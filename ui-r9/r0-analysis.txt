@@ -1,0 +1,81 @@
+PARSED
+  deepseek  50 of 50  missing -
+  glm       50 of 50  missing -
+  gpt       50 of 50  missing -
+  kimi      50 of 50  missing -
+  qwen      50 of 50  missing -
+
+CONTROLS  (the same image twice: the score gap is the judge measuring itself)
+  deepseek  exams A=6.75 B=6.75 error=0.00 verdict=tie
+  glm       exams A=7.00 B=7.00 error=0.00 verdict=tie
+  gpt       exams A=6.25 B=6.25 error=0.00 verdict=tie
+  kimi      exams A=6.50 B=6.50 error=0.00 verdict=tie
+  qwen      exams A=6.75 B=6.75 error=0.00 verdict=tie
+  deepseek  bank  A=6.00 B=6.00 error=0.00 verdict=tie
+  glm       bank  A=7.25 B=7.25 error=0.00 verdict=tie
+  gpt       bank  A=7.00 B=7.00 error=0.00 verdict=tie
+  kimi      bank  A=6.75 B=6.75 error=0.00 verdict=tie
+  qwen      bank  A=6.50 B=6.50 error=0.00 verdict=tie
+  error by judge: {'deepseek': 0.0, 'glm': 0.0, 'gpt': 0.0, 'kimi': 0.0, 'qwen': 0.0}   (0.00-0.50 trustworthy, over 1.0 unusable)
+
+MIRRORS  (the same pair, sides swapped: a judge that keeps picking the left image is caught here)
+  deepseek  banks                desktop ours  then ours 
+  glm       banks                desktop ours  then ours 
+  gpt       banks                desktop ours  then ours 
+  kimi      banks                desktop ours  then ours 
+  qwen      banks                desktop ours  then ours 
+  deepseek  exam                 desktop ours  then ours 
+  glm       exam                 desktop ours  then ours 
+  gpt       exam                 desktop ref   then ref  
+  kimi      exam                 desktop ours  then ours 
+  qwen      exam                 desktop ours  then ours 
+  deepseek  banks                narrow  ours  then ours 
+  glm       banks                narrow  ours  then ours 
+  gpt       banks                narrow  ours  then ours 
+  kimi      banks                narrow  ours  then ours 
+  qwen      banks                narrow  ours  then ours 
+  deepseek  exam                 narrow  ref   then ref  
+  glm       exam                 narrow  ref   then ref  
+  gpt       exam                 narrow  ref   then ref  
+  kimi      exam                 narrow  ours  then ours 
+  qwen      exam                 narrow  ours  then ours 
+  agrees with itself under swap: {'deepseek': '4/4', 'glm': '4/4', 'gpt': '4/4', 'kimi': '4/4', 'qwen': '4/4'}
+
+PAIRS
+  bank                 desktop de:ref gl:ref gp:ref ki:ref qw:ref
+  bank                 narrow  de:ours gl:ours gp:ours ki:ours qw:ours
+  banks                desktop de:ours gl:ours gp:ours ki:ours qw:ours
+  banks                narrow  de:ours gl:ours gp:ours ki:ours qw:ours
+  exam                 desktop de:ours gl:ours gp:ref ki:ours qw:ours
+  exam                 narrow  de:ref gl:ref gp:ref ki:ours qw:ours
+  exams                desktop de:ours gl:ours gp:ours ki:ours qw:ours
+  exams                narrow  de:ours gl:ours gp:ours ki:ours qw:ours
+  imports              desktop de:ours gl:ours gp:ours ki:ours qw:ours
+  imports              narrow  de:ours gl:ours gp:ours ki:ours qw:ours
+  paper-classic        desktop de:ours gl:ours gp:ref ki:ours qw:ours
+  paper-condensed      desktop de:ours gl:ours gp:ours ki:ours qw:ours
+  paper-exam-board     desktop de:ours gl:ours gp:ref ki:ours qw:ours
+  paper-standard       desktop de:ours gl:ours gp:ref ki:ours qw:ours
+  question-editor-bank desktop de:ours gl:ours gp:ref ki:ours qw:ours
+  question-editor-bank narrow  de:ref gl:ref gp:ref ki:ours qw:ours
+  votes {'ours': 64, 'ref': 16}  pairs won 13/16
+
+BY JUDGE
+  deepseek  ours=13 ref= 3 tie= 0
+  glm       ours=13 ref= 3 tie= 0
+  gpt       ours= 8 ref= 8 tie= 0
+  kimi      ours=15 ref= 1 tie= 0
+  qwen      ours=15 ref= 1 tie= 0
+
+OUR MEAN, desktop light (pairs and singles; controls and mirrors excluded)
+  screen                 n  mean  trimmed  H    S    T    St
+  account                5  6.50  6.58   6.8 6.0 6.8 6.4
+  figure-editor          5  6.40  6.33   6.6 6.0 6.8 6.2
+  figures                5  6.80  6.83   7.4 6.6 6.8 6.4
+  home                   5  7.10  7.08   8.0 7.0 6.4 7.0
+  home-empty             5  7.05  7.17   7.4 6.6 7.4 6.8
+  settings               5  6.45  6.50   6.6 6.2 6.6 6.4
+  welcome                5  6.65  6.67   7.2 5.4 7.6 6.4
+  DESKTOP TRIMMED MEAN over 7 screens: 6.74
+  narrow/light: 6.43 over 35 screens  {'hierarchy': 6.94, 'spacing': 5.8, 'type': 6.69, 'state': 6.29}
+  desktop/dark: 6.49 over 70 screens  {'hierarchy': 6.97, 'spacing': 6.17, 'type': 6.53, 'state': 6.27}

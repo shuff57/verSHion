@@ -1,0 +1,4602 @@
+[
+{
+"id": "P01",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "narrow",
+"what": "Import questions",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 8,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 3,
+"type": 7,
+"state": 6
+},
+"gap": "The WHAT IT READS format chips are bordered pills identical to buttons but they are inert labels, inviting clicks that do nothing."
+},
+{
+"id": "P01",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "narrow",
+"what": "Import entry screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 8,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 4,
+"spacing": 3,
+"type": 6,
+"state": 6
+},
+"gap": "The privacy footnote crowds the Report an issue pill near the viewport bottom edge, nearly touching its second line."
+},
+{
+"id": "P01",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "narrow",
+"what": "question import screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 8,
+"type": 8,
+"state": 7
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 3,
+"type": 7,
+"state": 6
+},
+"gap": "The privacy note at the bottom is set in tiny low-contrast text and wraps into a dense line that is easy to miss despite describing where photos are sent."
+},
+{
+"id": "P01",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "narrow",
+"what": "import screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "The format chips under WHAT IT READS (PDF, Word, Excel, Moodle XML\u2026) are styled exactly like buttons but are static informational labels, so they falsely read as interactive."
+},
+{
+"id": "P01",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "narrow",
+"what": "import questions screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The 'What it reads' card carries a tall empty band below the last row of format chips (Kahoot, Quizlet, Test Parrot .json), leaving the card bottom-heavy against the tight dropzone above."
+},
+{
+"id": "P02",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "narrow",
+"what": "Question banks list",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "Long bank titles are cut off by the kebab menu button in the corner of each card, so the names end mid-word."
+},
+{
+"id": "P02",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "narrow",
+"what": "Question banks list",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 4,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "The fourth card title runs into the flush-right \u22ef button with no gap, clipping the name against the controls."
+},
+{
+"id": "P02",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "narrow",
+"what": "Question bank list",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "The upper-right bank card title runs under its ellipsis menu, visibly clipping the title instead of reserving space for the action."
+},
+{
+"id": "P02",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "narrow",
+"what": "question banks grid",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "Long bank titles truncate right into the '...' menu button ('Demo: Algebra and Calculus (eq\u2026|...'), so names are clipped exactly where the only card action sits."
+},
+{
+"id": "P02",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "narrow",
+"what": "question banks list screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "On the two right-column cards the serif titles ('Demo: Algebra and Calculus (eq...', 'Ch4 Quiz 5A and 5B (answer key...') run underneath the circular kebab button instead of truncating before it."
+},
+{
+"id": "P03",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "desktop",
+"what": "Import questions",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "The Import history section is clipped by the bottom edge of the window, with its empty-state line half cut off under the fold."
+},
+{
+"id": "P03",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "desktop",
+"what": "Import entry screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 8,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 6,
+"state": 6
+},
+"gap": "The Import history section is sliced by the viewport fold showing only its caption and a half-visible No imports yet line."
+},
+{
+"id": "P03",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "desktop",
+"what": "Question import screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The bottom of the import history section is clipped by the viewport, so the page's empty-history state is only partly visible."
+},
+{
+"id": "P03",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "desktop",
+"what": "import landing",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 2,
+"type": 6,
+"state": 5
+},
+"gap": "The 'Import history' section's empty text ('No imports yet') is sliced off by the bottom edge of the window, leaving a half-visible line of text."
+},
+{
+"id": "P03",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "imports",
+"view": "desktop",
+"what": "import questions landing screen",
+"better": "ours",
+"ours": {
+"hierarchy": 9,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "The 'Import history' empty state ('No imports yet') is sliced in half by the bottom edge of the viewport, so the last section on the page reads as clipped mid-glyph instead of a legible empty state."
+},
+{
+"id": "P04",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "paper-exam-board",
+"view": "desktop",
+"what": "Exam editor",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The Search questions field in the right panel is a flat grey box on cream, so an editable filter reads as disabled."
+},
+{
+"id": "P04",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "paper-exam-board",
+"view": "desktop",
+"what": "Exam builder with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"gap": "Export history and Export buttons sit side by side in the top bar, making the primary export action ambiguous."
+},
+{
+"id": "P04",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "paper-exam-board",
+"view": "desktop",
+"what": "Exam builder",
+"better": "ref",
+"ours": {
+"hierarchy": 5,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 8,
+"type": 8,
+"state": 7
+},
+"gap": "The two-line formatting toolbar dominates the top of the workspace while the exam preview and question bank are compressed into narrow columns below."
+},
+{
+"id": "P04",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "paper-exam-board",
+"view": "desktop",
+"what": "exam editor with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 4
+},
+"gap": "The bank chip truncates to 'Ch4 Quiz 5A and 5B (an\u2026' and every question card cuts off mid-word ('How man\u2026'), so the panel never tells you exactly what you're adding."
+},
+{
+"id": "P04",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "paper-exam-board",
+"view": "desktop",
+"what": "exam editor with question bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The top bar packs breadcrumb, title, Saved chip, File/Edit/Format, undo/redo, Save, Export history and Export into one row of near-equal-weight clusters, so the document identity and the action pile read as a single undifferentiated strip."
+},
+{
+"id": "P05",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "narrow",
+"what": "Exams list narrow",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 4,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "Each exam card leaves roughly half its height empty below the one-line metadata, so three short records become tall mostly blank tiles."
+},
+{
+"id": "P05",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "narrow",
+"what": "Exams list screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 8,
+"state": 7
+},
+"ref": {
+"hierarchy": 4,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "Every full-width row leaves its lower third blank beneath the four metadata fields, inflating row height to about 175 pixels."
+},
+{
+"id": "P05",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "narrow",
+"what": "Exam list",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 8,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 7,
+"state": 6
+},
+"gap": "The exam thumbnails are so small that the printed question content in each preview is unreadable at this list scale."
+},
+{
+"id": "P05",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "narrow",
+"what": "exams list rows",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 2,
+"type": 6,
+"state": 5
+},
+"gap": "The '...' row action buttons are hairline-contrast circles at the far right of each row, easy to miss against the white card."
+},
+{
+"id": "P05",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "narrow",
+"what": "exams list screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 7
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 4
+},
+"gap": "In every exam band the area under the Questions/Points/Bank/Edited stat row is empty, so the right two-thirds of each card below one line of stats is dead space that makes the rows about twice as tall as their content."
+},
+{
+"id": "P06",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "narrow",
+"what": "Question bank narrow",
+"better": "ours",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 5,
+"state": 5
+},
+"gap": "The collapsed outline appears as a lone All 0 pill under the filter row with nothing labelling it as the question outline."
+},
+{
+"id": "P06",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "narrow",
+"what": "Narrow question bank pages",
+"better": "ours",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 5,
+"state": 7
+},
+"gap": "A lone All 0 filter chip floats on its own row beneath controls that are already dead over an empty list."
+},
+{
+"id": "P06",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "narrow",
+"what": "Question bank detail",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 2,
+"type": 6,
+"state": 5
+},
+"gap": "The active \u201cAll 0\u201d filter chip sits alone between the filter controls and empty-state panel, making that small state feel detached from the question list it filters."
+},
+{
+"id": "P06",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "narrow",
+"what": "bank detail narrow",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 6,
+"state": 6
+},
+"gap": "The empty-state card leaves a wide dead band above the pencil icon while the lone 'All 0' filter pill drifts by itself under the search row."
+},
+{
+"id": "P06",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "narrow",
+"what": "question bank detail view",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 5,
+"state": 6
+},
+"gap": "The unlabelled '...' overflow button sits at the head of the action row, left of 'Details', so the least important control reads as the first action."
+},
+{
+"id": "P07",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "desktop",
+"what": "Question editor dialog",
+"better": "ours",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "The empty-state card fills 250px with blank space and only refers to an Add question button located elsewhere on the screen."
+},
+{
+"id": "P07",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "desktop",
+"what": "Edit question modal",
+"better": "ours",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 8,
+"state": 9
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "Inactive Sort and Difficulty dropdowns sit in the toolbar above a list with zero questions, dead controls over a sparse page."
+},
+{
+"id": "P07",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "desktop",
+"what": "question management",
+"better": "ref",
+"ours": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 7,
+"state": 8
+},
+"gap": "The empty-bank screen shows sort, difficulty, and view controls despite having zero questions, adding irrelevant controls above the empty state."
+},
+{
+"id": "P07",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "desktop",
+"what": "bank with edit modal",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "The toolbar's secondary pills (Details, Preview, Import, Share) share one weight, leaving only green fill to mark the primary 'Add question'."
+},
+{
+"id": "P07",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "desktop",
+"what": "question bank editing screens",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The toolbar row leaves a ~300px empty gap between the Difficulty: All filter and the grid/list toggle pinned to the right edge, breaking an otherwise even row rhythm."
+},
+{
+"id": "P08",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "paper-condensed",
+"view": "desktop",
+"what": "Exam editor",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 5
+},
+"gap": "The greyed Search questions field in the question bank panel looks like a disabled control rather than an editable filter."
+},
+{
+"id": "P08",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "paper-condensed",
+"view": "desktop",
+"what": "Exam builder with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"gap": "Two stacked toolbar cards eat the top of the screen, squeezing the page area and leaving Export history crowding the primary Export."
+},
+{
+"id": "P08",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "paper-condensed",
+"view": "desktop",
+"what": "Exam editor",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 7,
+"state": 5
+},
+"gap": "In the right question-bank panel, several question titles are cut off with ellipses before their full prompts can be identified."
+},
+{
+"id": "P08",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "paper-condensed",
+"view": "desktop",
+"what": "exam editor with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 6,
+"state": 4
+},
+"gap": "Bank card text truncates mid-word ('How man\u2026') on every row, and the loaded-bank chip truncates to 'Ch4 Quiz 5A and 5B (an\u2026', so the panel hides exactly the text you need to verify."
+},
+{
+"id": "P08",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "paper-condensed",
+"view": "desktop",
+"what": "exam editor with question bank",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "The fourth question-bank card (FILL IN THE BLANK) is clipped mid-card at the bottom of the sidebar list, where the 'Click + or drag onto the page' hint and the floating 'Report an issue' button also crowd the same strip."
+},
+{
+"id": "P09",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "narrow",
+"what": "Question bank and editor",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The collapsed outline becomes a lone All 0 chip floating under the filters with no label, so its role is unreadable."
+},
+{
+"id": "P09",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "narrow",
+"what": "Bank and edit question",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "A lone All 0 filter chip floats on its own row, duplicating the toolbar with another control while the dropdowns above it stay dead."
+},
+{
+"id": "P09",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "narrow",
+"what": "Question editor",
+"better": "ref",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 8,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The top action row packs an overflow menu, Details, Preview, Import and Share beside Add question, making the main create action compete with several secondary controls."
+},
+{
+"id": "P09",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "narrow",
+"what": "bank empty vs edit question",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "The empty-state card is mostly blank: the pencil icon and 'No questions yet' text float low inside it, leaving a wide dead band across the card's top half."
+},
+{
+"id": "P09",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "question-editor-bank",
+"view": "narrow",
+"what": "question bank and editor",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "The solitary 'All 0' chip sits alone on its own row between the search/filter row and the empty-state card, an orphaned line that breaks the otherwise tidy vertical rhythm of the toolbar stack."
+},
+{
+"id": "P10",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "paper-classic",
+"view": "desktop",
+"what": "Exam editor",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "The Search questions field is grey on cream and reads as disabled, so the filter in the panel looks broken."
+},
+{
+"id": "P10",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "paper-classic",
+"view": "desktop",
+"what": "Exam builder with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 8,
+"state": 8
+},
+"gap": "Two stacked toolbar cards crowd Export history against the primary Export button in the top-right corner."
+},
+{
+"id": "P10",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "paper-classic",
+"view": "desktop",
+"what": "Exam editor and bank",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 7
+},
+"gap": "The exam preview is clipped at the bottom of the window, hiding the rest of the page while the question bank competes for attention at right."
+},
+{
+"id": "P10",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "paper-classic",
+"view": "desktop",
+"what": "exam editor with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 4
+},
+"gap": "The bank panel truncates every question mid-word ('How man\u2026', 'Draw a valid \u2026', 'Be') and the bank chip reads 'Ch4 Quiz 5A and 5B (an\u2026', so nothing in the panel is fully readable."
+},
+{
+"id": "P10",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "paper-classic",
+"view": "desktop",
+"what": "exam editor with question bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The second row of the full-width beige format band (Margins, Answer blanks, zoom stepper, question count) does not align to the columns of the row above and leaves the right half of the band empty, so the toolbar reads as unfinished."
+},
+{
+"id": "P11",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "desktop",
+"what": "Question banks list",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "Long bank names are clipped right at the kebab button, so the demo algebra title loses its ending underneath the control."
+},
+{
+"id": "P11",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "desktop",
+"what": "Question banks list",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 7,
+"state": 6
+},
+"gap": "Long card titles truncate hard against the round \u22ef menu button, reading as a clipped collision."
+},
+{
+"id": "P11",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "desktop",
+"what": "Question bank list",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 7,
+"state": 5
+},
+"gap": "The second bank title is truncated beneath its overflow button, so its full name cannot be identified from the card."
+},
+{
+"id": "P11",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "desktop",
+"what": "question banks grid",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "Long titles truncate straight into the '...' buttons ('Demo: Algebra and Calculus (eq\u2026', 'Ch4 Quiz 5A and 5B (answer key. \u2026'), making names unreadable where they collide."
+},
+{
+"id": "P11",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "banks",
+"view": "desktop",
+"what": "question banks list screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The row between the title and the grid pins the search field to the far left and the grid/list toggle to the far right with an empty gap between them about half the window wide, so the toggle reads as detached from the grid it controls."
+},
+{
+"id": "P12",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "desktop",
+"what": "Exams list",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "Every exam card's metadata stops halfway across the card, so each tile carries a large blank right half."
+},
+{
+"id": "P12",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "desktop",
+"what": "Exams list screen",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 8,
+"state": 7
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "The dotted grid background texture fights the cards and the lone second-row card leaves lopsided empty space below its metadata."
+},
+{
+"id": "P12",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "desktop",
+"what": "Exam library",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 3,
+"type": 6,
+"state": 4
+},
+"gap": "The faint graph-paper grid continues across the entire empty lower half, competing with the exam cards and making the page look like an editor rather than a library."
+},
+{
+"id": "P12",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "desktop",
+"what": "exams list grid",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "The low-contrast circular '...' buttons at each card's top-right nearly disappear against the white card, hiding the only per-exam action."
+},
+{
+"id": "P12",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "exams",
+"view": "desktop",
+"what": "exams list screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 5,
+"state": 4
+},
+"gap": "Inside each exam card the metadata block ends a third of the way down while the thumbnail column runs to the bottom, leaving a dead white band under the Questions/Points/Bank/Edited rows in every card."
+},
+{
+"id": "P13",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "paper-standard",
+"view": "desktop",
+"what": "Exam editor",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"gap": "The greyed Search questions box in the right panel is indistinguishable from a disabled control."
+},
+{
+"id": "P13",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "paper-standard",
+"view": "desktop",
+"what": "Exam builder with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"gap": "Two stacked toolbar cards crowd Export history against the primary Export button in the top-right corner."
+},
+{
+"id": "P13",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "paper-standard",
+"view": "desktop",
+"what": "exam builder",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "The bottom of the question-bank list is cut off behind the persistent footer, leaving the next card only partly visible."
+},
+{
+"id": "P13",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "paper-standard",
+"view": "desktop",
+"what": "exam editor with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 4
+},
+"gap": "Bank cards truncate every question mid-word ('How man\u2026', 'Be') and the bank chip truncates to 'Ch4 Quiz 5A and 5B (an\u2026', so content is unverifiable."
+},
+{
+"id": "P13",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "paper-standard",
+"view": "desktop",
+"what": "exam editor with question bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The second toolbar row strands the Fit 147% zoom stepper and the 1 question \u00b7 1 pts meta in the middle of the row with uneven gaps that align with none of the control groups above them."
+},
+{
+"id": "P14",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "desktop",
+"what": "Question bank screen",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "The empty-state panel is 250px tall and mostly blank, and the add action is dead text inside it rather than a control."
+},
+{
+"id": "P14",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "desktop",
+"what": "Question bank overview",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 8,
+"state": 9
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 8,
+"state": 8
+},
+"gap": "Search, Sort and Difficulty controls sit above a list with zero questions, adding dead interactive chrome the empty state does not need."
+},
+{
+"id": "P14",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "desktop",
+"what": "Question bank",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "The empty-state panel sits off-center in a very wide blank grid, leaving the empty bank\u2019s primary action and guidance visually detached from the outline controls."
+},
+{
+"id": "P14",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "desktop",
+"what": "question bank detail",
+"better": "ref",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"gap": "The toolbar's five equal-size pills make 'Details, Preview, Import, Share' identical in weight, so only fill color separates the primary 'Add question' and the row reads as one undifferentiated strip."
+},
+{
+"id": "P14",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "bank",
+"view": "desktop",
+"what": "question bank detail view",
+"better": "ref",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 7
+},
+"gap": "The ellipsis overflow button is the leftmost control in the action row ahead of Details, Preview, Import and Share, so the row opens with its least meaningful control while the primary Add question button ends mid-canvas with a dead half-width margin to its right."
+},
+{
+"id": "P15",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "desktop",
+"what": "Exam editor",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 5
+},
+"gap": "The Search questions box is filled grey on cream, so the only filter in the panel looks unusable."
+},
+{
+"id": "P15",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "desktop",
+"what": "Exam builder with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"gap": "Two stacked toolbar cards consume the top chrome, crowding Export history against the primary Export button."
+},
+{
+"id": "P15",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "desktop",
+"what": "exam editor and bank",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 8,
+"state": 6
+},
+"gap": "The preview is an unrelated one-question chemistry exam while the bank lists different chemistry prompts, so the central page does not represent the selected bank content."
+},
+{
+"id": "P15",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "desktop",
+"what": "exam editor with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 4
+},
+"gap": "Every bank card truncates question text mid-word ('How man\u2026', 'Be') and the bank chip truncates to 'Ch4 Quiz 5A and 5B (an\u2026', so content can't be verified before adding."
+},
+{
+"id": "P15",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "desktop",
+"what": "exam editor with question bank",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The floating Report an issue pill is pinned over the question bank panel's bottom-right corner, colliding with the panel's footer hint line and the clipped last card row."
+},
+{
+"id": "P16",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "narrow",
+"what": "Exam editor narrow",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 8,
+"state": 5
+},
+"gap": "The exam page preview is clipped mid-molecule at the bottom of its card, so most of the page is hidden."
+},
+{
+"id": "P16",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "narrow",
+"what": "Narrow exam builder",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 8,
+"state": 6
+},
+"gap": "The stacked Question bank panel is sliced at the viewport fold, leaving a dangling half-visible filter row."
+},
+{
+"id": "P16",
+"model": "gpt",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "narrow",
+"what": "Printed exam editor",
+"better": "ref",
+"ours": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 8,
+"state": 5
+},
+"gap": "The paper preview is clipped by the bottom edge of its short canvas, cutting off the displayed chemistry structure and leaving the exam\u2019s extent unclear."
+},
+{
+"id": "P16",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "narrow",
+"what": "exam editor narrow",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 6,
+"state": 4
+},
+"gap": "The Lewis-structure figure is clipped mid-molecule at the page viewport's bottom edge (the Cl bond runs off the visible area) with no scrollbar or continuation cue."
+},
+{
+"id": "P16",
+"model": "qwen",
+"kind": "pair",
+"partner": null,
+"screen": "exam",
+"view": "narrow",
+"what": "exam editor document view",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 4
+},
+"gap": "The open question-bank tab chip truncates its label to 'Ch4 Quiz 5A and 5B (an\u2026' even though the rest of that row is empty, hiding which bank is currently open."
+},
+{
+"id": "P17",
+"model": "deepseek",
+"kind": "control",
+"screen": "exams",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"B": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+}
+},
+{
+"id": "P17",
+"model": "glm",
+"kind": "control",
+"screen": "exams",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"B": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+}
+},
+{
+"id": "P17",
+"model": "gpt",
+"kind": "control",
+"screen": "exams",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 6
+},
+"B": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 6
+}
+},
+{
+"id": "P17",
+"model": "kimi",
+"kind": "control",
+"screen": "exams",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"B": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+}
+},
+{
+"id": "P17",
+"model": "qwen",
+"kind": "control",
+"screen": "exams",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"B": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 6
+}
+},
+{
+"id": "P18",
+"model": "deepseek",
+"kind": "control",
+"screen": "bank",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"B": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+}
+},
+{
+"id": "P18",
+"model": "glm",
+"kind": "control",
+"screen": "bank",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 8,
+"state": 9
+},
+"B": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 8,
+"state": 9
+}
+},
+{
+"id": "P18",
+"model": "gpt",
+"kind": "control",
+"screen": "bank",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 8,
+"state": 6
+},
+"B": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 8,
+"state": 6
+}
+},
+{
+"id": "P18",
+"model": "kimi",
+"kind": "control",
+"screen": "bank",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"B": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+}
+},
+{
+"id": "P18",
+"model": "qwen",
+"kind": "control",
+"screen": "bank",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 7
+},
+"B": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 7
+}
+},
+{
+"id": "P19",
+"model": "deepseek",
+"kind": "mirror",
+"partner": "P11",
+"screen": "banks",
+"view": "desktop",
+"what": "Question banks list",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "Long bank titles run into the kebab menu button at the top right of each card, hiding the end of the name."
+},
+{
+"id": "P19",
+"model": "glm",
+"kind": "mirror",
+"partner": "P11",
+"screen": "banks",
+"view": "desktop",
+"what": "Question banks list",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"gap": "Long card titles truncate hard against the round \u22ef menu button, with the clipped text and menu icon reading as a collision."
+},
+{
+"id": "P19",
+"model": "gpt",
+"kind": "mirror",
+"partner": "P11",
+"screen": "banks",
+"view": "desktop",
+"what": "Question bank list",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 5
+},
+"gap": "The second bank card title is cut off mid-word with an ellipsis, making it hard to distinguish that bank from its neighbors."
+},
+{
+"id": "P19",
+"model": "kimi",
+"kind": "mirror",
+"partner": "P11",
+"screen": "banks",
+"view": "desktop",
+"what": "question banks grid",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "Long titles truncate straight into the '...' menu button ('Demo: Algebra and Calculus (eq\u2026|...', 'Ch4 Quiz 5A and 5B (answer key. \u2026'), so names are unreadable and text and button collide."
+},
+{
+"id": "P19",
+"model": "qwen",
+"kind": "mirror",
+"partner": "P11",
+"screen": "banks",
+"view": "desktop",
+"what": "question banks list screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 6,
+"state": 8
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "Card titles truncate into the circular kebab button at each card's top-right ('Demo: Algebra and Calculus (eq...' and 'Ch4 Quiz 5A and 5B (answer key.' run under the control), colliding text with the menu on two of four cards."
+},
+{
+"id": "P20",
+"model": "deepseek",
+"kind": "mirror",
+"partner": "P15",
+"screen": "exam",
+"view": "desktop",
+"what": "Exam editor",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"gap": "The Search questions field in the right panel is grey on cream and indistinguishable from a disabled control."
+},
+{
+"id": "P20",
+"model": "glm",
+"kind": "mirror",
+"partner": "P15",
+"screen": "exam",
+"view": "desktop",
+"what": "Exam builder with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"gap": "Two stacked toolbar cards crowd Export history against the primary Export button in the top-right corner."
+},
+{
+"id": "P20",
+"model": "gpt",
+"kind": "mirror",
+"partner": "P15",
+"screen": "exam",
+"view": "desktop",
+"what": "exam editor and bank",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 8,
+"state": 6
+},
+"gap": "The right-hand bank panel is cut off at the bottom, leaving its last question and the drag-to-page instruction crowded against the edge."
+},
+{
+"id": "P20",
+"model": "kimi",
+"kind": "mirror",
+"partner": "P15",
+"screen": "exam",
+"view": "desktop",
+"what": "exam editor with bank",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 4
+},
+"gap": "Question bank cards truncate every question mid-word ('How man\u2026', 'Be') and the loaded-bank chip truncates, so the panel can't be fully read."
+},
+{
+"id": "P20",
+"model": "qwen",
+"kind": "mirror",
+"partner": "P15",
+"screen": "exam",
+"view": "desktop",
+"what": "exam editor with question bank",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The floating Report an issue pill is pinned over the question bank panel's bottom-right corner, colliding with the panel's footer hint line and the clipped last card row."
+},
+{
+"id": "P21",
+"model": "deepseek",
+"kind": "mirror",
+"partner": "P02",
+"screen": "banks",
+"view": "narrow",
+"what": "Question banks list",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "Long bank names truncate under the kebab menu button in the top-right corner of each card, losing the end of the title."
+},
+{
+"id": "P21",
+"model": "glm",
+"kind": "mirror",
+"partner": "P02",
+"screen": "banks",
+"view": "narrow",
+"what": "Question banks list",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 8,
+"state": 8
+},
+"ref": {
+"hierarchy": 4,
+"spacing": 3,
+"type": 7,
+"state": 6
+},
+"gap": "Long card titles truncate hard against the round \u22ef menu button, so the clipped text and menu icon read as a collision."
+},
+{
+"id": "P21",
+"model": "gpt",
+"kind": "mirror",
+"partner": "P02",
+"screen": "banks",
+"view": "narrow",
+"what": "Question bank list",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 6
+},
+"ref": {
+"hierarchy": 4,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "The second card in the top row has its title visibly cut off beneath the overflow button, so the bank name cannot be fully read."
+},
+{
+"id": "P21",
+"model": "kimi",
+"kind": "mirror",
+"partner": "P02",
+"screen": "banks",
+"view": "narrow",
+"what": "question banks grid",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 3,
+"type": 6,
+"state": 5
+},
+"gap": "Long bank titles truncate ('Demo: Algebra and Calculus (eq\u2026') exactly where the circular '\u2026' button sits, so text and button collide on two of the four cards."
+},
+{
+"id": "P21",
+"model": "qwen",
+"kind": "mirror",
+"partner": "P02",
+"screen": "banks",
+"view": "narrow",
+"what": "question banks grid list",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "On the two right-column cards the bank title runs straight under the kebab button and is cut mid-word without an ellipsis (Demo: Algebra and Calculus (eq, Ch4 Quiz 5A and 5B (answer key), so text and control overlap at the card top-right."
+},
+{
+"id": "P22",
+"model": "deepseek",
+"kind": "mirror",
+"partner": "P16",
+"screen": "exam",
+"view": "narrow",
+"what": "Exam editor narrow",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 8,
+"state": 5
+},
+"gap": "The exam page preview is cut off mid-diagram at the card edge, so the bottom of the paper is never visible."
+},
+{
+"id": "P22",
+"model": "glm",
+"kind": "mirror",
+"partner": "P16",
+"screen": "exam",
+"view": "narrow",
+"what": "Narrow exam builder",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 8,
+"state": 6
+},
+"gap": "The stacked Question bank panel is sliced at the viewport fold, leaving a dangling half-visible filter pill row."
+},
+{
+"id": "P22",
+"model": "gpt",
+"kind": "mirror",
+"partner": "P16",
+"screen": "exam",
+"view": "narrow",
+"what": "Exam editor preview",
+"better": "ref",
+"ours": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 8,
+"state": 6
+},
+"gap": "The preview is cut off at the bottom of the canvas, hiding the rest of the chemistry question and making the page state hard to judge."
+},
+{
+"id": "P22",
+"model": "kimi",
+"kind": "mirror",
+"partner": "P16",
+"screen": "exam",
+"view": "narrow",
+"what": "exam editor narrow",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 6,
+"state": 4
+},
+"gap": "The Lewis-structure figure is clipped mid-molecule at the bottom edge of the page viewport (the Cl tail is cut off) with no scrollbar or cue that more of the page exists."
+},
+{
+"id": "P22",
+"model": "qwen",
+"kind": "mirror",
+"partner": "P16",
+"screen": "exam",
+"view": "narrow",
+"what": "exam editor with paper preview",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 5,
+"spacing": 4,
+"type": 6,
+"state": 4
+},
+"gap": "The open question-bank tab label truncates to 'Ch4 Quiz 5A and 5B (an\u2026' inside a narrow chip even though the rest of that card row is almost entirely empty."
+},
+{
+"id": "S01",
+"model": "deepseek",
+"kind": "solo",
+"screen": "paper-standard",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The search field and filter chips in the right panel sit in near-identical dark fills with muted grey text, so they look disabled beside the bright paper."
+},
+{
+"id": "S01",
+"model": "glm",
+"kind": "solo",
+"screen": "paper-standard",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "Question card type labels such as SHORT ANSWER render dim orange on dark, the least readable text on screen."
+},
+{
+"id": "S01",
+"model": "gpt",
+"kind": "solo",
+"screen": "paper-standard",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"gap": "In the right question-bank panel, the first two question cards truncate their prompts with ellipses, so teachers cannot reliably distinguish candidates before opening them."
+},
+{
+"id": "S01",
+"model": "kimi",
+"kind": "solo",
+"screen": "paper-standard",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"gap": "Every question bank card truncates mid-word ('How man\u2026', 'Draw a valid \u2026', 'Be') and the bank chip truncates to 'Ch4 Quiz 5A and 5B (an\u2026', so the panel hides the content it exists to show."
+},
+{
+"id": "S01",
+"model": "qwen",
+"kind": "solo",
+"screen": "paper-standard",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"gap": "The fourth question card in the right-hand bank panel is sliced mid-card at the panel's scroll edge and butts directly against the 'Click + or drag onto the page' hint row, with no fade or scrollbar to signal the list continues."
+},
+{
+"id": "S02",
+"model": "deepseek",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "A 150px empty band separates the hero call to action from the HOW IT WORKS label, splitting the page."
+},
+{
+"id": "S02",
+"model": "glm",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"gap": "A 130-pixel empty band yawns between the CTA block and the HOW IT WORKS row, sagging the middle of the page."
+},
+{
+"id": "S02",
+"model": "gpt",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 4,
+"type": 6,
+"state": 4
+},
+"gap": "The hero and call-to-action occupy a small island near the top, with a huge unused vertical gap before the how-it-works cards."
+},
+{
+"id": "S02",
+"model": "kimi",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 5,
+"type": 6,
+"state": 7
+},
+"gap": "The four HOW IT WORKS cards set their body copy in a brown-gray so dim against the dark card fill that the step descriptions strain to read at normal size."
+},
+{
+"id": "S02",
+"model": "qwen",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "About a quarter of the viewport between the hero microcopy ('Runs on your machine...') and the tiny 'HOW IT WORKS' eyebrow is empty dark space, and a second such void sits above the footer, so the page reads as three disconnected islands."
+},
+{
+"id": "S03",
+"model": "deepseek",
+"kind": "solo",
+"screen": "imports",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The WHAT IT READS format chips are dark bordered pills that look like toggles you can switch on, though they are inert labels."
+},
+{
+"id": "S03",
+"model": "glm",
+"kind": "solo",
+"screen": "imports",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "The Import history section is sliced at the viewport fold with the No imports yet line half cropped off screen."
+},
+{
+"id": "S03",
+"model": "gpt",
+"kind": "solo",
+"screen": "imports",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "The Import history heading and introductory line are cut off at the bottom edge, making the start of the history section visibly inaccessible in this viewport."
+},
+{
+"id": "S03",
+"model": "kimi",
+"kind": "solo",
+"screen": "imports",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 6,
+"state": 6
+},
+"gap": "Inside the dark-green dropzone the 'Paste text' and 'Add photo' buttons are dark fills with hairline borders, nearly invisible next to the bright 'Choose files' they sit beside."
+},
+{
+"id": "S03",
+"model": "qwen",
+"kind": "solo",
+"screen": "imports",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "In the 'What it reads' card the static format labels (PDF, Word, Excel, Respondus and the rest) are styled as filled pill buttons identical to real controls, inviting clicks on plain text that does nothing."
+},
+{
+"id": "S04",
+"model": "deepseek",
+"kind": "solo",
+"screen": "home",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The three stat tiles are jammed against the top edge above the headline and clipped by the viewport, competing with the Welcome back title."
+},
+{
+"id": "S04",
+"model": "glm",
+"kind": "solo",
+"screen": "home",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The 29 questions stat card is clipped by the right viewport edge beneath the scrollbar, so the top row reads cut off."
+},
+{
+"id": "S04",
+"model": "gpt",
+"kind": "solo",
+"screen": "home",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 4,
+"type": 7,
+"state": 6
+},
+"gap": "The New exam, New bank, Import, and recent-exam cards are cut off at the right edge of the content area, hiding their full widths and potentially their controls."
+},
+{
+"id": "S04",
+"model": "kimi",
+"kind": "solo",
+"screen": "home",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The three stat cards at top-right are clipped by the window edge ('29 questions' half cut off beside a scrollbar), so the summary numbers can't actually be read."
+},
+{
+"id": "S04",
+"model": "qwen",
+"kind": "solo",
+"screen": "home",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 3,
+"type": 6,
+"state": 4
+},
+"gap": "A thick dark scrollbar-coloured bar is painted over the right edge of the content column, clipping the '29 questions' stat card, the right end of the green New exam banner and half of the list-view toggle button."
+},
+{
+"id": "S05",
+"model": "deepseek",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "At this width the settings column collapses to a single Values card while Appearance and Show and hide vanish behind More settings below."
+},
+{
+"id": "S05",
+"model": "glm",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 8,
+"state": 8
+},
+"gap": "The floating Report an issue button overlaps the disabled Handles button in the bottom action row."
+},
+{
+"id": "S05",
+"model": "gpt",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 7
+},
+"gap": "The fixed bottom action bar cuts across the settings panel at the bottom of the screen, obscuring its lower content and making the editor appear clipped."
+},
+{
+"id": "S05",
+"model": "kimi",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The floating 'Report an issue' chip overlaps and half-covers the 'Handles' chip at the right end of the bottom action row."
+},
+{
+"id": "S05",
+"model": "qwen",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 5,
+"state": 7
+},
+"gap": "The momentum/velocity readout inside the canvas ('Momentum before 8 kg m/s' through 'Kinetic energy before 16 J, after 16 J') is set as four unstyled left-flush plain-text lines under a heavy full-width rule, reading like a debug dump pasted into an otherwise clean diagram."
+},
+{
+"id": "S06",
+"model": "deepseek",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The Save preset control is a dashed ghost outline that reads as disabled next to the solid pills beneath it."
+},
+{
+"id": "S06",
+"model": "glm",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 8,
+"state": 8
+},
+"gap": "The preview canvas leaves its bottom third as empty white space below the momentum rows while the left column packs to its own rhythm."
+},
+{
+"id": "S06",
+"model": "gpt",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "The bottom action strip\u2019s \u2018Save to question\u2026\u2019 button is clipped by its own ellipsis and lacks a clear full label, obscuring what this primary action will do."
+},
+{
+"id": "S06",
+"model": "kimi",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The bottom bar strings five equal-weight chips (Student + key, Examples, Presets, Handles, Report an issue) in one row around the primary 'Save to question...', diluting the one action that matters."
+},
+{
+"id": "S06",
+"model": "qwen",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "The computed results under the diagram ('Momentum before 8 kg m/s' through 'Kinetic energy before 16 J, after 16 J') are set as a raw block of unstyled plain-text lines under a full-width rule, reading like a debug dump pasted into an otherwise designed canvas."
+},
+{
+"id": "S07",
+"model": "deepseek",
+"kind": "solo",
+"screen": "bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 5
+},
+"gap": "The toolbar opens with an unlabelled ellipsis icon carrying the same weight as Details, Preview, Import and Share, so the main action row starts with something unidentifiable."
+},
+{
+"id": "S07",
+"model": "glm",
+"kind": "solo",
+"screen": "bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"gap": "Inactive Sort and Difficulty dropdowns sit above a list with zero questions, adding dead controls over the sparse empty state."
+},
+{
+"id": "S07",
+"model": "gpt",
+"kind": "solo",
+"screen": "bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 8,
+"type": 8,
+"state": 8
+},
+"gap": "The Topics helper text in the left outline column wraps into a narrow two-line block, visually stranded beneath the topic heading."
+},
+{
+"id": "S07",
+"model": "kimi",
+"kind": "solo",
+"screen": "bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "The toolbar pills (Details, Preview, Import, Share) carry identical dark weight, so only the light-green fill separates the primary 'Add question' and the row reads as one flat strip."
+},
+{
+"id": "S07",
+"model": "qwen",
+"kind": "solo",
+"screen": "bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 8,
+"state": 8
+},
+"gap": "Below the 'No questions yet' card the bottom third of the window is empty dark canvas, and the left OUTLINE/TOPICS column likewise dies after its two-line blurb, leaving the whole layout top-loaded around a large dead zone."
+},
+{
+"id": "S08",
+"model": "deepseek",
+"kind": "solo",
+"screen": "exam",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The open-exam chip Ch4 Quiz 5A and 5B (an... is chopped by its own close button and floats above the panel heading, reading as a stray filter."
+},
+{
+"id": "S08",
+"model": "glm",
+"kind": "solo",
+"screen": "exam",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "Dim orange type labels like MULTIPART 2 PARTS sit on dark card backgrounds, the weakest text in the bank panel."
+},
+{
+"id": "S08",
+"model": "gpt",
+"kind": "solo",
+"screen": "exam",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "At the bottom of the preview, the page extends beyond the viewport and is visibly clipped, hiding the rest of the exam layout."
+},
+{
+"id": "S08",
+"model": "kimi",
+"kind": "solo",
+"screen": "exam",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"gap": "Every bank card truncates question text mid-word ('How man\u2026', 'Draw a valid \u2026', 'Be') and the bank chip reads 'Ch4 Quiz 5A and 5B (an\u2026', hiding the very content the panel exists to show."
+},
+{
+"id": "S08",
+"model": "qwen",
+"kind": "solo",
+"screen": "exam",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"gap": "The fourth question-bank card (FILL IN THE BLANK) is sliced off mid-sentence at the right panel bottom edge with no scrollbar or fade, and the floating Report an issue pill lands on the panel footer beside it, so the list scroll boundary reads as a rendering glitch."
+},
+{
+"id": "S09",
+"model": "deepseek",
+"kind": "solo",
+"screen": "question-editor-bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 5
+},
+"gap": "Details, Preview, Import and Share are drawn as equal outlined chips that look like tabs, so views and actions are indistinguishable."
+},
+{
+"id": "S09",
+"model": "glm",
+"kind": "solo",
+"screen": "question-editor-bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"gap": "The Sort and Difficulty dropdowns render dead against an empty list while everything below the empty-state card is unused space."
+},
+{
+"id": "S09",
+"model": "gpt",
+"kind": "solo",
+"screen": "question-editor-bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 8,
+"state": 6
+},
+"gap": "The large empty-state card takes up much of the workspace for a short prompt, leaving most of the dark canvas unused."
+},
+{
+"id": "S09",
+"model": "kimi",
+"kind": "solo",
+"screen": "question-editor-bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "The toolbar pills (Details, Preview, Import, Share) share identical dark weight with hairline borders, so the row reads flat and only the light-green fill marks the primary action."
+},
+{
+"id": "S09",
+"model": "qwen",
+"kind": "solo",
+"screen": "question-editor-bank",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 7
+},
+"gap": "Below the empty-state card the bottom third of the window is a flat featureless dark void with nothing to anchor it, so the composed region above reads as a fragment floating in emptiness."
+},
+{
+"id": "S10",
+"model": "deepseek",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The disabled Save button is a pale ghost pill in the form card, so the only action on the page is easy to overlook entirely."
+},
+{
+"id": "S10",
+"model": "glm",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "The page content stops two-thirds down, leaving the lower viewport as unused blank grid."
+},
+{
+"id": "S10",
+"model": "gpt",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 7,
+"type": 6,
+"state": 5
+},
+"gap": "The muted Save button below the blank server-address field has no nearby explanation that it is disabled until an address is entered."
+},
+{
+"id": "S10",
+"model": "kimi",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The four-item section list ends a third of the way down its column and the whole lower-left half of the window stays empty gridpaper, while the washed-out 'Save' button reads as maybe-disabled."
+},
+{
+"id": "S10",
+"model": "qwen",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 8
+},
+"gap": "The bottom third of the window is empty graph paper beneath the three info cards, whose bottoms are already ragged because 'Share with teachers' ends about 25px higher than 'Hosted AI' and 'Runs here'."
+},
+{
+"id": "S11",
+"model": "deepseek",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The Search figures input is squeezed to about 150px and sits inline with the category chips, so it reads as one more chip."
+},
+{
+"id": "S11",
+"model": "glm",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "The Search figures input stays barely 120 pixels wide, squeezed between the filter pills and the two action buttons."
+},
+{
+"id": "S11",
+"model": "gpt",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "The figure cards expose no visible add or attach control, so the next action for using a diagram is unclear."
+},
+{
+"id": "S11",
+"model": "kimi",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "The Spring Scale card's preview renders in pale yellow on white, so its thumbnail is effectively invisible next to the crisp black previews of every other card."
+},
+{
+"id": "S11",
+"model": "qwen",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "Most figure thumbnails (Free Body Diagram, Pulley, Spring Scale) render as tiny line drawings lost inside a large pale thumbnail well, so the only visual content in the grid carries almost no scanning value."
+},
+{
+"id": "S12",
+"model": "deepseek",
+"kind": "solo",
+"screen": "home-empty",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "The dialog is dropped over the green New bank tile so a green strip protrudes on both sides, and its bottom edge cuts across the page heading."
+},
+{
+"id": "S12",
+"model": "glm",
+"kind": "solo",
+"screen": "home-empty",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 8,
+"state": 7
+},
+"gap": "The centered modal sits exactly over the second CTA row, hiding a primary action behind it rather than clearing it."
+},
+{
+"id": "S12",
+"model": "gpt",
+"kind": "solo",
+"screen": "home-empty",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 8,
+"state": 8
+},
+"gap": "The opaque modal obscures the central green home action underneath, leaving its label and purpose unreadable until dismissal."
+},
+{
+"id": "S12",
+"model": "kimi",
+"kind": "solo",
+"screen": "home-empty",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 7
+},
+"gap": "The dialog's bottom edge lands exactly mid-glyph on the 'Let's make your first Question Bank' heading behind it, leaving the heading's lower halves visible under the modal in a way that reads as a rendering bug."
+},
+{
+"id": "S12",
+"model": "qwen",
+"kind": "solo",
+"screen": "home-empty",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "In the dialog action row the outlined Report an issue button with its globe icon is nearly twice the width of the stubby primary Got it button, inverting emphasis, and the modal offers no close-x affordance anywhere on its frame."
+},
+{
+"id": "S13",
+"model": "deepseek",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The four cream preview tiles blaze against the dark page, outshining the diagram names they are meant to support."
+},
+{
+"id": "S13",
+"model": "glm",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"gap": "The Search figures input is a 120-pixel sliver squeezed between the category pills and the action buttons."
+},
+{
+"id": "S13",
+"model": "gpt",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "The top filter/action row squeezes the \u201cOpen link...\u201d and \u201cImport SVG/PNG...\u201d controls against the search field, with the first action label visibly clipped and the row crowded into one line."
+},
+{
+"id": "S13",
+"model": "kimi",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"gap": "The Spring Scale preview renders in pale yellow on its white thumbnail, effectively invisible next to the crisp black diagrams on every surrounding card."
+},
+{
+"id": "S13",
+"model": "qwen",
+"kind": "solo",
+"screen": "figures",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "Six filter chips, the search field and both action buttons are crammed onto one toolbar line, squeezing the 'Search figures...' input to a sliver between the 'Health and technology' chip and the 'Open link...' button with nothing grouping filters apart from actions."
+},
+{
+"id": "S14",
+"model": "deepseek",
+"kind": "solo",
+"screen": "banks",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "Card surfaces are nearly the same value as the page background, so the grid dissolves into one dark field held together only by hairline borders."
+},
+{
+"id": "S14",
+"model": "glm",
+"kind": "solo",
+"screen": "banks",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"gap": "Long card titles truncate hard against the round \u22ef menu button, clipped mid-word with no reserve space."
+},
+{
+"id": "S14",
+"model": "gpt",
+"kind": "solo",
+"screen": "banks",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "The second and fourth bank titles run underneath their ellipsis controls, so the names are visibly truncated without a clear way to inspect them from the card."
+},
+{
+"id": "S14",
+"model": "kimi",
+"kind": "solo",
+"screen": "banks",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "Long titles truncate ('\u2026(eq.', '\u2026answer key.') directly beside '...' menu buttons that are dark-on-dark circles, so both the name and the only card action are illegible in the same spot."
+},
+{
+"id": "S14",
+"model": "qwen",
+"kind": "solo",
+"screen": "banks",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"gap": "On the 'Demo: Algebra and Calculus (eq...' and 'Ch4 Quiz 5A and 5B (answer key.' cards the serif title truncates mid-parenthesis exactly where the circular '...' overflow button sits, and on the Ch4 card the button overlaps the title's end, so the card header line reserves no space for both."
+},
+{
+"id": "S15",
+"model": "deepseek",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "The question-type mix bar on each bank card has no legend or labels, so its coloured segments carry no meaning."
+},
+{
+"id": "S15",
+"model": "glm",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"gap": "Three of four bank titles truncate mid-word with ellipses in one row, making the Your Banks shelf look like four identical cards."
+},
+{
+"id": "S15",
+"model": "gpt",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "Several exam and bank names are visibly truncated on their cards, hiding the distinguishing end of each title."
+},
+{
+"id": "S15",
+"model": "kimi",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"gap": "Card titles truncate everywhere \u2014 'Ch4 Quiz 5A and 5B (a\u2026' and 'Demo: Algebra and Ca\u2026' repeat across rows \u2014 so near-identical names are indistinguishable at a glance."
+},
+{
+"id": "S15",
+"model": "qwen",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"gap": "Nearly every card title and bank name is ellipsized on one line (Demo: Algebra and Ca\u2026, Ch4 Quiz 5A and 5B (answ\u2026) even though the cards have vertical room to wrap, so the dashboard hides the names of the very items it exists to reopen."
+},
+{
+"id": "S16",
+"model": "deepseek",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "Five pills share the bottom bar (Save to question, Student + key, Examples, Presets, Handles), so four secondary utilities dilute the one primary save."
+},
+{
+"id": "S16",
+"model": "glm",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 8
+},
+"gap": "The figure canvas leaves its bottom third as empty white space below the momentum rows, making the preview feel unbalanced against the tightly packed left column."
+},
+{
+"id": "S16",
+"model": "gpt",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "The white figure canvas dominates the right pane while the editable values and appearance controls are compressed into small, low-contrast cards on the left."
+},
+{
+"id": "S16",
+"model": "kimi",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The bottom bar crams five same-weight chips (Student + key, Examples, Presets, Handles, Report an issue) into one row so the primary 'Save to question...' action has to compete with them."
+},
+{
+"id": "S16",
+"model": "qwen",
+"kind": "solo",
+"screen": "figure-editor",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The white figure page sits flush under the toolbar but stops about 50px above the panel bottom edge, leaving a dead dark band that makes the preview look clipped while the left settings column stays cramped."
+},
+{
+"id": "S17",
+"model": "deepseek",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The three feature cards under the form look like clickable settings sections and sit at the same elevation as the real form above them."
+},
+{
+"id": "S17",
+"model": "glm",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "All content ends two thirds down the viewport, leaving a large dead grid area under the three feature cards."
+},
+{
+"id": "S17",
+"model": "gpt",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 5
+},
+"gap": "The disabled Save button under the server-address field has no visible reason or instruction, so the sharing setup appears stuck."
+},
+{
+"id": "S17",
+"model": "kimi",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The four-item section list dies a third of the way down the left column and the whole lower-left half of the window is empty gridpaper, leaving the page visibly unbalanced."
+},
+{
+"id": "S17",
+"model": "qwen",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 8
+},
+"gap": "The 'Share with teachers' card's bottom edge sits about 25px higher than the 'Hosted AI' and 'Runs here' cards beside it, leaving the three-card row visibly ragged along its bottom edge."
+},
+{
+"id": "S18",
+"model": "deepseek",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "The disabled Save button is a near-black pill on a near-black card, so the only action in the settings form is almost invisible."
+},
+{
+"id": "S18",
+"model": "glm",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"gap": "Body text in the three feature cards is low-contrast gray on dark, leaving the descriptions hard to read."
+},
+{
+"id": "S18",
+"model": "gpt",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "The server-address panel's Save button is visibly dim and disabled, but the field gives no nearby reason or next step for enabling it."
+},
+{
+"id": "S18",
+"model": "kimi",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 4
+},
+"gap": "In dark mode the 'Save' button under the server address is dark-gray text on a barely-different dark fill, to the point of being effectively invisible."
+},
+{
+"id": "S18",
+"model": "qwen",
+"kind": "solo",
+"screen": "account",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 6
+},
+"gap": "Roughly the bottom 40% of the window below the three info cards is empty dark canvas, and the cards themselves end at three different heights, leaving the whole settings screen stranded in the top half with no balancing content."
+},
+{
+"id": "S19",
+"model": "deepseek",
+"kind": "solo",
+"screen": "welcome",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 4,
+"type": 6,
+"state": 6
+},
+"gap": "Each step description runs the full 690px width at 12px, giving lines far too long to scan."
+},
+{
+"id": "S19",
+"model": "glm",
+"kind": "solo",
+"screen": "welcome",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "Subtitle and card bodies run 700-pixel full-width lines, well past a comfortable reading measure in the portrait frame."
+},
+{
+"id": "S19",
+"model": "gpt",
+"kind": "solo",
+"screen": "welcome",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 4,
+"type": 7,
+"state": 4
+},
+"gap": "The fourth how-it-works card is cut off by the bottom edge, so its body copy and the page's ending are not visible in this viewport."
+},
+{
+"id": "S19",
+"model": "kimi",
+"kind": "solo",
+"screen": "welcome",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 5,
+"type": 7,
+"state": 7
+},
+"gap": "The fourth step card ('Print the real thing') is sliced mid-sentence at the bottom edge of the window with no scroll cue indicating more below."
+},
+{
+"id": "S19",
+"model": "qwen",
+"kind": "solo",
+"screen": "welcome",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 5,
+"state": 6
+},
+"gap": "In this narrow window the stacked 'How it works' cards run full-bleed, so each card's body text stretches to roughly 100 characters per line (card 1: 'Write them in the editor, or hand a test...'), far beyond a readable measure."
+},
+{
+"id": "S20",
+"model": "deepseek",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"gap": "The modal backdrop is so weak that the green New bank tile and the page text behind it stay at full strength and compete with the dialog."
+},
+{
+"id": "S20",
+"model": "glm",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The modal background is nearly the same dark tone as the dimmed page behind it, so the dialog fails to separate visually."
+},
+{
+"id": "S20",
+"model": "gpt",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 5,
+"spacing": 7,
+"type": 5,
+"state": 4
+},
+"gap": "The centered alpha dialog uses muted gray text against a nearly black panel, making its explanatory copy noticeably low-contrast and hard to read."
+},
+{
+"id": "S20",
+"model": "kimi",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 6
+},
+"gap": "The modal's dark fill is nearly identical to the under-dimmed page behind it, with only a hairline border, so background card text remains readable right up against the dialog and the modal doesn't visually lift."
+},
+{
+"id": "S20",
+"model": "qwen",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 7,
+"state": 5
+},
+"gap": "The 'New bank' action card is filled with saturated green while its siblings 'New exam' and 'Import' stay dark, with no hover, selection or label anywhere to explain why one card reads as permanently active."
+},
+{
+"id": "S21",
+"model": "deepseek",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "Got it and Report an issue are the same pill height with near-equal text weight, so dismissing the dialog and escaping to report look equally primary."
+},
+{
+"id": "S21",
+"model": "glm",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 8,
+"state": 7
+},
+"gap": "The dimmed page content stops at mid-viewport, leaving the lower half empty under the dialog with nothing to anchor it."
+},
+{
+"id": "S21",
+"model": "gpt",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 8,
+"state": 7
+},
+"gap": "The dimmed home-page instructions remain prominent through the overlay around the dialog, creating competing text behind the alpha notice."
+},
+{
+"id": "S21",
+"model": "kimi",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"gap": "The dialog is placed so it slices the onboarding card behind it mid-sentence, leaving readable text fragments ('shot, a Word file.', 'age and reorder them.') poking out on both sides of the modal."
+},
+{
+"id": "S21",
+"model": "qwen",
+"kind": "solo",
+"screen": "home-empty",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "Everything stops at about two-thirds of the window height, leaving the bottom third as empty dimmed canvas so the dashboard reads top-heavy with the stats and action cards clustered far above the fold of useful content."
+},
+{
+"id": "S22",
+"model": "deepseek",
+"kind": "solo",
+"screen": "settings",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The disabled Save button is a pale ghost pill in the corner of the form card, so the only action on the page reads as decoration."
+},
+{
+"id": "S22",
+"model": "glm",
+"kind": "solo",
+"screen": "settings",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "All content stops two-thirds down the viewport, stranding the lower third as blank unbalanced grid."
+},
+{
+"id": "S22",
+"model": "gpt",
+"kind": "solo",
+"screen": "settings",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 5,
+"state": 5
+},
+"gap": "The three feature-card descriptions at the bottom use conspicuously expanded letter spacing, making otherwise short explanatory copy slow to read."
+},
+{
+"id": "S22",
+"model": "kimi",
+"kind": "solo",
+"screen": "settings",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The 'Save' button under the server address is rendered in such washed-out gray-on-gray that it is impossible to tell whether it is disabled or merely unhovered."
+},
+{
+"id": "S22",
+"model": "qwen",
+"kind": "solo",
+"screen": "settings",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 7
+},
+"gap": "Roughly the bottom 40% of the window below the three info cards is empty grid background, leaving all settings content stranded at the top with nothing balancing the page."
+},
+{
+"id": "S23",
+"model": "deepseek",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "The feature card descriptions are 12px grey on a near-black card, so the body copy is hard to read at normal distance."
+},
+{
+"id": "S23",
+"model": "glm",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"gap": "Feature card body text is muted gray-brown on dark, the dimmest text on the page and hard to scan."
+},
+{
+"id": "S23",
+"model": "gpt",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"gap": "The large server-address card has a dim Save button with no visible explanation of whether it is disabled or why, leaving the primary setting\u2019s save state unclear."
+},
+{
+"id": "S23",
+"model": "kimi",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 5,
+"type": 6,
+"state": 4
+},
+"gap": "The 'Save' button under the server address is dark-gray text on an almost identical dark fill, effectively invisible, and the empty left column below the four-item list leaves half the window dead."
+},
+{
+"id": "S23",
+"model": "qwen",
+"kind": "solo",
+"screen": "settings",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 4,
+"type": 6,
+"state": 6
+},
+"gap": "Below the three info cards, whose bottom edges are already misaligned because the 'Share with teachers' card is shorter than its two neighbours, the entire lower third of the window is empty dark canvas, leaving the page looking abandoned mid-scroll."
+},
+{
+"id": "S24",
+"model": "deepseek",
+"kind": "solo",
+"screen": "figures",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The category chips wrap so Health and technology sits alone on a second row beneath a wide blank gap."
+},
+{
+"id": "S24",
+"model": "glm",
+"kind": "solo",
+"screen": "figures",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "The search figures input is shrunken to fit barely a dozen characters while the Open link and Import buttons beside it are oversized."
+},
+{
+"id": "S24",
+"model": "gpt",
+"kind": "solo",
+"screen": "figures",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The unlabeled icon rail at left makes the app's main destinations hard to identify without guessing or hovering."
+},
+{
+"id": "S24",
+"model": "kimi",
+"kind": "solo",
+"screen": "figures",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "The category filter pills wrap so 'Health and technology' orphans onto its own row, and the figure thumbnails sit small at the top of tall cards leaving a band of dead white in each."
+},
+{
+"id": "S24",
+"model": "qwen",
+"kind": "solo",
+"screen": "figures",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"gap": "The figure cards (e.g. 'Free Body Diagram', 'Pulley') show no affordance that they can be opened or selected - no button, hover outline, or action row - so the main grid reads as a static poster rather than a working library."
+},
+{
+"id": "S25",
+"model": "deepseek",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 8,
+"state": 6
+},
+"gap": "A 150px empty band separates the hero call to action from the HOW IT WORKS steps, splitting the page in two."
+},
+{
+"id": "S25",
+"model": "glm",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 8,
+"state": 8
+},
+"gap": "A wide dead band separates the CTA block from the HOW IT WORKS cards, sagging the middle of the page."
+},
+{
+"id": "S25",
+"model": "gpt",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The large blank band between the hero\u2019s CTA and the \u201cHow it works\u201d heading wastes nearly a quarter of the visible page and disconnects the sections."
+},
+{
+"id": "S25",
+"model": "kimi",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 8,
+"spacing": 5,
+"type": 8,
+"state": 7
+},
+"gap": "A roughly 150px dead band of empty gridpaper between the 'Runs on your machine' note and the HOW IT WORKS section severs the hero from the content below it."
+},
+{
+"id": "S25",
+"model": "qwen",
+"kind": "solo",
+"screen": "welcome",
+"view": "desktop",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 5
+},
+"gap": "Two roughly 200px-tall bands of empty graph-paper background sit between the CTA block and the 'HOW IT WORKS' label and again between the four step cards and the footer, so the page reads as three disconnected islands instead of one flow."
+},
+{
+"id": "S26",
+"model": "deepseek",
+"kind": "solo",
+"screen": "account",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The three bordered feature cards below the form carry icon, heading and body styling identical to clickable settings tiles, yet they are static prose."
+},
+{
+"id": "S26",
+"model": "glm",
+"kind": "solo",
+"screen": "account",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"gap": "Below the three info cards the page drops into two-thirds blank grid, so all interactive content crowds the top of the viewport."
+},
+{
+"id": "S26",
+"model": "gpt",
+"kind": "solo",
+"screen": "account",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 7,
+"state": 5
+},
+"gap": "The disabled Save button sits directly below an example server URL with no explanation, leaving it unclear how to enable sharing."
+},
+{
+"id": "S26",
+"model": "kimi",
+"kind": "solo",
+"screen": "account",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The 'Save' button under the server address is rendered in such washed-out gray-on-gray that you cannot tell whether it is disabled or merely unhovered."
+},
+{
+"id": "S26",
+"model": "qwen",
+"kind": "solo",
+"screen": "account",
+"view": "narrow",
+"theme": "light",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 5,
+"state": 7
+},
+"gap": "The body copy inside the three feature cards mid-page is set with heavy letter-spacing ('S e n d  b a n k s  t o ...'), turning the only explanatory text on the screen into tracked-out, hard-to-read blocks."
+},
+{
+"id": "S27",
+"model": "deepseek",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "The QUESTIONS, TOPICS and EDITED labels on each bank card are 10px muted uppercase on dark, too small and too faint to read at a glance."
+},
+{
+"id": "S27",
+"model": "glm",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 8
+},
+"gap": "Three of four bank card titles truncate with ellipses in the same row, so the shelf reads as four lookalike cards."
+},
+{
+"id": "S27",
+"model": "gpt",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 6,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"gap": "Across both recent-exam and bank cards, long titles and bank names are cut off with ellipses, obscuring the labels needed to identify work at a glance."
+},
+{
+"id": "S27",
+"model": "kimi",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"gap": "Nearly every card title truncates ('Ch4 Quiz 5A and 5B (a\u2026' appears twice, 'Demo: Algebra and Ca\u2026'), so identically-truncated names can't be told apart without opening them."
+},
+{
+"id": "S27",
+"model": "qwen",
+"kind": "solo",
+"screen": "home",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"gap": "The selected Home tile in the left sidebar is a solid yellow blob whose icon is invisible against the yellow highlight, breaking the icon-plus-label pattern every other nav row follows."
+},
+{
+"id": "S28",
+"model": "deepseek",
+"kind": "solo",
+"screen": "exams",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"gap": "The bright white paper thumbnails outshine everything on the dark screen, pulling the eye away from the exam names they belong to."
+},
+{
+"id": "S28",
+"model": "glm",
+"kind": "solo",
+"screen": "exams",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"gap": "The Questions Points Bank Edited label column is dim reddish-gray on near-black, undercutting every card row."
+},
+{
+"id": "S28",
+"model": "gpt",
+"kind": "solo",
+"screen": "exams",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 5,
+"state": 6
+},
+"gap": "The tiny exam-page thumbnails and compact metadata leave the question content and most distinguishing details unreadable in each card."
+},
+{
+"id": "S28",
+"model": "kimi",
+"kind": "solo",
+"screen": "exams",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "The circular '...' menu buttons on each exam card are dark-on-dark with a hairline border, effectively invisible until you already know they are there."
+},
+{
+"id": "S28",
+"model": "qwen",
+"kind": "solo",
+"screen": "exams",
+"view": "desktop",
+"theme": "dark",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "Each exam card is ~250px tall for just a thumbnail and four metadata rows, so three exams leave a card-sized hole beside 'Demo: Science check' and a dead band across the bottom third of the window."
+}
+]
