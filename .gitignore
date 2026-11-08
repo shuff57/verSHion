@@ -10,3 +10,9 @@
 # playwright-cli scratch output (console logs, page snapshots)
 server/worker/.playwright-cli/
 tools/ui-grading/results.json
+
+# UI hill-climb round output (generated frames, blind sets, critic logs)
+/ui-r9/shots
+/ui-r9/blind-*
+/ui-r9/logs
+/tools/ui-grading/__pycache__/

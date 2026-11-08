@@ -1,0 +1,16 @@
+{
+  "round": "ui-r9-r0",
+  "tasks": [
+    {"id": "T1", "measured": false, "pass": false, "critical": false,
+     "friction": "Not measured: the web walk drifted one row off (clicks landed on the neighbouring sidebar item), so the first-bank walk was abandoned rather than guessed."},
+    {"id": "T2", "measured": false, "pass": false, "critical": false, "friction": "Not measured: desktop half, needs a walked recording with a file dialog."},
+    {"id": "T3", "measured": false, "pass": false, "critical": false, "friction": "Not measured: needs the mailbox for the mailed link; only the pre-link half is walkable."},
+    {"id": "T4", "measured": false, "pass": false, "critical": false, "friction": "Not measured: the app half was not walked this round."},
+    {"id": "T5", "measured": false, "pass": false, "critical": false, "friction": "Not measured: desktop half, needs a walked recording."},
+    {"id": "T6", "measured": false, "pass": false, "critical": false, "friction": "Not measured: Tab order not recorded."},
+    {"id": "T7", "measured": false, "pass": false, "critical": false, "friction": "Not measured: persistence not exercised."},
+    {"id": "T8", "measured": true, "pass": true, "critical": false, "actions": 14, "seconds": 95,
+     "screens": ["welcome", "home", "banks", "exams", "import", "grade", "figures"],
+     "friction": "The Grade empty state says to make an exam first but offers no button to get there; it is the only empty list whose next action lives on another page."}
+  ]
+}

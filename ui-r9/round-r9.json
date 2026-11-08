@@ -1,0 +1,76 @@
+{
+  "PAIRS": [
+    "banks",
+    "bank",
+    "question-editor-bank",
+    "exams",
+    "exam",
+    "paper-standard",
+    "paper-classic",
+    "paper-condensed",
+    "paper-exam-board",
+    "imports"
+  ],
+  "P7": [
+    "banks",
+    "bank",
+    "question-editor-bank",
+    "exams",
+    "exam",
+    "imports"
+  ],
+  "SOLO_L": [
+    "welcome",
+    "home-empty",
+    "home",
+    "figures",
+    "figure-editor",
+    "settings",
+    "account"
+  ],
+  "SOLO_7": [
+    "welcome",
+    "home-empty",
+    "home",
+    "figures",
+    "figure-editor",
+    "settings",
+    "account"
+  ],
+  "SOLO_D": [
+    "welcome",
+    "home-empty",
+    "home",
+    "banks",
+    "bank",
+    "question-editor-bank",
+    "exams",
+    "exam",
+    "paper-standard",
+    "imports",
+    "figures",
+    "figure-editor",
+    "settings",
+    "account"
+  ],
+  "MIRROR_D": [
+    "banks",
+    "exam"
+  ],
+  "MIRROR_7": [
+    "banks",
+    "exam"
+  ],
+  "CONTROLS": [
+    [
+      "exams",
+      "desktop",
+      "exams-light.png"
+    ],
+    [
+      "bank",
+      "desktop",
+      "bank-light.png"
+    ]
+  ]
+}
