@@ -815,12 +815,13 @@ fn preset_start(pair: &str) -> Option<(f64, f64, f64)> {
     }
 }
 
-/// A pair pick fills the page's boxes with that pair's numbers; typing in one of those boxes while
-/// a named pair is picked turns the pair into "Your own pair" and keeps everything else as shown.
+/// A pair pick fills the page's boxes with that pair's typical numbers and unit (they act from then on
+/// like any typed value, and typing a number keeps the pair). Typing a species name turns the pair into
+/// "Your own pair", because a named pair's names come from the pair.
 pub fn pp_panel_changed(key: &str, p: &mut Params) {
     let pair = p.s("pair").to_string();
     let Some((a, b, pa, qa, cy, u, _)) = preset(&pair) else { return };
-    let fill = |p: &mut Params| {
+    if key == "pair" {
         p.set_s("prey", a);
         p.set_s("pred", b);
         p.set_f("prey_avg", pa);
@@ -830,18 +831,10 @@ pub fn pp_panel_changed(key: &str, p: &mut Params) {
         let (x0, y0) = preset_start(&pair).map(|(x, y, _)| (x, y)).unwrap_or((pa * 0.4, qa * 0.6));
         p.set_f("prey0", x0);
         p.set_f("pred0", y0);
-    };
-    if key == "pair" {
-        fill(p);
         if let Some((_, _, t)) = preset_start(&pair) {
             p.set_f("tshow", t);
         }
-    } else if matches!(key, "prey" | "pred" | "prey_avg" | "pred_avg" | "cycle" | "unit" | "prey0" | "pred0") {
-        let typed = p.0.get(key).cloned();
-        fill(p);
-        if let Some(v) = typed {
-            p.0.insert(key.to_string(), v);
-        }
+    } else if matches!(key, "prey" | "pred") {
         p.set_s("pair", PAIRS[8]);
     }
 }
@@ -874,35 +867,22 @@ struct PpSetup {
     auto_right: bool, x0: f64, y0: f64, alpha: f64, beta: f64, gamma: f64, delta: f64,
 }
 
-/// A predator-prey number's default, the value that means "not set by the teacher".
-fn default_f(key: &str) -> f64 {
-    pp_params().iter().find(|d| d.key == key).map(|d| match d.default { Value::F(v) => v, Value::I(v) => v as f64, _ => 0.0 }).unwrap_or(0.0)
-}
-
 fn pp_setup(p: &Params) -> PpSetup {
     let (mut prey, mut pred) = (p.s("prey").trim().to_string(), p.s("pred").trim().to_string());
-    let (mut pavg, mut qavg, mut cycle) = (p.f("prey_avg").max(1.0), p.f("pred_avg").max(1.0), p.f("cycle").max(0.1));
-    let mut unit = p.s("unit").to_string();
+    let (pavg, qavg, cycle) = (p.f("prey_avg").max(1.0), p.f("pred_avg").max(1.0), p.f("cycle").max(0.1));
+    let unit = p.s("unit").to_string();
     let mut ytitle = p.s("y_title").trim().to_string();
     let pair = p.s("pair");
     let mut auto_right = false;
-    // A named pair supplies the species names and, for any number still at the figure's own
-    // default, that pair's typical value; a number the teacher has changed always acts.
-    let touched = |k: &str| (p.f(k) - default_f(k)).abs() > 1e-12;
-    if let Some((a, b, c, dd, e, u, yt)) = preset(pair) {
+    // A named pair supplies the species names (and the right-hand axis layout); the populations,
+    // averages, cycle length and unit are always the figure's own values. Picking a pair in the panel
+    // fills them with that pair's typical numbers (`pp_panel_changed`), and the examples carry them.
+    if let Some((a, b, _, _, _, _, yt)) = preset(pair) {
         prey = a.into(); pred = b.into();
-        if p.s("unit") == "Years" { unit = u.into(); }
-        if !touched("prey_avg") { pavg = c; }
-        if !touched("pred_avg") { qavg = dd; }
-        if !touched("cycle") { cycle = e; }
         if ytitle.is_empty() { ytitle = yt.into(); }
         auto_right = preset_start(pair).is_some();
     }
-    let start = preset_start(pair).map(|(a, b, _)| (a, b));
-    let (x0, y0) = if preset(pair).is_some() {
-        let (d0, e0) = start.unwrap_or((pavg * 0.4, qavg * 0.6));
-        (if touched("prey0") { p.f("prey0").max(0.01) } else { d0 }, if touched("pred0") { p.f("pred0").max(0.01) } else { e0 })
-    } else { (p.f("prey0").max(0.01), p.f("pred0").max(0.01)) };
+    let (x0, y0) = (p.f("prey0").max(0.01), p.f("pred0").max(0.01));
     // the reference's default (hares and lynx) counts thousands of animals
     if ytitle.is_empty() && prey == "Hares" && pred == "Lynx" && pavg == 50.0 && qavg == 20.0 { ytitle = "Number of animals (thousands)".into(); }
     if prey.is_empty() { prey = "Prey".into(); }
@@ -1303,21 +1283,35 @@ pub fn pp_render(p: &Params) -> String {
 }
 
 /// "Start from an example" entries for predator-prey (reference gallery).
+/// A pair's typical numbers and unit as params (what picking the pair in the panel fills in).
+pub fn pair_params(pair: &str) -> Vec<(&'static str, Value)> {
+    let Some((_, _, pa, qa, cy, u, _)) = preset(pair) else { return Vec::new() };
+    let (x0, y0) = preset_start(pair).map(|(x, y, _)| (x, y)).unwrap_or((pa * 0.4, qa * 0.6));
+    vec![("prey_avg", Value::F(pa)), ("pred_avg", Value::F(qa)), ("cycle", Value::F(cy)), ("unit", Value::S(u.into())), ("prey0", Value::F(x0)), ("pred0", Value::F(y0))]
+}
+
 pub fn pp_examples() -> Vec<Example> {
     let st = |v: &str| Value::S(v.into());
+    let with = |pair: &str, rest: Vec<(&'static str, Value)>| {
+        let mut v = vec![("pair", Value::S(pair.into()))];
+        v.extend(pair_params(pair));
+        v.extend(rest);
+        v
+    };
+    let hare = "Snowshoe hare and Canada lynx";
     vec![
-        Example { name: "Snowshoe hare and lynx population cycles", params: vec![("pair", st("Snowshoe hare and Canada lynx"))] },
-        Example { name: "Hare and lynx census counts with peaks, lag and period", params: vec![
-            ("pair", st("Snowshoe hare and Canada lynx")), ("data", st("Census counts")), ("marks", st("Peaks")),
+        Example { name: "Snowshoe hare and lynx population cycles", params: with(hare, vec![]) },
+        Example { name: "Hare and lynx census counts with peaks, lag and period", params: with(hare, vec![
+            ("data", st("Census counts")), ("marks", st("Peaks")),
             ("mark_lag", Value::B(true)), ("mark_period", Value::B(true)), ("y_axis", st("Predators on the right")),
             ("y_title", st("Hares (thousands)")),
-        ] },
-        Example { name: "Moose and wolf population cycles graph (Isle Royale)", params: vec![("pair", st("Moose and wolf (Isle Royale)")), ("tshow", Value::F(90.0))] },
-        Example { name: "Predator-prey phase plane loop", params: vec![("pair", st("Snowshoe hare and Canada lynx")), ("graph", st("Predators against prey"))] },
-        Example { name: "Lag and period worksheet (blank for students)", params: vec![
-            ("pair", st("Snowshoe hare and Canada lynx")), ("marks", st("Peaks")), ("mark_lag", Value::B(true)), ("mark_period", Value::B(true)),
+        ]) },
+        Example { name: "Moose and wolf population cycles graph (Isle Royale)", params: with("Moose and wolf (Isle Royale)", vec![("tshow", Value::F(90.0))]) },
+        Example { name: "Predator-prey phase plane loop", params: with(hare, vec![("graph", st("Predators against prey"))]) },
+        Example { name: "Lag and period worksheet (blank for students)", params: with(hare, vec![
+            ("marks", st("Peaks")), ("mark_lag", Value::B(true)), ("mark_period", Value::B(true)),
             ("lag_labels", st("Blank for students")), ("style", st("Black and white")),
-        ] },
+        ]) },
     ]
 }
 
@@ -1411,7 +1405,7 @@ mod tests {
         assert_eq!(r[0], "A cycle every 10 years; the predators peak 1.6 years after the prey");
         assert_eq!(r[1], "Hares: 16.8 to 111, averaging 49.9");
         // a preset pair uses its own names, units and cycle
-        let r = pp_readout(&pp(&[("pair", s("Aphid and ladybug"))]));
+        let r = pp_readout(&pp_pair("Aphid and ladybug", &[]));
         assert!(r[0].starts_with("A cycle every 20 days"), "{}", r[0]);
         assert!(r[1].starts_with("Aphids: ") && r[2].starts_with("Ladybugs: "), "{r:?}");
         // a short cycle in one unit reads "1 year"
@@ -1455,39 +1449,62 @@ mod tests {
         assert_ne!(a, b);
     }
 
-    /// With a named pair the teacher's starting populations, averages and cycle length used to be
-    /// ignored (only "Your own pair" read them); now a changed number acts and an untouched one
-    /// takes the pair's typical value.
+    /// A pair's params as the panel fills them, then `over` on top.
+    fn pp_pair(pair: &str, over: &[(&str, Value)]) -> Params {
+        let mut p = pp(&[("pair", s(pair))]);
+        pp_panel_changed("pair", &mut p);
+        for (k, v) in over { p.0.insert(k.to_string(), v.clone()); }
+        p
+    }
+
+    /// The numbers and the unit always act, even under a named pair (they used to be replaced by the
+    /// pair's table), and a value equal to the figure default is settable too: cycle 10 on
+    /// Rabbit and wolf (whose own is 8) and Years on Aphid and ladybug (whose own is days).
     #[test]
-    fn named_pair_honours_the_teachers_numbers() {
-        let base = pp_render(&pp(&[("pair", s("Rabbit and wolf"))]));
-        for (k, v) in [("prey0", 111.0), ("pred0", 7.0), ("prey_avg", 900.0), ("pred_avg", 55.0), ("cycle", 14.0)] {
-            let t = pp_render(&pp(&[("pair", s("Rabbit and wolf")), (k, Value::F(v))]));
-            assert_ne!(t, base, "{k} is dead under a named pair");
+    fn numbers_and_unit_always_act_under_a_named_pair() {
+        let base = pp_render(&pp_pair("Rabbit and wolf", &[]));
+        for (k, v) in [("prey0", 111.0), ("pred0", 7.0), ("prey_avg", 900.0), ("pred_avg", 55.0), ("cycle", 14.0), ("cycle", 10.0)] {
+            assert_ne!(pp_render(&pp_pair("Rabbit and wolf", &[(k, Value::F(v))])), base, "{k}={v} is dead under a named pair");
         }
-        // the pair still supplies its names and its own defaults for numbers left alone
+        assert_eq!(pp_setup(&pp_pair("Rabbit and wolf", &[("cycle", Value::F(10.0))])).cycle, 10.0);
+        assert_eq!(pp_setup(&pp_pair("Rabbit and wolf", &[])).cycle, 8.0);
         assert!(base.contains("Rabbits") && base.contains("Wolves"));
-        assert_eq!(pp_setup(&pp(&[("pair", s("Rabbit and wolf"))])).cycle, 8.0);
-        let st = pp_setup(&pp(&[("pair", s("Rabbit and wolf")), ("cycle", Value::F(14.0)), ("prey0", Value::F(111.0))]));
-        assert_eq!((st.cycle, st.x0, st.pavg), (14.0, 111.0, 600.0));
-        // the hare and lynx opening state is unchanged
+        let aphid = pp_pair("Aphid and ladybug", &[]);
+        assert_eq!(pp_setup(&aphid).unit, "Days");
+        for u in ["Years", "Months", "Weeks"] {
+            let q = pp_pair("Aphid and ladybug", &[("unit", s(u))]);
+            assert_eq!(pp_setup(&q).unit, u);
+            assert_ne!(pp_render(&q), pp_render(&aphid), "{u}");
+        }
+        assert!(pp_readout(&pp_pair("Rabbit and wolf", &[("unit", s("Months"))]))[0].contains("months"));
+        // the opening state (hare and lynx on the defaults) is unchanged
         let st = pp_setup(&pp(&[]));
         assert_eq!((st.pavg, st.qavg, st.cycle, st.x0, st.y0), (50.0, 20.0, 10.0, 20.0, 12.0));
     }
 
-    /// The time unit used to be replaced by the pair's own whenever a pair was named; a unit the
-    /// teacher picked now acts (the pair's unit only fills in while the choice is left on Years).
+    /// Picking a pair fills its typical numbers and unit; typing a number keeps the pair; typing a
+    /// species name makes it "Your own pair"; examples that name a pair carry its numbers.
     #[test]
-    fn named_pair_honours_the_unit() {
-        let pair = s("Aphid and ladybug");
-        assert_eq!(pp_setup(&pp(&[("pair", pair.clone())])).unit, "Days");
-        let base = pp_render(&pp(&[("pair", pair.clone())]));
-        for u in ["Months", "Weeks"] {
-            let st = pp_setup(&pp(&[("pair", pair.clone()), ("unit", s(u))]));
-            assert_eq!(st.unit, u);
-            assert_ne!(pp_render(&pp(&[("pair", pair.clone()), ("unit", s(u))])), base, "{u}");
+    fn picking_a_pair_fills_its_numbers() {
+        let mut p = pp(&[("pair", s("Moose and wolf (Isle Royale)"))]);
+        pp_panel_changed("pair", &mut p);
+        assert_eq!((p.f("prey_avg"), p.f("pred_avg"), p.f("cycle"), p.f("prey0"), p.f("pred0"), p.f("tshow")), (1000.0, 25.0, 30.0, 600.0, 20.0, 90.0));
+        assert_eq!((p.s("unit"), p.s("prey"), p.s("pred")), ("Years", "Moose", "Wolves"));
+        let mut q = pp(&[("pair", s("Aphid and ladybug"))]);
+        pp_panel_changed("pair", &mut q);
+        assert_eq!((q.s("unit"), q.f("cycle")), ("Days", 20.0));
+        q.set_f("cycle", 5.0);
+        pp_panel_changed("cycle", &mut q);
+        assert_eq!((q.s("pair"), q.f("cycle")), ("Aphid and ladybug", 5.0));
+        q.set_s("prey", "Mites");
+        pp_panel_changed("prey", &mut q);
+        assert_eq!(q.s("pair"), "Your own pair");
+        for ex in pp_examples() {
+            let pair = ex.params.iter().find_map(|(k, v)| if *k == "pair" { if let Value::S(x) = v { Some(x.clone()) } else { None } } else { None }).unwrap();
+            for (k, v) in pair_params(&pair) {
+                assert!(ex.params.iter().any(|(k2, v2)| *k2 == k && *v2 == v), "{} lacks {k}", ex.name);
+            }
         }
-        assert!(pp_readout(&pp(&[("pair", s("Rabbit and wolf")), ("unit", s("Months"))]))[0].contains("months"));
     }
 
     #[test]
