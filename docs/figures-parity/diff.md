@@ -92,7 +92,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | pedigree | `pedigree` | 17 | 1 | 8 | reference has a student version; ours has no show_answers | 95 |
 | photosynthesis-rate | `photosynthesis` | 14 | 0 | 8 | — | 26 |
 | population-growth | `population-growth` | 53 | 7 | 7 | reference has a student version; ours has no show_answers | 95 |
-| predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 94 |
+| predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 97 |
 | punnett-square | `punnett-square` | 24 | 3 | 8 | — | 94 |
 
 ## Reference figures we do not have
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-08T19:31:07+00:00 · probe: 2026-11-08T11:31:06
+Generated: 2026-11-08T20:27:51+00:00 · probe: 2026-11-08T12:27:51
 
-**Pooled 76.2** · mean 78.5 over 67 figures · built 68 of 71 reference figures (missing: math/pie-chart, biology/dna-protein-synthesis, biology/osmosis)
+**Pooled 76.3** · mean 78.6 over 67 figures · built 68 of 71 reference figures (missing: math/pie-chart, biology/dna-protein-synthesis, biology/osmosis)
 
 Comparable with the frozen baseline: **yes**
 
@@ -339,9 +339,6 @@ Comparable with the frozen baseline: **yes**
 - `rectangle`: 93 (80/86)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
-- `predator-prey`: 94 (90/96)
-  - cap-03c [control 3] Time units while keeping a named pair — no evidence
-  - cap-04c [version 3] Draw neither population: blank axes — no evidence
 - `punnett-square`: 94 (85/90)
   - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
   - cap-05d [interaction 2] Click a cell to blank it — no evidence
@@ -361,6 +358,8 @@ Comparable with the frozen baseline: **yes**
   - cap-03b [interaction 2] Pick the force at random — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
+- `predator-prey`: 97 (93/96)
+  - cap-04c [version 3] Draw neither population: blank axes — no evidence
 - `free-body-diagram`: 97 (65/67)
   - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
 - `waves`: 97 (97/100)

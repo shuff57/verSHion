@@ -9113,7 +9113,8 @@ mod cfg_math_tests {
         let measure = svg(&[("r_lab", s("Measure"))]);
         assert!(measure.contains("8 cm"));
         assert!(svg(&[("r_lab", s("None"))]).contains("8 cm") == false);
-        assert!(svg(&[("r_lab", s("Text")), ("r_label", s("d"))]).contains(">d<"));
+        // The Diameter row's text is d_label (its default is also "d", so use a distinct value).
+        assert!(svg(&[("r_lab", s("Text")), ("d_label", s("D"))]).contains(">D<"));
         assert_eq!(svg(&[("r_lab", s("Measure")), ("d_lab", s("Text"))]), measure);
     }
 

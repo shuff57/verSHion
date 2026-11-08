@@ -56,8 +56,8 @@
    "id": "cap-03c",
    "text": "Time units while keeping a named pair",
    "class": "control",
-   "evidence": "",
-   "note": "Attempted in round 3 (2026-11-08). Before: Wider form of cap-03b: with a named pair, ours renders the same whatever unit is chosen. Evidence cleared: round 3 checker failed it: the unit relabels the axis only and the panel boxes still say years."
+   "evidence": "changes:unit=Months",
+   "note": "Built in round 7 (2026-11-08). Attempted in round 3 (2026-11-08). Before: Wider form of cap-03b: with a named pair, ours renders the same whatever unit is chosen. Evidence cleared: round 3 checker failed it: the unit relabels the axis only and the panel boxes still say years."
   },
   {
    "id": "cap-04a",

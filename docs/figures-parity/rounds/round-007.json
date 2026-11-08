@@ -1,0 +1,35 @@
+{
+ "round": 7,
+ "figure": "predator-prey",
+ "capability": "cap-03c",
+ "hypothesis": "Retry of round 3: the unit acts under a named pair and the panel labels (cycle length, time shown, census interval) name the chosen unit. Evidence changes:unit=Months; expected predator-prey +3.1",
+ "started_at": "2026-11-08T11:53:48",
+ "git": "03eed3d",
+ "before": {
+  "figure": 93.8,
+  "pooled": 76.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-08T12:27:51",
+ "after": {
+  "figure": 96.9,
+  "pooled": 76.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:unit=Months",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/predator-prey/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/predator-prey/2765c3bdc131aefd.png"
+   }
+  ]
+ },
+ "checker": "pass: with a named pair, every unit option now reaches the axis title, the readout, the lag and period marks, and the three time-valued panel boxes. All of them take the unit from the one `unit` value, so they always agree.",
+ "result": "hit",
+ "evidence": "figure suite 2227 passed 0 failed (figtest, census included, no ids changed); no task run (bug-fix round); checker measured Rabbit and wolf Months peaks 8 months apart, Aphid Weeks 20 weeks",
+ "next": "predator-prey: lag label sits on the first prey peak marker"
+}

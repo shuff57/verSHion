@@ -1,0 +1,29 @@
+{
+ "round": 6,
+ "figure": "nuclide-notation",
+ "capability": "cap-05a",
+ "hypothesis": "Retry of round 1: hyphen notation alone drawn tight (Carbon-12) as one run, Off drops the part and its hyphen, ions keep their charge, blanks sit after the hyphen. Evidence changes:notation=Hyphen notation + mass-blank + ion; expected nuclide-notation +3.8",
+ "started_at": "2026-11-08T11:53:48",
+ "git": "03eed3d",
+ "before": {
+  "figure": 73.1,
+  "pooled": 76.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-08T12:27:51",
+ "after": {
+  "figure": 73.1,
+  "pooled": 76.3
+ },
+ "probe": {
+  "pass": false,
+  "why": "no evidence",
+  "class": "control",
+  "renders": []
+ },
+ "checker": "fail: on a student copy of an ion in hyphen-only mode with the mass number blanked, the box sits right against \"ion,\" (\"Chlorine-[ ]ion, [ ]\"). The leading space of the \" ion, \" text is dropped because SVG collapses leading and trailing whitespace and `tx` sets no `xml:space`.",
+ "result": "miss",
+ "evidence": "figure suite 2227 passed 0 failed (figtest, census included, no ids changed); no task run (bug-fix round); values checked Cl-37 1- 17/20/18, O 2- 8/8/10, Na+ 11/12/10; evidence cleared",
+ "next": "nuclide-notation cap-05a again: blank spacing in the hyphen form"
+}

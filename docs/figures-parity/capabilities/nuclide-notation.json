@@ -127,7 +127,7 @@
    "text": "Hyphen notation alone (carbon-14)",
    "class": "control",
    "evidence": "",
-   "note": "Attempted in round 1 (2026-11-08). Before: Ours' 'Hyphen notation' still draws the symbol: it renders byte-identical to 'Both' (nuclide.rs only adds the hyphen line, never hides the symbol). Evidence cleared: round 1 checker failed it: the hyphen form is spaced \"Carbon - 12\", Symbol Off leaves \"- 12\", Mass Off leaves \"Carbon -\", an ion loses its charge."
+   "note": "Attempted in round 6 (2026-11-08). Attempted in round 1 (2026-11-08). Before: Ours' 'Hyphen notation' still draws the symbol: it renders byte-identical to 'Both' (nuclide.rs only adds the hyphen line, never hides the symbol). Evidence cleared: round 1 checker failed it: the hyphen form is spaced \"Carbon - 12\", Symbol Off leaves \"- 12\", Mass Off leaves \"Carbon -\", an ion loses its charge. Round 6 checker failed it too: SVG drops the space in \" ion, \" so a blank touches \"ion\", and blank gaps are uneven. Evidence cleared."
   },
   {
    "id": "cap-05b",

@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-08T19:31:07+00:00",
- "probe_checked_at": "2026-11-08T11:31:06",
+ "generated_at": "2026-11-08T20:27:51+00:00",
+ "probe_checked_at": "2026-11-08T12:27:51",
  "comparable": true,
  "drift": [],
- "pooled": 76.2,
- "mean": 78.5,
+ "pooled": 76.3,
+ "mean": 78.6,
  "figures_scored": 67,
  "figures_built": 68,
  "figures_missing": [
@@ -2021,18 +2021,11 @@
    ]
   },
   "predator-prey": {
-   "score": 93.8,
-   "got": 90.0,
+   "score": 96.9,
+   "got": 93.0,
    "total": 96.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-03c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Time units while keeping a named pair",
-     "why": "no evidence"
-    },
     {
      "id": "cap-04c",
      "class": "version",
