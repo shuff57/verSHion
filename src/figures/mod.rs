@@ -740,6 +740,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     if id == "predator-prey" {
         biology::popdyn::pp_panel_changed(key, p);
     }
+    if key == "give_d" && matches!(id, "sphere" | "cylinder" | "cone") {
+        math::give_d_changed(p);
+    }
     if let ("pulley", "setup", Value::S(old)) = (id, key, old) {
         physics::pulley_setup_changed(old, p);
     }

@@ -4761,7 +4761,7 @@ fn measures_solid(id: &str) -> Option<super::MeasureCard> {
     let link = |name, value_key, label_key, text_key, eq| MeasureRow { equals: Some(eq), ..row(name, value_key, label_key, text_key) };
     let g = |title, rows| MeasureGroup { title, rows };
     // the Diameter row (value "diam") replaces Radius with "Give the diameter instead" (card_visible)
-    let radius = || vec![row("Radius", "radius", "r_lab", "r_label"), row("Diameter", "diam", "r_lab", "d_label"), link("Diameter", "diameter", "d_lab", "d_label", "2 \u{d7} radius")];
+    let radius = || vec![row("Radius", "radius", "r_lab", "r_label"), row("Diameter", "diam", "d_lab", "d_label"), link("Diameter", "diameter", "d_lab", "d_label", "2 \u{d7} radius")];
     let (help, groups) = match id {
         "sphere" => ("Give every measure. Worked-out measures are shown faintly. Type sqrt for \u{221a}, / for a fraction and pi for \u{3c0}.", vec![g("", radius())]),
         "cylinder" => (
@@ -5225,11 +5225,12 @@ fn round_common() -> Vec<ParamDef> {
 pub(super) fn solid_r(p: &Params) -> f64 { if p.b("give_d") { p.f("diam") / 2.0 } else { p.f("radius") } }
 /// Writes a dragged radius into whichever row is given.
 pub(super) fn set_solid_r(p: &mut Params, r: f64) { if p.b("give_d") { p.set_f("diam", 2.0 * r) } else { p.set_f("radius", r) } }
-/// The diameter's label: with "Give the diameter instead" it takes the radius row's label mode
-/// (Measure by default) and the diameter text; otherwise its own linked row's label.
+/// The diameter's label always follows the Diameter label (`d_lab`, text `d_label`); `r_lab` labels
+/// the radius only. Turning "Give the diameter instead" on in the panel carries the mode the Radius
+/// row had over to `d_lab` (`give_d_changed`), so the Diameter row opens labelled as the Radius row was.
 fn diam_text(p: &Params, v: f64) -> Option<String> {
     if !p.b("give_d") { return mtext(p, "d", "None", v, false); }
-    match match p.s("r_lab") { "" => "Measure", m => m } {
+    match match p.s("d_lab") { "" => "None", m => m } {
         "None" => None,
         "Text" => { let t = p.s("d_label").trim(); Some(if t.is_empty() { "d".to_string() } else { t.to_string() }) }
         _ => Some(fmtu(v, p.i("dec"), p.s("unit"))),
@@ -6852,6 +6853,18 @@ pub fn rows(id: &str) -> Option<super::RowsCard> {
         },
         _ => return None,
     })
+}
+
+/// The panel switched "Give the diameter instead" for a round solid: the Diameter row inherits the label
+/// mode of the Radius row it replaces, and going back to the radius clears it (the linked Diameter row
+/// starts unlabelled again).
+pub fn give_d_changed(p: &mut Params) {
+    if p.b("give_d") {
+        let m = p.s("r_lab").to_string();
+        p.set_s("d_lab", if m.is_empty() { "Measure" } else { &m });
+    } else {
+        p.set_s("d_lab", "None");
+    }
 }
 
 /// Visibility of a card group / row for the current params (default: everything is shown).
@@ -9099,9 +9112,38 @@ mod cfg_math_tests {
         assert!(quad_computed("rectangle", &p).iter().any(|(k, _)| *k == "__msg"));
     }
 
+    /// With "Give the diameter instead" the diameter's label followed `r_lab` and `d_lab` did nothing;
+    /// now `d_lab` labels the diameter and `r_lab` is the radius's alone.
+    #[test]
+    fn sphere_diameter_label_follows_d_lab() {
+        let svg = |kv: &[(&str, Value)]| {
+            let mut kv = kv.to_vec();
+            kv.push(("give_d", Value::B(true)));
+            kv.push(("diam", Value::F(8.0)));
+            let d = defs().into_iter().find(|d| d.id == "sphere").unwrap();
+            (d.render)(&params("sphere", &kv))
+        };
+        let measure = svg(&[("d_lab", s("Measure"))]);
+        let text = svg(&[("d_lab", s("Text")), ("d_label", s("d"))]);
+        let none = svg(&[("d_lab", s("None"))]);
+        assert!(measure.contains("8 cm") && !text.contains("8 cm") && text.contains(">d<"), "{text}");
+        assert!(!none.contains("8 cm") && !none.contains(">d<"));
+        assert_ne!(measure, text);
+        // r_lab no longer reaches the diameter
+        assert_eq!(svg(&[("d_lab", s("Measure")), ("r_lab", s("None"))]), measure);
+        assert_eq!(svg(&[("d_lab", s("None")), ("r_lab", s("Measure"))]), none);
+        // the panel carries the Radius row's mode across when the switch turns on
+        let mut p = params("sphere", &[("r_lab", s("Text")), ("give_d", Value::B(true))]);
+        give_d_changed(&mut p);
+        assert_eq!(p.s("d_lab"), "Text");
+        p.set_b("give_d", false);
+        give_d_changed(&mut p);
+        assert_eq!(p.s("d_lab"), "None");
+    }
+
     #[test]
     fn solids_diameter_and_conflicts() {
-        let p = params("cylinder", &[("give_d", Value::B(true)), ("diam", Value::F(3.0))]);
+        let p = params("cylinder", &[("give_d", Value::B(true)), ("diam", Value::F(3.0)), ("d_lab", s("Measure"))]);
         assert_eq!(solid_r(&p), 1.5);
         assert!(card_visible("cylinder", "", Some("diam"), &p) && !card_visible("cylinder", "", Some("radius"), &p));
         assert!(!card_visible("cylinder", "Oblique", None, &p));

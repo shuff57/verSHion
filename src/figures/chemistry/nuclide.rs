@@ -139,7 +139,10 @@ fn build(p: &Params) -> String {
         hyphen_line(&mut d, p, &hyphen, cx, cy + big * 0.34, style);
         y += 34.0;
     } else {
-        // the symbol, centred, with the numbers grouped tight to it as a textbook sets them
+        // the symbol, centred, with the numbers grouped tight to it as a textbook sets them. The label
+        // size scales the type but not these offsets, so the numbers stand off by half the symbol's
+        // measured width at that size (a two-letter symbol, or Large type, would otherwise run into them)
+        let off = if p.s("pos_symbol") == "Shown" { sym_w(&sym, big * svg::label_factor(p.s("label_size"))) / 2.0 + 6.0 } else { 34.0 };
         if p.s("pos_symbol") == "Shown" {
             tx(&mut d, cx, cy + big * 0.34, big, "middle", INK, true, &sym);
         } else if p.s("pos_symbol") == "Blank" {
@@ -152,12 +155,12 @@ fn build(p: &Params) -> String {
             c if c > 0 => format!("{c}+"),
             c => format!("{}+", c.abs()),
         };
-        position(&mut d, p.s("pos_mass"), &mass_text, cx - 34.0, cy - big * 0.30, small, style, "end");
-        position(&mut d, p.s("pos_z"), &z_text, cx - 34.0, cy + big * 0.40, small, style, "end");
+        position(&mut d, p.s("pos_mass"), &mass_text, cx - off, cy - big * 0.30, small, style, "end");
+        position(&mut d, p.s("pos_z"), &z_text, cx - off, cy + big * 0.40, small, style, "end");
         if charge < 0 {
-            position(&mut d, p.s("pos_charge"), &format!("{}{}", charge.abs(), "\u{2212}"), cx + 34.0, cy - big * 0.30, small, style, "start");
+            position(&mut d, p.s("pos_charge"), &format!("{}{}", charge.abs(), "\u{2212}"), cx + off, cy - big * 0.30, small, style, "start");
         } else {
-            position(&mut d, p.s("pos_charge"), &charge_text, cx + 34.0, cy - big * 0.30, small, style, "start");
+            position(&mut d, p.s("pos_charge"), &charge_text, cx + off, cy - big * 0.30, small, style, "start");
         }
 
         if p.s("notation") != "Symbol" {
@@ -185,7 +188,7 @@ fn build(p: &Params) -> String {
 
 /// Rough advance of a bold sans string: capitals are wider than lowercase.
 fn sym_w(s: &str, size: f64) -> f64 {
-    s.chars().map(|c| if c.is_uppercase() { 0.74 } else if c.is_ascii_digit() { 0.6 } else if "ilj".contains(c) { 0.3 } else { 0.58 }).sum::<f64>() * size
+    s.chars().map(|c| match c { 'W' => 1.0, 'M' => 0.92, 'm' => 0.9, 'w' => 0.78, 'I' | 'i' | 'l' | 'j' => 0.3, 't' | 'f' => 0.38, c if c.is_uppercase() => 0.74, c if c.is_ascii_digit() => 0.6, _ => 0.6 }).sum::<f64>() * size
 }
 
 /// The parts of the hyphen form: [name, "-", mass number] for an element or custom symbol, or just
@@ -261,5 +264,33 @@ mod tests {
         p.set_s("notation", "Hyphen notation");
         p.set_b(crate::figures::SHOW_ANSWERS, true);
         assert!(render(&p).contains("6 protons"));
+    }
+
+    /// The x a drawn text sits at.
+    fn text_x(svg: &str, text: &str) -> f64 {
+        let at = svg.find(&format!(">{text}</text>")).unwrap_or_else(|| panic!("{text} not drawn"));
+        let tag = &svg[svg[..at].rfind("<text").unwrap()..at];
+        tag.split("x=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap()
+    }
+
+    /// A two-letter custom symbol, and Large type, used to overlap the mass and atomic numbers: the
+    /// numbers now stand off from the symbol's real half-width at the label size (the em widths below
+    /// are the glyphs' own, not the figure's estimate).
+    #[test]
+    fn numbers_clear_a_wide_symbol_and_large_type() {
+        for (kv, mass, em) in [
+            (vec![("kind", "Custom symbol"), ("symbol", "Qz")], "12", 1.25),
+            (vec![("label_size", "Large")], "12", 0.70),
+            (vec![("kind", "Custom symbol"), ("symbol", "Qz"), ("label_size", "Large")], "12", 1.25),
+            (vec![("element", "74 W - Tungsten"), ("label_size", "Large")], "184", 0.98),
+        ] {
+            let svg = with(&kv);
+            let f = svg::label_factor(kv.iter().find(|(k, _)| *k == "label_size").map_or("Medium", |(_, v)| *v));
+            let symbol_left = 260.0 - em * 82.0 * f / 2.0;
+            let mass_right = text_x(&svg, mass);
+            assert!(mass_right <= symbol_left, "{kv:?}: mass number ends at {mass_right}, symbol starts at {symbol_left}");
+        }
+        let d = with(&[]);
+        assert!(d.contains(">12</text>") && d.contains(">6</text>"));
     }
 }
