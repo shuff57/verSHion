@@ -163,8 +163,6 @@ fn shade_fill(s: &str) -> (&'static str, bool) {
 fn size_r(s: &str) -> f64 { match s { "XS" => 2.6, "S" => 3.4, "L" => 5.6, "XL" => 7.0, _ => 4.5 } }
 fn charge_of(s: &str) -> &'static str { CHARGES.iter().copied().find(|c| *c == s).map(|c| if c == "None" { "" } else { c }).unwrap_or("") }
 fn unit_of(s: &str) -> &'static str { match s { "M" => "M", "mM" => "mM", _ => "%" } }
-/// One particle stands for this much concentration over one unit of area.
-fn per_particle(unit: &str) -> f64 { match unit { "M" => 0.05, "mM" => 50.0, _ => 0.25 } }
 
 /// The solutes that are switched on (with a name).
 fn read_sols(p: &Params, mult: Option<f64>) -> Vec<Sol> {
@@ -255,25 +253,48 @@ fn rng(seed: u64) -> impl FnMut() -> f64 {
     }
 }
 
-const AREA_UNIT: f64 = 6000.0;
+/// A box this many px2 (70 x 70) holds `c / pp` particles of a solute at concentration `c`.
+const AREA_UNIT: f64 = 4900.0;
+/// The densest solute may cover this share of its area.
+const MAX_COVER: f64 = 0.10;
 const WATER_R: f64 = 3.0;
-const WATER_FILL: f64 = 0.12;
+const WATER_FILL: f64 = 0.16;
 
-fn want_count(c: f64, area: f64, unit: &str, r: f64) -> usize {
-    if c <= 1e-9 { return 0; }
-    let n = (c / per_particle(unit) * area / AREA_UNIT).round().max(1.0);
-    let cap = (0.2 * area / (std::f64::consts::PI * r * r)).floor().max(1.0);
+fn want_count(c: f64, area: f64, pp: f64, r: f64) -> usize {
+    if c <= 1e-9 || pp <= 0.0 { return 0; }
+    let n = (c / pp * area / AREA_UNIT).round().max(1.0);
+    let cap = (0.3 * area / (std::f64::consts::PI * r * r)).floor().max(1.0);
     n.min(cap) as usize
 }
 
+/// A round number at or above `x` (1, 2, 2.5, 5 times a power of ten).
+fn nice_up(x: f64) -> f64 {
+    if !(x.is_finite() && x > 0.0) { return 1.0; }
+    let e = 10f64.powf(x.log10().floor());
+    for m in [1.0, 2.0, 2.5, 5.0, 10.0] { if m * e >= x * (1.0 - 1e-9) { return m * e; } }
+    10.0 * e
+}
+
+/// The concentration one particle stands for in a 70 x 70 box: chosen from the most concentrated solute drawn in any
+/// panel and the biggest particle, so the densest region stays under `MAX_COVER` and every lower concentration
+/// has visibly fewer particles.
+fn pick_pp(slots: &[Slot]) -> f64 {
+    let mut maxc = 0.0f64;
+    let mut maxr = 0.0f64;
+    for sl in slots { for s in &sl.m.sols { maxc = maxc.max(s.cin).max(s.cout); maxr = maxr.max(s.r); } }
+    if maxc <= 1e-9 { return 1.0; }
+    let per_box = MAX_COVER * AREA_UNIT / (std::f64::consts::PI * maxr.max(2.0).powi(2));
+    nice_up(maxc / per_box)
+}
+
 /// Scatters the particles of one region. `want` is (solute index, count); water fills the room left.
-fn scatter(reg: &Region, sols: &[Sol], want: &[(usize, usize)], water: bool, seed: u64) -> Vec<Dot> {
+fn scatter(reg: &Region, sols: &[Sol], want: &[(usize, usize)], rscale: f64, water: bool, seed: u64) -> Vec<Dot> {
     let mut rnd = rng(seed);
     let mut dots: Vec<Dot> = Vec::new();
     let mut order: Vec<(usize, usize)> = want.to_vec();
     order.sort_by(|a, b| sols[b.0].r.partial_cmp(&sols[a.0].r).unwrap_or(std::cmp::Ordering::Equal));
     let place = |dots: &mut Vec<Dot>, r: f64, k: usize, rnd: &mut dyn FnMut() -> f64| {
-        for _ in 0..60 {
+        for _ in 0..200 {
             let x = reg.x0 + rnd() * (reg.x1 - reg.x0);
             let y = reg.y0 + rnd() * (reg.y1 - reg.y0);
             if !reg.has(x, y, r + 0.8) { continue; }
@@ -283,7 +304,7 @@ fn scatter(reg: &Region, sols: &[Sol], want: &[(usize, usize)], water: bool, see
         }
     };
     for (i, n) in order {
-        for _ in 0..n { place(&mut dots, sols[i].r, i + 1, &mut rnd); }
+        for _ in 0..n { place(&mut dots, sols[i].r * rscale, i + 1, &mut rnd); }
     }
     if water {
         let used: f64 = dots.iter().map(|d| std::f64::consts::PI * d.r * d.r).sum();
@@ -353,6 +374,14 @@ fn rich(d: &mut Doc, x: f64, y: f64, size: f64, anchor: &str, weight: &str, s: &
     }
     o.push_str("</text>");
     d.raw(&o);
+}
+
+/// Small text on a patch of the solution colour, so no particle, arrow or membrane shows through it.
+fn clear_label(d: &mut Doc, pal: &Pal, x: f64, y: f64, size: f64, anchor: &str, s: &str) {
+    let w = tw(s, size) + 4.0;
+    let x0 = match anchor { "middle" => x - w / 2.0, "end" => x - w, _ => x - 2.0 };
+    d.raw(&format!(r#"<rect x="{x0:.2}" y="{:.2}" width="{w:.2}" height="{:.2}" rx="2" fill="{}"/>"#, y - size, size + 3.5, pal.sol));
+    rich(d, x, y, size, anchor, "400", s);
 }
 
 /// A label that is text, a blank line (answer written on it only in the key) or nothing.
@@ -470,7 +499,7 @@ fn geo_plant(m: &Model, kind: Kind, pal: &Pal) -> Geo {
         Tonic::Hyper => {
             let t = ((1.0 - m.vrel) / 0.5).clamp(0.25, 1.0);
             let s = 0.90 - 0.42 * t;
-            ((hw - 7.0) * s, (hh - 7.0) * s, 0.62 - 0.30 * t)
+            ((hw - 7.0) * s, (hh - 7.0) * s, 0.62 - 0.12 * t)
         }
     };
     let mut back = solution_box(pal, ph);
@@ -561,10 +590,10 @@ fn geo_bag(m: &Model, kind: Kind, pal: &Pal) -> Geo {
     let (l, r, top, bot) = (15.0, 225.0, 40.0, 176.0);
     let level = 74.0;
     let state = if kind == Kind::Start { Tonic::Iso } else { m.tonic };
-    let s = match state { Tonic::Iso => 1.0, _ => m.vrel.clamp(0.6, 1.4).sqrt() };
+    let s = match state { Tonic::Iso => 1.0, _ => m.vrel.clamp(0.6, 1.4).sqrt().min(1.16) };
     let wob = match state { Tonic::Hyper => 0.10, Tonic::Hypo => 0.02, Tonic::Iso => 0.045 };
-    let (cx, cy) = (120.0, 128.0);
-    let (a, b) = (34.0 * s, 48.0 * s);
+    let (cx, cy) = (120.0, 124.0);
+    let (a, b) = (32.0 * s, 38.0 * s);
     let mut back = String::new();
     back.push_str(&format!(r#"<rect x="{:.2}" y="{level}" width="{:.2}" height="{:.2}" fill="{}"/><line x1="{:.2}" y1="{level}" x2="{:.2}" y2="{level}" stroke="{}" stroke-width="1.2"/>"#, l + 1.5, r - l - 3.0, bot - level - 1.5, pal.sol, l + 1.5, r - 1.5, pal.water_edge));
     let poly = bag_poly(cx, cy, a, b, wob);
@@ -598,6 +627,7 @@ struct Cfg {
     arr_water: String,
     arr_solute: String,
     water: bool,
+    pp: f64,
     key: bool,
     ans: bool,
 }
@@ -616,6 +646,7 @@ fn cfg(p: &Params) -> Cfg {
         arr_water: p.s("arr_water").to_string(),
         arr_solute: p.s("arr_solute").to_string(),
         water: p.b("show_water"),
+        pp: 1.0,
         key: p.b("key"),
         ans: p.b(SHOW_ANSWERS),
     }
@@ -653,9 +684,10 @@ fn slots(p: &Params, c: &Cfg) -> Vec<Slot> {
 }
 
 fn render(p: &Params) -> String {
-    let c = cfg(p);
+    let mut c = cfg(p);
     let pal = palette(p);
     let slots = slots(p, &c);
+    c.pp = pick_pp(&slots);
     let scene = slots[0].m.scene;
     let title = p.s("title").trim().to_string();
     let n = slots.len();
@@ -718,11 +750,14 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
     let start_geo_in = geo(m, Kind::Start, pal);
     let (a_in0, a_out0) = (start_geo_in.inr.area(), start_geo_in.outr.area());
     let (a_in, a_out) = (g.inr.area(), g.outr.area());
+    // a region too small for the normal particle (a shrunken vacuole) gets smaller particles so its solute still shows
+    let rs_in = (a_in0 / 1800.0).sqrt().clamp(0.55, 1.0);
+    let rs_out = (a_out0 / 1800.0).sqrt().clamp(0.55, 1.0);
     let mut want_in: Vec<(usize, usize)> = Vec::new();
     let mut want_out: Vec<(usize, usize)> = Vec::new();
     for (i, s) in m.sols.iter().enumerate() {
-        let n_in0 = want_count(s.cin, a_in0, unit, s.r);
-        let n_out0 = want_count(s.cout, a_out0, unit, s.r);
+        let n_in0 = want_count(s.cin, a_in0, c.pp, s.r * rs_in);
+        let n_out0 = want_count(s.cout, a_out0, c.pp, s.r * rs_out);
         let (n_in, n_out) = if s.cross && sl.kind == Kind::Result {
             let total = (n_in0 + n_out0) as f64;
             let ni = (total * a_in / (a_in + a_out).max(1.0)).round() as usize;
@@ -731,8 +766,8 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
         want_in.push((i, n_in));
         want_out.push((i, n_out));
     }
-    let dots_in = scatter(&g.inr, &m.sols, &want_in, c.water, seed);
-    let dots_out = scatter(&g.outr, &m.sols, &want_out, c.water, seed ^ 0x55);
+    let dots_in = scatter(&g.inr, &m.sols, &want_in, rs_in, c.water, seed);
+    let dots_out = scatter(&g.outr, &m.sols, &want_out, rs_out, c.water, seed ^ 0x55);
     let mut body = String::new();
     body.push_str(&g.back);
     for dt in dots_in.iter().chain(dots_out.iter()) {
@@ -839,7 +874,7 @@ fn draw_arrows(d: &mut Doc, c: &Cfg, pal: &Pal, m: &Model, g: &Geo, ox: f64, oy:
         }
         // the H2O tag beside the right arrow
         let tag_x = if split { ox + el + 26.0 } else { ox + er + 24.0 };
-        if !blank { rich(d, tag_x, ay - 9.0, 9.5, "start", "400", "H_2O"); }
+        if !blank { clear_label(d, pal, tag_x, ay - 9.0, 9.5, "start", "H_2O"); }
     }
     // solutes that cross
     if c.arr_solute != "None" {
@@ -859,7 +894,7 @@ fn draw_arrows(d: &mut Doc, c: &Cfg, pal: &Pal, m: &Model, g: &Geo, ox: f64, oy:
             } else {
                 d.arrow_with(ex - dir * 22.0, y, ex + dir * 22.0, y, pal.sa, 2.4, dash, false);
             }
-            rich(d, ex, if blank { y - 14.0 } else { y + 14.0 }, 9.5, "middle", "400", &s.name);
+            clear_label(d, pal, ex, if blank { y - 14.0 } else { y + 14.0 }, 9.5, "middle", &s.name);
             k += 1;
         }
     }
@@ -879,7 +914,8 @@ fn draw_key(d: &mut Doc, m: &Model, c: &Cfg, pal: &Pal, x: f64, y: f64) {
     let mut rows: Vec<(f64, &str, String, bool)> = Vec::new();
     if c.water { rows.push((WATER_R + 1.0, pal.water, "Water".to_string(), true)); }
     for s in &m.sols { rows.push((s.r, s.fill, s.name.clone(), false)); }
-    let h = 30.0 + rows.len() as f64 * 22.0 + 18.0;
+    let side = AREA_UNIT.sqrt();
+    let h = 30.0 + rows.len() as f64 * 22.0 + 12.0 + side + 36.0;
     d.rect(x, y, 132.0, h, "#fff", "#111", 1.2);
     rich(d, x + 10.0, y + 18.0, 12.0, "start", "700", "Key");
     for (i, (r, fill, name, water)) in rows.iter().enumerate() {
@@ -887,21 +923,31 @@ fn draw_key(d: &mut Doc, m: &Model, c: &Cfg, pal: &Pal, x: f64, y: f64) {
         d.circle(x + 20.0, cy, *r, fill, if *water { pal.water_edge } else { "#333" }, 0.9);
         rich(d, x + 36.0, cy + 4.0, 11.0, "start", "400", name);
     }
-    rich(d, x + 10.0, y + h - 7.0, 8.5, "start", "400", &format!("1 particle \u{2248} {}", if m.unit == "%" { format!("{}%", fnum(per_particle("%"))) } else { format!("{} {}", fnum(per_particle(m.unit)), m.unit) }));
+    // the scale: a box of the area one particle is counted over, with one particle in it
+    let by = y + 30.0 + rows.len() as f64 * 22.0 + 6.0;
+    d.raw(&format!(r##"<rect x="{:.2}" y="{by:.2}" width="{side:.2}" height="{side:.2}" fill="none" stroke="#555" stroke-width="0.9" stroke-dasharray="3 2"/>"##, x + 10.0));
+    let (r0, f0) = m.sols.first().map(|s| (s.r, s.fill)).unwrap_or((4.5, "#a3a3a3"));
+    d.circle(x + 10.0 + side / 2.0, by + side / 2.0, r0, f0, "#333", 0.9);
+    let amount = if m.unit == "%" { format!("{}%", fnum(c.pp)) } else { format!("{} {}", fnum(c.pp), m.unit) };
+    rich(d, x + 10.0, by + side + 13.0, 8.5, "start", "400", "In a box this size,");
+    rich(d, x + 10.0, by + side + 24.0, 8.5, "start", "400", &format!("1 particle = {amount}"));
 }
 
 // ============================================================================================ the explanation
 
-/// The answer key text: the rule, then one line per panel, then what crossing solutes do.
+/// The answer key text: the rule, then one line per panel, then what each crossing solute does in each panel.
 fn explain(slots: &[Slot], c: &Cfg) -> Vec<String> {
+    let _ = c;
     let m0 = &slots[0].m;
+    let (inn, outn) = m0.scene.names();
+    // side names as drawn, for use inside a sentence
+    let (ia, ib) = match m0.scene { Scene::Rbc | Scene::Plant => ("inside the cell", "outside the cell"), Scene::Bag => ("the bag", "the beaker"), _ => ("Side A", "Side B") };
     let mut out = vec!["Water moves by osmosis across the membrane toward the side with the higher concentration of solute that cannot cross (the hypertonic side), so it moves from hypotonic to hypertonic. Only solutes that cannot cross count; a solute that can cross moves from higher to lower concentration until it is equal on both sides.".to_string()];
     for sl in slots {
         let m = &sl.m;
         let pre = sl.letter.map(|l| format!("{l}: ")).unwrap_or_default();
-        let (ci, co) = (m.ci, m.co);
         let cmp = if m.sols.iter().all(|s| s.cross) || m.sols.is_empty() { "there is no solute that cannot cross, so nothing pulls water either way".to_string() } else {
-            format!("non-crossing solute is {} inside and {} outside", conc_plain(m, ci), conc_plain(m, co))
+            format!("non-crossing solute: {inn} {}, {outn} {}", conc_plain(m, m.ci), conc_plain(m, m.co))
         };
         let line = match (m.scene, m.tonic) {
             (Scene::Rbc, Tonic::Hypo) => format!("{pre}hypotonic ({cmp}); water moves in, the cell gains water and {}.", if m.lysed() { "bursts (lysis), because it takes in more than its membrane can hold" } else { "swells (it would burst, lysis, if it gained enough)" }),
@@ -913,20 +959,29 @@ fn explain(slots: &[Slot], c: &Cfg) -> Vec<String> {
             (Scene::Bag, Tonic::Hypo) => format!("{pre}the beaker is hypotonic ({cmp}); water moves into the bag, which swells."),
             (Scene::Bag, Tonic::Iso) => format!("{pre}the beaker is isotonic ({cmp}); no net water movement, the bag stays the same size."),
             (Scene::Bag, Tonic::Hyper) => format!("{pre}the beaker is hypertonic ({cmp}); water moves out of the bag, which shrinks."),
-            (_, Tonic::Hypo) => format!("{pre}side B is hypotonic to side A ({cmp}); water moves from side B to side A, so the level rises on side A."),
+            (_, Tonic::Hypo) => format!("{pre}Side B is hypotonic to Side A ({cmp}); water moves from Side B to Side A, so the level rises on Side A."),
             (_, Tonic::Iso) => format!("{pre}the sides are isotonic ({cmp}); no net water movement, the levels stay equal."),
-            (_, Tonic::Hyper) => format!("{pre}side B is hypertonic to side A ({cmp}); water moves from side A to side B, so the level rises on side B."),
+            (_, Tonic::Hyper) => format!("{pre}Side B is hypertonic to Side A ({cmp}); water moves from Side A to Side B, so the level rises on Side B."),
         };
-        let mut cs = line.chars(); let line = match cs.next() { Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(), None => line.clone() };
+        let mut cs = line.chars();
+        let line = match cs.next() { Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(), None => line.clone() };
         out.push(line);
         if slots.len() == 1 || sl.letter.is_none() { break; }
     }
-    let (inn, outn) = m0.scene.names();
-    for s in m0.sols.iter().filter(|s| s.cross) {
-        let how = if s.cin > s.cout + 1e-9 { format!("moves from {} to {} until equal", inn.to_lowercase(), outn.to_lowercase()) } else if s.cout > s.cin + 1e-9 { format!("moves from {} to {} until equal", outn.to_lowercase(), inn.to_lowercase()) } else { "is already equal on both sides".to_string() };
-        out.push(format!("{} can cross the membrane, so it {how} and does not count toward tonicity.", plain(&s.name)));
+    // each crossing solute, worked out per panel (a three-up has a different direction in each)
+    let per_panel = slots.len() == 3 && slots[0].letter.is_some();
+    let panels: Vec<&Slot> = if per_panel { slots.iter().collect() } else { vec![&slots[0]] };
+    for (si, s0) in m0.sols.iter().enumerate().filter(|(_, s)| s.cross) {
+        for sl in &panels {
+            let Some(s) = sl.m.sols.get(si) else { continue };
+            let how = if s.cin > s.cout + 1e-9 { format!("moves from {ia} to {ib} until equal") } else if s.cout > s.cin + 1e-9 { format!("moves from {ib} to {ia} until equal") } else { "is already equal on both sides".to_string() };
+            let pre = sl.letter.filter(|_| per_panel).map(|l| format!("{l}: ")).unwrap_or_default();
+            let text = format!("{pre}{} can cross the membrane, so it {how}; it does not count toward tonicity.", plain(&s0.name));
+            let mut cs = text.chars();
+            let text = match cs.next() { Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(), None => text.clone() };
+            out.push(text);
+        }
     }
-    let _ = c;
     out
 }
 

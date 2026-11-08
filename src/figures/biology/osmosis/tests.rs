@@ -68,10 +68,10 @@ fn particles_are_as_crowded_as_the_concentration() {
     let one = render_of(&[s("show", "Start"), f("s1_in", 0.9), f("s1_out", 0.9)]);
     let two = render_of(&[s("show", "Start"), f("s1_in", 0.9), f("s1_out", 1.8)]);
     let (a, c) = (count_fill(&one, "#a3a3a3"), count_fill(&two, "#a3a3a3"));
-    assert!(c > a + a / 2, "{a} vs {c}");
+    assert!(c > a + a / 4, "{a} vs {c}");
     // zero concentration has no particles of that solute at all (the key's sample is the one left)
     let none = render_of(&[s("show", "Start"), f("s1_in", 0.0), f("s1_out", 0.0)]);
-    assert_eq!(count_fill(&none, "#a3a3a3"), 1);
+    assert_eq!(count_fill(&none, "#a3a3a3"), 2, "the key sample and its scale box");
 }
 
 #[test]
@@ -208,4 +208,83 @@ fn examples_render_and_cover_every_scene() {
 fn the_shuffle_chip_sets_a_fresh_layout() {
     let c = chips();
     assert_eq!(c.chips[0].set[0], ("seed", Value::I(i64::MIN)));
+}
+
+fn grey_count(svg: &str, fill: &str) -> usize { svg.matches(&format!("fill=\"{fill}\" stroke=\"#333\" stroke-width=\"0.9\"")).count() }
+
+#[test]
+fn density_keeps_rising_with_concentration_and_water_is_still_there() {
+    // three solutes of one size outside only, at 1, 2.5 and 5: more particles each time, and water at the highest
+    let svg = render_of(&[s("show", "Start"), s("scene", "Split beaker"), f("s1_in", 0.0), f("s1_out", 1.0), b("s2_on", true), f("s2_in", 0.0), f("s2_out", 2.5), b("s3_on", true), f("s3_in", 0.0), f("s3_out", 5.0),
+        s("s1_size", "M"), s("s2_size", "M"), s("s3_size", "M"), s("s1_shade", "Grey"), s("s2_shade", "Dark grey"), s("s3_shade", "Black"), b("key", false)]);
+    let (a, bb, c) = (grey_count(&svg, "#a3a3a3"), grey_count(&svg, "#666666"), grey_count(&svg, "#1e1e1e"));
+    assert!(a < bb && bb < c, "{a} {bb} {c}");
+    assert!(svg.matches("fill=\"#6ba6dd\"").count() > 5, "water disappeared at the highest concentration");
+    // big particles at a high concentration too
+    for size in ["L", "XL"] {
+        let hi = render_of(&[s("show", "Start"), s("s1_size", size), f("s1_in", 8.0), f("s1_out", 12.0), b("key", false)]);
+        let lo = render_of(&[s("show", "Start"), s("s1_size", size), f("s1_in", 8.0), f("s1_out", 5.0), b("key", false)]);
+        assert!(grey_count(&hi, "#a3a3a3") > grey_count(&lo, "#a3a3a3"), "{size}");
+    }
+    // M units: 0.9 M and 1.8 M differ
+    let m09 = render_of(&[s("show", "Start"), s("unit", "M"), f("s1_in", 0.9), f("s1_out", 0.9), b("key", false)]);
+    let m18 = render_of(&[s("show", "Start"), s("unit", "M"), f("s1_in", 0.9), f("s1_out", 1.8), b("key", false)]);
+    assert!(grey_count(&m18, "#a3a3a3") > grey_count(&m09, "#a3a3a3") + 3);
+}
+
+#[test]
+fn the_key_says_what_one_particle_is() {
+    let svg = render_of(&[]);
+    assert!(svg.contains("In a box this size,") && svg.contains("1 particle = 0.25%"), "{}", svg.len());
+    let m = render_of(&[s("unit", "mM"), f("s1_in", 150.0), f("s1_out", 300.0)]);
+    assert!(m.contains("1 particle = ") && m.contains(" mM"));
+}
+
+#[test]
+fn a_crossing_solute_is_keyed_in_each_panel_of_a_three_up() {
+    let svg = render_of(&[b("s2_on", true), b("s2_cross", true), s("s2_name", "Urea"), f("s2_in", 2.0), f("s2_out", 1.0), b("answer_key", true)]);
+    // in the three-up the outside is half, the same and double the inside: out, nothing, in
+    assert!(svg.contains("A: Urea can cross the membrane, so it moves from inside the cell to outside the cell"), "A");
+    assert!(svg.contains("B: Urea can cross the membrane, so it is already equal on both sides"), "B");
+    assert!(svg.contains("C: Urea can cross the membrane, so it moves from outside the cell to inside the cell"), "C");
+}
+
+#[test]
+fn the_key_uses_the_scenes_side_names_capitalised() {
+    let beaker = render_of(&[s("scene", "U-tube"), s("show", "Both"), f("s1_out", 5.0), b("answer_key", true)]);
+    assert!(beaker.contains("Side A 0.9%, Side B 5%"), "split names");
+    assert!(!beaker.contains("side a") && !beaker.contains("side b"));
+    let bag = render_of(&[s("scene", "Dialysis bag"), s("show", "Both"), b("s2_on", true), b("s2_cross", true), f("s2_in", 0.0), f("s2_out", 2.0), b("answer_key", true)]);
+    assert!(bag.contains("moves from the beaker to the bag until equal"), "bag");
+    assert!(!bag.contains("in the beaker to in the bag"));
+    let split = render_of(&[s("scene", "Split beaker"), s("show", "Both"), b("s2_on", true), b("s2_cross", true), f("s2_in", 0.0), f("s2_out", 2.0), b("answer_key", true)]);
+    assert!(split.contains("moves from Side B to Side A until equal"));
+}
+
+#[test]
+fn a_swollen_bag_stays_inside_the_beaker() {
+    for out in [0.0, 0.01, 0.1, 0.45] {
+        let svg = render_of(&[s("scene", "Dialysis bag"), s("show", "Result"), f("s1_out", out), b("key", false)]);
+        let at = svg.find("stroke-width=\"1.8\" stroke-linejoin").unwrap();
+        let start = svg[..at].rfind("<polygon points=\"").unwrap() + 17;
+        let pts = svg[start..].split('"').next().unwrap();
+        let maxy = pts.split(' ').map(|p| p.split(',').nth(1).unwrap().parse::<f64>().unwrap()).fold(0.0, f64::max);
+        assert!(maxy < 174.0, "out {out}: bag reaches y {maxy} (floor 176)");
+    }
+}
+
+#[test]
+fn a_plasmolyzed_vacuole_still_shows_solute() {
+    let svg = render_of(&[s("scene", "Plant cell"), s("show", "Result"), f("s1_in", 0.9), f("s1_out", 4.0), b("key", false)]);
+    let pal = palette(&with(&[]));
+    let m = mdl(&[s("scene", "Plant cell"), f("s1_in", 0.9), f("s1_out", 4.0)]);
+    let g = geo(&m, Kind::Result, &pal);
+    let mut inside = 0;
+    for el in svg.split("<circle ").skip(1) {
+        if !el.contains("fill=\"#a3a3a3\"") { continue; }
+        let num = |k: &str| el.split(&format!("{k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse::<f64>().unwrap();
+        let (x, y) = (num("cx"), num("cy"));
+        if x > g.inr.x0 && x < g.inr.x1 && y > g.inr.y0 && y < g.inr.y1 { inside += 1; }
+    }
+    assert!(inside >= 1, "no solute in the vacuole {:?} n={}", (g.inr.x0, g.inr.x1, g.inr.y0, g.inr.y1), svg.matches("fill=\"#a3a3a3\"").count());
 }
