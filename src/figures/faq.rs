@@ -194,6 +194,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "dot-plot" => DOT_PLOT,
         "ogive" => OGIVE,
         "bar-chart" => BAR_CHART,
+        "pie-chart" => PIE_CHART,
         "frequency-table" => FREQUENCY_TABLE,
         "normal-curve" => NORMAL_CURVE,
         "sampling-distribution" => SAMPLING_DISTRIBUTION,
@@ -2682,6 +2683,33 @@ const BAR_CHART: &[Faq] = &[
     Faq {
         q: "Why does the editor warn when the scale does not start at 0?",
         a: "A bar's length stands for its value, so the axis must start at 0. Starting higher makes small differences look large: a bar twice as long no longer means twice as many. The warning stays while Scale start is above 0, which is useful for teaching how graphs mislead.",
+    },
+];
+
+const PIE_CHART: &[Faq] = &[
+    Faq {
+        q: "How do I type the data?",
+        a: "One category per line: its name, a comma, then its value (Walk, 14). A spreadsheet paste works too: a name column and a value column. Sectors run clockwise from 12 o'clock in the order typed, or the largest first. A value with a % or ° sign is read as the number.",
+    },
+    Faq {
+        q: "Should I use counts, percents or degrees?",
+        a: "Counts are shares of the total (the sum, or a total you type). Percents are shares of 100 and degrees of 360, so the table should add to that: the editor says when it does not. Any label can show the value as typed, the percent, the angle or the fraction, whatever the table uses.",
+    },
+    Faq {
+        q: "How do I leave a sector for students to draw?",
+        a: "Leave its value out (type just the name). That sector takes whatever the others leave; with counts, type the total larger than the counts so there is room for it. Turn off Show answers for the student copy: the empty sector is drawn white and unlabelled, and Student + key saves it filled with its numbers. Leave every value out for a blank circle with a radius at 12 o'clock.",
+    },
+    Faq {
+        q: "How do I label a sector with a letter or a blank line?",
+        a: "Use A sector's own label: one line per sector, in the order typed. Type a letter such as x° for a missing angle problem, _ for a blank line to write on, or - for no label. A blank line keeps the chart's label for that sector.",
+    },
+    Faq {
+        q: "How do I make it photocopy in black and white?",
+        a: "Choose Black and white under Fills, or Print in Style: the sectors get hatching, dots and greys instead of colour. White leaves every sector empty to shade. A sector's own fill names one fill per sector (Blue, Hatching, Dots, Cross-hatching, Back hatching, Gray, White, Black).",
+    },
+    Faq {
+        q: "How do I add a key or a title?",
+        a: "Key puts the category names with their fills on the right or below the circle. Title can be your own text or a blank line for students to write one. Labels that do not fit inside a thin sector move outside with a short leader line.",
     },
 ];
 

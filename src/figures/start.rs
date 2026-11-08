@@ -28,6 +28,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         "ogive" => vec![("read", st("Value at a percentile"))],
         // the bar chart opens titled, so the first picture reads as a finished classroom chart
         "bar-chart" => vec![("title", st("How we get to school")), ("cat_title", st("Way to school"))],
+        // the pie chart opens titled, labelled with name and percent and with a key, so the first picture is a finished classroom chart
+        "pie-chart" => vec![("title_kind", st("Chart title")), ("title", st("How we get to school")), ("labels", st("Name and percent")), ("key", st("Right"))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror

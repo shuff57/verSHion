@@ -467,6 +467,14 @@ static BAR_CHART: [RefSection; 5] = [
     s("Student copy and appearance", &["blank", "questions", "show_answers", "style", "label_size"], "Turn off Show answers for a student copy: it leaves out the values, the bars (students draw them from a table) or the scale numbers, and the answers to the questions."),
 ];
 
+static PIE_CHART: [RefSection; 5] = [
+    s("Data", &["data", "values", "total", "order", "dot"], "One category per line: a name, a comma and its value, typed or pasted from a spreadsheet. Leave a value out and that sector is empty, for students to draw; with counts, type the total so there is room for it. Leave every value out for a blank circle. Sectors run clockwise from 12 o'clock."),
+    s("Labels", &["labels", "decimals", "own"], "A sector can carry its own text: a letter (x°), _ for a blank line to write on, or - for nothing."),
+    s("Look", &["look", "fill_list", "key"], "Black and white uses hatching and greys that photocopy; White leaves every sector to shade."),
+    s("Title", &["title_kind", "title"], ""),
+    s("Student copy and appearance", &["show_answers", "style", "label_size"], "Turn off Show answers for a student copy: empty sectors are drawn white and unlabelled for students to fill in."),
+];
+
 static STEM_AND_LEAF: [RefSection; 4] = [
     s("Data", &["data", "leaf_unit", "split", "order"], "Type or paste numbers, open a CSV, or generate sample data from a seed. Each number is rounded to the leaf unit."),
     s("Key and answers", &["key", "show_answers"], "Turn off Show answers for a student copy: the leaves are hidden and the stems and key stay."),
@@ -1118,6 +1126,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "two-way-table" => &TWO_WAY_TABLE,
         "stem-and-leaf" => &STEM_AND_LEAF,
         "bar-chart" => &BAR_CHART,
+        "pie-chart" => &PIE_CHART,
         "dot-plot" => &DOT_PLOT,
         "ogive" => &OGIVE,
         "normal-curve" => &NORMAL_CURVE,
