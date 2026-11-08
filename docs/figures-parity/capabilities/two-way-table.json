@@ -1,0 +1,161 @@
+{
+ "figure": "two-way-table",
+ "site": "math",
+ "slug": "two-way-table",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type the table: row categories down the side, column categories across the top, and the counts",
+   "class": "core",
+   "evidence": "changes:{\"cells\": \"10, 20, 30\\n5, 15, 25\"} + changes:row_labels=Year 7, Year 8",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Paste a table that includes its totals",
+   "class": "control",
+   "evidence": "",
+   "note": "pasted totals would be read as counts"
+  },
+  {
+   "id": "cap-02a",
+   "text": "Turn the Total column on or off",
+   "class": "control",
+   "evidence": "",
+   "note": "totals are always drawn"
+  },
+  {
+   "id": "cap-02b",
+   "text": "Turn the Total row on or off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Type the totals instead of having them worked out",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Leave totals or cells blank for students",
+   "class": "version",
+   "evidence": "changes:show_answers=false + changes:{\"blank\": \"Some cells\", \"show_answers\": false}",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Choose which cells are blank",
+   "class": "version",
+   "evidence": "",
+   "note": "verSHion picks the blank cells itself (a count along diagonals)"
+  },
+  {
+   "id": "cap-03c",
+   "text": "Write a cell as a letter like x",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "See whether the missing values can be worked out from the rest",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Show relative frequencies of the grand total",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Show relative frequencies of each row",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Show relative frequencies of each column",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Write relative frequencies as decimals or percents rounded to a set number of places",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Write relative frequencies as fractions in lowest terms",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Write a table title",
+   "class": "control",
+   "evidence": "changes:title=Lunch choices",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Put a blank line in place of the table title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Write a title for each variable outside the table",
+   "class": "control",
+   "evidence": "changes:col_title=Lunch + changes:row_title=Gender",
+   "note": "column title above the columns; the row title goes in the corner cell"
+  },
+  {
+   "id": "cap-05d",
+   "text": "Put the variable titles in a corner split by a diagonal",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Use gray headings",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": "Print tints the headings grey"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Use plain headings",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Draw lines round every cell or only under the headings and before the totals",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Write the totals in bold",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

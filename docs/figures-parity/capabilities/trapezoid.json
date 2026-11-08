@@ -1,0 +1,189 @@
+{
+ "figure": "trapezoid",
+ "site": "math",
+ "slug": "trapezoid",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Set the two bases AB and CD",
+   "class": "core",
+   "evidence": "changes:m_ab=14 + changes:m_cd=5",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "A right trapezoid from the bases and leg DA",
+   "class": "core",
+   "evidence": "changes:m_da=6",
+   "note": "The opening kind is Right trapezoid."
+  },
+  {
+   "id": "cap-01c",
+   "text": "An isosceles trapezoid from the bases and the height",
+   "class": "core",
+   "evidence": "changes:{\"kind\":\"Isosceles trapezoid\",\"m_da\":\"\",\"m_h\":\"3\"}",
+   "note": "Checked by hand: the legs come out equal (3.9). m_da has to be cleared, or the typed leg wins over the height."
+  },
+  {
+   "id": "cap-01d",
+   "text": "A general trapezoid from the bases, the height and angle A",
+   "class": "core",
+   "evidence": "changes:{\"kind\":\"Trapezoid\",\"m_da\":\"\",\"m_h\":\"3\",\"m_a\":\"70\"}",
+   "note": "Checked by hand: m_a=70 changes the drawing against the same kind and height without it."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Label a side, angle, height or diagonal with its measure",
+   "class": "control",
+   "evidence": "changes:a_lab=Measure + changes:{\"show_height\":true,\"height_label\":\"Measure\"} + changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"Measure\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Label a side, angle, height or diagonal with typed text such as x",
+   "class": "control",
+   "evidence": "changes:ab_lab=Text + changes:{\"show_height\":true,\"height_label\":\"Text\"} + changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"Text\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Leave a side, angle, height or diagonal unlabelled",
+   "class": "control",
+   "evidence": "changes:ab_lab=None + changes:{\"show_height\":true,\"height_label\":\"None\"} + changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"None\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Parallel arrows on the sides",
+   "class": "control",
+   "evidence": "changes:ab_arrows=2",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Congruence ticks on the sides",
+   "class": "control",
+   "evidence": "changes:da_ticks=1",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Congruence arcs on the angles",
+   "class": "control",
+   "evidence": "changes:b_arcs=1",
+   "note": "Angle A is a right angle at the opening state and shows its square instead; B (45°) takes the arc."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw the height from D to AB",
+   "class": "control",
+   "evidence": "changes:show_height=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw the height from C to AB",
+   "class": "control",
+   "evidence": "changes:{\"show_height\":true,\"hfrom\":\"C\"}",
+   "note": "Checked by hand: hfrom=C differs from the height from D."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Draw diagonal AC",
+   "class": "control",
+   "evidence": "changes:diagonals=AC only",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Draw diagonal BD",
+   "class": "control",
+   "evidence": "changes:diagonals=BD only",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Choose solid, dashed or dotted heights and diagonals",
+   "class": "control",
+   "evidence": "changes:{\"show_height\":true,\"line_style\":\"Dotted\"} + changes:{\"diagonals\":\"Drawn\",\"line_style\":\"Solid\"}",
+   "note": "Checked by hand: line_style changes a drawn height or diagonal. One setting covers both kinds of line."
+  },
+  {
+   "id": "cap-04f",
+   "text": "Give each height and diagonal its own solid, dashed or dotted style",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Name the point where a height lands",
+   "class": "control",
+   "evidence": "",
+   "note": "height_text names the height itself (h), not its foot; no parameter names the foot."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Name the point where the diagonals cross",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter names the diagonals' crossing point."
+  },
+  {
+   "id": "cap-06a",
+   "text": "A unit for every length, from a list or typed",
+   "class": "control",
+   "evidence": "changes:unit=cm",
+   "note": "unit is free text."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Round worked-out lengths to whole numbers, tenths or hundredths",
+   "class": "control",
+   "evidence": "changes:{\"bc_lab\":\"Measure\",\"dec\":0}",
+   "note": "Checked by hand: worked-out BC (7.1) shown as a measure changes with dec=0."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Rename the corners",
+   "class": "control",
+   "evidence": "changes:name_a=P",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:right=false",
+   "note": "The opening right trapezoid has two right angles."
+  },
+  {
+   "id": "cap-07c",
+   "text": "Choose which side sits at the bottom",
+   "class": "control",
+   "evidence": "changes:bottom=CD",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Flip the figure left to right",
+   "class": "control",
+   "evidence": "changes:flip=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Turn the figure",
+   "class": "control",
+   "evidence": "changes:rotate=30",
+   "note": ""
+  },
+  {
+   "id": "cap-i01",
+   "text": "Drag a label on the figure to move it",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": "From the page controls, not the bullets. The page says: Drag any label on the figure to move it."
+  }
+ ]
+}

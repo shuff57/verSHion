@@ -1,0 +1,77 @@
+{
+ "figure": "ph-reading",
+ "site": "chemistry",
+ "slug": "ph-reading",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A digital pH meter",
+   "class": "core",
+   "evidence": "changes:ph=9.21",
+   "note": "Opening state; the token changes the reading on it."
+  },
+  {
+   "id": "cap-01b",
+   "text": "An analog pH meter",
+   "class": "core",
+   "evidence": "changes:instrument=Analog meter",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "pH paper with its color chart",
+   "class": "core",
+   "evidence": "changes:instrument=pH paper",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "1 or 2 decimal places on the digital meter",
+   "class": "control",
+   "evidence": "changes:places=0.0",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Type the pH (0 to 14)",
+   "class": "core",
+   "evidence": "changes:ph=9.21",
+   "note": "Also a scroll handle."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Pick a random pH",
+   "class": "control",
+   "evidence": "",
+   "note": "No random control in ours."
+  },
+  {
+   "id": "cap-04a",
+   "text": "A magnifier beside the analog meter's dial",
+   "class": "control",
+   "evidence": "",
+   "note": "No magnifier on this figure in ours."
+  },
+  {
+   "id": "cap-04b",
+   "text": "The magnifier in place of the analog dial",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Lemon juice",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "An answer key line with the pH",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

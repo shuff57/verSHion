@@ -1,0 +1,140 @@
+{
+ "figure": "ruler-reading",
+ "site": "math",
+ "slug": "length-reading",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Use an inch ruler",
+   "class": "core",
+   "evidence": "changes:marks=1/4 in",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Make the inch ruler 6, 8, 12 or 20 in long",
+   "class": "control",
+   "evidence": "changes:{\"marks\": \"1/4 in\", \"ruler\": 6}",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Mark the inch ruler every 1, 1/2, 1/4, 1/8 or 1/16 in",
+   "class": "control",
+   "evidence": "changes:marks=1/16 in",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Make the metric ruler 15, 20, 30, 50 or 100 cm long",
+   "class": "control",
+   "evidence": "changes:ruler=30",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Mark the metric ruler every 1 mm, 0.5 cm or 1 cm",
+   "class": "control",
+   "evidence": "changes:marks=1 cm",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Mark a long ruler every 5 or 10 cm",
+   "class": "control",
+   "evidence": "changes:{\"ruler\": 100, \"marks\": \"10 cm\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Read metric lengths to the nearest mark or to one estimated digit",
+   "class": "control",
+   "evidence": "changes:read_to=Nearest mark",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type the object's length",
+   "class": "core",
+   "evidence": "changes:length=7.5",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Type where the object's left end sits",
+   "class": "core",
+   "evidence": "changes:start=2",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Pick the length and position at random",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Drag the object along the ruler",
+   "class": "interaction",
+   "evidence": "handle:drag:slide the whole object",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Use 1 to 5 marbles in a row as the object",
+   "class": "control",
+   "evidence": "changes:{\"object\": \"Marbles\", \"marbles\": 5}",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Use a rock as the object",
+   "class": "control",
+   "evidence": "changes:object=Rock",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Use a cube as the object",
+   "class": "control",
+   "evidence": "changes:object=Cube",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Use a metal cylinder as the object",
+   "class": "control",
+   "evidence": "changes:object=Metal cylinder",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "Draw dashed lines down from the object's ends",
+   "class": "control",
+   "evidence": "changes:guides=false",
+   "note": "dotted guides, on by default"
+  },
+  {
+   "id": "cap-06a",
+   "text": "Put magnifiers on the object's ends",
+   "class": "control",
+   "evidence": "changes:magnify=Ruler only",
+   "note": "magnifiers are on at the opening state"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title_mode=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Print an answer key line under the figure",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,210 @@
+{
+ "figure": "parallelogram",
+ "site": "math",
+ "slug": "parallelogram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A parallelogram from side AB",
+   "class": "core",
+   "evidence": "changes:m_ab=12",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "A parallelogram from side DA",
+   "class": "core",
+   "evidence": "changes:m_da=8",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A parallelogram from angle A",
+   "class": "core",
+   "evidence": "changes:m_a=70",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "A rhombus from side AB and angle A",
+   "class": "core",
+   "evidence": "changes:kind=Rhombus",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Label a side or angle with its measure",
+   "class": "control",
+   "evidence": "changes:bc_lab=Measure + changes:b_lab=Measure",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Label a side or angle with typed text such as x",
+   "class": "control",
+   "evidence": "changes:ab_lab=Text + changes:a_lab=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Leave a side or angle unlabelled",
+   "class": "control",
+   "evidence": "changes:ab_lab=None + changes:a_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Parallel arrows on the sides",
+   "class": "control",
+   "evidence": "changes:ab_arrows=None",
+   "note": "The default Auto draws them; setting a side to None changes the drawing."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Congruence ticks on the sides",
+   "class": "control",
+   "evidence": "changes:ab_ticks=1",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Congruence arcs on the angles",
+   "class": "control",
+   "evidence": "changes:a_arcs=2",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw the height from D to AB",
+   "class": "control",
+   "evidence": "changes:height=Onto AB (from D)",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw the height from C to AB",
+   "class": "control",
+   "evidence": "changes:height=Onto AB (from C)",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Draw diagonal AC",
+   "class": "control",
+   "evidence": "changes:diagonals=AC only",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Draw diagonal BD",
+   "class": "control",
+   "evidence": "changes:diagonals=BD only",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Choose solid, dashed or dotted heights and diagonals",
+   "class": "control",
+   "evidence": "changes:{\"height\":\"Onto AB (from D)\",\"line_style\":\"Dotted\"} + changes:{\"diagonals\":\"Drawn\",\"line_style\":\"Solid\"}",
+   "note": "Checked by hand: with a height or diagonals drawn, line_style changes the drawing. One setting covers both kinds of line, not each line separately."
+  },
+  {
+   "id": "cap-04f",
+   "text": "Label a height or diagonal with its length",
+   "class": "control",
+   "evidence": "changes:{\"height\":\"Onto AB (from D)\",\"height_label\":\"Measure\"} + changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"Measure\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-04g",
+   "text": "Label a height or diagonal with typed text",
+   "class": "control",
+   "evidence": "changes:{\"height\":\"Onto AB (from D)\",\"height_label\":\"Text\"} + changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"Text\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-04h",
+   "text": "Draw a height or diagonal with no label",
+   "class": "control",
+   "evidence": "changes:{\"height\":\"Onto AB (from D)\",\"height_label\":\"None\"} + changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"None\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-04i",
+   "text": "Give each height and diagonal its own solid, dashed or dotted style",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Name the point where a height lands",
+   "class": "control",
+   "evidence": "",
+   "note": "height_text names the height itself (h), not its foot; no parameter names the foot."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Name the point where the diagonals cross",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter names the diagonals' crossing point."
+  },
+  {
+   "id": "cap-06a",
+   "text": "A unit for every length",
+   "class": "control",
+   "evidence": "changes:unit=cm",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Rounding of worked-out measures",
+   "class": "control",
+   "evidence": "changes:{\"height\":\"Onto AB (from D)\",\"dec\":0}",
+   "note": "Checked by hand: with the height drawn (h = 5.2), dec=0 renders differently."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Rename the corners",
+   "class": "control",
+   "evidence": "changes:name_a=P",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:{\"height\":\"Onto AB (from D)\",\"right\":false}",
+   "note": "Checked by hand against the height drawn with squares on."
+  },
+  {
+   "id": "cap-06e",
+   "text": "Choose which side sits at the bottom",
+   "class": "control",
+   "evidence": "changes:bottom=BC",
+   "note": ""
+  },
+  {
+   "id": "cap-06f",
+   "text": "Flip the figure left to right",
+   "class": "control",
+   "evidence": "changes:flip=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06g",
+   "text": "Turn the figure",
+   "class": "control",
+   "evidence": "changes:rotate=30",
+   "note": ""
+  },
+  {
+   "id": "cap-i01",
+   "text": "Drag a label on the figure to move it",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": "From the page controls, not the bullets. The page says: Drag any label on the figure to move it."
+  }
+ ]
+}

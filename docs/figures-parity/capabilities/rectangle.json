@@ -1,0 +1,196 @@
+{
+ "figure": "rectangle",
+ "site": "math",
+ "slug": "rectangle",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A rectangle from side AB",
+   "class": "core",
+   "evidence": "changes:m_ab=12",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "A rectangle from side BC",
+   "class": "core",
+   "evidence": "changes:m_bc=4",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A square from side AB alone",
+   "class": "core",
+   "evidence": "changes:kind=Square",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Type a side as a fraction",
+   "class": "control",
+   "evidence": "changes:m_ab=21/2",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Type a side as a square root",
+   "class": "control",
+   "evidence": "changes:m_ab=sqrt(50)",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Label a side or angle with its measure",
+   "class": "control",
+   "evidence": "changes:cd_lab=Measure + changes:a_lab=Measure",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Label a side or angle with typed text such as x",
+   "class": "control",
+   "evidence": "changes:ab_lab=Text + changes:b_lab=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Leave a side unlabelled",
+   "class": "control",
+   "evidence": "changes:ab_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Congruence ticks on the sides",
+   "class": "control",
+   "evidence": "changes:ab_ticks=1",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Parallel arrows on the sides",
+   "class": "control",
+   "evidence": "changes:ab_arrows=2",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Congruence arcs on the angles",
+   "class": "control",
+   "evidence": "changes:{\"right\":false,\"a_arcs\":\"1\"}",
+   "note": "A right angle shows its square instead of arcs, so arcs need the squares off; checked by hand against right=false alone."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw diagonal AC",
+   "class": "control",
+   "evidence": "changes:diagonals=AC only",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw diagonal BD",
+   "class": "control",
+   "evidence": "changes:diagonals=BD only",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Choose solid, dashed or dotted diagonals",
+   "class": "control",
+   "evidence": "changes:{\"diagonals\":\"Drawn\",\"line_style\":\"Dotted\"}",
+   "note": "Checked by hand: with diagonals drawn, Dotted renders differently from the default Dashed."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Label a diagonal with its length",
+   "class": "control",
+   "evidence": "changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"Measure\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Label a diagonal with typed text",
+   "class": "control",
+   "evidence": "changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"Text\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-04f",
+   "text": "Draw a diagonal with no label",
+   "class": "control",
+   "evidence": "changes:{\"diagonals\":\"Drawn\",\"ac_lab\":\"None\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-04g",
+   "text": "Name the point where the diagonals cross",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter names the diagonals' crossing point."
+  },
+  {
+   "id": "cap-04h",
+   "text": "Give each diagonal its own solid, dashed or dotted style",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
+  },
+  {
+   "id": "cap-05a",
+   "text": "A unit for every length, from a list or typed",
+   "class": "control",
+   "evidence": "changes:unit=cm",
+   "note": "unit is free text, so a preset or a typed unit both work."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Round worked-out lengths to whole numbers, tenths or hundredths",
+   "class": "control",
+   "evidence": "changes:{\"diagonals\":\"Drawn and labelled\",\"dec\":0}",
+   "note": "Checked by hand: with labelled diagonals (length 11.7), dec=0 renders differently."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Rename the corners",
+   "class": "control",
+   "evidence": "changes:name_a=P",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:right=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Choose which side sits at the bottom",
+   "class": "control",
+   "evidence": "changes:bottom=BC",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Flip the figure left to right",
+   "class": "control",
+   "evidence": "changes:flip=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06e",
+   "text": "Turn the figure",
+   "class": "control",
+   "evidence": "changes:rotate=30",
+   "note": ""
+  },
+  {
+   "id": "cap-i01",
+   "text": "Drag a label on the figure to move it",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": "From the page controls, not the bullets. The page says: Drag any label on the figure to move it."
+  }
+ ]
+}

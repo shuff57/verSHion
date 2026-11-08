@@ -1,0 +1,77 @@
+{
+ "figure": "sphere",
+ "site": "math",
+ "slug": "sphere",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "A whole sphere or a hemisphere",
+   "class": "core",
+   "evidence": "changes:draw=A hemisphere",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Set the radius",
+   "class": "core",
+   "evidence": "changes:radius=4",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Give the diameter instead",
+   "class": "core",
+   "evidence": "changes:give_d=true",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "A hemisphere's flat face down like a dome or up like a bowl",
+   "class": "control",
+   "evidence": "changes:{\"draw\":\"A hemisphere\",\"face\":\"Up, like a bowl\"}",
+   "note": "Checked by hand against the hemisphere face down."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Label the radius or diameter with its measure",
+   "class": "control",
+   "evidence": "changes:{\"give_d\":true,\"r_lab\":\"Measure\"}",
+   "note": "Measure is the opening's own mode, so the evidence shows it on the diameter. Note: with give_d on, r_lab sets the diameter's label and d_lab renders the same either way."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Label the radius or diameter with typed text such as r",
+   "class": "control",
+   "evidence": "changes:r_lab=Text + changes:{\"give_d\":true,\"r_lab\":\"Text\"}",
+   "note": "Checked by hand: the diameter reads d."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Leave the radius or diameter unlabelled",
+   "class": "control",
+   "evidence": "changes:r_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "The dashed back of the middle circle, or left off",
+   "class": "control",
+   "evidence": "changes:hidden=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "A unit from the list or typed",
+   "class": "control",
+   "evidence": "changes:unit=m",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Drag the label on the figure",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,294 @@
+{
+ "figure": "coordinate-grid",
+ "site": "math",
+ "slug": "coordinate-grid",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Graph a line, in slope-intercept, standard or vertical form",
+   "class": "core",
+   "evidence": "changes:equations=2x+3y = 6",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Graph a curve",
+   "class": "core",
+   "evidence": "changes:equations=y = x^2 - 4",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Plot points, named or not",
+   "class": "core",
+   "evidence": "changes:points=A(1, 2), B(3, 4)",
+   "note": "points go in their own Points box, not the equation rows"
+  },
+  {
+   "id": "cap-01d",
+   "text": "Graph a piece of a function on a domain, with open or closed endpoints",
+   "class": "core",
+   "evidence": "changes:equations=y = x+2, x < 1; y = 5 - x, x >= 1",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Shade an inequality or a system of inequalities",
+   "class": "core",
+   "evidence": "changes:equations=y > x - 2",
+   "note": ""
+  },
+  {
+   "id": "cap-01f",
+   "text": "Graph several equations on the same grid, one per row",
+   "class": "core",
+   "evidence": "changes:equations=y = 2x+1; y = 9 - x",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Use powers and roots",
+   "class": "core",
+   "evidence": "changes:equations=y = sqrt(x)",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Use absolute value",
+   "class": "core",
+   "evidence": "changes:equations=y = |x - 5|",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Use sin, cos and tan",
+   "class": "core",
+   "evidence": "changes:equations=y = 3sin(x)+5",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Use sec, csc and cot",
+   "class": "core",
+   "evidence": "changes:equations=y = sec(x)",
+   "note": ""
+  },
+  {
+   "id": "cap-02e",
+   "text": "Use arcsin, arccos and arctan",
+   "class": "core",
+   "evidence": "changes:equations=y = arctan(x)",
+   "note": ""
+  },
+  {
+   "id": "cap-02f",
+   "text": "Use the inverses of sec, csc and cot",
+   "class": "core",
+   "evidence": "",
+   "note": "the evaluator knows arcsin/arccos/arctan only"
+  },
+  {
+   "id": "cap-02g",
+   "text": "Use ln and log (base 10)",
+   "class": "core",
+   "evidence": "changes:equations=y = ln(x)",
+   "note": ""
+  },
+  {
+   "id": "cap-02h",
+   "text": "Use log with any base",
+   "class": "core",
+   "evidence": "changes:equations=y = log_2(x)",
+   "note": ""
+  },
+  {
+   "id": "cap-02i",
+   "text": "Use e",
+   "class": "core",
+   "evidence": "changes:equations=y = e^x",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Choose each row's colour",
+   "class": "control",
+   "evidence": "changes:{\"equations\": \"y = 2x+1\", \"eq1_color\": \"#2a8a3e\"}",
+   "note": "per equation, first four rows; the opening grid has no equation, so the render also differs because one is added"
+  },
+  {
+   "id": "cap-03b",
+   "text": "Draw a row solid, dashed or dotted",
+   "class": "control",
+   "evidence": "",
+   "note": "Print style dashes rows automatically; no teacher choice"
+  },
+  {
+   "id": "cap-03c",
+   "text": "Make the graph lines thin, medium or thick",
+   "class": "control",
+   "evidence": "changes:{\"equations\": \"y = 2x+1\", \"line_width\": \"Thick\"}",
+   "note": "one setting for all rows; the opening grid has no equation, so the render also differs because one is added"
+  },
+  {
+   "id": "cap-03d",
+   "text": "Choose which ends of a row have arrows",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "Show or hide endpoint circles on pieces",
+   "class": "control",
+   "evidence": "changes:{\"equations\": \"y = x+2, x < 1\", \"endpoints\": false}",
+   "note": "one setting for all rows; the render also differs because the equation changes"
+  },
+  {
+   "id": "cap-03f",
+   "text": "Show or hide asymptotes",
+   "class": "control",
+   "evidence": "changes:{\"equations\": \"y = 1/(x - 5)\", \"asymptotes\": true}",
+   "note": "vertical asymptotes only, one setting for all rows; the render also differs because the equation changes"
+  },
+  {
+   "id": "cap-03g",
+   "text": "Draw points as a dot or a cross",
+   "class": "control",
+   "evidence": "changes:{\"points\": \"A(2, 3)\", \"pt_style\": \"Cross\"}",
+   "note": "one setting for all points; the render also differs because a point is added"
+  },
+  {
+   "id": "cap-03h",
+   "text": "Shade an inequality with a tint or hatching",
+   "class": "control",
+   "evidence": "changes:{\"equations\": \"y > x - 2\", \"shading\": \"Hatching\"}",
+   "note": "one setting for all rows; the render also differs because the equation changes"
+  },
+  {
+   "id": "cap-03i",
+   "text": "Set these styles row by row rather than for the whole graph",
+   "class": "control",
+   "evidence": "",
+   "note": "only colour is per row in verSHion"
+  },
+  {
+   "id": "cap-04a",
+   "text": "Set each axis's From, To and Count by",
+   "class": "control",
+   "evidence": "changes:xmax=10 + changes:ystep=2",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Type the range in decimals",
+   "class": "control",
+   "evidence": "changes:xstep=0.5",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Type the range as fractions",
+   "class": "control",
+   "evidence": "",
+   "note": "the range fields are plain numbers"
+  },
+  {
+   "id": "cap-04d",
+   "text": "Type the range in multiples of pi",
+   "class": "control",
+   "evidence": "changes:xunits=Multiples of π",
+   "note": "x-axis only"
+  },
+  {
+   "id": "cap-04e",
+   "text": "Type the range in degrees",
+   "class": "control",
+   "evidence": "changes:xunits=Degrees",
+   "note": "x-axis only"
+  },
+  {
+   "id": "cap-04f",
+   "text": "Choose how often each axis is numbered",
+   "class": "control",
+   "evidence": "changes:xnum=Every 2nd line + changes:ynum=Every 5th line",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Graph of a line",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write the axis titles",
+   "class": "control",
+   "evidence": "changes:xtitle_mode=Text + changes:ytitle_mode=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Put a blank line in place of a title for students",
+   "class": "version",
+   "evidence": "changes:title_mode=Blank line + changes:xtitle_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Set the x and y labels at the arrow tips",
+   "class": "control",
+   "evidence": "changes:xlabel=t + handle-edit:xlabel + handle-edit:ylabel",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Finish the axes with a triangle arrow or nothing",
+   "class": "control",
+   "evidence": "changes:arrows=false",
+   "note": "both axes, both ends together"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Finish an axis end with a line arrow",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Finish an axis end with a circle",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Set each end of each axis separately",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "changes:grid=Bold",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Add minor gridlines splitting each block into 2, 4 or 5",
+   "class": "control",
+   "evidence": "changes:minor=4",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,203 @@
+{
+ "figure": "predator-prey",
+ "site": "biology",
+ "slug": "predator-prey",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Pick a pair: snowshoe hare and Canada lynx, rabbit and wolf, rabbit and red fox, moose and wolf, sea lion and orca, snake and eagle, mouse and owl, or aphid and ladybug",
+   "class": "control",
+   "evidence": "changes:pair=Rabbit and wolf",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Name a pair of your own",
+   "class": "control",
+   "evidence": "changes:{\"pair\":\"Your own pair\",\"prey\":\"Voles\",\"pred\":\"Weasels\"} + changes:{\"pair\":\"Your own pair\",\"prey\":\"Voles\"}",
+   "note": "Checked by hand that the prey name changes the render over Your own pair alone."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Work the cycle out from the populations: both at the start, their averages and the cycle length",
+   "class": "core",
+   "evidence": "changes:{\"pair\":\"Your own pair\",\"prey0\":40.0} + changes:{\"pair\":\"Your own pair\",\"prey_avg\":70.0} + changes:{\"pair\":\"Your own pair\",\"cycle\":8.0}",
+   "note": "Narrow form: these only act with Your own pair; a named pair renders the same whatever they are set to (checked: prey0, prey_avg, cycle dead at the opening hare/lynx pair). Each checked by hand over Your own pair alone."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set the starting populations, averages and cycle length while keeping a named pair",
+   "class": "core",
+   "evidence": "",
+   "note": "Wider form of cap-02a: with a named pair, ours ignores these values."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Work the cycle out from the model's four rates α, β, γ and δ",
+   "class": "core",
+   "evidence": "changes:source=Model rates (α β γ δ) + changes:{\"source\":\"Model rates (α β γ δ)\",\"alpha\":0.9}",
+   "note": "Checked by hand that alpha changes it over the source switch alone."
+  },
+  {
+   "id": "cap-03a",
+   "text": "How much time is shown",
+   "class": "core",
+   "evidence": "changes:tshow=20.0",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Time in years, months, weeks or days",
+   "class": "control",
+   "evidence": "changes:{\"pair\":\"Your own pair\",\"unit\":\"Months\"}",
+   "note": "Like cap-02a, unit renders the same with a named pair; checked by hand over Your own pair alone."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Time units while keeping a named pair",
+   "class": "control",
+   "evidence": "",
+   "note": "Wider form of cap-03b: with a named pair, ours renders the same whatever unit is chosen."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw only one of the populations, for students to sketch the other",
+   "class": "version",
+   "evidence": "changes:show=Prey only + changes:show=Predators only",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "A phase plane of predators against prey",
+   "class": "core",
+   "evidence": "changes:graph=Predators against prey",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Draw neither population: blank axes",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Census counts instead of smooth curves",
+   "class": "core",
+   "evidence": "changes:data=Census counts",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Census counts taken every so often",
+   "class": "control",
+   "evidence": "changes:{\"data\":\"Census counts\",\"census_every\":2.0}",
+   "note": "Checked by hand over Census counts alone."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Census counts off by about 0 to 50%",
+   "class": "control",
+   "evidence": "changes:{\"data\":\"Census counts\",\"census_noise\":40.0}",
+   "note": "Checked by hand over Census counts alone."
+  },
+  {
+   "id": "cap-05d",
+   "text": "Census counts joined with lines or not",
+   "class": "control",
+   "evidence": "changes:{\"data\":\"Census counts\",\"census_join\":false}",
+   "note": "Checked by hand over Census counts alone."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Mark the peaks",
+   "class": "control",
+   "evidence": "changes:marks=Peaks",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Mark the lag from a prey peak to the predator peak after it",
+   "class": "control",
+   "evidence": "changes:mark_lag=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Mark the period from one peak to the next",
+   "class": "control",
+   "evidence": "changes:mark_period=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Label the lag and period with their length or their name only",
+   "class": "control",
+   "evidence": "changes:{\"mark_lag\":true,\"lag_labels\":\"Name only\"}",
+   "note": "Checked by hand over mark_lag alone."
+  },
+  {
+   "id": "cap-06e",
+   "text": "Leave the lag and period labels as a blank line for students",
+   "class": "version",
+   "evidence": "changes:{\"mark_lag\":true,\"lag_labels\":\"Blank for students\"}",
+   "note": "Checked by hand over mark_lag alone. Peak labels have no such choice (lag_labels renders the same with only peaks marked)."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Put the predators on a second y-axis on the right",
+   "class": "control",
+   "evidence": "changes:y_axis=Predators on the right",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Color or black and white",
+   "class": "control",
+   "evidence": "changes:style=Black and white",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "The chart title",
+   "class": "control",
+   "evidence": "changes:title=Hares and lynx + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "The axis titles",
+   "class": "control",
+   "evidence": "changes:x_title=t (years) + handle-edit:x_title + handle-edit:y_title",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Titles as blank lines",
+   "class": "version",
+   "evidence": "changes:ytitle_style=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Axis ranges",
+   "class": "control",
+   "evidence": "changes:{\"x_fit\":false,\"x_max\":30.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-07g",
+   "text": "Minor gridlines",
+   "class": "control",
+   "evidence": "changes:minor=2 per block",
+   "note": ""
+  },
+  {
+   "id": "cap-07h",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

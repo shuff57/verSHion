@@ -1,0 +1,196 @@
+{
+ "figure": "prism",
+ "site": "math",
+ "slug": "prism",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A rectangular base",
+   "class": "core",
+   "evidence": "changes:width=5 + changes:length=7",
+   "note": "The opening base is a rectangle."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A right-triangle base",
+   "class": "core",
+   "evidence": "changes:base=Right triangle",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "An isosceles-triangle base",
+   "class": "core",
+   "evidence": "changes:base=Isosceles triangle",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "A regular-polygon base of 3 to 8 sides",
+   "class": "core",
+   "evidence": "changes:base=Regular polygon + changes:{\"base\":\"Regular polygon\",\"n\":8}",
+   "note": "n runs 3 to 12."
+  },
+  {
+   "id": "cap-02",
+   "text": "Stand a triangular or polygon prism on its base or lay it on its side",
+   "class": "control",
+   "evidence": "changes:{\"base\":\"Right triangle\",\"sits\":\"Lying on its side\"} + changes:{\"base\":\"Regular polygon\",\"sits\":\"Lying on its side\"}",
+   "note": "Checked by hand against the same base standing."
+  },
+  {
+   "id": "cap-03a",
+   "text": "An oblique prism",
+   "class": "core",
+   "evidence": "changes:stands=Oblique",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Lean an oblique prism left or right",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"lean\":-2.0}",
+   "note": "Checked by hand: a negative lean leans the other way."
+  },
+  {
+   "id": "cap-03c",
+   "text": "An oblique prism from its height and lean",
+   "class": "core",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"lean\":3.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "An oblique prism from its slanted edge",
+   "class": "core",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"edge\":\"5\"}",
+   "note": "Checked by hand: the edge sets it and the height is worked out (4.6)."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type the slanted edge of an oblique prism as a fraction",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"edge_lab\":\"Measure\",\"edge\":\"9/2\"}",
+   "note": "NARROW: only the slanted edge is typed; checked by hand against the oblique prism with its edge labelled. The wide form is cap-04f."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Type the slanted edge of an oblique prism with √",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"edge_lab\":\"Measure\",\"edge\":\"sqrt(30)\"}",
+   "note": "NARROW: checked by hand, the edge is labelled √30 and the height worked out (5.1). sqrt(20) is the opening's own edge and renders the same. The wide form is cap-04g."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Label a measure with its value",
+   "class": "control",
+   "evidence": "changes:{\"base\":\"Right triangle\",\"hyp_lab\":\"Measure\"}",
+   "note": "Most lengths show their value at the opening state."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Label a measure with typed text such as x",
+   "class": "control",
+   "evidence": "changes:length_lab=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Leave a measure unlabelled",
+   "class": "control",
+   "evidence": "changes:length_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-04f",
+   "text": "Type any measure (length, width, height, lean) as a fraction",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: those are sliders (float)."
+  },
+  {
+   "id": "cap-04g",
+   "text": "Type any measure (length, width, height, lean) with √",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: those are sliders (float)."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Work out and label the hypotenuse or slanted side of a triangle base",
+   "class": "control",
+   "evidence": "changes:{\"base\":\"Right triangle\",\"hyp_lab\":\"Measure\"}",
+   "note": "Checked by hand against the base without the label."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Work out and label the apothem of a polygon base",
+   "class": "control",
+   "evidence": "changes:{\"base\":\"Regular polygon\",\"apothem_lab\":\"Measure\"}",
+   "note": "Checked by hand: apothem 2.1 cm drawn and labelled."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Hidden edges dashed or left off",
+   "class": "control",
+   "evidence": "changes:hidden=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Show the height",
+   "class": "control",
+   "evidence": "changes:stands=Oblique",
+   "note": "NARROW: an oblique prism draws its dashed height by itself. The switch is cap-06d."
+  },
+  {
+   "id": "cap-06d",
+   "text": "Switch the height line on or off",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: no show_height parameter on the prism."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"right\":false}",
+   "note": "The upright opening prism has no square; checked by hand on the oblique one."
+  },
+  {
+   "id": "cap-07a",
+   "text": "A unit from the list or typed",
+   "class": "control",
+   "evidence": "changes:unit=m",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Rounding for worked-out measures",
+   "class": "control",
+   "evidence": "changes:{\"base\":\"Right triangle\",\"hyp_lab\":\"Measure\",\"dec\":0}",
+   "note": "Checked by hand: the hypotenuse (5.8) with dec=0 differs."
+  },
+  {
+   "id": "cap-07c",
+   "text": "Name the corners",
+   "class": "control",
+   "evidence": "changes:names=true",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Which way the depth goes back",
+   "class": "control",
+   "evidence": "changes:depth=Left",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Drag labels on the figure",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": ""
+  }
+ ]
+}

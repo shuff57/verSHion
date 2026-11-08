@@ -1,0 +1,91 @@
+{
+ "figure": "organic-structure",
+ "site": "chemistry",
+ "slug": "structure-editor",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Draw: drag from an atom to add a carbon or from empty space to start a chain, drag onto an atom to bond, tap a bond for double then triple",
+   "class": "out-of-scope",
+   "evidence": "",
+   "note": "Not doing: \"Their freehand structure-drawing surface in `structure-editor` unless it is chosen as a round; the `organic-structure` generator is the in-scope part.\""
+  },
+  {
+   "id": "cap-02",
+   "text": "Move: drag a bond to move its structure, an atom to move it alone (snapping), or a box to move several atoms",
+   "class": "out-of-scope",
+   "evidence": "",
+   "note": "Not doing: \"Their freehand structure-drawing surface in `structure-editor` unless it is chosen as a round; the `organic-structure` generator is the in-scope part.\""
+  },
+  {
+   "id": "cap-03",
+   "text": "Delete: tap an atom or bond, or drag a box",
+   "class": "out-of-scope",
+   "evidence": "",
+   "note": "Not doing: \"Their freehand structure-drawing surface in `structure-editor` unless it is chosen as a round; the `organic-structure` generator is the in-scope part.\""
+  },
+  {
+   "id": "cap-04",
+   "text": "Select with shift-click, delete the selection, undo with Ctrl+Z",
+   "class": "out-of-scope",
+   "evidence": "",
+   "note": "Not doing: \"Their freehand structure-drawing surface in `structure-editor` unless it is chosen as a round; the `organic-structure` generator is the in-scope part.\""
+  },
+  {
+   "id": "cap-05",
+   "text": "Place atoms other than carbon (H, O and more) and ring templates (cyclopentane, cyclohexane, benzene) into the drawing",
+   "class": "out-of-scope",
+   "evidence": "",
+   "note": "Not doing: \"Their freehand structure-drawing surface in `structure-editor` unless it is chosen as a round; the `organic-structure` generator is the in-scope part.\" These are the editor's palette; ours has ring skeletons only as whole-figure presets. Raised as a scope question."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Condensed formula display",
+   "class": "control",
+   "evidence": "changes:mode=Condensed",
+   "note": "From the page's Figure controls, which act on the whole drawing; skeletal is the opening state. Narrow form: ours prints one condensed formula line; the wide form is cap-06a2."
+  },
+  {
+   "id": "cap-06a2",
+   "text": "Condensed view written on the drawing: H3C, CH2, CH3 at each carbon's place in the structure",
+   "class": "control",
+   "evidence": "",
+   "note": "Wide form of cap-06a (narrow/wide convention). Ours has no per-atom condensed labels."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Full structural formula display (every H drawn)",
+   "class": "control",
+   "evidence": "changes:mode=Full",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "'Carbons' display: the skeletal zigzag with a C written at every carbon atom and no hydrogens",
+   "class": "control",
+   "evidence": "",
+   "note": "Checked live 2026-11-08 on a drawn butane: Carbons keeps the skeletal bonds and writes C at all four vertices, no H (Condensed writes H3C/CH2, Full draws every H). Ours has Skeletal, Condensed and Full only (MODES in organic.rs), so no evidence."
+  },
+  {
+   "id": "cap-07",
+   "text": "Label the CH3 ends",
+   "class": "control",
+   "evidence": "changes:ends=false",
+   "note": "On at the opening state; the token turns it off."
+  },
+  {
+   "id": "cap-08",
+   "text": "Number the carbons",
+   "class": "control",
+   "evidence": "changes:numbers=true",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "A caption",
+   "class": "control",
+   "evidence": "changes:caption=Butane",
+   "note": ""
+  }
+ ]
+}

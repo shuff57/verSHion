@@ -1,0 +1,168 @@
+{
+ "figure": "ogive",
+ "site": "math",
+ "slug": "cumulative-frequency",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type a frequency table of bins and their frequencies",
+   "class": "core",
+   "evidence": "changes:{\"table\": \"0, 10, 4\\n10, 20, 9\\n20, 30, 6\"}",
+   "note": "verSHion takes lower, upper, frequency per line rather than a start and upper ends"
+  },
+  {
+   "id": "cap-01b",
+   "text": "Type a cumulative table of upper bounds",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Type a data set sorted into bins of a width you choose",
+   "class": "core",
+   "evidence": "changes:{\"input\": \"Raw values\", \"auto_classes\": false, \"class_width\": 5.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Choose crosses or dots at the points",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Join the points with a smooth curve",
+   "class": "control",
+   "evidence": "",
+   "note": "straight segments only"
+  },
+  {
+   "id": "cap-02c",
+   "text": "Leave the points unjoined",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Choose not to start from 0 at the lowest bound",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Show cumulative percent on the vertical axis",
+   "class": "control",
+   "evidence": "changes:y_axis=Cumulative percent",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw reading lines for the median",
+   "class": "control",
+   "evidence": "changes:marks=Median",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw reading lines for the lower and upper quartiles",
+   "class": "control",
+   "evidence": "changes:marks=Median and quartiles",
+   "note": "quartiles come with the median, not one at a time"
+  },
+  {
+   "id": "cap-04c",
+   "text": "Read across from any percentile or cumulative frequency",
+   "class": "control",
+   "evidence": "changes:pct=75",
+   "note": "the opening state already reads the 40th percentile"
+  },
+  {
+   "id": "cap-04d",
+   "text": "Read up from a value",
+   "class": "control",
+   "evidence": "changes:read=Percentile of a value",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Show each reading with its value, a blank line, or lines only",
+   "class": "control",
+   "evidence": "",
+   "note": "the student copy hides guide lines and values together; no per-reading choice"
+  },
+  {
+   "id": "cap-05",
+   "text": "Use black and white for printing instead of colour",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Heights",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Write the axis titles",
+   "class": "control",
+   "evidence": "changes:x_title=Height (cm) + changes:y_title=Number of plants",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Put a blank line in place of a title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Type the horizontal axis range and count-by",
+   "class": "control",
+   "evidence": "",
+   "note": "the axes are always worked out from the data"
+  },
+  {
+   "id": "cap-07b",
+   "text": "Type the vertical axis range and count-by",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Choose which lines are numbered",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Turn the gridlines on or off",
+   "class": "control",
+   "evidence": "changes:grid=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Make the gridlines light, standard or bold",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Add minor gridlines",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

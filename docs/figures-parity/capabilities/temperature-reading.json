@@ -1,0 +1,105 @@
+{
+ "figure": "temperature-reading",
+ "site": "chemistry",
+ "slug": "temperature-reading",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A liquid-in-glass thermometer in °C (-10 to 110)",
+   "class": "core",
+   "evidence": "handle:drag:top of the liquid + changes:temperature=50.2",
+   "note": "Opening state; the liquid top is a drag handle and moves with the typed temperature."
+  },
+  {
+   "id": "cap-01b",
+   "text": "The liquid-in-glass scale in kelvin (260 to 390 K)",
+   "class": "control",
+   "evidence": "changes:unit=Kelvin (K)",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "The liquid-in-glass scale in Fahrenheit (10 to 230 °F)",
+   "class": "control",
+   "evidence": "changes:unit=Fahrenheit (°F)",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Blue or gray liquid instead of red",
+   "class": "control",
+   "evidence": "changes:liquid=Blue + changes:liquid=Gray",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "A digital probe thermometer (-50 to 150 °C, or K or °F)",
+   "class": "core",
+   "evidence": "changes:thermometer=Digital probe",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "The digital probe showing 0 or 1 decimal places",
+   "class": "control",
+   "evidence": "changes:{\"thermometer\":\"Digital probe\",\"places\":\"0\"}",
+   "note": "Narrow form of the reference's 0 to 2 places (see cap-02c). Token passes on thermometer alone; checked separately that places=0 changes the digital render."
+  },
+  {
+   "id": "cap-02c",
+   "text": "The digital probe showing 2 decimal places",
+   "class": "control",
+   "evidence": "",
+   "note": "Wider form of cap-02b: ours offers 0 or 0.1 only."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Type the temperature",
+   "class": "core",
+   "evidence": "changes:temperature=50.2",
+   "note": "Drag/scroll handle on the liquid too."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Pick a random temperature",
+   "class": "control",
+   "evidence": "",
+   "note": "No random control in ours."
+  },
+  {
+   "id": "cap-04a",
+   "text": "A magnifier beside the liquid-in-glass thermometer, or none",
+   "class": "control",
+   "evidence": "changes:mag_show=Instrument only",
+   "note": "Magnifier is on at the opening state; the token removes it."
+  },
+  {
+   "id": "cap-04b",
+   "text": "The magnifier in place of the thermometer",
+   "class": "control",
+   "evidence": "changes:mag_show=Magnifier only",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Choose how many numbered marks (1 to 6) the magnifier spans",
+   "class": "control",
+   "evidence": "changes:mag_marks=4",
+   "note": "From the page's controls, not its bullet list."
+  },
+  {
+   "id": "cap-05a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Room temperature",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "An answer key line with the temperature",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,133 @@
+{
+ "figure": "volume-by-displacement",
+ "site": "chemistry",
+ "slug": "volume-by-displacement",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Graduated cylinder size: 10, 25, 50 or 100 mL",
+   "class": "control",
+   "evidence": "changes:size=50 mL",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "How far apart the smallest marks are",
+   "class": "control",
+   "evidence": "changes:marks=0.2 mL",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "How often the marks are numbered",
+   "class": "control",
+   "evidence": "changes:numbered=2 mL",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "No numbers on the scale",
+   "class": "version",
+   "evidence": "changes:numbered=No numbers",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Unit cm³ instead of mL",
+   "class": "control",
+   "evidence": "changes:unit=cm³",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Type the before and after readings",
+   "class": "core",
+   "evidence": "changes:before=3 + changes:after=7",
+   "note": "Both liquid levels are drag handles too."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Pick random before and after readings",
+   "class": "control",
+   "evidence": "",
+   "note": "No random control in ours."
+  },
+  {
+   "id": "cap-03c",
+   "text": "A dotted line from the bottom of each meniscus to the marks",
+   "class": "control",
+   "evidence": "changes:dotted=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "1 to 5 marbles",
+   "class": "core",
+   "evidence": "changes:count=4",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "A rock",
+   "class": "control",
+   "evidence": "changes:object=Rock",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "A cube",
+   "class": "control",
+   "evidence": "changes:object=Cube",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "A metal cylinder",
+   "class": "control",
+   "evidence": "changes:object=Metal cylinder",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Liquid color: blue, red or green instead of gray",
+   "class": "control",
+   "evidence": "changes:color=Blue + changes:color=Red + changes:color=Green",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "A magnifier beside each cylinder",
+   "class": "control",
+   "evidence": "changes:mag_show=Cylinders and magnifiers",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "The magnifiers spanning 1 to 6 numbered marks",
+   "class": "control",
+   "evidence": "changes:{\"mag_show\":\"Cylinders and magnifiers\",\"mag_marks\":4}",
+   "note": "Magnifiers are off at the opening state. Token passes on mag_show alone; checked separately that mag_marks=4 changes the magnifier render."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Your own caption under each cylinder",
+   "class": "control",
+   "evidence": "changes:lab_before=Start + changes:lab_after=End + handle-edit:lab_before",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Volume of a rock",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "An answer key line with the readings and the object's volume",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

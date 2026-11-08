@@ -1,0 +1,154 @@
+{
+ "figure": "stem-and-leaf",
+ "site": "math",
+ "slug": "stem-and-leaf",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type one data set",
+   "class": "core",
+   "evidence": "changes:data=12, 15, 15, 18, 22, 31, 34",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw two data sets back to back",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Name each back-to-back data set",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Choose the leaf unit: 0.01, 0.1, 1, 10 or 100",
+   "class": "control",
+   "evidence": "changes:leaf_unit=10",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Cut off digits past the leaf unit instead of rounding",
+   "class": "control",
+   "evidence": "",
+   "note": "verSHion rounds to the leaf unit"
+  },
+  {
+   "id": "cap-03a",
+   "text": "Split each stem into two rows (leaves 0-4 and 5-9)",
+   "class": "control",
+   "evidence": "changes:split=Split each stem in two",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Split each stem into five rows",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Set the first and last stems to start or end the plot past the data",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw empty stem rows with no data",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Put the leaves in order or as typed",
+   "class": "control",
+   "evidence": "changes:{\"data\": \"58, 52, 63, 61, 75, 70\", \"order\": false}",
+   "note": "the default data is typed in order, so the render also differs because the data changes"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Show negative values on negative stems, with -0 apart from 0",
+   "class": "control",
+   "evidence": "changes:data=-12, -5, 3, 8, 14",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Add headings over the stems and leaves",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Put the leaves in boxes",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Give each row empty boxes up to a count for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Write a key, or no key",
+   "class": "control",
+   "evidence": "changes:key=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Word the key with = or means",
+   "class": "control",
+   "evidence": "",
+   "note": "always 'means'"
+  },
+  {
+   "id": "cap-07c",
+   "text": "Type a measurement unit, such as cm, onto the key's value",
+   "class": "control",
+   "evidence": "",
+   "note": "Settled on the live page: the Key card's Unit box (placeholder cm) is free text appended to the value, so the key reads 3 | 4 = 34 cm. It is not the leaf unit (cap-02a). verSHion has no key unit."
+  },
+  {
+   "id": "cap-07d",
+   "text": "Choose the key's example value",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Put a blank line in the key for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Test scores",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,196 @@
+{
+ "figure": "pedigree",
+ "site": "biology",
+ "slug": "pedigree",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Autosomal dominant inheritance",
+   "class": "core",
+   "evidence": "changes:inherit=Autosomal dominant",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "X-linked recessive inheritance",
+   "class": "core",
+   "evidence": "changes:inherit=X-linked recessive",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "X-linked dominant inheritance",
+   "class": "core",
+   "evidence": "changes:inherit=X-linked dominant",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Y-linked inheritance",
+   "class": "core",
+   "evidence": "changes:inherit=Y-linked",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Autosomal recessive inheritance",
+   "class": "core",
+   "evidence": "changes:inherit=Autosomal dominant",
+   "note": "The opening state; evidence is that the inheritance choice redraws the family."
+  },
+  {
+   "id": "cap-02a",
+   "text": "A random family of 2, 3 or 4 generations",
+   "class": "core",
+   "evidence": "changes:gens=4",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "A small, medium or large family",
+   "class": "control",
+   "evidence": "changes:size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "New pedigree: another random family",
+   "class": "control",
+   "evidence": "changes:seed=7",
+   "note": "Ours is the seed number (change it for a different family), not a button."
+  },
+  {
+   "id": "cap-03",
+   "text": "Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness, vitamin D–resistant rickets)",
+   "class": "control",
+   "evidence": "",
+   "note": "Collapsed to one entry per list (owner decision 2026-11-08: a preset list is one capability, not one per preset)."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Set anyone's sex: male, female or unknown",
+   "class": "control",
+   "evidence": "changes:changes=II-1=female + changes:changes=II-1=unknown",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Set anyone's status: unaffected, carrier or affected",
+   "class": "core",
+   "evidence": "changes:changes=II-1=affected + changes:{\"carrier_style\":\"Half filled\",\"changes\":\"II-1=carrier\"}",
+   "note": "Checked by hand that the carrier override changes the render over Half filled alone."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Mark someone deceased",
+   "class": "control",
+   "evidence": "changes:changes=II-1=deceased",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Mark the proband",
+   "class": "control",
+   "evidence": "changes:changes=III-1=proband",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Make two siblings fraternal or identical twins",
+   "class": "control",
+   "evidence": "changes:{\"family\":\"1:m-f(mA-f(ft,m),f,mC-f(mA))\"} + changes:{\"family\":\"1:m-f(mA-f(fT,m),f,mC-f(mA))\"}",
+   "note": "Family text; checked by hand that each differs from the same family without twins (1:m-f(mA-f(f,m),f,mC-f(mA))), and looked at the crossbar."
+  },
+  {
+   "id": "cap-04f",
+   "text": "Mark partners as related",
+   "class": "control",
+   "evidence": "changes:changes=I-1=related",
+   "note": ""
+  },
+  {
+   "id": "cap-04g",
+   "text": "Add or remove children, partners and siblings",
+   "class": "editor",
+   "evidence": "changes:{\"family\":\"1:m-f(mA-f(f,m,m),f,mC-f(mA))\"} + changes:{\"family\":\"1:m-f(mA-f(f,m),f-m,mC-f(mA))\"} + changes:{\"family\":\"1:m-f(mA-f(f,m),mC-f(mA))\"}",
+   "note": "Family text (added child, added partner, removed sibling); checked by hand that each differs from the base family 1:m-f(mA-f(f,m),f,mC-f(mA)). In the app this is the person panel."
+  },
+  {
+   "id": "cap-04h",
+   "text": "Click a person in the pedigree to change them",
+   "class": "interaction",
+   "evidence": "",
+   "note": "In our app a click selects the person for the panel, but that is drawn by the workspace, not a handle in handle_list, so the probe cannot see it."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Carriers half filled",
+   "class": "control",
+   "evidence": "changes:carrier_style=Half filled",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Carriers as a center dot",
+   "class": "control",
+   "evidence": "changes:carrier_style=Center dot",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Genotypes under each person, worked out from the pedigree",
+   "class": "version",
+   "evidence": "changes:genotypes=Answers",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Genotypes as blank lines for students",
+   "class": "version",
+   "evidence": "changes:genotypes=Blanks",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Choose the allele letter",
+   "class": "control",
+   "evidence": "changes:{\"genotypes\":\"Answers\",\"allele_letter\":\"B\"}",
+   "note": "Checked by hand over Answers alone."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Generation numerals on or off",
+   "class": "control",
+   "evidence": "changes:gen_labels=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Individual numbers on or off",
+   "class": "control",
+   "evidence": "changes:numbers=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "The key on or off",
+   "class": "control",
+   "evidence": "changes:key=false",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Albinism + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "An answer key line naming the inheritance mode",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

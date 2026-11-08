@@ -1,0 +1,140 @@
+{
+ "figure": "circuit-diagram",
+ "site": "physics",
+ "slug": "circuit-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Set how many resistors or bulbs the circuit has, one to four",
+   "class": "core",
+   "evidence": "changes:n=4",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Make each part a resistor or a bulb",
+   "class": "control",
+   "evidence": "changes:r1_kind=Bulb + handle:click:switch between resistor and bulb",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Wire the parts in series or in parallel",
+   "class": "core",
+   "evidence": "changes:layout=In parallel",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw the source as one cell or as a battery of two cells",
+   "class": "control",
+   "evidence": "changes:cell=One cell + handle:click:add a cell",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Mark + and − beside the cell or battery",
+   "class": "control",
+   "evidence": "changes:polarity=true",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Put a closed switch in the main line",
+   "class": "control",
+   "evidence": "changes:switch=Closed",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Put an open switch in the main line",
+   "class": "control",
+   "evidence": "changes:switch=Open",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Put an ammeter in the main line",
+   "class": "control",
+   "evidence": "changes:ammeter=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Put a voltmeter across the battery",
+   "class": "control",
+   "evidence": "changes:voltmeter=Across the battery",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Put a voltmeter across one chosen part",
+   "class": "control",
+   "evidence": "changes:voltmeter=Across component 2",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Show or hide each meter's reading",
+   "class": "control",
+   "evidence": "changes:{\"ammeter\":true,\"amm_read_mode\":\"Text\"} + changes:{\"voltmeter\":\"Across the battery\",\"vm_read_mode\":\"Text\"}",
+   "note": "Readings default to None; checked by hand that turning a reading on changes the render over the meter alone."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Write each part's name, with subscripts, or leave it to number automatically",
+   "class": "control",
+   "evidence": "changes:r1_name=R_x + handle-edit:r1_name",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write each part's value with its unit (Ω, V)",
+   "class": "control",
+   "evidence": "changes:r1_val=10 Ω + handle-edit:r1_val",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Replace a name or value with a blank line for students",
+   "class": "version",
+   "evidence": "changes:r1_val_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Leave a part's name or value off",
+   "class": "control",
+   "evidence": "changes:r1_name_mode=None",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Draw US (zigzag) or IEC / UK GCSE (box) symbols",
+   "class": "control",
+   "evidence": "changes:style=IEC (box resistor)",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Add a chart title (text, blank line or none)",
+   "class": "control",
+   "evidence": "changes:title=Series circuit + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Mirror the figure left to right",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "changes:color=true",
+   "note": ""
+  }
+ ]
+}

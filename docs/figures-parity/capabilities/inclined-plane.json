@@ -1,0 +1,175 @@
+{
+ "figure": "inclined-plane",
+ "site": "physics",
+ "slug": "inclined-plane",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Put one, two or three objects on the ramp",
+   "class": "core",
+   "evidence": "changes:n=3",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Make each object a block, ball or cart",
+   "class": "control",
+   "evidence": "changes:obj=Ball + changes:{\"n\":2,\"obj2_kind\":\"Ball\"}",
+   "note": "Checked by hand that obj2_kind changes the render over n=2 alone."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Give each object its own label",
+   "class": "control",
+   "evidence": "changes:obj_lab=M + handle-edit:obj_lab",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Replace an object's label with a blank line for students",
+   "class": "version",
+   "evidence": "changes:obj_lab_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Give each object its own size",
+   "class": "control",
+   "evidence": "changes:size=150",
+   "note": ""
+  },
+  {
+   "id": "cap-01f",
+   "text": "Set how far up the ramp the objects sit",
+   "class": "interaction",
+   "evidence": "changes:pos=0.2 + handle:drag:slide the object along the ramp",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Tie two or three objects together by strings",
+   "class": "core",
+   "evidence": "changes:{\"n\":2,\"joined\":\"By strings\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set two or three objects touching",
+   "class": "core",
+   "evidence": "changes:{\"n\":2,\"joined\":\"Touching\"}",
+   "note": "Checked by hand that Touching differs from By strings at n=2."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Set the ramp angle, 5° to 60°",
+   "class": "core",
+   "evidence": "changes:angle=5 + handle:drag:ramp angle",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Write the angle label, such as θ or 30°",
+   "class": "control",
+   "evidence": "changes:ang_lab=30° + handle-edit:ang_lab",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Replace the angle label with a blank line for students",
+   "class": "version",
+   "evidence": "changes:ang_lab_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Draw the slope smooth or rough and hatched",
+   "class": "control",
+   "evidence": "changes:surface=Rough",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw gravity on the object, with its label",
+   "class": "core",
+   "evidence": "changes:gravity=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Draw the normal force, with its label",
+   "class": "core",
+   "evidence": "changes:normal=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Draw friction up or down the slope, with its label",
+   "class": "core",
+   "evidence": "changes:friction=Up the ramp",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Draw an applied force up or down the slope, with its label",
+   "class": "core",
+   "evidence": "changes:applied=Down the ramp",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Draw tension in the strings between objects",
+   "class": "core",
+   "evidence": "changes:{\"n\":2,\"tension\":true}",
+   "note": "Checked by hand that tension changes the render over n=2 alone."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Draw the contact forces where objects touch",
+   "class": "core",
+   "evidence": "changes:{\"n\":2,\"joined\":\"Touching\",\"contact\":true}",
+   "note": "Checked by hand that contact changes the render over n=2 touching alone."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Draw a dashed velocity arrow up or down the slope",
+   "class": "control",
+   "evidence": "changes:velocity=Up the ramp",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Draw a dashed acceleration arrow up or down the slope",
+   "class": "control",
+   "evidence": "changes:accel=Down the ramp",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Mark the slope's length",
+   "class": "control",
+   "evidence": "changes:mark_len=true",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Mark the ramp's height",
+   "class": "control",
+   "evidence": "changes:mark_h=true",
+   "note": ""
+  },
+  {
+   "id": "cap-09a",
+   "text": "Mirror so the ramp rises to the left",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-09b",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "changes:{\"gravity\":true,\"color\":true}",
+   "note": "Color shows only on the arrows; checked by hand that color changes the render over gravity alone."
+  }
+ ]
+}

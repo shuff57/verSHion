@@ -1,0 +1,3202 @@
+{
+ "generated_at": "2026-11-08T15:48:25+00:00",
+ "probe_checked_at": "2026-11-08T07:48:25",
+ "comparable": true,
+ "drift": [],
+ "pooled": 76.0,
+ "mean": 78.4,
+ "figures_scored": 67,
+ "figures_built": 68,
+ "figures_missing": [
+  "math/pie-chart",
+  "biology/dna-protein-synthesis",
+  "biology/osmosis"
+ ],
+ "figures": {
+  "angles": {
+   "score": 66.2,
+   "got": 47.0,
+   "total": 71.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01f",
+     "class": "core",
+     "weight": 5.0,
+     "text": "More than six rays from the vertex",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark a chosen angle with congruence marks",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Shade a chosen angle",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose which points appear and type their names",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04g",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click an angle on the figure to mark or shade it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04h",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click the vertex or near a ray's end to add a point",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a ray on the figure to style it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i01",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a ray on the figure to run it through the vertex as a line",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i02",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a ray on the figure to delete it",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "bar-chart": {
+   "score": 49.4,
+   "got": 43.0,
+   "total": 87.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Add a third or later series",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Stack several series instead of placing them side by side",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose to write the values inside the bars",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw error bars from a plus-or-minus value for each bar",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the error bars with or without crossbars",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add a note under the graph saying what the error bars show",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Use white bars for students to shade",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Pick the fill for each series",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Place the key on the right or below the graph",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of a title for students to write",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the value axis count-by",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose which gridlines are numbered (every line, every 2nd, 5th, 10th, or none)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the gridlines light, standard or bold",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add minor gridlines splitting each block into 2, 4 or 5",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "bohr-model": {
+   "score": 92.2,
+   "got": 59.0,
+   "total": 64.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Set the proton count by hand, independent of the element (0 to 200), so a wrong atom draws as set",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "box-plot": {
+   "score": 89.5,
+   "got": 51.0,
+   "total": 57.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-06a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Finish an end of the number line with an arrow",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Finish an end of the number line with a circle",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "circle": {
+   "score": 36.8,
+   "got": 60.0,
+   "total": 163.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Add as many points as you want",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02a",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Draw a line between any two chosen points, midpoints or touch points",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i01",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Click part of the circle on the figure to add a point there",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i02",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Click a point on the figure to join it to another point",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Place a point off the circle by its distance in radii",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Run a line on past its point with an arrow, a line arrow or a dot",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A tangent at any point on the circle, not only A",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "One or both tangents from a point outside the circle",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label any angle the lines make, not only ∠AOB and ∠ACB",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label an angle with typed text",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Congruence arcs on an angle",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label an arc in degrees",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label an arc by its length",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label an arc with typed text",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Congruence ticks on an arc",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05k",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label any line with its length, not only the radius and chord",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label a line with typed text",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05h",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Congruence ticks on a line",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05i",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Parallel arrows on a line",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05j",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a chosen line solid, dashed or dotted",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Shade a segment",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose the shading colour",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give areas in terms of π",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the point where lines cross or meet the circle",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "An inscribed polygon of 3 to 8 sides",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01g",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag any point on the figure, not only A",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01f",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag a point off the circle and back on",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i03",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a point on the circle on the figure to draw the tangent there",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i04",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a point outside the circle on the figure to draw the tangents from it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i05",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click the middle of a chord on the figure to name its midpoint",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i06",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click the middle of a chord on the figure to join its midpoint to the center",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i07",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a line, angle or arc on the figure to label it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i08",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a line, angle or arc on the figure to mark or style it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i09",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click inside an enclosed area on the figure to shade it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i10",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag a line's label across the line to put it on the other side",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i11",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click where lines cross, or where a line meets the circle, on the figure to name a point there",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i12",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a point or the center on the figure to rename it",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "circuit-diagram": {
+   "score": 100.0,
+   "got": 61.0,
+   "total": 61.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "composite-shape": {
+   "score": 56.0,
+   "got": 28.0,
+   "total": 50.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-i02",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Click a piece on the figure to type its exact sizes",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i03",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Click a piece on the figure to delete it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i05",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Drag from a corner or the middle of a side to draw a line, such as a height",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i04",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a piece on the figure to shade it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i06",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a side on the figure to label it with its length or text",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i07",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a side on the figure to give it congruence ticks, parallel arrows or a line style",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i08",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click an angle on the figure to label it, mark it right or shade it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i09",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a corner on the figure to show a named point there",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "cone": {
+   "score": 90.9,
+   "got": 60.0,
+   "total": 66.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type any measure (radius, height, lean) as a fraction",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type any measure (radius, height, lean) with √",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "coordinate-grid": {
+   "score": 83.0,
+   "got": 127.0,
+   "total": 153.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02f",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Use the inverses of sec, csc and cot",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a row solid, dashed or dotted",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose which ends of a row have arrows",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03i",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set these styles row by row rather than for the whole graph",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the range as fractions",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Finish an axis end with a line arrow",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Finish an axis end with a circle",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set each end of each axis separately",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "cylinder": {
+   "score": 87.8,
+   "got": 65.0,
+   "total": 74.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type any measure (radius, height, lean) as a fraction",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type any measure (radius, height, lean) with √",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Switch the oblique cylinder's height on or off",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "dot-and-cross": {
+   "score": 64.3,
+   "got": 36.0,
+   "total": 56.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01d",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw an ionic compound with every ion drawn separately",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Swap dots and crosses between the atoms",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06a",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Click an electron to cycle it through dot, cross, open circle, open square and nothing, for a find-the-mistake question",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Click an element symbol to blank or show it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Click an ion's charge to show it, make it a blank box or leave it off, per ion",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "enzyme-kinetics": {
+   "score": 31.8,
+   "got": 27.0,
+   "total": 85.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Plot rate against temperature",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Plot rate against pH",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw up to three curves on one graph",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Pick a named enzyme (human enzyme, Taq polymerase, pepsin, salivary amylase, trypsin or catalase) for a curve",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "An unknown enzyme with its own optimum and width",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name each curve in a key",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the optimum and denaturation with dots",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name each mark for its curve when there is more than one curve",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Leave a mark's label as a blank line for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Leave a mark unlabeled (line kept)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Shape-only axes, with no numbers",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the y-axis range by hand",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Turn gridlines off",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Arrows at the axes' ends",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A chart title (or blank line)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Edit the axis titles, or make them blank lines",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "free-body-diagram": {
+   "score": 97.0,
+   "got": 65.0,
+   "total": 67.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02e",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "gas-syringe": {
+   "score": 90.6,
+   "got": 29.0,
+   "total": 32.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Pick a random volume (0 to full scale, one decimal place)",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "gel-electrophoresis": {
+   "score": 96.7,
+   "got": 87.0,
+   "total": 90.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Leave a sample lane blank for students, with its bands kept for the answer key",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "half-life-graph": {
+   "score": 71.4,
+   "got": 60.0,
+   "total": 84.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Your own isotope's half-life in a unit you choose (not only years)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Up the side: activity in counts per minute",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Guide lines labeled with their times",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Guide labels as blank lines for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Axis titles as text, a blank line, or none",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the axis ranges (from, to, count by)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Axis numbering every line, every 2nd, 5th, 10th or none",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Minor gridlines (2, 4 or 5 per block)",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "heating-cooling-curve": {
+   "score": 85.4,
+   "got": 82.0,
+   "total": 96.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Segment lengths to scale, computed from the mass and the substance's specific heats and enthalpies (q = m c dT, q = n dH",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the mass used for the to-scale curve",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type your own substance's specific heats and enthalpies of fusion and vaporization",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose the heating rate",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "histogram": {
+   "score": 45.6,
+   "got": 41.0,
+   "total": 90.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type a frequency table: where the first bin starts, then each bin's upper end and its frequency",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Use unequal bin widths",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Paste a frequency table from a worksheet, with bins like 140 < h <= 150",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show relative frequency as a percent",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Fill the bars with a black-and-white pattern",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Leave the bars white",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a frequency polygon over the bars",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the frequency polygon alone",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Close the polygon down to the axis or leave it open",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Number the horizontal axis at every step of a typed range instead of at the bin edges",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of a title for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the vertical axis count-by",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose which gridlines are numbered",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the gridlines light, standard or bold",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add minor gridlines",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "inclined-plane": {
+   "score": 100.0,
+   "got": 91.0,
+   "total": 91.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "kite": {
+   "score": 92.8,
+   "got": 77.0,
+   "total": 83.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the point where the diagonals cross",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04h",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each diagonal its own solid, dashed or dotted style",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "length-reading": {
+   "score": 51.3,
+   "got": 40.0,
+   "total": 78.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Read a vernier caliper",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Read a micrometer",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type the caliper or micrometer reading, or pick one at random",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Give the caliper or micrometer a zero error, and draw it closed too",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the caliper's least count: 0.1, 0.05 or 0.02 mm",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Print the least count on the slider or leave it off",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Read the micrometer to its marks (0.01 mm) or to one estimated digit (0.001 mm)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Put nothing, a block, a cylinder, a ball or a wire in the jaws, drawn to size with a short label",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show the caliper or micrometer with its close-up, or the instrument alone",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show the close-up alone, without the instrument",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "lewis-structures": {
+   "score": 100.0,
+   "got": 51.0,
+   "total": 51.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "line-spectrum": {
+   "score": 100.0,
+   "got": 54.0,
+   "total": 54.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "mapping-diagram": {
+   "score": 100.0,
+   "got": 36.0,
+   "total": 36.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "mass-reading": {
+   "score": 76.2,
+   "got": 48.0,
+   "total": 63.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "An analytical balance showing 4 decimal places",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A weigh boat on the digital balance's pan",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A beaker on the digital balance's pan",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose 1 to 5 marbles",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Pick a random mass",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "mass-spectrum": {
+   "score": 100.0,
+   "got": 49.0,
+   "total": 49.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "micropipette-reading": {
+   "score": 92.6,
+   "got": 25.0,
+   "total": 27.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02b",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Pick the volume at random",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "motion-graphs": {
+   "score": 100.0,
+   "got": 89.0,
+   "total": 89.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "motion-map": {
+   "score": 40.2,
+   "got": 35.0,
+   "total": 87.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Build the motion from up to six segments in any order",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Set each segment at rest, constant velocity forward or back, speeding up or slowing down",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01d",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type each segment's speed",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01e",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Set where the motion starts",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw an acceleration arrow (or a = 0) above each segment",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write the times under the dots",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Put a letter on every dot",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Put the motion graph's letters at the segment ends",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the total displacement as an arrow under the number line",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Write the displacement's label, a blank line, or leave it off",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the origin",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label the object (text, blank line or none)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Print an answer key under the figure",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Color for slides",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "nuclide-notation": {
+   "score": 73.1,
+   "got": 57.0,
+   "total": 78.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Buttons for the element's natural isotopes (C-12, C-13)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the protons, neutrons and electrons instead of the numbers",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A positron",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose the particle's symbol form (He or α, e or β, p or H)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Hyphen notation alone (carbon-14)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Hyphen notation in the short form (C-14) as well as the long (carbon-14)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A serif (Times New Roman) font instead of sans serif",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "number-line": {
+   "score": 71.8,
+   "got": 51.0,
+   "total": 71.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01f",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Graph a sequence like a_n = 1/n",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write an inequality's endpoint values above the line, or leave them off",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw points as a dot or a cross",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose how the point labels show",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the range in multiples of pi",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose which terms of a sequence are shown, n from one whole number to another",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "ogive": {
+   "score": 49.3,
+   "got": 37.0,
+   "total": 75.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type a cumulative table of upper bounds",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose crosses or dots at the points",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Join the points with a smooth curve",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Leave the points unjoined",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose not to start from 0 at the lowest bound",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show each reading with its value, a blank line, or lines only",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of a title for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the horizontal axis range and count-by",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the vertical axis range and count-by",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose which lines are numbered",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the gridlines light, standard or bold",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add minor gridlines",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "orbital-diagram": {
+   "score": 100.0,
+   "got": 61.0,
+   "total": 61.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "organic-structure": {
+   "score": 71.4,
+   "got": 15.0,
+   "total": 21.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-06a2",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Condensed view written on the drawing: H3C, CH2, CH3 at each carbon's place in the structure",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "'Carbons' display: the skeletal zigzag with a C written at every carbon atom and no hydrogens",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "parallel-lines": {
+   "score": 50.0,
+   "got": 23.0,
+   "total": 46.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Four or more parallel lines",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01d",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Three or more transversals",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Put a named point where lines cross or at a line's end",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a line on the figure to style it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a crossing or a line's end on the figure to add a point",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i01",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click an angle on the figure to give it congruence arcs or shade it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i02",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a line on the figure to rename it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i03",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a line on the figure to delete it",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "parallelogram": {
+   "score": 90.4,
+   "got": 85.0,
+   "total": 94.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04i",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each height and diagonal its own solid, dashed or dotted style",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the point where a height lands",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the point where the diagonals cross",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "particle-diagram": {
+   "score": 88.2,
+   "got": 67.0,
+   "total": 76.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the lattice's rows and columns (up to 12 by 12)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Substitutional alloy lattice",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Lattice particles touching or spaced apart",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "pedigree": {
+   "score": 94.7,
+   "got": 90.0,
+   "total": 95.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness, ",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04h",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a person in the pedigree to change them",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "ph-reading": {
+   "score": 76.3,
+   "got": 29.0,
+   "total": 38.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Pick a random pH",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A magnifier beside the analog meter's dial",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "The magnifier in place of the analog dial",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "photoelectron-spectrum": {
+   "score": 100.0,
+   "got": 50.0,
+   "total": 50.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "photosynthesis": {
+   "score": 25.6,
+   "got": 32.0,
+   "total": 125.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Rate against distance from the lamp",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01e",
+     "class": "core",
+     "weight": 5.0,
+     "text": "CO₂ in a closed chamber over time",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01f",
+     "class": "core",
+     "weight": 5.0,
+     "text": "CO₂ and O₂ around one plant over time",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01g",
+     "class": "core",
+     "weight": 5.0,
+     "text": "CO₂ and O₂ around one plant against each other",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Up to three curves on one graph",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Set each curve's CO₂ concentration, temperature or light intensity",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "In a closed chamber, set the starting CO₂",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "In a closed chamber, the light going off part way, with the dark shaded",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Points measured off the curves, scattered a little",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the curves in a key, automatically or typed",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Net rate (less respiration) instead of gross",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Rate in bubbles a minute",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "CO₂ in %",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "In a closed chamber, set the time shown",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the saturation point with dashed lines to the axes",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark what limits the rate on the rise and on the plateau",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Lettered points A, B, C on the curve",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the compensation point",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05g",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Leave a mark's label as a blank line for students, or unlabeled",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Points alone, for students to draw the line",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Shape-only axes, with no numbers",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the axis ranges",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Gridlines off",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Chart and axis titles, or blank lines",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load one of six classic setups (limiting factors, pondweed and lamp, CO₂ at two light levels, temperature at two light l",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "population-growth": {
+   "score": 95.4,
+   "got": 125.0,
+   "total": 131.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load one of ten setups (yeast in a flask, bacteria doubling every hour, deer on an island, boom and crash...)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05e",
+     "class": "version",
+     "weight": 3.0,
+     "text": "The inflection point and phase labels as blank lines, or unlabeled",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "predator-prey": {
+   "score": 88.5,
+   "got": 85.0,
+   "total": 96.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Set the starting populations, averages and cycle length while keeping a named pair",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Time units while keeping a named pair",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Draw neither population: blank axes",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "prism": {
+   "score": 90.4,
+   "got": 85.0,
+   "total": 94.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type any measure (length, width, height, lean) as a fraction",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type any measure (length, width, height, lean) with √",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Switch the height line on or off",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "projectile-motion": {
+   "score": 95.9,
+   "got": 71.0,
+   "total": 74.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-06d",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Make a height/range/cliff mark's label a blank line for students",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "pulley": {
+   "score": 90.2,
+   "got": 92.0,
+   "total": 102.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "On a table or ramp, set the second object touching the first instead",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06e",
+     "class": "core",
+     "weight": 5.0,
+     "text": "The contact forces between objects touching",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "punnett-square": {
+   "score": 94.4,
+   "got": 85.0,
+   "total": 90.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a cell to blank it",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "pyramid": {
+   "score": 92.0,
+   "got": 69.0,
+   "total": 75.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type any measure (length, width, side, height, lean) as a fraction",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type any measure (length, width, side, height, lean) with √",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "ray-diagram": {
+   "score": 52.6,
+   "got": 60.0,
+   "total": 114.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01e",
+     "class": "core",
+     "weight": 5.0,
+     "text": "A plane mirror",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "A ray through C for a mirror",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a lens as the line symbol",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Hatch a mirror on its back",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Point the object arrow down (an inverted object)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Turn each principal ray on or off independently",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Show the setup alone, with no rays",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label C for a mirror",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Make a point label a blank line for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Arrow marking the object distance",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Arrow marking the image distance",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Arrow marking the focal length",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Arrows marking the object and image heights",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A numbered cm scale under the figure",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Print an answer key line (image distance, magnification, nature of the image)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Color for slides",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "reaction-energy-diagram": {
+   "score": 38.6,
+   "got": 39.0,
+   "total": 101.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02d",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Three steps",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "With and without an enzyme (biology), with the paths named for the enzyme",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type Ea and dH directly instead of the levels",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Units kJ mol-1 or kJ instead of kJ/mol",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Your own names for the paths in the key",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A level diagram of the reactants and products alone, instead of the energy profile",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Arrow labeled with its value (Ea = 80 kJ/mol) instead of the symbol",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Arrow labeled with a letter or number",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Arrow labeled with a blank line",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Arrowheads at both ends",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Dashed lines from the levels, on or off",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Subscripts in your own labels (N_2 + 3H_2)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Transition states and intermediates labeled with your own text",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06e",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Level labels as blank lines",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Line colors",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A chart title",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Axis titles as your own text or blank lines, each separately",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "The energy axis range (from, to, count by)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Gridlines (light, standard, bold, none) and minor gridlines",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07h",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Axis arrow ends chosen",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "rectangle": {
+   "score": 93.0,
+   "got": 80.0,
+   "total": 86.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the point where the diagonals cross",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04h",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each diagonal its own solid, dashed or dotted style",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "regular-polygon": {
+   "score": 88.6,
+   "got": 70.0,
+   "total": 79.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the size as a fraction",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the size as a square root",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04h",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give the apothem, the radius and the radii each their own solid, dashed or dotted style",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "ruler-reading": {
+   "score": 95.2,
+   "got": 59.0,
+   "total": 62.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Pick the length and position at random",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "sphere": {
+   "score": 100.0,
+   "got": 35.0,
+   "total": 35.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "spring-scale": {
+   "score": 96.0,
+   "got": 48.0,
+   "total": 50.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03b",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Pick the force at random",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "stem-and-leaf": {
+   "score": 34.3,
+   "got": 23.0,
+   "total": 67.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw two data sets back to back",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name each back-to-back data set",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Cut off digits past the leaf unit instead of rounding",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Split each stem into five rows",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the first and last stems to start or end the plot past the data",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Draw empty stem rows with no data",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add headings over the stems and leaves",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Put the leaves in boxes",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Give each row empty boxes up to a count for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Word the key with = or means",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type a measurement unit, such as cm, onto the key's value",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose the key's example value",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07e",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in the key for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of the title for students",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "temperature-reading": {
+   "score": 87.5,
+   "got": 42.0,
+   "total": 48.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-02c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "The digital probe showing 2 decimal places",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Pick a random temperature",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "titration-curve": {
+   "score": 100.0,
+   "got": 64.0,
+   "total": 64.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "transformations": {
+   "score": 28.7,
+   "got": 35.0,
+   "total": 122.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type the preimage's vertices (a polygon of up to 10)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Make the preimage a single point or an open path",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Reflect over any line x = a, y = a or y = ±x + a",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02g",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Rotate about any point",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02i",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Dilate from any center",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01a",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Click the preimage's vertices onto the grid",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02a",
+     "class": "editor",
+     "weight": 4.0,
+     "text": "Add transformations one after another, each acting on the last image",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A label for each preimage vertex",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Rotate clockwise",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Images told apart by dashed and dotted lines",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each figure its own colour",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each figure a solid, dashed or dotted line",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each figure a thin, medium or thick line",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Question version: both figures shown, the transformation to name",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show or hide in-between images",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show or hide lines of reflection and centers",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show or hide translation arrows",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04h",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show or hide point labels and coordinates",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set each axis's range",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Axis numbering (count by, which lines numbered)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Chart and axis titles",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Axis labels and end caps",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Gridline weight and minor gridlines",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02j",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Place a transformation's line or center on the grid with a preview",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i01",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag a preimage vertex on the grid to move it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i02",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click on the grid to set a translation, with the image following the pointer",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "trapezoid": {
+   "score": 89.4,
+   "got": 76.0,
+   "total": 85.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each height and diagonal its own solid, dashed or dotted style",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the point where a height lands",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the point where the diagonals cross",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "triangle": {
+   "score": 92.2,
+   "got": 71.0,
+   "total": 77.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each height its own solid, dashed or dotted style",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the point where the height lands",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "two-way-table": {
+   "score": 25.0,
+   "got": 17.0,
+   "total": 68.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Paste a table that includes its totals",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Turn the Total column on or off",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Turn the Total row on or off",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the totals instead of having them worked out",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Choose which cells are blank",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Write a cell as a letter like x",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "See whether the missing values can be worked out from the rest",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show relative frequencies of the grand total",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show relative frequencies of each row",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show relative frequencies of each column",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write relative frequencies as decimals or percents rounded to a set number of places",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write relative frequencies as fractions in lowest terms",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of the table title for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Put the variable titles in a corner split by a diagonal",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Use plain headings",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw lines round every cell or only under the headings and before the totals",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write the totals in bold",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "vector-diagram": {
+   "score": 84.2,
+   "got": 48.0,
+   "total": 57.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the angle of any individual vector",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Measure the angle mark from the vertical",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show the x and y components of any individual vector",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "venn-diagram": {
+   "score": 37.7,
+   "got": 20.0,
+   "total": 53.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "List each set's members and have them sorted into the regions",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Split a region's text into lines with commas",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw one set",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw two sets separate",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw one set inside the other",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the universal set U, xi, S, epsilon, a word or nothing",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Shade any chosen combination of regions",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Shade with a black-and-white pattern",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Give empty regions a blank line for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i01",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a region on the figure to type what goes in it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-i02",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click a region on the figure to shade it",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "volume-by-displacement": {
+   "score": 94.8,
+   "got": 55.0,
+   "total": 58.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Pick random before and after readings",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "volume-reading": {
+   "score": 89.8,
+   "got": 53.0,
+   "total": 59.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "A 600 mL beaker",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Pick a random reading",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "waves": {
+   "score": 97.0,
+   "got": 97.0,
+   "total": 100.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-07e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "End caps on the axes",
+     "why": "no evidence"
+    }
+   ]
+  }
+ }
+}

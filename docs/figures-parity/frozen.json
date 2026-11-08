@@ -1,0 +1,347 @@
+{
+ "frozen_at": "2026-11-08T15:48:25+00:00",
+ "map_sha256": "5ffa93cf8a8660913f045a3f6282de4aafe9396eb0d70f3d78cfff1dced36085",
+ "not_doing_sha256": "e8f59453e2072beb947ec2e08703edacf1607fbf425e7636a36fa6db2df95d3f",
+ "missing_figures": [
+  "biology/dna-protein-synthesis",
+  "biology/osmosis",
+  "math/pie-chart"
+ ],
+ "figures": {
+  "angles": {
+   "page": "math/angles",
+   "text_sha256": "b42f2a04784f4f2b570b9f4164cf31e34ef9e894503719bb1df19f3c0b1c35e4",
+   "shape": "b2612f277c87746959cbf45f1ebf703dd568cbc802d7181eb4075a9fc315b3f6"
+  },
+  "bar-chart": {
+   "page": "math/bar-graph",
+   "text_sha256": "6441be380d67adc0e6acb83032b4022fcf1eb6da7a4a17c036469dc14ec0ca0f",
+   "shape": "b4f97cfa18e6adbb12937f17b7211a837cd894d21981eaae12ec480223d296a5"
+  },
+  "box-plot": {
+   "page": "math/box-plot",
+   "text_sha256": "dc6c38a8cae49775e036329148bb6cadc697a6a57f198c59c562d82f819b640b",
+   "shape": "69cfe55a7c5cf29c0c23a2237495fd8a2ad4b54499ef36179769f236b2f74da4"
+  },
+  "circle": {
+   "page": "math/circle",
+   "text_sha256": "9d619f35c3c47e4744a302818ac2f0c3997032779e7a579ce4aee87794fc993a",
+   "shape": "a98b8a2c85784dc0c3f2ab38248340c2f2a85c2d0cd64c523b18ddd29dfdcfb2"
+  },
+  "composite-shape": {
+   "page": "math/composite-shape",
+   "text_sha256": "fade7f75a7253df53ee6f800737cd9783b1660b8385aba9cef47f261888fddb5",
+   "shape": "c88b699838ae72cd3d4c08f4d75a99599d78f515a58c8177bd6b1f5b3d26eef4"
+  },
+  "cone": {
+   "page": "math/cone",
+   "text_sha256": "8c940f127e78b950dc72159dbcb85b744c684b004e66cf7c0776fd2a772ce998",
+   "shape": "fd7a985507f5a45480289b67911e138fab67651a5273dd90aff9483aaf6190ea"
+  },
+  "coordinate-grid": {
+   "page": "math/coordinate-grid",
+   "text_sha256": "a7852f5bb7d880599858a370890663752aa9f2851d53f8b80d797ea661541638",
+   "shape": "185d62209d4f1730e371ae00d78d60631e69a117b99902692f84ce774d92b57f"
+  },
+  "ogive": {
+   "page": "math/cumulative-frequency",
+   "text_sha256": "0be155dcf4077e611567668aeb9f8b9dc33891ae9419bff157eebdc029cbe01f",
+   "shape": "70e32b47a26ddb564e03dedde9b998c9e7e069729285f52754d2917da044c809"
+  },
+  "cylinder": {
+   "page": "math/cylinder",
+   "text_sha256": "37b3e7245c5a2131e0ed51470f581292042d951a81694af60053d391dca4c2e1",
+   "shape": "7f0a020887862aae6bbd7743792487f5148e0d167af855927dc307b2b77e5d05"
+  },
+  "histogram": {
+   "page": "math/histogram",
+   "text_sha256": "1d134eef29120d3f5ecaa2b64e5818290bc1a5814135dba5aa9ddcd41b9e2122",
+   "shape": "d25980196c55fd543fbc6aa6f84a4dfb2a026dcb7d36a83daffd6ad74b1963f0"
+  },
+  "kite": {
+   "page": "math/kite",
+   "text_sha256": "c158ee6d7ee550479581a5d5259881ad7a288c499f85fdd1d907e990ab2e8902",
+   "shape": "527c9275347360aac68814ce2a63ff51a1eac7e5aed08346e53b3b0b8d5e14d7"
+  },
+  "ruler-reading": {
+   "page": "math/length-reading",
+   "text_sha256": "7fff5d8c6e323d980d27fa2e111637546659cf05cbb00472eb1595bc30965c7e",
+   "shape": "452f860c463b75482aba012584fee4ad22df713f3deec6311d0b06034ae04b9d"
+  },
+  "mapping-diagram": {
+   "page": "math/mapping-diagram",
+   "text_sha256": "372bc895e51e603ff8d174e4e0dc27e061ddf9243cdc2f9a8b2633b8a4984f2b",
+   "shape": "275555f05bdfed37e1b93c104ba8c3e18ec756b9e798c142280f34d9b1044553"
+  },
+  "number-line": {
+   "page": "math/number-line",
+   "text_sha256": "140d587bded9c60509d7b5899d24f83291c56443a55d4bf569c2b656d87a8159",
+   "shape": "367588a682d5b87494b9e791095e28823fae56683632f497fff04a1f45a7c412"
+  },
+  "parallel-lines": {
+   "page": "math/parallel-lines",
+   "text_sha256": "45c8a5348c814b7fc9c3b8c32481ba1c3546658a8d478427a71ade355f642926",
+   "shape": "e2b43a7be58d52f64d5aee9822e97e99d9ef11cf7473a1f83377654e21a1b2d2"
+  },
+  "parallelogram": {
+   "page": "math/parallelogram",
+   "text_sha256": "a319e7ac2d8aee4b4629aec0bbfd541dda1aa895038158162983fbf0b75786e5",
+   "shape": "7b6c153129509d5cb58edab2312bbfb4e0d96c1d3ccc49eb8bbfed0eab7e0008"
+  },
+  "prism": {
+   "page": "math/prism",
+   "text_sha256": "2a1b9a5962b60b9debdef6266af783144b2111b76d1f012e462bf4ca2b724338",
+   "shape": "26346ea26fa7c3613f383e24a746abd35c4e202119ebcde385de960de596bcb3"
+  },
+  "pyramid": {
+   "page": "math/pyramid",
+   "text_sha256": "d8688dde6f432b712c30c6c75ce9da268c81da86a069eb3533cf19481323459f",
+   "shape": "fde25b66634330bc70196bea7282df2cf1fe2bd14782bde101f08d60ddf2914f"
+  },
+  "rectangle": {
+   "page": "math/rectangle",
+   "text_sha256": "5aa53eabe039627231f573c5b3865f6c4d3bc483bae3197a5c92595af1fa786f",
+   "shape": "73322680c70dc6cce278ad2cfa6c02abce7757c43059a2fc973d5b12a1299877"
+  },
+  "regular-polygon": {
+   "page": "math/regular-polygon",
+   "text_sha256": "016380fec1cc357d1ef64c30fd6fd92971d32ca2d9f36c056393136f72711c1e",
+   "shape": "41d68de1da08f4e3b62b1102bd7b1ad5b6d56a63333fdcbf8ee23679b6874601"
+  },
+  "sphere": {
+   "page": "math/sphere",
+   "text_sha256": "61b1d58347235096062048f007d7b36dc46d581609f02ab180e4262ae6a34b03",
+   "shape": "5a5a0f0910856705c1519513f674ed163e7f04909e578ba7460bc709b0cc3869"
+  },
+  "stem-and-leaf": {
+   "page": "math/stem-and-leaf",
+   "text_sha256": "c26e013dc238a967d102116f5fb99a3097b9c9c17c0f91f925b773bac5a67a46",
+   "shape": "ce237a629a430e09f6e919c9ee3a7933faf0e213ff681c263ef86bdb6bd62cd9"
+  },
+  "transformations": {
+   "page": "math/transformations",
+   "text_sha256": "972fe9db986736b0673ca95f554830ad5299d66dbfbb6e1e602d299f2a94b40e",
+   "shape": "574fd3f58f62d196f010fff359795b1f778bac15c42ded0e8ceee7f953432d61"
+  },
+  "trapezoid": {
+   "page": "math/trapezoid",
+   "text_sha256": "6d8c75cbaff3d02bbac1ec5a33a5d09255ac443aff1b693dd29cb12503d42fcf",
+   "shape": "cad22546ba6c433238a740c824ca8fa93a5740c36fff2f7255571fe527199230"
+  },
+  "triangle": {
+   "page": "math/triangle",
+   "text_sha256": "de08fcded171d786c5bc783ee0b86155164e7a0dbb9e0e43961075ebabf7fbce",
+   "shape": "467f0f81a4dc5bfdb0c9a2010faaccd7a1ef9de0c17f5dc9c4d4b6271e2a0b88"
+  },
+  "two-way-table": {
+   "page": "math/two-way-table",
+   "text_sha256": "b896a0e82c11ee56fb46c69346f5871fb628778f9c3f9b578caca9ab162276aa",
+   "shape": "a38f90378e11f71c4766b0573c455651c8d301e2c992f887241b2ca8c3c9ec08"
+  },
+  "venn-diagram": {
+   "page": "math/venn-diagram",
+   "text_sha256": "1bddd97900c4d0e094913575af6d93815661721565d953efdb5da892c1fab11b",
+   "shape": "f321e193137af9007c120522dc0d2e6c9293848438524d4de02983d074dfdca0"
+  },
+  "circuit-diagram": {
+   "page": "physics/circuit-diagram",
+   "text_sha256": "bc229d74a085ad00ab713372a77a210bb6e4f9b8eead13ba95ba4a743b030b9b",
+   "shape": "4dbe86076e9ddc736f82f50d35ca341d6e7801fee743e53d63ff4b5b0af08908"
+  },
+  "free-body-diagram": {
+   "page": "physics/free-body-diagram",
+   "text_sha256": "574fd08f36634400ffd9baa2d8ba030a5a0092fc206c1c1686260704cc911008",
+   "shape": "e2d15995f2efc17b9d7ce6adaf85bd342ad21ecf1f678643d1e3a6dee1993c63"
+  },
+  "inclined-plane": {
+   "page": "physics/inclined-plane",
+   "text_sha256": "92cd459eac681fa9b6eace9aa084226b6928d023a8cc216c1e14547fbd218816",
+   "shape": "e0cc3d34dae6a1cbde75c281e1c40a4816ae1995eaa605f41b390095a3b49c90"
+  },
+  "length-reading": {
+   "page": "chemistry/length-reading",
+   "text_sha256": "b087d1097c7a67b1506f5d09aebdfab5c0ddb3acf6747d5ac09316f2e613fcf2",
+   "shape": "926983f36475d0370bc970f7b1b6b650e3601f0956818a6397bddce2770efa00"
+  },
+  "motion-graphs": {
+   "page": "physics/motion-graphs",
+   "text_sha256": "0046fecf2a22ea1a679b1818e07b69e6a50b7a26c85133b617cf9b96de5cdd0e",
+   "shape": "4d926265cc9b55c439135113fbd3ffc6e53f4c3544e6a4d391bb71ea68431502"
+  },
+  "motion-map": {
+   "page": "physics/motion-map",
+   "text_sha256": "4907014979ce787781055f5e15400dce7cf94abcd7398065aa701c627aa3d01e",
+   "shape": "db36898cb7fede475fa77663493d5196199853493abc0184fef0b9a0719e8b25"
+  },
+  "projectile-motion": {
+   "page": "physics/projectile-motion",
+   "text_sha256": "4f51ce51c49a5918b06086c86fd8b80d6a67c8295d2e1846d98b7fd837d8a213",
+   "shape": "b60dcb7755776103eaca10b84f832b7527e28d5ef6dcb43a1f97564127d693d3"
+  },
+  "pulley": {
+   "page": "physics/pulley",
+   "text_sha256": "d0b0fdc76ca0efdcf06b53e4f4a6dc0063e74c7bb7bce375acae2fe892d3d436",
+   "shape": "5aa1496d87625068996058f7db1f1d7d8cdbb2f3b1785f4cc31faf53469fe95a"
+  },
+  "ray-diagram": {
+   "page": "physics/ray-diagram",
+   "text_sha256": "429e8cbab7afa50ac6831a6e238659b195b0ba365d83611650953110c179d117",
+   "shape": "c8177f16fecd42275d1fcbd377fda65331c224ce17f532c6c057b8bf705370a6"
+  },
+  "spring-scale": {
+   "page": "physics/spring-scale",
+   "text_sha256": "e7c161856fbb5f666d222a61977ed0e1449114d4dfe493c273f9b9dec25e1a14",
+   "shape": "eba662649069aad6e886c5c5e60ac7c541c95a68bcfc3c7db138b3f2533036cd"
+  },
+  "vector-diagram": {
+   "page": "physics/vector-diagram",
+   "text_sha256": "3dbdcdab7044f7a0f4fc92bcac7260552f00c52a2ac0c621c455646ea2c037ac",
+   "shape": "82f8b7d6e069afbb396eab67330155e37293fdfc09665b8836d15b1357795243"
+  },
+  "waves": {
+   "page": "physics/waves",
+   "text_sha256": "fd1a38042b64e7b50b309466989bda62b90130264dcc669f30da10f2a7848790",
+   "shape": "206ae611c7df0eb9900f519cbc36043f800566ce6974444d1e607e2d952fc236"
+  },
+  "bohr-model": {
+   "page": "chemistry/bohr-model",
+   "text_sha256": "6825ba05a774ea24b191492758c7d8eb2f056d557657d187d0abd80d86ccdf3c",
+   "shape": "faa5e6e930d1cead13435e256bce6762d50c2024a55edfa89c0a1eacb836f34f"
+  },
+  "dot-and-cross": {
+   "page": "chemistry/dot-and-cross",
+   "text_sha256": "c86a6d2799ad7a9b04222a0a2c3d9e515e6396b6b1a356c130c08e0ac58e6cda",
+   "shape": "80b4f26f1ded3fad6cf5517757679ea7cdc013335dc10b5106916d3f2208e704"
+  },
+  "gas-syringe": {
+   "page": "chemistry/gas-syringe",
+   "text_sha256": "f00620164f2f24e90935f35e7c953a70b2a3236d3a533022a485cc4152160270",
+   "shape": "a824a705f5e4aa971cda5f65df04da7946e8c93b444dcfa39eed6fd400824024"
+  },
+  "half-life-graph": {
+   "page": "chemistry/half-life-graph",
+   "text_sha256": "5e7cd82cd18c6ae06b44bf85f12d40f5f9e88791b5735b4db92c3c952a4383f8",
+   "shape": "67a3ad492441c3258a78e3cae7dcae9711dc5089f8e54d06ee34c7e8253c2426"
+  },
+  "heating-cooling-curve": {
+   "page": "chemistry/heating-cooling-curve",
+   "text_sha256": "ab0b02d20f2bffe5c61b94e69dac4fd56cf20d163dcb5832871bcf36391d79c6",
+   "shape": "4503c5ed31e956ff2194091fd81e075b91d00629e01b2c11c3e95e0f77135c8f"
+  },
+  "lewis-structures": {
+   "page": "chemistry/lewis-structures",
+   "text_sha256": "fcb821d6c3110b8c9f2f12f166cc2eeec0a2d74a489ec7ed42a32379ba1d1dad",
+   "shape": "ca88a1ed42ea3364985ddca6c7e898403cc6e2e6d4daa9f07c91838515a4c7ab"
+  },
+  "line-spectrum": {
+   "page": "chemistry/line-spectrum",
+   "text_sha256": "9f98f7f5708170b9c5fb545b8567f75dca6cf30052024cb172647bad9634106c",
+   "shape": "58f796bdf95fa60676e50a3ba077699f71a968ab570df721d18636b05ae41e17"
+  },
+  "mass-reading": {
+   "page": "chemistry/mass-reading",
+   "text_sha256": "7464492275b369ece3b48ce374f89388a4c0bf54877b522eae87dd74561ffbdb",
+   "shape": "e8f0399a5a12889484b8988941c6d4472278f120c2c0ecd5048aff4b45b3bb27"
+  },
+  "mass-spectrum": {
+   "page": "chemistry/mass-spectrum",
+   "text_sha256": "fb484517071bb41380e98e1922a8d0fe180ba9ad60647c4f5f95d6dcba6be26c",
+   "shape": "6891a6b8b56067f9b4f52b725adddff440d3944200511e705be221d6ca419199"
+  },
+  "nuclide-notation": {
+   "page": "chemistry/nuclide-notation",
+   "text_sha256": "155b2f00a6395765dcca7633bcf71f48595154094cd892d0d38e0776dd585208",
+   "shape": "512685a2948e53915f005269167d92418f63df626b3489633d7365dd0e4a5687"
+  },
+  "orbital-diagram": {
+   "page": "chemistry/orbital-diagram",
+   "text_sha256": "a3232f018c952d321dd7af7e163c0a14fbaa2c14ac4b2409764d6d5a84f170c8",
+   "shape": "4d98053d839d8a9903d2f3914a1bdf92196703c968a16b9cb84a80e034734781"
+  },
+  "particle-diagram": {
+   "page": "chemistry/particle-diagram",
+   "text_sha256": "afd242868f635cfe842ca278fb7477a266c548a2f01fc5ae7a2c853b9480d4e9",
+   "shape": "86982efe2f0ec0f1c615bdfbf52cfa26daacddad4cbcd319b304ba2bc074242c"
+  },
+  "ph-reading": {
+   "page": "chemistry/ph-reading",
+   "text_sha256": "dad727d689e0796713545367fc3d7077e2f4a76e8fab863e2ae9b2d12606a612",
+   "shape": "70fe8ce8bccb37420726a4eb762ca72f5a384f08dce28dc951973e08ebf4955a"
+  },
+  "photoelectron-spectrum": {
+   "page": "chemistry/photoelectron-spectrum",
+   "text_sha256": "1bd025ab979cd80a87d5cc629206f0fc8ab8b7e9ea652c8d3eda81c73b829ae3",
+   "shape": "bca4782c71212859a6d4f6185bbf87d006a999bee518545e299b83396c776454"
+  },
+  "reaction-energy-diagram": {
+   "page": "chemistry/potential-energy-diagram",
+   "text_sha256": "1cd78d62d9372561772b2ff0662d1536575c1157f39f4faee6c7995282f7bf84",
+   "shape": "217466b73cf97f73884d02f9972ea3f7357f152efd38c69adead77e40043b9d1"
+  },
+  "organic-structure": {
+   "page": "chemistry/structure-editor",
+   "text_sha256": "9a3cbd7aff670ab147c4d61943e8d2b6e55623bbd82aac7d63301c265535f22d",
+   "shape": "a5aa93c136f4deea344a5f89cd99508506555b6ddd083b31b00130ae45f31c36"
+  },
+  "temperature-reading": {
+   "page": "chemistry/temperature-reading",
+   "text_sha256": "b5988537810fd45be5f50750671f0e1e307f2a5e4fb499e1db475782f45568f3",
+   "shape": "61fef4d39fc96135ba0526eba9ebb516942256600e861f82feaadcddd627db04"
+  },
+  "titration-curve": {
+   "page": "chemistry/titration-curve",
+   "text_sha256": "d1c843a486dbe468cfe0e2c0320df5c059444887b091ba1a6b13800638d63d76",
+   "shape": "40a7140d6ad8dc097d1ca98b194e35db5e9679b0f1e569e000fab46e715327ac"
+  },
+  "volume-by-displacement": {
+   "page": "chemistry/volume-by-displacement",
+   "text_sha256": "6cd700c7c195c65b7e7a1cdbf834a9bce8e231436eed8f0a5743cc08ccb69592",
+   "shape": "b9101dc6350df0f6e75e3472ff7caf48bfb326ab35a9e51e34a55fb693aab2b4"
+  },
+  "volume-reading": {
+   "page": "chemistry/volume-reading",
+   "text_sha256": "e6f36fb44a9aad0bcea651657ad8a980078f8fee2b58ec2d3dfaf4f7c72d48ec",
+   "shape": "efe7b1904aa29e32d014f063485a284f54d14f049ac07f1bcf695904afacc4a8"
+  },
+  "enzyme-kinetics": {
+   "page": "biology/enzyme-activity",
+   "text_sha256": "5f20a6d1ffa1225a0032ac2c7804affe034292f1b4fc300281713aab722351d9",
+   "shape": "1feff6367cb61ea307b39483bee10939b90e1da8ab4edb0ddcbba05b94f8f895"
+  },
+  "gel-electrophoresis": {
+   "page": "biology/gel-electrophoresis",
+   "text_sha256": "aad38fe05ebd1853a02b53cde924a365f3d4ba9c56802a1329e08d0d5d0a17b9",
+   "shape": "b077ecf600561edcab885d47ca5bc9cfc44886fe121ec870c4f9fed0f90af3e7"
+  },
+  "micropipette-reading": {
+   "page": "biology/micropipette-reading",
+   "text_sha256": "94299cbe3b0509b24b34772af8769ae2b09c97cb2b52c95cf1f9fa6a31acc3e9",
+   "shape": "1a263faae750fb51ea85dfc8c0abebff2f2de2124635f06266bed19ae0d812c3"
+  },
+  "pedigree": {
+   "page": "biology/pedigree",
+   "text_sha256": "13fd48bd91de9044345293dff0a8d3f7af47ba6f7317dfa3994b7c9d928fb427",
+   "shape": "054412f10dbbbc3ce96ffd1cc7db1fc3cf0ac39c62696a586ca725a2fb498173"
+  },
+  "photosynthesis": {
+   "page": "biology/photosynthesis-rate",
+   "text_sha256": "516684298e414ae30beabc76186c53281862a548f80c89906e194f11b85721a1",
+   "shape": "645fffb4c740dc1baead905110f3552daf82895739e11c2a4a44764103c613cf"
+  },
+  "population-growth": {
+   "page": "biology/population-growth",
+   "text_sha256": "e51f24b3b9f7631f9011d87ed010e07a0d835fd9a01625f66a8c0f0628ec587f",
+   "shape": "b6c2eb297433cad6d68cd32a9fffc62ab37b77b7b557361b74eeeedaeace6fbf"
+  },
+  "predator-prey": {
+   "page": "biology/predator-prey",
+   "text_sha256": "c3744f191aa8bf002d9848a8dd4a9fb54e7b9a0afd73ceb37f3770c74dbf229a",
+   "shape": "788099ba479d5a76c2082980217aedea4a64d089f13dec0cd2c76b64c3f196bb"
+  },
+  "punnett-square": {
+   "page": "biology/punnett-square",
+   "text_sha256": "4e3685f61df83dc800931323864a82ede797bd741c41f282497644531787d327",
+   "shape": "cf5903b4e8c2e2d701c93a31ec8cea55fd27fa6ed0160f346e53e58350969f62"
+  }
+ }
+}

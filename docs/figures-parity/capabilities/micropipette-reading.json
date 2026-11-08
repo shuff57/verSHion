@@ -1,0 +1,63 @@
+{
+ "figure": "micropipette-reading",
+ "site": "biology",
+ "slug": "micropipette-reading",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Pick a 2, 10, 20, 100, 200 or 1000 µL micropipette, each set from a tenth of its size up to it",
+   "class": "core",
+   "evidence": "changes:size=1000 µL",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Type the volume it's set to, checked against the pipette's range and steps",
+   "class": "core",
+   "evidence": "changes:volume=15.0 + handle:drag:set the volume + handle:click:step this digit",
+   "note": "Checked by hand: 25 µL renders as 20, 1 µL as 2, 12.53 as 12.5 on the 20 µL pipette."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Pick the volume at random",
+   "class": "interaction",
+   "evidence": "",
+   "note": "No random button or handle."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Put a tip on the end",
+   "class": "control",
+   "evidence": "changes:tip=false",
+   "note": "The tip is on at the opening state."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Draw the tip in the color its size takes: clear, yellow or blue",
+   "class": "control",
+   "evidence": "changes:size=1000 µL",
+   "note": "Looked at the 1000 µL render: blue tip."
+  },
+  {
+   "id": "cap-04",
+   "text": "Print the size above the volume display, or leave it off",
+   "class": "control",
+   "evidence": "changes:size_label=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Decimal digits in red, or all black and white for photocopying",
+   "class": "control",
+   "evidence": "changes:color=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "A line across the display at the decimal point",
+   "class": "control",
+   "evidence": "changes:decimal_line=false",
+   "note": ""
+  }
+ ]
+}

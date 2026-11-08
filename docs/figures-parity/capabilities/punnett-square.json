@@ -1,0 +1,196 @@
+{
+ "figure": "punnett-square",
+ "site": "biology",
+ "slug": "punnett-square",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A dihybrid cross: two genes, a 4 × 4 square",
+   "class": "core",
+   "evidence": "changes:cross=Dihybrid",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "An X-linked cross",
+   "class": "core",
+   "evidence": "changes:cross=X-linked",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Incomplete dominance",
+   "class": "core",
+   "evidence": "changes:dominance=Incomplete + changes:{\"cross\":\"X-linked\",\"parents\":\"X^B X^b × X^B Y\",\"dominance\":\"Incomplete\"}",
+   "note": "Checked by hand that it also changes an X-linked cross over the same cross with complete dominance."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Codominance",
+   "class": "core",
+   "evidence": "changes:dominance=Codominance",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Type the parents' genotypes (Tt × tt, RrYy × RrYy, X^B X^b × X^B Y, C^R C^W × C^R C^W)",
+   "class": "core",
+   "evidence": "changes:parents=Tt × tt + changes:{\"cross\":\"Dihybrid\",\"parents\":\"RrYy × rryy\"} + handle:click:cycle this parent's genotype",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO blood type)",
+   "class": "control",
+   "evidence": "",
+   "note": "Collapsed to one entry per list (owner decision 2026-11-08: a preset list is one capability, not one per preset). The ABO preset also needs a multiple-allele cross, which we lack."
+  },
+  {
+   "id": "cap-03",
+   "text": "Name each phenotype, used in the ratios, the key and the cells",
+   "class": "control",
+   "evidence": "changes:phenotypes=high, low",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Label the parents with ♀ and ♂",
+   "class": "control",
+   "evidence": "changes:parent_labels=♀ ♂",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Label the parents as Mother and Father",
+   "class": "control",
+   "evidence": "changes:parent_labels=Mother",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Leave the parents unlabeled",
+   "class": "control",
+   "evidence": "changes:parent_labels=None",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Leave the parents' genotypes blank",
+   "class": "version",
+   "evidence": "changes:blank_parents=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Leave the gametes blank",
+   "class": "version",
+   "evidence": "changes:blank_gametes=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Leave all offspring cells blank",
+   "class": "version",
+   "evidence": "changes:cells=Blank",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Leave just chosen offspring cells blank",
+   "class": "version",
+   "evidence": "changes:cells=Some blank + changes:{\"cells\":\"Some blank\",\"blank_cells\":\"2, 3\"}",
+   "note": "Checked by hand that blank_cells changes it over Some blank alone."
+  },
+  {
+   "id": "cap-05d",
+   "text": "Click a cell to blank it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "Our notes say to click the cells, but no cell handle exists at the opening state (cells start Filled in), so it cannot be evidenced yet."
+  },
+  {
+   "id": "cap-05e",
+   "text": "Write each phenotype's name under its genotype",
+   "class": "control",
+   "evidence": "changes:cell_phenotype=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Shade every phenotype its own fill, with a key",
+   "class": "control",
+   "evidence": "changes:shading=Each phenotype, with a key",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Shade just one phenotype",
+   "class": "control",
+   "evidence": "changes:shading=First phenotype only",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Shade in gray, hatching and dots for photocopies",
+   "class": "control",
+   "evidence": "changes:{\"shading\":\"Each phenotype, with a key\",\"shade_style\":\"Gray and patterns\"}",
+   "note": "Checked by hand over the shading alone."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Genotype and phenotype ratios as a blank line",
+   "class": "version",
+   "evidence": "changes:geno_ratio_style=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Genotype and phenotype ratios left off",
+   "class": "control",
+   "evidence": "changes:pheno_ratio_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Ratios written as percentages",
+   "class": "control",
+   "evidence": "changes:ratio_form=Percent",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Ratios written as fractions",
+   "class": "control",
+   "evidence": "changes:ratio_form=Fraction",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Daughters and sons separately for an X-linked cross",
+   "class": "control",
+   "evidence": "changes:{\"cross\":\"X-linked\",\"parents\":\"X^B X^b × X^B Y\",\"sex_split\":true}",
+   "note": "Checked by hand over the same X-linked cross alone."
+  },
+  {
+   "id": "cap-08a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Pea plant height + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "A question above the square",
+   "class": "version",
+   "evidence": "changes:question=What fraction are tall?",
+   "note": ""
+  },
+  {
+   "id": "cap-08c",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

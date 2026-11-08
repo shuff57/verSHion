@@ -1,0 +1,112 @@
+{
+ "figure": "spring-scale",
+ "site": "physics",
+ "slug": "spring-scale",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Set the capacity: 1, 2.5, 5, 10, 20, 30 or 50 N",
+   "class": "core",
+   "evidence": "changes:cap=5 N + handle:click:change the capacity",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Color-code the scale by capacity, or black and white",
+   "class": "control",
+   "evidence": "changes:coded=false",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Print the scale in newtons, grams, or both",
+   "class": "control",
+   "evidence": "changes:units=Both",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Type the force on the hook",
+   "class": "core",
+   "evidence": "changes:reading=6.2 + handle:drag:force on the hook",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Pick the force at random",
+   "class": "interaction",
+   "evidence": "",
+   "note": "No random button or handle."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Give the scale a zero offset",
+   "class": "core",
+   "evidence": "changes:offset=0.5",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw the unloaded scale beside it",
+   "class": "control",
+   "evidence": "changes:{\"offset\":0.5,\"show_zero\":true}",
+   "note": "Checked by hand that show_zero changes the render over offset alone."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Hang nothing on the hook",
+   "class": "control",
+   "evidence": "changes:hook=Nothing",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Hang a block with a short label",
+   "class": "control",
+   "evidence": "changes:block_lab=A + handle-edit:block_lab",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Hang 1 to 5 slotted masses",
+   "class": "control",
+   "evidence": "changes:{\"hook\":\"Slotted masses\",\"masses\":5}",
+   "note": "Checked by hand that masses changes the render over slotted masses alone."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Put a magnifier beside the scale",
+   "class": "control",
+   "evidence": "changes:view=Instrument only",
+   "note": "The magnifier is on at the opening state; removing it changes the render."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Show the magnifier in place of the scale",
+   "class": "control",
+   "evidence": "changes:view=Magnifier only",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Span the magnifier over 1 to 6 numbered marks",
+   "class": "control",
+   "evidence": "changes:mag_marks=6",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Add a chart title",
+   "class": "control",
+   "evidence": "changes:title=Spring scale + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Print an answer key line with the force",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

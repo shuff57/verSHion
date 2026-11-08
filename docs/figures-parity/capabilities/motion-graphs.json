@@ -1,0 +1,175 @@
+{
+ "figure": "motion-graphs",
+ "site": "physics",
+ "slug": "motion-graphs",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Build the motion from up to six segments",
+   "class": "core",
+   "evidence": "changes:n=6",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Set each segment at rest, constant velocity forward or back, speeding up or slowing down",
+   "class": "core",
+   "evidence": "changes:s2_kind=At rest",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Type each segment's speed",
+   "class": "core",
+   "evidence": "changes:s2_v=6.0",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Type each segment's duration",
+   "class": "core",
+   "evidence": "changes:s2_t=6.0 + handle:drag:duration and end",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Choose which way a segment speeding up from rest goes",
+   "class": "core",
+   "evidence": "changes:s1_dir=Back",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set where the motion starts",
+   "class": "core",
+   "evidence": "changes:x0=5.0 + handle:drag:starting position",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Show the position–time graph",
+   "class": "core",
+   "evidence": "changes:s1_v=6.0",
+   "note": "Opening state is position-time; evidence is that it plots the typed motion."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Show the velocity–time graph",
+   "class": "core",
+   "evidence": "changes:show=Velocity-time",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Show the acceleration–time graph",
+   "class": "core",
+   "evidence": "changes:show=Acceleration-time",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Show all three stacked",
+   "class": "core",
+   "evidence": "changes:show=All three, stacked",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Letter the segment ends A, B, C…",
+   "class": "control",
+   "evidence": "changes:letters=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw each segment in its own line style",
+   "class": "control",
+   "evidence": "changes:styles=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Draw a tangent to the position–time graph at any time",
+   "class": "control",
+   "evidence": "changes:tangent=true + changes:{\"tangent\":true,\"tangent_t\":6.0}",
+   "note": "Checked by hand that tangent_t moves the tangent."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=A trip + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Write the axis titles, with superscripts and subscripts such as m/s²",
+   "class": "control",
+   "evidence": "changes:xt=t (s) + handle-edit:xt + handle-edit:yt_pos",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Replace a title with a blank line for students",
+   "class": "version",
+   "evidence": "changes:yt_pos_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Leave a title off",
+   "class": "control",
+   "evidence": "changes:xt_mode=None",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Set each graph's ranges yourself",
+   "class": "control",
+   "evidence": "changes:{\"ranges\":true,\"p_max\":50.0}",
+   "note": "ranges=true alone renders the same as the fitted axes; checked by hand that p_max then changes it."
+  },
+  {
+   "id": "cap-07b",
+   "text": "Stacked graphs share one time axis",
+   "class": "control",
+   "evidence": "changes:show=All three, stacked",
+   "note": "Looked at the render: the three stacked graphs share one time range and one time-axis title."
+  },
+  {
+   "id": "cap-08a",
+   "text": "Numbers on the axes, or just the shapes",
+   "class": "control",
+   "evidence": "changes:numbers=false",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Gridlines on or off",
+   "class": "control",
+   "evidence": "changes:grid=false",
+   "note": ""
+  },
+  {
+   "id": "cap-08c",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-08d",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "changes:color=true",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "Open the same motion as a motion map",
+   "class": "out-of-scope",
+   "evidence": "",
+   "note": "not-doing: \"Links that open the same data as a different figure (motion graph ↔ motion map). Our figures are separate tools; a teacher copies the values across.\""
+  }
+ ]
+}

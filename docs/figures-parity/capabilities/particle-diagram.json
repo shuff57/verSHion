@@ -1,0 +1,161 @@
+{
+ "figure": "particle-diagram",
+ "site": "chemistry",
+ "slug": "particle-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Particles in a box as a gas, liquid or solid",
+   "class": "core",
+   "evidence": "changes:state=Liquid + changes:state=Solid",
+   "note": "Gas is the opening state."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Before and after boxes",
+   "class": "core",
+   "evidence": "changes:boxes=Before and after",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A lattice",
+   "class": "core",
+   "evidence": "changes:layout=Lattice",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Set the lattice's rows and columns (up to 12 by 12)",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours sizes the lattice from the particle counts; no rows/columns inputs."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Up to four kinds of particle",
+   "class": "core",
+   "evidence": "changes:{\"c_count\":3,\"d_count\":2}",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "0 to 60 of each kind",
+   "class": "core",
+   "evidence": "changes:a_count=60",
+   "note": "Ours' click/scroll handle also adds and removes particles."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Each kind alone or joined as a pair, bent, in a line, three around or four around",
+   "class": "control",
+   "evidence": "changes:a_shape=Pair + changes:a_shape=Bent + changes:a_shape=In a line + changes:a_shape=Three around + changes:a_shape=Four around",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Shuffle the particles' positions",
+   "class": "control",
+   "evidence": "changes:shuffle=3",
+   "note": "From the page's Shuffle button, not its bullet list."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Each atom's size, XS to XL (centre and outer atoms)",
+   "class": "control",
+   "evidence": "changes:a_size=XL + changes:{\"a_shape\":\"Pair\",\"a_osize\":\"XL\"}",
+   "note": "Second token passes on a_shape alone; checked separately that a_osize changes the Pair render."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Each atom's shade, white to black",
+   "class": "control",
+   "evidence": "changes:a_shade=Black",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Each atom's charge (+, -, 2+, 2-, 3+, 3-)",
+   "class": "control",
+   "evidence": "changes:a_charge=2+",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Lattice of one kind (a pure metal)",
+   "class": "control",
+   "evidence": "changes:{\"layout\":\"Lattice\",\"b_count\":0}",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Alternating lattice (an ionic solid)",
+   "class": "control",
+   "evidence": "changes:layout=Lattice",
+   "note": "Render checked: with equal counts the two kinds alternate."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Substitutional alloy lattice",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours fills the lattice in order: 14 of one kind and 2 of another put the 2 together at the end, not scattered through it."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Interstitial alloy (small atoms in the gaps)",
+   "class": "control",
+   "evidence": "changes:{\"state\":\"Solid\",\"gaps\":true}",
+   "note": "Ours does this in the solid box, not the lattice (gaps has no effect on the lattice). Token passes on state alone; checked separately that gaps changes the solid render."
+  },
+  {
+   "id": "cap-04e",
+   "text": "Lattice particles touching or spaced apart",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "A key with your names for each kind",
+   "class": "control",
+   "evidence": "changes:{\"key_show\":\"Box and key\",\"a_name\":\"Cl-\"}",
+   "note": "Token passes on key_show alone; checked separately that a_name changes the key."
+  },
+  {
+   "id": "cap-05b",
+   "text": "A note line in the key (with sub- and superscripts)",
+   "class": "control",
+   "evidence": "changes:{\"key_show\":\"Box and key\",\"note\":\"Salt solution\"}",
+   "note": "Token passes on key_show alone; checked separately that note changes the key."
+  },
+  {
+   "id": "cap-05c",
+   "text": "The key listing each kind whole or each atom once",
+   "class": "control",
+   "evidence": "changes:{\"key_show\":\"Box and key\",\"a_shape\":\"Pair\",\"key_list\":\"Each atom\"}",
+   "note": "Token passes on key_show alone; checked separately that key_list changes the Pair key."
+  },
+  {
+   "id": "cap-05d",
+   "text": "The key alone, without the box",
+   "class": "control",
+   "evidence": "changes:key_show=Key only",
+   "note": "From the page's Show control."
+  },
+  {
+   "id": "cap-05e",
+   "text": "The box's border single, double or none",
+   "class": "control",
+   "evidence": "changes:border=Double + changes:border=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05f",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Salt solution",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,126 @@
+{
+ "figure": "venn-diagram",
+ "site": "math",
+ "slug": "venn-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type what goes in each region: a number, letter, expression or words",
+   "class": "core",
+   "evidence": "changes:counts=x, 2x+1, 5, 4",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Split a region's text into lines with commas",
+   "class": "control",
+   "evidence": "",
+   "note": "a comma separates regions in verSHion"
+  },
+  {
+   "id": "cap-01c",
+   "text": "List each set's members and have them sorted into the regions",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw one set",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Draw three sets",
+   "class": "control",
+   "evidence": "changes:sets=3",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Draw two sets separate",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Draw one set inside the other",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Name each set with a letter or a word",
+   "class": "control",
+   "evidence": "changes:a_name=A + changes:b_name=Prime",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Name the universal set U, xi, S, epsilon, a word or nothing",
+   "class": "control",
+   "evidence": "",
+   "note": "always U"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Shade a region or set combination in a colour tint",
+   "class": "control",
+   "evidence": "changes:shade=A and B",
+   "note": "from a fixed list (A, B, C, A and B, A or B, A only, B only, Not A, Not B, Outside)"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Shade any chosen combination of regions",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Shade in gray",
+   "class": "control",
+   "evidence": "changes:{\"shade\": \"A and B\", \"style\": \"Print\"}",
+   "note": "Print shades grey; the render also differs because a region is shaded"
+  },
+  {
+   "id": "cap-05d",
+   "text": "Shade with a black-and-white pattern",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Leave regions empty for students",
+   "class": "version",
+   "evidence": "changes:show_answers=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Give empty regions a blank line for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-i01",
+   "text": "Click a region on the figure to type what goes in it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. The page says: Click any region on the figure to fill it in or shade it. No handles on our Venn diagram."
+  },
+  {
+   "id": "cap-i02",
+   "text": "Click a region on the figure to shade it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Same sentence; cap-05b is the setting, this is the click."
+  }
+ ]
+}

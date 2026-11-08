@@ -1,0 +1,168 @@
+{
+ "figure": "enzyme-kinetics",
+ "site": "biology",
+ "slug": "enzyme-activity",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Plot rate against temperature",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours is Michaelis–Menten (rate against [S]) only."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Plot rate against pH",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours is Michaelis–Menten (rate against [S]) only."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw up to three curves on one graph",
+   "class": "core",
+   "evidence": "",
+   "note": "One enzyme curve; an inhibitor adds the uninhibited curve beside it, nothing more."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Pick a named enzyme (human enzyme, Taq polymerase, pepsin, salivary amylase, trypsin or catalase) for a curve",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "An unknown enzyme with its own optimum and width",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Name each curve in a key",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Give a curve no inhibitor, a competitive inhibitor or a non-competitive one",
+   "class": "core",
+   "evidence": "changes:mode=competitive + changes:mode=noncompetitive",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Set how soon the rate levels off (Km)",
+   "class": "core",
+   "evidence": "changes:km=4.0",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Set how strong the inhibitor is",
+   "class": "core",
+   "evidence": "changes:{\"mode\":\"competitive\",\"inh\":6.0}",
+   "note": "Checked by hand over competitive alone."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Mark the optimum and denaturation with dots",
+   "class": "control",
+   "evidence": "",
+   "note": "No temperature or pH curves."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Mark Vmax, ½Vmax and Km with dashed lines to the axes",
+   "class": "control",
+   "evidence": "changes:show_answers=false",
+   "note": "Looked at the render: the dashed Vmax, Vmax/2 and Km lines are drawn and go with the answer switch."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Name each mark for its curve when there is more than one curve",
+   "class": "control",
+   "evidence": "",
+   "note": "With an inhibitor our marks read Vmax′ / Km′ for the inhibited curve only; no per-curve naming of several curves."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Leave a mark's label as a blank line for students",
+   "class": "version",
+   "evidence": "",
+   "note": "Marks are labeled or hidden with the answers; no blank-line mode."
+  },
+  {
+   "id": "cap-04e",
+   "text": "Leave a mark unlabeled (line kept)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Shape-only axes, with no numbers",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Set the x-axis range by hand",
+   "class": "control",
+   "evidence": "changes:smax=20.0",
+   "note": "Highest [S] shown."
+  },
+  {
+   "id": "cap-05d",
+   "text": "Set the y-axis range by hand",
+   "class": "control",
+   "evidence": "",
+   "note": "The rate axis is always fitted."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Color or black and white",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Turn gridlines off",
+   "class": "control",
+   "evidence": "",
+   "note": "Our gridlines are always drawn."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Arrows at the axes' ends",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "A chart title (or blank line)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06e",
+   "text": "Edit the axis titles, or make them blank lines",
+   "class": "control",
+   "evidence": "",
+   "note": "Axis titles are fixed text."
+  },
+  {
+   "id": "cap-06f",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

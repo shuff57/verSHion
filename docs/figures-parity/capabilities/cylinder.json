@@ -1,0 +1,154 @@
+{
+ "figure": "cylinder",
+ "site": "math",
+ "slug": "cylinder",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Set the radius",
+   "class": "core",
+   "evidence": "changes:radius=4",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Give the diameter instead, drawn right across the circle",
+   "class": "core",
+   "evidence": "changes:give_d=true",
+   "note": "Checked by hand: a 6 cm line across the top circle."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Set the height",
+   "class": "core",
+   "evidence": "changes:height=6",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "An oblique cylinder from its height and lean",
+   "class": "core",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"lean\":3.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "An oblique cylinder from its slanted edge",
+   "class": "core",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"edge\":\"6\"}",
+   "note": "Checked by hand: the height is worked out (5.7)."
+  },
+  {
+   "id": "cap-03a",
+   "text": "An oblique cylinder",
+   "class": "core",
+   "evidence": "changes:stands=Oblique",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Lean an oblique cylinder left or right",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"lean\":-2.0}",
+   "note": "Checked by hand against the default lean."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type the slanted edge as a fraction",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"edge_lab\":\"Measure\",\"edge\":\"11/2\"}",
+   "note": "NARROW: only the slanted edge is typed; checked by hand against the oblique cylinder with its edge labelled. The wide form is cap-04f."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Type the slanted edge with √",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"edge_lab\":\"Measure\",\"edge\":\"sqrt(30)\"}",
+   "note": "NARROW: only the slanted edge is typed. The wide form is cap-04g."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Label a measure with its value",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"edge_lab\":\"Measure\"}",
+   "note": "Radius and height show their values at the opening state."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Label a measure with typed text such as r",
+   "class": "control",
+   "evidence": "changes:r_lab=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Leave a measure unlabelled",
+   "class": "control",
+   "evidence": "changes:h_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-04f",
+   "text": "Type any measure (radius, height, lean) as a fraction",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: those are sliders (float)."
+  },
+  {
+   "id": "cap-04g",
+   "text": "Type any measure (radius, height, lean) with √",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: those are sliders (float)."
+  },
+  {
+   "id": "cap-05a",
+   "text": "The back of the bottom circle dashed or left off",
+   "class": "control",
+   "evidence": "changes:hidden=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Show the height of an oblique cylinder",
+   "class": "control",
+   "evidence": "changes:stands=Oblique",
+   "note": "NARROW: an oblique cylinder draws its dashed height by itself. show_height only adds a height to a right cylinder and does not change the oblique one; the switch is cap-05d."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"right\":false}",
+   "note": "The right opening cylinder has no square; checked by hand on the oblique one."
+  },
+  {
+   "id": "cap-05d",
+   "text": "Switch the oblique cylinder's height on or off",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: checked by hand, show_height renders the oblique cylinder the same either way."
+  },
+  {
+   "id": "cap-06a",
+   "text": "A unit from the list or typed",
+   "class": "control",
+   "evidence": "changes:unit=m",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Rounding for worked-out measures",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"edge\":\"6\",\"dec\":0}",
+   "note": "Checked by hand: the worked-out height (5.7) with dec=0 differs."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Drag labels on the figure",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": ""
+  }
+ ]
+}

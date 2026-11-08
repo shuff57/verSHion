@@ -1,0 +1,133 @@
+{
+ "figure": "titration-curve",
+ "site": "chemistry",
+ "slug": "titration-curve",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Titrate a strong acid with a strong base",
+   "class": "core",
+   "evidence": "changes:kind=Strong acid with a strong base",
+   "note": "Weak acid with a strong base is the opening state."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Titrate a strong base with a strong acid",
+   "class": "core",
+   "evidence": "changes:kind=Strong base with a strong acid",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Titrate a weak base with a strong acid",
+   "class": "core",
+   "evidence": "changes:kind=Weak base with a strong acid",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "A common titration in one step (HCl, CH3COOH, HCOOH or HF with NaOH; NaOH or NH3 with HCl)",
+   "class": "control",
+   "evidence": "changes:common=HCl with NaOH",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "The curve from concentrations: molarities, volume, and pKa or pKb",
+   "class": "core",
+   "evidence": "changes:molarity=0.2 + changes:volume=40 + changes:titrant=0.2 + changes:pk=3.2",
+   "note": "Drag handles on the equivalence and half-equivalence points also set volume and pKa/pKb."
+  },
+  {
+   "id": "cap-03b",
+   "text": "The curve from key points: starting, equivalence and ending pH",
+   "class": "core",
+   "evidence": "changes:source=Key points + changes:{\"source\":\"Key points\",\"kp_eqph\":7.0}",
+   "note": "Second token passes on source alone; checked separately that kp_eqph changes the key-points render."
+  },
+  {
+   "id": "cap-04a",
+   "text": "The equivalence point marked with a dot only, or not at all",
+   "class": "control",
+   "evidence": "changes:equiv=Dot + changes:equiv=Not marked",
+   "note": "Dot with lines to the axes is the opening state."
+  },
+  {
+   "id": "cap-04b",
+   "text": "The equivalence point's label as a blank line or nothing",
+   "class": "version",
+   "evidence": "changes:eq_label_style=Blank line + changes:eq_label_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "The half-equivalence point marked with a dot, or a dot with lines to the axes",
+   "class": "control",
+   "evidence": "changes:half_mark=Dot + changes:half_mark=Dot and lines to the axes",
+   "note": "Not marked at the opening state."
+  },
+  {
+   "id": "cap-04d",
+   "text": "The half-equivalence point's label as a blank line or nothing",
+   "class": "version",
+   "evidence": "changes:{\"half_mark\":\"Dot\",\"half_label_style\":\"Blank line\"}",
+   "note": "Token passes on half_mark alone; checked separately that the Blank line label changes the marked render."
+  },
+  {
+   "id": "cap-05a",
+   "text": "The curve's color",
+   "class": "control",
+   "evidence": "changes:curve_color=#c0392b",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:{\"title_style\":\"Text\",\"title\":\"Acetic acid with NaOH\"}",
+   "note": "Title style is None at the opening, so both are set; title alone renders the same."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Axis titles as your own text",
+   "class": "control",
+   "evidence": "changes:xlabel=Volume (mL) + changes:ytitle=pH value",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Chart and axis titles as blank lines or none",
+   "class": "version",
+   "evidence": "changes:title_style=Blank line + changes:xtitle_style=Blank line + changes:ytitle_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "The axis ranges (from, to, count by)",
+   "class": "control",
+   "evidence": "changes:{\"xaxis_fit\":false,\"xaxis_to\":60} + changes:yaxis_to=12",
+   "note": "xaxis_fit=false alone renders the same as the opening, so the change comes from the typed range."
+  },
+  {
+   "id": "cap-05f",
+   "text": "Axis numbering every line, every 2nd, 5th, 10th, or none",
+   "class": "control",
+   "evidence": "changes:xaxis_num=Every line + changes:yaxis_num=Every line",
+   "note": ""
+  },
+  {
+   "id": "cap-05g",
+   "text": "Minor gridlines (2, 4 or 5 per block)",
+   "class": "control",
+   "evidence": "changes:minor_grid=2 per block",
+   "note": ""
+  },
+  {
+   "id": "cap-05h",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

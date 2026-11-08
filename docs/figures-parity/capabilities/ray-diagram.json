@@ -1,0 +1,224 @@
+{
+ "figure": "ray-diagram",
+ "site": "physics",
+ "slug": "ray-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A converging lens",
+   "class": "core",
+   "evidence": "changes:f=15.0",
+   "note": "The opening state; evidence is that the focal length redraws it."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A diverging lens",
+   "class": "core",
+   "evidence": "changes:kind=Diverging lens",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A concave mirror",
+   "class": "core",
+   "evidence": "changes:kind=Concave mirror",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "A convex mirror",
+   "class": "core",
+   "evidence": "changes:kind=Convex mirror",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "A plane mirror",
+   "class": "core",
+   "evidence": "",
+   "note": "Not among our types."
+  },
+  {
+   "id": "cap-01f",
+   "text": "Draw a lens as the line symbol",
+   "class": "control",
+   "evidence": "",
+   "note": "We draw the lens shape only."
+  },
+  {
+   "id": "cap-01g",
+   "text": "Hatch a mirror on its back",
+   "class": "control",
+   "evidence": "",
+   "note": "Our mirrors are a plain arc, no hatching."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Set the focal length in cm",
+   "class": "core",
+   "evidence": "changes:f=15.0",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set the object's distance in cm",
+   "class": "core",
+   "evidence": "changes:dist=15.0 + handle:drag:sideways sets its distance",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Set the object's height in cm",
+   "class": "core",
+   "evidence": "changes:height=6.0 + handle:drag:up and down its height",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F",
+   "class": "interaction",
+   "evidence": "",
+   "note": "No quick-place buttons or handle snaps; distance is typed or dragged."
+  },
+  {
+   "id": "cap-03",
+   "text": "Point the object arrow down (an inverted object)",
+   "class": "control",
+   "evidence": "",
+   "note": "height has a 0.5 cm minimum; no inverted object."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw the principal rays (parallel, through the centre / to the vertex, through F)",
+   "class": "core",
+   "evidence": "changes:rays=1",
+   "note": "Our rays control is a count, 1 to 3, in a fixed order."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Turn each principal ray on or off independently",
+   "class": "control",
+   "evidence": "",
+   "note": "Only the first N rays in a fixed order; e.g. the through-F ray cannot be shown alone."
+  },
+  {
+   "id": "cap-04c",
+   "text": "A ray through C for a mirror",
+   "class": "core",
+   "evidence": "",
+   "note": "Our mirror rays are parallel, to the vertex, and through F (looked at the concave-mirror render); no ray through C."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Show the setup alone, with no rays",
+   "class": "version",
+   "evidence": "",
+   "note": "rays is clamped to at least 1."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Show the rays without the image",
+   "class": "version",
+   "evidence": "changes:image=false + changes:show_answers=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Show the rays and the image",
+   "class": "core",
+   "evidence": "changes:dist=15.0",
+   "note": "The opening state draws rays and image."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Write labels for F, F′, 2F, 2F′, the object and the image",
+   "class": "control",
+   "evidence": "changes:lab_f=f + changes:lab_o=A",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Label C for a mirror",
+   "class": "control",
+   "evidence": "",
+   "note": "Our mirror labels 2F, not C."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Make a point label a blank line for students",
+   "class": "version",
+   "evidence": "",
+   "note": "Labels are text only; no blank-line mode."
+  },
+  {
+   "id": "cap-06d",
+   "text": "Leave a label off",
+   "class": "control",
+   "evidence": "changes:lab_f= + changes:show_labels=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Arrow marking the object distance",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Arrow marking the image distance",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Arrow marking the focal length",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Arrows marking the object and image heights",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "A numbered cm scale under the figure",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Add a chart title",
+   "class": "control",
+   "evidence": "changes:title=Converging lens",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Print an answer key line (image distance, magnification, nature of the image)",
+   "class": "version",
+   "evidence": "",
+   "note": "Our answer switch hides or shows the image; there is no answer text line."
+  },
+  {
+   "id": "cap-08c",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-08d",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "",
+   "note": "No color parameter."
+  }
+ ]
+}

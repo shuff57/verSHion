@@ -1,0 +1,175 @@
+{
+ "figure": "triangle",
+ "site": "math",
+ "slug": "triangle",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A triangle from two angles and a side",
+   "class": "core",
+   "evidence": "changes:m_a=30",
+   "note": "The opening state is angles A, B and side AB."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A triangle from two sides and an angle",
+   "class": "core",
+   "evidence": "changes:{\"m_a\":\"\",\"m_bc\":\"5\"}",
+   "note": "Leaves AB=12, BC=5 and angle B=90."
+  },
+  {
+   "id": "cap-01c",
+   "text": "A triangle from three sides",
+   "class": "core",
+   "evidence": "changes:{\"m_a\":\"\",\"m_b\":\"\",\"m_ab\":\"5\",\"m_bc\":\"6\",\"m_ca\":\"7\"}",
+   "note": "Checked by hand: angles solve to 57.1 and 78.5."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Type a measure as a fraction",
+   "class": "control",
+   "evidence": "changes:m_ab=25/2",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Type a measure as a square root",
+   "class": "control",
+   "evidence": "changes:m_ab=sqrt(130)",
+   "note": ""
+  },
+  {
+   "id": "cap-01f",
+   "text": "Type a measure with π",
+   "class": "control",
+   "evidence": "changes:m_ab=2pi",
+   "note": "Checked by hand: the side is labelled 2π."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Label a side or angle with its measure",
+   "class": "control",
+   "evidence": "changes:c_lab=Measure + changes:ca_lab=Measure",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Label a side or angle with typed text such as x",
+   "class": "control",
+   "evidence": "changes:ab_lab=Text + changes:a_lab=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Leave a side or angle unlabelled",
+   "class": "control",
+   "evidence": "changes:bc_lab=None + changes:a_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "One to three congruence ticks on a side",
+   "class": "control",
+   "evidence": "changes:ab_ticks=3",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "One to three congruence arcs on an angle",
+   "class": "control",
+   "evidence": "changes:a_arcs=2",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw a height from any corner",
+   "class": "control",
+   "evidence": "changes:height=From C + changes:height=From A + changes:height=From B",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Choose a solid, dashed or dotted height",
+   "class": "control",
+   "evidence": "changes:{\"height\":\"From C\",\"line_style\":\"Dotted\"}",
+   "note": "Checked by hand against the dashed height."
+  },
+  {
+   "id": "cap-04e",
+   "text": "Give each height its own solid, dashed or dotted style",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Label the height",
+   "class": "control",
+   "evidence": "changes:{\"height\":\"From C\",\"height_label\":\"Text\"}",
+   "note": "Default label is h = measure; Measure, Text and None are offered."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Name the point where the height lands",
+   "class": "control",
+   "evidence": "",
+   "note": "height_text names the height itself (h), not its foot; no parameter names the foot."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Rename the corners",
+   "class": "control",
+   "evidence": "changes:name_a=P",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "A unit such as cm or ft",
+   "class": "control",
+   "evidence": "changes:unit=cm",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Round solved measures to whole numbers, tenths or hundredths",
+   "class": "control",
+   "evidence": "changes:{\"ca_lab\":\"Measure\",\"dec\":0}",
+   "note": "Checked by hand: CA (13.1) labelled with dec=0 and dec=2 each differ from tenths."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:right=false",
+   "note": "The opening triangle has a right angle at B."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Choose which side sits at the bottom",
+   "class": "control",
+   "evidence": "changes:bottom=BC",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Flip the figure left to right",
+   "class": "control",
+   "evidence": "changes:flip=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Turn the figure",
+   "class": "control",
+   "evidence": "changes:rotate=30",
+   "note": ""
+  },
+  {
+   "id": "cap-06e",
+   "text": "Drag a label to where you want it",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": ""
+  }
+ ]
+}

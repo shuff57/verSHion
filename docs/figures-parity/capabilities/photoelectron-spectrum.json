@@ -1,0 +1,119 @@
+{
+ "figure": "photoelectron-spectrum",
+ "site": "chemistry",
+ "slug": "photoelectron-spectrum",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "The element, hydrogen to xenon",
+   "class": "core",
+   "evidence": "changes:element=8 O - Oxygen",
+   "note": "Opening is sodium; a scroll handle also changes the element."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A second element to compare, drawn dashed behind it",
+   "class": "control",
+   "evidence": "changes:compare=12 Mg - Magnesium",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Binding energy in eV instead of MJ/mol",
+   "class": "control",
+   "evidence": "changes:units=eV",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "A broken energy axis",
+   "class": "control",
+   "evidence": "changes:scale=Broken",
+   "note": "Logarithmic is the opening state."
+  },
+  {
+   "id": "cap-02c",
+   "text": "A linear energy axis",
+   "class": "control",
+   "evidence": "changes:scale=Linear",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Peaks drawn as bars instead of smooth peaks",
+   "class": "control",
+   "evidence": "changes:drawn=Bars",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Sublevel labels as blank lines",
+   "class": "version",
+   "evidence": "changes:sublabel_style=Blank lines",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Sublevel labels left off",
+   "class": "control",
+   "evidence": "changes:sublabel_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Electron counts over the peaks (2p6)",
+   "class": "control",
+   "evidence": "changes:counts=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Binding energies over the peaks",
+   "class": "control",
+   "evidence": "changes:energies=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "A numbered electrons axis, or not",
+   "class": "control",
+   "evidence": "changes:numbered=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Gridlines at each number of electrons, or not",
+   "class": "control",
+   "evidence": "changes:gridlines=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Element names hidden",
+   "class": "version",
+   "evidence": "changes:names=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Sodium",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "An answer key line with each element's electron configuration",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

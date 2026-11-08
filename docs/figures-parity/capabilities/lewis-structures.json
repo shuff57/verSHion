@@ -1,0 +1,112 @@
+{
+ "figure": "lewis-structures",
+ "site": "chemistry",
+ "slug": "lewis-structures",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type a formula with one central atom (main-group elements through period 5), including polyatomic ions like NO3- or SO4 2-",
+   "class": "core",
+   "evidence": "changes:formula=CH4",
+   "note": "Double-click handle also edits the formula inline."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Type a single atom or monatomic ion (N, Ca 2+)",
+   "class": "core",
+   "evidence": "changes:formula=Ca 2+",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Pick a molecule with more than one central atom from a list (ethane, acetic acid, sulfuric acid...)",
+   "class": "core",
+   "evidence": "changes:preset=C₂H₄, ethene",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "A flat textbook drawing, or shaped to hint at the real shape (bent H2O)",
+   "class": "control",
+   "evidence": "changes:shape=Shaped",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Bonds as lines or as pairs of dots",
+   "class": "control",
+   "evidence": "changes:bond_style=Dots",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Formal charges shown on each atom whose formal charge is not 0",
+   "class": "control",
+   "evidence": "changes:{\"formula\":\"NO3-\",\"formal\":true}",
+   "note": "Token passes on the formula alone; checked separately that formal=true changes the NO3- render (H2O has no non-zero formal charges)."
+  },
+  {
+   "id": "cap-04",
+   "text": "The octet rule or fewest formal charges (expanded octet) for ions like SO4 2-",
+   "class": "control",
+   "evidence": "changes:{\"formula\":\"SO4 2-\",\"expand\":true}",
+   "note": "Token passes on the formula alone; checked separately that expand=true changes the SO4 2- render."
+  },
+  {
+   "id": "cap-05",
+   "text": "One resonance structure, or all of them joined by double arrows",
+   "class": "control",
+   "evidence": "changes:{\"formula\":\"NO3-\",\"resonance\":\"Show all\"}",
+   "note": "Token passes on the formula alone; checked separately that Show all changes the NO3- render."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Give students the bonds only",
+   "class": "version",
+   "evidence": "changes:question=Bonds only",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Give students the skeleton only",
+   "class": "version",
+   "evidence": "changes:question=Skeleton",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Find-the-mistake: change a bond (none, single, double, triple) by clicking it",
+   "class": "version",
+   "evidence": "handle:click:cycle the bond + changes:tweak=b1=2",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Find-the-mistake: change an atom's lone electrons by clicking it",
+   "class": "version",
+   "evidence": "handle:click:add lone electrons + changes:tweak=e1=4",
+   "note": ""
+  },
+  {
+   "id": "cap-06e",
+   "text": "Find-the-mistake: put the wrong atom in the centre",
+   "class": "version",
+   "evidence": "changes:central=H",
+   "note": ""
+  },
+  {
+   "id": "cap-06f",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:{\"title_style\":\"Text\",\"title\":\"Water\"}",
+   "note": "Title style is None at the opening, so both are set; title alone renders the same."
+  },
+  {
+   "id": "cap-06g",
+   "text": "An answer key for a question or a changed structure",
+   "class": "version",
+   "evidence": "changes:{\"question\":\"Skeleton\",\"answer\":true}",
+   "note": "Token passes on question alone; checked separately that answer=true changes the Skeleton render (as on the reference, the key needs a question or a change)."
+  }
+ ]
+}

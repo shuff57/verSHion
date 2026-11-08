@@ -1,0 +1,126 @@
+{
+ "figure": "vector-diagram",
+ "site": "physics",
+ "slug": "vector-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw up to three vectors head to tail",
+   "class": "core",
+   "evidence": "changes:n=3",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Set each vector's magnitude in grid squares, 0.5 to 12",
+   "class": "core",
+   "evidence": "changes:v1_mag=12.0 + handle:drag:length and direction",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Set each vector's direction",
+   "class": "core",
+   "evidence": "changes:v1_ang=45.0 + handle:drag:length and direction",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw each vector solid, dashed or left off",
+   "class": "control",
+   "evidence": "changes:v1_style=Dashed",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Draw the resultant solid, dashed or left off",
+   "class": "control",
+   "evidence": "changes:res_style=Drawn + changes:res_style=Left off",
+   "note": "The opening state draws the resultant dashed."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Write each arrow's own label",
+   "class": "control",
+   "evidence": "changes:v1_lab=F + handle-edit:v1_lab + handle-edit:res_lab",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Replace an arrow's label with a blank line for students",
+   "class": "version",
+   "evidence": "changes:res_lab_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-02e",
+   "text": "Leave an arrow's label off",
+   "class": "control",
+   "evidence": "changes:v1_lab_mode=None",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Mark the resultant's angle",
+   "class": "control",
+   "evidence": "changes:mark_angle=true",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Mark the angle of any individual vector",
+   "class": "control",
+   "evidence": "",
+   "note": "Our angle mark is on the resultant only (with one vector, the resultant is that vector)."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Measure the angle mark from the vertical",
+   "class": "control",
+   "evidence": "",
+   "note": "Our mark is always from the horizontal (mech.rs draws the arc from 0°)."
+  },
+  {
+   "id": "cap-03d",
+   "text": "Show the resultant's x and y components",
+   "class": "control",
+   "evidence": "changes:components=true",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "Show the x and y components of any individual vector",
+   "class": "control",
+   "evidence": "",
+   "note": "Components are drawn for the resultant only."
+  },
+  {
+   "id": "cap-04a",
+   "text": "A grid, one square per unit of magnitude",
+   "class": "control",
+   "evidence": "changes:grid=None",
+   "note": "The grid is on at the opening state."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Plain x and y axes through the first tail",
+   "class": "control",
+   "evidence": "changes:axes=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Mirror the figure left to right",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "changes:color=true",
+   "note": ""
+  }
+ ]
+}

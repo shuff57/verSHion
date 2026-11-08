@@ -1,0 +1,140 @@
+{
+ "figure": "cone",
+ "site": "math",
+ "slug": "cone",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Set the radius",
+   "class": "core",
+   "evidence": "changes:radius=4",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Give the diameter instead, drawn across the base",
+   "class": "core",
+   "evidence": "changes:give_d=true",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Give the height of a right cone and have the slant height worked out",
+   "class": "core",
+   "evidence": "changes:height=6 + changes:l_lab=Measure",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Give the slant height of a right cone and have the height worked out",
+   "class": "core",
+   "evidence": "changes:{\"slant\":\"6\",\"l_lab\":\"Measure\"}",
+   "note": "Checked by hand against the slant label alone. slant 5 is the opening's own worked value and renders the same."
+  },
+  {
+   "id": "cap-03a",
+   "text": "An oblique cone from its height and lean",
+   "class": "core",
+   "evidence": "changes:stands=Oblique + changes:{\"stands\":\"Oblique\",\"lean\":3.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Lean an oblique cone left or right",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"lean\":-2.0}",
+   "note": "Checked by hand against the default lean."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type the slant height as a fraction",
+   "class": "control",
+   "evidence": "changes:{\"slant\":\"11/2\",\"l_lab\":\"Measure\"}",
+   "note": "NARROW: only the slant height is typed. The wide form is cap-04f."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Type the slant height with √",
+   "class": "control",
+   "evidence": "changes:{\"slant\":\"sqrt(30)\",\"l_lab\":\"Measure\"}",
+   "note": "NARROW: only the slant height is typed. The wide form is cap-04g."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Label a measure with its value",
+   "class": "control",
+   "evidence": "changes:l_lab=Measure",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Label a measure with typed text such as x",
+   "class": "control",
+   "evidence": "changes:h_lab=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Leave a measure unlabelled",
+   "class": "control",
+   "evidence": "changes:r_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-04f",
+   "text": "Type any measure (radius, height, lean) as a fraction",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: those are sliders (float)."
+  },
+  {
+   "id": "cap-04g",
+   "text": "Type any measure (radius, height, lean) with √",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: those are sliders (float)."
+  },
+  {
+   "id": "cap-05a",
+   "text": "The back of the base circle dashed or left off",
+   "class": "control",
+   "evidence": "changes:hidden=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Show the dashed height",
+   "class": "control",
+   "evidence": "changes:show_height=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:right=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "A unit from the list or typed",
+   "class": "control",
+   "evidence": "changes:unit=m",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Rounding for worked-out measures",
+   "class": "control",
+   "evidence": "changes:{\"slant\":\"6\",\"dec\":0}",
+   "note": "Checked by hand: the worked-out height with dec=0 differs."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Drag labels on the figure",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,147 @@
+{
+ "figure": "free-body-diagram",
+ "site": "physics",
+ "slug": "free-body-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw the body as a dot, a block, a ball or a cart",
+   "class": "core",
+   "evidence": "changes:body=Block",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Size the body from 50% to 200% of its usual size",
+   "class": "control",
+   "evidence": "changes:body_size=200",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw up to eight forces",
+   "class": "core",
+   "evidence": "changes:n=8",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set each force's direction",
+   "class": "core",
+   "evidence": "changes:f2_ang=270 + handle:drag:direction and length",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Set each force's length",
+   "class": "core",
+   "evidence": "changes:f1_len=2.0 + handle:drag:direction and length",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Write each force's label",
+   "class": "control",
+   "evidence": "changes:f1_lab=W + handle-edit:f1_lab",
+   "note": ""
+  },
+  {
+   "id": "cap-02e",
+   "text": "Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the usual way and labelled",
+   "class": "interaction",
+   "evidence": "",
+   "note": "Our extra forces come with fixed default directions and labels (F_f right, F_T left, F_app 45°...), but there is no per-type button or picker; no handle either."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Mark a slanted force's angle, measured from the horizontal or the vertical",
+   "class": "control",
+   "evidence": "changes:{\"f1_ang\":300,\"f1_mark\":true} + changes:{\"f1_ang\":300,\"f1_mark\":true,\"f1_from\":\"Vertical\"}",
+   "note": "Checked by hand: with f1_ang=300, turning f1_mark on and then switching to Vertical each change the render."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Show a slanted force's horizontal and vertical components",
+   "class": "control",
+   "evidence": "changes:{\"f1_ang\":300,\"f1_comps\":true}",
+   "note": "Checked by hand that f1_comps changes the render over f1_ang=300 alone."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Labels take subscripts and Greek letters such as θ and μ",
+   "class": "control",
+   "evidence": "changes:f1_lab=mu_k",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Replace a label with a blank line for students",
+   "class": "version",
+   "evidence": "changes:f1_lab_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Leave a label off",
+   "class": "control",
+   "evidence": "changes:f1_lab_mode=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Put an arrow over every vector's label",
+   "class": "control",
+   "evidence": "changes:notation=Arrow",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Make every vector's label bold",
+   "class": "control",
+   "evidence": "changes:notation=Bold",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Type \\vec{F} or \\mathbf{F} in a single label",
+   "class": "control",
+   "evidence": "changes:f1_lab=\\vec{F} + changes:f2_lab=\\mathbf{N}",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "Forces pointing the same way are drawn side by side, each with its own length and label",
+   "class": "control",
+   "evidence": "changes:f2_ang=270",
+   "note": "Looked at the render: F_g and F_N both at 270° sit side by side with their own labels."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Draw a dashed velocity arrow beside the body",
+   "class": "control",
+   "evidence": "changes:motion=Velocity",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Draw a dashed acceleration arrow beside the body",
+   "class": "control",
+   "evidence": "changes:motion=Acceleration",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Mirror the figure left to right",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "changes:color=true",
+   "note": ""
+  }
+ ]
+}

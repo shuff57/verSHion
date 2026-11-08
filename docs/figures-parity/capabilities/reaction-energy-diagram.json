@@ -1,0 +1,224 @@
+{
+ "figure": "reaction-energy-diagram",
+ "site": "chemistry",
+ "slug": "potential-energy-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "An endothermic reaction as well as an exothermic one",
+   "class": "core",
+   "evidence": "changes:products=150",
+   "note": "Exothermic is the opening state; ours has no setups menu, the levels are typed."
+  },
+  {
+   "id": "cap-01b",
+   "text": "With and without an enzyme (biology), with the paths named for the enzyme",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours' catalyst key names are fixed ('Without catalyst', 'With catalyst')."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Type the energy of each level (reactants, transition state via Ea, products)",
+   "class": "core",
+   "evidence": "changes:reactants=60 + changes:products=10 + changes:ea=50",
+   "note": "Drag handles on the peak and both levels too."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Type Ea and dH directly instead of the levels",
+   "class": "control",
+   "evidence": "",
+   "note": "Narrow form only: ours types Ea, but dH only by moving the products' level."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Two steps with an intermediate",
+   "class": "core",
+   "evidence": "changes:steps=Two steps",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Three steps",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours stops at two."
+  },
+  {
+   "id": "cap-02e",
+   "text": "Units kJ mol-1 or kJ instead of kJ/mol",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours writes kJ/mol only."
+  },
+  {
+   "id": "cap-03a",
+   "text": "A catalysed path with its own lower transition state, dashed, with a key and its Ea arrow",
+   "class": "control",
+   "evidence": "changes:catalyst=true",
+   "note": "Render checked: dashed path, key, Ea (catalysed) arrow."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Your own names for the paths in the key",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours' key names are fixed (see cap-01b)."
+  },
+  {
+   "id": "cap-04",
+   "text": "A level diagram of the reactants and products alone, instead of the energy profile",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Each arrow (Ea forward, dH, Ea reverse) shown or left off",
+   "class": "control",
+   "evidence": "changes:show_ea=false + changes:show_dh=false + changes:show_ea_rev=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Arrow labeled with its value (Ea = 80 kJ/mol) instead of the symbol",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours labels arrows with the symbol only; the values are in the working under the diagram."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Arrow labeled with a letter or number",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Arrow labeled with a blank line",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "Arrowheads at both ends",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05f",
+   "text": "Dashed lines from the levels, on or off",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours always draws them; no toggle."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Reactants and products labeled with your own text",
+   "class": "control",
+   "evidence": "changes:reactant_text=Nitrogen and hydrogen + changes:product_text=Ammonia",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Subscripts in your own labels (N_2 + 3H_2)",
+   "class": "control",
+   "evidence": "",
+   "note": "Narrow form only: ours draws the underscore literally (render checked)."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Transition state labeled 'Transition state', 'Activated complex' or nothing",
+   "class": "control",
+   "evidence": "changes:ts_label=Transition state + changes:ts_label=None",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Transition states and intermediates labeled with your own text",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours' peak label is a fixed choice."
+  },
+  {
+   "id": "cap-06e",
+   "text": "Level labels as blank lines",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06f",
+   "text": "Level labels left off",
+   "class": "control",
+   "evidence": "changes:label_reactants=false + changes:label_products=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Line colors",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has Colour/Print only, no color choice."
+  },
+  {
+   "id": "cap-07b",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "",
+   "note": "No chart title in ours."
+  },
+  {
+   "id": "cap-07c",
+   "text": "Axis titles on or off",
+   "class": "control",
+   "evidence": "changes:axis_titles=false",
+   "note": "Narrow form: both together."
+  },
+  {
+   "id": "cap-07d",
+   "text": "Axis titles as your own text or blank lines, each separately",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "A numbered or shape-only energy axis",
+   "class": "control",
+   "evidence": "changes:axis=Unlabelled",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "The energy axis range (from, to, count by)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07g",
+   "text": "Gridlines (light, standard, bold, none) and minor gridlines",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no gridlines."
+  },
+  {
+   "id": "cap-07h",
+   "text": "Axis arrow ends chosen",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours always draws arrowheads on both axes."
+  },
+  {
+   "id": "cap-07i",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

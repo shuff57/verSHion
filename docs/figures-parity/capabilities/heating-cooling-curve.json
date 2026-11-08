@@ -1,0 +1,203 @@
+{
+ "figure": "heating-cooling-curve",
+ "site": "chemistry",
+ "slug": "heating-cooling-curve",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A heating curve or a cooling curve",
+   "class": "core",
+   "evidence": "changes:mode=Cooling",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Set the starting and ending temperatures",
+   "class": "core",
+   "evidence": "changes:start=-40 + changes:end=150",
+   "note": "Also drag handles on the start and end points."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Pick a real substance: water, ethanol, acetone, mercury or sodium chloride",
+   "class": "core",
+   "evidence": "changes:substance=Ethanol",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "A made-up Substance X",
+   "class": "control",
+   "evidence": "changes:substance=Substance X",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Your own melting and boiling points",
+   "class": "core",
+   "evidence": "changes:{\"substance\":\"Custom\",\"mp\":20,\"bp\":80}",
+   "note": "Token passes on substance=Custom alone; checked separately that mp/bp change the Custom render."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Schematic segment lengths, typed per segment (solid warms, melting, liquid warms, boiling, gas warms)",
+   "class": "core",
+   "evidence": "changes:t_boil=4",
+   "note": "Ours' opening ('To scale' in our naming) uses the typed segment times; t_boil=4 changes it."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Segment lengths to scale, computed from the mass and the substance's specific heats and enthalpies (q = m c dT, q = n dH)",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours' 'To scale' only uses the typed times; nothing is computed from heats or enthalpies, and our 'Schematic' is fixed equal segments."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Type the mass used for the to-scale curve",
+   "class": "control",
+   "evidence": "",
+   "note": "No mass input."
+  },
+  {
+   "id": "cap-03d",
+   "text": "Type your own substance's specific heats and enthalpies of fusion and vaporization",
+   "class": "control",
+   "evidence": "",
+   "note": "No such inputs."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Heat added (or removed) along the x-axis instead of time",
+   "class": "control",
+   "evidence": "changes:xaxis=Heat added",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Choose the heating rate",
+   "class": "control",
+   "evidence": "",
+   "note": "No heating-rate input."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Letters at the corners (A, B, C...) for questions",
+   "class": "version",
+   "evidence": "changes:letters=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Segment labels as blank lines for students",
+   "class": "version",
+   "evidence": "changes:seg_labels=Blank lines",
+   "note": "Opening shows state labels."
+  },
+  {
+   "id": "cap-05c",
+   "text": "No segment labels",
+   "class": "control",
+   "evidence": "changes:seg_labels=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Plateaus labeled with both states (Solid + liquid) instead of the change (Melting)",
+   "class": "control",
+   "evidence": "changes:plateau_labels=Both states (Solid + liquid)",
+   "note": "Ours opens on The change (Melting, Boiling); the token's render writes Solid + liquid and Liquid + gas on the plateaus (both PNGs looked at). The probe now keeps an option value containing ' + ' whole."
+  },
+  {
+   "id": "cap-05e",
+   "text": "Dashed lines across from the plateaus to the temperature axis, or not",
+   "class": "control",
+   "evidence": "changes:plateau_dashes=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-05f",
+   "text": "By the temperature axis: m.p. and b.p. instead of the temperatures",
+   "class": "control",
+   "evidence": "changes:temp_labels=m.p. and b.p.",
+   "note": "Opening writes the temperatures."
+  },
+  {
+   "id": "cap-05g",
+   "text": "By the temperature axis: blank lines for students",
+   "class": "version",
+   "evidence": "changes:temp_labels=Blank lines",
+   "note": ""
+  },
+  {
+   "id": "cap-05h",
+   "text": "Nothing by the temperature axis",
+   "class": "control",
+   "evidence": "changes:temp_labels=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05i",
+   "text": "Supercooling on a cooling curve",
+   "class": "control",
+   "evidence": "changes:{\"mode\":\"Cooling\",\"supercool\":true}",
+   "note": "Token passes on mode alone; checked separately that supercool changes the cooling render."
+  },
+  {
+   "id": "cap-06a",
+   "text": "The curve's color",
+   "class": "control",
+   "evidence": "changes:curve_color=#2563eb",
+   "note": "Opening is red."
+  },
+  {
+   "id": "cap-06b",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Heating water",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Axis titles as your own text",
+   "class": "control",
+   "evidence": "changes:xtitle=Time (s) + changes:ylabel=Temp (K)",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Chart and axis titles as blank lines or none",
+   "class": "version",
+   "evidence": "changes:title_style=Blank line + changes:xtitle_style=Blank line + changes:ytitle_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-06e",
+   "text": "Set the axis ranges (from, to, count by)",
+   "class": "control",
+   "evidence": "changes:{\"xaxis_fit\":false,\"xaxis_to\":30} + changes:{\"xaxis_fit\":false,\"yaxis_from\":-40}",
+   "note": "xaxis_fit=false alone renders the same as the opening, so each token's change comes from the range."
+  },
+  {
+   "id": "cap-06f",
+   "text": "Axis numbering every line, every 2nd, 5th, 10th, or none",
+   "class": "control",
+   "evidence": "changes:xaxis_num=Every line + changes:yaxis_num=Every 5th line",
+   "note": ""
+  },
+  {
+   "id": "cap-06g",
+   "text": "Minor gridlines (2, 4 or 5 per block)",
+   "class": "control",
+   "evidence": "changes:minor_grid=2 per block",
+   "note": ""
+  },
+  {
+   "id": "cap-06h",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

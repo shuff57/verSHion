@@ -1,0 +1,238 @@
+{
+ "figure": "photosynthesis",
+ "site": "biology",
+ "slug": "photosynthesis-rate",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Rate against light intensity",
+   "class": "core",
+   "evidence": "changes:pmax=6",
+   "note": "The opening state's graph; evidence is that it redraws with the plateau."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Rate against distance from the lamp",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Rate against CO₂ concentration",
+   "class": "core",
+   "evidence": "changes:graph_x=CO2 concentration",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Rate against temperature",
+   "class": "core",
+   "evidence": "changes:graph_x=Temperature",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "CO₂ in a closed chamber over time",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01f",
+   "text": "CO₂ and O₂ around one plant over time",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01g",
+   "text": "CO₂ and O₂ around one plant against each other",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Up to three curves on one graph",
+   "class": "core",
+   "evidence": "",
+   "note": "One curve only."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set each curve's CO₂ concentration, temperature or light intensity",
+   "class": "core",
+   "evidence": "",
+   "note": "Wider form of cap-02c: ours sets the one curve's shape directly, not from the conditions."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Set the one curve's plateau and half-saturation (optimum for temperature)",
+   "class": "core",
+   "evidence": "changes:pmax=6 + changes:xval=30",
+   "note": "Narrow form of cap-02b."
+  },
+  {
+   "id": "cap-02d",
+   "text": "Name the curves in a key, automatically or typed",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Net rate (less respiration) instead of gross",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Rate in bubbles a minute",
+   "class": "control",
+   "evidence": "",
+   "note": "Arbitrary units only."
+  },
+  {
+   "id": "cap-03c",
+   "text": "CO₂ in %",
+   "class": "control",
+   "evidence": "",
+   "note": "ppm only."
+  },
+  {
+   "id": "cap-04a",
+   "text": "In a closed chamber, set the starting CO₂",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "In a closed chamber, set the time shown",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "In a closed chamber, the light going off part way, with the dark shaded",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Mark the saturation point with dashed lines to the axes",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours marks the plateau and the half-plateau point, not where light stops limiting."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Mark what limits the rate on the rise and on the plateau",
+   "class": "control",
+   "evidence": "",
+   "note": "Said in our answer notes under the figure, not marked on the graph."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Lettered points A, B, C on the curve",
+   "class": "control",
+   "evidence": "",
+   "note": "Wider form of cap-05d."
+  },
+  {
+   "id": "cap-05d",
+   "text": "Mark one point P on the curve at a chosen x",
+   "class": "control",
+   "evidence": "changes:mark=50",
+   "note": "Narrow form of cap-05c."
+  },
+  {
+   "id": "cap-05e",
+   "text": "Mark the optimum",
+   "class": "control",
+   "evidence": "changes:{\"graph_x\":\"Temperature\",\"xval\":\"25\"}",
+   "note": "Looked at the temperature render: a dotted line and \"Peak\" at the optimum; checked by hand that xval moves it over Temperature alone."
+  },
+  {
+   "id": "cap-05f",
+   "text": "Mark the compensation point",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05g",
+   "text": "Leave a mark's label as a blank line for students, or unlabeled",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Points measured off the curves, scattered a little",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Points alone, for students to draw the line",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Shape-only axes, with no numbers",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Type the axis ranges",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Gridlines off",
+   "class": "control",
+   "evidence": "",
+   "note": "Our graph always has gridlines."
+  },
+  {
+   "id": "cap-07d",
+   "text": "Color or black and white",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Chart and axis titles, or blank lines",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Load one of six classic setups (limiting factors, pondweed and lamp, CO₂ at two light levels, temperature at two light levels, closed chamber, light then dark)",
+   "class": "control",
+   "evidence": "",
+   "note": "Collapsed to one entry per list (owner decision 2026-11-08: a preset list is one capability, not one per preset)."
+  }
+ ]
+}

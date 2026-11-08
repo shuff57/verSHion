@@ -1,0 +1,105 @@
+{
+ "figure": "parallel-lines",
+ "site": "math",
+ "slug": "parallel-lines",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Parallel lines cut by a transversal, with more parallel lines added",
+   "class": "core",
+   "evidence": "changes:lines=3",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Add a second transversal",
+   "class": "core",
+   "evidence": "changes:transversals=2",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Four or more parallel lines",
+   "class": "core",
+   "evidence": "",
+   "note": "WIDE: lines is capped at 3; the reference's Add parallel line has no stated limit."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Three or more transversals",
+   "class": "core",
+   "evidence": "",
+   "note": "WIDE: transversals is capped at 2."
+  },
+  {
+   "id": "cap-03",
+   "text": "Give each transversal its crossing angle (above the top line, right of the transversal)",
+   "class": "core",
+   "evidence": "changes:angle=50 + changes:{\"transversals\":2,\"angle_b\":\"80\"}",
+   "note": "Checked by hand: angle_b changes the second transversal."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Label a chosen angle with its measure, x, typed text or nothing",
+   "class": "control",
+   "evidence": "changes:marked=1, 3 + changes:{\"marked\":\"2\",\"unknown\":\"2\"} + changes:{\"marked\":\"2\",\"angle_text\":\"2 = 3y\"}",
+   "note": "No angle is labelled at the opening state; unknown and angle_text checked by hand against marked=2."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Style a chosen line solid, dashed or dotted",
+   "class": "control",
+   "evidence": "changes:m_style=Dashed + changes:t_style=Dotted",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Click an angle on the figure to label it",
+   "class": "interaction",
+   "evidence": "handle:click:label or unlabel this angle",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Click a line on the figure to style it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "Lines have drag handles (angle, gap) only."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Put a named point where lines cross or at a line's end",
+   "class": "control",
+   "evidence": "",
+   "note": "Only the lines are named; no parameter adds a named point."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Click a crossing or a line's end on the figure to add a point",
+   "class": "interaction",
+   "evidence": "",
+   "note": "No click handle adds a point."
+  },
+  {
+   "id": "cap-i01",
+   "text": "Click an angle on the figure to give it congruence arcs or shade it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. The page says click any angle to label or style it; the live pop-up has Label, Congruence arcs and Shading. Our click handle only labels or unlabels."
+  },
+  {
+   "id": "cap-i02",
+   "text": "Click a line on the figure to rename it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: the line's pop-up has a Name box."
+  },
+  {
+   "id": "cap-i03",
+   "text": "Click a line on the figure to delete it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: the line's pop-up has Delete this line."
+  }
+ ]
+}

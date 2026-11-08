@@ -1,0 +1,77 @@
+{
+ "figure": "mapping-diagram",
+ "site": "math",
+ "slug": "mapping-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type or paste the inputs and outputs as lists",
+   "class": "core",
+   "evidence": "changes:{\"inputs\": \"1, 2, 3, 4, 5\", \"outputs\": \"3, 5, 7, 9, 11\"}",
+   "note": "commas, semicolons, lines or tabs; not spaces"
+  },
+  {
+   "id": "cap-01b",
+   "text": "Give the mapping as ordered pairs instead",
+   "class": "core",
+   "evidence": "changes:paste=(1, 3), (2, 5), (3, 7)",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Choose the outputs each input goes to",
+   "class": "core",
+   "evidence": "changes:pairs=(1,5); (2,3); (3,3)",
+   "note": "typed as pairs; the reference clicks them in its panel"
+  },
+  {
+   "id": "cap-02b",
+   "text": "Match the inputs to the outputs in order",
+   "class": "control",
+   "evidence": "changes:{\"inputs\": \"1, 2, 3, 4\", \"outputs\": \"9, 7, 5, 3\", \"pairs\": \"in order\"}",
+   "note": "the Match in order chip; the opening diagram is empty, so the render also differs because the lists are added"
+  },
+  {
+   "id": "cap-02c",
+   "text": "Clear the arrows",
+   "class": "control",
+   "evidence": "changes:{\"inputs\": \"1, 2, 3\", \"outputs\": \"3, 5, 7\", \"pairs\": \"\"}",
+   "note": "the opening diagram is empty, so the render differs because the lists are added; the Clear arrows chip sets pairs empty"
+  },
+  {
+   "id": "cap-03a",
+   "text": "Write a title over each side",
+   "class": "control",
+   "evidence": "changes:title_in=Domain + changes:title_out=Range",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Write a diagram title",
+   "class": "control",
+   "evidence": "changes:title_mode=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Put a blank line in place of a title for students",
+   "class": "version",
+   "evidence": "changes:in_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw each side in a box instead of an oval",
+   "class": "control",
+   "evidence": "changes:shape=Boxes",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw each side with no outline",
+   "class": "control",
+   "evidence": "changes:shape=None",
+   "note": ""
+  }
+ ]
+}

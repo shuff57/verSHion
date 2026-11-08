@@ -1,0 +1,175 @@
+{
+ "figure": "regular-polygon",
+ "site": "math",
+ "slug": "regular-polygon",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Choose the number of sides, 3 to 20",
+   "class": "core",
+   "evidence": "changes:n=20 + changes:n=3",
+   "note": "n runs 3 to 20."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Size the polygon from its side",
+   "class": "core",
+   "evidence": "changes:value=10",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Size the polygon from its radius",
+   "class": "core",
+   "evidence": "changes:{\"n\":5,\"from\":\"Radius\"}",
+   "note": "A hexagon's radius equals its side, so from=Radius alone renders the same; checked by hand on a pentagon against from=Side."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Size the polygon from its apothem",
+   "class": "core",
+   "evidence": "changes:from=Apothem",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Type the size as a fraction",
+   "class": "control",
+   "evidence": "",
+   "note": "The size is a slider (float), not a typed measure; no fraction input."
+  },
+  {
+   "id": "cap-02e",
+   "text": "Type the size as a square root",
+   "class": "control",
+   "evidence": "",
+   "note": "The size is a slider (float); no square-root input."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Label the sides with the measure, typed text or nothing",
+   "class": "control",
+   "evidence": "changes:side_lab=Text + changes:side_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Label the angles with the measure, typed text or nothing",
+   "class": "control",
+   "evidence": "changes:ang_lab=Measure + changes:ang_lab=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Congruence ticks on every side",
+   "class": "control",
+   "evidence": "changes:side_ticks=1",
+   "note": "Checked by hand: a tick on each side."
+  },
+  {
+   "id": "cap-03d",
+   "text": "Congruence arcs on every angle",
+   "class": "control",
+   "evidence": "changes:ang_arcs=1",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "A center dot",
+   "class": "control",
+   "evidence": "changes:center_dot=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Name the center",
+   "class": "control",
+   "evidence": "changes:center_name=O",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Draw the apothem",
+   "class": "control",
+   "evidence": "changes:apothem=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Draw a radius",
+   "class": "control",
+   "evidence": "changes:radius=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Draw all the radii",
+   "class": "control",
+   "evidence": "changes:all_radii=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04f",
+   "text": "Solid, dashed or dotted center lines",
+   "class": "control",
+   "evidence": "changes:line_style=Solid + changes:line_style=Dotted",
+   "note": "The apothem is drawn at the opening state. One setting for all the lines."
+  },
+  {
+   "id": "cap-04h",
+   "text": "Give the apothem, the radius and the radii each their own solid, dashed or dotted style",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
+  },
+  {
+   "id": "cap-04g",
+   "text": "Label the apothem and radius (measure, text or none)",
+   "class": "control",
+   "evidence": "changes:apothem_label=a = measure + changes:{\"radius\":true,\"radius_label\":\"Measure\"}",
+   "note": "Checked by hand: radius_label changes a drawn radius."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Letter the corners A, B, C…",
+   "class": "control",
+   "evidence": "changes:vertices=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "A unit on the lengths",
+   "class": "control",
+   "evidence": "changes:unit=cm",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Round solved lengths to whole numbers, tenths or hundredths",
+   "class": "control",
+   "evidence": "changes:{\"apothem_label\":\"Measure\",\"dec\":0}",
+   "note": "Checked by hand: the apothem (6.9) with dec=0 differs."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:right=false",
+   "note": "The apothem's square shows at the opening state."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Turn the polygon",
+   "class": "control",
+   "evidence": "changes:rotate=15",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Drag a label to where you want it",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": ""
+  }
+ ]
+}

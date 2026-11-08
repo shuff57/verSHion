@@ -1,0 +1,279 @@
+# Figures parity score
+
+Generated: 2026-11-08T15:48:25+00:00 · probe: 2026-11-08T07:48:25
+
+**Pooled 76.0** · mean 78.4 over 67 figures · built 68 of 71 reference figures (missing: math/pie-chart, biology/dna-protein-synthesis, biology/osmosis)
+
+Comparable with the frozen baseline: **yes**
+
+- `two-way-table`: 25 (17/68)
+  - cap-01b [control 3] Paste a table that includes its totals — no evidence
+  - cap-02a [control 3] Turn the Total column on or off — no evidence
+  - cap-02b [control 3] Turn the Total row on or off — no evidence
+  - cap-02c [control 3] Type the totals instead of having them worked out — no evidence
+  - cap-03b [version 3] Choose which cells are blank — no evidence
+  - cap-03c [version 3] Write a cell as a letter like x — no evidence
+- `photosynthesis`: 26 (32/125)
+  - cap-01b [core 5] Rate against distance from the lamp — no evidence
+  - cap-01e [core 5] CO₂ in a closed chamber over time — no evidence
+  - cap-01f [core 5] CO₂ and O₂ around one plant over time — no evidence
+  - cap-01g [core 5] CO₂ and O₂ around one plant against each other — no evidence
+  - cap-02a [core 5] Up to three curves on one graph — no evidence
+  - cap-02b [core 5] Set each curve's CO₂ concentration, temperature or light intensity — no evidence
+- `transformations`: 29 (35/122)
+  - cap-01b [core 5] Type the preimage's vertices (a polygon of up to 10) — no evidence
+  - cap-01c [core 5] Make the preimage a single point or an open path — no evidence
+  - cap-02d [core 5] Reflect over any line x = a, y = a or y = ±x + a — no evidence
+  - cap-02g [core 5] Rotate about any point — no evidence
+  - cap-02i [core 5] Dilate from any center — no evidence
+  - cap-01a [editor 4] Click the preimage's vertices onto the grid — no evidence
+- `enzyme-kinetics`: 32 (27/85)
+  - cap-01a [core 5] Plot rate against temperature — no evidence
+  - cap-01b [core 5] Plot rate against pH — no evidence
+  - cap-02a [core 5] Draw up to three curves on one graph — no evidence
+  - cap-02b [core 5] Pick a named enzyme (human enzyme, Taq polymerase, pepsin, salivary amylase, trypsin or catalase) for a curve — no evidence
+  - cap-02c [core 5] An unknown enzyme with its own optimum and width — no evidence
+  - cap-02d [control 3] Name each curve in a key — no evidence
+- `stem-and-leaf`: 34 (23/67)
+  - cap-01b [core 5] Draw two data sets back to back — no evidence
+  - cap-01c [control 3] Name each back-to-back data set — no evidence
+  - cap-02b [control 3] Cut off digits past the leaf unit instead of rounding — no evidence
+  - cap-03b [control 3] Split each stem into five rows — no evidence
+  - cap-04a [control 3] Set the first and last stems to start or end the plot past the data — no evidence
+  - cap-04b [version 3] Draw empty stem rows with no data — no evidence
+- `circle`: 37 (60/163)
+  - cap-01b [editor 4] Add as many points as you want — no evidence
+  - cap-02a [editor 4] Draw a line between any two chosen points, midpoints or touch points — no evidence
+  - cap-i01 [editor 4] Click part of the circle on the figure to add a point there — no evidence
+  - cap-i02 [editor 4] Click a point on the figure to join it to another point — no evidence
+  - cap-01c [control 3] Place a point off the circle by its distance in radii — no evidence
+  - cap-02g [control 3] Run a line on past its point with an arrow, a line arrow or a dot — no evidence
+- `venn-diagram`: 38 (20/53)
+  - cap-01c [core 5] List each set's members and have them sorted into the regions — no evidence
+  - cap-01b [control 3] Split a region's text into lines with commas — no evidence
+  - cap-02a [control 3] Draw one set — no evidence
+  - cap-02c [control 3] Draw two sets separate — no evidence
+  - cap-02d [control 3] Draw one set inside the other — no evidence
+  - cap-04 [control 3] Name the universal set U, xi, S, epsilon, a word or nothing — no evidence
+- `reaction-energy-diagram`: 39 (39/101)
+  - cap-02d [core 5] Three steps — no evidence
+  - cap-01b [control 3] With and without an enzyme (biology), with the paths named for the enzyme — no evidence
+  - cap-02b [control 3] Type Ea and dH directly instead of the levels — no evidence
+  - cap-02e [control 3] Units kJ mol-1 or kJ instead of kJ/mol — no evidence
+  - cap-03b [control 3] Your own names for the paths in the key — no evidence
+  - cap-04 [control 3] A level diagram of the reactants and products alone, instead of the energy profile — no evidence
+- `motion-map`: 40 (35/87)
+  - cap-01a [core 5] Build the motion from up to six segments in any order — no evidence
+  - cap-01b [core 5] Set each segment at rest, constant velocity forward or back, speeding up or slowing down — no evidence
+  - cap-01d [core 5] Type each segment's speed — no evidence
+  - cap-01e [core 5] Set where the motion starts — no evidence
+  - cap-04b [core 5] Draw an acceleration arrow (or a = 0) above each segment — no evidence
+  - cap-03a [control 3] Write the times under the dots — no evidence
+- `histogram`: 46 (41/90)
+  - cap-02a [core 5] Type a frequency table: where the first bin starts, then each bin's upper end and its frequency — no evidence
+  - cap-02b [core 5] Use unequal bin widths — no evidence
+  - cap-02c [control 3] Paste a frequency table from a worksheet, with bins like 140 < h <= 150 — no evidence
+  - cap-03b [control 3] Show relative frequency as a percent — no evidence
+  - cap-04c [control 3] Fill the bars with a black-and-white pattern — no evidence
+  - cap-04d [control 3] Leave the bars white — no evidence
+- `ogive`: 49 (37/75)
+  - cap-01b [core 5] Type a cumulative table of upper bounds — no evidence
+  - cap-02a [control 3] Choose crosses or dots at the points — no evidence
+  - cap-02b [control 3] Join the points with a smooth curve — no evidence
+  - cap-02c [control 3] Leave the points unjoined — no evidence
+  - cap-02d [control 3] Choose not to start from 0 at the lowest bound — no evidence
+  - cap-04e [control 3] Show each reading with its value, a blank line, or lines only — no evidence
+- `bar-chart`: 49 (43/87)
+  - cap-01c [core 5] Add a third or later series — no evidence
+  - cap-02b [control 3] Stack several series instead of placing them side by side — no evidence
+  - cap-03b [control 3] Choose to write the values inside the bars — no evidence
+  - cap-04a [control 3] Draw error bars from a plus-or-minus value for each bar — no evidence
+  - cap-04b [control 3] Draw the error bars with or without crossbars — no evidence
+  - cap-04c [control 3] Add a note under the graph saying what the error bars show — no evidence
+- `parallel-lines`: 50 (23/46)
+  - cap-01c [core 5] Four or more parallel lines — no evidence
+  - cap-01d [core 5] Three or more transversals — no evidence
+  - cap-05a [control 3] Put a named point where lines cross or at a line's end — no evidence
+  - cap-04d [interaction 2] Click a line on the figure to style it — no evidence
+  - cap-05b [interaction 2] Click a crossing or a line's end on the figure to add a point — no evidence
+  - cap-i01 [interaction 2] Click an angle on the figure to give it congruence arcs or shade it — no evidence
+- `length-reading`: 51 (40/78)
+  - cap-01b [core 5] Read a vernier caliper — no evidence
+  - cap-01c [core 5] Read a micrometer — no evidence
+  - cap-06a [core 5] Type the caliper or micrometer reading, or pick one at random — no evidence
+  - cap-06b [core 5] Give the caliper or micrometer a zero error, and draw it closed too — no evidence
+  - cap-04a [control 3] Set the caliper's least count: 0.1, 0.05 or 0.02 mm — no evidence
+  - cap-04b [control 3] Print the least count on the slider or leave it off — no evidence
+- `ray-diagram`: 53 (60/114)
+  - cap-01e [core 5] A plane mirror — no evidence
+  - cap-04c [core 5] A ray through C for a mirror — no evidence
+  - cap-01f [control 3] Draw a lens as the line symbol — no evidence
+  - cap-01g [control 3] Hatch a mirror on its back — no evidence
+  - cap-03 [control 3] Point the object arrow down (an inverted object) — no evidence
+  - cap-04b [control 3] Turn each principal ray on or off independently — no evidence
+- `composite-shape`: 56 (28/50)
+  - cap-i02 [editor 4] Click a piece on the figure to type its exact sizes — no evidence
+  - cap-i03 [editor 4] Click a piece on the figure to delete it — no evidence
+  - cap-i05 [editor 4] Drag from a corner or the middle of a side to draw a line, such as a height — no evidence
+  - cap-i04 [interaction 2] Click a piece on the figure to shade it — no evidence
+  - cap-i06 [interaction 2] Click a side on the figure to label it with its length or text — no evidence
+  - cap-i07 [interaction 2] Click a side on the figure to give it congruence ticks, parallel arrows or a line style — no evidence
+- `dot-and-cross`: 64 (36/56)
+  - cap-01d [core 5] Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki — no evidence
+  - cap-03a [control 3] Draw an ionic compound with every ion drawn separately — no evidence
+  - cap-04a [control 3] Swap dots and crosses between the atoms — no evidence
+  - cap-06a [version 3] Click an electron to cycle it through dot, cross, open circle, open square and nothing, for a find-the-mistake question — no evidence
+  - cap-06b [version 3] Click an element symbol to blank or show it — no evidence
+  - cap-06c [version 3] Click an ion's charge to show it, make it a blank box or leave it off, per ion — no evidence
+- `angles`: 66 (47/71)
+  - cap-01f [core 5] More than six rays from the vertex — no evidence
+  - cap-04b [control 3] Mark a chosen angle with congruence marks — no evidence
+  - cap-04c [control 3] Shade a chosen angle — no evidence
+  - cap-04e [control 3] Choose which points appear and type their names — no evidence
+  - cap-04g [interaction 2] Click an angle on the figure to mark or shade it — no evidence
+  - cap-04h [interaction 2] Click the vertex or near a ray's end to add a point — no evidence
+- `half-life-graph`: 71 (60/84)
+  - cap-01e [control 3] Your own isotope's half-life in a unit you choose (not only years) — no evidence
+  - cap-02e [control 3] Up the side: activity in counts per minute — no evidence
+  - cap-04c [control 3] Guide lines labeled with their times — no evidence
+  - cap-04d [version 3] Guide labels as blank lines for students — no evidence
+  - cap-06c [control 3] Axis titles as text, a blank line, or none — no evidence
+  - cap-06d [control 3] Set the axis ranges (from, to, count by) — no evidence
+- `organic-structure`: 71 (15/21)
+  - cap-06a2 [control 3] Condensed view written on the drawing: H3C, CH2, CH3 at each carbon's place in the structure — no evidence
+  - cap-06c [control 3] 'Carbons' display: the skeletal zigzag with a C written at every carbon atom and no hydrogens — no evidence
+- `number-line`: 72 (51/71)
+  - cap-01f [core 5] Graph a sequence like a_n = 1/n — no evidence
+  - cap-02c [control 3] Write an inequality's endpoint values above the line, or leave them off — no evidence
+  - cap-02d [control 3] Draw points as a dot or a cross — no evidence
+  - cap-02e [control 3] Choose how the point labels show — no evidence
+  - cap-03d [control 3] Type the range in multiples of pi — no evidence
+  - cap-05 [control 3] Choose which terms of a sequence are shown, n from one whole number to another — no evidence
+- `nuclide-notation`: 73 (57/78)
+  - cap-01c [control 3] Buttons for the element's natural isotopes (C-12, C-13) — no evidence
+  - cap-01d [control 3] Set the protons, neutrons and electrons instead of the numbers — no evidence
+  - cap-03c [control 3] A positron — no evidence
+  - cap-03g [control 3] Choose the particle's symbol form (He or α, e or β, p or H) — no evidence
+  - cap-05a [control 3] Hyphen notation alone (carbon-14) — no evidence
+  - cap-05c [control 3] Hyphen notation in the short form (C-14) as well as the long (carbon-14) — no evidence
+- `mass-reading`: 76 (48/63)
+  - cap-02d [control 3] An analytical balance showing 4 decimal places — no evidence
+  - cap-03a [control 3] A weigh boat on the digital balance's pan — no evidence
+  - cap-03b [control 3] A beaker on the digital balance's pan — no evidence
+  - cap-03d [control 3] Choose 1 to 5 marbles — no evidence
+  - cap-04b [control 3] Pick a random mass — no evidence
+- `ph-reading`: 76 (29/38)
+  - cap-03b [control 3] Pick a random pH — no evidence
+  - cap-04a [control 3] A magnifier beside the analog meter's dial — no evidence
+  - cap-04b [control 3] The magnifier in place of the analog dial — no evidence
+- `coordinate-grid`: 83 (127/153)
+  - cap-02f [core 5] Use the inverses of sec, csc and cot — no evidence
+  - cap-03b [control 3] Draw a row solid, dashed or dotted — no evidence
+  - cap-03d [control 3] Choose which ends of a row have arrows — no evidence
+  - cap-03i [control 3] Set these styles row by row rather than for the whole graph — no evidence
+  - cap-04c [control 3] Type the range as fractions — no evidence
+  - cap-06b [control 3] Finish an axis end with a line arrow — no evidence
+- `vector-diagram`: 84 (48/57)
+  - cap-03b [control 3] Mark the angle of any individual vector — no evidence
+  - cap-03c [control 3] Measure the angle mark from the vertical — no evidence
+  - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
+- `heating-cooling-curve`: 85 (82/96)
+  - cap-03b [core 5] Segment lengths to scale, computed from the mass and the substance's specific heats and enthalpies (q = m c dT, q = n dH — no evidence
+  - cap-03c [control 3] Type the mass used for the to-scale curve — no evidence
+  - cap-03d [control 3] Type your own substance's specific heats and enthalpies of fusion and vaporization — no evidence
+  - cap-04b [control 3] Choose the heating rate — no evidence
+- `temperature-reading`: 88 (42/48)
+  - cap-02c [control 3] The digital probe showing 2 decimal places — no evidence
+  - cap-03b [control 3] Pick a random temperature — no evidence
+- `cylinder`: 88 (65/74)
+  - cap-04f [control 3] Type any measure (radius, height, lean) as a fraction — no evidence
+  - cap-04g [control 3] Type any measure (radius, height, lean) with √ — no evidence
+  - cap-05d [control 3] Switch the oblique cylinder's height on or off — no evidence
+- `particle-diagram`: 88 (67/76)
+  - cap-01d [control 3] Set the lattice's rows and columns (up to 12 by 12) — no evidence
+  - cap-04c [control 3] Substitutional alloy lattice — no evidence
+  - cap-04e [control 3] Lattice particles touching or spaced apart — no evidence
+- `predator-prey`: 88 (85/96)
+  - cap-02b [core 5] Set the starting populations, averages and cycle length while keeping a named pair — no evidence
+  - cap-03c [control 3] Time units while keeping a named pair — no evidence
+  - cap-04c [version 3] Draw neither population: blank axes — no evidence
+- `regular-polygon`: 89 (70/79)
+  - cap-02d [control 3] Type the size as a fraction — no evidence
+  - cap-02e [control 3] Type the size as a square root — no evidence
+  - cap-04h [control 3] Give the apothem, the radius and the radii each their own solid, dashed or dotted style — no evidence
+- `trapezoid`: 89 (76/85)
+  - cap-04f [control 3] Give each height and diagonal its own solid, dashed or dotted style — no evidence
+  - cap-05a [control 3] Name the point where a height lands — no evidence
+  - cap-05b [control 3] Name the point where the diagonals cross — no evidence
+- `box-plot`: 90 (51/57)
+  - cap-06a [control 3] Finish an end of the number line with an arrow — no evidence
+  - cap-06b [control 3] Finish an end of the number line with a circle — no evidence
+- `volume-reading`: 90 (53/59)
+  - cap-01d [control 3] A 600 mL beaker — no evidence
+  - cap-04b [control 3] Pick a random reading — no evidence
+- `pulley`: 90 (92/102)
+  - cap-03c [core 5] On a table or ramp, set the second object touching the first instead — no evidence
+  - cap-06e [core 5] The contact forces between objects touching — no evidence
+- `parallelogram`: 90 (85/94)
+  - cap-04i [control 3] Give each height and diagonal its own solid, dashed or dotted style — no evidence
+  - cap-05a [control 3] Name the point where a height lands — no evidence
+  - cap-05b [control 3] Name the point where the diagonals cross — no evidence
+- `prism`: 90 (85/94)
+  - cap-04f [control 3] Type any measure (length, width, height, lean) as a fraction — no evidence
+  - cap-04g [control 3] Type any measure (length, width, height, lean) with √ — no evidence
+  - cap-06d [control 3] Switch the height line on or off — no evidence
+- `gas-syringe`: 91 (29/32)
+  - cap-03b [control 3] Pick a random volume (0 to full scale, one decimal place) — no evidence
+- `cone`: 91 (60/66)
+  - cap-04f [control 3] Type any measure (radius, height, lean) as a fraction — no evidence
+  - cap-04g [control 3] Type any measure (radius, height, lean) with √ — no evidence
+- `pyramid`: 92 (69/75)
+  - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
+  - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
+- `bohr-model`: 92 (59/64)
+  - cap-01c [core 5] Set the proton count by hand, independent of the element (0 to 200), so a wrong atom draws as set — no evidence
+- `triangle`: 92 (71/77)
+  - cap-04e [control 3] Give each height its own solid, dashed or dotted style — no evidence
+  - cap-04d [control 3] Name the point where the height lands — no evidence
+- `micropipette-reading`: 93 (25/27)
+  - cap-02b [interaction 2] Pick the volume at random — no evidence
+- `kite`: 93 (77/83)
+  - cap-04g [control 3] Name the point where the diagonals cross — no evidence
+  - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
+- `rectangle`: 93 (80/86)
+  - cap-04g [control 3] Name the point where the diagonals cross — no evidence
+  - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
+- `punnett-square`: 94 (85/90)
+  - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
+  - cap-05d [interaction 2] Click a cell to blank it — no evidence
+- `pedigree`: 95 (90/95)
+  - cap-03 [control 3] Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness,  — no evidence
+  - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
+- `volume-by-displacement`: 95 (55/58)
+  - cap-03b [control 3] Pick random before and after readings — no evidence
+- `ruler-reading`: 95 (59/62)
+  - cap-04c [control 3] Pick the length and position at random — no evidence
+- `population-growth`: 95 (125/131)
+  - cap-03a [control 3] Load one of ten setups (yeast in a flask, bacteria doubling every hour, deer on an island, boom and crash...) — no evidence
+  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
+- `projectile-motion`: 96 (71/74)
+  - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
+- `spring-scale`: 96 (48/50)
+  - cap-03b [interaction 2] Pick the force at random — no evidence
+- `gel-electrophoresis`: 97 (87/90)
+  - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
+- `free-body-diagram`: 97 (65/67)
+  - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
+- `waves`: 97 (97/100)
+  - cap-07e [control 3] End caps on the axes — no evidence
+- `circuit-diagram`: 100 (61/61)
+- `inclined-plane`: 100 (91/91)
+- `lewis-structures`: 100 (51/51)
+- `line-spectrum`: 100 (54/54)
+- `mapping-diagram`: 100 (36/36)
+- `mass-spectrum`: 100 (49/49)
+- `motion-graphs`: 100 (89/89)
+- `orbital-diagram`: 100 (61/61)
+- `photoelectron-spectrum`: 100 (50/50)
+- `sphere`: 100 (35/35)
+- `titration-curve`: 100 (64/64)

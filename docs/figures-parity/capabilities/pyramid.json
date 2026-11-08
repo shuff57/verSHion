@@ -1,0 +1,161 @@
+{
+ "figure": "pyramid",
+ "site": "math",
+ "slug": "pyramid",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A rectangular base, a square when its sides are equal",
+   "class": "core",
+   "evidence": "changes:length=8",
+   "note": "The opening base is a 6 × 6 square."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A regular-polygon base of 3 to 8 sides",
+   "class": "core",
+   "evidence": "changes:base=Regular polygon + changes:{\"base\":\"Regular polygon\",\"n\":8}",
+   "note": "n runs 3 to 12."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Give the height of a right pyramid and have the slant height worked out",
+   "class": "core",
+   "evidence": "changes:height=6 + changes:slant_lab=Measure",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Give the slant height of a right pyramid and have the height worked out",
+   "class": "core",
+   "evidence": "changes:{\"slant\":\"6\",\"slant_lab\":\"Measure\"}",
+   "note": "Checked by hand: slant 6 gives height 5.2. (slant 5 is the opening state's own worked value, so it renders the same.)"
+  },
+  {
+   "id": "cap-03a",
+   "text": "An oblique pyramid from its height and lean",
+   "class": "core",
+   "evidence": "changes:stands=Oblique + changes:{\"stands\":\"Oblique\",\"lean\":3.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Lean an oblique pyramid left or right",
+   "class": "control",
+   "evidence": "changes:{\"stands\":\"Oblique\",\"lean\":-2.0}",
+   "note": "Checked by hand against the default lean."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type the slant height as a fraction",
+   "class": "control",
+   "evidence": "changes:{\"slant\":\"11/2\",\"slant_lab\":\"Measure\"}",
+   "note": "NARROW: only the slant height is typed. The wide form is cap-04f."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Type the slant height with √",
+   "class": "control",
+   "evidence": "changes:{\"slant\":\"sqrt(29)\",\"slant_lab\":\"Measure\"}",
+   "note": "NARROW: only the slant height is typed. The wide form is cap-04g."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Label a measure with its value",
+   "class": "control",
+   "evidence": "changes:slant_lab=Measure",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Label a measure with typed text such as x",
+   "class": "control",
+   "evidence": "changes:height_lab=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Leave a measure unlabelled",
+   "class": "control",
+   "evidence": "changes:length_lab=None",
+   "note": ""
+  },
+  {
+   "id": "cap-04f",
+   "text": "Type any measure (length, width, side, height, lean) as a fraction",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: those are sliders (float)."
+  },
+  {
+   "id": "cap-04g",
+   "text": "Type any measure (length, width, side, height, lean) with √",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: those are sliders (float)."
+  },
+  {
+   "id": "cap-05",
+   "text": "Work out and label the apothem of a polygon base",
+   "class": "control",
+   "evidence": "changes:{\"base\":\"Regular polygon\",\"apothem_lab\":\"Measure\"}",
+   "note": "Checked by hand against the polygon base without it."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Hidden edges dashed or left off",
+   "class": "control",
+   "evidence": "changes:hidden=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Show the dashed height",
+   "class": "control",
+   "evidence": "changes:show_height=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Right-angle squares on or off",
+   "class": "control",
+   "evidence": "changes:right=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "A unit from the list or typed",
+   "class": "control",
+   "evidence": "changes:unit=m",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Rounding",
+   "class": "control",
+   "evidence": "changes:{\"slant\":\"6\",\"dec\":0}",
+   "note": "Checked by hand: the worked-out height (5.2) with dec=0 differs."
+  },
+  {
+   "id": "cap-07c",
+   "text": "Name the corners",
+   "class": "control",
+   "evidence": "changes:names=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Which way the depth goes back",
+   "class": "control",
+   "evidence": "changes:depth=Left",
+   "note": ""
+  },
+  {
+   "id": "cap-i01",
+   "text": "Drag a label on the figure to move it",
+   "class": "interaction",
+   "evidence": "label-drag + handle:label:move this label",
+   "note": "From the page controls, not the bullets. The page says: Drag any label on the figure to move it."
+  }
+ ]
+}

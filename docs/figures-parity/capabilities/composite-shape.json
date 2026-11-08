@@ -1,0 +1,112 @@
+{
+ "figure": "composite-shape",
+ "site": "math",
+ "slug": "composite-shape",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Start from a single piece",
+   "class": "core",
+   "evidence": "changes:preset=Rectangle + changes:preset=Triangle",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Start from a shape already built from pieces",
+   "class": "core",
+   "evidence": "changes:preset=L-shape + changes:preset=House",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Click a straight side on the figure to add a rectangle onto it",
+   "class": "editor",
+   "evidence": "handle:click:add a rectangle on this side",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Add a triangle, semicircle or other piece onto a straight side",
+   "class": "editor",
+   "evidence": "changes:spec=rect 0 0 6 4; tri 0 4 6 4 3 7",
+   "note": "Only by typing the piece and its coordinates in the spec; the click handle adds rectangles only. Checked by hand: the triangle sits on the top side."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Pieces to use: rectangle, triangle, semicircle, circle",
+   "class": "control",
+   "evidence": "changes:preset=Semicircle + changes:preset=Circle + changes:spec=rect 0 0 6 4; tri 0 4 6 4 3 7",
+   "note": "As starting presets and as spec pieces; there is no palette to click from."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Ready-made L-shape, house and arch",
+   "class": "control",
+   "evidence": "changes:preset=L-shape + changes:preset=House + changes:preset=Arch",
+   "note": ""
+  },
+  {
+   "id": "cap-i01",
+   "text": "Drag a piece's side on the figure to resize it",
+   "class": "editor",
+   "evidence": "handle:drag:drag this corner",
+   "note": "From the page controls, not the bullets. Seen on the live page: select a piece and drag the handles on its sides. Ours drags a corner (linked points follow), which resizes the piece the same way."
+  },
+  {
+   "id": "cap-i02",
+   "text": "Click a piece on the figure to type its exact sizes",
+   "class": "editor",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: a selected rectangle opens Width and Height boxes."
+  },
+  {
+   "id": "cap-i03",
+   "text": "Click a piece on the figure to delete it",
+   "class": "editor",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: the piece's pop-up has Delete."
+  },
+  {
+   "id": "cap-i04",
+   "text": "Click a piece on the figure to shade it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: the piece's pop-up has Shading."
+  },
+  {
+   "id": "cap-i05",
+   "text": "Drag from a corner or the middle of a side to draw a line, such as a height",
+   "class": "editor",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: the Lines mode, 'draw heights and other lines'."
+  },
+  {
+   "id": "cap-i06",
+   "text": "Click a side on the figure to label it with its length or text",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: Label mode, a side's pop-up has Label None/Measure/Text."
+  },
+  {
+   "id": "cap-i07",
+   "text": "Click a side on the figure to give it congruence ticks, parallel arrows or a line style",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: the side's pop-up has Congruence ticks, Parallel arrows, Line and Thickness."
+  },
+  {
+   "id": "cap-i08",
+   "text": "Click an angle on the figure to label it, mark it right or shade it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: Label mode, an angle's pop-up has Label, Right-angle mark and Shading."
+  },
+  {
+   "id": "cap-i09",
+   "text": "Click a corner on the figure to show a named point there",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: Label mode, a corner's pop-up has Point."
+  }
+ ]
+}

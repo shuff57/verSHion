@@ -1,0 +1,119 @@
+{
+ "figure": "dot-and-cross",
+ "site": "chemistry",
+ "slug": "dot-and-cross",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw a covalent molecule picked from a list (H2, Cl2, HCl, H2O, CH4, NH3, O2, N2, CO2, ethene, ethane...)",
+   "class": "core",
+   "evidence": "changes:molecule=CH4",
+   "note": "Ours lacks methanol and ethanol from the reference's list."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw a binary ionic compound picked from a list (NaCl, MgO, MgCl2, CaF2...)",
+   "class": "core",
+   "evidence": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\"}",
+   "note": "Ours has 7 compounds; the reference takes any of its 8 metals with any of its 7 non-metals (see cap-01d)."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Draw one atom or ion from H to Ca, with its charge",
+   "class": "core",
+   "evidence": "changes:{\"kind\":\"Atom or ion\",\"charge\":1}",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picking",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours is pick-only from fixed lists."
+  },
+  {
+   "id": "cap-02",
+   "text": "Draw every shell instead of the outer shell only",
+   "class": "control",
+   "evidence": "changes:shells=Every shell",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw an ionic compound with every ion drawn separately",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours always draws one of each ion with its number in front."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Draw an ionic compound as one of each ion with its number in front, as 2[Cl]-",
+   "class": "control",
+   "evidence": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\"}",
+   "note": "Ours' only ionic layout; MgCl2 render checked shows 2[Cl]-."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Swap dots and crosses between the atoms",
+   "class": "control",
+   "evidence": "",
+   "note": "No swap control in ours."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw all marks in black instead of a color per kind",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": "Print style draws dots and crosses in black (checked)."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Leave the electrons blank for students to draw",
+   "class": "version",
+   "evidence": "changes:blank=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Show each ion's charge, leave a blank box, or leave it off",
+   "class": "version",
+   "evidence": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"charges\":\"Blank\"} + changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"charges\":\"Off\"}",
+   "note": "Tokens pass on the kind alone; checked separately that Blank and Off each change the MgCl2 render."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Click an electron to cycle it through dot, cross, open circle, open square and nothing, for a find-the-mistake question",
+   "class": "version",
+   "evidence": "",
+   "note": "Ours has no handles on this figure."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Click an element symbol to blank or show it",
+   "class": "version",
+   "evidence": "",
+   "note": "Ours has no handles on this figure."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Click an ion's charge to show it, make it a blank box or leave it off, per ion",
+   "class": "version",
+   "evidence": "",
+   "note": "Ours has no handles; cap-05b sets all charges at once only."
+  },
+  {
+   "id": "cap-07a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Water",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "An answer key describing the correct diagram",
+   "class": "version",
+   "evidence": "changes:show_answers=false",
+   "note": "Ours draws the bonding/lone-pair key under the figure and hides it with show answers off."
+  }
+ ]
+}

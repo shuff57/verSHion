@@ -1,0 +1,77 @@
+{
+ "figure": "gas-syringe",
+ "site": "chemistry",
+ "slug": "gas-syringe",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Draw the syringe alone, or set up with a conical flask, delivery tube and stand",
+   "class": "control",
+   "evidence": "changes:show=Syringe only",
+   "note": "Opening state is with flask and stand; the token switches to the syringe alone."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Syringe size 50 or 100",
+   "class": "control",
+   "evidence": "changes:size=50 cm³",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Scale unit cm³ or mL",
+   "class": "control",
+   "evidence": "changes:unit=mL",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Type the volume of gas",
+   "class": "core",
+   "evidence": "changes:volume=20",
+   "note": "Ours also has a drag/scroll plunger handle for this."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Pick a random volume (0 to full scale, one decimal place)",
+   "class": "control",
+   "evidence": "",
+   "note": "No random control in ours."
+  },
+  {
+   "id": "cap-04a",
+   "text": "A magnifier above the syringe, or none",
+   "class": "control",
+   "evidence": "changes:mag_show=Instrument only",
+   "note": "The magnifier is on at the opening state; the token removes it."
+  },
+  {
+   "id": "cap-04b",
+   "text": "The magnifier in place of the syringe",
+   "class": "control",
+   "evidence": "changes:mag_show=Magnifier only",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Choose how many numbered marks (1 to 6) the magnifier spans",
+   "class": "control",
+   "evidence": "changes:mag_marks=4",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Gas collected",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "An answer key line with the volume under the figure",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,203 @@
+{
+ "figure": "histogram",
+ "site": "math",
+ "slug": "histogram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type a data set that is sorted into bins",
+   "class": "core",
+   "evidence": "changes:data=12, 15, 15, 18, 22, 25, 31, 34, 38, 41",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Set where the bins start",
+   "class": "control",
+   "evidence": "changes:{\"auto_bins\": false, \"bin_start\": 45.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Set the bin width",
+   "class": "control",
+   "evidence": "changes:{\"auto_bins\": false, \"bin_width\": 5.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Choose which bin holds a value on an edge",
+   "class": "control",
+   "evidence": "changes:closed=In the bin to its left",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Type a frequency table: where the first bin starts, then each bin's upper end and its frequency",
+   "class": "core",
+   "evidence": "",
+   "note": "the histogram takes a list of values only"
+  },
+  {
+   "id": "cap-02b",
+   "text": "Use unequal bin widths",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Paste a frequency table from a worksheet, with bins like 140 < h <= 150",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Show relative frequency as a decimal on the vertical axis",
+   "class": "control",
+   "evidence": "changes:measure=Relative frequency",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Show relative frequency as a percent",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Show frequency density",
+   "class": "control",
+   "evidence": "changes:measure=Density",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Fill the bars with a colour",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": "one colour (blue); the token shows the colour/print switch is live"
+  },
+  {
+   "id": "cap-04b",
+   "text": "Fill the bars gray",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": "Print fills the single series solid grey"
+  },
+  {
+   "id": "cap-04c",
+   "text": "Fill the bars with a black-and-white pattern",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Leave the bars white",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Write each bar's frequency above it",
+   "class": "control",
+   "evidence": "changes:values=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw a frequency polygon over the bars",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Draw the frequency polygon alone",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Close the polygon down to the axis or leave it open",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "Number the horizontal axis at every step of a typed range instead of at the bin edges",
+   "class": "control",
+   "evidence": "",
+   "note": "verSHion always numbers the bin edges"
+  },
+  {
+   "id": "cap-07a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Test scores",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write the axis titles",
+   "class": "control",
+   "evidence": "changes:x_title=Score + changes:y_title=Students",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Put a blank line in place of a title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Type the vertical axis range, worked out from the data otherwise",
+   "class": "control",
+   "evidence": "changes:{\"auto_y\": false, \"y_max\": 20.0}",
+   "note": "the top only; the start is always 0"
+  },
+  {
+   "id": "cap-08b",
+   "text": "Type the vertical axis count-by",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08c",
+   "text": "Choose which gridlines are numbered",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08d",
+   "text": "Turn the gridlines on or off",
+   "class": "control",
+   "evidence": "changes:grid=false",
+   "note": ""
+  },
+  {
+   "id": "cap-08e",
+   "text": "Make the gridlines light, standard or bold",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08f",
+   "text": "Add minor gridlines",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

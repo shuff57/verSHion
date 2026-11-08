@@ -1,0 +1,203 @@
+{
+ "figure": "waves",
+ "site": "physics",
+ "slug": "waves",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw a transverse wave",
+   "class": "core",
+   "evidence": "changes:amp=2.0",
+   "note": "The opening state; evidence is that it redraws with the amplitude."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw a longitudinal wave",
+   "class": "core",
+   "evidence": "changes:kind=Longitudinal",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Draw both, the longitudinal one above with its compressions over the crests",
+   "class": "core",
+   "evidence": "changes:kind=Both",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Plot displacement against distance, showing the wavelength",
+   "class": "core",
+   "evidence": "changes:wl=6.0",
+   "note": "The opening state is against distance."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Plot displacement against time, showing the period",
+   "class": "core",
+   "evidence": "changes:against=Time",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Set the amplitude",
+   "class": "core",
+   "evidence": "changes:amp=2.0 + handle:drag:set the amplitude",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Set the wavelength or period",
+   "class": "core",
+   "evidence": "changes:wl=6.0 + handle:drag:stretch or squeeze the wavelength",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Draw 0.5 to 8 cycles",
+   "class": "core",
+   "evidence": "changes:cycles=8.0 + handle:scroll:add or remove cycles",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Arrow marking the wavelength (or period), labeled",
+   "class": "control",
+   "evidence": "changes:mark_wl=false + handle-edit:wl_lab",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Arrow marking the amplitude, labeled",
+   "class": "control",
+   "evidence": "changes:mark_amp=false + handle-edit:amp_lab",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Make a mark's label a blank line for students",
+   "class": "version",
+   "evidence": "changes:wl_lab_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Leave a mark unlabeled",
+   "class": "control",
+   "evidence": "changes:amp_lab_mode=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Label the crest and trough",
+   "class": "control",
+   "evidence": "changes:mark_ct=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Label the compression and rarefaction",
+   "class": "control",
+   "evidence": "changes:{\"kind\":\"Longitudinal\",\"mark_ct\":true}",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Make a crest/trough/compression/rarefaction label a blank line for students",
+   "class": "version",
+   "evidence": "changes:{\"mark_ct\":true,\"crest_mode\":\"Blank line\"}",
+   "note": "Checked by hand over mark_ct alone."
+  },
+  {
+   "id": "cap-05d",
+   "text": "Leave a crest/trough/compression/rarefaction label off",
+   "class": "control",
+   "evidence": "changes:{\"mark_ct\":true,\"trough_mode\":\"None\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Numbered axes to measure on",
+   "class": "control",
+   "evidence": "changes:numbers=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Gridlines, or tick marks without them",
+   "class": "control",
+   "evidence": "changes:grid=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Fit the axes to the wave, or set each axis range by hand",
+   "class": "control",
+   "evidence": "changes:{\"xaxis_fit\":false,\"xmax\":12.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "No axes, just a dashed rest line",
+   "class": "control",
+   "evidence": "changes:{\"numbers\":false,\"grid\":false}",
+   "note": "Looked at the render: no axes, dashed rest line."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Write a chart title (text, blank line or none)",
+   "class": "control",
+   "evidence": "changes:title=A wave + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write the axis titles (text, blank line or none)",
+   "class": "control",
+   "evidence": "changes:xt=x (m) + handle-edit:xt + handle-edit:yt",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Number every line, every 2nd, 5th or 10th, or none",
+   "class": "control",
+   "evidence": "changes:xaxis_num=Every line",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Letter at the end of each axis, or none",
+   "class": "control",
+   "evidence": "changes:{\"grid\":false,\"yaxis_letter\":\"None\"}",
+   "note": "Only drawn without gridlines; checked by hand over grid=false alone."
+  },
+  {
+   "id": "cap-07e",
+   "text": "End caps on the axes",
+   "class": "control",
+   "evidence": "",
+   "note": "Our axes end plain; no end-cap choice."
+  },
+  {
+   "id": "cap-07f",
+   "text": "Minor gridlines, 2, 4 or 5 per block",
+   "class": "control",
+   "evidence": "changes:minor=4 per block",
+   "note": ""
+  },
+  {
+   "id": "cap-07g",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-07h",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "changes:color=true",
+   "note": ""
+  }
+ ]
+}

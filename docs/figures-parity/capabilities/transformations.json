@@ -1,0 +1,252 @@
+{
+ "figure": "transformations",
+ "site": "math",
+ "slug": "transformations",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Click the preimage's vertices onto the grid",
+   "class": "editor",
+   "evidence": "",
+   "note": "No handles on this figure."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Type the preimage's vertices (a polygon of up to 10)",
+   "class": "core",
+   "evidence": "",
+   "note": "The preimage is a fixed triangle; no vertex parameter."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Make the preimage a single point or an open path",
+   "class": "core",
+   "evidence": "",
+   "note": "No parameter."
+  },
+  {
+   "id": "cap-01d",
+   "text": "A label for each preimage vertex",
+   "class": "control",
+   "evidence": "",
+   "note": "Vertices are lettered A, B, C automatically; no label parameter."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Add transformations one after another, each acting on the last image",
+   "class": "editor",
+   "evidence": "",
+   "note": "One transformation only (op)."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Translate by ⟨a, b⟩",
+   "class": "core",
+   "evidence": "changes:dx=5 + changes:dy=1",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Reflect over the x-axis, the y-axis, y = x or y = −x",
+   "class": "core",
+   "evidence": "changes:op=Reflect + changes:{\"op\":\"Reflect\",\"axis\":\"the line y = x\"}",
+   "note": "Checked by hand: image and the dashed mirror line are drawn."
+  },
+  {
+   "id": "cap-02d",
+   "text": "Reflect over any line x = a, y = a or y = ±x + a",
+   "class": "core",
+   "evidence": "",
+   "note": "axis offers the two axes and y = ±x only."
+  },
+  {
+   "id": "cap-02e",
+   "text": "Rotate 90°, 180° or 270°",
+   "class": "core",
+   "evidence": "changes:op=Rotate + changes:{\"op\":\"Rotate\",\"angle\":\"180 degrees\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-02f",
+   "text": "Rotate clockwise",
+   "class": "control",
+   "evidence": "",
+   "note": "Only anticlockwise turns are offered; 270° anticlockwise lands the same image as 90° clockwise, but the rule is written anticlockwise."
+  },
+  {
+   "id": "cap-02g",
+   "text": "Rotate about any point",
+   "class": "core",
+   "evidence": "",
+   "note": "Rotation is about the origin only."
+  },
+  {
+   "id": "cap-02h",
+   "text": "Dilate by any scale factor",
+   "class": "core",
+   "evidence": "changes:{\"op\":\"Dilate\",\"scale\":\"0.5\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-02i",
+   "text": "Dilate from any center",
+   "class": "core",
+   "evidence": "",
+   "note": "No center parameter."
+  },
+  {
+   "id": "cap-02j",
+   "text": "Place a transformation's line or center on the grid with a preview",
+   "class": "interaction",
+   "evidence": "",
+   "note": "No handles on this figure."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Color, or black and white for a copier",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Images told apart by dashed and dotted lines",
+   "class": "control",
+   "evidence": "",
+   "note": "Only one image exists; the preimage is dashed and the image solid in both styles, so there is nothing more to tell apart."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Give each figure its own colour",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter."
+  },
+  {
+   "id": "cap-03d",
+   "text": "Give each figure a solid, dashed or dotted line",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter."
+  },
+  {
+   "id": "cap-03e",
+   "text": "Give each figure a thin, medium or thick line",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Student version: the preimage to transform, the image left to draw",
+   "class": "version",
+   "evidence": "changes:show_answers=false",
+   "note": "Checked by hand: the image is gone and its coordinates become blanks."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Question version: both figures shown, the transformation to name",
+   "class": "version",
+   "evidence": "",
+   "note": "No version hides the rule while showing the image."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Answer key version",
+   "class": "version",
+   "evidence": "changes:show_answers=false",
+   "note": "The answer key is the opening state; the switch is the evidence it can be turned off and on."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Show or hide the preimage",
+   "class": "control",
+   "evidence": "changes:show_pre=false",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Show or hide in-between images",
+   "class": "control",
+   "evidence": "",
+   "note": "There is only one transformation, so there are none."
+  },
+  {
+   "id": "cap-04f",
+   "text": "Show or hide lines of reflection and centers",
+   "class": "control",
+   "evidence": "",
+   "note": "The mirror line is always drawn for a reflection; no switch, and no centers."
+  },
+  {
+   "id": "cap-04g",
+   "text": "Show or hide translation arrows",
+   "class": "control",
+   "evidence": "",
+   "note": "No translation arrow is drawn."
+  },
+  {
+   "id": "cap-04h",
+   "text": "Show or hide point labels and coordinates",
+   "class": "control",
+   "evidence": "",
+   "note": "Labels and the coordinate list are always shown."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Set each axis's range",
+   "class": "control",
+   "evidence": "",
+   "note": "The grid fits the figure; no range parameter."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Axis numbering (count by, which lines numbered)",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Chart and axis titles",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter."
+  },
+  {
+   "id": "cap-05d",
+   "text": "Axis labels and end caps",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter."
+  },
+  {
+   "id": "cap-05e",
+   "text": "Gridline weight and minor gridlines",
+   "class": "control",
+   "evidence": "",
+   "note": "No parameter."
+  },
+  {
+   "id": "cap-05f",
+   "text": "Small, medium or large labels",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-i01",
+   "text": "Drag a preimage vertex on the grid to move it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. The page says: drag a vertex to move it. No handles at our opening state."
+  },
+  {
+   "id": "cap-i02",
+   "text": "Click on the grid to set a translation, with the image following the pointer",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. The page says: A translation follows the pointer: click where the first vertex should go. cap-02j covers a line or center, not a translation."
+  }
+ ]
+}

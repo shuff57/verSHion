@@ -1,0 +1,154 @@
+{
+ "figure": "angles",
+ "site": "math",
+ "slug": "angles",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A single angle of any size, reflex included",
+   "class": "core",
+   "evidence": "changes:ray2=250",
+   "note": "Checked by hand: a 250° reflex angle is drawn and labelled."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Adjacent angles sharing a ray",
+   "class": "core",
+   "evidence": "changes:{\"ray_count\":3,\"ray3\":\"110\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Angles on a straight line",
+   "class": "core",
+   "evidence": "changes:ray1_line=Line",
+   "note": "Checked by hand: 60° and 120° on the line."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Angles around a point",
+   "class": "core",
+   "evidence": "changes:{\"ray_count\":3,\"ray3\":\"200\",\"around\":true}",
+   "note": "Checked by hand: three angles closing the full turn."
+  },
+  {
+   "id": "cap-01e",
+   "text": "Vertical angles from two crossing lines",
+   "class": "core",
+   "evidence": "changes:{\"ray1_line\":\"Line\",\"ray2_line\":\"Line\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-01f",
+   "text": "More than six rays from the vertex",
+   "class": "core",
+   "evidence": "",
+   "note": "WIDE: ray_count is capped at 6; the reference adds rays with no stated limit."
+  },
+  {
+   "id": "cap-02",
+   "text": "Set each ray's direction in degrees from a right-pointing baseline, counterclockwise",
+   "class": "core",
+   "evidence": "changes:ray2=90",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Turn a ray into a line through the vertex",
+   "class": "control",
+   "evidence": "changes:ray2_line=Line",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Label a chosen angle with its measure, x, typed text or nothing",
+   "class": "control",
+   "evidence": "changes:unknown=1 + changes:hide=1 + changes:sector_text=1 = 3y",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Mark a chosen angle with congruence marks",
+   "class": "control",
+   "evidence": "",
+   "note": "No congruence-arc parameter on angles; only right-angle squares."
+  },
+  {
+   "id": "cap-04i",
+   "text": "Shade the angles, all at once",
+   "class": "control",
+   "evidence": "changes:shade=true",
+   "note": "NARROW: one switch for every angle, off at the opening state. The per-angle form is cap-04c."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Shade a chosen angle",
+   "class": "control",
+   "evidence": "",
+   "note": "WIDE: shade is one switch for every angle (cap-04i passes that narrow form); no per-angle shading."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Lettered points at the vertex and the rays' ends",
+   "class": "control",
+   "evidence": "changes:letters=true",
+   "note": "Off at the opening state; turns on letters for the vertex and every ray at once."
+  },
+  {
+   "id": "cap-04e",
+   "text": "Choose which points appear and type their names",
+   "class": "control",
+   "evidence": "",
+   "note": "Letters are automatic (A, B, C…) and all or none; no per-point choice or name."
+  },
+  {
+   "id": "cap-04f",
+   "text": "Click an angle on the figure to change its label",
+   "class": "interaction",
+   "evidence": "handle:click:show degrees",
+   "note": "Our click cycles degrees / x / blank."
+  },
+  {
+   "id": "cap-04g",
+   "text": "Click an angle on the figure to mark or shade it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "The click handle only cycles the label."
+  },
+  {
+   "id": "cap-04h",
+   "text": "Click the vertex or near a ray's end to add a point",
+   "class": "interaction",
+   "evidence": "",
+   "note": "No click handle adds a point."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Draw a ray solid, dashed or dotted",
+   "class": "control",
+   "evidence": "changes:ray2_style=Dashed",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Click a ray on the figure to style it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "Rays have a drag handle for direction only."
+  },
+  {
+   "id": "cap-i01",
+   "text": "Click a ray on the figure to run it through the vertex as a line",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: the ray's pop-up has Through the vertex. Our ray handle only drags its direction."
+  },
+  {
+   "id": "cap-i02",
+   "text": "Click a ray on the figure to delete it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "From the page controls, not the bullets. Seen on the live page: the ray's pop-up has Delete this ray. No click handle on our rays."
+  }
+ ]
+}

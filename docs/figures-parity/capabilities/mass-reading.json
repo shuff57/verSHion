@@ -1,0 +1,140 @@
+{
+ "figure": "mass-reading",
+ "site": "chemistry",
+ "slug": "mass-reading",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "A triple beam balance weighing up to 610 g, read to 0.01 g",
+   "class": "core",
+   "evidence": "handle:drag:10 g rider + changes:mass=150.5",
+   "note": "Opening state; the riders are drag handles and move with the typed mass."
+  },
+  {
+   "id": "cap-02a",
+   "text": "A digital balance showing 2 decimal places (up to 400 g)",
+   "class": "core",
+   "evidence": "changes:balance=Digital balance",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "A digital balance showing 1 decimal place (up to 1000 g)",
+   "class": "control",
+   "evidence": "changes:{\"balance\":\"Digital balance\",\"places\":\"0.1\"}",
+   "note": "Token passes on balance alone; checked separately that places=0.1 changes the digital render."
+  },
+  {
+   "id": "cap-02c",
+   "text": "An analytical balance showing 3 decimal places (up to 200 g)",
+   "class": "control",
+   "evidence": "changes:{\"balance\":\"Digital balance\",\"places\":\"0.001\"}",
+   "note": "Token passes on balance alone; checked separately that places=0.001 changes the digital render."
+  },
+  {
+   "id": "cap-02d",
+   "text": "An analytical balance showing 4 decimal places",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours stops at 3 places."
+  },
+  {
+   "id": "cap-03a",
+   "text": "A weigh boat on the digital balance's pan",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "A beaker on the digital balance's pan",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Marbles on the pan",
+   "class": "control",
+   "evidence": "changes:pan=Marbles",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Choose 1 to 5 marbles",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no marble count."
+  },
+  {
+   "id": "cap-03e",
+   "text": "A rock on the pan",
+   "class": "control",
+   "evidence": "changes:pan=Rock",
+   "note": ""
+  },
+  {
+   "id": "cap-03f",
+   "text": "A cube on the pan",
+   "class": "control",
+   "evidence": "changes:pan=Cube",
+   "note": ""
+  },
+  {
+   "id": "cap-03g",
+   "text": "A metal cylinder on the pan",
+   "class": "control",
+   "evidence": "changes:pan=Metal cylinder",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type the mass",
+   "class": "core",
+   "evidence": "changes:mass=150.5",
+   "note": "Rider drag handles also set it."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Pick a random mass",
+   "class": "control",
+   "evidence": "",
+   "note": "No random control in ours."
+  },
+  {
+   "id": "cap-05a",
+   "text": "A magnifier on the triple beam's front beam, or none",
+   "class": "control",
+   "evidence": "changes:mag_show=Instrument only",
+   "note": "Magnifier is on at the opening state; the token removes it."
+  },
+  {
+   "id": "cap-05b",
+   "text": "The beams alone",
+   "class": "control",
+   "evidence": "changes:mag_show=Beams only",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Choose how many numbered marks (1 to 6) the magnifier spans",
+   "class": "control",
+   "evidence": "changes:mag_marks=4",
+   "note": "From the page's controls, not its bullet list."
+  },
+  {
+   "id": "cap-06a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Mass of a rock",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "An answer key line with the mass",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

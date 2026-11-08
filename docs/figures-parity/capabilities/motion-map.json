@@ -1,0 +1,175 @@
+{
+ "figure": "motion-map",
+ "site": "physics",
+ "slug": "motion-map",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Build the motion from up to six segments in any order",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours is a fixed sequence: speed up, constant velocity, slow down, rest."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Set each segment at rest, constant velocity forward or back, speeding up or slowing down",
+   "class": "core",
+   "evidence": "",
+   "note": "Wider form of cap-01f: only one direction for the whole motion, and the four phases are fixed in order (a phase can only be shortened)."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Type how long each segment lasts",
+   "class": "core",
+   "evidence": "changes:cruise=6.0",
+   "note": "Narrow form of cap-01a/01b: durations of our four fixed phases (speed up, constant, slow down, rest)."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Type each segment's speed",
+   "class": "core",
+   "evidence": "",
+   "note": "Wider form of cap-01g: we type one acceleration for the whole motion."
+  },
+  {
+   "id": "cap-01e",
+   "text": "Set where the motion starts",
+   "class": "core",
+   "evidence": "",
+   "note": "No starting position parameter."
+  },
+  {
+   "id": "cap-01f",
+   "text": "Run the whole motion forward or back",
+   "class": "core",
+   "evidence": "changes:dir=Back",
+   "note": "Narrow form of cap-01b: one direction for every segment."
+  },
+  {
+   "id": "cap-01g",
+   "text": "Set how fast it speeds up and slows down (one acceleration for the whole motion)",
+   "class": "core",
+   "evidence": "changes:accel=2.0",
+   "note": "Narrow form of cap-01d."
+  },
+  {
+   "id": "cap-02",
+   "text": "Put a dot every 0.5 s, 1 s or 2 s",
+   "class": "control",
+   "evidence": "changes:dt=0.5",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Write the times under the dots",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Put a letter on every dot",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Put the motion graph's letters at the segment ends",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw velocity arrows on one scale",
+   "class": "core",
+   "evidence": "changes:arrows=None",
+   "note": "Arrows are on at the opening state; the evidence is that removing them changes the map."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw an acceleration arrow (or a = 0) above each segment",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Dots only, for students to add the arrows",
+   "class": "version",
+   "evidence": "changes:arrows=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw the total displacement as an arrow under the number line",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write the displacement's label, a blank line, or leave it off",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Numbers on the number line, or just the shape",
+   "class": "control",
+   "evidence": "changes:numbers=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Mark the origin",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Label the object (text, blank line or none)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Add a chart title",
+   "class": "control",
+   "evidence": "changes:title=A trip",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Print an answer key under the figure",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "",
+   "note": "No color parameter on our motion map."
+  },
+  {
+   "id": "cap-08",
+   "text": "Start from, or open as, the motion graph with the same segments",
+   "class": "out-of-scope",
+   "evidence": "",
+   "note": "not-doing: \"Links that open the same data as a different figure (motion graph ↔ motion map). Our figures are separate tools; a teacher copies the values across.\""
+  }
+ ]
+}

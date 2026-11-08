@@ -1,0 +1,133 @@
+{
+ "figure": "bohr-model",
+ "site": "chemistry",
+ "slug": "bohr-model",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Pick the element, which sets its protons, its neutrons from the mass number and a neutral atom's shells",
+   "class": "core",
+   "evidence": "changes:element=11 Na - Sodium",
+   "note": "Click/scroll handle on the symbol also steps the element."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Set the charge, which redraws the shells for that ion",
+   "class": "core",
+   "evidence": "changes:charge=2",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Set the proton count by hand, independent of the element (0 to 200), so a wrong atom draws as set",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours has no proton count; protons come only from the element list (1 to 118)."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Set the neutron count by hand (0 to 200)",
+   "class": "core",
+   "evidence": "changes:neutrons=8",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Set the electrons on each of 1 to 7 shells by hand (up to 32 per shell)",
+   "class": "core",
+   "evidence": "changes:shells_custom=2,8,3",
+   "note": "Checked render: 2, 8, 3 drawn on three rings."
+  },
+  {
+   "id": "cap-02",
+   "text": "Fill: put the neutral atom's real ground-state shells on (e.g. Fe 2, 8, 14, 2)",
+   "class": "control",
+   "evidence": "changes:element=26 Fe - Iron",
+   "note": "Ours draws ground-state shells from the element whenever no custom shells are set; Fe render checked 2, 8, 14, 2. No separate Fill button after a manual edit (clearing the shells list does it)."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw the nucleus as proton and neutron balls (up to 40), or switch it to written counts (6 p+, 6 n0)",
+   "class": "control",
+   "evidence": "changes:nucleus=Protons and neutrons",
+   "note": "Balls are the opening state, so the token switches to written counts; balls and counts are one choice here."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Leave the nucleus blank",
+   "class": "control",
+   "evidence": "changes:nucleus=Blank",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Shuffle the arrangement of the nucleus balls",
+   "class": "control",
+   "evidence": "changes:shuffle=3",
+   "note": "Balls are the opening state."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Pair the electrons at the four sides as in Lewis structures instead of evenly spaced",
+   "class": "control",
+   "evidence": "changes:placement=Paired",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw empty rings, without electrons, for students to fill",
+   "class": "version",
+   "evidence": "changes:empty=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Show gained electrons in their own color and lost ones as empty spots, compared with the neutral atom",
+   "class": "control",
+   "evidence": "changes:{\"charge\":-2,\"gained_lost\":true}",
+   "note": "Token passes on the charge alone; checked separately that gained_lost changes the charge -2 render."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Set each particle's color (proton, neutron, electron)",
+   "class": "control",
+   "evidence": "changes:proton_color=Green + changes:neutron_color=Red + changes:electron_color=Red",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Set each particle's symbol (+/p/p+/none, 0/n/n0/none, -/e/e-/none)",
+   "class": "control",
+   "evidence": "changes:proton_symbol=p + changes:neutron_symbol=n + changes:electron_symbol=e",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "A key listing each part drawn as a ball or dot",
+   "class": "control",
+   "evidence": "changes:key=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Shell labels n = 1, n = 2... on each ring",
+   "class": "control",
+   "evidence": "changes:shell_labels=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Put an ion in square brackets with its charge at the top right",
+   "class": "control",
+   "evidence": "changes:{\"charge\":1,\"brackets\":true}",
+   "note": "Brackets show only for an ion; checked separately that brackets changes the charge +1 render (same as opening for a neutral atom)."
+  },
+  {
+   "id": "cap-06d",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Carbon atom",
+   "note": ""
+  }
+ ]
+}

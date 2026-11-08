@@ -1,0 +1,126 @@
+{
+ "figure": "volume-reading",
+ "site": "chemistry",
+ "slug": "volume-reading",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A graduated cylinder of 10, 25, 50, 100, 250 or 1000 mL",
+   "class": "core",
+   "evidence": "changes:size=250 mL + changes:size=10 mL",
+   "note": "100 mL cylinder is the opening state."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A 50 mL buret",
+   "class": "core",
+   "evidence": "changes:instrument=Buret",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A beaker (50 or 250 mL)",
+   "class": "core",
+   "evidence": "changes:instrument=Beaker + changes:{\"instrument\":\"Beaker\",\"size\":\"250 mL\"}",
+   "note": "Narrow form: ours' size list has no 600 mL (see cap-01d). Second token passes on instrument alone; checked separately that size changes the beaker render."
+  },
+  {
+   "id": "cap-01d",
+   "text": "A 600 mL beaker",
+   "class": "control",
+   "evidence": "",
+   "note": "Wider form of cap-01c: 600 mL is not in ours' size list."
+  },
+  {
+   "id": "cap-02a",
+   "text": "How far apart the smallest marks are",
+   "class": "control",
+   "evidence": "changes:marks=2 mL",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "How often the marks are numbered",
+   "class": "control",
+   "evidence": "changes:numbered=20 mL",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "No numbers on the scale",
+   "class": "version",
+   "evidence": "changes:numbered=No numbers",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Unit cm³ instead of mL",
+   "class": "control",
+   "evidence": "changes:unit=cm³",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type the reading",
+   "class": "core",
+   "evidence": "changes:reading=72.4",
+   "note": "Drag/scroll handle on the liquid level too."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Pick a random reading",
+   "class": "control",
+   "evidence": "",
+   "note": "No random control in ours."
+  },
+  {
+   "id": "cap-04c",
+   "text": "A dotted line from the bottom of the meniscus to the marks",
+   "class": "control",
+   "evidence": "changes:dotted=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Liquid color: blue, red or green instead of gray",
+   "class": "control",
+   "evidence": "changes:color=Blue + changes:color=Red + changes:color=Green",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "A magnifier beside the instrument, or none",
+   "class": "control",
+   "evidence": "changes:mag_show=Instrument only",
+   "note": "Magnifier is on at the opening state; the token removes it."
+  },
+  {
+   "id": "cap-06b",
+   "text": "The magnifier in place of the instrument",
+   "class": "control",
+   "evidence": "changes:mag_show=Magnifier only",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "The magnifier spanning 1 to 6 numbered marks",
+   "class": "control",
+   "evidence": "changes:mag_marks=4",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Volume of water",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "An answer key line with the reading",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

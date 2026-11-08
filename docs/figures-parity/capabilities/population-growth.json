@@ -1,0 +1,252 @@
+{
+ "figure": "population-growth",
+ "site": "biology",
+ "slug": "population-growth",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Exponential growth (J-curve)",
+   "class": "core",
+   "evidence": "changes:growth=Exponential (J-curve)",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Exponential and logistic together",
+   "class": "core",
+   "evidence": "changes:growth=Exponential and logistic",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Overshoot and oscillation around K",
+   "class": "core",
+   "evidence": "changes:growth=Overshoot and oscillation",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Boom and crash",
+   "class": "core",
+   "evidence": "changes:growth=Boom and crash",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Logistic growth (S-curve)",
+   "class": "core",
+   "evidence": "changes:growth=Exponential (J-curve)",
+   "note": "The opening state; evidence is that the growth choice redraws it."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Set the starting size N₀",
+   "class": "core",
+   "evidence": "changes:n0=50.0 + handle:drag:starting size",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set the growth rate r",
+   "class": "core",
+   "evidence": "changes:r=0.8 + handle:drag:growth rate",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Set the carrying capacity K (the peak size for boom and crash)",
+   "class": "core",
+   "evidence": "changes:k=500.0 + handle:drag:carrying capacity + changes:{\"growth\":\"Boom and crash\",\"k\":500.0}",
+   "note": "Checked by hand that k changes boom and crash over the growth choice alone."
+  },
+  {
+   "id": "cap-02d",
+   "text": "Set the lag τ for overshoot",
+   "class": "control",
+   "evidence": "changes:{\"growth\":\"Overshoot and oscillation\",\"tau\":2.0}",
+   "note": "Checked by hand over Overshoot alone."
+  },
+  {
+   "id": "cap-02e",
+   "text": "Set the time span",
+   "class": "core",
+   "evidence": "changes:tspan=30.0",
+   "note": ""
+  },
+  {
+   "id": "cap-02f",
+   "text": "Time in hours, days, weeks, months, years or generations",
+   "class": "control",
+   "evidence": "changes:unit=Days",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Load one of ten setups (yeast in a flask, bacteria doubling every hour, deer on an island, boom and crash...)",
+   "class": "control",
+   "evidence": "",
+   "note": "No setups list; the blank-graph setup is covered by our blank switch (cap-07b)."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Type the organism's name for the axis titles",
+   "class": "control",
+   "evidence": "changes:organism=deer",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Graph population size, growth rate or per capita growth rate over time",
+   "class": "core",
+   "evidence": "changes:graph=Growth rate over time",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Two of the graphs stacked",
+   "class": "core",
+   "evidence": "changes:graph=Population size and growth rate",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Either rate or both against population size",
+   "class": "core",
+   "evidence": "changes:graph=Both rates against population size",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "The carrying capacity as a dashed line",
+   "class": "control",
+   "evidence": "changes:mark_k=false + handle-edit:k_label",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-05b",
+   "text": "The inflection point at N = K/2",
+   "class": "control",
+   "evidence": "changes:mark_infl=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "The lag, exponential and stationary phases",
+   "class": "control",
+   "evidence": "changes:mark_phases=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "The carrying-capacity label as a blank line for students, or unlabeled",
+   "class": "version",
+   "evidence": "changes:k_label_style=Blank line + changes:k_label_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "The inflection point and phase labels as blank lines, or unlabeled",
+   "class": "version",
+   "evidence": "",
+   "note": "Wider form of cap-05d: only the K label has a blank/none choice."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Census points counted at any interval",
+   "class": "core",
+   "evidence": "changes:census_auto=true + changes:{\"census_auto\":true,\"census_every\":2.0}",
+   "note": "Checked by hand that census_every changes it over census_auto alone."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Census points on the curve or scattered by about 5%, 10% or 20%",
+   "class": "control",
+   "evidence": "changes:{\"census_auto\":true,\"census_scatter\":\"About 10%\"}",
+   "note": "Checked by hand over census_auto alone."
+  },
+  {
+   "id": "cap-06c",
+   "text": "A table of the counts beside the graph",
+   "class": "control",
+   "evidence": "changes:{\"census_auto\":true,\"census_table\":true}",
+   "note": "Checked by hand over census_auto alone."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Hide the curve for students to draw",
+   "class": "version",
+   "evidence": "changes:draw_curve=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "A blank graph for students to draw on",
+   "class": "version",
+   "evidence": "changes:blank=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "The curve's color",
+   "class": "control",
+   "evidence": "changes:curve_color=Red",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "A chart title (text, blank line or none)",
+   "class": "control",
+   "evidence": "changes:title=Yeast in a flask + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Axis titles written",
+   "class": "control",
+   "evidence": "changes:x_title=t (days) + handle-edit:x_title + handle-edit:y_title",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Axis titles as blank lines",
+   "class": "version",
+   "evidence": "changes:xtitle_style=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-07g",
+   "text": "Set the axis ranges",
+   "class": "control",
+   "evidence": "changes:{\"fit\":false,\"x_max\":30.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-07h",
+   "text": "Axis numbering: every line, every 2nd, 5th or 10th, or none",
+   "class": "control",
+   "evidence": "changes:x_numbers=Every line",
+   "note": ""
+  },
+  {
+   "id": "cap-07i",
+   "text": "Axis end caps and end labels",
+   "class": "control",
+   "evidence": "changes:x_hi_end=Triangle arrow + changes:x_end=Text",
+   "note": ""
+  },
+  {
+   "id": "cap-07j",
+   "text": "Minor gridlines",
+   "class": "control",
+   "evidence": "changes:minor=2 per block",
+   "note": ""
+  },
+  {
+   "id": "cap-07k",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

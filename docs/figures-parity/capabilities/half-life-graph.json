@@ -1,0 +1,189 @@
+{
+ "figure": "half-life-graph",
+ "site": "chemistry",
+ "slug": "half-life-graph",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Pick a real isotope from 16 with its half-life",
+   "class": "core",
+   "evidence": "changes:iso1=Iodine-131 (8.02 days)",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Plot up to three isotopes on one graph",
+   "class": "core",
+   "evidence": "changes:count=2",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A made-up Isotope X (10 years)",
+   "class": "control",
+   "evidence": "changes:iso1=Isotope X (10 years)",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Your own isotope name and half-life",
+   "class": "core",
+   "evidence": "changes:{\"iso1\":\"Custom\",\"custom_half\":3,\"custom_name\":\"Zed-1\"}",
+   "note": "Token passes on iso1=Custom alone; checked separately that custom_half and custom_name each change the Custom render."
+  },
+  {
+   "id": "cap-01e",
+   "text": "Your own isotope's half-life in a unit you choose (not only years)",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours' custom half-life is in years only."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Up the side: fraction remaining",
+   "class": "control",
+   "evidence": "changes:y=Fraction remaining",
+   "note": "Percent remaining is the opening state."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Up the side: mass remaining",
+   "class": "control",
+   "evidence": "changes:y=Mass remaining",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Up the side: number of nuclei",
+   "class": "control",
+   "evidence": "changes:y=Number of nuclei",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Up the side: activity in Bq",
+   "class": "control",
+   "evidence": "changes:y=Activity",
+   "note": "Render checked: Activity (Bq)."
+  },
+  {
+   "id": "cap-02e",
+   "text": "Up the side: activity in counts per minute",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours' activity axis is Bq only."
+  },
+  {
+   "id": "cap-02f",
+   "text": "Type the starting amount",
+   "class": "control",
+   "evidence": "changes:{\"y\":\"Mass remaining\",\"amount\":50}",
+   "note": "Token passes on y alone; checked separately that amount=50 changes the mass render."
+  },
+  {
+   "id": "cap-03",
+   "text": "Time in seconds, minutes, hours, days, years, thousand years or billion years (axes fitted to five half-lives)",
+   "class": "control",
+   "evidence": "changes:unit=Days",
+   "note": "Opening state is fitted axes over five half-lives."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Dashed guide lines at the first 1 to 4 half-lives, labeled T½, 2T½..., or no guides",
+   "class": "control",
+   "evidence": "changes:guides=1 + changes:guides=0",
+   "note": "Opening state has 3 guides with T½ labels."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Guide lines labeled with their times",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours labels only T½, 2T½..."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Guide labels as blank lines for students",
+   "class": "version",
+   "evidence": "",
+   "note": "Ours has no blank guide labels."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Dots at each half-life",
+   "class": "control",
+   "evidence": "changes:dots=false",
+   "note": "Dots are on at the opening state; the token turns them off."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Hide the curves for students to plot",
+   "class": "version",
+   "evidence": "changes:curves=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "A stable daughter curve",
+   "class": "control",
+   "evidence": "changes:daughter=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Hide the names as Isotope A, B and C",
+   "class": "version",
+   "evidence": "changes:hide_names=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Color or black and white curves",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Decay of carbon-14",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Axis titles as text, a blank line, or none",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours' axis titles are fixed."
+  },
+  {
+   "id": "cap-06d",
+   "text": "Set the axis ranges (from, to, count by)",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has only the span in half-lives, not axis ranges."
+  },
+  {
+   "id": "cap-06e",
+   "text": "Axis numbering every line, every 2nd, 5th, 10th or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06f",
+   "text": "Minor gridlines (2, 4 or 5 per block)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06g",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,203 @@
+{
+ "figure": "gel-electrophoresis",
+ "site": "biology",
+ "slug": "gel-electrophoresis",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Run 2 to 12 lanes",
+   "class": "core",
+   "evidence": "changes:{\"lanes\":\"Ladder: ladder 1kb | A: 5000 | B: 4000 | C: 3000 | D: 2500 | E: 2000 | F: 1500 | G: 1200 | H: 1000 | I: 800 | J: 600 | Ladder 2: ladder 100bp\"}",
+   "note": "Looked at the 12-lane render."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Make each lane a ladder or a sample, in any order",
+   "class": "core",
+   "evidence": "changes:{\"lanes\":\"A: 500, 300 | Ladder: ladder 100bp\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Give each lane its own label",
+   "class": "control",
+   "evidence": "changes:{\"lanes\":\"Ladder: ladder 1kb | Unknown: 5200, 3100\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Load a classic setup: crime scene, paternity test, restriction digest or PCR products",
+   "class": "control",
+   "evidence": "changes:setup=Paternity test",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "A 100 bp ladder",
+   "class": "control",
+   "evidence": "changes:{\"lanes\":\"A: 500, 300 | Ladder: ladder 100bp\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "A 1 kb ladder",
+   "class": "control",
+   "evidence": "changes:{\"lanes\":\"Ladder: ladder 1kb | A: 2500\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "A λ DNA / HindIII ladder",
+   "class": "control",
+   "evidence": "changes:{\"lanes\":\"Ladder: ladder lambda | A: 5000, 2000\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Type each sample's band sizes in bp or kb",
+   "class": "core",
+   "evidence": "changes:{\"lanes\":\"Ladder: ladder 1kb | A: 1.5 kb, 400\"} + handle:drag:change this band's fragment size",
+   "note": "Checked by hand: 5.2 kb in place of 5200 renders identically, so kb is parsed."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Make a band darker (x2) or fainter (x0.5)",
+   "class": "control",
+   "evidence": "changes:{\"lanes\":\"Ladder: ladder 1kb | Crime scene: 5200 x2, 3100, 1800 x0.5, 900 | Suspect 1: 6000, 3100, 1500, 700 | Suspect 2: 5200, 3100, 1800, 900 | Suspect 3: 4200, 2400, 1800, 1100\"} + handle:click:cycle its amount",
+   "note": "Same lanes as the opening state but for the x2 and x0.5."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Leave a sample lane blank for students, with its bands kept for the answer key",
+   "class": "version",
+   "evidence": "",
+   "note": "An empty lane can be typed, but its bands are then gone; there is no per-lane blank that keeps the answer."
+  },
+  {
+   "id": "cap-04",
+   "text": "Agarose: 0.8%, 1%, 1.5% or 2%",
+   "class": "control",
+   "evidence": "changes:agarose=2%",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Look: printable dark bands on white",
+   "class": "control",
+   "evidence": "changes:look=Blue stain",
+   "note": "Printable is the opening state."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Look: blue bands as a classroom stain leaves them",
+   "class": "control",
+   "evidence": "changes:look=Blue stain",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Look: glowing bands on a dark gel",
+   "class": "control",
+   "evidence": "changes:look=Glowing",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Lane labels as names",
+   "class": "control",
+   "evidence": "changes:lane_labels=None",
+   "note": "Names at the opening state."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Lane labels as blank lines",
+   "class": "version",
+   "evidence": "changes:lane_labels=Blank lines",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Lane labels left off",
+   "class": "control",
+   "evidence": "changes:lane_labels=None",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Lane numbers",
+   "class": "control",
+   "evidence": "changes:lane_numbers=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Ladder sizes in bp or kb",
+   "class": "control",
+   "evidence": "changes:size_units=kb",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Ladder sizes as blank lines",
+   "class": "version",
+   "evidence": "changes:ladder_sizes=Blank lines",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Ladder sizes left off",
+   "class": "control",
+   "evidence": "changes:ladder_sizes=None",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Electrodes as signs",
+   "class": "control",
+   "evidence": "changes:electrode_style=None",
+   "note": "Signs at the opening state."
+  },
+  {
+   "id": "cap-07e",
+   "text": "Electrodes named Cathode and Anode",
+   "class": "control",
+   "evidence": "changes:electrode_style=Named",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Electrodes as blank circles",
+   "class": "version",
+   "evidence": "changes:electrode_style=Blank",
+   "note": ""
+  },
+  {
+   "id": "cap-07g",
+   "text": "Electrodes left off",
+   "class": "control",
+   "evidence": "changes:electrode_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "A ruler in cm and mm beside the gel",
+   "class": "control",
+   "evidence": "changes:ruler=true",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Crime scene gel + handle-edit:title",
+   "note": ""
+  },
+  {
+   "id": "cap-08c",
+   "text": "An answer key line",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

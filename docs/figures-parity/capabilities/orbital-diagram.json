@@ -1,0 +1,140 @@
+{
+ "figure": "orbital-diagram",
+ "site": "chemistry",
+ "slug": "orbital-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "The element, hydrogen to oganesson",
+   "class": "core",
+   "evidence": "changes:element=26 Fe - Iron",
+   "note": "Click/scroll handle on the symbol also steps the element."
+  },
+  {
+   "id": "cap-01b",
+   "text": "The charge",
+   "class": "core",
+   "evidence": "changes:charge=-2",
+   "note": "Scroll on an orbital also changes the charge."
+  },
+  {
+   "id": "cap-02a",
+   "text": "A noble gas core written in brackets, drawing only the orbitals after it",
+   "class": "control",
+   "evidence": "changes:shorthand=true",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Sublevels by shell instead of in filling order (4s before 3d)",
+   "class": "control",
+   "evidence": "changes:{\"element\":\"26 Fe - Iron\",\"order\":\"By shell\"}",
+   "note": "Token passes on the element alone; checked separately that By shell changes the Fe render (O has no 3d/4s to reorder)."
+  },
+  {
+   "id": "cap-03",
+   "text": "Exceptions (Cr, Cu...) as the filling order predicts instead of as they really are",
+   "class": "control",
+   "evidence": "changes:{\"element\":\"24 Cr - Chromium\",\"exceptions\":\"Filling order\"}",
+   "note": "Token passes on the element alone; checked separately that Filling order changes the Cr render."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Half arrows instead of full arrows",
+   "class": "control",
+   "evidence": "changes:arrows=Half arrows",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Orbitals on lines instead of squares",
+   "class": "control",
+   "evidence": "changes:orbitals=Lines",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Sublevels by energy instead of in a row",
+   "class": "control",
+   "evidence": "changes:layout=Energy ladder",
+   "note": "From the page's Arrangement control, not its bullet list."
+  },
+  {
+   "id": "cap-05a",
+   "text": "The symbol as a blank line",
+   "class": "version",
+   "evidence": "changes:symbol_style=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "The symbol left off",
+   "class": "control",
+   "evidence": "changes:symbol_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Sublevel labels as blank lines",
+   "class": "version",
+   "evidence": "changes:sublabels=Blank lines",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Sublevel labels left off",
+   "class": "control",
+   "evidence": "changes:sublabels=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "The configuration line written",
+   "class": "control",
+   "evidence": "changes:config=true",
+   "note": "Off at the opening state."
+  },
+  {
+   "id": "cap-05f",
+   "text": "The configuration line as a blank line",
+   "class": "version",
+   "evidence": "changes:{\"config\":true,\"config_blank\":true}",
+   "note": "config_blank alone renders the same as the opening (line off); checked separately that it changes the config=true render."
+  },
+  {
+   "id": "cap-05g",
+   "text": "Orbitals left empty for students to fill",
+   "class": "version",
+   "evidence": "changes:blank=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Change orbitals (empty, up, down, pair) for a which-rule-is-broken question",
+   "class": "version",
+   "evidence": "handle:click:change this orbital + changes:edits=2p2=pair 2p3=empty",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Extra empty sublevels after the last",
+   "class": "control",
+   "evidence": "changes:extra_empty=2",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Oxygen",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "An answer key line with the configuration",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

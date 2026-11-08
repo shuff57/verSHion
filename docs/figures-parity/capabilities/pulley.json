@@ -1,0 +1,175 @@
+{
+ "figure": "pulley",
+ "site": "physics",
+ "slug": "pulley",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "An Atwood machine",
+   "class": "core",
+   "evidence": "changes:lower=Left",
+   "note": "The opening state; evidence is that it redraws."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A table with a hanging mass",
+   "class": "core",
+   "evidence": "changes:setup=Table",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A ramp with a hanging mass",
+   "class": "core",
+   "evidence": "changes:setup=Ramp",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "A block and tackle",
+   "class": "core",
+   "evidence": "changes:setup=Block & tackle",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Write each object's label",
+   "class": "control",
+   "evidence": "changes:l_lab=M + handle-edit:l_lab + handle-edit:r_lab",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Replace an object's label with a blank line for students, or leave it off",
+   "class": "version",
+   "evidence": "changes:l_lab_mode=Blank line + changes:r_lab_mode=None",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Set each object's size",
+   "class": "control",
+   "evidence": "changes:l_size=150 + handle:drag:resize this object",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "On a table or ramp, draw the object as a block or a cart",
+   "class": "control",
+   "evidence": "changes:{\"setup\":\"Table\",\"l_kind\":\"Cart\"}",
+   "note": "Checked by hand over Table alone."
+  },
+  {
+   "id": "cap-02e",
+   "text": "In an Atwood machine, choose which side hangs lower",
+   "class": "control",
+   "evidence": "changes:lower=Left + handle:drag:hang lower",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "In an Atwood machine, hang a third object below the left or right one",
+   "class": "core",
+   "evidence": "changes:third=true + changes:{\"third\":true,\"third_side\":\"Left\"}",
+   "note": "Checked by hand that third_side changes it over third alone."
+  },
+  {
+   "id": "cap-03b",
+   "text": "On a table or ramp, add a second object behind the first, tied by a string",
+   "class": "core",
+   "evidence": "changes:{\"setup\":\"Table\",\"second\":true}",
+   "note": "Checked by hand over Table alone."
+  },
+  {
+   "id": "cap-03c",
+   "text": "On a table or ramp, set the second object touching the first instead",
+   "class": "core",
+   "evidence": "",
+   "note": "Our second object is always tied by a string (no touching option in pulley.rs)."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Set the ramp's angle, 10° to 60°",
+   "class": "core",
+   "evidence": "changes:{\"setup\":\"Ramp\",\"angle\":60.0}",
+   "note": "Checked by hand over Ramp alone."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Write the ramp angle's label",
+   "class": "control",
+   "evidence": "changes:{\"setup\":\"Ramp\",\"ang_lab\":\"30°\"}",
+   "note": "Checked by hand over Ramp alone."
+  },
+  {
+   "id": "cap-04c",
+   "text": "A smooth or rough surface",
+   "class": "control",
+   "evidence": "changes:{\"setup\":\"Ramp\",\"surface\":\"Rough\"}",
+   "note": "Checked by hand over Ramp alone."
+  },
+  {
+   "id": "cap-05",
+   "text": "In a block and tackle, 1 to 4 strands holding up the load",
+   "class": "core",
+   "evidence": "changes:{\"setup\":\"Block & tackle\",\"strands\":4}",
+   "note": "Checked by hand over Block & tackle alone."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Tension along the strings",
+   "class": "core",
+   "evidence": "changes:tension=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Gravity on each object",
+   "class": "core",
+   "evidence": "changes:gravity=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "The normal force on each object on a table or ramp",
+   "class": "core",
+   "evidence": "changes:{\"setup\":\"Table\",\"normal\":true}",
+   "note": "Checked by hand over Table alone."
+  },
+  {
+   "id": "cap-06d",
+   "text": "Friction on each object on a table or ramp",
+   "class": "core",
+   "evidence": "changes:{\"setup\":\"Table\",\"friction\":\"Away from it\"}",
+   "note": "Checked by hand over Table alone."
+  },
+  {
+   "id": "cap-06e",
+   "text": "The contact forces between objects touching",
+   "class": "core",
+   "evidence": "",
+   "note": "No touching objects, so no contact forces."
+  },
+  {
+   "id": "cap-06f",
+   "text": "Each object's acceleration",
+   "class": "core",
+   "evidence": "changes:accel=Right falls",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Mirror the figure left to right",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "changes:{\"tension\":true,\"color\":true}",
+   "note": "Color shows only on the arrows; checked by hand that color changes the render over tension alone."
+  }
+ ]
+}

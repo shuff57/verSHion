@@ -1,0 +1,147 @@
+{
+ "figure": "projectile-motion",
+ "site": "physics",
+ "slug": "projectile-motion",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Launch from level ground at 10° to 85°",
+   "class": "core",
+   "evidence": "changes:angle=10 + handle:drag:aim the launch velocity",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Launch off a cliff at 0° to 85°",
+   "class": "core",
+   "evidence": "changes:{\"from\":\"A cliff\",\"angle\":0}",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Set how high the cliff is",
+   "class": "core",
+   "evidence": "changes:{\"from\":\"A cliff\",\"cliff\":0.7}",
+   "note": "Checked by hand that cliff changes the render over A cliff alone."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw the object as a ball or a dot",
+   "class": "control",
+   "evidence": "changes:object=Dot",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set the ball's size",
+   "class": "control",
+   "evidence": "changes:size=100 + handle:scroll:resize the object",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Show or hide the dashed path",
+   "class": "control",
+   "evidence": "changes:path=None",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw the ball again at 1 to 8 equal time steps",
+   "class": "core",
+   "evidence": "changes:steps=4",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Letter the time steps or not",
+   "class": "control",
+   "evidence": "changes:{\"steps\":4,\"letters\":true}",
+   "note": "Checked by hand that letters changes the render over steps=4 alone."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw the launch velocity with its label",
+   "class": "core",
+   "evidence": "changes:show_v=false + handle-edit:v_lab",
+   "note": "Velocity is on at the opening state."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Mark the launch angle, with its label",
+   "class": "control",
+   "evidence": "changes:show_angle=false + handle-edit:ang_lab",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Draw the velocity's horizontal and vertical components",
+   "class": "core",
+   "evidence": "changes:comps=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Draw the acceleration due to gravity, g",
+   "class": "core",
+   "evidence": "changes:show_g=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "Replace a velocity, component, angle or g label with a blank line, or leave it off",
+   "class": "version",
+   "evidence": "changes:v_lab_mode=Blank line + changes:ang_lab_mode=None",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Mark the maximum height, labeled",
+   "class": "control",
+   "evidence": "changes:mark_h=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Mark the range, labeled",
+   "class": "control",
+   "evidence": "changes:mark_r=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Mark the cliff's height, labeled",
+   "class": "control",
+   "evidence": "changes:{\"from\":\"A cliff\",\"mark_cliff\":true}",
+   "note": "Checked by hand over A cliff alone."
+  },
+  {
+   "id": "cap-06d",
+   "text": "Make a height/range/cliff mark's label a blank line for students",
+   "class": "version",
+   "evidence": "",
+   "note": "Our mark labels are text only (h_lab, r_lab, cliff_lab), with no blank-line mode; an empty text leaves the label off but draws no blank."
+  },
+  {
+   "id": "cap-06e",
+   "text": "Leave a mark's label off",
+   "class": "control",
+   "evidence": "changes:{\"mark_h\":true,\"h_lab\":\"\"}",
+   "note": "Checked by hand that an empty h_lab changes the render over mark_h alone."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Mirror, to launch to the left",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Color for slides",
+   "class": "control",
+   "evidence": "changes:color=true",
+   "note": ""
+  }
+ ]
+}

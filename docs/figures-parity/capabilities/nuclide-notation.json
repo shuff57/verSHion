@@ -1,0 +1,175 @@
+{
+ "figure": "nuclide-notation",
+ "site": "chemistry",
+ "slug": "nuclide-notation",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "An element with its mass number",
+   "class": "core",
+   "evidence": "changes:element=8 O - Oxygen + changes:mass=14",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "The charge, for an ion",
+   "class": "core",
+   "evidence": "changes:charge=2",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Buttons for the element's natural isotopes (C-12, C-13)",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no isotope buttons; the mass number is typed (0 = the usual isotope)."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Set the protons, neutrons and electrons instead of the numbers",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no particle-count inputs; the same result needs element, mass number and charge."
+  },
+  {
+   "id": "cap-02",
+   "text": "Your own symbol of up to three characters, for identify-the-element questions",
+   "class": "core",
+   "evidence": "changes:{\"kind\":\"Custom symbol\",\"symbol\":\"Qz\"}",
+   "note": "Atomic number comes from the element list, not typed freely. Render check: a two-letter custom symbol (Qz) overlaps the atomic and mass numbers."
+  },
+  {
+   "id": "cap-03a",
+   "text": "An alpha particle",
+   "class": "control",
+   "evidence": "changes:kind=Alpha particle",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "A beta particle",
+   "class": "control",
+   "evidence": "changes:kind=Beta particle",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "A positron",
+   "class": "control",
+   "evidence": "",
+   "note": "Not in ours' list."
+  },
+  {
+   "id": "cap-03d",
+   "text": "A neutron",
+   "class": "control",
+   "evidence": "changes:kind=Neutron",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "A proton",
+   "class": "control",
+   "evidence": "changes:kind=Proton",
+   "note": ""
+  },
+  {
+   "id": "cap-03f",
+   "text": "A gamma ray",
+   "class": "control",
+   "evidence": "changes:kind=Gamma ray",
+   "note": ""
+  },
+  {
+   "id": "cap-03g",
+   "text": "Choose the particle's symbol form (He or α, e or β, p or H)",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours draws one form per particle."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Mass number shown, blank or left off",
+   "class": "version",
+   "evidence": "changes:pos_mass=Blank + changes:pos_mass=Off",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Atomic number shown, blank or left off",
+   "class": "version",
+   "evidence": "changes:pos_z=Blank + changes:pos_z=Off",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Symbol shown, blank or left off",
+   "class": "version",
+   "evidence": "changes:pos_symbol=Blank + changes:pos_symbol=Off",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Charge shown, blank or left off",
+   "class": "version",
+   "evidence": "changes:pos_charge=Blank + changes:{\"charge\":2,\"pos_charge\":\"Off\"}",
+   "note": "Off only differs when there is a charge to hide."
+  },
+  {
+   "id": "cap-04e",
+   "text": "Blanks as lines instead of boxes",
+   "class": "control",
+   "evidence": "changes:{\"pos_mass\":\"Blank\",\"blanks\":\"Line\"}",
+   "note": "Token passes on pos_mass alone; checked separately that blanks=Line changes the Blank render."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Hyphen notation alone (carbon-14)",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours' 'Hyphen notation' still draws the symbol: it renders byte-identical to 'Both' (nuclide.rs only adds the hyphen line, never hides the symbol)."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Symbol and hyphen notation both",
+   "class": "control",
+   "evidence": "changes:notation=Both",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Hyphen notation in the short form (C-14) as well as the long (carbon-14)",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours writes only the element name form."
+  },
+  {
+   "id": "cap-06a",
+   "text": "A serif (Times New Roman) font instead of sans serif",
+   "class": "control",
+   "evidence": "",
+   "note": "No font choice in ours."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Small, medium or large text",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": "Render check: at Large the mass number touches the symbol (12 runs into C)."
+  },
+  {
+   "id": "cap-07a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Carbon-14",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "An answer key",
+   "class": "version",
+   "evidence": "changes:show_answers=false",
+   "note": "Ours prints the particle counts under the figure and hides them with show answers off."
+  }
+ ]
+}

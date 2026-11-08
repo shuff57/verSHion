@@ -1,0 +1,161 @@
+{
+ "figure": "length-reading",
+ "site": "physics",
+ "slug": "length-reading",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Set the object's length",
+   "class": "core",
+   "evidence": "changes:length=6.2 + handle:drag:change the length",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Read a vernier caliper",
+   "class": "core",
+   "evidence": "",
+   "note": "verSHion has only the ruler; no instrument choice."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Read a micrometer",
+   "class": "core",
+   "evidence": "",
+   "note": "verSHion has only the ruler; no instrument choice."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Use a metric ruler 15 to 100 cm long",
+   "class": "control",
+   "evidence": "changes:ruler=100 cm",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Use an inch ruler, 6 to 20 in long",
+   "class": "control",
+   "evidence": "changes:units=Imperial (in) + changes:{\"units\":\"Imperial (in)\",\"ruler\":\"30 cm\"}",
+   "note": "The inch ruler's length rides on the cm choices (30 cm drew a 12 in ruler); checked by hand that it changes over Imperial alone."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Set how finely the ruler is marked",
+   "class": "control",
+   "evidence": "changes:marks=1 cm",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Read lengths to one estimated digit or to the nearest mark",
+   "class": "version",
+   "evidence": "changes:{\"answer\":true,\"read_to\":\"Nearest mark\"}",
+   "note": "read_to alone renders the same; it shows through the answer key line (checked by hand against answer=true alone)."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Choose the object on the ruler: marbles, rock, cube or metal cylinder",
+   "class": "control",
+   "evidence": "changes:object=Rock",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Set where the object's left end sits",
+   "class": "core",
+   "evidence": "changes:offset=2.0 + handle:drag:slide the object along the ruler",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Put magnifiers on the object's ends",
+   "class": "control",
+   "evidence": "changes:mag_show=Ruler and magnifiers",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Set how many numbered marks the magnifier shows",
+   "class": "control",
+   "evidence": "changes:{\"mag_show\":\"Ruler and magnifiers\",\"mag_marks\":4}",
+   "note": "Checked by hand that mag_marks changes the render over the magnifiers alone."
+  },
+  {
+   "id": "cap-03e",
+   "text": "Draw dashed lines from the object's ends down to the ruler",
+   "class": "control",
+   "evidence": "changes:{\"object\":\"Marbles\",\"dashes\":true}",
+   "note": "Checked by hand that dashes changes the render over Marbles alone."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Set the caliper's least count: 0.1, 0.05 or 0.02 mm",
+   "class": "control",
+   "evidence": "",
+   "note": "No caliper."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Print the least count on the slider or leave it off",
+   "class": "control",
+   "evidence": "",
+   "note": "No caliper."
+  },
+  {
+   "id": "cap-05",
+   "text": "Read the micrometer to its marks (0.01 mm) or to one estimated digit (0.001 mm)",
+   "class": "version",
+   "evidence": "",
+   "note": "No micrometer."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Type the caliper or micrometer reading, or pick one at random",
+   "class": "core",
+   "evidence": "",
+   "note": "No caliper or micrometer."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Give the caliper or micrometer a zero error, and draw it closed too",
+   "class": "core",
+   "evidence": "",
+   "note": "No caliper or micrometer."
+  },
+  {
+   "id": "cap-07",
+   "text": "Put nothing, a block, a cylinder, a ball or a wire in the jaws, drawn to size with a short label",
+   "class": "control",
+   "evidence": "",
+   "note": "No caliper or micrometer."
+  },
+  {
+   "id": "cap-08a",
+   "text": "Show the caliper or micrometer with its close-up, or the instrument alone",
+   "class": "control",
+   "evidence": "",
+   "note": "No caliper or micrometer."
+  },
+  {
+   "id": "cap-08b",
+   "text": "Show the close-up alone, without the instrument",
+   "class": "control",
+   "evidence": "",
+   "note": "Our ruler options are ruler with magnifiers, ruler only, or ruler with one magnifier above; no close-up alone."
+  },
+  {
+   "id": "cap-09a",
+   "text": "Add a chart title",
+   "class": "control",
+   "evidence": "changes:title=Measure the cylinder",
+   "note": ""
+  },
+  {
+   "id": "cap-09b",
+   "text": "Print an answer key line with the reading (and any correction)",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

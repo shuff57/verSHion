@@ -1,0 +1,112 @@
+{
+ "figure": "mass-spectrum",
+ "site": "chemistry",
+ "slug": "mass-spectrum",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "An element's natural isotopes as peaks (58 elements)",
+   "class": "core",
+   "evidence": "changes:element=Chlorine",
+   "note": "Opening is magnesium."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Type 1 to 6 isotopes, each with its mass and % abundance",
+   "class": "core",
+   "evidence": "changes:{\"source\":\"Custom isotopes\",\"custom\":\"10:19.9, 11:80.1\"}",
+   "note": "Ours' peaks also drag (sideways = mass number, up/down = abundance)."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Name your own isotopes' element, such as Element X",
+   "class": "control",
+   "evidence": "changes:{\"source\":\"Custom isotopes\",\"custom_name\":\"Element Q\"}",
+   "note": "Token passes on source alone; checked separately that custom_name changes the Custom render."
+  },
+  {
+   "id": "cap-02",
+   "text": "Peak heights relative to the tallest (100) instead of percent abundance",
+   "class": "control",
+   "evidence": "changes:relative=true",
+   "note": "Percent abundance is the opening state."
+  },
+  {
+   "id": "cap-03",
+   "text": "Each peak's abundance written over it, or not",
+   "class": "control",
+   "evidence": "changes:values=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Hide the element's name",
+   "class": "version",
+   "evidence": "changes:show_name=false",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Leave one peak out for students to draw",
+   "class": "version",
+   "evidence": "changes:leave_out=1",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Magnesium",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Axis titles as your own text",
+   "class": "control",
+   "evidence": "changes:xtitle=m/z + changes:ytitle=Relative abundance",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Chart and axis titles as blank lines or none",
+   "class": "version",
+   "evidence": "changes:title_style=Blank line + changes:xtitle_style=Blank line + changes:ytitle_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "The x-axis fitted to the peaks or typed (from, to, count by)",
+   "class": "control",
+   "evidence": "changes:{\"xaxis_fit\":false,\"xaxis_from\":20,\"xaxis_to\":30}",
+   "note": "xaxis_fit=false alone renders the same as the opening, so the change comes from the typed range."
+  },
+  {
+   "id": "cap-05e",
+   "text": "The y-axis range",
+   "class": "control",
+   "evidence": "changes:yaxis_to=120",
+   "note": ""
+  },
+  {
+   "id": "cap-05f",
+   "text": "Minor gridlines (2, 4 or 5 per block)",
+   "class": "control",
+   "evidence": "changes:minor_grid=2 per block",
+   "note": ""
+  },
+  {
+   "id": "cap-05g",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "An answer key line with the element, its relative atomic mass and the peak left out",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}

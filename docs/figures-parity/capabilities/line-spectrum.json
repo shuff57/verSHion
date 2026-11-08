@@ -1,0 +1,119 @@
+{
+ "figure": "line-spectrum",
+ "site": "chemistry",
+ "slug": "line-spectrum",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Up to 8 strips, each one of 15 elements (H, He, Li, Na, K, Ca, Sr, Ba, Cu, Zn, Cd, Hg, Ne, Ar, Kr)",
+   "class": "core",
+   "evidence": "changes:strips=Potassium; Krypton",
+   "note": "Ours takes the strips as a list, also edited as cards; all 15 elements are in its line table."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A strip of lines you type, with its own name",
+   "class": "core",
+   "evidence": "changes:strips=Mystery: 450, 520, 610",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A mixture strip made of the other strips",
+   "class": "core",
+   "evidence": "changes:strips=Hydrogen; Neon; Unknown = Hydrogen & Neon",
+   "note": "Opening already has a mixture (Unknown = Hydrogen + Sodium); the token makes a different one, written with & because the probe splits tokens on ' + '."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Absorption: dark lines across a rainbow",
+   "class": "control",
+   "evidence": "changes:style=Absorption",
+   "note": "Emission is the opening state."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Print: black lines on white",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Lines as bright as NIST's relative intensities instead of all equal",
+   "class": "control",
+   "evidence": "changes:brightness=Relative",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Label strips with element symbols instead of names",
+   "class": "control",
+   "evidence": "changes:label_style=Symbols",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Label strips with blank lines for students",
+   "class": "version",
+   "evidence": "changes:label_style=Blank",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "No strip labels",
+   "class": "control",
+   "evidence": "changes:label_style=None",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Set the wavelength range (anywhere from 380 to 780 nm)",
+   "class": "control",
+   "evidence": "changes:nm_from=380 + changes:nm_to=780",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Small tick spacing (none, 5, 10, 20, 25, 50 nm)",
+   "class": "control",
+   "evidence": "changes:tick_every=5 nm",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Number spacing (10, 20, 25, 50, 100 nm)",
+   "class": "control",
+   "evidence": "changes:num_every=100 nm",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "The scale under every strip",
+   "class": "control",
+   "evidence": "changes:axis_pos=Under each",
+   "note": "Under the last strip is the opening state."
+  },
+  {
+   "id": "cap-05e",
+   "text": "The scale left off",
+   "class": "control",
+   "evidence": "changes:axis_pos=None",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "changes:title=Flame tests",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "An answer key naming what is in each mixture",
+   "class": "version",
+   "evidence": "changes:answer=true",
+   "note": ""
+  }
+ ]
+}
