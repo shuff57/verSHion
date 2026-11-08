@@ -91,7 +91,7 @@ fn all_64_codons_follow_the_standard_code() {
 
 #[test]
 fn the_codon_chart_lists_all_64_with_start_and_stops_in_bold() {
-    let svg = render(&with(&[("chart", s("Codon chart only"))]));
+    let svg = render(&with(&[("chart", s("Chart only"))]));
     let t = texts(&svg);
     for (aa, codons) in BY_AMINO {
         for c in codons {
@@ -107,7 +107,7 @@ fn the_codon_chart_lists_all_64_with_start_and_stops_in_bold() {
     // the strands are not drawn with the chart alone
     assert!(!t.iter().any(|x| x == "DNA coding strand"));
     // one-letter names in the chart
-    let one = texts(&render(&with(&[("chart", s("Codon chart only")), ("aa_names", s("M"))])));
+    let one = texts(&render(&with(&[("chart", s("Chart only")), ("aa_names", s("M"))])));
     assert!(one.contains(&"UGG W".to_string()) && one.contains(&"AUG M (Start)".to_string()));
 }
 
@@ -381,8 +381,8 @@ fn options_change_the_drawing() {
         ("hbonds", b(true)),
         ("color_bases", b(true)),
         ("mistakes", s("2")),
-        ("chart", s("Strands and codon chart")),
-        ("chart", s("Codon chart only")),
+        ("chart", s("Both")),
+        ("chart", s("Chart only")),
         ("title", s("Protein synthesis")),
         (SHOW_ANSWERS, b(true)),
         ("label_size", s("Large")),
@@ -398,8 +398,8 @@ fn options_change_the_drawing() {
     assert_ne!(render(&with(&first)), render(&with(&lead)));
     assert!(texts(&render(&with(&first))).iter().any(|t| t == "Ala"), "GCT read as Ala from the first base");
     // chart below vs beside
-    let beside = render(&with(&[("chart", s("Strands and codon chart"))]));
-    let below = render(&with(&[("chart", s("Strands and codon chart")), ("chart_pos", s("Below"))]));
+    let beside = render(&with(&[("chart", s("Both"))]));
+    let below = render(&with(&[("chart", s("Both")), ("chart_pos", s("Below"))]));
     assert!(svg_size(&below).1 > svg_size(&beside).1 && svg_size(&below).0 < svg_size(&beside).0);
     // hydrogen bonds: 2 for each A–T pair, 3 for each G–C
     let m = Model::from_params(&defaults());
@@ -439,7 +439,7 @@ fn panel_relevance_and_notes() {
     assert!(!relevant("mistake_row", &p));
     assert!(relevant("mistake_row", &with(&[("mistakes", s("1"))])));
     assert!(!relevant("chart_pos", &p));
-    assert!(relevant("chart_pos", &with(&[("chart", s("Strands and codon chart"))])));
+    assert!(relevant("chart_pos", &with(&[("chart", s("Both"))])));
     assert!(!relevant("hbonds", &with(&[("row_template", s("Off"))])));
     assert!(!relevant("blank_seed", &p) && !relevant("mistake_seed", &p));
     assert_eq!(readout(&p), "Met\u{2013}Glu\u{2013}Pro\u{2013}Ala\u{2013}Phe, then Stop");
@@ -454,7 +454,7 @@ fn renders_png_for_review() {
         ("default", vec![]),
         ("key", vec![(SHOW_ANSWERS, b(true)), ("row_mrna", s("Some")), ("row_amino", s("Blank")), ("mistakes", s("2"))]),
         ("colour_hbonds", vec![("color_bases", b(true)), ("hbonds", b(true)), ("brackets", b(true)), ("aa_names", s("Methionine")), ("aa_style", s("Words"))]),
-        ("chart_beside", vec![("chart", s("Strands and codon chart")), (SHOW_ANSWERS, b(true))]),
+        ("chart_beside", vec![("chart", s("Both")), (SHOW_ANSWERS, b(true))]),
         ("print", vec![("style", s("Print")), ("color_bases", b(true)), ("hbonds", b(true)), ("row_names", s("Blank")), ("ends", s("Blank"))]),
     ] {
         let svg = render(&with(&over));

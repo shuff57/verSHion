@@ -1042,7 +1042,7 @@ static RAY_DIAGRAM: [RefSection; 5] = [
 ];
 
 static DNA_PROTEIN_SYNTHESIS: [RefSection; 8] = [
-    s("Sequence", &["typed", "seq", "frame"], "Type the template strand 3′ to 5′ (it usually starts TAC), or the coding strand or the mRNA 5′ to 3′. The template pairs A–T and G–C with the coding strand; the mRNA pairs with the template, so it is the coding strand with U for T. Codons are read from the first AUG, or the first base, to the first stop codon with the standard genetic code."),
+    s("Sequence", &["typed", "seq", "frame"], "The mRNA pairs with the template strand, so it is the coding strand with U for T."),
     s("Rows", &["row_coding", "row_template", "row_mrna", "row_trna", "row_amino", "some_share", "row_names", "name_coding", "name_template", "name_mrna", "name_trna", "name_amino"], "Blank leaves a row for students to fill in; Some leaves part of it blank."),
     s("Amino acids", &["aa_names", "aa_style"], ""),
     s("Strands", &["ends", "gaps", "brackets", "hbonds", "color_bases"], ""),

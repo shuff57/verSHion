@@ -85,7 +85,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("mistakes", "How many mistakes", &["None", "1", "2", "3", "4"], "None")
             .hint("Wrong bases in one row, for multiple choice: make choice A with none, then B to D with some and shuffle"),
         ParamDef::choice("mistake_row", "Mistakes in the row", &MISTAKE_ROWS, "mRNA"),
-        ParamDef::choice("chart", "Show", &["Strands", "Strands and codon chart", "Codon chart only"], "Strands").hint("The standard codon chart, start and stop codons in bold"),
+        ParamDef::choice("chart", "Show", &["Strands", "Both", "Chart only"], "Strands").hint("Strands alone, the strands and the standard codon chart, or the chart alone; start and stop codons in bold"),
         ParamDef::choice("chart_pos", "Codon chart", &["On the right", "Below"], "On the right"),
         ParamDef::text("title", "Chart title (blank = none)", ""),
         ParamDef::bool(SHOW_ANSWERS, "Answer key", false)
@@ -104,13 +104,13 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "some_share" => ROW_KEYS.iter().any(|k| p.s(k) == "Some"),
         "name_coding" | "name_template" | "name_mrna" | "name_trna" | "name_amino" => {
             let i = NAME_KEYS.iter().position(|k| *k == key).unwrap_or(0);
-            p.s("row_names") != "Off" && !off(ROW_KEYS[i]) && p.s("chart") != "Codon chart only"
+            p.s("row_names") != "Off" && !off(ROW_KEYS[i]) && p.s("chart") != "Chart only"
         }
-        "aa_style" => !off("row_amino") && p.s("chart") != "Codon chart only",
+        "aa_style" => !off("row_amino") && p.s("chart") != "Chart only",
         "hbonds" => !off("row_coding") && !off("row_template"),
         "brackets" => !off("row_mrna"),
         "mistake_row" => p.s("mistakes") != "None",
-        "chart_pos" => p.s("chart") == "Strands and codon chart",
+        "chart_pos" => p.s("chart") == "Both",
         // the seeds are set by the Shuffle buttons
         "blank_seed" | "mistake_seed" => false,
         _ => true,
@@ -446,7 +446,7 @@ pub fn mistakes_asked(p: &Params) -> usize { p.s("mistakes").parse::<usize>().un
 pub fn mistakes(p: &Params, m: &Model) -> Vec<Mistake> {
     let want = mistakes_asked(p);
     let r = mistake_row(p);
-    if want == 0 || mode(p, r) == Mode::Off || p.s("chart") == "Codon chart only" {
+    if want == 0 || mode(p, r) == Mode::Off || p.s("chart") == "Chart only" {
         return vec![];
     }
     let bl = blanks(p, m, r);
@@ -920,7 +920,7 @@ pub fn key_lines(p: &Params, m: &Model) -> Vec<String> {
     let groups = m.groups();
     let grouped = |v: &[u8]| groups.iter().map(|&(s, n)| String::from_utf8_lossy(&v[s..s + n]).into_owned()).collect::<Vec<_>>().join(" ");
     let mut out = Vec::new();
-    let chart_only = p.s("chart") == "Codon chart only";
+    let chart_only = p.s("chart") == "Chart only";
     if !chart_only && m.len() > 0 {
         for r in ROWS {
             if mode(p, r) == Mode::Off {
@@ -972,7 +972,7 @@ fn render(p: &Params) -> String {
     let look = Look { print, key: p.b(SHOW_ANSWERS), colour: p.b("color_bases"), lab: svg::label_factor(p.s("label_size")) };
     let naming = naming(p);
     let chart = p.s("chart");
-    let show_strands = chart != "Codon chart only";
+    let show_strands = chart != "Chart only";
     let show_chart = chart != "Strands";
     let below = p.s("chart_pos") == "Below";
 
@@ -1093,7 +1093,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         coding("Frameshift: one base deleted from codon 3", BETA_FRAMESHIFT),
         Example {
             name: "Transcribe and translate: student copy with blank rows",
-            params: vec![("row_mrna", sv("Blank")), ("row_trna", sv("Blank")), ("row_amino", sv("Blank")), ("chart", sv("Strands and codon chart")), ("chart_pos", sv("Below"))],
+            params: vec![("row_mrna", sv("Blank")), ("row_trna", sv("Blank")), ("row_amino", sv("Blank")), ("chart", sv("Both")), ("chart_pos", sv("Below"))],
         },
     ])
 }
