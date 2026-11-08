@@ -1,0 +1,29 @@
+{
+ "round": 3,
+ "figure": "predator-prey",
+ "capability": "cap-03c",
+ "hypothesis": "The time unit (years, months, weeks, days) acts while a named pair is kept; code landed with round 2's change (3ff9dcf, 4a848f9). Evidence changes:{pair:Aphid and ladybug,unit:Years}; expected predator-prey +1..2",
+ "started_at": "2026-11-08T11:23:36",
+ "git": "7131409",
+ "before": {
+  "figure": 93.8,
+  "pooled": 76.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-08T11:31:16",
+ "after": {
+  "figure": 93.8,
+  "pooled": 76.2
+ },
+ "probe": {
+  "pass": false,
+  "why": "no evidence",
+  "class": "control",
+  "renders": []
+ },
+ "checker": "fail: switching the unit under a named pair only renames the time axis. The numbers stay the same, so they are now read in the new unit, but the panel box still says \"Cycle length (years)\".",
+ "result": "miss",
+ "evidence": "figure suite 2223 passed 0 failed (figtest profile, census included); census changed: nuclide-notation__defaults, __start (number spacing); no task run (bug-fix round); evidence cleared after the checker",
+ "next": "predator-prey cap-03c again: panel labels follow the unit"
+}

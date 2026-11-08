@@ -1,0 +1,40 @@
+{
+ "round": 2,
+ "figure": "predator-prey",
+ "capability": "cap-02b",
+ "hypothesis": "A named pair keeps its starting populations, averages and cycle length as editable settings (the pair seeds them, the teacher's values then act); today a named pair renders the same whatever they are. Evidence changes: with a named pair; expected predator-prey +2..4",
+ "started_at": "2026-11-08T08:01:44",
+ "git": "7279dca",
+ "before": {
+  "figure": 88.5,
+  "pooled": 76.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-08T11:31:16",
+ "after": {
+  "figure": 93.8,
+  "pooled": 76.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"pair\":\"Rabbit and wolf\",\"cycle\":14.0}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/predator-prey/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/predator-prey/70a785e815519b5c.png"
+   },
+   {
+    "token": "changes:{\"pair\":\"Rabbit and wolf\",\"prey0\":100.0}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/predator-prey/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/predator-prey/da3aaf4706b808c7.png"
+   }
+  ]
+ },
+ "checker": "pass: under a named pair, the cycle length, starting populations and averages now change the drawing and the pair stays picked. Each example and pair pick still opens looking like that pair.",
+ "result": "hit",
+ "evidence": "figure suite 2223 passed 0 failed (figtest profile, census included); census changed: nuclide-notation__defaults, __start (number spacing); no task run (bug-fix round); checker measured peaks 8 then 14.0 years apart; open: old saved figures that name a pair without its numbers now open at the defaults",
+ "next": "predator-prey: migrate old saved pair figures"
+}

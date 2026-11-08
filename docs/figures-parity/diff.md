@@ -70,10 +70,10 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | mass-spectrum | `mass-spectrum` | 35 | 3 | 6 | reference has a student version; ours has no show_answers | 100 |
 | nuclide-notation | `nuclide-notation` | 14 | 0 | 7 | — | 73 |
 | orbital-diagram | `orbital-diagram` | 19 | 6 | 6 | reference has a student version; ours has no show_answers | 100 |
-| particle-diagram | `particle-diagram` | 58 | 1 | 5 | — | 88 |
+| particle-diagram | `particle-diagram` | 58 | 1 | 5 | — | 92 |
 | ph-reading | `ph-reading` | 7 | 1 | 5 | — | 76 |
 | photoelectron-spectrum | `photoelectron-spectrum` | 18 | 1 | 6 | reference has a student version; ours has no show_answers | 100 |
-| potential-energy-diagram | `reaction-energy-diagram` | 23 | 3 | 7 | — | 39 |
+| potential-energy-diagram | `reaction-energy-diagram` | 23 | 3 | 7 | — | 42 |
 | structure-editor | `organic-structure` | 9 | 0 | 4 | reference mentions click/drag; ours has no handles | 71 |
 | temperature-reading | `temperature-reading` | 10 | 1 | 5 | — | 88 |
 | titration-curve | `titration-curve` | 46 | 2 | 5 | — | 100 |
@@ -92,7 +92,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | pedigree | `pedigree` | 17 | 1 | 8 | reference has a student version; ours has no show_answers | 95 |
 | photosynthesis-rate | `photosynthesis` | 14 | 0 | 8 | — | 26 |
 | population-growth | `population-growth` | 53 | 7 | 7 | reference has a student version; ours has no show_answers | 95 |
-| predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 88 |
+| predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 94 |
 | punnett-square | `punnett-square` | 24 | 3 | 8 | — | 94 |
 
 ## Reference figures we do not have
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-08T15:48:25+00:00 · probe: 2026-11-08T07:48:25
+Generated: 2026-11-08T19:31:07+00:00 · probe: 2026-11-08T11:31:06
 
-**Pooled 76.0** · mean 78.4 over 67 figures · built 68 of 71 reference figures (missing: math/pie-chart, biology/dna-protein-synthesis, biology/osmosis)
+**Pooled 76.2** · mean 78.5 over 67 figures · built 68 of 71 reference figures (missing: math/pie-chart, biology/dna-protein-synthesis, biology/osmosis)
 
 Comparable with the frozen baseline: **yes**
 
@@ -156,13 +156,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02c [control 3] Draw two sets separate — no evidence
   - cap-02d [control 3] Draw one set inside the other — no evidence
   - cap-04 [control 3] Name the universal set U, xi, S, epsilon, a word or nothing — no evidence
-- `reaction-energy-diagram`: 39 (39/101)
-  - cap-02d [core 5] Three steps — no evidence
-  - cap-01b [control 3] With and without an enzyme (biology), with the paths named for the enzyme — no evidence
-  - cap-02b [control 3] Type Ea and dH directly instead of the levels — no evidence
-  - cap-02e [control 3] Units kJ mol-1 or kJ instead of kJ/mol — no evidence
-  - cap-03b [control 3] Your own names for the paths in the key — no evidence
-  - cap-04 [control 3] A level diagram of the reactants and products alone, instead of the energy profile — no evidence
 - `motion-map`: 40 (35/87)
   - cap-01a [core 5] Build the motion from up to six segments in any order — no evidence
   - cap-01b [core 5] Set each segment at rest, constant velocity forward or back, speeding up or slowing down — no evidence
@@ -170,6 +163,13 @@ Comparable with the frozen baseline: **yes**
   - cap-01e [core 5] Set where the motion starts — no evidence
   - cap-04b [core 5] Draw an acceleration arrow (or a = 0) above each segment — no evidence
   - cap-03a [control 3] Write the times under the dots — no evidence
+- `reaction-energy-diagram`: 42 (42/101)
+  - cap-02d [core 5] Three steps — no evidence
+  - cap-01b [control 3] With and without an enzyme (biology), with the paths named for the enzyme — no evidence
+  - cap-02b [control 3] Type Ea and dH directly instead of the levels — no evidence
+  - cap-02e [control 3] Units kJ mol-1 or kJ instead of kJ/mol — no evidence
+  - cap-03b [control 3] Your own names for the paths in the key — no evidence
+  - cap-04 [control 3] A level diagram of the reactants and products alone, instead of the energy profile — no evidence
 - `histogram`: 46 (41/90)
   - cap-02a [core 5] Type a frequency table: where the first bin starts, then each bin's upper end and its frequency — no evidence
   - cap-02b [core 5] Use unequal bin widths — no evidence
@@ -290,14 +290,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04f [control 3] Type any measure (radius, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (radius, height, lean) with √ — no evidence
   - cap-05d [control 3] Switch the oblique cylinder's height on or off — no evidence
-- `particle-diagram`: 88 (67/76)
-  - cap-01d [control 3] Set the lattice's rows and columns (up to 12 by 12) — no evidence
-  - cap-04c [control 3] Substitutional alloy lattice — no evidence
-  - cap-04e [control 3] Lattice particles touching or spaced apart — no evidence
-- `predator-prey`: 88 (85/96)
-  - cap-02b [core 5] Set the starting populations, averages and cycle length while keeping a named pair — no evidence
-  - cap-03c [control 3] Time units while keeping a named pair — no evidence
-  - cap-04c [version 3] Draw neither population: blank axes — no evidence
 - `regular-polygon`: 89 (70/79)
   - cap-02d [control 3] Type the size as a fraction — no evidence
   - cap-02e [control 3] Type the size as a square root — no evidence
@@ -331,6 +323,9 @@ Comparable with the frozen baseline: **yes**
 - `pyramid`: 92 (69/75)
   - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
+- `particle-diagram`: 92 (70/76)
+  - cap-01d [control 3] Set the lattice's rows and columns (up to 12 by 12) — no evidence
+  - cap-04e [control 3] Lattice particles touching or spaced apart — no evidence
 - `bohr-model`: 92 (59/64)
   - cap-01c [core 5] Set the proton count by hand, independent of the element (0 to 200), so a wrong atom draws as set — no evidence
 - `triangle`: 92 (71/77)
@@ -344,6 +339,9 @@ Comparable with the frozen baseline: **yes**
 - `rectangle`: 93 (80/86)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
+- `predator-prey`: 94 (90/96)
+  - cap-03c [control 3] Time units while keeping a named pair — no evidence
+  - cap-04c [version 3] Draw neither population: blank axes — no evidence
 - `punnett-square`: 94 (85/90)
   - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
   - cap-05d [interaction 2] Click a cell to blank it — no evidence

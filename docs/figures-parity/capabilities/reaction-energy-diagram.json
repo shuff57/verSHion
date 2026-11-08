@@ -126,8 +126,8 @@
    "id": "cap-06b",
    "text": "Subscripts in your own labels (N_2 + 3H_2)",
    "class": "control",
-   "evidence": "",
-   "note": "Narrow form only: ours draws the underscore literally (render checked)."
+   "evidence": "changes:{\"reactant_text\":\"N_2 + 3H_2\",\"product_text\":\"2NH_3\"}",
+   "note": "Built in round 4 (2026-11-08). Before: Narrow form only: ours draws the underscore literally (render checked)."
   },
   {
    "id": "cap-06c",

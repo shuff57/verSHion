@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-08T15:48:25+00:00",
- "probe_checked_at": "2026-11-08T07:48:25",
+ "generated_at": "2026-11-08T19:31:07+00:00",
+ "probe_checked_at": "2026-11-08T11:31:06",
  "comparable": true,
  "drift": [],
- "pooled": 76.0,
- "mean": 78.4,
+ "pooled": 76.2,
+ "mean": 78.5,
  "figures_scored": 67,
  "figures_built": 68,
  "figures_missing": [
@@ -1736,8 +1736,8 @@
    ]
   },
   "particle-diagram": {
-   "score": 88.2,
-   "got": 67.0,
+   "score": 92.1,
+   "got": 70.0,
    "total": 76.0,
    "unclassified": 0,
    "gaps": [
@@ -1746,13 +1746,6 @@
      "class": "control",
      "weight": 3.0,
      "text": "Set the lattice's rows and columns (up to 12 by 12)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Substitutional alloy lattice",
      "why": "no evidence"
     },
     {
@@ -2028,18 +2021,11 @@
    ]
   },
   "predator-prey": {
-   "score": 88.5,
-   "got": 85.0,
+   "score": 93.8,
+   "got": 90.0,
    "total": 96.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-02b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Set the starting populations, averages and cycle length while keeping a named pair",
-     "why": "no evidence"
-    },
     {
      "id": "cap-03c",
      "class": "control",
@@ -2294,8 +2280,8 @@
    ]
   },
   "reaction-energy-diagram": {
-   "score": 38.6,
-   "got": 39.0,
+   "score": 41.6,
+   "got": 42.0,
    "total": 101.0,
    "unclassified": 0,
    "gaps": [
@@ -2374,13 +2360,6 @@
      "class": "control",
      "weight": 3.0,
      "text": "Dashed lines from the levels, on or off",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Subscripts in your own labels (N_2 + 3H_2)",
      "why": "no evidence"
     },
     {

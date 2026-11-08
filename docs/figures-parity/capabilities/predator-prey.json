@@ -28,8 +28,8 @@
    "id": "cap-02b",
    "text": "Set the starting populations, averages and cycle length while keeping a named pair",
    "class": "core",
-   "evidence": "",
-   "note": "Wider form of cap-02a: with a named pair, ours ignores these values."
+   "evidence": "changes:{\"pair\":\"Rabbit and wolf\",\"cycle\":14.0} + changes:{\"pair\":\"Rabbit and wolf\",\"prey0\":100.0}",
+   "note": "Built in round 2 (2026-11-08). Before: Wider form of cap-02a: with a named pair, ours ignores these values."
   },
   {
    "id": "cap-02c",
@@ -57,7 +57,7 @@
    "text": "Time units while keeping a named pair",
    "class": "control",
    "evidence": "",
-   "note": "Wider form of cap-03b: with a named pair, ours renders the same whatever unit is chosen."
+   "note": "Attempted in round 3 (2026-11-08). Before: Wider form of cap-03b: with a named pair, ours renders the same whatever unit is chosen. Evidence cleared: round 3 checker failed it: the unit relabels the axis only and the panel boxes still say years."
   },
   {
    "id": "cap-04a",

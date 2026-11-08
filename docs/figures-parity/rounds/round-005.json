@@ -1,0 +1,35 @@
+{
+ "round": 5,
+ "figure": "particle-diagram",
+ "capability": "cap-04c",
+ "hypothesis": "A substitutional alloy lattice scatters the minority atoms through the lattice (deterministic spread) instead of filling in order and bunching them at the end. Evidence changes: a lattice option for substitutional; expected particle-diagram +2..3",
+ "started_at": "2026-11-08T08:01:44",
+ "git": "7279dca",
+ "before": {
+  "figure": 88.2,
+  "pooled": 76.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-08T11:31:17",
+ "after": {
+  "figure": 92.1,
+  "pooled": 76.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"layout\":\"Lattice\",\"state\":\"Solid\",\"a_count\":14,\"b_count\":2}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/99f2c108e79e1ea5.png"
+   }
+  ]
+ },
+ "checker": "pass: with unequal counts the Lattice layout now spreads the minority kind through the grid. It does this the same way every time and draws exactly the counts set. Equal counts and ionic-solid counts still alternate as a checkerboard.",
+ "result": "hit",
+ "evidence": "figure suite 2223 passed 0 failed (figtest profile, census included); census changed: nuclide-notation__defaults, __start (number spacing); no task run (bug-fix round); counts checked 14+2 12+4 15+1 10+6 20+4 16+8 10+3+3",
+ "next": "particle-diagram cap-01d lattice rows and columns"
+}

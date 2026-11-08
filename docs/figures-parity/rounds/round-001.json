@@ -1,0 +1,29 @@
+{
+ "round": 1,
+ "figure": "nuclide-notation",
+ "capability": "cap-05a",
+ "hypothesis": "Hyphen notation alone (carbon-14) lets a teacher ask for the symbol from the name; today 'Hyphen notation' renders byte-identical to 'Both' because nuclide.rs never hides the symbol. Evidence changes:notation=Hyphen notation; expected nuclide-notation +2..3",
+ "started_at": "2026-11-08T08:01:44",
+ "git": "7279dca",
+ "before": {
+  "figure": 73.1,
+  "pooled": 76.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-08T11:31:16",
+ "after": {
+  "figure": 73.1,
+  "pooled": 76.2
+ },
+ "probe": {
+  "pass": false,
+  "why": "no evidence",
+  "class": "control",
+  "renders": []
+ },
+ "checker": "fail: \"Hyphen notation\" now drops the symbol, but it typesets the hyphen form wrong. The default render reads \"Carbon - 12\" with a space on each side of the hyphen, while the same figure's \"Both\" line writes \"Carbon-12\".",
+ "result": "miss",
+ "evidence": "figure suite 2223 passed 0 failed (figtest profile, census included); census changed: nuclide-notation__defaults, __start (number spacing); no task run (bug-fix round); evidence cleared after the checker",
+ "next": "nuclide-notation cap-05a again: tight hyphen form, Symbol/Mass Off, ion charge"
+}

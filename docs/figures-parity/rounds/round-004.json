@@ -1,0 +1,35 @@
+{
+ "round": 4,
+ "figure": "reaction-energy-diagram",
+ "capability": "cap-06b",
+ "hypothesis": "Subscripts in typed level labels (N_2 + 3H_2 drawn as N₂ + 3H₂) let a teacher label species properly; today the underscore is drawn literally. Evidence changes: reactant_text with N_2 vs plain; expected reaction-energy-diagram +1..2",
+ "started_at": "2026-11-08T08:01:44",
+ "git": "7279dca",
+ "before": {
+  "figure": 38.6,
+  "pooled": 76.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-08T11:31:17",
+ "after": {
+  "figure": 41.6,
+  "pooled": 76.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"reactant_text\":\"N_2 + 3H_2\",\"product_text\":\"2NH_3\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/71a180ec50383f29.png"
+   }
+  ]
+ },
+ "checker": "pass: typed `_x` and `_{...}` in the Reactants and Products labels now draw as real subscripts in colour, Print and the student copy; labels with no underscore come out exactly as before, and the placer keeps the shorter labels clear of everything else.",
+ "result": "hit",
+ "evidence": "figure suite 2223 passed 0 failed (figtest profile, census included); census changed: nuclide-notation__defaults, __start (number spacing); no task run (bug-fix round)",
+ "next": "reaction-energy-diagram cap-05b arrow values"
+}

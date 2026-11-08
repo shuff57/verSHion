@@ -98,8 +98,8 @@
    "id": "cap-04c",
    "text": "Substitutional alloy lattice",
    "class": "control",
-   "evidence": "",
-   "note": "Ours fills the lattice in order: 14 of one kind and 2 of another put the 2 together at the end, not scattered through it."
+   "evidence": "changes:{\"layout\":\"Lattice\",\"state\":\"Solid\",\"a_count\":14,\"b_count\":2}",
+   "note": "Built in round 5 (2026-11-08). Before: Ours fills the lattice in order: 14 of one kind and 2 of another put the 2 together at the end, not scattered through it."
   },
   {
    "id": "cap-04d",
