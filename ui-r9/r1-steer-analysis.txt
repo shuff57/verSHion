@@ -1,0 +1,42 @@
+PARSED
+  deepseek  11 of 11  missing -
+  glm       11 of 11  missing -
+  kimi      11 of 11  missing -
+
+CONTROLS  (the same image twice: the score gap is the judge measuring itself)
+  deepseek  exams A=6.50 B=6.50 error=0.00 verdict=tie
+  glm       exams A=6.75 B=6.75 error=0.00 verdict=tie
+  kimi      exams A=7.00 B=7.00 error=0.00 verdict=tie
+  deepseek  bank  A=6.75 B=6.75 error=0.00 verdict=tie
+  glm       bank  A=7.00 B=7.00 error=0.00 verdict=tie
+  kimi      bank  A=6.50 B=6.50 error=0.00 verdict=tie
+  error by judge: {'deepseek': 0.0, 'glm': 0.0, 'kimi': 0.0}   (0.00-0.50 trustworthy, over 1.0 unusable)
+
+MIRRORS  (the same pair, sides swapped: a judge that keeps picking the left image is caught here)
+  deepseek  welcome              desktop ours  then ours 
+  glm       welcome              desktop ref   then ours   <- FLIPPED
+  kimi      welcome              desktop ours  then ours 
+  deepseek  settings             desktop ours  then ours 
+  glm       settings             desktop ours  then ours 
+  kimi      settings             desktop ours  then ours 
+  deepseek  welcome              narrow  ours  then ours 
+  glm       welcome              narrow  ours  then ours 
+  kimi      welcome              narrow  ours  then ours 
+  agrees with itself under swap: {'deepseek': '3/3', 'glm': '2/3', 'kimi': '3/3'}
+
+PAIRS
+  account              desktop de:ours gl:ours ki:ours
+  account              narrow  de:ref gl:ours ki:ours
+  settings             desktop de:ours gl:ours ki:ours
+  settings             narrow  de:ours gl:ours ki:ours
+  welcome              desktop de:ours gl:ref ki:ours
+  welcome              narrow  de:ours gl:ours ki:ours
+  votes {'ours': 16, 'ref': 2}  pairs won 6/6
+
+BY JUDGE
+  deepseek  ours= 5 ref= 1 tie= 0
+  glm       ours= 5 ref= 1 tie= 0
+  kimi      ours= 6 ref= 0 tie= 0
+
+OUR MEAN, desktop light (pairs and singles; controls and mirrors excluded)
+  screen                 n  mean  trimmed  H    S    T    St

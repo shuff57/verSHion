@@ -1,0 +1,743 @@
+[
+{
+"id": "P01",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "welcome",
+"view": "narrow",
+"what": "marketing landing page",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 6
+},
+"gap": "Step 4's body copy is sliced mid-sentence at the bottom edge of the window with no cue that the page continues."
+},
+{
+"id": "P01",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "welcome",
+"view": "narrow",
+"what": "marketing landing page",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 7,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 5
+},
+"gap": "Step 4's last line 're-download years from now' is sliced horizontally through the middle at the fold."
+},
+{
+"id": "P01",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "welcome",
+"view": "narrow",
+"what": "landing hero page",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The fourth card text is clipped mid-glyph by the bottom viewport edge, making the page look broken at the fold."
+},
+{
+"id": "P02",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "settings",
+"view": "narrow",
+"what": "account settings page",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 5,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 5,
+"state": 6
+},
+"gap": "The three info cards' body copy is set in a wide, letter-spaced code-like face at ~10px, out of step with the sans-serif UI text above."
+},
+{
+"id": "P02",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "settings",
+"view": "narrow",
+"what": "account settings screen",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 5
+},
+"gap": "The sidebar's topmost slot is empty where a Home icon once sat, leaving the primary destination off the visible navigation."
+},
+{
+"id": "P02",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "settings",
+"view": "narrow",
+"what": "account settings screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The server-address field shows placeholder-gray text that looks like a real value, so it is unclear whether an address is already entered."
+},
+{
+"id": "P03",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "account",
+"view": "desktop",
+"what": "account settings sidebar layout",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "The info cards end at three different heights, so the row's bottom edge is visibly uneven."
+},
+{
+"id": "P03",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "account",
+"view": "desktop",
+"what": "account settings screen",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "Roughly 240px of bare grid sits between the three info cards and the footer line, leaving the screen's lower half empty."
+},
+{
+"id": "P03",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "account",
+"view": "desktop",
+"what": "account settings wide",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "The server-address field shows placeholder-gray text that looks like a real value, so it is unclear whether an address is already entered."
+},
+{
+"id": "P04",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "settings",
+"view": "desktop",
+"what": "account settings sidebar layout",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"gap": "The first info card ends ~11px above its two neighbours, leaving a visibly ragged bottom edge under the row."
+},
+{
+"id": "P04",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "settings",
+"view": "desktop",
+"what": "account settings screen",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "Roughly 240px of bare grid sits between the three info cards and the footer line, leaving the screen's lower half empty."
+},
+{
+"id": "P04",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "settings",
+"view": "desktop",
+"what": "account settings wide",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The three info cards in the bottom row have unequal heights, so the first card bottom edge floats higher than its two neighbours."
+},
+{
+"id": "P05",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "welcome",
+"view": "desktop",
+"what": "wide marketing landing",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "The card row stops around 650px and the next element is the footer text 160px lower, leaving the lower third of the page empty."
+},
+{
+"id": "P05",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "welcome",
+"view": "desktop",
+"what": "marketing landing page",
+"better": "ref",
+"ours": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"gap": "A 151px empty grid band separates the CTA note from HOW IT WORKS, filled with nothing but background texture."
+},
+{
+"id": "P05",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "welcome",
+"view": "desktop",
+"what": "landing page wide",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "A roughly 150px empty band between the bottom of the four cards and the footer lines leaves the lower third of the page hollow."
+},
+{
+"id": "P06",
+"model": "deepseek",
+"kind": "pair",
+"partner": null,
+"screen": "account",
+"view": "narrow",
+"what": "account settings page",
+"better": "ref",
+"ours": {
+"hierarchy": 6,
+"spacing": 6,
+"type": 6,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"gap": "The left rail skips Home entirely - its first item is Banks - even though the breadcrumb above reads Home / Account."
+},
+{
+"id": "P06",
+"model": "glm",
+"kind": "pair",
+"partner": null,
+"screen": "account",
+"view": "narrow",
+"what": "account settings screen",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 5
+},
+"gap": "The sidebar's topmost slot is empty where a Home icon once sat, leaving the primary destination off the visible navigation."
+},
+{
+"id": "P06",
+"model": "kimi",
+"kind": "pair",
+"partner": null,
+"screen": "account",
+"view": "narrow",
+"what": "account settings screen",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The server-address field shows placeholder-gray text that looks like a real value, so it is unclear whether an address is already entered."
+},
+{
+"id": "P07",
+"model": "deepseek",
+"kind": "control",
+"screen": "exams",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+},
+"B": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 6
+}
+},
+{
+"id": "P07",
+"model": "glm",
+"kind": "control",
+"screen": "exams",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"B": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 7
+}
+},
+{
+"id": "P07",
+"model": "kimi",
+"kind": "control",
+"screen": "exams",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 7
+},
+"B": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 7
+}
+},
+{
+"id": "P08",
+"model": "deepseek",
+"kind": "control",
+"screen": "bank",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"B": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+}
+},
+{
+"id": "P08",
+"model": "glm",
+"kind": "control",
+"screen": "bank",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"B": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+}
+},
+{
+"id": "P08",
+"model": "kimi",
+"kind": "control",
+"screen": "bank",
+"view": "desktop",
+"better": "tie",
+"A": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"B": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+}
+},
+{
+"id": "P09",
+"model": "deepseek",
+"kind": "mirror",
+"partner": "P05",
+"screen": "welcome",
+"view": "desktop",
+"what": "wide marketing landing",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "A ~160px empty band under the four-card row leaves the lower sixth of the window blank before the footer line."
+},
+{
+"id": "P09",
+"model": "glm",
+"kind": "mirror",
+"partner": "P05",
+"screen": "welcome",
+"view": "desktop",
+"what": "marketing landing page",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 5
+},
+"gap": "The 'Get the desktop app for Linux' footer is a bare low-contrast text line with no button affordance, easy to miss as the real download action."
+},
+{
+"id": "P09",
+"model": "kimi",
+"kind": "mirror",
+"partner": "P05",
+"screen": "welcome",
+"view": "desktop",
+"what": "landing page wide",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 5,
+"type": 7,
+"state": 6
+},
+"gap": "A roughly 150px empty band between the bottom of the four cards and the footer lines leaves the lower third of the page hollow."
+},
+{
+"id": "P10",
+"model": "deepseek",
+"kind": "mirror",
+"partner": "P04",
+"screen": "settings",
+"view": "desktop",
+"what": "account settings sidebar layout",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 6,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 5,
+"state": 4
+},
+"gap": "The three info cards end at three different heights, so the row's bottom edge steps down from left to right."
+},
+{
+"id": "P10",
+"model": "glm",
+"kind": "mirror",
+"partner": "P04",
+"screen": "settings",
+"view": "desktop",
+"what": "account settings screen",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 7
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "Roughly 240px of bare grid sits between the three info cards and the footer line, leaving the screen's lower half empty."
+},
+{
+"id": "P10",
+"model": "kimi",
+"kind": "mirror",
+"partner": "P04",
+"screen": "settings",
+"view": "desktop",
+"what": "account settings wide",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The three info cards in the bottom row have unequal heights, so the first card bottom edge floats higher than its two neighbours."
+},
+{
+"id": "P11",
+"model": "deepseek",
+"kind": "mirror",
+"partner": "P01",
+"screen": "welcome",
+"view": "narrow",
+"what": "narrow marketing landing",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 6,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 5,
+"type": 6,
+"state": 5
+},
+"gap": "Step 4's body text is cut in half by the window's bottom edge with no scroll affordance or fade."
+},
+{
+"id": "P11",
+"model": "glm",
+"kind": "mirror",
+"partner": "P01",
+"screen": "welcome",
+"view": "narrow",
+"what": "marketing landing page",
+"better": "ours",
+"ours": {
+"hierarchy": 7,
+"spacing": 8,
+"type": 7,
+"state": 5
+},
+"ref": {
+"hierarchy": 7,
+"spacing": 7,
+"type": 7,
+"state": 5
+},
+"gap": "Step 4's last line 're-download years from now' is sliced horizontally through the middle at the fold."
+},
+{
+"id": "P11",
+"model": "kimi",
+"kind": "mirror",
+"partner": "P01",
+"screen": "welcome",
+"view": "narrow",
+"what": "landing hero page",
+"better": "ours",
+"ours": {
+"hierarchy": 8,
+"spacing": 7,
+"type": 7,
+"state": 6
+},
+"ref": {
+"hierarchy": 8,
+"spacing": 6,
+"type": 7,
+"state": 6
+},
+"gap": "The fourth card text is clipped mid-glyph by the bottom viewport edge, making the page look broken at the fold."
+}
+]
