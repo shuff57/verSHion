@@ -76,6 +76,8 @@ fn params() -> Vec<ParamDef> {
         ParamDef::int("x_to", "x-axis to", 0, 30, 10),
         ParamDef::int("y_from", "y-axis from", -30, 0, -10),
         ParamDef::int("y_to", "y-axis to", 0, 30, 10),
+        // the compact figure every saved transformations figure had before the range existed: a grid fitted to the
+        // shapes, letters at fixed offsets, no vertex dots (saved figures from then load with it on, see `migrate`)
         ParamDef::bool("fit", "Shrink the grid to the shapes", false),
         // enough places for the image a half-unit enlargement produces (a 0.5 scale factor is an ordinary setting)
         ParamDef::int("dec", "Decimal places", 0, 2, 2),
@@ -197,7 +199,8 @@ fn rule_name(p: &Params) -> String {
                 "270 degrees clockwise" => "turn 270\u{b0} clockwise",
                 _ => "turn 90\u{b0} anticlockwise",
             };
-            format!("{turn} about {about}")
+            // about the origin a turn reads as it always did: only the half turn names the origin
+            if a == 0.0 && b == 0.0 && p.s("angle") != "180 degrees" { turn.to_string() } else { format!("{turn} about {about}") }
         }
         "Dilate" => format!("enlarge by {} about {about}", num(fin(p.f("scale"), 0.5, 3.0, 1.0), 2)),
         _ => "translate".into(),
@@ -207,6 +210,17 @@ fn rule_name(p: &Params) -> String {
 /// The rule in words: (x, y) maps to something. The mapping is read off the transformation itself (it is affine), so
 /// the words and the drawn image cannot disagree.
 pub fn rule_text(p: &Params) -> String {
+    // a translation keeps its old wording: both shifts written out, at the figure's decimal places (x + 0 included)
+    if p.s("op") == "Translate" {
+        let dec = p.i("dec").clamp(0, 2);
+        let sg = |v: f64| if v >= 0.0 { format!("+ {}", num(v, dec)) } else { format!("\u{2212} {}", num(-v, dec)) };
+        return format!("translate: (x, y) \u{2192} (x {}, y {})", sg(fin(p.f("dx"), -8.0, 8.0, 0.0)), sg(fin(p.f("dy"), -8.0, 8.0, 0.0)));
+    }
+    // an enlargement about the origin keeps its old wording, which writes the factor even when it is 1 (1x, 1y)
+    if p.s("op") == "Dilate" && centre(p) == (0.0, 0.0) {
+        let k = num(fin(p.f("scale"), 0.5, 3.0, 1.0), 2);
+        return format!("{}: (x, y) \u{2192} ({k}x, {k}y)", rule_name(p));
+    }
     let o = map_point(p, (0.0, 0.0));
     let ex = map_point(p, (1.0, 0.0));
     let ey = map_point(p, (0.0, 1.0));
@@ -276,6 +290,19 @@ impl Frame {
     fn gh(&self) -> f64 { (self.y1 - self.y0) * self.u }
 }
 
+/// The plot area's side and the canvas width: the fitted (pre-November 2026) figure keeps its old, smaller canvas.
+fn plot_size(p: &Params) -> (f64, f64) { if p.b("fit") { (340.0, 470.0) } else { (PLOT, W) } }
+
+/// Upgrades a transformations figure saved before the grid range existed (its spec has none of the range keys, not
+/// merely their defaults): it turns "Shrink the grid to the shapes" on, so the figure opens exactly as it was saved.
+/// Every other old key (op, dx, dy, axis, angle, scale) means what it meant: the old choices are still options, and
+/// the new keys (vertices, centre, line number) default to the old fixed triangle, the origin and no line.
+pub fn migrate(spec: &crate::model::FigureSpec, p: &mut Params) {
+    if !["x_from", "x_to", "y_from", "y_to"].iter().any(|k| spec.params.contains_key(*k)) {
+        p.set_b("fit", true);
+    }
+}
+
 /// The stated axis range, from <= 0 <= to on both axes.
 fn stated(p: &Params) -> (f64, f64, f64, f64) {
     (p.i("x_from").clamp(-30, 0) as f64, p.i("x_to").clamp(0, 30) as f64, p.i("y_from").clamp(-30, 0) as f64, p.i("y_to").clamp(0, 30) as f64)
@@ -325,9 +352,10 @@ pub fn layout(p: &Params) -> Layout {
     if x1 - x0 < 1.0 { x1 = x0 + 1.0; }
     if y1 - y0 < 1.0 { y1 = y0 + 1.0; }
     // a square grid in shape: equal pixels per unit on both axes, fitted into the plot area
-    let u = (PLOT / (x1 - x0)).min(PLOT / (y1 - y0));
+    let (plot, _) = plot_size(p);
+    let u = (plot / (x1 - x0)).min(plot / (y1 - y0));
     let (gw, gh) = ((x1 - x0) * u, (y1 - y0) * u);
-    let frame = Frame { x0, x1, y0, y1, u, ox: L + (PLOT - gw) / 2.0, oy: T + (PLOT - gh) / 2.0 };
+    let frame = Frame { x0, x1, y0, y1, u, ox: L + (plot - gw) / 2.0, oy: T + (plot - gh) / 2.0 };
     Layout { pre, image, frame }
 }
 
@@ -396,7 +424,12 @@ pub fn build(p: &Params) -> (String, Report) {
     let py = |y: f64| fr.py(y);
 
     let (ink, image_col, pre_col, grid) = (if print { "#555555" } else { INK }, if print { IMAGE_PRINT } else { IMAGE_COLOUR }, if print { PRE_PRINT } else { PRE_COLOUR }, if print { GRID_PRINT } else { GRID_COLOUR });
-    let cw = (W * (1.0 + 0.75 * (f - 1.0))).max(W);
+    // the fitted figure is drawn exactly as before the grid range existed (saved figures from then open with it on):
+    // its canvas, its letters at fixed offsets, no vertex dots, its axis numbers and its one-line readout
+    let old = p.b("fit");
+    let (plot, wbase) = plot_size(p);
+    let rows_y0 = T + plot + 30.0;
+    let cw = (wbase * (1.0 + 0.75 * (f - 1.0))).max(wbase);
 
     // the readout under the grid: the rule, then the image vertices, wrapped to the canvas
     let room = cw - L * 0.8;
@@ -405,7 +438,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let rule = rule_text(p);
     let row1 = format!("Rule  {rule}");
     match rule.split_once(": ") {
-        Some((name, map)) if tw(&row1, fs, false) > room => {
+        Some((name, map)) if !old && tw(&row1, fs, false) > room => {
             rows.push(format!("Rule  {name}:"));
             rows.push(format!("      {map}"));
         }
@@ -415,7 +448,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut line = "Image ".to_string();
     for i in 0..image.len() {
         let item = format!(" {}{}", v(i), if i + 1 < image.len() { "," } else { "" });
-        if line.trim() != "Image" && tw(&format!("{line}{item}"), fs, false) > room {
+        if line.trim() != "Image" && (!old || image.len() > 3) && tw(&format!("{line}{item}"), fs, false) > room {
             rows.push(line);
             line = "      ".to_string();
         }
@@ -424,8 +457,8 @@ pub fn build(p: &Params) -> (String, Report) {
     if image.is_empty() { line.push_str(" \u{2014}"); }
     rows.push(line);
 
-    let mut d = Doc::new(cw, ROWS_Y0 + rows.len() as f64 * ROW_H * f + 8.0);
-    d.describe("Transformations", "A shape and its image after a transformation, on one coordinate grid");
+    let mut d = Doc::new(cw, rows_y0 + rows.len() as f64 * ROW_H * f + 8.0);
+    d.describe("Transformations", if old { "A triangle and its image after a transformation, on one coordinate grid" } else { "A shape and its image after a transformation, on one coordinate grid" });
 
     // the grid: one line per unit
     let mut k = x0.ceil();
@@ -451,7 +484,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let dir = ((other.0 - top.0) / len, (other.1 - top.1) / len);
         let n = if dir.0.abs() < 1e-6 { (1.0, 0.0) } else if dir.0 < 0.0 { (-dir.1, dir.0) } else { (dir.1, -dir.0) };
         let anchor = if n.0 > 0.2 { "start" } else if n.0 < -0.2 { "end" } else { "middle" };
-        line_label = Some((top.0 + dir.0 * 20.0 + n.0 * 12.0, top.1 + dir.1 * 20.0 + n.1 * 12.0 + 4.0, anchor, name));
+        if !old || p.s("axis").ends_with('a') { line_label = Some((top.0 + dir.0 * 20.0 + n.0 * 12.0, top.1 + dir.1 * 20.0 + n.1 * 12.0 + 4.0, anchor, name)); }
     }
 
     let mut labels: Vec<Rect> = Vec::new();
@@ -462,6 +495,20 @@ pub fn build(p: &Params) -> (String, Report) {
     }
     // one shape: its sides (closed back to the first vertex when asked), a dot on each vertex
     let shape = |d: &mut Doc, pts: &[Pt], col: &str, sw: f64, dashed: bool| {
+        if old && pts.len() >= 2 {
+            // the old markup: a dashed pre-image as a bare polyline, a solid side through Doc::polyline
+            let mut poly: Vec<Pt> = pts.iter().map(|&q| fr.to_svg(q)).collect();
+            if closed && pts.len() >= 3 { poly.push(poly[0]); }
+            if dashed {
+                d.raw(&format!(
+                    r##"<polyline points="{}" fill="none" stroke="{col}" stroke-width="2.0" stroke-dasharray="7 5"/>"##,
+                    poly.iter().map(|q| format!("{:.2},{:.2}", q.0, q.1)).collect::<Vec<_>>().join(" ")
+                ));
+            } else {
+                d.polyline(&poly, col, sw);
+            }
+            return;
+        }
         if pts.len() >= 2 {
             let mut poly: Vec<Pt> = pts.iter().map(|&q| fr.to_svg(q)).collect();
             if closed && pts.len() >= 3 { poly.push(poly[0]); }
@@ -494,7 +541,7 @@ pub fn build(p: &Params) -> (String, Report) {
     if show_pre && !pre.is_empty() {
         shape(&mut d, &pre, pre_col, if ans { 2.0 } else { 2.6 }, ans);
         for i in 0..pre.len() {
-            let (x, y, a) = label_spot(&fr, &pre, i, size, NAMES[i], &labels, &dots, &sides);
+            let (x, y, a) = if old { (px(pre[i].0) - 8.0, py(pre[i].1) - 6.0, "end") } else { label_spot(&fr, &pre, i, size, NAMES[i], &labels, &dots, &sides) };
             put(&mut d, &mut labels, x, y, a, NAMES[i], pre_col, size);
         }
     }
@@ -503,7 +550,7 @@ pub fn build(p: &Params) -> (String, Report) {
         shape(&mut d, &image, image_col, 3.0, false);
         for i in 0..image.len() {
             let name = format!("{}\u{2032}", NAMES[i]);
-            let (x, y, a) = label_spot(&fr, &image, i, size, &name, &labels, &dots, &sides);
+            let (x, y, a) = if old { (px(image[i].0) + 8.0, py(image[i].1) - 6.0, "start") } else { label_spot(&fr, &image, i, size, &name, &labels, &dots, &sides) };
             put(&mut d, &mut labels, x, y, a, &name, image_col, size);
         }
     }
@@ -512,7 +559,7 @@ pub fn build(p: &Params) -> (String, Report) {
         put(&mut d, &mut labels, *x, *y, a, name, pre_col, 13.0 * f);
     }
     // the centre of a turn or an enlargement: an open ring (on the student copy too, it is part of the question)
-    if has_centre(p) {
+    if has_centre(p) && !(old && centre(p) == (0.0, 0.0)) {
         let c = fr.to_svg(centre(p));
         d.circle(c.0, c.1, 4.5, "#ffffff", ink, 1.8);
     }
@@ -526,22 +573,38 @@ pub fn build(p: &Params) -> (String, Report) {
         let hit = labels.iter().any(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1);
         if k.abs() > 0.5 && !hit { d.raw(&text_el(x, y, 12.0, anchor, ink, &t)); }
     };
+    if old {
+        // the old numbering: every even line from -6 to 12, never left out
+        let mut k = (x0.max(-6.0)).ceil();
+        while k <= x1.min(12.0) {
+            if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(k), py(0.0) + 16.0, 12.0, "middle", ink, &format!("{}", k as i64))); }
+            k += 1.0;
+        }
+        let mut k = (y0.max(-6.0)).ceil();
+        while k <= y1.min(12.0) {
+            if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(0.0) - 6.0, py(k) + 4.0, 12.0, "end", ink, &format!("{}", k as i64))); }
+            k += 1.0;
+        }
+    }
     let step = [2.0, 5.0, 10.0, 20.0, 50.0].into_iter().find(|s| s * fr.u >= 26.0).unwrap_or(100.0);
-    let mut k = (x0 / step).ceil() * step;
+    let (x0n, y0n) = if old { (f64::INFINITY, f64::INFINITY) } else { (x0, y0) };
+    let mut k = (x0n / step).ceil() * step;
     while k <= x1 + 1e-9 {
         number(&mut d, px(k), py(0.0) + 16.0, "middle", k);
         k += step;
     }
-    let mut k = (y0 / step).ceil() * step;
+    let mut k = (y0n / step).ceil() * step;
     while k <= y1 + 1e-9 {
         number(&mut d, px(0.0) - 6.0, py(k) + 4.0, "end", k);
         k += step;
     }
 
     for (i, line) in rows.iter().enumerate() {
+        // a continuation row is indented with spaces, which only survive under xml:space
+        let keep = if line.starts_with(' ') { r#" xml:space="preserve""# } else { "" };
         d.raw(&format!(
-            r##"<text x="{:.2}" y="{:.2}" font-size="{}" text-anchor="start" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{}" xml:space="preserve">{}</text>"##,
-            L * 0.4, ROWS_Y0 + i as f64 * ROW_H * f, fs, ink, svg::esc(line)
+            r##"<text x="{:.2}" y="{:.2}" font-size="{}" text-anchor="start" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{}"{keep}>{}</text>"##,
+            L * 0.4, rows_y0 + i as f64 * ROW_H * f, fs, ink, svg::esc(line)
         ));
     }
 
@@ -704,6 +767,10 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
     ])
 }
 
+/// The figure as it was before batch 2, kept as a fixture: saved figures from then must load and render unchanged.
+#[cfg(test)]
+mod before;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,9 +829,9 @@ mod tests {
         let r = |l: &[(&'static str, Value)]| rule_text(&with(l));
         assert_eq!(r(&[s("op", "Reflect"), s("axis", AXES[0])]), "reflect in the x-axis: (x, y) \u{2192} (x, \u{2212}y)");
         assert_eq!(r(&[s("op", "Reflect"), s("axis", AXES[3])]), "reflect in y = \u{2212}x: (x, y) \u{2192} (\u{2212}y, \u{2212}x)");
-        assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[0])]), "turn 90\u{b0} anticlockwise about the origin: (x, y) \u{2192} (\u{2212}y, x)");
+        assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[0])]), "turn 90\u{b0} anticlockwise: (x, y) \u{2192} (\u{2212}y, x)");
         assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[1])]), "turn 180\u{b0} about the origin: (x, y) \u{2192} (\u{2212}x, \u{2212}y)");
-        assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[2])]), "turn 270\u{b0} anticlockwise about the origin: (x, y) \u{2192} (y, \u{2212}x)");
+        assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[2])]), "turn 270\u{b0} anticlockwise: (x, y) \u{2192} (y, \u{2212}x)");
         assert_eq!(r(&[s("op", "Dilate"), f("scale", 0.5)]), "enlarge by 0.5 about the origin: (x, y) \u{2192} (0.5x, 0.5y)");
     }
 
@@ -891,7 +958,7 @@ mod tests {
         // clockwise turns: 90 clockwise is 270 anticlockwise, and the other way round
         let cw = with(&[s("op", "Rotate"), s("angle", ANGLES[3])]);
         assert_eq!(map_point(&cw, (1.0, 0.0)), (0.0, -1.0));
-        assert_eq!(rule_text(&cw), "turn 90\u{b0} clockwise about the origin: (x, y) \u{2192} (y, \u{2212}x)");
+        assert_eq!(rule_text(&cw), "turn 90\u{b0} clockwise: (x, y) \u{2192} (y, \u{2212}x)");
         let cw270 = with(&[s("op", "Rotate"), s("angle", ANGLES[4])]);
         assert_eq!(map_point(&cw270, (1.0, 0.0)), (0.0, 1.0));
         // enlarge by 2 from (1, 1): (3, 2) is (2, 1) from the centre, so it lands (4, 2) from it
@@ -1051,6 +1118,78 @@ mod tests {
 
     fn click_grid_if_any(p: &mut Params, at: Pt) {
         if handles(p).iter().any(|h| h.click_at.is_some()) { click_grid(p, at); }
+    }
+
+    /// An old saved spec, as the old app wrote it: every old param, nothing else.
+    fn old_spec(list: &[(&'static str, Value)]) -> (crate::model::FigureSpec, Params) {
+        let defs = before::params();
+        let mut p = Params::defaults(&defs);
+        for (k, v) in list { p.0.insert(k.to_string(), v.clone()); }
+        p.normalize(&defs, false);
+        (crate::figures::spec::spec_for(ID, &p), p)
+    }
+
+    fn old_cases() -> Vec<Vec<(&'static str, Value)>> {
+        let mut cases: Vec<Vec<(&'static str, Value)>> = vec![vec![]];
+        for e in before::examples_params() { cases.push(e); }
+        for a in ["the x-axis", "the y-axis", "the line y = x", "the line y = -x"] { cases.push(vec![s("op", "Reflect"), s("axis", a)]); }
+        for a in ["90 degrees anticlockwise", "180 degrees", "270 degrees anticlockwise"] { cases.push(vec![s("op", "Rotate"), s("angle", a)]); }
+        for k in [0.5, 1.0, 1.5, 3.0] { cases.push(vec![s("op", "Dilate"), f("scale", k)]); }
+        for (dx, dy) in [(-6.0, -5.0), (8.0, 8.0), (0.0, 0.0), (-8.0, 3.0)] { cases.push(vec![s("op", "Translate"), f("dx", dx), f("dy", dy)]); }
+        cases.push(vec![s("op", "Rotate"), b("show_pre", false)]);
+        cases.push(vec![s("op", "Dilate"), f("scale", 2.5), ("dec", Value::I(0))]);
+        cases
+    }
+
+    /// A figure saved before the grid range existed loads through the real loader (params_from_spec, then migrate)
+    /// and renders byte for byte what the old figure drew, in every version: colour, Print, student, key, every label
+    /// size. The default old spec is the one the census line transformations__defaults at 4337404 was taken from.
+    #[test]
+    fn an_old_saved_figure_loads_and_renders_exactly_as_it_was() {
+        let d = def();
+        let mut n = 0;
+        for case in old_cases() {
+            for extra in [vec![], vec![s("style", "Print")], vec![b(SHOW_ANSWERS, false)], vec![b(SHOW_ANSWERS, true)], vec![s("label_size", "Large")], vec![s("label_size", "Small"), s("style", "Print"), b(SHOW_ANSWERS, false)]] {
+                let mut l = case.clone();
+                l.extend(extra);
+                let (spec, old) = old_spec(&l);
+                let loaded = crate::figures::spec::params_from_spec(&d, &spec);
+                assert!(loaded.b("fit"), "an old spec opens on the fitted grid: {l:?}");
+                let (now, was) = ((d.render)(&loaded), before::render(&old));
+                assert!(now == was, "{l:?} renders differently after loading\n--- was\n{was}\n--- now\n{now}");
+                n += 1;
+            }
+        }
+        assert!(n > 100, "{n} old specs checked");
+    }
+
+    /// The old keys mean the transformation they meant: same vertices in, same image out, same rule.
+    #[test]
+    fn old_reflection_rotation_and_enlargement_keys_load_to_the_same_transformation() {
+        let d = def();
+        for case in old_cases() {
+            let (spec, old) = old_spec(&case);
+            let loaded = crate::figures::spec::params_from_spec(&d, &spec);
+            assert_eq!(vertices(&loaded), vec![(1.0, 1.0), (4.0, 1.0), (1.0, 3.0)], "the old fixed triangle");
+            for q in [(1.0, 1.0), (4.0, 1.0), (1.0, 3.0), (-2.5, 7.0)] {
+                assert_eq!(map_point(&loaded, q), before::map_point(&old, q), "{case:?} at {q:?}");
+            }
+            assert_eq!(rule_text(&loaded), before::rule_text(&old), "{case:?}");
+        }
+    }
+
+    /// Only an old spec is upgraded: one saved with the range keys keeps its own grid setting, even at the defaults.
+    #[test]
+    fn a_spec_saved_with_the_range_keeps_its_own_grid() {
+        let d = def();
+        let spec = crate::figures::spec::spec_for(ID, &with(&[]));
+        assert!(!crate::figures::spec::params_from_spec(&d, &spec).b("fit"));
+        let spec = crate::figures::spec::spec_for(ID, &with(&[b("fit", true)]));
+        assert!(crate::figures::spec::params_from_spec(&d, &spec).b("fit"));
+        // one range key is enough to tell a new spec
+        let mut spec = old_spec(&[]).0;
+        spec.params.insert("x_to".into(), serde_json::json!(10));
+        assert!(!crate::figures::spec::params_from_spec(&d, &spec).b("fit"));
     }
 
     #[test]

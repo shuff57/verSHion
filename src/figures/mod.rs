@@ -805,6 +805,10 @@ pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
     if id == "predator-prey" {
         biology::popdyn::migrate_saved_pair(p);
     }
+    // a transformations figure saved before the grid range existed opens on the fitted grid it was saved with
+    if id == transform::ID {
+        transform::migrate(spec, p);
+    }
     math::migrate(id, spec, p)
 }
 
