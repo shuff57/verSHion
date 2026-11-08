@@ -80,6 +80,8 @@ depreciation-schedule__defaults 8418f5e4d808335c
 depreciation-schedule__start 8418f5e4d808335c
 discrete-distribution__defaults 767041fc6b5f1a4e
 discrete-distribution__start 767041fc6b5f1a4e
+dna-protein-synthesis__defaults 63da939896b8e944
+dna-protein-synthesis__start 63da939896b8e944
 dot-and-cross__defaults 7bdac9ed37d40a62
 dot-and-cross__start 7bdac9ed37d40a62
 dot-plot__defaults bf00470ec7dd43be
