@@ -200,8 +200,8 @@ network-topology__defaults 4558fdec4c6b2d2e
 network-topology__start 4558fdec4c6b2d2e
 normal-curve__defaults a3e5818ffabc6901
 normal-curve__start a3e5818ffabc6901
-nuclide-notation__defaults 628f1ac8895987e8
-nuclide-notation__start 628f1ac8895987e8
+nuclide-notation__defaults 592fc60ddfa78b9f
+nuclide-notation__start 592fc60ddfa78b9f
 number-base__defaults 54e82b76636d4034
 number-base__start 54e82b76636d4034
 number-line__defaults 3678255fb61cf882
