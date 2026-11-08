@@ -16,6 +16,8 @@ use super::svg::{self, Doc, Fills};
 use super::*;
 use std::f64::consts::PI;
 
+mod edit;
+
 type Pt = (f64, f64);
 
 const W0: f64 = 520.0;
@@ -62,6 +64,9 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("a1", "Point A at (degrees)", 0.0, 360.0, 1.0, 20.0),
         ParamDef::float("a2", "Point B at (degrees)", 0.0, 360.0, 1.0, 110.0),
         ParamDef::float("c_angle", "Point C at (degrees)", 0.0, 360.0, 1.0, 250.0),
+        b("show_b", "Point B", false).hint("B on its own, without a chord; a chord, arc, sector or angle through B draws it anyway"),
+        b("show_c", "Point C", false).hint("C on its own, without the inscribed angle"),
+        ParamDef::list("more_points", "More points (letter and degrees)", "").hint("One point per row, such as D 270 (its letter, then its direction in degrees from the right, counterclockwise). Or click the circle on the figure to put a point there; a row without a letter gets the next free one"),
         ParamDef::choice("define", "Define the chord by", &["Points", "Angle", "Chord length", "OM distance"], "Points").hint("Points: drag B or type its angle. Angle: B is A plus the central angle. Chord length or OM distance: type the length and B follows (c = 2r sin(theta/2), OM = r cos(theta/2))"),
         ParamDef::float("chord_len", "Chord length", 0.0, 20000.0, 0.1, 8.0),
         ParamDef::float("om_dist", "Distance OM (centre to chord)", 0.0, 10000.0, 0.1, 3.0),
@@ -299,12 +304,12 @@ fn visible(p: &Params, k: K) -> bool {
     if mode(p, k) == Md::Hidden { return false; }
     let pt = parts(p);
     // (a row for the inscribed or tangent angle needs its part to be drawn)
-    (p.b(kinfo(k).2) && match k { K::Inscribed => pt.c, K::TanAngle => pt.tan, _ => true }) || match k {
+    (p.b(kinfo(k).2) && match k { K::Inscribed => pt.insc, K::TanAngle => pt.tan, _ => true }) || match k {
         K::Radius => pt.radius && p.s("r_label") == "Value",
         K::Diameter => pt.diam,
         K::Chord => pt.chord && !pt.deg,
         K::Central => pt.central && !pt.deg,
-        K::Inscribed => pt.c,
+        K::Inscribed => pt.insc,
         K::Om => pt.bis && !pt.deg,
         K::Am => (pt.bis || pt.chord) && !pt.deg,
         K::TanAngle => pt.tan,
@@ -462,7 +467,9 @@ fn layout_of(p: &Params) -> Lay {
 
 // ---------------------------------------------------------------------------------------------------------------- which parts are drawn
 
-struct Parts { radius: bool, diam: bool, chord: bool, bis: bool, tan: bool, sec: bool, central: bool, arc: u8, sector: u8, two: bool, a: bool, b: bool, c: bool, deg: bool }
+/// `b` and `c` are whether points B and C are drawn (for a part that needs them, or turned on as points of their own); `insc` is
+/// whether the inscribed angle at C is drawn.
+struct Parts { radius: bool, diam: bool, chord: bool, bis: bool, tan: bool, sec: bool, central: bool, arc: u8, sector: u8, two: bool, a: bool, b: bool, c: bool, insc: bool, deg: bool }
 
 fn parts(p: &Params) -> Parts {
     let g = geom(p);
@@ -473,7 +480,8 @@ fn parts(p: &Params) -> Parts {
     let (arc, sector) = (lvl("arc"), lvl("sector"));
     let two = chord || bis || sec || central || insc || arc != 0 || sector != 0 || row_on(K::Chord) || row_on(K::Om) || row_on(K::Am) || row_on(K::Central) || row_on(K::Arc) || row_on(K::Sector);
     let deg = g.d < 0.5;
-    Parts { radius, diam, chord, bis, tan, sec, central, arc, sector, two, a: radius || diam || tan || two, b: two && !deg, c: insc && !m.c_clash && !deg, deg }
+    let insc = insc && !m.c_clash && !deg;
+    Parts { radius, diam, chord, bis, tan, sec, central, arc, sector, two, a: radius || diam || tan || two, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc, deg }
 }
 
 /// Editor-only notes about what the figure could not do as asked (never drawn into the SVG).
@@ -503,6 +511,12 @@ pub fn warnings(p: &Params) -> Vec<String> {
         let l = [&n.o, &n.a, &n.b, &n.c, &n.m];
         let same = (0..5).any(|i| (i + 1..5).any(|j| drawn[i] && drawn[j] && l[i] == l[j]));
         if same { v.push(format!("Two points have the same letter ({}, {}, {}, {}, {}): rename one so the labels can be told apart.", n.o, n.a, n.b, n.c, n.m)); }
+        // a More point lettered like another drawn point
+        let mut seen: Vec<String> = (0..5).filter(|i| drawn[*i]).map(|i| l[i].clone()).collect();
+        for (nm, _) in edit::extras(p) {
+            if on && seen.contains(&nm) { v.push(format!("Two points are lettered {nm}: rename one so the labels can be told apart.")); }
+            seen.push(nm);
+        }
     }
     match p.s("define") {
         "Chord length" => {
@@ -521,7 +535,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
     if mode(p, K::TanAngle) == Md::Ask && pt.tan && p.s("right_marks") == "Show always" {
         v.push("The right-angle mark gives the answer away: set Right-angle marks to Key only.".to_string());
     }
-    if (c.g.d - 180.0).abs() < 0.5 && pt.c && mode(p, K::Inscribed) == Md::Ask && p.s("right_marks") == "Show always" {
+    if (c.g.d - 180.0).abs() < 0.5 && pt.insc && mode(p, K::Inscribed) == Md::Ask && p.s("right_marks") == "Show always" {
         v.push(format!("The right-angle mark at {} gives the answer away: set Right-angle marks to Key only.", c.n.c));
     }
     // a Given value that the sheet does not show, when a value asked for needs it
@@ -891,6 +905,8 @@ pub fn control_label(key: &str, p: &Params) -> Option<String> {
         "a1" => format!("Point {} at (degrees)", n.a),
         "a2" => format!("Point {} at (degrees)", n.b),
         "c_angle" => format!("Point {} at (degrees)", n.c),
+        "show_b" => format!("Point {}", n.b),
+        "show_c" => format!("Point {}", n.c),
         _ => return None,
     })
 }
@@ -1034,7 +1050,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         sc.arc_pts(o, 30.0, cen_s, cen_s + cen_d);
     }
     let semi = (g.d - 180.0).abs() < 0.5;
-    if pt.c {
+    if pt.insc {
         sc.ln(pc, pa, col(1), 2.0);
         sc.ln(pc, pb, col(1), 2.0);
         let (u, wv) = ((pa.0 - pc.0, pa.1 - pc.1), (pb.0 - pc.0, pb.1 - pc.1));
@@ -1055,6 +1071,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     if pt.a { sc.dot(pa); }
     if pt.b { sc.dot(pb); }
     if pt.c { sc.dot(pc); }
+    let ex = edit::extras(p);
+    for (_, d) in &ex { sc.dot(on_circle(cx, *d)); }
     if p.b("show_centre") { sc.dot(o); }
 
     // labels
@@ -1068,6 +1086,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         if pt.a { letter(&mut labs, &n.a, pa, unit(g.a)); }
         if pt.b { letter(&mut labs, &n.b, pb, unit(g.b)); }
         if pt.c { letter(&mut labs, &n.c, pc, unit(g.c)); }
+        for (nm, d) in &ex { letter(&mut labs, nm, on_circle(cx, *d), unit(*d)); }
         if p.b("show_centre") {
             let t = if p.b("show_coords") { format!("{} ({}, {})", n.o, num(fin(p.f("centre_x")), 2), num(fin(p.f("centre_y")), 2)) } else { n.o.clone() };
             letter(&mut labs, &t, o, (0.6, 0.8));
@@ -1109,7 +1128,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             labs.push(Lab { kind: Some(K::Central), text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: false, froms });
         }
     }
-    if pt.c {
+    if pt.insc {
         if let Some((t, wide)) = both(K::Inscribed, &*named(K::Inscribed, format!("\u{2220}{}{}{}", n.a, n.c, n.b))) {
             let size = sz(13.0);
             let (bw, bh) = box_of(&wide, size, true);
@@ -1316,19 +1335,25 @@ fn gap_handle(c: Pt, at: Pt, tip: &str) -> Handle {
     Handle::knob(at, tip, move |p, pt| {
         if unmoved(at, pt) { return; }
         let a = wrap(p.f("a1"));
-        let gap = snap_angle((interact::angle_deg(c, pt) - a).rem_euclid(360.0));
-        let r = fin(p.f("radius")).clamp(0.1, 10000.0);
-        let rnd = |x: f64| (x * 100.0).round() / 100.0;
-        // the chord and OM depend on the shorter way round
-        let short = gap.min(360.0 - gap);
-        match p.s("define") {
-            "Chord length" => p.set_f("chord_len", rnd(2.0 * r * (short.to_radians() / 2.0).sin())),
-            "OM distance" => p.set_f("om_dist", rnd(r * (short.to_radians() / 2.0).cos())),
-            "Angle" => p.set_f("theta", gap),
-            _ if p.b("use_theta") => p.set_f("theta", gap),
-            _ => p.set_f("a2", (a + gap).rem_euclid(360.0)),
-        }
+        set_gap(p, snap_angle((interact::angle_deg(c, pt) - a).rem_euclid(360.0)));
     })
+}
+
+/// Puts point B `gap` degrees on from A: the central angle when it is typed, the chord or OM when the chord is defined by length
+/// (from the shorter gap), else B's own direction.
+fn set_gap(p: &mut Params, gap: f64) {
+    let a = wrap(p.f("a1"));
+    let r = fin(p.f("radius")).clamp(0.1, 10000.0);
+    let rnd = |x: f64| (x * 100.0).round() / 100.0;
+    // the chord and OM depend on the shorter way round
+    let short = gap.min(360.0 - gap);
+    match p.s("define") {
+        "Chord length" => p.set_f("chord_len", rnd(2.0 * r * (short.to_radians() / 2.0).sin())),
+        "OM distance" => p.set_f("om_dist", rnd(r * (short.to_radians() / 2.0).cos())),
+        "Angle" => p.set_f("theta", gap),
+        _ if p.b("use_theta") => p.set_f("theta", gap),
+        _ => p.set_f("a2", (a + gap).rem_euclid(360.0)),
+    }
 }
 
 pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
@@ -1345,6 +1370,8 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if pt.a { v.push(angle_handle("a1", centre, at(g.a), &format!("Drag point {} round the circle", n.a))); }
     if pt.b { v.push(gap_handle(centre, at(g.b), &format!("Drag point {} round the circle (the angle snaps to 30, 45, 60, 90, ...)", n.b))); }
     if pt.c { v.push(angle_handle("c_angle", centre, at(g.c), &format!("Drag point {} round the circle", n.c))); }
+    // the More points' knobs, then the click area (the workspace puts every area under the knobs)
+    v.extend(edit::handles(p, cx, pad));
     Some(v)
 }
 
@@ -1352,6 +1379,8 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
 mod tests {
     use super::*;
 
+    /// The point knobs (the click areas left out).
+    fn knobs(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> { handles(id, p, size).map(|v| v.into_iter().filter(|h| h.drag.is_some()).collect()) }
     fn def() -> FigureDef { registry().into_iter().find(|d| d.id == "circle").unwrap() }
     fn with(list: &[(&'static str, Value)]) -> Params {
         let d = def();
@@ -1609,7 +1638,7 @@ mod tests {
     fn handles_move_the_points_and_round_trip() {
         let d = def();
         let p = with(&[b("show_chord", true), b("show_inscribed", true), f("a1", 37.0), f("a2", 144.0), f("c_angle", 251.0)]);
-        let hs = handles("circle", &p, (520.0, 440.0)).unwrap();
+        let hs = knobs("circle", &p, (520.0, 440.0)).unwrap();
         assert_eq!(hs.len(), 3);
         for h in &hs {
             let mut q = p.clone();
@@ -1621,8 +1650,8 @@ mod tests {
         let mut q = p.clone();
         (hs[0].drag.as_ref().unwrap())(&mut q, (cx, CY - R));
         assert_eq!(q.f("a1"), 90.0);
-        assert!(handles("other", &p, (1.0, 1.0)).is_none());
-        assert_eq!(handles("circle", &with(&[]), (1.0, 1.0)).unwrap().len(), 1);
+        assert!(knobs("other", &p, (1.0, 1.0)).is_none());
+        assert_eq!(knobs("circle", &with(&[]), (1.0, 1.0)).unwrap().len(), 1);
     }
 
     /// Dragged angles snap to whole degrees and to the familiar angles within 3 degrees; typed values are untouched.
@@ -1638,7 +1667,7 @@ mod tests {
         assert_eq!(snap_angle(f64::NAN), 0.0);
         // point A moves by whole degrees (so 31 is reachable); point B moves the central angle, which snaps
         let p = with(&[b("show_chord", true), f("a1", 10.0), f("a2", 100.0)]);
-        let hs = handles("circle", &p, (1.0, 1.0)).unwrap();
+        let hs = knobs("circle", &p, (1.0, 1.0)).unwrap();
         let cx = layout_of(&p).cx;
         let at = |deg: f64| (cx + R * deg.to_radians().cos(), CY - R * deg.to_radians().sin());
         let mut q = p.clone();
@@ -1652,7 +1681,7 @@ mod tests {
         assert_eq!(q.f("a2"), 81.0, "71 degrees is no familiar angle: whole degrees");
         // with the central angle set by number the drag sets that number
         let mut t = p.clone(); t.set_b("use_theta", true); t.set_f("theta", 90.0);
-        let hs = handles("circle", &t, (1.0, 1.0)).unwrap();
+        let hs = knobs("circle", &t, (1.0, 1.0)).unwrap();
         (hs[1].drag.as_ref().unwrap())(&mut t, at(10.0 + 134.0));
         assert_eq!(t.f("theta"), 135.0);
         assert_eq!(with(&[f("a1", 33.5)]).f("a1"), 33.5, "a typed value is exact");
@@ -1662,15 +1691,15 @@ mod tests {
     fn no_handle_for_a_point_that_is_not_drawn() {
         // nothing draws A: no handle at all
         let p = with(&[b("show_radius", false)]);
-        assert!(handles("circle", &p, (1.0, 1.0)).unwrap().is_empty());
+        assert!(knobs("circle", &p, (1.0, 1.0)).unwrap().is_empty());
         // A and B in the same place: B is not drawn, so it has no handle
         let p = with(&[b("show_chord", true), f("a1", 40.0), f("a2", 40.0)]);
-        assert_eq!(handles("circle", &p, (1.0, 1.0)).unwrap().len(), 1);
+        assert_eq!(knobs("circle", &p, (1.0, 1.0)).unwrap().len(), 1);
         // C on A: not drawn
         let p = with(&[b("show_inscribed", true), f("a1", 40.0), f("a2", 140.0), f("c_angle", 40.0)]);
-        assert_eq!(handles("circle", &p, (1.0, 1.0)).unwrap().len(), 2);
+        assert_eq!(knobs("circle", &p, (1.0, 1.0)).unwrap().len(), 2);
         // a readout row that needs B makes B a drawn point
-        assert_eq!(handles("circle", &with(&[b("m_chord", true)]), (1.0, 1.0)).unwrap().len(), 2);
+        assert_eq!(knobs("circle", &with(&[b("m_chord", true)]), (1.0, 1.0)).unwrap().len(), 2);
     }
 
     #[test]
@@ -1801,7 +1830,7 @@ mod tests {
         l.extend([s("label_size", "Large"), s("unit", "centimetres"), f("radius", 10000.0), b("hints", true), ("dec", Value::I(4))]);
         let p = with(&l);
         let (_, rep) = build(&p);
-        let hs = handles("circle", &p, (1.0, 1.0)).unwrap();
+        let hs = knobs("circle", &p, (1.0, 1.0)).unwrap();
         assert!((hs[0].pos.0 - (rep.w / 2.0 + R * geom(&p).a.to_radians().cos())).abs() < 1e-6);
     }
 
@@ -2226,7 +2255,7 @@ mod tests {
         assert_eq!(render_of(&[f("a1", 20.0), f("a2", 110.0), b("show_chord", true)]), render_of(&[f("a1", 20.0), f("a2", 110.0), b("show_chord", true), s("define", "Points")]));
         // dragging B with the chord defined by its length sets the length
         let p = with(&[s("define", "Chord length"), f("chord_len", 8.0), b("show_chord", true)]);
-        let hs = handles("circle", &p, (1.0, 1.0)).unwrap();
+        let hs = knobs("circle", &p, (1.0, 1.0)).unwrap();
         let cx = layout_of(&p).cx;
         let a = geom(&p).a;
         let mut q = p.clone();
@@ -2634,14 +2663,14 @@ mod tests {
     fn handles_round_trip_and_chord_drag_uses_the_shorter_gap() {
         for (r, define, key, val) in [(7.0, "Chord length", "chord_len", 3.3), (5.0, "OM distance", "om_dist", 0.1), (5.0, "Angle", "theta", 106.26)] {
             let p = with(&[f("radius", r), s("define", define), f(key, val), b("show_chord", true)]);
-            let hs = handles("circle", &p, (1.0, 1.0)).unwrap();
+            let hs = knobs("circle", &p, (1.0, 1.0)).unwrap();
             let mut q = p.clone();
             (hs[1].drag.as_ref().unwrap())(&mut q, hs[1].pos);
             q.normalize(&(def().params)(), true);
             assert_eq!(q.f(key), val, "{define}: a grab without a move changed {key}");
         }
         let p = with(&[f("radius", 5.0), f("a1", 0.0), s("define", "Chord length"), f("chord_len", 8.0), b("show_chord", true)]);
-        let hs = handles("circle", &p, (1.0, 1.0)).unwrap();
+        let hs = knobs("circle", &p, (1.0, 1.0)).unwrap();
         let cx = layout_of(&p).cx;
         let drag = |p: &Params, deg: f64, r_: f64| { let mut q = p.clone(); (hs[1].drag.as_ref().unwrap())(&mut q, (cx + r_ * deg.to_radians().cos(), CY - r_ * deg.to_radians().sin())); q.normalize(&(def().params)(), true); q };
         // ten degrees clockwise (350) is the small chord, not the diameter

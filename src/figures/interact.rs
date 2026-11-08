@@ -18,6 +18,8 @@ pub type Pt = (f64, f64);
 pub type DragFn = Arc<dyn Fn(&mut Params, Pt) + Send + Sync>;
 pub type ClickFn = Arc<dyn Fn(&mut Params) + Send + Sync>;
 pub type ScrollFn = Arc<dyn Fn(&mut Params, f64) + Send + Sync>;
+/// A click that needs to know where it landed (in SVG units): an editor's "click the circle to add a point here".
+pub type ClickAtFn = Arc<dyn Fn(&mut Params, Pt) + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shape {
@@ -50,6 +52,9 @@ pub struct Handle {
     pub drag: Option<DragFn>,
     pub click: Option<ClickFn>,
     pub scroll: Option<ScrollFn>,
+    /// Click that receives the pointer position (SVG units); for an area whose parts act differently
+    /// (a ring that adds a point where it is clicked, a region that is shaded where it is clicked).
+    pub click_at: Option<ClickAtFn>,
     /// Text param edited inline on double-click.
     pub edit: Option<&'static str>,
     /// A movable figure label (`labels::handles`): hit only over its own text box and drawn on
@@ -59,7 +64,7 @@ pub struct Handle {
 
 impl Handle {
     fn base(pos: Pt, shape: Shape, cursor: Cursor, tip: &str) -> Self {
-        Handle { pos, half: (7.0, 7.0), shape, cursor, tip: tip.to_string(), drag: None, click: None, scroll: None, edit: None, label_drag: false }
+        Handle { pos, half: (7.0, 7.0), shape, cursor, tip: tip.to_string(), drag: None, click: None, scroll: None, click_at: None, edit: None, label_drag: false }
     }
     /// Round knob that drives params when dragged.
     pub fn knob(pos: Pt, tip: &str, f: impl Fn(&mut Params, Pt) + Send + Sync + 'static) -> Self {
@@ -79,6 +84,11 @@ impl Handle {
     /// Clickable rectangle (width/height in SVG units) such as a cell, bond or toggle.
     pub fn zone(centre: Pt, size: Pt, tip: &str, f: impl Fn(&mut Params) + Send + Sync + 'static) -> Self {
         Handle { half: (size.0 / 2.0, size.1 / 2.0), click: Some(Arc::new(f)), ..Handle::base(centre, Shape::Zone, Cursor::Pointer, tip) }
+    }
+    /// Clickable area (width/height in SVG units) whose click is told where it landed. Drawn under
+    /// the knobs like any zone, so a knob inside it still wins its own clicks and drags.
+    pub fn area(centre: Pt, size: Pt, tip: &str, f: impl Fn(&mut Params, Pt) + Send + Sync + 'static) -> Self {
+        Handle { half: (size.0 / 2.0, size.1 / 2.0), click_at: Some(Arc::new(f)), ..Handle::base(centre, Shape::Zone, Cursor::Crosshair, tip) }
     }
     /// Double-click a label to edit text param `key` in place.
     pub fn label(centre: Pt, size: Pt, key: &'static str, tip: &str) -> Self {
@@ -302,6 +312,17 @@ mod tests {
                         q.normalize(&defs, true);
                         in_range(&defs, &q).unwrap_or_else(|e| panic!("{} click {i} ({}): {e}", d.id, h.tip));
                         assert!(!(d.render)(&q).is_empty());
+                    }
+                    if let Some(f) = &h.click_at {
+                        // at its centre, at its corners and far outside: in range, and the figure still renders
+                        let (c, hh) = (h.pos, h.half);
+                        for t in [c, (c.0 - hh.0, c.1 - hh.1), (c.0 + hh.0, c.1 + hh.1), (c.0 + hh.0 * 0.5, c.1), (-5000.0, 9000.0), (f64::NAN, 1e9)] {
+                            let mut q = p.clone();
+                            f(&mut q, t);
+                            q.normalize(&defs, true);
+                            in_range(&defs, &q).unwrap_or_else(|e| panic!("{} click-at {i} ({}) -> {t:?}: {e}", d.id, h.tip));
+                            assert!((d.render)(&q).contains("<svg"), "{} click-at {i}", d.id);
+                        }
                     }
                     if let Some(f) = &h.scroll {
                         for dy in [-3.0, 3.0] {

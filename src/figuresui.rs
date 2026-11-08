@@ -2066,6 +2066,12 @@ impl Workspace {
                 f(&mut self.params);
                 self.params.normalize(&pdefs, true);
                 changed = true;
+            } else if r.clicked()
+                && let (Some(f), Some(ptr)) = (&h.click_at, r.interact_pointer_pos())
+            {
+                f(&mut self.params, to_svg(ptr));
+                self.params.normalize(&pdefs, true);
+                changed = true;
             }
             if r.hovered()
                 && let Some(f) = &h.scroll

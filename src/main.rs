@@ -186,7 +186,7 @@ fn main() -> Result<(), eframe::Error> {
             let p = figures::start_params(&d);
             let size = figures::svg_size(&(d.render)(&p));
             for h in d.handles(&p, size) {
-                let acts: Vec<&str> = [(h.drag.is_some(), "drag"), (h.click.is_some(), "click"), (h.scroll.is_some(), "scroll"), (h.label_drag, "label")]
+                let acts: Vec<&str> = [(h.drag.is_some(), "drag"), (h.click.is_some() || h.click_at.is_some(), "click"), (h.scroll.is_some(), "scroll"), (h.label_drag, "label")]
                     .into_iter()
                     .filter_map(|(on, name)| on.then_some(name))
                     .collect();
