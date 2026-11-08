@@ -775,7 +775,11 @@ impl crate::App {
         shell_frame(self, ctx, false, |app, ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 ui.vertical_centered(|ui| {
-                    ui.add_space(if fresh { 30.0 } else { 70.0 });
+                    // Balance the page: a little more air above the hero takes the slack off the floor
+                    // under the cards, so the three bands (hero, steps, footer) stop reading as three
+                    // separate islands.
+                    let lead = (ui.available_height() * 0.10).clamp(24.0, 88.0);
+                    ui.add_space(if fresh { lead } else { 70.0 });
                     ui.label(theme::serif("Turn anything into an exam.").size(40.0));
                     ui.add_space(12.0);
                     crate::pageshell::prose_centered(
@@ -813,11 +817,11 @@ impl crate::App {
                     ui.add_space(8.0);
                 });
 
-                // A short page used to pile every spare pixel into one band under the cards. Split
-                // it: air between the call to action and the steps, the rest under them, so the
-                // footer still holds the bottom of the window.
+                // A short page used to pile every spare pixel into one band under the cards, and the
+                // critics read the hero and the steps as two disconnected halves. Keep the air between
+                // them small and let the footer take the slack instead.
                 let spare = (ui.available_height() - 300.0).max(0.0);
-                ui.add_space(14.0 + (spare * 0.42).min(110.0));
+                ui.add_space(14.0 + (spare * 0.10).min(20.0));
 
                 ui.set_max_width(ui.available_width().min(980.0));
                 ui.vertical_centered(|ui| {
@@ -1866,6 +1870,13 @@ impl crate::App {
                 }
                 ui.add_space(16.0);
                 });
+                // A short section ends two-thirds down and leaves a floor of empty grid paper; the
+                // critics named that on settings and account more than anything else. A quiet rule
+                // holds the bottom of the viewport instead.
+                crate::pageshell::footer(
+                    ui,
+                    "verSHion · your work is saved on this machine, and nothing leaves it unless you share it",
+                );
             });
           }
         });

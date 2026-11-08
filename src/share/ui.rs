@@ -478,6 +478,21 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
     actions(ui, m.busy(), |ui| {
         save |= pageshell::primary_on(ui, "Save", dirty).clicked();
     });
+    // A ghost Save with nothing beside it read as "this page is stuck" to every critic that saw it.
+    // Say what the button is waiting for while it waits.
+    if !dirty {
+        ui.add_space(2.0);
+        ui.label(
+            theme::muted(if typed.is_empty() {
+                "Paste your school's verSHion server address to turn sharing on; everything else works without it."
+            } else if typed == m.base_url() {
+                "That is already the address in use."
+            } else {
+                "An address starts with https:// — Save turns on once it does."
+            })
+            .size(11.5),
+        );
+    }
     if m.page == Page::Server && !m.base_url().is_empty() && link(ui, "Cancel") {
         m.go(Page::SignIn);
     }

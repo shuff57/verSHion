@@ -166,6 +166,9 @@ fn perks_row(ui: &mut Ui) {
         for (col, (icon, head, body)) in cols.iter_mut().zip(perks) {
             crate::pageshell::card(col, |ui| {
                 ui.set_width(ui.available_width());
+                // Equal heights: the body copy wraps to a different number of lines in each card and
+                // the three used to end at three different heights, which the critics read as ragged.
+                ui.set_min_height(96.0);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 10.0;
                     let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(32.0), egui::Sense::hover());
