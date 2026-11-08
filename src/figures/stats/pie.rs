@@ -38,6 +38,13 @@ const R: f64 = 150.0;
 /// mid grey. Hatch and dots are patterns (`pie-p1`..`pie-p4`); the two greys are plain fills.
 const BW_WASH: &str = "#d4d4d4";
 const BW_MID: &str = "#9a9a9a";
+const BW_DARK: &str = "#707070";
+/// Colours after the six of `Fills`, so up to 20 sectors never repeat a colour.
+const EXTRA: [&str; 14] = [
+    "#8c564b", "#17becf", "#bcbd22", "#e377c2", "#7f7f7f", "#aec7e8", "#ffbb78", "#98df8a", "#ff9896", "#c5b0d5", "#c49c94", "#f7b6d2", "#9edae5", "#dbdb8d",
+];
+/// Black-and-white fills before they repeat.
+const BW_N: usize = 12;
 
 pub fn def() -> FigureDef {
     FigureDef {
@@ -53,7 +60,7 @@ pub fn def() -> FigureDef {
 fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::long("data", "Categories and values", "Walk, 14\nCar, 12\nBus, 10\nBike, 4")
-            .hint("One category per line: its name, a comma (or a tab, from a spreadsheet paste), then its value. Leave the value out and that sector is empty: it takes what the others leave, and the student copy draws it blank. Leave every value out for a blank circle. Sectors run clockwise from 12 o'clock"),
+            .hint("One category per line: its name, a comma (or a tab, from a spreadsheet paste), then its value. Leave the value out and that sector is empty: it takes what the others leave, and the student copy draws it blank. Two or more empty rows share one combined empty sector, with no split. A total above the sum leaves the rest as an empty sector too. Leave every value out for a blank circle. Sectors run clockwise from 12 o'clock"),
         ParamDef::choice("values", "Values are", &VALUES, "Counts").hint("Counts are shares of the total; percents add to 100; degrees add to 360"),
         ParamDef::text("total", "Total (counts)", "").hint("Blank uses the sum of the counts. Type a bigger total to leave room for the empty sectors"),
         ParamDef::choice("order", "Order", &ORDERS, "As typed"),
@@ -124,7 +131,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
             Example {
                 name: "Complete the pie chart",
                 params: vec![
-                    ("data", s("Soccer, 20\nBasketball, 15\nTennis\nOther")),
+                    ("data", s("Soccer, 20\nBasketball, 15")),
                     ("total", s("60")),
                     ("labels", s("Name and value")),
                     ("key", s("None")),
@@ -186,6 +193,10 @@ pub fn parse(text: &str) -> (Vec<Row>, Vec<String>) {
             (line.to_string(), String::new())
         };
         let value = number(&cell);
+        if rows.is_empty() && value.is_none() && !cell.trim().is_empty() {
+            notes.push(format!("The first line (\"{}\", \"{}\") looks like column headings, so it is skipped.", clip(&name, MAX_NAME), clip(cell.trim(), MAX_NAME)));
+            continue;
+        }
         if value.is_none() && !cell.trim().is_empty() {
             notes.push(format!("Line {}: \"{}\" is not a number, so {} is an empty sector.", n + 1, cell.trim(), clip(&name, MAX_NAME)));
         }
@@ -204,6 +215,9 @@ pub struct Model {
     pub whole: f64,
     pub unit: usize,
     pub notes: Vec<String>,
+    /// Rows typed by the teacher; one more, unnamed and empty, follows when the circle has a
+    /// remainder to draw as a single empty sector (two or more empty rows, or a total above the sum).
+    pub real: usize,
 }
 
 pub fn model(p: &Params) -> Model {
@@ -219,6 +233,7 @@ pub fn model(p: &Params) -> Model {
         _ => typed_total.unwrap_or(sum),
     };
     let mut share = vec![0.0; rows.len()];
+    let mut rest = 0.0;
     if whole > 0.0 && !rows.is_empty() {
         let used = if sum > whole * (1.0 + 1e-9) {
             notes.push(format!("The values add to {}, more than the whole ({}), so the sectors are scaled down to fit and none is left empty.", data::fmt_num(sum), data::fmt_num(whole)));
@@ -232,23 +247,33 @@ pub fn model(p: &Params) -> Model {
             }
         }
         let left = (1.0 - share.iter().sum::<f64>()).max(0.0);
-        if nb > 0 && left > 1e-9 && used == whole {
+        if nb == 1 && left > 1e-9 && used == whole {
             for i in 0..rows.len() {
                 if blank[i] {
-                    share[i] = left / nb as f64;
+                    share[i] = left;
                 }
             }
+        } else if nb != 1 && nb < rows.len() && left > 1e-9 && used == whole {
+            // one combined empty sector for the remainder: no split between empty rows, no number
+            rest = left;
         } else if nb > 0 && used == whole && unit == 0 && typed_total.is_none() {
             notes.push("Type a total, larger than the counts, to leave room for the empty sectors.".into());
         }
     }
-    Model { rows, share, blank, whole, unit, notes }
+    let real = rows.len();
+    let (mut rows, mut share, mut blank) = (rows, share, blank);
+    if rest > 1e-9 {
+        rows.push(Row { name: String::new(), value: None });
+        share.push(rest);
+        blank.push(true);
+    }
+    Model { rows, share, blank, whole, unit, notes, real }
 }
 
 pub fn warnings(p: &Params) -> Vec<String> {
     let m = model(p);
     let mut w = m.notes.clone();
-    if m.unit != 0 && m.rows.iter().filter_map(|r| r.value).sum::<f64>() > 0.0 && m.blank.iter().all(|b| !*b) {
+    if m.unit != 0 && m.rows.iter().filter_map(|r| r.value).sum::<f64>() > 0.0 && m.blank[..m.real].iter().all(|b| !*b) {
         let sum: f64 = m.rows.iter().filter_map(|r| r.value).sum();
         if (sum - m.whole).abs() > 1e-6 {
             w.push(format!("The values add to {}, not {}.", data::fmt_num(sum), data::fmt_num(m.whole)));
@@ -344,14 +369,27 @@ fn hex_dark(hex: &str) -> bool {
 }
 
 fn bw(i: usize) -> Paint {
-    match i % 6 {
+    match i % BW_N {
         0 => Paint { css: BW_WASH.into(), kind: LIGHT },
         1 => Paint { css: "url(#pie-p1)".into(), kind: PATTERN },
         2 => Paint { css: "url(#pie-p2)".into(), kind: PATTERN },
         3 => Paint { css: "url(#pie-p3)".into(), kind: PATTERN },
         4 => Paint { css: "url(#pie-p4)".into(), kind: PATTERN },
-        _ => Paint { css: BW_MID.into(), kind: LIGHT },
+        5 => Paint { css: BW_MID.into(), kind: LIGHT },
+        6 => Paint { css: "url(#pie-p5)".into(), kind: PATTERN },
+        7 => Paint { css: "url(#pie-p6)".into(), kind: PATTERN },
+        8 => Paint { css: "url(#pie-p7)".into(), kind: PATTERN },
+        9 => Paint { css: "url(#pie-p8)".into(), kind: PATTERN },
+        10 => Paint { css: "url(#pie-p9)".into(), kind: PATTERN },
+        _ => Paint { css: BW_DARK.into(), kind: DARK },
     }
+}
+
+/// The black-and-white fill for the sector drawn at `pos` of `n`: in turn, but the last of a
+/// wrapped set never repeats the first (they sit side by side).
+fn bw_at(pos: usize, n: usize) -> Paint {
+    let i = if n > 1 && pos == n - 1 && pos > 0 && pos % BW_N == 0 { 6 } else { pos };
+    bw(i)
 }
 
 fn solid(hex: &str) -> Paint {
@@ -388,6 +426,11 @@ fn patterns() -> String {
         r##"<circle cx="2" cy="2" r="1.3" fill="#444"/><circle cx="6" cy="6" r="1.3" fill="#444"/>"##.to_string(),
         format!("{}{}", line(fwd), line(back)),
         line(back),
+        line("M0,4 h8"),
+        line("M4,0 v8"),
+        r##"<circle cx="4" cy="4" r="2.4" fill="#444"/>"##.to_string(),
+        r##"<path d="M0,8 l8,-8 M-1,1 l2,-2 M7,9 l2,-2" stroke="#444" stroke-width="2.6" fill="none"/>"##.to_string(),
+        r##"<rect x="1" y="1" width="3" height="3" fill="#444"/><rect x="5" y="5" width="3" height="3" fill="#444"/>"##.to_string(),
     ];
     let mut out = String::new();
     for (i, fg) in pats.iter().enumerate() {
@@ -406,7 +449,7 @@ struct Placed {
     y: f64,
     anchor: &'static str,
     /// From the rim, for an outside label.
-    leader: Option<((f64, f64), (f64, f64))>,
+    leader: Option<(f64, f64)>,
     plate: bool,
     white: bool,
     w: f64,
@@ -443,15 +486,17 @@ fn render(p: &Params) -> String {
     for (pos, &i) in idx.iter().enumerate() {
         let auto = match look {
             "White" => Paint { css: "#ffffff".into(), kind: LIGHT },
-            "Black and white" => bw(pos),
-            _ if print => bw(pos),
+            "Black and white" => bw_at(pos, n),
+            _ if print => bw_at(pos, n),
+            _ if pos >= 6 => solid(EXTRA[(pos - 6) % EXTRA.len()]),
             _ => solid(&fills.series(pos)),
         };
         paint[i] = if look == "White" { auto } else { picks.get(i).and_then(|t| named(t, print || look == "Black and white")).unwrap_or(auto) };
     }
     // an empty sector on the student copy is white, for students to shade
     let shown = |i: usize| -> Paint {
-        if m.blank[i] && !key_on { Paint { css: "#ffffff".into(), kind: LIGHT } } else { paint[i].clone() }
+        // a combined remainder, or an empty row that has no sector of its own, is never filled in
+        if m.blank[i] && (!key_on || i >= m.real || m.share[i] <= 1e-9) { Paint { css: "#ffffff".into(), kind: LIGHT } } else { paint[i].clone() }
     };
 
     let all_blank = n == 0 || m.blank.iter().all(|b| *b);
@@ -470,7 +515,7 @@ fn render(p: &Params) -> String {
     if !all_blank {
         for &i in &idx {
             let sh = m.share[i];
-            if sh <= 1e-9 {
+            if sh <= 1e-9 || i >= m.real {
                 continue;
             }
             let mut blank_line = false;
@@ -488,12 +533,12 @@ fn render(p: &Params) -> String {
             }
             let mid = starts[i] + sh * 180.0; // degrees clockwise from 12
             let (sx, sy) = ((mid.to_radians()).sin(), -(mid.to_radians()).cos());
-            let w = if blank_line { 56.0 * k } else { lines.iter().map(|l| tw(l, fl)).fold(0.0, f64::max) };
+            let w = if blank_line { 56.0 * k } else { lines.iter().enumerate().map(|(j, l)| tw(l, fl) * if j == 0 && lines.len() > 1 { 1.1 } else { 1.0 }).fold(0.0, f64::max) };
             let h = if blank_line { line_h } else { lines.len() as f64 * line_h };
             let th = sh * std::f64::consts::TAU;
             let rin = if sh > 0.9999 { 0.0 } else { 0.62 * R };
-            let chord = if sh > 0.9999 { 2.0 * R } else { 2.0 * rin * (th / 2.0).sin().abs() };
-            let fits = chord >= w + 8.0 && (sh > 0.45 || h + 6.0 <= 0.55 * R) && !(sh > 0.5 && sh < 0.9999 && w > 1.4 * R);
+            let chord = if sh >= 0.5 { 2.0 * rin.max(0.62 * R) } else { 2.0 * rin * (th / 2.0).sin().abs() };
+            let fits = chord >= w + 8.0 && (sh > 0.45 || h + 6.0 <= 0.55 * R);
             let sector = shown(i);
             if fits {
                 let (x, y) = (cx0 + rin * sx, cy0 + rin * sy);
@@ -506,19 +551,42 @@ fn render(p: &Params) -> String {
                 let joined = if lines.len() > 1 { vec![lines.join(" ")] } else { lines };
                 let w = if blank_line { w } else { tw(&joined[0.min(joined.len().saturating_sub(1))], fl) };
                 let hx = x1 + if right { 6.0 } else { -6.0 };
-                placed.push(Placed { lines: joined, blank: blank_line, x: hx, y: y1 + fl * 0.35, anchor: if right { "start" } else { "end" }, leader: Some(((x0, y0), (x1, y1))), plate: false, white: false, w });
+                placed.push(Placed { lines: joined, blank: blank_line, x: hx, y: y1 + fl * 0.35, anchor: if right { "start" } else { "end" }, leader: Some((x0, y0)), plate: false, white: false, w });
             }
         }
     }
-    // push apart outside labels that would sit on each other, one side at a time
+    // spread outside labels that would sit on each other, one side at a time, keeping them
+    // above, below and clear of the pie
+    let lim = R + fl * 1.5;
     for right in [true, false] {
         let mut side: Vec<usize> = (0..placed.len()).filter(|&j| placed[j].leader.is_some() && (placed[j].anchor == "start") == right).collect();
         side.sort_by(|&a, &b| placed[a].y.partial_cmp(&placed[b].y).unwrap_or(std::cmp::Ordering::Equal));
-        for w in 1..side.len() {
-            let min = placed[side[w - 1]].y + line_h;
-            if placed[side[w]].y < min {
-                placed[side[w]].y = min;
+        let m = side.len();
+        if m == 0 {
+            continue;
+        }
+        for _ in 0..2 {
+            for w in 1..m {
+                let min = placed[side[w - 1]].y + line_h;
+                if placed[side[w]].y < min {
+                    placed[side[w]].y = min;
+                }
             }
+            if placed[side[m - 1]].y > lim {
+                placed[side[m - 1]].y = lim;
+                for w in (0..m - 1).rev() {
+                    let max = placed[side[w + 1]].y - line_h;
+                    if placed[side[w]].y > max {
+                        placed[side[w]].y = max;
+                    }
+                }
+            }
+        }
+        for &j in &side {
+            let (y0, y1) = (placed[j].y - fl, placed[j].y + 4.0);
+            let yc = if y0 <= 0.0 && y1 >= 0.0 { 0.0 } else if y0 > 0.0 { y0 } else { y1 };
+            let hw = if yc.abs() < R { (R * R - yc * yc).sqrt() } else { 0.0 };
+            placed[j].x = if right { placed[j].x.max(hw + 14.0) } else { placed[j].x.min(-(hw + 14.0)) };
         }
     }
 
@@ -541,7 +609,7 @@ fn render(p: &Params) -> String {
     let title_text = if p.s("title_kind") == TITLES[1] { clip(p.s("title").trim(), MAX_TITLE) } else { String::new() };
     let title_blank = p.s("title_kind") == TITLES[2];
     let title_h = if title_text.is_empty() && !title_blank { 0.0 } else { ft + 18.0 };
-    let title_w = if title_blank { 280.0 * k } else { tw(&title_text, ft) };
+    let title_w = if title_blank { 280.0 * k } else { tw(&title_text, ft) * 1.1 + 6.0 };
 
     let mut content_w = hi_x - lo_x;
     let mut key_below_rows: Vec<Vec<(usize, String, f64)>> = Vec::new();
@@ -571,7 +639,10 @@ fn render(p: &Params) -> String {
     }
     let key_below_h = if key_below_rows.is_empty() { 0.0 } else { key_below_rows.len() as f64 * (swatch + 10.0) + 14.0 };
     let top = pad + title_h + (-lo_y - R).max(0.0);
-    let h_total = top + R + hi_y.max(R) + key_below_h + pad;
+    let key_step = swatch + 12.0;
+    let key_h = if key == KEYS[1] { names.len() as f64 * key_step } else { 0.0 };
+    let key_top = (top + R - key_h / 2.0 + 6.0).max(pad + title_h);
+    let h_total = (top + R + hi_y.max(R) + key_below_h + pad).max(if key_h > 0.0 { key_top + key_h + pad } else { 0.0 });
     // the pie (and its labels) sit at the left of the content, which is centred on the canvas
     let ox = (w_total - content_w) / 2.0 - lo_x;
     let cx = ox;
@@ -596,20 +667,20 @@ fn render(p: &Params) -> String {
         let i = (0..n).find(|&i| m.share[i] > 0.9999).unwrap_or(0);
         d.circle(cx, cy, R, &shown(i).css, ink, sw_print);
     } else {
-        for &i in &idx {
-            let sh = m.share[i];
-            if sh <= 1e-9 {
-                continue;
+        // coloured sectors first, then the white and empty ones, so their outlines are not covered
+        let is_white = |i: usize| shown(i).css == "#ffffff";
+        for pass in [false, true] {
+            for &i in &idx {
+                let sh = m.share[i];
+                if sh <= 1e-9 || is_white(i) != pass {
+                    continue;
+                }
+                let (a0, a1) = (90.0 - starts[i], 90.0 - starts[i] - sh * 360.0);
+                let (st, w) = if pass { (ink, sw_print) } else { (outline, outline_w) };
+                d.sector(cx, cy, R, a0, a1, &shown(i).css, st, w);
             }
-            let (a0, a1) = (90.0 - starts[i], 90.0 - starts[i] - sh * 360.0);
-            let blank_here = m.blank[i];
-            let (s, w) = if blank_here { (ink, sw_print) } else { (outline, outline_w) };
-            d.sector(cx, cy, R, a0, a1, &shown(i).css, s, w);
         }
-        // empty sectors last, so their outline is not covered by a neighbour
-        if m.blank.iter().any(|b| *b) && m.share.iter().zip(&m.blank).any(|(s, b)| *b && *s > 1e-9) {
-            d.circle(cx, cy, R, "none", ink, sw_print);
-        } else if print || look != "Color" {
+        if print || look != "Color" || (0..n).any(|i| m.share[i] > 1e-9 && is_white(i)) {
             d.circle(cx, cy, R, "none", ink, sw_print);
         }
     }
@@ -620,8 +691,9 @@ fn render(p: &Params) -> String {
     for pl in &placed {
         let (x, y) = (cx + pl.x, cy + pl.y);
         let txt_ink = if pl.white { "#ffffff" } else { ink };
-        if let Some(((x0, y0), (x1, y1))) = pl.leader {
-            d.line(cx + x0, cy + y0, cx + x1, cy + y1, ink, 1.0);
+        if let Some((x0, y0)) = pl.leader {
+            let ex = if pl.anchor == "start" { pl.x - 3.0 } else { pl.x + 3.0 };
+            d.line(cx + x0, cy + y0, cx + ex, cy + pl.y - fl * 0.35, ink, 1.0);
         }
         if pl.blank {
             let yy = y;
@@ -649,8 +721,8 @@ fn render(p: &Params) -> String {
     };
     if key == KEYS[1] && !names.is_empty() {
         let kx = ox + hi_x + key_gap;
-        let step = swatch + 12.0;
-        let ky = cy - names.len() as f64 * step / 2.0 + 6.0;
+        let step = key_step;
+        let ky = key_top;
         for (j, (i, s)) in names.iter().enumerate() {
             let y = ky + j as f64 * step;
             swatch_rect(&mut d, kx, y, *i);

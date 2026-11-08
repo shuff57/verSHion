@@ -120,3 +120,70 @@ fn warnings_say_when_percents_do_not_add_up() {
     let w = warnings(&params(&[("data", s("A, 30\nB, 30")), ("values", s("Percents"))]));
     assert!(w.iter().any(|x| x.contains("not 100")), "{w:?}");
 }
+
+#[test]
+fn several_empty_rows_make_one_combined_sector_with_no_invented_numbers() {
+    let over = [("data", s("A, 20\nB, 15\nC\nD")), ("total", s("60")), ("labels", s("Name and value")), ("key", s("Right"))];
+    let m = model(&params(&over));
+    assert_eq!(m.real, 4);
+    assert_eq!(m.rows.len(), 5, "one remainder sector");
+    assert_eq!(m.share[2], 0.0);
+    assert_eq!(m.share[3], 0.0);
+    assert!((m.share[4] - 25.0 / 60.0).abs() < 1e-12);
+    let t = svg(&over);
+    assert!(!t.contains(">12.5<") && !t.contains(">25<"), "the key invents no value: {t}");
+    assert!(t.contains(">C<") && t.contains(">D<"), "empty rows stay in the key");
+}
+
+#[test]
+fn a_total_above_the_sum_draws_the_rest_as_an_outlined_empty_sector() {
+    let m = model(&params(&[("data", s("A, 20\nB, 15")), ("total", s("60"))]));
+    assert_eq!(m.rows.len(), 3);
+    assert!((m.share.iter().sum::<f64>() - 1.0).abs() < 1e-9);
+    assert!(svg(&[("data", s("A, 20\nB, 15")), ("total", s("60"))]).contains(r##"fill="#ffffff" stroke="#111827""##));
+}
+
+#[test]
+fn white_fill_has_a_visible_outline_in_colour() {
+    let t = svg(&[("data", s("A, 1\nB, 1")), ("fill_list", s("White"))]);
+    assert!(t.contains(r##"fill="#ffffff" stroke="#111827""##), "{t}");
+}
+
+#[test]
+fn many_categories_keep_the_key_inside_and_never_repeat_a_colour() {
+    let data: String = (1..=20).map(|i| format!("Category {i}, {i}\n")).collect();
+    let t = svg(&[("data", s(&data)), ("key", s("Right"))]);
+    let h = t.split("height=\"").nth(1).unwrap().split('"').next().unwrap().parse::<f64>().unwrap();
+    let last_key_y = t.rfind(">Category 20<").map(|i| t[..i].rsplit(" y=\"").next().unwrap().split('"').next().unwrap().parse::<f64>().unwrap()).unwrap();
+    assert!(last_key_y < h, "key text at {last_key_y} within height {h}");
+    let fills: std::collections::BTreeSet<String> = (0..20).map(|i| if i < 6 { svg::Fills::new(&params(&[])).series(i) } else { EXTRA[i - 6].to_string() }).collect();
+    assert_eq!(fills.len(), 20);
+    assert_ne!(bw_at(12, 13).css, bw_at(0, 13).css);
+}
+
+#[test]
+fn a_heading_row_is_skipped() {
+    let (rows, notes) = parse("Category\tCount\nWalk\t5\nCar\t3");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].name, "Walk");
+    assert!(notes.iter().any(|n| n.contains("headings")));
+    let (rows, _) = parse("Dog\nCat");
+    assert_eq!(rows.len(), 2, "names alone are empty sectors, not headings");
+}
+
+#[test]
+fn a_sector_over_half_labels_inside_and_a_long_title_fits() {
+    let t = svg(&[("data", s("Big, 80\nSmall, 20")), ("labels", s("Name and percent"))]);
+    assert!(!t.contains("<line"), "no leader line: the big sector's label is inside");
+    let title = "A very long and rather wordy chart title that is bold";
+    let t = svg(&[("title_kind", s("Chart title")), ("title", s(title))]);
+    let w: f64 = t.split("width=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+    assert!(w > crate::figures::stats::bar::tw(title, 22.0) * 1.05);
+}
+
+#[test]
+fn outside_labels_stay_clear_of_the_pie_with_many_tiny_sectors() {
+    let data: String = (1..=20).map(|i| format!("Name number {i}, {}\n", if i % 2 == 0 { 1 } else { 40 })).collect();
+    let t = svg(&[("data", s(&data)), ("labels", s("Name and percent"))]);
+    assert!(t.starts_with("<svg") && t.contains("<line"));
+}

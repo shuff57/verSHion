@@ -2722,7 +2722,7 @@ const PIE_CHART: &[Faq] = &[
     },
     Faq {
         q: "How do I leave a sector for students to draw?",
-        a: "Leave its value out (type just the name). That sector takes whatever the others leave; with counts, type the total larger than the counts so there is room for it. Turn off Show answers for the student copy: the empty sector is drawn white and unlabelled, and Student + key saves it filled with its numbers. Leave every value out for a blank circle with a radius at 12 o'clock.",
+        a: "Leave its value out (type just the name). That sector takes whatever the others leave; two or more empty rows share one combined empty sector, and a total above the sum leaves the rest as an empty sector too, neither split nor numbered; with counts, type the total larger than the counts so there is room for it. Turn off Show answers for the student copy: the empty sector is drawn white and unlabelled, and Student + key saves it filled with its numbers. Leave every value out for a blank circle with a radius at 12 o'clock.",
     },
     Faq {
         q: "How do I label a sector with a letter or a blank line?",
