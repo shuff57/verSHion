@@ -3801,7 +3801,7 @@ const TRANSFORMATIONS: &[Faq] = &[
     },
     Faq {
         q: "Can I move the pre-image?",
-        a: "Yes. Drag any of its vertices on the grid: it snaps to the nearest grid point and the image follows as you drag. To draw a new one, clear the vertex list and click grid points on the figure one after another; click the first vertex again to close the shape. Or type the vertices, one x, y pair per line: one pair is a point, more make a polygon of up to ten vertices, or an open path with Join the last vertex to the first turned off.",
+        a: "Yes. Drag any of its vertices on the grid: it snaps to the nearest grid point and the image follows as you drag. To draw a new one, clear the vertex list and click grid points on the figure one after another; click the first vertex again to close the shape, or the last one to leave it as a path (Clicks on the grid add vertices turns adding back on). Or type the vertices, one x, y pair per line: one pair is a point, more make a polygon of up to ten vertices, or an open path with Join the last vertex to the first turned off.",
     },
     Faq {
         q: "Can I move the centre or the mirror line?",

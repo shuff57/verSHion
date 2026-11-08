@@ -62,6 +62,9 @@ fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::data("pre", "Pre-image vertices (x, y), one per line", 2, PRE_DEFAULT),
         ParamDef::bool("closed", "Join the last vertex to the first", true),
+        // on while the pre-image is being clicked out: from the first click on an empty grid until A is clicked
+        // (closed) or the last vertex is (finished as a path); turn it on to add more vertices to a shape
+        ParamDef::bool("adding", "Clicks on the grid add vertices", false),
         ParamDef::choice("op", "Transformation", &OPS, "Translate"),
         ParamDef::float("dx", "Translate right by", -8.0, 8.0, 1.0, 3.0),
         ParamDef::float("dy", "Translate up by", -8.0, 8.0, 1.0, -2.0),
@@ -303,6 +306,24 @@ pub fn migrate(spec: &crate::model::FigureSpec, p: &mut Params) {
     }
 }
 
+/// Whether param `key` applies to the chosen transformation (the panel hides the rest; hidden values are kept, so
+/// switching back restores them): the shifts for a translation, the line for a reflection (its number only for a line
+/// that has one), the turn for a rotation, the factor for an enlargement, the centre for both of those, the range
+/// unless the grid is shrunk to the shapes.
+pub fn relevant(key: &str, p: &Params) -> bool {
+    let op = p.s("op");
+    match key {
+        "dx" | "dy" => op == "Translate",
+        "axis" => op == "Reflect",
+        "line_a" => op == "Reflect" && p.s("axis").ends_with('a'),
+        "angle" => op == "Rotate",
+        "scale" => op == "Dilate",
+        "cx" | "cy" => matches!(op, "Rotate" | "Dilate"),
+        "x_from" | "x_to" | "y_from" | "y_to" => !p.b("fit"),
+        _ => true,
+    }
+}
+
 /// The stated axis range, from <= 0 <= to on both axes.
 fn stated(p: &Params) -> (f64, f64, f64, f64) {
     (p.i("x_from").clamp(-30, 0) as f64, p.i("x_to").clamp(0, 30) as f64, p.i("y_from").clamp(-30, 0) as f64, p.i("y_to").clamp(0, 30) as f64)
@@ -367,12 +388,27 @@ pub struct Report {
     pub labels: Vec<Rect>,
 }
 
+/// How much a text box at `r` is in the way: every 2 px of a side inside it counts that side's weight, a letter or
+/// a vertex dot under it counts 100.
+fn box_cost(r: &Rect, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt, f64)]) -> f64 {
+    let inside = |q: Pt| q.0 > r.x0 - 1.0 && q.0 < r.x1 + 1.0 && q.1 > r.y0 - 1.0 && q.1 < r.y1 + 1.0;
+    let hit = |q: &Rect| r.x0 < q.x1 + 1.0 && q.x0 < r.x1 + 1.0 && r.y0 < q.y1 + 1.0 && q.y0 < r.y1 + 1.0;
+    let crossed: f64 = sides.iter().map(|&(a, b, w)| {
+        let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+        let n = (len / 2.0).ceil().max(1.0) as usize;
+        w * (0..=n).filter(|&k| inside((a.0 + (b.0 - a.0) * k as f64 / n as f64, a.1 + (b.1 - a.1) * k as f64 / n as f64))).count() as f64
+    }).sum();
+    crossed + 100.0 * taken.iter().filter(|q| hit(q)).count() as f64 + 100.0 * dots.iter().filter(|&&d| inside(d)).count() as f64
+}
+
 /// Where a vertex's letter goes: its box centred a little way out from the vertex, pushed away from the shape's middle
 /// so the letter sits outside the shape whatever its form (one point gets its letter up and to the left). When that
 /// spot is on a side, on another letter or on a vertex dot (an image vertex can land on a pre-image one), the
-/// direction is turned 45 degrees at a time; when every direction is blocked, the least blocked one is used.
+/// direction is turned 45 degrees at a time (then the in-between directions), then tried a little further out; when every spot is in the way, the
+/// least blocked one is used. `sides` carries a weight per side: the other figure's edges and the mirror line weigh
+/// more than the letter's own figure, so a letter is kept clear of them first.
 #[allow(clippy::too_many_arguments)]
-fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt)]) -> (f64, f64, &'static str) {
+fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt, f64)]) -> (f64, f64, &'static str) {
     let n = pts.len() as f64;
     let c = (pts.iter().map(|q| q.0).sum::<f64>() / n, pts.iter().map(|q| q.1).sum::<f64>() / n);
     let (vx, vy) = (fr.px(pts[i].0), fr.py(pts[i].1));
@@ -380,32 +416,24 @@ fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[
     let len = (dx * dx + dy * dy).sqrt();
     if len < 1e-6 { (dx, dy) = (-0.7071, -0.7071); } else { dx /= len; dy /= len; }
     let (hw, hh) = (tw(text, size, false) / 2.0, size * 0.62);
-    // the box's centre, far enough along (dx, dy) that the box clears the vertex by a few px: the distance from the
+    // the box's centre, far enough along (dx, dy) that the box clears the vertex by `gap` px: the distance from the
     // centre of a hw x hh box to its edge along (dx, dy), plus the gap
-    let at = |dx: f64, dy: f64| {
+    let at = |dx: f64, dy: f64, gap: f64| {
         let edge = (hw / dx.abs().max(1e-6)).min(hh / dy.abs().max(1e-6));
-        let (cx, cy) = (vx + dx * (edge + 4.0), vy + dy * (edge + 4.0));
+        let (cx, cy) = (vx + dx * (edge + gap), vy + dy * (edge + gap));
         (cx, cy + size * 0.35, "middle")
     };
-    let cost = |(x, y, a): (f64, f64, &str)| {
-        let r = text_rect(x, y, size, a, text);
-        let hit = |q: &Rect| r.x0 < q.x1 + 1.0 && q.x0 < r.x1 + 1.0 && r.y0 < q.y1 + 1.0 && q.y0 < r.y1 + 1.0;
-        let inside = |q: Pt| q.0 > r.x0 - 1.0 && q.0 < r.x1 + 1.0 && q.1 > r.y0 - 1.0 && q.1 < r.y1 + 1.0;
-        // a side through the letter, sampled every 2 px
-        let crossed = sides.iter().filter(|&&(a, b)| {
-            let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
-            let n = (len / 2.0).ceil().max(1.0) as usize;
-            (0..=n).map(|k| k as f64 / n as f64).any(|t| inside((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)))
-        }).count();
-        crossed + 2 * taken.iter().filter(|q| hit(q)).count() + 2 * dots.iter().filter(|&&d| inside(d)).count()
-    };
-    let mut best = (usize::MAX, at(dx, dy));
-    for turn in [0.0f64, 45.0, -45.0, 90.0, -90.0, 135.0, -135.0, 180.0] {
-        let (s, co) = turn.to_radians().sin_cos();
-        let spot = at(dx * co - dy * s, dx * s + dy * co);
-        let k = cost(spot);
-        if k == 0 { return spot; }
-        if k < best.0 { best = (k, spot); }
+    let own_dot = |d: &&Pt| (d.0 - vx).abs() + (d.1 - vy).abs() > 1.0;
+    let dots: Vec<Pt> = dots.iter().filter(own_dot).copied().collect();
+    let mut best = (f64::MAX, at(dx, dy, 4.0));
+    for gap in [4.0, 8.0, 13.0] {
+        for turn in [0.0f64, 45.0, -45.0, 90.0, -90.0, 135.0, -135.0, 180.0, 22.5, -22.5, 67.5, -67.5, 112.5, -112.5, 157.5, -157.5] {
+            let (s, co) = turn.to_radians().sin_cos();
+            let spot = at(dx * co - dy * s, dx * s + dy * co, gap);
+            let k = box_cost(&text_rect(spot.0, spot.1, size, spot.2, text), taken, &dots, sides);
+            if k == 0.0 { return spot; }
+            if k < best.0 { best = (k, spot); }
+        }
     }
     best.1
 }
@@ -470,7 +498,7 @@ pub fn build(p: &Params) -> (String, Report) {
     d.line(px(0.0), oy, px(0.0), oy + gh, ink, 1.8);
     // a reflected shape needs its mirror line: every line but the two axes is drawn as a dashed helper, named at its
     // upper end (on the student copy too: the line is part of the question)
-    let mut line_label: Option<(f64, f64, &str, String)> = None;
+    let mut line_label: Option<(Pt, Pt, String)> = None;
     let mut mirror_side: Option<(Pt, Pt)> = None;
     if p.s("op") == "Reflect"
         && let (Some((a, b)), Some(name)) = (mirror_seg(p, &fr), line_name(p))
@@ -478,13 +506,9 @@ pub fn build(p: &Params) -> (String, Report) {
     {
         d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{pre_col}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, s.0, s.1, e.0, e.1));
         mirror_side = Some((s, e));
-        // the upper end (the right one on a level line), and the side of the line that faces up (right on an upright)
+        // the upper end (the right one on a level line): the name is placed later, once the letters are down
         let (top, other) = if e.1 < s.1 - 1e-6 || ((e.1 - s.1).abs() <= 1e-6 && e.0 > s.0) { (e, s) } else { (s, e) };
-        let len = ((other.0 - top.0).powi(2) + (other.1 - top.1).powi(2)).sqrt().max(1e-9);
-        let dir = ((other.0 - top.0) / len, (other.1 - top.1) / len);
-        let n = if dir.0.abs() < 1e-6 { (1.0, 0.0) } else if dir.0 < 0.0 { (-dir.1, dir.0) } else { (dir.1, -dir.0) };
-        let anchor = if n.0 > 0.2 { "start" } else if n.0 < -0.2 { "end" } else { "middle" };
-        if !old || p.s("axis").ends_with('a') { line_label = Some((top.0 + dir.0 * 20.0 + n.0 * 12.0, top.1 + dir.1 * 20.0 + n.1 * 12.0 + 4.0, anchor, name)); }
+        if !old || p.s("axis").ends_with('a') { line_label = Some((top, other, name)); }
     }
 
     let mut labels: Vec<Rect> = Vec::new();
@@ -533,15 +557,19 @@ pub fn build(p: &Params) -> (String, Report) {
         if closed && q.len() >= 3 { e.push((q[q.len() - 1], q[0])); }
         e
     };
-    let mut sides: Vec<(Pt, Pt)> = Vec::new();
-    if show_pre { sides.extend(edges(&pre)); }
-    if ans { sides.extend(edges(&image)); }
-    sides.extend(mirror_side);
+    // weighted per figure: a letter's own figure 1, the other figure and the mirror line 4
+    let weigh = |e: Vec<(Pt, Pt)>, w: f64| e.into_iter().map(move |(a, b)| (a, b, w));
+    let (pre_e, img_e) = (if show_pre { edges(&pre) } else { Vec::new() }, if ans { edges(&image) } else { Vec::new() });
+    let mirror_e: Vec<(Pt, Pt)> = mirror_side.into_iter().collect();
+    let pre_sides: Vec<(Pt, Pt, f64)> = weigh(pre_e.clone(), 1.0).chain(weigh(img_e.clone(), 4.0)).chain(weigh(mirror_e.clone(), 4.0)).collect();
+    let img_sides: Vec<(Pt, Pt, f64)> = weigh(pre_e.clone(), 4.0).chain(weigh(img_e.clone(), 1.0)).chain(weigh(mirror_e.clone(), 4.0)).collect();
+    let all_sides: Vec<(Pt, Pt, f64)> = weigh(pre_e, 1.0).chain(weigh(img_e, 1.0)).collect();
+    let stroke_sides: Vec<(Pt, Pt, f64)> = all_sides.iter().copied().chain(weigh(mirror_e, 1.0)).collect();
     // the pre-image, dashed when the image is drawn on top of it
     if show_pre && !pre.is_empty() {
         shape(&mut d, &pre, pre_col, if ans { 2.0 } else { 2.6 }, ans);
         for i in 0..pre.len() {
-            let (x, y, a) = if old { (px(pre[i].0) - 8.0, py(pre[i].1) - 6.0, "end") } else { label_spot(&fr, &pre, i, size, NAMES[i], &labels, &dots, &sides) };
+            let (x, y, a) = if old { (px(pre[i].0) - 8.0, py(pre[i].1) - 6.0, "end") } else { label_spot(&fr, &pre, i, size, NAMES[i], &labels, &dots, &pre_sides) };
             put(&mut d, &mut labels, x, y, a, NAMES[i], pre_col, size);
         }
     }
@@ -550,13 +578,40 @@ pub fn build(p: &Params) -> (String, Report) {
         shape(&mut d, &image, image_col, 3.0, false);
         for i in 0..image.len() {
             let name = format!("{}\u{2032}", NAMES[i]);
-            let (x, y, a) = if old { (px(image[i].0) + 8.0, py(image[i].1) - 6.0, "start") } else { label_spot(&fr, &image, i, size, &name, &labels, &dots, &sides) };
+            let (x, y, a) = if old { (px(image[i].0) + 8.0, py(image[i].1) - 6.0, "start") } else { label_spot(&fr, &image, i, size, &name, &labels, &dots, &img_sides) };
             put(&mut d, &mut labels, x, y, a, &name, image_col, size);
         }
     }
 
-    if let Some((x, y, a, name)) = &line_label {
-        put(&mut d, &mut labels, *x, *y, a, name, pre_col, 13.0 * f);
+    // the mirror line's name: near its upper end, on whichever side and as far along as keeps it off both axes, the
+    // figures, their letters and the line itself (an axis through "x = -1" strikes out the equals sign)
+    if let Some((top, other, name)) = &line_label {
+        let ls = 13.0 * f;
+        let len = ((other.0 - top.0).powi(2) + (other.1 - top.1).powi(2)).sqrt().max(1e-9);
+        let dir = ((other.0 - top.0) / len, (other.1 - top.1) / len);
+        let n = if dir.0.abs() < 1e-6 { (1.0, 0.0) } else if dir.0 < 0.0 { (-dir.1, dir.0) } else { (dir.1, -dir.0) };
+        let axes = [((ox, py(0.0)), (ox + gw, py(0.0)), 6.0), ((px(0.0), oy), (px(0.0), oy + gh), 6.0)];
+        let mut obstacles: Vec<(Pt, Pt, f64)> = all_sides.clone();
+        obstacles.extend(axes);
+        obstacles.extend(mirror_side.map(|(a, b)| (a, b, 6.0)));
+        let mut best: (f64, (f64, f64, &str)) = (f64::MAX, (0.0, 0.0, "start"));
+        'search: for along in [20.0, 45.0, 75.0, 110.0, 150.0, 200.0] {
+            if along > len - 10.0 { break; }
+            for side in [1.0, -1.0] {
+                let nn = (n.0 * side, n.1 * side);
+                let anchor = if nn.0 > 0.2 { "start" } else if nn.0 < -0.2 { "end" } else { "middle" };
+                let spot = (top.0 + dir.0 * along + nn.0 * 10.0, top.1 + dir.1 * along + nn.1 * 10.0 + ls * 0.35, anchor);
+                let r = text_rect(spot.0, spot.1, ls, anchor, name);
+                // inside the grid: a name hanging off the edge reads as belonging to nothing
+                let off = if r.x0 < ox - 2.0 || r.x1 > ox + gw + 2.0 || r.y0 < oy - 2.0 || r.y1 > oy + gh + 2.0 { 50.0 } else { 0.0 };
+                let k = box_cost(&r, &labels, &dots, &obstacles) + off;
+                if k < best.0 { best = (k, spot); }
+                if k == 0.0 { break 'search; }
+            }
+        }
+        if best.0 == f64::MAX { best.1 = (top.0 + n.0 * 10.0, top.1 + 20.0, if n.0 > 0.2 { "start" } else { "end" }); }
+        let (x, y, a) = best.1;
+        put(&mut d, &mut labels, x, y, a, name, pre_col, ls);
     }
     // the centre of a turn or an enlargement: an open ring (on the student copy too, it is part of the question)
     if has_centre(p) && !(old && centre(p) == (0.0, 0.0)) {
@@ -570,7 +625,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let number = |d: &mut Doc, x: f64, y: f64, anchor: &str, k: f64| {
         let t = format!("{}", k as i64);
         let r = text_rect(x, y, 12.0, anchor, &t);
-        let hit = labels.iter().any(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1);
+        let hit = labels.iter().any(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1)
+            // a side or the mirror line through the number: its white halo would cut a gap in the stroke
+            || box_cost(&Rect { x0: r.x0 + 1.0, y0: r.y0 + 2.0, x1: r.x1 - 1.0, y1: r.y1 }, &[], &[], &stroke_sides) > 0.0;
         if k.abs() > 0.5 && !hit { d.raw(&text_el(x, y, 12.0, anchor, ink, &t)); }
     };
     if old {
@@ -698,7 +755,7 @@ pub fn handles(p: &Params) -> Vec<Handle> {
     // a click on the grid: while the pre-image is being built (nothing typed yet, or an open shape with room for
     // more) it adds the next vertex at the grid point clicked, the way the reference builds one; once the shape is
     // closed, on a translation's answer key, it moves A' to the grid point clicked and the image with it
-    let building = lay.pre.is_empty() || (!p.b("closed") && lay.pre.len() < MAX_V);
+    let building = lay.pre.is_empty() || (p.b("adding") && lay.pre.len() < MAX_V);
     let translating = !building && p.s("op") == "Translate" && p.b(SHOW_ANSWERS);
     let grid_mid = (fr.px((fr.x0 + fr.x1) / 2.0), fr.py((fr.y0 + fr.y1) / 2.0));
     let grid_size = (fr.gw(), fr.gh());
@@ -712,8 +769,11 @@ pub fn handles(p: &Params) -> Vec<Handle> {
             let Some(q) = point_at(m) else { return };
             let mut v = vertices(p);
             if v.len() >= MAX_V || v.last() == Some(&q) { return; }
-            // a new pre-image is built open; clicking its first vertex again closes it
-            if v.is_empty() { p.set_b("closed", false); }
+            // a new pre-image is built open, adding until its first vertex is clicked again (closed) or its last
+            if v.is_empty() {
+                p.set_b("closed", false);
+                p.set_b("adding", true);
+            }
             v.push(q);
             p.set_s("pre", &data::pairs_text(&v));
         }));
@@ -727,11 +787,16 @@ pub fn handles(p: &Params) -> Vec<Handle> {
     }
     if p.b("show_pre") {
         let n = lay.pre.len();
+        let adding = p.b("adding");
         for (i, q) in lay.pre.iter().enumerate() {
-            // the first vertex of three or more also closes (or opens) the shape when clicked, as in the reference
+            // the first vertex of three or more also closes (or opens) the shape when clicked, as in the reference;
+            // while vertices are being added, the last one finishes the shape as a path (or a lone point)
             let closes = i == 0 && n >= 3;
+            let finishes = adding && i + 1 == n && !closes;
             let tip = if closes {
-                format!("Drag vertex {} to a grid point, or click it to {} the shape", NAMES[i], if p.b("closed") { "open" } else { "close" })
+                format!("Drag vertex {} to a grid point, or click it to {} the shape", NAMES[i], if p.b("closed") && !adding { "open" } else { "close" })
+            } else if finishes {
+                format!("Drag vertex {} to a grid point, or click it to finish the {}", NAMES[i], if n == 1 { "point" } else { "path" })
             } else {
                 format!("Drag vertex {} to a grid point", NAMES[i])
             };
@@ -745,7 +810,17 @@ pub fn handles(p: &Params) -> Vec<Handle> {
                     p.set_s("pre", &data::pairs_text(&v));
                 }
             });
-            hs.push(if closes { h.with_click(|p| { let c = p.b("closed"); p.set_b("closed", !c); }) } else { h });
+            hs.push(if closes {
+                h.with_click(|p| {
+                    let c = !p.b("closed") || p.b("adding");
+                    p.set_b("closed", c);
+                    p.set_b("adding", false);
+                })
+            } else if finishes {
+                h.with_click(|p| p.set_b("adding", false))
+            } else {
+                h
+            });
         }
     }
     hs
@@ -1089,6 +1164,7 @@ mod tests {
         assert_eq!(click_grid(&mut p, (3.8, 1.2)), "Click a grid point to add the next vertex");
         click_grid(&mut p, (1.0, 3.3));
         assert_eq!(vertices(&p), vec![(1.0, 1.0), (4.0, 1.0), (1.0, 3.0)]);
+        assert!(p.b("adding"), "still adding until the shape is closed or finished");
         // a second click on the same point adds nothing
         click_grid(&mut p, (1.0, 3.0));
         assert_eq!(vertices(&p).len(), 3);
@@ -1099,7 +1175,7 @@ mod tests {
         let a = handles(&p).into_iter().find(|h| h.tip.starts_with("Drag vertex A")).unwrap();
         assert!(a.tip.ends_with("click it to close the shape"), "{}", a.tip);
         (a.click.as_ref().unwrap())(&mut p);
-        assert!(p.b("closed"));
+        assert!(p.b("closed") && !p.b("adding"), "closed, and the grid stops adding");
         // closed and translated: the grid click no longer adds, it sets the translation
         assert_eq!(click_grid(&mut p, (-3.0, 4.0)), "Click where A\u{2032} should go to set the translation");
         assert_eq!(vertices(&p).len(), 3);
@@ -1109,11 +1185,100 @@ mod tests {
         assert!(!handles(&with(&[s("op", "Rotate")])).iter().any(|h| h.click_at.is_some()));
         let mut p = with(&[s("pre", ""), s("op", "Rotate")]);
         for k in 0..12 { click_grid_if_any(&mut p, (k as f64 - 6.0, 2.0)); }
+        assert!(p.b("adding"));
         assert_eq!(vertices(&p).len(), MAX_V);
         // a click far off the grid lands on the edge of the range
         let mut p = with(&[s("pre", "")]);
         click_grid(&mut p, (40.0, -40.0));
         assert_eq!(vertices(&p), vec![(10.0, -10.0)]);
+    }
+
+    /// An open path stops taking vertices once it is finished: a stray click on the grid then does what a click does
+    /// on a finished shape (on a translation's key, it moves A'), never adds a vertex.
+    #[test]
+    fn a_finished_path_takes_no_more_vertices() {
+        let mut p = with(&[s("pre", "")]);
+        click_grid(&mut p, (-4.0, 1.0));
+        click_grid(&mut p, (-1.0, 4.0));
+        click_grid(&mut p, (2.0, 1.0));
+        let last = handles(&p).into_iter().find(|h| h.tip.starts_with("Drag vertex C")).unwrap();
+        assert!(last.tip.ends_with("click it to finish the path"), "{}", last.tip);
+        (last.click.as_ref().unwrap())(&mut p);
+        assert!(!p.b("closed") && !p.b("adding"), "an open path, finished");
+        assert_eq!(click_grid(&mut p, (5.0, 5.0)), "Click where A\u{2032} should go to set the translation");
+        assert_eq!(vertices(&p).len(), 3, "the stray click added nothing");
+        // a typed open path offers no adding either; turning "adding" on in the panel resumes it
+        let p = with(&[s("pre", "0, 0\n2, 0"), b("closed", false), s("op", "Rotate")]);
+        assert!(!handles(&p).iter().any(|h| h.click_at.is_some()));
+        let mut p = with(&[s("pre", "0, 0\n2, 0"), b("closed", false), b("adding", true)]);
+        assert_eq!(click_grid(&mut p, (2.0, 2.0)), "Click a grid point to add the next vertex");
+        assert_eq!(vertices(&p).len(), 3);
+        // a lone point finishes as a point
+        let mut p = with(&[s("pre", "")]);
+        click_grid(&mut p, (3.0, 3.0));
+        let a = handles(&p).into_iter().find(|h| h.tip.starts_with("Drag vertex A")).unwrap();
+        assert!(a.tip.ends_with("finish the point"), "{}", a.tip);
+    }
+
+    /// The panel shows only the chosen transformation's controls.
+    #[test]
+    fn the_panel_shows_only_the_chosen_transformations_controls() {
+        let shown = |l: &[(&'static str, Value)]| -> Vec<&'static str> {
+            let p = with(l);
+            ["dx", "dy", "axis", "line_a", "angle", "scale", "cx", "cy", "x_from"].into_iter().filter(|k| crate::figures::param_relevant(ID, k, &p)).collect()
+        };
+        assert_eq!(shown(&[]), vec!["dx", "dy", "x_from"]);
+        assert_eq!(shown(&[s("op", "Reflect")]), vec!["axis", "x_from"]);
+        assert_eq!(shown(&[s("op", "Reflect"), s("axis", AXES[6])]), vec!["axis", "line_a", "x_from"]);
+        assert_eq!(shown(&[s("op", "Rotate")]), vec!["angle", "cx", "cy", "x_from"]);
+        assert_eq!(shown(&[s("op", "Dilate"), b("fit", true)]), vec!["scale", "cx", "cy"]);
+    }
+
+    /// Letters and names keep clear: the mirror line's name is off both axes, a vertex letter is off the other
+    /// figure's edges, and no axis number sits on a stroke (its halo would cut a gap in it).
+    #[test]
+    fn names_letters_and_numbers_keep_clear_of_lines() {
+        let crosses = |r: &Rect, a: Pt, b: Pt| box_cost(r, &[], &[], &[(a, b, 1.0)]) > 0.0;
+        let text_boxes = |svg: &str| -> Vec<(String, Rect)> {
+            let mut out = Vec::new();
+            for part in svg.split("<text ").skip(1) {
+                let attr = |k: &str| part.split(&format!("{k}=\"")).nth(1).and_then(|t| t.split('"').next()).unwrap_or("").to_string();
+                let body = part.split('>').nth(1).unwrap_or("").split("</text").next().unwrap_or("").to_string();
+                let (x, y, size): (f64, f64, f64) = (attr("x").parse().unwrap_or(0.0), attr("y").parse().unwrap_or(0.0), attr("font-size").parse().unwrap_or(12.0));
+                out.push((body.clone(), text_rect(x, y, size, &attr("text-anchor"), &body)));
+            }
+            out
+        };
+        // x = -1: the y-axis must not run through its name
+        let p = with(&[s("op", "Reflect"), s("axis", AXES[4]), f("line_a", -1.0)]);
+        let fr = layout(&p).frame;
+        let svg = build(&p).0;
+        let (_, r) = text_boxes(&svg).into_iter().find(|(t, _)| t == "x = \u{2212}1").expect("the line is named");
+        assert!(!crosses(&r, fr.to_svg((0.0, fr.y0)), fr.to_svg((0.0, fr.y1))), "the y-axis strikes through the name");
+        assert!(!crosses(&r, fr.to_svg((fr.x0, 0.0)), fr.to_svg((fr.x1, 0.0))), "the x-axis strikes through the name");
+        // y = -x + 3: A is not crossed by the image's edge C'B'
+        let p = with(&[s("op", "Reflect"), s("axis", AXES[7]), f("line_a", 3.0)]);
+        let fr = layout(&p).frame;
+        let img = build(&p).1.image;
+        let (_, r) = text_boxes(&build(&p).0).into_iter().find(|(t, _)| t == "A").unwrap();
+        for k in 0..3 {
+            let (a, b) = (fr.to_svg(img[k]), fr.to_svg(img[(k + 1) % 3]));
+            assert!(!crosses(&r, a, b), "A is crossed by the image edge {k}");
+        }
+        // no axis number on a stroke: a quarter turn (C'A' passes x = -2 near the axis) and a half-size enlargement
+        for l in [vec![s("op", "Rotate")], vec![s("op", "Dilate"), f("scale", 0.5)], vec![s("op", "Rotate"), s("angle", ANGLES[2])], vec![]] {
+            let p = with(&l);
+            let fr = layout(&p).frame;
+            let rep = build(&p);
+            let mut segs: Vec<(Pt, Pt)> = Vec::new();
+            for shape in [vertices(&p), rep.1.image.clone()] {
+                for k in 0..shape.len() { segs.push((fr.to_svg(shape[k]), fr.to_svg(shape[(k + 1) % shape.len()]))); }
+            }
+            for (t, r) in text_boxes(&rep.0).into_iter().filter(|(t, _)| t.trim_start_matches('\u{2212}').chars().all(|c| c.is_ascii_digit()) && !t.is_empty()) {
+                let inner = Rect { x0: r.x0 + 1.0, y0: r.y0 + 2.0, x1: r.x1 - 1.0, y1: r.y1 };
+                for (a, b) in &segs { assert!(!crosses(&inner, *a, *b), "{l:?}: the number {t} sits on a stroke"); }
+            }
+        }
     }
 
     fn click_grid_if_any(p: &mut Params, at: Pt) {
