@@ -3789,7 +3789,7 @@ const UNIT_CIRCLE: &[Faq] = &[
 const TRANSFORMATIONS: &[Faq] = &[
     Faq {
         q: "Where does the image go for each transformation?",
-        a: "Translate moves every corner by the same amount. Reflect flips the shape over the named line: over the x-axis y changes sign, over the y-axis x does, over y = x the coordinates swap. Rotate turns the shape about the origin, anticlockwise. Enlarge multiplies both coordinates by the scale factor, about the origin.",
+        a: "Translate moves every corner by the same amount. Reflect flips the shape over the named line: over the x-axis y changes sign, over the y-axis x does, over y = x the coordinates swap. Rotate turns the shape a quarter, a half or three quarters of a turn, either way, about the centre (the origin unless you move it). Enlarge stretches every vertex's distance from the centre by the scale factor. Reflect also takes any line x = a, y = a, y = x + a or y = -x + a.",
     },
     Faq {
         q: "Why is the image not drawn?",
@@ -3802,6 +3802,10 @@ const TRANSFORMATIONS: &[Faq] = &[
     Faq {
         q: "Can I move the pre-image?",
         a: "Yes. Drag any of its vertices on the grid: it snaps to the nearest grid point and the image follows as you drag. Or type the vertices, one x, y pair per line: one pair is a point, more make a polygon of up to ten vertices, or an open path with Join the last vertex to the first turned off.",
+    },
+    Faq {
+        q: "Can I move the centre or the mirror line?",
+        a: "Yes, on the figure: drag the ring that marks the centre of a turn or an enlargement, or the knob on a mirror line x = a, y = a, y = x + a or y = -x + a. Each snaps to the grid, and the image and the rule follow. Or type them: the centre's x and y, the line's number a.",
     },
     Faq {
         q: "How big is the grid?",

@@ -41,8 +41,11 @@ const NAMES: [&str; MAX_V] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
 const VMAX: f64 = 30.0;
 
 const OPS: [&str; 4] = ["Translate", "Reflect", "Rotate", "Dilate"];
-const AXES: [&str; 4] = ["the x-axis", "the y-axis", "the line y = x", "the line y = -x"];
-const ANGLES: [&str; 3] = ["90 degrees anticlockwise", "180 degrees", "270 degrees anticlockwise"];
+const AXES: [&str; 8] = [
+    "the x-axis", "the y-axis", "the line y = x", "the line y = -x",
+    "the line x = a", "the line y = a", "the line y = x + a", "the line y = -x + a",
+];
+const ANGLES: [&str; 5] = ["90 degrees anticlockwise", "180 degrees", "270 degrees anticlockwise", "90 degrees clockwise", "270 degrees clockwise"];
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -63,8 +66,11 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("dx", "Translate right by", -8.0, 8.0, 1.0, 3.0),
         ParamDef::float("dy", "Translate up by", -8.0, 8.0, 1.0, -2.0),
         ParamDef::choice("axis", "Reflect in", &AXES, AXES[0]),
-        ParamDef::choice("angle", "Turn about the origin", &ANGLES, ANGLES[0]),
+        ParamDef::float("line_a", "The mirror line's number a", -10.0, 10.0, 0.5, 2.0),
+        ParamDef::choice("angle", "Turn by", &ANGLES, ANGLES[0]),
         ParamDef::float("scale", "Scale factor", 0.5, 3.0, 0.5, 2.0),
+        ParamDef::float("cx", "Turn or enlarge about x", -10.0, 10.0, 0.5, 0.0),
+        ParamDef::float("cy", "Turn or enlarge about y", -10.0, 10.0, 0.5, 0.0),
         ParamDef::bool("show_pre", "Show the pre-image", true),
         ParamDef::int("x_from", "x-axis from", -30, 0, -10),
         ParamDef::int("x_to", "x-axis to", 0, 30, 10),
@@ -88,24 +94,46 @@ pub fn vertices(p: &Params) -> Vec<Pt> {
     data::pairs(p.s("pre")).into_iter().filter(|q| q.0.is_finite() && q.1.is_finite()).take(MAX_V).map(|q| (q.0.clamp(-VMAX, VMAX), q.1.clamp(-VMAX, VMAX))).collect()
 }
 
+/// The centre a turn or an enlargement is about.
+pub fn centre(p: &Params) -> Pt { (fin(p.f("cx"), -10.0, 10.0, 0.0), fin(p.f("cy"), -10.0, 10.0, 0.0)) }
+
+/// The number a in a mirror line x = a, y = a or y = x + a, y = -x + a.
+fn line_a(p: &Params) -> f64 { fin(p.f("line_a"), -10.0, 10.0, 0.0) }
+
+/// Is the transformation about a centre (a turn or an enlargement)?
+fn has_centre(p: &Params) -> bool { matches!(p.s("op"), "Rotate" | "Dilate") }
+
 /// Where a point goes under the chosen transformation.
 pub fn map_point(p: &Params, pt: Pt) -> Pt {
     let (x, y) = pt;
     match p.s("op") {
-        "Reflect" => match p.s("axis") {
-            "the y-axis" => (-x, y),
-            "the line y = x" => (y, x),
-            "the line y = -x" => (-y, -x),
-            _ => (x, -y),
-        },
-        "Rotate" => match p.s("angle") {
-            "180 degrees" => (-x, -y),
-            "270 degrees anticlockwise" => (y, -x),
-            _ => (-y, x),
-        },
+        "Reflect" => {
+            let a = line_a(p);
+            match p.s("axis") {
+                "the y-axis" => (-x, y),
+                "the line y = x" => (y, x),
+                "the line y = -x" => (-y, -x),
+                "the line x = a" => (2.0 * a - x, y),
+                "the line y = a" => (x, 2.0 * a - y),
+                "the line y = x + a" => (y - a, x + a),
+                "the line y = -x + a" => (a - y, a - x),
+                _ => (x, -y),
+            }
+        }
+        "Rotate" => {
+            let (a, b) = centre(p);
+            let (u, v) = (x - a, y - b);
+            let (u, v) = match p.s("angle") {
+                "180 degrees" => (-u, -v),
+                "270 degrees anticlockwise" | "90 degrees clockwise" => (v, -u),
+                _ => (-v, u),
+            };
+            (u + a, v + b)
+        }
         "Dilate" => {
             let k = fin(p.f("scale"), 0.5, 3.0, 1.0);
-            (x * k, y * k)
+            let (a, b) = centre(p);
+            (a + (x - a) * k, b + (y - b) * k)
         }
         _ => (x + fin(p.f("dx"), -8.0, 8.0, 0.0), y + fin(p.f("dy"), -8.0, 8.0, 0.0)),
     }
@@ -136,21 +164,42 @@ fn affine(a: f64, b: f64, c: f64) -> String {
     out
 }
 
+/// A mirror line's equation as the figure writes it: `x = 2`, `y = x - 1` (with a true minus sign).
+fn line_name(p: &Params) -> Option<String> {
+    let a = line_a(p);
+    let plus = |a: f64| if a.abs() < 1e-9 { String::new() } else if a < 0.0 { format!(" \u{2212} {}", num(-a, 2)) } else { format!(" + {}", num(a, 2)) };
+    Some(match p.s("axis") {
+        "the line y = x" => "y = x".into(),
+        "the line y = -x" => "y = \u{2212}x".into(),
+        "the line x = a" => format!("x = {}", num(a, 2)),
+        "the line y = a" => format!("y = {}", num(a, 2)),
+        "the line y = x + a" => format!("y = x{}", plus(a)),
+        "the line y = -x + a" => format!("y = \u{2212}x{}", plus(a)),
+        _ => return None,
+    })
+}
+
 /// The transformation's name, the part of the rule before the colon.
 fn rule_name(p: &Params) -> String {
+    let (a, b) = centre(p);
+    let about = if a == 0.0 && b == 0.0 { "the origin".to_string() } else { format!("({}, {})", num(a, 2), num(b, 2)) };
     match p.s("op") {
-        "Reflect" => match p.s("axis") {
-            "the y-axis" => "reflect in the y-axis".into(),
-            "the line y = x" => "reflect in y = x".into(),
-            "the line y = -x" => "reflect in y = \u{2212}x".into(),
+        "Reflect" => match (p.s("axis"), line_name(p)) {
+            ("the y-axis", _) => "reflect in the y-axis".into(),
+            (_, Some(l)) => format!("reflect in {l}"),
             _ => "reflect in the x-axis".into(),
         },
-        "Rotate" => match p.s("angle") {
-            "180 degrees" => "turn 180\u{b0} about the origin".into(),
-            "270 degrees anticlockwise" => "turn 270\u{b0} anticlockwise".into(),
-            _ => "turn 90\u{b0} anticlockwise".into(),
-        },
-        "Dilate" => format!("enlarge by {} about the origin", num(fin(p.f("scale"), 0.5, 3.0, 1.0), 2)),
+        "Rotate" => {
+            let turn = match p.s("angle") {
+                "180 degrees" => "turn 180\u{b0}",
+                "270 degrees anticlockwise" => "turn 270\u{b0} anticlockwise",
+                "90 degrees clockwise" => "turn 90\u{b0} clockwise",
+                "270 degrees clockwise" => "turn 270\u{b0} clockwise",
+                _ => "turn 90\u{b0} anticlockwise",
+            };
+            format!("{turn} about {about}")
+        }
+        "Dilate" => format!("enlarge by {} about {about}", num(fin(p.f("scale"), 0.5, 3.0, 1.0), 2)),
         _ => "translate".into(),
     }
 }
@@ -249,6 +298,8 @@ pub fn layout(p: &Params) -> Layout {
     let mut pts: Vec<Pt> = Vec::new();
     if p.b("show_pre") || !fit { pts.extend(pre.iter().copied()); }
     pts.extend(image.iter().copied());
+    // the centre of a turn or an enlargement is drawn, so the grid takes it in too
+    if has_centre(p) { pts.push(centre(p)); }
     let lim = 4.0 * VMAX;
     let lo = |v: f64| v.clamp(-lim, lim);
     let (mut x0, mut x1, mut y0, mut y1) = if fit {
@@ -384,18 +435,23 @@ pub fn build(p: &Params) -> (String, Report) {
     // the axes
     d.line(ox, py(0.0), ox + gw, py(0.0), ink, 1.8);
     d.line(px(0.0), oy, px(0.0), oy + gh, ink, 1.8);
-    // a reflected shape needs its mirror line: y = x and y = -x are not axes, so draw them as a dashed helper
-    if p.s("op") == "Reflect" {
-        let (a, b) = match p.s("axis") {
-            "the line y = x" => ((x0, x0), (x1, x1)),
-            "the line y = -x" => ((x0, -x0), (x1, -x1)),
-            _ => ((0.0, 0.0), (0.0, 0.0)),
-        };
-        if a != b
-            && let Some((s, e)) = clip_seg(px(a.0), py(a.1), px(b.0), py(b.1), ox, oy, ox + gw, oy + gh)
-        {
-            d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{pre_col}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, s.0, s.1, e.0, e.1));
-        }
+    // a reflected shape needs its mirror line: every line but the two axes is drawn as a dashed helper, named at its
+    // upper end (on the student copy too: the line is part of the question)
+    let mut line_label: Option<(f64, f64, &str, String)> = None;
+    let mut mirror_side: Option<(Pt, Pt)> = None;
+    if p.s("op") == "Reflect"
+        && let (Some((a, b)), Some(name)) = (mirror_seg(p, &fr), line_name(p))
+        && let Some((s, e)) = clip_seg(px(a.0), py(a.1), px(b.0), py(b.1), ox, oy, ox + gw, oy + gh)
+    {
+        d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{pre_col}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, s.0, s.1, e.0, e.1));
+        mirror_side = Some((s, e));
+        // the upper end (the right one on a level line), and the side of the line that faces up (right on an upright)
+        let (top, other) = if e.1 < s.1 - 1e-6 || ((e.1 - s.1).abs() <= 1e-6 && e.0 > s.0) { (e, s) } else { (s, e) };
+        let len = ((other.0 - top.0).powi(2) + (other.1 - top.1).powi(2)).sqrt().max(1e-9);
+        let dir = ((other.0 - top.0) / len, (other.1 - top.1) / len);
+        let n = if dir.0.abs() < 1e-6 { (1.0, 0.0) } else if dir.0 < 0.0 { (-dir.1, dir.0) } else { (dir.1, -dir.0) };
+        let anchor = if n.0 > 0.2 { "start" } else if n.0 < -0.2 { "end" } else { "middle" };
+        line_label = Some((top.0 + dir.0 * 20.0 + n.0 * 12.0, top.1 + dir.1 * 20.0 + n.1 * 12.0 + 4.0, anchor, name));
     }
 
     let mut labels: Vec<Rect> = Vec::new();
@@ -433,6 +489,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut sides: Vec<(Pt, Pt)> = Vec::new();
     if show_pre { sides.extend(edges(&pre)); }
     if ans { sides.extend(edges(&image)); }
+    sides.extend(mirror_side);
     // the pre-image, dashed when the image is drawn on top of it
     if show_pre && !pre.is_empty() {
         shape(&mut d, &pre, pre_col, if ans { 2.0 } else { 2.6 }, ans);
@@ -451,17 +508,33 @@ pub fn build(p: &Params) -> (String, Report) {
         }
     }
 
+    if let Some((x, y, a, name)) = &line_label {
+        put(&mut d, &mut labels, *x, *y, a, name, pre_col, 13.0 * f);
+    }
+    // the centre of a turn or an enlargement: an open ring (on the student copy too, it is part of the question)
+    if has_centre(p) {
+        let c = fr.to_svg(centre(p));
+        d.circle(c.0, c.1, 4.5, "#ffffff", ink, 1.8);
+    }
+
     // the axis numbers, drawn after the shapes so a side cannot swallow a digit (they carry a halo); every 2nd line,
     // or every 5th, 10th ... when the units are too small for that
+    // a number is left out where a vertex letter or the line's name already sits: the letter matters more there
+    let number = |d: &mut Doc, x: f64, y: f64, anchor: &str, k: f64| {
+        let t = format!("{}", k as i64);
+        let r = text_rect(x, y, 12.0, anchor, &t);
+        let hit = labels.iter().any(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1);
+        if k.abs() > 0.5 && !hit { d.raw(&text_el(x, y, 12.0, anchor, ink, &t)); }
+    };
     let step = [2.0, 5.0, 10.0, 20.0, 50.0].into_iter().find(|s| s * fr.u >= 26.0).unwrap_or(100.0);
     let mut k = (x0 / step).ceil() * step;
     while k <= x1 + 1e-9 {
-        if k.abs() > 0.5 { d.raw(&text_el(px(k), py(0.0) + 16.0, 12.0, "middle", ink, &format!("{}", k as i64))); }
+        number(&mut d, px(k), py(0.0) + 16.0, "middle", k);
         k += step;
     }
     let mut k = (y0 / step).ceil() * step;
     while k <= y1 + 1e-9 {
-        if k.abs() > 0.5 { d.raw(&text_el(px(0.0) - 6.0, py(k) + 4.0, 12.0, "end", ink, &format!("{}", k as i64))); }
+        number(&mut d, px(0.0) - 6.0, py(k) + 4.0, "end", k);
         k += step;
     }
 
@@ -475,18 +548,76 @@ pub fn build(p: &Params) -> (String, Report) {
     (d.finish(), Report { image, bounds: (x0, x1, y0, y1), labels })
 }
 
+/// The mirror line across the grid, in units (the axes return `None`: they are drawn already).
+fn mirror_seg(p: &Params, fr: &Frame) -> Option<(Pt, Pt)> {
+    let a = line_a(p);
+    let (x0, x1, y0, y1) = (fr.x0, fr.x1, fr.y0, fr.y1);
+    Some(match p.s("axis") {
+        "the line y = x" => ((x0, x0), (x1, x1)),
+        "the line y = -x" => ((x0, -x0), (x1, -x1)),
+        "the line x = a" => ((a, y0), (a, y1)),
+        "the line y = a" => ((x0, a), (x1, a)),
+        "the line y = x + a" => ((x0, x0 + a), (x1, x1 + a)),
+        "the line y = -x + a" => ((x0, a - x0), (x1, a - x1)),
+        _ => return None,
+    })
+}
+
 /// A vertex moves to the grid point under the pointer, inside the stated range (or the fitted grid). Within half a
 /// unit of where it is it stays put, so a vertex typed off the grid (1.5) is not snapped by a press that does not move.
 fn snap(m: f64, cur: f64, lo: f64, hi: f64) -> f64 {
     if !m.is_finite() || (m - cur).abs() < 0.5 { cur } else { m.round().clamp(lo, hi) }
 }
 
-/// The drag handles: every pre-image vertex, snapping to grid points, with the image following live.
+/// The drag handles: every pre-image vertex, snapping to grid points, with the image following live; the centre of a
+/// turn or an enlargement; a mirror line x = a, y = a or y = x + a, y = -x + a.
 pub fn handles(p: &Params) -> Vec<Handle> {
     let lay = layout(p);
     let fr = lay.frame;
     let mut hs = Vec::new();
     let (lx0, lx1, ly0, ly1) = if p.b("fit") { (fr.x0, fr.x1, fr.y0, fr.y1) } else { stated(p) };
+    let inside = |q: Pt| q.0 >= fr.x0 - 1e-9 && q.0 <= fr.x1 + 1e-9 && q.1 >= fr.y0 - 1e-9 && q.1 <= fr.y1 + 1e-9;
+    // the centre: first, so a pre-image vertex on the same grid point stays on top (the centre can be typed)
+    if has_centre(p) {
+        let tip = if p.s("op") == "Rotate" { "Drag the centre of rotation" } else { "Drag the centre of enlargement" };
+        let (cx0, cx1, cy0, cy1) = (lx0.max(-10.0), lx1.min(10.0), ly0.max(-10.0), ly1.min(10.0));
+        hs.push(Handle::diamond(fr.to_svg(centre(p)), tip, move |p, m| {
+            let (mx, my) = fr.to_xy(m);
+            let c = centre(p);
+            let to = (snap(mx, c.0, cx0, cx1), snap(my, c.1, cy0, cy1));
+            if to != c {
+                p.set_f("cx", to.0);
+                p.set_f("cy", to.1);
+            }
+        }));
+    }
+    // a mirror line with a number in it: a knob where it passes nearest the middle of the grid
+    if p.s("op") == "Reflect" && p.s("axis").ends_with('a') {
+        let a = line_a(p);
+        let (gx, gy) = ((fr.x0 + fr.x1) / 2.0, (fr.y0 + fr.y1) / 2.0);
+        let axis = p.s("axis").to_string();
+        let at = match axis.as_str() {
+            "the line x = a" => (a, gy),
+            "the line y = a" => (gx, a),
+            "the line y = x + a" => { let s = (gx + gy - a) / 2.0; (s, s + a) }
+            _ => { let s = (gx - gy + a) / 2.0; (s, a - s) }
+        };
+        if inside(at) {
+            let drag = move |p: &mut Params, m: Pt| {
+                let (mx, my) = fr.to_xy(m);
+                let raw = match axis.as_str() { "the line x = a" => mx, "the line y = a" => my, "the line y = x + a" => my - mx, _ => my + mx };
+                let a = line_a(p);
+                let to = snap(raw, a, -10.0, 10.0);
+                if to != a { p.set_f("line_a", to); }
+            };
+            let tip = "Drag the mirror line";
+            hs.push(match p.s("axis") {
+                "the line x = a" => Handle::bar(fr.to_svg(at), false, tip, drag),
+                "the line y = a" => Handle::bar(fr.to_svg(at), true, tip, drag),
+                _ => Handle::knob(fr.to_svg(at), tip, drag).with_cursor(super::interact::Cursor::Move),
+            });
+        }
+    }
     if p.b("show_pre") {
         for (i, q) in lay.pre.iter().enumerate() {
             hs.push(Handle::knob(fr.to_svg(*q), &format!("Drag vertex {} to a grid point", NAMES[i]), move |p, m| {
@@ -514,6 +645,9 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Reflect in the line y = x", params: vec![s("op", OPS[1]), s("axis", AXES[2])] },
         Example { name: "Turn 180 degrees about the origin", params: vec![s("op", OPS[2]), s("angle", ANGLES[1])] },
         Example { name: "Enlarge by 2 about the origin", params: vec![s("op", OPS[3]), f("scale", 2.0)] },
+        Example { name: "Reflect in the line x = -1", params: vec![s("op", OPS[1]), s("axis", AXES[4]), f("line_a", -1.0)] },
+        Example { name: "Turn 90 degrees clockwise about (-1, 2)", params: vec![s("op", OPS[2]), s("angle", ANGLES[3]), f("cx", -1.0), f("cy", 2.0)] },
+        Example { name: "Enlarge by 2 from (2, 4)", params: vec![s("op", OPS[3]), f("scale", 2.0), f("cx", 2.0), f("cy", 4.0)] },
     ])
 }
 
@@ -575,9 +709,9 @@ mod tests {
         let r = |l: &[(&'static str, Value)]| rule_text(&with(l));
         assert_eq!(r(&[s("op", "Reflect"), s("axis", AXES[0])]), "reflect in the x-axis: (x, y) \u{2192} (x, \u{2212}y)");
         assert_eq!(r(&[s("op", "Reflect"), s("axis", AXES[3])]), "reflect in y = \u{2212}x: (x, y) \u{2192} (\u{2212}y, \u{2212}x)");
-        assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[0])]), "turn 90\u{b0} anticlockwise: (x, y) \u{2192} (\u{2212}y, x)");
+        assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[0])]), "turn 90\u{b0} anticlockwise about the origin: (x, y) \u{2192} (\u{2212}y, x)");
         assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[1])]), "turn 180\u{b0} about the origin: (x, y) \u{2192} (\u{2212}x, \u{2212}y)");
-        assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[2])]), "turn 270\u{b0} anticlockwise: (x, y) \u{2192} (y, \u{2212}x)");
+        assert_eq!(r(&[s("op", "Rotate"), s("angle", ANGLES[2])]), "turn 270\u{b0} anticlockwise about the origin: (x, y) \u{2192} (y, \u{2212}x)");
         assert_eq!(r(&[s("op", "Dilate"), f("scale", 0.5)]), "enlarge by 0.5 about the origin: (x, y) \u{2192} (0.5x, 0.5y)");
     }
 
@@ -695,6 +829,111 @@ mod tests {
     }
 
     #[test]
+    fn a_turn_and_an_enlargement_go_about_any_centre() {
+        // 90 anticlockwise about (2, 1): (3, 1) is one to the right of the centre, so it goes one above it
+        let p = with(&[s("op", "Rotate"), f("cx", 2.0), f("cy", 1.0)]);
+        assert_eq!(map_point(&p, (3.0, 1.0)), (2.0, 2.0));
+        assert_eq!(map_point(&p, (2.0, 1.0)), (2.0, 1.0), "the centre stays put");
+        assert_eq!(rule_text(&p), "turn 90\u{b0} anticlockwise about (2, 1): (x, y) \u{2192} (\u{2212}y + 3, x \u{2212} 1)");
+        // clockwise turns: 90 clockwise is 270 anticlockwise, and the other way round
+        let cw = with(&[s("op", "Rotate"), s("angle", ANGLES[3])]);
+        assert_eq!(map_point(&cw, (1.0, 0.0)), (0.0, -1.0));
+        assert_eq!(rule_text(&cw), "turn 90\u{b0} clockwise about the origin: (x, y) \u{2192} (y, \u{2212}x)");
+        let cw270 = with(&[s("op", "Rotate"), s("angle", ANGLES[4])]);
+        assert_eq!(map_point(&cw270, (1.0, 0.0)), (0.0, 1.0));
+        // enlarge by 2 from (1, 1): (3, 2) is (2, 1) from the centre, so it lands (4, 2) from it
+        let p = with(&[s("op", "Dilate"), f("scale", 2.0), f("cx", 1.0), f("cy", 1.0)]);
+        assert_eq!(map_point(&p, (3.0, 2.0)), (5.0, 3.0));
+        assert_eq!(rule_text(&p), "enlarge by 2 about (1, 1): (x, y) \u{2192} (2x \u{2212} 1, 2y \u{2212} 1)");
+        // the centre is drawn as a ring, on the student copy too
+        let stu = render_of(&[s("op", "Rotate"), f("cx", 2.0), f("cy", 1.0), b(SHOW_ANSWERS, false)]);
+        assert!(stu.contains(r##"r="4.50" fill="#ffffff""##) || stu.contains(r##"r="4.5" fill="#ffffff""##), "{stu}");
+    }
+
+    #[test]
+    fn a_reflection_goes_over_any_line_x_a_y_a_or_y_pm_x_a() {
+        let cases = [
+            (AXES[4], 2.0, (3.0, 5.0), (1.0, 5.0), "reflect in x = 2: (x, y) \u{2192} (\u{2212}x + 4, y)"),
+            (AXES[5], -1.0, (3.0, 5.0), (3.0, -7.0), "reflect in y = \u{2212}1: (x, y) \u{2192} (x, \u{2212}y \u{2212} 2)"),
+            (AXES[6], 1.0, (3.0, 0.0), (-1.0, 4.0), "reflect in y = x + 1: (x, y) \u{2192} (y \u{2212} 1, x + 1)"),
+            (AXES[7], 2.0, (3.0, 0.0), (2.0, -1.0), "reflect in y = \u{2212}x + 2: (x, y) \u{2192} (\u{2212}y + 2, \u{2212}x + 2)"),
+        ];
+        for (axis, a, from, to, rule) in cases {
+            let p = with(&[s("op", "Reflect"), s("axis", axis), f("line_a", a)]);
+            assert_eq!(map_point(&p, from), to, "{axis}");
+            assert_eq!(map_point(&p, to), from, "{axis}: a reflection undoes itself");
+            assert_eq!(rule_text(&p), rule);
+            // the mirror line is drawn dashed and named, on the student copy too
+            let stu = texts(&render_of(&[s("op", "Reflect"), s("axis", axis), f("line_a", a), b(SHOW_ANSWERS, false)]));
+            let name = rule.trim_start_matches("reflect in ").split(':').next().unwrap();
+            assert!(stu.lines().any(|l| l == name), "{name} not named: {stu}");
+        }
+        // a = 0 reads as the plain line
+        assert_eq!(rule_name(&with(&[s("op", "Reflect"), s("axis", AXES[6]), f("line_a", 0.0)])), "reflect in y = x");
+    }
+
+    /// Every handle, for every transformation and every line or turn: dragged onto itself it changes nothing, dragged
+    /// anywhere it stays in range and the figure still renders. The shared probe tries one choice at a time from the
+    /// defaults, so it never reaches a reflection in x = a.
+    #[test]
+    fn every_handle_round_trips_in_every_setting() {
+        let d = def();
+        let defs = (d.params)();
+        let mut seen = std::collections::BTreeSet::new();
+        for op in OPS {
+            for (axis, angle) in AXES.iter().map(|a| (*a, ANGLES[0])).chain(ANGLES.iter().map(|g| (AXES[0], *g))) {
+                for extra in [vec![], vec![f("line_a", -3.5), f("cx", 1.5), f("cy", -2.0)], vec![b("fit", true)]] {
+                    let mut l = vec![s("op", op), s("axis", axis), s("angle", angle)];
+                    l.extend(extra);
+                    let p = with(&l);
+                    for h in handles(&p) {
+                        seen.insert(h.tip.clone());
+                        let f = h.drag.as_ref().unwrap();
+                        let mut q = p.clone();
+                        f(&mut q, h.pos);
+                        q.normalize(&defs, true);
+                        let mut want = p.clone();
+                        want.normalize(&defs, true);
+                        assert_eq!(format!("{:?}", q.0), format!("{:?}", want.0), "{op} {axis} {angle}: {} moved itself", h.tip);
+                        for t in [(0.0, 0.0), (-5000.0, 9000.0), (1e9, -1e9), (f64::NAN, 3.0)] {
+                            let mut q = p.clone();
+                            f(&mut q, t);
+                            q.normalize(&defs, true);
+                            assert!((d.render)(&q).contains("<svg"));
+                            assert!(vertices(&q).iter().all(|v| v.0.abs() <= 10.0 && v.1.abs() <= 10.0 || p.b("fit")), "{}: {:?}", h.tip, vertices(&q));
+                        }
+                    }
+                }
+            }
+        }
+        for tip in ["Drag vertex A to a grid point", "Drag the centre of rotation", "Drag the centre of enlargement", "Drag the mirror line"] {
+            assert!(seen.contains(tip), "no {tip:?} handle: {seen:?}");
+        }
+    }
+
+    #[test]
+    fn dragging_the_centre_or_the_mirror_line_moves_it_to_a_grid_point() {
+        let p = with(&[s("op", "Rotate")]);
+        let fr = layout(&p).frame;
+        let h = handles(&p).into_iter().find(|h| h.tip.contains("centre")).unwrap();
+        assert_eq!(h.pos, fr.to_svg((0.0, 0.0)));
+        let mut q = p.clone();
+        (h.drag.as_ref().unwrap())(&mut q, fr.to_svg((-1.8, 2.2)));
+        assert_eq!(centre(&q), (-2.0, 2.0));
+        assert_eq!(map_point(&q, (-1.0, 2.0)), (-2.0, 3.0), "the image turns about the new centre");
+        for (axis, to, want) in [(AXES[4], (3.2, 0.0), 3.0), (AXES[5], (0.0, -4.1), -4.0), (AXES[6], (0.0, 5.0), 5.0), (AXES[7], (2.0, -5.0), -3.0)] {
+            let p = with(&[s("op", "Reflect"), s("axis", axis)]);
+            let fr = layout(&p).frame;
+            let h = handles(&p).into_iter().find(|h| h.tip == "Drag the mirror line").unwrap();
+            let mut q = p.clone();
+            (h.drag.as_ref().unwrap())(&mut q, fr.to_svg(to));
+            assert_eq!(line_a(&q), want, "{axis}");
+        }
+        // the axes, y = x and y = -x have nothing to drag
+        assert!(!handles(&with(&[s("op", "Reflect"), s("axis", AXES[2])])).iter().any(|h| h.tip.contains("mirror")));
+    }
+
+    #[test]
     fn print_is_neutral_grey_only() {
         let svg = render_of(&[s("style", "Print"), b(SHOW_ANSWERS, true)]);
         for line in svg.lines().filter(|l| l.contains("stroke=\"#") || l.contains("fill=\"#")) {
@@ -714,6 +953,12 @@ mod tests {
         let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![])];
         for (i, (_, l)) in examples(ID).unwrap().into_iter().map(|e| (e.name.to_string(), e.params)).enumerate() { cases.push((format!("ex{i}"), l)); }
         cases.push(("dilate3".into(), vec![s("op", "Dilate"), f("scale", 3.0), b(SHOW_ANSWERS, true)]));
+        cases.push(("reflect-yx1".into(), vec![s("op", "Reflect"), s("axis", AXES[6]), f("line_a", 1.0)]));
+        cases.push(("reflect-ynx".into(), vec![s("op", "Reflect"), s("axis", AXES[7]), f("line_a", 3.0)]));
+        cases.push(("reflect-ya".into(), vec![s("op", "Reflect"), s("axis", AXES[5]), f("line_a", -2.0)]));
+        cases.push(("polygon".into(), vec![s("pre", "0, 0\n2, 0\n3, 2\n1, 3\n-1, 2"), s("op", "Rotate"), f("cx", 1.0), f("cy", -1.0)]));
+        cases.push(("point".into(), vec![s("pre", "2, 3")]));
+        cases.push(("path".into(), vec![s("pre", "-4, 1\n-1, 4\n2, 1"), b("closed", false), s("op", "Reflect"), s("axis", AXES[0])]));
         for (tag, list) in cases {
             for (kind, extra) in [("colour", vec![]), ("print", vec![s("style", "Print")]), ("student", vec![b(SHOW_ANSWERS, false)]), ("key", vec![b(SHOW_ANSWERS, true)]), ("student-print", vec![s("style", "Print"), b(SHOW_ANSWERS, false)])] {
                 let mut l = list.clone();
