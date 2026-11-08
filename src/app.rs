@@ -497,6 +497,14 @@ impl App {
                 }
             }
             "paste" => raw.events.push(egui::Event::Paste(arg.replace("\\n", "\n"))),
+            // wheel:x,y,dy = hover at x,y and turn the mouse wheel by dy points (negative scrolls down)
+            "wheel" => {
+                let v: Vec<f32> = arg.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+                if let [x, y, dy] = v[..] {
+                    raw.events.push(egui::Event::PointerMoved(egui::pos2(x, y)));
+                    raw.events.push(egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, dy), phase: egui::TouchPhase::Move, modifiers: mods });
+                }
+            }
             _ => {}
         }
     }
