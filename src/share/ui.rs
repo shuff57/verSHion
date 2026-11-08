@@ -532,26 +532,32 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
         enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         typed = m.forms.server.trim().to_string();
         let h = r.rect.height();
-        // Live at all times, as a form's submit beside its field is: pressed with nothing typed,
-        // `save_server` answers with the address error, which says what is missing. Every disabled
-        // look tried (faded, beige, dashed, greyed) was read as either unreadable or still live.
-        ui.add_enabled_ui(!busy, |ui| {
-            let (rest, hover, press) = pageshell::accent_states();
-            save |= pageshell::styled_button(
-                ui,
-                egui::RichText::new("Connect").family(theme::bold_family()).size(15.2).color(theme::on_accent_col()),
-                rest,
-                hover,
-                press,
-                egui::Stroke::NONE,
-                h,
-            )
-            .clicked();
-        });
+        // Not available until there is an address: a lit Connect beside an empty box read as ready
+        // to submit with nothing to send. Grey and unpressable while empty, the solid green action
+        // once something is typed; the line under the field says which and why.
+        if typed.is_empty() {
+            pageshell::unavailable(ui, "Connect", h, "Enter a server address first.");
+        } else {
+            ui.add_enabled_ui(!busy, |ui| {
+                let (rest, hover, press) = pageshell::accent_states();
+                save |= pageshell::styled_button(
+                    ui,
+                    egui::RichText::new("Connect").family(theme::bold_family()).size(15.2).color(theme::on_accent_col()),
+                    rest,
+                    hover,
+                    press,
+                    egui::Stroke::NONE,
+                    h,
+                )
+                .clicked();
+            });
+        }
     });
     let dirty = !typed.is_empty() && typed != base;
     save |= enter && dirty;
-    let hint = if !typed.is_empty() && typed == base {
+    let hint = if typed.is_empty() {
+        "Enter your school's server address to connect."
+    } else if typed == base {
         "That is already the address in use."
     } else {
         "Paste the address your school gives you, then press Connect."
@@ -1048,7 +1054,7 @@ fn delete_page(ui: &mut Ui, m: &mut AccountModel) {
 #[cfg(test)]
 mod alpha_note_tests {
     use super::*;
-    use egui_kittest::{kittest::Queryable, Harness};
+    use egui_kittest::{kittest::{NodeT, Queryable}, Harness};
 
     /// The account section on `page`, with the app's fonts (the first frame only installs them).
     fn harness<'a>(page: Page, signed_in: bool) -> Harness<'a, AccountUi> {
@@ -1089,5 +1095,20 @@ mod alpha_note_tests {
         assert!(shows_note(Page::SignUp, false), "sign up");
         assert!(!shows_note(Page::Forgot, false), "forgot");
         assert!(!shows_note(Page::SignIn, true), "already signed in");
+    }
+
+    /// Connect is unavailable while the address box is empty, with the reason under the field, and
+    /// becomes the live action once an address is typed.
+    #[test]
+    fn connect_waits_for_an_address() {
+        let mut h = harness(Page::Server, false);
+        h.run();
+        assert!(h.get_by_label("Connect").accesskit_node().is_disabled(), "empty: Connect is disabled");
+        assert!(h.query_by_label("Enter your school's server address to connect.").is_some());
+
+        h.state_mut().model.forms.server = "https://pool.example.org".into();
+        h.run();
+        assert!(!h.get_by_label("Connect").accesskit_node().is_disabled(), "typed: Connect is live");
+        assert!(h.query_by_label("Paste the address your school gives you, then press Connect.").is_some());
     }
 }

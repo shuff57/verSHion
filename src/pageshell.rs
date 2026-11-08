@@ -257,6 +257,39 @@ pub fn primary_on(ui: &mut Ui, text: &str, on: bool) -> egui::Response {
     )
 }
 
+/// The three colours of a button that is not available yet: fill, text, outline. A true neutral
+/// grey, not the beige field colour (read as washed out) or an accent outline (read as live); the
+/// text stays above 4:1 against its fill in both palettes so the label reads as a button's.
+pub fn unavailable_colors() -> (Color32, Color32, Color32) {
+    if theme::is_dark() {
+        (Color32::from_rgb(0x46, 0x42, 0x3e), Color32::from_rgb(0xb5, 0xb0, 0xaa), Color32::from_rgb(0x5c, 0x57, 0x52))
+    } else {
+        (Color32::from_rgb(0xe6, 0xe4, 0xe1), Color32::from_rgb(0x6e, 0x6a, 0x66), Color32::from_rgb(0xc8, 0xc5, 0xc1))
+    }
+}
+
+/// A button `h` tall that cannot be pressed yet: grey fill, mid-grey label, no hover, no click
+/// (`add_enabled(false, ..)`), drawn at full strength rather than egui's half-faded disabled look.
+/// `why` is the tooltip shown on hover, saying what makes it available.
+pub fn unavailable(ui: &mut Ui, text: &str, h: f32, why: &str) -> egui::Response {
+    let (fill, fg, edge) = unavailable_colors();
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = Vec2::new(18.0, 4.0);
+        ui.visuals_mut().disabled_alpha = 1.0;
+        ui.visuals_mut().widgets.noninteractive.expansion = 0.0;
+        ui.add_enabled(
+            false,
+            egui::Button::new(RichText::new(text).family(theme::bold_family()).size(15.2).color(fg))
+                .fill(fill)
+                .stroke(Stroke::new(1.0, edge))
+                .corner_radius(CornerRadius::same(12))
+                .min_size(Vec2::new(0.0, h)),
+        )
+        .on_disabled_hover_text(why)
+    })
+    .inner
+}
+
 /// The outlined action.
 pub fn outline(ui: &mut Ui, text: &str) -> egui::Response {
     button(ui, text, theme::card(), theme::hover_bg(), theme::accent_faded(), Stroke::new(1.0, theme::rule()), theme::ink())
