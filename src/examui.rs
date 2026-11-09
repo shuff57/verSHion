@@ -173,6 +173,8 @@ struct EditUi {
     narrow: bool,
     /// Height of the format bar's zoom well when last drawn, held while the bank tab hides it.
     zoom_well_h: f32,
+    /// Narrow window only: the Page setup disclosure in the top card is open.
+    page_setup_open: bool,
     /// This frame the bank fills the work area on its own (narrow window, bank tab), so there
     /// is no page beside it to drag onto.
     shelf_alone: bool,
@@ -1110,7 +1112,8 @@ fn draw_editor(
     st.shelf_alone = st.narrow && st.bank_tab;
     draw_top_card(app, ui, exam_id, st);
     ui.add_space(10.0);
-    if !FORMAT_POPOVER {
+    // Narrow: the format controls live in the top card's Page setup disclosure instead.
+    if !FORMAT_POPOVER && !st.narrow {
         draw_format_bar(app, ui, exam_id, st);
         ui.add_space(10.0);
     }
@@ -1332,6 +1335,10 @@ fn draw_top_card(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut
         .inner_margin(Margin::symmetric(14, 8))
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
+            if st.narrow {
+                draw_top_card_narrow(app, ui, exam_id, st);
+                return;
+            }
             // Narrow windows: drop "Saved" text, Export history (it lives in File) and shrink the name.
             let compact = ui.available_width() < 980.0;
             ui.horizontal(|ui| {
@@ -1358,8 +1365,109 @@ fn draw_top_card(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut
         });
 }
 
+/// The narrow window's top card. Two rows instead of the title card's two plus the format
+/// bar's two: the name with undo, Save and Export, then the menus, a Page setup button that
+/// sums up the paper and opens its controls in place, and the zoom. The page and bank switch
+/// and the paper start about 90 px higher.
+fn draw_top_card_narrow(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut EditUi) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        // The name field hugs its text, so the save state reads right after it.
+        let name = app.store.exam(exam_id).map(|e| e.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| "Untitled Exam".to_string());
+        let text_w = ui.fonts_mut(|f| f.layout_no_wrap(name, FontId::new(19.0, theme::serif_family()), theme::ink()).size().x);
+        draw_crumb_and_name_w(app, ui, exam_id, (text_w + 12.0).clamp(100.0, 190.0));
+        draw_saved_indicator_at(app, ui, exam_id, SavedWord::Plain);
+        draw_actions(app, ui, exam_id, true);
+    });
+    ui.add_space(6.0);
+    let summary = app.store.exam(exam_id).map(page_setup_summary).unwrap_or_default();
+    ui.horizontal(|ui| {
+        ui.scope(|ui| draw_menus(app, ui, exam_id, st));
+        bar_sep(ui);
+        let r = page_setup_button(ui, &summary, st.page_setup_open).on_hover_text("Paper style, heading, text size, margins and answer blanks");
+        if r.clicked() {
+            st.page_setup_open = !st.page_setup_open;
+        }
+        // With the bank filling the work area there is no page to zoom.
+        if !st.shelf_alone {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let (mut zoom, eff) = (st.zoom, st.zoom_eff);
+                zoom_controls_at(ui, &mut zoom, eff, true);
+                st.zoom = zoom;
+            });
+        }
+    });
+    if st.page_setup_open {
+        ui.add_space(8.0);
+        rule(ui);
+        ui.add_space(8.0);
+        draw_page_setup(app, ui, exam_id, st);
+        ui.add_space(2.0);
+    }
+}
+
+/// The paper in a few words for the Page setup button: "Standard · 12 pt · 1 in".
+fn page_setup_summary(e: &model::Exam) -> String {
+    let m = e.page_margins();
+    let margins = if m.uniform() { format!("{} in", fmt_inches(m.top)) } else { "each side".to_string() };
+    format!("{} · {} pt · {margins}", e.paper_style.label(), e.body_pt.round() as i32)
+}
+
+/// The narrow top card's Page setup button: its name, the current paper in brief and a caret;
+/// in the accent wash while its controls are open.
+fn page_setup_button(ui: &mut egui::Ui, summary: &str, open: bool) -> egui::Response {
+    let mut job = LayoutJob::default();
+    job.append("Page setup", 0.0, egui::TextFormat::simple(FontId::new(14.0, theme::bold_family()), theme::ink()));
+    job.append(&format!("   {summary}  "), 0.0, egui::TextFormat::simple(FontId::new(14.0, theme::medium_family()), theme::text_col()));
+    let caret = if open { egui_phosphor::regular::CARET_UP } else { egui_phosphor::regular::CARET_DOWN };
+    job.append(caret, 0.0, egui::TextFormat::simple(theme::icon_font(13.0), theme::text_col()));
+    let (rest, stroke) = if open { (theme::accent_faded(), Stroke::new(1.0, theme::accent_col())) } else { (theme::card(), Stroke::new(1.0, theme::rule())) };
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = Vec2::new(14.0, 4.0);
+        let w = &mut ui.visuals_mut().widgets;
+        for (state, fill) in [(&mut w.inactive, rest), (&mut w.hovered, if open { rest } else { theme::hover_bg() }), (&mut w.active, theme::accent_faded())] {
+            state.weak_bg_fill = fill;
+            state.bg_fill = fill;
+            state.bg_stroke = stroke;
+            state.expansion = 0.0;
+            state.corner_radius = CornerRadius::same(12);
+        }
+        ui.add(egui::Button::new(job).min_size(Vec2::new(0.0, 34.0))).on_hover_cursor(egui::CursorIcon::PointingHand)
+    })
+    .inner
+}
+
+/// The Page setup controls, opened in place under the narrow top card's rows: every format
+/// control of the wide format bar, with labels at the normal size and contrast.
+fn draw_page_setup(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut EditUi) {
+    let Some(ex) = app.store.exam(exam_id) else { return };
+    let mut f = ex.clone();
+    let mut changed = false;
+    let mut margins_open = st.margins_open;
+    for row in [&[("Paper", 4u8), ("Heading", 0)][..], &[("Text size", 1), ("Margins", 2), ("Answer blanks", 3)][..]] {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
+            for &(label, which) in row {
+                ui.label(RichText::new(label).family(theme::medium_family()).size(14.0).color(theme::text_col()));
+                changed |= format_control(ui, which, &mut f, "setup", &mut margins_open);
+                ui.add_space(14.0);
+            }
+        });
+        ui.add_space(4.0);
+    }
+    st.margins_open = margins_open;
+    if changed {
+        write_format(app, exam_id, &f);
+    }
+}
+
 /// "Exams / <name>" — the crumb back to the list and the inline exam title.
 fn draw_crumb_and_name(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, compact: bool) {
+    draw_crumb_and_name_w(app, ui, exam_id, if compact { 190.0 } else { 260.0 });
+}
+
+/// [`draw_crumb_and_name`] with the name field `name_w` wide.
+fn draw_crumb_and_name_w(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, name_w: f32) {
     if ui
         .add(egui::Button::new(muted(RichText::new("Exams").size(12.0))).frame(false))
         .clicked()
@@ -1377,7 +1485,7 @@ fn draw_crumb_and_name(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, co
             .font(FontId::new(19.0, theme::serif_family()))
             .text_color(theme::ink())
             .frame(egui::Frame::NONE)
-            .desired_width(if compact { 190.0 } else { 260.0 }),
+            .desired_width(name_w),
     );
     if name != before {
         if let Some(e) = app.store.exam_mut(exam_id) {
@@ -1391,6 +1499,21 @@ fn draw_crumb_and_name(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, co
 /// Saved/edited dot: every edit is written straight through; "Edited" means the exam differs
 /// from its File > Save checkpoint (Discard changes goes back).
 fn draw_saved_indicator(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, compact: bool) {
+    draw_saved_indicator_at(app, ui, exam_id, if compact { SavedWord::None } else { SavedWord::Accent });
+}
+
+/// How the save state's word is shown beside its mark.
+#[derive(Clone, Copy, PartialEq)]
+enum SavedWord {
+    /// The mark alone.
+    None,
+    /// Small bold accent text (the wide title card).
+    Accent,
+    /// Normal-contrast text at the small label size (the narrow top card).
+    Plain,
+}
+
+fn draw_saved_indicator_at(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, word: SavedWord) {
     let dirty = working_copy_dirty(app, ui.ctx(), exam_id);
     let (sr, sresp) = ui.allocate_exact_size(Vec2::new(13.0, 16.0), Sense::hover());
     let sc = sr.center();
@@ -1408,14 +1531,17 @@ fn draw_saved_indicator(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, c
         "Everything in this working copy matches your last Save."
     };
     sresp.on_hover_text(tip);
-    if !compact {
-        ui.label(
-            RichText::new(if dirty { "Edited" } else { "Saved" })
-                .family(theme::bold_family())
-                .size(12.0)
-                .color(theme::accent_col()),
-        )
-        .on_hover_text(tip);
+    let text = if dirty { "Edited" } else { "Saved" };
+    match word {
+        SavedWord::None => {}
+        SavedWord::Accent => {
+            ui.label(RichText::new(text).family(theme::bold_family()).size(12.0).color(theme::accent_col())).on_hover_text(tip);
+        }
+        SavedWord::Plain => {
+            // Tucked against its mark rather than a full item gap away.
+            ui.add_space(-6.0);
+            ui.label(RichText::new(text).family(theme::medium_family()).size(13.5).color(theme::text_col())).on_hover_text(tip);
+        }
     }
     ui.add_space(4.0);
 }
@@ -1435,6 +1561,7 @@ fn draw_actions(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, compact: 
             .add_enabled_ui(dirty, |ui| crate::pageshell::outline(ui, "Save"))
             .inner
             .on_hover_text("Save a checkpoint of this exam (File > Discard changes returns to it)")
+            .on_disabled_hover_text("Nothing to save: every change is already on disk, and the exam matches your last Save")
             .clicked()
         {
             save_checkpoint(app, ui.ctx(), exam_id);
@@ -1793,6 +1920,12 @@ fn format_control(ui: &mut egui::Ui, which: u8, f: &mut model::Exam, salt: &str,
 /// Page zoom: fit, smaller, larger. The page is drawn at 57.6 dpi base, so a fit on a wide
 /// window is already more than 100% of that.
 fn zoom_controls(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) -> f32 {
+    zoom_controls_at(ui, zoom, zoom_eff, false)
+}
+
+/// [`zoom_controls`]; `readable` sets its figures at the normal label size and contrast (the
+/// narrow top card) instead of the format bar's small muted ones.
+fn zoom_controls_at(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32, readable: bool) -> f32 {
     // A quiet well around the three zoom controls, so they read as one readout with two buttons
     // rather than as loose text next to the status line.
     let frame = egui::Frame::new()
@@ -1800,38 +1933,49 @@ fn zoom_controls(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) -> f32 {
         .stroke(egui::Stroke::new(1.0, theme::border()))
         .corner_radius(egui::CornerRadius::same(8))
         .inner_margin(egui::Margin::symmetric(6, 1));
-    frame.show(ui, |ui| zoom_controls_inner(ui, zoom, zoom_eff)).response.rect.height()
+    frame.show(ui, |ui| zoom_controls_inner(ui, zoom, zoom_eff, readable)).response.rect.height()
 }
 
-fn zoom_controls_inner(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) {
+fn zoom_controls_inner(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32, readable: bool) {
     ui.spacing_mut().item_spacing.x = 4.0;
+    let look = |t: &str, small: f32, big: f32| {
+        if readable {
+            RichText::new(t).size(big).color(theme::text_col())
+        } else {
+            muted(RichText::new(t).size(small))
+        }
+    };
     let pct = if *zoom <= 0.0 { zoom_eff.max(0.5) } else { *zoom };
     let label = if *zoom <= 0.0 {
         format!("Fit  {:.0}%", pct * 100.0)
     } else {
         format!("{:.0}%", pct * 100.0)
     };
-    if ui
-        .add(egui::Button::new(muted(RichText::new("−").size(13.0))).frame(false))
-        .on_hover_text("Smaller page")
-        .clicked()
-    {
-        *zoom = (pct - 0.125).clamp(0.5, 2.0);
+    // Smaller, the readout (a click fits the column), larger: in that order on screen, so in
+    // the narrow card's right-to-left row they are laid out last first.
+    let mut parts = [0u8, 1, 2];
+    if readable && ui.layout().prefer_right_to_left() {
+        parts.reverse();
     }
-    let r = ui.add(
-        egui::Button::new(muted(RichText::new(label).size(11.5)))
-            .frame(false)
-            .min_size(Vec2::new(62.0, 0.0)),
-    );
-    if r.on_hover_text("Fit the column").clicked() {
-        *zoom = 0.0;
-    }
-    if ui
-        .add(egui::Button::new(muted(RichText::new("+").size(13.0))).frame(false))
-        .on_hover_text("Larger page")
-        .clicked()
-    {
-        *zoom = (pct + 0.125).clamp(0.5, 2.0);
+    for part in parts {
+        match part {
+            0 => {
+                if ui.add(egui::Button::new(look("−", 13.0, 16.0)).frame(false)).on_hover_text("Smaller page").clicked() {
+                    *zoom = (pct - 0.125).clamp(0.5, 2.0);
+                }
+            }
+            1 => {
+                let r = ui.add(egui::Button::new(look(&label, 11.5, 14.0)).frame(false).min_size(Vec2::new(62.0, 0.0)));
+                if r.on_hover_text("Fit the column").clicked() {
+                    *zoom = 0.0;
+                }
+            }
+            _ => {
+                if ui.add(egui::Button::new(look("+", 13.0, 16.0)).frame(false)).on_hover_text("Larger page").clicked() {
+                    *zoom = (pct + 0.125).clamp(0.5, 2.0);
+                }
+            }
+        }
     }
 }
 

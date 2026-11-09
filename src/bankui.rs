@@ -634,11 +634,14 @@ impl App {
         } else {
             format!("Share {}", egui_phosphor::regular::CARET_DOWN)
         };
-        let mut tools = vec![Tool::More, Tool::Details, Tool::Popover, Tool::Import, Tool::Share];
+        // Read left to right by rank: the bank's main action first, then the outlined actions
+        // that bring questions in or send them out, then the quiet ones that only show the
+        // bank (its details, its own window), and the overflow last as a bare icon.
+        let mut tools = vec![Tool::Add, Tool::Import, Tool::Share];
         if !questions.is_empty() {
             tools.push(Tool::Export);
         }
-        tools.push(Tool::Add);
+        tools.extend([Tool::Details, Tool::Popover, Tool::More]);
         if !ltr {
             tools.reverse();
         }
@@ -648,16 +651,16 @@ impl App {
         for t in tools {
             if ltr && !first {
                 // pageshell buttons are laid out where the cursor is: start the next line first.
-                let label = match t {
-                    Tool::More => "…",
-                    Tool::Details => "Details",
-                    Tool::Popover => "Preview",
-                    Tool::Import => "Import",
-                    Tool::Share => share_label.as_str(),
-                    Tool::Export => "Export",
-                    Tool::Add => "Add question",
+                let w = match t {
+                    Tool::More => MORE_W,
+                    Tool::Details => crate::pageshell::button_width(ui, "Details"),
+                    Tool::Popover => crate::pageshell::button_width(ui, "Preview"),
+                    Tool::Import => crate::pageshell::button_width(ui, "Import"),
+                    Tool::Share => crate::pageshell::button_width(ui, share_label.as_str()),
+                    Tool::Export => crate::pageshell::button_width(ui, "Export"),
+                    Tool::Add => crate::pageshell::button_width(ui, "Add question"),
                 };
-                if crate::pageshell::button_width(ui, label) > ui.max_rect().right() - ui.cursor().min.x {
+                if w > ui.max_rect().right() - ui.cursor().min.x {
                     ui.end_row();
                 }
             }
@@ -666,8 +669,9 @@ impl App {
                 Tool::Add => {
                     // An empty bank's card below has its own filled Add question, the page's one
                     // primary; here it steps back to an outline so the two do not compete.
+                    // It still leads the row: an accent outline, a step above the plain ones.
                     let r = if questions.is_empty() {
-                        crate::pageshell::outline(ui, "Add question")
+                        accent_outline(ui, "Add question")
                     } else {
                         crate::pageshell::primary(ui, "Add question")
                     };
@@ -722,47 +726,35 @@ impl App {
                     r
                 }
                 Tool::Popover => {
-                    let r = crate::pageshell::outline(ui, "Preview").on_hover_text("Open this bank in its own window");
+                    let r = quiet_button(ui, "Preview").on_hover_text("Open this bank in its own window");
                     if r.clicked() {
                         open_popover(ctx, bank_id);
                     }
                     r
                 }
                 Tool::Details => {
-                    let r = crate::pageshell::outline(ui, "Details").on_hover_text("Description, author and license");
+                    let r = quiet_button(ui, "Details").on_hover_text("Description, author and license");
                     if r.clicked() {
                         let d = self.store.bank(bank_id).map(|b| b.details.clone()).unwrap_or_default();
                         with_state(ctx, key, |s: &mut BankEditState| s.details = Some(d));
                     }
                     r
                 }
-                // (Details has its own button next to this menu; the menu keeps what has none.)
-                Tool::More => ui
-                    .scope(|ui| {
-                        // the same 40 px, 12 px-corner look as the buttons beside it
-                        ui.spacing_mut().interact_size.y = 40.0;
-                        ui.spacing_mut().button_padding = egui::Vec2::new(16.0, 4.0);
-                        let w = &mut ui.visuals_mut().widgets;
-                        for (state, fill) in [(&mut w.inactive, theme::card()), (&mut w.hovered, theme::hover_bg()), (&mut w.active, theme::accent_faded()), (&mut w.open, theme::accent_faded())] {
-                            state.weak_bg_fill = fill;
-                            state.bg_fill = fill;
-                            state.bg_stroke = Stroke::new(1.0, theme::rule());
-                            state.expansion = 0.0;
+                // (Details has its own button beside this menu; the menu keeps what has none.)
+                Tool::More => {
+                    let r = more_button(ui).on_hover_text("More bank actions");
+                    egui::Popup::menu(&r).show(|ui| {
+                        ui.set_min_width(170.0);
+                        let tidy = ui
+                            .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
+                            .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
+                        if tidy.clicked() {
+                            open_tidy(self, ctx, key, bank_id);
+                            ui.close();
                         }
-                        ui.menu_button(RichText::new("…").size(16.0).color(theme::ink()), |ui| {
-                            ui.set_min_width(170.0);
-                            let tidy = ui
-                                .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
-                                .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
-                            if tidy.clicked() {
-                                open_tidy(self, ctx, key, bank_id);
-                                ui.close();
-                            }
-                        })
-                        .response
-                    })
-                    .inner
-                    .on_hover_text("More bank actions"),
+                    });
+                    r
+                }
             };
             width += r.rect.width() + gap;
         }
@@ -2900,6 +2892,60 @@ fn pencil_button(ui: &mut Ui) -> egui::Response {
         ui.painter().rect_filled(rect, CornerRadius::same(6), theme::hover_bg());
     }
     crate::handicons::paint_glyph(ui.painter(), rect.center(), crate::handicons::EDIT, 15.0, col);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// Width of the bank toolbar's overflow button.
+const MORE_W: f32 = 40.0;
+
+/// A toolbar action that only shows the bank (Details, Preview): the page buttons' size, a
+/// medium weight and a light hairline with no fill, so it reads as a button at rest yet ranks
+/// below the outlined actions beside it.
+fn quiet_button(ui: &mut Ui, text: &str) -> egui::Response {
+    crate::pageshell::styled_button(
+        ui,
+        RichText::new(text).family(theme::medium_family()).size(15.2).color(theme::text_col()),
+        Color32::TRANSPARENT,
+        theme::hover_bg(),
+        theme::accent_faded(),
+        Stroke::new(1.0, theme::border()),
+        40.0,
+    )
+}
+
+/// The outlined look in the accent: the row's lead action while the empty bank's card below
+/// holds the page's one filled Add question.
+fn accent_outline(ui: &mut Ui, text: &str) -> egui::Response {
+    crate::pageshell::styled_button(
+        ui,
+        RichText::new(text).family(theme::bold_family()).size(15.2).color(theme::accent_col()),
+        theme::card(),
+        theme::hover_bg(),
+        theme::accent_faded(),
+        Stroke::new(1.5, theme::accent_col()),
+        40.0,
+    )
+}
+
+/// The toolbar's overflow: three painted dots on no fill, a rounded wash under the pointer or
+/// while its menu is open.
+fn more_button(ui: &mut Ui) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(MORE_W), Sense::click());
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    let r = CornerRadius::same(12);
+    if open {
+        ui.painter().rect_filled(rect, r, theme::accent_faded());
+    } else if resp.hovered() {
+        ui.painter().rect_filled(rect, r, theme::hover_bg());
+    }
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect, r, Stroke::new(2.0, theme::accent_col()), egui::StrokeKind::Inside);
+    }
+    let col = if resp.hovered() || open { theme::ink() } else { theme::text_col() };
+    for dx in [-6.5, 0.0, 6.5] {
+        ui.painter().circle_filled(rect.center() + Vec2::new(dx, 0.0), 2.0, col);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "More bank actions"));
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
