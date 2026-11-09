@@ -1070,6 +1070,21 @@ static DNA_PROTEIN_SYNTHESIS: [RefSection; 8] = [
     s("More options", &["style", "label_size"], ""),
 ];
 
+/// The photosynthesis figure: the View first (with the classic setups beside it), then the chloroplast's sections
+/// and the rate graphs' (only one view's controls show at a time).
+static PHOTOSYNTHESIS: [RefSection; 10] = [
+    s("Figure", &["view"], ""),
+    s("Chloroplast", &["show_parts", "show_stages", "show_io", "show_shuttle", "show_equation"], ""),
+    s("Rate graph", &["show_graph", "graph_x", "pmax", "xval", "mark", "dec"], ""),
+    s("Graph", &["rg_graph", "rg_light_x", "rg_rate", "rg_unit", "rg_co2_unit", "rg_curves", "rg_c0", "rg_tmax", "rg_light_off", "rg_off_at"], "Textbook shapes, not data. The rate rises with light, then levels off at a height set by CO2 and temperature (highest near 30 \u{b0}C). Light falls as 1/d\u{b2} from the lamp. Net rate is photosynthesis less respiration, which doubles every 10 \u{b0}C."),
+    items("Curve"),
+    s("Marked", &["rg_mark", "rg_mark_lab"], ""),
+    s("Data points", &["rg_points", "rg_seed"], ""),
+    s("Titles", &["rg_title_mode", "rg_title", "rg_xt_mode", "rg_xt", "rg_yt_mode", "rg_yt"], ""),
+    s("Axes", &["rg_axes", "rg_xmax", "rg_ymax", "rg_grid"], ""),
+    s("More options", &["show_answers", "style", "label_size"], ""),
+];
+
 pub fn reference(id: &str) -> Option<&'static [RefSection]> {
     Some(match id {
         "angles" => &FIG_0,
@@ -1194,6 +1209,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "parallelogram" => &FIG_25,
         "particle-diagram" => &FIG_26,
         "pedigree" => &FIG_27,
+        "photosynthesis" => &PHOTOSYNTHESIS,
         "ph-reading" => &FIG_28,
         "photoelectron-spectrum" => &FIG_29,
         "population-growth" => &FIG_30,
@@ -1229,6 +1245,8 @@ pub fn live_help(fig: &str, title: &str, help: &str, p: &super::Params) -> Strin
         return h;
     }
     match (fig, title) {
+        // each curve's section says what its curve shows (the rate graphs' reading of it)
+        ("photosynthesis", t) if t.starts_with("Curve ") => super::biology::photosynthesis::rate::curve_help(t, p),
         ("micropipette-reading", "Micropipette") => super::biology::pipette::notes(p).0,
         ("micropipette-reading", "Reading") => super::biology::pipette::notes(p).1,
         ("spring-scale", "Reading") => {
