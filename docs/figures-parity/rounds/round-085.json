@@ -1,0 +1,35 @@
+{
+ "round": 85,
+ "figure": "photosynthesis",
+ "capability": "cap-01e",
+ "hypothesis": "Batch 3 photosynthesis: cap-01e; evidence changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 in a closed chamber\"}",
+ "started_at": "2026-11-09T08:58:38",
+ "git": "ca533e5",
+ "before": {
+  "figure": 29.6,
+  "pooled": 82.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:58:39",
+ "after": {
+  "figure": 33.6,
+  "pooled": 82.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 in a closed chamber\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/1c7ab452df38b9ee.png"
+   }
+  ]
+ },
+ "checker": "pass: CO2 in a closed chamber falls in light, rises in the dark",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

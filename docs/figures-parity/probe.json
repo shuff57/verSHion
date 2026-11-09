@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-09T07:05:14",
- "ours_built_at": "2026-11-09T15:05:00+00:00",
- "git": "6595949",
+ "checked_at": "2026-11-09T08:59:06",
+ "ours_built_at": "2026-11-09T16:58:29+00:00",
+ "git": "ca533e5",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -16856,15 +16856,21 @@
       {
        "token": "changes:pmax=6",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/3c58a0ef617c0109.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/cce780128522f23b.png"
       }
      ]
     },
     "cap-01b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_light_x\":\"Distance from the lamp\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/8e7c1484731bcc71.png"
+      }
+     ]
     },
     "cap-01c": {
      "pass": true,
@@ -16874,7 +16880,7 @@
       {
        "token": "changes:graph_x=CO2 concentration",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/188010ef75c1d5f9.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/92ad5ed6973d8b1d.png"
       }
      ]
     },
@@ -16886,39 +16892,69 @@
       {
        "token": "changes:graph_x=Temperature",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/2d1dafc301e63e8d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/3f274b3ee9206ee8.png"
       }
      ]
     },
     "cap-01e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 in a closed chamber\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/1c7ab452df38b9ee.png"
+      }
+     ]
     },
     "cap-01f": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 and O2 over time\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/2f597f07ecdc4fe3.png"
+      }
+     ]
     },
     "cap-01g": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 against O2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/dfeb929a58cf91a3.png"
+      }
+     ]
     },
     "cap-02a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_curves\":3}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/1b0197135e651ba4.png"
+      }
+     ]
     },
     "cap-02b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against temperature\",\"rg_curves\":2,\"c2_light\":15}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/3b1bedcfb1a716a0.png"
+      }
+     ]
     },
     "cap-02c": {
      "pass": true,
@@ -16928,74 +16964,134 @@
       {
        "token": "changes:pmax=6",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/3c58a0ef617c0109.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/cce780128522f23b.png"
       },
       {
        "token": "changes:xval=30",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/e70145564edc400a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/92853c2509be8d0b.png"
       }
      ]
     },
     "cap-02d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"c1_name\":\"High CO2, warm\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/a6cffd921f79cb0b.png"
+      }
+     ]
     },
     "cap-03a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_rate\":\"Net\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/aaeb885e97eacd1d.png"
+      }
+     ]
     },
     "cap-03b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_unit\":\"Bubbles a minute\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/4f76314f7c894414.png"
+      }
+     ]
     },
     "cap-03c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against CO2\",\"rg_co2_unit\":\"%\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/fe31a4744cb077e4.png"
+      }
+     ]
     },
     "cap-04a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 in a closed chamber\",\"rg_c0\":0.1}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/ed1e083f457223c8.png"
+      }
+     ]
     },
     "cap-04b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 in a closed chamber\",\"rg_tmax\":120}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/9fb7cd08725dcb54.png"
+      }
+     ]
     },
     "cap-04c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 in a closed chamber\",\"rg_light_off\":true,\"rg_off_at\":40}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/e6d8891e3492e6a4.png"
+      }
+     ]
     },
     "cap-05a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_mark\":\"Saturation point\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/65f6205164c9230c.png"
+      }
+     ]
     },
     "cap-05b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_mark\":\"Limiting factors\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/ae20c3596d735d66.png"
+      }
+     ]
     },
     "cap-05c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_mark\":\"Lettered points\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/a315b20e62d950c6.png"
+      }
+     ]
     },
     "cap-05d": {
      "pass": true,
@@ -17005,7 +17101,7 @@
       {
        "token": "changes:mark=50",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/526d5ecb26fc199e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/2d588bc7ab3663e3.png"
       }
      ]
     },
@@ -17017,51 +17113,93 @@
       {
        "token": "changes:{\"graph_x\":\"Temperature\",\"xval\":\"25\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/05bd64560e794ef2.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/5b47c1872d8bec64.png"
       }
      ]
     },
     "cap-05f": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_mark\":\"Compensation point\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/7947095e6afa0792.png"
+      }
+     ]
     },
     "cap-05g": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_mark\":\"Limiting factors\",\"rg_mark_lab\":\"Blank line\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/f55d44f39bdf5928.png"
+      }
+     ]
     },
     "cap-06a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_points\":\"On the curves\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/812459a47b8e94bf.png"
+      }
+     ]
     },
     "cap-06b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_points\":\"Points only\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/03f4e92a362ef8d0.png"
+      }
+     ]
     },
     "cap-07a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_axes\":\"Shape only\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/7dc6ef3352375370.png"
+      }
+     ]
     },
     "cap-07b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_xmax\":\"60\",\"rg_ymax\":\"15\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/b40a2d02cc5e29c4.png"
+      }
+     ]
     },
     "cap-07c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_grid\":false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/5e01c6d8263e73e6.png"
+      }
+     ]
     },
     "cap-07d": {
      "pass": true,
@@ -17071,15 +17209,21 @@
       {
        "token": "changes:style=Print",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/3e03bdfa531815a0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/5631c00c01f1835c.png"
       }
      ]
     },
     "cap-07e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_title_mode\":\"Text\",\"rg_xt_mode\":\"Blank line\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/645cd46cf4b6aee0.png"
+      }
+     ]
     },
     "cap-07f": {
      "pass": true,
@@ -17089,15 +17233,21 @@
       {
        "token": "changes:label_size=Large",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/423630ca096e09ae.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/1fd8e3fb8630f915.png"
       }
      ]
     },
     "cap-08": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against light\",\"rg_curves\":3,\"c1_co2\":0.1,\"c1_temp\":25,\"c2_co2\":0.1,\"c2_temp\":15,\"c3_co2\":0.04,\"c3_temp\":25,\"rg_mark\":\"Limiting factors\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/b1ca1c039b0d39e6.png"
+      }
+     ]
     }
    }
   },

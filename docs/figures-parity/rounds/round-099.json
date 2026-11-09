@@ -1,0 +1,35 @@
+{
+ "round": 99,
+ "figure": "photosynthesis",
+ "capability": "cap-05c",
+ "hypothesis": "Batch 3 photosynthesis: cap-05c; evidence changes:{\"view\":\"Rate graphs\",\"rg_mark\":\"Lettered points\"}",
+ "started_at": "2026-11-09T08:58:51",
+ "git": "ca533e5",
+ "before": {
+  "figure": 74.4,
+  "pooled": 83.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:58:52",
+ "after": {
+  "figure": 76.8,
+  "pooled": 83.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_mark\":\"Lettered points\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/a315b20e62d950c6.png"
+   }
+  ]
+ },
+ "checker": "pass: lettered points",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

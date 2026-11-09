@@ -1,0 +1,35 @@
+{
+ "round": 92,
+ "figure": "photosynthesis",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 3 photosynthesis: cap-03b; evidence changes:{\"view\":\"Rate graphs\",\"rg_unit\":\"Bubbles a minute\"}",
+ "started_at": "2026-11-09T08:58:44",
+ "git": "ca533e5",
+ "before": {
+  "figure": 54.4,
+  "pooled": 83.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:58:44",
+ "after": {
+  "figure": 56.8,
+  "pooled": 83.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_unit\":\"Bubbles a minute\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/4f76314f7c894414.png"
+   }
+  ]
+ },
+ "checker": "pass: rate in bubbles a minute",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

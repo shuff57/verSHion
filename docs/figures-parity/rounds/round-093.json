@@ -1,0 +1,35 @@
+{
+ "round": 93,
+ "figure": "photosynthesis",
+ "capability": "cap-03c",
+ "hypothesis": "Batch 3 photosynthesis: cap-03c; evidence changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against CO2\",\"rg_co2_unit\":\"%\"}",
+ "started_at": "2026-11-09T08:58:44",
+ "git": "ca533e5",
+ "before": {
+  "figure": 56.8,
+  "pooled": 83.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:58:45",
+ "after": {
+  "figure": 59.2,
+  "pooled": 83.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against CO2\",\"rg_co2_unit\":\"%\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/fe31a4744cb077e4.png"
+   }
+  ]
+ },
+ "checker": "pass: CO2 unit",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

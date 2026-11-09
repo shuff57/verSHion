@@ -1,0 +1,37 @@
+{
+ "round": 84,
+ "figure": "photosynthesis",
+ "capability": "cap-01b",
+ "hypothesis": "Batch 3 photosynthesis: cap-01b; evidence changes:{\"view\":\"Rate graphs\",\"rg_light_x\":\"Distance from the lamp\"}",
+ "started_at": "2026-11-09T08:58:36",
+ "git": "ca533e5",
+ "before": {
+  "figure": 25.6,
+  "pooled": 82.4
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 2 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T08:58:38",
+ "after": {
+  "figure": 29.6,
+  "pooled": 82.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_light_x\":\"Distance from the lamp\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/8e7c1484731bcc71.png"
+   }
+  ]
+ },
+ "checker": "pass: rate against distance from the lamp, inverse-square light",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

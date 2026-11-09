@@ -1,0 +1,35 @@
+{
+ "round": 89,
+ "figure": "photosynthesis",
+ "capability": "cap-02b",
+ "hypothesis": "Batch 3 photosynthesis: cap-02b; evidence changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against temperature\",\"rg_curves\":2,\"c2_light\":15}",
+ "started_at": "2026-11-09T08:58:41",
+ "git": "ca533e5",
+ "before": {
+  "figure": 45.6,
+  "pooled": 82.8
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:58:42",
+ "after": {
+  "figure": 49.6,
+  "pooled": 82.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against temperature\",\"rg_curves\":2,\"c2_light\":15}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/3b1bedcfb1a716a0.png"
+   }
+  ]
+ },
+ "checker": "pass on re-check: each curve's own light; the temperature key's steep fall matches each drawn curve within 0.5 degrees C (6466b49)",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

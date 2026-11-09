@@ -1,0 +1,35 @@
+{
+ "round": 108,
+ "figure": "photosynthesis",
+ "capability": "cap-08",
+ "hypothesis": "Batch 3 photosynthesis: cap-08; evidence changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against light\",\"rg_curves\":3,\"c1_co2\":0.1,\"c1_temp\":25,\"c2_co2\":0.1,\"c2_temp\":15,\"c3_co2\":0.04,\"c3_temp\":25,\"rg_mark\":\"Limiting factors\"}",
+ "started_at": "2026-11-09T08:59:05",
+ "git": "ca533e5",
+ "before": {
+  "figure": 97.6,
+  "pooled": 84.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:59:07",
+ "after": {
+  "figure": 100.0,
+  "pooled": 84.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"Rate against light\",\"rg_curves\":3,\"c1_co2\":0.1,\"c1_temp\":25,\"c2_co2\":0.1,\"c2_temp\":15,\"c3_co2\":0.04,\"c3_temp\":25,\"rg_mark\":\"Limiting factors\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/b1ca1c039b0d39e6.png"
+   }
+  ]
+ },
+ "checker": "pass on re-check: all six classic setups, every key value matching the drawn curves",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

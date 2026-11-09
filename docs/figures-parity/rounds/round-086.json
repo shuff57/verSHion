@@ -1,0 +1,35 @@
+{
+ "round": 86,
+ "figure": "photosynthesis",
+ "capability": "cap-01f",
+ "hypothesis": "Batch 3 photosynthesis: cap-01f; evidence changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 and O2 over time\"}",
+ "started_at": "2026-11-09T08:58:39",
+ "git": "ca533e5",
+ "before": {
+  "figure": 33.6,
+  "pooled": 82.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:58:40",
+ "after": {
+  "figure": 37.6,
+  "pooled": 82.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 and O2 over time\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/2f597f07ecdc4fe3.png"
+   }
+  ]
+ },
+ "checker": "pass: CO2 and O2 over time change by equal and opposite amounts",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

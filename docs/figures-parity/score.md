@@ -1,18 +1,11 @@
 # Figures parity score
 
-Generated: 2026-11-09T15:05:14+00:00 · probe: 2026-11-09T07:05:14
+Generated: 2026-11-09T16:59:06+00:00 · probe: 2026-11-09T08:59:06
 
-**Pooled 82.4** · mean 84.0 over 70 figures · built 71 of 71 reference figures
+**Pooled 84.1** · mean 85.0 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `photosynthesis`: 26 (32/125)
-  - cap-01b [core 5] Rate against distance from the lamp — no evidence
-  - cap-01e [core 5] CO₂ in a closed chamber over time — no evidence
-  - cap-01f [core 5] CO₂ and O₂ around one plant over time — no evidence
-  - cap-01g [core 5] CO₂ and O₂ around one plant against each other — no evidence
-  - cap-02a [core 5] Up to three curves on one graph — no evidence
-  - cap-02b [core 5] Set each curve's CO₂ concentration, temperature or light intensity — no evidence
 - `motion-map`: 40 (35/87)
   - cap-01a [core 5] Build the motion from up to six segments in any order — no evidence
   - cap-01b [core 5] Set each segment at rest, constant velocity forward or back, speeding up or slowing down — no evidence
@@ -247,6 +240,7 @@ Comparable with the frozen baseline: **yes**
 - `orbital-diagram`: 100 (61/61)
 - `osmosis`: 100 (140/140)
 - `photoelectron-spectrum`: 100 (50/50)
+- `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
 - `sphere`: 100 (35/35)
 - `stem-and-leaf`: 100 (67/67)

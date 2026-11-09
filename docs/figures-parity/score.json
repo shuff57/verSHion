@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-09T15:05:14+00:00",
- "probe_checked_at": "2026-11-09T07:05:14",
+ "generated_at": "2026-11-09T16:59:06+00:00",
+ "probe_checked_at": "2026-11-09T08:59:06",
  "comparable": true,
  "drift": [],
- "pooled": 82.4,
- "mean": 84.0,
+ "pooled": 84.1,
+ "mean": 85.0,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -1657,187 +1657,11 @@
    "gaps": []
   },
   "photosynthesis": {
-   "score": 25.6,
-   "got": 32.0,
+   "score": 100.0,
+   "got": 125.0,
    "total": 125.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Rate against distance from the lamp",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01e",
-     "class": "core",
-     "weight": 5.0,
-     "text": "CO₂ in a closed chamber over time",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01f",
-     "class": "core",
-     "weight": 5.0,
-     "text": "CO₂ and O₂ around one plant over time",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01g",
-     "class": "core",
-     "weight": 5.0,
-     "text": "CO₂ and O₂ around one plant against each other",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Up to three curves on one graph",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Set each curve's CO₂ concentration, temperature or light intensity",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "In a closed chamber, set the starting CO₂",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "In a closed chamber, the light going off part way, with the dark shaded",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Points measured off the curves, scattered a little",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the curves in a key, automatically or typed",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Net rate (less respiration) instead of gross",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Rate in bubbles a minute",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "CO₂ in %",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "In a closed chamber, set the time shown",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Mark the saturation point with dashed lines to the axes",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Mark what limits the rate on the rise and on the plateau",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Lettered points A, B, C on the curve",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Mark the compensation point",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05g",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Leave a mark's label as a blank line for students, or unlabeled",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Points alone, for students to draw the line",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Shape-only axes, with no numbers",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type the axis ranges",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Gridlines off",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Chart and axis titles, or blank lines",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Load one of six classic setups (limiting factors, pondweed and lamp, CO₂ at two light levels, temperature at two light l",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "pie-chart": {
    "score": 100.0,

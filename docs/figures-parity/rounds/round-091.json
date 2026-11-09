@@ -1,0 +1,35 @@
+{
+ "round": 91,
+ "figure": "photosynthesis",
+ "capability": "cap-03a",
+ "hypothesis": "Batch 3 photosynthesis: cap-03a; evidence changes:{\"view\":\"Rate graphs\",\"rg_rate\":\"Net\"}",
+ "started_at": "2026-11-09T08:58:43",
+ "git": "ca533e5",
+ "before": {
+  "figure": 52.0,
+  "pooled": 83.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:58:43",
+ "after": {
+  "figure": 54.4,
+  "pooled": 83.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_rate\":\"Net\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/aaeb885e97eacd1d.png"
+   }
+  ]
+ },
+ "checker": "pass: net rate one respiration below gross",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}

@@ -1,0 +1,35 @@
+{
+ "round": 94,
+ "figure": "photosynthesis",
+ "capability": "cap-04a",
+ "hypothesis": "Batch 3 photosynthesis: cap-04a; evidence changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 in a closed chamber\",\"rg_c0\":0.1}",
+ "started_at": "2026-11-09T08:58:45",
+ "git": "ca533e5",
+ "before": {
+  "figure": 59.2,
+  "pooled": 83.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T08:58:46",
+ "after": {
+  "figure": 63.2,
+  "pooled": 83.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"view\":\"Rate graphs\",\"rg_graph\":\"CO2 in a closed chamber\",\"rg_c0\":0.1}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/photosynthesis/ed1e083f457223c8.png"
+   }
+  ]
+ },
+ "checker": "pass: starting CO2",
+ "result": "hit",
+ "evidence": "photosynthesis::rate tests (89, incl. the steep fall read off each drawn temperature curve, the dim-light compensation point, the dark key); chloroplast view and old saved figures unchanged; census unchanged; no task run (built on the NAS without a browser), the checker counted the limiting-factors task: reference 0+2 actions, ours 2",
+ "next": "photosynthesis (remaining)"
+}
