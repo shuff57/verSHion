@@ -587,8 +587,13 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel, address_source: bool) {
         ui.spacing_mut().item_spacing.y = 10.0;
     }
     if typed.is_empty() {
-        // why Connect waits, in the gated look, within 8 pt under the field
-        kit::gated_reason(ui, hint);
+        // why Connect waits: a neutral hint (an info mark in body text), not a warning, since
+        // nothing has gone wrong before anything is typed
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(15.0)).color(theme::text_col()));
+            ui.add(egui::Label::new(kit::meta(hint)).wrap());
+        });
     } else {
         ui.add(egui::Label::new(egui::RichText::new(hint).size(kit::ty::META).color(theme::ink().gamma_multiply(0.85))).wrap());
     }

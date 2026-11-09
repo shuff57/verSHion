@@ -565,34 +565,35 @@ pub fn tertiary(ui: &mut Ui, icon: &str, label: &str, h: f32) -> egui::Response 
     tier_button(ui, Some(icon), label, h, Tier { fill: Color32::TRANSPARENT, stroke: Stroke::new(1.0, theme::edge()), fg: theme::ink(), family: theme::semibold() })
 }
 
-/// The icon well shared by [`icon_button`] and [`more_dots`]: a `side` square on a `field` fill,
-/// radius 10, hover_bg / accent_faded (also while its popup is open), focus ring, `tip` as the
-/// hover text and the accessible name. Returns the response and the colour to draw the glyph in.
+/// The square shared by [`icon_button`] and [`more_dots`]: a `side` square in the secondary look
+/// at rest (card fill, 1 pt [`theme::edge`], radius 12, ink glyph), hover_bg / accent_faded (also
+/// while its popup is open), focus ring, `tip` as the hover text and the accessible name. Returns
+/// the response and the colour to draw the glyph in.
 fn icon_well(ui: &mut Ui, side: f32, tip: &str) -> (egui::Response, Color32) {
     let enabled = ui.is_enabled();
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(side), sense);
-    let r = CornerRadius::same(10);
-    let (fill, fg) = if !enabled {
-        let (f, t, _) = crate::pageshell::unavailable_colors();
-        (f, t)
+    let r = CornerRadius::same(12);
+    let (fill, edge, fg) = if !enabled {
+        let (f, t, e) = crate::pageshell::unavailable_colors();
+        (f, e, t)
     } else if resp.is_pointer_button_down_on() || popup_open(ui, &resp) {
-        (theme::accent_faded(), theme::ink())
+        (theme::accent_faded(), theme::edge(), theme::ink())
     } else if resp.hovered() {
-        (theme::hover_bg(), theme::ink())
+        (theme::hover_bg(), theme::edge(), theme::ink())
     } else {
-        (theme::field(), theme::ink())
+        (theme::card(), theme::edge(), theme::ink())
     };
-    ui.painter().rect_filled(rect, r, fill);
+    ui.painter().rect(rect, r, fill, Stroke::new(1.0, edge), StrokeKind::Inside);
     if resp.has_focus() {
-        focus_ring(ui, rect, 10);
+        focus_ring(ui, rect, 12);
     }
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tip));
     let resp = if enabled { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp };
     (resp.on_hover_text(tip), fg)
 }
 
-/// Icon tier: a `side` square well holding one ink glyph (`icon`: anything
+/// Icon tier: a `side` square in the secondary look holding one ink glyph (`icon`: anything
 /// `handicons::paint_glyph` takes). `tip` is both the hover text and the accessible name.
 pub fn icon_button(ui: &mut Ui, icon: &str, side: f32, tip: &str) -> egui::Response {
     let (resp, fg) = icon_well(ui, side, tip);
@@ -601,8 +602,8 @@ pub fn icon_button(ui: &mut Ui, icon: &str, side: f32, tip: &str) -> egui::Respo
     resp
 }
 
-/// The overflow "…" in the icon tier: three painted ink dots in a `side` square well. Anchor its
-/// menu on the returned response (`egui::Popup::menu(&r)`); the well stays pressed while open.
+/// The overflow "…": three painted ink dots in a `side` square in the secondary look. Anchor its
+/// menu on the returned response (`egui::Popup::menu(&r)`); it stays pressed while open.
 pub fn more_dots(ui: &mut Ui, side: f32, tip: &str) -> egui::Response {
     let (resp, fg) = icon_well(ui, side, tip);
     let step = if side >= 36.0 { 6.5 } else { 5.5 };

@@ -849,38 +849,42 @@ fn format_lines<'a>(ui: &egui::Ui, items: &[&'a str], width: f32) -> Vec<Vec<&'a
 
 /// The line breaking behind [`format_lines`]: names go on a line while they fit with a
 /// separator `sep` wide between them; a name that does not fit starts the next line (alone if
-/// it is wider than the whole line), so a break always falls between two names. A continued
-/// line opens with the separator (see [`format_line`]), so its width counts one `sep` up front.
+/// it is wider than the whole line), so a break always falls between two names. A line that
+/// continues ends with the separator (see [`format_line`]), so every name but the last keeps
+/// one `sep` of room after it.
 fn break_between<'a>(items: &[&'a str], width: f32, sep: f32, w_of: impl Fn(&str) -> f32) -> Vec<Vec<&'a str>> {
     let mut rows: Vec<Vec<&str>> = vec![Vec::new()];
     let mut used = 0.0_f32;
-    for it in items {
+    for (i, it) in items.iter().enumerate() {
         let w = w_of(it);
-        if !rows.last().expect("one row to start with").is_empty() && used + sep + w > width {
+        let trail = if i + 1 < items.len() { sep } else { 0.0 };
+        if used > 0.0 && used + sep + w + trail > width {
             rows.push(Vec::new());
-            used = sep;
+            used = 0.0;
         }
-        let row = rows.last_mut().expect("one row to start with");
-        used += if row.is_empty() { w } else { sep + w };
-        row.push(*it);
+        used += if used > 0.0 { sep + w } else { w };
+        rows.last_mut().expect("one row to start with").push(*it);
     }
     rows
 }
 
-/// One line of format names: the names in body text, the middots between them muted. A
-/// `continued` line opens with the muted separator, so a wrapped name ("Test Parrot .json")
-/// reads as part of the list above it. Plain text on purpose: these are what the importer
-/// reads, not things to press, so the only button-shaped things on the page are Choose files,
-/// Paste text and Add photo.
-fn format_line(items: &[&str], continued: bool) -> egui::text::LayoutJob {
+/// One line of format names: the names in body text, the middots between them muted. A line
+/// that `continues` ends with the muted separator, so the list reads on into the next line; a
+/// line never starts with one. Plain text on purpose: these are what the importer reads, not
+/// things to press, so the only button-shaped things on the page are Choose files, Paste text
+/// and Add photo.
+fn format_line(items: &[&str], continues: bool) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     let name = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::text_col());
     let sep = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::muted_col());
     for (i, it) in items.iter().enumerate() {
-        if i > 0 || continued {
+        if i > 0 {
             job.append(FORMAT_SEP, 0.0, sep.clone());
         }
         job.append(it, 0.0, name.clone());
+    }
+    if continues {
+        job.append(FORMAT_SEP.trim_end(), 0.0, sep);
     }
     job
 }
@@ -895,7 +899,7 @@ fn formats_panel(ui: &mut egui::Ui) {
             ui.add_space(2.0);
             ui.label(kit::meta("Detected from the file itself — nothing is converted until you press Convert."));
         });
-        ui.add_space(10.0);
+        ui.add_space(8.0);
         let groups: [(&str, &[&str]); 3] = [
             ("Documents", &["PDF", "Word", "Photos of a worksheet", "Pasted text"]),
             ("Spreadsheets", &["Excel", "CSV"]),
@@ -911,7 +915,7 @@ fn formats_panel(ui: &mut egui::Ui) {
         let rest = (inner - lab_w).max(120.0);
         for (gi, (group, items)) in groups.into_iter().enumerate() {
             if gi > 0 {
-                ui.add_space(7.0);
+                ui.add_space(5.0);
             }
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
@@ -921,8 +925,10 @@ fn formats_panel(ui: &mut egui::Ui) {
                 });
                 ui.allocate_ui_with_layout(Vec2::new(rest, 0.0), Layout::top_down(Align::Min), |ui| {
                     ui.spacing_mut().item_spacing.y = 3.0;
-                    for (li, line) in format_lines(ui, items, rest).into_iter().enumerate() {
-                        ui.add(egui::Label::new(format_line(&line, li > 0)).selectable(false).wrap_mode(egui::TextWrapMode::Extend));
+                    let lines = format_lines(ui, items, rest);
+                    let n = lines.len();
+                    for (li, line) in lines.into_iter().enumerate() {
+                        ui.add(egui::Label::new(format_line(&line, li + 1 < n)).selectable(false).wrap_mode(egui::TextWrapMode::Extend));
                     }
                 });
             });
@@ -932,7 +938,9 @@ fn formats_panel(ui: &mut egui::Ui) {
 
 fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut State) {    fix_pick(st);
     let view_h = ui.available_height();
-    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+    // The page's bar floats and shows only under the pointer: a solid handle ran down the right
+    // edge as a dark rule whenever the page was a few points taller than the window.
+    kit::quiet_scroll_area(ui, egui::ScrollArea::vertical().auto_shrink([false, false]), |ui| {
         let full = ui.available_width();
         let w = if st.sources.is_empty() { full.min(crate::pageshell::PAGE_W) } else { (full - 14.0).min(1500.0) };
         ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Min), |ui| {
@@ -943,18 +951,19 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
                 "Import questions",
                 Some("One place for everything: pasted text, files, spreadsheets or a photo of a worksheet. We work out the format for you."),
             );
-            ui.add_space(14.0);
+            // Spaced so the history heading and its first line sit in the first view at 1280x800
+            // and at 760 wide while nothing is staged.
+            let empty = st.sources.is_empty();
+            ui.add_space(12.0);
             drop_area(app, ui, st);
-            ui.add_space(14.0);
-            if st.sources.is_empty() {
+            ui.add_space(12.0);
+            if empty {
                 formats_panel(ui);
-                ui.add_space(14.0);
-                privacy_note(app, ui);
             } else {
                 let flags = dup_flags(app, st);
                 workspace(app, ui, ctx, st, &flags, w, view_h);
             }
-            ui.add_space(26.0);
+            ui.add_space(if empty { 14.0 } else { 26.0 });
             history(app, ui);
             ui.add_space(20.0);
             crate::pageshell::footer(
@@ -1004,13 +1013,13 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
     let inner = egui::Frame::new()
         .fill(fill)
         .corner_radius(CornerRadius::same(16))
-        .inner_margin(if compact { Margin::symmetric(16, 10) } else { Margin { left: 16, right: 16, top: 18, bottom: 14 } })
+        .inner_margin(if compact { Margin::symmetric(16, 10) } else { Margin { left: 16, right: 16, top: 14, bottom: 12 } })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.vertical_centered(|ui| {
                 if !compact {
-                    let (r, _) = ui.allocate_exact_size(Vec2::splat(46.0), Sense::hover());
-                    ui.painter().rect_filled(r, CornerRadius::same(14), theme::card());
+                    let (r, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
+                    ui.painter().rect_filled(r, CornerRadius::same(12), theme::card());
                     paint_icon(ui.painter(), Ic::Upload, r.center(), theme::accent_col(), 1.25);
                     ui.add_space(4.0);
                     ui.label(theme::serif("Drop anything here").size(19.0).color(theme::ink()));
@@ -1073,8 +1082,11 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                     });
                 }
                 if !compact && !st.in_modal {
-                    ui.add_space(2.0);
-                    ui.label(kit::meta("Any file, text or photo — the format is detected after the drop."));
+                    // The privacy facts close the drop zone (where a file is handed over), as one
+                    // wrapped line, instead of a band of their own that pushed the history below
+                    // the window.
+                    ui.add_space(4.0);
+                    privacy_line(app, ui);
                 }
             });
         });
@@ -1123,8 +1135,9 @@ fn ctx_hovering(ctx: &egui::Context) -> bool {
     ctx.input(|i| !i.raw.hovered_files.is_empty())
 }
 
-/// Privacy note, truthful about the configured provider.
-fn privacy_note(app: &crate::App, ui: &mut egui::Ui) {
+/// The privacy facts, truthful about the configured provider: a lock, "Private by default." in
+/// bold ink, then the sentence in `text`, `size` pt.
+fn privacy_job(app: &crate::App, size: f32) -> egui::text::LayoutJob {
     let (dest, leaves) = provider_label(&app.settings);
     let msg = if leaves {
         format!(
@@ -1133,7 +1146,26 @@ fn privacy_note(app: &crate::App, ui: &mut egui::Ui) {
     } else {
         format!("Everything is read on this computer. When you press Convert, the photo goes to {dest}, which runs here too.")
     };
-    crate::pageshell::note(ui, egui_phosphor::regular::LOCK_SIMPLE, Some("Private by default."), &msg);
+    let mut job = egui::text::LayoutJob::default();
+    job.append(egui_phosphor::regular::LOCK_SIMPLE, 0.0, egui::TextFormat::simple(theme::icon_font(size + 1.0), theme::accent_col()));
+    job.append(" Private by default.", 4.0, egui::TextFormat::simple(FontId::new(size, theme::bold_family()), theme::ink()));
+    job.append(&format!(" {msg}"), 0.0, egui::TextFormat::simple(FontId::new(size, theme::sans_family()), theme::text_col()));
+    job
+}
+
+/// The privacy line closing the drop zone: 14 pt, centred, wrapped at the measure.
+fn privacy_line(app: &crate::App, ui: &mut egui::Ui) {
+    let w = ui.available_width().min(crate::pageshell::MEASURE);
+    ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Center), |ui| {
+        ui.set_max_width(w);
+        ui.add(egui::Label::new(privacy_job(app, kit::ty::BODY)).wrap());
+    });
+}
+
+/// The same facts as one left-aligned 13 pt paragraph, for the Import dialog and the
+/// workspace's details column.
+fn privacy_note(app: &crate::App, ui: &mut egui::Ui) {
+    ui.add(egui::Label::new(privacy_job(app, kit::ty::META)).wrap());
 }
 
 // ----- the three-pane workspace: import list | page preview | details -----
@@ -2918,7 +2950,7 @@ impl crate::App {
 fn history(app: &mut crate::App, ui: &mut egui::Ui) {
     ui.label(theme::serif("Import history").size(22.0).color(theme::ink()));
     ui.label(kit::lead("Everything verSHion has read: pasted, converted by the AI, or read from a file."));
-    ui.add_space(8.0);
+    ui.add_space(4.0);
     if app.store.imports.is_empty() {
         crate::pageshell::empty_line(ui, crate::handicons::IMPORT, "Nothing imported yet. What you import is listed here.", None);
         return;
@@ -3008,12 +3040,17 @@ mod tests {
         assert_eq!(break_between(&items, 54.0, 5.0, w), vec![items.to_vec()]);
         // One unit short: the last name moves down whole, never split at its space.
         assert_eq!(break_between(&items, 53.0, 5.0, w), vec![vec!["PDF", "Word", "Photos of a worksheet"], vec!["Pasted text"]]);
-        // A continued line opens with a separator, so it holds 5 units less than the first:
-        // "Photos of a worksheet  ·  Pasted text" (37) fits a first line but not a continued one.
+        // A line that continues ends with a separator, so a name that is not the last keeps room
+        // for one after it: "PDF  ·  Word  ·  Photos of a worksheet" (38) fills a 38 line, but then
+        // its trailing "·" would not fit, so Photos moves down with Pasted text.
         assert_eq!(
-            break_between(&items, 37.0, 5.0, w),
-            vec![vec!["PDF", "Word"], vec!["Photos of a worksheet"], vec!["Pasted text"]]
+            break_between(&items, 38.0, 5.0, w),
+            vec![vec!["PDF", "Word"], vec!["Photos of a worksheet", "Pasted text"]]
         );
+        // A continued line never starts with the separator; the line before ends with it.
+        let job = |items: &[&str], continues| format_line(items, continues).text;
+        assert_eq!(job(&["Kahoot", "Quizlet"], true), "Kahoot  ·  Quizlet  ·");
+        assert_eq!(job(&["Test Parrot .json"], false), "Test Parrot .json");
         // A name wider than the line still gets a line of its own, unbroken.
         let lines = break_between(&items, 10.0, 5.0, w);
         assert_eq!(lines, vec![vec!["PDF"], vec!["Word"], vec!["Photos of a worksheet"], vec!["Pasted text"]]);
