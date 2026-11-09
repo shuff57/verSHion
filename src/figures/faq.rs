@@ -4177,7 +4177,11 @@ const REACTION_ENERGY_DIAGRAM: &[Faq] = &[
     },
     Faq {
         q: "What does the student copy leave out?",
-        a: "Show answers off keeps the curve, the axes and the energies printed at the axis, which are what a student works from, and replaces every computed value (\u{394}H, each Ea, how much the catalyst lowers Ea) and the words exothermic or endothermic with blank lines. The key prints the working, each number subtracted from the energies at the axis.",
+        a: "Show answers off keeps the curve, the axes and the energies printed at the axis, which are what a student works from, and replaces every computed value (\u{394}H, each Ea, how much the catalyst lowers Ea) and the words exothermic or endothermic with blank lines. An arrow labelled with its value (Ea = 80 kJ/mol) gets a blank line after its name instead, and lettered arrows are listed with a blank for each, for the student to say what it shows. The key prints the working, each number subtracted from the energies at the axis.",
+    },
+    Faq {
+        q: "How do three steps and the rate-determining step work?",
+        a: "Three steps draw three peaks with an intermediate in each of the two valleys; each step's Ea runs from the level just before it (the reactants, intermediate 1, intermediate 2). The overall Ea is the largest climb from the lowest point on the way up to a peak, which is the reactants up to the highest peak unless an intermediate before that peak lies below the reactants. With Rate-determining step in the key on, the key names the step with the highest Ea of its own, but only when its transition state is also the one that sets the overall Ea; when the two point to different steps (or two steps tie) it names none and says why. The Level diagram view draws only the reactants' and products' levels and the \u{394}H arrow, an energy (enthalpy) level diagram.",
     },
 ];
 

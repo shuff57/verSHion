@@ -36,9 +36,23 @@ const WORD_BLANK: &str = "____________";
 const E_LO: f64 = -5000.0;
 const E_HI: f64 = 5000.0;
 const EA_HI: f64 = 10000.0;
-const STEPS: [&str; 2] = ["One step", "Two steps"];
+const STEPS: [&str; 3] = ["One step", "Two steps", "Three steps"];
 const AXIS: [&str; 2] = ["Numbered (kJ/mol)", "Unlabelled"];
-const TS_NAMES: [&str; 3] = ["Activated complex", "Transition state", "None"];
+const TS_NAMES: [&str; 5] = ["Activated complex", "Transition state", "None", "Text", "Blank line"];
+const VIEWS: [&str; 2] = ["Energy profile", "Level diagram"];
+const ENTRY: [&str; 2] = ["Each level's energy", "Ea and ΔH"];
+const UNITS: [&str; 3] = ["kJ/mol", "kJ mol⁻¹", "kJ"];
+const PATHS: [&str; 3] = ["Catalyst", "Enzyme", "Text"];
+const ARROW_LABS: [&str; 5] = ["Symbol", "Value", "Letter or number", "Blank line", "None"];
+const TAGS: [&str; 2] = ["Letters (A, B, C)", "Numbers (1, 2, 3)"];
+const LEVEL_MODES: [&str; 2] = ["Text", "Blank line"];
+const INTER_MODES: [&str; 4] = ["Same as the peaks", "Text", "Blank line", "None"];
+const TITLE_MODES: [&str; 3] = ["Text", "Blank line", "None"];
+const CHART_TITLE_MODES: [&str; 3] = ["None", "Text", "Blank line"];
+const COLOURS: [&str; 6] = ["Blue", "Orange", "Green", "Red", "Purple", "Black"];
+const GRIDS: [&str; 4] = ["None", "Light", "Standard", "Bold"];
+const MINORS: [&str; 4] = ["None", "2 per block", "4 per block", "5 per block"];
+const ENDS: [&str; 3] = ["Arrow", "Line arrow", "None"];
 /// The shortest arrow drawn (px): below this the head alone would be longer than the arrow.
 const MIN_ARROW: f64 = 13.0;
 
@@ -75,6 +89,44 @@ fn params() -> Vec<ParamDef> {
         ParamDef::bool("show_ea_rev", "Ea (reverse) arrow", true),
         ParamDef::bool("show_dh", "ΔH arrow", true),
         ParamDef::bool("readout", "Working under the diagram", true),
+        // ---- batch 4: the reference's controls. Every default draws what the figure drew before.
+        ParamDef::choice("view", "Diagram", &VIEWS, VIEWS[0]).hint("Level diagram: the reactants' and products' levels alone with the ΔH arrow, no curve (an enthalpy level diagram)"),
+        ParamDef::choice("enter", "Type", &ENTRY, ENTRY[0]).hint("Ea and ΔH: the products sit ΔH above the reactants, so typing ΔH moves them"),
+        ParamDef::float("dh", "ΔH (kJ/mol)", -EA_HI, EA_HI, 0.1, -60.0).hint("E(products) − E(reactants): negative for an exothermic reaction"),
+        ParamDef::float("intermediate2", "Second intermediate energy (kJ/mol)", E_LO, E_HI, 0.1, 100.0).hint("Three steps only: the valley between the second and third peaks"),
+        ParamDef::float("ea3", "Ea of step 3 (kJ/mol)", 0.0, EA_HI, 0.1, 50.0).hint("Three steps only: the third peak's height above the second intermediate"),
+        ParamDef::bool("rds", "Rate-determining step in the key", false).hint("Two or three steps: the key names the step with the highest Ea when its transition state is also the highest above the lowest point before it"),
+        ParamDef::choice("unit", "Unit", &UNITS, UNITS[0]),
+        ParamDef::choice("path_names", "Names in the key", &PATHS, PATHS[0]).hint("Enzyme: the paths are with and without an enzyme (biology)"),
+        ParamDef::text("uncat_text", "Uncatalysed path's name", "Without catalyst"),
+        ParamDef::text("cat_text", "Catalysed path's name", "With catalyst"),
+        ParamDef::choice("ea_label", "Ea arrow's label", &ARROW_LABS, ARROW_LABS[0]).hint("Value writes Ea = … on the key; the student copy gets a blank line there"),
+        ParamDef::choice("dh_label", "ΔH arrow's label", &ARROW_LABS, ARROW_LABS[0]),
+        ParamDef::choice("ear_label", "Ea (reverse) arrow's label", &ARROW_LABS, ARROW_LABS[0]),
+        ParamDef::choice("tags", "Letters or numbers", &TAGS, TAGS[0]).hint("Given in order across the diagram, left to right"),
+        ParamDef::bool("both_heads", "Arrowheads at both ends", false),
+        ParamDef::bool("level_lines", "Dashed lines from the levels", true),
+        ParamDef::choice("reactant_mode", "Reactants label", &LEVEL_MODES, LEVEL_MODES[0]),
+        ParamDef::choice("product_mode", "Products label", &LEVEL_MODES, LEVEL_MODES[0]),
+        ParamDef::text("ts_label_text", "Peak label text", "Transition state").hint("With more than one peak each is numbered"),
+        ParamDef::choice("inter_label", "Intermediate label", &INTER_MODES, INTER_MODES[0]),
+        ParamDef::text("inter_label_text", "Intermediate label text", "Intermediate"),
+        ParamDef::choice("line_color", "Line color", &COLOURS, COLOURS[0]),
+        ParamDef::choice("cat_color", "Catalysed path's color", &COLOURS, COLOURS[1]),
+        ParamDef::choice("title_mode", "Chart title", &CHART_TITLE_MODES, CHART_TITLE_MODES[0]),
+        ParamDef::text("title", "Chart title text", "").hint("Leave empty for Potential energy diagram"),
+        ParamDef::choice("x_title_mode", "x-axis title", &TITLE_MODES, TITLE_MODES[0]),
+        ParamDef::text("x_title", "x-axis title text", "").hint("Leave empty for Reaction progress"),
+        ParamDef::choice("y_title_mode", "y-axis title", &TITLE_MODES, TITLE_MODES[0]),
+        ParamDef::text("y_title", "y-axis title text", "").hint("Leave empty for Potential energy and the unit"),
+        ParamDef::bool("fit", "Fit the axis to the levels", true),
+        ParamDef::float("y_from", "Energy axis from", E_LO, E_HI, 1.0, 0.0),
+        ParamDef::float("y_to", "Energy axis to", E_LO, E_HI, 1.0, 200.0),
+        ParamDef::float("y_step", "Count by", 0.01, EA_HI, 1.0, 20.0),
+        ParamDef::choice("grid", "Gridlines", &GRIDS, GRIDS[0]),
+        ParamDef::choice("minor", "Minor gridlines", &MINORS, MINORS[0]),
+        ParamDef::choice("y_end", "Energy axis top", &ENDS, ENDS[0]),
+        ParamDef::choice("x_end", "Reaction progress end", &ENDS, ENDS[0]),
         answers_param().hint("Off keeps the curve, the axes and the energies at the axis, and blanks ΔH, every Ea and the word exothermic or endothermic"),
         svg::style_param(),
         svg::label_size_param(),
@@ -134,22 +186,26 @@ fn rounding_note(rounded: &Rounded, r_in: Option<f64>, p_in: Option<f64>, e: &En
     Some(s)
 }
 
-/// The energies drawn, in kJ/mol, after every repair. A one-step reaction keeps `inter` and `ts2` equal to `ts1`.
+/// The energies drawn, in kJ/mol, after every repair. A one-step reaction keeps `inter` and `ts2` equal to `ts1`; a
+/// one- or two-step reaction keeps `inter2` and `ts3` equal to `ts2`. `two` is set for two steps and for three (`three`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Energy {
     pub r: f64,
     pub p: f64,
     pub two: bool,
+    pub three: bool,
     pub ts1: f64,
     pub inter: f64,
     pub ts2: f64,
+    pub inter2: f64,
+    pub ts3: f64,
     /// The catalysed pathway's peak, when one is drawn.
     pub cat: Option<f64>,
 }
 
 /// A level an overall barrier is measured from or to.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Lvl { Reactants, Products, Intermediate, Ts1, Ts2, Top }
+pub enum Lvl { Reactants, Products, Intermediate, Intermediate2, Ts1, Ts2, Ts3, Top }
 
 /// The climb that sets an overall barrier: from one level up to a peak.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -168,16 +224,79 @@ impl Energy {
     /// ΔH = E(products) − E(reactants).
     pub fn dh(&self) -> f64 { q2(self.p - self.r) }
     /// The highest transition state.
-    pub fn top(&self) -> f64 { if self.two { self.ts1.max(self.ts2) } else { self.ts1 } }
+    pub fn top(&self) -> f64 { if self.three { self.ts1.max(self.ts2).max(self.ts3) } else if self.two { self.ts1.max(self.ts2) } else { self.ts1 } }
+    /// The number of steps: 1, 2 or 3.
+    pub fn steps(&self) -> usize { if self.three { 3 } else if self.two { 2 } else { 1 } }
+    /// The transition states, in order along the reaction.
+    pub fn peaks(&self) -> Vec<f64> { [self.ts1, self.ts2, self.ts3][..self.steps()].to_vec() }
+    /// The intermediates, in order (none for one step).
+    pub fn valleys(&self) -> Vec<f64> { [self.inter, self.inter2][..self.steps() - 1].to_vec() }
+    /// Each step's own Ea: its transition state above the level just before it (the reactants or an intermediate).
+    pub fn step_eas(&self) -> Vec<f64> {
+        let before = [self.r, self.inter, self.inter2];
+        self.peaks().iter().zip(before).map(|(t, b)| q2(t - b)).collect()
+    }
+    /// Which peak is the highest (0, 1 or 2); a tie goes to the later peak, the one nearer the products.
+    pub fn top_idx(&self) -> usize {
+        let pk = self.peaks();
+        let mut best = 0;
+        for (i, v) in pk.iter().enumerate() { if *v >= pk[best] { best = i; } }
+        best
+    }
+    /// The peak (0, 1 or 2) a climb ends on.
+    pub fn peak_of(&self, l: Lvl) -> usize { match l { Lvl::Ts1 => 0, Lvl::Ts2 => 1, Lvl::Ts3 => 2, _ => self.top_idx() } }
+    /// The rate-determining step (1, 2 or 3) of a reaction of two or three steps: the step with the highest Ea of its
+    /// own, named only when no other step ties it and its transition state is also the one that sets the overall Ea
+    /// (the highest above the lowest point before it). Otherwise None, with the two steps the diagram points to:
+    /// Err((step with the highest Ea, or 0 for a tie), the step whose transition state sets the overall Ea).
+    pub fn rds(&self) -> Option<Result<usize, (usize, usize)>> {
+        if !self.two { return None; }
+        let eas = self.step_eas();
+        let max = eas.iter().cloned().fold(f64::MIN, f64::max);
+        let tops: Vec<usize> = (0..eas.len()).filter(|i| eas[*i] == max).collect();
+        let sets = self.peak_of(self.climb_fwd().to);
+        if tops.len() == 1 && tops[0] == sets { Some(Ok(sets + 1)) } else { Some(Err((if tops.len() == 1 { tops[0] + 1 } else { 0 }, sets + 1))) }
+    }
+    /// The overall climb of a three-step reaction, forward or back: for each peak, its height above the lowest point
+    /// on the way to it (the starting end or an intermediate; a tie goes to the end), and the largest of these (a tie
+    /// goes to the peak nearer the products). With every intermediate above the starting end this is the end up to
+    /// the highest peak.
+    fn climb3(&self, fwd: bool) -> Climb {
+        let pk = [(Lvl::Ts1, self.ts1), (Lvl::Ts2, self.ts2), (Lvl::Ts3, self.ts3)];
+        let mut best: Option<Climb> = None;
+        for j in 0..3 {
+            // the levels on the way to peak j: from the reactants forward, or from the products back
+            let way: Vec<(Lvl, f64)> = if fwd {
+                [(Lvl::Reactants, self.r), (Lvl::Intermediate, self.inter), (Lvl::Intermediate2, self.inter2)][..=j].to_vec()
+            } else {
+                [(Lvl::Products, self.p), (Lvl::Intermediate2, self.inter2), (Lvl::Intermediate, self.inter)][..3 - j].to_vec()
+            };
+            let mut low = way[0];
+            for w in &way[1..] { if w.1 < low.1 { low = *w; } }
+            let c = Climb { from: low.0, to: pk[j].0, e_from: low.1, e_to: pk[j].1 };
+            if best.as_ref().is_none_or(|b| c.size() >= b.size()) { best = Some(c); }
+        }
+        best.unwrap()
+    }
     /// The intermediate lies below the reactants: going forward, the system first drops into it and must then climb
     /// out, so the overall barrier is the largest climb on the way (the energetic span), not the highest peak minus the
     /// reactants.
-    pub fn deep_fwd(&self) -> bool { self.two && self.inter < self.r }
+    /// With three steps: an intermediate below the reactants makes the overall climb something other than the reactants
+    /// up to the highest peak.
+    pub fn deep_fwd(&self) -> bool {
+        if self.three { let c = self.climb3(true); return c.from != Lvl::Reactants || self.peak_of(c.to) != self.top_idx(); }
+        self.two && self.inter < self.r
+    }
     /// The intermediate lies below the products: the same, for the reverse reaction.
-    pub fn deep_rev(&self) -> bool { self.two && self.inter < self.p }
+    /// With three steps: likewise from the products.
+    pub fn deep_rev(&self) -> bool {
+        if self.three { let c = self.climb3(false); return c.from != Lvl::Products || self.peak_of(c.to) != self.top_idx(); }
+        self.two && self.inter < self.p
+    }
     /// The climb that sets the forward overall Ea: the reactants up to the highest peak (the textbook definition), or,
     /// when the intermediate lies below the reactants, the larger of reactants to peak 1 and intermediate to peak 2.
     pub fn climb_fwd(&self) -> Climb {
+        if self.three { return self.climb3(true); }
         if self.deep_fwd() {
             let (a, b) = (q2(self.ts1 - self.r), q2(self.ts2 - self.inter));
             if b > a { return Climb { from: Lvl::Intermediate, to: Lvl::Ts2, e_from: self.inter, e_to: self.ts2 }; }
@@ -188,6 +307,7 @@ impl Energy {
     /// The climb that sets the reverse overall Ea: the products up to the highest peak, or, when the intermediate lies
     /// below the products, the larger of products to peak 2 and intermediate to peak 1.
     pub fn climb_rev(&self) -> Climb {
+        if self.three { return self.climb3(false); }
         if self.deep_rev() {
             let (a, b) = (q2(self.ts2 - self.p), q2(self.ts1 - self.inter));
             if b > a { return Climb { from: Lvl::Intermediate, to: Lvl::Ts1, e_from: self.inter, e_to: self.ts1 }; }
@@ -206,6 +326,7 @@ impl Energy {
     pub fn peak_ea(&self) -> f64 { q2(self.top() - self.r) }
     pub fn ea1(&self) -> f64 { q2(self.ts1 - self.r) }
     pub fn ea2(&self) -> f64 { q2(self.ts2 - self.inter) }
+    pub fn ea3(&self) -> f64 { q2(self.ts3 - self.inter2) }
     pub fn ea_cat(&self) -> Option<f64> { self.cat.map(|c| q2(c - self.r)) }
     fn dh_zero(&self) -> bool { self.dh() == 0.0 }
     /// Whether the second transition state is the highest (ties go to it: it is nearer the products).
@@ -218,11 +339,25 @@ fn read(p: &Params) -> (Energy, Vec<String>) {
     let mut rd: Rounded = Vec::new();
     let typed = |k: &str| match p.0.get(k) { Some(Value::F(v)) if v.is_finite() => Some(*v), Some(Value::I(i)) => Some(*i as f64), _ => None };
     let r = val(p, "reactants", "The reactant energy", E_LO, E_HI, 100.0, &mut n, &mut rd);
-    let pr = val(p, "products", "The product energy", E_LO, E_HI, 40.0, &mut n, &mut rd);
-    let two = choice(p, "steps", &STEPS) == STEPS[1];
+    // the products' level typed, or ΔH typed and the products put ΔH above the reactants
+    let by_dh = choice(p, "enter", &ENTRY) == ENTRY[1];
+    let pr = if by_dh {
+        let dh_in = val(p, "dh", "ΔH", -EA_HI, EA_HI, -60.0, &mut n, &mut rd);
+        let want = q2(r + dh_in);
+        if (E_LO..=E_HI).contains(&want) { want } else {
+            let c = want.clamp(E_LO, E_HI);
+            n.push(format!("The products would lie at {} kJ/mol, outside {} to {} kJ/mol, so they are drawn at {} kJ/mol and ΔH is {} kJ/mol.", fmt(want), fmt(E_LO), fmt(E_HI), fmt(c), fmt(q2(c - r))));
+            c
+        }
+    } else {
+        val(p, "products", "The product energy", E_LO, E_HI, 40.0, &mut n, &mut rd)
+    };
+    let steps = choice(p, "steps", &STEPS);
+    let three = steps == STEPS[2];
+    let two = steps == STEPS[1] || three;
     let ea_in = val(p, "ea", "Ea", 0.0, EA_HI, 80.0, &mut n, &mut rd);
     let dh = q2(pr - r);
-    let mut e = Energy { r, p: pr, two, ts1: r, inter: r, ts2: r, cat: None };
+    let mut e = Energy { r, p: pr, two, three, ts1: r, inter: r, ts2: r, inter2: r, ts3: r, cat: None };
     if !two {
         let min = dh.max(0.0);
         let ea = if ea_in < min {
@@ -244,8 +379,19 @@ fn read(p: &Params) -> (Energy, Vec<String>) {
         // the valley must show as a valley: the intermediate at least 4 % of the drawing's energy span under the first
         // peak (about 7 px), which is the least the curve needs to dip visibly between the two peaks
         let i_cap = i_in.min(e.ts1);
-        let ts2_est = i_cap + ea2_in.max(pr - i_cap);
-        let lv = [r, pr, e.ts1, i_cap, ts2_est];
+        let (i2_in, ea3_in) = if three {
+            (val(p, "intermediate2", "The second intermediate energy", E_LO, E_HI, 100.0, &mut n, &mut rd), val(p, "ea3", "Ea of step 3", 0.0, EA_HI, 50.0, &mut n, &mut rd))
+        } else {
+            (0.0, 0.0)
+        };
+        let mut lv = vec![r, pr, e.ts1, i_cap];
+        if three {
+            let ts2_est = i_cap + ea2_in;
+            let i2_cap = i2_in.min(ts2_est);
+            lv.extend([ts2_est, i2_cap, i2_cap + ea3_in.max(pr - i2_cap)]);
+        } else {
+            lv.push(i_cap + ea2_in.max(pr - i_cap));
+        }
         let span_est = lv.iter().cloned().fold(f64::MIN, f64::max) - lv.iter().cloned().fold(f64::MAX, f64::min);
         let gap = q2((0.04 * span_est).max(0.01));
         e.inter = if i_in > e.ts1 - gap {
@@ -260,7 +406,9 @@ fn read(p: &Params) -> (Energy, Vec<String>) {
         } else {
             i_in
         };
-        let min2 = q2(pr - e.inter).max(0.0);
+        // with two steps the second peak is the last, so it stands at or above the products; with three it only needs to
+        // stand above its own valley
+        let min2 = if three { 0.0 } else { q2(pr - e.inter).max(0.0) };
         let ea2 = if ea2_in < min2 {
             n.push(format!(
                 "Ea of step 2 must be at least {} kJ/mol, or the second transition state would lie below the products; it is drawn as {} kJ/mol.",
@@ -271,6 +419,33 @@ fn read(p: &Params) -> (Energy, Vec<String>) {
             ea2_in
         };
         e.ts2 = q2(e.inter + ea2);
+        e.inter2 = e.ts2;
+        e.ts3 = e.ts2;
+        if three {
+            // the second valley under the second peak by the same rule as the first, and the last peak at or above the
+            // products
+            e.inter2 = if i2_in > e.ts2 - gap {
+                let i = q2(e.ts2 - gap.max(q2((0.25 * ea2).max(1.0))));
+                n.push(format!(
+                    "The second intermediate ({} kJ/mol) must lie at least {} kJ/mol below the second transition state ({} kJ/mol), or the valley between the second and third peaks would not show at this scale; it is drawn at {} kJ/mol.",
+                    fmt(i2_in), fmt(gap), fmt(e.ts2), fmt(i)
+                ));
+                i
+            } else {
+                i2_in
+            };
+            let min3 = q2(pr - e.inter2).max(0.0);
+            let ea3 = if ea3_in < min3 {
+                n.push(format!(
+                    "Ea of step 3 must be at least {} kJ/mol, or the third transition state would lie below the products; it is drawn as {} kJ/mol.",
+                    fmt(min3), fmt(min3)
+                ));
+                min3
+            } else {
+                ea3_in
+            };
+            e.ts3 = q2(e.inter2 + ea3);
+        }
     }
     if bo(p, "catalyst", false) {
         // the catalysed pathway is one hump: its peak lies above both ends and below the highest uncatalysed peak
@@ -320,7 +495,7 @@ fn read(p: &Params) -> (Energy, Vec<String>) {
         };
     }
     let r_in = typed("reactants").filter(|v| (E_LO..=E_HI).contains(v));
-    let p_in = typed("products").filter(|v| (E_LO..=E_HI).contains(v));
+    let p_in = if by_dh { None } else { typed("products").filter(|v| (E_LO..=E_HI).contains(v)) };
     if let Some(note) = rounding_note(&rd, r_in, p_in, &e, typed("ea").filter(|v| (0.0..=EA_HI).contains(v))) { n.push(note); }
     (e, n)
 }
@@ -621,6 +796,13 @@ fn name_variants(s: &str, fs: f64, width: f64) -> (Vec<Vec<String>>, Vec<Vec<Str
     if whole.is_empty() { (all, Vec::new()) } else { (whole, all.into_iter().filter(|v| cut(v)).collect()) }
 }
 
+/// A name wrapped to each width (four lines at most), keeping only the wrappings that break between words: none that
+/// cut a word or the name short.
+fn whole_word_wraps(s: &str, fs: f64, widths: &[f64]) -> Vec<Vec<String>> {
+    let words: Vec<&str> = s.split_whitespace().collect();
+    widths.iter().map(|w| wrap_name(s, fs, *w, 4)).filter(|v| v.len() > 1 && v.iter().flat_map(|l| l.split_whitespace()).eq(words.iter().copied())).collect()
+}
+
 /// Greedy word wrap to `max_w` px at `fs`; a word longer than the line is broken. At most `max_lines` lines, the last
 /// ending in an ellipsis when text is left over.
 fn wrap_px(s: &str, fs: f64, max_w: f64, max_lines: usize) -> Vec<String> {
@@ -712,6 +894,9 @@ pub struct Report {
     pub peak: Pt,
     pub peak2: Option<Pt>,
     pub inter: Option<Pt>,
+    pub peak3: Option<Pt>,
+    pub inter2: Option<Pt>,
+    pub level_view: bool,
     pub cat: Option<Pt>,
     pub e: Energy,
     pub notes: Vec<String>,
@@ -781,10 +966,54 @@ struct Arrow {
     /// Shaft width and dash: in Print, where every arrow is grey, the stroke tells them apart.
     sw: f64,
     dash: &'static str,
+    /// What it measures, in kJ/mol (for a label that gives the value).
+    value: f64,
+}
+
+/// The `k`th letter (A … Z, then AA …) or number (1, 2 …) for a lettered arrow.
+fn tag(k: usize, numbers: bool) -> String {
+    if numbers { return (k + 1).to_string(); }
+    let mut k = k;
+    let mut s = String::new();
+    loop {
+        s.insert(0, (b'A' + (k % 26) as u8) as char);
+        if k < 26 { break; }
+        k = k / 26 - 1;
+    }
+    s
+}
+
+/// A line colour by name (the first two are the series colours the figure always used).
+fn colour_of(name: &str) -> &'static str {
+    match name { "Orange" => "#e0803c", "Green" => "#4aa36b", "Red" => "#c9494f", "Purple" => "#8a62c4", "Black" => "#222222", _ => "#4f7cd4" }
+}
+
+/// A typed label: control characters dropped, spaces collapsed, at most 120 characters, `N_2` subscripted.
+fn clean_text(s: &str) -> String {
+    let s: String = s.chars().filter(|c| !c.is_control()).take(120).collect();
+    subscripts(&s.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
+fn text_param(p: &Params, k: &str) -> String { match p.0.get(k) { Some(Value::S(s)) => clean_text(s), _ => String::new() } }
+
+/// A number param that is finite, or `d`.
+fn num(p: &Params, k: &str, d: f64) -> f64 { match p.0.get(k) { Some(Value::F(v)) if v.is_finite() => *v, Some(Value::I(i)) => *i as f64, _ => d } }
+
+/// The paths' names: (uncatalysed, catalysed, the word for the catalyst in the key's sentences).
+fn path_words(p: &Params, two: bool) -> (String, String, &'static str) {
+    match choice(p, "path_names", &PATHS) {
+        "Enzyme" => ("Without enzyme".into(), if two { "With enzyme (alternative pathway, drawn as one hump)".into() } else { "With enzyme (alternative pathway)".into() }, "enzyme"),
+        "Text" => {
+            let a = text_param(p, "uncat_text");
+            let b = text_param(p, "cat_text");
+            (if a.is_empty() { "Without catalyst".into() } else { a }, if b.is_empty() { "With catalyst".into() } else { b }, "catalyst")
+        }
+        _ => ("Without catalyst".into(), if two { "With catalyst (alternative pathway, drawn as one hump)".into() } else { "With catalyst (alternative pathway)".into() }, "catalyst"),
+    }
 }
 
 pub fn build(p: &Params) -> (String, Report) {
-    let (e, mut notes) = read(p);
+    let (mut e, mut notes) = read(p);
     let lab = svg::label_factor(p.s("label_size"));
     let fills = Fills::new(p);
     let print = fills.is_print();
@@ -793,15 +1022,29 @@ pub fn build(p: &Params) -> (String, Report) {
     let values = numeric && bo(p, "level_values", true);
     let titles = bo(p, "axis_titles", true);
     let ts_name = choice(p, "ts_label", &TS_NAMES);
-    let show_ea = bo(p, "show_ea", true);
-    let show_rev = bo(p, "show_ea_rev", true);
+    // a level diagram has the two levels and ΔH alone: no peak, no catalysed path, no Ea
+    let level_view = choice(p, "view", &VIEWS) == VIEWS[1];
+    if level_view {
+        e = Energy { two: false, three: false, ts1: e.r.max(e.p), inter: e.r.max(e.p), ts2: e.r.max(e.p), inter2: e.r.max(e.p), ts3: e.r.max(e.p), cat: None, ..e };
+    }
+    let show_ea = bo(p, "show_ea", true) && !level_view;
+    let show_rev = bo(p, "show_ea_rev", true) && !level_view;
     let show_dh = bo(p, "show_dh", true);
+    let unit = choice(p, "unit", &UNITS);
+    let both_heads = bo(p, "both_heads", false);
+    let lines_on = bo(p, "level_lines", true);
+    let arrow_mode = |k: &str| -> &'static str {
+        match k { "dh" => choice(p, "dh_label", &ARROW_LABS), "ear" => choice(p, "ear_label", &ARROW_LABS), _ => choice(p, "ea_label", &ARROW_LABS) }
+    };
+    let enzyme = choice(p, "path_names", &PATHS) == "Enzyme";
+    let x_title = titles && choice(p, "x_title_mode", &TITLE_MODES) != "None";
+    let y_title = titles && choice(p, "y_title_mode", &TITLE_MODES) != "None";
 
     let ink_c = "#111111";
     let tick_c = "#444444";
     let level_c = "#8c8c8c";
-    let c_main = fills.line(0);
-    let c_cat = if print { "#5a5a5a" } else { fills.line(1) };
+    let c_main = if print { fills.line(0) } else { colour_of(choice(p, "line_color", &COLOURS)) };
+    let c_cat = if print { "#5a5a5a" } else { colour_of(choice(p, "cat_color", &COLOURS)) };
     let (c_ea, c_rev, c_dh, c_eacat) = if print { ("#222222", "#222222", "#222222", "#5a5a5a") } else { ("#b03a2e", "#7d3c98", "#1e7a46", "#b8641f") };
     // Print tells the grey arrows apart by their stroke: Ea solid, Ea (reverse) dashed, ΔH solid and heavier,
     // Ea (catalysed) dotted and lighter. Colour keeps every arrow solid at 1.6 in its own colour.
@@ -821,11 +1064,36 @@ pub fn build(p: &Params) -> (String, Report) {
     let lh = 1.18 * fs_lab;
 
     let w = 640.0 * (1.0 + 0.45 * (lab - 1.0));
-    let ph = 380.0 * (1.0 + 0.3 * (lab - 1.0));
+    // the chart title over the plot, and the axis titles: each the automatic words, the teacher's own, a blank line or
+    // nothing; a long one wraps onto a second line, and the band it sits in grows to hold it
+    let title_lh = 1.2 * fs_title;
+    let chart_lines: Vec<String> = match choice(p, "title_mode", &CHART_TITLE_MODES) {
+        "Text" => { let t = text_param(p, "title"); wrap_px(if t.is_empty() { "Potential energy diagram" } else { &t }, fs_title, w - 24.0, 2) }
+        "Blank line" => vec![WORD_BLANK.repeat(2)],
+        _ => Vec::new(),
+    };
+    let title_h = if chart_lines.is_empty() { 0.0 } else { chart_lines.len() as f64 * title_lh + 4.0 };
+    let axis_title = |mode_k: &str, text_k: &str, auto: &str, width: f64| -> Vec<String> {
+        match choice(p, mode_k, &TITLE_MODES) {
+            "Blank line" => vec![WORD_BLANK.to_string()],
+            "None" => Vec::new(),
+            _ => { let t = text_param(p, text_k); wrap_px(if t.is_empty() { auto } else { &t }, fs_title, width, 2) }
+        }
+    };
+    let y_auto = if numeric { format!("Potential energy ({unit})") } else { "Potential energy".to_string() };
+    let ph0 = 380.0 * (1.0 + 0.3 * (lab - 1.0));
+    let xt_lines = if x_title { axis_title("x_title_mode", "x_title", "Reaction progress", w - 90.0 * lab) } else { Vec::new() };
+    let xt_extra = xt_lines.len().saturating_sub(1) as f64 * title_lh;
+    let ph = ph0 + title_h + xt_extra;
+    let t = 14.0 + 26.0 * lab + title_h;
+    let bm = 10.0 + if x_title { 28.0 * lab + xt_extra } else { 6.0 };
+    let yt_lines = if y_title { axis_title("y_title_mode", "y_title", &y_auto, ph - t - bm) } else { Vec::new() };
 
     // ---- energy range and the y axis
-    let mut levels = vec![e.r, e.p, e.ts1];
+    let mut levels = vec![e.r, e.p];
+    if !level_view { levels.push(e.ts1); }
     if e.two { levels.extend([e.inter, e.ts2]); }
+    if e.three { levels.extend([e.inter2, e.ts3]); }
     if let Some(c) = e.cat { levels.push(c); }
     let lo = levels.iter().cloned().fold(f64::MAX, f64::min);
     let hi = levels.iter().cloned().fold(f64::MIN, f64::max);
@@ -833,10 +1101,35 @@ pub fn build(p: &Params) -> (String, Report) {
     // when the lowest level is the intermediate (a deep valley) or the reactants (where the Ea arrows stand), it keeps
     // one label line of room above the x axis, so a name under it has a place by its own feature; a range that leaves
     // less is widened downwards. The products' name goes over its plateau, so a low products level changes nothing.
-    let plot_h = ph - (14.0 + 26.0 * lab) - (10.0 + if titles { 28.0 * lab } else { 6.0 });
-    let low_named = (e.two && e.inter <= lo) || e.r <= lo;
+    let plot_h = ph - t - bm;
+    let low_named = (e.two && e.inter <= lo) || (e.three && e.inter2 <= lo) || e.r <= lo;
     let need = if low_named { (6.0 + 13.0) * lab + 6.0 } else { 0.0 };
-    let (y0, y1, step) = if numeric {
+    // the teacher's own range (from, to, count by), widened by whole steps to take in every level
+    let manual = if numeric && !bo(p, "fit", true) {
+        let (a, b, st) = (num(p, "y_from", 0.0), num(p, "y_to", 200.0), num(p, "y_step", 20.0));
+        if !(b > a) || !(st > 0.0) {
+            notes.push("The energy axis needs a top above its bottom and a count-by above 0, so it is fitted to the levels.".to_string());
+            None
+        } else {
+            let (mut a2, mut b2) = (a, b);
+            if lo < a2 { a2 -= ((a2 - lo) / st - 1e-9).ceil() * st; }
+            if hi > b2 { b2 += ((hi - b2) / st - 1e-9).ceil() * st; }
+            let mut st2 = st;
+            if (b2 - a2) / st2 > 50.0 {
+                st2 = nice_step(b2 - a2, 8.0);
+                notes.push(format!("Counting by {} kJ/mol would draw more than 50 numbers, so the axis counts by {} kJ/mol.", fmt(st), fmt(st2)));
+            }
+            if a2 != a || b2 != b {
+                notes.push(format!("Every level must show, so the energy axis runs from {} to {} kJ/mol.", fmt(a2), fmt(b2)));
+            }
+            Some((a2, b2, st2))
+        }
+    } else {
+        None
+    };
+    let (y0, y1, step) = if let Some(m) = manual {
+        m
+    } else if numeric {
         let step = nice_step(span * 1.2, 6.0);
         let mut y0 = ((lo - 0.06 * span) / step).floor() * step;
         if lo >= 0.0 && lo <= 0.5 * hi { y0 = 0.0; }
@@ -860,24 +1153,41 @@ pub fn build(p: &Params) -> (String, Report) {
         for v in &levels { if !given.iter().any(|g| (g - v).abs() < 1e-9) { given.push(*v); } }
     }
     let num_w = tick_list.iter().map(|t| tw(&t.1, fs_ax)).chain(given.iter().map(|v| tw(&fmt(*v), fs_ax) * 1.08)).fold(0.0, f64::max);
-    let title_band = if titles { fs_title + 10.0 } else { 0.0 };
+    let title_band = if y_title { fs_title + 10.0 + yt_lines.len().saturating_sub(1) as f64 * title_lh } else { 0.0 };
     let l = 8.0 + title_band + if numeric { num_w + 14.0 } else { 6.0 };
-    let t = 14.0 + 26.0 * lab;
-    let bm = 10.0 + if titles { 28.0 * lab } else { 6.0 };
     let fr = Frame { w, h: ph, l, r: 14.0, t, b: bm, x0: 0.0, x1: 1.0, y0, y1 };
     let (left, right, top, bottom) = (fr.left(), fr.right(), fr.top(), fr.bottom());
     let px = |x: f64| fr.px(x);
     let py = |v: f64| fr.py(v);
 
     // ---- where things go across (fractions of the plot width)
-    let (xr0, xr1, xts1, xi, xts2, xp0, xp1, xdh) = if e.two { (0.03, 0.16, 0.31, 0.46, 0.61, 0.74, 0.88, 0.95) } else { (0.03, 0.21, 0.45, 0.45, 0.45, 0.69, 0.87, 0.95) };
-    let x_top = if e.top_is_2() { xts2 } else { xts1 };
+    let (xr0, xr1, xts1, xi, xts2, xp0, xp1, xdh) = if level_view {
+        (0.06, 0.40, 0.5, 0.5, 0.5, 0.60, 0.94, 0.5)
+    } else if e.three {
+        (0.03, 0.12, 0.23, 0.34, 0.45, 0.78, 0.89, 0.96)
+    } else if e.two {
+        (0.03, 0.16, 0.31, 0.46, 0.61, 0.74, 0.88, 0.95)
+    } else {
+        (0.03, 0.21, 0.45, 0.45, 0.45, 0.69, 0.87, 0.95)
+    };
+    // the third peak and the second valley (three steps only)
+    let (xi2, xts3) = (0.56, 0.67);
+    let x_peaks = [xts1, xts2, xts3];
+    let x_top = if e.three { x_peaks[e.top_idx()] } else if e.top_is_2() { xts2 } else { xts1 };
     let col = 16.0 * lab;
 
     let mut stat = vec![(px(xr0), py(e.r)), (px(xr1), py(e.r)), (px(xts1), py(e.ts1))];
     if e.two { stat.extend([(px(xi), py(e.inter)), (px(xts2), py(e.ts2))]); }
+    if e.three { stat.extend([(px(xi2), py(e.inter2)), (px(xts3), py(e.ts3))]); }
     stat.extend([(px(xp0), py(e.p)), (px(xp1), py(e.p))]);
-    let (main_d, main_pts) = curve(&stat);
+    // a level diagram draws the two levels alone, as two heavy lines
+    let (main_d, main_segs): (String, Vec<Seg>) = if level_view {
+        let (a, b, c, d) = ((px(xr0), py(e.r)), (px(xr1), py(e.r)), (px(xp0), py(e.p)), (px(xp1), py(e.p)));
+        (format!("M{:.3},{:.3} L{:.3},{:.3} M{:.3},{:.3} L{:.3},{:.3}", a.0, a.1, b.0, b.1, c.0, c.1, d.0, d.1), vec![(a, b), (c, d)])
+    } else {
+        let (d, pts) = curve(&stat);
+        (d, pts.windows(2).map(|w2| (w2[0], w2[1])).collect())
+    };
     // Everything that depends on where the catalysed peak stands across: its curve, its arrow, the level lines, and
     // the labels placed around them. A one-step reaction puts the peak under the uncatalysed one; with two steps it
     // stands clear of the valley (x = 0.40), unless that leaves a label away from its feature, when the other places
@@ -891,10 +1201,12 @@ pub fn build(p: &Params) -> (String, Report) {
 
         // ---- arrows
         let mut arrows: Vec<Arrow> = Vec::new();
+        // with a head at each end an arrow needs room for both
+        let min_arrow = if both_heads { 2.0 * MIN_ARROW } else { MIN_ARROW };
         let mut want = |key: &'static str, name: &'static str, x: f64, from: f64, to: f64, color: &'static str, value: f64, notes: &mut Vec<String>| {
-            if (py(from) - py(to)).abs() >= MIN_ARROW {
+            if (py(from) - py(to)).abs() >= min_arrow {
                 let (sw, dash) = style(key);
-                arrows.push(Arrow { key, x, from, to, color, name, sw, dash });
+                arrows.push(Arrow { key, x, from, to, color, name, sw, dash, value });
             } else {
                 notes.push(format!("The {name} arrow is too short to draw at this scale ({} kJ/mol); it is left out of the diagram.", fmt(value)));
             }
@@ -903,18 +1215,19 @@ pub fn build(p: &Params) -> (String, Report) {
             if e.two {
                 want("ea1", "Ea (step 1)", px(xts1), e.r, e.ts1, c_ea, e.ea1(), &mut notes);
                 want("ea2", "Ea (step 2)", px(xts2), e.inter, e.ts2, c_ea, e.ea2(), &mut notes);
+                if e.three { want("ea3", "Ea (step 3)", px(xts3), e.inter2, e.ts3, c_ea, e.ea3(), &mut notes); }
             } else {
                 want("ea", "Ea", px(xts1), e.r, e.ts1, c_ea, e.ea(), &mut notes);
             }
             if let (Some(c), Some(v)) = (e.cat, e.ea_cat()) {
-                want("eacat", "Ea (catalysed)", px(xcat) + cat_side * col, e.r, c, c_eacat, v, &mut notes);
+                want("eacat", if enzyme { "Ea (with enzyme)" } else { "Ea (catalysed)" }, px(xcat) + cat_side * col, e.r, c, c_eacat, v, &mut notes);
             }
         }
         let cr = e.climb_rev();
         // on the products' plateau, its foot on the level it is measured from; when the reverse barrier is the climb
         // out of a deep intermediate, standing in the valley instead
-        let x_ear = if cr.from == Lvl::Intermediate { px(xi) } else { px(xp0) + 7.0 * lab };
-        let x_ear_peak = px(match cr.to { Lvl::Ts1 => xts1, Lvl::Ts2 => xts2, _ => x_top });
+        let x_ear = match cr.from { Lvl::Intermediate => px(xi), Lvl::Intermediate2 => px(xi2), _ => px(xp0) + 7.0 * lab };
+        let x_ear_peak = px(match cr.to { Lvl::Ts1 => xts1, Lvl::Ts2 => xts2, Lvl::Ts3 => xts3, _ => x_top });
         if show_rev {
             want("ear", "Ea (reverse)", x_ear, cr.e_from, cr.e_to, c_rev, e.ea_rev(), &mut notes);
         }
@@ -932,13 +1245,21 @@ pub fn build(p: &Params) -> (String, Report) {
         if r_ext > px(xr1) { add_line(e.r, px(xr1), r_ext + 4.0); }
         {
             if values { add_line(e.p, left, px(xp0)); }
-            if let Some(x) = has("dh") { add_line(e.p, px(xp1), x + 4.0); }
+            // the level diagram's ΔH arrow stands between the two levels, left of the products
+            if let Some(x) = has("dh") { if x < px(xp0) { add_line(e.p, x - 4.0, px(xp0)); } else { add_line(e.p, px(xp1), x + 4.0); } }
         }
-        {
+        if !level_view {
             let x_pk = px(x_top);
             if values { add_line(e.top(), left, x_pk); }
             if let Some(x) = has("ear") { add_line(cr.e_to, x_ear_peak, x + 4.0); }
-            if e.two {
+            if e.three {
+                let pk = e.peaks();
+                let top_i = e.top_idx();
+                for i in 0..3 { if i != top_i && values { add_line(pk[i], left, px(x_peaks[i])); } }
+                if values { add_line(e.inter, left, px(xi)); add_line(e.inter2, left, px(xi2)); }
+                if let Some(x) = has("ea2") { add_line(e.inter, px(xi), x + 4.0); }
+                if let Some(x) = has("ea3") { add_line(e.inter2, px(xi2), x + 4.0); }
+            } else if e.two {
                 let (other, xo) = if e.top_is_2() { (e.ts1, xts1) } else { (e.ts2, xts2) };
                 if values { add_line(other, left, px(xo)); }
                 if values { add_line(e.inter, left, px(xi)); }
@@ -957,7 +1278,7 @@ pub fn build(p: &Params) -> (String, Report) {
         // ---- obstacles for the labels
         let mut hard: Vec<Seg> = Vec::new();
         let mut arrow_boxes: Vec<Bx> = Vec::new();
-        for w2 in main_pts.windows(2) { hard.push((w2[0], w2[1])); }
+        hard.extend(main_segs.iter().cloned());
         if let Some((_, pts)) = &cat_curve { for w2 in pts.windows(2) { hard.push((w2[0], w2[1])); } }
         let mut shafts: Vec<Seg> = Vec::new();
         for a in &arrows {
@@ -966,7 +1287,12 @@ pub fn build(p: &Params) -> (String, Report) {
             let hl = (a.sw * 4.0).max(9.0);
             let base = y_b + if y_b < y_a { hl } else { -hl };
             arrow_boxes.push((a.x - 0.4 * hl, a.x + 0.4 * hl, y_b.min(base), y_b.max(base)));
+            if both_heads {
+                let tail = y_a + if y_b < y_a { -hl } else { hl };
+                arrow_boxes.push((a.x - 0.4 * hl, a.x + 0.4 * hl, y_a.min(tail), y_a.max(tail)));
+            }
         }
+        if !lines_on { level_lines.clear(); }
         // the axes and the y-axis arrowhead
         hard.push(((left, bottom), (right + 12.0, bottom)));
         hard.push(((left, bottom), (left, top - 16.0)));
@@ -976,16 +1302,20 @@ pub fn build(p: &Params) -> (String, Report) {
         let mut feats: Vec<(String, Feature)> = vec![
             ("react".into(), Feature::Seg((px(xr0), py(e.r)), (px(xr1), py(e.r)))),
             ("prod".into(), Feature::Seg((px(xp0), py(e.p)), (px(xp1), py(e.p)))),
-            ("ts1".into(), Feature::Pt((px(xts1), py(e.ts1)))),
         ];
+        if !level_view { feats.push(("ts1".into(), Feature::Pt((px(xts1), py(e.ts1))))); }
         if e.two {
             feats.push(("inter".into(), Feature::Pt((px(xi), py(e.inter)))));
             feats.push(("ts2".into(), Feature::Pt((px(xts2), py(e.ts2)))));
         }
+        if e.three {
+            feats.push(("inter2".into(), Feature::Pt((px(xi2), py(e.inter2)))));
+            feats.push(("ts3".into(), Feature::Pt((px(xts3), py(e.ts3)))));
+        }
         if let Some(c) = e.cat { feats.push(("catpk".into(), Feature::Pt((px(xcat), py(c))))); }
         for a in &arrows { feats.push((format!("arrow:{}", a.key), Feature::Seg((a.x, py(a.from)), (a.x, py(a.to))))); }
-        let curves: Vec<Seg> = main_pts.windows(2).map(|w2| (w2[0], w2[1])).collect();
-        let mut pl = Placer { boxes: arrow_boxes.clone(), hard, soft, bounds: (left + 3.0, w - 3.0, 3.0, bottom - 3.0), feats, own: None, reach: 40.0 * lab - 2.0, shafts, curves };
+        let curves: Vec<Seg> = main_segs.clone();
+        let mut pl = Placer { boxes: arrow_boxes.clone(), hard, soft, bounds: (left + 3.0, w - 3.0, 3.0 + title_h, bottom - 3.0), feats, own: None, reach: 40.0 * lab - 2.0, shafts, curves };
         pl.boxes.push(y_head);
         pl.boxes.push((right + 2.0, right + 12.0, bottom - 5.0, bottom + 5.0));
 
@@ -1010,8 +1340,10 @@ pub fn build(p: &Params) -> (String, Report) {
             if variants.is_empty() { return; }
             jobs.push(Job { own, variants, fallback, anchor, cands, color });
         };
-        let label_text = |key: &str, on: &str, d: &str| -> Option<String> {
+        let label_text = |key: &str, on: &str, d: &str, mode: &str| -> Option<String> {
             if !bo(p, on, true) { return None; }
+            // a blank line for the student to name the level
+            if choice(p, mode, &LEVEL_MODES) == "Blank line" { return Some(WORD_BLANK.to_string()); }
             let s = match p.0.get(key) { Some(Value::S(s)) => s.as_str(), _ => d };
             let s: String = s.chars().filter(|c| !c.is_control()).take(120).collect();
             let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -1019,33 +1351,71 @@ pub fn build(p: &Params) -> (String, Report) {
             let s = subscripts(&s);
             (!s.is_empty()).then_some(s)
         };
-        // the arrows' names (the values are in the working, so the student copy names the same arrows)
-        for a in &arrows {
+        // the arrows' names (the values are in the working, so the student copy names the same arrows), or their values
+        // (the key only: the student copy has a blank line for the value), a letter or number, a blank line, or nothing.
+        // The letters run across the diagram from left to right.
+        let mut lettered: Vec<(f64, usize)> = arrows.iter().enumerate().filter(|(_, a)| arrow_mode(a.key) == "Letter or number").map(|(i, a)| (a.x, i)).collect();
+        lettered.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.cmp(&b.1)));
+        let tag_of = |i: usize| -> String {
+            let k = lettered.iter().position(|l| l.1 == i).unwrap_or(0);
+            tag(k, choice(p, "tags", &TAGS) == TAGS[1])
+        };
+        for (ai, a) in arrows.iter().enumerate() {
             let (x, ya, yb) = (a.x, py(a.from), py(a.to));
             // ΔH stands at the right-hand edge, so its name goes outside it and leaves the products' side free
             let left_first = matches!(a.key, "ea" | "ea1" | "eacat");
             let mut variants = vec![vec![a.name.to_string()]];
-            if let Some((h, t2)) = a.name.split_once(' ') { variants.push(vec![h.to_string(), t2.to_string()]); }
+            match arrow_mode(a.key) {
+                "None" => continue,
+                "Value" => {
+                    let v = if ans { format!("= {} {unit}", fmt(a.value)) } else { format!("= {BLANK}") };
+                    variants = vec![vec![format!("{} {v}", a.name)], vec![a.name.to_string(), v.clone()]];
+                    if let Some((h, t2)) = a.name.split_once(' ') { variants.push(vec![h.to_string(), t2.to_string(), v]); }
+                }
+                "Letter or number" => variants = vec![vec![tag_of(ai)]],
+                "Blank line" => variants = vec![vec![BLANK.to_string()]],
+                _ => if let Some((h, t2)) = a.name.split_once(' ') { variants.push(vec![h.to_string(), t2.to_string()]); },
+            }
             job(Some(format!("arrow:{}", a.key)), (variants, vec![]), (x, (ya + yb) / 2.0), Box::new(move |n| beside_arrow(x, ya, yb, fs_lab, lh, n, left_first, lab)), a.color);
         }
-        // the peak (or peaks) and the intermediate
-        if ts_name != "None" {
-            let peaks: Vec<(f64, f64, String, &str)> = if e.two {
-                vec![(px(xts1), py(e.ts1), format!("{ts_name} 1"), "ts1"), (px(xts2), py(e.ts2), format!("{ts_name} 2"), "ts2")]
+        // the peak (or peaks) and the intermediate: the usual word, the teacher's own text, a blank line or nothing; with
+        // more than one peak each is numbered
+        let own_ts = text_param(p, "ts_label_text");
+        let ts_base = match ts_name { "Text" => if own_ts.is_empty() { "Transition state".to_string() } else { own_ts }, "Blank line" => BLANK.to_string(), n => n.to_string() };
+        let numbered = |base: &str, k: usize| if base == BLANK { BLANK.to_string() } else { format!("{base} {k}") };
+        if ts_name != "None" && !level_view {
+            let mut peaks: Vec<(f64, f64, String, &str)> = if e.two {
+                vec![(px(xts1), py(e.ts1), numbered(&ts_base, 1), "ts1"), (px(xts2), py(e.ts2), numbered(&ts_base, 2), "ts2")]
             } else {
-                vec![(px(xts1), py(e.ts1), ts_name.to_string(), "ts1")]
+                vec![(px(xts1), py(e.ts1), ts_base.clone(), "ts1")]
             };
+            if e.three { peaks.push((px(xts3), py(e.ts3), numbered(&ts_base, 3), "ts3")); }
             for (x, y, name, key) in peaks {
                 let words: Vec<&str> = name.split(' ').collect();
-                let two_lines = vec![words[..words.len().min(1)].join(" "), words[1.min(words.len())..].join(" ")];
-                job(Some(key.to_string()), (vec![vec![name.clone()], two_lines], vec![]), (x, y), Box::new(move |n| around_point(x, y, fs_lab, lh, g, n, true)), ink_c);
+                let mut variants = vec![vec![name.clone()]];
+                if words.len() >= 2 { variants.push(vec![words[..1].join(" "), words[1..].join(" ")]); }
+                // the teacher's own words, wrapped narrower for a long name
+                if ts_name == "Text" { for wv in whole_word_wraps(&name, fs_lab, &[120.0 * lab, 84.0 * lab]) { if !variants.contains(&wv) { variants.push(wv); } } }
+                job(Some(key.to_string()), (variants, vec![]), (x, y), Box::new(move |n| around_point(x, y, fs_lab, lh, g, n, true)), ink_c);
             }
-            if e.two {
+        }
+        let inter_base: Option<String> = match choice(p, "inter_label", &INTER_MODES) {
+            "Text" => { let t = text_param(p, "inter_label_text"); Some(if t.is_empty() { "Intermediate".into() } else { t }) }
+            "Blank line" => Some(BLANK.into()),
+            "None" => None,
+            _ => match ts_name { "None" => None, "Blank line" => Some(BLANK.into()), _ => Some("Intermediate".into()) },
+        };
+        if let (Some(base), true) = (inter_base, e.two) {
+            // each valley: (key, x, y, the two peaks beside it); with three steps the intermediates are numbered
+            let mut wells = vec![("inter", px(xi), py(e.inter), e.ts1, e.ts2, if e.three { numbered(&base, 1) } else { base.clone() })];
+            if e.three { wells.push(("inter2", px(xi2), py(e.inter2), e.ts2, e.ts3, numbered(&base, 2))); }
+            for (key, x, y, pa, pb, name) in wells {
                 // under the valley, beside it, or above it inside the well between the two peaks
-                let (x, y) = (px(xi), py(e.inter));
                 // the depth of the well under the lower peak, in px
-                let depth = y - py(e.ts1).max(py(e.ts2));
-                job(Some("inter".into()), (vec![vec!["Intermediate".to_string()]], vec![]), (x, y), Box::new(move |n| {
+                let depth = y - py(pa).max(py(pb));
+                let mut variants = vec![vec![name.clone()]];
+                if name.contains(' ') && name != "Intermediate" { for wv in whole_word_wraps(&name, fs_lab, &[110.0 * lab, 66.0 * lab]) { if !variants.contains(&wv) { variants.push(wv); } } }
+                job(Some(key.into()), (variants, vec![]), (x, y), Box::new(move |n| {
                     let mut v = around_point(x, y, fs_lab, lh, g, n, false);
                     v.extend(around_point(x, y, fs_lab, lh, g, n, true));
                     // off to one side, its near corner by the valley
@@ -1063,19 +1433,19 @@ pub fn build(p: &Params) -> (String, Report) {
                 }), ink_c);
             }
         }
-        if let Some(s) = label_text("reactant_text", "label_reactants", "Reactants") {
+        if let Some(s) = label_text("reactant_text", "label_reactants", "Reactants", "reactant_mode") {
             let (a, b, y) = (px(xr0), px(xr1), py(e.r));
             let width = (b - left - 6.0).max(70.0 * lab);
             let variants = name_variants(&s, fs_lab, width);
             job(Some("react".into()), variants, ((a + b) / 2.0, y), Box::new(move |n| beside_level(a, b, y, fs_lab, lh, g, n, true)), ink_c);
         }
-        if let Some(s) = label_text("product_text", "label_products", "Products") {
+        if let Some(s) = label_text("product_text", "label_products", "Products", "product_mode") {
             // the room over the plateau: from the Ea (reverse) arrow standing on it to the ΔH arrow, clear of the shaft
             // on the left and of the ΔH arrow's head on the right, with the placer's margins
             let (a, b, y) = (px(xp0), px(xp1), py(e.p));
             let ear_on = arrows.iter().find(|x| x.key == "ear" && (x.x - (px(xp0) + 7.0 * lab)).abs() < 1e-9).map(|x| x.x);
             let a2 = ear_on.map_or(a, |x| x + (5.0 * lab).max(4.0));
-            let b2 = arrows.iter().find(|x| x.key == "dh").map_or(b + 6.0 * lab, |x| x.x - 0.4 * (x.sw * 4.0).max(9.0) - 3.0 - lab);
+            let b2 = arrows.iter().find(|x| x.key == "dh" && x.x > a).map_or(b + 6.0 * lab, |x| x.x - 0.4 * (x.sw * 4.0).max(9.0) - 3.0 - lab);
             let width = (b2 - a2).max(70.0 * lab);
             let variants = name_variants(&s, fs_lab, width);
             job(Some("prod".into()), variants, ((a + b) / 2.0, y), Box::new(move |n| {
@@ -1152,11 +1522,20 @@ pub fn build(p: &Params) -> (String, Report) {
     // ---- the legend and the working under the plot
     let legend = cat_curve.is_some();
     // a two-step reaction's catalysed pathway is drawn as one hump: the legend says so, on a second row if need be
-    let leg_a = "Without catalyst";
-    let leg_b = if e.two { "With catalyst (alternative pathway, drawn as one hump)" } else { "With catalyst (alternative pathway)" };
-    let leg_wrap = left + 36.0 + tw(leg_a, fs_ro) + 24.0 + 36.0 + tw(leg_b, fs_ro) > w - 12.0;
-    let legend_h = if !legend { 0.0 } else if leg_wrap { 48.0 * lab } else { 26.0 * lab };
-    let ro_lines: Vec<String> = if bo(p, "readout", true) { readout(&e, ans, numeric, show_rev, ts_name) } else { Vec::new() };
+    let (leg_a, leg_b, cat_word) = path_words(p, e.two);
+    let leg_wrap = left + 36.0 + tw(&leg_a, fs_ro) + 24.0 + 36.0 + tw(&leg_b, fs_ro) > w - 12.0;
+    // a name too long for its own row wraps (two lines at most)
+    let leg_w = w - 12.0 - left - 36.0;
+    let (leg_a_lines, leg_b_lines) = (wrap_px(&leg_a, fs_ro, leg_w, 2), wrap_px(&leg_b, fs_ro, leg_w, 2));
+    let leg_lh = 1.25 * fs_ro;
+    let leg_extra = (leg_a_lines.len() + leg_b_lines.len()).saturating_sub(2) as f64 * leg_lh;
+    let legend_h = if !legend { 0.0 } else if leg_wrap { 48.0 * lab + leg_extra } else { 26.0 * lab };
+    // the arrows given letters, in their order, for the key to say what each one is
+    let mut tagged: Vec<(f64, String)> = arrows.iter().filter(|a| arrow_mode(a.key) == "Letter or number").map(|a| (a.x, if a.name == "Ea" { "Ea (forward)".to_string() } else { a.name.to_string() })).collect();
+    tagged.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let tags: Vec<(String, String)> = tagged.into_iter().enumerate().map(|(k, (_, n))| (tag(k, choice(p, "tags", &TAGS) == TAGS[1]), n)).collect();
+    let ro = Ro { ans, numeric, show_rev, ts_name, cat_word, level_view, rds: bo(p, "rds", false), tags };
+    let ro_lines: Vec<String> = if bo(p, "readout", true) { readout(&e, &ro).into_iter().map(|l| if unit == UNITS[0] { l } else { l.replace("kJ/mol", unit) }).collect() } else { Vec::new() };
     let ro_w = w - 40.0;
     let mut wrapped: Vec<String> = Vec::new();
     for line in &ro_lines { wrapped.extend(wrap_px(line, fs_ro, ro_w, 6)); }
@@ -1164,8 +1543,28 @@ pub fn build(p: &Params) -> (String, Report) {
     let h = ph + legend_h + if wrapped.is_empty() { 4.0 } else { 6.0 + wrapped.len() as f64 * ro_lh + 4.0 };
 
     let mut d = Doc::new(w, h.ceil());
-    d.describe("Reaction energy diagram", &describe(&e, &arrows));
+    d.describe("Reaction energy diagram", &describe(&e, &arrows, level_view, enzyme));
 
+    // gridlines across the plot at the energy axis's numbers (and minor ones between), under everything else
+    let grid = choice(p, "grid", &GRIDS);
+    let minor = match choice(p, "minor", &MINORS) { "2 per block" => 2, "4 per block" => 4, "5 per block" => 5, _ => 0 };
+    if numeric && step > 0.0 {
+        if minor > 0 {
+            let ms = step / minor as f64;
+            for (v, _) in ticks(y0, y1, ms) {
+                if ((v / step).round() * step - v).abs() < 1e-6 * step || (v - y0).abs() < 1e-9 { continue; }
+                let y = py(v);
+                d.raw(&format!(r##"<line x1="{left:.2}" y1="{y:.2}" x2="{right:.2}" y2="{y:.2}" stroke="#ececec" stroke-width="0.6" data-o="grid"/>"##));
+            }
+        }
+        if let Some((c, sw)) = match grid { "Light" => Some(("#e2e2e2", 0.8)), "Standard" => Some(("#c8c8c8", 1.0)), "Bold" => Some(("#9a9a9a", 1.4)), _ => None } {
+            for (v, _) in &tick_list {
+                if (v - y0).abs() < 1e-9 { continue; }
+                let y = py(*v);
+                d.raw(&format!(r##"<line x1="{left:.2}" y1="{y:.2}" x2="{right:.2}" y2="{y:.2}" stroke="{c}" stroke-width="{sw}" data-o="grid"/>"##));
+            }
+        }
+    }
     // dotted level lines first, so everything else draws over them
     for (y, a, b) in &level_lines {
         d.raw(&format!(r##"<line x1="{a:.2}" y1="{y:.3}" x2="{b:.2}" y2="{y:.3}" stroke="{level_c}" stroke-width="1" stroke-dasharray="2 3" data-o="level"/>"##));
@@ -1177,14 +1576,23 @@ pub fn build(p: &Params) -> (String, Report) {
     d.raw(&format!(r##"<path d="{main_d}" fill="none" stroke="{c_main}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" data-o="curve" data-k="main"/>"##));
     for a in &arrows {
         d.raw(&format!(r#"<g data-o="arrow" data-k="{}">"#, a.key));
-        d.arrow_with(a.x, py(a.from), a.x, py(a.to), a.color, a.sw, a.dash, false);
+        d.arrow_with(a.x, py(a.from), a.x, py(a.to), a.color, a.sw, a.dash, both_heads);
         d.raw("</g>");
     }
-    // axes
-    d.raw(&format!(r##"<line x1="{left:.2}" y1="{bottom:.2}" x2="{:.2}" y2="{bottom:.2}" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##, right + 2.0));
-    d.raw(&format!(r##"<polygon points="{:.2},{bottom:.2} {:.2},{:.2} {:.2},{:.2}" fill="{ink_c}" stroke="{ink_c}" stroke-width="0.5" data-o="axis"/>"##, right + 12.0, right + 2.0, bottom - 5.0, right + 2.0, bottom + 5.0));
-    d.raw(&format!(r##"<line x1="{left:.2}" y1="{bottom:.2}" x2="{left:.2}" y2="{:.2}" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##, top - 6.0));
-    d.raw(&format!(r##"<polygon points="{left:.2},{:.2} {:.2},{:.2} {:.2},{:.2}" fill="{ink_c}" stroke="{ink_c}" stroke-width="0.5" data-o="axis"/>"##, top - 16.0, left - 5.0, top - 6.0, left + 5.0, top - 6.0));
+    // axes, each ending in a solid arrowhead, an open (line) arrowhead, or nothing
+    let (x_end, y_end) = (choice(p, "x_end", &ENDS), choice(p, "y_end", &ENDS));
+    d.raw(&format!(r##"<line x1="{left:.2}" y1="{bottom:.2}" x2="{:.2}" y2="{bottom:.2}" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##, right + if x_end == "Line arrow" { 11.0 } else { 2.0 }));
+    match x_end {
+        "Arrow" => { d.raw(&format!(r##"<polygon points="{:.2},{bottom:.2} {:.2},{:.2} {:.2},{:.2}" fill="{ink_c}" stroke="{ink_c}" stroke-width="0.5" data-o="axis"/>"##, right + 12.0, right + 2.0, bottom - 5.0, right + 2.0, bottom + 5.0)); }
+        "Line arrow" => { d.raw(&format!(r##"<polyline points="{:.2},{:.2} {:.2},{bottom:.2} {:.2},{:.2}" fill="none" stroke="{ink_c}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" data-o="axis"/>"##, right + 4.0, bottom - 6.0, right + 12.0, right + 4.0, bottom + 6.0)); }
+        _ => {}
+    }
+    d.raw(&format!(r##"<line x1="{left:.2}" y1="{bottom:.2}" x2="{left:.2}" y2="{:.2}" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##, top - if y_end == "Line arrow" { 15.0 } else { 6.0 }));
+    match y_end {
+        "Arrow" => { d.raw(&format!(r##"<polygon points="{left:.2},{:.2} {:.2},{:.2} {:.2},{:.2}" fill="{ink_c}" stroke="{ink_c}" stroke-width="0.5" data-o="axis"/>"##, top - 16.0, left - 5.0, top - 6.0, left + 5.0, top - 6.0)); }
+        "Line arrow" => { d.raw(&format!(r##"<polyline points="{:.2},{:.2} {left:.2},{:.2} {:.2},{:.2}" fill="none" stroke="{ink_c}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" data-o="axis"/>"##, left - 6.0, top - 8.0, top - 16.0, left + 6.0, top - 8.0)); }
+        _ => {}
+    }
     if numeric {
         // the energies at the axis, spread so none prints on another, then the tick numbers that are clear of them
         let gap = 1.15 * fs_ax;
@@ -1205,15 +1613,19 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&text_el(left - 9.0, yl + 0.36 * fs_ax, fs_ax, "end", ink_c, &fmt(*v), "axis", r#" font-weight="bold""#));
         }
     }
-    if titles {
-        d.raw(&text_el((left + right) / 2.0, bottom + 22.0 * lab, fs_title, "middle", ink_c, "Reaction progress", "axis", ""));
+    for (k, line) in xt_lines.iter().enumerate() {
+        d.raw(&text_el((left + right) / 2.0, bottom + 22.0 * lab + k as f64 * title_lh, fs_title, "middle", ink_c, line, "axis", ""));
+    }
+    for (k, line) in yt_lines.iter().enumerate() {
         let ty = (top + bottom) / 2.0;
-        let tx = 4.0 + 0.76 * fs_title;
-        let name = if numeric { "Potential energy (kJ/mol)" } else { "Potential energy" };
+        let tx = 4.0 + 0.76 * fs_title + k as f64 * title_lh;
         d.raw(&format!(
             r##"<text x="{tx:.2}" y="{ty:.2}" font-size="{fs_title:.2}" text-anchor="middle" font-family="{FONT}" fill="{ink_c}" transform="rotate(-90 {tx:.2} {ty:.2})" data-o="axis">{}</text>"##,
-            esc(name)
+            esc(line)
         ));
+    }
+    for (k, line) in chart_lines.iter().enumerate() {
+        d.raw(&text_el(w / 2.0, 4.0 + 0.9 * fs_title + k as f64 * title_lh, fs_title, "middle", ink_c, line, "axis", r#" font-weight="bold""#));
     }
     for (i, lb) in labels.iter().enumerate() {
         for (k, line) in lb.lines.iter().enumerate() {
@@ -1226,12 +1638,20 @@ pub fn build(p: &Params) -> (String, Report) {
         let mut x = left;
         d.raw(&format!(r##"<line x1="{x:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{c_main}" stroke-width="2.6" data-o="note"/>"##, ly - 0.3 * fs_ro, x + 30.0, ly - 0.3 * fs_ro));
         x += 36.0;
-        d.raw(&text_el(x, ly, fs_ro, "start", ink_c, leg_a, "note", ""));
-        x += tw(leg_a, fs_ro) + 24.0;
-        let ly = if leg_wrap { x = left; ly + 22.0 * lab } else { ly };
+        if leg_wrap {
+            for (k, l) in leg_a_lines.iter().enumerate() { d.raw(&text_el(x, ly + k as f64 * leg_lh, fs_ro, "start", ink_c, l, "note", "")); }
+        } else {
+            d.raw(&text_el(x, ly, fs_ro, "start", ink_c, &leg_a, "note", ""));
+        }
+        x += tw(&leg_a, fs_ro) + 24.0;
+        let ly = if leg_wrap { x = left; ly + 22.0 * lab + leg_a_lines.len().saturating_sub(1) as f64 * leg_lh } else { ly };
         d.raw(&format!(r##"<line x1="{x:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{c_cat}" stroke-width="2.2" stroke-dasharray="8 5" data-o="note"/>"##, ly - 0.3 * fs_ro, x + 30.0, ly - 0.3 * fs_ro));
         x += 36.0;
-        d.raw(&text_el(x, ly, fs_ro, "start", ink_c, leg_b, "note", ""));
+        if leg_wrap {
+            for (k, l) in leg_b_lines.iter().enumerate() { d.raw(&text_el(x, ly + k as f64 * leg_lh, fs_ro, "start", ink_c, l, "note", "")); }
+        } else {
+            d.raw(&text_el(x, ly, fs_ro, "start", ink_c, &leg_b, "note", ""));
+        }
         y += legend_h;
     }
     for (i, line) in wrapped.iter().enumerate() {
@@ -1250,19 +1670,31 @@ pub fn build(p: &Params) -> (String, Report) {
         peak: (px(xts1), py(e.ts1)),
         peak2: e.two.then(|| (px(xts2), py(e.ts2))),
         inter: e.two.then(|| (px(xi), py(e.inter))),
+        peak3: e.three.then(|| (px(xts3), py(e.ts3))),
+        inter2: e.three.then(|| (px(xi2), py(e.inter2))),
+        level_view,
         cat: e.cat.map(|c| (px(xcat), py(c))),
         e,
-        notes,
+        // the editor's notes in the unit the figure shows
+        notes: if unit == UNITS[0] { notes } else { notes.into_iter().map(|n| n.replace("kJ/mol", unit)).collect() },
     };
     (d.finish(), rep)
 }
 
 /// The figure's description for a screen reader: what kind of reaction, whether the catalysed pathway is drawn, and
 /// which arrows are marked. No computed value and no answer word, so a student copy can carry it.
-fn describe(e: &Energy, arrows: &[Arrow]) -> String {
+fn describe(e: &Energy, arrows: &[Arrow], level_view: bool, enzyme: bool) -> String {
     let mut s = String::from("Potential energy against reaction progress for a ");
-    s.push_str(if e.two { "two-step reaction: two peaks with an intermediate in the valley between them" } else { "one-step reaction over a single peak" });
-    if e.cat.is_some() { s.push_str(", with and without a catalyst (the catalysed pathway is the dashed curve, drawn as one lower hump)"); }
+    if level_view {
+        s = String::from("Energy level diagram: the reactants' level and the products' level, with no curve between them");
+    } else if e.three {
+        s.push_str("three-step reaction: three peaks with an intermediate in each of the two valleys between them");
+    } else {
+        s.push_str(if e.two { "two-step reaction: two peaks with an intermediate in the valley between them" } else { "one-step reaction over a single peak" });
+    }
+    if e.cat.is_some() {
+        s.push_str(if enzyme { ", with and without an enzyme (the pathway with the enzyme is the dashed curve, drawn as one lower hump)" } else { ", with and without a catalyst (the catalysed pathway is the dashed curve, drawn as one lower hump)" });
+    }
     s.push('.');
     // kept to ASCII: the figure's size is read from the first 400 bytes of the SVG, which this text follows
     let names: Vec<String> = arrows.iter().map(|a| a.name.replace("ΔH", "Delta H")).collect();
@@ -1307,25 +1739,72 @@ fn spread(ys: &[f64], gap: f64, lo: f64, hi: f64) -> Vec<f64> {
     out
 }
 
+/// What the working under the diagram depends on besides the energies.
+struct Ro {
+    ans: bool,
+    numeric: bool,
+    show_rev: bool,
+    ts_name: &'static str,
+    /// "catalyst" or "enzyme".
+    cat_word: &'static str,
+    level_view: bool,
+    /// Name the rate-determining step (two or three steps).
+    rds: bool,
+    /// The lettered arrows: (letter, what it measures), left to right.
+    tags: Vec<(String, String)>,
+}
+
 /// The working (key) or the blanks (student copy) under the diagram.
-fn readout(e: &Energy, ans: bool, numeric: bool, show_rev: bool, ts_name: &str) -> Vec<String> {
-    let ts = match ts_name { "Transition state" => "transition state", "Activated complex" => "activated complex", _ => "peak" };
-    let tss = match ts_name { "Transition state" => "transition states", "Activated complex" => "activated complexes", _ => "peaks" };
+fn readout(e: &Energy, ro: &Ro) -> Vec<String> {
+    let (ans, numeric, show_rev, ts_name) = (ro.ans, ro.numeric, ro.show_rev, ro.ts_name);
+    let ts = match ts_name { "Transition state" | "Text" | "Blank line" => "transition state", "Activated complex" => "activated complex", _ => "peak" };
+    let tss = match ts_name { "Transition state" | "Text" | "Blank line" => "transition states", "Activated complex" => "activated complexes", _ => "peaks" };
     let dh = e.dh();
     let (cf, cr) = (e.climb_fwd(), e.climb_rev());
+    let inter_n = |k: u8| if e.three { format!("intermediate {k}") } else { "intermediate".to_string() };
     let lvl = |l: Lvl| -> String {
-        match l { Lvl::Reactants => "reactants".into(), Lvl::Products => "products".into(), Lvl::Intermediate => "intermediate".into(), Lvl::Ts1 => format!("{ts} 1"), Lvl::Ts2 => format!("{ts} 2"), Lvl::Top => "highest peak".into() }
+        match l { Lvl::Reactants => "reactants".into(), Lvl::Products => "products".into(), Lvl::Intermediate => inter_n(1), Lvl::Intermediate2 => inter_n(2), Lvl::Ts1 => format!("{ts} 1"), Lvl::Ts2 => format!("{ts} 2"), Lvl::Ts3 => format!("{ts} 3"), Lvl::Top => "highest peak".into() }
     };
     // why a deep intermediate changes the overall barrier, in a plain sentence
-    let why = |c: &Climb, end: &str, dir: &str| format!("The intermediate lies below the {end}, so the largest climb{dir} is from the {} to {}.", lvl(c.from), lvl(c.to));
+    let the_inter = if e.three { "An intermediate" } else { "The intermediate" };
+    let why = |c: &Climb, end: &str, dir: &str| format!("{the_inter} lies below the {end}, so the largest climb{dir} is from the {} to {}.", lvl(c.from), lvl(c.to));
+    let cw = ro.cat_word;
     let mut v = Vec::new();
+    // the lettered arrows: the key says what each measures, the student copy asks
+    if !ro.tags.is_empty() {
+        let list: Vec<String> = ro.tags.iter().map(|(t, n)| if ans { format!("{t} = {n}") } else { format!("{t} = {BLANK}") }).collect();
+        v.push(format!("{} {}.", if ans { "Arrows:" } else { "What does each arrow show?" }, list.join(", ")));
+    }
+    if ro.level_view {
+        if numeric && ans {
+            let word = if e.dh_zero() { "neither exothermic nor endothermic" } else if dh < 0.0 { "exothermic (energy is released)" } else { "endothermic (energy is absorbed)" };
+            v.push(format!("ΔH = E(products) − E(reactants) = {} = {} kJ/mol: {word}", minus(e.p, e.r), fmt(dh)));
+        } else if numeric {
+            v.push(format!("ΔH = {BLANK} kJ/mol"));
+            v.push(format!("Exothermic or endothermic? {WORD_BLANK}"));
+        } else if ans {
+            v.push(if e.dh_zero() {
+                "ΔH = 0: the products and the reactants are at the same energy (neither exothermic nor endothermic).".to_string()
+            } else if dh < 0.0 {
+                "ΔH is negative: the products are lower in energy than the reactants, so the reaction is exothermic (energy is released).".to_string()
+            } else {
+                "ΔH is positive: the products are higher in energy than the reactants, so the reaction is endothermic (energy is absorbed).".to_string()
+            });
+        } else {
+            v.push(format!("Is ΔH positive or negative? {BLANK}"));
+            v.push(format!("Exothermic or endothermic? {WORD_BLANK}"));
+        }
+        return v;
+    }
+    let eas = e.step_eas();
     if numeric {
         if ans {
             let word = if e.dh_zero() { "neither exothermic nor endothermic" } else if dh < 0.0 { "exothermic (energy is released)" } else { "endothermic (energy is absorbed)" };
             v.push(format!("ΔH = E(products) − E(reactants) = {} = {} kJ/mol: {word}", minus(e.p, e.r), fmt(dh)));
             if e.two {
                 v.push(format!("Ea (step 1) = E({ts} 1) − E(reactants) = {} = {} kJ/mol", minus(e.ts1, e.r), fmt(e.ea1())));
-                v.push(format!("Ea (step 2) = E({ts} 2) − E(intermediate) = {} = {} kJ/mol", minus(e.ts2, e.inter), fmt(e.ea2())));
+                v.push(format!("Ea (step 2) = E({ts} 2) − E({}) = {} = {} kJ/mol", inter_n(1), minus(e.ts2, e.inter), fmt(e.ea2())));
+                if e.three { v.push(format!("Ea (step 3) = E({ts} 3) − E({}) = {} = {} kJ/mol", inter_n(2), minus(e.ts3, e.inter2), fmt(e.ea3()))); }
                 v.push(format!("Overall Ea = E({}) − E({}) = {} = {} kJ/mol", lvl(cf.to), lvl(cf.from), minus(cf.e_to, cf.e_from), fmt(e.ea())));
                 if e.deep_fwd() { v.push(why(&cf, "reactants", "")); }
             } else {
@@ -1341,11 +1820,12 @@ fn readout(e: &Energy, ans: bool, numeric: bool, show_rev: bool, ts_name: &str) 
                 }
             }
             if let (Some(c), Some(ec)) = (e.cat, e.ea_cat()) {
-                v.push(format!("Ea (catalysed) = E(catalysed peak) − E(reactants) = {} = {} kJ/mol", minus(c, e.r), fmt(ec)));
-                v.push(format!("The catalyst lowers Ea by {} = {} kJ/mol.", minus(e.ea(), ec), fmt(q2(e.ea() - ec))));
+                let (name, peak) = if cw == "enzyme" { ("Ea (with enzyme)", "peak with the enzyme") } else { ("Ea (catalysed)", "catalysed peak") };
+                v.push(format!("{name} = E({peak}) − E(reactants) = {} = {} kJ/mol", minus(c, e.r), fmt(ec)));
+                v.push(format!("The {cw} lowers Ea by {} = {} kJ/mol.", minus(e.ea(), ec), fmt(q2(e.ea() - ec))));
                 v.push(format!(
-                    "ΔH is unchanged by the catalyst ({} kJ/mol): it gives an alternative pathway with a lower Ea between the same reactants and products.",
-                    fmt(dh)
+                    "ΔH is unchanged by the {cw} ({} kJ/mol): it gives an alternative pathway with a lower Ea between the same {}.",
+                    fmt(dh), if cw == "enzyme" { "substrate and products" } else { "reactants and products" }
                 ));
             }
         } else {
@@ -1355,15 +1835,16 @@ fn readout(e: &Energy, ans: bool, numeric: bool, show_rev: bool, ts_name: &str) 
             if e.two {
                 v.push(format!("Ea (step 1) = {BLANK} kJ/mol"));
                 v.push(format!("Ea (step 2) = {BLANK} kJ/mol"));
+                if e.three { v.push(format!("Ea (step 3) = {BLANK} kJ/mol")); }
                 v.push(format!("Overall Ea = {BLANK} kJ/mol"));
             } else {
                 v.push(format!("Ea (forward) = {BLANK} kJ/mol"));
             }
             if show_rev { v.push(format!("Ea (reverse) = {BLANK} kJ/mol")); }
             if e.cat.is_some() {
-                v.push(format!("Ea (catalysed) = {BLANK} kJ/mol"));
-                v.push(format!("The catalyst lowers Ea by {BLANK} kJ/mol"));
-                v.push(format!("Does the catalyst change ΔH? {BLANK}"));
+                v.push(format!("{} = {BLANK} kJ/mol", if cw == "enzyme" { "Ea (with enzyme)" } else { "Ea (catalysed)" }));
+                v.push(format!("The {cw} lowers Ea by {BLANK} kJ/mol"));
+                v.push(format!("Does the {cw} change ΔH? {BLANK}"));
             }
         }
     } else if ans {
@@ -1387,7 +1868,21 @@ fn readout(e: &Energy, ans: bool, numeric: bool, show_rev: bool, ts_name: &str) 
                 "Ea (reverse) is smaller than Ea (forward), by ΔH.".to_string()
             });
         }
-        if e.two {
+        if e.three {
+            let pk = e.peaks();
+            let top = pk.iter().cloned().fold(f64::MIN, f64::max);
+            let n_top = pk.iter().filter(|x| **x == top).count();
+            v.push(if e.deep_fwd() {
+                format!("An intermediate lies below the reactants, so the overall Ea is the largest climb: from the {} up to {}.", lvl(cf.from), lvl(cf.to))
+            } else if n_top > 1 {
+                format!("The highest {tss} are equally high; the overall Ea runs from the reactants up to them.")
+            } else {
+                format!("The overall Ea runs from the reactants up to {}, the highest peak.", lvl(cf.to))
+            });
+            if e.deep_rev() && show_rev {
+                v.push(format!("An intermediate lies below the products, so Ea (reverse) is the largest climb back: from the {} up to {}.", lvl(cr.from), lvl(cr.to)));
+            }
+        } else if e.two {
             v.push(if e.deep_fwd() {
                 format!("The intermediate lies below the reactants, so the overall Ea is the largest climb: from the {} up to {}.", lvl(cf.from), lvl(cf.to))
             } else if e.ts1 == e.ts2 {
@@ -1400,14 +1895,28 @@ fn readout(e: &Energy, ans: bool, numeric: bool, show_rev: bool, ts_name: &str) 
             }
         }
         if e.cat.is_some() {
-            v.push("The catalyst gives an alternative pathway with a lower Ea; ΔH is unchanged.".to_string());
+            v.push(format!("The {cw} gives an alternative pathway with a lower Ea; ΔH is unchanged."));
         }
     } else {
         v.push(format!("Is ΔH positive or negative? {BLANK}"));
         v.push(format!("Exothermic or endothermic? {WORD_BLANK}"));
         if show_rev { v.push(format!("Is Ea (reverse) larger or smaller than Ea (forward)? {BLANK}")); }
         if e.two { v.push(format!("Which {ts} sets the overall Ea? {BLANK}")); }
-        if e.cat.is_some() { v.push(format!("What does the catalyst change: Ea, ΔH, or both? {BLANK}")); }
+        if e.cat.is_some() { v.push(format!("What does the {cw} change: Ea, ΔH, or both? {BLANK}")); }
+    }
+    // the rate-determining step: the step with the highest Ea, named only when its transition state also stands
+    // highest above the lowest point before it (otherwise the two point to different steps, and the key says so)
+    if ro.rds && e.two {
+        if !ans {
+            v.push(format!("Which step is rate-determining? {BLANK}"));
+        } else if let Some(r) = e.rds() {
+            let val = |k: usize| if numeric { format!(", {} kJ/mol", fmt(eas[k - 1])) } else { String::new() };
+            v.push(match r {
+                Ok(k) => format!("Rate-determining step: step {k}, the step with the highest Ea{} (its {ts} is also the highest above the lowest point before it).", val(k)),
+                Err((0, j)) => format!("No one step has the highest Ea (two steps tie), so no rate-determining step is named; {ts} {j} sets the overall Ea."),
+                Err((k, j)) => format!("No rate-determining step is named: step {k} has the highest Ea of its own{}, but {ts} {j} stands highest above the lowest point before it, so it sets the overall Ea.", val(k)),
+            });
+        }
     }
     v
 }
@@ -1431,18 +1940,28 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
         if (v - cur).abs() >= 0.5 { q.set_f(key, v); }
     };
     let mut hs = Vec::new();
-    {
+    let by_dh = choice(p, "enter", &ENTRY) == ENTRY[1];
+    if !rep.level_view {
         let (r, cur) = (e.r, e.ea1());
         let min = if e.two { 0.0 } else { e.dh().max(0.0) };
         hs.push(Handle::knob(rep.peak, if e.two { "Drag the first peak to change Ea of step 1" } else { "Drag the peak to change Ea" }, move |q, pt| set(q, "ea", vy(pt.1) - r, cur, min, EA_HI)));
     }
     if let (Some(pos), true) = (rep.peak2, e.two) {
-        let (i, cur, min) = (e.inter, e.ea2(), (e.p - e.inter).max(0.0));
+        // the last peak stands at or above the products; with three steps the second only above its valley
+        let (i, cur, min) = (e.inter, e.ea2(), if e.three { 0.0 } else { (e.p - e.inter).max(0.0) });
         hs.push(Handle::knob(pos, "Drag the second peak to change Ea of step 2", move |q, pt| set(q, "ea2", vy(pt.1) - i, cur, min, EA_HI)));
     }
     if let Some(pos) = rep.inter {
         let cur = e.inter;
-        hs.push(Handle::knob(pos, "Drag the intermediate up or down", move |q, pt| set(q, "intermediate", vy(pt.1), cur, E_LO, E_HI)));
+        hs.push(Handle::knob(pos, if e.three { "Drag the first intermediate up or down" } else { "Drag the intermediate up or down" }, move |q, pt| set(q, "intermediate", vy(pt.1), cur, E_LO, E_HI)));
+    }
+    if let (Some(pos), true) = (rep.peak3, e.three) {
+        let (i, cur, min) = (e.inter2, e.ea3(), (e.p - e.inter2).max(0.0));
+        hs.push(Handle::knob(pos, "Drag the third peak to change Ea of step 3", move |q, pt| set(q, "ea3", vy(pt.1) - i, cur, min, EA_HI)));
+    }
+    if let Some(pos) = rep.inter2 {
+        let cur = e.inter2;
+        hs.push(Handle::knob(pos, "Drag the second intermediate up or down", move |q, pt| set(q, "intermediate2", vy(pt.1), cur, E_LO, E_HI)));
     }
     if let (Some(pos), Some(cur)) = (rep.cat, e.ea_cat()) {
         let r = e.r;
@@ -1450,11 +1969,50 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     }
     {
         let cur = e.p;
-        hs.push(Handle::bar(rep.prod, true, "Drag the products' level to change ΔH", move |q, pt| set(q, "products", vy(pt.1), cur, E_LO, E_HI)));
+        if by_dh {
+            // ΔH typed: the drag sets ΔH, the products' height above the reactants
+            let (r, cur) = (e.r, e.dh());
+            hs.push(Handle::bar(rep.prod, true, "Drag the products' level to change ΔH", move |q, pt| set(q, "dh", vy(pt.1) - r, cur, -EA_HI, EA_HI)));
+        } else {
+            hs.push(Handle::bar(rep.prod, true, "Drag the products' level to change ΔH", move |q, pt| set(q, "products", vy(pt.1), cur, E_LO, E_HI)));
+        }
         let cur = e.r;
         hs.push(Handle::bar(rep.react, true, "Drag the reactants' level", move |q, pt| set(q, "reactants", vy(pt.1), cur, E_LO, E_HI)));
     }
     Some(hs)
+}
+
+/// Whether a control applies to the current settings (the reference shows only the chosen setup's controls). Hidden
+/// controls keep their values.
+pub fn relevant(key: &str, p: &Params) -> bool {
+    let level = choice(p, "view", &VIEWS) == VIEWS[1];
+    let steps = choice(p, "steps", &STEPS);
+    let multi = !level && steps != STEPS[0];
+    let numeric = choice(p, "axis", &AXIS) == AXIS[0];
+    let cat = !level && bo(p, "catalyst", false);
+    let by_dh = choice(p, "enter", &ENTRY) == ENTRY[1];
+    let lettered = (!level && bo(p, "show_ea", true) && choice(p, "ea_label", &ARROW_LABS) == "Letter or number")
+        || (bo(p, "show_dh", true) && choice(p, "dh_label", &ARROW_LABS) == "Letter or number")
+        || (!level && bo(p, "show_ea_rev", true) && choice(p, "ear_label", &ARROW_LABS) == "Letter or number");
+    match key {
+        "products" => !by_dh,
+        "dh" => by_dh,
+        "intermediate" | "ea2" | "rds" | "inter_label" | "inter_label_text" => multi,
+        "intermediate2" | "ea3" => multi && steps == STEPS[2],
+        "steps" | "ea" | "catalyst" | "ts_label" | "ts_label_text" | "show_ea" | "show_ea_rev" => !level,
+        "ea_cat" | "path_names" | "cat_color" => cat,
+        "uncat_text" | "cat_text" => cat && choice(p, "path_names", &PATHS) == "Text",
+        "ea_label" => !level && bo(p, "show_ea", true),
+        "ear_label" => !level && bo(p, "show_ea_rev", true),
+        "dh_label" => bo(p, "show_dh", true),
+        "tags" => lettered,
+        "fit" | "grid" | "minor" | "level_values" | "unit" => numeric,
+        "y_from" | "y_to" | "y_step" => numeric && !bo(p, "fit", true),
+        "x_title_mode" | "y_title_mode" | "x_title" | "y_title" => bo(p, "axis_titles", true),
+        "reactant_mode" | "reactant_text" => bo(p, "label_reactants", true),
+        "product_mode" | "product_text" => bo(p, "label_products", true),
+        _ => true,
+    }
 }
 
 pub fn examples(id: &str) -> Option<Vec<Example>> {
@@ -1471,6 +2029,16 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
             params: vec![s("steps", "Two steps"), f("reactants", 100.0), f("products", 20.0), f("ea", 60.0), f("intermediate", 110.0), f("ea2", 70.0)],
         },
         Example { name: "Label the diagram (no numbers)", params: vec![s("axis", "Unlabelled"), b("catalyst", true)] },
+        Example {
+            name: "Three-step reaction, rate-determining step",
+            params: vec![s("steps", "Three steps"), f("reactants", 100.0), f("products", 30.0), f("ea", 50.0), f("intermediate", 120.0), f("ea2", 70.0), f("intermediate2", 90.0), f("ea3", 40.0), b("rds", true)],
+        },
+        Example {
+            name: "With and without an enzyme (biology)",
+            params: vec![b("catalyst", true), s("path_names", "Enzyme"), s("reactant_text", "Substrate"), s("product_text", "Products"), f("ea_cat", 35.0), s("axis", "Unlabelled"), b("show_ea_rev", false)],
+        },
+        Example { name: "Energy level diagram", params: vec![s("view", "Level diagram"), f("reactants", 100.0), f("products", 40.0)] },
+        Example { name: "Arrows lettered for a question", params: vec![s("ea_label", "Letter or number"), s("dh_label", "Letter or number"), s("ear_label", "Letter or number"), b(SHOW_ANSWERS, false)] },
     ])
 }
 
@@ -1501,7 +2069,7 @@ mod tests {
 
     /// One drawn text: (x, y, font size, anchor, content, data-o, data-g).
     #[derive(Clone, Debug)]
-    struct T { x: f64, y: f64, fs: f64, anchor: String, text: String, kind: String, group: String }
+    struct T { x: f64, y: f64, fs: f64, anchor: String, text: String, kind: String, group: String, rot: bool }
 
     fn attr(tag: &str, k: &str) -> Option<String> {
         let pat = format!(" {k}=\"");
@@ -1526,6 +2094,7 @@ mod tests {
                 text,
                 kind: attr(tag, "data-o").unwrap_or_default(),
                 group: attr(tag, "data-g").unwrap_or_default(),
+                rot: tag.contains("rotate("),
             });
         }
         out
@@ -1573,9 +2142,16 @@ mod tests {
             } else if tag.starts_with("polygon ") {
                 let pts: Vec<(f64, f64)> = attr(tag, "points").unwrap().split_whitespace().filter_map(|p| { let (a, b) = p.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect();
                 for i in 0..pts.len() { out.push((kind.clone(), (pts[i], pts[(i + 1) % pts.len()]))); }
-            } else if tag.starts_with("path ") {
-                let pts = sample_path(&attr(tag, "d").unwrap());
+            } else if tag.starts_with("polyline ") {
+                let pts: Vec<(f64, f64)> = attr(tag, "points").unwrap().split_whitespace().filter_map(|p| { let (a, b) = p.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect();
                 for w in pts.windows(2) { out.push((kind.clone(), (w[0], w[1]))); }
+            } else if tag.starts_with("path ") {
+                // each subpath on its own: a move (M) lifts the pen
+                let d = attr(tag, "d").unwrap();
+                for sub in d.split('M').filter(|x| !x.trim().is_empty()) {
+                    let pts = sample_path(&format!("M{sub}"));
+                    for w in pts.windows(2) { out.push((kind.clone(), (w[0], w[1]))); }
+                }
             }
         }
         out
@@ -1638,20 +2214,20 @@ mod tests {
                 if bb.group == a.group { continue; }
                 if hits(ba, ink_of(bb)) { bad.push(format!("{:?} on {:?}", a.text, bb.text)); }
             }
-            for t in axis.iter().filter(|t| !t.text.starts_with("Potential energy")) {
+            for t in axis.iter().filter(|t| !t.rot) {
                 if hits(ba, ink_of(t)) { bad.push(format!("{:?} on the axis text {:?}", a.text, t.text)); }
             }
             for (kind, (p, q)) in &st {
                 if !seg_hits(*p, *q, ba) { continue; }
                 match kind.as_str() {
-                    "level" => soft += 1,
+                    "level" | "grid" => soft += 1,
                     k => bad.push(format!("{:?} on a {k} stroke {p:?}-{q:?}", a.text)),
                 }
             }
         }
         // the axis texts (tick numbers, the given energies, the titles) must not print on each other either
         for (i, a) in axis.iter().enumerate() {
-            if a.text.starts_with("Potential energy") { continue; } // rotated: measured in the_y_axis_title_clears_the_numbers
+            if a.rot { continue; } // rotated: measured in the_y_axis_title_clears_the_numbers
             let ba = ink_of(a);
             if ba.0 < 0.0 || ba.2 < 0.0 || ba.3 > h { bad.push(format!("axis text {:?} leaves the canvas", a.text)); }
             for bb in axis.iter().skip(i + 1) {
@@ -1663,7 +2239,7 @@ mod tests {
     }
 
     /// The y-axis title is rotated, so its unrotated box means nothing; it is measured on its own in `axis_title_clear`.
-    fn is_rotated_title(_svg: &str, a: &T, b: &T) -> bool { a.text.starts_with("Potential energy") || b.text.starts_with("Potential energy") }
+    fn is_rotated_title(_svg: &str, a: &T, b: &T) -> bool { a.rot || b.rot }
 
     #[test]
     fn it_is_registered_with_a_faq_and_examples() {
@@ -1906,6 +2482,7 @@ mod tests {
     fn answers(e: &Energy) -> Vec<String> {
         let mut v = vec![fmt(e.dh()), fmt(e.dh().abs()), fmt(e.ea()), fmt(e.ea_rev())];
         if e.two { v.push(fmt(e.ea1())); v.push(fmt(e.ea2())); }
+        if e.three { v.push(fmt(e.ea3())); }
         if let Some(c) = e.ea_cat() { v.push(fmt(c)); v.push(fmt(e.ea() - c)); }
         v
     }
@@ -2371,9 +2948,13 @@ mod tests {
             v.push(("react".into(), Feat::Seg(st[0], st[1])));
             v.push(("prod".into(), Feat::Seg(st[n - 2], st[n - 1])));
             v.push(("ts1".into(), Feat::Pt(st[2])));
-            if n == 7 {
+            if n == 7 || n == 9 {
                 v.push(("inter".into(), Feat::Pt(st[3])));
                 v.push(("ts2".into(), Feat::Pt(st[4])));
+            }
+            if n == 9 {
+                v.push(("inter2".into(), Feat::Pt(st[5])));
+                v.push(("ts3".into(), Feat::Pt(st[6])));
             }
         }
         if let Some(c) = curve_cmds(svg, "cat") { v.push(("catpk".into(), Feat::Pt(stat(&c)[2]))); }
@@ -2409,7 +2990,7 @@ mod tests {
         for t in texts(svg).into_iter().filter(|t| t.kind == "label") {
             match groups.iter_mut().find(|g| g.0 == t.group) { Some(g) => g.1.push(t), None => groups.push((t.group.clone(), vec![t])) }
         }
-        let arrows = [("ea", "Ea"), ("ea1", "Ea (step 1)"), ("ea2", "Ea (step 2)"), ("eacat", "Ea (catalysed)"), ("ear", "Ea (reverse)"), ("dh", "ΔH")];
+        let arrows = [("ea", "Ea"), ("ea1", "Ea (step 1)"), ("ea2", "Ea (step 2)"), ("ea3", "Ea (step 3)"), ("eacat", "Ea (catalysed)"), ("eacat", "Ea (with enzyme)"), ("ear", "Ea (reverse)"), ("dh", "ΔH")];
         let ns = |s: &str| s.replace('…', "").split_whitespace().collect::<String>();
         let (rn, pn) = (ns(rname), ns(pname));
         let mut bad = Vec::new();
@@ -2422,10 +3003,12 @@ mod tests {
                 Some(format!("arrow:{k}"))
             } else if txt.starts_with("ΔH = 0") {
                 continue;
-            } else if txt == "Intermediate" {
+            } else if txt == "Intermediate" || txt == "Intermediate 1" {
                 Some("inter".into())
+            } else if txt == "Intermediate 2" {
+                Some("inter2".into())
             } else if jn.starts_with("Activatedcomplex") || jn.starts_with("Transitionstate") {
-                Some(if jn.ends_with('2') { "ts2".into() } else { "ts1".into() })
+                Some(if jn.ends_with('2') { "ts2".into() } else if jn.ends_with('3') { "ts3".into() } else { "ts1".into() })
             } else if !jn.is_empty() && jn == pn && jn != rn {
                 Some("prod".into())
             } else if !jn.is_empty() && (jn == rn || (rn.starts_with(&jn) && !pn.starts_with(&jn))) {
@@ -2815,6 +3398,627 @@ mod tests {
             n += 1;
         }
         assert!(n >= 60, "only {n} old cases");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Batch 4: the reference's controls
+    // ---------------------------------------------------------------------------------------------
+
+    fn three(extra: &[(&'static str, Value)]) -> Vec<(&'static str, Value)> {
+        let mut v = vec![s("steps", "Three steps"), f("reactants", 100.0), f("products", 30.0), f("ea", 50.0), f("intermediate", 120.0), f("ea2", 70.0), f("intermediate2", 90.0), f("ea3", 40.0)];
+        v.extend(extra.iter().cloned());
+        v
+    }
+
+    /// Three steps, checked by hand: each step's Ea from the level just before it, ΔH from the two ends, the overall Ea
+    /// the largest climb from the lowest point on the way to a peak, Ea (reverse) likewise from the products, and the
+    /// rate-determining step named only when the step with the highest Ea also sets the overall Ea.
+    #[test]
+    fn three_steps_follow_the_chemistry_by_hand() {
+        // 100 → 150 → 120 → 190 → 90 → 130 → 30
+        let e = energetics(&with(&three(&[])));
+        assert!(e.three && e.two);
+        assert_eq!((e.ts1, e.inter, e.ts2, e.inter2, e.ts3), (150.0, 120.0, 190.0, 90.0, 130.0));
+        assert_eq!(e.step_eas(), vec![50.0, 70.0, 40.0]);
+        assert_eq!(e.dh(), -70.0, "ΔH = 30 − 100");
+        // forward: the reactants (100) up to the highest peak (190); intermediate 2 (90) lies after that peak
+        assert_eq!(e.ea(), 90.0);
+        assert_eq!((e.climb_fwd().from, e.climb_fwd().to), (Lvl::Reactants, Lvl::Ts2));
+        // reverse: the products (30) up to the highest peak, so Ea (reverse) = Ea − ΔH = 90 + 70
+        assert_eq!(e.ea_rev(), 160.0);
+        assert_eq!(e.ea_rev(), e.ea() - e.dh());
+        assert!(!e.deep_fwd() && !e.deep_rev(), "the 90 valley lies after the highest peak, so it changes no climb");
+        // step 2 has the highest Ea (70) and its transition state sets the overall Ea: it is rate-determining
+        assert_eq!(e.rds(), Some(Ok(2)));
+        // step 1 has the highest Ea (80) but transition state 2 stands highest above the reactants: not named
+        let e = energetics(&with(&three(&[f("ea", 80.0), f("intermediate", 170.0), f("ea2", 30.0)])));
+        assert_eq!((e.ts1, e.ts2), (180.0, 200.0));
+        assert_eq!(e.step_eas(), vec![80.0, 30.0, 40.0]);
+        assert_eq!(e.rds(), Some(Err((1, 2))));
+        // a deep second intermediate: the climb out of it (to the third peak) is the overall barrier
+        let e = energetics(&with(&three(&[f("ea", 30.0), f("intermediate", 110.0), f("ea2", 20.0), f("intermediate2", -50.0), f("ea3", 150.0)])));
+        assert_eq!((e.ts1, e.inter, e.ts2, e.inter2, e.ts3), (130.0, 110.0, 130.0, -50.0, 100.0));
+        assert_eq!((e.climb_fwd().from, e.climb_fwd().to, e.ea()), (Lvl::Intermediate2, Lvl::Ts3, 150.0));
+        assert!(e.deep_fwd());
+        assert_eq!(e.rds(), Some(Ok(3)));
+        // a tie between two steps' Ea names none
+        let e = energetics(&with(&three(&[f("ea", 70.0), f("ea2", 70.0), f("intermediate", 160.0), f("ea3", 10.0), f("intermediate2", 200.0)])));
+        assert_eq!(e.step_eas()[0], e.step_eas()[1]);
+        assert!(matches!(e.rds(), Some(Err((0, _)))), "{:?}", e.rds());
+        // a one-step reaction has no rate-determining step to name
+        assert_eq!(energetics(&with(&[])).rds(), None);
+        // two steps follow the same rule: the textbook example (step 2 has 70, the highest peak is step 2's)
+        let e = energetics(&with(&[s("steps", "Two steps"), f("reactants", 100.0), f("products", 20.0), f("ea", 60.0), f("intermediate", 110.0), f("ea2", 70.0)]));
+        assert_eq!(e.rds(), Some(Ok(2)));
+        // over a grid, the overall Ea is never below any step's own Ea, and ΔH is always products − reactants
+        for i in [-200.0, 60.0, 115.0, 400.0] {
+            for i2 in [-300.0, 20.0, 95.0, 300.0] {
+                for ea3 in [0.0, 25.0, 400.0] {
+                    let e = energetics(&with(&three(&[f("intermediate", i), f("intermediate2", i2), f("ea3", ea3)])));
+                    assert!(e.inter < e.ts1 && e.inter <= e.ts2 && e.inter2 < e.ts2 && e.inter2 <= e.ts3 && e.ts3 >= e.p && e.ts1 >= e.r, "{e:?}");
+                    assert!(e.step_eas().iter().all(|s_| e.ea() >= *s_ - 1e-9), "overall {} below a step {:?}", e.ea(), e.step_eas());
+                    assert_eq!(e.dh(), q2(e.p - e.r));
+                    let keyed = all_text(&render_of(&three(&[f("intermediate", i), f("intermediate2", i2), f("ea3", ea3), b("rds", true)])));
+                    assert!(keyed.contains(&format!("Ea (step 3) = E(activated complex 3) − E(intermediate 2) = {} = {} kJ/mol", minus(e.ts3, e.inter2), fmt(e.ea3()))), "{keyed}");
+                    assert!(keyed.contains(&format!("Overall Ea = E(")) && keyed.contains(&format!("= {} kJ/mol", fmt(e.ea()))), "{keyed}");
+                    match e.rds().unwrap() { Ok(k) => assert!(keyed.contains(&format!("Rate-determining step: step {k}")), "{keyed}"), Err(_) => assert!(keyed.contains("No rate-determining step") || keyed.contains("no rate-determining step"), "{keyed}") }
+                }
+            }
+        }
+        // repairs: a second intermediate above the second peak, a third peak below the products
+        let p = with(&three(&[f("intermediate2", 500.0), f("ea3", 0.0), f("products", 150.0)]));
+        let e = energetics(&p);
+        assert!(e.inter2 < e.ts2 && e.ts3 >= e.p, "{e:?}");
+        let w = warnings(&p);
+        assert!(w.iter().any(|n| n.contains("second intermediate")) && w.iter().any(|n| n.contains("step 3")), "{w:?}");
+    }
+
+    /// The drawn curve passes through every typed level of a three-step reaction, and its arrows span each step.
+    #[test]
+    fn the_three_step_curve_reads_back_through_its_levels() {
+        let p = with(&three(&[]));
+        let (svg, rep) = build(&p);
+        let e = energetics(&p);
+        let cmds = curve_cmds(&svg, "main").unwrap();
+        // the anchors of the path: plateau start, plateau end, then each stationary point
+        let anchors: Vec<f64> = cmds.iter().map(|(_, ps)| rep.vy(ps.last().unwrap().1)).collect();
+        let want = [e.r, e.r, e.ts1, e.inter, e.ts2, e.inter2, e.ts3, e.p, e.p];
+        assert_eq!(anchors.len(), want.len(), "{cmds:?}");
+        for (a, w) in anchors.iter().zip(want) { assert!((a - w).abs() < 0.01, "{a} vs {w}"); }
+        for k in ["ea1", "ea2", "ea3", "ear", "dh"] { assert!(svg.contains(&format!(r#"data-k="{k}""#)), "no {k} arrow"); }
+        let t = all_text(&svg);
+        for want in ["Activated complex 3", "Intermediate 1", "Intermediate 2", "Ea (step 3)"] { assert!(t.contains(want), "no {want:?} in {t}"); }
+        assert!(desc_of(&svg).contains("three-step"), "{}", desc_of(&svg));
+    }
+
+    /// Typing ΔH puts the products ΔH above the reactants; the key gives back the ΔH typed; the products' handle then
+    /// drags ΔH, through the workspace's own hit test.
+    #[test]
+    fn delta_h_typed_moves_the_products() {
+        for (r, dh) in [(100.0, -60.0), (40.0, 75.0), (-20.0, 0.0), (0.0, -250.5)] {
+            let p = with(&[s("enter", "Ea and ΔH"), f("reactants", r), f("dh", dh), f("products", 999.0)]);
+            let e = energetics(&p);
+            assert_eq!(e.p, q2(r + dh));
+            assert_eq!(e.dh(), q2(dh));
+            let key = all_text(&render_of(&[s("enter", "Ea and ΔH"), f("reactants", r), f("dh", dh)]));
+            assert!(key.contains(&format!("= {} kJ/mol", fmt(q2(dh)))), "{key}");
+        }
+        // an exothermic ΔH that would take the products off the scale is clamped, with a note
+        let p = with(&[s("enter", "Ea and ΔH"), f("reactants", -4000.0), f("dh", -5000.0)]);
+        assert_eq!(energetics(&p).p, E_LO);
+        assert!(warnings(&p).iter().any(|n| n.contains("ΔH is")), "{:?}", warnings(&p));
+        // the products' bar, found by interact::pick over pixels around it, sets ΔH (not the products' param)
+        let p = with(&[s("enter", "Ea and ΔH"), f("dh", -60.0)]);
+        let (svg, rep) = build(&p);
+        let hs = crate::figures::interact::handles_for(ID, &p, canvas(&svg));
+        let at = rep.prod;
+        for dx in [-6.0, 0.0, 6.0] {
+            for dy in [-5.0, 0.0, 5.0] {
+                let i = crate::figures::interact::pick(&hs, (at.0 + dx, at.1 + dy), 1.0).expect("the products' bar is hit");
+                assert!(hs[i].tip.contains("products"), "{}", hs[i].tip);
+            }
+        }
+        let h = &hs[crate::figures::interact::pick(&hs, at, 1.0).unwrap()];
+        let mut q = p.clone();
+        (h.drag.as_ref().unwrap())(&mut q, (at.0, rep.py(70.0)));
+        assert_eq!(q.f("dh"), -30.0, "70 − 100");
+        assert_eq!(q.f("products"), p.f("products"), "the products' param is left alone");
+    }
+
+    /// Every three-step and level-diagram handle is reached through interact::pick, and dragging it moves its own level.
+    #[test]
+    fn the_new_handles_are_hit_and_drag_their_levels() {
+        let p = with(&three(&[]));
+        let (svg, rep) = build(&p);
+        let hs = crate::figures::interact::handles_for(ID, &p, canvas(&svg));
+        let e = energetics(&p);
+        for (tip, pos, key, to, want) in [
+            ("third peak", rep.peak3.unwrap(), "ea3", 150.0, 60.0),
+            ("second intermediate", rep.inter2.unwrap(), "intermediate2", 80.0, 80.0),
+            ("first intermediate", rep.inter.unwrap(), "intermediate", 110.0, 110.0),
+        ] {
+            // every pixel within 6 px of the knob goes to it
+            for dx in -6..=6 {
+                for dy in -6..=6 {
+                    let i = crate::figures::interact::pick(&hs, (pos.0 + dx as f64, pos.1 + dy as f64), 1.0).unwrap_or_else(|| panic!("nothing hit near the {tip}"));
+                    assert!(hs[i].tip.contains(tip), "{tip}: hit {:?}", hs[i].tip);
+                }
+            }
+            let i = crate::figures::interact::pick(&hs, pos, 1.0).unwrap();
+            let mut q = p.clone();
+            (hs[i].drag.as_ref().unwrap())(&mut q, (pos.0, rep.py(to)));
+            assert_eq!(q.f(key), want, "{tip}");
+            let _ = e.clone();
+        }
+        // the level diagram has the two levels' handles and no peak
+        let p = with(&[s("view", "Level diagram")]);
+        let (svg, _) = build(&p);
+        let tips: Vec<String> = crate::figures::interact::handles_for(ID, &p, canvas(&svg)).into_iter().map(|h| h.tip).collect();
+        assert!(tips.iter().any(|t| t.contains("reactants")) && tips.iter().any(|t| t.contains("products")) && !tips.iter().any(|t| t.contains("peak")), "{tips:?}");
+    }
+
+    /// The level diagram: the two levels and ΔH only, no curve, no peak, no Ea; the key gives ΔH alone.
+    #[test]
+    fn the_level_diagram_draws_the_two_levels_and_delta_h() {
+        for (r, p_) in [(100.0, 40.0), (40.0, 150.0), (60.0, 60.0)] {
+            let list = vec![s("view", "Level diagram"), f("reactants", r), f("products", p_), b("catalyst", true), s("steps", "Two steps")];
+            let svg = render_of(&list);
+            let main = svg.split("<path").find(|x| x.contains(r#"data-k="main""#)).unwrap();
+            assert!(!attr(main, "d").unwrap().contains('C'), "a level diagram has no curve");
+            assert!(!svg.contains(r#"data-k="cat""#) && !svg.contains(r#"data-k="ea"#) && !svg.contains(r#"data-k="ear""#));
+            assert_eq!(svg.contains(r#"data-k="dh""#), r != p_);
+            let t = all_text(&svg);
+            assert!(!t.contains("Ea") && !t.contains("complex") && !t.contains("Intermediate"), "{t}");
+            assert!(t.contains(&format!("ΔH = E(products) − E(reactants) = {} = {} kJ/mol", minus(p_, r), fmt(q2(p_ - r)))), "{t}");
+            assert!(desc_of(&svg).contains("level diagram"), "{}", desc_of(&svg));
+            let (bad, _) = audit(&svg);
+            assert!(bad.is_empty(), "{bad:?}");
+            // the student copy blanks ΔH and the word
+            let svg = render_of(&[s("view", "Level diagram"), f("reactants", r), f("products", p_), b(SHOW_ANSWERS, false)]);
+            let st = working(&svg);
+            assert!(st.contains("ΔH = ______") && number_tokens(&st).is_empty(), "{st}");
+            assert!(texts(&svg).iter().filter(|t| t.kind == "label").all(|t| number_tokens(&t.text).is_empty()));
+        }
+    }
+
+    /// An arrow's value label agrees with the arrow as drawn (to the 0.01 kJ/mol the axis shows) and with the key; the
+    /// student copy has a blank there. Letters run left to right and the key says what each is; blank lines and none.
+    #[test]
+    fn arrow_labels_give_the_drawn_value_a_letter_or_a_blank() {
+        for extra in [vec![], vec![b("catalyst", true)], vec![s("steps", "Two steps")], three(&[b("catalyst", true)]), vec![f("reactants", 40.0), f("products", 100.0), f("ea", 110.0)]] {
+            let mut l = vec![s("ea_label", "Value"), s("dh_label", "Value"), s("ear_label", "Value")];
+            l.extend(extra.clone());
+            let p = with(&l);
+            let (svg, rep) = build(&p);
+            let labels: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "label").map(|t| t.text).collect();
+            let joined = labels.join(" ");
+            let key = all_text(&svg);
+            for part in svg.split(r#"<g data-o="arrow" data-k=""#).skip(1) {
+                let k = part.split('"').next().unwrap();
+                let line = part.split("<line").nth(1).unwrap();
+                let poly = part.split("<polygon").nth(1).unwrap();
+                let tip_y: f64 = attr(poly, "points").unwrap().split_whitespace().next().unwrap().split(',').nth(1).unwrap().parse().unwrap();
+                let drawn = q2((rep.vy(tip_y) - rep.vy(attr_f(line, "y1").unwrap())).abs());
+                let e = energetics(&p);
+                let want = match k { "dh" => e.dh(), "ear" => e.ea_rev(), "ea" => e.ea(), "ea1" => e.ea1(), "ea2" => e.ea2(), "ea3" => e.ea3(), "eacat" => e.ea_cat().unwrap(), _ => unreachable!() };
+                assert!((drawn - want.abs()).abs() <= 0.02, "{k}: drawn {drawn} vs {want}");
+                assert!(joined.contains(&format!("= {} kJ/mol", fmt(want))), "{k}: no value label {} in {labels:?}", fmt(want));
+                assert!(key.contains(&format!("{} kJ/mol", fmt(want))), "{k}: the key lacks {}", fmt(want));
+            }
+            assert!(audit(&svg).0.is_empty(), "{extra:?}: {:?}", audit(&svg).0);
+            // the student copy: blanks beside the arrows, no value
+            let mut st = l.clone();
+            st.push(b(SHOW_ANSWERS, false));
+            let e = energetics(&p);
+            for t in texts(&render_of(&st)).into_iter().filter(|t| t.kind == "label") {
+                for tok in number_tokens(&t.text) {
+                    let step_no = (tok == "1" || tok == "2" || tok == "3") && (t.text.contains("step") || t.text.contains("complex") || t.text.contains("Intermediate"));
+                    assert!(step_no || !answers(&e).contains(&tok), "{extra:?}: {:?} gives {tok} away", t.text);
+                }
+            }
+        }
+        // letters, left to right, with the key's list
+        let l = vec![s("ea_label", "Letter or number"), s("dh_label", "Letter or number"), s("ear_label", "Letter or number"), b("catalyst", true)];
+        let svg = render_of(&l);
+        let lab: Vec<T> = texts(&svg).into_iter().filter(|t| t.kind == "label" && t.text.len() == 1).collect();
+        let mut by_x: Vec<(f64, String)> = lab.iter().map(|t| (t.x, t.text.clone())).collect();
+        by_x.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        assert_eq!(lab.len(), 4, "{:?}", lab.iter().map(|t| &t.text).collect::<Vec<_>>());
+        assert!(all_text(&svg).contains("Arrows: A = Ea (catalysed), B = Ea (forward), C = Ea (reverse), D = ΔH."), "{}", all_text(&svg));
+        // each letter sits by its own arrow: the nearest arrow shaft to A is the catalysed one, and so on
+        let feats = features(&svg);
+        for (letter, key) in [("A", "eacat"), ("B", "ea"), ("C", "ear"), ("D", "dh")] {
+            let t = lab.iter().find(|t| t.text == letter).unwrap();
+            let bx = ink_of(t);
+            let nearest = feats.iter().filter(|f| f.0.starts_with("arrow:")).min_by(|a, b| feat_dist(a.1, bx).partial_cmp(&feat_dist(b.1, bx)).unwrap()).unwrap();
+            assert_eq!(nearest.0, format!("arrow:{key}"), "{letter}");
+        }
+        let st = all_text(&render_of(&[l.clone(), vec![b(SHOW_ANSWERS, false)]].concat()));
+        assert!(st.contains("What does each arrow show? A = ______, B = ______") && !st.contains("A = Ea"), "{st}");
+        let nums = all_text(&render_of(&[l.clone(), vec![s("tags", "Numbers (1, 2, 3)")]].concat()));
+        assert!(nums.contains("Arrows: 1 = Ea (catalysed), 2 = Ea (forward)"), "{nums}");
+        // a blank line, and nothing
+        let svg = render_of(&[s("ea_label", "Blank line"), s("dh_label", "None"), s("ear_label", "Symbol")]);
+        let lt: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "label").map(|t| t.text).collect();
+        assert!(lt.contains(&"______".to_string()) && !lt.iter().any(|t| t.contains("ΔH")) && lt.contains(&"Ea (reverse)".to_string()), "{lt:?}");
+        assert!(svg.contains(r#"data-k="dh""#), "the ΔH arrow stays without its label");
+    }
+
+    /// Arrowheads at both ends; the dashed level lines on or off.
+    #[test]
+    fn both_heads_and_the_level_lines() {
+        let svg = render_of(&[b("both_heads", true)]);
+        for part in svg.split(r#"<g data-o="arrow""#).skip(1) {
+            let g = part.split("</g>").next().unwrap();
+            assert_eq!(g.matches("<polygon").count(), 2, "{g}");
+        }
+        assert!(audit(&svg).0.is_empty(), "{:?}", audit(&svg).0);
+        let svg = render_of(&[]);
+        assert!(svg.contains(r#"data-o="level""#));
+        let off = render_of(&[b("level_lines", false)]);
+        assert!(!off.contains(r#"data-o="level""#));
+    }
+
+    /// Units: every value on the figure and in the key is in the unit chosen.
+    #[test]
+    fn the_unit_is_the_one_chosen_everywhere() {
+        for u in ["kJ mol⁻¹", "kJ"] {
+            for extra in [vec![], vec![s("ea_label", "Value"), s("dh_label", "Value"), s("ear_label", "Value"), b("catalyst", true), s("steps", "Two steps")], vec![s("view", "Level diagram")]] {
+                let mut l = vec![s("unit", u)];
+                l.extend(extra);
+                let t = all_text(&render_of(&l));
+                assert!(!t.contains("kJ/mol"), "{u}: {t}");
+                assert!(t.contains(&format!("Potential energy ({u})")) && t.contains(&format!("= −60 {u}")), "{u}: {t}");
+                let mut st = l.clone();
+                st.push(b(SHOW_ANSWERS, false));
+                assert!(all_text(&render_of(&st)).contains(&format!("ΔH = ______ {u}")));
+            }
+        }
+    }
+
+    /// Level labels as blank lines, own peak and intermediate labels, blank peaks; numbered with more than one.
+    #[test]
+    fn level_peak_and_intermediate_labels() {
+        let t = all_text(&render_of(&[s("reactant_mode", "Blank line"), s("product_mode", "Blank line")]));
+        assert!(!t.contains("Reactants") && !t.contains("Products") && t.matches("____________").count() >= 2, "{t}");
+        let t = all_text(&render_of(&three(&[s("ts_label", "Text"), s("ts_label_text", "TS"), s("inter_label", "Text"), s("inter_label_text", "I")])));
+        for w in ["TS 1", "TS 2", "TS 3", "I 1", "I 2"] { assert!(t.contains(w), "{w}: {t}"); }
+        let svg = render_of(&three(&[s("ts_label", "Blank line")]));
+        let lab: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "label").map(|t| t.text).collect();
+        assert_eq!(lab.iter().filter(|t| *t == "______").count(), 5, "three peaks and two intermediates blank: {lab:?}");
+        let t = all_text(&render_of(&[s("steps", "Two steps"), s("inter_label", "None")]));
+        assert!(!t.contains("Intermediate\n") && !t.ends_with("Intermediate"), "{t}");
+        // a long own name wraps between words, never inside one
+        for size in ["Small", "Medium", "Large"] {
+            let svg = render_of(&three(&[s("ts_label", "Text"), s("ts_label_text", "Activated complex of the step"), s("inter_label", "Text"), s("inter_label_text", "Reactive intermediate species"), s("label_size", size)]));
+            let words = ["Activated", "complex", "of", "the", "step", "Reactive", "intermediate", "species", "1", "2", "3", "(step", "1)", "2)", "3)"];
+            for t in texts(&svg).into_iter().filter(|t| t.kind == "label" && !t.text.starts_with("Ea") && !t.text.contains("Reactants") && !t.text.contains("Products") && t.text != "ΔH") {
+                for wd in t.text.split_whitespace() { assert!(words.contains(&wd) || wd.starts_with('('), "{size}: {wd:?} in {:?} is a broken word", t.text); }
+            }
+            assert!(audit(&svg).0.is_empty(), "{size}: {:?}", audit(&svg).0);
+        }
+    }
+
+    /// With and without an enzyme (biology), or the teacher's own names: the key, the legend, the arrow and the
+    /// description all use them; ΔH is unchanged and Ea drops by the same amount.
+    #[test]
+    fn the_paths_are_named_for_an_enzyme_or_the_teachers_words() {
+        let l = vec![b("catalyst", true), s("path_names", "Enzyme"), f("ea_cat", 35.0)];
+        let svg = render_of(&l);
+        let t = all_text(&svg);
+        for w in ["Without enzyme", "With enzyme (alternative pathway)", "Ea (with enzyme)", "The enzyme lowers Ea by 80 − 35 = 45 kJ/mol.", "ΔH is unchanged by the enzyme (−60 kJ/mol)"] { assert!(t.contains(w), "{w}: {t}"); }
+        assert!(!t.contains("catalys"), "{t}");
+        assert!(desc_of(&svg).contains("enzyme"), "{}", desc_of(&svg));
+        let p = with(&l);
+        let e = energetics(&p);
+        assert_eq!((e.dh(), e.ea(), e.ea_cat()), (-60.0, 80.0, Some(35.0)));
+        // Ea (reverse) drops by the same amount with the enzyme: (Ea − ΔH) − (Ea,cat − ΔH) = Ea − Ea,cat
+        assert_eq!(q2(e.ea_rev() - (e.ea_cat().unwrap() - e.dh())), q2(e.ea() - e.ea_cat().unwrap()));
+        let st = all_text(&render_of(&[l.clone(), vec![b(SHOW_ANSWERS, false)]].concat()));
+        assert!(st.contains("Does the enzyme change ΔH? ______") && !st.contains("45"), "{st}");
+        let own = render_of(&[b("catalyst", true), s("path_names", "Text"), s("uncat_text", "Uncatalysed route"), s("cat_text", "Route over a platinum surface, a very long name that must wrap inside the page")]);
+        let notes: Vec<T> = texts(&own).into_iter().filter(|t| t.kind == "note").collect();
+        assert!(notes.iter().any(|t| t.text == "Uncatalysed route") && notes.iter().any(|t| t.text.starts_with("Route over a platinum")), "{:?}", notes.iter().map(|t| &t.text).collect::<Vec<_>>());
+        let (w, h) = canvas(&own);
+        for t in &notes { let b_ = ink_of(t); assert!(b_.0 >= 0.0 && b_.1 <= w && b_.3 <= h, "{:?} leaves the page", t.text); }
+        // the legend's lines never overlap each other
+        for (i, a) in notes.iter().enumerate() { for b_ in notes.iter().skip(i + 1) { assert!(!hits(ink_of(a), ink_of(b_)), "{:?} on {:?}", a.text, b_.text); } }
+    }
+
+    /// Line colours: the curves take the colour chosen, and Print stays grey whatever is chosen.
+    #[test]
+    fn line_colours_and_print() {
+        let svg = render_of(&[b("catalyst", true), s("line_color", "Red"), s("cat_color", "Green")]);
+        let main = svg.split("<path").find(|x| x.contains(r#"data-k="main""#)).unwrap();
+        let cat = svg.split("<path").find(|x| x.contains(r#"data-k="cat""#)).unwrap();
+        assert_eq!((attr(main, "stroke").unwrap().as_str(), attr(cat, "stroke").unwrap().as_str()), ("#c9494f", "#4aa36b"));
+        let pr = render_of(&[b("catalyst", true), s("line_color", "Red"), s("cat_color", "Green"), s("style", "Print"), s("grid", "Bold"), s("minor", "5 per block"), s("title_mode", "Text")]);
+        for part in pr.split('"').filter(|x| x.starts_with('#') && x.len() == 7 && x[1..].chars().all(|c| c.is_ascii_hexdigit())) {
+            let c = |i: usize| u8::from_str_radix(&part[i..i + 2], 16).unwrap();
+            assert!(c(1) == c(3) && c(3) == c(5), "Print draws a hue: {part}");
+        }
+    }
+
+    /// The chart title and each axis title: the automatic words, the teacher's own, a blank line, or none; inside the
+    /// page and clear of every label at every size.
+    #[test]
+    fn chart_and_axis_titles() {
+        let t = all_text(&render_of(&[s("title_mode", "Text")]));
+        assert!(t.starts_with("Potential energy diagram") || t.contains("Potential energy diagram"), "{t}");
+        let long = "An energy profile for the decomposition of hydrogen peroxide catalysed by manganese(IV) oxide in water";
+        for size in ["Small", "Medium", "Large"] {
+            for l in [
+                vec![s("title_mode", "Text"), s("title", long)],
+                vec![s("title_mode", "Blank line"), s("x_title_mode", "Blank line"), s("y_title_mode", "Blank line")],
+                vec![s("x_title", long), s("y_title", long)],
+                vec![s("x_title_mode", "None"), s("y_title", "Enthalpy, H")],
+            ] {
+                let mut l = l.clone();
+                l.push(s("label_size", size));
+                l.push(b("catalyst", true));
+                let svg = render_of(&l);
+                let (w, h) = canvas(&svg);
+                let ts = texts(&svg);
+                for t in ts.iter().filter(|t| t.kind == "axis" && !t.rot) {
+                    let bx = ink_of(t);
+                    assert!(bx.0 >= 0.0 && bx.1 <= w && bx.2 >= 0.0 && bx.3 <= h, "{size}: {:?} leaves the page", t.text);
+                }
+                // a rotated title stays within the plot's height
+                for t in ts.iter().filter(|t| t.rot) {
+                    let half = tw(&t.text, t.fs) / 2.0;
+                    assert!(t.y - half >= 0.0 && t.y + half <= h, "{size}: the y title {:?} runs off", t.text);
+                    assert!(t.x - 0.76 * t.fs >= 0.0, "{size}: the y title leaves the page");
+                }
+                assert!(audit(&svg).0.is_empty(), "{size} {l:?}: {:?}", audit(&svg).0);
+            }
+        }
+        let t = all_text(&render_of(&[s("x_title_mode", "None"), s("y_title_mode", "None")]));
+        assert!(!t.contains("Reaction progress") && !t.contains("Potential energy"), "{t}");
+        let t = all_text(&render_of(&[s("x_title", "Time"), s("y_title", "Enthalpy, H")]));
+        assert!(t.contains("Time") && t.contains("Enthalpy, H") && !t.contains("Reaction progress"), "{t}");
+        // axis titles off still turns both off, as it always did
+        let t = all_text(&render_of(&[b("axis_titles", false), s("x_title", "Time")]));
+        assert!(!t.contains("Time"), "{t}");
+    }
+
+    /// The energy axis range typed (from, to, count by), widened by whole steps to show every level, with a note.
+    #[test]
+    fn the_energy_axis_range_is_the_teachers() {
+        let p = with(&[b("fit", false), f("y_from", 0.0), f("y_to", 250.0), f("y_step", 25.0)]);
+        let (svg, rep) = build(&p);
+        assert_eq!((rep.y0, rep.y1), (0.0, 250.0));
+        let nums: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "axis" && t.text.chars().all(|c| c.is_ascii_digit())).map(|t| t.text).collect();
+        for n in ["0", "25", "75", "125", "150", "200", "225", "250"] { assert!(nums.contains(&n.to_string()), "{n} not in {nums:?}"); }
+        assert!(warnings(&p).is_empty(), "{:?}", warnings(&p));
+        // a range that leaves the peak (180) off is widened to 200
+        let p = with(&[b("fit", false), f("y_from", 50.0), f("y_to", 150.0), f("y_step", 25.0)]);
+        let rep = build(&p).1;
+        assert_eq!((rep.y0, rep.y1), (25.0, 200.0));
+        assert!(warnings(&p).iter().any(|n| n.contains("25 to 200")), "{:?}", warnings(&p));
+        // an upside-down range is fitted instead, with a note; too fine a count is coarsened
+        let p = with(&[b("fit", false), f("y_from", 300.0), f("y_to", 100.0)]);
+        assert!(warnings(&p).iter().any(|n| n.contains("fitted")), "{:?}", warnings(&p));
+        let p = with(&[b("fit", false), f("y_from", 0.0), f("y_to", 4000.0), f("y_step", 1.0)]);
+        let svg = (def().render)(&p);
+        assert!(texts(&svg).into_iter().filter(|t| t.kind == "axis").count() < 30, "too many numbers");
+        assert!(audit(&svg).0.is_empty(), "{:?}", audit(&svg).0);
+    }
+
+    /// Gridlines at the numbers (light, standard, bold) and minor ones between, only on a numbered axis; the axis ends.
+    #[test]
+    fn gridlines_and_axis_ends() {
+        let count = |svg: &str, sw: &str| svg.split("<line").filter(|x| x.contains(r#"data-o="grid""#) && x.contains(&format!(r#"stroke-width="{sw}""#))).count();
+        let p = with(&[s("grid", "Standard")]);
+        let (svg, rep) = build(&p);
+        let ticks_ = ticks(rep.y0, rep.y1, nice_step(1.0, 1.0)).len();
+        let _ = ticks_;
+        let majors = count(&svg, "1");
+        let numbers = texts(&svg).into_iter().filter(|t| t.kind == "axis" && t.text.chars().all(|c| c.is_ascii_digit())).count();
+        assert!(majors >= 3 && majors <= numbers + 4, "{majors} gridlines for {numbers} numbers");
+        assert_eq!(count(&render_of(&[s("grid", "Bold")]), "1.4"), majors);
+        assert_eq!(count(&render_of(&[s("grid", "Light")]), "0.8"), majors);
+        let minor = count(&render_of(&[s("grid", "Standard"), s("minor", "4 per block")]), "0.6");
+        assert!(minor >= 3 * majors, "{minor} minor lines for {majors} blocks");
+        assert!(!render_of(&[s("grid", "Bold"), s("axis", "Unlabelled")]).contains(r#"data-o="grid""#));
+        assert!(!render_of(&[]).contains(r#"data-o="grid""#));
+        // axis ends
+        let svg = render_of(&[s("y_end", "None"), s("x_end", "None")]);
+        assert!(!svg.split("<polygon").skip(1).any(|x| x.split('>').next().unwrap().contains(r#"data-o="axis""#)), "no axis arrowheads");
+        let svg = render_of(&[s("y_end", "Line arrow"), s("x_end", "Line arrow")]);
+        assert_eq!(svg.matches("<polyline").count(), 2);
+        assert!(audit(&svg).0.is_empty());
+    }
+
+    /// No answer on the student copy of any new mode: not in the drawing, not in the description.
+    #[test]
+    fn the_new_modes_keep_answers_off_the_student_copy() {
+        let modes: Vec<Vec<(&'static str, Value)>> = vec![
+            three(&[b("rds", true), b("catalyst", true)]),
+            vec![s("steps", "Two steps"), b("rds", true), s("ea_label", "Value"), s("dh_label", "Value"), s("ear_label", "Value")],
+            vec![s("view", "Level diagram"), s("dh_label", "Value")],
+            vec![s("enter", "Ea and ΔH"), f("dh", 45.0), s("ea", "x"), f("ea", 90.0), s("ea_label", "Letter or number"), s("dh_label", "Letter or number")],
+            vec![b("catalyst", true), s("path_names", "Enzyme"), s("unit", "kJ")],
+        ];
+        for m in modes {
+            let mut l = m.clone();
+            l.push(b(SHOW_ANSWERS, false));
+            let p = with(&l);
+            let e = energetics(&p);
+            let svg = (def().render)(&p);
+            let ans = answers(&e);
+            for t in texts(&svg) {
+                if t.kind == "axis" { continue; }
+                let low = t.text.to_lowercase();
+                assert!(!low.contains("exothermic") && !low.contains("endothermic") || low.contains("exothermic or endothermic"), "{m:?}: {:?}", t.text);
+                assert!(!low.contains("rate-determining step:"), "{m:?}: {:?}", t.text);
+                for tok in number_tokens(&t.text) {
+                    let step_no = ["1", "2", "3"].contains(&tok.as_str()) && (t.text.contains("step") || t.text.contains("complex") || t.text.contains("Intermediate"));
+                    assert!(step_no || !ans.contains(&tok), "{m:?}: {tok} in {:?}", t.text);
+                }
+            }
+            let d = desc_of(&svg);
+            assert!(number_tokens(&d).iter().all(|t| ["1", "2", "3"].contains(&t.as_str())) && !d.to_lowercase().contains("thermic") && d.is_ascii(), "{d}");
+        }
+    }
+
+    /// The controls shown follow the setup, and every one shown changes the drawing from the opening state.
+    #[test]
+    fn only_the_setups_controls_are_shown_and_each_changes_the_drawing() {
+        let open = with(&[]);
+        assert!(!relevant("intermediate2", &open) && !relevant("dh", &open) && relevant("products", &open) && !relevant("y_from", &open));
+        let t3 = with(&three(&[]));
+        assert!(relevant("intermediate2", &t3) && relevant("ea3", &t3) && relevant("rds", &t3));
+        let lv = with(&[s("view", "Level diagram")]);
+        assert!(!relevant("ea", &lv) && !relevant("catalyst", &lv) && relevant("dh_label", &lv));
+        assert!(crate::figures::param_relevant("bar-chart", "ea", &open), "other figures are untouched");
+        // each new control, changed alone from the opening state (or from the state it needs), changes the SVG
+        let base = render_of(&[]);
+        for (k, v, needs) in [
+            ("view", s("view", "Level diagram").1, vec![]), ("enter", s("enter", "Ea and ΔH").1, vec![f("dh", 30.0)]),
+            ("steps", s("steps", "Three steps").1, vec![]), ("unit", s("unit", "kJ").1, vec![]),
+            ("path_names", s("path_names", "Enzyme").1, vec![b("catalyst", true)]), ("ea_label", s("ea_label", "Value").1, vec![]),
+            ("dh_label", s("dh_label", "Blank line").1, vec![]), ("ear_label", s("ear_label", "None").1, vec![]),
+            ("both_heads", Value::B(true), vec![]), ("level_lines", Value::B(false), vec![]), ("reactant_mode", s("reactant_mode", "Blank line").1, vec![]),
+            ("product_mode", s("product_mode", "Blank line").1, vec![]), ("ts_label", s("ts_label", "Text").1, vec![s("ts_label_text", "TS")]),
+            ("inter_label", s("inter_label", "Blank line").1, vec![s("steps", "Two steps")]), ("line_color", s("line_color", "Green").1, vec![]),
+            ("cat_color", s("cat_color", "Purple").1, vec![b("catalyst", true)]), ("title_mode", s("title_mode", "Text").1, vec![]),
+            ("x_title_mode", s("x_title_mode", "Blank line").1, vec![]), ("y_title_mode", s("y_title_mode", "None").1, vec![]),
+            ("fit", Value::B(false), vec![f("y_to", 300.0)]), ("grid", s("grid", "Light").1, vec![]), ("minor", s("minor", "2 per block").1, vec![]),
+            ("y_end", s("y_end", "None").1, vec![]), ("x_end", s("x_end", "Line arrow").1, vec![]),
+            ("rds", Value::B(true), vec![s("steps", "Two steps")]), ("tags", s("tags", "Numbers (1, 2, 3)").1, vec![s("ea_label", "Letter or number")]),
+        ] {
+            let mut before = needs.clone();
+            let b0 = if needs.is_empty() { base.clone() } else { render_of(&before) };
+            before.push((k, v));
+            assert_ne!(render_of(&before), b0, "{k} changes nothing");
+        }
+    }
+
+    /// The new modes through both audits: no label on another label, an axis text, a stroke or off the page, and every
+    /// label by its own feature, over random three-step, enzyme, level-diagram, value-label and titled figures.
+    #[test]
+    fn the_new_modes_pass_the_label_audits_across_three_thousand_cases() {
+        let mut rng = crate::figures::biology::Rng::new(41);
+        let pick = |r: &mut crate::figures::biology::Rng, lo: f64, hi: f64, step: f64| lo + r.below((((hi - lo) / step).round() as usize) + 1) as f64 * step;
+        let sizes = ["Small", "Medium", "Large"];
+        let labs = ["Symbol", "Value", "Letter or number", "Blank line", "None"];
+        let (mut bad, mut away, mut n) = (Vec::new(), Vec::new(), 0);
+        for i in 0..3000 {
+            let steps = ["One step", "Two steps", "Three steps"][rng.below(3)];
+            let view = if rng.below(8) == 0 { "Level diagram" } else { "Energy profile" };
+            let mut c = vec![
+                f("reactants", pick(&mut rng, -300.0, 300.0, 10.0)), f("products", pick(&mut rng, -300.0, 300.0, 10.0)), f("ea", pick(&mut rng, 0.0, 400.0, 5.0)),
+                f("intermediate", pick(&mut rng, -300.0, 500.0, 10.0)), f("ea2", pick(&mut rng, 0.0, 400.0, 5.0)),
+                f("intermediate2", pick(&mut rng, -300.0, 500.0, 10.0)), f("ea3", pick(&mut rng, 0.0, 400.0, 5.0)), f("ea_cat", pick(&mut rng, 0.0, 300.0, 5.0)),
+                s("steps", steps), s("view", view), b("catalyst", rng.below(3) == 0), s("label_size", sizes[rng.below(3)]),
+                s("path_names", ["Catalyst", "Enzyme"][rng.below(2)]), s("ea_label", labs[rng.below(5)]), s("dh_label", labs[rng.below(5)]), s("ear_label", labs[rng.below(5)]),
+                b("both_heads", rng.below(4) == 0), b(SHOW_ANSWERS, rng.below(2) == 0), s("axis", ["Numbered (kJ/mol)", "Unlabelled"][rng.below(4).min(1)]),
+                s("ts_label", ["Activated complex", "Transition state", "None", "Blank line"][rng.below(4)]), b("rds", rng.below(2) == 0),
+                s("unit", UNITS[rng.below(3)]), s("grid", GRIDS[rng.below(4)]),
+            ];
+            if rng.below(4) == 0 { c.push(s("title_mode", "Text")); c.push(s("title", "Energy profile of the reaction")); }
+            if rng.below(4) == 0 { c.push(s("y_title", "Enthalpy")); }
+            let svg = render_of(&c);
+            let (b_, _) = audit(&svg);
+            if !b_.is_empty() { bad.push(format!("{c:?}: {}", b_.join("; "))); }
+            // attribution only for named labels (letters, blanks and values name no feature by their text)
+            if view == "Energy profile" && c.iter().filter(|x| x.0.ends_with("_label") && x.0 != "ts_label").all(|x| matches!(&x.1, Value::S(v) if v == "Symbol" || v == "None")) && name_in(&c, "ts_label", "") != "Blank line" {
+                let a = attribution(&svg, "Reactants", "Products");
+                if !a.is_empty() { away.push(format!("{i} {c:?}: {}", a.join("; "))); }
+            }
+            n += 1;
+        }
+        println!("new-mode audit: {n} cases, {} collisions, {} away from their feature\n{}", bad.len(), away.len(), away.join("\n"));
+        assert!(bad.is_empty(), "{} of {n} collide, e.g.:\n{}", bad.len(), bad.iter().take(6).cloned().collect::<Vec<_>>().join("\n"));
+        // the placer keeps each label by its feature; a crowded random case may leave one a little further off, as the
+        // older audit allows (labels_stay_by_their_own_features_across_ten_thousand_cases)
+        // one case at the last run: "Ea (with enzyme)" at Large, 16 px from its arrow and 7 px from the reactants' plateau
+        assert!(away.len() <= 3, "{} of {n} have a label away from its feature, e.g.:\n{}", away.len(), away.iter().take(6).cloned().collect::<Vec<_>>().join("\n"));
+    }
+
+    /// Every option of every choice and both values of every switch, alone and over three steps with a catalyst and
+    /// over the level diagram, renders a whole SVG and a PNG with no non-finite number (the census's cases, run here).
+    #[test]
+    fn every_option_renders() {
+        let defs = (def().params)();
+        for base in [vec![], three(&[b("catalyst", true)]), vec![s("view", "Level diagram")]] {
+            for pd in &defs {
+                let vals: Vec<Value> = match &pd.kind {
+                    crate::figures::Kind::Choice(o) => o.iter().map(|x| Value::S(x.to_string())).collect(),
+                    crate::figures::Kind::Bool => vec![Value::B(true), Value::B(false)],
+                    crate::figures::Kind::Float { min, max, .. } => vec![Value::F(*min), Value::F(*max), Value::F(min + (max - min) * 0.3)],
+                    crate::figures::Kind::Text => vec![Value::S(String::new()), Value::S("A very long typed name, far wider than its place on the diagram".into())],
+                    _ => continue,
+                };
+                for v in vals {
+                    let mut l = base.clone();
+                    l.push((pd.key, v.clone()));
+                    let svg = render_of(&l);
+                    assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{} = {v:?}", pd.key);
+                    let low = svg.to_lowercase();
+                    assert!(!low.contains("nan") && !low.contains("inf"), "{} = {v:?}", pd.key);
+                    to_png(&svg, 0.25).unwrap();
+                }
+            }
+        }
+    }
+
+    /// Writes the batch 4 review renders (each new control from the opening state) to $VERSHION_B4_DIR.
+    #[test]
+    fn batch4_pngs() {
+        let Ok(dir) = std::env::var("VERSHION_B4_DIR") else { return };
+        // a crop of one saved SVG, magnified: VERSHION_B4_ZOOM="file.svg x y w h"
+        if let Ok(z) = std::env::var("VERSHION_B4_ZOOM") {
+            let v: Vec<&str> = z.split_whitespace().collect();
+            let svg = std::fs::read_to_string(v[0]).unwrap();
+            let (w0, h0) = canvas(&svg);
+            let at = svg.find("viewBox=\"").unwrap() + 9;
+            let end = at + svg[at..].find('"').unwrap();
+            let svg = format!("{}{} {} {} {}{}", &svg[..at], v[1], v[2], v[3], v[4], &svg[end..]).replacen(&format!("width=\"{w0}\""), &format!("width=\"{}\"", v[3]), 1).replacen(&format!("height=\"{h0}\""), &format!("height=\"{}\"", v[4]), 1);
+            std::fs::write(format!("{dir}/zoom.png"), to_png(&svg, 5.0).unwrap()).unwrap();
+            return;
+        }
+        let cases: Vec<(&str, Vec<(&'static str, Value)>)> = vec![
+            ("open", vec![]),
+            ("enzyme", vec![b("catalyst", true), s("path_names", "Enzyme")]),
+            ("ownnames", vec![b("catalyst", true), s("path_names", "Text"), s("uncat_text", "Uncatalysed route"), s("cat_text", "Route over a platinum surface")]),
+            ("dhmode", vec![s("enter", "Ea and ΔH"), f("dh", 30.0)]),
+            ("three", vec![s("steps", "Three steps")]),
+            ("three-rds", examples(ID).unwrap()[5].params.clone()),
+            ("three-cat", vec![s("steps", "Three steps"), b("catalyst", true)]),
+            ("unit", vec![s("unit", "kJ mol⁻¹")]),
+            ("unitkj", vec![s("unit", "kJ")]),
+            ("level", vec![s("view", "Level diagram")]),
+            ("level-endo", vec![s("view", "Level diagram"), f("products", 150.0), s("reactant_text", "N_2 + 3H_2"), s("product_text", "2NH_3")]),
+            ("value", vec![s("ea_label", "Value"), s("dh_label", "Value"), s("ear_label", "Value")]),
+            ("value-two", vec![s("steps", "Two steps"), s("ea_label", "Value"), s("dh_label", "Value"), s("ear_label", "Value"), b("catalyst", true)]),
+            ("letters", vec![s("ea_label", "Letter or number"), s("dh_label", "Letter or number"), s("ear_label", "Letter or number"), b("catalyst", true)]),
+            ("numbers", vec![s("ea_label", "Letter or number"), s("dh_label", "Letter or number"), s("ear_label", "Letter or number"), s("tags", "Numbers (1, 2, 3)")]),
+            ("blanks", vec![s("ea_label", "Blank line"), s("dh_label", "Blank line"), s("ear_label", "Blank line")]),
+            ("both", vec![b("both_heads", true)]),
+            ("nolines", vec![b("level_lines", false)]),
+            ("lvlblank", vec![s("reactant_mode", "Blank line"), s("product_mode", "Blank line")]),
+            ("tstext", vec![s("ts_label", "Text"), s("ts_label_text", "[N₂H₃]‡ complex"), s("steps", "Two steps"), s("inter_label", "Text"), s("inter_label_text", "N₂H₂ + H")]),
+            ("tsblank", vec![s("ts_label", "Blank line"), s("steps", "Three steps")]),
+            ("colors", vec![s("line_color", "Red"), b("catalyst", true), s("cat_color", "Green")]),
+            ("title", vec![s("title_mode", "Text"), s("title", "The Haber process")]),
+            ("titleblank", vec![s("title_mode", "Blank line")]),
+            ("axtitles", vec![s("x_title", "Progress of the reaction"), s("y_title_mode", "Blank line")]),
+            ("range", vec![b("fit", false), f("y_from", 0.0), f("y_to", 250.0), f("y_step", 25.0)]),
+            ("grid", vec![s("grid", "Standard"), s("minor", "4 per block")]),
+            ("gridbold", vec![s("grid", "Bold")]),
+            ("ends", vec![s("y_end", "Line arrow"), s("x_end", "None")]),
+        ];
+        for (tag, list) in cases {
+            for (kind, extra) in [("key", vec![b(SHOW_ANSWERS, true)]), ("student", vec![b(SHOW_ANSWERS, false)]), ("print", vec![s("style", "Print")]), ("large", vec![s("label_size", "Large")])] {
+                if tag != "open" && kind == "print" && !matches!(tag, "colors" | "grid" | "three" | "level") { continue; }
+                let mut l = list.clone();
+                l.extend(extra);
+                let svg = render_of(&l);
+                std::fs::write(format!("{dir}/{tag}-{kind}.png"), to_png(&svg, 1.3).unwrap()).unwrap();
+                if kind == "key" { std::fs::write(format!("{dir}/{tag}-{kind}.svg"), &svg).unwrap(); }
+            }
+        }
     }
 
     /// Writes the review renders to $VERSHION_PNG_DIR.

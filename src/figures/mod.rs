@@ -740,6 +740,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "transformations" => transform::relevant(key, p),
         // only the chosen axis's controls, the switched-on curves and an unknown enzyme's own numbers
         "enzyme-kinetics" => biology::enzyme::relevant(key, p),
+        // only the chosen setup's controls: two or three steps' valleys, the catalysed path's, the typed axis range
+        "reaction-energy-diagram" => chemistry::reactionenergy::relevant(key, p),
         _ => cards::relevant(id, key, p),
     }
 }
