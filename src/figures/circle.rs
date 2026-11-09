@@ -927,14 +927,33 @@ struct Opt { drop_unit: bool, pad: f64, exclude: Vec<(usize, String, Option<K>)>
 /// The figure, with its labels fitted: as drawn, then without the unit on the figure labels (the readout keeps it), then with room
 /// added round the figure, and as a last resort with the labels that still do not fit moved into the readout. No label overlaps another or leaves the canvas.
 pub fn build(p: &Params) -> (String, Report) {
-    let levels = [(false, 0.0), (true, 0.0), (true, 40.0), (true, 90.0), (true, 150.0)];
+    let need = tangent_room(p);
+    let levels = [(false, 0.0f64), (true, 0.0), (true, 40.0), (true, 90.0), (true, 150.0)];
     for (d, pad) in levels {
-        let (svg, rep, bad) = core(p, &Opt { drop_unit: d, pad, exclude: vec![] });
+        let (svg, rep, bad) = core(p, &Opt { drop_unit: d, pad: pad.max(need), exclude: vec![] });
         if bad.is_empty() { return (svg, rep); }
     }
-    let (_, _, bad) = core(p, &Opt { drop_unit: true, pad: 150.0, exclude: vec![] });
-    let (svg, rep, _) = core(p, &Opt { drop_unit: true, pad: 150.0, exclude: bad });
+    let last = 150f64.max(need);
+    let (_, _, bad) = core(p, &Opt { drop_unit: true, pad: last, exclude: vec![] });
+    let (svg, rep, _) = core(p, &Opt { drop_unit: true, pad: last, exclude: bad });
     (svg, rep)
+}
+
+/// The room (left, right and top) the tangents need beyond the canvas to reach where they meet, at most 300 px.
+fn tangent_room(p: &Params) -> f64 {
+    let lines = edit::tangent_lines(p);
+    if lines.iter().all(|t| t.1 <= 130.0 && t.2 <= 130.0) { return 0.0; }
+    let lay = layout_of(p);
+    let cx = lay.w / 2.0;
+    let mut need: f64 = 0.0;
+    for (d, back, fwd) in lines {
+        let q = on_circle(cx, d);
+        let fv = (-d.to_radians().sin(), -d.to_radians().cos());
+        for e in [(q.0 + fv.0 * fwd, q.1 + fv.1 * fwd), (q.0 - fv.0 * back, q.1 - fv.1 * back)] {
+            need = need.max(10.0 - e.0).max(e.0 - (lay.w - 10.0)).max(14.0 - e.1);
+        }
+    }
+    (need + 4.0).clamp(0.0, 300.0)
 }
 
 fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>)>) {
@@ -1000,7 +1019,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             for i in 0..=n { let a = (sa0 + (sa1 - sa0) * i as f64 / n as f64).to_radians(); hatch.push((cx + R * a.cos(), CY - R * a.sin())); }
         }
     }
-    // the shaded areas (each a polygon in radii from the centre), in the sector's fill; in Print their outlines are kept clear of labels
+    // the shaded areas (each a polygon in radii from the centre), in the sector's fill (a hatch in Print). Labels may sit on them:
+    // the text's white halo reads over the hatch, and keeping off a large area would push the point letters away from their points.
     let mut hatches: Vec<Vec<Pt>> = vec![];
     // (an area of two pieces that meet along a line is one path, so no seam shows between them)
     for pieces in edit::regions(p) {
@@ -1010,7 +1030,6 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             if !d.is_empty() { d.push(' '); }
             d.extend(pts.iter().enumerate().map(|(i, q)| format!("{}{:.2},{:.2}", if i == 0 { "M" } else { " L" }, q.0, q.1)));
             d.push_str(" Z");
-            if print { hatches.push(pts); }
         }
         sc.d.raw(&format!(r##"<path d="{d}" fill="{sector_fill}" stroke="none"/>"##));
     }
@@ -1042,13 +1061,20 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let mut tan_ends: Vec<Pt> = vec![];
     let ua = unit(g.a);
     let tv = (-ua.1, ua.0);
+    // a tangent is drawn 130 px each way, or on to where it meets another tangent (the canvas grows to hold that meeting point,
+    // see `build`; it is clipped only at the canvas)
+    let tlines = edit::tangent_lines(p);
+    let tclip = Rect { x0: 10.0 - pad, y0: 14.0 - pad, x1: w - 10.0 + pad, y1: area.y1 };
+    let tan_seg = |d: f64| -> (Pt, Pt) {
+        let (back, fwd) = tlines.iter().find(|t| angdiff(t.0, d) < 1e-6).map(|t| (t.1, t.2)).unwrap_or((130.0, 130.0));
+        let q = on_circle(cx, d);
+        let fv = (-d.to_radians().sin(), -d.to_radians().cos());
+        let (tf, tb) = (clip_len(q, fv, fwd, &tclip), clip_len(q, (-fv.0, -fv.1), back, &tclip));
+        ((q.0 - fv.0 * tb, q.1 - fv.1 * tb), (q.0 + fv.0 * tf, q.1 + fv.1 * tf))
+    };
     if pt.tan {
-        let mut ends = vec![];
-        for s in [1.0, -1.0] {
-            let d = (tv.0 * s, tv.1 * s);
-            let t = clip_len(pa, d, 130.0, &area);
-            ends.push((pa.0 + d.0 * t, pa.1 + d.1 * t));
-        }
+        let (e0, e1) = tan_seg(g.a);
+        let ends = vec![e0, e1];
         sc.ln(ends[0], ends[1], col(2), 2.2);
         sc.solid.push((ends[0], ends[1]));
         tan_ends = ends;
@@ -1072,7 +1098,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     for (_, d) in edit::tangent_points(p) {
         let (q, u) = (on_circle(cx, d), unit(d));
         let tq = (-u.1, u.0);
-        let ends: Vec<Pt> = [1.0, -1.0].iter().map(|s| { let dd = (tq.0 * s, tq.1 * s); let t = clip_len(q, dd, 130.0, &area); (q.0 + dd.0 * t, q.1 + dd.1 * t) }).collect();
+        let (e0, e1) = tan_seg(d);
+        let ends = [e0, e1];
         sc.ln(ends[0], ends[1], col(2), 2.2);
         sc.solid.push((ends[0], ends[1]));
         // the right angle with a radius drawn to the same point
@@ -1285,7 +1312,12 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         let say = |s: &edit::Say, deg: f64, len: f64| match s { edit::Say::Degrees => angle_text(deg, c.rad), edit::Say::Length => cf.with_u(num(len, c.dec)), edit::Say::Text(t) => t.clone() };
         match mk {
             edit::Mark::Arc { start, span, say: s } => {
-                let mid = start + span / 2.0;
+                let mut mid = start + span / 2.0;
+                // a point at the arc's middle (C on a semicircle's arc): the label goes beside it, so it does not read as the point's
+                if let Some((_, d)) = edit::circle_points(p).into_iter().find(|(_, d)| angdiff(*d, mid) < 8.0) && span > 30.0 {
+                    let side = if (mid - d).rem_euclid(360.0) < 180.0 { 1.0 } else { -1.0 };
+                    mid = d + side * 11.0;
+                }
                 let t = say(&s, span, m.r * span.to_radians());
                 let (bw, bh) = box_of(&t, size, true);
                 let at = on_circle(cx, mid);
