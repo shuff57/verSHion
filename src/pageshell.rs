@@ -328,7 +328,10 @@ fn progress(now: f64, t0: f64, secs: f64) -> f32 {
 /// The one content column every page uses (Home, Banks, Exams, Import, Shared, Account, Settings).
 pub const PAGE_W: f32 = 980.0;
 
+// A narrower 196 px menu (more room for the content column) lost 2 of 4 side-by-side verdicts.
 const NAV_W: f32 = 236.0;
+/// The gap between the section menu and the content column.
+const NAV_COL_GAP: f32 = 28.0;
 const NAV_ITEM_H: f32 = 44.0;
 const NAV_GAP: f32 = 4.0;
 const NAV_COLLAPSE_W: f32 = 700.0;
@@ -375,10 +378,10 @@ pub fn sections_aside(
         .min(items.len() - 1);
     let lead = aside_leads.contains(&selected);
     if ui.available_width() >= NAV_COLLAPSE_W {
-        let content_w = (ui.available_width() - NAV_W - 28.0).clamp(280.0, 960.0);
+        let content_w = (ui.available_width() - NAV_W - NAV_COL_GAP).clamp(280.0, 960.0);
         let settings = salt == "settings";
         ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 28.0;
+            ui.spacing_mut().item_spacing.x = NAV_COL_GAP;
             ui.vertical(|ui| {
                 ui.set_width(NAV_W);
                 nav_column(ui, id, items, &mut selected, settings);
@@ -413,13 +416,7 @@ pub fn sections_aside(
             });
         });
     } else {
-        ui.horizontal_wrapped(|ui| {
-            for (i, it) in items.iter().enumerate() {
-                if crate::kit::chip_toggle(ui, it.label, i == selected).clicked() {
-                    selected = i;
-                }
-            }
-        });
+        nav_strip(ui, items, &mut selected);
         ui.add_space(12.0);
         if lead {
             aside(ui);
@@ -476,6 +473,64 @@ fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize, quie
         // Left-aligned font glyphs sit with their left edge at x = 18; a centred icon goes half its width in.
         crate::handicons::paint_glyph(ui.painter(), mid + Vec2::new(18.0 + 9.0, 0.0), it.icon, 18.0, col);
         ui.painter().text(mid + Vec2::new(46.0, 0.0), Align2::LEFT_CENTER, it.label, egui::FontId::new(if quiet { 14.0 } else { 15.2 }, if quiet && !on { egui::FontFamily::Proportional } else { theme::bold_family() }), col);
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
+        if resp.clicked() {
+            *selected = i;
+        }
+    }
+}
+
+/// The narrow window's section list: one segmented strip across the content column (a shared
+/// rounded frame, segments split by hairlines, the chosen one filled), so it reads as navigation.
+/// Separate outlined chips with small bold labels read as a row of secondary buttons.
+fn nav_strip(ui: &mut Ui, items: &[NavItem], selected: &mut usize) {
+    const SEG_H: f32 = 40.0;
+    const PAD: f32 = 3.0;
+    let n = items.len();
+    let font = egui::FontId::new(14.0, egui::FontFamily::Proportional);
+    let w = ui.available_width();
+    // One row when every label fits its equal share; otherwise two per row.
+    let widest = items
+        .iter()
+        .map(|it| ui.painter().layout_no_wrap(it.label.to_owned(), font.clone(), theme::ink()).size().x)
+        .fold(0.0_f32, f32::max);
+    let cols = if widest + 28.0 <= w / n as f32 { n } else { 2.min(n) };
+    let rows = n.div_ceil(cols);
+    let (frame, _) = ui.allocate_exact_size(Vec2::new(w, SEG_H * rows as f32), Sense::hover());
+    let painter = ui.painter();
+    painter.rect(frame, CornerRadius::same(12), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+    let seg_w = w / cols as f32;
+    let seg = |i: usize| Rect::from_min_size(frame.min + Vec2::new((i % cols) as f32 * seg_w, (i / cols) as f32 * SEG_H), Vec2::new(seg_w, SEG_H));
+    // Hairlines between neighbours, left out beside the chosen segment so its fill stands alone.
+    for i in 0..n {
+        let r = seg(i);
+        if i % cols != 0 && i != *selected && i - 1 != *selected {
+            painter.line_segment(
+                [Pos2::new(r.left(), r.top() + 10.0), Pos2::new(r.left(), r.bottom() - 10.0)],
+                Stroke::new(1.0, theme::border()),
+            );
+        }
+        if i >= cols && i % cols == 0 {
+            painter.line_segment([Pos2::new(frame.left() + 10.0, r.top()), Pos2::new(frame.right() - 10.0, r.top())], Stroke::new(1.0, theme::border()));
+        }
+    }
+    for (i, it) in items.iter().enumerate() {
+        let r = seg(i);
+        let resp = ui.interact(r, ui.id().with(("nav_strip", i)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+        let on = i == *selected;
+        let inner = r.shrink(PAD);
+        if on {
+            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::accent_faded());
+        } else if resp.is_pointer_button_down_on() {
+            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::accent_faded().gamma_multiply(0.7));
+        } else if resp.hovered() {
+            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::hover_bg());
+        }
+        if resp.has_focus() {
+            ui.painter().rect_stroke(inner, CornerRadius::same(9), Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
+        }
+        let col = if on { theme::accent_col() } else { theme::ink() };
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, it.label, font.clone(), col);
         resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
         if resp.clicked() {
             *selected = i;

@@ -970,8 +970,10 @@ impl crate::App {
                 // The hero's text, top to bottom. `left` sets it flush left in the wide window's
                 // two-column hero; otherwise it is a centred column.
                 let mut hero_text = |ui: &mut egui::Ui, hero: &mut Rect, left: bool| {
-                    *hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 50.0 } else { 40.0 })).rect;
-                    ui.add_space(if roomy { 16.0 } else { 12.0 });
+                    // 43 px on a wide window, not 50: larger, it outweighed the lead, button and preview beside
+                    // it and left them reading as a second tier (the critics' words).
+                    *hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 43.0 } else { 40.0 })).rect;
+                    ui.add_space(if roomy { 14.0 } else { 12.0 });
                     // The lead's column, as `prose_centered_ink` sizes it.
                     let lead_w = ui.available_width().min(if roomy { 620.0 } else { 560.0 });
                     let mid = ui.max_rect().center().x;
