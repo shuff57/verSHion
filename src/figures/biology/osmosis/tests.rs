@@ -284,8 +284,13 @@ fn every_particle_size_still_shows_in_a_plasmolyzed_vacuole() {
             }
             // the start has at least this many inside the cell; none may be lost when the vacuole shrinks
             let start = model(&with(&[s("scene", "Plant cell"), s("s1_size", size), f("s1_in", 0.9), f("s1_out", 4.0)]), mult);
-            let want = want_count(start.sols[0].cin, geo(&start, Kind::Start, &pal).inr.area(), pick_pp_for(&start), start.sols[0].r);
-            assert!(inside >= 1 && inside >= want.min(2), "{size} {show}: {inside} particles in the vacuole (start {want})");
+            let area = geo(&start, Kind::Start, &pal).inr.area();
+            let e = expected_count(start.sols[0].os_in, area, pick_pp_for(&start));
+            let want = if e >= 0.5 { (e.floor() as usize).max(1) } else { 0 };
+            // from half a particle up the vacuole always keeps its solute; below that it may be drawn as none (the weak
+            // solution must not look denser than the strong one outside) but the solute still shows in the panel
+            let anywhere = panel.split("<circle ").skip(1).filter(|el| el.contains(&format!("fill=\"{fill}\" stroke=\"#333\""))).count();
+            assert!(anywhere >= 1 && inside >= want, "{size} {show}: {inside} particles in the vacuole (start {want})");
         }
     }
 }
@@ -462,11 +467,14 @@ fn the_key_states_the_comparison_in_osmolarity() {
     assert!(svg.contains("inside the cell is about 308 mOsm/L and outside the cell about 182 mOsm/L"), "comparison");
     assert!(svg.contains("hypotonic"));
     assert!(svg.contains("NaCl: 58.44 g/mol, splits into 2 particles"));
-    assert!(svg.contains("Glucose: 180.16 g/mol, splits into 1 particle;"));
+    assert!(svg.contains("Glucose: 180.16 g/mol, stays as 1 particle per molecule;") && !svg.contains("splits into 1 particle"));
     let unknown = flat(&render_of(&[s("s1_name", "Mystery"), s("show", "Start"), b("answer_key", true)]));
     assert!(unknown.contains("not in the table of known solutes") && unknown.contains("assumed 100 g/mol"));
     let big = flat(&render_of(&[s("s1_name", "Starch"), s("show", "Start"), b("answer_key", true)]));
-    assert!(big.contains("a large molecule, taken as 50000 g/mol, so it adds almost no osmolarity"));
+    assert!(big.contains("a large molecule, taken as 50000 g/mol, so a percent of it adds almost no osmolarity"));
+    // in M or mM the typed value is the particle concentration: no "almost no osmolarity" beside a big number, no grams per litre
+    let molar = flat(&render_of(&[s("s1_name", "Protein"), s("unit", "mM"), f("s1_in", 150.0), f("s1_out", 300.0), s("show", "Start"), b("answer_key", true)]));
+    assert!(molar.contains("a typed M or mM is already the particle concentration") && !molar.contains("adds almost no osmolarity") && !molar.contains("grams per litre"), "{molar}");
 }
 
 #[test]
@@ -597,7 +605,7 @@ fn in_panel_labels_are_measured_at_the_large_size() {
     let (a, b2) = (rect(1.0), rect(1.4));
     assert!((b2.2 - b2.0) > 1.35 * (a.2 - a.0) - 3.0 && (b2.3 - b2.1) > 1.3 * (a.3 - a.1) - 3.0, "{a:?} {b2:?}");
     // a name too long for its room shrinks until it fits as drawn
-    let lab = Lab { x: 100.0, y: 50.0, size: 9.5, anchor: "start", text: "Polyvinylpyrrolidone".into(), lf: 1.4 }.fit(60.0);
+    let lab = Lab { x: 100.0, y: 50.0, size: 9.5, anchor: "start", text: "Polyvinylpyrrolidone".into(), lf: 1.4 }.fit(60.0, true);
     let r = lab.rect();
     assert!(r.2 - r.0 <= 60.5 && lab.size < 9.5, "{r:?} {}", lab.size);
 }
@@ -665,4 +673,110 @@ fn doubling_a_concentration_at_the_largest_particle_size_shows() {
     let svg = render_of(&[s("scene", "Split beaker"), s("show", "Start"), s("s1_size", "XL"), f("s1_in", 0.9), f("s1_out", 1.8), b("key", false)]);
     let (l, r) = side_counts(&svg, "#a3a3a3");
     assert!(r as f64 >= 1.5 * l as f64 && l >= 1, "XL: {l} vs {r}");
+}
+
+#[test]
+fn a_starch_bag_in_water_swells_a_little_and_a_small_relative_difference_is_not_isotonic() {
+    let starch = mdl(&[s("scene", "Dialysis bag"), s("s1_name", "Starch"), f("s1_in", 1.0), f("s1_out", 0.0)]);
+    assert_eq!(starch.tonic, Tonic::Hypo, "1 % starch against pure water is not isotonic");
+    let strong = mdl(&[s("scene", "Dialysis bag"), f("s1_in", 0.9), f("s1_out", 0.0)]);
+    // a small but visible swelling, much less than for salt water
+    assert!(starch.vrel > 1.08 && starch.vrel < 1.3 && strong.vrel > 2.0, "starch {} salt {}", starch.vrel, strong.vrel);
+    let pal = palette(&with(&[]));
+    let width = |m: &Model, kind| { let g = geo(m, kind, &pal); g.shape.2 };
+    assert!(width(&starch, Kind::Result) > width(&starch, Kind::Start) + 1.5, "the bag visibly swells");
+    assert!(width(&strong, Kind::Result) > width(&starch, Kind::Result) + 1.5);
+    // the key says so, and 3 % starch is a little more than 1 %, not a jump to the largest swelling
+    let key = flat(&render_of(&[s("scene", "Dialysis bag"), s("show", "Both"), s("s1_name", "Starch"), f("s1_in", 1.0), f("s1_out", 0.0), b("answer_key", true)]));
+    assert!(key.contains("water moves into the bag, which swells a little"), "{key}");
+    let three = mdl(&[s("scene", "Dialysis bag"), s("s1_name", "Starch"), f("s1_in", 3.0), f("s1_out", 0.0)]);
+    assert!(three.vrel >= starch.vrel && three.vrel < 1.5, "3 % starch {}", three.vrel);
+    // the shipped example says the same
+    let ex = examples(ID).unwrap().into_iter().find(|e| e.name.starts_with("Dialysis bag: glucose crosses")).unwrap();
+    assert!(flat(&render_of(&ex.params)).contains("water moves into the bag, which swells a little"));
+}
+
+#[test]
+fn isotonic_is_a_relative_test() {
+    // 0.9 mM against 1.1 mM is 22 % apart: not isotonic
+    let near = mdl(&[s("unit", "mM"), f("s1_in", 0.9), f("s1_out", 1.1)]);
+    assert_eq!(near.tonic, Tonic::Hyper);
+    assert!(near.vrel < 0.95, "{}", near.vrel);
+    // equal, within 2 %, and nothing at all are isotonic
+    assert_eq!(mdl(&[f("s1_in", 0.9), f("s1_out", 0.9)]).tonic, Tonic::Iso);
+    assert_eq!(mdl(&[f("s1_in", 0.9), f("s1_out", 0.91)]).tonic, Tonic::Iso);
+    assert_eq!(mdl(&[f("s1_in", 0.0), f("s1_out", 0.0)]).tonic, Tonic::Iso);
+    assert_eq!(mdl(&[f("s1_in", 0.9), f("s1_out", 0.95)]).tonic, Tonic::Hyper);
+    // a bigger difference is a bigger effect
+    let eff = |out: f64| mdl(&[f("s1_in", 0.9), f("s1_out", out)]).ds.abs();
+    assert!(eff(0.95) < eff(1.2) && eff(1.2) < eff(2.0) && eff(2.0) < eff(4.0), "{} {} {} {}", eff(0.95), eff(1.2), eff(2.0), eff(4.0));
+}
+
+#[test]
+fn drawn_density_follows_concentration_even_in_a_small_region() {
+    // a weak solute never outnumbers a strong one in the same region, whatever the seed
+    for seed in 1..8 {
+        let svg = render_of(&[s("scene", "Plant cell"), s("show", "Start"), ("seed", Value::I(seed)), b("key", false), s("s1_name", "NaCl"), f("s1_in", 0.9), f("s1_out", 0.9),
+            b("s2_on", true), s("s2_name", "Glucose"), s("s2_shade", "Black"), s("s2_size", "S"), f("s2_in", 0.2), f("s2_out", 0.2),
+            b("s3_on", true), s("s3_name", "Sucrose"), s("s3_shade", "Dark grey"), s("s3_size", "S"), f("s3_in", 5.0), f("s3_out", 5.0)]);
+        let (weak, strong) = (grey_count(&svg, "#1e1e1e"), grey_count(&svg, "#666666"));
+        assert!(weak <= strong, "seed {seed}: weak solute {weak} drawn more than strong {strong}");
+    }
+    // a fraction is drawn with that probability: the average over many draws is the expectation
+    let draws = 1000;
+    let total: usize = (0..draws).map(|k| want_count(0.4, 4000.0, 3.0, (k as f64 + 0.5) / draws as f64)).sum();
+    assert!((total as f64 - 400.0).abs() < 5.0, "{total}");
+    assert_eq!(want_count(0.4, 4000.0, 3.0, 0.9), 0);
+    // but a solute that is present is never hidden altogether
+    let svg = render_of(&[s("show", "Start"), f("s1_in", 0.0005), f("s1_out", 0.0005), b("key", false)]);
+    assert!(grey_count(&svg, "#a3a3a3") >= 1, "a present solute is shown");
+}
+
+fn px_font_of(svg: &str, starts: &str) -> Vec<f64> {
+    svg.split("<text ").skip(1).filter(|t| t.split('>').nth(1).map_or(false, |b| b.starts_with(starts))).map(|t| t.split("font-size=\"").nth(1).unwrap().split('"').next().unwrap().parse::<f64>().unwrap()).collect()
+}
+
+#[test]
+fn long_crossing_names_stay_readable_and_inside_the_panel_at_large() {
+    let pal = palette(&with(&[]));
+    let long = "Polyvinylpyrrolidone solution";
+    for scene in ["Red blood cell", "Plant cell", "Split beaker", "U-tube", "Dialysis bag"] {
+        for size in ["Medium", "Large"] {
+            let p = with(&[s("scene", scene), s("label_size", size), s("show", "Start"), s("s1_name", long), b("s1_cross", true), f("s1_in", 3.0), f("s1_out", 0.0),
+                b("s2_on", true), s("s2_name", "Sodium bicarbonate"), b("s2_cross", true), f("s2_in", 2.0), f("s2_out", 0.0), b("s3_on", true), s("s3_name", "Ethylenediaminetetraacetic"), b("s3_cross", true), f("s3_in", 0.0), f("s3_out", 2.0)]);
+            let c = cfg(&p);
+            let m = model(&p, None);
+            let g = geo(&m, Kind::Start, &pal);
+            let pl = plan(&c, &m, &g, m.flow());
+            let what = format!("{scene} {size}");
+            assert_eq!(pl.sol.len(), 3, "{what}");
+            for (i, a) in pl.sol.iter().enumerate() {
+                let r = a.lab.rect();
+                assert!(r.0 >= 0.0 && r.2 <= PW && r.3 <= g.ph, "{what}: label {i} {:?} off the panel {r:?}", a.lab.text);
+                assert!(a.lab.size * a.lab.lf >= 7.95, "{what}: label {i} is drawn at {:.1} px", a.lab.size * a.lab.lf);
+                for (j, o) in pl.sol.iter().enumerate().filter(|(j, _)| *j != i) {
+                    assert!(!overlap(r, o.lab.rect()) && !overlap(r, o.boxr), "{what}: label {i} meets arrow or label {j}");
+                }
+            }
+            // and the page: nothing runs off it, and the drawn text is at least 8 px
+            let svg = render_of(&[s("scene", scene), s("label_size", size), s("show", "Start"), s("s1_name", long), b("s1_cross", true), f("s1_in", 3.0), f("s1_out", 0.0), b("answer_key", false)]);
+            assert_inside_page(&svg, &what);
+            for fs in px_font_of(&svg, "Polyvinyl").into_iter().chain(px_font_of(&svg, "Sodium")) { assert!(fs >= 7.95, "{what}: {fs}"); }
+        }
+    }
+}
+
+#[test]
+fn leaders_come_in_clear_of_the_blank_water_boxes_of_a_plant_cell() {
+    let pal = palette(&with(&[]));
+    for mult in [0.5, 1.0, 2.0] {
+        let m = model(&with(&[s("scene", "Plant cell"), s("arr_water", "Blank boxes")]), Some(mult));
+        let g = geo(&m, Kind::Result, &pal);
+        let (ay, box_top, box_bot) = (g.ay, g.ay - 12.0, g.ay + 12.0);
+        assert!(ay > 0.0);
+        // the wall leader runs above the box, the membrane and vacuole leaders below it
+        assert!(g.t_wall.1 < box_top - 2.0, "wall leader at {} meets the box {box_top}", g.t_wall.1);
+        assert!(g.t_mem.1 > box_bot + 2.0, "membrane leader at {} meets the box {box_bot}", g.t_mem.1);
+        assert!(g.t_vac.1 > box_bot + 2.0, "vacuole leader at {} runs through the box {box_bot}", g.t_vac.1);
+    }
 }

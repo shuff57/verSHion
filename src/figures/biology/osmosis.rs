@@ -196,6 +196,9 @@ pub struct Model {
     pub tonic: Tonic,
     /// Final size of the inside relative to the start, from the concentrations (before any clamp a drawing applies).
     pub vrel: f64,
+    /// Signed size of the effect, 0 to 1 (positive when the inside is the more concentrated): the relative difference
+    /// of the two osmolarities, damped when the difference is tiny in absolute terms, never below `MIN_EFFECT` unless isotonic.
+    pub ds: f64,
     pub burst: bool,
     unit: &'static str,
 }
@@ -206,6 +209,9 @@ impl Model {
     }
     fn lysed(&self) -> bool { self.scene == Scene::Rbc && self.burst && self.tonic == Tonic::Hypo && self.vrel >= 1.5 }
 }
+
+/// The smallest effect drawn for a difference that is not isotonic (a swelling of about 12 % by volume).
+const MIN_EFFECT: f64 = 0.06;
 
 fn shade_fill(s: &str) -> (&'static str, bool) {
     match s { "White" => ("#ffffff", false), "Light grey" => ("#d4d4d4", false), "Dark grey" => ("#666666", true), "Black" => ("#1e1e1e", true), _ => ("#a3a3a3", false) }
@@ -237,10 +243,18 @@ pub fn model(p: &Params, mult: Option<f64>) -> Model {
     let sols = read_sols(p, mult);
     let ci: f64 = sols.iter().filter(|s| !s.cross).map(|s| s.os_in).sum();
     let co: f64 = sols.iter().filter(|s| !s.cross).map(|s| s.os_out).sum();
-    // a difference under 1 % (and under half a mOsm/L, which no cell notices) is isotonic
-    let tonic = if (ci - co).abs() <= (0.01 * ci.max(co)).max(0.5) { Tonic::Iso } else if co < ci { Tonic::Hypo } else { Tonic::Hyper };
-    let vrel = if ci <= 1e-9 && co <= 1e-9 { 1.0 } else if co <= 1e-9 { 2.5 } else { (ci / co).clamp(0.35, 2.5) };
-    Model { scene, sols, ci, co, tonic, vrel: if tonic == Tonic::Iso { 1.0 } else { vrel }, burst: p.b("burst"), unit: unit_of(p.s("unit")) }
+    // isotonic only when the two osmolarities are within 2 % of each other (or both are zero): a relative test, so
+    // 1 % starch against pure water is not isotonic however small its osmolarity is
+    let tonic = if (ci - co).abs() <= 0.02 * ci.max(co) { Tonic::Iso } else if co < ci { Tonic::Hypo } else { Tonic::Hyper };
+    // how big the effect is: the relative difference, damped when the difference itself is tiny (a cell notices
+    // 0.2 mOsm/L less than 150), but always big enough to see
+    let ds = if tonic == Tonic::Iso { 0.0 } else {
+        let rel = (ci - co).abs() / (ci + co);
+        let damp = (ci - co).abs() / ((ci - co).abs() + 10.0);
+        (rel * damp).max(MIN_EFFECT).copysign(ci - co)
+    };
+    let vrel = if tonic == Tonic::Iso { 1.0 } else { ((1.0 + ds) / (1.0 - ds)).clamp(0.35, 2.5) };
+    Model { scene, sols, ci, co, tonic, vrel, ds, burst: p.b("burst"), unit: unit_of(p.s("unit")) }
 }
 
 fn fnum(v: f64) -> String {
@@ -316,9 +330,20 @@ const MAX_COVER: f64 = 0.14;
 const WATER_R: f64 = 3.0;
 const WATER_FILL: f64 = 0.16;
 
-fn want_count(c: f64, area: f64, pp: f64, r: f64) -> usize {
-    if c <= 1e-9 || pp <= 0.0 { return 0; }
-    let n = (c / pp * area / AREA_UNIT).round().max(1.0);
+/// How many particles a region of `area` px2 should hold at concentration `c`, as a fraction.
+fn expected_count(c: f64, area: f64, pp: f64) -> f64 {
+    if c <= 1e-9 || pp <= 0.0 { 0.0 } else { c / pp * area / AREA_UNIT }
+}
+
+/// The whole number drawn for an expected count `e`. A fraction is drawn as one more particle with that probability
+/// (`u` is a fixed pseudo-random number in [0, 1), so the picture stays the same for the same seed): the expected
+/// density follows the concentration, and a weak solution in a small region is not drawn denser than a strong one
+/// in a large region just because every solute must show at least one particle.
+fn want_count(e: f64, area: f64, r: f64, u: f64) -> usize {
+    if e <= 0.0 { return 0; }
+    let mut n = e.floor() + if e.fract() > u { 1.0 } else { 0.0 };
+    // from half a particle up a solute always shows; below that it is drawn with the probability `e`
+    if e >= 0.5 { n = n.max(1.0); }
     let cap = (0.3 * area / (std::f64::consts::PI * r * r)).floor().max(1.0);
     n.min(cap) as usize
 }
@@ -447,10 +472,12 @@ fn rich(d: &mut Doc, x: f64, y: f64, size: f64, anchor: &str, weight: &str, s: &
 fn clear_label(d: &mut Doc, pal: &Pal, x: f64, y: f64, size: f64, lf: f64, anchor: &str, s: &str) {
     // the patch is measured at the size the text ends up at: the label size scales every font after the layout
     let sz = size * lf;
-    let w = tw(s, sz) + 4.0;
+    let ls: Vec<&str> = s.split('\n').collect();
+    let w = ls.iter().map(|l| tw(l, sz)).fold(0.0, f64::max) + 4.0;
     let x0 = match anchor { "middle" => x - w / 2.0, "end" => x - w, _ => x - 2.0 };
-    d.raw(&format!(r#"<rect x="{x0:.2}" y="{:.2}" width="{w:.2}" height="{:.2}" rx="2" fill="{}"/>"#, y - sz, sz + 3.5, pal.sol));
-    rich(d, x, y, size, anchor, "400", s);
+    let pitch = sz * 1.1;
+    d.raw(&format!(r#"<rect x="{x0:.2}" y="{:.2}" width="{w:.2}" height="{:.2}" rx="2" fill="{}"/>"#, y - sz, sz + 3.5 + pitch * (ls.len() as f64 - 1.0), pal.sol));
+    for (i, l) in ls.iter().enumerate() { rich(d, x, y + pitch * i as f64, size, anchor, "400", l); }
 }
 
 /// The font size (before the label-size scaling) that lets `s` fit in `avail` pixels at the label factor `lf`.
@@ -544,7 +571,7 @@ fn solution_box(pal: &Pal, h: f64) -> String {
 }
 
 fn geo_rbc(m: &Model, kind: Kind, pal: &Pal) -> Geo {
-    let (cx, cy, ph) = (PW / 2.0, 98.0, 200.0);
+    let (cx, cy, ph) = (PW / 2.0, 98.0, 220.0);
     let r0 = 46.0;
     let lysed = kind == Kind::Result && m.lysed();
     let state = if kind == Kind::Start { Tonic::Iso } else { m.tonic };
@@ -587,7 +614,7 @@ fn geo_rbc(m: &Model, kind: Kind, pal: &Pal) -> Geo {
 }
 
 fn geo_plant(m: &Model, kind: Kind, pal: &Pal) -> Geo {
-    let (cx, cy, ph) = (PW / 2.0, 98.0, 200.0);
+    let (cx, cy, ph) = (PW / 2.0, 98.0, 220.0);
     let (hw, hh) = (70.0, 50.0);
     let state = if kind == Kind::Start { Tonic::Iso } else { m.tonic };
     // membrane half-size: against the wall when turgid, a little in when flaccid, far in when plasmolyzed
@@ -627,17 +654,18 @@ fn geo_plant(m: &Model, kind: Kind, pal: &Pal) -> Geo {
         in_inner && !(x > ml && x < mr && y > mt && y < mb)
     });
     // leader targets: wall at its left edge, membrane inside the wall, vacuole's edge
-    let vy_t = cy - 0.45 * vy;
+    // the leaders come in below the blank water boxes (which sit at y = cy - 24 .. cy) and above the solute arrows
+    let vy_t = cy + 0.45 * vy;
     let vx_t = cx - vx * (1.0 - 0.45f64.powi(2)).sqrt();
     // the water and solute arrows cross the membrane, not the wall: edges and shape are the membrane's
-    Geo { back, front: String::new(), inr, outr, ph, edges: (cx - mw, cx + mw), ay: cy - 12.0, t_mem: (cx - mw, cy), t_wall: (cx - hw, cy - 28.0), t_vac: (vx_t, vy_t), left_x: cx - hw, shape: (cx, cy, mw, mh, true), wall: (cx + hw + 4.5, cy + hh + 4.5) }
+    Geo { back, front: String::new(), inr, outr, ph, edges: (cx - mw, cx + mw), ay: cy - 12.0, t_mem: (cx - mw, cy + 6.0), t_wall: (cx - hw, cy - 28.0), t_vac: (vx_t, vy_t), left_x: cx - hw, shape: (cx, cy, mw, mh, true), wall: (cx + hw + 4.5, cy + hh + 4.5) }
 }
 
 fn geo_beaker(m: &Model, kind: Kind, pal: &Pal) -> Geo {
     let ph = 190.0;
     let (l, r, top, bot) = (15.0, 225.0, 42.0, 176.0);
     let h0 = 90.0;
-    let d = if kind == Kind::Result && m.tonic != Tonic::Iso { ((m.co - m.ci) / (m.co + m.ci).max(1e-9)).clamp(-1.0, 1.0) } else { 0.0 };
+    let d = if kind == Kind::Result { -m.ds } else { 0.0 };
     let dh = 0.4 * d * h0;
     let (ya, yb) = (bot - h0 + dh, bot - h0 - dh);
     let mut back = String::new();
@@ -658,7 +686,7 @@ fn geo_utube(m: &Model, kind: Kind, pal: &Pal) -> Geo {
     let top = 40.0;
     let h0 = 74.0; // water depth in the arms at the start (surface at top + 30)
     let level = cy - h0 + 30.0 + 18.0;
-    let d = if kind == Kind::Result && m.tonic != Tonic::Iso { ((m.co - m.ci) / (m.co + m.ci).max(1e-9)).clamp(-1.0, 1.0) } else { 0.0 };
+    let d = if kind == Kind::Result { -m.ds } else { 0.0 };
     let dh = 0.4 * d * (cy - level + 40.0);
     let (ya, yb) = (level + dh, level - dh);
     let mut back = String::new();
@@ -880,9 +908,13 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
     let (rs0_in, rs0_out, rs_in, rs_out) = (rsf(a_in0), rsf(a_out0), rsf(a_in), rsf(a_out));
     let mut want_in: Vec<(usize, usize)> = Vec::new();
     let mut want_out: Vec<(usize, usize)> = Vec::new();
+    let mut ur = rng(seed ^ 0xABCDEF);
     for (i, s) in m.sols.iter().enumerate() {
-        let n_in0 = want_count(s.os_in, a_in0, c.pp, s.r * rs0_in);
-        let n_out0 = want_count(s.os_out, a_out0, c.pp, s.r * rs0_out);
+        let (e_in, e_out) = (expected_count(s.os_in, a_in0, c.pp), expected_count(s.os_out, a_out0, c.pp));
+        let (u_in, u_out) = (ur(), ur());
+        let (mut n_in0, mut n_out0) = (want_count(e_in, a_in0, s.r * rs0_in, u_in), want_count(e_out, a_out0, s.r * rs0_out, u_out));
+        // a solute that is present is never hidden altogether: if neither region drew one, the fuller region gets one
+        if n_in0 + n_out0 == 0 && e_in + e_out > 0.0 { if e_in >= e_out { n_in0 = 1 } else { n_out0 = 1 } }
         let (n_in, n_out) = if s.cross && sl.kind == Kind::Result {
             let total = (n_in0 + n_out0) as f64;
             let ni = (total * a_in / (a_in + a_out).max(1.0)).round() as usize;
@@ -1005,20 +1037,51 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
 }
 
 /// A small text and the box it occupies, in panel coordinates. `lf` is the label factor the text is finally drawn at
-/// (the label size scales every font after layout), so the box is measured at `size * lf`.
+/// (the label size scales every font after layout), so the box is measured at `size * lf`. A text with a newline in it
+/// is several lines.
 #[derive(Clone)]
 struct Lab { x: f64, y: f64, size: f64, anchor: &'static str, text: String, lf: f64 }
 
+/// The smallest text (as drawn, in px) a label is allowed to shrink to.
+const MIN_LABEL_PX: f64 = 8.0;
+
 impl Lab {
+    fn lines(&self) -> Vec<&str> { self.text.split('\n').collect() }
+    fn pitch(&self) -> f64 { self.size * self.lf * 1.1 }
     fn rect(&self) -> (f64, f64, f64, f64) {
         let sz = self.size * self.lf;
-        let w = tw(&self.text, sz) + 4.0;
+        let ls = self.lines();
+        let w = ls.iter().map(|l| tw(l, sz)).fold(0.0, f64::max) + 4.0;
         let x0 = match self.anchor { "middle" => self.x - w / 2.0, "end" => self.x - w, _ => self.x - 2.0 };
-        (x0, self.y - sz, x0 + w, self.y + 3.5)
+        (x0, self.y - sz, x0 + w, self.y + self.pitch() * (ls.len() as f64 - 1.0) + 3.5)
     }
-    /// Shrinks the text so it is no wider than `avail` as drawn.
-    fn fit(mut self, avail: f64) -> Lab {
-        self.size = fit_size(&self.text, self.size, self.lf, avail - 5.0);
+    /// Makes the text fit `avail` px as drawn without going under `MIN_LABEL_PX`: shrinks it, then (with `wrap`) breaks
+    /// it onto two lines, and last of all cuts it with an ellipsis (the key still has the full name).
+    fn fit(mut self, avail: f64, wrap: bool) -> Lab {
+        let room = avail - 5.0;
+        let min = MIN_LABEL_PX / self.lf.max(0.1);
+        let one = fit_size(&self.text, self.size, self.lf, room);
+        if one >= min.min(self.size) - 1e-9 { self.size = one; return self; }
+        let full = self.text.clone();
+        if wrap {
+            let mut sz = self.size;
+            while sz >= min - 1e-9 {
+                let ls = wrap_fit(&full, room, sz * self.lf);
+                if ls.len() <= 2 { self.size = sz; self.text = ls.join("\n"); return self; }
+                sz -= 0.5;
+            }
+        }
+        self.size = min.min(self.size);
+        let sz = self.size * self.lf;
+        let mut ls = if wrap { wrap_fit(&full, room, sz) } else { vec![full] };
+        ls.truncate(if wrap { 2 } else { 1 });
+        if let Some(l) = ls.last_mut() {
+            if tw(l, sz) > room || wrap {
+                while !l.is_empty() && tw(&format!("{l}\u{2026}"), sz) > room { l.pop(); }
+                l.push('\u{2026}');
+            }
+        }
+        self.text = ls.join("\n");
         self
     }
 }
@@ -1052,7 +1115,7 @@ fn plan(c: &Cfg, m: &Model, g: &Geo, flow: Flow) -> Plan {
         // the H2O tag goes with the arrow, or beside the blank box that stands for it; past the wall in a plant cell
         let tx = if split { el + if blank { 25.0 } else { 26.0 } } else { (er + if blank { 25.0 } else { 24.0 }).max(if g.wall.0 > 0.0 { g.wall.0 + 5.0 } else { 0.0 }) };
         let ty = if blank { ay + 4.0 } else { ay - 9.0 };
-        pl.tag = Some(mk(tx, ty, "start", "H_2O".to_string()).fit(PW - 2.0 - tx));
+        pl.tag = Some(mk(tx, ty, "start", "H_2O".to_string()).fit(PW - 2.0 - tx, false));
     }
     if c.arr_solute != "None" {
         let blank = c.arr_solute == "Blank boxes";
@@ -1063,6 +1126,15 @@ fn plan(c: &Cfg, m: &Model, g: &Geo, flow: Flow) -> Plan {
         }).collect();
         let n = items.len();
         let (cx, cy, rx, ry, _) = g.shape;
+        // plant labels sit in rows under the wall; the side labels (row 1) may wrap to two lines, so row 2 starts below them
+        let row1_bottom = if m.scene == Scene::Plant {
+            items.iter().enumerate().skip(1).take(2).map(|(k, (name, _))| {
+                let ex = cx + [0.0, -28.0, 28.0][k.min(2)];
+                let y1 = g.wall.1 + 2.0 + h;
+                let lab = if k == 1 { mk(ex + 10.0, y1, "end", name.clone()).fit(ex + 8.0, true) } else { mk(ex - 10.0, y1, "start", name.clone()).fit(PW - 2.0 - (ex - 10.0), true) };
+                lab.rect().3
+            }).fold(0.0, f64::max)
+        } else { 0.0 };
         for (k, (name, dir)) in items.into_iter().enumerate() {
             let kk = k.min(2);
             let sa = match m.scene {
@@ -1078,9 +1150,9 @@ fn plan(c: &Cfg, m: &Model, g: &Geo, flow: Flow) -> Plan {
                     let hh = (14.0 * uy).max(9.0) + 4.0;
                     let boxr = (mid.0 - 13.0, mid.1 - hh, mid.0 + 13.0, mid.1 + hh);
                     let lab = match kk {
-                        0 => mk(mid.0, boxr.3 + 2.0 + h, "middle", name).fit(110.0),
-                        1 => mk(boxr.0 - 3.0, mid.1 + h * 0.35, "end", name).fit(boxr.0 - 5.0),
-                        _ => mk(boxr.2 + 3.0, mid.1 + h * 0.35, "start", name).fit(PW - 2.0 - boxr.2 - 3.0),
+                        0 => mk(mid.0, boxr.3 + 2.0 + h, "middle", name).fit(110.0, true),
+                        1 => mk(boxr.0 - 3.0, mid.1 + h * 0.35, "end", name).fit(boxr.0 - 5.0, true),
+                        _ => mk(boxr.2 + 3.0, mid.1 + h * 0.35, "start", name).fit(PW - 2.0 - boxr.2 - 3.0, true),
                     };
                     SolArrow { a: pa, b: pb, boxr, lab, dir }
                 }
@@ -1088,14 +1160,14 @@ fn plan(c: &Cfg, m: &Model, g: &Geo, flow: Flow) -> Plan {
                     // across the bottom of the membrane (wherever it is now); labels in rows under the wall
                     let ex = cx + [0.0, -28.0, 28.0][kk];
                     let yb = cy + ry;
-                    let (pa, pb) = if dir >= 0.0 { ((ex, yb - 14.0), (ex, yb + 14.0)) } else { ((ex, yb + 14.0), (ex, yb - 14.0)) };
-                    let boxr = (ex - 13.0, yb - 17.0, ex + 13.0, yb + 17.0);
+                    let (pa, pb) = if dir >= 0.0 { ((ex, yb - 10.0), (ex, yb + 10.0)) } else { ((ex, yb + 10.0), (ex, yb - 10.0)) };
+                    let boxr = (ex - 13.0, yb - 13.0, ex + 13.0, yb + 13.0);
                     let y1 = g.wall.1 + 2.0 + h;
-                    let y2 = y1 + h + 4.0;
+                    let y2 = (y1 + 3.5).max(row1_bottom) + h + 1.0;
                     let lab = match kk {
-                        0 => mk(cx, if n >= 2 { y2 } else { y1 }, "middle", name).fit(PW - 8.0),
-                        1 => mk(ex + 10.0, y1, "end", name).fit(ex + 8.0),
-                        _ => mk(ex - 10.0, y1, "start", name).fit(PW - 2.0 - (ex - 10.0)),
+                        0 => mk(cx, if n >= 2 { y2 } else { y1 }, "middle", name).fit(PW - 8.0, true),
+                        1 => mk(ex + 10.0, y1, "end", name).fit(ex + 8.0, true),
+                        _ => mk(ex - 10.0, y1, "start", name).fit(PW - 2.0 - (ex - 10.0), true),
                     };
                     SolArrow { a: pa, b: pb, boxr, lab, dir }
                 }
@@ -1105,7 +1177,7 @@ fn plan(c: &Cfg, m: &Model, g: &Geo, flow: Flow) -> Plan {
                     let y = ay + 26.0 + pitch * kk as f64;
                     let ex = cx + rx * (1.0 - ((y - cy) / ry.max(1.0)).powi(2)).max(0.12).sqrt();
                     let (pa, pb) = if dir >= 0.0 { ((ex - 16.0, y), (ex + 16.0, y)) } else { ((ex + 16.0, y), (ex - 16.0, y)) };
-                    let lab = mk(ex + 22.0, y + h * 0.35, "start", name).fit(222.0 - (ex + 22.0));
+                    let lab = mk(ex + 22.0, y + h * 0.35, "start", name).fit(222.0 - (ex + 22.0), false);
                     SolArrow { a: pa, b: pb, boxr: (ex - 19.0, y - pitch / 2.0 + 0.5, ex + 19.0, y + pitch / 2.0 - 0.5), lab, dir }
                 }
                 _ => {
@@ -1113,7 +1185,7 @@ fn plan(c: &Cfg, m: &Model, g: &Geo, flow: Flow) -> Plan {
                     let (y, left, hs) = if beaker { (ay + 22.0 * (kk as f64 + 1.0), false, 8.0) } else { (ay + 20.0 + 16.0 * kk as f64, kk == 1, 7.5) };
                     let reach = if beaker { 100.0 } else { (98.0f64.powi(2) - (y - 128.0).powi(2)).max(0.0).sqrt() - 3.0 };
                     let (pa, pb) = if dir >= 0.0 { ((el - 14.0, y), (el + 14.0, y)) } else { ((el + 14.0, y), (el - 14.0, y)) };
-                    let lab = if left { mk(el - 20.0, y + h * 0.35, "end", name).fit(reach - 20.0) } else { mk(el + 20.0, y + h * 0.35, "start", name).fit(reach - 20.0) };
+                    let lab = if left { mk(el - 20.0, y + h * 0.35, "end", name).fit(reach - 20.0, false) } else { mk(el + 20.0, y + h * 0.35, "start", name).fit(reach - 20.0, false) };
                     SolArrow { a: pa, b: pb, boxr: (el - 18.0, y - hs, el + 18.0, y + hs), lab, dir }
                 }
             };
@@ -1200,19 +1272,20 @@ fn explain(slots: &[Slot], c: &Cfg) -> Vec<String> {
         let cmp = if m.sols.iter().all(|s| s.cross) || m.sols.is_empty() { "there is no solute that cannot cross, so nothing pulls water either way".to_string() } else {
             format!("counting only solutes that cannot cross, {ia} is about {} and {ib} about {}", mosm_text(m.ci), mosm_text(m.co))
         };
+        let little = m.ds.abs() < 0.12;
         let line = match (m.scene, m.tonic) {
-            (Scene::Rbc, Tonic::Hypo) => format!("{pre}hypotonic ({cmp}); water moves in, the cell gains water and {}.", if m.lysed() { "bursts (lysis), because it takes in more than its membrane can hold" } else { "swells (it would burst, lysis, if it gained enough)" }),
+            (Scene::Rbc, Tonic::Hypo) => format!("{pre}hypotonic ({cmp}); water moves in{}, the cell gains water and {}.", "", if m.lysed() { "bursts (lysis), because it takes in more than its membrane can hold" } else { "swells (it would burst, lysis, if it gained enough)" }),
             (Scene::Rbc, Tonic::Iso) => format!("{pre}isotonic ({cmp}); no net water movement, the cell stays the same size."),
-            (Scene::Rbc, Tonic::Hyper) => format!("{pre}hypertonic ({cmp}); water moves out, the cell loses water and shrinks, its surface puckering (crenation)."),
+            (Scene::Rbc, Tonic::Hyper) => format!("{pre}hypertonic ({cmp}); water moves out{}, the cell loses water and shrinks, its surface puckering{} (crenation).", "", if little { " a little" } else { "" }),
             (Scene::Plant, Tonic::Hypo) => format!("{pre}hypotonic ({cmp}); water moves in and the vacuole swells, pressing the membrane against the cell wall: the cell is turgid (firm). The wall stops it bursting."),
             (Scene::Plant, Tonic::Iso) => format!("{pre}isotonic ({cmp}); no net water movement: the cell is flaccid (limp), with no pressure on the wall."),
             (Scene::Plant, Tonic::Hyper) => format!("{pre}hypertonic ({cmp}); water leaves the vacuole and the cytoplasm shrinks, so the membrane pulls away from the cell wall: plasmolysis."),
-            (Scene::Bag, Tonic::Hypo) => format!("{pre}the beaker is hypotonic ({cmp}); water moves into the bag, which swells."),
+            (Scene::Bag, Tonic::Hypo) => format!("{pre}the beaker is hypotonic ({cmp}); water moves into the bag{}, which swells{}.", "", if little { " a little" } else { "" }),
             (Scene::Bag, Tonic::Iso) => format!("{pre}the beaker is isotonic ({cmp}); no net water movement, the bag stays the same size."),
-            (Scene::Bag, Tonic::Hyper) => format!("{pre}the beaker is hypertonic ({cmp}); water moves out of the bag, which shrinks."),
-            (_, Tonic::Hypo) => format!("{pre}Side B is hypotonic to Side A ({cmp}); water moves from Side B to Side A, so the level rises on Side A."),
+            (Scene::Bag, Tonic::Hyper) => format!("{pre}the beaker is hypertonic ({cmp}); water moves out of the bag{}, which shrinks{}.", "", if little { " a little" } else { "" }),
+            (_, Tonic::Hypo) => format!("{pre}Side B is hypotonic to Side A ({cmp}); water moves from Side B to Side A{}, so the level rises{} on Side A.", "", if little { " a little" } else { "" }),
             (_, Tonic::Iso) => format!("{pre}the sides are isotonic ({cmp}); no net water movement, the levels stay equal."),
-            (_, Tonic::Hyper) => format!("{pre}Side B is hypertonic to Side A ({cmp}); water moves from Side A to Side B, so the level rises on Side B."),
+            (_, Tonic::Hyper) => format!("{pre}Side B is hypertonic to Side A ({cmp}); water moves from Side A to Side B{}, so the level rises{} on Side B.", "", if little { " a little" } else { "" }),
         };
         let mut cs = line.chars();
         let line = match cs.next() { Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(), None => line.clone() };
@@ -1249,14 +1322,20 @@ fn osmolarity_notes(slots: &[Slot]) -> Vec<String> {
     let (ia, ib) = match m0.scene { Scene::Rbc | Scene::Plant => ("inside", "outside"), Scene::Bag => ("in the bag", "in the beaker"), _ => ("Side A", "Side B") };
     for s in &m0.sols {
         let how = match s.basis.how {
-            How::Known => format!("{} g/mol, splits into {} particle{}", fnum(s.basis.mm), fnum(s.basis.iv), if s.basis.iv == 1.0 { "" } else { "s" }),
-            How::Large => format!("a large molecule, taken as {} g/mol, so it adds almost no osmolarity", fnum(s.basis.mm)),
+            How::Known => {
+                let parts = if s.basis.iv == 1.0 { "stays as 1 particle per molecule".to_string() } else { format!("splits into {} particles", fnum(s.basis.iv)) };
+                if m0.unit == "%" { format!("{} g/mol, {parts}", fnum(s.basis.mm)) } else { parts }
+            }
+            How::Large => if m0.unit == "%" { format!("a large molecule, taken as {} g/mol, so a percent of it adds almost no osmolarity", fnum(s.basis.mm)) } else { "a large molecule, but a typed M or mM is already the particle concentration, so it counts in full".to_string() },
             How::Unknown => if m0.unit == "%" { format!("not in the table of known solutes, so counted as one particle per molecule with an assumed {} g/mol", fnum(s.basis.mm)) } else { "not in the table of known solutes, so counted as one particle per molecule".to_string() },
         };
         let vals = if three { format!("{ia} {} = {}", conc(s.cin), mosm_text(s.os_in)) } else { format!("{ia} {} = {}, {ib} {} = {}", conc(s.cin), mosm_text(s.os_in), conc(s.cout), mosm_text(s.os_out)) };
         out.push(format!("{}: {how}; {vals}.", plain(&s.name)));
     }
-    if !out.is_empty() { out.insert(0, "Tonicity compares osmolarity, the concentration of particles in mOsm/L (grams per litre divided by molar mass, times the particles each unit gives).".to_string()); }
+    if !out.is_empty() {
+        let how = if m0.unit == "%" { "grams per litre divided by molar mass, times the particles each unit gives" } else { "the typed moles per litre, times the particles each unit gives" };
+        out.insert(0, format!("Tonicity compares osmolarity, the concentration of particles in mOsm/L ({how})."));
+    }
     out
 }
 
