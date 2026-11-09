@@ -491,8 +491,8 @@ static PIE_CHART: [RefSection; 5] = [
 ];
 
 static STEM_AND_LEAF: [RefSection; 6] = [
-    s("Data", &["plot", "data", "name1", "data2", "name2"], "Type or paste numbers, open a CSV, or generate sample data from a seed. Back-to-back takes two sets: the first set's leaves run left from the stems and the second set's run right. Leave the numbers empty and type a first and last stem for empty rows to fill in."),
-    s("Stems and leaves", &["leaf_unit", "cut", "split", "first_stem", "last_stem", "order"], "A stem typed as -0 is the stem of the values between -9 and 0."),
+    s("Data", &["plot", "data", "name1", "data2", "name2"], "Type or paste numbers, open a CSV, or generate sample data from a seed."),
+    s("Stems and leaves", &["leaf_unit", "cut", "split", "first_stem", "last_stem", "order"], "Leave the numbers empty and type a first and last stem for empty rows to fill in. A stem typed as -0 is the stem of the values between -9 and 0."),
     s("Look", &["headings", "boxes", "box_count"], "With boxes, the student copy gives every row the same number of empty boxes, so the boxes do not tell how many leaves a row has."),
     s("Key", &["key", "key_blank", "key_word", "key_value", "key_unit"], ""),
     s("Title", &["title_blank", "title"], ""),
