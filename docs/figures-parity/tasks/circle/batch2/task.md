@@ -35,7 +35,12 @@ The reference opens with A (210°), B (330°), C (100°), radii OA, OB and chord
 Opening state: the circle, O and radius OA, A at 20°. Clicking the circle does nothing (ours-before/01-click-circle-nothing.png). There is no
 fourth point, no tangent except at A, no shading but the sector AB, and no label on an arc. Not finished.
 
-## Ours after (this branch, debug build under Xvfb, 1280x800)
+## Ours after (re-run on the one click area, debug build under Xvfb, 1280x800)
+
+Re-run after the click targets moved into one area that acts on the part under the pointer (the label zones are gone): a point's knob
+first, then within 5 px of a drawn line (away from its ends) a label, within 6 px of the circle a new point, an angle's wedge a label,
+the ring just outside an arc a label (unless that spot is in an enclosed area outside the circle), and anywhere else in an enclosed
+area, inside the circle or outside it, shading. Hovering outlines the part and its tip says what a click does.
 
 | # | action | shot |
 |---|---|---|
@@ -44,8 +49,11 @@ fourth point, no tangent except at A, no shading but the sector AB, and no label
 | 3 | click the circle at 270°: D | |
 | 4 | click point C: its tangent | ours-after/03-click-circle-D-then-click-C-tangent.png |
 | 5-7 | Lines between points: + Add, click the row, type BD | (seeded) |
-| 8 | click inside the minor segment: shaded | ours-after/04-click-segment-shade.png |
+| 8 | click inside the minor segment, 10 px past chord BD: shaded (outlined under the pointer) | ours-after/04-click-segment-shade.png |
 | 9-11 | Arc and line labels: + Add, click the row, type arc BC 70° | (seeded) |
+
+ours-after/05-hover-line-outlined.png: with chord BD drawn, the pointer 30% along BD outlines the chord and its tip reads "Click to label
+line BD with its length"; a click there labels it (a click anywhere along a drawn line does, not only at its middle).
 
 Seeded: the two typed rows (`joins` = BD, `marks` = arc BC 70°) went in through VERSHION_FIG_PARAMS because the QA hook cannot scroll the
 side panel to the two list controls; they are counted above as the three panel actions each would take. Every other step is a real click
@@ -62,15 +70,14 @@ the very next frames is mapped with the old canvas scale (a workspace-wide behav
 
 How it differs:
 - Points: the reference's click on an arc opens a pop-up with Add point here (the arc's middle); ours puts the point where the circle is
-  clicked, in one click, snapped to whole degrees and the familiar angles.
+  clicked (within 6 px of it), in one click, snapped to whole degrees and the familiar angles.
 - Tangent: the reference clicks the point, then Tangent here; ours is one click on the point (again to take it off).
 - Line between points: the reference picks Join to in the point's pop-up; ours is a typed row (BD) in Lines between points. No click on
   the figure joins two points yet (cap-i02).
-- Shading: both click inside the area; the reference then picks a colour, ours shades in one click (one colour, a hatch in Print).
-  Ours keeps a band 4 px inside the circle for adding points, and a line's label zone is pushed towards the centre so a thin segment
-  stays clickable.
-- Arc label: the reference clicks the arc and types; ours offers a click beside an arc between neighbouring points (degrees, then
-  length, then none), and typed text as a row (arc BC 70°). Here A (at 20°) lies on arc BC, so B and C are not neighbours and the label
-  was typed.
+- Shading: both click inside the area; the reference then picks a colour, ours shades in one click (one colour, a hatch in Print). A
+  click more than 5 px from any line and 6 px from the circle shades, so a thin segment stays clickable.
+- Labels: the reference clicks a line, angle or arc and picks from a pop-up; ours labels by a click on the line (anywhere along it), in
+  the angle's wedge or just outside the arc, and typed text is a row (arc BC 70°). Here A (at 20°) lies on arc BC, so arc BC is offered
+  from the second ring out (a click there gives its degrees, 130°); the text 70° was typed.
 
 Verdict: fewer actions and finished.
