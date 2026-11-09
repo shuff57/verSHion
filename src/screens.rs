@@ -357,6 +357,121 @@ fn soft_backing(core: Rect, feather: Vec2, fill: Color32) -> egui::Shape {
     egui::Shape::mesh(mesh)
 }
 
+/// The printed page the welcome hero promises, at thumbnail size: a first page of a quiz (title,
+/// name line, a multiple-choice question with bubbles, one with a small graph, a short answer and a
+/// written answer, the page number) on paper-white, with a second sheet tilted behind it for the
+/// answer key. The critics read the page as describing the output without ever showing one.
+const PREVIEW_SIZE: Vec2 = Vec2::new(222.0, 287.0);
+
+fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
+    use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
+    use egui::{FontId, Shape};
+    let shade = if theme::is_dark() { 90 } else { 30 };
+    // The answer key behind, turned a little and peeking out at the lower right.
+    let back_c = page.center() + Vec2::new(14.0, 8.0);
+    let turn = egui::emath::Rot2::from_angle(0.06);
+    let half = page.size() / 2.0;
+    let back: Vec<Pos2> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+        .iter()
+        .map(|(sx, sy)| back_c + turn * Vec2::new(sx * half.x, sy * half.y))
+        .collect();
+    let back_shadow: Vec<Pos2> = back.iter().map(|p| *p + Vec2::new(1.0, 3.0)).collect();
+    painter.add(Shape::convex_polygon(back_shadow, Color32::from_black_alpha(shade / 3), Stroke::NONE));
+    painter.add(Shape::convex_polygon(back, theme::paper(), Stroke::new(1.0, theme::paper_edge())));
+    // The exam itself.
+    painter.add(
+        egui::Shadow { offset: [0, 10], blur: 26, spread: 0, color: Color32::from_black_alpha(shade) }
+            .as_shape(page, CornerRadius::same(2)),
+    );
+    painter.rect(page, CornerRadius::same(2), theme::paper(), Stroke::new(1.0, theme::paper_edge()), StrokeKind::Inside);
+
+    let m = 17.0;
+    let (l, r) = (page.left() + m, page.right() - m);
+    let body = FontId::proportional(7.6);
+    let num = FontId::new(7.6, theme::bold_family());
+    let hair = Stroke::new(0.8, PAPER_RULE);
+    let text = |pos: Pos2, s: &str, f: &FontId, c: Color32| painter.text(pos, Align2::LEFT_TOP, s, f.clone(), c).width();
+    let mut y = page.top() + 16.0;
+    text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(11.5, theme::serif_family()), PAPER_INK);
+    // The one touch of accent: the version tag, as a small filled pill (accent text alone faded on
+    // white paper in dark mode).
+    let tag = painter.layout_no_wrap("Version A".into(), FontId::new(6.4, theme::bold_family()), theme::on_accent_col());
+    let pill = Rect::from_min_size(Pos2::new(r - tag.size().x - 8.0, y + 1.5), tag.size() + Vec2::new(8.0, 3.0));
+    painter.rect_filled(pill, CornerRadius::same(5), theme::accent_col());
+    painter.galley(pill.min + Vec2::new(4.0, 1.5), tag, theme::on_accent_col());
+    y += 21.0;
+    let name_w = text(Pos2::new(l, y), "Name", &body, PAPER_SOFT);
+    painter.hline(l + name_w + 3.0..=l + 112.0, y + 8.5, hair);
+    let date_w = text(Pos2::new(l + 122.0, y), "Date", &body, PAPER_SOFT);
+    painter.hline(l + 122.0 + date_w + 3.0..=r, y + 8.5, hair);
+    y += 16.0;
+    painter.hline(l..=r, y, Stroke::new(1.0, PAPER_RULE));
+    y += 9.0;
+
+    let stem = |y: f32, n: &str, s: &str| {
+        text(Pos2::new(l, y), n, &num, PAPER_INK);
+        text(Pos2::new(l + 10.0, y), s, &body, PAPER_INK);
+    };
+    let ind = l + 10.0;
+    // 1. Multiple choice, with answer bubbles.
+    stem(y, "1.", "Solve for x:   3x + 5 = 20");
+    y += 15.0;
+    let mut x = ind;
+    for (letter, val) in [("A", "3"), ("B", "5"), ("C", "15"), ("D", "25")] {
+        let c = Pos2::new(x + 4.0, y + 4.5);
+        painter.circle_stroke(c, 4.2, Stroke::new(0.8, PAPER_SOFT));
+        painter.text(c, Align2::CENTER_CENTER, letter, FontId::new(5.2, theme::bold_family()), PAPER_SOFT);
+        text(Pos2::new(x + 11.0, y), val, &body, PAPER_INK);
+        x += 40.0;
+    }
+    y += 21.0;
+    // 2. A question with a small figure.
+    stem(y, "2.", "Which line has a slope of 2?");
+    y += 14.0;
+    let fig = Rect::from_min_size(Pos2::new(ind, y), Vec2::new(64.0, 46.0));
+    for k in 1..8 {
+        painter.vline(fig.left() + k as f32 * 8.0, fig.y_range(), Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
+    }
+    for k in 1..6 {
+        painter.hline(fig.x_range(), fig.top() + k as f32 * 7.7, Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
+    }
+    painter.rect_stroke(fig, CornerRadius::ZERO, Stroke::new(0.8, PAPER_RULE), StrokeKind::Inside);
+    let o = Pos2::new(fig.left() + 24.0, fig.top() + 30.8);
+    painter.hline(fig.x_range(), o.y, Stroke::new(0.8, PAPER_SOFT));
+    painter.vline(o.x, fig.y_range(), Stroke::new(0.8, PAPER_SOFT));
+    painter.line_segment([Pos2::new(fig.left() + 10.0, fig.bottom() - 4.0), Pos2::new(fig.left() + 30.0, fig.bottom() - 42.5)], Stroke::new(1.1, PAPER_INK));
+    painter.line_segment([Pos2::new(fig.left() + 2.0, fig.top() + 26.0), Pos2::new(fig.right() - 2.0, fig.top() + 12.0)], Stroke::new(1.1, PAPER_SOFT));
+    painter.text(Pos2::new(fig.left() + 32.0, fig.top() + 2.0), Align2::LEFT_TOP, "p", FontId::proportional(6.5), PAPER_INK);
+    painter.text(Pos2::new(fig.right() - 9.0, fig.top() + 3.0), Align2::LEFT_TOP, "q", FontId::proportional(6.5), PAPER_SOFT);
+    let ax = fig.right() + 14.0;
+    for (k, s) in ["line p", "line q"].iter().enumerate() {
+        let yy = fig.top() + 11.0 + k as f32 * 16.0;
+        painter.circle_stroke(Pos2::new(ax + 4.0, yy + 4.5), 4.2, Stroke::new(0.8, PAPER_SOFT));
+        text(Pos2::new(ax + 12.0, yy), s, &body, PAPER_INK);
+    }
+    y = fig.bottom() + 13.0;
+    // 3. Short answer.
+    stem(y, "3.", "Simplify:   2(x + 4) \u{2212} 3x");
+    y += 16.0;
+    let aw = text(Pos2::new(ind, y), "Answer", &body, PAPER_SOFT);
+    painter.hline(ind + aw + 4.0..=ind + 96.0, y + 8.5, hair);
+    y += 21.0;
+    // 4. Written answer on ruled lines.
+    stem(y, "4.", "Explain how you checked your answer to 1.");
+    y += 21.0;
+    for _ in 0..3 {
+        painter.hline(ind..=r, y, hair);
+        y += 13.0;
+    }
+    painter.text(
+        Pos2::new(page.center().x, page.bottom() - 12.0),
+        Align2::CENTER_CENTER,
+        "Page 1 of 2",
+        FontId::proportional(6.4),
+        PAPER_SOFT,
+    );
+}
+
 pub fn step_cell(ui: &mut egui::Ui, i: usize, big: bool) {
     let Some((title, body)) = STEPS.get(i) else { return };
     // Left-aligned rows (a `columns` cell is justified, which stretched the copy).
@@ -836,27 +951,39 @@ impl crate::App {
                 // with their letterforms (the critics' words).
                 let backing = ui.painter().add(egui::Shape::Noop);
                 let mut hero = Rect::NOTHING;
-                ui.vertical_centered(|ui| {
-                    ui.add_space(lead);
-                    hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 50.0 } else { 40.0 })).rect;
+                // The hero's text, top to bottom. `left` sets it flush left in the wide window's
+                // two-column hero; otherwise it is a centred column.
+                let mut hero_text = |ui: &mut egui::Ui, hero: &mut Rect, left: bool| {
+                    *hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 50.0 } else { 40.0 })).rect;
                     ui.add_space(if roomy { 16.0 } else { 12.0 });
                     // The lead's column, as `prose_centered_ink` sizes it.
                     let lead_w = ui.available_width().min(if roomy { 620.0 } else { 560.0 });
                     let mid = ui.max_rect().center().x;
-                    hero |= Rect::from_x_y_ranges(mid - lead_w / 2.0..=mid + lead_w / 2.0, hero.top()..=hero.bottom());
+                    if !left {
+                        *hero |= Rect::from_x_y_ranges(mid - lead_w / 2.0..=mid + lead_w / 2.0, hero.top()..=hero.bottom());
+                    }
                     // Narrower than the step column below it at every width (the critics read a lead
                     // running wider than the cards as a page with no single column edge), and about
                     // 80 characters a line.
                     // The one sentence that explains the product, in softened ink: the pale tan was
                     // the hardest text on the page to read.
-                    crate::pageshell::prose_centered_ink(
-                        ui,
-                        "PDFs, scans, screenshots, old Word documents, questions you type \
-                         yourself: verSHion gathers them into Question Banks and lays \
-                         them out as a clean, printable exam.",
-                        if roomy { 16.5 } else { 14.5 },
-                        if roomy { 620.0 } else { 560.0 },
-                    );
+                    let lead_text = "PDFs, scans, screenshots, old Word documents, questions you type \
+                                     yourself: verSHion gathers them into Question Banks and lays \
+                                     them out as a clean, printable exam.";
+                    if left {
+                        let r = ui.allocate_ui_with_layout(Vec2::new(lead_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                            ui.set_width(lead_w);
+                            ui.label(RichText::new(lead_text).size(16.5).color(theme::ink().gamma_multiply(0.82)));
+                        });
+                        *hero |= r.response.rect;
+                    } else {
+                        crate::pageshell::prose_centered_ink(
+                            ui,
+                            lead_text,
+                            if roomy { 16.5 } else { 14.5 },
+                            if roomy { 620.0 } else { 560.0 },
+                        );
+                    }
                     ui.add_space(if roomy { 28.0 } else { 22.0 });
                     // A returning teacher is not a first-run visitor: the button goes back to work,
                     // and a second way in sits beside it. A first run names where the button leads:
@@ -899,11 +1026,40 @@ impl crate::App {
                     let text = theme::accent("Prefer to install? Get the desktop app for Linux").size(size).underline();
                     let link = egui::Button::new((icon, text)).frame(false);
                     let resp = ui.add(link).on_hover_cursor(egui::CursorIcon::PointingHand);
-                    hero |= resp.rect;
+                    *hero |= resp.rect;
                     if resp.clicked() {
                         crate::platform::open_url(DESKTOP_RELEASES);
                     }
-                });
+                };
+                if roomy {
+                    // Two columns on the steps' own edges: the text flush left, and on the right a
+                    // printed page, so the promised exam is shown and not only described.
+                    let row_w = ui.available_width().min(STEPS_W);
+                    let x0 = ui.max_rect().center().x - row_w / 2.0;
+                    ui.add_space(lead);
+                    let top = ui.cursor().top();
+                    let text_w = 660.0_f32.min(row_w - PREVIEW_SIZE.x - 60.0);
+                    let col = Rect::from_min_size(Pos2::new(x0, top), Vec2::new(text_w, ui.available_height().max(0.0)));
+                    let mut text = Rect::NOTHING;
+                    ui.scope_builder(UiBuilder::new().max_rect(col).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
+                        hero_text(ui, &mut text, true);
+                    });
+                    // The page sits midway across the space right of the text, its middle level with
+                    // the text's middle.
+                    let cx = (x0 + text_w + x0 + row_w) / 2.0;
+                    let page = Rect::from_center_size(Pos2::new(cx, text.center().y), PREVIEW_SIZE);
+                    paint_exam_preview(ui.painter(), page);
+                    hero = text | page;
+                    let below = page.bottom() + 8.0 - ui.cursor().top();
+                    if below > 0.0 {
+                        ui.add_space(below);
+                    }
+                } else {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(lead);
+                        hero_text(ui, &mut hero, false);
+                    });
+                }
                 if !theme::chem_skin() && hero.is_positive() {
                     let mut painter = ui.painter().clone();
                     painter.set_clip_rect(desk);
