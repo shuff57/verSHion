@@ -420,6 +420,28 @@ pub fn fractions_ok(m: &Model) -> bool {
     (0..m.real).all(|i| m.share[i] <= 1e-9 || frac_text(m, i).is_some())
 }
 
+/// The label kind a letter or a blank line stands for: the unit the chart's labels show (angle,
+/// percent, fraction, value), or the unit the letter itself carries ("x\u{b0}", "n%").
+fn answer_mode(mode: &str, own: &str) -> &'static str {
+    if own.ends_with('\u{b0}') {
+        return "Angle";
+    }
+    if own.ends_with('%') {
+        return "Percent";
+    }
+    if mode == "Value and percent" || mode.ends_with("value") || mode == "Value" {
+        "Value"
+    } else if mode.ends_with("angle") || mode == "Angle" {
+        "Angle"
+    } else if mode.ends_with("percent") || mode == "Percent" {
+        "Percent"
+    } else if mode.ends_with("fraction") || mode == "Fraction" {
+        "Fraction"
+    } else {
+        "Value"
+    }
+}
+
 /// A share of the circle as a reduced fraction (denominator up to 1000), or `None`.
 pub fn fraction(share: f64) -> Option<String> {
     if !share.is_finite() || share < 0.0 {
@@ -485,18 +507,55 @@ const DARK: u8 = 0;
 const LIGHT: u8 = 1;
 const PATTERN: u8 = 2;
 
-/// Whether white type reads better than the ink on `hex` (the higher WCAG contrast).
-fn hex_dark(hex: &str) -> bool {
+const INK_L: f64 = 0.0095;
+
+fn rgb(hex: &str) -> Option<[f64; 3]> {
     let h = hex.trim_start_matches('#');
     if h.len() != 6 {
-        return false;
+        return None;
     }
-    let c = |i: usize| {
-        let v = u8::from_str_radix(&h[i..i + 2], 16).unwrap_or(0) as f64 / 255.0;
-        if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
-    };
-    let l = 0.2126 * c(0) + 0.7152 * c(2) + 0.0722 * c(4);
-    1.05 / (l + 0.05) > (l + 0.05) / 0.059
+    let c = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok().map(|v| v as f64 / 255.0);
+    Some([c(0)?, c(2)?, c(4)?])
+}
+
+fn lum(c: [f64; 3]) -> f64 {
+    let l = |v: f64| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+    0.2126 * l(c[0]) + 0.7152 * l(c[1]) + 0.0722 * l(c[2])
+}
+
+/// WCAG contrast of the better of white and the ink type on a fill of luminance `l`.
+fn best_contrast(l: f64) -> f64 {
+    (1.05 / (l + 0.05)).max((l + 0.05) / (INK_L + 0.05))
+}
+
+/// Whether white type reads better than the ink on `hex` (the higher WCAG contrast).
+fn hex_dark(hex: &str) -> bool {
+    match rgb(hex) {
+        Some(c) => {
+            let l = lum(c);
+            1.05 / (l + 0.05) > (l + 0.05) / (INK_L + 0.05)
+        }
+        None => false,
+    }
+}
+
+/// `hex`, moved the least towards white or black that makes its type reach 4.5:1 (WCAG AA).
+fn aa_fill(hex: &str) -> String {
+    let Some(c) = rgb(hex) else { return hex.to_string() };
+    if best_contrast(lum(c)) >= 4.5 {
+        return hex.to_string();
+    }
+    for step in 1..=60 {
+        let t = step as f64 / 100.0;
+        for toward in [1.0f64, 0.0] {
+            let m = [0, 1, 2].map(|i| c[i] + (toward - c[i]) * t);
+            if best_contrast(lum(m)) >= 4.5 {
+                let b = m.map(|v| (v * 255.0).round() as u8);
+                return format!("#{:02x}{:02x}{:02x}", b[0], b[1], b[2]);
+            }
+        }
+    }
+    hex.to_string()
 }
 
 fn bw(i: usize) -> Paint {
@@ -510,13 +569,15 @@ fn bw(i: usize) -> Paint {
 
 /// The black-and-white fill for the sector drawn at `pos` of `n`: in turn, but the last of a
 /// wrapped set never repeats the first (they sit side by side).
+#[allow(dead_code)]
 fn bw_at(pos: usize, n: usize) -> Paint {
     let i = if n > 1 && pos == n - 1 && pos > 0 && pos % BW_N == 0 { 6 } else { pos };
     bw(i)
 }
 
 fn solid(hex: &str) -> Paint {
-    Paint { css: hex.into(), kind: if hex_dark(hex) { DARK } else { LIGHT } }
+    let hex = aa_fill(hex);
+    Paint { kind: if hex_dark(&hex) { DARK } else { LIGHT }, css: hex }
 }
 
 /// The fill named by `tok` (a Fills token typed by the teacher), or `None` when blank/unknown.
@@ -529,7 +590,7 @@ fn named(tok: &str, print: bool) -> Option<Paint> {
         "green" => colour("#4aa36b", 2),
         "orange" => colour("#e0803c", 3),
         "purple" => colour("#8a62c4", 4),
-        "gray" | "grey" => Some(solid(if print { BW_WASH } else { "#9aa0a6" })).map(|p| Paint { kind: LIGHT, ..p }),
+        "gray" | "grey" => Some(if print { bw(5) } else { solid("#9aa0a6") }),
         "white" => Some(Paint { css: "#ffffff".into(), kind: LIGHT }),
         "hatching" => Some(bw(1)),
         "dots" => Some(bw(2)),
@@ -620,25 +681,56 @@ fn render(p: &Params) -> String {
     let own: Vec<String> = p.s("own").lines().map(|l| l.trim().to_string()).collect();
     let picks: Vec<String> = p.s("fill_list").split(',').map(|s| s.trim().to_string()).collect();
 
-    // a paint for every sector (typed index): the auto fill follows the drawn position
-    let mut paint: Vec<Paint> = vec![Paint { css: "#ffffff".into(), kind: LIGHT }; n];
-    for (pos, &i) in idx.iter().enumerate() {
-        let auto = match look {
-            "White" => Paint { css: "#ffffff".into(), kind: LIGHT },
-            "Black and white" => bw_at(pos, n),
-            _ if print => bw_at(pos, n),
-            _ if pos >= 6 => solid(EXTRA[(pos - 6) % EXTRA.len()]),
-            _ => solid(&fills.series(pos)),
-        };
-        paint[i] = if look == "White" { auto } else { picks.get(i).and_then(|t| named(t, print || look == "Black and white")).unwrap_or(auto) };
+    // a paint for every sector (typed index): picked fills first, then the automatic ones in
+    // turn, skipping any fill another sector already has (so a pick never repeats an automatic fill)
+    let is_bw = print || look == "Black and white";
+    let white = || Paint { css: "#ffffff".into(), kind: LIGHT };
+    let mut paint: Vec<Option<Paint>> = vec![None; n];
+    let mut used: Vec<String> = Vec::new();
+    if look == "White" {
+        paint = vec![Some(white()); n];
+    } else {
+        for &i in &idx {
+            if let Some(pk) = picks.get(i).and_then(|t| named(t, is_bw)) {
+                let dup = pk.css != "#ffffff" && used.contains(&pk.css) && is_bw;
+                if !dup {
+                    used.push(pk.css.clone());
+                    paint[i] = Some(pk);
+                }
+            }
+        }
+        let mut next = 0usize;
+        for &i in &idx {
+            if paint[i].is_some() {
+                continue;
+            }
+            let cand = |c: usize| -> Paint {
+                if is_bw {
+                    bw(c)
+                } else if c >= 6 {
+                    solid(EXTRA[(c - 6) % EXTRA.len()])
+                } else {
+                    solid(&fills.series(c))
+                }
+            };
+            let limit = if is_bw { BW_N } else { 6 + EXTRA.len() };
+            while next < limit && used.contains(&cand(next).css) {
+                next += 1;
+            }
+            let c = cand(next);
+            next += 1;
+            used.push(c.css.clone());
+            paint[i] = Some(c);
+        }
     }
+    let paint: Vec<Paint> = paint.into_iter().map(|p| p.unwrap_or_else(white)).collect();
+    let all_blank = n == 0 || m.blank.iter().all(|b| *b) || m.share.iter().all(|s| *s <= 1e-9);
     // an empty sector on the student copy is white, for students to shade
     let shown = |i: usize| -> Paint {
         // a combined remainder, or an empty row that has no sector of its own, is never filled in
-        if m.blank[i] && (!key_on || i >= m.real || m.share[i] <= 1e-9) { Paint { css: "#ffffff".into(), kind: LIGHT } } else { paint[i].clone() }
+        if all_blank || (m.blank[i] && (!key_on || i >= m.real || m.share[i] <= 1e-9)) { Paint { css: "#ffffff".into(), kind: LIGHT } } else { paint[i].clone() }
     };
 
-    let all_blank = n == 0 || m.blank.iter().all(|b| *b) || m.share.iter().all(|s| *s <= 1e-9);
     let single = n > 0 && !all_blank && m.share.iter().any(|s| *s > 0.9999);
     let mut starts = vec![0.0; n];
     let mut acc = 0.0;
@@ -661,7 +753,7 @@ fn render(p: &Params) -> String {
             let given = own.get(i).map(String::as_str);
             let lines: Vec<String> = match given {
                 // on the key, a blank line to write on and a letter for the value show the answer
-                Some("_") if key_on => lines_for(&m, i, "Value", dec, true),
+                Some("_") if key_on => lines_for(&m, i, answer_mode(mode, ""), dec, true),
                 Some("_") => {
                     blank_line = true;
                     vec![]
@@ -670,8 +762,8 @@ fn render(p: &Params) -> String {
                 Some(t) if !t.is_empty() => {
                     let t = clip(t, MAX_NAME);
                     if key_on && t.chars().count() <= 3 {
-                        let v = lines_for(&m, i, "Value", dec, true).join("");
-                        vec![format!("{} = {}", t.trim_end_matches('\u{b0}'), v)]
+                        let v = lines_for(&m, i, answer_mode(mode, &t), dec, true).join("");
+                        vec![format!("{} = {}", t.trim_end_matches(['\u{b0}', '%']), v)]
                     } else {
                         vec![t]
                     }
@@ -747,11 +839,11 @@ fn render(p: &Params) -> String {
             } else {
                 let right = sx >= 0.0;
                 let (x0, y0) = (R * sx, R * sy);
-                let (x1, y1) = ((R + 12.0) * sx, (R + 12.0) * sy);
+                let (x1, y1) = ((R + 14.0) * sx, (R + 14.0) * sy);
                 let joined = if lines.len() > 1 { vec![lines.join(if mode == "Value and percent" { ", " } else { " " })] } else { lines };
                 let w = if blank_line { 56.0 * k } else { tw(&joined[0.min(joined.len().saturating_sub(1))], fl) };
                 // every outside label of a side stands in one column, so a leader never runs through another label
-                let hx = if right { R + 30.0 } else { -(R + 30.0) };
+                let hx = if right { R + 40.0 } else { -(R + 40.0) };
                 placed.push(Placed { lines: joined, blank: blank_line, x: hx, y: y1 + fl * 0.35, anchor: if right { "start" } else { "end" }, leader: Some(((x0, y0), (x1, y1))), plate: false, white: false, w, bold: 0 });
             }
         }
@@ -910,9 +1002,10 @@ fn render(p: &Params) -> String {
         let (x, y) = (cx + pl.x, cy + pl.y);
         let txt_ink = if pl.white { "#ffffff" } else { ink };
         if let Some(((x0, y0), (x1, y1))) = pl.leader {
-            // out from the sector's own rim point, then across to its label
-            let ex = if pl.anchor == "start" { pl.x - 3.0 } else { pl.x + 3.0 };
-            d.polyline(&[(cx + x0, cy + y0), (cx + x1, cy + y1), (cx + ex, cy + pl.y - fl * 0.35)], ink, 1.0);
+            // out from the sector's own rim point, level to a rail beside the labels, then to its
+            // label: the order down the rail is the order round the pie, so leaders never cross
+            let (rail, ex) = if pl.anchor == "start" { (pl.x - 16.0, pl.x - 3.0) } else { (pl.x + 16.0, pl.x + 3.0) };
+            d.polyline(&[(cx + x0, cy + y0), (cx + x1, cy + y1), (cx + rail, cy + y1), (cx + ex, cy + pl.y - fl * 0.35)], ink, 1.0);
         }
         if pl.blank {
             let yy = y;

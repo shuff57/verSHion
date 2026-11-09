@@ -393,3 +393,141 @@ fn a_long_name_inside_a_sector_stays_inside_the_circle_and_its_radii() {
     let (worst, seen) = worst_overhang(&t);
     assert!(seen.iter().any(|x| x.0 == "Tom & Jerry") && worst <= 0.0 && seen.iter().all(|x| x.1), "{worst} {seen:?}");
 }
+
+fn key_text(over: &[(&'static str, Value)]) -> String {
+    svg(over)
+}
+
+#[test]
+fn a_letter_label_is_answered_in_the_unit_the_chart_labels_show() {
+    // counts data, angle labels: Bike is 4 of 40, a tenth of the circle
+    let counts = |mode: &str, own: &str| key_text(&[("data", s("Walk, 14\nCar, 12\nBus, 10\nBike, 4")), ("labels", s(mode)), ("own", s(&format!("\n\n\n{own}")))]);
+    assert!(counts("Name and angle", "x\u{b0}").contains(">x = 36\u{b0}<"));
+    assert!(counts("Angle", "x").contains(">x = 36\u{b0}<"));
+    assert!(counts("Name and percent", "x").contains(">x = 10%<"));
+    assert!(counts("Percent", "x").contains(">x = 10%<"));
+    assert!(counts("Name and value", "x").contains(">x = 4<"));
+    assert!(counts("Value and percent", "x").contains(">x = 4<"));
+    assert!(counts("Name and fraction", "x").contains(">x = 1/10<"));
+    // the letter's own unit wins
+    assert!(counts("Name and percent", "x\u{b0}").contains(">x = 36\u{b0}<"));
+    assert!(counts("Name and angle", "x%").contains(">x = 10%<"));
+    // percents data, angle labels
+    let pct = key_text(&[("data", s("Walk, 40\nCar, 30\nBus, 20\nBike, 10")), ("values", s("Percents")), ("labels", s("Name and angle")), ("own", s("\n\n\nx"))]);
+    assert!(pct.contains(">x = 36\u{b0}<"), "{pct}");
+    let pct = key_text(&[("data", s("Walk, 40\nCar, 20\nBus, 20\nBike, 20")), ("values", s("Percents")), ("labels", s("Name and angle")), ("own", s("\n\n\nx"))]);
+    assert!(pct.contains(">x = 72\u{b0}<"), "{pct}");
+    // degrees data, percent labels
+    let deg = key_text(&[("data", s("A, 90\nB, 270")), ("values", s("Degrees")), ("labels", s("Name and percent")), ("own", s("x"))]);
+    assert!(deg.contains(">x = 25%<"), "{deg}");
+    // an empty sector: total 60, A 20, B 10, so C is half the circle
+    let empty = |mode: &str| key_text(&[("data", s("A, 20\nB, 10\nC")), ("total", s("60")), ("labels", s(mode)), ("own", s("\n\nx"))]);
+    assert!(empty("Name and angle").contains(">x = 180\u{b0}<"));
+    assert!(empty("Name and percent").contains(">x = 50.0%<"));
+    assert!(empty("Name and value").contains(">x = 30<"));
+    assert!(empty("Name and fraction").contains(">x = 1/2<"));
+}
+
+#[test]
+fn a_blank_line_is_answered_in_the_label_unit_on_the_key() {
+    let t = key_text(&[("data", s("A, 14\nB, 12\nC, 14")), ("labels", s("Angle")), ("own", s("\n_"))]);
+    assert!(t.contains(">108\u{b0}<"), "{t}");
+    let t = key_text(&[("data", s("A, 14\nB, 12\nC, 14")), ("labels", s("Percent")), ("own", s("\n_"))]);
+    assert!(t.contains(">30%<"), "{t}");
+}
+
+/// The leader polylines of a drawing, as lists of points.
+fn leaders(t: &str) -> Vec<Vec<(f64, f64)>> {
+    t.split("<polyline points=\"").skip(1).map(|seg| {
+        seg.split('"').next().unwrap().split(' ').map(|p| {
+            let (x, y) = p.split_once(',').unwrap();
+            (x.parse::<f64>().unwrap(), y.parse::<f64>().unwrap())
+        }).collect()
+    }).collect()
+}
+
+fn crosses(a: ((f64, f64), (f64, f64)), b: ((f64, f64), (f64, f64))) -> bool {
+    let o = |p: (f64, f64), q: (f64, f64), r: (f64, f64)| (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0);
+    let (d1, d2, d3, d4) = (o(b.0, b.1, a.0), o(b.0, b.1, a.1), o(a.0, a.1, b.0), o(a.0, a.1, b.1));
+    d1 * d2 < -1e-9 && d3 * d4 < -1e-9
+}
+
+fn seg_dist(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 == 0.0 { 0.0 } else { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
+    (p.0 - (a.0 + t * dx)).hypot(p.1 - (a.1 + t * dy))
+}
+
+fn assert_clean_leaders(t: &str) {
+    let ls = leaders(t);
+    assert!(ls.len() >= 10, "{} leaders", ls.len());
+    // the pie's centre is the apex of the first sector path
+    let c: Vec<f64> = t.split("<path d=\"M").skip(1).find(|x| x.split('"').next().unwrap().contains(" L")).unwrap().split(' ').next().unwrap().split(',').map(|v| v.parse().unwrap()).collect();
+    let centre = (c[0], c[1]);
+    let segs: Vec<(usize, usize, ((f64, f64), (f64, f64)))> = ls.iter().enumerate().flat_map(|(i, l)| l.windows(2).enumerate().map(move |(j, w)| (i, j, (w[0], w[1])))).collect();
+    for (ai, a) in segs.iter().enumerate() {
+        for b in &segs[ai + 1..] {
+            assert!(a.0 == b.0 || !crosses(a.2, b.2), "leaders {} and {} cross: {:?} {:?}", a.0, b.0, a.2, b.2);
+        }
+        // beyond the first segment (which leaves the rim) every leader stays 4 px off the circle
+        if a.1 >= 1 {
+            let nearest = seg_dist(centre, a.2 .0, a.2 .1);
+            assert!(nearest >= 150.0 + 4.0, "leader {} within {} of the pie centre", a.0, nearest);
+        }
+    }
+}
+
+#[test]
+fn leaders_never_cross_and_stay_off_the_rim_with_many_tiny_slices() {
+    let mut data = String::from("Big, 82\n");
+    for i in 1..=18 {
+        data.push_str(&format!("S{i}, 1\n"));
+    }
+    assert_clean_leaders(&svg(&[("data", s(&data)), ("labels", s("Name"))]));
+    let twenty: String = (1..=20).map(|i| format!("Item {i}, {}\n", if i == 10 || i == 20 { 30 } else { 1 })).collect();
+    assert_clean_leaders(&svg(&[("data", s(&twenty)), ("labels", s("Name")), ("label_size", s("Large"))]));
+    assert_clean_leaders(&svg(&[("data", s(&twenty)), ("labels", s("Name"))]));
+}
+
+fn sector_fills(t: &str) -> Vec<String> {
+    t.split("<path d=\"M").skip(1).filter(|seg| seg.split('"').next().unwrap().contains(" L")).map(|seg| seg.split("fill=\"").nth(1).unwrap().split('"').next().unwrap().to_string()).collect()
+}
+
+#[test]
+fn picked_fills_never_collapse_or_repeat_an_automatic_one() {
+    let t = svg(&[("data", s("A, 1\nB, 1\nC, 1\nD, 1")), ("fill_list", s("Blue, Red, Black, Gray")), ("style", s("Print"))]);
+    let f = sector_fills(&t);
+    let set: std::collections::BTreeSet<&String> = f.iter().collect();
+    assert_eq!(f.len(), 4);
+    assert_eq!(set.len(), 4, "{f:?}");
+    let t = svg(&[("data", s("A, 1\nB, 1\nC, 1")), ("fill_list", s(", Blue")), ("style", s("Print"))]);
+    let f = sector_fills(&t);
+    assert_eq!(f.iter().collect::<std::collections::BTreeSet<_>>().len(), 3, "{f:?}");
+    // in colour a picked colour is not repeated by an automatic fill either
+    let t = svg(&[("data", s("A, 1\nB, 1\nC, 1")), ("fill_list", s(", Blue"))]);
+    let f = sector_fills(&t);
+    assert_eq!(f.iter().collect::<std::collections::BTreeSet<_>>().len(), 3, "{f:?}");
+}
+
+#[test]
+fn every_fill_reaches_aa_contrast_for_its_label() {
+    let fills = svg::Fills::new(&params(&[]));
+    let mut all: Vec<String> = (0..6).map(|i| fills.series(i)).collect();
+    all.extend(EXTRA.iter().map(|c| c.to_string()));
+    all.extend(["#4f7cd4", "#c9494f", "#4aa36b", "#e0803c", "#8a62c4", "#9aa0a6", "#7f7f7f"].iter().map(|c| c.to_string()));
+    for hex in all {
+        let css = solid(&hex).css;
+        let c = best_contrast(lum(rgb(&css).unwrap()));
+        assert!(c >= 4.5, "{hex} -> {css}: {c}");
+    }
+    assert_eq!(bw(5).css, BW_MID);
+    assert!(best_contrast(lum(rgb(BW_MID).unwrap())) >= 4.5 && best_contrast(lum(rgb(BW_DARK).unwrap())) >= 4.5);
+}
+
+#[test]
+fn with_every_value_zero_the_key_swatches_are_white() {
+    let t = svg(&[("data", s("A, 0\nB, 0")), ("key", s("Right"))]);
+    let blue = solid("#4f7cd4").css;
+    assert!(!t.contains(&blue), "{t}");
+}
