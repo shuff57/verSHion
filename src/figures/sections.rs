@@ -468,13 +468,16 @@ static DOT_PLOT: [RefSection; 5] = [
     s("Appearance", &["style", "label_size"], ""),
 ];
 
-static OGIVE: [RefSection; 6] = [
-    s("Data", &["input", "table", "data", "auto_classes", "class_width", "class_start", "closed"], "Type the classes as lower boundary, upper boundary, frequency (one per line), or type raw values and the figure makes the histogram's classes."),
-    s("Graph", &["y_axis", "grid"], ""),
-    s("Reading", &["read", "pct", "value", "marks", "decimals"], "Guide lines across from a percentile and down to the axis, or up from a value; readings are straight-line interpolations."),
-    s("Student copy", &["show_table", "student_curve", "show_answers"], "Turn off Show answers for a student copy: the cumulative column, guide lines and read-off values are blanked."),
-    s("Labels and text", &["title", "x_title", "y_title"], ""),
-    s("Appearance", &["style", "label_size"], ""),
+static OGIVE: [RefSection; 9] = [
+    s("Data", &["input", "table", "cum_table", "data", "auto_classes", "class_width", "class_start", "closed"], "Type the classes as lower boundary, upper boundary, frequency (one per line), a cumulative table of upper boundaries and running totals, or raw values and the figure makes the histogram's classes."),
+    s("Points and curve", &["points", "join", "from_zero", "style"], ""),
+    s("Reading", &["read", "pct", "value", "read_label", "marks", "median_label", "q1_label", "q3_label", "decimals"], "Guide lines across from a percentile and down to the axis, or up from a value. Readings are taken off the curve as drawn: straight lines between the points, or the smooth curve."),
+    s("Titles", &["title_mode", "title", "x_title_mode", "x_title", "y_title_mode", "y_title"], ""),
+    s("Horizontal axis", &["x_auto", "x_min", "x_max", "x_step", "x_numbers"], ""),
+    s("Vertical axis", &["y_axis", "y_auto", "y_min", "y_max", "y_step", "y_numbers"], ""),
+    s("Grid", &["grid", "grid_weight", "minor"], ""),
+    s("Student copy", &["show_table", "student_curve", "show_answers"], "Turn off Show answers for a student copy: the cumulative column, guide lines and read-off values are blanked (a reading set to Lines only or Blank line keeps its lines)."),
+    s("Appearance", &["label_size"], ""),
 ];
 
 static BAR_CHART: [RefSection; 7] = [

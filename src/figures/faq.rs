@@ -1744,7 +1744,7 @@ const OGIVE: &[Faq] = &[
     },
     Faq {
         q: "How exact is a percentile read from the ogive?",
-        a: "It is an estimate. The curve is straight inside each class, as if the values were spread evenly across it, so the reading is a straight-line interpolation: the 40th percentile of 50 values is where the curve reaches 20 (p/100 times n). Some courses, and OpenStax, instead count p/100 times (n + 1) values up the sorted list, so their percentile can differ by up to one class from this curve; the figure always uses p/100 times n. From raw values it can differ from a percentile worked out from the sorted list. Where the curve is flat (an empty class) every value along the flat part fits; the figure reads the lowest and a note says so.",
+        a: "It is an estimate. With straight lines the curve is straight inside each class, as if the values were spread evenly across it, so the reading is a straight-line interpolation; with Join the points: Smooth curve the reading is taken off the smooth curve as drawn, which can differ by a little. Either way the 40th percentile of 50 values is where the curve reaches 20 (p/100 times n). Some courses, and OpenStax, instead count p/100 times (n + 1) values up the sorted list, so their percentile can differ by up to one class from this curve; the figure always uses p/100 times n. From raw values it can differ from a percentile worked out from the sorted list. Where the curve is flat (an empty class) every value along the flat part fits; the figure reads the lowest and a note says so.",
     },
     Faq {
         q: "Why does it refuse my table?",
@@ -1752,7 +1752,7 @@ const OGIVE: &[Faq] = &[
     },
     Faq {
         q: "How do I make a student copy?",
-        a: "Turn off Show answers. The cumulative column, the guide lines and the read-off values are blanked and the numbered questions get answer lines. Turn off \"Student copy shows the ogive\" as well to leave empty axes for students to plot the points. Student + key saves both versions.",
+        a: "Turn off Show answers. The cumulative column, the guide lines and the read-off values are blanked and the numbered questions get answer lines. To keep a reading's guide lines for students, set it to Lines only, or to Blank line for a blank under the axis to write the value on. Turn off \"Student copy shows the ogive\" as well to leave empty axes for students to plot the points. Student + key saves both versions.",
     },
     Faq {
         q: "Which vertical axis should I use?",

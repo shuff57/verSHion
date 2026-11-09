@@ -42,19 +42,44 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         return true;
     }
     let raw = p.s("input") == RAW;
+    let marks = p.s("marks");
     match key {
-        "table" => !raw,
+        "table" => p.s("input") == GROUPED,
+        "cum_table" => p.s("input") == CUM,
         "data" | "auto_classes" | "closed" => raw,
         "class_width" | "class_start" => raw && !p.b("auto_classes"),
         "pct" => p.s("read") == READ_PCT,
         "value" => p.s("read") == READ_VALUE,
-        "decimals" => p.s("read") != "None" || p.s("marks") != "None",
+        "decimals" => p.s("read") != "None" || marks != "None",
+        "read_label" => p.s("read") != "None",
+        "median_label" => marks != "None",
+        "q1_label" | "q3_label" => marks == "Median and quartiles",
+        "x_min" | "x_max" | "x_step" => !p.b("x_auto"),
+        "y_min" | "y_max" | "y_step" => !p.b("y_auto"),
+        "title" => p.s("title_mode") != "None",
+        "x_title" => p.s("x_title_mode") != "None",
+        "y_title" => p.s("y_title_mode") != "None",
+        "grid_weight" | "minor" => p.b("grid"),
         _ => true,
     }
 }
 
 pub const RAW: &str = "Raw values";
 pub const GROUPED: &str = "Grouped table";
+pub const CUM: &str = "Cumulative table";
+/// How a reading shows: its value (key only), its guide lines alone, or the lines with a blank to
+/// write the value on (both copies).
+pub const SHOW_VALUE: &str = "Value";
+pub const SHOW_LINES: &str = "Lines only";
+pub const SHOW_BLANK: &str = "Blank line";
+pub const SHOWS: [&str; 3] = [SHOW_VALUE, SHOW_LINES, SHOW_BLANK];
+pub const TITLE_MODES: [&str; 3] = ["Text", "Blank line", "None"];
+pub const JOIN_STRAIGHT: &str = "Straight lines";
+pub const JOIN_SMOOTH: &str = "Smooth curve";
+pub const NUMBERS: [&str; 5] = ["Every line", "Every 2nd line", "Every 5th line", "Every 10th line", "No numbers"];
+pub const MINORS: [&str; 5] = ["Automatic", "None", "2 per block", "4 per block", "5 per block"];
+/// The blank a student writes a reading on.
+pub const BLANK: &str = "______";
 pub const READ_PCT: &str = "Value at a percentile";
 pub const READ_VALUE: &str = "Percentile of a value";
 pub const Y_FREQ: &str = "Cumulative frequency";
@@ -68,24 +93,47 @@ pub const DEFAULT_DATA: &str = "52, 58, 61, 63, 65, 66, 68, 70, 71, 72, 74, 75, 
 
 fn params() -> Vec<ParamDef> {
     vec![
-        ParamDef::choice("input", "Data", &[GROUPED, RAW], GROUPED),
+        ParamDef::choice("input", "Data", &[GROUPED, CUM, RAW], GROUPED),
         ParamDef::long("table", "Classes: lower, upper, frequency", DEFAULT_TABLE).hint("One class per line: lower boundary, upper boundary, frequency (for example 40, 50, 3). The classes must meet, with no gaps or overlaps"),
+        ParamDef::long("cum_table", "Upper boundary, cumulative frequency", cumtable::DEFAULT_CUM).hint("One line per class: its upper boundary and the running total up to it (for example 50, 3). A first line with 0 (40, 0) is where the first class starts; without it the first class is as wide as the next. A pasted \"140 < h \u{2264} 150, 12\" reads as up to 150"),
         ParamDef::data("data", "Values", 1, DEFAULT_DATA),
         ParamDef::bool("auto_classes", "Choose the classes automatically", true).hint("The same classes the histogram chooses for these values"),
         ParamDef::float("class_width", "Class width", 0.01, 10000.0, 0.5, 10.0),
         ParamDef::float("class_start", "First class starts at", -10000.0, 10000.0, 0.5, 50.0),
         ParamDef::choice("closed", "A value on a class boundary goes", &[LEFT_CLOSED, RIGHT_CLOSED], LEFT_CLOSED),
+        ParamDef::choice("points", "Points", &["Dots", "Crosses"], "Dots"),
+        ParamDef::choice("join", "Join the points", &[JOIN_STRAIGHT, JOIN_SMOOTH, "None"], JOIN_STRAIGHT).hint("Smooth curve: a curve through every point that never dips or overshoots, and the readings are taken off it. None leaves the points for students to join"),
+        ParamDef::bool("from_zero", "Start from 0 at the lowest boundary", true).hint("Off starts the curve at the first class's upper boundary, so nothing below it can be read"),
         ParamDef::choice("y_axis", "Vertical axis", &[Y_FREQ, Y_REL, Y_PCT], Y_FREQ),
         ParamDef::choice("read", "Reading", &["None", READ_PCT, READ_VALUE], "None"),
         ParamDef::float("pct", "Percentile", 1.0, 99.0, 1.0, 40.0),
         ParamDef::float("value", "Value", -1e12, 1e12, 1.0, 75.0),
+        ParamDef::choice("read_label", "The reading shows", &SHOWS, SHOW_VALUE).hint("Value: the guide lines and the value in the key, nothing in the student copy. Lines only: the guide lines in both copies, no value. Blank line: the guide lines and a blank for the value, in both copies"),
         ParamDef::choice("marks", "Mark", &["None", "Median", "Median and quartiles"], "None"),
+        ParamDef::choice("median_label", "The median shows", &SHOWS, SHOW_VALUE),
+        ParamDef::choice("q1_label", "The lower quartile shows", &SHOWS, SHOW_VALUE),
+        ParamDef::choice("q3_label", "The upper quartile shows", &SHOWS, SHOW_VALUE),
         ParamDef::int("decimals", "Decimal places in readings", 0, 4, 1),
         ParamDef::bool("show_table", "Frequency table beside the graph", true).hint("Up to 16 classes"),
         ParamDef::bool("student_curve", "Student copy shows the ogive", true).hint("Off leaves empty axes in the student copy, for students to plot the points and draw the curve"),
+        ParamDef::bool("x_auto", "Horizontal axis fits the data", true).hint("Off: type the range and count-by; the axis is then numbered at every count-by, not at the class boundaries"),
+        ParamDef::float("x_min", "Horizontal axis from", -1e9, 1e9, 1.0, 40.0),
+        ParamDef::float("x_max", "Horizontal axis to", -1e9, 1e9, 1.0, 100.0),
+        ParamDef::float("x_step", "Horizontal count-by", 0.0001, 1e9, 1.0, 10.0),
+        ParamDef::choice("x_numbers", "Horizontal numbers", &NUMBERS, "Every line"),
+        ParamDef::bool("y_auto", "Vertical axis fits the data", true),
+        ParamDef::float("y_min", "Vertical axis from", -1e9, 1e9, 1.0, 0.0),
+        ParamDef::float("y_max", "Vertical axis to", -1e9, 1e9, 1.0, 50.0),
+        ParamDef::float("y_step", "Vertical count-by", 0.0001, 1e9, 1.0, 5.0),
+        ParamDef::choice("y_numbers", "Vertical numbers", &NUMBERS, "Every line"),
         ParamDef::bool("grid", "Gridlines", true),
+        ParamDef::choice("grid_weight", "Gridlines are", &["Light", "Standard", "Bold"], "Standard").hint("Bold holds up on a photocopy"),
+        ParamDef::choice("minor", "Minor gridlines", &MINORS, "Automatic").hint("How many small squares each block between numbered lines is cut into; Automatic picks a count the grid has room for"),
+        ParamDef::choice("title_mode", "Chart title as", &TITLE_MODES, "Text"),
         ParamDef::text("title", "Title", ""),
+        ParamDef::choice("x_title_mode", "Horizontal axis title as", &TITLE_MODES, "Text"),
         ParamDef::text("x_title", "Horizontal axis title", "Test score"),
+        ParamDef::choice("y_title_mode", "Vertical axis title as", &TITLE_MODES, "Text").hint("Blank line leaves a line for students to write the title on"),
         ParamDef::text("y_title", "Vertical axis title (blank = the vertical axis)", ""),
         svg::style_param(),
         svg::label_size_param(),
@@ -122,6 +170,21 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example {
             name: "Student copy: plot and read",
             params: vec![("student_curve", Value::B(false)), ("read", s(READ_PCT)), ("pct", Value::F(75.0)), ("show_answers", Value::B(false))],
+        },
+        Example {
+            name: "Cumulative table, smooth curve, blanks to fill in",
+            params: vec![
+                ("input", s(CUM)),
+                ("cum_table", s("140, 0\n150, 4\n160, 16\n170, 42\n180, 66\n190, 76\n200, 80")),
+                ("x_title", s("Height (cm)")),
+                ("title", s("Heights of 80 students")),
+                ("points", s("Crosses")),
+                ("join", s(JOIN_SMOOTH)),
+                ("marks", s("Median and quartiles")),
+                ("median_label", s(SHOW_BLANK)),
+                ("q1_label", s(SHOW_BLANK)),
+                ("q3_label", s(SHOW_BLANK)),
+            ],
         },
     ])
 }
@@ -849,6 +912,9 @@ pub fn classes(p: &Params) -> Result<Classes, String> {
         let lc = p.s("closed") != RIGHT_CLOSED;
         let list = raw_classes(&data::numbers(p.s("data")), p.b("auto_classes"), p.f("class_width"), p.f("class_start"), lc)?;
         Ok(Classes { list, left_closed: Some(lc), note: None })
+    } else if p.s("input") == CUM {
+        let (list, note) = cumtable::parse_cum_table(p.s("cum_table"))?;
+        Ok(Classes { list, left_closed: None, note })
     } else {
         let (list, note) = parse_table_notes(p.s("table"))?;
         Ok(Classes { list, left_closed: None, note })
@@ -965,6 +1031,10 @@ pub struct Reading {
     pub short: String,
     /// The percentile drawn (0 to 100).
     pub pct: f64,
+    /// How it shows: [`SHOW_VALUE`], [`SHOW_LINES`] or [`SHOW_BLANK`].
+    pub mode: &'static str,
+    /// Read up from a value (the answer is the height), not across from a height.
+    pub up: bool,
 }
 
 /// Readings whose guides fall on the same point of the curve share one guide line and one label:
@@ -989,6 +1059,9 @@ pub struct GroupLabel {
     pub side_short: String,
     pub foot: String,
     pub short: String,
+    /// A blank to write a value read off the horizontal axis on: it goes at the foot of the
+    /// vertical guide only, where the value is read.
+    pub foot_only: bool,
 }
 
 pub fn group_label(readings: &[Reading], g: &[usize]) -> GroupLabel {
@@ -1010,7 +1083,56 @@ pub fn group_label(readings: &[Reading], g: &[usize]) -> GroupLabel {
     // the value the foot carried ("P50 = 72"), if any reading has one
     let value = g.iter().find_map(|&i| readings[i].foot.split_once(" = ").map(|(_, v)| v.to_string()));
     let foot = match value { Some(v) => format!("{name} = {v}"), None => name.clone() };
-    GroupLabel { side: after_name(&base.side), side_short: after_name(&base.side_short), foot, short: name }
+    GroupLabel { side: after_name(&base.side), side_short: after_name(&base.side_short), foot, short: name, foot_only: false }
+}
+
+/// The readings one copy draws, each with whether it carries a label: a Value reading in the key
+/// only (labelled), a Lines-only reading in both copies with no label, a Blank-line reading in both
+/// copies with a blank where its answer goes (the value read off for a reading across, the height
+/// for one read up from a value) and its given part as typed.
+pub fn drawn_readings(readings: &[Reading], key: bool) -> Vec<(Reading, bool)> {
+    readings
+        .iter()
+        .filter(|r| key || r.mode != SHOW_VALUE)
+        .map(|r| {
+            let mut r = r.clone();
+            match r.mode {
+                SHOW_LINES => (r, false),
+                SHOW_BLANK => {
+                    if r.up {
+                        r.side = BLANK.to_string();
+                        r.side_short = BLANK.to_string();
+                    }
+                    (r, true)
+                }
+                _ => (r, true),
+            }
+        })
+        .collect()
+}
+
+/// The guide groups of the drawn readings: every reading on the group's line, the ones whose label
+/// it carries (the values, in the key, over any blanks), and that label (None: lines only).
+pub fn group_labels(vis: &[(Reading, bool)]) -> Vec<(Vec<usize>, Vec<usize>, Option<GroupLabel>)> {
+    let readings: Vec<Reading> = vis.iter().map(|(r, _)| r.clone()).collect();
+    guide_groups(&readings)
+        .into_iter()
+        .map(|g| {
+            let labelled: Vec<usize> = g.iter().copied().filter(|&i| vis[i].1).collect();
+            let values: Vec<usize> = labelled.iter().copied().filter(|&i| vis[i].0.mode == SHOW_VALUE).collect();
+            let sub = if values.is_empty() { labelled } else { values };
+            let across_blank = !sub.is_empty() && sub.iter().all(|&i| readings[i].mode == SHOW_BLANK && !readings[i].up);
+            let lab = if across_blank {
+                // "M = ______": the names of the readings on this line and a blank for their value
+                let names: Vec<&str> = sub.iter().map(|&i| readings[i].short.as_str()).collect();
+                let t = format!("{} = {BLANK}", names.join(" = "));
+                Some(GroupLabel { side: t.clone(), side_short: t.clone(), foot: t.clone(), short: t, foot_only: true })
+            } else {
+                (!sub.is_empty()).then(|| group_label(&readings, &sub))
+            };
+            (g, sub, lab)
+        })
+        .collect()
 }
 
 /// Everything the figure works out from the params (also used by the notes and the tests).
@@ -1018,7 +1140,13 @@ pub struct Model {
     pub cs: Vec<Class>,
     pub left_closed: Option<bool>,
     pub n: u64,
+    /// Every class boundary with its running total, from (lowest boundary, 0).
     pub pts: Vec<(f64, f64)>,
+    /// The points the curve goes through: `pts`, or without the first when it does not start from 0.
+    pub curve_pts: Vec<(f64, f64)>,
+    /// The smooth curve, when the points are joined by one.
+    pub smooth: Option<smooth::Smooth>,
+    pub ax: Ax,
     pub readings: Vec<Reading>,
     /// Numbered questions: (question lines, answer for the key or None when the table or curve is the answer).
     pub questions: Vec<(String, Option<String>)>,
@@ -1088,8 +1216,11 @@ pub fn divisions(w_px: f64) -> usize {
 }
 
 /// Half of the fine gridline spacing at `x`, in x units: how far a reading may sit from the exact
-/// value and still be the value a student would read off the grid (across and up combined).
-pub fn read_tol(cs: &[Class], x: f64, ystep: f64, sc: f64) -> Option<Rat> {
+/// value and still be the value a student would read off the grid (across and up combined). The
+/// grid is the one drawn: the minor gridlines chosen, a typed horizontal count-by; on a smooth
+/// curve its own slope at `x` turns the vertical half-step into x, in place of the class's.
+pub fn read_tol_ax(cs: &[Class], x: f64, ax: &Ax, sc: f64, slope: Option<f64>) -> Option<Rat> {
+    let ystep = ax.ystep;
     let c = cs.iter().find(|c| x >= c.lo && x <= c.hi).unwrap_or_else(|| {
         // outside every class (a value typed on the last boundary): use the nearest one
         cs.iter().min_by(|a, b| (a.hi - x).abs().total_cmp(&(b.hi - x).abs())).unwrap()
@@ -1100,16 +1231,27 @@ pub fn read_tol(cs: &[Class], x: f64, ystep: f64, sc: f64) -> Option<Rat> {
         return None;
     }
     let span = cs[cs.len() - 1].hi - cs[0].lo;
-    let d = divisions(class_px(c.hi - c.lo, span));
-    let across = w.div(Rat::int(2 * d as i128))?;
-    // one fine vertical step, turned into x by the slope of the class: dy * w / f
-    let up = if c.f == 0 {
-        Rat::int(0)
-    } else {
-        Rat::dec(ystep)?.div(Rat::dec(sc)?)?.div(Rat::int(2 * minor_divisions(ystep) as i128))?.mul(w)?.div(Rat::int(c.f as i128))?
+    let (across, cap) = match ax.x {
+        None => {
+            let d = ax.minor.unwrap_or_else(|| divisions(class_px(c.hi - c.lo, span)));
+            (w.div(Rat::int(2 * d as i128))?, w)
+        }
+        Some((_, _, st)) => {
+            let a = Rat::dec(st)?.div(Rat::int(2 * ax.x_per_block() as i128))?;
+            (a, if w.cmp_le(a)? { a } else { w })
+        }
+    };
+    // one fine vertical step, turned into x by the slope of the curve: dy * w / f on a straight
+    // class, dy / slope on the smooth curve
+    let fine = || Rat::dec(ystep)?.div(Rat::dec(sc)?)?.div(Rat::int(2 * ax.y_per_block() as i128));
+    let up = match slope {
+        None if c.f == 0 => Rat::int(0),
+        None => fine()?.mul(w)?.div(Rat::int(c.f as i128))?,
+        Some(s) if s > 0.0 && (fine()?.to_f64() / s).is_finite() => Rat::dec(fine()?.to_f64() / s)?,
+        Some(_) => cap,
     };
     let t = across.add(up)?;
-    if t.cmp_le(w)? { Some(t) } else { Some(w) }
+    if t.cmp_le(cap)? { Some(t) } else { Some(cap) }
 }
 
 /// The vertical axis: the top shown and the step between labelled ticks.
@@ -1124,6 +1266,134 @@ pub fn y_frame(y_axis: &str, nf: f64) -> (f64, f64) {
     }
 }
 
+/// The axes as set: the vertical range and count-by in the units the axis shows, the horizontal
+/// range and count-by when typed (None: fitted to the classes and numbered at their boundaries),
+/// the minor gridlines chosen per block (None: automatic), and which lines are numbered (every
+/// `x_every`th; 0 for none).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ax {
+    pub x: Option<(f64, f64, f64)>,
+    pub y0: f64,
+    pub y1: f64,
+    pub ystep: f64,
+    pub y_manual: bool,
+    pub minor: Option<usize>,
+    pub x_every: usize,
+    pub y_every: usize,
+}
+
+impl Ax {
+    /// The axes fitted to the data, as before any axis option existed.
+    pub fn fitted(ytop: f64, ystep: f64) -> Ax { Ax { x: None, y0: 0.0, y1: ytop, ystep, y_manual: false, minor: None, x_every: 1, y_every: 1 } }
+    /// Small squares per block between numbered horizontal lines.
+    pub fn y_per_block(&self) -> usize { self.minor.unwrap_or_else(|| minor_divisions(self.ystep)) }
+    /// Small squares per block across a typed horizontal axis: the choice, else 5 (4 for a step of
+    /// 2) while each is at least MIN_PITCH px wide, else halves, else none.
+    pub fn x_per_block(&self) -> usize {
+        let Some((lo, hi, st)) = self.x else { return 1 };
+        if let Some(n) = self.minor {
+            return n;
+        }
+        let block = PLOT_W * st / (hi - lo);
+        let n = minor_divisions(st);
+        if block / n as f64 >= MIN_PITCH { n } else if block / 2.0 >= MIN_PITCH { 2 } else { 1 }
+    }
+    /// The lines of a typed horizontal axis: From, From + count-by, ... up to To.
+    pub fn x_lines(&self) -> Vec<f64> {
+        match self.x { Some((lo, hi, st)) => lines_of(lo, hi, st), None => Vec::new() }
+    }
+    /// The numbered lines of the vertical axis.
+    pub fn y_lines(&self) -> Vec<f64> {
+        if self.y_manual { lines_of(self.y0, self.y1, self.ystep) } else { chart::ticks(0.0, self.y1, self.ystep).into_iter().map(|t| t.0).collect() }
+    }
+}
+
+fn lines_of(lo: f64, hi: f64, st: f64) -> Vec<f64> {
+    let k = ((hi - lo) / st + 1e-9).floor().clamp(0.0, MAX_LINES) as usize;
+    (0..=k).map(|i| { let v = lo + i as f64 * st; (v * 1e9).round() / 1e9 }).collect()
+}
+
+/// Every how many lines carries a number (0: none).
+fn every(choice: &str) -> usize {
+    match choice { "Every 2nd line" => 2, "Every 5th line" => 5, "Every 10th line" => 10, "No numbers" => 0, _ => 1 }
+}
+
+fn minor_choice(choice: &str) -> Option<usize> {
+    match choice { "None" => Some(1), "2 per block" => Some(2), "4 per block" => Some(4), "5 per block" => Some(5), _ => None }
+}
+
+/// Most numbered lines a typed axis may have.
+pub const MAX_LINES: f64 = 100.0;
+
+/// Why a typed range cannot be drawn, with the fix (None when it can).
+fn range_fault(lo: f64, hi: f64, st: f64) -> Option<String> {
+    if !(lo.is_finite() && hi.is_finite() && st.is_finite()) {
+        return Some("is not a number".into());
+    }
+    if hi <= lo {
+        return Some(format!("runs from {} to {}: To must be above From", plain(lo), plain(hi)));
+    }
+    if st <= 0.0 {
+        return Some("counts by 0: type a count-by above 0".into());
+    }
+    let k = (hi - lo) / st;
+    if k > MAX_LINES + 1e-9 {
+        // the smallest 1, 2 or 5 times a power of ten that brings it to MAX_LINES lines or fewer
+        let base = 10f64.powf(((hi - lo) / MAX_LINES).log10().floor());
+        let w = [1.0, 2.0, 5.0, 10.0].iter().map(|m| m * base).find(|w| (hi - lo) / w <= MAX_LINES + 1e-9).unwrap_or(10.0 * base);
+        return Some(format!("from {} to {} by {} would have more than {MAX_LINES:.0} lines: count by {} or more", plain(lo), plain(hi), plain(st), plain(w)));
+    }
+    if k < 1.0 - 1e-9 {
+        return Some(format!("counts by {}, more than the whole axis: count by {} or less", plain(st), plain(hi - lo)));
+    }
+    None
+}
+
+/// The axes the params ask for, with a note for a typed range that cannot be used or that cuts
+/// the curve off.
+pub fn axes_for(p: &Params, cs: &[Class], n: u64, notes: &mut Vec<String>) -> Ax {
+    let y_axis = p.s("y_axis");
+    let nf = n as f64;
+    let (ytop, ystep) = y_frame(y_axis, nf);
+    let mut ax = Ax { minor: minor_choice(p.s("minor")), x_every: every(p.s("x_numbers")), y_every: every(p.s("y_numbers")), ..Ax::fitted(ytop, ystep) };
+    let (a, b) = (cs[0].lo, cs[cs.len() - 1].hi);
+    if !p.b("x_auto") {
+        let (lo, hi, st) = (p.f("x_min"), p.f("x_max"), p.f("x_step"));
+        match range_fault(lo, hi, st) {
+            Some(why) => notes.push(format!("The horizontal axis {why}. Until then it fits the data.")),
+            None => {
+                ax.x = Some((lo, hi, st));
+                if lo > a || hi < b {
+                    notes.push(format!(
+                        "The classes run from {} to {}, past the horizontal axis ({} to {}), so part of the ogive is cut off. Type From {} or less and To {} or more, or turn on Horizontal axis fits the data.",
+                        plain(a), plain(b), plain(lo), plain(hi), plain(a), plain(b)
+                    ));
+                }
+            }
+        }
+    }
+    if !p.b("y_auto") {
+        let (lo, hi, st) = (p.f("y_min"), p.f("y_max"), p.f("y_step"));
+        match range_fault(lo, hi, st) {
+            Some(why) => notes.push(format!("The vertical axis {why}. Until then it fits the data.")),
+            None => {
+                ax.y0 = lo;
+                ax.y1 = hi;
+                ax.ystep = st;
+                ax.y_manual = true;
+                let top = nf * y_scale(y_axis, nf);
+                if lo > 0.0 || hi < top - 1e-9 {
+                    notes.push(format!(
+                        "The ogive rises from 0 to {}, past the vertical axis ({} to {}), so part of it is cut off. Type From 0 or less and To {} or more, or turn on Vertical axis fits the data.",
+                        tidy(top), plain(lo), plain(hi), tidy(top)
+                    ));
+                }
+            }
+        }
+    }
+    ax
+}
+
 pub fn model(p: &Params) -> Result<Model, String> {
     let c = classes(p)?;
     let cs = c.list;
@@ -1132,7 +1402,6 @@ pub fn model(p: &Params) -> Result<Model, String> {
     let nf = n as f64;
     let d = p.i("decimals").clamp(0, 4) as usize;
     let y_axis = p.s("y_axis");
-    let (_, ystep) = y_frame(y_axis, nf);
     let sc = y_scale(y_axis, nf);
     let mut readings = Vec::new();
     let mut questions: Vec<(String, Option<String>)> = Vec::new();
@@ -1140,6 +1409,28 @@ pub fn model(p: &Params) -> Result<Model, String> {
     if let Some(n) = &c.note {
         notes.push(n.clone());
     }
+    let ax = axes_for(p, &cs, n, &mut notes);
+    let ystep = ax.ystep;
+    // the curve: from (lowest boundary, 0) or from the first upper boundary, straight or smooth
+    let curve_pts: Vec<(f64, f64)> = if p.b("from_zero") || pts.len() < 3 { pts.clone() } else { pts[1..].to_vec() };
+    let smooth = (p.s("join") == JOIN_SMOOTH).then(|| smooth::Smooth::new(&curve_pts));
+    let how = if smooth.is_some() { "read off the smooth curve" } else { "by straight-line interpolation" };
+    // the value at height t off the drawn curve, and its exact fraction on a straight one
+    let x_of = |t: f64, tr: Option<Rat>| -> (f64, Option<Rat>) {
+        match &smooth {
+            Some(s) => { let x = s.x_at(t); (x, Rat::dec(x)) }
+            None => (value_at(&curve_pts, t), tr.and_then(|r| value_frac(&cs, r))),
+        }
+    };
+    let slope_at = |x: f64| smooth.as_ref().map(|s| s.slope(x));
+    let first = curve_pts[0];
+    // a height below where the curve starts cannot be read off it
+    let below_start = |t: f64| t < first.1 - 1e-9 * nf.max(1.0);
+    let start_note = |what: &str| format!(
+        "The {what} cannot be read: the curve starts at {} with {} of the {n} values already counted, above the height it needs. Turn on Start from 0 at the lowest boundary to read it.",
+        plain(first.0), tidy(first.1)
+    );
+    let mode_of = |key: &str| -> &'static str { SHOWS.iter().copied().find(|m| *m == p.s(key)).unwrap_or(SHOW_VALUE) };
     let table = p.b("show_table") && cs.len() <= MAX_TABLE;
     if p.b("show_table") && cs.len() > MAX_TABLE {
         let extra = if c.left_closed.is_some() { " (or make the class width larger)" } else { " (or merge neighbouring classes)" };
@@ -1150,14 +1441,14 @@ pub fn model(p: &Params) -> Result<Model, String> {
         Y_PCT => "cumulative percent",
         _ => "cumulative frequency",
     };
-    let (a, b) = (pts[0].0, pts[pts.len() - 1].0);
+    let (a, b) = (curve_pts[0].0, curve_pts[curve_pts.len() - 1].0);
     // the values a student reading the fine grid could take for the exact one, kept inside the
     // range the curve covers and stretched over a flat stretch (where every value reads the same)
     let accept = |xr: Option<Rat>, x: f64, t: f64| -> Option<String> {
-        let tol = read_tol(&cs, x, ystep, sc)?;
+        let tol = read_tol_ax(&cs, x, &ax, sc, slope_at(x))?;
         let xr = xr?;
         let (mut lo, mut hi) = (xr.sub(tol)?, xr.add(tol)?);
-        if let Some((p0, p1)) = plateau(&pts, t) {
+        if let Some((p0, p1)) = plateau(&curve_pts, t) {
             if let (Some(l), Some(h)) = (Rat::dec(p0), Rat::dec(p1)) {
                 if l.cmp_le(lo)? {
                     lo = l;
@@ -1182,10 +1473,18 @@ pub fn model(p: &Params) -> Result<Model, String> {
         questions.push((format!("Complete the {cum_name} column of the table."), None));
     }
     if !p.b("student_curve") {
-        questions.push((format!("Draw the ogive: plot each class's {cum_name} at its upper class boundary, start at 0 on the lower boundary of the first class, and join the points with straight lines."), None));
+        let start = if curve_pts.len() == pts.len() { ", start at 0 on the lower boundary of the first class" } else { "" };
+        questions.push((
+            match p.s("join") {
+                JOIN_SMOOTH => format!("Draw the ogive: plot each class's {cum_name} at its upper class boundary{start}, and join the points with a smooth curve."),
+                "None" => format!("Plot the ogive's points: each class's {cum_name} at its upper class boundary{start}."),
+                _ => format!("Draw the ogive: plot each class's {cum_name} at its upper class boundary{start}, and join the points with straight lines."),
+            },
+            None,
+        ));
     }
     let flat_note = |t: f64, what: &str| -> Option<String> {
-        let (x0, x1) = plateau(&pts, t)?;
+        let (x0, x1) = plateau(&curve_pts, t)?;
         Some(format!(
             "The ogive is flat at the height of the {what} from {} to {}: no values lie between them, so every value there fits. The figure reads the lowest, {}.",
             plain(x0), plain(x1), plain(x0)
@@ -1198,35 +1497,39 @@ pub fn model(p: &Params) -> Result<Model, String> {
             let pr = Rat::dec(pc);
             let tr = pr.and_then(|v| v.mul(Rat::int(n as i128))).and_then(|v| v.div(Rat::int(100)));
             let t = tr.map(|r| r.to_f64()).unwrap_or(pc / 100.0 * nf);
-            let x = value_at(&pts, t);
-            let xr = tr.and_then(|r| value_frac(&cs, r));
             let name = format!("{} percentile", ordinal(pc));
-            notes.extend(flat_note(t, &name));
-            let side = match y_axis {
-                Y_FREQ => format!("P{}: {} = {}% of {n}", chart::fmt(pc), tidy_rat(tr, t), chart::fmt(pc)),
-                Y_PCT => format!("P{}: {}%", chart::fmt(pc), chart::fmt(pc)),
-                _ => format!("P{}: {}", chart::fmt(pc), tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0)),
-            };
-            // the short label names the reading and gives its height, for a corner with no room
-            let height = match y_axis {
-                Y_FREQ => tidy_rat(tr, t),
-                Y_PCT => format!("{}%", chart::fmt(pc)),
-                _ => tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0),
-            };
-            let side_short = format!("P{}: {height}", chart::fmt(pc));
-            readings.push(Reading { t, x, side, side_short, foot: format!("P{} = {}", chart::fmt(pc), num_rat(xr, x, d)), short: format!("P{}", chart::fmt(pc)), pct: pc });
-            questions.push((
-                format!("Use the ogive to estimate the {name}."),
-                Some(format!("{}% of {n} is {}; across to the curve and down, the {name} is {}; an estimate by straight-line interpolation.", chart::fmt(pc), tidy_rat(tr, t), about(xr, x, t))),
-            ));
+            if below_start(t) {
+                notes.push(start_note(&name));
+            } else {
+                let (x, xr) = x_of(t, tr);
+                notes.extend(flat_note(t, &name));
+                let side = match y_axis {
+                    Y_FREQ => format!("P{}: {} = {}% of {n}", chart::fmt(pc), tidy_rat(tr, t), chart::fmt(pc)),
+                    Y_PCT => format!("P{}: {}%", chart::fmt(pc), chart::fmt(pc)),
+                    _ => format!("P{}: {}", chart::fmt(pc), tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0)),
+                };
+                // the short label names the reading and gives its height, for a corner with no room
+                let height = match y_axis {
+                    Y_FREQ => tidy_rat(tr, t),
+                    Y_PCT => format!("{}%", chart::fmt(pc)),
+                    _ => tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0),
+                };
+                let side_short = format!("P{}: {height}", chart::fmt(pc));
+                readings.push(Reading { t, x, side, side_short, foot: format!("P{} = {}", chart::fmt(pc), num_rat(xr, x, d)), short: format!("P{}", chart::fmt(pc)), pct: pc, mode: mode_of("read_label"), up: false });
+                questions.push((
+                    format!("Use the ogive to estimate the {name}."),
+                    Some(format!("{}% of {n} is {}; across to the curve and down, the {name} is {}; an estimate {how}.", chart::fmt(pc), tidy_rat(tr, t), about(xr, x, t))),
+                ));
+            }
         }
         READ_VALUE => {
             let v = p.f("value");
-            match cum_at(&pts, v) {
+            let on = match &smooth { Some(s) => s.y(v), None => cum_at(&curve_pts, v) };
+            match on {
                 Some(t) => {
                     let pc = 100.0 * t / nf;
                     let vr = Rat::dec(v);
-                    let tr = vr.and_then(|x| cum_frac(&cs, x));
+                    let tr = match &smooth { Some(_) => Rat::dec(t), None => vr.and_then(|x| cum_frac(&cs, x)) };
                     let pcr = tr.and_then(|q| q.mul(Rat::int(100))).and_then(|q| q.div(Rat::int(n as i128)));
                     let below = match c.left_closed { Some(false) => "at or below", _ => "below" };
                     let side = match y_axis {
@@ -1234,11 +1537,11 @@ pub fn model(p: &Params) -> Result<Model, String> {
                         Y_REL => num_rat(tr.and_then(|q| q.div(Rat::int(n as i128))), t / nf, (d + 2).min(6)),
                         _ => format!("{}%", num_rat(pcr, pc, d)),
                     };
-                    readings.push(Reading { t, x: v, side: side.clone(), side_short: side, foot: plain(v).replace('-', "\u{2212}"), short: plain(v).replace('-', "\u{2212}"), pct: pc });
+                    readings.push(Reading { t, x: v, side: side.clone(), side_short: side, foot: plain(v).replace('-', "\u{2212}"), short: plain(v).replace('-', "\u{2212}"), pct: pc, mode: mode_of("read_label"), up: true });
                     // half of one fine vertical gridline, in percentage points, for the key's range
                     let (fnum, fden) = match y_axis { Y_FREQ => (100, n as i128), Y_PCT => (1, 1), _ => (100, 1) };
                     let yhalf = Rat::dec(ystep)
-                        .and_then(|s| s.div(Rat::int(2 * minor_divisions(ystep) as i128)))
+                        .and_then(|s| s.div(Rat::int(2 * ax.y_per_block() as i128)))
                         .and_then(|h| h.mul(Rat::int(fnum)))
                         .and_then(|h| h.div(Rat::int(fden)));
                     let top = 100 * 10i128.pow(d as u32);
@@ -1250,9 +1553,13 @@ pub fn model(p: &Params) -> Result<Model, String> {
                     let answer = match range { Some(r) => format!("about {}% ({r})", num_rat(pcr, pc, d)), None => format!("about {}%", num_rat(pcr, pc, d)) };
                     questions.push((
                         format!("Use the ogive to estimate the percentage of the values {below} {}.", plain(v).replace('-', "\u{2212}")),
-                        Some(format!("Up from {} to the curve and across, about {} of the {n} values, so {answer} (an estimate by straight-line interpolation).", plain(v).replace('-', "\u{2212}"), num_rat(tr, t, d))),
+                        Some(format!("Up from {} to the curve and across, about {} of the {n} values, so {answer} (an estimate {how}).", plain(v).replace('-', "\u{2212}"), num_rat(tr, t, d))),
                     ));
                 }
+                None if v >= pts[0].0 && v < a => notes.push(format!(
+                    "The value {} is below where the curve starts, at {}: it does not start from 0, so nothing below its first point can be read. Type a value between {} and {}, or turn on Start from 0 at the lowest boundary.",
+                    plain(v), plain(a), plain(a), plain(b)
+                )),
                 None => notes.push(format!(
                     "The value {} is outside the classes, which run from {} to {}: the ogive only covers that range. Type a value between {} and {}.",
                     plain(v), plain(a), plain(b), plain(a), plain(b)
@@ -1263,15 +1570,25 @@ pub fn model(p: &Params) -> Result<Model, String> {
     }
     let marks = p.s("marks");
     if marks == "Median" || marks == "Median and quartiles" {
-        let q: Vec<(f64, &str, &str)> = if marks == "Median" { vec![(50.0, "M", "median")] } else { vec![(25.0, "Q1", "lower quartile Q1"), (50.0, "M", "median"), (75.0, "Q3", "upper quartile Q3")] };
+        let q: Vec<(f64, &str, &str, &str)> = if marks == "Median" {
+            vec![(50.0, "M", "median", "median_label")]
+        } else {
+            vec![(25.0, "Q1", "lower quartile Q1", "q1_label"), (50.0, "M", "median", "median_label"), (75.0, "Q3", "upper quartile Q3", "q3_label")]
+        };
         let mut ans = Vec::new();
         let mut units = Vec::new();
-        for (pc, short, long) in &q {
+        for (pc, short, long, key) in &q {
             let pr = Rat::dec(*pc);
             let tr = pr.and_then(|v| v.mul(Rat::int(n as i128))).and_then(|v| v.div(Rat::int(100)));
             let t = tr.map(|r| r.to_f64()).unwrap_or(pc / 100.0 * nf);
-            let x = value_at(&pts, t);
-            let xr = tr.and_then(|r| value_frac(&cs, r));
+            let named = if *short == "M" { "median" } else { short };
+            if below_start(t) {
+                notes.push(start_note(long));
+                ans.push(format!("{named} cannot be read (the curve starts above it)"));
+                units.push(None);
+                continue;
+            }
+            let (x, xr) = x_of(t, tr);
             notes.extend(flat_note(t, long));
             let side = match y_axis { Y_FREQ => format!("{short}: {} = {pc}% of {n}", tidy_rat(tr, t)), Y_PCT => format!("{short}: {pc}%"), _ => format!("{short}: {}", tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0)) };
             let height = match y_axis {
@@ -1280,23 +1597,23 @@ pub fn model(p: &Params) -> Result<Model, String> {
                 _ => tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0),
             };
             let side_short = format!("{short}: {height}");
-            readings.push(Reading { t, x, side, side_short, foot: short.to_string(), short: short.to_string(), pct: *pc });
-            ans.push(format!("{} {}", if *short == "M" { "median" } else { short }, about(xr, x, t)));
-            units.push(xr.and_then(|r| r.units(d)));
+            readings.push(Reading { t, x, side, side_short, foot: short.to_string(), short: short.to_string(), pct: *pc, mode: mode_of(key), up: false });
+            ans.push(format!("{named} {}", about(xr, x, t)));
+            units.push(Some(xr.and_then(|r| r.units(d))));
         }
         if q.len() == 3 {
             // the IQR a student gets: the printed Q3 minus the printed Q1
-            let iqr = match (units[0], units[2]) {
-                (Some(q1), Some(q3)) => units_text(q3 - q1, d),
-                _ => num(value_at(&pts, 0.75 * nf) - value_at(&pts, 0.25 * nf), d),
-            };
-            ans.push(format!("IQR about {iqr}"));
+            match (units[0], units[2]) {
+                (Some(Some(q1)), Some(Some(q3))) => ans.push(format!("IQR about {}", units_text(q3 - q1, d))),
+                (Some(_), Some(_)) => ans.push(format!("IQR about {}", num(x_of(0.75 * nf, None).0 - x_of(0.25 * nf, None).0, d))),
+                _ => {}
+            }
         }
         let ask = if q.len() == 1 { "Use the ogive to estimate the median." } else { "Use the ogive to estimate the median, the quartiles Q1 and Q3 and the interquartile range." };
         let est = if q.len() == 1 { "an estimate" } else { "estimates" };
-        questions.push((ask.to_string(), Some(format!("{} ({est} by straight-line interpolation).", ans.join(", ")))));
+        questions.push((ask.to_string(), Some(format!("{} ({est} {how}).", ans.join(", ")))));
     }
-    Ok(Model { cs, left_closed: c.left_closed, n, pts, readings, questions, notes, table })
+    Ok(Model { cs, left_closed: c.left_closed, n, pts, curve_pts, smooth, ax, readings, questions, notes, table })
 }
 
 /// Editor notes: why nothing could be drawn, or what was left out and how to get it.
@@ -1308,10 +1625,15 @@ pub fn warnings(p: &Params) -> Vec<String> {
     let mut key = p.clone();
     key.set_b(SHOW_ANSWERS, true);
     let bare = draw(&key).1;
+    // the readings as the key draws them (a Lines-only guide has no label to miss)
+    let vis = drawn_readings(&readings, true);
+    let readings: Vec<Reading> = vis.iter().map(|(r, _)| r.clone()).collect();
     if !bare.is_empty() {
         // every distinct guide the drawing could not label, as a group of coincident readings
-        let groups = guide_groups(&readings);
-        let unlabelled: Vec<&Vec<usize>> = groups.iter().filter(|g| bare.contains(&group_label(&readings, g).short)).collect();
+        let gl: Vec<(Vec<usize>, String)> = group_labels(&vis).into_iter().filter_map(|(_, sub, l)| l.map(|l| (sub, l.short))).collect();
+        let groups: Vec<Vec<usize>> = gl.iter().map(|(g, _)| g.clone()).collect();
+        let short_of = |g: &Vec<usize>| gl.iter().find(|(h, _)| h == g).map(|(_, s)| s.clone()).unwrap_or_default();
+        let unlabelled: Vec<&Vec<usize>> = groups.iter().filter(|g| bare.contains(&short_of(g))).collect();
         let on = |g: &Vec<usize>, q: &Model| -> bool {
             // a guide is on the same spot of the curve in `q` when a reading sits there
             g.iter().any(|&i| {
@@ -1351,7 +1673,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
                 }
             })
             .map(|(t, _)| t);
-        let names: Vec<String> = unlabelled.iter().map(|g| group_label(&readings, g).short).collect();
+        let names: Vec<String> = unlabelled.iter().map(|g| short_of(g)).collect();
         let (names, it) = if names.len() == 1 { (names[0].clone(), "its value is") } else { (names.join(" and "), "their values are") };
         let lines = if names.contains(" and ") { "guide lines" } else { "guide line" };
         let tail = match fix {
@@ -1505,6 +1827,25 @@ fn pt_box_dist(q: (f64, f64), bx: Bx) -> f64 {
 
 pub fn render(p: &Params) -> String { draw(p).0 }
 
+/// The gridline look (labelled colour, fine colour, labelled width, fine width) for a weight.
+/// Standard is the look the figure always had; Light is paler and thinner; Bold is darker and
+/// wider, for a photocopy. Print stays neutral grey at every weight.
+pub fn grid_look(weight: &str, print: bool) -> (&'static str, &'static str, f64, f64) {
+    match (weight, print) {
+        ("Light", false) => ("#e9ecf1", "#f1f3f6", 0.8, 0.8),
+        ("Light", true) => ("#8c8c8c", "#a8a8a8", 1.2, 1.0),
+        ("Bold", false) => ("#9aa3b0", "#c9cfd8", 1.6, 1.0),
+        ("Bold", true) => ("#3a3a3a", "#666666", 2.4, 1.8),
+        // Print lines are a little wider so a 66 % copy keeps them (the ink of a hairline is
+        // otherwise spread thin by the reduction); Colour keeps the shared hairline weight
+        (_, true) => (GRID_PRINT, FINE_PRINT, GRID_W, FINE_W),
+        (_, false) => (chart::GRID, FINE_GRID, 1.0, 1.0),
+    }
+}
+
+/// Half the arm of a cross drawn at a point, for a dot radius `r`.
+fn cross_arm(r: f64) -> f64 { r * 1.25 }
+
 /// The SVG, and the readings whose guide lines got no label at all in the key (no room).
 pub fn draw(p: &Params) -> (String, Vec<String>) {
     let m = match model(p) {
@@ -1517,11 +1858,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     let print = p.s("style") == "Print";
     let fills = Fills::new(p);
     let ink = if print { "#000" } else { INK };
-    let grid_col = if print { GRID_PRINT } else { chart::GRID };
-    let fine_col = if print { FINE_PRINT } else { FINE_GRID };
-    // Print lines are a little wider so a 66 % copy keeps them (the ink of a hairline is otherwise
-    // spread thin by the reduction); Colour keeps the shared hairline weight
-    let (grid_w, fine_w) = if print { (GRID_W, FINE_W) } else { (1.0, 1.0) };
+    let (grid_col, fine_col, grid_w, fine_w) = grid_look(p.s("grid_weight"), print);
     let curve_col = fills.line(0);
     let guide_col = if print { "#000" } else { "#b4410f" };
     let k = svg::label_factor(p.s("label_size"));
@@ -1529,24 +1866,70 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     let y_axis = p.s("y_axis");
     let nf = m.n as f64;
     let sc = y_scale(y_axis, nf);
+    let ax = &m.ax;
+    let ystep = ax.ystep;
+    let ytop = ax.y1;
 
     // the vertical scale: frequency ticks at a nice whole step up to the total or just above it;
-    // relative frequency 0 to 1 by 0.1; percent 0 to 100 by 10
-    let (ytop, ystep) = y_frame(y_axis, nf);
-    let yticks = chart::ticks(0.0, ytop, ystep);
-    let ytick_w = yticks.iter().map(|t| tw(&t.1, fs)).fold(0.0, f64::max);
+    // relative frequency 0 to 1 by 0.1; percent 0 to 100 by 10; or the range typed
+    let yticks: Vec<(f64, String)> = ax.y_lines().into_iter().map(|v| (v, chart::fmt(v))).collect();
+    let y_numbered = |i: usize| ax.y_every > 0 && i % ax.y_every == 0;
+    let ytick_w = yticks.iter().enumerate().filter(|(i, _)| y_numbered(*i)).map(|(_, t)| tw(&t.1, fs)).fold(0.0, f64::max);
+    let mode = |key: &str| match p.s(key) { "Blank line" => 1, "None" => 2, _ => 0 };
+    let (title_mode, x_title_mode, y_title_mode) = (mode("title_mode"), mode("x_title_mode"), mode("y_title_mode"));
     let y_title_txt = match p.s("y_title").trim() { "" => y_axis.to_string(), t => t.to_string() };
-    let title_txt = p.s("title").trim().to_string();
-    let x_title_txt = p.s("x_title").trim().to_string();
+    let title_txt = if title_mode == 0 { p.s("title").trim().to_string() } else { String::new() };
+    let x_title_txt = if x_title_mode == 0 { p.s("x_title").trim().to_string() } else { String::new() };
+    let has_title = !title_txt.is_empty() || title_mode == 1;
+    let has_x_title = !x_title_txt.is_empty() || x_title_mode == 1;
 
     let (a, b) = (m.pts[0].0, m.pts[m.pts.len() - 1].0);
-    let pad = (b - a) * 0.03;
-    let top = 22.0 + if title_txt.is_empty() { 0.0 } else { fs * 1.35 + 14.0 };
+    let (fx0, fx1) = match ax.x {
+        Some((lo, hi, _)) => (lo, hi),
+        None => {
+            let pad = (b - a) * 0.03;
+            (a - pad, b + pad)
+        }
+    };
+    let top = 22.0 + if !has_title { 0.0 } else { fs * 1.35 + 14.0 };
     let left = 16.0 + fs * 1.2 + 12.0 + ytick_w + 10.0;
     let plot_bottom = top + PLOT_H;
-    let bottom_axis = plot_bottom + 10.0 + fs * 1.1 + if x_title_txt.is_empty() { 0.0 } else { fs * 1.6 };
-    let fr = chart::Frame { w: left + PLOT_W + 30.0, h: plot_bottom + 1.0, l: left, r: 30.0, t: top, b: 1.0, x0: a - pad, x1: b + pad, y0: 0.0, y1: ytop };
+    let fr = chart::Frame { w: left + PLOT_W + 30.0, h: plot_bottom + 1.0, l: left, r: 30.0, t: top, b: 1.0, x0: fx0, x1: fx1, y0: ax.y0, y1: ytop };
     let (px, py) = (|x: f64| fr.px(x), |t: f64| fr.py(t * sc));
+    let xlines = ax.x_lines();
+    // the readings this copy draws, and their labels
+    let vis = drawn_readings(&m.readings, show);
+    let glabels = group_labels(&vis);
+    let lfs = fs * 0.95;
+    // a value to be written in goes on a blank under the horizontal axis, below the foot of its
+    // guide ("M = ______", the blank centred on the guide); blanks that would touch go on a row below
+    let blank_row = fs * 1.3;
+    // (where the name starts, row, name such as "M =", where the blank line starts)
+    let blank_w = 3.2 * lfs;
+    let mut blanks: Vec<(f64, usize, String, f64)> = Vec::new();
+    {
+        let mut order: Vec<(f64, String)> = glabels
+            .iter()
+            .filter_map(|(g, _, l)| l.as_ref().filter(|l| l.foot_only).map(|l| (px(vis[g[0]].0.x), l.foot.clone())))
+            .collect();
+        order.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut ends: Vec<f64> = Vec::new();
+        for (gx, t) in order {
+            let name = t.trim_end_matches('_').trim_end().to_string();
+            let x0 = (gx - blank_w / 2.0 - 5.0 - tw(&name, lfs)).max(4.0);
+            let line0 = x0 + tw(&name, lfs) + 5.0;
+            let x1 = line0 + blank_w;
+            let row = match ends.iter().position(|e| *e + 12.0 <= x0) {
+                Some(r) => r,
+                None => { ends.push(f64::NEG_INFINITY); ends.len() - 1 }
+            };
+            ends[row] = x1;
+            blanks.push((x0, row, name, line0));
+        }
+    }
+    let blank_rows = blanks.iter().map(|b| b.1 + 1).max().unwrap_or(0);
+    let below = blank_rows as f64 * blank_row;
+    let bottom_axis = plot_bottom + 10.0 + fs * 1.1 + below + if !has_x_title { 0.0 } else { fs * 1.6 };
 
     // the table beside the graph
     let cum_head = match y_axis { Y_REL => ["Cumulative", "rel. frequency"], Y_PCT => ["Cumulative", "percent"], _ => ["Cumulative", "frequency"] };
@@ -1577,8 +1960,12 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     let head_h = tfs * 1.25 * 2.0 + 10.0;
     let table_h = if m.table { head_h + rh * m.cs.len() as f64 } else { 0.0 };
     let mut w = if m.table { table_x + table_w + 20.0 } else { fr.right() + 20.0 };
-    // the last boundary's label is centred on its tick: room for its right half
-    w = w.max(px(b) + tw(&chart::fmt(b), fs) / 2.0 + 12.0);
+    // the last label is centred on its tick: room for its right half
+    let last_x = match xlines.last() { Some(v) if ax.x.is_some() => *v, _ => b };
+    w = w.max(px(last_x) + tw(&chart::fmt(last_x), fs) / 2.0 + 12.0);
+    for (_, _, _, line0) in &blanks {
+        w = w.max(line0 + blank_w + 12.0);
+    }
 
     // questions under the graph (same lines in both copies: the key fills the answers in)
     let qfs = fs;
@@ -1612,13 +1999,16 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     let h = qtop + qlines.len() as f64 * qlh + 16.0;
     let fr = chart::Frame { w, h, l: left, r: w - left - PLOT_W, t: top, b: h - plot_bottom, ..fr };
     let mut doc = Doc::new(w, h);
-    let what = if m.left_closed.is_some() { "raw values" } else { "a grouped table" };
+    let what = match (m.left_closed.is_some(), p.s("input") == CUM) { (true, _) => "raw values", (_, true) => "a cumulative table", _ => "a grouped table" };
     doc.describe(
         if title_txt.is_empty() { "Ogive" } else { &title_txt },
         &format!("Ogive (cumulative frequency graph) of {what}, {} class{} from {} to {}.", m.cs.len(), if m.cs.len() == 1 { "" } else { "es" }, plain(a), plain(b)),
     );
     if !title_line.is_empty() {
         text(&mut doc, w / 2.0, 14.0 + fs * 1.35, title_fs, "middle", ink, "title", &title_line);
+    } else if title_mode == 1 {
+        let y = 14.0 + fs * 1.35 + 2.0;
+        doc.raw(&format!(r#"<line class="blank" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{ink}" stroke-width="1.4"/>"#, w / 2.0 - 120.0, w / 2.0 + 120.0));
     }
     // gridlines, then axes: a labelled line per tick, fine lines between them, five (or two) fine
     // lines across every class, and a vertical line at every class boundary. The fine x-grid is
@@ -1626,27 +2016,43 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     let bounds: Vec<f64> = m.pts.iter().map(|q| q.0).collect();
     if p.b("grid") {
         let span = b - a;
-        for wnd in m.pts.windows(2) {
-            let d = divisions(class_px(wnd[1].0 - wnd[0].0, span));
-            for j in 1..d {
-                let x = wnd[0].0 + (wnd[1].0 - wnd[0].0) * j as f64 / d as f64;
-                let tx = px(x);
-                doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{fine_col}" stroke-width="{fine_w}"/>"#, fr.top(), fr.bottom()));
+        match ax.x {
+            None => {
+                for wnd in m.pts.windows(2) {
+                    let d = ax.minor.unwrap_or_else(|| divisions(class_px(wnd[1].0 - wnd[0].0, span)));
+                    for j in 1..d {
+                        let x = wnd[0].0 + (wnd[1].0 - wnd[0].0) * j as f64 / d as f64;
+                        let tx = px(x);
+                        doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{fine_col}" stroke-width="{fine_w}"/>"#, fr.top(), fr.bottom()));
+                    }
+                }
+            }
+            Some((_, hi, st)) => {
+                let nx = ax.x_per_block();
+                for x0 in &xlines {
+                    for j in 1..nx {
+                        let x = x0 + st * j as f64 / nx as f64;
+                        if x < hi - 1e-9 * st {
+                            let tx = px(x);
+                            doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{fine_col}" stroke-width="{fine_w}"/>"#, fr.top(), fr.bottom()));
+                        }
+                    }
+                }
             }
         }
         for (v, _) in &yticks {
             let y = fr.py(*v);
-            if *v > 0.0 {
+            if *v > ax.y0 {
                 doc.raw(&format!(r#"<line class="grid" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{grid_col}" stroke-width="{grid_w}"/>"#, fr.left(), fr.right()));
             }
         }
-        let nm = minor_divisions(ystep);
-        let steps = (ytop / ystep).round().clamp(1.0, 60.0) as usize;
+        let nm = ax.y_per_block();
+        let steps = if ax.y_manual { ((ytop - ax.y0) / ystep - 1e-9).ceil().clamp(1.0, MAX_LINES) as usize } else { (ytop / ystep).round().clamp(1.0, 60.0) as usize };
         for k in 1..=(steps * nm).min(400) {
             if k % nm == 0 {
                 continue; // a labelled line
             }
-            let v = k as f64 * ystep / nm as f64;
+            let v = ax.y0 + k as f64 * ystep / nm as f64;
             if v < ytop - 1e-9 {
                 let y = fr.py(v);
                 doc.raw(&format!(r#"<line class="grid" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{fine_col}" stroke-width="{fine_w}"/>"#, fr.left(), fr.right()));
@@ -1655,98 +2061,182 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     }
     doc.raw(&format!(r#"<line class="axis" x1="{l:.2}" y1="{b:.2}" x2="{r:.2}" y2="{b:.2}" stroke="{ink}" stroke-width="2"/>"#, l = fr.left(), r = fr.right(), b = fr.bottom()));
     doc.raw(&format!(r#"<line class="axis" x1="{l:.2}" y1="{t:.2}" x2="{l:.2}" y2="{b:.2}" stroke="{ink}" stroke-width="2"/>"#, l = fr.left(), t = fr.top(), b = fr.bottom()));
-    for (v, label) in &yticks {
+    for (i, (v, label)) in yticks.iter().enumerate() {
         let y = fr.py(*v);
         doc.raw(&format!(r#"<line class="tick" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{ink}" stroke-width="1.6"/>"#, fr.left() - 6.0, fr.left()));
-        text(&mut doc, fr.left() - 10.0, y + fs * 0.35, fs, "end", ink, "ytick", label);
+        if y_numbered(i) {
+            text(&mut doc, fr.left() - 10.0, y + fs * 0.35, fs, "end", ink, "ytick", label);
+        }
     }
-    // x ticks at every boundary; labels thinned so none touch (the first and last always stay)
     let ty = fr.bottom() + 8.0 + fs * 1.05;
-    // a tick at every boundary while they are far enough apart to read; else only under a label,
-    // or 200 classes become a solid black comb
-    let tick_pitch = (fr.right() - fr.left()) / (bounds.len().max(2) - 1) as f64;
-    let tick_all = tick_pitch >= 6.0;
     let lab = |x: f64| chart::fmt(x);
-    let mut kept: Vec<usize> = Vec::new();
-    let span = |i: usize| { let t = lab(bounds[i]); let wd = tw(&t, fs); (px(bounds[i]) - wd / 2.0, px(bounds[i]) + wd / 2.0) };
-    let last = bounds.len() - 1;
-    for i in 0..bounds.len() {
-        let (l, _) = span(i);
-        if let Some(&j) = kept.last() {
-            if l < span(j).1 + 8.0 {
-                if i == last {
-                    if kept.len() > 1 { kept.pop(); } else { continue; }
-                } else {
+    match ax.x {
+        None => {
+            // x ticks at every boundary; labels thinned so none touch (the first and last always stay)
+            // a tick at every boundary while they are far enough apart to read; else only under a label,
+            // or 200 classes become a solid black comb
+            let tick_pitch = (fr.right() - fr.left()) / (bounds.len().max(2) - 1) as f64;
+            let tick_all = tick_pitch >= 6.0;
+            let mut kept: Vec<usize> = Vec::new();
+            let span = |i: usize| { let t = lab(bounds[i]); let wd = tw(&t, fs); (px(bounds[i]) - wd / 2.0, px(bounds[i]) + wd / 2.0) };
+            // the boundaries that may carry a number: every one, every nth, or none
+            let cands: Vec<usize> = match ax.x_every { 0 => Vec::new(), e => (0..bounds.len()).filter(|i| i % e == 0).collect() };
+            let last = cands.last().copied().unwrap_or(0);
+            for &i in &cands {
+                let (l, _) = span(i);
+                if let Some(&j) = kept.last() {
+                    if l < span(j).1 + 8.0 {
+                        if i == last {
+                            if kept.len() > 1 { kept.pop(); } else { continue; }
+                        } else {
+                            continue;
+                        }
+                    }
+                }
+                kept.push(i);
+            }
+            // removing the previous label for the last one may still leave a clash with the one before
+            while kept.len() > 2 && span(kept[kept.len() - 1]).0 < span(kept[kept.len() - 2]).1 + 8.0 {
+                kept.remove(kept.len() - 2);
+            }
+            // tick marks: every boundary while they read apart, else only under a kept label
+            for (i, x) in bounds.iter().enumerate() {
+                if !(tick_all || kept.contains(&i)) {
                     continue;
+                }
+                let tx = px(*x);
+                doc.raw(&format!(r#"<line class="tick" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.6"/>"#, fr.bottom(), fr.bottom() + 6.0));
+            }
+            // vertical gridlines at the class boundaries, so a point can be plotted on the grid: at every
+            // boundary when they are far enough apart to tell apart, else at the numbered ones only
+            if p.b("grid") {
+                let every = fr.right() - fr.left() >= 12.0 * bounds.len() as f64;
+                for (i, x) in bounds.iter().enumerate() {
+                    if i == 0 || !(every || kept.contains(&i)) {
+                        continue;
+                    }
+                    let tx = px(*x);
+                    doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{grid_col}" stroke-width="{grid_w}"/>"#, fr.top(), fr.bottom()));
+                }
+            }
+            for &i in &kept {
+                text(&mut doc, px(bounds[i]), ty, fs, "middle", ink, "xtick", &lab(bounds[i]));
+            }
+        }
+        Some((lo, _, _)) => {
+            // a typed axis: a tick and a gridline at every count-by, numbered as chosen, a number
+            // left out where it would touch the one before
+            let mut right_end = f64::NEG_INFINITY;
+            let mut numbered: Vec<usize> = Vec::new();
+            for (i, x) in xlines.iter().enumerate() {
+                let tx = px(*x);
+                doc.raw(&format!(r#"<line class="tick" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.6"/>"#, fr.bottom(), fr.bottom() + 6.0));
+                if p.b("grid") && *x > lo {
+                    doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{grid_col}" stroke-width="{grid_w}"/>"#, fr.top(), fr.bottom()));
+                }
+                if ax.x_every > 0 && i % ax.x_every == 0 {
+                    let wd = tw(&lab(*x), fs);
+                    if tx - wd / 2.0 >= right_end + 8.0 {
+                        numbered.push(i);
+                        right_end = tx + wd / 2.0;
+                    }
+                }
+            }
+            for i in numbered {
+                text(&mut doc, px(xlines[i]), ty, fs, "middle", ink, "xtick", &lab(xlines[i]));
+            }
+        }
+    }
+    if !x_title_line.is_empty() {
+        text(&mut doc, x_title_cx, ty + below + fs * 1.6, x_title_fs, "middle", ink, "xtitle", &x_title_line);
+    } else if x_title_mode == 1 {
+        let y = ty + below + fs * 1.6 + 2.0;
+        doc.raw(&format!(r#"<line class="blank" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{ink}" stroke-width="1.4"/>"#, x_title_cx - 100.0, x_title_cx + 100.0));
+    }
+    match y_title_mode {
+        0 => {
+            let ytitle = fit(&y_title_txt, fs * 1.1, PLOT_H + 20.0);
+            doc.raw(&format!(
+                r##"<text class="ytitle" transform="translate({:.2} {:.2}) rotate(-90)" font-size="{:.2}" text-anchor="middle" font-family="{FONT}" fill="{ink}">{}</text>"##,
+                16.0 + fs * 1.1 * 0.8,
+                (fr.top() + fr.bottom()) / 2.0,
+                fs * 1.1,
+                esc(&ytitle)
+            ));
+        }
+        1 => {
+            let (x, cy) = (16.0 + fs * 1.1 * 0.8 + 2.0, (fr.top() + fr.bottom()) / 2.0);
+            doc.raw(&format!(r#"<line class="blank" x1="{x:.2}" y1="{:.2}" x2="{x:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.4"/>"#, cy - 90.0, cy + 90.0));
+        }
+        _ => {}
+    }
+
+    // a typed range may leave part of the curve outside the plot: it is cut at the frame (a little
+    // outside it, so a point on an axis keeps its whole dot)
+    let clip = ax.x.is_some() || ax.y_manual;
+    if clip {
+        doc.raw(&format!(
+            r#"<clipPath id="ogive-plot"><rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}"/></clipPath><g clip-path="url(#ogive-plot)">"#,
+            fr.left() - 6.0, fr.top() - 6.0, fr.right() - fr.left() + 12.0, fr.bottom() - fr.top() + 12.0
+        ));
+    }
+    // the curve and its points
+    let join = p.s("join");
+    let curve: Vec<(f64, f64)> = m.curve_pts.iter().map(|q| (px(q.0), py(q.1))).collect();
+    let dot_r = 3.2 * k.max(1.0);
+    let crosses = p.s("points") == "Crosses";
+    let arm = cross_arm(dot_r);
+    // how far a label keeps from a point's centre, beyond the gaps
+    let point_r = if crosses { arm * std::f64::consts::SQRT_2 } else { dot_r };
+    let draw_curve = show || p.b("student_curve");
+    let points_drawn = curve.len() <= 120 || join == "None";
+    if draw_curve {
+        match (join, &m.smooth) {
+            (JOIN_SMOOTH, Some(s)) => {
+                let mut path = format!("M{:.2},{:.2}", curve[0].0, curve[0].1);
+                for bz in s.beziers() {
+                    let q: Vec<(f64, f64)> = bz.iter().map(|c| (px(c.0), py(c.1))).collect();
+                    path.push_str(&format!(" C{:.2},{:.2} {:.2},{:.2} {:.2},{:.2}", q[1].0, q[1].1, q[2].0, q[2].1, q[3].0, q[3].1));
+                }
+                doc.raw(&format!(r#"<path class="curve" d="{path}" fill="none" stroke="{curve_col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>"#));
+            }
+            ("None", _) => {}
+            _ => {
+                let pts: Vec<String> = curve.iter().map(|(x, y)| format!("{x:.2},{y:.2}")).collect();
+                doc.raw(&format!(r#"<polyline class="curve" points="{}" fill="none" stroke="{curve_col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>"#, pts.join(" ")));
+            }
+        }
+        if points_drawn {
+            for (x, y) in &curve {
+                if crosses {
+                    doc.raw(&format!(
+                        r#"<path class="point" d="M{:.2},{:.2} L{:.2},{:.2} M{:.2},{:.2} L{:.2},{:.2}" fill="none" stroke="{curve_col}" stroke-width="2" stroke-linecap="round"/>"#,
+                        x - arm, y - arm, x + arm, y + arm, x - arm, y + arm, x + arm, y - arm
+                    ));
+                } else {
+                    doc.raw(&format!(r#"<circle class="point" cx="{x:.2}" cy="{y:.2}" r="{dot_r:.2}" fill="{curve_col}"/>"#));
                 }
             }
         }
-        kept.push(i);
-    }
-    // removing the previous label for the last one may still leave a clash with the one before
-    while kept.len() > 2 && span(kept[kept.len() - 1]).0 < span(kept[kept.len() - 2]).1 + 8.0 {
-        kept.remove(kept.len() - 2);
-    }
-    // tick marks: every boundary while they read apart, else only under a kept label
-    for (i, x) in bounds.iter().enumerate() {
-        if !(tick_all || kept.contains(&i)) {
-            continue;
-        }
-        let tx = px(*x);
-        doc.raw(&format!(r#"<line class="tick" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.6"/>"#, fr.bottom(), fr.bottom() + 6.0));
-    }
-    // vertical gridlines at the class boundaries, so a point can be plotted on the grid: at every
-    // boundary when they are far enough apart to tell apart, else at the numbered ones only
-    if p.b("grid") {
-        let every = fr.right() - fr.left() >= 12.0 * bounds.len() as f64;
-        for (i, x) in bounds.iter().enumerate() {
-            if i == 0 || !(every || kept.contains(&i)) {
-                continue;
-            }
-            let tx = px(*x);
-            doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{grid_col}" stroke-width="{grid_w}"/>"#, fr.top(), fr.bottom()));
-        }
-    }
-    for &i in &kept {
-        text(&mut doc, px(bounds[i]), ty, fs, "middle", ink, "xtick", &lab(bounds[i]));
-    }
-    if !x_title_line.is_empty() {
-        text(&mut doc, x_title_cx, ty + fs * 1.6, x_title_fs, "middle", ink, "xtitle", &x_title_line);
-    }
-    let ytitle = fit(&y_title_txt, fs * 1.1, PLOT_H + 20.0);
-    doc.raw(&format!(
-        r##"<text class="ytitle" transform="translate({:.2} {:.2}) rotate(-90)" font-size="{:.2}" text-anchor="middle" font-family="{FONT}" fill="{ink}">{}</text>"##,
-        16.0 + fs * 1.1 * 0.8,
-        (fr.top() + fr.bottom()) / 2.0,
-        fs * 1.1,
-        esc(&ytitle)
-    ));
-
-    // the curve and its points
-    let curve: Vec<(f64, f64)> = m.pts.iter().map(|q| (px(q.0), py(q.1))).collect();
-    let dot_r = 3.2 * k.max(1.0);
-    let draw_curve = show || p.b("student_curve");
-    if draw_curve {
-        let pts: Vec<String> = curve.iter().map(|(x, y)| format!("{x:.2},{y:.2}")).collect();
-        doc.raw(&format!(r#"<polyline class="curve" points="{}" fill="none" stroke="{curve_col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>"#, pts.join(" ")));
-        if curve.len() <= 120 {
-            for (x, y) in &curve {
-                doc.raw(&format!(r#"<circle class="point" cx="{x:.2}" cy="{y:.2}" r="{dot_r:.2}" fill="{curve_col}"/>"#));
-            }
-        }
     }
 
-    // guides and their labels (key only): each guide is an L from the vertical axis to the curve
-    // and down to the horizontal axis
-    if show {
-        let curve_segs: Vec<Seg> = curve.windows(2).map(|w| (w[0], w[1])).collect();
-        let dots: Vec<(f64, f64)> = if curve.len() <= 120 { curve.clone() } else { Vec::new() };
-        let gs: Vec<(f64, f64)> = m.readings.iter().map(|r| (px(r.x), py(r.t))).collect();
+    // guides and their labels: each guide is an L from the vertical axis to the curve and down to
+    // the horizontal axis. The key draws every reading; the student copy only the ones set to
+    // show their lines (with a blank where one is to be written)
+    if !vis.is_empty() {
+        // the line labels keep clear of: the drawn curve (or where it would run)
+        let along: Vec<(f64, f64)> = match &m.smooth {
+            Some(s) if join == JOIN_SMOOTH => s.sample(24).iter().map(|q| (px(q.0), py(q.1))).collect(),
+            _ => curve.clone(),
+        };
+        let curve_segs: Vec<Seg> = along.windows(2).map(|w| (w[0], w[1])).collect();
+        let dots: Vec<(f64, f64)> = if points_drawn { curve.clone() } else { Vec::new() };
+        let gs: Vec<(f64, f64)> = vis.iter().map(|(r, _)| (px(r.x), py(r.t))).collect();
         let guide_segs: Vec<[Seg; 2]> = gs.iter().map(|&(gx, gy)| [((fr.left(), gy), (gx, gy)), ((gx, gy), (gx, fr.bottom()))]).collect();
         // one guide line and one label per point of the curve: coincident readings share both
-        let groups = guide_groups(&m.readings);
+        let groups: Vec<Vec<usize>> = glabels.iter().map(|(g, _, _)| g.clone()).collect();
         let mine: Vec<usize> = {
-            let mut v = vec![usize::MAX; m.readings.len()];
+            let mut v = vec![usize::MAX; vis.len()];
             for (gi, g) in groups.iter().enumerate() {
                 for &i in g {
                     v[i] = gi;
@@ -1760,12 +2250,12 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
         }
         let inner: Bx = (fr.left() + 3.0, fr.top() + 2.0, fr.right() - 2.0, fr.bottom() - 3.0);
         let mut placed: Vec<Bx> = Vec::new();
-        let lfs = fs * 0.95;
         // (x, y, anchor, text, class, leader from → to)
         let mut labels: Vec<(f64, f64, &str, String, &str, Option<Seg>)> = Vec::new();
-        for (gi, g) in groups.iter().enumerate() {
+        for (gi, (g, _, lab)) in glabels.iter().enumerate() {
+            // a blank to fill in is under the axis, not in the plot
+            let Some(lab) = lab.as_ref().filter(|l| !l.foot_only) else { continue };
             let (gx, gy) = gs[g[0]];
-            let lab = group_label(&m.readings, g);
             let before = labels.len();
             let gap = OWN_GAP;
             // the text box reaches 0.06 em past its anchor (side bearings), so the anchor steps out that much more
@@ -1778,7 +2268,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
                 let bx = text_box(x, y, lfs, anchor, txt);
                 let ok = bx.0 >= inner.0 && bx.1 >= inner.1 && bx.2 <= inner.2 && bx.3 <= inner.3
                     && curve_segs.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= LABEL_GAP + PLATE)
-                    && dots.iter().all(|q| pt_box_dist(*q, bx) >= dot_r + LABEL_GAP + PLATE)
+                    && dots.iter().all(|q| pt_box_dist(*q, bx) >= point_r + LABEL_GAP + PLATE)
                     && guide_segs[g[0]].iter().all(|s| seg_box_dist(s.0, s.1, bx) >= PLATE + 1.5)
                     // another guide stays well clear, so a label is always nearest its own line
                     && guide_segs.iter().enumerate().filter(|(j, _)| mine[*j] != gi).all(|(_, gsg)| gsg.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= RIVAL_GAP))
@@ -1787,7 +2277,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
             };
             // the height on the horizontal guide, then the foot of the vertical one; at each spot the
             // full text first, then the short one, so a cramped corner still gets a label
-            let side_txt: Vec<&String> = if lab.side == lab.side_short { vec![&lab.side] } else { vec![&lab.side, &lab.side_short] };
+            let side_txt: Vec<&String> = if lab.foot_only { vec![] } else if lab.side == lab.side_short { vec![&lab.side] } else { vec![&lab.side, &lab.side_short] };
             let foot_txt: Vec<&String> = if lab.foot == lab.short { vec![&lab.foot] } else { vec![&lab.foot, &lab.short] };
             let along: Vec<f64> = [1.0, 0.5, 0.3, 0.7, 0.15, 0.85].into_iter().map(|f| fr.bottom() + (gy - fr.bottom()) * f).collect();
             let mut cands: Vec<(f64, f64, &str, &str)> = Vec::new();
@@ -1805,12 +2295,12 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
             for (x, y, anchor, txt) in cands {
                 if let Some(bx) = fits(&placed, x, y, anchor, txt) {
                     placed.push(bx);
-                    let class = if txt == lab.side.as_str() || txt == lab.side_short.as_str() { "side" } else { "foot" };
+                    let class = if !lab.foot_only && (txt == lab.side.as_str() || txt == lab.side_short.as_str()) { "side" } else { "foot" };
                     labels.push((x, y, anchor, txt.to_string(), class, None));
                     break;
                 }
             }
-            if labels.len() == before {
+            if labels.len() == before && !lab.foot_only {
                 // no room beside either guide: lift the short height label clear of the curve, but
                 // only a few pixels, and only while it still plainly belongs to its own guide (a
                 // longer leader passes a rival guide and reads as that one's label)
@@ -1846,6 +2336,15 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
             doc.raw(&format!(r##"<rect class="plate" x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="#fff"/>"##, bx.0 - PLATE, bx.1 - PLATE, bx.2 - bx.0 + 2.0 * PLATE, bx.3 - bx.1 + 2.0 * PLATE));
             text(&mut doc, *x, *y, lfs, anchor, if print { "#000" } else { guide_col }, class, txt);
         }
+    }
+    if clip {
+        doc.raw("</g>");
+    }
+    for (x0, row, name, line0) in &blanks {
+        let y = ty + blank_row * (*row as f64 + 1.0);
+        let col = if print { "#000" } else { guide_col };
+        text(&mut doc, *x0, y, lfs, "start", col, "foot", name);
+        doc.raw(&format!(r#"<line class="blank" x1="{line0:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{col}" stroke-width="1.4"/>"#, y + 2.0, line0 + blank_w, y + 2.0));
     }
 
     // the table
@@ -1899,5 +2398,10 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     (doc.finish(), unlabelled)
 }
 
+pub mod cumtable;
+pub mod smooth;
+
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_b4;
