@@ -394,9 +394,16 @@ pub fn build(p: &Params) -> (String, Report) {
     let w = (W * (1.0 + 0.45 * (lab - 1.0))).max(W);
     // a chart title takes a band over the plot; with none (the default) every position below is as it always was
     let (x_title, y_title, chart_title) = multi::titles(p);
-    let title_room = if chart_title == multi::Label::Off { 0.0 } else { 34.0 * lab };
+    // (a title too long for its room wraps: the chart title over the canvas width, the y title to the plot's height
+    // with the plot moved right for each further line, the x title to the plot's width with everything under it
+    // moved down; a title that fits keeps every position exactly as before)
+    let y_more = multi::y_band(&y_title, H - 22.0 - 52.0, lab);
+    let title_cx = (66.0 + y_more + w - 20.0) / 2.0;
+    let title_w = multi::chart_room(w, title_cx);
+    let title_room = multi::chart_band(&chart_title, title_w, lab);
     let hh = H + title_room;
-    let f = Frame { w, h: hh, l: 66.0, r: 20.0, t: 22.0 + title_room, b: 52.0, x0: 0.0, x1: smax, y0: 0.0, y1: y_top };
+    let f = Frame { w, h: hh, l: 66.0 + y_more, r: 20.0, t: 22.0 + title_room, b: 52.0, x0: 0.0, x1: smax, y0: 0.0, y1: y_top };
+    let x_more = multi::x_band(&x_title, f.right() - f.left(), lab);
     let numbered = p.s("axes") != "Shape only";
     let grid_on = numbered && p.b("gridlines");
     // the mark labels: written with their value (as always), named only, a blank line, or left off
@@ -407,7 +414,7 @@ pub fn build(p: &Params) -> (String, Report) {
     // title grows down from the axis while the givens sat at a fixed H + 18. The givens keep at least 10 px (scaled)
     // between the title's descenders and their own capitals, and everything under them moves down with them.
     let title_y = f.bottom() + 40.0 * lab;
-    let givens_y0 = (hh + 18.0 * lab).max(title_y + 0.22 * 13.0 * lab + 10.0 * lab + 0.74 * 12.0 * lab);
+    let givens_y0 = (hh + 18.0 * lab).max(title_y + x_more + 0.22 * 13.0 * lab + 10.0 * lab + 0.74 * 12.0 * lab);
     let shift = givens_y0 - (hh + 18.0 * lab);
     // the givens, always printed: they are what the curve is drawn from
     let mode = p.s("mode");
@@ -436,7 +443,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let rows_y0 = hh + 46.0 * lab + shift + (givens_lines.len().max(1) - 1) as f64 * 15.0 * lab;
     let mut d = Doc::new(w, rows_y0 + (rows - 1.0) * ROW_H * lab + 16.0);
     d.describe("Enzyme kinetics", "Reaction rate against substrate concentration with Vmax and Km marked");
-    multi::draw_chart_title(&mut d, &chart_title, (f.left() + f.right()) / 2.0, 22.0 + 20.0 * lab, lab, ink);
+    multi::draw_chart_title(&mut d, &chart_title, (f.left() + f.right()) / 2.0, 22.0 + 20.0 * lab, title_w, lab, ink);
 
     // axes and gridlines
     let xs = nice_step(smax, 6.0);

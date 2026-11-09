@@ -744,6 +744,15 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
     }
 }
 
+/// The panel's introduction for figures whose subject changes with a control, in place of the fixed blurb
+/// (the enzyme figure draws rate against temperature or pH as well as Michaelis-Menten). None: the blurb.
+pub fn live_intro(id: &str, p: &Params) -> Option<String> {
+    match id {
+        "enzyme-kinetics" => biology::enzyme::multi::intro(p),
+        _ => None,
+    }
+}
+
 /// Follow-up after the panel changed param `key` of figure `id` from `old` (a pulley's load
 /// label follows a switch to or from the block and tackle).
 pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {

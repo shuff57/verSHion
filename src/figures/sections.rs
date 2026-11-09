@@ -1287,6 +1287,8 @@ pub fn note_after(fig: &str, key: &str, p: &super::Params) -> Option<String> {
         ("free-body-diagram", "notation") => Some("An arrow over every vector\u{2019}s label, or every one in bold. For just one label, type \\vec{F} or \\mathbf{F} in it.".into()),
         ("motion-graphs", "x0") => Some("Speeding up and slowing down carry on from the velocity before them.".into()),
         // the DNA figure: what was typed differently, the protein read, and the mistakes placed
+        // each enzyme's optimum and denaturation, under the curves (plain information, not a warning)
+        ("enzyme-kinetics", "curve3") => super::biology::enzyme::multi::info(p),
         ("dna-protein-synthesis", "seq") => super::biology::dna::seq_note(p),
         ("dna-protein-synthesis", "frame") => Some(super::biology::dna::readout(p)),
         ("dna-protein-synthesis", "mistakes") => super::biology::dna::mistakes_note(p),

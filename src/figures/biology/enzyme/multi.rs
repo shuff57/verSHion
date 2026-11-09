@@ -308,37 +308,113 @@ pub fn axis_arrows(d: &mut Doc, f: &Frame, ink: &str) {
     d.poly(&[(l, t - 14.0), (l - 5.0, t - 4.0), (l + 5.0, t - 4.0)], ink, ink, 1.0);
 }
 
-/// The chart title (or its blank line) centred over the plot at baseline `y`.
-pub fn draw_chart_title(d: &mut Doc, t: &Label, cx: f64, y: f64, lab: f64, ink: &str) {
+/// Splits typed text into lines of at most `per` characters, at spaces where it can and through a word only when
+/// the word alone is longer than a line.
+pub fn split_lines(s: &str, per: usize) -> Vec<String> {
+    let per = per.max(4);
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for word in s.split_whitespace() {
+        let mut w: Vec<char> = word.chars().collect();
+        while w.len() > per {
+            if !cur.is_empty() { out.push(std::mem::take(&mut cur)); }
+            out.push(w[..per].iter().collect());
+            w.drain(..per);
+        }
+        let w: String = w.into_iter().collect();
+        if w.is_empty() { continue; }
+        if !cur.is_empty() && cur.chars().count() + 1 + w.chars().count() > per { out.push(std::mem::take(&mut cur)); }
+        if !cur.is_empty() { cur.push(' '); }
+        cur.push_str(&w);
+    }
+    if !cur.is_empty() { out.push(cur); }
+    out
+}
+
+/// The lines a title takes in `room` px at font size `size` (`em`: the width of a character in ems, 0.55 regular,
+/// 0.6 bold). A title that fits is one line, unchanged.
+pub fn title_lines(t: &Label, room: f64, size: f64, em: f64) -> Vec<String> {
     match t {
         Label::Text(s) => {
-            d.raw(&format!(
-                r##"<text x="{cx:.2}" y="{y:.2}" font-size="{}" text-anchor="middle" font-weight="bold" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{ink}">{}</text>"##,
-                15.0 * lab,
-                svg::esc(s)
-            ));
+            let per = (room / (size * em)).floor().max(4.0) as usize;
+            if s.chars().count() <= per { vec![s.clone()] } else { split_lines(s, per) }
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Line spacing of a wrapped chart title, x title and (across) y title, before the label size.
+const CHART_LH: f64 = 19.0;
+const X_LH: f64 = 16.0;
+const Y_LH: f64 = 17.0;
+
+/// The width a chart title centred on `cx` has before either edge of a canvas `w` wide (20 px kept at each side).
+pub fn chart_room(w: f64, cx: f64) -> f64 { 2.0 * (cx - 20.0).min(w - 20.0 - cx) }
+
+/// The band the chart title takes over the plot: none, one line (34 px, scaled) and 19 px more for each further line.
+pub fn chart_band(t: &Label, room: f64, lab: f64) -> f64 {
+    match t {
+        Label::Off => 0.0,
+        Label::Blank => 34.0 * lab,
+        Label::Text(_) => 34.0 * lab + (title_lines(t, room, 15.0 * lab, 0.6).len().max(1) - 1) as f64 * CHART_LH * lab,
+    }
+}
+
+/// How much further right the plot starts so a y title wrapped onto more lines (to fit the plot's height `plot_h`)
+/// stays clear of the tick numbers.
+pub fn y_band(t: &Label, plot_h: f64, lab: f64) -> f64 {
+    (title_lines(t, plot_h - 4.0, 13.0 * lab, 0.55).len().max(1) - 1) as f64 * Y_LH * lab
+}
+
+/// How much lower everything under the x title goes when it wraps onto more lines (to fit the plot's width).
+pub fn x_band(t: &Label, plot_w: f64, lab: f64) -> f64 {
+    (title_lines(t, plot_w, 13.0 * lab, 0.55).len().max(1) - 1) as f64 * X_LH * lab
+}
+
+/// The chart title (or its blank line) centred over the plot at `cx`, its first baseline at `y`, wrapped to `room`.
+pub fn draw_chart_title(d: &mut Doc, t: &Label, cx: f64, y: f64, room: f64, lab: f64, ink: &str) {
+    match t {
+        Label::Text(_) => {
+            for (i, line) in title_lines(t, room, 15.0 * lab, 0.6).iter().enumerate() {
+                d.raw(&format!(
+                    r##"<text x="{cx:.2}" y="{:.2}" font-size="{}" text-anchor="middle" font-weight="bold" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{ink}">{}</text>"##,
+                    y + i as f64 * CHART_LH * lab,
+                    15.0 * lab,
+                    svg::esc(line)
+                ));
+            }
         }
         Label::Blank => { d.line(cx - 120.0 * lab, y, cx + 120.0 * lab, y, ink, 1.3); }
         Label::Off => {}
     }
 }
 
-/// The x title at baseline `y` and the y title rotated at x = 18 (or the blank lines to write them on).
+/// The x title at baseline `y` and the y title rotated at x = 18 (or the blank lines to write them on). A title too
+/// long for the plot's width (x) or height (y) wraps: the x title's further lines go below, the y title's to the
+/// right of the first, nearer the axis (the plot was moved right by [`y_band`] to make room).
 pub fn draw_axis_titles(d: &mut Doc, f: &Frame, xt: &Label, yt: &Label, y: f64, lab: f64, ink: &str) {
     let cx = (f.left() + f.right()) / 2.0;
     match xt {
-        Label::Text(s) => { d.raw(&text_el(cx, y, 13.0 * lab, "middle", ink, s)); }
+        Label::Text(_) => {
+            for (i, line) in title_lines(xt, f.right() - f.left(), 13.0 * lab, 0.55).iter().enumerate() {
+                d.raw(&text_el(cx, y + i as f64 * X_LH * lab, 13.0 * lab, "middle", ink, line));
+            }
+        }
         Label::Blank => { d.line(cx - 90.0 * lab, y, cx + 90.0 * lab, y, ink, 1.3); }
         Label::Off => {}
     }
     let cy = (f.top() + f.bottom()) / 2.0;
     match yt {
-        Label::Text(s) => {
-            d.raw(&format!(
-                r##"<text transform="translate(18.00 {cy:.2}) rotate(-90)" font-size="{}" text-anchor="middle" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{ink}">{}</text>"##,
-                13.0 * lab,
-                svg::esc(s)
-            ));
+        Label::Text(_) => {
+            for (i, line) in title_lines(yt, f.bottom() - f.top() - 4.0, 13.0 * lab, 0.55).iter().enumerate() {
+                let x = 18.0 + i as f64 * Y_LH * lab;
+                let tx = if i == 0 { "18.00".to_string() } else { format!("{x:.2}") };
+                d.raw(&format!(
+                    r##"<text transform="translate({tx} {cy:.2}) rotate(-90)" font-size="{}" text-anchor="middle" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{ink}">{}</text>"##,
+                    13.0 * lab,
+                    svg::esc(line)
+                ));
+            }
         }
         Label::Blank => {
             let half = ((f.bottom() - f.top()) * 0.3).min(90.0 * lab);
@@ -384,12 +460,16 @@ pub fn build(p: &Params) -> (String, Multi) {
     let y_top = if p.b("y_fit") { y_fit_top } else { fin(p.f("y_to"), 1.0, 200.0, 12.0) };
 
     let w = (W * (1.0 + 0.45 * (lab - 1.0))).max(W);
-    let title_room = if chart == Label::Off { 0.0 } else { 34.0 * lab };
     // the plot grows a little with the labels so the rotated rate title still fits beside it at Large
     let plot_h = (H - 22.0 - 52.0) * (1.0 + 0.3 * (lab - 1.0)).max(1.0);
+    let left = 66.0 + y_band(&yt, plot_h, lab);
+    let title_cx = (left + w - 20.0) / 2.0;
+    let title_w = chart_room(w, title_cx);
+    let title_room = chart_band(&chart, title_w, lab);
     let top = 22.0 + title_room;
     let h = top + plot_h + 52.0;
-    let f = Frame { w, h, l: 66.0, r: 20.0, t: top, b: 52.0, x0, x1, y0: 0.0, y1: y_top };
+    let f = Frame { w, h, l: left, r: 20.0, t: top, b: 52.0, x0, x1, y0: 0.0, y1: y_top };
+    let x_more = x_band(&xt, f.right() - f.left(), lab);
 
     // under the plot: the x title, then the key, then (against substrate) the givens
     let title_y = f.bottom() + 40.0 * lab;
@@ -413,7 +493,7 @@ pub fn build(p: &Params) -> (String, Multi) {
             row_w += iw;
         }
     }
-    let after_title = if xt == Label::Off { f.bottom() + 24.0 * lab } else { title_y + 6.0 * lab };
+    let after_title = if xt == Label::Off { f.bottom() + 24.0 * lab } else { title_y + 6.0 * lab + x_more };
     let key_y0 = after_title + 20.0 * lab;
     let mut next_y = if key_rows.is_empty() { after_title } else { key_y0 + (key_rows.len() - 1) as f64 * 20.0 * lab + 6.0 * lab };
 
@@ -462,7 +542,7 @@ pub fn build(p: &Params) -> (String, Multi) {
     // no value in the description: it is exported with the student copy
     d.describe("Enzyme activity", &format!("Rate of reaction against {what} for {}{marks}", names.join(", ")));
 
-    draw_chart_title(&mut d, &chart, (f.left() + f.right()) / 2.0, 22.0 + 20.0 * lab, lab, ink);
+    draw_chart_title(&mut d, &chart, title_cx, 22.0 + 20.0 * lab, title_w, lab, ink);
 
     // axes, gridlines and numbers
     let mut tick_boxes: Vec<(f64, f64, f64, f64)> = Vec::new();
@@ -521,9 +601,11 @@ pub fn build(p: &Params) -> (String, Multi) {
     let mut texts: Vec<(f64, &'static str, f64, String, &'static str, Option<(f64, f64)>)> = Vec::new();
 
     // each label is placed against every dot and label before it, and the tick numbers
-    let place = |cands: &[(f64, &'static str, f64)], s: &str, placed: &mut Vec<((f64, f64, f64, f64), String)>, dots: &[(f64, f64)], ok: &dyn Fn((f64, f64, f64, f64)) -> bool| -> (f64, &'static str, f64) {
+    // (`lines`: thin dashed lines a label should not sit on, as boxes)
+    let place = |cands: &[(f64, &'static str, f64)], s: &str, placed: &mut Vec<((f64, f64, f64, f64), String)>, dots: &[(f64, f64)], lines: &[(f64, f64, f64, f64)], ok: &dyn Fn((f64, f64, f64, f64)) -> bool| -> (f64, &'static str, f64) {
         let width = tw(s, fs);
         let mut obstacles: Vec<(f64, f64, f64, f64)> = placed.iter().map(|(b, _)| *b).collect();
+        obstacles.extend(lines.iter().copied());
         obstacles.extend(dots.iter().map(|(x, y)| dot_box(*x, *y)));
         obstacles.extend(tick_boxes.iter().copied());
         let c = pick(cands, width, fs, &obstacles, ok);
@@ -531,11 +613,11 @@ pub fn build(p: &Params) -> (String, Multi) {
         c
     };
 
+    let mut line_boxes: Vec<(f64, f64, f64, f64)> = Vec::new();
     match a {
         Against::Temperature | Against::Ph => {
             let opt_name = { let t = tidy_text(p.s("opt_text")); if t.is_empty() { "Optimum".to_string() } else { t.chars().take(30).collect() } };
             let den_name = { let t = tidy_text(p.s("den_text")); if t.is_empty() { "Denatured".to_string() } else { t.chars().take(30).collect() } };
-            let tag = |n: &str, c: &Curve| if tagged { format!("{n} {}", c.letter()) } else { n.to_string() };
             // every dot first, so each label can clear all of them
             let mut opt_dots: Vec<(usize, (f64, f64))> = Vec::new();
             let mut den_dots: Vec<(usize, f64, (f64, f64))> = Vec::new();
@@ -567,9 +649,19 @@ pub fn build(p: &Params) -> (String, Multi) {
                 let (col, _) = curve_style(cs[*i].slot, print);
                 d.circle(*x, *y, DOT_R, "#fff", col, 2.0);
             }
-            for (i, (x, y)) in &opt_dots {
+            // curves with the same optimum share one dot and one label naming them all ("Optimum A, B")
+            let same_at = |pts: &[(f64, f64)], q: (f64, f64)| -> Vec<usize> { pts.iter().enumerate().filter(|(_, r)| (r.0 - q.0).abs() < 0.5 && (r.1 - q.1).abs() < 0.5).map(|(k, _)| k).collect() };
+            let group_tag = |n: &str, ks: &[usize], idx: &dyn Fn(usize) -> usize| -> String {
+                if !tagged { return n.to_string(); }
+                let ls: Vec<String> = ks.iter().map(|&k| cs[idx(k)].letter().to_string()).collect();
+                format!("{n} {}", ls.join(", "))
+            };
+            let opt_pts: Vec<(f64, f64)> = opt_dots.iter().map(|(_, q)| *q).collect();
+            for (k_this, (i, (x, y))) in opt_dots.iter().enumerate() {
                 let c = &cs[*i];
-                let lbl = mark_label(p.s("opt_label"), &tag(&opt_name, c), &x_value(a, c.opt), ": ", ans);
+                let same = same_at(&opt_pts, (*x, *y));
+                if same[0] != k_this { continue; }
+                let lbl = mark_label(p.s("opt_label"), &group_tag(&opt_name, &same, &|k| opt_dots[k].0), &x_value(a, c.opt), ": ", ans);
                 let s = match &lbl { Label::Text(s) => s.clone(), Label::Blank => BLANK_LINE.to_string(), Label::Off => continue };
                 let (x, y) = (*x, *y);
                 let cands = [
@@ -585,12 +677,15 @@ pub fn build(p: &Params) -> (String, Multi) {
                     (x + 9.0, "start", y + 58.0 * lab),
                     (x - 9.0, "end", y + 58.0 * lab),
                 ];
-                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &plot_ok);
+                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &line_boxes, &plot_ok);
                 texts.push((lx, an, ly, s, curve_style(c.slot, print).0, Some((x, y))));
             }
-            for (i, v, (x, y)) in &den_dots {
+            let den_pts: Vec<(f64, f64)> = den_dots.iter().map(|(_, _, q)| *q).collect();
+            for (k_this, (i, v, (x, y))) in den_dots.iter().enumerate() {
                 let c = &cs[*i];
-                let lbl = mark_label(p.s("den_label"), &tag(&den_name, c), &x_value(a, *v), ": ", ans);
+                let same = same_at(&den_pts, (*x, *y));
+                if same[0] != k_this { continue; }
+                let lbl = mark_label(p.s("den_label"), &group_tag(&den_name, &same, &|k| den_dots[k].0), &x_value(a, *v), ": ", ans);
                 let s = match &lbl { Label::Text(s) => s.clone(), Label::Blank => BLANK_LINE.to_string(), Label::Off => continue };
                 let (x, y) = (*x, *y);
                 // the side away from the optimum first: the curve comes down to the dot from the other side
@@ -603,7 +698,7 @@ pub fn build(p: &Params) -> (String, Multi) {
                 let mut cands: Vec<(f64, &'static str, f64)> = Vec::new();
                 for dy in [10.0, 26.0, 42.0, 58.0, 74.0] { cands.extend(side(6.0, dy * lab)); }
                 cands.push((x, "middle", y - 12.0 * lab));
-                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &plot_ok);
+                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &line_boxes, &plot_ok);
                 texts.push((lx, an, ly, s, curve_style(c.slot, print).0, Some((x, y))));
             }
         }
@@ -629,6 +724,10 @@ pub fn build(p: &Params) -> (String, Multi) {
                 let (kx, half) = (f.px(c.km), f.py(c.vmax / 2.0));
                 d.raw(&format!(r##"<line x1="{kx:.2}" y1="{:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{col}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.bottom()));
                 d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{col}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left()));
+                line_boxes.push((f.left(), kx, half - 1.0, half + 1.0));
+            }
+            for (v, _) in &groups {
+                if *v <= y_top { let vy = f.py(*v); line_boxes.push((f.left(), f.right(), vy - 1.0, vy + 1.0)); }
             }
             for (v, members) in &groups {
                 if *v > y_top { continue; }
@@ -640,8 +739,27 @@ pub fn build(p: &Params) -> (String, Multi) {
                 for dy in [6.0, 22.0, 38.0] { cands.push((f.right() - 4.0, "end", vy - dy * lab)); }
                 for dy in [6.0, 22.0, 38.0] { cands.push((f.left() + 6.0, "start", vy - dy * lab)); }
                 for dy in [16.0, 32.0] { cands.push((f.right() - 4.0, "end", vy + dy * lab)); }
-                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &plot_ok);
+                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &line_boxes, &plot_ok);
                 texts.push((lx, an, ly, s, curve_style(cs[members[0]].slot, print).0, None));
+            }
+            // half of each Vmax: the dotted line from the rate axis to the curve, named like its Vmax (one label per value)
+            for (v, members) in &groups {
+                let inside: Vec<usize> = members.iter().copied().filter(|&i| cs[i].km <= x1).collect();
+                if inside.is_empty() { continue; }
+                let letters: Vec<String> = inside.iter().map(|&i| cs[i].letter().to_string()).collect();
+                let s = match mark_label(mode, &format!("\u{bd}Vmax {}", letters.join(", ")), &val(*v / 2.0, dec), " = ", ans) { Label::Text(s) => s, Label::Blank => BLANK_LINE.to_string(), Label::Off => continue };
+                let half = f.py(*v / 2.0);
+                let end = inside.iter().map(|&i| f.px(cs[i].km)).fold(f.left(), f64::max);
+                let mut cands = Vec::new();
+                for dy in [-6.0, 15.0, -22.0, 31.0] {
+                    for dx in [6.0, 36.0, 66.0, 96.0, 126.0] {
+                        let x = f.left() + dx * lab;
+                        if x < end + 40.0 * lab { cands.push((x, "start", half + dy * lab)); }
+                    }
+                }
+                if cands.is_empty() { cands.push((f.left() + 6.0, "start", half - 6.0 * lab)); }
+                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &line_boxes, &plot_ok);
+                texts.push((lx, an, ly, s, curve_style(cs[inside[0]].slot, print).0, None));
             }
             // Km: one label per distinct value, named for every curve that shares it (a noncompetitive inhibitor keeps Km)
             let mut km_groups: Vec<(f64, Vec<usize>)> = Vec::new();
@@ -664,7 +782,7 @@ pub fn build(p: &Params) -> (String, Multi) {
                     cands.push((kx, "middle", y));
                     for dx in [4.0, 12.0, 24.0] { cands.push((kx + dx, "start", y)); cands.push((kx - dx, "end", y)); }
                 }
-                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &plot_ok);
+                let (lx, an, ly) = place(&cands, &s, &mut placed, &dots, &line_boxes, &plot_ok);
                 texts.push((lx, an, ly, s, curve_style(c.slot, print).0, Some((kx, f.bottom()))));
             }
         }
@@ -739,11 +857,14 @@ pub fn handles(p: &Params) -> Vec<Handle> {
     out
 }
 
-/// What the editor shows under the controls: each enzyme's optimum and where it has denatured.
-pub fn notes(p: &Params) -> Vec<String> {
+/// The plain information under the curves in the panel: each enzyme's optimum and where it has denatured, and which
+/// curves lie exactly on top of each other (human digestive enzymes all work best at body temperature). None
+/// against substrate.
+pub fn info(p: &Params) -> Option<String> {
     let a = against(p);
-    if a == Against::Substrate { return Vec::new(); }
-    let mut out: Vec<String> = curves(p)
+    if a == Against::Substrate { return None; }
+    let cs = curves(p);
+    let mut lines: Vec<String> = cs
         .iter()
         .map(|c| match a {
             Against::Temperature => format!("{}: works best at {} and has denatured by {}", c.name, x_value(a, c.opt), x_value(a, c.hi)),
@@ -756,9 +877,29 @@ pub fn notes(p: &Params) -> Vec<String> {
             }
         })
         .collect();
-    out.extend(axis_note(p));
-    out
+    for (i, c) in cs.iter().enumerate() {
+        for d in &cs[i + 1..] {
+            // the same numbers give the same curve (lo is -inf for both against temperature, and -inf == -inf)
+            if c.opt == d.opt && c.lo == d.lo && c.hi == d.hi && (a == Against::Ph || c.rise == d.rise) {
+                lines.push(format!("{} and {} have the same curve here, so curve {} is drawn exactly over curve {}.", c.name, d.name, d.letter(), c.letter()));
+            }
+        }
+    }
+    Some(lines.join("\n"))
 }
+
+/// The panel's introduction, following what the figure draws.
+pub fn intro(p: &Params) -> Option<String> {
+    Some(match against(p) {
+        Against::Temperature => "Rate of reaction against temperature: each enzyme rises to its optimum and falls to zero where it has denatured. Up to three named enzymes on one graph.".to_string(),
+        Against::Ph => "Rate of reaction against pH: each enzyme works best at its optimum pH and stops working too far either side. Up to three named enzymes on one graph.".to_string(),
+        Against::Substrate if is_multi(p) => "Rate against substrate concentration for up to three curves, each with no inhibitor, a competitive one (Km rises) or a noncompetitive one (Vmax falls), with Vmax and Km marked.".to_string(),
+        Against::Substrate => return None,
+    })
+}
+
+/// Editor warnings: only what could not be drawn as asked.
+pub fn notes(p: &Params) -> Vec<String> { axis_note(p).into_iter().collect() }
 
 /// The note under the controls when a rate axis set by hand stops below the peaks.
 pub fn axis_note(p: &Params) -> Option<String> {
@@ -1067,9 +1208,19 @@ mod tests {
     #[test]
     fn the_editor_notes_name_each_enzymes_optimum_and_a_cut_off_axis() {
         let p = with(&[s("against", "Temperature"), b("curve2", true)]);
-        assert_eq!(notes(&p), ["Human enzyme: works best at 37 \u{b0}C and has denatured by 47 \u{b0}C", "Taq polymerase: works best at 75 \u{b0}C and has denatured by 100 \u{b0}C"]);
+        assert_eq!(info(&p).unwrap(), "Human enzyme: works best at 37 \u{b0}C and has denatured by 47 \u{b0}C\nTaq polymerase: works best at 75 \u{b0}C and has denatured by 100 \u{b0}C");
+        assert!(notes(&p).is_empty(), "information is not a warning");
         let p = with(&[s("against", "pH"), s("enz1", "Trypsin")]);
-        assert_eq!(notes(&p), ["Trypsin: works best at pH 8, and only between pH 5 and pH 11"]);
+        assert_eq!(info(&p).unwrap(), "Trypsin: works best at pH 8, and only between pH 5 and pH 11");
+        // pepsin and the human enzyme share a curve against temperature: said, not hidden
+        let p = with(&[s("against", "Temperature"), s("enz1", "Pepsin"), b("curve2", true), s("enz2", "Human enzyme")]);
+        assert!(info(&p).unwrap().contains("Pepsin and Human enzyme have the same curve here, so curve B is drawn exactly over curve A."), "{:?}", info(&p));
+        assert!(!info(&with(&[s("against", "Temperature"), b("curve2", true)])).unwrap().contains("same curve"));
+        // and on the figure the shared dot carries one label naming both curves
+        let labels: Vec<String> = build(&p).1.labels.into_iter().map(|(_, t)| t).collect();
+        assert_eq!(labels, ["Optimum A, B"]);
+        assert!(info(&with(&[])).is_none() && intro(&with(&[])).is_none());
+        assert!(intro(&with(&[s("against", "pH")])).unwrap().starts_with("Rate of reaction against pH"));
         let p = with(&[s("against", "pH"), b("y_fit", false), f("y_to", 8.0)]);
         assert!(axis_note(&p).is_some() && build(&p).1.dots.is_empty());
         assert!(axis_note(&with(&[s("against", "pH")])).is_none());
@@ -1090,5 +1241,114 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Every text of an SVG as (x, y, size, anchor, bold, rotated, text).
+    fn text_items(svg: &str) -> Vec<(f64, f64, f64, String, bool, bool, String)> {
+        let attr = |tag: &str, k: &str| -> Option<String> { let i = tag.find(&format!(" {k}=\""))? + k.len() + 3; Some(tag[i..i + tag[i..].find('"')?].to_string()) };
+        let mut out = Vec::new();
+        let mut rest = svg;
+        while let Some(i) = rest.find("<text") {
+            rest = &rest[i..];
+            let Some(j) = rest.find('>') else { break };
+            let tag = &rest[..j];
+            let body = &rest[j + 1..];
+            let Some(k) = body.find("</text>") else { break };
+            let text = body[..k].to_string();
+            rest = &body[k..];
+            if tag.contains(r##"fill="none""##) { continue; } // a halo, drawn again with its fill
+            let size: f64 = attr(tag, "font-size").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let anchor = attr(tag, "text-anchor").unwrap_or_default();
+            let bold = tag.contains("font-weight=\"bold\"");
+            if let Some(t) = attr(tag, "transform") {
+                let nums: Vec<f64> = t.trim_start_matches("translate(").split(|c| c == ' ' || c == ')').filter_map(|v| v.parse().ok()).collect();
+                out.push((nums[0], nums[1], size, anchor, bold, true, text));
+            } else {
+                let x: f64 = attr(tag, "x").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                let y: f64 = attr(tag, "y").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                out.push((x, y, size, anchor, bold, false, text));
+            }
+        }
+        out
+    }
+
+    /// The y axis line (x, top, bottom): the longest vertical 1.6 px ink line.
+    fn y_axis(svg: &str) -> (f64, f64, f64) {
+        let mut best = (0.0, 0.0, 0.0);
+        for part in svg.split("<line ").skip(1) {
+            let g = |k: &str| -> f64 { let i = part.find(&format!("{k}=\"")).unwrap() + k.len() + 2; part[i..i + part[i..].find('"').unwrap()].parse().unwrap() };
+            if !part.contains("stroke-width=\"1.6\"") { continue; }
+            let (x1, y1, x2, y2) = (g("x1"), g("y1"), g("x2"), g("y2"));
+            if (x1 - x2).abs() < 1e-6 && (y2 - y1).abs() > best.2 - best.1 { best = (x1, y1.min(y2), y1.max(y2)); }
+        }
+        best
+    }
+
+    /// The longest titles the boxes take (80 characters), at every label size, on every kind of figure: every line
+    /// stays on the canvas, the y title stays within the plot's height and clear of the tick numbers, no line under
+    /// the plot runs into another, and no text is drawn under 8 px.
+    #[test]
+    fn the_longest_titles_wrap_and_stay_on_the_canvas_at_every_size() {
+        let words = "The effect of temperature on the rate of an enzyme-controlled reaction in humans and bacteria";
+        let long: String = words.chars().take(80).collect();
+        let yt: String = "Volume of oxygen released per minute (cm\u{b3}/min) by catalase from potato and liver cells".chars().take(80).collect();
+        let unbroken: String = "Pneumonoultramicroscopicsilicovolcanoconiosis".repeat(2).chars().take(80).collect();
+        let mut n = 0;
+        for base in [
+            vec![],
+            vec![s("mode", "competitive")],
+            vec![s("against", "Temperature"), b("curve2", true), b("curve3", true)],
+            vec![s("against", "pH"), b("curve2", true), b("mark_den", true)],
+            vec![b("curve2", true), b("curve3", true)],
+        ] {
+            for size in ["Small", "Medium", "Large"] {
+                for (title, x, y) in [(long.as_str(), long.as_str(), yt.as_str()), (unbroken.as_str(), unbroken.as_str(), unbroken.as_str()), ("Rate", "pH", "v")] {
+                    let mut l = base.clone();
+                    l.extend([s("label_size", size), s("title", title), s("xtitle", x), s("ytitle", y)]);
+                    let svg = (def().render)(&with(&l));
+                    let (w, h) = crate::figures::svg_size(&svg);
+                    let (ax, top, bottom) = y_axis(&svg);
+                    let items = text_items(&svg);
+                    let mut under: Vec<((f64, f64, f64, f64), String)> = Vec::new();
+                    for (tx, ty, fs, anchor, bold, rot, t) in &items {
+                        assert!(*fs >= 8.0, "{l:?}: {t} at {fs} px");
+                        let len = t.chars().count() as f64 * fs * if *bold { 0.6 } else { 0.55 };
+                        if *rot {
+                            assert!(ty - len / 2.0 >= top - 2.0 && ty + len / 2.0 <= bottom + 2.0, "{l:?}: y title line {t} runs past the plot ({top}..{bottom})");
+                            assert!(tx - 0.8 * fs >= 0.0, "{l:?}: y title off the left edge");
+                            // clear of the widest tick number (3 characters, 12 px scaled) ending 8 px left of the axis
+                            let tick_left = ax - 8.0 - 3.0 * 12.0 * svg::label_factor(size) * 0.55;
+                            assert!(tx + 0.3 * fs <= tick_left, "{l:?}: y title line {t} at {tx} runs into the tick numbers at {tick_left}");
+                        } else {
+                            let (x0, x1) = match anchor.as_str() { "middle" => (tx - len / 2.0, tx + len / 2.0), "end" => (tx - len, *tx), _ => (*tx, tx + len) };
+                            assert!(x0 >= -0.5 && x1 <= w + 0.5, "{l:?}: {t} off the canvas ({x0:.1}..{x1:.1} of {w})");
+                            assert!(*ty - fs * 0.8 >= 0.0 && *ty + fs * 0.25 <= h, "{l:?}: {t} off the canvas vertically");
+                            if *ty > bottom + 4.0 { under.push(((x0, x1, ty - fs * 0.74, ty + fs * 0.22), t.clone())); }
+                            if *bold { assert!(*ty < top, "{l:?}: the chart title {t} runs into the plot"); }
+                        }
+                    }
+                    for (i, (a, ta)) in under.iter().enumerate() {
+                        for (bb, tb) in &under[i + 1..] {
+                            assert!(!super::super::hits(*a, *bb), "{l:?}: {ta} runs into {tb}");
+                        }
+                    }
+                    n += 1;
+                }
+            }
+        }
+        assert_eq!(n, 45);
+        // the splitter: at spaces when it can, through a word only when the word alone is longer than a line
+        assert_eq!(split_lines("one two three", 7), ["one two", "three"]);
+        assert_eq!(split_lines("abcdefghij k", 4), ["abcd", "efgh", "ij k"]);
+    }
+
+    /// A title that fits is drawn exactly as before the wrapping existed: one line, same place.
+    #[test]
+    fn a_title_that_fits_keeps_its_place() {
+        let one = |l: &[(&'static str, Value)]| (def().render)(&with(l));
+        let svg = one(&[s("title", "Michaelis-Menten"), s("ytitle", "Rate"), s("xtitle", "[S] (mmol/L)")]);
+        assert!(svg.contains(r##"<text transform="translate(18.00 "##) && svg.matches("rotate(-90)").count() == 1);
+        assert_eq!(svg.matches("Michaelis-Menten</text>").count(), 1);
+        assert_eq!(y_axis(&svg).0, 66.0);
     }
 }

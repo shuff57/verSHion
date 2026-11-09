@@ -2382,11 +2382,14 @@ impl Workspace {
         let shell = skin && self.shell_panel();
         ui.vertical(|ui| {
             if !skin {
-                ui.label(theme::muted(if def.subject == figures::Subject::Math { figures::chemistry::skin_intro(def.id).unwrap_or(def.blurb) } else { def.blurb }).size(12.0));
+                let blurb = figures::live_intro(def.id, &self.params).unwrap_or_else(|| (if def.subject == figures::Subject::Math { figures::chemistry::skin_intro(def.id).unwrap_or(def.blurb) } else { def.blurb }).to_string());
+                ui.label(theme::muted(blurb).size(12.0));
                 ui.add_space(6.0);
             }
             let skin_phys = self.skin_subject() == figures::Subject::Physics;
             let params_now = self.params.clone();
+            // a figure whose purpose changes with a control says so (enzyme activity against temperature or pH)
+            let live_intro = figures::live_intro(def.id, &params_now);
             let mut content = |ui: &mut Ui| {
                     ui.spacing_mut().slider_width = 170.0;
                     let n_now = pdefs.iter().any(|d| d.key == "n").then(|| self.params.i("n"));
@@ -2758,7 +2761,7 @@ impl Workspace {
                     let stacked = shell && ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("fig_stacked"))).unwrap_or(false);
                     let intro_card = |ui: &mut Ui, start_example: &mut bool| {
                     chem_shell::panel_card_m(ui, if chem_page { Margin { left: 18, right: 18, top: 17, bottom: 16 } } else if bio_page || phys_page { Margin { left: 18, right: 18, top: 17, bottom: 16 } } else { Margin::same(18) }, |ui| {
-                        let intro = RichText::new(figures::chemistry::skin_intro_in(def.id, skin_phys).unwrap_or(def.blurb)).size(if shell || def.subject == figures::Subject::Math { 14.5 } else if chem_page || bio_page || phys_page { 14.72 } else { 15.0 }).color(theme::ink());
+                        let intro = RichText::new(live_intro.clone().unwrap_or_else(|| figures::chemistry::skin_intro_in(def.id, skin_phys).unwrap_or(def.blurb).to_string())).size(if shell || def.subject == figures::Subject::Math { 14.5 } else if chem_page || bio_page || phys_page { 14.72 } else { 15.0 }).color(theme::ink());
                         // the chemistry page sets its lead at 1.5 line height
                         ui.label(if chem_page { intro.line_height(Some(22.0)) } else if bio_page { intro.line_height(Some(22.08)) } else if phys_page { intro.line_height(Some(22.0)) } else { intro });
                         ui.add_space(if chem_page { 2.0 } else if bio_page { 1.9 } else if phys_page { 2.0 } else { 4.0 });
