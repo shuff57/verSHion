@@ -357,8 +357,8 @@
    "id": "cap-i07",
    "text": "Click a line, angle or arc on the figure to label it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: click any line, angle or arc to label or style it."
+   "evidence": "handle:click:a line, angle or arc to label it",
+   "note": "Built in batch 2, round 25 (2026-11-08). From the page controls, not the bullets. The page says: click any line, angle or arc to label or style it."
   },
   {
    "id": "cap-i08",
@@ -371,8 +371,8 @@
    "id": "cap-i09",
    "text": "Click inside an enclosed area on the figure to shade it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: or inside an enclosed area to shade it."
+   "evidence": "handle:click:an enclosed area to shade it",
+   "note": "Built in batch 2, round 24 (2026-11-08). From the page controls, not the bullets. The page says: or inside an enclosed area to shade it."
   },
   {
    "id": "cap-i10",

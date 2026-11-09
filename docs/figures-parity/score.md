@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-09T02:23:59+00:00 · probe: 2026-11-08T18:23:51
+Generated: 2026-11-09T03:11:18+00:00 · probe: 2026-11-08T19:11:17
 
-**Pooled 78.8** · mean 80.1 over 70 figures · built 71 of 71 reference figures
+**Pooled 78.9** · mean 80.1 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -62,13 +62,6 @@ Comparable with the frozen baseline: **yes**
   - cap-03b [control 3] Show relative frequency as a percent — no evidence
   - cap-04c [control 3] Fill the bars with a black-and-white pattern — no evidence
   - cap-04d [control 3] Leave the bars white — no evidence
-- `circle`: 49 (80/163)
-  - cap-i02 [editor 4] Click a point on the figure to join it to another point — no evidence
-  - cap-01c [control 3] Place a point off the circle by its distance in radii — no evidence
-  - cap-02g [control 3] Run a line on past its point with an arrow, a line arrow or a dot — no evidence
-  - cap-03b [control 3] One or both tangents from a point outside the circle — no evidence
-  - cap-04e [control 3] Label any angle the lines make, not only ∠AOB and ∠ACB — no evidence
-  - cap-04b [control 3] Label an angle with typed text — no evidence
 - `ogive`: 49 (37/75)
   - cap-01b [core 5] Type a cumulative table of upper bounds — no evidence
   - cap-02a [control 3] Choose crosses or dots at the points — no evidence
@@ -97,6 +90,13 @@ Comparable with the frozen baseline: **yes**
   - cap-06b [core 5] Give the caliper or micrometer a zero error, and draw it closed too — no evidence
   - cap-04a [control 3] Set the caliper's least count: 0.1, 0.05 or 0.02 mm — no evidence
   - cap-04b [control 3] Print the least count on the slider or leave it off — no evidence
+- `circle`: 52 (84/163)
+  - cap-i02 [editor 4] Click a point on the figure to join it to another point — no evidence
+  - cap-01c [control 3] Place a point off the circle by its distance in radii — no evidence
+  - cap-02g [control 3] Run a line on past its point with an arrow, a line arrow or a dot — no evidence
+  - cap-03b [control 3] One or both tangents from a point outside the circle — no evidence
+  - cap-04e [control 3] Label any angle the lines make, not only ∠AOB and ∠ACB — no evidence
+  - cap-04b [control 3] Label an angle with typed text — no evidence
 - `ray-diagram`: 53 (60/114)
   - cap-01e [core 5] A plane mirror — no evidence
   - cap-04c [core 5] A ray through C for a mirror — no evidence

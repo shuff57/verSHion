@@ -1,9 +1,9 @@
 {
- "generated_at": "2026-11-09T02:23:59+00:00",
- "probe_checked_at": "2026-11-08T18:23:51",
+ "generated_at": "2026-11-09T03:11:18+00:00",
+ "probe_checked_at": "2026-11-08T19:11:17",
  "comparable": true,
  "drift": [],
- "pooled": 78.8,
+ "pooled": 78.9,
  "mean": 80.1,
  "figures_scored": 70,
  "figures_built": 71,
@@ -224,8 +224,8 @@
    ]
   },
   "circle": {
-   "score": 49.1,
-   "got": 80.0,
+   "score": 51.5,
+   "got": 84.0,
    "total": 163.0,
    "unclassified": 0,
    "gaps": [
@@ -405,24 +405,10 @@
      "why": "no evidence"
     },
     {
-     "id": "cap-i07",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a line, angle or arc on the figure to label it",
-     "why": "no evidence"
-    },
-    {
      "id": "cap-i08",
      "class": "interaction",
      "weight": 2.0,
      "text": "Click a line, angle or arc on the figure to mark or style it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i09",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click inside an enclosed area on the figure to shade it",
      "why": "no evidence"
     },
     {

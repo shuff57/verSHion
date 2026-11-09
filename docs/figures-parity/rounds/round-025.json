@@ -1,0 +1,29 @@
+{
+ "round": 25,
+ "figure": "circle",
+ "capability": "cap-i07",
+ "hypothesis": "Batch 2 circle editor, fourth fix round: cap-i07; evidence handle:click:a line, angle or arc to label it",
+ "started_at": "2026-11-08T19:11:16",
+ "git": "a0add37",
+ "before": {
+  "figure": 50.3,
+  "pooled": 78.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-08T19:11:18",
+ "after": {
+  "figure": 51.5,
+  "pooled": 78.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: clicks along every drawn line of 10 examples and 19 setups (3,192 samples) all reached a line label except 51 on a point's own knob; angle wedges and arc rings label too.",
+ "result": "hit",
+ "evidence": "circle tests through interact::pick (per-pixel sweeps), figures::interact, census circle ids unchanged; NAS full suite 2378 passed 0 failed; checker: 143 old renders byte-identical, 3,192 line clicks, tangents meeting below/above/sides; task run reference 16 actions, ours 11, no dead ends",
+ "next": "circle cap-01g drag any point (no token at the opening state)"
+}
