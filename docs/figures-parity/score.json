@@ -1,17 +1,11 @@
 {
- "generated_at": "2026-11-08T23:36:55+00:00",
- "probe_checked_at": "2026-11-08T15:36:55",
- "comparable": false,
- "drift": [
-  "map.json changed since freeze",
-  "not-doing.md changed since freeze",
-  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
-  "spring-scale: capability list or classes changed since freeze (denominator moved)",
-  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
- ],
- "pooled": 77.4,
- "mean": 79.2,
- "figures_scored": 67,
+ "generated_at": "2026-11-09T02:23:59+00:00",
+ "probe_checked_at": "2026-11-08T18:23:51",
+ "comparable": true,
+ "drift": [],
+ "pooled": 78.8,
+ "mean": 80.1,
+ "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
  "figures": {
@@ -639,6 +633,13 @@
      "why": "no evidence"
     }
    ]
+  },
+  "dna-protein-synthesis": {
+   "score": 100.0,
+   "got": 102.0,
+   "total": 102.0,
+   "unclassified": 0,
+   "gaps": []
   },
   "dot-and-cross": {
    "score": 64.3,
@@ -1602,6 +1603,13 @@
     }
    ]
   },
+  "osmosis": {
+   "score": 100.0,
+   "got": 140.0,
+   "total": 140.0,
+   "unclassified": 0,
+   "gaps": []
+  },
   "parallel-lines": {
    "score": 50.0,
    "got": 23.0,
@@ -1957,6 +1965,13 @@
      "why": "no evidence"
     }
    ]
+  },
+  "pie-chart": {
+   "score": 100.0,
+   "got": 93.0,
+   "total": 93.0,
+   "unclassified": 0,
+   "gaps": []
   },
   "population-growth": {
    "score": 95.4,

@@ -1,12 +1,8 @@
 {
- "frozen_at": "2026-11-08T15:48:25+00:00",
- "map_sha256": "5ffa93cf8a8660913f045a3f6282de4aafe9396eb0d70f3d78cfff1dced36085",
- "not_doing_sha256": "e8f59453e2072beb947ec2e08703edacf1607fbf425e7636a36fa6db2df95d3f",
- "missing_figures": [
-  "biology/dna-protein-synthesis",
-  "biology/osmosis",
-  "math/pie-chart"
- ],
+ "frozen_at": "2026-11-09T02:23:59+00:00",
+ "map_sha256": "9a4c3be020f08b79676c68f613a36c37374576473ef3d81604ea49c480c01a89",
+ "not_doing_sha256": "0d4d68bef94ec157aa39e4048a440fc3b2f491bb3ec66ce38d39b83dfef34a60",
+ "missing_figures": [],
  "figures": {
   "angles": {
    "page": "math/angles",
@@ -87,6 +83,11 @@
    "page": "math/parallelogram",
    "text_sha256": "a319e7ac2d8aee4b4629aec0bbfd541dda1aa895038158162983fbf0b75786e5",
    "shape": "7b6c153129509d5cb58edab2312bbfb4e0d96c1d3ccc49eb8bbfed0eab7e0008"
+  },
+  "pie-chart": {
+   "page": "math/pie-chart",
+   "text_sha256": "1bcd695a24f3fc8ecd49d4e3009ff11720d81eb10bd530ea2fcba4742af241f8",
+   "shape": "0098eded0cafe2efeb28186e1f8777b50d3caef15a1acb3577b200e2c721d076"
   },
   "prism": {
    "page": "math/prism",
@@ -191,7 +192,7 @@
   "spring-scale": {
    "page": "physics/spring-scale",
    "text_sha256": "e7c161856fbb5f666d222a61977ed0e1449114d4dfe493c273f9b9dec25e1a14",
-   "shape": "eba662649069aad6e886c5c5e60ac7c541c95a68bcfc3c7db138b3f2533036cd"
+   "shape": "559804557e7beb3b94e7dbc4a20d3afca567a2d8357aee91fbdb38f43a8d7755"
   },
   "vector-diagram": {
    "page": "physics/vector-diagram",
@@ -303,6 +304,11 @@
    "text_sha256": "e6f36fb44a9aad0bcea651657ad8a980078f8fee2b58ec2d3dfaf4f7c72d48ec",
    "shape": "efe7b1904aa29e32d014f063485a284f54d14f049ac07f1bcf695904afacc4a8"
   },
+  "dna-protein-synthesis": {
+   "page": "biology/dna-protein-synthesis",
+   "text_sha256": "b0db6f0d2257434f302dccdee67c5e5eaef694407c6f1eead9f2b69b85d1603a",
+   "shape": "d50b33c2d01ba8a7479e8d91b4bbb5d0376c7c702c5f0ae69ee541342d9ad11d"
+  },
   "enzyme-kinetics": {
    "page": "biology/enzyme-activity",
    "text_sha256": "5f20a6d1ffa1225a0032ac2c7804affe034292f1b4fc300281713aab722351d9",
@@ -316,7 +322,12 @@
   "micropipette-reading": {
    "page": "biology/micropipette-reading",
    "text_sha256": "94299cbe3b0509b24b34772af8769ae2b09c97cb2b52c95cf1f9fa6a31acc3e9",
-   "shape": "1a263faae750fb51ea85dfc8c0abebff2f2de2124635f06266bed19ae0d812c3"
+   "shape": "eb6e389ce618c059387591bfb8ac65a3da17299b6f3a2e4ebe0f390c26bbc11d"
+  },
+  "osmosis": {
+   "page": "biology/osmosis",
+   "text_sha256": "540e086a8f501640faa7d4ed77bcc20693a5e1fae7112ced71340376f85006af",
+   "shape": "0a59ad2ae74460401e86c87ccb09c53c27399bd096309d0f6fc4f1d7e000d017"
   },
   "pedigree": {
    "page": "biology/pedigree",

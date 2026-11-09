@@ -1,16 +1,10 @@
 # Figures parity score
 
-Generated: 2026-11-08T23:36:55+00:00 · probe: 2026-11-08T15:36:55
+Generated: 2026-11-09T02:23:59+00:00 · probe: 2026-11-08T18:23:51
 
-**Pooled 77.4** · mean 79.2 over 67 figures · built 71 of 71 reference figures
+**Pooled 78.8** · mean 80.1 over 70 figures · built 71 of 71 reference figures
 
-Comparable with the frozen baseline: **no**
-
-- map.json changed since freeze
-- not-doing.md changed since freeze
-- micropipette-reading: capability list or classes changed since freeze (denominator moved)
-- spring-scale: capability list or classes changed since freeze (denominator moved)
-- ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart
+Comparable with the frozen baseline: **yes**
 
 - `two-way-table`: 25 (17/68)
   - cap-01b [control 3] Paste a table that includes its totals — no evidence
@@ -270,6 +264,7 @@ Comparable with the frozen baseline: **no**
 - `waves`: 97 (97/100)
   - cap-07e [control 3] End caps on the axes — no evidence
 - `circuit-diagram`: 100 (61/61)
+- `dna-protein-synthesis`: 100 (102/102)
 - `inclined-plane`: 100 (91/91)
 - `lewis-structures`: 100 (51/51)
 - `line-spectrum`: 100 (54/54)
@@ -277,6 +272,8 @@ Comparable with the frozen baseline: **no**
 - `mass-spectrum`: 100 (49/49)
 - `motion-graphs`: 100 (89/89)
 - `orbital-diagram`: 100 (61/61)
+- `osmosis`: 100 (140/140)
 - `photoelectron-spectrum`: 100 (50/50)
+- `pie-chart`: 100 (93/93)
 - `sphere`: 100 (35/35)
 - `titration-curve`: 100 (64/64)

@@ -1,6 +1,6 @@
 # Figures parity diff
 
-Reference scraped 2026-11-08T05:54:07+00:00 · local `/home/shuff57/Documents/GitHub/verSHion/docs/figures-parity/ours.json`
+Reference scraped 2026-11-08T05:54:07+00:00 · local `docs/figures-parity/ours.json`
 
 The click/drag column is a keyword hint. The ledger and the round's task run are the authority.
 
@@ -11,7 +11,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | angles | `angles` | 29 | 2 | 6 | — | 66 |
 | bar-graph | `bar-chart` | 21 | 0 | 7 | — | 49 |
 | box-plot | `box-plot` | 37 | 0 | 6 | reference has a student version; ours has no show_answers | 90 |
-| circle | `circle` | 69 | 3 | 7 | — | 49 |
+| circle | `circle` | 69 | 2 | 7 | — | 49 |
 | composite-shape | `composite-shape` | 9 | 10 | 3 | — | 56 |
 | cone | `cone` | 26 | 4 | 6 | — | 91 |
 | coordinate-grid | `coordinate-grid` | 41 | 2 | 7 | — | 83 |
@@ -24,7 +24,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | number-line | `number-line` | 18 | 0 | 6 | — | 72 |
 | parallel-lines | `parallel-lines` | 29 | 10 | 7 | — | 50 |
 | parallelogram | `parallelogram` | 57 | 9 | 6 | — | 90 |
-| pie-chart | `pie-chart` | 16 | 0 | 5 | — |  |
+| pie-chart | `pie-chart` | 16 | 0 | 5 | — | 100 |
 | prism | `prism` | 35 | 6 | 8 | — | 90 |
 | pyramid | `pyramid` | 33 | 6 | 7 | — | 92 |
 | rectangle | `rectangle` | 52 | 9 | 6 | — | 93 |
@@ -84,11 +84,11 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
-| dna-protein-synthesis | `dna-protein-synthesis` | 32 | 0 | 8 | — |  |
+| dna-protein-synthesis | `dna-protein-synthesis` | 32 | 0 | 8 | — | 100 |
 | enzyme-activity | `enzyme-kinetics` | 11 | 1 | 6 | — | 32 |
 | gel-electrophoresis | `gel-electrophoresis` | 18 | 17 | 8 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 97 |
 | micropipette-reading | `micropipette-reading` | 10 | 5 | 6 | reference has black-and-white; ours has no style switch | 89 |
-| osmosis | `osmosis` | 45 | 0 | 7 | — |  |
+| osmosis | `osmosis` | 46 | 0 | 7 | — | 100 |
 | pedigree | `pedigree` | 17 | 1 | 8 | reference has a student version; ours has no show_answers | 95 |
 | photosynthesis-rate | `photosynthesis` | 14 | 0 | 8 | — | 26 |
 | population-growth | `population-growth` | 53 | 7 | 7 | reference has a student version; ours has no show_answers | 95 |
@@ -101,17 +101,11 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-08T23:36:55+00:00 · probe: 2026-11-08T15:36:55
+Generated: 2026-11-09T02:23:59+00:00 · probe: 2026-11-08T18:23:51
 
-**Pooled 77.4** · mean 79.2 over 67 figures · built 71 of 71 reference figures
+**Pooled 78.8** · mean 80.1 over 70 figures · built 71 of 71 reference figures
 
-Comparable with the frozen baseline: **no**
-
-- map.json changed since freeze
-- not-doing.md changed since freeze
-- micropipette-reading: capability list or classes changed since freeze (denominator moved)
-- spring-scale: capability list or classes changed since freeze (denominator moved)
-- ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart
+Comparable with the frozen baseline: **yes**
 
 - `two-way-table`: 25 (17/68)
   - cap-01b [control 3] Paste a table that includes its totals — no evidence
@@ -371,6 +365,7 @@ Comparable with the frozen baseline: **no**
 - `waves`: 97 (97/100)
   - cap-07e [control 3] End caps on the axes — no evidence
 - `circuit-diagram`: 100 (61/61)
+- `dna-protein-synthesis`: 100 (102/102)
 - `inclined-plane`: 100 (91/91)
 - `lewis-structures`: 100 (51/51)
 - `line-spectrum`: 100 (54/54)
@@ -378,6 +373,8 @@ Comparable with the frozen baseline: **no**
 - `mass-spectrum`: 100 (49/49)
 - `motion-graphs`: 100 (89/89)
 - `orbital-diagram`: 100 (61/61)
+- `osmosis`: 100 (140/140)
 - `photoelectron-spectrum`: 100 (50/50)
+- `pie-chart`: 100 (93/93)
 - `sphere`: 100 (35/35)
 - `titration-curve`: 100 (64/64)

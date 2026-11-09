@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-08T23:36:55+00:00",
+ "generated_at": "2026-11-09T02:23:59+00:00",
  "spec_generated_at": "2026-11-08T05:54:07+00:00",
  "figures": [
   {
@@ -364,7 +364,7 @@
     "label_size"
    ],
    "param_count": 69,
-   "handles": 3,
+   "handles": 2,
    "label_drag": false,
    "show_answers": true,
    "style": true,
@@ -5313,6 +5313,7 @@
     "lab_conc",
     "lab_tonic",
     "lab_membrane",
+    "lab_membrane_text",
     "lab_struct",
     "lab_result",
     "arr_water",
@@ -5325,7 +5326,7 @@
     "show_answers",
     "label_size"
    ],
-   "param_count": 45,
+   "param_count": 46,
    "handles": 0,
    "label_drag": false,
    "show_answers": true,

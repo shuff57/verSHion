@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-08T23:25:01+00:00",
-  "src_mtime": 1794180224.4729,
-  "git": "b2b1b80",
+  "built_at": "2026-11-09T02:23:16+00:00",
+  "src_mtime": 1794189032.1781306,
+  "git": "9eda06c",
   "figures": 191
  },
  "figures": {
@@ -7993,6 +7993,13 @@
       "None"
      ],
      "default": "Text"
+    },
+    {
+     "key": "lab_membrane_text",
+     "label": "Membrane label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
     },
     {
      "key": "lab_struct",
@@ -22778,14 +22785,7 @@
       "click"
      ],
      "edit": null,
-     "tip": "Click the circle to put a point there, or inside an enclosed area to shade it"
-    },
-    {
-     "actions": [
-      "click"
-     ],
-     "edit": null,
-     "tip": "Click radius OA to label it: r = its value, the letter r, or none"
+     "tip": "Click the circle to put a point there, a line, angle or arc to label it, or an enclosed area to shade it"
     }
    ],
    "handles": true,
