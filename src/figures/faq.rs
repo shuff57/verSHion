@@ -641,6 +641,10 @@ const ENZYME_KINETICS: &[Faq] = &[
         q: "Why is the marked rate always below Vmax?",
         a: "Because the enzyme can only work as fast as its active sites allow. The formula v = Vmax [S] / (Km + [S]) gives a fraction of Vmax for any finite concentration, and only approaches Vmax as the concentration becomes very large.",
     },
+    Faq {
+        q: "Why does the rate climb slowly to the optimum and then fall so fast?",
+        a: "Below the optimum, warming makes molecules collide more often and with more energy, so the rate rises gradually. Above it, the heat breaks the bonds holding the enzyme's shape, the active site no longer fits the substrate, and the rate drops to zero within a few degrees: the enzyme has denatured. Against pH the curve is a hill on both sides, because too much acid or too much alkali changes the active site.",
+    },
 ];
 
 const FOOD_WEB: &[Faq] = &[

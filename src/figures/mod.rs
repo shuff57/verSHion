@@ -738,6 +738,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "boltzmann-distribution" if key == "t3" => p.s("curves") == "3",
         // only the chosen transformation's controls (the shifts for a translation, the line for a reflection ...)
         "transformations" => transform::relevant(key, p),
+        // only the chosen axis's controls, the switched-on curves and an unknown enzyme's own numbers
+        "enzyme-kinetics" => biology::enzyme::relevant(key, p),
         _ => cards::relevant(id, key, p),
     }
 }

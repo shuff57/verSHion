@@ -10,6 +10,8 @@ use super::super::chart::{fmt, nice_step, ticks, Frame};
 use super::*;
 use crate::figures::interact::Handle;
 
+pub mod multi;
+
 pub const ID: &str = "enzyme-kinetics";
 
 const INK: &str = "#111111";
@@ -39,20 +41,105 @@ pub fn defs() -> Vec<FigureDef> {
     }]
 }
 
+/// Every control, in panel order. The keys the figure had before Temperature, pH and the extra curves (vmax, km,
+/// smax, at, mode, inh, ki, dec, show_answers, style, label_size) keep their meaning, and every new control's default
+/// draws the old figure unchanged, so a saved figure (which stores only the old keys) needs no migration.
 fn params() -> Vec<ParamDef> {
+    use multi::{ENZYMES, LABEL_MODES, MODES, TITLE_MODES};
     vec![
+        ParamDef::choice("against", "Rate against", &["Substrate concentration", "Temperature", "pH"], "Substrate concentration")
+            .hint("Temperature and pH draw each enzyme rising to its optimum and falling to zero where it has denatured"),
+        ParamDef::choice("enz1", "Curve A enzyme", &ENZYMES, "Human enzyme"),
+        ParamDef::choice("mode", "Inhibitor", &MODES, "none"),
+        ParamDef::text("name1", "Curve A name", "").hint("Shown in the key. Empty: the enzyme's name (against substrate, the inhibitor)"),
+        ParamDef::float("uopt_t1", "Curve A optimum (\u{b0}C)", 0.0, 100.0, 1.0, 45.0),
+        ParamDef::float("uwid_t1", "Curve A denatured this many \u{b0}C above it", 2.0, 40.0, 1.0, 10.0),
+        ParamDef::float("uopt_ph1", "Curve A optimum pH", 0.0, 14.0, 0.1, 7.0),
+        ParamDef::float("uwid_ph1", "Curve A works within \u{b1} (pH)", 0.5, 7.0, 0.1, 3.0),
+        ParamDef::bool("curve2", "Curve B", false),
+        ParamDef::choice("enz2", "Curve B enzyme", &ENZYMES, "Taq polymerase"),
+        ParamDef::choice("mode2", "Curve B inhibitor", &MODES, "competitive"),
+        ParamDef::text("name2", "Curve B name", ""),
+        ParamDef::float("uopt_t2", "Curve B optimum (\u{b0}C)", 0.0, 100.0, 1.0, 60.0),
+        ParamDef::float("uwid_t2", "Curve B denatured this many \u{b0}C above it", 2.0, 40.0, 1.0, 10.0),
+        ParamDef::float("uopt_ph2", "Curve B optimum pH", 0.0, 14.0, 0.1, 5.0),
+        ParamDef::float("uwid_ph2", "Curve B works within \u{b1} (pH)", 0.5, 7.0, 0.1, 3.0),
+        ParamDef::bool("curve3", "Curve C", false),
+        ParamDef::choice("enz3", "Curve C enzyme", &ENZYMES, "Pepsin"),
+        ParamDef::choice("mode3", "Curve C inhibitor", &MODES, "noncompetitive"),
+        ParamDef::text("name3", "Curve C name", ""),
+        ParamDef::float("uopt_t3", "Curve C optimum (\u{b0}C)", 0.0, 100.0, 1.0, 30.0),
+        ParamDef::float("uwid_t3", "Curve C denatured this many \u{b0}C above it", 2.0, 40.0, 1.0, 10.0),
+        ParamDef::float("uopt_ph3", "Curve C optimum pH", 0.0, 14.0, 0.1, 9.0),
+        ParamDef::float("uwid_ph3", "Curve C works within \u{b1} (pH)", 0.5, 7.0, 0.1, 3.0),
         ParamDef::float("vmax", "Vmax (rate units)", 1.0, 100.0, 1.0, 10.0),
         ParamDef::float("km", "Km (concentration units)", 0.2, 20.0, 0.1, 2.0),
-        ParamDef::float("smax", "Highest [S] shown", 2.0, 40.0, 1.0, 12.0),
-        ParamDef::float("at", "Mark the rate at [S] =", 0.0, 40.0, 0.5, 6.0),
-        ParamDef::choice("mode", "Inhibitor", &["none", "competitive", "noncompetitive"], "none"),
         ParamDef::float("inh", "Inhibitor concentration [I]", 0.0, 10.0, 0.5, 3.0),
         ParamDef::float("ki", "Inhibition constant Ki", 0.2, 10.0, 0.1, 1.0),
+        ParamDef::float("smax", "Highest [S] shown", 2.0, 40.0, 1.0, 12.0),
+        ParamDef::float("at", "Mark the rate at [S] =", 0.0, 40.0, 0.5, 6.0),
+        ParamDef::bool("mark_opt", "Mark the optimum", true).hint("A dot on each peak, with a dashed line down to the axis"),
+        ParamDef::choice("opt_label", "Optimum label", &LABEL_MODES, "Name only"),
+        ParamDef::text("opt_text", "Optimum label text", "Optimum"),
+        ParamDef::bool("mark_den", "Mark where it has denatured", false).hint("A dot where each curve reaches zero"),
+        ParamDef::choice("den_label", "Denaturation label", &LABEL_MODES, "Name only"),
+        ParamDef::text("den_text", "Denaturation label text", "Denatured"),
+        ParamDef::choice("vk_label", "Vmax, Vmax/2 and Km labels", &LABEL_MODES, "Name and value").hint("Blank line leaves a line for students to name the mark; None keeps the dashed line unlabelled"),
         ParamDef::int("dec", "Decimal places", 1, 3, 2),
-        answers_param().hint("Off keeps the axes and blanks the curve, Vmax, Km and the marked rate"),
+        answers_param().hint("Off: against substrate with one curve, blanks the curve, Vmax, Km and the marked rate; otherwise every value on a label is blanked and every named mark becomes a blank line"),
         svg::style_param(),
+        ParamDef::bool("gridlines", "Gridlines", true),
+        ParamDef::choice("title_style", "Chart title", &TITLE_MODES, "Text"),
+        ParamDef::text("title", "Chart title text", "").hint("Empty: no title"),
+        ParamDef::choice("xtitle_style", "x-axis title", &TITLE_MODES, "Text"),
+        ParamDef::text("xtitle", "x-axis title text", "").hint("Empty: the usual title for the axis"),
+        ParamDef::choice("ytitle_style", "y-axis title", &TITLE_MODES, "Text"),
+        ParamDef::text("ytitle", "y-axis title text", "").hint("Empty: the usual title for the axis"),
         svg::label_size_param(),
+        ParamDef::choice("axes", "Axes", &["Numbered", "Shape only"], "Numbered").hint("Shape only: no numbers and no gridlines"),
+        ParamDef::bool("y_fit", "Fit the rate axis to the curves", true),
+        ParamDef::float("y_to", "Rate axis up to", 1.0, 200.0, 1.0, 12.0),
+        ParamDef::bool("arrows", "Arrows at the axes' ends", false),
     ]
+}
+
+/// Which controls apply: only the chosen axis's, only the switched-on curves', an unknown enzyme's numbers only
+/// when it is picked, and a label's text only while it is written.
+pub fn relevant(key: &str, p: &Params) -> bool {
+    use multi::Against;
+    let a = multi::against(p);
+    let sub = a == Against::Substrate;
+    let single = sub && !p.b("curve2") && !p.b("curve3");
+    let on = |n: u8| n == 1 || p.b(if n == 2 { "curve2" } else { "curve3" });
+    let unknown = |n: u8| on(n) && p.s(["enz1", "enz2", "enz3"][(n - 1) as usize]) == "Unknown enzyme";
+    match key {
+        "enz1" => !sub,
+        "enz2" => !sub && on(2),
+        "enz3" => !sub && on(3),
+        "mode" => sub,
+        "mode2" | "name2" => (key == "name2" || sub) && on(2),
+        "mode3" | "name3" => (key == "name3" || sub) && on(3),
+        "uopt_t1" | "uwid_t1" => a == Against::Temperature && unknown(1),
+        "uopt_t2" | "uwid_t2" => a == Against::Temperature && unknown(2),
+        "uopt_t3" | "uwid_t3" => a == Against::Temperature && unknown(3),
+        "uopt_ph1" | "uwid_ph1" => a == Against::Ph && unknown(1),
+        "uopt_ph2" | "uwid_ph2" => a == Against::Ph && unknown(2),
+        "uopt_ph3" | "uwid_ph3" => a == Against::Ph && unknown(3),
+        "vmax" | "km" | "smax" | "vk_label" | "dec" => sub,
+        "at" => single,
+        "inh" | "ki" => sub && [("mode", 1u8), ("mode2", 2), ("mode3", 3)].iter().any(|(k, n)| on(*n) && p.s(k) != "none"),
+        "mark_opt" | "mark_den" => !sub,
+        "opt_label" => !sub && p.b("mark_opt"),
+        "opt_text" => !sub && p.b("mark_opt") && matches!(p.s("opt_label"), "Name and value" | "Name only"),
+        "den_label" => !sub && p.b("mark_den"),
+        "den_text" => !sub && p.b("mark_den") && matches!(p.s("den_label"), "Name and value" | "Name only"),
+        "title" => p.s("title_style") == "Text",
+        "xtitle" => p.s("xtitle_style") == "Text",
+        "ytitle" => p.s("ytitle_style") == "Text",
+        "gridlines" => p.s("axes") != "Shape only",
+        "y_to" => !p.b("y_fit"),
+        _ => true,
+    }
 }
 
 fn render(p: &Params) -> String { build(p).0 }
@@ -99,6 +186,18 @@ pub fn marked(p: &Params) -> f64 {
 }
 
 pub fn warnings(p: &Params) -> Vec<String> {
+    if multi::is_multi(p) {
+        let mut out = multi::notes(p);
+        if multi::against(p) == multi::Against::Substrate {
+            let smax = given(p).2;
+            for c in multi::curves(p) {
+                if c.km > smax + 1e-9 {
+                    out.push(format!("Km of curve {} is {} but the axis stops at [S] = {}, so its Km is not marked.", c.letter(), num(c.km, 2), num(smax, 1)));
+                }
+            }
+        }
+        return out;
+    }
     let (_, _, smax, at, _, _) = given(p);
     let (_, km_a) = kinetics(p);
     let mut out = Vec::new();
@@ -238,6 +337,14 @@ fn text_el_halo(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) ->
     format!(r##"<text {common} fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round">{t}</text><text {common} fill="{fill}">{t}</text>"##)
 }
 
+/// A mark's label: its text with the halo, or, for a label left blank, a line to write on (in ink, the width the
+/// blank's text would take, on the text's baseline).
+fn mark_text(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
+    if s != multi::BLANK_LINE { return text_el_halo(x, y, size, anchor, fill, s); }
+    let b = box_around(x, s.chars().count() as f64 * size * 0.55, anchor, y, size);
+    format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#fff" stroke-width="4"/><line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{INK}" stroke-width="1.4"/>"##, b.0, y, b.1, y, b.0, y, b.1, y)
+}
+
 fn val(v: f64, dec: i64) -> String {
     let zeros = |s: &str| s.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
     let s = num(v, dec);
@@ -260,6 +367,13 @@ pub struct Report {
 }
 
 pub fn build(p: &Params) -> (String, Report) {
+    // temperature, pH and more than one curve are drawn by `multi`; this path is the single Michaelis-Menten curve,
+    // and every control added with `multi` is gated below so that its default leaves this drawing byte for byte as
+    // it was
+    if multi::is_multi(p) {
+        let (svg, m) = multi::build(p);
+        return (svg, Report { frame: m.frame, point: (f64::NAN, f64::NAN) });
+    }
     let (vmax, km, smax, _, _, inhibited) = given(p);
     let (vmax_a, km_a) = kinetics(p);
     let s_at = marked(p);
@@ -275,18 +389,26 @@ pub fn build(p: &Params) -> (String, Report) {
     let grid = if print { "#787878" } else { "#e2e2e2" };
 
     // the y axis runs a little above Vmax so the asymptote is visibly an asymptote
-    let y_top = (if inhibited { vmax.max(vmax_a) } else { vmax }) * 1.15;
+    let y_top = if p.b("y_fit") { (if inhibited { vmax.max(vmax_a) } else { vmax }) * 1.15 } else { fin(p.f("y_to"), 1.0, 200.0, 12.0) };
     // the canvas grows with the labels: at Large the givens line with an inhibitor ran off the right edge
     let w = (W * (1.0 + 0.45 * (lab - 1.0))).max(W);
-    let f = Frame { w, h: H, l: 66.0, r: 20.0, t: 22.0, b: 52.0, x0: 0.0, x1: smax, y0: 0.0, y1: y_top };
+    // a chart title takes a band over the plot; with none (the default) every position below is as it always was
+    let (x_title, y_title, chart_title) = multi::titles(p);
+    let title_room = if chart_title == multi::Label::Off { 0.0 } else { 34.0 * lab };
+    let hh = H + title_room;
+    let f = Frame { w, h: hh, l: 66.0, r: 20.0, t: 22.0 + title_room, b: 52.0, x0: 0.0, x1: smax, y0: 0.0, y1: y_top };
+    let numbered = p.s("axes") != "Shape only";
+    let grid_on = numbered && p.b("gridlines");
+    // the mark labels: written with their value (as always), named only, a blank line, or left off
+    let vk = p.s("vk_label");
 
     let rows = if inhibited { 3.0 } else { 1.0 };
     // (round 9 minor) the x-axis title and the givens line under it were about 5 px apart at Large (20 at Medium): the
     // title grows down from the axis while the givens sat at a fixed H + 18. The givens keep at least 10 px (scaled)
     // between the title's descenders and their own capitals, and everything under them moves down with them.
     let title_y = f.bottom() + 40.0 * lab;
-    let givens_y0 = (H + 18.0 * lab).max(title_y + 0.22 * 13.0 * lab + 10.0 * lab + 0.74 * 12.0 * lab);
-    let shift = givens_y0 - (H + 18.0 * lab);
+    let givens_y0 = (hh + 18.0 * lab).max(title_y + 0.22 * 13.0 * lab + 10.0 * lab + 0.74 * 12.0 * lab);
+    let shift = givens_y0 - (hh + 18.0 * lab);
     // the givens, always printed: they are what the curve is drawn from
     let mode = p.s("mode");
     let givens = if inhibited {
@@ -311,36 +433,43 @@ pub fn build(p: &Params) -> (String, Report) {
     // (round 10 major) the readout started 28 px (scaled) under the FIRST givens line whatever their number: a wrapped
     // second line (Large, with an inhibitor) put its ")" on "With the inhibitor". It now starts that far under the
     // LAST line, and the canvas grows with it.
-    let rows_y0 = H + 46.0 * lab + shift + (givens_lines.len().max(1) - 1) as f64 * 15.0 * lab;
+    let rows_y0 = hh + 46.0 * lab + shift + (givens_lines.len().max(1) - 1) as f64 * 15.0 * lab;
     let mut d = Doc::new(w, rows_y0 + (rows - 1.0) * ROW_H * lab + 16.0);
     d.describe("Enzyme kinetics", "Reaction rate against substrate concentration with Vmax and Km marked");
+    multi::draw_chart_title(&mut d, &chart_title, (f.left() + f.right()) / 2.0, 22.0 + 20.0 * lab, lab, ink);
 
     // axes and gridlines
     let xs = nice_step(smax, 6.0);
     let ys = nice_step(y_top, 5.0);
     // (round 8) the tick numbers are boxes the plot labels clear as well
     let mut tick_boxes: Vec<(f64, f64, f64, f64)> = Vec::new();
-    for (v, label) in ticks(f.x0, f.x1, xs) {
+    for (v, label) in if numbered { ticks(f.x0, f.x1, xs) } else { Vec::new() } {
         let x = f.px(v);
-        d.line(x, f.top(), x, f.bottom(), grid, 1.0);
+        if grid_on { d.line(x, f.top(), x, f.bottom(), grid, 1.0); }
         d.raw(&text_el(x, f.bottom() + 18.0 * lab, 12.0 * lab, "middle", ink, &label));
         tick_boxes.push(box_around(x, label.chars().count() as f64 * 12.0 * lab * 0.55, "middle", f.bottom() + 18.0 * lab, 12.0 * lab));
     }
-    for (v, label) in ticks(f.y0, f.y1, ys) {
+    for (v, label) in if numbered { ticks(f.y0, f.y1, ys) } else { Vec::new() } {
         let y = f.py(v);
-        d.line(f.left(), y, f.right(), y, grid, 1.0);
+        if grid_on { d.line(f.left(), y, f.right(), y, grid, 1.0); }
         d.raw(&text_el(f.left() - 8.0, y + 4.0 * lab, 12.0 * lab, "end", ink, &label));
         tick_boxes.push(box_around(f.left() - 8.0, label.chars().count() as f64 * 12.0 * lab * 0.55, "end", y + 4.0 * lab, 12.0 * lab));
     }
     d.line(f.left(), f.bottom(), f.right(), f.bottom(), ink, 1.6);
     d.line(f.left(), f.top(), f.left(), f.bottom(), ink, 1.6);
-    d.raw(&text_el((f.left() + f.right()) / 2.0, title_y, 13.0 * lab, "middle", ink, "Substrate concentration [S]"));
-    d.raw(&format!(
-        r##"<text transform="translate(18.00 {:.2}) rotate(-90)" font-size="{}" text-anchor="middle" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{}">Reaction rate v</text>"##,
-        (f.top() + f.bottom()) / 2.0,
-        13.0 * lab,
-        ink
-    ));
+    if p.b("arrows") { multi::axis_arrows(&mut d, &f, ink); }
+    multi::draw_axis_titles(&mut d, &f, &x_title, &y_title, title_y, lab, ink);
+    // a rate axis set by hand below Vmax cuts the curves off at the top of the plot
+    let clip = !p.b("y_fit");
+    if clip && ans {
+        d.raw(&format!(
+            r##"<clipPath id="enz-plot"><rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}"/></clipPath><g clip-path="url(#enz-plot)">"##,
+            f.left() - 2.0,
+            f.top() - 2.0,
+            f.right() - f.left() + 4.0,
+            f.bottom() - f.top() + 4.0
+        ));
+    }
 
     // the curve and its two constants — the answer, so absent from the student copy
     if ans {
@@ -375,12 +504,18 @@ pub fn build(p: &Params) -> (String, Report) {
         // "Vmax = 2" beside givens that say "Vmax = 10" reads as a contradiction; the prime is the usual mark.
         let vy = f.py(vmax_a);
         let vmax_name = if inhibited { "Vmax\u{2032}" } else { "Vmax" };
-        let vmax_text = format!("{vmax_name} = {}", val(vmax_a, dec));
+        let vk_text = |name: String, v: f64| match vk {
+            "Name only" => name,
+            "Blank line" => multi::BLANK_LINE.to_string(),
+            _ => format!("{name} = {}", val(v, dec)),
+        };
+        let vk_shown = vk != "None";
+        let vmax_text = vk_text(vmax_name.to_string(), vmax_a);
         // Km: the concentration that reaches half of it — or, past the right-hand edge, named there, because an
         // inhibitor can push Km far beyond the axis the curve is drawn on
         let half = f.py(vmax_a / 2.0);
         let km_name = if inhibited { "Km\u{2032}" } else { "Km" };
-        let km_text = format!("{km_name} = {}", val(km_a, dec));
+        let km_text = vk_text(km_name.to_string(), km_a);
         let km_w = km_text.chars().count() as f64 * 12.0 * lab * 0.55;
         // (round 3) centred on its marker it clipped at the right edge when Km sat near the axis end; keep it inside
         let (km_lx, km_anchor) = if km_a <= smax && f.px(km_a) + km_w / 2.0 > f.right() { (f.right() - 2.0, "end") }
@@ -430,7 +565,11 @@ pub fn build(p: &Params) -> (String, Report) {
         let km_obstacles = with_ticks(&[point_box]);
         let ((km_lx, km_anchor, km_y), _) = pick_near(&km_cands, km_w, 12.0 * lab, &km_obstacles, &thin_km, &|b| in_x(b) && b.2 > f.top());
         let km_box = box_around(km_lx, km_w, km_anchor, km_y, 12.0 * lab);
-        let note_text = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
+        let note_text = match vk {
+            "Name only" => format!("{km_name} beyond this axis"),
+            "Blank line" => format!("{} beyond this axis", multi::BLANK_LINE),
+            _ => format!("{km_name} = {}, beyond this axis", val(km_a, dec)),
+        };
         let note_w = note_text.chars().count() as f64 * 12.0 * lab * 0.55;
         let note_box = box_around(f.right() - 4.0, note_w, "end", half - 7.0 * lab, 12.0 * lab);
         // the note is drawn at a row chosen below (clear of Vmax′ and the point), so the box the half-rate and rate
@@ -454,13 +593,13 @@ pub fn build(p: &Params) -> (String, Report) {
         d.raw(&format!(r##"<line x1="{:.2}" y1="{vy:.2}" x2="{:.2}" y2="{vy:.2}" stroke="{curve}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, f.left(), f.right()));
         // (round 6) the asymptote label sits on its own dashed line and the curve runs under it: it carries the same
         // thin halo as the half-rate and rate labels, so a drawn line never strikes through it
-        d.raw(&text_el_halo(vmax_x, vmax_y, 12.0 * lab, vmax_anchor, curve, &vmax_text));
+        if vk_shown { d.raw(&mark_text(vmax_x, vmax_y, 12.0 * lab, vmax_anchor, curve, &vmax_text)); }
         if km_a <= smax {
             let kx = f.px(km_a);
             d.raw(&format!(r##"<line x1="{kx:.2}" y1="{:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.bottom()));
             d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left()));
             // (round 6) the dotted Km marker runs through the middle of "Km = n"; haloed like every other plot label
-            d.raw(&text_el_halo(km_lx, km_y, 12.0 * lab, km_anchor, curve, &km_text));
+            if vk_shown { d.raw(&mark_text(km_lx, km_y, 12.0 * lab, km_anchor, curve, &km_text)); }
         } else {
             d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left(), f.right()));
             // (round 6) the note clears the asymptote label too: it used to print through it with a Km past the axis.
@@ -470,14 +609,14 @@ pub fn build(p: &Params) -> (String, Report) {
                 .map(|y| (f.right() - 4.0, "end", *y))
                 .collect();
             let (_, _, note_y) = pick(&note_cands, note_w, 12.0 * lab, &with_ticks(&[vmax_box, point_box]), &|b| b.2 > f.top() && b.3 < f.bottom() + 30.0 * lab);
-            d.raw(&text_el_halo(f.right() - 4.0, note_y, 12.0 * lab, "end", curve, &note_text));
+            if vk_shown { d.raw(&text_el_halo(f.right() - 4.0, note_y, 12.0 * lab, "end", curve, &note_text)); }
             note_under = box_around(f.right() - 4.0, note_w, "end", note_y, 12.0 * lab);
         }
         // (round 5) whichever of the two sits under the point — the Km label at low [S] or the beyond-the-axis note —
         // is one of the boxes the other labels must clear.
         let under_box = if km_a <= smax { km_box } else { note_under };
         // (round 4) the half-rate label names the APPARENT half when an inhibitor is on (Vmax′/2), like the asymptote
-        let half_label = format!("{vmax_name}/2 = {}", val(vmax_a / 2.0, dec));
+        let half_label = vk_text(format!("{vmax_name}/2"), vmax_a / 2.0);
         let half_w = half_label.chars().count() as f64 * 11.0 * lab * 0.55;
         let hx0 = if km_a <= smax && f.px(km_a) < f.left() + 118.0 { f.px(km_a) + 8.0 } else { f.left() + 6.0 };
         // (round 5, round 6) a strong inhibitor puts the half-rate line near the axis, where the Km label and the
@@ -558,7 +697,7 @@ pub fn build(p: &Params) -> (String, Report) {
             }
         };
         // (round 4) this label runs over the curve too, so it carries the same halo as the rate label
-        d.raw(&text_el_halo(hx, half_y, 11.0 * lab, "start", curve, &half_label));
+        if vk_shown { d.raw(&mark_text(hx, half_y, 11.0 * lab, "start", curve, &half_label)); }
         let half_box = box_around(hx, half_w, "start", half_y, 11.0 * lab);
         // the marked point
         d.circle(px, py, POINT_R, mark, ink, 1.2);
@@ -588,6 +727,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let (lx, anchor, ly) = pick(&rate_cands, text_w, 12.0 * lab, &with_ticks(&[half_box, under_box, vmax_box, point_box]), &|b| inside(b) && in_x(b));
         // (round 3) a label over the curve carries a thin halo, so the curve is never struck through
         d.raw(&text_el_halo(lx, ly, 12.0 * lab, anchor, mark, &label));
+        if clip { d.raw("</g>"); }
     }
 
     // the givens, always printed (wrapped above, where the readout is placed under their last line)
@@ -633,6 +773,7 @@ pub fn build(p: &Params) -> (String, Report) {
 /// The marked point is draggable along the x axis: it sets the concentration whose rate is read off.
 pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if id != ID { return None; }
+    if multi::is_multi(p) { return Some(multi::handles(p)); }
     let rep = build(p).1;
     let (l, span, x0, x1, _, _) = rep.frame;
     Some(vec![Handle::knob(rep.point, "Drag the point to read the rate at another substrate concentration", move |p, pt| {
@@ -647,12 +788,23 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
     if id != ID { return None; }
     let f = |k: &'static str, v: f64| (k, Value::F(v));
     let s = |k: &'static str, v: &str| (k, Value::S(v.to_string()));
+    let b = |k: &'static str, v: bool| (k, Value::B(v));
     Some(vec![
         Example { name: "A typical enzyme: Vmax 10, Km 2", params: vec![] },
         Example { name: "A low-Km enzyme: saturated early", params: vec![f("km", 0.5), f("at", 2.0)] },
         Example { name: "A high-Km enzyme: needs a lot of substrate", params: vec![f("km", 10.0), f("smax", 40.0), f("at", 20.0)] },
         Example { name: "Competitive inhibition raises Km", params: vec![s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0)] },
         Example { name: "Noncompetitive inhibition lowers Vmax", params: vec![s("mode", "noncompetitive"), f("inh", 4.0), f("ki", 1.0)] },
+        Example { name: "Temperature: a human enzyme and Taq polymerase", params: vec![s("against", "Temperature"), b("curve2", true), b("mark_den", true)] },
+        Example {
+            name: "pH: pepsin, salivary amylase and trypsin",
+            params: vec![s("against", "pH"), s("enz1", "Pepsin"), b("curve2", true), s("enz2", "Salivary amylase"), b("curve3", true), s("enz3", "Trypsin")],
+        },
+        Example { name: "Worksheet: label the optimum on a blank line", params: vec![s("against", "Temperature"), s("opt_label", "Blank line"), s("axes", "Shape only")] },
+        Example {
+            name: "No inhibitor, competitive and noncompetitive on one graph",
+            params: vec![b("curve2", true), b("curve3", true), f("inh", 2.0), f("ki", 1.0), s("vk_label", "Name only")],
+        },
     ])
 }
 
@@ -1500,6 +1652,53 @@ mod tests {
                 assert!(r == g && g == bl, "Print draws a hue: {part} in {line}");
             }
         }
+    }
+
+    /// The keys a saved enzyme figure stored before Temperature, pH and the extra curves existed (bd2ea88).
+    const OLD_KEYS: &[&str] = &["vmax", "km", "smax", "at", "mode", "inh", "ki", "dec", SHOW_ANSWERS, "style", "label_size"];
+
+    fn fnv(s: &str) -> u64 {
+        let mut h: u64 = 0xcbf29ce484222325;
+        for b in s.as_bytes() { h ^= *b as u64; h = h.wrapping_mul(0x100000001b3); }
+        h
+    }
+
+    /// Old saved figures render byte for byte as before: a spec holding only the old keys is loaded through the
+    /// real load path (`params_from_spec`, which runs `migrate`) and rendered. The hashes were taken from the build
+    /// before the new controls existed (bd2ea88), over the examples and the awkward settings in Colour, Print,
+    /// the student copy and every label size. While this was written each render was also compared string for string
+    /// with the bd2ea88 module compiled beside the new one; all 325 matched.
+    #[test]
+    fn old_saved_figures_render_byte_identically() {
+        let mut cases: Vec<Vec<(&'static str, Value)>> = vec![vec![]];
+        for e in examples(ID).unwrap().into_iter().take(5) { cases.push(e.params); }
+        // a sweep of the old controls
+        for mode in ["none", "competitive", "noncompetitive"] {
+            for (km, smax, at) in [(0.2, 2.0, 0.0), (2.0, 12.0, 6.0), (8.0, 12.0, 11.0), (20.0, 40.0, 3.0), (1.0, 5.0, 5.0), (5.0, 30.0, 40.0)] {
+                for (inh, ki) in [(3.0, 1.0), (10.0, 0.2), (0.5, 5.0)] {
+                    cases.push(vec![s("mode", mode), f("km", km), f("smax", smax), f("at", at), f("inh", inh), f("ki", ki)]);
+                }
+            }
+        }
+        cases.push(vec![f("at", 12.0), f("km", 20.0), f("smax", 12.0)]);
+        cases.push(vec![s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0), f("km", 20.0)]);
+        cases.push(vec![s("mode", "noncompetitive"), f("inh", 10.0), f("ki", 0.2)]);
+        cases.push(vec![f("at", 0.0), ("dec", Value::I(3)), f("vmax", 100.0)]);
+        cases.push(vec![s("mode", "competitive"), f("at", 2.0), f("km", 0.2), f("smax", 40.0)]);
+        let d = def();
+        let mut hashes = Vec::new();
+        for c in &cases {
+            for extra in [vec![], vec![s("style", "Print")], vec![b(SHOW_ANSWERS, false)], vec![s("label_size", "Large")], vec![s("label_size", "Small")]] {
+                let mut l = c.clone();
+                l.extend(extra);
+                let mut spec = crate::figures::spec::spec_for(ID, &with(&l));
+                spec.params.retain(|k, _| OLD_KEYS.contains(&k.as_str()));
+                let p = crate::figures::spec::params_from_spec(&d, &spec);
+                hashes.push(format!("{:016x}", fnv(&(d.render)(&p))));
+            }
+        }
+        let all = format!("{:016x}", fnv(&hashes.join(" ")));
+        assert_eq!(all, "9755b5f7e33b8e19", "{}", hashes.join(" "));
     }
 
     /// Writes every case (Colour, Print, student, key) to $VERSHION_PNG_DIR.

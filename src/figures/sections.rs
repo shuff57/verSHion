@@ -262,6 +262,21 @@ static FIG_30: [RefSection; 9] = [
     s("Grid", &["minor"], ""),
 ];
 
+static ENZYME_KINETICS: [RefSection; 5] = [
+    s(
+        "Enzymes",
+        &[
+            "against", "enz1", "mode", "name1", "uopt_t1", "uwid_t1", "uopt_ph1", "uwid_ph1", "curve2", "enz2", "mode2", "name2", "uopt_t2", "uwid_t2", "uopt_ph2", "uwid_ph2",
+            "curve3", "enz3", "mode3", "name3", "uopt_t3", "uwid_t3", "uopt_ph3", "uwid_ph3", "vmax", "km", "inh", "ki", "smax", "at",
+        ],
+        "Human enzymes work best near 37 \u{b0}C; pepsin near pH 2, salivary amylase and catalase near pH 7, trypsin near pH 8. Taq polymerase works best at about 75 \u{b0}C. Curve widths are typical, not measured. Against substrate the curves follow Michaelis-Menten.",
+    ),
+    s("Marked", &["mark_opt", "opt_label", "opt_text", "mark_den", "den_label", "den_text", "vk_label", "dec", "show_answers"], ""),
+    s("Lines", &["style", "gridlines"], ""),
+    s("Titles", &["title_style", "title", "xtitle_style", "xtitle", "ytitle_style", "ytitle", "label_size"], ""),
+    s("Axes", &["axes", "y_fit", "y_to", "arrows"], ""),
+];
+
 static FIG_31: [RefSection; 8] = [
     s("Predator and prey", &["pair", "prey", "pred", "source", "prey0", "pred0", "prey_avg", "pred_avg", "alpha", "beta", "gamma", "delta", "cycle", "tshow", "unit"], ""),
     s("Graph", &["graph", "show", "style", "y_axis"], ""),
@@ -1180,6 +1195,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "ph-reading" => &FIG_28,
         "photoelectron-spectrum" => &FIG_29,
         "population-growth" => &FIG_30,
+        "enzyme-kinetics" => &ENZYME_KINETICS,
         "predator-prey" => &FIG_31,
         "prism" => &FIG_32,
         "projectile-motion" => &FIG_33,
