@@ -30,7 +30,12 @@ const SPLIT_FIVE: &str = "Split each stem in five";
 /// The panel shows a control only where it acts: the second set and the names for a back-to-back plot, the
 /// box count with boxes, the key's wording, example and unit with a written key, the title text unless it is a
 /// blank line.
-pub fn relevant(_fig: &str, key: &str, p: &Params) -> bool {
+pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
+    // stats::relevant ANDs every module's answer for every figure, so answer only for this one: the bar
+    // chart also has name1/name2 and must not lose them.
+    if fig != "stem-and-leaf" {
+        return true;
+    }
     match key {
         "data2" | "name1" | "name2" => p.s("plot") == BACK,
         "box_count" => p.b("boxes"),
@@ -566,6 +571,18 @@ mod tests {
     use super::*;
 
     fn defaults() -> Params { Params::defaults(&params()) }
+
+    /// stats::relevant ANDs this for every figure: another figure's name1/name2 (the bar chart's group names)
+    /// must stay visible, while stem-and-leaf still hides its own until it is back to back.
+    #[test]
+    fn relevance_only_answers_for_stem_and_leaf() {
+        let p = defaults();
+        for key in ["name1", "name2", "data2", "box_count", "key_word", "title"] {
+            assert!(relevant("bar-chart", key, &p), "{key} hidden on another figure");
+        }
+        assert!(!relevant("stem-and-leaf", "name1", &p));
+    }
+
     fn strs(r: &[Row]) -> Vec<String> {
         r.iter().map(|r| format!("{}|{}", r.stem, r.leaves.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(""))).collect()
     }
