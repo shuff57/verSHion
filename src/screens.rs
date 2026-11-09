@@ -357,18 +357,26 @@ fn soft_backing(core: Rect, feather: Vec2, fill: Color32) -> egui::Shape {
     egui::Shape::mesh(mesh)
 }
 
-/// The printed page the welcome hero promises, at thumbnail size: a first page of a quiz (title,
-/// name line, a multiple-choice question with bubbles, one with a small graph, a short answer and a
-/// written answer, the page number) on paper-white, with a second sheet tilted behind it for the
-/// answer key. The critics read the page as describing the output without ever showing one.
-const PREVIEW_SIZE: Vec2 = Vec2::new(222.0, 287.0);
+/// The printed page the welcome hero promises: a first page of a quiz (title, name line, a
+/// multiple-choice question with bubbles, one with a small graph, a short answer and a written
+/// answer, the page number) on paper-white, with a second sheet tilted behind it for the answer key.
+/// The critics read the page as describing the output without ever showing one, and then found the
+/// 222 px thumbnail's 7.6 px question text too small to inspect: the sheet is drawn larger, and its
+/// type a step larger again than the sheet, so the questions read at about 10 px.
+const PREVIEW_SIZE: Vec2 = Vec2::new(272.0, 352.0);
 
 fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
     use egui::{FontId, Shape};
+    // Geometry is laid out on the old 222 px sheet and scaled by `k`; type and the gaps that follow
+    // a line of type scale by `tk`.
+    let k = page.width() / 222.0;
+    let tk = k * 1.12;
+    let g = |v: f32| v * k;
+    let t = |v: f32| v * tk;
     let shade = if theme::is_dark() { 90 } else { 30 };
     // The answer key behind, turned a little and peeking out at the lower right.
-    let back_c = page.center() + Vec2::new(14.0, 8.0);
+    let back_c = page.center() + Vec2::new(g(14.0), g(8.0));
     let turn = egui::emath::Rot2::from_angle(0.06);
     let half = page.size() / 2.0;
     let back: Vec<Pos2> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
@@ -380,94 +388,102 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     painter.add(Shape::convex_polygon(back, theme::paper(), Stroke::new(1.0, theme::paper_edge())));
     // The exam itself.
     painter.add(
-        egui::Shadow { offset: [0, 10], blur: 26, spread: 0, color: Color32::from_black_alpha(shade) }
+        egui::Shadow { offset: [0, 12], blur: 30, spread: 0, color: Color32::from_black_alpha(shade) }
             .as_shape(page, CornerRadius::same(2)),
     );
     painter.rect(page, CornerRadius::same(2), theme::paper(), Stroke::new(1.0, theme::paper_edge()), StrokeKind::Inside);
 
-    let m = 17.0;
+    let m = g(17.0);
     let (l, r) = (page.left() + m, page.right() - m);
-    let body = FontId::proportional(7.6);
-    let num = FontId::new(7.6, theme::bold_family());
-    let hair = Stroke::new(0.8, PAPER_RULE);
+    let body = FontId::proportional(t(7.6));
+    let num = FontId::new(t(7.6), theme::bold_family());
+    let small = FontId::new(t(5.2), theme::bold_family());
+    let hair = Stroke::new(0.9, PAPER_RULE);
+    let ring = Stroke::new(0.9, PAPER_SOFT);
     let text = |pos: Pos2, s: &str, f: &FontId, c: Color32| painter.text(pos, Align2::LEFT_TOP, s, f.clone(), c).width();
-    let mut y = page.top() + 16.0;
-    text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(11.5, theme::serif_family()), PAPER_INK);
+    let mut y = page.top() + g(16.0);
+    text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(t(11.5), theme::serif_family()), PAPER_INK);
     // The one touch of accent: the version tag, as a small filled pill (accent text alone faded on
     // white paper in dark mode).
-    let tag = painter.layout_no_wrap("Version A".into(), FontId::new(6.4, theme::bold_family()), theme::on_accent_col());
-    let pill = Rect::from_min_size(Pos2::new(r - tag.size().x - 8.0, y + 1.5), tag.size() + Vec2::new(8.0, 3.0));
-    painter.rect_filled(pill, CornerRadius::same(5), theme::accent_col());
-    painter.galley(pill.min + Vec2::new(4.0, 1.5), tag, theme::on_accent_col());
-    y += 21.0;
+    let tag = painter.layout_no_wrap("Version A".into(), FontId::new(t(6.4), theme::bold_family()), theme::on_accent_col());
+    let pad = Vec2::new(g(4.0), g(1.5));
+    let pill = Rect::from_min_size(Pos2::new(r - tag.size().x - 2.0 * pad.x, y + t(2.0)), tag.size() + 2.0 * pad);
+    painter.rect_filled(pill, CornerRadius::same(6), theme::accent_col());
+    painter.galley(pill.min + pad, tag, theme::on_accent_col());
+    y += t(21.0);
     let name_w = text(Pos2::new(l, y), "Name", &body, PAPER_SOFT);
-    painter.hline(l + name_w + 3.0..=l + 112.0, y + 8.5, hair);
-    let date_w = text(Pos2::new(l + 122.0, y), "Date", &body, PAPER_SOFT);
-    painter.hline(l + 122.0 + date_w + 3.0..=r, y + 8.5, hair);
-    y += 16.0;
+    painter.hline(l + name_w + 3.0..=l + g(118.0), y + t(8.5), hair);
+    let date_w = text(Pos2::new(l + g(128.0), y), "Date", &body, PAPER_SOFT);
+    painter.hline(l + g(128.0) + date_w + 3.0..=r, y + t(8.5), hair);
+    y += t(16.0);
     painter.hline(l..=r, y, Stroke::new(1.0, PAPER_RULE));
-    y += 9.0;
+    y += g(9.0);
 
+    let ind = l + t(10.5);
     let stem = |y: f32, n: &str, s: &str| {
         text(Pos2::new(l, y), n, &num, PAPER_INK);
-        text(Pos2::new(l + 10.0, y), s, &body, PAPER_INK);
+        text(Pos2::new(ind, y), s, &body, PAPER_INK);
     };
-    let ind = l + 10.0;
+    let bubble = |c: Pos2, letter: &str| {
+        painter.circle_stroke(c, t(4.2), ring);
+        if !letter.is_empty() {
+            painter.text(c, Align2::CENTER_CENTER, letter, small.clone(), PAPER_SOFT);
+        }
+    };
     // 1. Multiple choice, with answer bubbles.
     stem(y, "1.", "Solve for x:   3x + 5 = 20");
-    y += 15.0;
+    y += t(15.0);
     let mut x = ind;
     for (letter, val) in [("A", "3"), ("B", "5"), ("C", "15"), ("D", "25")] {
-        let c = Pos2::new(x + 4.0, y + 4.5);
-        painter.circle_stroke(c, 4.2, Stroke::new(0.8, PAPER_SOFT));
-        painter.text(c, Align2::CENTER_CENTER, letter, FontId::new(5.2, theme::bold_family()), PAPER_SOFT);
-        text(Pos2::new(x + 11.0, y), val, &body, PAPER_INK);
-        x += 40.0;
+        bubble(Pos2::new(x + t(4.2), y + t(4.6)), letter);
+        text(Pos2::new(x + t(11.0), y), val, &body, PAPER_INK);
+        x += g(42.0);
     }
-    y += 21.0;
+    y += t(20.0);
     // 2. A question with a small figure.
     stem(y, "2.", "Which line has a slope of 2?");
-    y += 14.0;
-    let fig = Rect::from_min_size(Pos2::new(ind, y), Vec2::new(64.0, 46.0));
-    for k in 1..8 {
-        painter.vline(fig.left() + k as f32 * 8.0, fig.y_range(), Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
+    y += t(14.0);
+    let fig = Rect::from_min_size(Pos2::new(ind, y), Vec2::new(g(64.0), g(46.0)));
+    for i in 1..8 {
+        painter.vline(fig.left() + g(i as f32 * 8.0), fig.y_range(), Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
     }
-    for k in 1..6 {
-        painter.hline(fig.x_range(), fig.top() + k as f32 * 7.7, Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
+    for i in 1..6 {
+        painter.hline(fig.x_range(), fig.top() + g(i as f32 * 7.7), Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
     }
-    painter.rect_stroke(fig, CornerRadius::ZERO, Stroke::new(0.8, PAPER_RULE), StrokeKind::Inside);
-    let o = Pos2::new(fig.left() + 24.0, fig.top() + 30.8);
-    painter.hline(fig.x_range(), o.y, Stroke::new(0.8, PAPER_SOFT));
-    painter.vline(o.x, fig.y_range(), Stroke::new(0.8, PAPER_SOFT));
-    painter.line_segment([Pos2::new(fig.left() + 10.0, fig.bottom() - 4.0), Pos2::new(fig.left() + 30.0, fig.bottom() - 42.5)], Stroke::new(1.1, PAPER_INK));
-    painter.line_segment([Pos2::new(fig.left() + 2.0, fig.top() + 26.0), Pos2::new(fig.right() - 2.0, fig.top() + 12.0)], Stroke::new(1.1, PAPER_SOFT));
-    painter.text(Pos2::new(fig.left() + 32.0, fig.top() + 2.0), Align2::LEFT_TOP, "p", FontId::proportional(6.5), PAPER_INK);
-    painter.text(Pos2::new(fig.right() - 9.0, fig.top() + 3.0), Align2::LEFT_TOP, "q", FontId::proportional(6.5), PAPER_SOFT);
-    let ax = fig.right() + 14.0;
-    for (k, s) in ["line p", "line q"].iter().enumerate() {
-        let yy = fig.top() + 11.0 + k as f32 * 16.0;
-        painter.circle_stroke(Pos2::new(ax + 4.0, yy + 4.5), 4.2, Stroke::new(0.8, PAPER_SOFT));
-        text(Pos2::new(ax + 12.0, yy), s, &body, PAPER_INK);
+    painter.rect_stroke(fig, CornerRadius::ZERO, Stroke::new(0.9, PAPER_RULE), StrokeKind::Inside);
+    let o = Pos2::new(fig.left() + g(24.0), fig.top() + g(30.8));
+    painter.hline(fig.x_range(), o.y, ring);
+    painter.vline(o.x, fig.y_range(), ring);
+    let at = |dx: f32, dy: f32| fig.min + Vec2::new(g(dx), g(dy));
+    painter.line_segment([at(10.0, 42.0), at(30.0, 3.5)], Stroke::new(1.3, PAPER_INK));
+    painter.line_segment([at(2.0, 26.0), at(62.0, 12.0)], Stroke::new(1.3, PAPER_SOFT));
+    painter.text(at(32.0, 2.0), Align2::LEFT_TOP, "p", FontId::proportional(t(6.5)), PAPER_INK);
+    painter.text(at(55.0, 3.0), Align2::LEFT_TOP, "q", FontId::proportional(t(6.5)), PAPER_SOFT);
+    let ax = fig.right() + g(14.0);
+    for (i, s) in ["line p", "line q"].iter().enumerate() {
+        let yy = fig.top() + g(8.0) + i as f32 * t(16.0);
+        bubble(Pos2::new(ax + t(4.2), yy + t(4.6)), "");
+        text(Pos2::new(ax + t(12.0), yy), s, &body, PAPER_INK);
     }
-    y = fig.bottom() + 13.0;
+    y = fig.bottom() + g(12.0);
     // 3. Short answer.
     stem(y, "3.", "Simplify:   2(x + 4) \u{2212} 3x");
-    y += 16.0;
+    y += t(16.0);
     let aw = text(Pos2::new(ind, y), "Answer", &body, PAPER_SOFT);
-    painter.hline(ind + aw + 4.0..=ind + 96.0, y + 8.5, hair);
-    y += 21.0;
+    painter.hline(ind + aw + 4.0..=ind + g(104.0), y + t(8.5), hair);
+    y += t(20.0);
     // 4. Written answer on ruled lines.
     stem(y, "4.", "Explain how you checked your answer to 1.");
-    y += 21.0;
-    for _ in 0..3 {
+    y += t(20.0);
+    for _ in 0..2 {
         painter.hline(ind..=r, y, hair);
-        y += 13.0;
+        y += t(13.0);
     }
     painter.text(
-        Pos2::new(page.center().x, page.bottom() - 12.0),
+        Pos2::new(page.center().x, page.bottom() - g(12.0)),
         Align2::CENTER_CENTER,
         "Page 1 of 2",
-        FontId::proportional(6.4),
+        FontId::proportional(t(6.4)),
         PAPER_SOFT,
     );
 }
