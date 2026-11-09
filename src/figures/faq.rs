@@ -2768,19 +2768,23 @@ const DOT_PLOT: &[Faq] = &[
 const STEM_AND_LEAF: &[Faq] = &[
     Faq {
         q: "How do I make a student copy?",
-        a: "Turn off Show answers. The stems, the bar and the key stay and the leaves are hidden, so students fill them in. Student + key saves both versions.",
+        a: "Turn off Show answers. The stems, the bar and the key stay and the leaves are hidden, so students fill them in. With Leaves in boxes, every row of the student copy gets the same number of empty boxes, so the boxes do not give away how many leaves a row has. Blank line for the title or the key leaves a line for students to write on. For a plot to fill in from scratch, clear the numbers and type a first and last stem. Student + key saves both versions.",
     },
     Faq {
         q: "What is the leaf unit?",
-        a: "It is the place value of a leaf. With a leaf unit of 1, the number 63 is stem 6 and leaf 3. With 0.1, the number 6.3 is stem 6 and leaf 3. Auto picks the smallest unit that gives about a dozen stems. Values are rounded to the leaf unit.",
+        a: "It is the place value of a leaf. With a leaf unit of 1, the number 63 is stem 6 and leaf 3. With 0.1, the number 6.3 is stem 6 and leaf 3. Auto picks the smallest unit that gives about a dozen stems. Values are rounded to the leaf unit, or with Digits past the leaf unit set to Cut off, the extra digits are dropped: 63.8 is stem 6, leaf 3 (rounded it is leaf 4). The key's unit, such as cm, is different: it is only written after the key's value.",
     },
     Faq {
         q: "When should I split the stems?",
-        a: "When one stem has so many leaves that the plot looks like a single long row. Splitting puts leaves 0 to 4 and leaves 5 to 9 of each stem on two rows, which shows the shape more clearly.",
+        a: "When one stem has so many leaves that the plot looks like a single long row. Split in two puts leaves 0 to 4 and 5 to 9 of each stem on two rows; split in five puts 0-1, 2-3, 4-5, 6-7 and 8-9 on five rows. Both show the shape more clearly.",
+    },
+    Faq {
+        q: "How do I compare two data sets back to back?",
+        a: "Choose Back-to-back and type the second set. The two sets share the stems down the middle: the first set's leaves run left, the smallest next to the stem, and the second set's run right. Name each set and the names head their side and appear in the key, which reads both ways, such as 2 | 5 | 5 means 52 for Class A and 55 for Class B.",
     },
     Faq {
         q: "Why is there a stem with no leaves?",
-        a: "An empty stem is a gap in the data. It is kept on purpose, because the gap is part of the shape, just as a gap would be in a dot plot or histogram.",
+        a: "An empty stem is a gap in the data. It is kept on purpose, because the gap is part of the shape, just as a gap would be in a dot plot or histogram. Type a first or last stem to run the plot past the data.",
     },
     Faq {
         q: "How are negative numbers shown?",
