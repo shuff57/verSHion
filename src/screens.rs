@@ -364,6 +364,11 @@ fn soft_backing(core: Rect, feather: Vec2, fill: Color32) -> egui::Shape {
 /// 222 px thumbnail's 7.6 px question text too small to inspect: the sheet is drawn larger, and its
 /// type a step larger again than the sheet, so the questions read at about 10 px.
 const PREVIEW_SIZE: Vec2 = Vec2::new(272.0, 352.0);
+/// The same page in a narrow window, beside the hero's text: the critics read the narrow page's
+/// steps as a text-only explanation with no example of the printed exam it describes.
+const NARROW_PREVIEW_SIZE: Vec2 = Vec2::new(184.0, 238.0);
+/// The narrow window's column for the hero and the steps.
+const NARROW_STEPS_W: f32 = 640.0;
 
 fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
@@ -966,20 +971,18 @@ impl crate::App {
                 // text is placed. Grid lines running through the lead and the small print competed
                 // with their letterforms (the critics' words).
                 let backing = ui.painter().add(egui::Shape::Noop);
-                let mut hero = Rect::NOTHING;
-                // The hero's text, top to bottom. `left` sets it flush left in the wide window's
-                // two-column hero; otherwise it is a centred column.
-                let mut hero_text = |ui: &mut egui::Ui, hero: &mut Rect, left: bool| {
+                let hero: Rect;
+                // The headline and the gap under it. Narrow, it runs across the whole column above the
+                // rest of the hero and the page beside it.
+                let hero_head = |ui: &mut egui::Ui, hero: &mut Rect| {
                     // 43 px on a wide window, not 50: larger, it outweighed the lead, button and preview beside
                     // it and left them reading as a second tier (the critics' words).
                     *hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 43.0 } else { 40.0 })).rect;
                     ui.add_space(if roomy { 14.0 } else { 12.0 });
-                    // The lead's column, as `prose_centered_ink` sizes it.
+                };
+                // The rest of the hero's text, top to bottom, flush left in its column.
+                let mut hero_text = |ui: &mut egui::Ui, hero: &mut Rect| {
                     let lead_w = ui.available_width().min(if roomy { 620.0 } else { 560.0 });
-                    let mid = ui.max_rect().center().x;
-                    if !left {
-                        *hero |= Rect::from_x_y_ranges(mid - lead_w / 2.0..=mid + lead_w / 2.0, hero.top()..=hero.bottom());
-                    }
                     // Narrower than the step column below it at every width (the critics read a lead
                     // running wider than the cards as a page with no single column edge), and about
                     // 80 characters a line.
@@ -988,20 +991,12 @@ impl crate::App {
                     let lead_text = "PDFs, scans, screenshots, old Word documents, questions you type \
                                      yourself: verSHion gathers them into Question Banks and lays \
                                      them out as a clean, printable exam.";
-                    if left {
-                        let r = ui.allocate_ui_with_layout(Vec2::new(lead_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                            ui.set_width(lead_w);
-                            ui.label(RichText::new(lead_text).size(16.5).color(theme::ink().gamma_multiply(0.82)));
-                        });
-                        *hero |= r.response.rect;
-                    } else {
-                        crate::pageshell::prose_centered_ink(
-                            ui,
-                            lead_text,
-                            if roomy { 16.5 } else { 14.5 },
-                            if roomy { 620.0 } else { 560.0 },
-                        );
-                    }
+                    let r = ui.allocate_ui_with_layout(Vec2::new(lead_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        ui.set_width(lead_w);
+                        let size = if roomy { 16.5 } else { 14.5 };
+                        ui.label(RichText::new(lead_text).size(size).color(theme::ink().gamma_multiply(0.82)));
+                    });
+                    *hero |= r.response.rect;
                     ui.add_space(if roomy { 28.0 } else { 22.0 });
                     // A returning teacher is not a first-run visitor: the button goes back to work,
                     // and a second way in sits beside it. A first run names where the button leads:
@@ -1060,7 +1055,8 @@ impl crate::App {
                     let col = Rect::from_min_size(Pos2::new(x0, top), Vec2::new(text_w, ui.available_height().max(0.0)));
                     let mut text = Rect::NOTHING;
                     ui.scope_builder(UiBuilder::new().max_rect(col).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
-                        hero_text(ui, &mut text, true);
+                        hero_head(ui, &mut text);
+                        hero_text(ui, &mut text);
                     });
                     // The page sits midway across the space right of the text, its middle level with
                     // the text's middle.
@@ -1073,10 +1069,41 @@ impl crate::App {
                         ui.add_space(below);
                     }
                 } else {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(lead);
-                        hero_text(ui, &mut hero, false);
+                    // Narrow: the same printed page, smaller, so the exam is shown here too and not
+                    // only described. The headline runs across the steps' column; under it the rest
+                    // of the hero sits flush left with the page beside it, on the steps' own edges.
+                    let row_w = ui.available_width().min(NARROW_STEPS_W);
+                    let x0 = ui.max_rect().center().x - row_w / 2.0;
+                    ui.add_space(lead);
+                    let top = ui.cursor().top();
+                    let col = Rect::from_min_size(Pos2::new(x0, top), Vec2::new(row_w, ui.available_height().max(0.0)));
+                    let mut head = Rect::NOTHING;
+                    ui.scope_builder(UiBuilder::new().max_rect(col).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
+                        hero_head(ui, &mut head);
                     });
+                    let body_top = head.bottom() + 12.0;
+                    // The page's right edge sits in from the column's, leaving room for the answer
+                    // key that peeks out behind it. A column too narrow to hold the text beside it
+                    // goes without the page.
+                    let with_page = row_w >= 520.0;
+                    let page = Rect::from_min_size(
+                        Pos2::new(x0 + row_w - NARROW_PREVIEW_SIZE.x - 18.0, body_top + 4.0),
+                        NARROW_PREVIEW_SIZE,
+                    );
+                    let text_w = if with_page { page.left() - 36.0 - x0 } else { row_w };
+                    let body = Rect::from_min_size(Pos2::new(x0, body_top), Vec2::new(text_w, ui.available_height().max(0.0)));
+                    let mut text = Rect::NOTHING;
+                    ui.scope_builder(UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
+                        hero_text(ui, &mut text);
+                    });
+                    hero = if with_page { head | text | page } else { head | text };
+                    if with_page {
+                        paint_exam_preview(ui.painter(), page);
+                        let below = page.bottom() + 8.0 - ui.cursor().top();
+                        if below > 0.0 {
+                            ui.add_space(below);
+                        }
+                    }
                 }
                 if !theme::chem_skin() && hero.is_positive() {
                     let mut painter = ui.painter().clone();
@@ -1097,7 +1124,7 @@ impl crate::App {
                 // different page. (`set_max_width` cannot narrow a Ui the hero has already widened.)
                 let full = ui.available_width();
                 let wide = full >= 940.0;
-                let col_w = full.min(if wide { STEPS_W } else { 640.0 });
+                let col_w = full.min(if wide { STEPS_W } else { NARROW_STEPS_W });
                 let top = ui.cursor().top();
                 let left = ui.max_rect().center().x - col_w / 2.0;
                 let area = egui::Rect::from_min_size(egui::pos2(left, top), Vec2::new(col_w, ui.available_height().max(0.0)));
@@ -1111,7 +1138,10 @@ impl crate::App {
                     // read as four buttons beside the one real action (the critics' words), and their
                     // uneven text left each card a different empty floor.
                     let w = ui.available_width();
-                    crate::kit::card().inner_margin(Margin::symmetric(4, if wide { 26 } else { 16 })).show(ui, |ui| {
+                    // Narrow: a little less above the first numerals, whose 28 px slot already
+                    // holds space over the figure, so the panel's top and bottom read even.
+                    let pad = if wide { Margin::symmetric(4, 26) } else { Margin { left: 4, right: 4, top: 10, bottom: 16 } };
+                    crate::kit::card().inner_margin(pad).show(ui, |ui| {
                         ui.set_width(w - 10.0);
                         if wide {
                             ui.columns(4, |cols| {
@@ -1128,15 +1158,18 @@ impl crate::App {
                             // Narrow: two rows of two. Four stacked rows ran past the bottom of the window
                             // and left the page with no visible end.
                             for row in 0..2 {
+                                // The rows sit closer than they did (the critics named the gaps
+                                // between the panel's short blocks as large), which also makes room
+                                // for the printed page above.
                                 if row > 0 {
-                                    ui.add_space(14.0);
+                                    ui.add_space(6.0);
                                     let (rule, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
                                     for cell in 0..2 {
                                         let half = rule.width() / 2.0;
                                         let x = rule.left() + half * cell as f32;
                                         ui.painter().hline(x + 20.0..=x + half - 20.0, rule.center().y, Stroke::new(1.0, theme::border()));
                                     }
-                                    ui.add_space(16.0);
+                                    ui.add_space(8.0);
                                 }
                                 let row_top = ui.cursor().top();
                                 ui.columns(2, |cols| {
