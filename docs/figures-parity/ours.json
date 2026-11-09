@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-09T16:58:29+00:00",
-  "src_mtime": 1794242680.6933599,
-  "git": "ca533e5",
+  "built_at": "2026-11-09T19:07:18+00:00",
+  "src_mtime": 1794251159.4035099,
+  "git": "2caba4f",
   "figures": 191
  },
  "figures": {
@@ -25186,11 +25186,35 @@
    "blurb": "A histogram of a data list, with bins chosen for you or set by hand; frequency, relative frequency or density.",
    "params": [
     {
+     "key": "input",
+     "label": "Data",
+     "kind": "choice",
+     "options": [
+      "Data set",
+      "Frequency table"
+     ],
+     "default": "Data set"
+    },
+    {
      "key": "data",
      "label": "Numbers",
      "kind": "data",
      "options": [],
      "default": "52, 58, 61, 63, 65, 66, 68, 70, 71, 72, 74, 75, 75, 77, 79, 82, 84, 85, 88, 93"
+    },
+    {
+     "key": "table_start",
+     "label": "First bin starts at",
+     "kind": "text",
+     "options": [],
+     "default": "50"
+    },
+    {
+     "key": "table",
+     "label": "Up to, frequency",
+     "kind": "long",
+     "options": [],
+     "default": "60, 2\\n70, 5\\n80, 8\\n90, 4\\n100, 1"
     },
     {
      "key": "auto_bins",
@@ -25224,12 +25248,52 @@
      "default": "In the bin to its right"
     },
     {
+     "key": "fill",
+     "label": "Bars",
+     "kind": "choice",
+     "options": [
+      "Blue",
+      "Red",
+      "Green",
+      "Orange",
+      "Purple",
+      "Gray",
+      "White",
+      "Hatching",
+      "Dots",
+      "Cross-hatching",
+      "Back hatching",
+      "Black"
+     ],
+     "default": "Blue"
+    },
+    {
+     "key": "polygon",
+     "label": "Frequency polygon",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Over the bars",
+      "Alone"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "poly_closed",
+     "label": "Close the polygon down to the axis",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
      "key": "measure",
      "label": "Bar height",
      "kind": "choice",
      "options": [
       "Frequency",
       "Relative frequency",
+      "Relative frequency (%)",
+      "Frequency density",
       "Density"
      ],
      "default": "Frequency"
@@ -25249,11 +25313,69 @@
      "default": "10.0"
     },
     {
+     "key": "y_step",
+     "label": "Count by (0 = automatic)",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "y_numbers",
+     "label": "Vertical axis numbers",
+     "kind": "choice",
+     "options": [
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Every line"
+    },
+    {
      "key": "values",
      "label": "Write the value above each bar",
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "x_numbers",
+     "label": "Horizontal axis numbers",
+     "kind": "choice",
+     "options": [
+      "Bin edges",
+      "Every step"
+     ],
+     "default": "Bin edges"
+    },
+    {
+     "key": "x_auto",
+     "label": "Fit the range to the bins",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "x_from",
+     "label": "From",
+     "kind": "float",
+     "options": [],
+     "default": "50.0"
+    },
+    {
+     "key": "x_to",
+     "label": "To",
+     "kind": "float",
+     "options": [],
+     "default": "100.0"
+    },
+    {
+     "key": "x_step",
+     "label": "Count by",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
     },
     {
      "key": "grid",
@@ -25263,6 +25385,40 @@
      "default": "true"
     },
     {
+     "key": "grid_weight",
+     "label": "Gridline weight",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold"
+     ],
+     "default": "Light"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines",
+     "kind": "choice",
+     "options": [
+      "None",
+      "2 per block",
+      "4 per block",
+      "5 per block"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "title_mode",
+     "label": "Chart title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
      "key": "title",
      "label": "Title",
      "kind": "text",
@@ -25270,11 +25426,33 @@
      "default": ""
     },
     {
+     "key": "x_title_mode",
+     "label": "Horizontal axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
      "key": "x_title",
      "label": "Horizontal axis title",
      "kind": "text",
      "options": [],
      "default": ""
+    },
+    {
+     "key": "y_title_mode",
+     "label": "Vertical axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
     },
     {
      "key": "y_title",
@@ -27409,6 +27587,16 @@
      "default": ""
     },
     {
+     "key": "layout",
+     "label": "Several groups",
+     "kind": "choice",
+     "options": [
+      "Side by side",
+      "Stacked"
+     ],
+     "default": "Side by side"
+    },
+    {
      "key": "orient",
      "label": "Bars",
      "kind": "choice",
@@ -27454,6 +27642,16 @@
      "default": "true"
     },
     {
+     "key": "values_at",
+     "label": "Values sit",
+     "kind": "choice",
+     "options": [
+      "At the end",
+      "Inside"
+     ],
+     "default": "At the end"
+    },
+    {
      "key": "decimals",
      "label": "Decimals in percents",
      "kind": "int",
@@ -27482,11 +27680,108 @@
      "default": "20.0"
     },
     {
+     "key": "scale_step",
+     "label": "Count by (0 = automatic)",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "numbers",
+     "label": "Numbered gridlines",
+     "kind": "choice",
+     "options": [
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Every line"
+    },
+    {
      "key": "grid",
      "label": "Gridlines",
      "kind": "bool",
      "options": [],
      "default": "true"
+    },
+    {
+     "key": "grid_weight",
+     "label": "Gridline weight",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold"
+     ],
+     "default": "Standard"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines",
+     "kind": "choice",
+     "options": [
+      "None",
+      "2 per block",
+      "4 per block",
+      "5 per block"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "err_caps",
+     "label": "Crossbars on the error bars",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "err_note",
+     "label": "Note under the graph",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "look",
+     "label": "Fills",
+     "kind": "choice",
+     "options": [
+      "Color",
+      "Black and white",
+      "White"
+     ],
+     "default": "Color"
+    },
+    {
+     "key": "fill_list",
+     "label": "A group's own fill",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "key",
+     "label": "Key",
+     "kind": "choice",
+     "options": [
+      "Above",
+      "Right",
+      "Below",
+      "None"
+     ],
+     "default": "Above"
+    },
+    {
+     "key": "title_kind",
+     "label": "Chart title is",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line"
+     ],
+     "default": "Text"
     },
     {
      "key": "title",
@@ -27496,11 +27791,31 @@
      "default": ""
     },
     {
+     "key": "cat_kind",
+     "label": "Category axis title is",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line"
+     ],
+     "default": "Text"
+    },
+    {
      "key": "cat_title",
      "label": "Category axis title",
      "kind": "text",
      "options": [],
      "default": ""
+    },
+    {
+     "key": "val_kind",
+     "label": "Value axis title is",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line"
+     ],
+     "default": "Text"
     },
     {
      "key": "val_title",

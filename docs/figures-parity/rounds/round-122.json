@@ -1,0 +1,35 @@
+{
+ "round": 122,
+ "figure": "histogram",
+ "capability": "cap-08e",
+ "hypothesis": "Batch 4 histogram: cap-08e; evidence changes:grid_weight=Bold",
+ "started_at": "2026-11-09T11:07:26",
+ "git": "2caba4f",
+ "before": {
+  "figure": 93.3,
+  "pooled": 84.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T11:07:27",
+ "after": {
+  "figure": 96.7,
+  "pooled": 85.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:grid_weight=Bold",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/histogram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/histogram/c612799db2d9af51.png"
+   }
+  ]
+ },
+ "checker": "pass: bold grid",
+ "result": "hit",
+ "evidence": "histogram tests (old figures byte-identical over 3,888 old-control combinations, old saved specs and share links, unequal-bin density and areas, polygon midpoints); census unchanged; task run reference 11 actions, ours 6",
+ "next": "histogram (remaining)"
+}

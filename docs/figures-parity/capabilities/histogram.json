@@ -35,22 +35,22 @@
    "id": "cap-02a",
    "text": "Type a frequency table: where the first bin starts, then each bin's upper end and its frequency",
    "class": "core",
-   "evidence": "",
-   "note": "the histogram takes a list of values only"
+   "evidence": "changes:{\"input\":\"Frequency table\",\"table_start\":\"0\",\"table\":\"10, 4\\n20, 6\\n30, 3\"}",
+   "note": "Built in batch 4, round 109 (2026-11-08). the histogram takes a list of values only"
   },
   {
    "id": "cap-02b",
    "text": "Use unequal bin widths",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"input\":\"Frequency table\",\"table_start\":\"0\",\"table\":\"10, 4\\n15, 8\\n30, 6\"}",
+   "note": "Built in batch 4, round 110 (2026-11-08)."
   },
   {
    "id": "cap-02c",
    "text": "Paste a frequency table from a worksheet, with bins like 140 < h <= 150",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"input\":\"Frequency table\",\"table_start\":\"\",\"table\":\"140 < h \\u2264 150\\t7\\n150 < h \\u2264 165\\t12\\n165 < h \\u2264 170\\t4\"}",
+   "note": "Built in batch 4, round 111 (2026-11-08)."
   },
   {
    "id": "cap-03a",
@@ -63,8 +63,8 @@
    "id": "cap-03b",
    "text": "Show relative frequency as a percent",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:measure=Relative frequency (%)",
+   "note": "Built in batch 4, round 112 (2026-11-08)."
   },
   {
    "id": "cap-03c",
@@ -91,15 +91,15 @@
    "id": "cap-04c",
    "text": "Fill the bars with a black-and-white pattern",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:fill=Hatching",
+   "note": "Built in batch 4, round 113 (2026-11-08)."
   },
   {
    "id": "cap-04d",
    "text": "Leave the bars white",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:fill=White",
+   "note": "Built in batch 4, round 114 (2026-11-08)."
   },
   {
    "id": "cap-04e",
@@ -112,29 +112,29 @@
    "id": "cap-05a",
    "text": "Draw a frequency polygon over the bars",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:polygon=Over the bars",
+   "note": "Built in batch 4, round 115 (2026-11-08)."
   },
   {
    "id": "cap-05b",
    "text": "Draw the frequency polygon alone",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:polygon=Alone",
+   "note": "Built in batch 4, round 116 (2026-11-08)."
   },
   {
    "id": "cap-05c",
    "text": "Close the polygon down to the axis or leave it open",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"polygon\":\"Over the bars\",\"poly_closed\":false}",
+   "note": "Built in batch 4, round 117 (2026-11-08)."
   },
   {
    "id": "cap-06",
    "text": "Number the horizontal axis at every step of a typed range instead of at the bin edges",
    "class": "control",
-   "evidence": "",
-   "note": "verSHion always numbers the bin edges"
+   "evidence": "changes:x_numbers=Every step",
+   "note": "Built in batch 4, round 118 (2026-11-08). verSHion always numbers the bin edges"
   },
   {
    "id": "cap-07a",
@@ -154,8 +154,8 @@
    "id": "cap-07c",
    "text": "Put a blank line in place of a title for students",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:title_mode=Blank line",
+   "note": "Built in batch 4, round 119 (2026-11-08)."
   },
   {
    "id": "cap-08a",
@@ -168,15 +168,15 @@
    "id": "cap-08b",
    "text": "Type the vertical axis count-by",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"auto_y\":false,\"y_step\":2.5}",
+   "note": "Built in batch 4, round 120 (2026-11-08)."
   },
   {
    "id": "cap-08c",
    "text": "Choose which gridlines are numbered",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:y_numbers=Every 2nd line",
+   "note": "Built in batch 4, round 121 (2026-11-08)."
   },
   {
    "id": "cap-08d",
@@ -189,15 +189,15 @@
    "id": "cap-08e",
    "text": "Make the gridlines light, standard or bold",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:grid_weight=Bold",
+   "note": "Built in batch 4, round 122 (2026-11-08)."
   },
   {
    "id": "cap-08f",
    "text": "Add minor gridlines",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:minor=4 per block",
+   "note": "Built in batch 4, round 123 (2026-11-08)."
   }
  ]
 }

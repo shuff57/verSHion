@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-09T16:59:06+00:00",
- "probe_checked_at": "2026-11-09T08:59:06",
+ "generated_at": "2026-11-09T19:07:27+00:00",
+ "probe_checked_at": "2026-11-09T11:07:27",
  "comparable": true,
  "drift": [],
- "pooled": 84.1,
- "mean": 85.0,
+ "pooled": 85.0,
+ "mean": 85.8,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -830,117 +830,11 @@
    ]
   },
   "histogram": {
-   "score": 45.6,
-   "got": 41.0,
+   "score": 100.0,
+   "got": 90.0,
    "total": 90.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Type a frequency table: where the first bin starts, then each bin's upper end and its frequency",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Use unequal bin widths",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Paste a frequency table from a worksheet, with bins like 140 < h <= 150",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Show relative frequency as a percent",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Fill the bars with a black-and-white pattern",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Leave the bars white",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw a frequency polygon over the bars",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw the frequency polygon alone",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Close the polygon down to the axis or leave it open",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Number the horizontal axis at every step of a typed range instead of at the bin edges",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07c",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Put a blank line in place of a title for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type the vertical axis count-by",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose which gridlines are numbered",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Make the gridlines light, standard or bold",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Add minor gridlines",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "inclined-plane": {
    "score": 100.0,

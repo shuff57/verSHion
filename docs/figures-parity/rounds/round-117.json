@@ -1,0 +1,35 @@
+{
+ "round": 117,
+ "figure": "histogram",
+ "capability": "cap-05c",
+ "hypothesis": "Batch 4 histogram: cap-05c; evidence changes:{\"polygon\":\"Over the bars\",\"poly_closed\":false}",
+ "started_at": "2026-11-09T11:07:23",
+ "git": "2caba4f",
+ "before": {
+  "figure": 76.7,
+  "pooled": 84.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T11:07:24",
+ "after": {
+  "figure": 80.0,
+  "pooled": 84.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"polygon\":\"Over the bars\",\"poly_closed\":false}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/histogram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/histogram/b829c751488151b1.png"
+   }
+  ]
+ },
+ "checker": "pass: open polygon",
+ "result": "hit",
+ "evidence": "histogram tests (old figures byte-identical over 3,888 old-control combinations, old saved specs and share links, unequal-bin density and areas, polygon midpoints); census unchanged; task run reference 11 actions, ours 6",
+ "next": "histogram (remaining)"
+}

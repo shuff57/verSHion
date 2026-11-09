@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-09T16:59:06+00:00 · probe: 2026-11-09T08:59:06
+Generated: 2026-11-09T19:07:27+00:00 · probe: 2026-11-09T11:07:27
 
-**Pooled 84.1** · mean 85.0 over 70 figures · built 71 of 71 reference figures
+**Pooled 85.0** · mean 85.8 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -20,13 +20,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [control 3] Units kJ mol-1 or kJ instead of kJ/mol — no evidence
   - cap-03b [control 3] Your own names for the paths in the key — no evidence
   - cap-04 [control 3] A level diagram of the reactants and products alone, instead of the energy profile — no evidence
-- `histogram`: 46 (41/90)
-  - cap-02a [core 5] Type a frequency table: where the first bin starts, then each bin's upper end and its frequency — no evidence
-  - cap-02b [core 5] Use unequal bin widths — no evidence
-  - cap-02c [control 3] Paste a frequency table from a worksheet, with bins like 140 < h <= 150 — no evidence
-  - cap-03b [control 3] Show relative frequency as a percent — no evidence
-  - cap-04c [control 3] Fill the bars with a black-and-white pattern — no evidence
-  - cap-04d [control 3] Leave the bars white — no evidence
 - `ogive`: 49 (37/75)
   - cap-01b [core 5] Type a cumulative table of upper bounds — no evidence
   - cap-02a [control 3] Choose crosses or dots at the points — no evidence
@@ -231,6 +224,7 @@ Comparable with the frozen baseline: **yes**
 - `circuit-diagram`: 100 (61/61)
 - `dna-protein-synthesis`: 100 (102/102)
 - `enzyme-kinetics`: 100 (85/85)
+- `histogram`: 100 (90/90)
 - `inclined-plane`: 100 (91/91)
 - `lewis-structures`: 100 (51/51)
 - `line-spectrum`: 100 (54/54)
