@@ -140,6 +140,7 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         ("circuit-diagram", "show_answers") => p.s("solve") != "Off",
         ("ph-reading", "places" | "meter") => p.s("instrument") == "Digital meter",
         ("dna-protein-synthesis", _) => super::biology::dna::relevant(key, p),
+        ("photosynthesis", _) => super::biology::photosynthesis::relevant(key, p),
         _ => super::stats::relevant(fig, key, p) && super::computing::relevant(fig, key, p) && super::electric::relevant(fig, key, p) && super::accounting::relevant(fig, key, p) && super::economics::relevant(fig, key, p) && super::earth::relevant(fig, key, p) && super::geography::relevant(fig, key, p) && super::music::relevant(fig, key, p) && super::business::relevant(fig, key, p) && super::language::relevant(fig, key, p) && super::health::relevant(fig, key, p) && super::art::relevant(fig, key, p),
     }
 }

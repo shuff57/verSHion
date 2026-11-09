@@ -101,6 +101,7 @@ pub fn classic_setups(id: &str) -> Option<Vec<super::Example>> {
         "punnett-square" => Some(punnett::classics()),
         "pedigree" => Some(pedigree::classics()),
         "dna-protein-synthesis" => Some(dna::classics()),
+        "photosynthesis" => Some(photosynthesis::rate::classics()),
         _ => None,
     }
 }

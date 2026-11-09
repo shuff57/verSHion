@@ -373,7 +373,13 @@ fn leader_problems(svg: &str) -> Vec<String> {
 fn the_controls_are_the_documented_ones() {
     let ps = (def().params)();
     let keys: Vec<&str> = ps.iter().map(|p| p.key).collect();
-    assert_eq!(keys, ["show_parts", "show_stages", "show_io", "show_shuttle", "show_equation", "show_graph", "graph_x", "pmax", "xval", "mark", "dec", "show_answers", "style", "label_size"]);
+    // the View switch first, the chloroplast's controls, then the Rate graphs view's (tested in rate::tests)
+    let rate_keys: Vec<&str> = rate::params().iter().map(|p| p.key).collect();
+    let mut want = vec!["view", "show_parts", "show_stages", "show_io", "show_shuttle", "show_equation", "show_graph", "graph_x", "pmax", "xval", "mark", "dec"];
+    want.extend(rate_keys);
+    want.extend(["show_answers", "style", "label_size"]);
+    assert_eq!(keys, want);
+    assert_eq!(Params::defaults(&ps).s("view"), rate::VIEWS[0], "opens on the chloroplast, as before");
     let p = Params::defaults(&ps);
     for k in ["show_parts", "show_stages", "show_io", "show_shuttle", "show_equation", SHOW_ANSWERS] { assert!(p.b(k), "{k} defaults on"); }
     assert!(!p.b("show_graph"), "the graph is optional, off by default");

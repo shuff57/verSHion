@@ -28,6 +28,8 @@ use super::cladogram::text_w;
 use super::*;
 use std::cell::RefCell;
 
+pub mod rate;
+
 pub const ID: &str = "photosynthesis";
 
 pub fn defs() -> Vec<FigureDef> {
@@ -44,7 +46,8 @@ pub fn defs() -> Vec<FigureDef> {
 const AXES: [&str; 3] = ["Light intensity", "CO2 concentration", "Temperature"];
 
 fn params() -> Vec<ParamDef> {
-    vec![
+    let mut v = vec![
+        rate::view_param(),
         ParamDef::bool("show_parts", "Label the structures", true).hint("Outer and inner membrane, stroma, granum, thylakoid membrane"),
         ParamDef::bool("show_stages", "Stage bars", true).hint("Two bars under the drawing name the light-dependent reactions and the Calvin cycle"),
         ParamDef::bool("show_io", "Inputs and outputs", true).hint("Light, water, oxygen, carbon dioxide and G3P, as arrows"),
@@ -56,13 +59,20 @@ fn params() -> Vec<ParamDef> {
         ParamDef::text("xval", "Half-saturation (optimum for temperature)", "").hint("Leave empty for a typical value. Light 3 to 20 %, CO2 40 to 240 ppm: the value giving half the plateau. Temperature 15 to 40 \u{b0}C: the optimum"),
         ParamDef::text("mark", "Point P at x =", "auto").hint("A value on the x axis (light 0 to 100 %, CO2 0 to 1200 ppm, temperature 0 to 60 \u{b0}C), or auto for a typical point (20 %, 400 ppm, 20 \u{b0}C). Leave empty for no point"),
         ParamDef::int("dec", "Decimal places for P", 0, 3, 1),
+    ];
+    v.extend(rate::params());
+    v.extend([
         answers_param().hint("Off keeps numbered blanks: the names, the equation and the rate at P are for the student to write"),
         svg::style_param(),
         svg::label_size_param(),
-    ]
+    ]);
+    v
 }
 
 fn render(p: &Params) -> String { build(p) }
+
+/// Whether a control applies to the current params (the chloroplast's in one view, the rate graphs' in the other).
+pub fn relevant(key: &str, p: &Params) -> bool { rate::relevant(key, p) }
 
 // ================================================================== text with subscripts
 
@@ -1004,6 +1014,7 @@ fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut 
 const HEAD: &str = "The graph could not be drawn:";
 
 pub fn warnings(p: &Params) -> Vec<String> {
+    if rate::is_rate(p) { return rate::render(p).notes; }
     let c = cfg(p);
     let mut out = Vec::new();
     if !(c.parts || c.stages || c.io || c.shuttle) {
@@ -1034,6 +1045,7 @@ pub fn build(p: &Params) -> String {
 fn eq_width(z: &Sizes) -> f64 { let fs = 1.38 * z.fs; rw(EQ_LEFT, fs) + 14.0 + 38.0 + 14.0 + rw(EQ_RIGHT, fs) }
 
 fn draw(p: &Params) -> String {
+    if rate::is_rate(p) { return rate::render(p).svg; }
     let c = cfg(p);
     let z = sizes(c.lab);
     let fills = svg::Fills::new(p);
