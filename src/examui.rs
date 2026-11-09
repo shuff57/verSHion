@@ -171,8 +171,6 @@ struct EditUi {
     bank_tab: bool,
     /// This frame's narrow-or-not decision (see [`narrow_mode`]).
     narrow: bool,
-    /// Height of the format bar's zoom well when last drawn, held while the bank tab hides it.
-    zoom_well_h: f32,
     /// Narrow window only: the Page setup disclosure in the top card is open.
     page_setup_open: bool,
     /// This frame the bank fills the work area on its own (narrow window, bank tab), so there
@@ -233,14 +231,7 @@ fn muted(rt: impl Into<egui::RichText>) -> egui::RichText {
 
 /// A small caps field label, for grouping a run of controls in a dialog.
 fn field_label(ui: &mut egui::Ui, text: &str) {
-    ui.add(
-        egui::Label::new(
-            egui::RichText::new(text.to_ascii_uppercase())
-                .size(10.0)
-                .strong()
-                .color(theme::muted_col()),
-        ),
-    );
+    kit::label(ui, text);
 }
 
 /// A short vertical separator between groups of controls in a toolbar row.
@@ -574,16 +565,20 @@ impl crate::App {
                             app.screen = crate::Screen::ExamEdit(id);
                         }
                     } else if st.search.trim().is_empty() {
-                        ui.label(muted("Every exam is archived. Press Show archived to see them."));
-                    } else {
-                        ui.label(muted("No exams match that search."));
+                        if crate::pageshell::empty_line(ui, crate::handicons::EXAMS, "Every exam is archived.", Some("Show archived")).is_some() {
+                            st.show_archived = true;
+                        }
+                    } else if crate::pageshell::empty_line(ui, crate::handicons::EXAMS, "No exams match that search.", Some("Clear search")).is_some() {
+                        st.search.clear();
                     }
+                    crate::pageshell::end_pad(ui);
                     return;
                 }
                 match st.mode {
                     ViewMode::Cards => draw_exam_cards(app, ui, &rows, &mut st),
                     ViewMode::List => draw_exam_list(app, ui, &rows, &mut st),
                 }
+                crate::pageshell::end_pad(ui);
             });
         });
 
@@ -706,41 +701,50 @@ fn open_exam_screen(app: &mut crate::App, id: &Id) {
     app.exam = Some(id.clone());
 }
 
-/// The "…" menu on a card/row.
-fn exam_menu(ui: &mut egui::Ui, rect: Rect, row: &ExamRow, st: &mut ListUi) {
-    ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
-        ui.spacing_mut().button_padding = Vec2::new(6.0, 2.0);
-        ui.menu_button("…", |ui| {
+/// The "…" menu on a card/row: a `side` square in the icon tier at `rect`'s centre.
+fn exam_menu(ui: &mut egui::Ui, rect: Rect, side: f32, row: &ExamRow, st: &mut ListUi) {
+    let at = Rect::from_center_size(rect.center(), Vec2::splat(side));
+    ui.scope_builder(UiBuilder::new().max_rect(at), |ui| {
+        let r = kit::more_dots(ui, side, "Exam actions");
+        egui::Popup::menu(&r).show(|ui| {
+            ui.set_min_width(140.0);
             if ui.button("Open").clicked() {
                 st.open = Some(row.id.clone());
+                ui.close();
             }
             if ui.button("Rename").clicked() {
                 st.rename = Some((row.id.clone(), row.name.clone()));
+                ui.close();
             }
             if ui.button(if row.archived { "Restore" } else { "Archive" }).clicked() {
                 st.archive = Some((row.id.clone(), !row.archived));
+                ui.close();
             }
-            ui.add_space(4.0);
+            ui.separator();
             if ui
                 .add(egui::Button::new(egui::RichText::new("Delete").color(theme::bad())))
                 .clicked()
             {
                 st.confirm_delete = Some(row.id.clone());
+                ui.close();
             }
         });
     });
 }
 
-/// The Exams screen's page thumbnail: a small, fixed letter-page box, so the card is no taller
-/// than its facts and actions need.
-const EXAMS_THUMB: Vec2 = Vec2::new(88.0, 114.0);
+/// The Exams screen's page thumbnail (a mitigation: big enough to tell a page with a table from
+/// one of text; the name and the meta still say which exam it is).
+const EXAMS_THUMB: Vec2 = Vec2::new(112.0, 145.0);
+/// A card's action height (Open and its "…").
+const EXAMS_ACT_H: f32 = 32.0;
 
-/// The exam cards: the first page on the left; on the right the name, its counts and bank, and
-/// a bottom row (edited date, Open, the "..." menu) level with the page's foot. One 16 px gutter
-/// between cards and rows, and a row exactly as wide as the toolbar above it.
+/// The exam cards: the first page on the left; on the right the name (two lines kept), its
+/// counts, "From <bank>", and a footer under a hairline, level with the page's foot (edited date;
+/// Open, then "…"). Every card is the page plus its 16 px pads tall. One 16 px gutter between
+/// cards and rows.
 fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st: &mut ListUi) {
-    let gap = 16.0;
-    let pad = 16.0;
+    let gap = kit::GUTTER;
+    let pad = kit::CARD_PAD;
     let avail = ui.available_width();
     let n = (((avail + gap) / (420.0 + gap)).floor() as usize).max(1);
     // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
@@ -753,18 +757,22 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
         ui.spacing_mut().item_spacing = Vec2::splat(gap);
         for row in chunk {
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(card_w, card_h), Sense::click());
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &row.name));
             if resp.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             }
-            let hover = kit::hover_t(ui.ctx(), resp.id.with("hover"), resp.hovered());
+            let hover = kit::hover_t(ui.ctx(), resp.id.with("hover"), resp.hovered() || resp.has_focus());
             let p = ui.painter().clone();
             p.rect(
                 rect,
                 CornerRadius::same(kit::R_CARD),
                 theme::card(),
-                Stroke::new(1.0, theme::border().lerp_to_gamma(theme::accent_col(), hover)),
+                Stroke::new(1.0, theme::border().lerp_to_gamma(theme::accent_col(), hover * 0.6)),
                 StrokeKind::Inside,
             );
+            if resp.has_focus() {
+                p.rect_stroke(rect.expand(1.0), CornerRadius::same(kit::R_CARD + 1), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+            }
             let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::splat(pad), EXAMS_THUMB);
             let ctx = ui.ctx().clone();
             if paint_exam_thumb(app, &ctx, &p, thumb_area, &row.id).is_none() {
@@ -772,11 +780,13 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
             }
             let tx = thumb_area.right() + pad;
             let tw = rect.right() - pad - tx;
-            let mut y = rect.top() + pad - 3.0;
-            let g = clamped_galley(&p, &row.name, FontId::new(17.0, theme::serif_family()), theme::ink(), tw, 2);
-            let gh = g.size().y;
-            p.galley(Pos2::new(tx, y), g, theme::ink());
-            y += gh + 5.0;
+            let mut y = rect.top() + pad - 2.0;
+            // Name: two lines kept, top-aligned.
+            let mut job = egui::text::LayoutJob::default();
+            job.append(&row.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
+            job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
+            p.galley(Pos2::new(tx, y), p.layout_job(job), theme::ink());
+            y += 2.0 * kit::ty::CARD_LINE + 6.0;
             // Counts, then the bank the questions came from.
             let counts = format!(
                 "{} question{} · {} point{}",
@@ -785,43 +795,35 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
                 fmt_number(row.pts),
                 if (row.pts - 1.0).abs() < 1e-9 { "" } else { "s" },
             );
-            let gc = clamped_galley(&p, &counts, FontId::proportional(12.5), theme::text_col(), tw, 1);
-            let ch = gc.size().y;
+            let meta = FontId::new(kit::ty::META, theme::sans_family());
+            let gc = clamped_galley(&p, &counts, meta.clone(), theme::text_col(), tw, 1);
             p.galley(Pos2::new(tx, y), gc, theme::text_col());
-            y += ch + 3.0;
-            let bank_label = "Bank  ";
-            let lw = p.layout_no_wrap(bank_label.to_string(), FontId::proportional(12.0), theme::muted_col()).size().x;
-            p.text(Pos2::new(tx, y), Align2::LEFT_TOP, bank_label, FontId::proportional(12.0), theme::muted_col());
-            let gb = clamped_galley(&p, &row.bank, FontId::new(12.0, theme::bold_family()), theme::ink(), tw - lw, 1);
-            p.galley(Pos2::new(tx + lw, y), gb, theme::ink());
-            // Bottom row, level with the foot of the page: when, then the card's actions.
-            let foot = Rect::from_min_max(Pos2::new(tx, thumb_area.bottom() - 28.0), Pos2::new(rect.right() - pad, thumb_area.bottom()));
-            p.line_segment([Pos2::new(tx, foot.top() - 8.0), Pos2::new(foot.right(), foot.top() - 8.0)], Stroke::new(1.0, theme::border()));
-            let menu = Rect::from_min_size(Pos2::new(foot.right() - 30.0, foot.center().y - 12.0), Vec2::new(30.0, 24.0));
+            y += 18.0 + 4.0;
+            let from = p.layout_no_wrap("From ".to_string(), meta.clone(), theme::muted_col());
+            let lw = from.size().x;
+            p.galley(Pos2::new(tx, y), from, theme::muted_col());
+            let gb = clamped_galley(&p, &row.bank, FontId::new(kit::ty::META, theme::semibold()), theme::text_col(), tw - lw, 1);
+            p.galley(Pos2::new(tx + lw, y), gb, theme::text_col());
+            // Footer, level with the foot of the page: when, then the card's actions.
+            let foot = Rect::from_min_max(Pos2::new(tx, thumb_area.bottom() - EXAMS_ACT_H), Pos2::new(rect.right() - pad, thumb_area.bottom()));
+            p.hline(tx..=foot.right(), foot.top() - 9.5, Stroke::new(1.0, theme::border()));
+            let menu = Rect::from_min_size(Pos2::new(foot.right() - EXAMS_ACT_H, foot.top()), Vec2::splat(EXAMS_ACT_H));
             let mut open = false;
-            let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 6.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
-            let ob = crate::pageshell::styled_button(
-                &mut btn,
-                RichText::new("Open").family(theme::bold_family()).size(12.5).color(theme::accent_col()),
-                theme::card(),
-                theme::hover_bg(),
-                theme::accent_faded(),
-                Stroke::new(1.0, theme::rule()),
-                28.0,
-            );
+            let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 8.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
+            let ob = kit::secondary_accent(&mut btn, "Open", EXAMS_ACT_H);
             if ob.clicked() {
                 open = true;
             }
-            let when_w = (ob.rect.left() - 10.0 - tx).max(20.0);
+            let when_w = (ob.rect.left() - 12.0 - tx).max(20.0);
             let when = format!("{}Edited {}", if row.archived { "Archived · " } else { "" }, bankui::fmt_date(row.modified));
-            let gw = clamped_galley(&p, &when, FontId::proportional(11.5), theme::muted_col(), when_w, 1);
+            let gw = clamped_galley(&p, &when, meta, theme::muted_col(), when_w, 1);
             let wy = foot.center().y - gw.size().y / 2.0;
             p.galley(Pos2::new(tx, wy), gw, theme::muted_col());
+            // (a child ui: the menu must not move this row's cursor, which set the gutter)
+            exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, EXAMS_ACT_H, row, st);
             if open || resp.clicked() {
                 open_exam_screen(app, &row.id);
             }
-            // (a child ui: the menu must not move this row's cursor, which set the gutter)
-            exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, row, st);
         }
     });
     }
@@ -833,17 +835,10 @@ fn draw_exam_list(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st:
         // Column x offsets (fractions of the row width).
         let cols = [0.0, 0.42, 0.55, 0.65, 0.84];
         let head = ["Exam", "Questions", "Points", "Bank", "Edited"];
-        let (hr, _) = ui.allocate_exact_size(Vec2::new(w, 26.0), Sense::hover());
+        let (hr, _) = ui.allocate_exact_size(Vec2::new(w, 28.0), Sense::hover());
         for (i, h) in head.iter().enumerate() {
-            let g = kit::small_caps_text(h);
-            ui.painter().text(
-                Pos2::new(hr.left() + 10.0 + w * cols[i], hr.center().y),
-                Align2::LEFT_CENTER,
-                h.to_uppercase(),
-                FontId::new(10.0, theme::bold_family()),
-                theme::muted_col(),
-            );
-            let _ = g;
+            let g = ui.painter().layout_no_wrap(h.to_uppercase(), FontId::new(kit::ty::LABEL, theme::bold_family()), theme::muted_col());
+            ui.painter().galley(Pos2::new(hr.left() + 10.0 + w * cols[i], hr.center().y - g.size().y / 2.0), g, theme::muted_col());
         }
         ui.painter().line_segment([hr.left_bottom(), hr.right_bottom()], Stroke::new(1.0, theme::border()));
         for row in rows {
@@ -855,9 +850,9 @@ fn draw_exam_list(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st:
             let cy = rect.center().y;
             let x = |i: usize| rect.left() + 10.0 + w * cols[i];
             let name_w = w * (cols[1] - cols[0]) - 20.0;
-            let g = clamped_galley(p, &row.name, FontId::new(15.0, theme::serif_family()), theme::ink(), name_w, 1);
+            let g = clamped_galley(p, &row.name, FontId::new(kit::ty::CARD, theme::serif_family()), theme::ink(), name_w, 1);
             p.galley(Pos2::new(x(0), cy - g.size().y / 2.0), g, theme::ink());
-            let f = FontId::proportional(12.5);
+            let f = FontId::proportional(kit::ty::META);
             p.text(Pos2::new(x(1), cy), Align2::LEFT_CENTER, row.q.to_string(), f.clone(), theme::text_col());
             p.text(Pos2::new(x(2), cy), Align2::LEFT_CENTER, fmt_number(row.pts), f.clone(), theme::text_col());
             p.text(Pos2::new(x(3), cy), Align2::LEFT_CENTER, truncate_str(&row.bank, 22), f.clone(), theme::text_col());
@@ -866,8 +861,9 @@ fn draw_exam_list(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st:
                 open_exam_screen(app, &row.id);
             }
             exam_menu(
-                ui,
-                Rect::from_min_size(Pos2::new(rect.right() - 36.0, cy - 11.0), Vec2::new(30.0, 22.0)),
+                &mut ui.new_child(UiBuilder::new().max_rect(rect)),
+                Rect::from_center_size(Pos2::new(rect.right() - 22.0, cy), Vec2::splat(32.0)),
+                32.0,
                 row,
                 st,
             );
@@ -1469,13 +1465,13 @@ fn draw_crumb_and_name(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, co
 /// [`draw_crumb_and_name`] with the name field `name_w` wide.
 fn draw_crumb_and_name_w(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, name_w: f32) {
     if ui
-        .add(egui::Button::new(muted(RichText::new("Exams").size(12.0))).frame(false))
+        .add(egui::Button::new(kit::meta_muted("Exams")).frame(false))
         .clicked()
     {
         app.screen = crate::Screen::Exams;
         app.exam = None;
     }
-    ui.label(muted(RichText::new("/").size(12.0)));
+    ui.label(kit::meta_muted("/"));
 
     let mut name = app.store.exam(exam_id).map(|e| e.name.clone()).unwrap_or_default();
     let before = name.clone();
@@ -1535,7 +1531,7 @@ fn draw_saved_indicator_at(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id
     match word {
         SavedWord::None => {}
         SavedWord::Accent => {
-            ui.label(RichText::new(text).family(theme::bold_family()).size(12.0).color(theme::accent_col())).on_hover_text(tip);
+            ui.label(RichText::new(text).family(theme::bold_family()).size(kit::ty::META).color(theme::accent_col())).on_hover_text(tip);
         }
         SavedWord::Plain => {
             // Tucked against its mark rather than a full item gap away.
@@ -1834,13 +1830,13 @@ fn format_control(ui: &mut egui::Ui, which: u8, f: &mut model::Exam, salt: &str,
             }
         }
         1 => {
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(104.0, 28.0), Sense::hover());
-            let minus = Rect::from_min_size(rect.min, Vec2::new(30.0, 28.0));
-            let plus = Rect::from_min_size(rect.right_top() - Vec2::new(30.0, 0.0), Vec2::new(30.0, 28.0));
+            let (rect, _) = ui.allocate_exact_size(Vec2::new(STEPPER_W, STRIP_H), Sense::hover());
+            let minus = Rect::from_min_size(rect.min, Vec2::new(30.0, STRIP_H));
+            let plus = Rect::from_min_size(rect.right_top() - Vec2::new(30.0, 0.0), Vec2::new(30.0, STRIP_H));
             let r_minus = ui.interact(minus, ui.id().with(("fmt_minus", salt)), Sense::click());
             let r_plus = ui.interact(plus, ui.id().with(("fmt_plus", salt)), Sense::click());
             let p = ui.painter();
-            p.rect(rect, CornerRadius::same(14), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+            p.rect(rect, CornerRadius::same(10), theme::card(), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
             for (r, resp, is_plus) in [(minus, &r_minus, false), (plus, &r_plus, true)] {
                 if resp.hovered() {
                     p.rect_filled(r.shrink(2.0), CornerRadius::same(12), theme::hover_bg());
@@ -1856,7 +1852,7 @@ fn format_control(ui: &mut egui::Ui, which: u8, f: &mut model::Exam, salt: &str,
                 rect.center(),
                 Align2::CENTER_CENTER,
                 format!("{} pt", f.body_pt.round() as i32),
-                FontId::new(12.5, theme::bold_family()),
+                FontId::new(kit::ty::META, theme::bold_family()),
                 theme::ink(),
             );
             if r_minus.clicked() && f.body_pt > 9.0 {
@@ -1917,69 +1913,257 @@ fn format_control(ui: &mut egui::Ui, which: u8, f: &mut model::Exam, salt: &str,
     changed
 }
 
-/// Page zoom: fit, smaller, larger. The page is drawn at 57.6 dpi base, so a fit on a wide
-/// window is already more than 100% of that.
+/// Page zoom: smaller, the readout (a click fits the column), larger. The page is drawn at 57.6
+/// dpi base, so a fit on a wide window is already more than 100% of that. Returns the well's height.
 fn zoom_controls(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) -> f32 {
-    zoom_controls_at(ui, zoom, zoom_eff, false)
+    zoom_well(ui, zoom, zoom_eff)
 }
 
-/// [`zoom_controls`]; `readable` sets its figures at the normal label size and contrast (the
-/// narrow top card) instead of the format bar's small muted ones.
-fn zoom_controls_at(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32, readable: bool) -> f32 {
-    // A quiet well around the three zoom controls, so they read as one readout with two buttons
-    // rather than as loose text next to the status line.
-    let frame = egui::Frame::new()
-        .fill(theme::card())
-        .stroke(egui::Stroke::new(1.0, theme::border()))
-        .corner_radius(egui::CornerRadius::same(8))
-        .inner_margin(egui::Margin::symmetric(6, 1));
-    frame.show(ui, |ui| zoom_controls_inner(ui, zoom, zoom_eff, readable)).response.rect.height()
+/// [`zoom_controls`] (the narrow top card's call; the well is the readable one everywhere).
+fn zoom_controls_at(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32, _readable: bool) -> f32 {
+    zoom_well(ui, zoom, zoom_eff)
 }
 
-fn zoom_controls_inner(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32, readable: bool) {
-    ui.spacing_mut().item_spacing.x = 4.0;
-    let look = |t: &str, small: f32, big: f32| {
-        if readable {
-            RichText::new(t).size(big).color(theme::text_col())
-        } else {
-            muted(RichText::new(t).size(small))
-        }
-    };
+/// The zoom well's −/+ hit areas (square).
+const ZOOM_BTN: f32 = 28.0;
+/// The zoom well's height.
+const ZOOM_H: f32 = 32.0;
+/// The readout's narrowest box, so the well does not change width as the figure changes.
+const ZOOM_READ_MIN: f32 = 74.0;
+
+/// The readout: "Fit  100%" while fitting the column, else "125%".
+fn zoom_label(zoom: f32, zoom_eff: f32) -> String {
+    let pct = if zoom <= 0.0 { zoom_eff.max(0.5) } else { zoom };
+    if zoom <= 0.0 { format!("Fit  {:.0}%", pct * 100.0) } else { format!("{:.0}%", pct * 100.0) }
+}
+
+/// The zoom well's width for a readout `label`.
+fn zoom_well_w(ui: &egui::Ui, label: &str) -> f32 {
+    let t = ui.painter().layout_no_wrap(label.to_string(), FontId::new(kit::ty::BODY, theme::sans_family()), theme::text_col()).size().x;
+    2.0 + ZOOM_BTN + 2.0 + (t + 14.0).max(ZOOM_READ_MIN) + 2.0 + ZOOM_BTN + 2.0
+}
+
+/// The zoom well: a card-fill box holding − (28 square), the readout at 14 and + (28 square),
+/// each a named button with hover, pressed and focus looks.
+fn zoom_well(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) -> f32 {
+    let label = zoom_label(*zoom, zoom_eff);
+    let w = zoom_well_w(ui, &label);
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, ZOOM_H), Sense::hover());
+    ui.painter().rect(rect, CornerRadius::same(10), theme::card(), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
     let pct = if *zoom <= 0.0 { zoom_eff.max(0.5) } else { *zoom };
-    let label = if *zoom <= 0.0 {
-        format!("Fit  {:.0}%", pct * 100.0)
-    } else {
-        format!("{:.0}%", pct * 100.0)
-    };
-    // Smaller, the readout (a click fits the column), larger: in that order on screen, so in
-    // the narrow card's right-to-left row they are laid out last first.
-    let mut parts = [0u8, 1, 2];
-    if readable && ui.layout().prefer_right_to_left() {
-        parts.reverse();
-    }
-    for part in parts {
-        match part {
-            0 => {
-                if ui.add(egui::Button::new(look("−", 13.0, 16.0)).frame(false)).on_hover_text("Smaller page").clicked() {
-                    *zoom = (pct - 0.125).clamp(0.5, 2.0);
-                }
-            }
+    let cy = rect.center().y;
+    let minus = Rect::from_center_size(Pos2::new(rect.left() + 2.0 + ZOOM_BTN / 2.0, cy), Vec2::splat(ZOOM_BTN));
+    let plus = Rect::from_center_size(Pos2::new(rect.right() - 2.0 - ZOOM_BTN / 2.0, cy), Vec2::splat(ZOOM_BTN));
+    let read = Rect::from_min_max(Pos2::new(minus.right() + 2.0, cy - ZOOM_BTN / 2.0), Pos2::new(plus.left() - 2.0, cy + ZOOM_BTN / 2.0));
+    let id = ui.id().with("zoom_well");
+    for (r, salt, tip) in [(minus, 0u8, "Smaller page"), (read, 1, "Fit the column"), (plus, 2, "Larger page")] {
+        let resp = ui.interact(r, id.with(salt), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+        let p = ui.painter();
+        if resp.is_pointer_button_down_on() {
+            p.rect_filled(r, CornerRadius::same(8), theme::accent_faded());
+        } else if resp.hovered() {
+            p.rect_filled(r, CornerRadius::same(8), theme::hover_bg());
+        }
+        if resp.has_focus() {
+            p.rect_stroke(r, CornerRadius::same(8), Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
+        }
+        let c = r.center();
+        let s = Stroke::new(1.8, theme::ink());
+        match salt {
             1 => {
-                let r = ui.add(egui::Button::new(look(&label, 11.5, 14.0)).frame(false).min_size(Vec2::new(62.0, 0.0)));
-                if r.on_hover_text("Fit the column").clicked() {
-                    *zoom = 0.0;
-                }
+                p.text(c, Align2::CENTER_CENTER, &label, FontId::new(kit::ty::BODY, theme::sans_family()), theme::text_col());
             }
-            _ => {
-                if ui.add(egui::Button::new(look("+", 13.0, 16.0)).frame(false)).on_hover_text("Larger page").clicked() {
-                    *zoom = (pct + 0.125).clamp(0.5, 2.0);
+            n => {
+                // −/+ drawn 16 wide
+                p.line_segment([c + Vec2::new(-5.0, 0.0), c + Vec2::new(5.0, 0.0)], s);
+                if n == 2 {
+                    p.line_segment([c + Vec2::new(0.0, -5.0), c + Vec2::new(0.0, 5.0)], s);
                 }
             }
         }
+        let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip);
+        if resp.clicked() {
+            *zoom = match salt {
+                0 => (pct - 0.125).clamp(0.5, 2.0),
+                1 => 0.0,
+                _ => (pct + 0.125).clamp(0.5, 2.0),
+            };
+        }
     }
+    ZOOM_H
 }
 
-fn draw_format_bar(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut EditUi) {    let Some(ex) = app.store.exam(exam_id) else { return };
+/// The desktop format strip's control height.
+const STRIP_H: f32 = 30.0;
+/// The text-size stepper's width.
+const STEPPER_W: f32 = 104.0;
+
+/// The words inside each desktop strip control, in strip order (paper, heading, text size,
+/// margins, blanks). `words` false leaves "paper"/"heading" to the tooltips.
+fn strip_labels(f: &model::Exam, words: bool) -> [String; 5] {
+    let m = f.page_margins();
+    let blanks = match f.ruled_blanks.min(6) {
+        0 => "Blanks: none".to_string(),
+        1 => "Blanks: 1 ruled line".to_string(),
+        n => format!("Blanks: {n} ruled lines"),
+    };
+    let head = HEAD_LABELS[head_idx(f.heading_pt)];
+    [
+        if words { format!("{} paper", f.paper_style.label()) } else { f.paper_style.label().to_string() },
+        if words { format!("{head} heading") } else { head.to_string() },
+        format!("{} pt", f.body_pt.round() as i32),
+        if m.uniform() { format!("{} in margins", fmt_inches(m.top)) } else { "Each side margins".to_string() },
+        blanks,
+    ]
+}
+
+/// A strip control's width for `text`: 12 in, the words at 13, then (a menu) 8 and a caret, 12 out.
+fn strip_ctl_w(ui: &egui::Ui, text: &str, caret: bool) -> f32 {
+    let t = ui.painter().layout_no_wrap(text.to_string(), FontId::new(kit::ty::META, theme::sans_family()), theme::ink()).size().x;
+    (12.0 + t + if caret { 8.0 + 12.0 } else { 0.0 } + 12.0).ceil()
+}
+
+/// The gap between the strip's controls, and a separator's width (6 + 1 + 6).
+const STRIP_GAP: f32 = 8.0;
+const SEP_W: f32 = 13.0;
+
+/// The strip's separator: exactly [`SEP_W`] wide (the row's item spacing goes either side).
+fn strip_sep(ui: &mut egui::Ui) {
+    let (r, _) = ui.allocate_exact_size(Vec2::new(SEP_W, 18.0), Sense::hover());
+    ui.painter().vline(r.center().x, r.y_range(), Stroke::new(1.0, theme::border()));
+}
+
+/// The strip's widths: (the five controls with their gaps, the zoom well with its separator,
+/// the summary with its separator), for the words and summary given.
+fn strip_need(ui: &egui::Ui, labels: &[String; 5], zoom_label: Option<&str>, summary: Option<&str>) -> f32 {
+    let mut w = 0.0;
+    for (i, l) in labels.iter().enumerate() {
+        w += if i == 2 { STEPPER_W } else { strip_ctl_w(ui, l, i != 3) };
+    }
+    w += STRIP_GAP * 4.0;
+    if let Some(z) = zoom_label {
+        w += STRIP_GAP + SEP_W + STRIP_GAP + zoom_well_w(ui, z);
+    }
+    if let Some(s) = summary {
+        let t = ui.painter().layout_no_wrap(s.to_string(), FontId::new(kit::ty::META, theme::sans_family()), theme::text_col()).size().x;
+        w += STRIP_GAP + SEP_W + STRIP_GAP + t.ceil();
+    }
+    w
+}
+
+/// What the strip shows at a width: whether "paper"/"heading" stay in the controls, and the summary.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct StripFit {
+    words: bool,
+    summary: Option<String>,
+}
+
+/// Fits the strip into `avail`, dropping in order: the "Page N of M ·" prefix, the whole summary
+/// (the page header prints the counts), then the words "paper"/"heading" (tooltips keep them).
+/// Never two rows.
+fn strip_fit(ui: &egui::Ui, f: &model::Exam, avail: f32, zoom_label: Option<&str>, full: &str, short: &str) -> StripFit {
+    for (words, summary) in [(true, Some(full)), (true, Some(short)), (true, None), (false, None)] {
+        if strip_need(ui, &strip_labels(f, words), zoom_label, summary) <= avail {
+            return StripFit { words, summary: summary.map(str::to_string) };
+        }
+    }
+    StripFit { words: false, summary: None }
+}
+
+/// A strip control: card fill, 1 pt `edge`, the words at 13 in ink, a caret when it opens a menu;
+/// the accent wash while `on`.
+fn strip_button(ui: &mut egui::Ui, text: &str, caret: bool, on: bool) -> egui::Response {
+    let w = strip_ctl_w(ui, text, caret);
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, STRIP_H), Sense::click());
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    let fill = if on || open || resp.is_pointer_button_down_on() {
+        theme::accent_faded()
+    } else if resp.hovered() {
+        theme::hover_bg()
+    } else {
+        theme::card()
+    };
+    let p = ui.painter();
+    p.rect(rect, CornerRadius::same(10), fill, Stroke::new(1.0, if on { theme::accent_col() } else { theme::edge() }), StrokeKind::Inside);
+    if resp.has_focus() {
+        p.rect_stroke(rect.expand(1.0), CornerRadius::same(11), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+    }
+    p.text(Pos2::new(rect.left() + 12.0, rect.center().y), Align2::LEFT_CENTER, text, FontId::new(kit::ty::META, theme::sans_family()), theme::ink());
+    if caret {
+        let c = if open { egui_phosphor::regular::CARET_UP } else { egui_phosphor::regular::CARET_DOWN };
+        p.text(Pos2::new(rect.right() - 12.0 - 6.0, rect.center().y), Align2::CENTER_CENTER, c, theme::icon_font(12.0), theme::text_col());
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, text));
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// The desktop strip's five controls with the words inside them; returns true when the format changed.
+fn strip_controls(ui: &mut egui::Ui, f: &mut model::Exam, words: bool, margins_open: &mut bool) -> bool {
+    let labels = strip_labels(f, words);
+    let mut changed = false;
+    ui.spacing_mut().item_spacing.x = STRIP_GAP;
+    // Paper style.
+    let r = strip_button(ui, &labels[0], true, false).on_hover_text("Paper style");
+    let mut sel = f.paper_style;
+    egui::Popup::menu(&r).show(|ui| {
+        ui.set_min_width(170.0);
+        for ps in model::PaperStyle::ALL {
+            ui.selectable_value(&mut sel, ps, ps.label()).on_hover_text(ps.blurb());
+        }
+    });
+    if sel != f.paper_style {
+        f.paper_style = sel;
+        changed = true;
+    }
+    // Heading size.
+    let r = strip_button(ui, &labels[1], true, false).on_hover_text("Heading size");
+    let cur = head_idx(f.heading_pt);
+    let mut sel = cur;
+    egui::Popup::menu(&r).show(|ui| {
+        ui.set_min_width(130.0);
+        for (i, l) in HEAD_LABELS.iter().enumerate() {
+            ui.selectable_value(&mut sel, i, *l);
+        }
+    });
+    if sel != cur {
+        f.heading_pt = HEAD_PT[sel];
+        changed = true;
+    }
+    // Text size: the stepper.
+    ui.scope(|ui| {
+        changed |= format_control(ui, 1, f, "bar", margins_open);
+    })
+    .response
+    .on_hover_text("Text size");
+    // Margins: opens the margins dialog.
+    if strip_button(ui, &labels[3], false, *margins_open).on_hover_text("Margins (all sides or each side)").clicked() {
+        *margins_open = !*margins_open;
+    }
+    // Answer blanks.
+    let r = strip_button(ui, &labels[4], true, false).on_hover_text("Answer blanks under questions that take a written answer");
+    let cur = f.ruled_blanks.min(6) as usize;
+    let mut sel = cur;
+    egui::Popup::menu(&r).show(|ui| {
+        ui.set_min_width(160.0);
+        for n in 0..=6usize {
+            let l = match n {
+                0 => "None".to_string(),
+                1 => "1 ruled line".to_string(),
+                n => format!("{n} ruled lines"),
+            };
+            ui.selectable_value(&mut sel, n, l);
+        }
+    });
+    if sel != cur {
+        f.ruled_blanks = sel as u8;
+        changed = true;
+    }
+    changed
+}
+
+fn draw_format_bar(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut EditUi) {
+    let Some(ex) = app.store.exam(exam_id) else { return };
     let mut f = ex.clone();
     let n_q = f.items.len();
     let pts: f64 = f
@@ -1995,65 +2179,29 @@ fn draw_format_bar(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &m
         .inner_margin(Margin::symmetric(14, 6))
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            let wide = ui.available_width() > 1180.0;
-            // The page number prints on the page itself, so the narrow bar can leave it out.
-            let summary = if wide {
-                format!(
-                    "Page 1 of {} · {n_q} question{} · {} pts",
-                    st.pages.max(1),
-                    if n_q == 1 { "" } else { "s" },
-                    fmt_number(pts)
-                )
-            } else {
-                format!("{n_q} question{} · {} pts", if n_q == 1 { "" } else { "s" }, fmt_number(pts))
-            };
-            // Wide: one row with the summary pushed right. Narrow: controls wrap, summary last.
-            // With the bank filling the narrow work area there is no page to zoom, and the last
-            // zoom it drew at would be a stale figure, so the zoom well leaves the bar.
-            let page_shown = !st.shelf_alone;
+            let short = format!("{n_q} question{} · {} pt{}", if n_q == 1 { "" } else { "s" }, fmt_number(pts), if (pts - 1.0).abs() < 1e-9 { "" } else { "s" });
+            let full = format!("Page 1 of {} · {short}", st.pages.max(1));
             let mut margins_open = st.margins_open;
             let mut zoom = st.zoom;
             let zoom_eff = st.zoom_eff;
-            let mut zoom_h = st.zoom_well_h;
-            let mut body = |ui: &mut egui::Ui, range: std::ops::Range<usize>| {
-                ui.spacing_mut().item_spacing.x = 8.0;
-                for (label, which) in [("Paper", 4u8), ("Heading", 0), ("Text size", 1), ("Margins", 2), ("Answer blanks", 3)]
-                    .into_iter()
-                    .skip(range.start)
-                    .take(range.len())
-                {
-                    ui.label(muted(RichText::new(label).size(11.5)));
-                    changed |= format_control(ui, which, &mut f, "bar", &mut margins_open);
-                    ui.add_space(10.0);
-                }
-            };
-            if wide {
-                ui.horizontal(|ui| {
-                    body(ui, 0..5);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(muted(RichText::new(&summary).size(12.0)));
-                        bar_sep(ui);
-                        zoom_controls(ui, &mut zoom, zoom_eff);
-                    });
-                });
-            } else {
-                ui.horizontal(|ui| body(ui, 0..3));
-                ui.horizontal(|ui| {
-                    body(ui, 3..5);
-                    if page_shown {
-                        bar_sep(ui);
-                        zoom_h = zoom_controls(ui, &mut zoom, zoom_eff);
-                    } else {
-                        // Hold the row at the zoom well's height so the switch below never jumps.
-                        ui.allocate_exact_size(Vec2::new(0.0, zoom_h), Sense::hover());
+            // One row at every desktop width: what does not fit is dropped, never wrapped.
+            let zl = zoom_label(zoom, zoom_eff);
+            let fit = strip_fit(ui, &f, ui.available_width(), Some(&zl), &full, &short);
+            ui.horizontal(|ui| {
+                ui.set_min_height(ZOOM_H);
+                changed |= strip_controls(ui, &mut f, fit.words, &mut margins_open);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = STRIP_GAP;
+                    if let Some(s) = &fit.summary {
+                        ui.label(kit::meta(s.as_str()));
+                        strip_sep(ui);
                     }
-                    bar_sep(ui);
-                    ui.label(muted(RichText::new(&summary).size(12.0)));
+                    zoom_controls(ui, &mut zoom, zoom_eff);
+                    strip_sep(ui);
                 });
-            }
+            });
             st.margins_open = margins_open;
             st.zoom = zoom;
-            st.zoom_well_h = zoom_h;
         });
     if changed {
         write_format(app, exam_id, &f);
@@ -2684,22 +2832,34 @@ fn margin_button(ui: &mut egui::Ui, id: egui::Id, center: Pos2, kind: u8, show: 
 
 /// [`margin_button`] returning its response (None while hidden).
 fn margin_button_resp(ui: &mut egui::Ui, id: egui::Id, center: Pos2, kind: u8, show: bool) -> Option<egui::Response> {
-    let rect = Rect::from_center_size(center, Vec2::splat(18.0));
-    let resp = ui.interact(rect, id, if show { Sense::click() } else { Sense::hover() });
-    if !show {
-        return None;
-    }
-    paint_margin_glyph(ui, rect, kind, resp.hovered());
-    let tip = match kind {
+    margin_button_side(ui, id, center, kind, show, 18.0)
+}
+
+/// What a margin button does, as its tooltip and accessible name.
+fn margin_tip(kind: u8) -> &'static str {
+    match kind {
         0 => "Remove from exam",
         1 => "Move up",
         3 => "Duplicate question",
         4 => "Question actions",
         5 => "Merge with section above",
         6 => "Delete section and its questions",
+        7 => "Edit question",
         _ => "Move down",
-    };
-    Some(resp.on_hover_text(tip))
+    }
+}
+
+/// [`margin_button_resp`] with a `side` square hit area (the narrow page's handles are 24).
+fn margin_button_side(ui: &mut egui::Ui, id: egui::Id, center: Pos2, kind: u8, show: bool, side: f32) -> Option<egui::Response> {
+    let rect = Rect::from_center_size(center, Vec2::splat(side));
+    let resp = ui.interact(rect, id, if show { Sense::click() } else { Sense::hover() });
+    if !show {
+        return None;
+    }
+    paint_margin_glyph(ui, rect, kind, resp.hovered() || resp.has_focus());
+    let tip = margin_tip(kind);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+    Some(resp.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand))
 }
 
 /// Paints a margin button's glyph (see [`margin_button`] for the kinds).
@@ -2733,6 +2893,10 @@ fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
                 p.circle_filled(c + Vec2::new(dx, 0.0), 1.5, col);
             }
         }
+        7 => {
+            // Edit question: the hand-drawn pencil.
+            crate::handicons::paint_glyph(p, c, crate::handicons::EDIT, 13.0, col);
+        }
         5 => {
             // Merge up: arrow into a bar.
             p.line_segment([c + Vec2::new(-4.5, -4.0), c + Vec2::new(4.5, -4.0)], s);
@@ -2744,6 +2908,53 @@ fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
             p.line_segment([c + Vec2::new(-4.0, -1.5), c + Vec2::new(0.0, 2.5)], s);
             p.line_segment([c + Vec2::new(0.0, 2.5), c + Vec2::new(4.0, -1.5)], s);
         }
+    }
+}
+
+/// The grip's slot in [`MarginHandles`] (the other kinds are [`margin_tip`]'s).
+const GRIP: u8 = 255;
+
+/// Where a placed question's handles go: the left gutter's (grip, pencil, "…") and the right
+/// gutter's (×, ↑, ↓), each a kind and a centre, `side` square.
+#[derive(Debug)]
+struct MarginHandles {
+    left: Vec<(u8, Pos2)>,
+    right: Vec<(u8, Pos2)>,
+    side: f32,
+    /// ↑/↓ beside the question (false: they are in its "…" menu).
+    tall: bool,
+}
+
+/// The handles of a question at `rect` with gutters `ml`/`mr` wide. Desktop: grip and "…" left,
+/// ×/↑/↓ right, 18 square. Narrow: 24 square, 26 apart, and a pencil between grip and "…"; under
+/// 76 tall only grip, "…" and ×. A gutter under 30 wide puts them in a 26-tall strip above the
+/// question, right-aligned.
+fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32, narrow: bool) -> MarginHandles {
+    let tall = !narrow || rect.height() >= 76.0;
+    let side = if narrow { 24.0 } else { 18.0 };
+    let step = if narrow { 26.0 } else { 20.0 };
+    let left_k: &[u8] = if narrow && tall { &[GRIP, 7, 4] } else { &[GRIP, 4] };
+    let right_k: &[u8] = if tall { &[0, 1, 2] } else { &[0] };
+    if narrow && ml.min(mr) < 30.0 {
+        let y = rect.top() - 13.0;
+        let total = left_k.len() + right_k.len();
+        let at = |k: usize| Pos2::new(rect.right() - side / 2.0 - (total - 1 - k) as f32 * step, y);
+        return MarginHandles {
+            left: left_k.iter().enumerate().map(|(k, &kind)| (kind, at(k))).collect(),
+            right: right_k.iter().enumerate().map(|(k, &kind)| (kind, at(left_k.len() + k))).collect(),
+            side,
+            tall,
+        };
+    }
+    let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
+    let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
+    let y0 = rect.top() + if narrow { 12.0 } else { 9.0 };
+    let lstep = if narrow { step } else { 24.0 };
+    MarginHandles {
+        left: left_k.iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * lstep))).collect(),
+        right: right_k.iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y0 + k as f32 * step))).collect(),
+        side,
+        tall,
     }
 }
 
@@ -2802,10 +3013,19 @@ fn draw_item(
     let menu_id = ui.id().with(("it_menu", i));
     let menu_open = egui::Popup::is_id_open(ctx, menu_id.with("popup"));
     let hover = !any_drag && ui.rect_contains_pointer(rect.expand2(Vec2::new(ml.max(mr) - 2.0, 4.0)));
-    let show = hover || dragging_this || menu_open;
+    // A narrow page shows its handles at rest: no pointer reaches a touch screen's hover, and a
+    // still capture showed none of them. Desktop keeps them for the question under the pointer.
+    let narrow = st.narrow;
+    let show = hover || dragging_this || menu_open || (narrow && !any_drag);
+    let n_items = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
     if let Some(q) = q {
-        let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
-        let grect = Rect::from_center_size(gc, Vec2::new(18.0, 24.0));
+        let hs = margin_handles(rect, ml, mr, bp, narrow);
+        let (tall, side) = (hs.tall, hs.side);
+        let left_pos: Vec<Pos2> = hs.left.iter().map(|h| h.1).collect();
+        let right_pos: Vec<Pos2> = hs.right.iter().map(|h| h.1).collect();
+        let left_n = left_pos.len();
+        let gc = left_pos[0];
+        let grect = Rect::from_center_size(gc, Vec2::new(if narrow { 24.0 } else { 18.0 }, 24.0));
         let gresp = ui.interact(grect, ui.id().with(("it_grip", i)), Sense::click_and_drag());
         if show {
             let col = if dragging_this || gresp.hovered() { theme::accent_col() } else { PAPER_SOFT };
@@ -2814,7 +3034,7 @@ fn draw_item(
                     ui.painter().circle_filled(gc + Vec2::new(dx, dy), 1.5, col);
                 }
             }
-            gresp.clone().on_hover_cursor(egui::CursorIcon::Grab);
+            gresp.clone().on_hover_cursor(egui::CursorIcon::Grab).on_hover_text("Drag to move");
         }
         if gresp.drag_started() {
             st.drag = Some(DragState {
@@ -2823,29 +3043,32 @@ fn draw_item(
                 label: kind_pill(q.kind.qkind()),
             });
         }
-        let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
-        let y0 = rect.top() + 9.0;
-        if margin_button(ui, ui.id().with(("it_x", i)), Pos2::new(rx, y0), 0, show) {
+        if margin_button_side(ui, ui.id().with(("it_x", i)), right_pos[0], 0, show, side).is_some_and(|r| r.clicked()) {
             remove_item(app, exam_id, i);
         }
-        if margin_button(ui, ui.id().with(("it_up", i)), Pos2::new(rx, y0 + 20.0), 1, show) {
-            shift_item(app, exam_id, i, -1);
+        if tall {
+            if margin_button_side(ui, ui.id().with(("it_up", i)), right_pos[1], 1, show, side).is_some_and(|r| r.clicked()) {
+                shift_item(app, exam_id, i, -1);
+            }
+            if margin_button_side(ui, ui.id().with(("it_dn", i)), right_pos[2], 2, show, side).is_some_and(|r| r.clicked()) {
+                shift_item(app, exam_id, i, 1);
+            }
         }
-        if margin_button(ui, ui.id().with(("it_dn", i)), Pos2::new(rx, y0 + 40.0), 2, show) {
-            shift_item(app, exam_id, i, 1);
+        let mut act: Option<QAct> = None;
+        if left_n == 3 && margin_button_side(ui, ui.id().with(("it_edit", i)), left_pos[1], 7, show, side).is_some_and(|r| r.clicked()) {
+            act = Some(QAct::Edit);
         }
-        // The per-question actions menu sits in the left gutter under the grip, inside even a
-        // one-line question's height.
-        let mrect = Rect::from_center_size(gc + Vec2::new(0.0, 24.0), Vec2::splat(18.0));
+        // The per-question actions menu sits in the left gutter under the grip (and the pencil),
+        // inside even a one-line question's height.
+        let mrect = Rect::from_center_size(left_pos[left_n - 1], Vec2::splat(side));
         let mresp = ui.interact(mrect, menu_id, Sense::click());
         if show {
-            paint_margin_glyph(ui, mrect, 4, mresp.hovered() || menu_open);
+            paint_margin_glyph(ui, mrect, 4, mresp.hovered() || menu_open || mresp.has_focus());
         }
+        mresp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Question actions"));
         let mresp = mresp.on_hover_text("Question actions");
-        let n_items = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
         let next_starts = app.store.exam(exam_id).and_then(|e| e.items.get(i + 1)).is_some_and(|it| it.section.is_some());
         let is_mc = matches!(q.kind, Kind::Mc { .. });
-        let mut act: Option<QAct> = None;
         egui::Popup::menu(&mresp).id(menu_id.with("popup")).show(|ui| {
             ui.set_min_width(220.0);
             if ui.button("Edit question").clicked() {
@@ -2853,6 +3076,15 @@ fn draw_item(
             }
             if ui.button("Duplicate").clicked() {
                 act = Some(QAct::Duplicate);
+            }
+            // A short question on a narrow page has no room for ↑/↓ beside it: they live here.
+            if !tall {
+                if ui.add_enabled(i > 0, egui::Button::new("Move up")).on_disabled_hover_text("Already the first question").clicked() {
+                    act = Some(QAct::Move(-1));
+                }
+                if ui.add_enabled(i + 1 < n_items, egui::Button::new("Move down")).on_disabled_hover_text("Already the last question").clicked() {
+                    act = Some(QAct::Move(1));
+                }
             }
             ui.separator();
             let can_section = i + 1 < n_items && !next_starts;
@@ -2944,6 +3176,8 @@ enum QAct {
     ShuffleA,
     /// Multiple choice: answer columns (1 / 2 / 4).
     Columns(u8),
+    /// One place up (-1) or down (1).
+    Move(i32),
     Remove,
 }
 
@@ -2995,6 +3229,7 @@ fn question_action(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, st: 
             }
             it
         }),
+        QAct::Move(d) => shift_item(app, exam_id, i, d),
         QAct::Remove => remove_item(app, exam_id, i),
     }
 }
@@ -4028,7 +4263,7 @@ fn draw_shelf_inner(
     if let Some(plus) = open_menu {
         egui::Popup::menu(&plus).show(|ui| {
             ui.set_min_width(220.0);
-            ui.label(kit::small_caps_text("Open question bank"));
+            ui.label(kit::label_text("Open question bank"));
             let others: Vec<(Id, String, usize)> = app
                 .store
                 .banks
@@ -4201,8 +4436,8 @@ fn draw_shelf_inner(
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
-            ui.label(muted(RichText::new(format!("of {} used", bank.questions.len())).size(11.5)));
-            ui.label(RichText::new(used.to_string()).family(theme::bold_family()).size(11.5).color(theme::ink()));
+            ui.label(kit::meta(format!("of {} used", bank.questions.len())));
+            ui.label(RichText::new(used.to_string()).family(theme::bold_family()).size(kit::ty::META).color(theme::ink()));
         })
         .response
         .on_hover_text("Questions from this bank already on the exam");
@@ -4236,9 +4471,16 @@ fn draw_shelf_inner(
 }
 
 /// One shelf card (Test Parrot's layout): TYPE label with "In exam" / "Image" badges and quiet
-/// edit / copy icons, the stem on two lines, and the add button (or in-exam check) in a column
+/// edit / copy icons, the stem on three lines, and the add button (or in-exam check) in a column
 /// of its own on the right. The card drags onto the page.
 #[allow(clippy::too_many_arguments)]
+/// "Short answer" from a type's label, whatever its case.
+fn sentence_case(s: &str) -> String {
+    let low = s.to_lowercase();
+    let mut c = low.chars();
+    c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+}
+
 fn shelf_row(
     app: &mut crate::App,
     ui: &mut egui::Ui,
@@ -4259,8 +4501,10 @@ fn shelf_row(
     let already = in_count > 0;
     let p = ui.painter().clone();
     let stem_txt = crate::equation::stem_preview(&q.stem);
-    let galley = clamped_galley(&p, &stem_txt, FontId::proportional(12.5), theme::ink(), stem_w, 2);
-    let h = galley.size().y + 31.0;
+    // Three lines of the stem at 13, so two questions that start alike still read apart; the
+    // card's tooltip has the whole stem.
+    let galley = clamped_galley(&p, &stem_txt, FontId::proportional(kit::ty::META), theme::ink(), stem_w, 3);
+    let h = galley.size().y + 28.0 + 10.0;
     // Alone in the narrow window the bank has no page beside it to drop on, so its cards do not
     // drag (no grab cursor, no ghost) and + is the way onto the page.
     let alone = st.shelf_alone;
@@ -4278,26 +4522,28 @@ fn shelf_row(
     let add_rect = Rect::from_center_size(Pos2::new(rect.right() - 10.0 - ADD_SZ / 2.0, rect.center().y), Vec2::splat(ADD_SZ));
     let ty_y = rect.top() + 8.0;
     // Edit and copy sit at the right end of the type line, left of the add column.
-    let icon_cy = ty_y + 6.0;
+    let icon_cy = ty_y + 8.0;
     let copy_rect = Rect::from_center_size(Pos2::new(add_rect.left() - 6.0 - ICON_SZ / 2.0, icon_cy), Vec2::splat(ICON_SZ));
     let edit_rect = copy_rect.translate(Vec2::new(-ICON_SZ - 2.0, 0.0));
     let meta_right = edit_rect.left() - 6.0;
-    // TYPE label (+ part count) and badges; a badge that would run under the icons is left out.
+    // Type label (+ part count) in sentence case and badges; a badge that would run under the
+    // icons is left out.
     let mut x = rect.left() + 12.0;
     let ty = match &q.kind {
-        Kind::Multipart { parts } => format!("{} · {} PARTS", q.kind.qkind().label().to_uppercase(), parts.len()),
-        _ => q.kind.qkind().label().to_uppercase(),
+        Kind::Multipart { parts } => format!("{} · {} parts", sentence_case(q.kind.qkind().label()), parts.len()),
+        _ => sentence_case(q.kind.qkind().label()),
     };
-    let tg = p.layout_no_wrap(ty, FontId::new(9.5, theme::bold_family()), theme::muted_col());
+    let tg = p.layout_no_wrap(ty, FontId::new(kit::ty::LABEL, theme::semibold()), theme::muted_col());
     let tw = tg.size().x;
+    let line_h = tg.size().y;
     p.galley(Pos2::new(x, ty_y), tg, theme::muted_col());
     x += tw + 8.0;
-    let badge_g = |label: &str, fg: Color32| p.layout_no_wrap(label.to_string(), FontId::new(9.5, theme::bold_family()), fg);
+    let badge_g = |label: &str, fg: Color32| p.layout_no_wrap(label.to_string(), FontId::new(kit::ty::LABEL, theme::bold_family()), fg);
     let put_badge = |x: &mut f32, g: std::sync::Arc<egui::Galley>, bg: Color32| {
-        let r = Rect::from_min_size(Pos2::new(*x, ty_y - 1.5), g.size() + Vec2::new(10.0, 3.0));
+        let r = Rect::from_min_size(Pos2::new(*x, ty_y + (line_h - g.size().y) / 2.0 - 1.0), g.size() + Vec2::new(10.0, 2.0));
         p.rect_filled(r, CornerRadius::same(6), bg);
         *x = r.right() + 6.0;
-        p.galley(r.min + Vec2::new(5.0, 1.5), g, Color32::PLACEHOLDER);
+        p.galley(r.min + Vec2::new(5.0, 1.0), g, Color32::PLACEHOLDER);
     };
     // An unfinished question says so before it is clicked (it can not be added; see `qcheck`).
     // That warning is placed first and is never left out: "In exam", "Image" and the points
@@ -4314,7 +4560,7 @@ fn shelf_row(
         if x + g.size().x + 10.0 <= meta_right {
             put_badge(&mut x, g, bg);
         } else {
-            let mark = p.layout_no_wrap(egui_phosphor::regular::WARNING.to_string(), FontId::proportional(12.0), fg);
+            let mark = p.layout_no_wrap(egui_phosphor::regular::WARNING.to_string(), FontId::proportional(13.0), fg);
             let mx = x.min(meta_right - mark.size().x);
             p.galley(Pos2::new(mx, ty_y - 1.5), mark.clone(), Color32::PLACEHOLDER);
             x = mx + mark.size().x + 6.0;
@@ -4333,14 +4579,14 @@ fn shelf_row(
         optional(&mut x, "Image", theme::muted_col(), theme::field());
     }
     if let Some(pts) = q.points {
-        let g = p.layout_no_wrap(format!("{} pt", fmt_number(pts)), FontId::proportional(10.5), theme::muted_col());
+        let g = p.layout_no_wrap(format!("{} pt", fmt_number(pts)), FontId::proportional(kit::ty::LABEL), theme::muted_col());
         let gx = meta_right - g.size().x;
         if gx > x {
             p.galley(Pos2::new(gx, ty_y), g, Color32::PLACEHOLDER);
         }
     }
     // Stem.
-    p.galley(Pos2::new(rect.left() + 12.0, rect.top() + 22.0), galley, theme::ink());
+    p.galley(Pos2::new(rect.left() + 12.0, rect.top() + 28.0), galley, theme::ink());
 
     // Buttons: edit and copy (quiet), add (the accent square) or the in-exam check.
     let hit = |br: Rect, id: &str, tip: &str| -> egui::Response {
@@ -4441,9 +4687,9 @@ fn shelf_row(
                 ui.add(egui::Label::new(RichText::new(format!("{label}: {why}")).size(12.0).color(col)).wrap());
                 ui.add_space(4.0);
             }
-            ui.add(egui::Label::new(RichText::new(&stem_txt).size(12.5).color(theme::ink())).wrap());
+            ui.add(egui::Label::new(RichText::new(&stem_txt).size(kit::ty::META).color(theme::ink())).wrap());
             ui.add_space(4.0);
-            ui.label(muted(RichText::new(how).size(11.5)));
+            ui.label(muted(RichText::new(how).size(kit::ty::LABEL)));
         };
         resp.on_hover_ui(tip);
     }
@@ -7288,5 +7534,143 @@ mod examed_tests {
         let mut d = sample();
         d[2].section = None;
         assert!(!same_items(&a, &d));
+    }
+}
+
+#[cfg(test)]
+mod system_pass_tests {
+    use super::*;
+    use egui_kittest::Harness;
+
+    /// The inner width of the desktop format bar at a 1280 window (spec section 6).
+    const INNER_1280: f32 = 1082.0;
+
+    /// The worst case the strip can show: the widest paper and heading words, a two-digit size,
+    /// per-side margins, six ruled lines, a three-digit fit, and a long summary.
+    fn worst(ui: &egui::Ui) -> ([String; 5], String, String) {
+        let widest = |opts: Vec<String>| {
+            opts.into_iter()
+                .max_by(|a, b| strip_ctl_w(ui, a, true).total_cmp(&strip_ctl_w(ui, b, true)))
+                .unwrap()
+        };
+        let paper = widest(model::PaperStyle::ALL.iter().map(|p| format!("{} paper", p.label())).collect());
+        let head = widest(HEAD_LABELS.iter().map(|h| format!("{h} heading")).collect());
+        let labels = [paper, head, "14 pt".to_string(), "Each side margins".to_string(), "Blanks: 6 ruled lines".to_string()];
+        (labels, "Fit  200%".to_string(), "Page 12 of 12 · 99 questions · 999 pts".to_string())
+    }
+
+    /// Runs `f` in a themed Ui (the theme's fonts load on the first frame) and returns its result.
+    fn in_ui<T: Default + 'static>(f: impl Fn(&mut egui::Ui) -> T + 'static) -> T {
+        let mut first = true;
+        let mut h = Harness::builder().with_size(Vec2::new(1400.0, 300.0)).build_ui_state(
+            move |ui, out: &mut T| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                *out = f(ui);
+            },
+            T::default(),
+        );
+        h.run();
+        std::mem::take(h.state_mut())
+    }
+
+    /// The desktop strip's worst case fits one row at 1280 with everything shown, and laying the
+    /// real controls out takes the width the fit arithmetic says.
+    #[test]
+    fn the_worst_case_format_strip_fits_one_row_at_1280() {
+        let (need, laid, need_same) = in_ui(|ui| {
+            let (labels, zoom, summary) = worst(ui);
+            let need = strip_need(ui, &labels, Some(&zoom), Some(&summary));
+            // The real row: the same exam, laid out as the bar lays it out.
+            let mut f = model::Exam { paper_style: model::PaperStyle::Condensed, heading_pt: HEAD_PT[1], body_pt: 14.0, ruled_blanks: 6, ..Default::default() };
+            f.margins = Some(model::Margins { top: 25.4, right: 19.05, bottom: 25.4, left: 25.4 });
+            let real = strip_labels(&f, true);
+            let need_same = strip_need(ui, &real, Some(&zoom), None);
+            let mut open = false;
+            let row = ui
+                .horizontal(|ui| {
+                    strip_controls(ui, &mut f, true, &mut open);
+                    strip_sep(ui);
+                    let mut z = 2.0;
+                    zoom_well(ui, &mut z, 2.0);
+                })
+                .response
+                .rect;
+            (need, row.width(), need_same)
+        });
+        assert!(need > 600.0, "measured {need}");
+        assert!(need <= INNER_1280, "the worst-case strip needs {need} of {INNER_1280}");
+        assert!((laid - need_same).abs() <= 2.0, "laid out {laid}, arithmetic {need_same}");
+    }
+
+    /// Short of room the strip drops the page prefix, then the summary, then the words, and never
+    /// needs more than it was given once the words are gone (or the smallest it can be).
+    #[test]
+    fn the_format_strip_drops_in_the_spec_order() {
+        let fits = in_ui(|ui| {
+            let f = model::Exam { ruled_blanks: 6, ..Default::default() };
+            let (full, short) = ("Page 3 of 3 · 40 questions · 120 pts", "40 questions · 120 pts");
+            let z = "Fit  147%";
+            let all = strip_need(ui, &strip_labels(&f, true), Some(z), Some(full));
+            let no_prefix = strip_need(ui, &strip_labels(&f, true), Some(z), Some(short));
+            let none = strip_need(ui, &strip_labels(&f, true), Some(z), None);
+            let bare = strip_need(ui, &strip_labels(&f, false), Some(z), None);
+            assert!(all > no_prefix && no_prefix > none && none > bare);
+            [all, no_prefix, none, bare, bare - 1.0].map(|w| strip_fit(ui, &f, w, Some(z), full, short))
+        });
+        assert_eq!(fits[0], StripFit { words: true, summary: Some("Page 3 of 3 · 40 questions · 120 pts".into()) });
+        assert_eq!(fits[1], StripFit { words: true, summary: Some("40 questions · 120 pts".into()) });
+        assert_eq!(fits[2], StripFit { words: true, summary: None });
+        assert_eq!(fits[3], StripFit { words: false, summary: None });
+        assert_eq!(fits[4], StripFit { words: false, summary: None });
+    }
+
+    /// A narrow page shows a tall question's grip, pencil and "…" on the left and ×, ↑, ↓ on the
+    /// right, 24 square and 26 apart; a short one keeps grip and "…" and ×. Desktop is as before.
+    #[test]
+    fn narrow_question_handles_by_height() {
+        let tall = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 120.0));
+        let short = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 40.0));
+        let kinds = |v: &[(u8, Pos2)]| v.iter().map(|h| h.0).collect::<Vec<_>>();
+        let h = margin_handles(tall, 60.0, 60.0, 14.0, true);
+        assert_eq!((kinds(&h.left), kinds(&h.right), h.side, h.tall), (vec![GRIP, 7, 4], vec![0, 1, 2], 24.0, true));
+        let s = margin_handles(short, 60.0, 60.0, 14.0, true);
+        assert_eq!((kinds(&s.left), kinds(&s.right), s.tall), (vec![GRIP, 4], vec![0], false));
+        for hs in [&h, &s] {
+            let all: Vec<Rect> = hs.left.iter().chain(&hs.right).map(|p| Rect::from_center_size(p.1, Vec2::splat(hs.side))).collect();
+            for (a, ra) in all.iter().enumerate() {
+                assert!(!ra.intersects(tall.shrink(1.0)) || ra.right() <= tall.left() || ra.left() >= tall.right(), "a handle sits on the question");
+                for rb in &all[a + 1..] {
+                    assert!(!ra.intersects(rb.shrink(0.5)), "handles overlap");
+                }
+            }
+            // The left column stays inside the question's height plus its gap.
+            assert!(hs.left.last().unwrap().1.y + hs.side / 2.0 <= tall.top() + 14.0 * 0.75 + 52.0 + 12.0 + 0.5);
+        }
+        assert!((h.left[1].1.y - h.left[0].1.y - 26.0).abs() < 0.01 && (h.right[1].1.y - h.right[0].1.y - 26.0).abs() < 0.01);
+        // A gutter under 30: one strip above the question, right-aligned.
+        let n = margin_handles(tall, 24.0, 60.0, 14.0, true);
+        assert!(n.left.iter().chain(&n.right).all(|p| (p.1.y - (tall.top() - 13.0)).abs() < 0.01));
+        assert!((n.right.last().unwrap().1.x - (tall.right() - 12.0)).abs() < 0.01);
+        // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart, 18 square, as before.
+        let d = margin_handles(short, 60.0, 60.0, 14.0, false);
+        assert_eq!((kinds(&d.left), kinds(&d.right), d.side), (vec![GRIP, 4], vec![0, 1, 2], 18.0));
+    }
+
+    /// The pencil (kind 7) is named "Edit question", never the catch-all "Move down".
+    #[test]
+    fn the_pencil_handle_is_edit_question() {
+        assert_eq!(margin_tip(7), "Edit question");
+        assert_eq!(margin_tip(2), "Move down");
+        assert_eq!(margin_tip(4), "Question actions");
+    }
+
+    #[test]
+    fn type_labels_read_in_sentence_case() {
+        assert_eq!(sentence_case("Short Answer"), "Short answer");
+        assert_eq!(sentence_case("MULTIPLE CHOICE"), "Multiple choice");
     }
 }

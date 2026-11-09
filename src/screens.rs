@@ -366,19 +366,23 @@ fn soft_backing(core: Rect, feather: Vec2, fill: Color32) -> egui::Shape {
 const PREVIEW_SIZE: Vec2 = Vec2::new(272.0, 352.0);
 /// The same page in a narrow window, beside the hero's text: the critics read the narrow page's
 /// steps as a text-only explanation with no example of the printed exam it describes.
-const NARROW_PREVIEW_SIZE: Vec2 = Vec2::new(184.0, 238.0);
+const NARROW_PREVIEW_SIZE: Vec2 = Vec2::new(200.0, 259.0);
 /// The narrow window's column for the hero and the steps.
 const NARROW_STEPS_W: f32 = 640.0;
 
 fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
     use egui::{FontId, Shape};
-    // Geometry is laid out on the old 222 px sheet and scaled by `k`; type and the gaps that follow
-    // a line of type scale by `tk`.
+    // Geometry is laid out on the old 222 px sheet and scaled by `k`; the title, tag and folio
+    // scale by `tk`. The questions' type (and the gaps that follow a line of it) has its own scale,
+    // `bk`: the body is 12 pt on the desktop sheet and 11 on the narrow one (a printed page, so
+    // exempt from the 12 pt floor, but it has to be read to be believed).
     let k = page.width() / 222.0;
     let tk = k * 1.12;
+    let bk = if page.width() >= 250.0 { 12.0 } else { 11.0 } / 7.6;
     let g = |v: f32| v * k;
     let t = |v: f32| v * tk;
+    let b = |v: f32| v * bk;
     let shade = if theme::is_dark() { 90 } else { 30 };
     // The answer key behind, turned a little and peeking out at the lower right.
     let back_c = page.center() + Vec2::new(g(14.0), g(8.0));
@@ -400,9 +404,9 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
 
     let m = g(17.0);
     let (l, r) = (page.left() + m, page.right() - m);
-    let body = FontId::proportional(t(7.6));
-    let num = FontId::new(t(7.6), theme::bold_family());
-    let small = FontId::new(t(5.2), theme::bold_family());
+    let body = FontId::proportional(b(7.6));
+    let num = FontId::new(b(7.6), theme::bold_family());
+    let small = FontId::new(b(5.2), theme::bold_family());
     let hair = Stroke::new(0.9, PAPER_RULE);
     let ring = Stroke::new(0.9, PAPER_SOFT);
     let text = |pos: Pos2, s: &str, f: &FontId, c: Color32| painter.text(pos, Align2::LEFT_TOP, s, f.clone(), c).width();
@@ -417,37 +421,37 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     painter.galley(pill.min + pad, tag, theme::on_accent_col());
     y += t(21.0);
     let name_w = text(Pos2::new(l, y), "Name", &body, PAPER_SOFT);
-    painter.hline(l + name_w + 3.0..=l + g(118.0), y + t(8.5), hair);
+    painter.hline(l + name_w + 3.0..=l + g(118.0), y + b(8.5), hair);
     let date_w = text(Pos2::new(l + g(128.0), y), "Date", &body, PAPER_SOFT);
-    painter.hline(l + g(128.0) + date_w + 3.0..=r, y + t(8.5), hair);
-    y += t(16.0);
+    painter.hline(l + g(128.0) + date_w + 3.0..=r, y + b(8.5), hair);
+    y += b(16.0);
     painter.hline(l..=r, y, Stroke::new(1.0, PAPER_RULE));
     y += g(9.0);
 
-    let ind = l + t(10.5);
+    let ind = l + b(10.5);
     let stem = |y: f32, n: &str, s: &str| {
         text(Pos2::new(l, y), n, &num, PAPER_INK);
         text(Pos2::new(ind, y), s, &body, PAPER_INK);
     };
     let bubble = |c: Pos2, letter: &str| {
-        painter.circle_stroke(c, t(4.2), ring);
+        painter.circle_stroke(c, b(4.2), ring);
         if !letter.is_empty() {
             painter.text(c, Align2::CENTER_CENTER, letter, small.clone(), PAPER_SOFT);
         }
     };
     // 1. Multiple choice, with answer bubbles.
     stem(y, "1.", "Solve for x:   3x + 5 = 20");
-    y += t(15.0);
+    y += b(15.0);
     let mut x = ind;
     for (letter, val) in [("A", "3"), ("B", "5"), ("C", "15"), ("D", "25")] {
-        bubble(Pos2::new(x + t(4.2), y + t(4.6)), letter);
-        text(Pos2::new(x + t(11.0), y), val, &body, PAPER_INK);
+        bubble(Pos2::new(x + b(4.2), y + b(4.6)), letter);
+        text(Pos2::new(x + b(11.0), y), val, &body, PAPER_INK);
         x += g(42.0);
     }
-    y += t(20.0);
+    y += b(20.0);
     // 2. A question with a small figure.
     stem(y, "2.", "Which line has a slope of 2?");
-    y += t(14.0);
+    y += b(14.0);
     let fig = Rect::from_min_size(Pos2::new(ind, y), Vec2::new(g(64.0), g(46.0)));
     for i in 1..8 {
         painter.vline(fig.left() + g(i as f32 * 8.0), fig.y_range(), Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
@@ -466,23 +470,29 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     painter.text(at(55.0, 3.0), Align2::LEFT_TOP, "q", FontId::proportional(t(6.5)), PAPER_SOFT);
     let ax = fig.right() + g(14.0);
     for (i, s) in ["line p", "line q"].iter().enumerate() {
-        let yy = fig.top() + g(8.0) + i as f32 * t(16.0);
-        bubble(Pos2::new(ax + t(4.2), yy + t(4.6)), "");
-        text(Pos2::new(ax + t(12.0), yy), s, &body, PAPER_INK);
+        let yy = fig.top() + g(8.0) + i as f32 * b(16.0);
+        bubble(Pos2::new(ax + b(4.2), yy + b(4.6)), "");
+        text(Pos2::new(ax + b(12.0), yy), s, &body, PAPER_INK);
     }
     y = fig.bottom() + g(12.0);
     // 3. Short answer.
     stem(y, "3.", "Simplify:   2(x + 4) \u{2212} 3x");
-    y += t(16.0);
+    y += b(16.0);
     let aw = text(Pos2::new(ind, y), "Answer", &body, PAPER_SOFT);
-    painter.hline(ind + aw + 4.0..=ind + g(104.0), y + t(8.5), hair);
-    y += t(20.0);
-    // 4. Written answer on ruled lines.
-    stem(y, "4.", "Explain how you checked your answer to 1.");
-    y += t(20.0);
-    for _ in 0..2 {
-        painter.hline(ind..=r, y, hair);
-        y += t(13.0);
+    painter.hline(ind + aw + 4.0..=ind + g(104.0), y + b(8.5), hair);
+    y += b(20.0);
+    // 4. Written answer on ruled lines, when the sheet has room for it above the folio (the
+    // narrow sheet, at its larger type, does not).
+    let stem4 = "Show how you checked your answer.";
+    let fits = y + b(20.0) + b(13.0) * 2.0 <= page.bottom() - g(20.0)
+        && ind + painter.layout_no_wrap(stem4.to_string(), body.clone(), PAPER_INK).size().x <= r;
+    if fits {
+        stem(y, "4.", stem4);
+        y += b(20.0);
+        for _ in 0..2 {
+            painter.hline(ind..=r, y, hair);
+            y += b(13.0);
+        }
     }
     painter.text(
         Pos2::new(page.center().x, page.bottom() - g(12.0)),
@@ -502,20 +512,20 @@ pub fn step_cell(ui: &mut egui::Ui, i: usize, big: bool) {
             // this narrow; 10 px above it, the number read as detached from its heading.
             step_badge(ui, i);
             ui.add_space(2.0);
-            ui.add(egui::Label::new(theme::serif(*title).size(if big { 18.5 } else { 16.0 })).wrap());
+            ui.add(egui::Label::new(theme::serif(*title).size(if big { crate::kit::ty::PANEL } else { crate::kit::ty::CARD })).wrap());
             ui.add_space(6.0);
-            // Narrow (2 x 2): a size up and looser lines, so the two-line bodies keep up with
-            // their headings instead of reading as small, tight print under them.
-            let text = if big { step_body(body, 13.5) } else { step_body(body, 13.5).line_height(Some(20.0)) };
+            // Body at 14 in `text` on loose lines, so the two-line bodies keep up with their headings
+            // instead of reading as small, tight print under them.
+            let text = step_body(body, crate::kit::ty::BODY).line_height(Some(20.0));
             ui.add(egui::Label::new(text).wrap());
         });
     });
 }
 
-/// A step's body copy: a size up from fine print, and in a softened ink rather than the pale brown
-/// `muted`, which the critics read as four slabs of low-contrast fine print.
+/// A step's body copy: BODY in `text`, never the pale brown `muted`, which the critics read as four
+/// slabs of low-contrast fine print.
 fn step_body(body: &str, size: f32) -> egui::RichText {
-    egui::RichText::new(no_widow(body)).size(size).color(theme::ink().gamma_multiply(0.86))
+    egui::RichText::new(no_widow(body)).size(size).color(theme::text_col())
 }
 
 /// The body with its last two words held together, so a wrap never leaves one word alone on the last
@@ -536,7 +546,7 @@ fn step_badge(ui: &mut egui::Ui, i: usize) {
         r.left_center(),
         Align2::LEFT_CENTER,
         format!("{}", i + 1),
-        egui::FontId::new(20.0, theme::bold_family()),
+        egui::FontId::new(crate::kit::ty::SECTION, theme::bold_family()),
         theme::accent_col(),
     );
 }
@@ -977,7 +987,7 @@ impl crate::App {
                 let hero_head = |ui: &mut egui::Ui, hero: &mut Rect| {
                     // 43 px on a wide window, not 50: larger, it outweighed the lead, button and preview beside
                     // it and left them reading as a second tier (the critics' words).
-                    *hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 43.0 } else { 40.0 })).rect;
+                    *hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { crate::kit::ty::DISPLAY } else { crate::kit::ty::DISPLAY_NARROW })).rect;
                     ui.add_space(if roomy { 14.0 } else { 12.0 });
                 };
                 // The rest of the hero's text, top to bottom, flush left in its column.
@@ -993,7 +1003,7 @@ impl crate::App {
                                      them out as a clean, printable exam.";
                     let r = ui.allocate_ui_with_layout(Vec2::new(lead_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.set_width(lead_w);
-                        let size = if roomy { 16.5 } else { 14.5 };
+                        let size = if roomy { crate::kit::ty::HERO_LEAD } else { crate::kit::ty::HERO_LEAD_NARROW };
                         ui.label(RichText::new(lead_text).size(size).color(theme::ink().gamma_multiply(0.82)));
                     });
                     *hero |= r.response.rect;
@@ -1008,10 +1018,7 @@ impl crate::App {
                     }
                     if !fresh {
                         ui.add_space(2.0);
-                        if ui
-                            .add(egui::Button::new(theme::accent("Open your banks").size(12.5)).frame(false))
-                            .clicked()
-                        {
+                        if crate::kit::link(ui, "Open your banks", true).clicked() {
                             app.screen = crate::Screen::Banks;
                         }
                     }
@@ -1023,8 +1030,8 @@ impl crate::App {
                             "Everything is saved on this machine, and nothing leaves it."
                         })
                         // The reassurance under the call to action: readable, not 12 px fine print.
-                        .size(13.5)
-                        .color(theme::ink().gamma_multiply(0.8)),
+                        .size(crate::kit::ty::BODY)
+                        .color(theme::text_col()),
                     );
                     // The installed build is offered here, where a teacher decides how to start: a quiet
                     // text link under the note, clearly weaker than the button. As an outlined button
@@ -1034,7 +1041,7 @@ impl crate::App {
                     // rest, at body size. A muted lead-in beside green text left it unclear what
                     // could be pressed, and a smaller hover-only underline read as plain text.
                     ui.add_space(4.0);
-                    let size = if roomy { 14.5 } else { 14.0 };
+                    let size = crate::kit::ty::BODY;
                     let icon = RichText::new(egui_phosphor::regular::DOWNLOAD_SIMPLE).font(theme::icon_font(size + 1.0)).color(theme::accent_col());
                     let text = theme::accent("Prefer to install? Get the desktop app for Linux").size(size).underline();
                     let link = egui::Button::new((icon, text)).frame(false);
@@ -1058,10 +1065,10 @@ impl crate::App {
                         hero_head(ui, &mut text);
                         hero_text(ui, &mut text);
                     });
-                    // The page sits midway across the space right of the text, its middle level with
-                    // the text's middle.
+                    // The page sits midway across the space right of the text, its top level with the
+                    // headline's top.
                     let cx = (x0 + text_w + x0 + row_w) / 2.0;
-                    let page = Rect::from_center_size(Pos2::new(cx, text.center().y), PREVIEW_SIZE);
+                    let page = Rect::from_min_size(Pos2::new(cx - PREVIEW_SIZE.x / 2.0, text.top()), PREVIEW_SIZE);
                     paint_exam_preview(ui.painter(), page);
                     hero = text | page;
                     let below = page.bottom() + 8.0 - ui.cursor().top();
@@ -1131,13 +1138,16 @@ impl crate::App {
                 ui.scope_builder(UiBuilder::new().max_rect(area), |ui| {
                     ui.vertical_centered(|ui| {
                         // A real section heading: as a small-caps caption the four steps had no title.
-                        ui.label(theme::serif("How it works").size(if roomy { 22.0 } else { 20.0 }));
+                        ui.label(theme::serif("How it works").size(crate::kit::ty::SECTION));
                     });
                     ui.add_space(10.0);
                     // One panel holding the four steps, split by hairlines. Four bordered, filled cards
                     // read as four buttons beside the one real action (the critics' words), and their
                     // uneven text left each card a different empty floor.
                     let w = ui.available_width();
+                    // Four columns while the strip itself is at least 1000 wide, else two rows of two:
+                    // decided on the strip's width, never on a measured text column.
+                    let wide = col_w >= STEPS_W;
                     // Narrow: a little less above the first numerals, whose 28 px slot already
                     // holds space over the figure, so the panel's top and bottom read even.
                     let pad = if wide { Margin::symmetric(4, 26) } else { Margin { left: 4, right: 4, top: 10, bottom: 16 } };
@@ -1201,6 +1211,8 @@ impl crate::App {
                 app.draw_home_body(ui);
             });
         });
+        // A bank tile's "Used in N exams" opens the bank screens' usage list.
+        crate::bankui::draw_usage_dialog(self, ctx);
     }
 
     fn first_bank(&mut self) {
@@ -1254,8 +1266,8 @@ impl crate::App {
                                 .show(ui, |ui| {
                                     ui.set_min_width(62.0);
                                     ui.spacing_mut().item_spacing.y = 0.0;
-                                    ui.label(theme::serif(n.to_string()).size(22.0));
-                                    ui.label(theme::muted(label).size(11.5));
+                                    ui.label(theme::serif(n.to_string()).size(kit::ty::SECTION));
+                                    ui.label(kit::meta_muted(label));
                                 });
                         },
                     );
@@ -1266,6 +1278,8 @@ impl crate::App {
 
         // Action tiles.
         let gap = 12.0;
+        // The card grids below share the system gutter.
+        let grid_gap = kit::GUTTER;
         let avail = ui.available_width();
         let stacked = avail < 620.0;
         let tiles: [(NavIcon, &str, &str, bool); 3] = [
@@ -1406,13 +1420,14 @@ impl crate::App {
         let mut exam_mode = if self.settings.home_exams_list { kit::ViewMode::List } else { kit::ViewMode::Cards };
         let mut link_exams = false;
         ui.horizontal(|ui| {
-            kit::small_caps(ui, "Recent exams");
+            kit::label(ui, "Recent exams");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if kit::view_toggle(ui, &mut exam_mode, "home_exams") {
                     self.settings.home_exams_list = exam_mode == kit::ViewMode::List;
                     self.save_view_prefs();
                 }
-                if ui.add(egui::Button::new(theme::accent("All exams").family(theme::bold_family()).size(12.5)).frame(false)).clicked() {
+                ui.add_space(4.0);
+                if kit::link(ui, "All exams", true).clicked() {
                     link_exams = true;
                 }
             });
@@ -1423,25 +1438,26 @@ impl crate::App {
         }
         let mut open_ex: Option<Id> = None;
         if exams.is_empty() {
-            ui.label(theme::muted("No exams yet. Start one with New exam above."));
+            if crate::pageshell::empty_line(ui, crate::handicons::EXAMS, "No exams yet. An exam you start is listed here.", Some("New exam")).is_some() {
+                self.first_exam();
+            }
         } else if exam_mode == kit::ViewMode::Cards {
-            let mut cols = grid_cols(ui.available_width(), 230.0, gap, 3);
+            let mut cols = grid_cols(ui.available_width(), 230.0, grid_gap, 3);
             // Fewer exams than columns: the cards take the row (up to a readable width) rather
             // than leaving the page's right side empty.
             cols = exams.len().clamp(1, cols);
-            let cw = (ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32;
+            let cw = ((ui.available_width() - grid_gap * (cols as f32 - 1.0)) / cols as f32).floor();
             for chunk in exams.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
-                // The cards of a row share the height of the one with the most text.
-                let h = chunk.iter().map(|e| exam_card_h(ui.painter(), cw, e)).fold(0.0, f32::max);
+                // Every card has the same slots, so every card is HOME_EXAM_H.
                 ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = gap;
+                    ui.spacing_mut().item_spacing.x = grid_gap;
                     for (k, e) in chunk.iter().enumerate() {
-                        if exam_card(ui, self, cw, h, e, k % 2 == 1) {
+                        if exam_card(ui, self, cw, e, k % 2 == 1) {
                             open_ex = Some(e.id.clone());
                         }
                     }
                 });
-                ui.add_space(gap - 4.0);
+                ui.add_space(grid_gap);
             }
         } else {
             let rows: Vec<&ExamRow> = exams.iter().take(8).collect();
@@ -1455,39 +1471,19 @@ impl crate::App {
         ui.add_space(22.0);
 
         // ---- Your banks ----
-        let mut banks: Vec<BankRow> = self
-            .store
-            .banks
-            .iter()
-            .map(|b| {
-                let mut topics: Vec<&String> = b.questions.iter().flat_map(|q| q.topics.iter()).collect();
-                topics.sort();
-                topics.dedup();
-                let mut counts = [0usize; 6];
-                for q in &b.questions {
-                    counts[crate::bankui::mix_index(q.kind.qkind())] += 1;
-                }
-                BankRow {
-                    id: b.id.clone(),
-                    name: b.name.clone(),
-                    qs: b.questions.len(),
-                    topics: topics.len(),
-                    edited: b.modified,
-                    counts,
-                }
-            })
-            .collect();
+        let mut banks: Vec<crate::bankui::BankTile> = self.store.banks.iter().map(|b| crate::bankui::BankTile::of(&self.store, b)).collect();
         banks.sort_by(|a, b| b.edited.cmp(&a.edited));
         let mut bank_mode = if self.settings.home_banks_list { kit::ViewMode::List } else { kit::ViewMode::Cards };
         let mut link_banks = false;
         ui.horizontal(|ui| {
-            kit::small_caps(ui, "Your banks");
+            kit::label(ui, "Your banks");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if kit::view_toggle(ui, &mut bank_mode, "home_banks") {
                     self.settings.home_banks_list = bank_mode == kit::ViewMode::List;
                     self.save_view_prefs();
                 }
-                if ui.add(egui::Button::new(theme::accent("All banks").family(theme::bold_family()).size(12.5)).frame(false)).clicked() {
+                ui.add_space(4.0);
+                if kit::link(ui, "All banks", true).clicked() {
                     link_banks = true;
                 }
             });
@@ -1498,25 +1494,30 @@ impl crate::App {
         }
         let mut open_bk: Option<Id> = None;
         if banks.is_empty() {
-            ui.label(theme::muted("No banks yet. Start one with New bank above."));
+            if crate::pageshell::empty_line(ui, crate::handicons::BANKS, "No banks yet. A bank you start is listed here.", Some("New bank")).is_some() {
+                self.first_bank();
+            }
         } else if bank_mode == kit::ViewMode::Cards {
-            let mut cols = grid_cols(ui.available_width(), 226.0, gap, 4);
+            use crate::bankui::{bank_tile, TileAct, TileVariant};
+            let mut cols = grid_cols(ui.available_width(), 226.0, grid_gap, 4);
             cols = banks.len().clamp(1, cols);
-            let cw = (ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32;
+            let cw = ((ui.available_width() - grid_gap * (cols as f32 - 1.0)) / cols as f32).floor();
             for chunk in banks.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
-                // Each card is as tall as its type key needs; a row's cards share its top edge.
+                // Every tile is BANK_TILE_H (the Banks screen's tile), so a row ends on one line.
                 ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = gap;
+                    ui.spacing_mut().item_spacing.x = grid_gap;
                     for b in chunk {
-                        if bank_card(ui, cw, b) {
-                            open_bk = Some(b.id.clone());
+                        match bank_tile(ui, self, cw, b, TileVariant::Home) {
+                            Some(TileAct::Usage) => crate::bankui::open_usage(ui.ctx(), b.name.clone(), b.used_in.clone()),
+                            Some(_) => open_bk = Some(b.id.clone()),
+                            None => {}
                         }
                     }
                 });
-                ui.add_space(gap - 4.0);
+                ui.add_space(grid_gap);
             }
         } else {
-            let rows: Vec<&BankRow> = banks.iter().take(10).collect();
+            let rows: Vec<&crate::bankui::BankTile> = banks.iter().take(10).collect();
             if let Some(id) = bank_list(ui, &rows) {
                 open_bk = Some(id);
             }
@@ -1541,7 +1542,7 @@ impl crate::App {
                         draw_printer_icon(ui.painter(), r.center(), theme::accent_col());
                         let what = if rec.what.is_empty() { String::new() } else { format!(" with {}", rec.what.iter().skip(1).cloned().collect::<Vec<_>>().join(", ")) };
                         let what = if what == " with " { String::new() } else { what };
-                        ui.label(theme::strong("Last export").size(12.5));
+                        ui.label(theme::strong("Last export").size(crate::kit::ty::META));
                         ui.label(
                             theme::text(format!(
                                 "{} · {} · {}{}, {}",
@@ -1551,10 +1552,10 @@ impl crate::App {
                                 what,
                                 plural(rec.versions.max(1) as usize, "version")
                             ))
-                            .size(12.5),
+                            .size(crate::kit::ty::META),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.add(egui::Button::new(theme::accent("Export history").family(theme::bold_family()).size(12.5)).frame(false)).clicked() {
+                            if crate::kit::link(ui, "Export history", false).clicked() {
                                 go = true;
                             }
                         });
@@ -1974,17 +1975,9 @@ impl crate::App {
                         pageshell::title(ui, "Home  /  Account", "Account", "Your account, backups and AI settings. Your work is saved on this machine; keep a copy by exporting it.");
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // A quiet help action: as a full outlined button it outweighed Connect, the
-                        // card's real action.
-                        let b = egui::Button::new((
-                            RichText::new(egui_phosphor::regular::QUESTION).font(theme::icon_font(15.0)).color(theme::muted_col()),
-                            RichText::new("How it works").size(13.5).color(theme::ink().gamma_multiply(0.85)),
-                        ))
-                        .fill(theme::card())
-                        .stroke(Stroke::new(1.0, theme::border()))
-                        .corner_radius(CornerRadius::same(10))
-                        .min_size(Vec2::new(0.0, 32.0));
-                        if ui.add(b).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                        // A quiet help action, the tertiary tier: as a full outlined button it
+                        // outweighed Connect, the card's real action.
+                        if kit::tertiary(ui, egui_phosphor::regular::QUESTION, "How it works", 34.0).clicked() {
                             app.help_open = true;
                         }
                     });
@@ -2099,7 +2092,7 @@ impl crate::App {
                         theme::muted(
                             "Restoring replaces everything in verSHion with that file's contents, so keep the backup somewhere else too.",
                         )
-                        .size(11.5),
+                        .size(crate::kit::ty::META),
                     );
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
@@ -2121,7 +2114,7 @@ impl crate::App {
                         egui::Label::new(
                             RichText::new(store::backend_label())
                                 .color(theme::text_col())
-                                .size(12.0)
+                                .size(crate::kit::ty::META)
                                 .family(egui::FontFamily::Monospace),
                         )
                         .wrap(),
@@ -2137,7 +2130,7 @@ impl crate::App {
                             if n_exams == 1 { "" } else { "s" },
                             if n_q == 1 { "" } else { "s" },
                         ))
-                        .size(12.0),
+                        .size(crate::kit::ty::META),
                     );
                     ui.add_space(8.0);
                     if pageshell::outline(ui, "Open folder").clicked() {
@@ -2161,13 +2154,13 @@ impl crate::App {
                             ui.add(
                                 egui::Label::new(
                                     RichText::new(name)
-                                        .size(11.5)
+                                        .size(crate::kit::ty::META)
                                         .family(egui::FontFamily::Monospace)
                                         .color(theme::text_col()),
                                 ),
                             );
                             ui.add(
-                                egui::Label::new(theme::muted(format!("— {what}")).size(11.5)).wrap(),
+                                egui::Label::new(theme::muted(format!("— {what}")).size(crate::kit::ty::META)).wrap(),
                             );
                         });
                     }
@@ -2642,16 +2635,6 @@ struct ExamRow {
     edited: i64,
 }
 
-struct BankRow {
-    id: Id,
-    name: String,
-    qs: usize,
-    topics: usize,
-    edited: i64,
-    /// Question counts by kind, in the bank screen's mix order, for the type key and bar.
-    counts: [usize; 6],
-}
-
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WEEKDAYS: [&str; 7] = ["Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"];
 
@@ -2776,8 +2759,8 @@ fn home_tile(ui: &mut egui::Ui, w: f32, icon: NavIcon, title: &str, sub: &str, p
     let tx = rect.min.x + 18.0 + 42.0 + 14.0;
     let tw = rect.right() - tx - 10.0;
     paint_fit(p, Pos2::new(tx, rect.min.y + 15.0), title, serif_font(19.0), fg, tw);
-    let subc = if primary { fg.gamma_multiply(0.9) } else { theme::muted_col() };
-    paint_fit(p, Pos2::new(tx, rect.min.y + 40.0), sub, sans(12.0), subc, tw);
+    let subc = if primary { fg.gamma_multiply(0.92) } else { theme::text_col() };
+    paint_fit(p, Pos2::new(tx, rect.min.y + 40.0), sub, sans(crate::kit::ty::META), subc, tw);
     resp.clicked()
 }
 
@@ -2837,15 +2820,12 @@ fn paint_preview_bg(p: &egui::Painter, r: Rect) {
     p.line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0, theme::border()));
 }
 
-/// Small-caps caption over a value, painted; returns nothing.
-fn paint_fact(p: &egui::Painter, pos: Pos2, w: f32, label: &str, value: &str) {
-    paint_fit(p, pos, &label.to_uppercase(), bold(9.5), theme::muted_col(), w);
-    paint_fit(p, pos + Vec2::new(0.0, 12.0), value, bold(13.0), theme::ink(), w);
-}
-
-/// The first page on a Home exam card, the size the Exams screen uses, so the text beside it
-/// keeps most of the card.
+/// The first page on a Home exam card, the size the Exams screen used, centred in its strip.
 const HOME_THUMB: Vec2 = Vec2::new(88.0, 114.0);
+/// Every Home exam card is this tall: each slot is filled on every card (spec section 3). The text
+/// column, top down: pad 13, name 44 (two lines kept), gap 6, meta 18, gap 4, "From" 18, gap 8,
+/// hairline 1, gap 8, footer 18, pad 14.
+const HOME_EXAM_H: f32 = 152.0;
 
 /// Where a Home exam card's text starts (from the card's left edge) and how wide it may run.
 fn exam_card_text_x(w: f32) -> (f32, f32) {
@@ -2854,34 +2834,34 @@ fn exam_card_text_x(w: f32) -> (f32, f32) {
     (x, (w - x - 16.0).max(60.0))
 }
 
-/// The exam's name (two lines before it is cut) and its bank's name (likewise), laid out for a
-/// card `w` wide.
-fn exam_card_galleys(p: &egui::Painter, w: f32, e: &ExamRow) -> (std::sync::Arc<egui::Galley>, std::sync::Arc<egui::Galley>) {
-    let (_, iw) = exam_card_text_x(w);
-    (
-        wrap_galley(p, &e.name, serif_font(16.0), theme::ink(), iw, 2),
-        wrap_galley(p, &e.bank, bold(13.0), theme::ink(), iw, 2),
-    )
+/// "Edited 2 hours ago", "Edited yesterday", "Edited Oct 9".
+fn edited_label(secs: i64) -> String {
+    let r = rel_time(secs);
+    let r = if MONTHS.iter().any(|m| r.starts_with(m)) || r.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        r
+    } else {
+        let mut c = r.chars();
+        c.next().map(|f| f.to_lowercase().collect::<String>() + c.as_str()).unwrap_or_default()
+    };
+    format!("Edited {r}")
 }
 
-/// The height a Home exam card needs: the page with its margins, or its text, whichever is taller.
-fn exam_card_h(p: &egui::Painter, w: f32, e: &ExamRow) -> f32 {
-    let (title, bank) = exam_card_galleys(p, w, e);
-    let text = 13.0 + title.size().y + 9.0 + 30.0 + 6.0 + 13.0 + bank.size().y + 6.0 + 15.0 + 13.0;
-    text.max(HOME_THUMB.y + 24.0).ceil()
-}
-
-fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, h: f32, e: &ExamRow, tilt_right: bool) -> bool {
-    // A landscape card: the first page on the left (the Exams screen's size), and beside it the
-    // name over two lines, the counts, the bank on a line of its own (names are read, not guessed
-    // from an ellipsis), then when it was edited.
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
+/// A Home exam card, `w` wide and [`HOME_EXAM_H`] tall: the first page on the left, beside it the
+/// name over two lines, "11 questions · 26 points", "From <bank>", a hairline, then when it was
+/// edited and an Open link. The whole card opens the exam; so does the link. Returns true on either.
+fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_right: bool) -> bool {
+    use crate::kit;
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, HOME_EXAM_H), egui::Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &e.name));
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     let p = ui.painter();
     hover_lift(p, rect, &resp, 16);
     p.rect(rect, CornerRadius::same(16), theme::card(), hover_border(&resp), StrokeKind::Inside);
+    if resp.has_focus() {
+        p.rect_stroke(rect.expand(1.0), CornerRadius::same(17), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+    }
     let pv = Rect::from_min_max(
         Pos2::new(rect.min.x + 6.0, rect.min.y + 12.0),
         Pos2::new(rect.min.x + 6.0 + 8.0 + HOME_THUMB.x + 8.0, rect.max.y - 12.0),
@@ -2896,22 +2876,37 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, h: f32, e: &ExamRo
     }
     let (dx, iw) = exam_card_text_x(w);
     let x = rect.min.x + dx;
-    let (title, bank) = exam_card_galleys(p, w, e);
     let mut y = rect.min.y + 13.0;
-    let th = title.size().y;
-    p.galley(Pos2::new(x, y), title, theme::ink());
-    y += th + 9.0;
-    let half = (iw - 12.0) / 2.0;
-    paint_fact(p, Pos2::new(x, y), half, "Questions", &e.qs.to_string());
-    paint_fact(p, Pos2::new(x + half + 12.0, y), half, "Points", &fmt_pts(e.pts));
-    y += 30.0 + 6.0;
-    paint_fit(p, Pos2::new(x, y), "BANK", bold(9.5), theme::muted_col(), iw);
-    y += 13.0;
-    let bh = bank.size().y;
-    p.galley(Pos2::new(x, y), bank, theme::ink());
-    y += bh + 6.0;
-    paint_fit(p, Pos2::new(x, y), &format!("Edited {}", rel_time(e.edited)), sans(11.5), theme::muted_col(), iw);
-    resp.clicked()
+    // Name: two lines kept, top-aligned; a one-line name leaves its second line blank.
+    let mut job = egui::text::LayoutJob::default();
+    job.append(&e.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
+    job.wrap = egui::text::TextWrapping { max_width: iw, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
+    p.galley(Pos2::new(x, y), p.layout_job(job), theme::ink());
+    y += 44.0 + 6.0;
+    let line = |p: &egui::Painter, y: f32, text: &str, font: egui::FontId, col: Color32| {
+        let g = p.layout_no_wrap(text.to_string(), font.clone(), col);
+        paint_fit(p, Pos2::new(x, y + (18.0 - g.size().y) / 2.0), text, font, col, iw);
+    };
+    let meta = format!("{} · {} point{}", plural(e.qs, "question"), fmt_pts(e.pts), if (e.pts - 1.0).abs() < 0.05 { "" } else { "s" });
+    line(p, y, &meta, sans(kit::ty::META), theme::text_col());
+    y += 18.0 + 4.0;
+    // "From" quiet, then the bank in the stressed weight, on one line.
+    let from = p.layout_no_wrap("From ".to_string(), sans(kit::ty::META), theme::muted_col());
+    let fw = from.size().x;
+    let fy = y + (18.0 - from.size().y) / 2.0;
+    p.galley(Pos2::new(x, fy), from, theme::muted_col());
+    let strong = egui::FontId::new(kit::ty::META, theme::semibold());
+    paint_fit(p, Pos2::new(x + fw, fy), &e.bank, strong, theme::text_col(), (iw - fw).max(10.0));
+    y += 18.0 + 8.0;
+    p.hline(x..=x + iw, y + 0.5, Stroke::new(1.0, theme::border()));
+    y += 1.0 + 8.0;
+    line(p, y, &edited_label(e.edited), sans(kit::ty::META), theme::muted_col());
+    // The Open link, at the footer's right, added after the card so it takes its own click.
+    let link_w = ui.painter().layout_no_wrap("Open".to_string(), egui::FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()).size().x + 17.0;
+    let lr = Rect::from_min_size(Pos2::new(x + iw - link_w.ceil(), y), Vec2::new(link_w.ceil(), 18.0));
+    // (a child Ui: the link never moves the row's cursor)
+    let open = kit::link(&mut ui.new_child(UiBuilder::new().max_rect(lr).id_salt(("home_exam_open", &e.id))), "Open", true).clicked();
+    resp.clicked() || open
 }
 
 fn list_columns(w: f32, fr: &[f32]) -> Vec<(f32, f32)> {
@@ -2932,7 +2927,7 @@ fn list_columns(w: f32, fr: &[f32]) -> Vec<(f32, f32)> {
 
 fn list_header(p: &egui::Painter, rect: Rect, cols: &[(f32, f32)], names: &[&str]) {
     for ((x, w), n) in cols.iter().skip(1).zip(names) {
-        paint_fit(p, Pos2::new(rect.min.x + x, rect.min.y + 8.0), &n.to_uppercase(), bold(10.0), theme::muted_col(), *w);
+        paint_fit(p, Pos2::new(rect.min.x + x, rect.min.y + 7.0), &n.to_uppercase(), bold(crate::kit::ty::LABEL), theme::muted_col(), *w);
     }
     p.line_segment([rect.left_bottom(), rect.right_bottom()], Stroke::new(1.0, theme::border()));
 }
@@ -2976,55 +2971,7 @@ fn paint_bank_glyph(p: &egui::Painter, r: Rect) {
     draw_nav_icon_k(p, NavIcon::Banks, r.center(), theme::accent_col(), 1.05);
 }
 
-/// Text wrapped to `width` over at most `rows` lines (ellipsised past them), laid out for painting.
-fn wrap_galley(p: &egui::Painter, text: &str, font: egui::FontId, col: Color32, width: f32, rows: usize) -> std::sync::Arc<egui::Galley> {
-    let mut job = egui::text::LayoutJob::simple(text.to_string(), font, col, width.max(1.0));
-    job.wrap.max_rows = rows;
-    job.wrap.break_anywhere = false;
-    job.wrap.overflow_character = Some('…');
-    p.layout_job(job)
-}
-
-/// A bank on Home: the glyph with the name beside it (two lines before it is cut), then the
-/// facts, the type key (the Banks screen's, swatch per type) and its bar across the card's full
-/// width. The card is as tall as its key needs.
-fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
-    let fw = w - 28.0;
-    let key_h = crate::bankui::mix_key(ui.painter(), None, fw, &b.counts);
-    let h = 61.0 + 40.0 + key_h + 8.0 + 5.0 + 16.0;
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
-    if resp.hovered() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-    }
-    let p = ui.painter();
-    hover_lift(p, rect, &resp, 16);
-    p.rect(rect, CornerRadius::same(16), theme::card(), hover_border(&resp), StrokeKind::Inside);
-    let g = Rect::from_min_size(rect.min + Vec2::new(14.0, 13.0), Vec2::splat(34.0));
-    paint_bank_glyph(p, g);
-    let x = g.right() + 11.0;
-    let iw = rect.right() - x - 14.0;
-    let title = wrap_galley(p, &b.name, serif_font(15.0), theme::ink(), iw, 2);
-    let ty = (g.center().y - title.size().y / 2.0).max(rect.min.y + 9.0);
-    p.galley(Pos2::new(x, ty), title, theme::ink());
-    // Below the header the card's whole inner width is free.
-    let x0 = rect.min.x + 14.0;
-    let fy = rect.min.y + 61.0;
-    let facts = [("Questions", b.qs.to_string()), ("Topics", b.topics.to_string()), ("Edited", rel_time(b.edited))];
-    // Fixed columns grouped to the left on a wide card, thirds otherwise.
-    let cols: [f32; 3] = if fw >= 470.0 { [110.0, 110.0, 190.0] } else { [fw * 0.3, fw * 0.28, fw * 0.42] };
-    let mut fx = x0;
-    for (i, (label, value)) in facts.iter().enumerate() {
-        paint_fact(p, Pos2::new(fx, fy), cols[i] - 8.0, label, value);
-        fx += cols[i];
-    }
-    // The bar is a question-type breakdown: the key names each shade.
-    let ky = fy + 40.0;
-    crate::bankui::mix_key(p, Some(Pos2::new(x0, ky)), fw, &b.counts);
-    crate::bankui::mix_bar_at(p, Rect::from_min_size(Pos2::new(x0, ky + key_h + 8.0), Vec2::new(fw, 5.0)), &b.counts);
-    resp.clicked()
-}
-
-fn bank_list(ui: &mut egui::Ui, rows: &[&BankRow]) -> Option<Id> {
+fn bank_list(ui: &mut egui::Ui, rows: &[&crate::bankui::BankTile]) -> Option<Id> {
     let w = ui.available_width();
     let mut cols = list_columns(w - 90.0 - 12.0, &[2.2, 0.9, 0.8, 1.0]);
     cols.push((w - 14.0 - 90.0 - 0.0, 90.0));
@@ -3048,10 +2995,10 @@ fn bank_list(ui: &mut egui::Ui, rows: &[&BankRow]) -> Option<Id> {
         paint_bank_glyph(p, Rect::from_center_size(Pos2::new(r.min.x + 8.0 + 28.0, cy), Vec2::splat(34.0)));
         let at = |c: usize| Pos2::new(outer.min.x + cols[c].0, cy);
         paint_fit(p, at(1) - Vec2::new(0.0, 9.0), &b.name, serif_font(15.0), theme::ink(), cols[1].1);
-        paint_fit(p, at(2) - Vec2::new(0.0, 8.0), &b.qs.to_string(), bold(13.0), theme::ink(), cols[2].1);
+        paint_fit(p, at(2) - Vec2::new(0.0, 8.0), &b.questions.to_string(), bold(13.0), theme::ink(), cols[2].1);
         paint_fit(p, at(3) - Vec2::new(0.0, 8.0), &b.topics.to_string(), sans(13.0), theme::text_col(), cols[3].1);
         paint_fit(p, at(4) - Vec2::new(0.0, 8.0), &rel_time(b.edited), sans(13.0), theme::text_col(), cols[4].1);
-        crate::bankui::mix_bar_at(p, Rect::from_min_size(Pos2::new(outer.min.x + cols[5].0, cy - 2.5), Vec2::new(cols[5].1, 5.0)), &b.counts);
+        crate::bankui::mix_bar_at(p, Rect::from_min_size(Pos2::new(outer.min.x + cols[5].0, cy - 2.5), Vec2::new(cols[5].1, 5.0)), &b.mix);
         if resp.clicked() {
             hit = Some(b.id.clone());
         }
@@ -3216,6 +3163,23 @@ fn read_backup(path: &std::path::Path) -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every Home exam card is the sum of its slots (spec section 3), whatever its text.
+    #[test]
+    fn a_home_exam_card_is_152_tall() {
+        assert_eq!(HOME_EXAM_H, 13.0 + 44.0 + 6.0 + 18.0 + 4.0 + 18.0 + 8.0 + 1.0 + 8.0 + 18.0 + 14.0);
+        // At 1280 the text column is 316 - 124 - 16 = 176 wide.
+        assert_eq!(exam_card_text_x(316.0), (124.0, 176.0));
+    }
+
+    #[test]
+    fn edited_label_reads_as_a_sentence() {
+        assert_eq!(edited_label(0), "Edited not yet");
+        assert_eq!(edited_label(now_secs()), "Edited just now");
+        assert!(edited_label(now_secs() - 2 * 3600).starts_with("Edited 2 hours"));
+        let old = edited_label(1_760_659_200);
+        assert_eq!(old, "Edited Oct 17");
+    }
 
     #[test]
     fn epoch_start_formats() {
