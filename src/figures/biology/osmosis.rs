@@ -444,11 +444,19 @@ fn rich(d: &mut Doc, x: f64, y: f64, size: f64, anchor: &str, weight: &str, s: &
 }
 
 /// Small text on a patch of the solution colour, so no particle, arrow or membrane shows through it.
-fn clear_label(d: &mut Doc, pal: &Pal, x: f64, y: f64, size: f64, anchor: &str, s: &str) {
-    let w = tw(s, size) + 4.0;
+fn clear_label(d: &mut Doc, pal: &Pal, x: f64, y: f64, size: f64, lf: f64, anchor: &str, s: &str) {
+    // the patch is measured at the size the text ends up at: the label size scales every font after the layout
+    let sz = size * lf;
+    let w = tw(s, sz) + 4.0;
     let x0 = match anchor { "middle" => x - w / 2.0, "end" => x - w, _ => x - 2.0 };
-    d.raw(&format!(r#"<rect x="{x0:.2}" y="{:.2}" width="{w:.2}" height="{:.2}" rx="2" fill="{}"/>"#, y - size, size + 3.5, pal.sol));
+    d.raw(&format!(r#"<rect x="{x0:.2}" y="{:.2}" width="{w:.2}" height="{:.2}" rx="2" fill="{}"/>"#, y - sz, sz + 3.5, pal.sol));
     rich(d, x, y, size, anchor, "400", s);
+}
+
+/// The font size (before the label-size scaling) that lets `s` fit in `avail` pixels at the label factor `lf`.
+fn fit_size(s: &str, size: f64, lf: f64, avail: f64) -> f64 {
+    let w = tw(s, size * lf);
+    if w > avail && avail > 10.0 { (size * avail / w).max(5.0 / lf.max(0.1)) } else { size }
 }
 
 /// A label that is text, a blank line (answer written on it only in the key) or nothing.
@@ -475,6 +483,22 @@ fn wrap(s: &str, max: f64, size: f64) -> Vec<String> {
     lines
 }
 
+/// Like `wrap`, but a word longer than a line is broken too, so every line is no wider than `max`.
+fn wrap_fit(s: &str, max: f64, size: f64) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for l in wrap(s, max, size) {
+        if tw(&l, size) <= max { out.push(l); continue; }
+        let mut cur = String::new();
+        for ch in l.chars() {
+            if !cur.is_empty() && tw(&format!("{cur}{ch}"), size) > max { out.push(std::mem::take(&mut cur)); }
+            cur.push(ch);
+        }
+        if !cur.is_empty() { out.push(cur); }
+    }
+    if out.is_empty() { out.push(String::new()); }
+    out
+}
+
 // ============================================================================================ geometry
 
 /// One panel's drawing: shapes behind the particles, shapes in front, the two particle regions and where things attach.
@@ -496,6 +520,8 @@ struct Geo {
     left_x: f64,
     /// The body in the panel (cx, cy, rx, ry, is a rectangle): where a crossing arrow meets its membrane.
     shape: (f64, f64, f64, f64, bool),
+    /// A plant cell's wall: right edge x and bottom y (0 elsewhere), so arrows can be put across the membrane inside it.
+    wall: (f64, f64),
 }
 
 fn fmt_pts(pts: &[(f64, f64)]) -> String { pts.iter().map(|(x, y)| format!("{x:.2},{y:.2}")).collect::<Vec<_>>().join(" ") }
@@ -535,14 +561,17 @@ fn geo_rbc(m: &Model, kind: Kind, pal: &Pal) -> Geo {
         }
         inside_r = rr - 5.0;
     } else if state == Tonic::Hyper {
-        let n = 20;
+        // more and deeper spikes the more hypertonic the solution: a mild case is only slightly scalloped
+        let t = ((1.0 - m.vrel) / 0.5).clamp(0.25, 1.0);
+        let n = (12.0 + 10.0 * t).round() as usize;
+        let inner = 1.0 - 0.34 * t;
         let pts: Vec<(f64, f64)> = (0..2 * n).map(|i| {
             let a = i as f64 * std::f64::consts::PI / n as f64;
-            let rr = if i % 2 == 0 { r } else { r * 0.8 };
+            let rr = if i % 2 == 0 { r } else { r * inner };
             (cx + rr * a.cos(), cy + rr * a.sin())
         }).collect();
         back.push_str(&format!(r#"<polygon points="{}" fill="{}" stroke="{}" stroke-width="2" stroke-linejoin="round"/>"#, fmt_pts(&pts), pal.rbc, pal.rbc_edge));
-        inside_r = r * 0.75;
+        inside_r = r * (inner - 0.05);
     } else {
         back.push_str(&format!(r#"<circle cx="{cx}" cy="{cy}" r="{r:.2}" fill="{}" stroke="{}" stroke-width="2.2"/>"#, pal.rbc, pal.rbc_edge));
         if state == Tonic::Iso { back.push_str(&format!(r#"<circle cx="{cx}" cy="{cy}" r="{:.2}" fill="{}" stroke="none"/>"#, r * 0.4, pal.dimple)); }
@@ -554,7 +583,7 @@ fn geo_rbc(m: &Model, kind: Kind, pal: &Pal) -> Geo {
     let inr = Region::new((cx - ir, cy - ir, cx + ir, cy + ir), move |x, y| { let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt(); d <= ir && d >= skip * 0.0 });
     let out_r = if lysed { 60.0 } else { r + 2.0 };
     let outr = Region::new((5.0, 5.0, PW - 5.0, ph - 5.0), move |x, y| x > 5.0 && x < PW - 5.0 && y > 5.0 && y < ph - 5.0 && ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() > out_r);
-    Geo { back, front: String::new(), inr, outr, ph, edges: (edge_l, edge_r), ay: cy - 12.0, t_mem: (edge_l + 0.7 * 0.0, cy), t_wall: (0.0, 0.0), t_vac: (0.0, 0.0), left_x: 0.0, shape: (cx, cy, edge_r - cx, edge_r - cx, false) }
+    Geo { back, front: String::new(), inr, outr, ph, edges: (edge_l, edge_r), ay: cy - 12.0, t_mem: (edge_l + 0.7 * 0.0, cy), t_wall: (0.0, 0.0), t_vac: (0.0, 0.0), left_x: 0.0, shape: (cx, cy, edge_r - cx, edge_r - cx, false), wall: (0.0, 0.0) }
 }
 
 fn geo_plant(m: &Model, kind: Kind, pal: &Pal) -> Geo {
@@ -598,9 +627,10 @@ fn geo_plant(m: &Model, kind: Kind, pal: &Pal) -> Geo {
         in_inner && !(x > ml && x < mr && y > mt && y < mb)
     });
     // leader targets: wall at its left edge, membrane inside the wall, vacuole's edge
-    let vy_t = cy + 28.0;
-    let vx_t = cx - vx * (1.0 - ((vy_t - cy) / vy).powi(2)).max(0.0).sqrt();
-    Geo { back, front: String::new(), inr, outr, ph, edges: (cx - hw, cx + hw), ay: cy - 12.0, t_mem: (cx - mw, cy), t_wall: (cx - hw, cy - 28.0), t_vac: (vx_t, vy_t), left_x: cx - hw, shape: (cx, cy, hw + 3.5, hh + 3.5, true) }
+    let vy_t = cy - 0.45 * vy;
+    let vx_t = cx - vx * (1.0 - 0.45f64.powi(2)).sqrt();
+    // the water and solute arrows cross the membrane, not the wall: edges and shape are the membrane's
+    Geo { back, front: String::new(), inr, outr, ph, edges: (cx - mw, cx + mw), ay: cy - 12.0, t_mem: (cx - mw, cy), t_wall: (cx - hw, cy - 28.0), t_vac: (vx_t, vy_t), left_x: cx - hw, shape: (cx, cy, mw, mh, true), wall: (cx + hw + 4.5, cy + hh + 4.5) }
 }
 
 fn geo_beaker(m: &Model, kind: Kind, pal: &Pal) -> Geo {
@@ -619,7 +649,7 @@ fn geo_beaker(m: &Model, kind: Kind, pal: &Pal) -> Geo {
     front.push_str(&format!(r#"<line x1="120" y1="{}" x2="120" y2="{}" stroke="{}" stroke-width="1.6" stroke-dasharray="4 3"/>"#, top - 4.0, bot, pal.glass));
     let inr = Region::new((l + 2.0, ya, 118.0, bot - 2.0), move |x, y| x > l + 2.0 && x < 118.0 && y > ya && y < bot - 2.0);
     let outr = Region::new((122.0, yb, r - 2.0, bot - 2.0), move |x, y| x > 122.0 && x < r - 2.0 && y > yb && y < bot - 2.0);
-    Geo { back, front, inr, outr, ph, edges: (120.0, 120.0), ay: 100.0, t_mem: (120.0, top - 4.0), t_wall: (0.0, 0.0), t_vac: (0.0, 0.0), left_x: 120.0, shape: (0.0, 0.0, 0.0, 0.0, false) }
+    Geo { back, front, inr, outr, ph, edges: (120.0, 120.0), ay: 100.0, t_mem: (120.0, top - 4.0), t_wall: (0.0, 0.0), t_vac: (0.0, 0.0), left_x: 120.0, shape: (0.0, 0.0, 0.0, 0.0, false), wall: (0.0, 0.0) }
 }
 
 fn geo_utube(m: &Model, kind: Kind, pal: &Pal) -> Geo {
@@ -643,7 +673,7 @@ fn geo_utube(m: &Model, kind: Kind, pal: &Pal) -> Geo {
     };
     let inr = Region::new((20.0, ya, 120.0, cy + 100.0), move |x, y| x < 118.0 && y > ya && fluid(x, y));
     let outr = Region::new((120.0, yb, 220.0, cy + 100.0), move |x, y| x > 122.0 && y > yb && fluid(x, y));
-    Geo { back, front, inr, outr, ph, edges: (120.0, 120.0), ay: cy + 28.0, t_mem: (120.0, top - 4.0), t_wall: (0.0, 0.0), t_vac: (0.0, 0.0), left_x: 120.0, shape: (0.0, 0.0, 0.0, 0.0, false) }
+    Geo { back, front, inr, outr, ph, edges: (120.0, 120.0), ay: cy + 28.0, t_mem: (120.0, cy + 18.0), t_wall: (0.0, 0.0), t_vac: (0.0, 0.0), left_x: 120.0, shape: (0.0, 0.0, 0.0, 0.0, false), wall: (0.0, 0.0) }
 }
 
 fn bag_poly(cx: f64, cy: f64, a: f64, b: f64, wob: f64) -> Vec<(f64, f64)> {
@@ -677,7 +707,7 @@ fn geo_bag(m: &Model, kind: Kind, pal: &Pal) -> Geo {
     let inr = Region::new((cx - ia, cy - ib, cx + ia, cy + ib), move |x, y| ((x - cx) / ia).powi(2) + ((y - cy) / ib).powi(2) <= 1.0);
     let (oa, ob) = (a * (1.0 + wob * 1.6) + 2.5, b * (1.0 + wob * 1.6) + 2.5);
     let outr = Region::new((l + 2.0, level, r - 2.0, bot - 2.0), move |x, y| x > l + 2.0 && x < r - 2.0 && y > level && y < bot - 2.0 && ((x - cx) / oa).powi(2) + ((y - cy) / ob).powi(2) > 1.0);
-    Geo { back, front, inr, outr, ph, edges: (cx - a, cx + a), ay: cy - 22.0, t_mem: (cx - a, cy + 4.0), t_wall: (0.0, 0.0), t_vac: (0.0, 0.0), left_x: cx - a, shape: (cx, cy, a, b, false) }
+    Geo { back, front, inr, outr, ph, edges: (cx - a, cx + a), ay: cy - 30.0, t_mem: (cx - a, cy + 4.0), t_wall: (0.0, 0.0), t_vac: (0.0, 0.0), left_x: cx - a, shape: (cx, cy, a, b, false), wall: (0.0, 0.0) }
 }
 
 // ============================================================================================ drawing
@@ -698,6 +728,8 @@ struct Cfg {
     water: bool,
     pp: f64,
     lf: f64,
+    /// The label factor as chosen (0.8, 1 or 1.4): what in-panel labels are laid out at.
+    lfr: f64,
     mem_text: String,
     key: bool,
     ans: bool,
@@ -719,6 +751,7 @@ fn cfg(p: &Params) -> Cfg {
         water: p.b("show_water"),
         pp: 1.0,
         lf: svg::label_factor(p.s("label_size")).max(1.0),
+        lfr: svg::label_factor(p.s("label_size")),
         mem_text: p.s("lab_membrane_text").trim().to_string(),
         key: p.b("key"),
         ans: p.b(SHOW_ANSWERS),
@@ -774,7 +807,7 @@ fn render(p: &Params) -> String {
     let geos: Vec<Geo> = slots.iter().map(|s| geo(&s.m, s.kind, &pal)).collect();
     let ph = geos[0].ph;
     let title_h = if title.is_empty() { 0.0 } else { 30.0 };
-    let top = title_h + TOP;
+    let top = title_h + TOP + (split_label(&c, scene).len() as f64 - 1.0) * 12.5 * c.lfr;
     let panels_w = n as f64 * PW + (n as f64 - 1.0) * gap;
     // the key grows with the label size: its names must fit inside the box
     let key_w = if c.key {
@@ -819,6 +852,13 @@ fn render(p: &Params) -> String {
     }
     let svg_s = d.finish();
     svg::with_label_size(svg_s, p)
+}
+
+/// The membrane label above a split scene, wrapped to the width of the panel.
+fn split_label(c: &Cfg, scene: Scene) -> Vec<String> {
+    if !scene.is_split() || c.lab_membrane == "None" { return vec![String::new()]; }
+    let txt = if c.mem_text.is_empty() { "Selectively permeable membrane" } else { c.mem_text.as_str() };
+    wrap_fit(txt, PW + 30.0, 11.0 * c.lfr)
 }
 
 fn title_min(t: &str) -> f64 { if t.is_empty() { 0.0 } else { tw(t, 16.0) + 40.0 } }
@@ -892,8 +932,13 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
             field(d, ox + 174.0, ty, 12.5, "middle", "700", &c.lab_tonic, c.ans, 80.0, &tb.word().to_string());
         }
         if sl.lead && c.lab_membrane != "None" {
-            let txt = if c.mem_text.is_empty() { "Selectively permeable membrane" } else { c.mem_text.as_str() };
-            field(d, ox + PW / 2.0, oy - 12.0, 11.0, "middle", "400", &c.lab_membrane, c.ans, 170.0, txt);
+            // a long wording wraps onto lines stacked upward from the panel, each with its own blank line
+            let lines = split_label(c, scene);
+            let (n, lh, sz) = (lines.len(), 12.5 * c.lfr, 11.0 * c.lfr);
+            for (j, line) in lines.iter().enumerate() {
+                let w = (tw(line, sz) + 8.0).max(170.0 * c.lfr.min(1.0)).min(PW + 30.0);
+                field(d, ox + PW / 2.0, oy - 12.0 - lh * (n - 1 - j) as f64, 11.0, "middle", "400", &c.lab_membrane, c.ans, w, line);
+            }
             d.line(ox + PW / 2.0, oy - 8.0, ox + PW / 2.0, oy + g.t_mem.1 + 2.0, "#111", 0.9);
         }
     } else if sl.lead || tri {
@@ -902,6 +947,7 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
     // leaders for the cell's parts, in the left margin of the first panel
     if first && !scene.is_split() {
         let lx = ox - 12.0;
+        let (sz, lh, ww) = (11.0 * c.lfr, 12.5 * c.lfr, 96.0 * c.lf);
         let mut leaders: Vec<(String, (f64, f64), &str)> = Vec::new();
         if c.lab_membrane != "None" {
             let dflt = match scene { Scene::Bag => "Dialysis tubing", _ => "Cell membrane" };
@@ -911,12 +957,22 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
             leaders.push(("Cell wall".to_string(), g.t_wall, &c.lab_struct));
             leaders.push(("Vacuole".to_string(), g.t_vac, &c.lab_struct));
         }
-        for (name, t, mode) in leaders {
-            let (tx, ty) = (ox + t.0, oy + t.1);
-            let w = tw(&name, 11.0).max(70.0);
-            field(d, lx, ty + 4.0, 11.0, "end", "400", mode, c.ans, w, &name);
-            let x1 = if mode == "Text" { lx + 3.0 } else { lx + 3.0 };
-            d.line(x1, ty, tx, ty, "#111", 0.9);
+        // each label is wrapped to the margin and kept below the one above it, so none runs off the page or over another
+        let mut order: Vec<usize> = (0..leaders.len()).collect();
+        order.sort_by(|a, b| (leaders[*a].1).1.partial_cmp(&(leaders[*b].1).1).unwrap_or(std::cmp::Ordering::Equal));
+        let mut bottom = f64::NEG_INFINITY;
+        for i in order {
+            let (name, t, mode) = (&leaders[i].0, leaders[i].1, leaders[i].2);
+            let lines = wrap_fit(name, ww, sz);
+            let hgt = lines.len() as f64 * lh;
+            let centre = t.1.max(bottom + 3.0 + hgt / 2.0);
+            bottom = centre + hgt / 2.0;
+            for (k, line) in lines.iter().enumerate() {
+                let y = oy + centre - hgt / 2.0 + lh * (k as f64 + 0.5) + sz * 0.35;
+                let w = (tw(line, sz) + 8.0).max(70.0 * c.lfr).min(ww);
+                field(d, lx, y, 11.0, "end", "400", mode, c.ans, w, line);
+            }
+            d.line(lx + 3.0, oy + centre, ox + t.0, oy + t.1, "#111", 0.9);
         }
     }
     // the caption under the panel and the two concentration columns
@@ -933,32 +989,36 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
         if c.lab_conc != "None" {
             rich(d, xa, hdr, 11.0, "middle", "700", inn);
             rich(d, xb, hdr, 11.0, "middle", "700", outn);
+            // a long solute name shrinks to its column instead of running into the next one
+            let colw = PW * 0.48 - 6.0;
             for (k, i) in rows.iter().enumerate() {
                 let s = &m.sols[*i];
                 let (ta, tb) = (conc_text(m, s.cin, &s.name), conc_text(m, s.cout, &s.name));
                 let y = hdr + 15.0 * c.lf * (k as f64 + 1.0);
-                field(d, xa, y, 11.0, "middle", "400", &c.lab_conc, c.ans, 90.0, &ta);
-                field(d, xb, y, 11.0, "middle", "400", &c.lab_conc, c.ans, 90.0, &tb);
+                let (za, zb) = (fit_size(&ta, 11.0, c.lfr, colw), fit_size(&tb, 11.0, c.lfr, colw));
+                field(d, xa, y, za, "middle", "400", &c.lab_conc, c.ans, 90.0f64.min(colw), &ta);
+                field(d, xb, y, zb, "middle", "400", &c.lab_conc, c.ans, 90.0f64.min(colw), &tb);
             }
         }
     }
     let _ = p;
 }
 
-/// A small text and the box it occupies, in panel coordinates.
+/// A small text and the box it occupies, in panel coordinates. `lf` is the label factor the text is finally drawn at
+/// (the label size scales every font after layout), so the box is measured at `size * lf`.
 #[derive(Clone)]
-struct Lab { x: f64, y: f64, size: f64, anchor: &'static str, text: String }
+struct Lab { x: f64, y: f64, size: f64, anchor: &'static str, text: String, lf: f64 }
 
 impl Lab {
     fn rect(&self) -> (f64, f64, f64, f64) {
-        let w = tw(&self.text, self.size) + 4.0;
+        let sz = self.size * self.lf;
+        let w = tw(&self.text, sz) + 4.0;
         let x0 = match self.anchor { "middle" => self.x - w / 2.0, "end" => self.x - w, _ => self.x - 2.0 };
-        (x0, self.y - self.size, x0 + w, self.y + 3.5)
+        (x0, self.y - sz, x0 + w, self.y + 3.5)
     }
-    /// Shrinks the text so it is no wider than `avail`.
+    /// Shrinks the text so it is no wider than `avail` as drawn.
     fn fit(mut self, avail: f64) -> Lab {
-        let w = tw(&self.text, self.size) + 4.0;
-        if w > avail && avail > 10.0 { self.size = (self.size * avail / w).max(6.5); }
+        self.size = fit_size(&self.text, self.size, self.lf, avail - 5.0);
         self
     }
 }
@@ -969,12 +1029,16 @@ struct SolArrow { a: (f64, f64), b: (f64, f64), boxr: (f64, f64, f64, f64), lab:
 struct Plan { water: Vec<(f64, f64, f64)>, wbox: Vec<(f64, f64, f64, f64)>, tag: Option<Lab>, sol: Vec<SolArrow> }
 
 /// Water arrows at the membrane, then up to three arrows for solutes that cross, each crossing the membrane with its
-/// label beside it: below the cell for a cell (three side by side), right of the bag, right of the membrane in a
-/// split scene (one under another).
+/// label clear of the others. A red blood cell's arrows are radial on its lower rim (at the radius it has now), a plant
+/// cell's cross the bottom of the membrane with their labels under the wall, the bag's sit right of it, and in a split
+/// scene they stack along the membrane (a U-tube alternates sides so the narrow bend has room).
 fn plan(c: &Cfg, m: &Model, g: &Geo, flow: Flow) -> Plan {
     let split = m.scene.is_split();
+    let lf = c.lfr;
+    let h = 9.5 * lf;
     let (el, er) = g.edges;
     let ay = g.ay;
+    let mk = |x: f64, y: f64, anchor: &'static str, text: String| Lab { x, y, size: 9.5, anchor, text, lf };
     let mut pl = Plan { water: Vec::new(), wbox: Vec::new(), tag: None, sol: Vec::new() };
     if c.arr_water != "None" {
         let blank = c.arr_water == "Blank boxes";
@@ -985,50 +1049,75 @@ fn plan(c: &Cfg, m: &Model, g: &Geo, flow: Flow) -> Plan {
             if blank { pl.wbox.push((ex - 21.0, ay - 12.0, ex + 21.0, ay + 12.0)); }
             pl.water.push((ex, ay, dir));
         }
-        if !blank {
-            let tag_x = if split { el + 26.0 } else { er + 24.0 };
-            pl.tag = Some(Lab { x: tag_x, y: ay - 9.0, size: 9.5, anchor: "start", text: "H_2O".to_string() });
-        }
+        // the H2O tag goes with the arrow, or beside the blank box that stands for it; past the wall in a plant cell
+        let tx = if split { el + if blank { 25.0 } else { 26.0 } } else { (er + if blank { 25.0 } else { 24.0 }).max(if g.wall.0 > 0.0 { g.wall.0 + 5.0 } else { 0.0 }) };
+        let ty = if blank { ay + 4.0 } else { ay - 9.0 };
+        pl.tag = Some(mk(tx, ty, "start", "H_2O".to_string()).fit(PW - 2.0 - tx));
     }
     if c.arr_solute != "None" {
         let blank = c.arr_solute == "Blank boxes";
-        let mut k = 0usize;
-        for s in m.sols.iter().filter(|s| s.cross) {
-            let hi_in = s.cin > s.cout + 1e-9;
-            let hi_out = s.cout > s.cin + 1e-9;
-            if !hi_in && !hi_out && !blank { continue; }
-            // +1: from the inside (side A) to the outside (side B)
-            let dir = if hi_in { 1.0 } else if hi_out { -1.0 } else { 0.0 };
-            let name = s.name.clone();
-            let (cx, cy, rx, ry, rect) = g.shape;
+        // +1: from the inside (side A) to the outside (side B)
+        let items: Vec<(String, f64)> = m.sols.iter().filter(|s| s.cross).filter_map(|s| {
+            let dir = if s.cin > s.cout + 1e-9 { 1.0 } else if s.cout > s.cin + 1e-9 { -1.0 } else { 0.0 };
+            if dir == 0.0 && !blank { None } else { Some((s.name.clone(), dir)) }
+        }).collect();
+        let n = items.len();
+        let (cx, cy, rx, ry, _) = g.shape;
+        for (k, (name, dir)) in items.into_iter().enumerate() {
             let kk = k.min(2);
             let sa = match m.scene {
-                Scene::Rbc | Scene::Plant => {
-                    let ex = cx + [0.0, -36.0, 36.0][kk];
-                    let dx = (ex - cx).abs();
-                    let ey = if rect { cy + ry } else { cy + ry * (1.0 - (dx / rx.max(1.0)).powi(2)).max(0.0).sqrt() };
-                    let (a, b) = if dir >= 0.0 { ((ex, ey - 14.0), (ex, ey + 14.0)) } else { ((ex, ey + 14.0), (ex, ey - 14.0)) };
-                    let lab = Lab { x: ex, y: ey + 25.0 + if kk == 1 { 11.0 } else { 0.0 }, size: 9.5, anchor: "middle", text: name }.fit(70.0);
-                    SolArrow { a, b, boxr: (ex - 13.0, ey - 17.0, ex + 13.0, ey + 17.0), lab, dir }
+                Scene::Rbc => {
+                    // radial arrows on the lower rim: straight down, then out to either side as far as the radius needs
+                    let r = rx;
+                    let ang = (30.0 / r.max(1.0)).clamp(0.55, 0.9).asin();
+                    let a = [0.0, -ang, ang][kk];
+                    let (ux, uy) = (a.sin(), a.cos());
+                    let at = |rho: f64| (cx + rho * ux, cy + rho * uy);
+                    let (p0, p1, mid) = (at(r - 14.0), at(r + 14.0), at(r));
+                    let (pa, pb) = if dir >= 0.0 { (p0, p1) } else { (p1, p0) };
+                    let hh = (14.0 * uy).max(9.0) + 4.0;
+                    let boxr = (mid.0 - 13.0, mid.1 - hh, mid.0 + 13.0, mid.1 + hh);
+                    let lab = match kk {
+                        0 => mk(mid.0, boxr.3 + 2.0 + h, "middle", name).fit(110.0),
+                        1 => mk(boxr.0 - 3.0, mid.1 + h * 0.35, "end", name).fit(boxr.0 - 5.0),
+                        _ => mk(boxr.2 + 3.0, mid.1 + h * 0.35, "start", name).fit(PW - 2.0 - boxr.2 - 3.0),
+                    };
+                    SolArrow { a: pa, b: pb, boxr, lab, dir }
+                }
+                Scene::Plant => {
+                    // across the bottom of the membrane (wherever it is now); labels in rows under the wall
+                    let ex = cx + [0.0, -28.0, 28.0][kk];
+                    let yb = cy + ry;
+                    let (pa, pb) = if dir >= 0.0 { ((ex, yb - 14.0), (ex, yb + 14.0)) } else { ((ex, yb + 14.0), (ex, yb - 14.0)) };
+                    let boxr = (ex - 13.0, yb - 17.0, ex + 13.0, yb + 17.0);
+                    let y1 = g.wall.1 + 2.0 + h;
+                    let y2 = y1 + h + 4.0;
+                    let lab = match kk {
+                        0 => mk(cx, if n >= 2 { y2 } else { y1 }, "middle", name).fit(PW - 8.0),
+                        1 => mk(ex + 10.0, y1, "end", name).fit(ex + 8.0),
+                        _ => mk(ex - 10.0, y1, "start", name).fit(PW - 2.0 - (ex - 10.0)),
+                    };
+                    SolArrow { a: pa, b: pb, boxr, lab, dir }
                 }
                 Scene::Bag => {
-                    let y = ay + 20.0 + 18.0 * kk as f64;
+                    // right of the bag, below the water arrows
+                    let pitch = (h + 4.0).max(16.0);
+                    let y = ay + 26.0 + pitch * kk as f64;
                     let ex = cx + rx * (1.0 - ((y - cy) / ry.max(1.0)).powi(2)).max(0.12).sqrt();
-                    let (a, b) = if dir >= 0.0 { ((ex - 16.0, y), (ex + 16.0, y)) } else { ((ex + 16.0, y), (ex - 16.0, y)) };
-                    let lab = Lab { x: ex + 22.0, y: y + 3.0, size: 9.5, anchor: "start", text: name }.fit(222.0 - (ex + 22.0));
-                    SolArrow { a, b, boxr: (ex - 19.0, y - 9.0, ex + 19.0, y + 9.0), lab, dir }
+                    let (pa, pb) = if dir >= 0.0 { ((ex - 16.0, y), (ex + 16.0, y)) } else { ((ex + 16.0, y), (ex - 16.0, y)) };
+                    let lab = mk(ex + 22.0, y + h * 0.35, "start", name).fit(222.0 - (ex + 22.0));
+                    SolArrow { a: pa, b: pb, boxr: (ex - 19.0, y - pitch / 2.0 + 0.5, ex + 19.0, y + pitch / 2.0 - 0.5), lab, dir }
                 }
                 _ => {
-                    let step = if m.scene == Scene::Beaker { 22.0 } else { 18.0 };
-                    let y = ay + step * (kk as f64 + 1.0);
-                    let right = if m.scene == Scene::Beaker { 222.0 } else { 120.0 + (98.0f64.powi(2) - (y - 128.0).powi(2)).max(0.0).sqrt() - 3.0 };
-                    let (a, b) = if dir >= 0.0 { ((el - 14.0, y), (el + 14.0, y)) } else { ((el + 14.0, y), (el - 14.0, y)) };
-                    let lab = Lab { x: el + 20.0, y: y + 3.0, size: 9.5, anchor: "start", text: name }.fit(right - (el + 20.0));
-                    SolArrow { a, b, boxr: (el - 18.0, y - 8.0, el + 18.0, y + 8.0), lab, dir }
+                    let beaker = m.scene == Scene::Beaker;
+                    let (y, left, hs) = if beaker { (ay + 22.0 * (kk as f64 + 1.0), false, 8.0) } else { (ay + 20.0 + 16.0 * kk as f64, kk == 1, 7.5) };
+                    let reach = if beaker { 100.0 } else { (98.0f64.powi(2) - (y - 128.0).powi(2)).max(0.0).sqrt() - 3.0 };
+                    let (pa, pb) = if dir >= 0.0 { ((el - 14.0, y), (el + 14.0, y)) } else { ((el + 14.0, y), (el - 14.0, y)) };
+                    let lab = if left { mk(el - 20.0, y + h * 0.35, "end", name).fit(reach - 20.0) } else { mk(el + 20.0, y + h * 0.35, "start", name).fit(reach - 20.0) };
+                    SolArrow { a: pa, b: pb, boxr: (el - 18.0, y - hs, el + 18.0, y + hs), lab, dir }
                 }
             };
             pl.sol.push(sa);
-            k += 1;
         }
     }
     pl
@@ -1045,7 +1134,7 @@ fn draw_arrows(d: &mut Doc, c: &Cfg, pal: &Pal, pl: &Plan, ox: f64, oy: f64) {
             water_arrow(d, pal, ox + ex, oy + ay, *dir, 25.0, 2.6);
         }
     }
-    if let Some(t) = &pl.tag { clear_label(d, pal, ox + t.x, oy + t.y, t.size, t.anchor, &t.text); }
+    if let Some(t) = &pl.tag { clear_label(d, pal, ox + t.x, oy + t.y, t.size, t.lf, t.anchor, &t.text); }
     let sblank = c.arr_solute == "Blank boxes";
     for sa in &pl.sol {
         if sblank {
@@ -1055,7 +1144,7 @@ fn draw_arrows(d: &mut Doc, c: &Cfg, pal: &Pal, pl: &Plan, ox: f64, oy: f64) {
         } else if sa.dir != 0.0 {
             d.arrow_with(ox + sa.a.0, oy + sa.a.1, ox + sa.b.0, oy + sa.b.1, pal.sa, 2.4, dash, false);
         }
-        clear_label(d, pal, ox + sa.lab.x, oy + sa.lab.y, sa.lab.size, sa.lab.anchor, &sa.lab.text);
+        clear_label(d, pal, ox + sa.lab.x, oy + sa.lab.y, sa.lab.size, sa.lab.lf, sa.lab.anchor, &sa.lab.text);
     }
 }
 
@@ -1083,7 +1172,7 @@ fn draw_key(d: &mut Doc, m: &Model, c: &Cfg, pal: &Pal, x: f64, y: f64, kw: f64)
     for (i, (r, fill, name, water)) in rows.iter().enumerate() {
         let cy = y + 24.0 + 14.0 * lf + i as f64 * step - 4.0;
         d.circle(x + 20.0, cy, *r, fill, if *water { pal.water_edge } else { "#333" }, 0.9);
-        rich(d, x + 36.0, cy + 4.0, 11.0, "start", "400", name);
+        rich(d, x + 36.0, cy + 4.0, fit_size(name, 11.0, c.lfr, kw - 40.0), "start", "400", name);
     }
     if !scale { return; }
     // the scale: a box of the area one particle is counted over, with one particle in it

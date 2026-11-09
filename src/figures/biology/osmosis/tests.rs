@@ -254,11 +254,11 @@ fn the_membrane_label_takes_the_teachers_words() {
     for (scene, dflt) in [("Red blood cell", "Cell membrane"), ("Split beaker", "Selectively permeable membrane"), ("Dialysis bag", "Dialysis tubing")] {
         let base = render_of(&[s("scene", scene), s("show", "Start")]);
         assert!(base.contains(dflt), "{scene}");
-        let own = render_of(&[s("scene", scene), s("show", "Start"), s("lab_membrane_text", "Plasma membrane (lipid bilayer)")]);
+        let own = flat(&render_of(&[s("scene", scene), s("show", "Start"), s("lab_membrane_text", "Plasma membrane (lipid bilayer)")]));
         assert!(own.contains("Plasma membrane (lipid bilayer)") && !own.contains(dflt), "{scene}");
         // blank line: the wording is the answer, shown in the key only
         let blank = |ans: bool| render_of(&[s("scene", scene), s("show", "Start"), s("lab_membrane", "Blank line"), s("lab_membrane_text", "Plasma membrane"), b(SHOW_ANSWERS, ans)]);
-        assert!(blank(true).contains("Plasma membrane") && !blank(false).contains("Plasma membrane"), "{scene}");
+        assert!(flat(&blank(true)).contains("Plasma membrane") && !flat(&blank(false)).contains("Plasma membrane"), "{scene}");
     }
 }
 
@@ -298,8 +298,8 @@ fn pick_pp_for(m: &Model) -> f64 {
 #[test]
 fn up_to_three_crossing_arrows_each_cross_the_membrane_and_keep_their_labels_clear() {
     let pal = palette(&with(&[]));
-    for scene in ["Red blood cell", "Plant cell", "Split beaker", "U-tube", "Dialysis bag"] {
-        let p = with(&[s("scene", scene), s("show", "Start"), b("s1_on", true), b("s2_on", true), b("s2_cross", true), f("s2_in", 2.0), f("s2_out", 0.0), b("s3_on", true), b("s3_cross", true), f("s3_in", 0.0), f("s3_out", 2.0), b("s1_cross", true), f("s1_in", 3.0), f("s1_out", 0.0)]);
+    for (scene, size) in ["Red blood cell", "Plant cell", "Split beaker", "U-tube", "Dialysis bag"].into_iter().flat_map(|sc| ["Medium", "Large"].into_iter().map(move |sz| (sc, sz))) {
+        let p = with(&[s("scene", scene), s("label_size", size), s("show", "Start"), b("s1_on", true), b("s2_on", true), b("s2_cross", true), f("s2_in", 2.0), f("s2_out", 0.0), b("s3_on", true), b("s3_cross", true), f("s3_in", 0.0), f("s3_out", 2.0), b("s1_cross", true), f("s1_in", 3.0), f("s1_out", 0.0)]);
         let c = cfg(&p);
         let m = model(&p, None);
         let g = geo(&m, Kind::Start, &pal);
@@ -320,7 +320,8 @@ fn up_to_three_crossing_arrows_each_cross_the_membrane_and_keep_their_labels_cle
             let crossing = match scene {
                 "Split beaker" | "U-tube" => a.a.0 < 120.0 && a.b.0 > 120.0 || a.a.0 > 120.0 && a.b.0 < 120.0,
                 "Dialysis bag" => { let (cx, _, rx, _, _) = g.shape; (a.a.0 - cx).abs().min((a.b.0 - cx).abs()) < rx + 1.0 && (a.a.0 - cx).abs().max((a.b.0 - cx).abs()) > rx * 0.5 }
-                _ => { let (_, cy, _, ry, _) = g.shape; (a.a.1 - cy).abs().min((a.b.1 - cy).abs()) < ry && (a.a.1 - cy).abs().max((a.b.1 - cy).abs()) > ry * 0.8 }
+                "Red blood cell" => { let (cx, cy, r, _, _) = g.shape; let d = |p: (f64, f64)| ((p.0 - cx).powi(2) + (p.1 - cy).powi(2)).sqrt(); d(a.a).min(d(a.b)) < r && d(a.a).max(d(a.b)) > r }
+                _ => { let (_, cy, _, ry, _) = g.shape; (a.a.1 - cy).abs().min((a.b.1 - cy).abs()) < ry && (a.a.1 - cy).abs().max((a.b.1 - cy).abs()) > ry }
             };
             assert!(crossing, "{scene}: arrow {i} does not cross");
         }
@@ -478,4 +479,190 @@ fn particles_follow_osmolarity_so_salt_is_drawn_denser_than_the_same_percent_of_
     let m = render_of(&[s("show", "Start"), s("unit", "M"), f("s1_in", 0.154), f("s1_out", 0.154), b("key", false)]);
     let mm = render_of(&[s("show", "Start"), s("unit", "mM"), f("s1_in", 0.154), f("s1_out", 0.154), b("key", false)]);
     assert!(grey_count(&m, "#a3a3a3") > 3 * grey_count(&mm, "#a3a3a3"), "M and mM must differ");
+}
+
+type Rc = (f64, f64, f64, f64);
+fn overlap(a: Rc, b: Rc) -> bool { !(a.2 <= b.0 || b.2 <= a.0 || a.3 <= b.1 || b.3 <= a.1) }
+
+/// (y, left, right, text) of every `<text>` as finally drawn.
+fn text_boxes(svg: &str) -> Vec<(f64, f64, f64, String)> {
+    let mut out = Vec::new();
+    for t in svg.split("<text ").skip(1) {
+        let num = |k: &str| t.split(&format!("{k}=\"")).nth(1).and_then(|v| v.split('"').next()).and_then(|v| v.parse::<f64>().ok());
+        let (x, y, fs) = (num("x").unwrap(), num("y").unwrap(), num("font-size").unwrap());
+        let anchor = t.split("text-anchor=\"").nth(1).unwrap().split('"').next().unwrap();
+        let inner = t.split("</text>").next().unwrap().split('>').skip(1).collect::<Vec<_>>().join(">");
+        let body: String = inner.split('<').map(|p| p.split('>').last().unwrap_or("")).collect();
+        let width = text_w(&body, fs);
+        let (l, r) = match anchor { "middle" => (x - width / 2.0, x + width / 2.0), "end" => (x - width, x), _ => (x, x + width) };
+        out.push((y, l, r, body));
+    }
+    out
+}
+
+fn assert_inside_page(svg: &str, what: &str) {
+    let w: f64 = svg.split("width=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+    for (y, l, r, body) in text_boxes(svg) {
+        assert!(r <= w + 1.0 && l >= -1.0 && y >= 0.0, "{what}: text {body:?} runs to {l:.0}..{r:.0} (page {w}) at y {y:.0}");
+    }
+}
+
+#[test]
+fn a_shrunken_cell_and_a_plasmolyzed_plant_keep_every_crossing_arrow_on_the_membrane() {
+    let pal = palette(&with(&[]));
+    for scene in ["Red blood cell", "Plant cell"] {
+        for size in ["Medium", "Large"] {
+            for blank in [false, true] {
+                let mode = if blank { "Blank boxes" } else { "Arrows" };
+                let p = with(&[s("scene", scene), s("label_size", size), s("arr_solute", mode), s("arr_water", mode), s("show", "Result"),
+                    b("s1_on", true), b("s1_cross", true), f("s1_in", 3.0), f("s1_out", 0.0), s("s1_name", "Urea"),
+                    b("s2_on", true), b("s2_cross", true), f("s2_in", 0.0), f("s2_out", 2.0), s("s2_name", "Glucose"),
+                    b("s3_on", true), b("s3_cross", true), f("s3_in", 2.0), f("s3_out", 0.0), s("s3_name", "Ethanol")]);
+                let c = cfg(&p);
+                let mut m = model(&p, None);
+                m.tonic = Tonic::Hyper;
+                m.vrel = 0.5;
+                let g = geo(&m, Kind::Result, &pal);
+                let pl = plan(&c, &m, &g, m.flow());
+                let what = format!("{scene} {size} blank={blank}");
+                assert_eq!(pl.sol.len(), 3, "{what}");
+                let (cx, cy, rx, ry, _) = g.shape;
+                // what the leaders and the water arrows occupy
+                let mut busy: Vec<Rc> = pl.water.iter().map(|(x, y, _)| (x - 25.0, y - 6.0, x + 25.0, y + 6.0)).collect();
+                busy.extend(pl.wbox.iter().copied());
+                if scene == "Red blood cell" { busy.push((0.0, cy - 1.0, g.edges.0, cy + 1.0)); }
+                if let Some(t) = &pl.tag { busy.push(t.rect()); }
+                for (i, a) in pl.sol.iter().enumerate() {
+                    let crossing = if scene == "Red blood cell" {
+                        let d = |q: (f64, f64)| ((q.0 - cx).powi(2) + (q.1 - cy).powi(2)).sqrt();
+                        d(a.a).min(d(a.b)) < rx && d(a.a).max(d(a.b)) > rx
+                    } else {
+                        // the bottom of the membrane as it is now, well inside the wall
+                        a.a.1.min(a.b.1) < cy + ry && a.a.1.max(a.b.1) > cy + ry && cy + ry < g.wall.1 - 12.0 && (a.a.0 - cx).abs() < rx
+                    };
+                    assert!(crossing, "{what}: arrow {i} is not across the membrane");
+                    let lab = a.lab.rect();
+                    assert!(lab.0 >= 0.0 && lab.2 <= PW && lab.3 <= g.ph, "{what}: label {i} off the panel {lab:?}");
+                    if scene == "Plant cell" { assert!(lab.1 >= g.wall.1, "{what}: label {i} is not below the wall"); }
+                    for q in &busy {
+                        assert!(!overlap(a.boxr, *q), "{what}: arrow {i} box {:?} runs over {q:?}", a.boxr);
+                        assert!(!overlap(lab, *q), "{what}: label {i} {lab:?} runs over {q:?}");
+                    }
+                    for (j, o) in pl.sol.iter().enumerate().filter(|(j, _)| *j != i) {
+                        assert!(!overlap(a.boxr, o.boxr), "{what}: boxes {i} and {j} overlap");
+                        assert!(!overlap(lab, o.lab.rect()) && !overlap(lab, o.boxr), "{what}: label {i} meets arrow or label {j}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_plasmolyzed_plants_water_arrows_cross_the_membrane_not_the_wall() {
+    let pal = palette(&with(&[]));
+    let m = mdl(&[s("scene", "Plant cell"), f("s1_in", 0.9), f("s1_out", 4.0)]);
+    assert_eq!(m.tonic, Tonic::Hyper);
+    let g = geo(&m, Kind::Result, &pal);
+    let c = cfg(&with(&[]));
+    let pl = plan(&c, &m, &g, m.flow());
+    let (cx, _, mw, _, _) = g.shape;
+    assert!(mw < 45.0, "plasmolyzed membrane half-width {mw}");
+    for (x, _, _) in &pl.water { assert!(((x - cx).abs() - mw).abs() < 0.01, "water arrow at {x} is not at the membrane ({mw} from {cx})"); }
+    // and the tag is clear of the wall
+    assert!(pl.tag.unwrap().rect().0 > g.wall.0);
+}
+
+#[test]
+fn a_long_membrane_label_wraps_and_stays_on_the_page() {
+    let long = "Plasma membrane: a phospholipid bilayer that is selectively permeable to water and small molecules";
+    for scene in ["Red blood cell", "Plant cell", "Split beaker", "U-tube", "Dialysis bag"] {
+        for size in ["Medium", "Large"] {
+            for mode in ["Text", "Blank line"] {
+                for ans in [false, true] {
+                    let svg = render_of(&[s("scene", scene), s("label_size", size), s("show", "Both"), s("lab_membrane", mode), s("lab_membrane_text", long), b(SHOW_ANSWERS, ans)]);
+                    assert_inside_page(&svg, &format!("{scene} {size} {mode} answers={ans}"));
+                    let words = flat(&svg);
+                    if mode == "Text" || ans { assert!(["Plasma", "phospholipid", "molecules"].iter().all(|w| words.contains(w)), "{scene} {size} {mode}: wording missing"); }
+                    if !ans && mode == "Blank line" { assert!(!words.contains("phospholipid"), "{scene}: the blank line gave the answer away"); }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn in_panel_labels_are_measured_at_the_large_size() {
+    let rect = |lf: f64| Lab { x: 100.0, y: 50.0, size: 9.5, anchor: "start", text: "Glucose".into(), lf }.rect();
+    let (a, b2) = (rect(1.0), rect(1.4));
+    assert!((b2.2 - b2.0) > 1.35 * (a.2 - a.0) - 3.0 && (b2.3 - b2.1) > 1.3 * (a.3 - a.1) - 3.0, "{a:?} {b2:?}");
+    // a name too long for its room shrinks until it fits as drawn
+    let lab = Lab { x: 100.0, y: 50.0, size: 9.5, anchor: "start", text: "Polyvinylpyrrolidone".into(), lf: 1.4 }.fit(60.0);
+    let r = lab.rect();
+    assert!(r.2 - r.0 <= 60.5 && lab.size < 9.5, "{r:?} {}", lab.size);
+}
+
+#[test]
+fn long_solute_names_do_not_make_columns_or_labels_collide() {
+    let name = "Polyvinylpyrrolidone solution";
+    for scene in ["Red blood cell", "Plant cell", "Split beaker", "Dialysis bag"] {
+        for size in ["Medium", "Large"] {
+            for show in ["Both", "Three-up"] {
+                let svg = render_of(&[s("scene", scene), s("label_size", size), s("show", show), s("s1_name", name), b("s2_on", true), s("s2_name", "Sodium bicarbonate"), b("s2_cross", true), f("s2_in", 2.0), f("s2_out", 0.0), b("answer_key", false)]);
+                let what = format!("{scene} {size} {show}");
+                assert_inside_page(&svg, &what);
+                // texts on one row never overlap
+                let mut boxes = text_boxes(&svg);
+                boxes.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.partial_cmp(&b.1).unwrap()));
+                for w in boxes.windows(2) {
+                    if (w[0].0 - w[1].0).abs() < 0.5 { assert!(w[0].2 <= w[1].1 + 0.5, "{what}: {:?} runs into {:?}", w[0], w[1]); }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_utube_leader_ends_on_the_membrane_and_blank_water_boxes_keep_clear() {
+    let pal = palette(&with(&[]));
+    let m = mdl(&[s("scene", "U-tube")]);
+    let g = geo(&m, Kind::Start, &pal);
+    // the dashed membrane starts at y = 148; the leader stops there
+    assert!((g.t_mem.1 + 2.0 - 148.0).abs() < 0.5, "{}", g.t_mem.1);
+    for scene in ["Red blood cell", "Plant cell", "Split beaker", "U-tube", "Dialysis bag"] {
+        let p = with(&[s("scene", scene), s("arr_water", "Blank boxes"), s("arr_solute", "Blank boxes"), s("show", "Start"),
+            b("s1_cross", true), b("s2_on", true), b("s2_cross", true), b("s3_on", true), b("s3_cross", true)]);
+        let c = cfg(&p);
+        let m = model(&p, None);
+        let g = geo(&m, Kind::Start, &pal);
+        let pl = plan(&c, &m, &g, m.flow());
+        let tag = pl.tag.as_ref().unwrap_or_else(|| panic!("{scene}: blank water boxes have no H2O tag")).rect();
+        assert!(!pl.wbox.is_empty(), "{scene}");
+        for wb in &pl.wbox {
+            assert!(!overlap(tag, *wb), "{scene}: the H2O tag sits on a blank box");
+            for sa in &pl.sol { assert!(!overlap(*wb, sa.boxr), "{scene}: water box {wb:?} touches solute box {:?}", sa.boxr); assert!(!overlap(tag, sa.boxr), "{scene}: tag on a solute box"); }
+        }
+    }
+}
+
+fn spike_ratio(svg: &str) -> (f64, usize) {
+    let poly = svg.split("<polygon points=\"").nth(1).unwrap().split('"').next().unwrap();
+    let pts: Vec<(f64, f64)> = poly.split(' ').map(|p| { let mut it = p.split(','); (it.next().unwrap().parse().unwrap(), it.next().unwrap().parse().unwrap()) }).collect();
+    let d: Vec<f64> = pts.iter().map(|(x, y)| ((x - 120.0).powi(2) + (y - 98.0).powi(2)).sqrt()).collect();
+    (d.iter().cloned().fold(f64::MAX, f64::min) / d.iter().cloned().fold(0.0, f64::max), pts.len())
+}
+
+#[test]
+fn crenation_deepens_with_hypertonicity() {
+    let at = |out: f64| spike_ratio(&render_of(&[s("scene", "Red blood cell"), s("show", "Result"), f("s1_in", 0.9), f("s1_out", out), b("key", false)]));
+    let (mild, strong) = (at(1.2), at(3.6));
+    assert!(mild.0 > strong.0 + 0.1, "mild {mild:?} strong {strong:?}");
+    assert!(strong.1 > mild.1, "more spikes when more hypertonic: {mild:?} {strong:?}");
+}
+
+#[test]
+fn doubling_a_concentration_at_the_largest_particle_size_shows() {
+    let svg = render_of(&[s("scene", "Split beaker"), s("show", "Start"), s("s1_size", "XL"), f("s1_in", 0.9), f("s1_out", 1.8), b("key", false)]);
+    let (l, r) = side_counts(&svg, "#a3a3a3");
+    assert!(r as f64 >= 1.5 * l as f64 && l >= 1, "XL: {l} vs {r}");
 }
