@@ -2016,14 +2016,16 @@ impl Workspace {
         let mut changed = false;
         let math_quiet = (def.subject == figures::Subject::Math && def.id != "composite-shape" && theme::chem_skin()) || def.subject == figures::Subject::Biology;
         let mut start_edit: Option<(&'static str, String)> = None;
-        for i in order {
+        // the widget id is the place in the hit order (as it was before the order came from interact), so a drag that outlives a
+        // change in the handle list passes to the same handle as before
+        for (pos, i) in order.into_iter().enumerate() {
             let h = &hs[i];
             let c = to_screen(h.pos);
             let (hx, hy) = figures::interact::hit_half(h, k);
             let (hx, hy) = ((hx * k) as f32, (hy * k) as f32);
             let hit = egui::Rect::from_center_size(c, Vec2::new(hx * 2.0, hy * 2.0));
             let sense = if h.drag.is_some() { Sense::click_and_drag() } else { Sense::click() };
-            let r = ui.interact(hit, UiId::new(("fig_handle", si, i)), sense);
+            let r = ui.interact(hit, UiId::new(("fig_handle", si, pos)), sense);
             let active = r.dragged();
             if r.hovered() || active {
                 ui.ctx().set_cursor_icon(if active {
