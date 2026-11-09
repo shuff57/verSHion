@@ -294,13 +294,6 @@ fn the_key_shows_the_answer_for_a_letter_label() {
     assert!(stu.contains(">x\u{b0}<") && !stu.contains(">x = "), "{stu}");
 }
 
-#[test]
-fn a_long_name_inside_a_sector_wraps_or_moves_outside() {
-    let t = svg(&[("data", s("Walking with friends, 14\nCar, 12\nBus, 10\nBike, 4"))]);
-    assert!(!t.contains(">Walking with friends<") || t.contains("<polyline"), "{t}");
-    let t = svg(&[("data", s("Tom & Jerry, 43\nOthers, 57")), ("values", s("Percents"))]);
-    assert!(t.contains("Tom &amp;"));
-}
 
 #[test]
 fn fractions_stay_fractions_across_the_chart() {
@@ -324,4 +317,79 @@ fn tiny_values_spaced_thousands_and_contrast() {
     assert!(notes.iter().any(|n| n.contains("put a comma")), "{notes:?}");
     assert!(!hex_dark("#17becf"), "dark type on cyan");
     assert!(hex_dark("#000000"));
+}
+/// Every label drawn inside the pie (middle-anchored text): its box against the circle and the
+/// radii of the sector holding its centre. Returns the worst overhang in px (0 when it fits).
+fn worst_overhang(t: &str) -> (f64, Vec<(String, bool)>) {
+    let attr = |tag: &str, name: &str| -> Option<String> {
+        let pat = format!(" {name}=\"");
+        let i = tag.find(&pat)? + pat.len();
+        Some(tag[i..].split('"').next()?.to_string())
+    };
+    let num = |v: Option<String>| v.and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+    // sectors: M cx,cy L x0,y0 A r,r 0 l s x1,y1 Z
+    let mut sectors: Vec<(f64, f64, f64, f64)> = Vec::new(); // cx, cy, start deg, span deg
+    let mut centre = (0.0, 0.0);
+    for seg in t.split("<path d=\"M").skip(1) {
+        let d = seg.split('"').next().unwrap();
+        let nums: Vec<f64> = d.split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-')).filter(|x| !x.is_empty()).filter_map(|x| x.parse().ok()).collect();
+        if nums.len() < 10 || !d.contains('L') {
+            continue;
+        }
+        let (cx, cy, x0, y0, x1, y1) = (nums[0], nums[1], nums[2], nums[3], nums[nums.len() - 2], nums[nums.len() - 1]);
+        let ang = |x: f64, y: f64| (x - cx).atan2(-(y - cy)).to_degrees().rem_euclid(360.0);
+        let (a0, a1) = (ang(x0, y0), ang(x1, y1));
+        centre = (cx, cy);
+        sectors.push((cx, cy, a0, (a1 - a0).rem_euclid(360.0)));
+    }
+    let r = 150.0;
+    let (mut worst, mut seen) = (0.0f64, Vec::new());
+    for tag in t.split("<text ").skip(1) {
+        let head_s = format!(" {}", tag.split('>').next().unwrap());
+        let head = head_s.as_str();
+        if attr(head, "text-anchor").as_deref() != Some("middle") {
+            continue;
+        }
+        let content = tag.split_once('>').unwrap().1.split("</text>").next().unwrap().replace("&amp;", "&");
+        let (x, y, size) = (num(attr(head, "x")), num(attr(head, "y")), num(attr(head, "font-size")));
+        if (x - centre.0).hypot(y - centre.1) > r {
+            continue; // the title
+        }
+        let bold = head.contains("font-weight");
+        let w = crate::figures::stats::bar::tw(&content, size) * if bold { 1.1 } else { 1.0 };
+        let mid = (x, y - size * 0.35);
+        let ang = |px: f64, py: f64| (px - centre.0).atan2(-(py - centre.1)).to_degrees().rem_euclid(360.0);
+        let home = sectors.iter().find(|s| (ang(mid.0, mid.1) - s.2).rem_euclid(360.0) <= s.3);
+        let mut ok = true;
+        for (dx, dy) in [(-1.0, -0.65), (1.0, -0.65), (-1.0, 0.35), (1.0, 0.35)] {
+            let (px, py) = (x + dx * w / 2.0, y + dy * size);
+            let dist = (px - centre.0).hypot(py - centre.1);
+            worst = worst.max(dist - r);
+            if dist > r {
+                ok = false;
+            }
+            if let Some(h) = home {
+                if (ang(px, py) - h.2).rem_euclid(360.0) > h.3 + 0.5 && dist > 6.0 {
+                    ok = false;
+                    worst = worst.max(1.0);
+                }
+            }
+        }
+        seen.push((content, ok));
+    }
+    (worst, seen)
+}
+
+#[test]
+fn a_long_name_inside_a_sector_stays_inside_the_circle_and_its_radii() {
+    let t = svg(&[("data", s("Walking with friends, 14\nCar, 12\nBus, 10\nBike, 4")), ("labels", s("Name and percent"))]);
+    let (worst, seen) = worst_overhang(&t);
+    assert!(!seen.is_empty() && worst <= 0.0 && seen.iter().all(|x| x.1), "overhang {worst}: {seen:?}");
+    // a wrapped name keeps the name's weight on every line; the value line is regular
+    let bold: Vec<&str> = t.split("<text ").skip(1).filter(|x| x.split('>').next().unwrap().contains("font-weight")).map(|x| x.split_once('>').unwrap().1.split("</text>").next().unwrap()).collect();
+    assert!(bold.contains(&"Walking with") && bold.contains(&"friends"), "{bold:?}");
+    assert!(!bold.iter().any(|b| b.contains('%')), "{bold:?}");
+    let t = svg(&[("data", s("Tom & Jerry, 43\nOthers, 57")), ("values", s("Percents")), ("labels", s("Name and percent"))]);
+    let (worst, seen) = worst_overhang(&t);
+    assert!(seen.iter().any(|x| x.0 == "Tom & Jerry") && worst <= 0.0 && seen.iter().all(|x| x.1), "{worst} {seen:?}");
 }

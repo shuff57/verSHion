@@ -589,6 +589,8 @@ struct Placed {
     plate: bool,
     white: bool,
     w: f64,
+    /// How many leading lines are the name (drawn bold); a wrapped name keeps one weight.
+    bold: usize,
 }
 
 fn text(d: &mut Doc, x: f64, y: f64, size: f64, anchor: &str, s: &str, ink: &str, bold: bool) {
@@ -681,11 +683,11 @@ fn render(p: &Params) -> String {
             }
             let mid = starts[i] + sh * 180.0; // degrees clockwise from 12
             let (sx, sy) = ((mid.to_radians()).sin(), -(mid.to_radians()).cos());
-            let box_of = |ls: &[String]| -> (f64, f64) {
+            let box_of = |ls: &[String], bold: usize| -> (f64, f64) {
                 if blank_line {
                     (56.0 * k, line_h)
                 } else {
-                    (ls.iter().enumerate().map(|(j, l)| tw(l, fl) * if j == 0 && ls.len() > 1 { 1.1 } else { 1.0 }).fold(0.0, f64::max), ls.len() as f64 * line_h)
+                    (ls.iter().enumerate().map(|(j, l)| tw(l, fl) * if j < bold { 1.1 } else { 1.0 }).fold(0.0, f64::max), ls.len() as f64 * line_h)
                 }
             };
             // the label's whole box must sit inside the circle and between the sector's two radii
@@ -707,34 +709,41 @@ fn render(p: &Params) -> String {
                 }
                 true
             };
-            let mut cands: Vec<Vec<String>> = vec![lines.clone()];
+            // the first line of a two-line label is bold; wrapped, every line of it stays bold
+            let first_bold = lines.len() > 1;
+            let mut cands: Vec<(Vec<String>, usize)> = vec![(lines.clone(), usize::from(first_bold))];
             if !blank_line {
                 for wmax in [0.95 * R, 0.7 * R, 0.5 * R] {
                     let mut out: Vec<String> = Vec::new();
-                    for l in &lines {
-                        out.extend(crate::figures::stats::bar::wrap(l, wmax, fl, true).unwrap_or_else(|| vec![l.clone()]));
+                    let mut bold = 0;
+                    for (j, l) in lines.iter().enumerate() {
+                        let w = crate::figures::stats::bar::wrap(l, wmax, fl, true).unwrap_or_else(|| vec![l.clone()]);
+                        if j == 0 && first_bold {
+                            bold = w.len();
+                        }
+                        out.extend(w);
                     }
-                    if out.len() <= 4 && !cands.contains(&out) {
-                        cands.push(out);
+                    if out.len() <= 4 && !cands.iter().any(|c| c.0 == out) {
+                        cands.push((out, bold));
                     }
                 }
             }
             let radii: &[f64] = if sh > 0.9999 { &[0.0] } else { &[0.62, 0.5, 0.72, 0.42, 0.8, 0.3] };
-            let mut found: Option<(Vec<String>, f64, f64, f64, f64)> = None;
-            'search: for c in &cands {
-                let (w, h) = box_of(c);
+            let mut found: Option<(Vec<String>, usize, f64, f64, f64, f64)> = None;
+            'search: for (c, bold) in &cands {
+                let (w, h) = box_of(c, *bold);
                 for r in radii {
                     let (bx, by) = (r * R * sx, r * R * sy);
                     if box_fits(bx, by, w, h) {
-                        found = Some((c.clone(), w, h, bx, by));
+                        found = Some((c.clone(), *bold, w, h, bx, by));
                         break 'search;
                     }
                 }
             }
             let sector = shown(i);
-            if let Some((ls, w, h, bx, by)) = found {
+            if let Some((ls, bold, w, h, bx, by)) = found {
                 let white = sector.kind == DARK;
-                placed.push(Placed { lines: ls, blank: blank_line, x: bx, y: by - h / 2.0 + fl, anchor: "middle", leader: None, plate: sector.kind == PATTERN, white, w });
+                placed.push(Placed { lines: ls, blank: blank_line, x: bx, y: by - h / 2.0 + fl, anchor: "middle", leader: None, plate: sector.kind == PATTERN, white, w, bold });
             } else {
                 let right = sx >= 0.0;
                 let (x0, y0) = (R * sx, R * sy);
@@ -743,7 +752,7 @@ fn render(p: &Params) -> String {
                 let w = if blank_line { 56.0 * k } else { tw(&joined[0.min(joined.len().saturating_sub(1))], fl) };
                 // every outside label of a side stands in one column, so a leader never runs through another label
                 let hx = if right { R + 30.0 } else { -(R + 30.0) };
-                placed.push(Placed { lines: joined, blank: blank_line, x: hx, y: y1 + fl * 0.35, anchor: if right { "start" } else { "end" }, leader: Some(((x0, y0), (x1, y1))), plate: false, white: false, w });
+                placed.push(Placed { lines: joined, blank: blank_line, x: hx, y: y1 + fl * 0.35, anchor: if right { "start" } else { "end" }, leader: Some(((x0, y0), (x1, y1))), plate: false, white: false, w, bold: 0 });
             }
         }
     }
@@ -921,7 +930,7 @@ fn render(p: &Params) -> String {
             d.raw(&format!(r##"<rect x="{:.2}" y="{:.2}" width="{w:.2}" height="{hh:.2}" rx="3" fill="#ffffff" fill-opacity="0.9"/>"##, x - w / 2.0, y - fl - 1.0));
         }
         for (j, l) in pl.lines.iter().enumerate() {
-            text(&mut d, x, y + j as f64 * line_h, fl, pl.anchor, l, txt_ink, j == 0 && pl.lines.len() > 1);
+            text(&mut d, x, y + j as f64 * line_h, fl, pl.anchor, l, txt_ink, j < pl.bold);
         }
     }
 
