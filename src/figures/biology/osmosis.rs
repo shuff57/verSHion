@@ -134,13 +134,62 @@ impl Tonic {
 pub enum Flow { In, Out, None }
 
 #[derive(Clone, Debug)]
-pub struct Sol { pub name: String, pub cin: f64, pub cout: f64, pub cross: bool, r: f64, fill: &'static str, dark: bool, charge: &'static str }
+pub struct Sol {
+    pub name: String,
+    /// Concentrations as typed (in the chosen unit), for the labels.
+    pub cin: f64,
+    pub cout: f64,
+    /// The same as osmolarity in mOsm/L (particles per litre), what tonicity and the particle counts use.
+    pub os_in: f64,
+    pub os_out: f64,
+    pub basis: Basis,
+    pub cross: bool,
+    r: f64,
+    fill: &'static str,
+    dark: bool,
+    charge: &'static str,
+}
+
+/// Where a solute's osmolarity comes from.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum How { Known, Large, Unknown }
+
+/// Molar mass (g/mol) and the number of particles one formula unit gives (van 't Hoff i).
+#[derive(Clone, Copy, Debug)]
+pub struct Basis { pub mm: f64, pub iv: f64, pub how: How }
+
+/// Molar mass assumed for a protein or starch: a large molecule, so a percent of it is a tiny osmolarity.
+pub const LARGE_MM: f64 = 50_000.0;
+/// Molar mass assumed for a solute that is not in the table, when it is typed as a percent.
+pub const UNKNOWN_MM: f64 = 100.0;
+
+fn basis_of(name: &str) -> Basis {
+    let key: String = name.to_lowercase().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+    let known = |mm: f64, iv: f64| Basis { mm, iv, how: How::Known };
+    match key.as_str() {
+        "nacl" | "sodiumchloride" | "salt" | "tablesalt" => known(58.44, 2.0),
+        "kcl" | "potassiumchloride" => known(74.55, 2.0),
+        "cacl2" | "calciumchloride" => known(110.98, 3.0),
+        "mgcl2" | "magnesiumchloride" => known(95.21, 3.0),
+        "glucose" | "c6h12o6" | "dextrose" | "fructose" => known(180.16, 1.0),
+        "sucrose" | "c12h22o11" => known(342.3, 1.0),
+        "urea" | "ch4n2o" => known(60.06, 1.0),
+        "starch" | "protein" | "albumin" | "hemoglobin" | "haemoglobin" | "amylose" | "amylopectin" | "gelatin" => Basis { mm: LARGE_MM, iv: 1.0, how: How::Large },
+        _ => Basis { mm: UNKNOWN_MM, iv: 1.0, how: How::Unknown },
+    }
+}
+
+/// Osmolarity in mOsm/L of `c` in the unit `unit` (percent is w/v: grams per 100 mL).
+pub fn mosm(c: f64, unit: &str, b: Basis) -> f64 {
+    let mol_per_l = match unit { "M" => c, "mM" => c / 1000.0, _ => 10.0 * c / b.mm };
+    1000.0 * b.iv * mol_per_l
+}
 
 #[derive(Clone, Debug)]
 pub struct Model {
     pub scene: Scene,
     pub sols: Vec<Sol>,
-    /// Non-crossing solute inside and outside, summed (the tonicity numbers).
+    /// Non-crossing solute inside and outside, summed as osmolarity in mOsm/L (the tonicity numbers).
     pub ci: f64,
     pub co: f64,
     /// The outside relative to the inside.
@@ -175,7 +224,10 @@ fn read_sols(p: &Params, mult: Option<f64>) -> Vec<Sol> {
         let cin = p.f(&k("in")).max(0.0);
         let cout = match mult { Some(m) => cin * m, None => p.f(&k("out")).max(0.0) };
         let name = p.s(&k("name")).trim().to_string();
-        out.push(Sol { name: if name.is_empty() { format!("Solute {i}") } else { name }, cin, cout, cross: p.b(&k("cross")), r: size_r(p.s(&k("size"))), fill, dark, charge: charge_of(p.s(&k("charge"))) });
+        let name = if name.is_empty() { format!("Solute {i}") } else { name };
+        let basis = basis_of(&name);
+        let unit = unit_of(p.s("unit"));
+        out.push(Sol { os_in: mosm(cin, unit, basis), os_out: mosm(cout, unit, basis), basis, name, cin, cout, cross: p.b(&k("cross")), r: size_r(p.s(&k("size"))), fill, dark, charge: charge_of(p.s(&k("charge"))) });
     }
     out
 }
@@ -183,9 +235,10 @@ fn read_sols(p: &Params, mult: Option<f64>) -> Vec<Sol> {
 pub fn model(p: &Params, mult: Option<f64>) -> Model {
     let scene = Scene::of(p.s("scene"));
     let sols = read_sols(p, mult);
-    let ci: f64 = sols.iter().filter(|s| !s.cross).map(|s| s.cin).sum();
-    let co: f64 = sols.iter().filter(|s| !s.cross).map(|s| s.cout).sum();
-    let tonic = if (ci - co).abs() <= 1e-9 + 0.01 * ci.max(co) { Tonic::Iso } else if co < ci { Tonic::Hypo } else { Tonic::Hyper };
+    let ci: f64 = sols.iter().filter(|s| !s.cross).map(|s| s.os_in).sum();
+    let co: f64 = sols.iter().filter(|s| !s.cross).map(|s| s.os_out).sum();
+    // a difference under 1 % (and under half a mOsm/L, which no cell notices) is isotonic
+    let tonic = if (ci - co).abs() <= (0.01 * ci.max(co)).max(0.5) { Tonic::Iso } else if co < ci { Tonic::Hypo } else { Tonic::Hyper };
     let vrel = if ci <= 1e-9 && co <= 1e-9 { 1.0 } else if co <= 1e-9 { 2.5 } else { (ci / co).clamp(0.35, 2.5) };
     Model { scene, sols, ci, co, tonic, vrel: if tonic == Tonic::Iso { 1.0 } else { vrel }, burst: p.b("burst"), unit: unit_of(p.s("unit")) }
 }
@@ -256,8 +309,10 @@ fn rng(seed: u64) -> impl FnMut() -> f64 {
 
 /// A box this many px2 (70 x 70) holds `c / pp` particles of a solute at concentration `c`.
 const AREA_UNIT: f64 = 4900.0;
+/// One particle is never less than this many mOsm/L.
+const MIN_PP: f64 = 10.0;
 /// The densest solute may cover this share of its area.
-const MAX_COVER: f64 = 0.10;
+const MAX_COVER: f64 = 0.14;
 const WATER_R: f64 = 3.0;
 const WATER_FILL: f64 = 0.16;
 
@@ -268,7 +323,7 @@ fn want_count(c: f64, area: f64, pp: f64, r: f64) -> usize {
     n.min(cap) as usize
 }
 
-/// A round number at or above `x` (1, 2, 2.5, 5 times a power of ten).
+/// A round number at or above `x` (1, 1.2, 1.5, 2 ... times a power of ten).
 fn nice_up(x: f64) -> f64 {
     if !(x.is_finite() && x > 0.0) { return 1.0; }
     let e = 10f64.powf(x.log10().floor());
@@ -282,10 +337,11 @@ fn nice_up(x: f64) -> f64 {
 fn pick_pp(slots: &[Slot]) -> f64 {
     let mut maxc = 0.0f64;
     let mut maxr = 0.0f64;
-    for sl in slots { for s in &sl.m.sols { maxc = maxc.max(s.cin).max(s.cout); maxr = maxr.max(s.r); } }
-    if maxc <= 1e-9 { return 1.0; }
+    for sl in slots { for s in &sl.m.sols { maxc = maxc.max(s.os_in).max(s.os_out); maxr = maxr.max(s.r); } }
+    if maxc <= 1e-9 { return MIN_PP; }
     let per_box = MAX_COVER * AREA_UNIT / (std::f64::consts::PI * maxr.max(2.0).powi(2));
-    nice_up(maxc / per_box)
+    // never finer than MIN_PP, so a dilute figure (mM) has visibly fewer particles than a concentrated one
+    nice_up(maxc / per_box).max(MIN_PP)
 }
 
 /// Scatters the particles of one region. `want` is (solute index, count); water fills the room left. Nothing is put
@@ -785,8 +841,8 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
     let mut want_in: Vec<(usize, usize)> = Vec::new();
     let mut want_out: Vec<(usize, usize)> = Vec::new();
     for (i, s) in m.sols.iter().enumerate() {
-        let n_in0 = want_count(s.cin, a_in0, c.pp, s.r * rs0_in);
-        let n_out0 = want_count(s.cout, a_out0, c.pp, s.r * rs0_out);
+        let n_in0 = want_count(s.os_in, a_in0, c.pp, s.r * rs0_in);
+        let n_out0 = want_count(s.os_out, a_out0, c.pp, s.r * rs0_out);
         let (n_in, n_out) = if s.cross && sl.kind == Kind::Result {
             let total = (n_in0 + n_out0) as f64;
             let ni = (total * a_in / (a_in + a_out).max(1.0)).round() as usize;
@@ -1035,7 +1091,7 @@ fn draw_key(d: &mut Doc, m: &Model, c: &Cfg, pal: &Pal, x: f64, y: f64, kw: f64)
     d.raw(&format!(r##"<rect x="{:.2}" y="{by:.2}" width="{side:.2}" height="{side:.2}" fill="none" stroke="#555" stroke-width="0.9" stroke-dasharray="3 2"/>"##, x + 10.0));
     let (r0, f0) = (m.sols[0].r, m.sols[0].fill);
     d.circle(x + 10.0 + side / 2.0, by + side / 2.0, r0, f0, "#333", 0.9);
-    let amount = if m.unit == "%" { format!("{}%", fnum(c.pp)) } else { format!("{} {}", fnum(c.pp), m.unit) };
+    let amount = format!("{} mOsm/L", fnum(c.pp));
     rich(d, x + 10.0, by + side + 6.0 + 8.0 * lf, 8.5, "start", "400", "In a box this size,");
     rich(d, x + 10.0, by + side + 6.0 + 19.0 * lf, 8.5, "start", "400", &format!("1 particle = {amount}"));
 }
@@ -1053,7 +1109,7 @@ fn explain(slots: &[Slot], c: &Cfg) -> Vec<String> {
         let m = &sl.m;
         let pre = sl.letter.map(|l| format!("{l}: ")).unwrap_or_default();
         let cmp = if m.sols.iter().all(|s| s.cross) || m.sols.is_empty() { "there is no solute that cannot cross, so nothing pulls water either way".to_string() } else {
-            format!("non-crossing solute: {ia} {}, {ib} {}", conc_plain(m, m.ci), conc_plain(m, m.co))
+            format!("counting only solutes that cannot cross, {ia} is about {} and {ib} about {}", mosm_text(m.ci), mosm_text(m.co))
         };
         let line = match (m.scene, m.tonic) {
             (Scene::Rbc, Tonic::Hypo) => format!("{pre}hypotonic ({cmp}); water moves in, the cell gains water and {}.", if m.lysed() { "bursts (lysis), because it takes in more than its membrane can hold" } else { "swells (it would burst, lysis, if it gained enough)" }),
@@ -1074,6 +1130,7 @@ fn explain(slots: &[Slot], c: &Cfg) -> Vec<String> {
         out.push(line);
         if slots.len() == 1 || sl.letter.is_none() { break; }
     }
+    out.extend(osmolarity_notes(slots));
     // each crossing solute, worked out per panel (a three-up has a different direction in each)
     let per_panel = slots.len() == 3 && slots[0].letter.is_some();
     let panels: Vec<&Slot> = if per_panel { slots.iter().collect() } else { vec![&slots[0]] };
@@ -1088,6 +1145,29 @@ fn explain(slots: &[Slot], c: &Cfg) -> Vec<String> {
             out.push(text);
         }
     }
+    out
+}
+
+/// A mOsm/L figure for the key: whole numbers from 10 up, one decimal below.
+fn mosm_text(v: f64) -> String { if v >= 10.0 { format!("{} mOsm/L", v.round() as i64) } else { format!("{:.1} mOsm/L", v) } }
+
+/// How each solute's osmolarity was worked out, and what was assumed for the solutes the table does not know.
+fn osmolarity_notes(slots: &[Slot]) -> Vec<String> {
+    let m0 = &slots[0].m;
+    let three = slots.len() == 3 && slots[0].letter.is_some();
+    let mut out = Vec::new();
+    let conc = |v: f64| conc_plain(m0, v);
+    let (ia, ib) = match m0.scene { Scene::Rbc | Scene::Plant => ("inside", "outside"), Scene::Bag => ("in the bag", "in the beaker"), _ => ("Side A", "Side B") };
+    for s in &m0.sols {
+        let how = match s.basis.how {
+            How::Known => format!("{} g/mol, splits into {} particle{}", fnum(s.basis.mm), fnum(s.basis.iv), if s.basis.iv == 1.0 { "" } else { "s" }),
+            How::Large => format!("a large molecule, taken as {} g/mol, so it adds almost no osmolarity", fnum(s.basis.mm)),
+            How::Unknown => if m0.unit == "%" { format!("not in the table of known solutes, so counted as one particle per molecule with an assumed {} g/mol", fnum(s.basis.mm)) } else { "not in the table of known solutes, so counted as one particle per molecule".to_string() },
+        };
+        let vals = if three { format!("{ia} {} = {}", conc(s.cin), mosm_text(s.os_in)) } else { format!("{ia} {} = {}, {ib} {} = {}", conc(s.cin), mosm_text(s.os_in), conc(s.cout), mosm_text(s.os_out)) };
+        out.push(format!("{}: {how}; {vals}.", plain(&s.name)));
+    }
+    if !out.is_empty() { out.insert(0, "Tonicity compares osmolarity, the concentration of particles in mOsm/L (grams per litre divided by molar mass, times the particles each unit gives).".to_string()); }
     out
 }
 
@@ -1110,7 +1190,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Split beaker: a solute that can cross", params: vec![s("scene", "Split beaker"), s("show", "Both"), f("s1_out", 5.0), b("s2_on", true), b("s2_cross", true), f("s2_in", 1.5), f("s2_out", 0.0), s("s2_size", "S")] },
         Example { name: "U-tube: sugar on one side (student copy)", params: vec![s("scene", "U-tube"), s("show", "Both"), s("s1_name", "Sucrose"), f("s1_in", 0.5), f("s1_out", 3.0), s("lab_tonic", "Blank"), s("arr_water", "Blank boxes"), b("answer_key", true), b(SHOW_ANSWERS, false)] },
         Example { name: "Dialysis bag in a strong salt solution", params: vec![s("scene", "Dialysis bag"), s("show", "Both"), f("s1_out", 5.0)] },
-        Example { name: "Dialysis bag: starch stays in, glucose crosses", params: vec![s("scene", "Dialysis bag"), s("show", "Both"), s("s1_name", "Starch"), s("s1_shade", "White"), s("s1_size", "XL"), f("s1_in", 1.0), f("s1_out", 0.0), b("s2_on", true), b("s2_cross", true), s("s2_shade", "Dark grey"), s("s2_size", "S"), f("s2_in", 0.0), f("s2_out", 2.0), b("answer_key", true)] },
+        Example { name: "Dialysis bag: glucose crosses, starch adds almost no osmolarity", params: vec![s("scene", "Dialysis bag"), s("show", "Both"), s("s1_name", "Starch"), s("s1_shade", "White"), s("s1_size", "XL"), f("s1_in", 1.0), f("s1_out", 0.0), b("s2_on", true), b("s2_cross", true), s("s2_shade", "Dark grey"), s("s2_size", "S"), f("s2_in", 0.0), f("s2_out", 2.0), b("answer_key", true)] },
     ])
 }
 

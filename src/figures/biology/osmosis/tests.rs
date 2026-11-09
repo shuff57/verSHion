@@ -218,7 +218,7 @@ fn grey_count(svg: &str, fill: &str) -> usize { svg.matches(&format!("fill=\"{fi
 #[test]
 fn density_keeps_rising_with_concentration_and_water_is_still_there() {
     // three solutes of one size outside only, at 1, 2.5 and 5: more particles each time, and water at the highest
-    let svg = render_of(&[s("show", "Start"), s("scene", "Split beaker"), f("s1_in", 0.0), f("s1_out", 1.0), b("s2_on", true), f("s2_in", 0.0), f("s2_out", 2.5), b("s3_on", true), f("s3_in", 0.0), f("s3_out", 5.0),
+    let svg = render_of(&[s("show", "Start"), s("scene", "Split beaker"), s("s1_name", "Aa"), s("s2_name", "Bb"), s("s3_name", "Cc"), f("s1_in", 0.0), f("s1_out", 1.0), b("s2_on", true), f("s2_in", 0.0), f("s2_out", 2.5), b("s3_on", true), f("s3_in", 0.0), f("s3_out", 5.0),
         s("s1_size", "M"), s("s2_size", "M"), s("s3_size", "M"), s("s1_shade", "Grey"), s("s2_shade", "Dark grey"), s("s3_shade", "Black"), b("key", false)]);
     let (a, bb, c) = (grey_count(&svg, "#a3a3a3"), grey_count(&svg, "#666666"), grey_count(&svg, "#1e1e1e"));
     assert!(a < bb && bb < c, "{a} {bb} {c}");
@@ -352,9 +352,9 @@ fn a_large_label_size_keeps_the_key_and_the_answer_key_inside_the_page() {
 #[test]
 fn the_key_says_what_one_particle_is() {
     let svg = render_of(&[]);
-    assert!(svg.contains("In a box this size,") && svg.contains("1 particle = 0.25%"), "{}", svg.len());
+    assert!(svg.contains("In a box this size,") && svg.contains("1 particle = "), "{}", svg.len());
     let m = render_of(&[s("unit", "mM"), f("s1_in", 150.0), f("s1_out", 300.0)]);
-    assert!(m.contains("1 particle = ") && m.contains(" mM"));
+    assert!(m.contains("1 particle = ") && m.contains(" mOsm/L"));
 }
 
 #[test]
@@ -368,8 +368,8 @@ fn a_crossing_solute_is_keyed_in_each_panel_of_a_three_up() {
 
 #[test]
 fn the_key_uses_the_scenes_side_names_capitalised() {
-    let beaker = render_of(&[s("scene", "U-tube"), s("show", "Both"), f("s1_out", 5.0), b("answer_key", true)]);
-    assert!(beaker.contains("Side A 0.9%, Side B 5%"), "split names");
+    let beaker = flat(&render_of(&[s("scene", "U-tube"), s("show", "Both"), f("s1_out", 5.0), b("answer_key", true)]));
+    assert!(beaker.contains("Side A is about 308 mOsm/L and Side B about 1711 mOsm/L"), "split names");
     assert!(!beaker.contains("side a") && !beaker.contains("side b"));
     let bag = render_of(&[s("scene", "Dialysis bag"), s("show", "Both"), b("s2_on", true), b("s2_cross", true), f("s2_in", 0.0), f("s2_out", 2.0), b("answer_key", true)]);
     assert!(bag.contains("moves from the beaker to the bag until equal"), "bag");
@@ -404,4 +404,78 @@ fn a_plasmolyzed_vacuole_still_shows_solute() {
         if x > g.inr.x0 && x < g.inr.x1 && y > g.inr.y0 && y < g.inr.y1 { inside += 1; }
     }
     assert!(inside >= 1, "no solute in the vacuole {:?} n={}", (g.inr.x0, g.inr.x1, g.inr.y0, g.inr.y1), svg.matches("fill=\"#a3a3a3\"").count());
+}
+
+#[test]
+fn flat_text_joins_the_wrapped_key_lines() {
+    let svg = render_of(&[b("answer_key", true)]);
+    assert!(flat(&svg).contains("moves from hypotonic to hypertonic."));
+}
+
+/// All the text of an SVG on one line (the answer key is wrapped over several <text> elements).
+fn flat(svg: &str) -> String {
+    svg.split("<text ").skip(1).map(|t| t.split('>').nth(1).unwrap_or("").split("</text").next().unwrap_or("").to_string()).collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn osmolarity_of_known_solutes_in_each_unit() {
+    let near = |a: f64, b: f64| (a - b).abs() < 0.6;
+    // percent (w/v): 0.9 % NaCl is 154 mM, two particles each
+    assert!(near(mosm(0.9, "%", basis_of("NaCl")), 308.0));
+    assert!(near(mosm(0.154, "M", basis_of("NaCl")), 308.0));
+    assert!(near(mosm(154.0, "mM", basis_of("NaCl")), 308.0));
+    assert!(near(mosm(0.9, "%", basis_of("KCl")), 241.4));
+    assert!(near(mosm(1.0, "%", basis_of("CaCl_2")), 270.3));
+    assert!(near(mosm(5.0, "%", basis_of("C_6H_12O_6")), 277.5));
+    assert!(near(mosm(5.0, "%", basis_of("glucose")), 277.5));
+    assert!(near(mosm(10.0, "%", basis_of("Sucrose")), 292.1));
+    assert!(near(mosm(1.8, "%", basis_of("urea")), 299.7));
+    // starch and protein count for almost nothing
+    assert!(mosm(5.0, "%", basis_of("Starch")) < 2.0 && mosm(5.0, "%", basis_of("protein")) < 2.0);
+    // not in the table: one particle per molecule, 100 g/mol assumed for a percent
+    assert_eq!(basis_of("Mystery").how, How::Unknown);
+    assert!(near(mosm(1.0, "%", basis_of("Mystery")), 100.0));
+    assert!(near(mosm(0.1, "M", basis_of("Mystery")), 100.0));
+}
+
+#[test]
+fn a_cell_in_dilute_salt_plus_sugar_is_hypotonic_by_osmolarity_not_by_percent() {
+    // 0.9 % NaCl inside; outside 0.45 % NaCl + 0.5 % glucose: the percents add to 0.95 % (looks isotonic), the osmolarity is 182 vs 308
+    let m = mdl(&[f("s1_in", 0.9), f("s1_out", 0.45), b("s2_on", true), f("s2_in", 0.0), f("s2_out", 0.5)]);
+    assert!((m.ci - 308.0).abs() < 0.6 && (m.co - 181.6).abs() < 1.2, "{} {}", m.ci, m.co);
+    assert_eq!(m.tonic, Tonic::Hypo);
+    // sugar at the same percent is a quarter of the salt's osmolarity but twice... check both directions
+    let salt_vs_sugar = mdl(&[s("s1_name", "Glucose"), f("s1_in", 5.0), f("s1_out", 0.9), b("s2_on", true), s("s2_name", "NaCl"), f("s2_in", 0.0), f("s2_out", 0.0)]);
+    assert!(salt_vs_sugar.ci > salt_vs_sugar.co);
+    // a protein inside, same salt both sides: nothing to move water
+    let prot = mdl(&[b("s2_on", true), s("s2_name", "Protein"), f("s2_in", 5.0), f("s2_out", 0.0), f("s1_in", 0.9), f("s1_out", 0.9)]);
+    assert_eq!(prot.tonic, Tonic::Iso);
+    // 5 % glucose is isotonic with 0.9 % NaCl (277 vs 308, within 10 %) only loosely: it is hypotonic, not equal
+    let g = mdl(&[s("s1_name", "NaCl"), f("s1_in", 0.9), b("s2_on", true), s("s2_name", "Glucose"), f("s2_in", 0.0), f("s2_out", 5.0), f("s1_out", 0.0)]);
+    assert_eq!(g.tonic, Tonic::Hypo);
+}
+
+#[test]
+fn the_key_states_the_comparison_in_osmolarity() {
+    let svg = flat(&render_of(&[f("s1_out", 0.45), b("s2_on", true), f("s2_in", 0.0), f("s2_out", 0.5), s("show", "Start"), b("answer_key", true)]));
+    assert!(svg.contains("inside the cell is about 308 mOsm/L and outside the cell about 182 mOsm/L"), "comparison");
+    assert!(svg.contains("hypotonic"));
+    assert!(svg.contains("NaCl: 58.44 g/mol, splits into 2 particles"));
+    assert!(svg.contains("Glucose: 180.16 g/mol, splits into 1 particle;"));
+    let unknown = flat(&render_of(&[s("s1_name", "Mystery"), s("show", "Start"), b("answer_key", true)]));
+    assert!(unknown.contains("not in the table of known solutes") && unknown.contains("assumed 100 g/mol"));
+    let big = flat(&render_of(&[s("s1_name", "Starch"), s("show", "Start"), b("answer_key", true)]));
+    assert!(big.contains("a large molecule, taken as 50000 g/mol, so it adds almost no osmolarity"));
+}
+
+#[test]
+fn particles_follow_osmolarity_so_salt_is_drawn_denser_than_the_same_percent_of_sugar() {
+    // same typed 0.9 %, but NaCl is 308 mOsm/L and glucose 50: salt has about six times the particles
+    let svg = render_of(&[s("show", "Start"), s("scene", "Split beaker"), f("s1_in", 0.9), f("s1_out", 0.9), b("s2_on", true), s("s2_name", "Glucose"), f("s2_in", 0.9), f("s2_out", 0.9), s("s2_shade", "Black"), s("s2_size", "M"), b("key", false)]);
+    let (salt, sugar) = (grey_count(&svg, "#a3a3a3"), grey_count(&svg, "#1e1e1e"));
+    assert!(salt >= 4 * sugar && sugar >= 1, "salt {salt}, sugar {sugar}");
+    // a dilute figure in mM has fewer particles than the same numbers in M
+    let m = render_of(&[s("show", "Start"), s("unit", "M"), f("s1_in", 0.154), f("s1_out", 0.154), b("key", false)]);
+    let mm = render_of(&[s("show", "Start"), s("unit", "mM"), f("s1_in", 0.154), f("s1_out", 0.154), b("key", false)]);
+    assert!(grey_count(&m, "#a3a3a3") > 3 * grey_count(&mm, "#a3a3a3"), "M and mM must differ");
 }

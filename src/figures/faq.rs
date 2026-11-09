@@ -4477,8 +4477,8 @@ const PERIODIC_TABLE: &[Faq] = &[
 
 const OSMOSIS: &[Faq] = &[
     Faq {
-        q: "How is the tonicity worked out?",
-        a: "Add up the solutes that cannot cross the membrane, inside and outside. Water moves toward the higher total, which is the hypertonic side; the side with less is hypotonic, and equal totals are isotonic (no net water movement). A solute marked Can cross the membrane is left out, because it moves from higher to lower until it is the same on both sides and then pulls no water either way. The sums use the numbers as typed, so give every solute in the same unit; mass percent is not the same as particles per litre, so a percent comparison of two different solutes is a simplification.",
+        q: "How is the tonicity worked out (and what is a mOsm/L)?",
+        a: "Tonicity compares osmolarity, the concentration of particles, in mOsm/L, not the typed percent. For each solute the figure takes grams per litre (a percent is grams per 100 mL, so 0.9 % is 9 g/L), divides by the molar mass to get mol/L, and multiplies by the particles one unit splits into: NaCl 58.44 g/mol and 2 particles, KCl 74.55 and 2, CaCl2 110.98 and 3, glucose (C6H12O6) 180.16 and 1, sucrose 342.3 and 1, urea 60.06 and 1; starch and protein are treated as large molecules of 50 000 g/mol, so a percent of them adds almost no osmolarity. A name that is not in this table counts as one particle per molecule, with 100 g/mol assumed when typed as a percent; the answer key says so. 0.9 % NaCl is 154 mM x 2 = 308 mOsm/L, so 0.45 % NaCl plus 0.5 % glucose (154 + 28 = 182 mOsm/L) outside a 0.9 % NaCl cell is hypotonic even though the percents look nearly equal. Only the solutes that cannot cross the membrane count: add them up inside and outside, water moves toward the higher total (the hypertonic side), the lower is hypotonic, and totals within 1 % are isotonic. A solute marked Can cross the membrane moves from higher to lower until equal and is left out. The particles drawn follow the same numbers: the key says how many mOsm/L one particle stands for.",
     },
     Faq {
         q: "What happens to a red blood cell in each solution?",
