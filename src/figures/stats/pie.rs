@@ -197,6 +197,18 @@ fn number(c: &str) -> Option<f64> {
     any_number(c).filter(|v| *v >= 0.0)
 }
 
+/// "1,200" or "12,345,678.5": digits in comma-separated groups of three after a first group of 1-3.
+fn thousands_grouped(s: &str) -> bool {
+    let int = s.split('.').next().unwrap_or("");
+    let mut groups = int.split(',');
+    let first = groups.next().unwrap_or("");
+    let rest: Vec<&str> = groups.collect();
+    !rest.is_empty()
+        && (1..=3).contains(&first.len())
+        && first.chars().all(|c| c.is_ascii_digit())
+        && rest.iter().all(|g| g.len() == 3 && g.chars().all(|c| c.is_ascii_digit()))
+}
+
 /// The rows of `text`, and a note for each cell that was not a number (left as an empty sector).
 pub fn parse(text: &str) -> (Vec<Row>, Vec<String>) {
     let (mut rows, mut notes) = (Vec::new(), Vec::new());
@@ -205,7 +217,15 @@ pub fn parse(text: &str) -> (Vec<Row>, Vec<String>) {
             notes.push(format!("Only the first {MAX_CATS} categories are drawn."));
             break;
         }
-        let (name, cell, extra) = if line.contains('\t') {
+        // "Walk 1,200": a name, a space, then a number in thousands groups. Splitting at the first
+        // comma would read it as "Walk 1" and 200, so a line ending in such a number is name + value.
+        let spaced_thousands = (!line.contains(['\t', ';']))
+            .then(|| line.rsplit_once(char::is_whitespace))
+            .flatten()
+            .filter(|(a, b)| !a.contains(',') && thousands_grouped(b) && any_number(b).is_some());
+        let (name, cell, extra) = if let Some((a, b)) = spaced_thousands {
+            (a.trim().to_string(), b.to_string(), false)
+        } else if line.contains('\t') {
             let cells = data::parse_table(line).into_iter().next().unwrap_or_default();
             let more = cells.iter().skip(2).any(|c| !c.is_empty());
             (cells.first().cloned().unwrap_or_default(), cells.get(1).cloned().unwrap_or_default(), more)

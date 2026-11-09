@@ -229,6 +229,11 @@ fn thousands_groups_are_read_and_never_silently_truncated() {
     let (rows, notes) = parse("Apples, 1, 200");
     assert_eq!(rows[0].value, Some(1.0));
     assert!(notes.iter().any(|n| n.contains("only the first two cells")), "{notes:?}");
+    // a name, a space, then a grouped number: not "Walk 1" and 200
+    let (rows, notes) = parse("Walk 1,200\nCar 800\nNew Town 12,345,678.5");
+    assert_eq!(rows.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), vec!["Walk", "Car", "New Town"]);
+    assert_eq!(rows.iter().map(|r| r.value).collect::<Vec<_>>(), vec![Some(1200.0), Some(800.0), Some(12345678.5)]);
+    assert!(notes.is_empty(), "{notes:?}");
 }
 
 #[test]
