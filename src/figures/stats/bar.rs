@@ -661,8 +661,11 @@ fn parse_count(cell: &str) -> Result<u64, CountErr> {
     }
 }
 
-/// A heading cell that names an error column: `±`, `+/-`, `+-`, SEM, SD or SE (with or without
-/// the ± in front). Its numbers are the error bars of the column before it.
+/// A heading cell that names an error column: `±`, `+/-` or `+-` alone or before SEM, SD, SE or
+/// Error (`± SD`), or a word only a statistic is called without one (SEM, stdev, standard error,
+/// standard deviation). Its numbers are the error bars of the column before it. SD, SE, Error and
+/// Errors on their own stay group names: before error bars a chart could have a group called Errors
+/// ("Quiz, Correct, Errors") or SD (a state), and old saved charts must draw as they did.
 pub fn err_head(c: &str) -> bool {
     let t = c.trim().to_lowercase();
     let (signed, rest) = match t.strip_prefix('\u{b1}').or_else(|| t.strip_prefix("+/-")).or_else(|| t.strip_prefix("+-")) {
@@ -670,8 +673,9 @@ pub fn err_head(c: &str) -> bool {
         None => (false, t.clone()),
     };
     let word: String = rest.chars().filter(|c| !matches!(c, '.' | ' ')).collect();
-    let word = word.trim_start_matches('1');
-    (signed && word.is_empty()) || matches!(word, "sem" | "sd" | "se" | "stdev" | "stddev" | "error" | "errors")
+    let word = word.trim_start_matches('1').to_string();
+    let stat = matches!(word.as_str(), "sem" | "stdev" | "stddev" | "standarderror" | "standarddeviation" | "stderror");
+    (signed && (word.is_empty() || stat || matches!(word.as_str(), "sd" | "se" | "error" | "errors"))) || stat
 }
 
 /// An error-bar size typed in an error column: a number 0 or more (a leading ± is allowed), or

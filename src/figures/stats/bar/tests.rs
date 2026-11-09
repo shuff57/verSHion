@@ -2093,10 +2093,11 @@ fn values_inside_sit_on_white_chips_inside_their_own_bars() {
 
 #[test]
 fn error_columns_are_read_from_their_headings() {
-    for h in ["\u{b1}", "+/-", "+-", "SEM", "sd", "SE", "\u{b1} SEM", "\u{b1}1 SD", "S.E.M."] {
+    for h in ["\u{b1}", "+/-", "+-", "SEM", "\u{b1} sd", "+/- SE", "\u{b1} SEM", "\u{b1}1 SD", "S.E.M.", "\u{b1} errors", "Standard error", "stdev"] {
         assert!(err_head(h), "{h}");
     }
-    for h in ["Boys", "Seminar", "Sd card", "Error rate", "2019"] {
+    // SD, SE and Errors alone name groups, as they did before error bars (old saved charts)
+    for h in ["Boys", "Seminar", "Sd card", "Error rate", "2019", "SD", "se", "Error", "Errors"] {
         assert!(!err_head(h), "{h}");
     }
     let t = parse(MEANS).unwrap();
@@ -2421,4 +2422,18 @@ fn old_saved_figures_render_as_before_the_new_options() {
         }
         assert_eq!(before, render(&p), "{}", ex.name);
     }
+}
+
+#[test]
+fn a_group_called_errors_or_sd_is_still_a_group() {
+    // the batch 4 checker: "Quiz, Correct, Errors" drew one group with error bars after the change
+    for data in ["Quiz, Correct, Errors\nQuiz 1, 8, 2\nQuiz 2, 6, 4", "State, SD, ND\nCorn, 12, 9\nWheat, 7, 11", "Mistake, Errors\nSpelling, 4\nGrammar, 6"] {
+        let t = parse(data).unwrap_or_else(|e| panic!("{data}: {e}"));
+        assert!(!t.has_err, "{data}");
+        let heads = data.lines().next().unwrap().split(", ").count() - 1;
+        assert_eq!(t.groups, heads, "{data}");
+    }
+    // with a plus-minus sign, or a statistic's own name, it is an error column
+    assert!(parse("Treatment, Height, \u{b1} SD\nNone, 12.4, 1.1").unwrap().has_err);
+    assert!(parse("Treatment, Height, SEM\nNone, 12.4, 1.1").unwrap().has_err);
 }
