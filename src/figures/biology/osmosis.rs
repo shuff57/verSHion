@@ -1027,9 +1027,11 @@ fn draw_panel(d: &mut Doc, p: &Params, c: &Cfg, pal: &Pal, sl: &Slot, g: &Geo, o
                 let s = &m.sols[*i];
                 let (ta, tb) = (conc_text(m, s.cin, &s.name), conc_text(m, s.cout, &s.name));
                 let y = hdr + 15.0 * c.lf * (k as f64 + 1.0);
-                let (za, zb) = (fit_size(&ta, 11.0, c.lfr, colw), fit_size(&tb, 11.0, c.lfr, colw));
-                field(d, xa, y, za, "middle", "400", &c.lab_conc, c.ans, 90.0f64.min(colw), &ta);
-                field(d, xb, y, zb, "middle", "400", &c.lab_conc, c.ans, 90.0f64.min(colw), &tb);
+                // never under 8 px as drawn: past that the name is cut with an ellipsis (the key has the full name)
+                let cell = |t: String| Lab { x: 0.0, y: 0.0, size: 11.0, anchor: "middle", text: t, lf: c.lfr }.fit(colw + 5.0, false);
+                let (la, lb) = (cell(ta), cell(tb));
+                field(d, xa, y, la.size, "middle", "400", &c.lab_conc, c.ans, 90.0f64.min(colw), &la.text);
+                field(d, xb, y, lb.size, "middle", "400", &c.lab_conc, c.ans, 90.0f64.min(colw), &lb.text);
             }
         }
     }

@@ -780,3 +780,27 @@ fn leaders_come_in_clear_of_the_blank_water_boxes_of_a_plant_cell() {
         assert!(g.t_vac.1 > box_bot + 2.0, "vacuole leader at {} runs through the box {box_bot}", g.t_vac.1);
     }
 }
+
+#[test]
+fn concentration_columns_never_go_under_8_px_even_with_the_longest_names() {
+    let long = "Polyvinylpyrrolidone solution (very long name)";
+    for scene in ["Red blood cell", "Plant cell", "Split beaker", "Dialysis bag"] {
+        for size in ["Medium", "Large"] {
+            for show in ["Start", "Three-up"] {
+                let svg = render_of(&[s("scene", scene), s("label_size", size), s("show", show), s("s1_name", long), b("s2_on", true), s("s2_name", "Ethylenediaminetetraacetic acid"), b("answer_key", false)]);
+                let what = format!("{scene} {size} {show}");
+                assert_inside_page(&svg, &what);
+                let mut seen = 0;
+                for t in svg.split("<text ").skip(1) {
+                    let body = t.split('>').nth(1).unwrap_or("");
+                    if body.contains("Polyvinyl") || body.contains("Ethylene") {
+                        seen += 1;
+                        let fs: f64 = t.split("font-size=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+                        assert!(fs >= 7.95, "{what}: {body:?} drawn at {fs}");
+                    }
+                }
+                assert!(seen >= 2, "{what}");
+            }
+        }
+    }
+}
