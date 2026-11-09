@@ -612,7 +612,7 @@ fn the_steep_fall_is_read_off_each_temperature_curve_as_drawn_and_the_key_and_no
         let p = with(&l);
         let st = settings(&p);
         let c = st.conds[0];
-        let drop = drop_x(&st, &c);
+        let drop = drop_x(&st, &c).unwrap();
         // read off the drawn curve: where it falls below 95 % of its own top, past the peak
         let svg = svg_of(&l);
         let top = st.rate_at(&c, opt_x(&st, &c));
@@ -640,7 +640,7 @@ fn the_steep_fall_is_read_off_each_temperature_curve_as_drawn_and_the_key_and_no
         let p = with(&[s("rg_graph", GRAPHS[2]), i("rg_curves", 1), f("c1_light", light), f("c1_co2", 0.1), s("rg_rate", RATES[1])]);
         let st = settings(&p);
         let c = st.conds[0];
-        let drop = drop_x(&st, &c);
+        let drop = drop_x(&st, &c).unwrap();
         let slope = |t: f64| (st.rate_at(&c, t + 0.1) - st.rate_at(&c, t - 0.1)) / 0.2;
         let top = (opt_x(&st, &c), st.rate_at(&c, opt_x(&st, &c))).1;
         assert!(drop > 35.0, "light {light}: {drop}");
@@ -773,5 +773,39 @@ fn letters_keep_clear_of_the_direction_arrows_on_co2_against_o2() {
             // and no arrowhead is drawn over a lettered point's dot
             for h in &heads { for d in &dots { assert!(!(d.0 > h.0 - 5.0 && d.0 < h.2 + 5.0 && d.1 > h.1 - 5.0 && d.1 < h.3 + 5.0), "an arrowhead over a dot at {d:?} ({l:?})"); } }
         }
+    }
+}
+
+#[test]
+fn in_dim_light_the_temperature_compensation_point_is_found_below_the_optimum_and_marked() {
+    // light 5 at 0.1 % CO2 is the light compensation point at 25 degrees C, so the net rate crosses zero there; the
+    // search used to start at the optimum (about 30 degrees C), past the crossing, and found nothing
+    for light in [3.0, 5.0, 7.0, 80.0] {
+        let t = temp_comp(light, 0.1).unwrap_or_else(|| panic!("light {light}: no compensation point"));
+        assert!(close(net(light, 0.1, t), 0.0, 1e-9), "light {light}: {t}");
+        // positive just below, negative just above: respiration overtakes as it warms
+        assert!(net(light, 0.1, t - 0.5) > 0.0 && net(light, 0.1, t + 0.5) < 0.0, "light {light}: {t}");
+        if light <= 7.0 { assert!(t < t_opt(), "light {light}: {t}"); }
+        let l = [s("rg_graph", GRAPHS[2]), i("rg_curves", 1), f("c1_light", light), f("c1_co2", 0.1), s("rg_rate", RATES[1]), s("rg_mark", "Compensation point")];
+        let st = settings(&with(&l));
+        let key = readouts(&st, 50.0);
+        assert!(key[0].contains(&format!("Above about {} \u{b0}C respiration is faster", sig2(t))), "light {light}: {}", key[0]);
+        let svg = svg_of(&l);
+        assert!(ink(&svg).iter().any(|w| w.0 == "Compensation point" || w.0 == "Compensation"), "light {light}: the point is labelled");
+        assert!(!svg.contains("is not on the x-axis shown"), "light {light}");
+    }
+    // in the dark the net rate is never above zero: no compensation point
+    assert!(temp_comp(0.0, 0.1).is_none());
+}
+
+#[test]
+fn with_no_light_the_temperature_key_says_there_is_no_photosynthesis_and_nothing_denatures() {
+    for rate in [RATES[0], RATES[1]] {
+        let l = [s("rg_graph", GRAPHS[2]), i("rg_curves", 1), f("c1_light", 0.0), s("rg_rate", rate), s("rg_mark", "Limiting factors")];
+        let st = settings(&with(&l));
+        assert!(drop_x(&st, &st.conds[0]).is_none());
+        let key = readouts(&st, 50.0);
+        assert!(key[0].contains("no photosynthesis") && !key[0].contains("falls steeply") && !key[0].contains("denature"), "{rate}: {}", key[0]);
+        assert!(!ink(&svg_of(&l)).iter().any(|w| w.0.contains("denaturing")), "{rate}: no Enzymes denaturing label on a curve with nothing to fall");
     }
 }

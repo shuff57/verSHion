@@ -277,8 +277,16 @@ pub fn light_comp(co2: f64, t: f64) -> Option<f64> { root(0.0, 1e5, |l| net(l, c
 /// The CO2 compensation point (%): the CO2 at which gross photosynthesis equals respiration at this light.
 pub fn co2_comp(light: f64, t: f64) -> Option<f64> { root(0.0, 20.0, |c| net(light, c, t)) }
 
-/// The high-temperature compensation point: above the optimum, where respiration catches up with photosynthesis.
-pub fn temp_comp(light: f64, co2: f64) -> Option<f64> { root(t_opt(), 80.0, |t| -net(light, co2, t)) }
+/// The high-temperature compensation point: past the net rate's peak, where respiration catches up with
+/// photosynthesis. The search starts at that peak, not at the optimum: in dim light the light-limited rate barely
+/// rises with temperature while respiration doubles every 10 degrees, so the net rate peaks and crosses zero well
+/// below the optimum (light 5 at about 25 degrees C). None when the net rate is never above zero.
+pub fn temp_comp(light: f64, co2: f64) -> Option<f64> {
+    let mut best = (t_opt(), net(light, co2, t_opt()));
+    for k in 0..=800 { let t = k as f64 * 0.1; let v = net(light, co2, t); if v > best.1 { best = (t, v); } }
+    if best.1 <= 0.0 { return None; }
+    root(best.0, 80.0, |t| -net(light, co2, t))
+}
 
 /// The CO2 (%) in a sealed chamber over `tmax` minutes, starting at `c0`, the light off from `off` on: Runge-Kutta
 /// steps of dC/dt = -K_CH net(light, C, T), with a step boundary exactly where the light goes off.
@@ -491,8 +499,9 @@ pub const STEEP: f64 = 0.05;
 /// past the optimum; a dim-light curve stays flat (light limits it) until the enzymes' loss catches up with the light
 /// limit, a few degrees later (light 15: about 39 degrees C), so this is read off each curve, not taken from T_DENAT.
 /// On a net graph respiration also takes a little more each degree, a gentle slope all the way; the steep fall is
-/// the photosynthesis part plunging, so the drop is read off that part (gross, in the units drawn).
-pub fn drop_x(s: &S, c: &Cond) -> f64 {
+/// the photosynthesis part plunging, so the drop is read off that part (gross, in the units drawn). None when the
+/// curve never falls steeply below 50 degrees C (in the dark there is no photosynthesis to fall).
+pub fn drop_x(s: &S, c: &Cond) -> Option<f64> {
     let r = |t: f64| { let (l, co2, tt) = s.at(c, t); s.shown_rate(gross(l, co2, tt)) };
     let mut to = 0.0;
     let mut top = f64::NEG_INFINITY;
@@ -501,10 +510,10 @@ pub fn drop_x(s: &S, c: &Cond) -> f64 {
     let h = 0.05;
     let mut t = to;
     while t < 50.0 {
-        if (r(t + h) - r(t - h)) / (2.0 * h) < -STEEP * top { return t; }
+        if (r(t + h) - r(t - h)) / (2.0 * h) < -STEEP * top { return Some(t); }
         t += 0.01;
     }
-    50.0
+    None
 }
 
 /// Which factor limits the plateau of curve `c`, as a label.
@@ -967,11 +976,12 @@ pub fn render(p: &Params) -> Out {
                     let tr = 0.55 * to;
                     if pmax(c0, tr) < 0.9 * ALPHA * l0 { deferred.push(((px(tr), py(s.rate_at(c, tr))), "Temperature limiting".into(), vec![300.0, 240.0, 330.0], Some(0))); }
                     // on the steep fall of this curve as drawn, a little past where it starts
-                    let td = drop_x(&s, c);
-                    let tf = (td + 2.5).min(x_ax.hi - 1.0);
-                    deferred.push(((px(tf), py(s.rate_at(c, tf))), "Enzymes denaturing".into(), vec![330.0, 0.0, 30.0, 300.0], Some(0)));
-                    // the label starts where the steep fall does, so it is never read against the flat part before it
-                    min_x.push(("Enzymes denaturing", px(td) - 2.0));
+                    if let Some(td) = drop_x(&s, c) {
+                        let tf = (td + 2.5).min(x_ax.hi - 1.0);
+                        deferred.push(((px(tf), py(s.rate_at(c, tf))), "Enzymes denaturing".into(), vec![330.0, 0.0, 30.0, 300.0], Some(0)));
+                        // the label starts where the steep fall does, so it is never read against the flat part before it
+                        min_x.push(("Enzymes denaturing", px(td) - 2.0));
+                    }
                     for (i, c) in s.conds.iter().enumerate() {
                         if ALPHA * c.light < 0.9 * pmax(c.co2, t_opt()) {
                             let tl = t_opt() - 3.0;
@@ -1299,11 +1309,14 @@ pub fn readouts(s: &S, x_end: f64) -> Vec<String> {
                 let comp = if s.net || s.mark == "Compensation point" { temp_comp(c.light, c.co2).map_or(String::new(), |t| format!(" Above about {} \u{b0}C respiration is faster than photosynthesis (the compensation point is there).", sig2(t))) } else { String::new() };
                 let (to, r) = (sig2(to), sig2(s.rate_at(c, to)));
                 // where this curve, as drawn, starts to fall steeply
-                let dn = sig2(drop_x(s, c));
-                match (flat, s.net) {
-                    (false, _) => format!("{}the rate is highest at about {to} \u{b0}C ({r} {ru}); below that, enzymes work more slowly; above it the rate falls, and above about {dn} \u{b0}C it falls steeply as enzymes denature.{comp}", tag(i)),
-                    (true, false) => format!("{}light limits the rate over most of the range, so the curve is flat-topped at about {r} {ru}; it falls steeply above about {dn} \u{b0}C as enzymes denature.{comp}", tag(i)),
-                    (true, true) => format!("{}light limits photosynthesis over most of the range, so the net rate is highest at about {to} \u{b0}C ({r} {ru}); warmer than that respiration, which doubles every 10 \u{b0}C, takes more of it, and above about {dn} \u{b0}C enzymes denature.{comp}", tag(i)),
+                match drop_x(s, c).map(sig2) {
+                    // no light, so no photosynthesis: nothing rises or falls but respiration
+                    None => if s.net { format!("{}with no light there is no photosynthesis, so the net rate is respiration alone, below zero and falling as respiration doubles every 10 \u{b0}C.", tag(i)) } else { format!("{}with no light there is no photosynthesis: the rate is zero at every temperature.", tag(i)) },
+                    Some(dn) => match (flat, s.net) {
+                        (false, _) => format!("{}the rate is highest at about {to} \u{b0}C ({r} {ru}); below that, enzymes work more slowly; above it the rate falls, and above about {dn} \u{b0}C it falls steeply as enzymes denature.{comp}", tag(i)),
+                        (true, false) => format!("{}light limits the rate over most of the range, so the curve is flat-topped at about {r} {ru}; it falls steeply above about {dn} \u{b0}C as enzymes denature.{comp}", tag(i)),
+                        (true, true) => format!("{}light limits photosynthesis over most of the range, so the net rate is highest at about {to} \u{b0}C ({r} {ru}); warmer than that respiration, which doubles every 10 \u{b0}C, takes more of it, and above about {dn} \u{b0}C enzymes denature.{comp}", tag(i)),
+                    },
                 }
             }
             G::Chamber => {
