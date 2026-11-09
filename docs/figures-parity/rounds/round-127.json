@@ -1,0 +1,35 @@
+{
+ "round": 127,
+ "figure": "bar-chart",
+ "capability": "cap-04a",
+ "hypothesis": "Batch 4 bar-chart: cap-04a; evidence changes:{\"data\":\"Treatment, Height, SEM\\nNone, 12.4, 1.1\\nFertilizer A, 18.9, 1.6\"}",
+ "started_at": "2026-11-09T11:44:56",
+ "git": "7529bc6",
+ "before": {
+  "figure": 62.1,
+  "pooled": 85.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T11:44:58",
+ "after": {
+  "figure": 65.5,
+  "pooled": 85.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"data\":\"Treatment, Height, SEM\\nNone, 12.4, 1.1\\nFertilizer A, 18.9, 1.6\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bar-chart/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bar-chart/c8fb178b7d90839f.png"
+   }
+  ]
+ },
+ "checker": "pass: error bars from value minus to value plus the error on the drawn axis",
+ "result": "hit",
+ "evidence": "bar tests (4,320 old states byte-identical; stacked totals and error bars read off the drawing; group names Errors/SD/SE kept, 7989da2); census unchanged; task run reference 22 typed (7 with a paste), ours 8, before not possible",
+ "next": "bar-chart (remaining)"
+}

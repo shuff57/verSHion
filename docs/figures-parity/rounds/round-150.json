@@ -1,0 +1,37 @@
+{
+ "round": 150,
+ "figure": "motion-map",
+ "capability": "cap-01a",
+ "hypothesis": "Batch 4 motion-map: cap-01a; evidence changes:{\"n\":5,\"s5_kind\":\"Constant velocity back\",\"s5_v\":4.0}",
+ "started_at": "2026-11-09T11:45:51",
+ "git": "7529bc6",
+ "before": {
+  "figure": 40.2,
+  "pooled": 86.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T11:45:53",
+ "after": {
+  "figure": 46.0,
+  "pooled": 86.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"n\":5,\"s5_kind\":\"Constant velocity back\",\"s5_v\":4.0}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/motion-map/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/motion-map/2e9bc6449607bc24.png"
+   }
+  ]
+ },
+ "checker": "pass: segments added, a fifth carries on a new row",
+ "result": "hit",
+ "evidence": "motion_map tests (physics read off the drawn SVG; 5,184 old saved specs byte-identical but 10 moving 0.01 px; old share links converted at load; a long motion drawn to its end, 7529bc6); census unchanged; task run reference 6, ours 6, before not possible",
+ "next": "motion-map (remaining)"
+}

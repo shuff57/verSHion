@@ -21,8 +21,8 @@
    "id": "cap-01c",
    "text": "Add a third or later series",
    "class": "core",
-   "evidence": "",
-   "note": "verSHion takes at most two counts per category (bar.rs refuses a third)"
+   "evidence": "changes:{\"data\":\"Year, Walk, Bus, Car\\nYear 7, 12, 10, 8\\nYear 8, 15, 8, 6\"}",
+   "note": "Built in batch 4, round 124 (2026-11-08). verSHion takes at most two counts per category (bar.rs refuses a third)"
   },
   {
    "id": "cap-01d",
@@ -42,8 +42,8 @@
    "id": "cap-02b",
    "text": "Stack several series instead of placing them side by side",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"data\":\"Way, A, B\\nWalk, 12, 10\\nCar, 9, 11\",\"layout\":\"Stacked\"}",
+   "note": "Built in batch 4, round 125 (2026-11-08)."
   },
   {
    "id": "cap-02c",
@@ -63,29 +63,29 @@
    "id": "cap-03b",
    "text": "Choose to write the values inside the bars",
    "class": "control",
-   "evidence": "",
-   "note": "no placement choice; verSHion decides by fit"
+   "evidence": "changes:values_at=Inside",
+   "note": "Built in batch 4, round 126 (2026-11-08). no placement choice; verSHion decides by fit"
   },
   {
    "id": "cap-04a",
    "text": "Draw error bars from a plus-or-minus value for each bar",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"data\":\"Treatment, Height, SEM\\nNone, 12.4, 1.1\\nFertilizer A, 18.9, 1.6\"}",
+   "note": "Built in batch 4, round 127 (2026-11-08)."
   },
   {
    "id": "cap-04b",
    "text": "Draw the error bars with or without crossbars",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"data\":\"Treatment, Height, SEM\\nNone, 12.4, 1.1\\nFertilizer A, 18.9, 1.6\",\"err_caps\":false}",
+   "note": "Built in batch 4, round 128 (2026-11-08)."
   },
   {
    "id": "cap-04c",
    "text": "Add a note under the graph saying what the error bars show",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"data\":\"Treatment, Height, SEM\\nNone, 12.4, 1.1\\nFertilizer A, 18.9, 1.6\",\"err_note\":\"Error bars show \\u00b11 SEM\"}",
+   "note": "Built in batch 4, round 129 (2026-11-08)."
   },
   {
    "id": "cap-05a",
@@ -105,22 +105,22 @@
    "id": "cap-05c",
    "text": "Use white bars for students to shade",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:look=White",
+   "note": "Built in batch 4, round 130 (2026-11-08)."
   },
   {
    "id": "cap-05d",
    "text": "Pick the fill for each series",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:fill_list=Red",
+   "note": "Built in batch 4, round 131 (2026-11-08)."
   },
   {
    "id": "cap-05e",
    "text": "Place the key on the right or below the graph",
    "class": "control",
-   "evidence": "",
-   "note": "verSHion draws a legend above the plot for two groups, with no position choice"
+   "evidence": "changes:{\"data\":\"Way, A, B\\nWalk, 12, 10\\nCar, 9, 11\",\"key\":\"Right\"}",
+   "note": "Built in batch 4, round 132 (2026-11-08). verSHion draws a legend above the plot for two groups, with no position choice"
   },
   {
    "id": "cap-06a",
@@ -147,8 +147,8 @@
    "id": "cap-06d",
    "text": "Put a blank line in place of a title for students to write",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:title_kind=Blank line",
+   "note": "Built in batch 4, round 133 (2026-11-08)."
   },
   {
    "id": "cap-07a",
@@ -161,15 +161,15 @@
    "id": "cap-07b",
    "text": "Type the value axis count-by",
    "class": "control",
-   "evidence": "",
-   "note": "the step is always chosen automatically"
+   "evidence": "changes:scale_step=2.0",
+   "note": "Built in batch 4, round 134 (2026-11-08). the step is always chosen automatically"
   },
   {
    "id": "cap-07c",
    "text": "Choose which gridlines are numbered (every line, every 2nd, 5th, 10th, or none)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:numbers=Every 2nd line",
+   "note": "Built in batch 4, round 135 (2026-11-08)."
   },
   {
    "id": "cap-07d",
@@ -182,15 +182,15 @@
    "id": "cap-07e",
    "text": "Make the gridlines light, standard or bold",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:grid_weight=Bold",
+   "note": "Built in batch 4, round 136 (2026-11-08)."
   },
   {
    "id": "cap-07f",
    "text": "Add minor gridlines splitting each block into 2, 4 or 5",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:minor=4 per block",
+   "note": "Built in batch 4, round 137 (2026-11-08)."
   }
  ]
 }

@@ -1,0 +1,37 @@
+{
+ "round": 124,
+ "figure": "bar-chart",
+ "capability": "cap-01c",
+ "hypothesis": "Batch 4 bar-chart: cap-01c; evidence changes:{\"data\":\"Year, Walk, Bus, Car\\nYear 7, 12, 10, 8\\nYear 8, 15, 8, 6\"}",
+ "started_at": "2026-11-09T11:44:46",
+ "git": "7529bc6",
+ "before": {
+  "figure": 49.4,
+  "pooled": 85.0
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 2 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T11:44:51",
+ "after": {
+  "figure": 55.2,
+  "pooled": 85.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"data\":\"Year, Walk, Bus, Car\\nYear 7, 12, 10, 8\\nYear 8, 15, 8, 6\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bar-chart/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bar-chart/d3431e9f8c031061.png"
+   }
+  ]
+ },
+ "checker": "pass: three groups side by side named from the headings",
+ "result": "hit",
+ "evidence": "bar tests (4,320 old states byte-identical; stacked totals and error bars read off the drawing; group names Errors/SD/SE kept, 7989da2); census unchanged; task run reference 22 typed (7 with a paste), ours 8, before not possible",
+ "next": "bar-chart (remaining)"
+}

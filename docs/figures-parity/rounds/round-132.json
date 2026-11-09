@@ -1,0 +1,35 @@
+{
+ "round": 132,
+ "figure": "bar-chart",
+ "capability": "cap-05e",
+ "hypothesis": "Batch 4 bar-chart: cap-05e; evidence changes:{\"data\":\"Way, A, B\\nWalk, 12, 10\\nCar, 9, 11\",\"key\":\"Right\"}",
+ "started_at": "2026-11-09T11:45:08",
+ "git": "7529bc6",
+ "before": {
+  "figure": 79.3,
+  "pooled": 85.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T11:45:10",
+ "after": {
+  "figure": 82.8,
+  "pooled": 85.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"data\":\"Way, A, B\\nWalk, 12, 10\\nCar, 9, 11\",\"key\":\"Right\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bar-chart/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bar-chart/b7071e45c9a0d345.png"
+   }
+  ]
+ },
+ "checker": "pass: key at the right",
+ "result": "hit",
+ "evidence": "bar tests (4,320 old states byte-identical; stacked totals and error bars read off the drawing; group names Errors/SD/SE kept, 7989da2); census unchanged; task run reference 22 typed (7 with a paste), ours 8, before not possible",
+ "next": "bar-chart (remaining)"
+}

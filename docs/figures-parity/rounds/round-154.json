@@ -1,0 +1,35 @@
+{
+ "round": 154,
+ "figure": "motion-map",
+ "capability": "cap-03a",
+ "hypothesis": "Batch 4 motion-map: cap-03a; evidence changes:on_dots=Times",
+ "started_at": "2026-11-09T11:46:00",
+ "git": "7529bc6",
+ "before": {
+  "figure": 63.2,
+  "pooled": 86.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T11:46:02",
+ "after": {
+  "figure": 66.7,
+  "pooled": 87.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:on_dots=Times",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/motion-map/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/motion-map/97559119a4e8baff.png"
+   }
+  ]
+ },
+ "checker": "pass: times under the dots",
+ "result": "hit",
+ "evidence": "motion_map tests (physics read off the drawn SVG; 5,184 old saved specs byte-identical but 10 moving 0.01 px; old share links converted at load; a long motion drawn to its end, 7529bc6); census unchanged; task run reference 6, ours 6, before not possible",
+ "next": "motion-map (remaining)"
+}

@@ -7,49 +7,49 @@
    "id": "cap-01a",
    "text": "Build the motion from up to six segments in any order",
    "class": "core",
-   "evidence": "",
-   "note": "Ours is a fixed sequence: speed up, constant velocity, slow down, rest."
+   "evidence": "changes:{\"n\":5,\"s5_kind\":\"Constant velocity back\",\"s5_v\":4.0}",
+   "note": "Built in batch 4, round 150 (2026-11-08). Ours is a fixed sequence: speed up, constant velocity, slow down, rest."
   },
   {
    "id": "cap-01b",
    "text": "Set each segment at rest, constant velocity forward or back, speeding up or slowing down",
    "class": "core",
-   "evidence": "",
-   "note": "Wider form of cap-01f: only one direction for the whole motion, and the four phases are fixed in order (a phase can only be shortened)."
+   "evidence": "changes:s2_kind=Constant velocity back",
+   "note": "Built in batch 4, round 151 (2026-11-08). Wider form of cap-01f: only one direction for the whole motion, and the four phases are fixed in order (a phase can only be shortened)."
   },
   {
    "id": "cap-01c",
    "text": "Type how long each segment lasts",
    "class": "core",
-   "evidence": "changes:cruise=6.0",
+   "evidence": "changes:s2_t=6.0",
    "note": "Narrow form of cap-01a/01b: durations of our four fixed phases (speed up, constant, slow down, rest)."
   },
   {
    "id": "cap-01d",
    "text": "Type each segment's speed",
    "class": "core",
-   "evidence": "",
-   "note": "Wider form of cap-01g: we type one acceleration for the whole motion."
+   "evidence": "changes:s2_v=6.0",
+   "note": "Built in batch 4, round 152 (2026-11-08). Wider form of cap-01g: we type one acceleration for the whole motion."
   },
   {
    "id": "cap-01e",
    "text": "Set where the motion starts",
    "class": "core",
-   "evidence": "",
-   "note": "No starting position parameter."
+   "evidence": "changes:x0=10.0",
+   "note": "Built in batch 4, round 153 (2026-11-08). No starting position parameter."
   },
   {
    "id": "cap-01f",
    "text": "Run the whole motion forward or back",
    "class": "core",
-   "evidence": "changes:dir=Back",
+   "evidence": "changes:{\"s1_dir\":\"Back\",\"s2_kind\":\"Constant velocity back\"}",
    "note": "Narrow form of cap-01b: one direction for every segment."
   },
   {
    "id": "cap-01g",
    "text": "Set how fast it speeds up and slows down (one acceleration for the whole motion)",
    "class": "core",
-   "evidence": "changes:accel=2.0",
+   "evidence": "changes:{\"s1_v\":8.0,\"s2_v\":8.0}",
    "note": "Narrow form of cap-01d."
   },
   {
@@ -63,22 +63,22 @@
    "id": "cap-03a",
    "text": "Write the times under the dots",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:on_dots=Times",
+   "note": "Built in batch 4, round 154 (2026-11-08)."
   },
   {
    "id": "cap-03b",
    "text": "Put a letter on every dot",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:on_dots=A letter on every dot",
+   "note": "Built in batch 4, round 155 (2026-11-08)."
   },
   {
    "id": "cap-03c",
    "text": "Put the motion graph's letters at the segment ends",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:on_dots=Letters at the segment ends",
+   "note": "Built in batch 4, round 156 (2026-11-08)."
   },
   {
    "id": "cap-04a",
@@ -91,8 +91,8 @@
    "id": "cap-04b",
    "text": "Draw an acceleration arrow (or a = 0) above each segment",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:acc_arrows=true",
+   "note": "Built in batch 4, round 157 (2026-11-08)."
   },
   {
    "id": "cap-04c",
@@ -105,15 +105,15 @@
    "id": "cap-05a",
    "text": "Draw the total displacement as an arrow under the number line",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:disp=true",
+   "note": "Built in batch 4, round 158 (2026-11-08)."
   },
   {
    "id": "cap-05b",
    "text": "Write the displacement's label, a blank line, or leave it off",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"disp\":true,\"disp_mode\":\"Blank line\"}",
+   "note": "Built in batch 4, round 159 (2026-11-08)."
   },
   {
    "id": "cap-06a",
@@ -126,15 +126,15 @@
    "id": "cap-06b",
    "text": "Mark the origin",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:origin=true",
+   "note": "Built in batch 4, round 160 (2026-11-08)."
   },
   {
    "id": "cap-07a",
    "text": "Label the object (text, blank line or none)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:obj_mode=Text",
+   "note": "Built in batch 4, round 161 (2026-11-08)."
   },
   {
    "id": "cap-07b",
@@ -147,8 +147,8 @@
    "id": "cap-07c",
    "text": "Print an answer key under the figure",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:key=true",
+   "note": "Built in batch 4, round 162 (2026-11-08)."
   },
   {
    "id": "cap-07d",
@@ -161,8 +161,8 @@
    "id": "cap-07e",
    "text": "Color for slides",
    "class": "control",
-   "evidence": "",
-   "note": "No color parameter on our motion map."
+   "evidence": "changes:color=true",
+   "note": "Built in batch 4, round 163 (2026-11-08). No color parameter on our motion map."
   },
   {
    "id": "cap-08",

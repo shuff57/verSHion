@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-09T19:07:18+00:00",
-  "src_mtime": 1794251159.4035099,
-  "git": "2caba4f",
+  "built_at": "2026-11-09T19:45:51+00:00",
+  "src_mtime": 1794253197.2043436,
+  "git": "7529bc6",
   "figures": 191
  },
  "figures": {
@@ -3836,43 +3836,234 @@
    "blurb": "Dots along a number line, one per tick of the clock, each moving dot with its velocity arrow.",
    "params": [
     {
-     "key": "up",
-     "label": "Speeding up for (s)",
+     "key": "n",
+     "label": "Number of segments",
+     "kind": "int",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "x0",
+     "label": "Starting position (m)",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "s1_kind",
+     "label": "Segment 1 motion",
+     "kind": "choice",
+     "options": [
+      "At rest",
+      "Constant velocity forward",
+      "Constant velocity back",
+      "Speeding up",
+      "Slowing down"
+     ],
+     "default": "Speeding up"
+    },
+    {
+     "key": "s1_v",
+     "label": "Segment 1 speed (m/s)",
      "kind": "float",
      "options": [],
      "default": "4.0"
     },
     {
-     "key": "accel",
-     "label": "Acceleration (m/s²)",
-     "kind": "float",
-     "options": [],
-     "default": "1.0"
-    },
-    {
-     "key": "cruise",
-     "label": "Constant velocity for (s)",
+     "key": "s1_t",
+     "label": "Segment 1 lasts (s)",
      "kind": "float",
      "options": [],
      "default": "4.0"
     },
     {
-     "key": "down",
-     "label": "Slowing down for (s)",
+     "key": "s1_dir",
+     "label": "Segment 1 direction",
+     "kind": "choice",
+     "options": [
+      "Forward",
+      "Back"
+     ],
+     "default": "Forward"
+    },
+    {
+     "key": "s2_kind",
+     "label": "Segment 2 motion",
+     "kind": "choice",
+     "options": [
+      "At rest",
+      "Constant velocity forward",
+      "Constant velocity back",
+      "Speeding up",
+      "Slowing down"
+     ],
+     "default": "Constant velocity forward"
+    },
+    {
+     "key": "s2_v",
+     "label": "Segment 2 speed (m/s)",
      "kind": "float",
      "options": [],
      "default": "4.0"
     },
     {
-     "key": "rest",
-     "label": "At rest for (s)",
+     "key": "s2_t",
+     "label": "Segment 2 lasts (s)",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "s2_dir",
+     "label": "Segment 2 direction",
+     "kind": "choice",
+     "options": [
+      "Forward",
+      "Back"
+     ],
+     "default": "Forward"
+    },
+    {
+     "key": "s3_kind",
+     "label": "Segment 3 motion",
+     "kind": "choice",
+     "options": [
+      "At rest",
+      "Constant velocity forward",
+      "Constant velocity back",
+      "Speeding up",
+      "Slowing down"
+     ],
+     "default": "Slowing down"
+    },
+    {
+     "key": "s3_v",
+     "label": "Segment 3 speed (m/s)",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "s3_t",
+     "label": "Segment 3 lasts (s)",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "s3_dir",
+     "label": "Segment 3 direction",
+     "kind": "choice",
+     "options": [
+      "Forward",
+      "Back"
+     ],
+     "default": "Forward"
+    },
+    {
+     "key": "s4_kind",
+     "label": "Segment 4 motion",
+     "kind": "choice",
+     "options": [
+      "At rest",
+      "Constant velocity forward",
+      "Constant velocity back",
+      "Speeding up",
+      "Slowing down"
+     ],
+     "default": "At rest"
+    },
+    {
+     "key": "s4_v",
+     "label": "Segment 4 speed (m/s)",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "s4_t",
+     "label": "Segment 4 lasts (s)",
      "kind": "float",
      "options": [],
      "default": "3.0"
     },
     {
-     "key": "dir",
-     "label": "Direction",
+     "key": "s4_dir",
+     "label": "Segment 4 direction",
+     "kind": "choice",
+     "options": [
+      "Forward",
+      "Back"
+     ],
+     "default": "Forward"
+    },
+    {
+     "key": "s5_kind",
+     "label": "Segment 5 motion",
+     "kind": "choice",
+     "options": [
+      "At rest",
+      "Constant velocity forward",
+      "Constant velocity back",
+      "Speeding up",
+      "Slowing down"
+     ],
+     "default": "At rest"
+    },
+    {
+     "key": "s5_v",
+     "label": "Segment 5 speed (m/s)",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "s5_t",
+     "label": "Segment 5 lasts (s)",
+     "kind": "float",
+     "options": [],
+     "default": "2.0"
+    },
+    {
+     "key": "s5_dir",
+     "label": "Segment 5 direction",
+     "kind": "choice",
+     "options": [
+      "Forward",
+      "Back"
+     ],
+     "default": "Forward"
+    },
+    {
+     "key": "s6_kind",
+     "label": "Segment 6 motion",
+     "kind": "choice",
+     "options": [
+      "At rest",
+      "Constant velocity forward",
+      "Constant velocity back",
+      "Speeding up",
+      "Slowing down"
+     ],
+     "default": "At rest"
+    },
+    {
+     "key": "s6_v",
+     "label": "Segment 6 speed (m/s)",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "s6_t",
+     "label": "Segment 6 lasts (s)",
+     "kind": "float",
+     "options": [],
+     "default": "3.0"
+    },
+    {
+     "key": "s6_dir",
+     "label": "Segment 6 direction",
      "kind": "choice",
      "options": [
       "Forward",
@@ -3888,6 +4079,36 @@
      "default": "1.0"
     },
     {
+     "key": "on_dots",
+     "label": "On the dots",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Times",
+      "A letter on every dot",
+      "Letters at the segment ends"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "obj_mode",
+     "label": "Object",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "obj",
+     "label": "Object label",
+     "kind": "text",
+     "options": [],
+     "default": "cart"
+    },
+    {
      "key": "arrows",
      "label": "Arrows",
      "kind": "choice",
@@ -3898,11 +4119,50 @@
      "default": "Velocity"
     },
     {
+     "key": "acc_arrows",
+     "label": "Acceleration for each segment",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "disp",
+     "label": "Total displacement",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "disp_mode",
+     "label": "Displacement label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "disp_lab",
+     "label": "Displacement label text",
+     "kind": "text",
+     "options": [],
+     "default": "Δx"
+    },
+    {
      "key": "numbers",
      "label": "Numbers on the number line",
      "kind": "bool",
      "options": [],
      "default": "true"
+    },
+    {
+     "key": "origin",
+     "label": "Mark the origin",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "xlabel",
@@ -3912,11 +4172,32 @@
      "default": "x (m)"
     },
     {
+     "key": "old_scale",
+     "label": "Keep the first version's scale",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
      "key": "title",
      "label": "Chart title",
      "kind": "text",
      "options": [],
      "default": ""
+    },
+    {
+     "key": "key",
+     "label": "Answer key under the figure",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "color",
+     "label": "Color (for slides)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "label_size",
@@ -27889,6 +28170,7 @@
      "kind": "choice",
      "options": [
       "Grouped table",
+      "Cumulative table",
       "Raw values"
      ],
      "default": "Grouped table"
@@ -27899,6 +28181,13 @@
      "kind": "long",
      "options": [],
      "default": "40, 50, 3\\n50, 60, 7\\n60, 70, 12\\n70, 80, 15\\n80, 90, 9\\n90, 100, 4"
+    },
+    {
+     "key": "cum_table",
+     "label": "Upper boundary, cumulative frequency",
+     "kind": "long",
+     "options": [],
+     "default": "40, 0\\n50, 3\\n60, 10\\n70, 22\\n80, 37\\n90, 46\\n100, 50"
     },
     {
      "key": "data",
@@ -27939,6 +28228,34 @@
      "default": "In the class to its right"
     },
     {
+     "key": "points",
+     "label": "Points",
+     "kind": "choice",
+     "options": [
+      "Dots",
+      "Crosses"
+     ],
+     "default": "Dots"
+    },
+    {
+     "key": "join",
+     "label": "Join the points",
+     "kind": "choice",
+     "options": [
+      "Straight lines",
+      "Smooth curve",
+      "None"
+     ],
+     "default": "Straight lines"
+    },
+    {
+     "key": "from_zero",
+     "label": "Start from 0 at the lowest boundary",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
      "key": "y_axis",
      "label": "Vertical axis",
      "kind": "choice",
@@ -27975,6 +28292,17 @@
      "default": "75.0"
     },
     {
+     "key": "read_label",
+     "label": "The reading shows",
+     "kind": "choice",
+     "options": [
+      "Value",
+      "Lines only",
+      "Blank line"
+     ],
+     "default": "Value"
+    },
+    {
      "key": "marks",
      "label": "Mark",
      "kind": "choice",
@@ -27984,6 +28312,39 @@
       "Median and quartiles"
      ],
      "default": "None"
+    },
+    {
+     "key": "median_label",
+     "label": "The median shows",
+     "kind": "choice",
+     "options": [
+      "Value",
+      "Lines only",
+      "Blank line"
+     ],
+     "default": "Value"
+    },
+    {
+     "key": "q1_label",
+     "label": "The lower quartile shows",
+     "kind": "choice",
+     "options": [
+      "Value",
+      "Lines only",
+      "Blank line"
+     ],
+     "default": "Value"
+    },
+    {
+     "key": "q3_label",
+     "label": "The upper quartile shows",
+     "kind": "choice",
+     "options": [
+      "Value",
+      "Lines only",
+      "Blank line"
+     ],
+     "default": "Value"
     },
     {
      "key": "decimals",
@@ -28007,11 +28368,128 @@
      "default": "true"
     },
     {
+     "key": "x_auto",
+     "label": "Horizontal axis fits the data",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "x_min",
+     "label": "Horizontal axis from",
+     "kind": "float",
+     "options": [],
+     "default": "40.0"
+    },
+    {
+     "key": "x_max",
+     "label": "Horizontal axis to",
+     "kind": "float",
+     "options": [],
+     "default": "100.0"
+    },
+    {
+     "key": "x_step",
+     "label": "Horizontal count-by",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "x_numbers",
+     "label": "Horizontal numbers",
+     "kind": "choice",
+     "options": [
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Every line"
+    },
+    {
+     "key": "y_auto",
+     "label": "Vertical axis fits the data",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "y_min",
+     "label": "Vertical axis from",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "y_max",
+     "label": "Vertical axis to",
+     "kind": "float",
+     "options": [],
+     "default": "50.0"
+    },
+    {
+     "key": "y_step",
+     "label": "Vertical count-by",
+     "kind": "float",
+     "options": [],
+     "default": "5.0"
+    },
+    {
+     "key": "y_numbers",
+     "label": "Vertical numbers",
+     "kind": "choice",
+     "options": [
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Every line"
+    },
+    {
      "key": "grid",
      "label": "Gridlines",
      "kind": "bool",
      "options": [],
      "default": "true"
+    },
+    {
+     "key": "grid_weight",
+     "label": "Gridlines are",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold"
+     ],
+     "default": "Standard"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "None",
+      "2 per block",
+      "4 per block",
+      "5 per block"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "title_mode",
+     "label": "Chart title as",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
     },
     {
      "key": "title",
@@ -28021,11 +28499,33 @@
      "default": ""
     },
     {
+     "key": "x_title_mode",
+     "label": "Horizontal axis title as",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
      "key": "x_title",
      "label": "Horizontal axis title",
      "kind": "text",
      "options": [],
      "default": "Test score"
+    },
+    {
+     "key": "y_title_mode",
+     "label": "Vertical axis title as",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
     },
     {
      "key": "y_title",

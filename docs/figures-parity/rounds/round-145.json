@@ -1,0 +1,35 @@
+{
+ "round": 145,
+ "figure": "ogive",
+ "capability": "cap-07a",
+ "hypothesis": "Batch 4 ogive: cap-07a; evidence changes:{\"x_auto\":false,\"x_min\":30.0,\"x_max\":110.0,\"x_step\":5.0}",
+ "started_at": "2026-11-09T11:45:38",
+ "git": "7529bc6",
+ "before": {
+  "figure": 80.0,
+  "pooled": 86.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T11:45:39",
+ "after": {
+  "figure": 84.0,
+  "pooled": 86.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"x_auto\":false,\"x_min\":30.0,\"x_max\":110.0,\"x_step\":5.0}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ogive/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ogive/871a6c17bd2a5159.png"
+   }
+  ]
+ },
+ "checker": "pass: typed x axis",
+ "result": "hit",
+ "evidence": "ogive tests (110 old share-link payloads byte-identical; quartiles and percentiles read off the straight and smooth curve as drawn); census unchanged; task run reference 6, ours 6",
+ "next": "ogive (remaining)"
+}

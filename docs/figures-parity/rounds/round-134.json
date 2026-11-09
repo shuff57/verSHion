@@ -1,0 +1,35 @@
+{
+ "round": 134,
+ "figure": "bar-chart",
+ "capability": "cap-07b",
+ "hypothesis": "Batch 4 bar-chart: cap-07b; evidence changes:scale_step=2.0",
+ "started_at": "2026-11-09T11:45:12",
+ "git": "7529bc6",
+ "before": {
+  "figure": 86.2,
+  "pooled": 85.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T11:45:14",
+ "after": {
+  "figure": 89.7,
+  "pooled": 85.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:scale_step=2.0",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bar-chart/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bar-chart/1be40e0e73363e13.png"
+   }
+  ]
+ },
+ "checker": "pass: count-by 2",
+ "result": "hit",
+ "evidence": "bar tests (4,320 old states byte-identical; stacked totals and error bars read off the drawing; group names Errors/SD/SE kept, 7989da2); census unchanged; task run reference 22 typed (7 with a paste), ours 8, before not possible",
+ "next": "bar-chart (remaining)"
+}

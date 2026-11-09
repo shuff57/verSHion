@@ -14,8 +14,8 @@
    "id": "cap-01b",
    "text": "Type a cumulative table of upper bounds",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"input\":\"Cumulative table\",\"cum_table\":\"40, 0\\n50, 5\\n60, 10\\n70, 22\\n80, 37\\n90, 46\\n100, 50\"}",
+   "note": "Built in batch 4, round 138 (2026-11-08)."
   },
   {
    "id": "cap-01c",
@@ -28,29 +28,29 @@
    "id": "cap-02a",
    "text": "Choose crosses or dots at the points",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:points=Crosses",
+   "note": "Built in batch 4, round 139 (2026-11-08)."
   },
   {
    "id": "cap-02b",
    "text": "Join the points with a smooth curve",
    "class": "control",
-   "evidence": "",
-   "note": "straight segments only"
+   "evidence": "changes:join=Smooth curve",
+   "note": "Built in batch 4, round 140 (2026-11-08). straight segments only"
   },
   {
    "id": "cap-02c",
    "text": "Leave the points unjoined",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:join=None",
+   "note": "Built in batch 4, round 141 (2026-11-08)."
   },
   {
    "id": "cap-02d",
    "text": "Choose not to start from 0 at the lowest bound",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:from_zero=false",
+   "note": "Built in batch 4, round 142 (2026-11-08)."
   },
   {
    "id": "cap-03",
@@ -91,8 +91,8 @@
    "id": "cap-04e",
    "text": "Show each reading with its value, a blank line, or lines only",
    "class": "control",
-   "evidence": "",
-   "note": "the student copy hides guide lines and values together; no per-reading choice"
+   "evidence": "changes:{\"read_label\":\"Blank line\"}",
+   "note": "Built in batch 4, round 143 (2026-11-08). the student copy hides guide lines and values together; no per-reading choice"
   },
   {
    "id": "cap-05",
@@ -119,29 +119,29 @@
    "id": "cap-06c",
    "text": "Put a blank line in place of a title for students",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:x_title_mode=Blank line",
+   "note": "Built in batch 4, round 144 (2026-11-08)."
   },
   {
    "id": "cap-07a",
    "text": "Type the horizontal axis range and count-by",
    "class": "control",
-   "evidence": "",
-   "note": "the axes are always worked out from the data"
+   "evidence": "changes:{\"x_auto\":false,\"x_min\":30.0,\"x_max\":110.0,\"x_step\":5.0}",
+   "note": "Built in batch 4, round 145 (2026-11-08). the axes are always worked out from the data"
   },
   {
    "id": "cap-07b",
    "text": "Type the vertical axis range and count-by",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"y_auto\":false,\"y_min\":0.0,\"y_max\":60.0,\"y_step\":5.0}",
+   "note": "Built in batch 4, round 146 (2026-11-08)."
   },
   {
    "id": "cap-07c",
    "text": "Choose which lines are numbered",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:x_numbers=Every 2nd line",
+   "note": "Built in batch 4, round 147 (2026-11-08)."
   },
   {
    "id": "cap-07d",
@@ -154,15 +154,15 @@
    "id": "cap-07e",
    "text": "Make the gridlines light, standard or bold",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:grid_weight=Bold",
+   "note": "Built in batch 4, round 148 (2026-11-08)."
   },
   {
    "id": "cap-07f",
    "text": "Add minor gridlines",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:minor=2 per block",
+   "note": "Built in batch 4, round 149 (2026-11-08)."
   }
  ]
 }

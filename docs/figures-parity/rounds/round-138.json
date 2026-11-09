@@ -1,0 +1,37 @@
+{
+ "round": 138,
+ "figure": "ogive",
+ "capability": "cap-01b",
+ "hypothesis": "Batch 4 ogive: cap-01b; evidence changes:{\"input\":\"Cumulative table\",\"cum_table\":\"40, 0\\n50, 5\\n60, 10\\n70, 22\\n80, 37\\n90, 46\\n100, 50\"}",
+ "started_at": "2026-11-09T11:45:24",
+ "git": "7529bc6",
+ "before": {
+  "figure": 49.3,
+  "pooled": 85.8
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T11:45:27",
+ "after": {
+  "figure": 56.0,
+  "pooled": 85.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"input\":\"Cumulative table\",\"cum_table\":\"40, 0\\n50, 5\\n60, 10\\n70, 22\\n80, 37\\n90, 46\\n100, 50\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ogive/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ogive/3b2430a75e835926.png"
+   }
+  ]
+ },
+ "checker": "pass: cumulative table read, frequencies derived, bad tables noted",
+ "result": "hit",
+ "evidence": "ogive tests (110 old share-link payloads byte-identical; quartiles and percentiles read off the straight and smooth curve as drawn); census unchanged; task run reference 6, ours 6",
+ "next": "ogive (remaining)"
+}

@@ -1,18 +1,11 @@
 # Figures parity score
 
-Generated: 2026-11-09T19:07:27+00:00 · probe: 2026-11-09T11:07:27
+Generated: 2026-11-09T19:46:22+00:00 · probe: 2026-11-09T11:46:22
 
-**Pooled 85.0** · mean 85.8 over 70 figures · built 71 of 71 reference figures
+**Pooled 87.5** · mean 88.1 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `motion-map`: 40 (35/87)
-  - cap-01a [core 5] Build the motion from up to six segments in any order — no evidence
-  - cap-01b [core 5] Set each segment at rest, constant velocity forward or back, speeding up or slowing down — no evidence
-  - cap-01d [core 5] Type each segment's speed — no evidence
-  - cap-01e [core 5] Set where the motion starts — no evidence
-  - cap-04b [core 5] Draw an acceleration arrow (or a = 0) above each segment — no evidence
-  - cap-03a [control 3] Write the times under the dots — no evidence
 - `reaction-energy-diagram`: 42 (42/101)
   - cap-02d [core 5] Three steps — no evidence
   - cap-01b [control 3] With and without an enzyme (biology), with the paths named for the enzyme — no evidence
@@ -20,20 +13,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [control 3] Units kJ mol-1 or kJ instead of kJ/mol — no evidence
   - cap-03b [control 3] Your own names for the paths in the key — no evidence
   - cap-04 [control 3] A level diagram of the reactants and products alone, instead of the energy profile — no evidence
-- `ogive`: 49 (37/75)
-  - cap-01b [core 5] Type a cumulative table of upper bounds — no evidence
-  - cap-02a [control 3] Choose crosses or dots at the points — no evidence
-  - cap-02b [control 3] Join the points with a smooth curve — no evidence
-  - cap-02c [control 3] Leave the points unjoined — no evidence
-  - cap-02d [control 3] Choose not to start from 0 at the lowest bound — no evidence
-  - cap-04e [control 3] Show each reading with its value, a blank line, or lines only — no evidence
-- `bar-chart`: 49 (43/87)
-  - cap-01c [core 5] Add a third or later series — no evidence
-  - cap-02b [control 3] Stack several series instead of placing them side by side — no evidence
-  - cap-03b [control 3] Choose to write the values inside the bars — no evidence
-  - cap-04a [control 3] Draw error bars from a plus-or-minus value for each bar — no evidence
-  - cap-04b [control 3] Draw the error bars with or without crossbars — no evidence
-  - cap-04c [control 3] Add a note under the graph saying what the error bars show — no evidence
 - `parallel-lines`: 50 (23/46)
   - cap-01c [core 5] Four or more parallel lines — no evidence
   - cap-01d [core 5] Three or more transversals — no evidence
@@ -221,6 +200,7 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
 - `waves`: 97 (97/100)
   - cap-07e [control 3] End caps on the axes — no evidence
+- `bar-chart`: 100 (87/87)
 - `circuit-diagram`: 100 (61/61)
 - `dna-protein-synthesis`: 100 (102/102)
 - `enzyme-kinetics`: 100 (85/85)
@@ -231,6 +211,8 @@ Comparable with the frozen baseline: **yes**
 - `mapping-diagram`: 100 (36/36)
 - `mass-spectrum`: 100 (49/49)
 - `motion-graphs`: 100 (89/89)
+- `motion-map`: 100 (87/87)
+- `ogive`: 100 (75/75)
 - `orbital-diagram`: 100 (61/61)
 - `osmosis`: 100 (140/140)
 - `photoelectron-spectrum`: 100 (50/50)
