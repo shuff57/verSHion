@@ -297,7 +297,7 @@ pub const STEPS: [(&str, &str); 4] = [
     ("Gather your questions", "Type them in, or let the AI read an old PDF, scan or screenshot."),
     ("Keep them in a bank", "Tag them by topic and difficulty. Reuse a bank in any exam."),
     ("Lay out the exam", "Pull from any bank, shuffle, and make a second version in a click."),
-    ("Print the real thing", "Export the exam and its answer key as PDF or Word. Every copy is kept."),
+    ("Print the real thing", "PDF or Word, answer key included. Every copy is kept."),
 ];
 
 /// The welcome panel's width in a wide window: four columns wide enough that each step reads in
@@ -410,7 +410,7 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     let hair = Stroke::new(0.9, PAPER_RULE);
     let ring = Stroke::new(0.9, PAPER_SOFT);
     let text = |pos: Pos2, s: &str, f: &FontId, c: Color32| painter.text(pos, Align2::LEFT_TOP, s, f.clone(), c).width();
-    let mut y = page.top() + g(16.0);
+    let mut y = page.top() + g(14.0);
     text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(t(11.5), theme::serif_family()), PAPER_INK);
     // The one touch of accent: the version tag, as a small filled pill (accent text alone faded on
     // white paper in dark mode).
@@ -424,9 +424,9 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     painter.hline(l + name_w + 3.0..=l + g(118.0), y + b(8.5), hair);
     let date_w = text(Pos2::new(l + g(128.0), y), "Date", &body, PAPER_SOFT);
     painter.hline(l + g(128.0) + date_w + 3.0..=r, y + b(8.5), hair);
-    y += b(16.0);
+    y += b(15.0);
     painter.hline(l..=r, y, Stroke::new(1.0, PAPER_RULE));
-    y += g(9.0);
+    y += g(7.0);
 
     let ind = l + b(10.5);
     let stem = |y: f32, n: &str, s: &str| {
@@ -448,7 +448,7 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
         text(Pos2::new(x + b(11.0), y), val, &body, PAPER_INK);
         x += g(42.0);
     }
-    y += b(20.0);
+    y += b(18.0);
     // 2. A question with a small figure.
     stem(y, "2.", "Which line has a slope of 2?");
     y += b(14.0);
@@ -474,22 +474,23 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
         bubble(Pos2::new(ax + b(4.2), yy + b(4.6)), "");
         text(Pos2::new(ax + b(12.0), yy), s, &body, PAPER_INK);
     }
-    y = fig.bottom() + g(12.0);
+    y = fig.bottom() + g(9.0);
     // 3. Short answer.
     stem(y, "3.", "Simplify:   2(x + 4) \u{2212} 3x");
     y += b(16.0);
     let aw = text(Pos2::new(ind, y), "Answer", &body, PAPER_SOFT);
     painter.hline(ind + aw + 4.0..=ind + g(104.0), y + b(8.5), hair);
-    y += b(20.0);
-    // 4. Written answer on ruled lines, when the sheet has room for it above the folio (the
-    // narrow sheet, at its larger type, does not).
+    y += b(18.0);
+    // 4. Written answer on ruled lines: two when the sheet has room above the folio, else one,
+    // else the question is left off (the narrow sheet, at its larger type).
     let stem4 = "Show how you checked your answer.";
-    let fits = y + b(20.0) + b(13.0) * 2.0 <= page.bottom() - g(20.0)
-        && ind + painter.layout_no_wrap(stem4.to_string(), body.clone(), PAPER_INK).size().x <= r;
+    let floor = page.bottom() - g(20.0);
+    let lines = (0..=2).rev().find(|&n| y + b(20.0) + b(13.0) * n as f32 <= floor).unwrap_or(0);
+    let fits = lines > 0 && ind + painter.layout_no_wrap(stem4.to_string(), body.clone(), PAPER_INK).size().x <= r;
     if fits {
         stem(y, "4.", stem4);
         y += b(20.0);
-        for _ in 0..2 {
+        for _ in 0..lines {
             painter.hline(ind..=r, y, hair);
             y += b(13.0);
         }
@@ -1150,7 +1151,7 @@ impl crate::App {
                     let wide = col_w >= STEPS_W;
                     // Narrow: a little less above the first numerals, whose 28 px slot already
                     // holds space over the figure, so the panel's top and bottom read even.
-                    let pad = if wide { Margin::symmetric(4, 26) } else { Margin { left: 4, right: 4, top: 10, bottom: 16 } };
+                    let pad = if wide { Margin::symmetric(4, 18) } else { Margin { left: 4, right: 4, top: 10, bottom: 16 } };
                     crate::kit::card().inner_margin(pad).show(ui, |ui| {
                         ui.set_width(w - 10.0);
                         if wide {
@@ -1165,31 +1166,28 @@ impl crate::App {
                                 ui.painter().vline(x, r.top() + 4.0..=r.bottom() - 4.0, Stroke::new(1.0, theme::border()));
                             }
                         } else {
-                            // Narrow: two rows of two. Four stacked rows ran past the bottom of the window
-                            // and left the page with no visible end.
+                            // Narrow: two rows of two, each cell its own column with real side
+                            // padding, split by one divider that runs the panel's height and a
+                            // gap between the rows (no broken cross of short rules).
+                            let top = ui.cursor().top();
+                            let full = ui.available_width();
+                            let cell_w = ((full - 1.0) / 2.0).floor();
                             for row in 0..2 {
-                                // The rows sit closer than they did (the critics named the gaps
-                                // between the panel's short blocks as large), which also makes room
-                                // for the printed page above.
                                 if row > 0 {
-                                    ui.add_space(6.0);
-                                    let (rule, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
-                                    for cell in 0..2 {
-                                        let half = rule.width() / 2.0;
-                                        let x = rule.left() + half * cell as f32;
-                                        ui.painter().hline(x + 20.0..=x + half - 20.0, rule.center().y, Stroke::new(1.0, theme::border()));
-                                    }
-                                    ui.add_space(8.0);
+                                    ui.add_space(18.0);
                                 }
-                                let row_top = ui.cursor().top();
-                                ui.columns(2, |cols| {
-                                    for (k, col) in cols.iter_mut().enumerate() {
-                                        step_cell(col, row * 2 + k, false);
+                                ui.horizontal_top(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 1.0;
+                                    for k in 0..2 {
+                                        ui.allocate_ui_with_layout(Vec2::new(cell_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                                            ui.set_width(cell_w);
+                                            step_cell(ui, row * 2 + k, false);
+                                        });
                                     }
                                 });
-                                let x = ui.min_rect().center().x;
-                                ui.painter().vline(x, row_top + 6.0..=ui.cursor().top() - 10.0, Stroke::new(1.0, theme::border()));
                             }
+                            let x = ui.min_rect().left() + cell_w + 0.5;
+                            ui.painter().vline(x, top + 6.0..=ui.cursor().top() - 4.0, Stroke::new(1.0, theme::border()));
                         }
                     });
                 });
@@ -1206,7 +1204,9 @@ impl crate::App {
 
     pub fn draw_home(&mut self, ctx: &egui::Context) {
         shell_frame(self, ctx, true, |app, ui| {
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            // The bar floats and shows only under the pointer: always drawn, it read as a dark
+            // rule down the page's right edge.
+            crate::kit::quiet_scroll_area(ui, egui::ScrollArea::vertical().auto_shrink([false, false]), |ui| {
                 ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
                 app.draw_home_body(ui);
             });
@@ -2822,10 +2822,11 @@ fn paint_preview_bg(p: &egui::Painter, r: Rect) {
 
 /// The first page on a Home exam card, the size the Exams screen used, centred in its strip.
 const HOME_THUMB: Vec2 = Vec2::new(88.0, 114.0);
-/// Every Home exam card is this tall: each slot is filled on every card (spec section 3). The text
-/// column, top down: pad 13, name 44 (two lines kept), gap 6, meta 18, gap 4, "From" 18, gap 8,
-/// hairline 1, gap 8, footer 18, pad 14.
-const HOME_EXAM_H: f32 = 152.0;
+/// Every Home exam card is this tall. The text column flows from the top: pad 13, the name (one or
+/// two lines of 22), gap 4, meta 18, gap 2, "From <bank>" (one or two lines of 18, so a bank's
+/// name is read whole); the footer is pinned: gap 7, hairline 1, gap 7, footer 18, pad 13. The
+/// longest case (44 + 36) ends 7 above the hairline.
+const HOME_EXAM_H: f32 = 164.0;
 
 /// Where a Home exam card's text starts (from the card's left edge) and how wide it may run.
 fn exam_card_text_x(w: f32) -> (f32, f32) {
@@ -2877,29 +2878,30 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_
     let (dx, iw) = exam_card_text_x(w);
     let x = rect.min.x + dx;
     let mut y = rect.min.y + 13.0;
-    // Name: two lines kept, top-aligned; a one-line name leaves its second line blank.
+    // Name: two lines at most, then the facts right under it.
     let mut job = egui::text::LayoutJob::default();
     job.append(&e.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
     job.wrap = egui::text::TextWrapping { max_width: iw, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
-    p.galley(Pos2::new(x, y), p.layout_job(job), theme::ink());
-    y += 44.0 + 6.0;
+    let name = p.layout_job(job);
+    let name_h = name.rows.len().max(1) as f32 * kit::ty::CARD_LINE;
+    p.galley(Pos2::new(x, y), name, theme::ink());
+    y += name_h + 4.0;
     let line = |p: &egui::Painter, y: f32, text: &str, font: egui::FontId, col: Color32| {
         let g = p.layout_no_wrap(text.to_string(), font.clone(), col);
         paint_fit(p, Pos2::new(x, y + (18.0 - g.size().y) / 2.0), text, font, col, iw);
     };
     let meta = format!("{} · {} point{}", plural(e.qs, "question"), fmt_pts(e.pts), if (e.pts - 1.0).abs() < 0.05 { "" } else { "s" });
     line(p, y, &meta, sans(kit::ty::META), theme::text_col());
-    y += 18.0 + 4.0;
-    // "From" quiet, then the bank in the stressed weight, on one line.
-    let from = p.layout_no_wrap("From ".to_string(), sans(kit::ty::META), theme::muted_col());
-    let fw = from.size().x;
-    let fy = y + (18.0 - from.size().y) / 2.0;
-    p.galley(Pos2::new(x, fy), from, theme::muted_col());
-    let strong = egui::FontId::new(kit::ty::META, theme::semibold());
-    paint_fit(p, Pos2::new(x + fw, fy), &e.bank, strong, theme::text_col(), (iw - fw).max(10.0));
-    y += 18.0 + 8.0;
-    p.hline(x..=x + iw, y + 0.5, Stroke::new(1.0, theme::border()));
-    y += 1.0 + 8.0;
+    y += 18.0 + 2.0;
+    // "From" quiet, then the bank in the stressed weight, wrapped to two lines so it reads whole.
+    let mut job = egui::text::LayoutJob::default();
+    job.append("From ", 0.0, egui::TextFormat { font_id: sans(kit::ty::META), color: theme::muted_col(), line_height: Some(18.0), ..Default::default() });
+    job.append(&e.bank, 0.0, egui::TextFormat { font_id: egui::FontId::new(kit::ty::META, theme::semibold()), color: theme::text_col(), line_height: Some(18.0), ..Default::default() });
+    job.wrap = egui::text::TextWrapping { max_width: iw, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
+    p.galley(Pos2::new(x, y), p.layout_job(job), theme::text_col());
+    // The footer, pinned to the card's foot.
+    let y = rect.max.y - 13.0 - 18.0;
+    p.hline(x..=x + iw, y - 7.0 - 0.5, Stroke::new(1.0, theme::border()));
     line(p, y, &edited_label(e.edited), sans(kit::ty::META), theme::muted_col());
     // The Open link, at the footer's right, added after the card so it takes its own click.
     let link_w = ui.painter().layout_no_wrap("Open".to_string(), egui::FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()).size().x + 17.0;
@@ -3166,8 +3168,12 @@ mod tests {
 
     /// Every Home exam card is the sum of its slots (spec section 3), whatever its text.
     #[test]
-    fn a_home_exam_card_is_152_tall() {
-        assert_eq!(HOME_EXAM_H, 13.0 + 44.0 + 6.0 + 18.0 + 4.0 + 18.0 + 8.0 + 1.0 + 8.0 + 18.0 + 14.0);
+    fn a_home_exam_card_holds_two_name_and_two_bank_lines() {
+        // The longest text (two name lines, two bank lines) still clears the pinned footer.
+        let text = 13.0 + 44.0 + 4.0 + 18.0 + 2.0 + 36.0;
+        let footer = 7.0 + 1.0 + 7.0 + 18.0 + 13.0;
+        assert!(text + footer <= HOME_EXAM_H + 0.01);
+        assert_eq!(HOME_EXAM_H, 164.0);
         // At 1280 the text column is 316 - 124 - 16 = 176 wide.
         assert_eq!(exam_card_text_x(316.0), (124.0, 176.0));
     }

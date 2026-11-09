@@ -652,7 +652,8 @@ impl App {
         // An empty bank's card below has its own filled Add question with the type menu, the
         // page's one primary; the toolbar's would only repeat it, so it is hidden until the first
         // question is in (judged on the whole bank, never on a filter).
-        let mut tools = if questions.is_empty() { vec![Tool::Import, Tool::Share] } else { vec![Tool::Add, Tool::Import, Tool::Share] };
+        // Import likewise: the empty card offers Import questions beside its Add question.
+        let mut tools = if questions.is_empty() { vec![Tool::Share] } else { vec![Tool::Add, Tool::Import, Tool::Share] };
         if !questions.is_empty() {
             tools.push(Tool::Export);
         }
@@ -1715,7 +1716,10 @@ fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6]) {
     let font = egui::FontId::new(kit::ty::META, theme::sans_family());
     let p = ui.painter().clone();
     let galleys: Vec<_> = (0..6).map(|i| p.layout_no_wrap(format!("{} {}", mix[i], KEY_LABELS[i]), font.clone(), theme::text_col())).collect();
-    let more_g = |n: usize| p.layout_no_wrap(more_label(n), font.clone(), theme::muted_col());
+    // "+N more" is a link-style reveal: accent semibold, underlined under the pointer, its tooltip
+    // listing the types it stands for (the bar still shows their shades).
+    let more_font = egui::FontId::new(kit::ty::META, theme::semibold());
+    let more_g = |n: usize| p.layout_no_wrap(more_label(n), more_font.clone(), theme::accent_col());
     let key = layout_tile_key(mix, w, |i| SW + SGAP + galleys[i].size().x, |n| more_g(n).size().x);
     let ac = theme::accent_col();
     for (i, x, l) in key.items {
@@ -1731,9 +1735,14 @@ fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6]) {
         let g = more_g(rest.len());
         let ly = at.y + KEY_LINE + KEY_LGAP;
         let r = Rect::from_min_size(Pos2::new(at.x + x, ly + (KEY_LINE - g.size().y) / 2.0), g.size());
-        p.galley(r.min, g, theme::muted_col());
+        p.galley(r.min, g, theme::accent_col());
         let tip = rest.iter().map(|&i| format!("{} {}", mix[i], KEY_LABELS[i])).collect::<Vec<_>>().join("\n");
-        ui.interact(r, ui.id().with(("tile_more", at.x as i32, at.y as i32)), Sense::hover()).on_hover_text(tip);
+        let h = ui.interact(r.expand(2.0), ui.id().with(("tile_more", at.x as i32, at.y as i32)), Sense::hover());
+        if h.hovered() {
+            p.hline(r.x_range(), (r.bottom() - 2.0).round() + 0.5, Stroke::new(1.0, theme::accent_col()));
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
+        }
+        h.on_hover_text(format!("Also in this bank:\n{tip}"));
     }
 }
 

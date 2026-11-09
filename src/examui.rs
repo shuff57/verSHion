@@ -735,6 +735,8 @@ fn exam_menu(ui: &mut egui::Ui, rect: Rect, side: f32, row: &ExamRow, st: &mut L
 /// The Exams screen's page thumbnail (a mitigation: big enough to tell a page with a table from
 /// one of text; the name and the meta still say which exam it is).
 const EXAMS_THUMB: Vec2 = Vec2::new(112.0, 145.0);
+/// The thumbnail in a narrow window, so three cards and their actions show above the fold.
+const EXAMS_THUMB_NARROW: Vec2 = Vec2::new(88.0, 114.0);
 /// A card's action height (Open and its "…").
 const EXAMS_ACT_H: f32 = 32.0;
 
@@ -750,7 +752,8 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
     // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
     let fit = rows.len().clamp(1, n);
     let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
-    let card_h = EXAMS_THUMB.y + pad * 2.0;
+    let thumb = if avail < 760.0 { EXAMS_THUMB_NARROW } else { EXAMS_THUMB };
+    let card_h = thumb.y + pad * 2.0;
     ui.spacing_mut().item_spacing = Vec2::splat(gap);
     for chunk in rows.chunks(n) {
     ui.horizontal_top(|ui| {
@@ -773,7 +776,7 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
             if resp.has_focus() {
                 p.rect_stroke(rect.expand(1.0), CornerRadius::same(kit::R_CARD + 1), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
             }
-            let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::splat(pad), EXAMS_THUMB);
+            let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::splat(pad), thumb);
             let ctx = ui.ctx().clone();
             if paint_exam_thumb(app, &ctx, &p, thumb_area, &row.id).is_none() {
                 paint_thumb(&p, thumb_area.center(), -0.05, row.q.max(2));
@@ -781,12 +784,17 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
             let tx = thumb_area.right() + pad;
             let tw = rect.right() - pad - tx;
             let mut y = rect.top() + pad - 2.0;
-            // Name: two lines kept, top-aligned.
+            // Name (two lines at most), then the facts right under it: the card's height is the
+            // page's, so the text flows from the top and only the footer is pinned.
             let mut job = egui::text::LayoutJob::default();
             job.append(&row.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
-            job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
-            p.galley(Pos2::new(tx, y), p.layout_job(job), theme::ink());
-            y += 2.0 * kit::ty::CARD_LINE + 6.0;
+            // (the narrow card is wide but short: one line, so the facts stay above the footer)
+            let rows = if thumb.y < EXAMS_THUMB.y { 1 } else { 2 };
+            job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: rows, break_anywhere: false, overflow_character: Some('…') };
+            let name = p.layout_job(job);
+            let name_h = name.rows.len().max(1) as f32 * kit::ty::CARD_LINE;
+            p.galley(Pos2::new(tx, y), name, theme::ink());
+            y += name_h + 4.0;
             // Counts, then the bank the questions came from.
             let counts = format!(
                 "{} question{} · {} point{}",
@@ -2865,10 +2873,12 @@ fn margin_button_side(ui: &mut egui::Ui, id: egui::Id, center: Pos2, kind: u8, s
 /// Paints a margin button's glyph (see [`margin_button`] for the kinds).
 fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
     let p = ui.painter();
+    // Remove and delete warn under the pointer: the red, not the accent the editing handles take.
+    let danger = matches!(kind, 0 | 6);
     if hovered {
-        p.rect_filled(rect, CornerRadius::same(5), theme::accent_faded());
+        p.rect_filled(rect, CornerRadius::same(5), if danger { theme::bad().gamma_multiply(0.14) } else { theme::accent_faded() });
     }
-    let col = if hovered { theme::accent_col() } else { PAPER_SOFT };
+    let col = if hovered { if danger { theme::bad() } else { theme::accent_col() } } else { PAPER_SOFT };
     let s = Stroke::new(1.6, col);
     let c = rect.center();
     match kind {
@@ -2926,33 +2936,56 @@ struct MarginHandles {
 }
 
 /// The handles of a question at `rect` with gutters `ml`/`mr` wide. Desktop: grip and "…" left,
-/// ×/↑/↓ right, 18 square. Narrow: 24 square, 26 apart, and a pencil between grip and "…"; under
-/// 76 tall only grip, "…" and ×. A gutter under 30 wide puts them in a 26-tall strip above the
-/// question, right-aligned.
+/// ×/↑/↓ right, 18 square, shown under the pointer. Narrow: every handle in ONE place, the left
+/// gutter, 24 square, 26 apart, in two columns: next to the question grip, pencil, "…"; outside
+/// them ↑, ↓ and, set 6 lower and apart, ×. Under 76 tall only grip and "…", with × beside "…".
+/// A gutter too narrow for two columns puts them in a row above the question, right-aligned, × last
+/// and apart. (`left` holds the grip/pencil/"…" column, `right` the move and remove handles.)
 fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32, narrow: bool) -> MarginHandles {
-    let tall = !narrow || rect.height() >= 76.0;
-    let side = if narrow { 24.0 } else { 18.0 };
-    let step = if narrow { 26.0 } else { 20.0 };
-    let left_k: &[u8] = if narrow && tall { &[GRIP, 7, 4] } else { &[GRIP, 4] };
-    let right_k: &[u8] = if tall { &[0, 1, 2] } else { &[0] };
-    if narrow && ml.min(mr) < 30.0 {
-        let y = rect.top() - 13.0;
-        let total = left_k.len() + right_k.len();
-        let at = |k: usize| Pos2::new(rect.right() - side / 2.0 - (total - 1 - k) as f32 * step, y);
+    if !narrow {
+        let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
+        let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
+        let y0 = rect.top() + 9.0;
         return MarginHandles {
-            left: left_k.iter().enumerate().map(|(k, &kind)| (kind, at(k))).collect(),
-            right: right_k.iter().enumerate().map(|(k, &kind)| (kind, at(left_k.len() + k))).collect(),
+            left: vec![(GRIP, gc), (4, gc + Vec2::new(0.0, 24.0))],
+            right: [0u8, 1, 2].iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y0 + k as f32 * 20.0))).collect(),
+            side: 18.0,
+            tall: true,
+        };
+    }
+    let tall = rect.height() >= 76.0;
+    let (side, step, apart) = (24.0, 26.0, 6.0);
+    let left_k: &[u8] = if tall { &[GRIP, 7, 4] } else { &[GRIP, 4] };
+    if ml < 62.0 {
+        // One row above the question: grip, pencil, "…", ↑, ↓, then × set apart.
+        let y = rect.top() - 13.0;
+        let mut kinds: Vec<u8> = left_k.to_vec();
+        if tall {
+            kinds.extend([1, 2]);
+        }
+        let n = kinds.len();
+        let xr = rect.right() - side / 2.0;
+        let x_of = |k: usize| xr - (n - k) as f32 * step - apart;
+        return MarginHandles {
+            left: kinds.iter().take(left_k.len()).enumerate().map(|(k, &kind)| (kind, Pos2::new(x_of(k), y))).collect(),
+            right: kinds[left_k.len()..].iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(x_of(left_k.len() + k), y))).chain([(0u8, Pos2::new(xr, y))]).collect(),
             side,
             tall,
         };
     }
-    let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
-    let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
-    let y0 = rect.top() + if narrow { 12.0 } else { 9.0 };
-    let lstep = if narrow { step } else { 24.0 };
+    let xi = rect.left() - 8.0 - side / 2.0;
+    // (4 more between the columns than between rows, so they read as two columns of one group)
+    let xo = xi - step - 2.0;
+    let y0 = rect.top() + 10.0;
+    let row = |k: usize| y0 + k as f32 * step;
+    let right = if tall {
+        vec![(1u8, Pos2::new(xo, row(0))), (2, Pos2::new(xo, row(1))), (0, Pos2::new(xo, row(2) + apart))]
+    } else {
+        vec![(0u8, Pos2::new(xo, row(1) + apart))]
+    };
     MarginHandles {
-        left: left_k.iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * lstep))).collect(),
-        right: right_k.iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y0 + k as f32 * step))).collect(),
+        left: left_k.iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(xi, row(k)))).collect(),
+        right,
         side,
         tall,
     }
@@ -3022,7 +3055,6 @@ fn draw_item(
         let hs = margin_handles(rect, ml, mr, bp, narrow);
         let (tall, side) = (hs.tall, hs.side);
         let left_pos: Vec<Pos2> = hs.left.iter().map(|h| h.1).collect();
-        let right_pos: Vec<Pos2> = hs.right.iter().map(|h| h.1).collect();
         let left_n = left_pos.len();
         let gc = left_pos[0];
         let grect = Rect::from_center_size(gc, Vec2::new(if narrow { 24.0 } else { 18.0 }, 24.0));
@@ -3043,15 +3075,18 @@ fn draw_item(
                 label: kind_pill(q.kind.qkind()),
             });
         }
-        if margin_button_side(ui, ui.id().with(("it_x", i)), right_pos[0], 0, show, side).is_some_and(|r| r.clicked()) {
-            remove_item(app, exam_id, i);
-        }
-        if tall {
-            if margin_button_side(ui, ui.id().with(("it_up", i)), right_pos[1], 1, show, side).is_some_and(|r| r.clicked()) {
-                shift_item(app, exam_id, i, -1);
-            }
-            if margin_button_side(ui, ui.id().with(("it_dn", i)), right_pos[2], 2, show, side).is_some_and(|r| r.clicked()) {
-                shift_item(app, exam_id, i, 1);
+        for &(kind, at) in &hs.right {
+            let (salt, d) = match kind {
+                0 => ("it_x", 0),
+                1 => ("it_up", -1),
+                _ => ("it_dn", 1),
+            };
+            if margin_button_side(ui, ui.id().with((salt, i)), at, kind, show, side).is_some_and(|r| r.clicked()) {
+                if d == 0 {
+                    remove_item(app, exam_id, i);
+                } else {
+                    shift_item(app, exam_id, i, d);
+                }
             }
         }
         let mut act: Option<QAct> = None;
@@ -4447,7 +4482,7 @@ fn draw_shelf_inner(
     // The list runs to the card's foot: the used count sits on the sort row above, and the
     // card's own + and grab cursor say how a question gets onto the page.
     let list_h = ui.available_height().max(60.0);
-    egui::ScrollArea::vertical()
+    let out = egui::ScrollArea::vertical()
         .id_salt("bank_panel_scroll")
         .max_height(list_h)
         .auto_shrink([false, false])
@@ -4467,7 +4502,23 @@ fn draw_shelf_inner(
                 ui.add_space(8.0);
             }
         });
-
+    // More below: the list fades into the card's fill over its last 36 px instead of slicing a
+    // card (and its +) at the edge; gone once the list is scrolled to its end.
+    let view = out.inner_rect;
+    let left = out.content_size.y - out.state.offset.y - view.height();
+    if left > 2.0 {
+        let a = (left / 36.0).clamp(0.0, 1.0);
+        let fade = Rect::from_min_max(Pos2::new(view.left(), view.bottom() - 36.0), view.right_bottom());
+        let fill = theme::card().gamma_multiply(a);
+        let mut mesh = Mesh::default();
+        mesh.colored_vertex(fade.left_top(), Color32::TRANSPARENT);
+        mesh.colored_vertex(fade.right_top(), Color32::TRANSPARENT);
+        mesh.colored_vertex(fade.right_bottom(), fill);
+        mesh.colored_vertex(fade.left_bottom(), fill);
+        mesh.add_triangle(0, 1, 2);
+        mesh.add_triangle(0, 2, 3);
+        ui.painter().with_clip_rect(view).add(Shape::mesh(mesh));
+    }
 }
 
 /// One shelf card (Test Parrot's layout): TYPE label with "In exam" / "Image" badges and quiet
@@ -7628,36 +7679,47 @@ mod system_pass_tests {
         assert_eq!(fits[4], StripFit { words: false, summary: None });
     }
 
-    /// A narrow page shows a tall question's grip, pencil and "…" on the left and ×, ↑, ↓ on the
-    /// right, 24 square and 26 apart; a short one keeps grip and "…" and ×. Desktop is as before.
+    /// A narrow page keeps a question's handles in one place, the left gutter: grip, pencil and
+    /// "…" next to it, ↑ and ↓ outside them, × set apart below; 24 square and 26 apart. A short
+    /// question keeps grip, "…" and ×. Desktop is as before.
     #[test]
     fn narrow_question_handles_by_height() {
         let tall = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 120.0));
         let short = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 40.0));
         let kinds = |v: &[(u8, Pos2)]| v.iter().map(|h| h.0).collect::<Vec<_>>();
-        let h = margin_handles(tall, 60.0, 60.0, 14.0, true);
-        assert_eq!((kinds(&h.left), kinds(&h.right), h.side, h.tall), (vec![GRIP, 7, 4], vec![0, 1, 2], 24.0, true));
-        let s = margin_handles(short, 60.0, 60.0, 14.0, true);
+        let h = margin_handles(tall, 67.0, 67.0, 14.0, true);
+        assert_eq!((kinds(&h.left), kinds(&h.right), h.side, h.tall), (vec![GRIP, 7, 4], vec![1, 2, 0], 24.0, true));
+        let s = margin_handles(short, 67.0, 67.0, 14.0, true);
         assert_eq!((kinds(&s.left), kinds(&s.right), s.tall), (vec![GRIP, 4], vec![0], false));
-        for hs in [&h, &s] {
-            let all: Vec<Rect> = hs.left.iter().chain(&hs.right).map(|p| Rect::from_center_size(p.1, Vec2::splat(hs.side))).collect();
-            for (a, ra) in all.iter().enumerate() {
-                assert!(!ra.intersects(tall.shrink(1.0)) || ra.right() <= tall.left() || ra.left() >= tall.right(), "a handle sits on the question");
-                for rb in &all[a + 1..] {
+        for (hs, q) in [(&h, tall), (&s, short)] {
+            let all: Vec<(u8, Rect)> = hs.left.iter().chain(&hs.right).map(|p| (p.0, Rect::from_center_size(p.1, Vec2::splat(hs.side)))).collect();
+            for (a, (_, ra)) in all.iter().enumerate() {
+                // one place: all in the left gutter, inside the page's margin, clear of the text
+                assert!(ra.right() <= q.left() && ra.left() >= q.left() - 67.0, "a handle outside the left gutter");
+                for (_, rb) in &all[a + 1..] {
                     assert!(!ra.intersects(rb.shrink(0.5)), "handles overlap");
                 }
             }
-            // The left column stays inside the question's height plus its gap.
-            assert!(hs.left.last().unwrap().1.y + hs.side / 2.0 <= tall.top() + 14.0 * 0.75 + 52.0 + 12.0 + 0.5);
+            // × stands apart: further from every other handle than the 26 between rows.
+            let x = all.iter().find(|h| h.0 == 0).unwrap().1;
+            let nearest = all.iter().filter(|h| h.0 != 0).map(|h| (h.1.center() - x.center()).length()).fold(f32::MAX, f32::min);
+            assert!(nearest >= 28.0, "× is {nearest} from the nearest handle");
+            // the columns end about where a 76-tall question does
+            assert!(all.iter().all(|h| h.1.bottom() <= q.top() + 80.5));
         }
-        assert!((h.left[1].1.y - h.left[0].1.y - 26.0).abs() < 0.01 && (h.right[1].1.y - h.right[0].1.y - 26.0).abs() < 0.01);
-        // A gutter under 30: one strip above the question, right-aligned.
-        let n = margin_handles(tall, 24.0, 60.0, 14.0, true);
+        let col = |v: &[(u8, Pos2)]| v.iter().map(|p| p.1.y).collect::<Vec<_>>();
+        assert_eq!(col(&h.left), vec![110.0, 136.0, 162.0]);
+        // A gutter too narrow for two columns: one row above the question, × last and apart.
+        let n = margin_handles(tall, 40.0, 60.0, 14.0, true);
+        assert_eq!(kinds(&n.right), vec![1, 2, 0]);
         assert!(n.left.iter().chain(&n.right).all(|p| (p.1.y - (tall.top() - 13.0)).abs() < 0.01));
-        assert!((n.right.last().unwrap().1.x - (tall.right() - 12.0)).abs() < 0.01);
-        // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart, 18 square, as before.
+        let last = n.right.last().unwrap();
+        assert_eq!(last.0, 0);
+        assert!((last.1.x - (tall.right() - 12.0)).abs() < 0.01);
+        // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart on the right, 18 square, as before.
         let d = margin_handles(short, 60.0, 60.0, 14.0, false);
         assert_eq!((kinds(&d.left), kinds(&d.right), d.side), (vec![GRIP, 4], vec![0, 1, 2], 18.0));
+        assert!(d.right.iter().all(|p| p.1.x > short.right()));
     }
 
     /// The pencil (kind 7) is named "Edit question", never the catch-all "Move down".
