@@ -158,14 +158,19 @@ pub(super) struct Dot {
     pub seg: usize,
 }
 
-/// A dot every `dt` from t = 0 to the end of the motion (at most 400). A dot at a segment end takes the next
+/// Dots enough for the longest motion the controls allow: six segments of 60 s with a dot every 0.25 s. The old
+/// cap of 400 cut a long motion short while the key still gave where it ends (the batch 4 checker: two 60 s
+/// segments at a dot every 0.25 s stopped at 20 m, the key said 0 m).
+const MAX_DOTS: usize = 6 * 60 * 4 + 1;
+
+/// A dot every `dt` from t = 0 to the end of the motion (at most MAX_DOTS). A dot at a segment end takes the next
 /// segment's velocity, except on a first-version figure, whose dot there kept the velocity it arrived with.
 pub(super) fn sample(p: &Params, segs: &[Seg]) -> Vec<Dot> {
     let total = segs.last().map_or(0.0, |s| s.t1);
     let dt = p.f("dt").max(0.05);
     let n = ((total / dt) + 1e-6).floor() as usize + 1;
     let old = p.b(OLD);
-    (0..n.min(400))
+    (0..n.min(MAX_DOTS))
         .map(|i| {
             let t = i as f64 * dt;
             let j = segs.iter().position(|s| if old { t <= s.t1 } else { t < s.t1 }).unwrap_or(segs.len().saturating_sub(1));

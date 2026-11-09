@@ -589,3 +589,20 @@ fn motion_map_pngs() {
         std::fs::write(format!("{dir}/motion-{tag}.png"), crate::figures::to_png(&draw(&list), 1.0).unwrap()).unwrap();
     }
 }
+
+#[test]
+fn a_long_motion_is_drawn_to_its_end() {
+    // 60 s forward at 1 m/s, then 60 s back: 481 dots a quarter second apart, ending where it started
+    let l = motion(vec![seg(1, "Constant velocity forward", 1.0, 60.0, false), seg(2, "Constant velocity back", 1.0, 60.0, false)], &[f("dt", 0.25)]);
+    let p = with(&l);
+    let segs = segments(&p);
+    let dots = sample(&p, &segs);
+    assert_eq!(dots.len(), 481);
+    let last = dots.last().unwrap();
+    assert!((last.t - 120.0).abs() < 1e-9 && last.x.abs() < 1e-9, "t {} x {}", last.t, last.x);
+    assert_eq!(dots_of(&draw(&l)).len(), 481);
+    // the longest the controls allow still fits
+    let six: Vec<_> = (1..=6).map(|k| seg(k, "Constant velocity forward", 1.0, 60.0, false)).collect();
+    let p = with(&motion(six, &[f("dt", 0.25)]));
+    assert_eq!(sample(&p, &segments(&p)).len(), MAX_DOTS);
+}
