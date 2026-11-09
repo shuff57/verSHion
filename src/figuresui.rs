@@ -2210,7 +2210,9 @@ impl Workspace {
                 if let Some((_, _, before)) = &mut self.click_undo {
                     (target.set)(before, &buf);
                 }
-                self.params.normalize(&pdefs, true);
+                // no snapping: a text edit must not move numbers onto their step grid (coordinate-grid's count by 1
+                // would become 1.05, predator-prey's starts would shift)
+                self.params.normalize(&pdefs, false);
             } else if !esc {
                 self.editing = Some((target, buf, false));
             }
@@ -5237,6 +5239,25 @@ mod tests {
         comp_frame(&ctx, &mut ws, vec![]);
         assert!(ws.editing.is_none(), "no edit box");
         assert_eq!(ws.params.s("shade"), "A or B");
+    }
+
+    /// Closing an inline label edit sets the text and nothing else: numbers stay off their step grid (coordinate-grid's
+    /// x "count by" of 1, min 0.05 step 0.5, once snapped to 1.05 after renaming an axis).
+    #[test]
+    fn an_inline_label_edit_moves_no_numbers() {
+        let (ctx, mut ws) = open_fig("coordinate-grid");
+        ws.params.set_f("xstep", 1.0);
+        let before = ws.params.clone();
+        ws.editing = Some((InlineEdit::key("xlabel"), "time (s)".to_string(), true));
+        comp_frame(&ctx, &mut ws, vec![]);
+        comp_frame(&ctx, &mut ws, vec![egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+        comp_frame(&ctx, &mut ws, vec![]);
+        assert_eq!(ws.params.s("xlabel"), "time (s)");
+        for (k, v) in &before.0 {
+            if k != "xlabel" {
+                assert_eq!(ws.params.0.get(k), Some(v), "{k} moved");
+            }
+        }
     }
 
     /// Share links made before the Venn rework (v6 and older: only the keys that differ from the old opening state) open
