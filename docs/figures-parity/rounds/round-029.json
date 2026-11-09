@@ -1,0 +1,35 @@
+{
+ "round": 29,
+ "figure": "stem-and-leaf",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 3 stem-and-leaf: cap-03b built and checked; evidence changes:split=Split each stem in five",
+ "started_at": "2026-11-09T06:49:46",
+ "git": "9601147",
+ "before": {
+  "figure": 50.7,
+  "pooled": 79.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T06:49:46",
+ "after": {
+  "figure": 55.2,
+  "pooled": 79.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:split=Split each stem in five",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/stem-and-leaf/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/stem-and-leaf/4f5194b07e26d67f.png"
+   }
+  ]
+ },
+ "checker": "pass: five rows per stem, negatives in the right order",
+ "result": "hit",
+ "evidence": "stem tests 27 + relevance guard; census unchanged; 6,912 old specs byte-identical; old links via the saved-spec path; task run reference 7 actions, ours 7",
+ "next": "stem-and-leaf (remaining reference controls)"
+}

@@ -1,0 +1,35 @@
+{
+ "round": 44,
+ "figure": "two-way-table",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 3 two-way-table: cap-03b built and checked; evidence changes:{\"blank\":\"Boxes I choose\",\"cells\":\"24, 18, 8\\n19, [27], 4\",\"show_answers\":false}",
+ "started_at": "2026-11-09T06:49:59",
+ "git": "9601147",
+ "before": {
+  "figure": 42.6,
+  "pooled": 80.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T06:50:01",
+ "after": {
+  "figure": 47.1,
+  "pooled": 80.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:{\"blank\":\"Boxes I choose\",\"cells\":\"24, 18, 8\\n19, [27], 4\",\"show_answers\":false}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/two-way-table/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/two-way-table/98e68261c3af093e.png"
+   }
+  ]
+ },
+ "checker": "pass: one chosen box blank, key shows 27",
+ "result": "hit",
+ "evidence": "twoway 41 tests incl. old saves (1,800) and old share links byte-identical; share v7 checked over 4,560 links of 190 figures; task run reference 14 actions, ours 12",
+ "next": "two-way-table (last reference controls)"
+}

@@ -1,0 +1,35 @@
+{
+ "round": 43,
+ "figure": "two-way-table",
+ "capability": "cap-02c",
+ "hypothesis": "Batch 3 two-way-table: cap-02c built and checked; evidence changes:{\"cells\":\"24, 18, 8 = 60\\n19, 27, 4\"}",
+ "started_at": "2026-11-09T06:49:58",
+ "git": "9601147",
+ "before": {
+  "figure": 38.2,
+  "pooled": 79.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T06:49:59",
+ "after": {
+  "figure": 42.6,
+  "pooled": 80.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"cells\":\"24, 18, 8 = 60\\n19, 27, 4\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/two-way-table/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/two-way-table/f83981c26680fe80.png"
+   }
+  ]
+ },
+ "checker": "pass: typed total drawn, with the doesn't-add-up note",
+ "result": "hit",
+ "evidence": "twoway 41 tests incl. old saves (1,800) and old share links byte-identical; share v7 checked over 4,560 links of 190 figures; task run reference 14 actions, ours 12",
+ "next": "two-way-table (last reference controls)"
+}

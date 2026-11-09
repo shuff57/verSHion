@@ -1,0 +1,35 @@
+{
+ "round": 47,
+ "figure": "two-way-table",
+ "capability": "cap-04a",
+ "hypothesis": "Batch 3 two-way-table: cap-04a built and checked; evidence changes:values=Relative frequency of the grand total",
+ "started_at": "2026-11-09T06:50:03",
+ "git": "9601147",
+ "before": {
+  "figure": 55.9,
+  "pooled": 80.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T06:50:05",
+ "after": {
+  "figure": 60.3,
+  "pooled": 80.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:values=Relative frequency of the grand total",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/two-way-table/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/two-way-table/0120248128381f86.png"
+   }
+  ]
+ },
+ "checker": "pass: joint relative frequencies, by hand",
+ "result": "hit",
+ "evidence": "twoway 41 tests incl. old saves (1,800) and old share links byte-identical; share v7 checked over 4,560 links of 190 figures; task run reference 14 actions, ours 12",
+ "next": "two-way-table (last reference controls)"
+}

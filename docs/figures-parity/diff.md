@@ -30,12 +30,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | rectangle | `rectangle` | 52 | 9 | 6 | — | 93 |
 | regular-polygon | `regular-polygon` | 29 | 8 | 6 | — | 89 |
 | sphere | `sphere` | 17 | 2 | 6 | — | 100 |
-| stem-and-leaf | `stem-and-leaf` | 8 | 0 | 8 | — | 34 |
+| stem-and-leaf | `stem-and-leaf` | 23 | 0 | 8 | — | 100 |
 | transformations | `transformations` | 22 | 5 | 5 | — | 61 |
 | trapezoid | `trapezoid` | 63 | 11 | 7 | — | 89 |
 | triangle | `triangle` | 42 | 9 | 6 | — | 92 |
-| two-way-table | `two-way-table` | 11 | 0 | 6 | — | 25 |
-| venn-diagram | `venn-diagram` | 11 | 0 | 6 | reference mentions click/drag; ours has no handles | 38 |
+| two-way-table | `two-way-table` | 21 | 12 | 6 | — | 100 |
+| venn-diagram | `venn-diagram` | 21 | 3 | 6 | — | 38 |
 
 ## physics
 
@@ -85,12 +85,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
 | dna-protein-synthesis | `dna-protein-synthesis` | 32 | 0 | 8 | — | 100 |
-| enzyme-activity | `enzyme-kinetics` | 11 | 1 | 6 | — | 32 |
+| enzyme-activity | `enzyme-kinetics` | 52 | 1 | 6 | — | 100 |
 | gel-electrophoresis | `gel-electrophoresis` | 18 | 17 | 8 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 97 |
 | micropipette-reading | `micropipette-reading` | 10 | 5 | 6 | reference has black-and-white; ours has no style switch | 89 |
 | osmosis | `osmosis` | 46 | 0 | 7 | — | 100 |
 | pedigree | `pedigree` | 17 | 1 | 8 | reference has a student version; ours has no show_answers | 95 |
-| photosynthesis-rate | `photosynthesis` | 14 | 0 | 8 | — | 26 |
+| photosynthesis-rate | `photosynthesis` | 51 | 0 | 8 | — | 26 |
 | population-growth | `population-growth` | 53 | 7 | 7 | reference has a student version; ours has no show_answers | 95 |
 | predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 97 |
 | punnett-square | `punnett-square` | 24 | 3 | 8 | — | 94 |
@@ -101,19 +101,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-09T03:11:18+00:00 · probe: 2026-11-08T19:11:17
+Generated: 2026-11-09T14:50:47+00:00 · probe: 2026-11-09T06:50:47
 
-**Pooled 78.9** · mean 80.1 over 70 figures · built 71 of 71 reference figures
+**Pooled 81.8** · mean 83.1 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `two-way-table`: 25 (17/68)
-  - cap-01b [control 3] Paste a table that includes its totals — no evidence
-  - cap-02a [control 3] Turn the Total column on or off — no evidence
-  - cap-02b [control 3] Turn the Total row on or off — no evidence
-  - cap-02c [control 3] Type the totals instead of having them worked out — no evidence
-  - cap-03b [version 3] Choose which cells are blank — no evidence
-  - cap-03c [version 3] Write a cell as a letter like x — no evidence
 - `photosynthesis`: 26 (32/125)
   - cap-01b [core 5] Rate against distance from the lamp — no evidence
   - cap-01e [core 5] CO₂ in a closed chamber over time — no evidence
@@ -121,20 +114,6 @@ Comparable with the frozen baseline: **yes**
   - cap-01g [core 5] CO₂ and O₂ around one plant against each other — no evidence
   - cap-02a [core 5] Up to three curves on one graph — no evidence
   - cap-02b [core 5] Set each curve's CO₂ concentration, temperature or light intensity — no evidence
-- `enzyme-kinetics`: 32 (27/85)
-  - cap-01a [core 5] Plot rate against temperature — no evidence
-  - cap-01b [core 5] Plot rate against pH — no evidence
-  - cap-02a [core 5] Draw up to three curves on one graph — no evidence
-  - cap-02b [core 5] Pick a named enzyme (human enzyme, Taq polymerase, pepsin, salivary amylase, trypsin or catalase) for a curve — no evidence
-  - cap-02c [core 5] An unknown enzyme with its own optimum and width — no evidence
-  - cap-02d [control 3] Name each curve in a key — no evidence
-- `stem-and-leaf`: 34 (23/67)
-  - cap-01b [core 5] Draw two data sets back to back — no evidence
-  - cap-01c [control 3] Name each back-to-back data set — no evidence
-  - cap-02b [control 3] Cut off digits past the leaf unit instead of rounding — no evidence
-  - cap-03b [control 3] Split each stem into five rows — no evidence
-  - cap-04a [control 3] Set the first and last stems to start or end the plot past the data — no evidence
-  - cap-04b [version 3] Draw empty stem rows with no data — no evidence
 - `venn-diagram`: 38 (20/53)
   - cap-01c [core 5] List each set's members and have them sorted into the regions — no evidence
   - cap-01b [control 3] Split a region's text into lines with commas — no evidence
@@ -366,6 +345,7 @@ Comparable with the frozen baseline: **yes**
   - cap-07e [control 3] End caps on the axes — no evidence
 - `circuit-diagram`: 100 (61/61)
 - `dna-protein-synthesis`: 100 (102/102)
+- `enzyme-kinetics`: 100 (85/85)
 - `inclined-plane`: 100 (91/91)
 - `lewis-structures`: 100 (51/51)
 - `line-spectrum`: 100 (54/54)
@@ -377,4 +357,6 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `pie-chart`: 100 (93/93)
 - `sphere`: 100 (35/35)
+- `stem-and-leaf`: 100 (67/67)
 - `titration-curve`: 100 (64/64)
+- `two-way-table`: 100 (68/68)

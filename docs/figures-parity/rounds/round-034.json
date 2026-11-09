@@ -1,0 +1,35 @@
+{
+ "round": 34,
+ "figure": "stem-and-leaf",
+ "capability": "cap-06c",
+ "hypothesis": "Batch 3 stem-and-leaf: cap-06c built and checked; evidence changes:{\"boxes\":true,\"box_count\":12}",
+ "started_at": "2026-11-09T06:49:49",
+ "git": "9601147",
+ "before": {
+  "figure": 73.1,
+  "pooled": 79.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T06:49:50",
+ "after": {
+  "figure": 77.6,
+  "pooled": 79.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:{\"boxes\":true,\"box_count\":12}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/stem-and-leaf/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/stem-and-leaf/34069ad7efa5da4e.png"
+   }
+  ]
+ },
+ "checker": "pass: empty boxes up to a count, rows equal width on the student copy",
+ "result": "hit",
+ "evidence": "stem tests 27 + relevance guard; census unchanged; 6,912 old specs byte-identical; old links via the saved-spec path; task run reference 7 actions, ours 7",
+ "next": "stem-and-leaf (remaining reference controls)"
+}

@@ -7,43 +7,43 @@
    "id": "cap-01a",
    "text": "Plot rate against temperature",
    "class": "core",
-   "evidence": "",
-   "note": "Ours is Michaelis–Menten (rate against [S]) only."
+   "evidence": "changes:against=Temperature",
+   "note": "Built in batch 2, round 57 (2026-11-08). Ours is Michaelis–Menten (rate against [S]) only."
   },
   {
    "id": "cap-01b",
    "text": "Plot rate against pH",
    "class": "core",
-   "evidence": "",
-   "note": "Ours is Michaelis–Menten (rate against [S]) only."
+   "evidence": "changes:against=pH",
+   "note": "Built in batch 2, round 58 (2026-11-08). Ours is Michaelis–Menten (rate against [S]) only."
   },
   {
    "id": "cap-02a",
    "text": "Draw up to three curves on one graph",
    "class": "core",
-   "evidence": "",
-   "note": "One enzyme curve; an inhibitor adds the uninhibited curve beside it, nothing more."
+   "evidence": "changes:{\"against\":\"pH\",\"curve2\":true,\"curve3\":true}",
+   "note": "Built in batch 2, round 59 (2026-11-08). One enzyme curve; an inhibitor adds the uninhibited curve beside it, nothing more."
   },
   {
    "id": "cap-02b",
    "text": "Pick a named enzyme (human enzyme, Taq polymerase, pepsin, salivary amylase, trypsin or catalase) for a curve",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"against\":\"pH\",\"enz1\":\"Pepsin\"}",
+   "note": "Built in batch 2, round 60 (2026-11-08)."
   },
   {
    "id": "cap-02c",
    "text": "An unknown enzyme with its own optimum and width",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"against\":\"Temperature\",\"enz1\":\"Unknown enzyme\",\"uopt_t1\":60,\"uwid_t1\":5}",
+   "note": "Built in batch 2, round 61 (2026-11-08)."
   },
   {
    "id": "cap-02d",
    "text": "Name each curve in a key",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:curve2=true",
+   "note": "Built in batch 2, round 62 (2026-11-08)."
   },
   {
    "id": "cap-03a",
@@ -70,8 +70,8 @@
    "id": "cap-04a",
    "text": "Mark the optimum and denaturation with dots",
    "class": "control",
-   "evidence": "",
-   "note": "No temperature or pH curves."
+   "evidence": "changes:{\"against\":\"Temperature\",\"mark_den\":true}",
+   "note": "Built in batch 2, round 63 (2026-11-08). No temperature or pH curves."
   },
   {
    "id": "cap-04b",
@@ -84,29 +84,29 @@
    "id": "cap-04c",
    "text": "Name each mark for its curve when there is more than one curve",
    "class": "control",
-   "evidence": "",
-   "note": "With an inhibitor our marks read Vmax′ / Km′ for the inhibited curve only; no per-curve naming of several curves."
+   "evidence": "changes:{\"against\":\"Temperature\",\"curve2\":true}",
+   "note": "Built in batch 2, round 64 (2026-11-08). With an inhibitor our marks read Vmax′ / Km′ for the inhibited curve only; no per-curve naming of several curves."
   },
   {
    "id": "cap-04d",
    "text": "Leave a mark's label as a blank line for students",
    "class": "version",
-   "evidence": "",
-   "note": "Marks are labeled or hidden with the answers; no blank-line mode."
+   "evidence": "changes:{\"against\":\"Temperature\",\"opt_label\":\"Blank line\"}",
+   "note": "Built in batch 2, round 65 (2026-11-08). Marks are labeled or hidden with the answers; no blank-line mode."
   },
   {
    "id": "cap-04e",
    "text": "Leave a mark unlabeled (line kept)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"against\":\"Temperature\",\"mark_den\":true,\"den_label\":\"None\"}",
+   "note": "Built in batch 2, round 66 (2026-11-08)."
   },
   {
    "id": "cap-05a",
    "text": "Shape-only axes, with no numbers",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"against\":\"Temperature\",\"axes\":\"Shape only\"}",
+   "note": "Built in batch 2, round 67 (2026-11-08)."
   },
   {
    "id": "cap-05c",
@@ -119,8 +119,8 @@
    "id": "cap-05d",
    "text": "Set the y-axis range by hand",
    "class": "control",
-   "evidence": "",
-   "note": "The rate axis is always fitted."
+   "evidence": "changes:{\"y_fit\":false,\"y_to\":30}",
+   "note": "Built in batch 2, round 68 (2026-11-08). The rate axis is always fitted."
   },
   {
    "id": "cap-06a",
@@ -133,29 +133,29 @@
    "id": "cap-06b",
    "text": "Turn gridlines off",
    "class": "control",
-   "evidence": "",
-   "note": "Our gridlines are always drawn."
+   "evidence": "changes:{\"against\":\"Temperature\",\"gridlines\":false}",
+   "note": "Built in batch 2, round 69 (2026-11-08). Our gridlines are always drawn."
   },
   {
    "id": "cap-06c",
    "text": "Arrows at the axes' ends",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:arrows=true",
+   "note": "Built in batch 2, round 70 (2026-11-08)."
   },
   {
    "id": "cap-06d",
    "text": "A chart title (or blank line)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"title\":\"The effect of temperature on the rate of an enzyme-controlled reaction in humans\",\"label_size\":\"Large\"}",
+   "note": "Built in batch 2, round 71 (2026-11-08)."
   },
   {
    "id": "cap-06e",
    "text": "Edit the axis titles, or make them blank lines",
    "class": "control",
-   "evidence": "",
-   "note": "Axis titles are fixed text."
+   "evidence": "changes:{\"xtitle\":\"Volume of oxygen gas released per minute from the catalase in mammal liver\",\"label_size\":\"Small\"}",
+   "note": "Built in batch 2, round 72 (2026-11-08). Axis titles are fixed text."
   },
   {
    "id": "cap-06f",

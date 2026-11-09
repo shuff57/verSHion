@@ -1,0 +1,35 @@
+{
+ "round": 57,
+ "figure": "enzyme-kinetics",
+ "capability": "cap-01a",
+ "hypothesis": "Batch 3 enzyme-kinetics: cap-01a built and checked; evidence changes:against=Temperature",
+ "started_at": "2026-11-09T06:50:21",
+ "git": "9601147",
+ "before": {
+  "figure": 31.8,
+  "pooled": 80.7
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T06:50:23",
+ "after": {
+  "figure": 37.6,
+  "pooled": 80.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:against=Temperature",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/enzyme-kinetics/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/enzyme-kinetics/b4cb750a56901d2c.png"
+   }
+  ]
+ },
+ "checker": "pass: each curve rises to its optimum, zero by denaturation",
+ "result": "hit",
+ "evidence": "enzyme 44 tests incl. old saves byte-identical; old links via the saved-spec path; inhibitor maths and optima checked by hand; task run reference 3 actions, ours 4",
+ "next": "enzyme-kinetics (remaining)"
+}

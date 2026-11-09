@@ -1,0 +1,35 @@
+{
+ "round": 51,
+ "figure": "two-way-table",
+ "capability": "cap-04e",
+ "hypothesis": "Batch 3 two-way-table: cap-04e built and checked; evidence changes:{\"values\":\"Relative frequency of the grand total\",\"rf_as\":\"Fraction\"}",
+ "started_at": "2026-11-09T06:50:09",
+ "git": "9601147",
+ "before": {
+  "figure": 73.5,
+  "pooled": 80.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T06:50:11",
+ "after": {
+  "figure": 77.9,
+  "pooled": 80.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"values\":\"Relative frequency of the grand total\",\"rf_as\":\"Fraction\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/two-way-table/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/two-way-table/0dc78862a21435a7.png"
+   }
+  ]
+ },
+ "checker": "pass: fractions in lowest terms",
+ "result": "hit",
+ "evidence": "twoway 41 tests incl. old saves (1,800) and old share links byte-identical; share v7 checked over 4,560 links of 190 figures; task run reference 14 actions, ours 12",
+ "next": "two-way-table (last reference controls)"
+}

@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-09T03:11:18+00:00",
- "probe_checked_at": "2026-11-08T19:11:17",
+ "generated_at": "2026-11-09T14:50:47+00:00",
+ "probe_checked_at": "2026-11-09T06:50:47",
  "comparable": true,
  "drift": [],
- "pooled": 78.9,
- "mean": 80.1,
+ "pooled": 81.8,
+ "mean": 83.1,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -678,124 +678,11 @@
    ]
   },
   "enzyme-kinetics": {
-   "score": 31.8,
-   "got": 27.0,
+   "score": 100.0,
+   "got": 85.0,
    "total": 85.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Plot rate against temperature",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Plot rate against pH",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw up to three curves on one graph",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Pick a named enzyme (human enzyme, Taq polymerase, pepsin, salivary amylase, trypsin or catalase) for a curve",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "An unknown enzyme with its own optimum and width",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name each curve in a key",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Mark the optimum and denaturation with dots",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name each mark for its curve when there is more than one curve",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04d",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Leave a mark's label as a blank line for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Leave a mark unlabeled (line kept)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Shape-only axes, with no numbers",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set the y-axis range by hand",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Turn gridlines off",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Arrows at the axes' ends",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "A chart title (or blank line)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Edit the axis titles, or make them blank lines",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "free-body-diagram": {
    "score": 97.0,
@@ -2463,110 +2350,11 @@
    ]
   },
   "stem-and-leaf": {
-   "score": 34.3,
-   "got": 23.0,
+   "score": 100.0,
+   "got": 67.0,
    "total": 67.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw two data sets back to back",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name each back-to-back data set",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Cut off digits past the leaf unit instead of rounding",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Split each stem into five rows",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set the first and last stems to start or end the plot past the data",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Draw empty stem rows with no data",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Add headings over the stems and leaves",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Put the leaves in boxes",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Give each row empty boxes up to a count for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Word the key with = or means",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type a measurement unit, such as cm, onto the key's value",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose the key's example value",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07e",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Put a blank line in the key for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Put a blank line in place of the title for students",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "temperature-reading": {
    "score": 87.5,
@@ -2769,131 +2557,11 @@
    ]
   },
   "two-way-table": {
-   "score": 25.0,
-   "got": 17.0,
+   "score": 100.0,
+   "got": 68.0,
    "total": 68.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Paste a table that includes its totals",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Turn the Total column on or off",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Turn the Total row on or off",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type the totals instead of having them worked out",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Choose which cells are blank",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03c",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Write a cell as a letter like x",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "See whether the missing values can be worked out from the rest",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Show relative frequencies of the grand total",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Show relative frequencies of each row",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Show relative frequencies of each column",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Write relative frequencies as decimals or percents rounded to a set number of places",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Write relative frequencies as fractions in lowest terms",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Put a blank line in place of the table title for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Put the variable titles in a corner split by a diagonal",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Use plain headings",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw lines round every cell or only under the headings and before the totals",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Write the totals in bold",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "vector-diagram": {
    "score": 84.2,

@@ -1,0 +1,35 @@
+{
+ "round": 62,
+ "figure": "enzyme-kinetics",
+ "capability": "cap-02d",
+ "hypothesis": "Batch 3 enzyme-kinetics: cap-02d built and checked; evidence changes:curve2=true",
+ "started_at": "2026-11-09T06:50:30",
+ "git": "9601147",
+ "before": {
+  "figure": 61.2,
+  "pooled": 81.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T06:50:32",
+ "after": {
+  "figure": 64.7,
+  "pooled": 81.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:curve2=true",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/enzyme-kinetics/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/enzyme-kinetics/1b18523a7e79cd86.png"
+   }
+  ]
+ },
+ "checker": "pass: key names each curve",
+ "result": "hit",
+ "evidence": "enzyme 44 tests incl. old saves byte-identical; old links via the saved-spec path; inhibitor maths and optima checked by hand; task run reference 3 actions, ours 4",
+ "next": "enzyme-kinetics (remaining)"
+}
