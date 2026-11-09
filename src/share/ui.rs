@@ -415,7 +415,7 @@ fn notice(ui: &mut Ui, n: Option<&Notice>) {
 }
 
 fn para(ui: &mut Ui, text: &str) {
-    ui.add(egui::Label::new(theme::muted(text).size(12.5)).wrap());
+    ui.add(egui::Label::new(kit::meta_muted(text)).wrap());
     ui.add_space(6.0);
 }
 
@@ -434,7 +434,7 @@ fn field_noted(ui: &mut Ui, label: &str, note: Option<&str>, value: &mut String,
         ui.spacing_mut().item_spacing.x = 6.0;
         ui.label(theme::strong(label).size(13.5));
         if let Some(n) = note {
-            ui.label(theme::muted(format!("· {n}")).size(12.5));
+            ui.label(kit::meta_muted(format!("· {n}")));
         }
     });
     ui.add_space(2.0);
@@ -544,6 +544,10 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel, address_source: bool) {
             .inner;
         enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         typed = m.forms.server.trim().to_string();
+        if typed.is_empty() {
+            // the step that is missing wears the accent ring
+            kit::attention_ring(ui, &r);
+        }
         let h = r.rect.height();
         // Not available until there is an address: a lit Connect beside an empty box read as ready
         // to submit with nothing to send. Grey and unpressable while empty, the solid green action
@@ -582,7 +586,12 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel, address_source: bool) {
     if address_source {
         ui.spacing_mut().item_spacing.y = 10.0;
     }
-    ui.add(egui::Label::new(egui::RichText::new(hint).size(13.0).color(theme::ink().gamma_multiply(0.8))).wrap());
+    if typed.is_empty() {
+        // why Connect waits, in the gated look, within 8 pt under the field
+        kit::gated_reason(ui, hint);
+    } else {
+        ui.add(egui::Label::new(egui::RichText::new(hint).size(kit::ty::META).color(theme::ink().gamma_multiply(0.85))).wrap());
+    }
     if address_source {
         let mut job = egui::text::LayoutJob::default();
         let style = ui.style().clone();

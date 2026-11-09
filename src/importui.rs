@@ -41,7 +41,6 @@ enum Ic {
     Clip,
     Camera,
     Sparkle,
-    Lock,
 }
 
 struct Source {
@@ -544,7 +543,6 @@ fn paint_icon(p: &Painter, ic: Ic, c: Pos2, col: Color32, k: f32) {
         Ic::Clip => ph::PAPERCLIP,
         Ic::Camera => ph::CAMERA,
         Ic::Sparkle => crate::handicons::SPARKLE,
-        Ic::Lock => ph::LOCK_SIMPLE,
     };
     crate::handicons::paint_glyph(p, c, glyph, 16.0 * k, col);
 }
@@ -851,31 +849,35 @@ fn format_lines<'a>(ui: &egui::Ui, items: &[&'a str], width: f32) -> Vec<Vec<&'a
 
 /// The line breaking behind [`format_lines`]: names go on a line while they fit with a
 /// separator `sep` wide between them; a name that does not fit starts the next line (alone if
-/// it is wider than the whole line), so a break always falls between two names.
+/// it is wider than the whole line), so a break always falls between two names. A continued
+/// line opens with the separator (see [`format_line`]), so its width counts one `sep` up front.
 fn break_between<'a>(items: &[&'a str], width: f32, sep: f32, w_of: impl Fn(&str) -> f32) -> Vec<Vec<&'a str>> {
     let mut rows: Vec<Vec<&str>> = vec![Vec::new()];
     let mut used = 0.0_f32;
     for it in items {
         let w = w_of(it);
-        if used > 0.0 && used + sep + w > width {
+        if !rows.last().expect("one row to start with").is_empty() && used + sep + w > width {
             rows.push(Vec::new());
-            used = 0.0;
+            used = sep;
         }
-        used += if used > 0.0 { sep + w } else { w };
-        rows.last_mut().expect("one row to start with").push(*it);
+        let row = rows.last_mut().expect("one row to start with");
+        used += if row.is_empty() { w } else { sep + w };
+        row.push(*it);
     }
     rows
 }
 
-/// One line of format names: the names in body text, the middots between them muted. Plain
-/// text on purpose: these are what the importer reads, not things to press, so the only
-/// button-shaped things on the page are Choose files, Paste text and Add photo.
-fn format_line(items: &[&str]) -> egui::text::LayoutJob {
+/// One line of format names: the names in body text, the middots between them muted. A
+/// `continued` line opens with the muted separator, so a wrapped name ("Test Parrot .json")
+/// reads as part of the list above it. Plain text on purpose: these are what the importer
+/// reads, not things to press, so the only button-shaped things on the page are Choose files,
+/// Paste text and Add photo.
+fn format_line(items: &[&str], continued: bool) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     let name = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::text_col());
     let sep = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::muted_col());
     for (i, it) in items.iter().enumerate() {
-        if i > 0 {
+        if i > 0 || continued {
             job.append(FORMAT_SEP, 0.0, sep.clone());
         }
         job.append(it, 0.0, name.clone());
@@ -889,9 +891,9 @@ fn formats_panel(ui: &mut egui::Ui) {
     kit::card().inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal_wrapped(|ui| {
-            kit::small_caps(ui, "What it reads");
+            kit::label(ui, "What it reads");
             ui.add_space(2.0);
-            ui.label(theme::muted("Detected from the file itself — nothing is converted until you press Convert.").size(11.5));
+            ui.label(kit::meta("Detected from the file itself — nothing is converted until you press Convert."));
         });
         ui.add_space(10.0);
         let groups: [(&str, &[&str]); 3] = [
@@ -919,8 +921,8 @@ fn formats_panel(ui: &mut egui::Ui) {
                 });
                 ui.allocate_ui_with_layout(Vec2::new(rest, 0.0), Layout::top_down(Align::Min), |ui| {
                     ui.spacing_mut().item_spacing.y = 3.0;
-                    for line in format_lines(ui, items, rest) {
-                        ui.add(egui::Label::new(format_line(&line)).wrap_mode(egui::TextWrapMode::Extend));
+                    for (li, line) in format_lines(ui, items, rest).into_iter().enumerate() {
+                        ui.add(egui::Label::new(format_line(&line, li > 0)).selectable(false).wrap_mode(egui::TextWrapMode::Extend));
                     }
                 });
             });
@@ -1012,7 +1014,7 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                     paint_icon(ui.painter(), Ic::Upload, r.center(), theme::accent_col(), 1.25);
                     ui.add_space(4.0);
                     ui.label(theme::serif("Drop anything here").size(19.0).color(theme::ink()));
-                    ui.label(theme::text("Files, photos, or paste text straight in.").size(12.5));
+                    ui.label(kit::meta("Files, photos, or paste text straight in."));
                     ui.add_space(8.0);
                 }
                 ui.horizontal(|ui| {
@@ -1055,7 +1057,7 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                             ),
                     );
                     paste_live_line(app, ui, st);
-                    ui.label(theme::muted("* marks the correct answer. One blank line between questions.").size(11.5));
+                    ui.label(kit::meta("* marks the correct answer. One blank line between questions."));
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         ui.add_space(((ui.available_width() - 250.0) / 2.0).max(0.0));
@@ -1072,7 +1074,7 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                 }
                 if !compact && !st.in_modal {
                     ui.add_space(2.0);
-                    ui.label(theme::muted("Any file, text or photo — the format is detected after the drop.").size(11.5));
+                    ui.label(kit::meta("Any file, text or photo — the format is detected after the drop."));
                 }
             });
         });
@@ -1131,11 +1133,7 @@ fn privacy_note(app: &crate::App, ui: &mut egui::Ui) {
     } else {
         format!("Everything is read on this computer. When you press Convert, the photo goes to {dest}, which runs here too.")
     };
-    ui.horizontal_top(|ui| {
-        let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, 16.0), Sense::hover());
-        paint_icon(ui.painter(), Ic::Lock, r.center() + Vec2::new(0.0, 2.0), theme::accent_col(), 0.8);
-        ui.add(egui::Label::new(theme::muted(msg).size(12.0)).wrap());
-    });
+    crate::pageshell::note(ui, egui_phosphor::regular::LOCK_SIMPLE, Some("Private by default."), &msg);
 }
 
 // ----- the three-pane workspace: import list | page preview | details -----
@@ -2919,10 +2917,10 @@ impl crate::App {
 
 fn history(app: &mut crate::App, ui: &mut egui::Ui) {
     ui.label(theme::serif("Import history").size(22.0).color(theme::ink()));
-    ui.label(theme::muted("Everything verSHion has read: pasted, converted by the AI, or read from a file.").size(12.5));
+    ui.label(kit::lead("Everything verSHion has read: pasted, converted by the AI, or read from a file."));
     ui.add_space(8.0);
     if app.store.imports.is_empty() {
-        ui.label(theme::muted("No imports yet."));
+        crate::pageshell::empty_line(ui, crate::handicons::IMPORT, "Nothing imported yet. What you import is listed here.", None);
         return;
     }
     let mut sorted = app.store.imports.clone();
@@ -3010,6 +3008,12 @@ mod tests {
         assert_eq!(break_between(&items, 54.0, 5.0, w), vec![items.to_vec()]);
         // One unit short: the last name moves down whole, never split at its space.
         assert_eq!(break_between(&items, 53.0, 5.0, w), vec![vec!["PDF", "Word", "Photos of a worksheet"], vec!["Pasted text"]]);
+        // A continued line opens with a separator, so it holds 5 units less than the first:
+        // "Photos of a worksheet  ·  Pasted text" (37) fits a first line but not a continued one.
+        assert_eq!(
+            break_between(&items, 37.0, 5.0, w),
+            vec![vec!["PDF", "Word"], vec!["Photos of a worksheet"], vec!["Pasted text"]]
+        );
         // A name wider than the line still gets a line of its own, unbroken.
         let lines = break_between(&items, 10.0, 5.0, w);
         assert_eq!(lines, vec![vec!["PDF"], vec!["Word"], vec!["Photos of a worksheet"], vec!["Pasted text"]]);

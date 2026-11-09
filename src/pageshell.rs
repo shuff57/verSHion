@@ -47,6 +47,7 @@ pub fn footer(ui: &mut Ui, text: &str) {
     let h = 30.0;
     let rest = ui.available_height();
     if rest < h + 24.0 {
+        end_pad(ui);
         return;
     }
     let top = ui.cursor().top();
@@ -62,6 +63,7 @@ pub fn footer(ui: &mut Ui, text: &str) {
         _ => (bottom - h, bottom - h + 15.0),
     };
     if rule_y - top < 24.0 {
+        end_pad(ui);
         return;
     }
     ui.add_space(rule_y - top);
@@ -71,9 +73,17 @@ pub fn footer(ui: &mut Ui, text: &str) {
         Pos2::new(r.left(), text_y),
         Align2::LEFT_CENTER,
         text,
-        egui::FontId::proportional(11.5),
+        egui::FontId::proportional(crate::kit::ty::META),
         theme::muted_col(),
     );
+}
+
+/// Room at the foot of a page that scrolls, so its last row can scroll clear of the floating
+/// "Report an issue" pill: the pill's height + 16, or 52 before the pill's first frame. Call it
+/// last in a page's scroll content (`footer` does when the page overflows).
+pub fn end_pad(ui: &mut Ui) {
+    let h = crate::alphanote::corner_rect(ui.ctx()).map_or(52.0, |r| r.height() + 16.0);
+    ui.add_space(h);
 }
 
 /// The readable measure for a paragraph of prose: at these sizes roughly 70 characters, which is
@@ -125,7 +135,7 @@ pub fn title(ui: &mut Ui, crumbs: &str, title: &str, sub: &str) {
 pub fn header(ui: &mut Ui, crumbs: &str, title: &str, sub: Option<&str>) {
     ui.add_space(6.0);
     if !crumbs.is_empty() {
-        ui.label(RichText::new(crumbs).size(12.8).color(theme::muted_col()));
+        ui.label(RichText::new(crumbs).size(crate::kit::ty::META).color(theme::muted_col()));
     }
     ui.label(RichText::new(title).family(theme::serif_family()).size(34.0).color(theme::ink()));
     if let Some(sub) = sub {
@@ -147,9 +157,18 @@ pub fn styled_button(ui: &mut Ui, text: RichText, rest: Color32, hover: Color32,
             state.expansion = 0.0;
             state.corner_radius = CornerRadius::same(12);
         }
-        ui.add(egui::Button::new(text).min_size(Vec2::new(0.0, h))).on_hover_cursor(egui::CursorIcon::PointingHand)
+        let r = ui.add(egui::Button::new(text).min_size(Vec2::new(0.0, h))).on_hover_cursor(egui::CursorIcon::PointingHand);
+        focus_ring(ui, &r, 12);
+        r
     })
     .inner
+}
+
+/// The 2 pt accent ring outside a button that has keyboard focus, 1 pt clear of its edge.
+fn focus_ring(ui: &Ui, r: &egui::Response, radius: u8) {
+    if r.has_focus() {
+        ui.painter().rect_stroke(r.rect.expand(1.0), CornerRadius::same(radius + 1), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+    }
 }
 
 /// The solid accent look's three states: rest, hover, pressed.
@@ -204,6 +223,86 @@ pub fn empty_state_buttons(ui: &mut Ui, icon: &str, title: &str, body: &str, act
     pressed
 }
 
+/// A short note set into the page: a card-fill band (1 pt `border`, radius 12, padding 14x12)
+/// with a 28 pt accent_faded disc holding a 16 pt accent `icon` (anything
+/// `handicons::paint_glyph` takes), then an optional bold ink `lead` and `text`, BODY 14 in
+/// `text`, wrapped at [`MEASURE`]. The lead adds emphasis; it never replaces the facts.
+pub fn note(ui: &mut Ui, icon: &str, lead: Option<&str>, text: &str) {
+    const DISC: f32 = 28.0;
+    const GAP: f32 = 12.0;
+    let size = crate::kit::ty::BODY;
+    Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0, theme::border()))
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(Margin::symmetric(14, 12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = GAP;
+                let (r, _) = ui.allocate_exact_size(Vec2::splat(DISC), Sense::hover());
+                ui.painter().circle_filled(r.center(), DISC / 2.0, theme::accent_faded());
+                crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 16.0, theme::accent_col());
+                let w = ui.available_width().min(MEASURE);
+                let mut job = egui::text::LayoutJob::default();
+                if let Some(lead) = lead {
+                    job.append(lead, 0.0, egui::TextFormat::simple(egui::FontId::new(size, theme::bold_family()), theme::ink()));
+                    job.append(" ", 0.0, egui::TextFormat::simple(egui::FontId::new(size, theme::sans_family()), theme::text_col()));
+                }
+                job.append(text, 0.0, egui::TextFormat::simple(egui::FontId::new(size, theme::sans_family()), theme::text_col()));
+                ui.allocate_ui_with_layout(Vec2::new(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                    ui.set_max_width(w);
+                    // the first line's centre on the disc's centre
+                    ui.add_space(4.0);
+                    ui.add(egui::Label::new(job).wrap());
+                });
+            });
+        });
+}
+
+/// An empty list said in one line: a card-fill band (1 pt `border`, radius 12, at least 64
+/// tall) with a 36 pt accent_faded disc holding a 20 pt accent `icon`, one BODY line in `text`,
+/// and an optional `kit::secondary` (32 tall) on the right. Returns the button's response only
+/// on the frame it is clicked.
+pub fn empty_line(ui: &mut Ui, icon: &str, text: &str, action: Option<&str>) -> Option<egui::Response> {
+    const DISC: f32 = 36.0;
+    const GAP: f32 = 12.0;
+    const BTN_H: f32 = 32.0;
+    let mut out = None;
+    Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0, theme::border()))
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(Margin::symmetric(14, 13))
+        .show(ui, |ui| {
+            let w = ui.available_width();
+            ui.set_width(w);
+            // The button's width first, so the line wraps in the room left beside it.
+            let btn_w = action.map_or(0.0, |a| {
+                let g = ui.painter().layout_no_wrap(a.to_owned(), egui::FontId::new(crate::kit::ty::BUTTON_SM, theme::bold_family()), theme::ink());
+                (g.size().x + 28.0).ceil()
+            });
+            let text_w = (w - DISC - GAP - if action.is_some() { btn_w + GAP } else { 0.0 }).clamp(40.0, MEASURE);
+            let galley = egui::WidgetText::from(crate::kit::body(text)).into_galley(ui, Some(egui::TextWrapMode::Wrap), text_w, egui::TextStyle::Body);
+            let h = galley.size().y.max(DISC).max(64.0 - 26.0);
+            let (row, _) = ui.allocate_exact_size(Vec2::new(w, h), Sense::hover());
+            let disc = Rect::from_center_size(Pos2::new(row.left() + DISC / 2.0, row.center().y), Vec2::splat(DISC));
+            ui.painter().circle_filled(disc.center(), DISC / 2.0, theme::accent_faded());
+            crate::handicons::paint_glyph(ui.painter(), disc.center(), icon, 20.0, theme::accent_col());
+            // `put` centres its widget in the rect, so the rect is the wrapped text's own size.
+            let text_rect = Rect::from_min_size(Pos2::new(disc.right() + GAP, row.center().y - galley.size().y / 2.0), galley.size());
+            ui.put(text_rect, egui::Label::new(crate::kit::body(text)).wrap());
+            if let Some(a) = action {
+                let btn = Rect::from_min_size(Pos2::new(row.right() - btn_w, row.center().y - BTN_H / 2.0), Vec2::new(btn_w, BTN_H));
+                let r = ui.scope_builder(egui::UiBuilder::new().max_rect(btn), |ui| crate::kit::secondary(ui, a, BTN_H)).inner;
+                if r.clicked() {
+                    out = Some(r);
+                }
+            }
+        });
+    out
+}
+
 /// The width a [`primary`] or [`outline`] button with this text takes. The buttons are laid out
 /// where the cursor is, so a wrapping row of them asks this first and starts the next line itself.
 pub fn button_width(ui: &Ui, text: &str) -> f32 {
@@ -232,7 +331,9 @@ pub fn primary_large(ui: &mut Ui, text: &str) -> egui::Response {
             state.corner_radius = CornerRadius::same(14);
         }
         let t = RichText::new(text).family(theme::bold_family()).size(17.5).color(theme::on_accent_col());
-        ui.add(egui::Button::new(t).min_size(Vec2::new(240.0, 52.0))).on_hover_cursor(egui::CursorIcon::PointingHand)
+        let r = ui.add(egui::Button::new(t).min_size(Vec2::new(240.0, 52.0))).on_hover_cursor(egui::CursorIcon::PointingHand);
+        focus_ring(ui, &r, 14);
+        r
     })
     .inner
 }
@@ -294,7 +395,7 @@ pub fn unavailable(ui: &mut Ui, text: &str, h: f32, why: &str) -> egui::Response
 
 /// The outlined action.
 pub fn outline(ui: &mut Ui, text: &str) -> egui::Response {
-    button(ui, text, theme::card(), theme::hover_bg(), theme::accent_faded(), Stroke::new(1.0, theme::rule()), theme::ink())
+    button(ui, text, theme::card(), theme::hover_bg(), theme::accent_faded(), Stroke::new(1.0, theme::edge()), theme::ink())
 }
 
 // ---------------------------------------------------------------- motion
@@ -395,7 +496,7 @@ pub fn sections_aside(
                         ui.add_space(18.0);
                         ui.vertical(|ui| {
                             ui.set_width(NAV_W - 30.0);
-                            crate::kit::small_caps(ui, "Account optional");
+                            crate::kit::label(ui, "Account optional");
                             ui.add_space(6.0);
                             ui.add(egui::Label::new(theme::muted("Create banks, build exams and print on this machine. Connect when you want to share.").size(13.0)).wrap());
                         });
@@ -482,25 +583,28 @@ fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize, quie
     }
 }
 
-/// The narrow window's section list: one segmented strip across the content column (a shared
-/// rounded frame, segments split by hairlines, the chosen one filled), so it reads as navigation.
-/// Separate outlined chips with small bold labels read as a row of secondary buttons.
+/// The narrow window's section list: one segmented strip across the content column, so it reads
+/// as navigation rather than a row of buttons. The track is `field` with a 1 pt `edge`; labels are
+/// 14 semibold ink; the chosen segment is a `card` fill with its label in accent bold and a 2 pt
+/// accent underline. Two per row when the labels do not fit one row.
 fn nav_strip(ui: &mut Ui, items: &[NavItem], selected: &mut usize) {
     const SEG_H: f32 = 40.0;
     const PAD: f32 = 3.0;
     let n = items.len();
-    let font = egui::FontId::new(14.0, egui::FontFamily::Proportional);
+    let font = egui::FontId::new(14.0, theme::semibold());
+    let font_on = egui::FontId::new(14.0, theme::bold_family());
     let w = ui.available_width();
-    // One row when every label fits its equal share; otherwise two per row.
+    // One row when every label (measured in the wider, chosen face) fits its equal share;
+    // otherwise two per row.
     let widest = items
         .iter()
-        .map(|it| ui.painter().layout_no_wrap(it.label.to_owned(), font.clone(), theme::ink()).size().x)
+        .map(|it| ui.painter().layout_no_wrap(it.label.to_owned(), font_on.clone(), theme::ink()).size().x)
         .fold(0.0_f32, f32::max);
     let cols = if widest + 28.0 <= w / n as f32 { n } else { 2.min(n) };
     let rows = n.div_ceil(cols);
     let (frame, _) = ui.allocate_exact_size(Vec2::new(w, SEG_H * rows as f32), Sense::hover());
     let painter = ui.painter();
-    painter.rect(frame, CornerRadius::same(12), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+    painter.rect(frame, CornerRadius::same(12), theme::field(), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
     let seg_w = w / cols as f32;
     let seg = |i: usize| Rect::from_min_size(frame.min + Vec2::new((i % cols) as f32 * seg_w, (i / cols) as f32 * SEG_H), Vec2::new(seg_w, SEG_H));
     // Hairlines between neighbours, left out beside the chosen segment so its fill stands alone.
@@ -522,17 +626,21 @@ fn nav_strip(ui: &mut Ui, items: &[NavItem], selected: &mut usize) {
         let on = i == *selected;
         let inner = r.shrink(PAD);
         if on {
-            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::accent_faded());
+            ui.painter().rect(inner, CornerRadius::same(9), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+            ui.painter().line_segment(
+                [Pos2::new(inner.left() + 12.0, inner.bottom() - 3.0), Pos2::new(inner.right() - 12.0, inner.bottom() - 3.0)],
+                Stroke::new(2.0, theme::accent_col()),
+            );
         } else if resp.is_pointer_button_down_on() {
-            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::accent_faded().gamma_multiply(0.7));
+            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::accent_faded());
         } else if resp.hovered() {
             ui.painter().rect_filled(inner, CornerRadius::same(9), theme::hover_bg());
         }
         if resp.has_focus() {
             ui.painter().rect_stroke(inner, CornerRadius::same(9), Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
         }
-        let col = if on { theme::accent_col() } else { theme::ink() };
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, it.label, font.clone(), col);
+        let (col, f) = if on { (theme::accent_col(), font_on.clone()) } else { (theme::ink(), font.clone()) };
+        ui.painter().text(r.center() - Vec2::new(0.0, if on { 1.0 } else { 0.0 }), Align2::CENTER_CENTER, it.label, f, col);
         resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
         if resp.clicked() {
             *selected = i;
@@ -559,4 +667,41 @@ fn ease_in_content(ui: &mut Ui, id: Id, selected: usize, content: impl FnOnce(&m
         ui.add_space((1.0 - e) * 10.0);
     }
     content(ui, selected);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::{kittest::Queryable, Harness};
+
+    /// `empty_line` says its line, is at least 64 tall, and returns its button's response only on
+    /// the frame the button is pressed.
+    #[test]
+    fn empty_line_returns_the_action_only_when_pressed() {
+        let mut first = true;
+        let mut h = Harness::builder().with_size(egui::vec2(700.0, 300.0)).build_ui_state(
+            move |ui, s: &mut (usize, f32)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let top = ui.cursor().top();
+                if empty_line(ui, crate::handicons::BANKS, "No banks yet.", Some("New bank")).is_some() {
+                    s.0 += 1;
+                }
+                s.1 = ui.cursor().top() - top;
+            },
+            (0, 0.0),
+        );
+        h.run();
+        assert!(h.query_by_label("No banks yet.").is_some());
+        assert!(h.state().1 >= 64.0, "{}", h.state().1);
+        assert_eq!(h.state().0, 0);
+        h.get_by_label("New bank").click();
+        h.run();
+        assert_eq!(h.state().0, 1);
+        h.run();
+        assert_eq!(h.state().0, 1, "Some only on the click's frame");
+    }
 }

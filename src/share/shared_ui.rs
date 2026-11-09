@@ -159,7 +159,7 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui, row_gap: f32) {
         (ph::MAGNIFYING_GLASS, "Browse the pool", "Copy published questions."),
         (crate::handicons::SPARKLE, "Hosted AI", "Turn a PDF into questions."),
     ];
-    crate::kit::small_caps(ui, "What an account adds");
+    crate::kit::label(ui, "What an account adds");
     ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 6.0 } else { 18.0 });
     // A narrow window: a short stacked list, one line per benefit, the bold heading in a fixed slot and
     // a one-line description beside it. Three columns at this width wrapped each description into a
@@ -177,7 +177,7 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui, row_gap: f32) {
                     ui.label(theme::strong(head).size(13.0));
                 });
                 ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    ui.add(egui::Label::new(egui::RichText::new(body).size(13.0).color(theme::ink().gamma_multiply(0.7))).wrap());
+                    ui.add(egui::Label::new(crate::kit::meta(body)).wrap());
                 });
             });
         }
@@ -199,7 +199,7 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui, row_gap: f32) {
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 1.0;
                 ui.label(theme::strong(head).size(14.0));
-                ui.add(egui::Label::new(egui::RichText::new(body).size(13.5).color(theme::ink().gamma_multiply(0.72))).wrap());
+                ui.add(egui::Label::new(crate::kit::meta(body)).wrap());
             });
         });
     }
@@ -600,7 +600,7 @@ fn steps_strip(ui: &mut Ui, now: u8) {
 /// `kit::pill`'s look, allocated in one piece so a wrapping row moves it to the next line whole
 /// (a framed pill is laid out where the row's cursor is and squeezed there instead).
 pub(super) fn step_pill(ui: &mut Ui, label: &str, fill: egui::Color32, fg: egui::Color32) {
-    let text = egui::RichText::new(label).family(theme::bold_family()).size(11.0).color(fg);
+    let text = egui::RichText::new(label).family(theme::bold_family()).size(crate::kit::ty::LABEL).color(fg);
     let galley = egui::WidgetText::from(text).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Body);
     let (rect, _) = ui.allocate_exact_size(galley.size() + egui::vec2(18.0, 4.0), egui::Sense::hover());
     ui.painter().rect_filled(rect, egui::CornerRadius::same(255), fill);
