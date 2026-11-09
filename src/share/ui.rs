@@ -27,6 +27,9 @@ pub struct AccountUi {
     /// The Shared page is on screen this frame: a quiet lookup must not close the account.
     pinned: bool,
     wants_page: bool,
+    /// Set while the Account screen draws the section: the server form adds where an address
+    /// comes from under its helper line.
+    address_source: bool,
 }
 
 /// Field ids whose egui edit state is dropped once the field is empty, so no copy of a password
@@ -163,6 +166,14 @@ impl AccountUi {
         self.section(ui, true);
     }
 
+    /// The section on the Account screen: as `draw_section`, with the server form also saying
+    /// where an address comes from, under its helper line.
+    pub fn draw_account_section(&mut self, ui: &mut Ui) {
+        self.address_source = true;
+        self.section(ui, true);
+        self.address_source = false;
+    }
+
     /// The section on the Shared page's Settings tab, which offers "Delete my account" itself
     /// (with what deleting does), so the status page's own link is left out.
     pub fn draw_settings_section(&mut self, ui: &mut Ui) {
@@ -199,6 +210,7 @@ impl AccountUi {
     }
 
     fn page_body(&mut self, ui: &mut Ui, chrome: bool, delete_link: bool) -> bool {
+        let address_source = self.address_source;
         let m = &mut self.model;
         let mut close = false;
         if chrome {
@@ -247,7 +259,7 @@ impl AccountUi {
                     ui.label(theme::muted("Opening your account…"));
                 });
             }
-            Page::NotConfigured | Page::Server => server_page(ui, m),
+            Page::NotConfigured | Page::Server => server_page(ui, m, address_source),
             Page::SignIn => sign_in_page(ui, m),
             Page::SignUp => sign_up_page(ui, m),
             Page::CheckEmail(kind) => check_email_page(ui, m, kind),
@@ -481,7 +493,16 @@ fn actions(ui: &mut Ui, busy: bool, add: impl FnOnce(&mut Ui)) {
     });
 }
 
-fn server_page(ui: &mut Ui, m: &mut AccountModel) {
+/// Room for a pool address and no more: across a wide card a short URL sat in a box running most of
+/// the card's width, with Connect pushed to the far edge. A narrow card still fills its row.
+const SERVER_FIELD_MAX: f32 = 400.0;
+
+fn server_field_width(avail: f32, btn_w: f32) -> f32 {
+    let fill = (avail.min(FORM_WIDTH) - btn_w - 10.0).max(160.0);
+    if avail >= 620.0 { fill.min(SERVER_FIELD_MAX) } else { fill }
+}
+
+fn server_page(ui: &mut Ui, m: &mut AccountModel, address_source: bool) {
     para(
         ui,
         "Sharing questions with other teachers needs an account on a verSHion pool server.",
@@ -489,12 +510,12 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
     // The field and its action on one row, the usual address-and-submit pair: below the field, a
     // locked Connect was read in turn as washed out, as a pressable pill and as a drop zone. Beside
     // the box it waits for, the locked button reads as that box's submit.
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        ui.label(theme::strong("Server address").size(13.5));
-        ui.label(theme::muted("· needed to connect").size(12.5));
-    });
-    ui.add_space(2.0);
+    // The label sits just above its field: in a row it took the theme's 34 px interact height and
+    // floated in a band of its own between the sentence above and the box.
+    let gap_y = ui.spacing().item_spacing.y;
+    ui.spacing_mut().item_spacing.y = 6.0;
+    ui.label(theme::strong("Server address").size(13.5));
+    ui.spacing_mut().item_spacing.y = gap_y;
     let busy = m.busy();
     let base = m.base_url().to_string();
     let mut enter = false;
@@ -517,39 +538,61 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
                         .id(egui::Id::new("share_server"))
                         .hint_text("https://pool.example.org")
                         .margin(egui::Margin::symmetric(12, 10))
-                        .desired_width((ui.available_width().min(FORM_WIDTH) - btn_w - 10.0).max(160.0)),
+                        .desired_width(server_field_width(ui.available_width(), btn_w)),
                 )
             })
             .inner;
         enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         typed = m.forms.server.trim().to_string();
         let h = r.rect.height();
-        // Live at all times, as a form's submit beside its field is: pressed with nothing typed,
-        // `save_server` answers with the address error, which says what is missing. Every disabled
-        // look tried (faded, beige, dashed, greyed) was read as either unreadable or still live.
-        ui.add_enabled_ui(!busy, |ui| {
-            let (rest, hover, press) = pageshell::accent_states();
-            save |= pageshell::styled_button(
-                ui,
-                egui::RichText::new("Connect").family(theme::bold_family()).size(15.2).color(theme::on_accent_col()),
-                rest,
-                hover,
-                press,
-                egui::Stroke::NONE,
-                h,
-            )
-            .clicked();
-        });
+        // Not available until there is an address: a lit Connect beside an empty box read as ready
+        // to submit with nothing to send. Grey and unpressable while empty, the solid green action
+        // once something is typed; the line under the field says which and why.
+        if typed.is_empty() {
+            pageshell::unavailable(ui, "Connect", h, "Enter a server address first.");
+        } else {
+            ui.add_enabled_ui(!busy, |ui| {
+                let (rest, hover, press) = pageshell::accent_states();
+                save |= pageshell::styled_button(
+                    ui,
+                    egui::RichText::new("Connect").family(theme::bold_family()).size(15.2).color(theme::on_accent_col()),
+                    rest,
+                    hover,
+                    press,
+                    egui::Stroke::NONE,
+                    h,
+                )
+                .clicked();
+            });
+        }
     });
     let dirty = !typed.is_empty() && typed != base;
     save |= enter && dirty;
-    let hint = if !typed.is_empty() && typed == base {
+    let hint = if typed.is_empty() {
+        "Enter your school's server address to connect."
+    } else if typed == base {
         "That is already the address in use."
     } else {
         "Paste the address your school gives you, then press Connect."
     };
-    ui.add_space(6.0);
+    // One compact help block under the field: why Connect waits, then (on the Account screen)
+    // where an address comes from, as a second line instead of a separate inset box.
+    ui.add_space(-2.0);
+    // 10 px between the two lines: at 3 px they ran together and read as one instruction.
+    if address_source {
+        ui.spacing_mut().item_spacing.y = 10.0;
+    }
     ui.add(egui::Label::new(egui::RichText::new(hint).size(13.0).color(theme::ink().gamma_multiply(0.8))).wrap());
+    if address_source {
+        let mut job = egui::text::LayoutJob::default();
+        let style = ui.style().clone();
+        theme::strong("No address yet? ").size(13.0).append_to(&mut job, &style, egui::FontSelection::Default, egui::Align::Center);
+        theme::muted("Ask the colleague or IT team who runs your school's pool.")
+            .size(13.0)
+            .append_to(&mut job, &style, egui::FontSelection::Default, egui::Align::Center);
+        ui.spacing_mut().item_spacing.y = gap_y;
+        ui.add(egui::Label::new(job).wrap());
+    }
     ui.add_space(6.0);
     if m.page == Page::Server && !m.base_url().is_empty() && link(ui, "Cancel") {
         m.go(Page::SignIn);
@@ -1040,7 +1083,7 @@ fn delete_page(ui: &mut Ui, m: &mut AccountModel) {
 #[cfg(test)]
 mod alpha_note_tests {
     use super::*;
-    use egui_kittest::{kittest::Queryable, Harness};
+    use egui_kittest::{kittest::{NodeT, Queryable}, Harness};
 
     /// The account section on `page`, with the app's fonts (the first frame only installs them).
     fn harness<'a>(page: Page, signed_in: bool) -> Harness<'a, AccountUi> {
@@ -1081,5 +1124,20 @@ mod alpha_note_tests {
         assert!(shows_note(Page::SignUp, false), "sign up");
         assert!(!shows_note(Page::Forgot, false), "forgot");
         assert!(!shows_note(Page::SignIn, true), "already signed in");
+    }
+
+    /// Connect is unavailable while the address box is empty, with the reason under the field, and
+    /// becomes the live action once an address is typed.
+    #[test]
+    fn connect_waits_for_an_address() {
+        let mut h = harness(Page::Server, false);
+        h.run();
+        assert!(h.get_by_label("Connect").accesskit_node().is_disabled(), "empty: Connect is disabled");
+        assert!(h.query_by_label("Enter your school's server address to connect.").is_some());
+
+        h.state_mut().model.forms.server = "https://pool.example.org".into();
+        h.run();
+        assert!(!h.get_by_label("Connect").accesskit_node().is_disabled(), "typed: Connect is live");
+        assert!(h.query_by_label("Paste the address your school gives you, then press Connect.").is_some());
     }
 }

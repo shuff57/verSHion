@@ -290,32 +290,209 @@ pub fn draw_nav_icon_k(
     hand::paint_glyph(painter, c, glyph, 16.0 * k, c_col);
 }
 
-/// The four how-it-works steps, shared by the welcome page and the help overlay.
+/// The four how-it-works steps, shared by the welcome page and the help overlay. Each body is short
+/// enough to read in two lines in a desktop welcome column (at three lines of prose each the critics
+/// read the panel as text squeezed into narrow columns).
 pub const STEPS: [(&str, &str); 4] = [
-    (
-        "Gather your questions",
-        "Type them in, or hand the built-in AI a test you already have, as a PDF, a \
-         scan or a screenshot, and it writes the questions out for you.",
-    ),
-    (
-        "Keep them in a bank",
-        "Every question gets a topic and a difficulty, so the one you want is a filter \
-         away. A bank is yours to reuse in as many exams as you like.",
-    ),
-    (
-        "Lay out the exam",
-        "Pull questions from any bank onto the page. Reorder them, shuffle the questions \
-         or the answers, and make a second version in a click.",
-    ),
-    (
-        "Print the real thing",
-        "Export a clean, printable exam as a PDF or a Word file, with its answer key. \
-         Every copy you hand out is saved, ready to download again years from now.",
-    ),
+    ("Gather your questions", "Type them in, or let the AI read an old PDF, scan or screenshot."),
+    ("Keep them in a bank", "Tag them by topic and difficulty. Reuse a bank in any exam."),
+    ("Lay out the exam", "Pull from any bank, shuffle, and make a second version in a click."),
+    ("Print the real thing", "Export the exam and its answer key as PDF or Word. Every copy is kept."),
 ];
+
+/// The welcome panel's width in a wide window: four columns wide enough that each step reads in
+/// two lines with the short STEPS copy (at 920 the old copy wrapped to five).
+const STEPS_W: f32 = 1000.0;
 
 /// One numbered how-it-works card.
 /// One step as a column of the welcome panel: the numbered disc, the title, the body.
+/// A patch of `fill` over `core` whose edge fades to nothing across `feather` (x and y apart), so
+/// what is under it calms behind the patch without a visible edge, border or shadow. The core is a
+/// rounded rectangle; the fade follows its outline outwards on a smoothstep.
+fn soft_backing(core: Rect, feather: Vec2, fill: Color32) -> egui::Shape {
+    use std::f32::consts::FRAC_PI_2;
+    const ARC: usize = 10;
+    const RINGS: usize = 10;
+    let r = (core.height() / 2.0).min(core.width() / 2.0).min(64.0);
+    let inner = core.shrink(r);
+    // The outline: four quarter arcs, each point with its outward normal.
+    let corners = [
+        (Pos2::new(inner.right(), inner.bottom()), 0.0),
+        (Pos2::new(inner.left(), inner.bottom()), FRAC_PI_2),
+        (Pos2::new(inner.left(), inner.top()), 2.0 * FRAC_PI_2),
+        (Pos2::new(inner.right(), inner.top()), 3.0 * FRAC_PI_2),
+    ];
+    let mut outline = Vec::with_capacity(4 * (ARC + 1));
+    for (c, a0) in corners {
+        for k in 0..=ARC {
+            let a = a0 + FRAC_PI_2 * k as f32 / ARC as f32;
+            let n = Vec2::new(a.cos(), a.sin());
+            outline.push((c + n * r, n));
+        }
+    }
+    let n = outline.len() as u32;
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(core.center(), fill);
+    for ring in 0..=RINGS {
+        let t = ring as f32 / RINGS as f32;
+        let a = 1.0 - t * t * (3.0 - 2.0 * t);
+        let col = fill.gamma_multiply(a);
+        for (p, nrm) in &outline {
+            mesh.colored_vertex(*p + Vec2::new(nrm.x * feather.x, nrm.y * feather.y) * t, col);
+        }
+    }
+    // The core as a fan from the centre, then each ring stitched to the next.
+    for i in 0..n {
+        mesh.add_triangle(0, 1 + i, 1 + (i + 1) % n);
+    }
+    for ring in 0..RINGS as u32 {
+        let a = 1 + ring * n;
+        let b = a + n;
+        for i in 0..n {
+            let j = (i + 1) % n;
+            mesh.add_triangle(a + i, b + i, b + j);
+            mesh.add_triangle(a + i, b + j, a + j);
+        }
+    }
+    egui::Shape::mesh(mesh)
+}
+
+/// The printed page the welcome hero promises: a first page of a quiz (title, name line, a
+/// multiple-choice question with bubbles, one with a small graph, a short answer and a written
+/// answer, the page number) on paper-white, with a second sheet tilted behind it for the answer key.
+/// The critics read the page as describing the output without ever showing one, and then found the
+/// 222 px thumbnail's 7.6 px question text too small to inspect: the sheet is drawn larger, and its
+/// type a step larger again than the sheet, so the questions read at about 10 px.
+const PREVIEW_SIZE: Vec2 = Vec2::new(272.0, 352.0);
+/// The same page in a narrow window, beside the hero's text: the critics read the narrow page's
+/// steps as a text-only explanation with no example of the printed exam it describes.
+const NARROW_PREVIEW_SIZE: Vec2 = Vec2::new(184.0, 238.0);
+/// The narrow window's column for the hero and the steps.
+const NARROW_STEPS_W: f32 = 640.0;
+
+fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
+    use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
+    use egui::{FontId, Shape};
+    // Geometry is laid out on the old 222 px sheet and scaled by `k`; type and the gaps that follow
+    // a line of type scale by `tk`.
+    let k = page.width() / 222.0;
+    let tk = k * 1.12;
+    let g = |v: f32| v * k;
+    let t = |v: f32| v * tk;
+    let shade = if theme::is_dark() { 90 } else { 30 };
+    // The answer key behind, turned a little and peeking out at the lower right.
+    let back_c = page.center() + Vec2::new(g(14.0), g(8.0));
+    let turn = egui::emath::Rot2::from_angle(0.06);
+    let half = page.size() / 2.0;
+    let back: Vec<Pos2> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+        .iter()
+        .map(|(sx, sy)| back_c + turn * Vec2::new(sx * half.x, sy * half.y))
+        .collect();
+    let back_shadow: Vec<Pos2> = back.iter().map(|p| *p + Vec2::new(1.0, 3.0)).collect();
+    painter.add(Shape::convex_polygon(back_shadow, Color32::from_black_alpha(shade / 3), Stroke::NONE));
+    painter.add(Shape::convex_polygon(back, theme::paper(), Stroke::new(1.0, theme::paper_edge())));
+    // The exam itself.
+    painter.add(
+        egui::Shadow { offset: [0, 12], blur: 30, spread: 0, color: Color32::from_black_alpha(shade) }
+            .as_shape(page, CornerRadius::same(2)),
+    );
+    painter.rect(page, CornerRadius::same(2), theme::paper(), Stroke::new(1.0, theme::paper_edge()), StrokeKind::Inside);
+
+    let m = g(17.0);
+    let (l, r) = (page.left() + m, page.right() - m);
+    let body = FontId::proportional(t(7.6));
+    let num = FontId::new(t(7.6), theme::bold_family());
+    let small = FontId::new(t(5.2), theme::bold_family());
+    let hair = Stroke::new(0.9, PAPER_RULE);
+    let ring = Stroke::new(0.9, PAPER_SOFT);
+    let text = |pos: Pos2, s: &str, f: &FontId, c: Color32| painter.text(pos, Align2::LEFT_TOP, s, f.clone(), c).width();
+    let mut y = page.top() + g(16.0);
+    text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(t(11.5), theme::serif_family()), PAPER_INK);
+    // The one touch of accent: the version tag, as a small filled pill (accent text alone faded on
+    // white paper in dark mode).
+    let tag = painter.layout_no_wrap("Version A".into(), FontId::new(t(6.4), theme::bold_family()), theme::on_accent_col());
+    let pad = Vec2::new(g(4.0), g(1.5));
+    let pill = Rect::from_min_size(Pos2::new(r - tag.size().x - 2.0 * pad.x, y + t(2.0)), tag.size() + 2.0 * pad);
+    painter.rect_filled(pill, CornerRadius::same(6), theme::accent_col());
+    painter.galley(pill.min + pad, tag, theme::on_accent_col());
+    y += t(21.0);
+    let name_w = text(Pos2::new(l, y), "Name", &body, PAPER_SOFT);
+    painter.hline(l + name_w + 3.0..=l + g(118.0), y + t(8.5), hair);
+    let date_w = text(Pos2::new(l + g(128.0), y), "Date", &body, PAPER_SOFT);
+    painter.hline(l + g(128.0) + date_w + 3.0..=r, y + t(8.5), hair);
+    y += t(16.0);
+    painter.hline(l..=r, y, Stroke::new(1.0, PAPER_RULE));
+    y += g(9.0);
+
+    let ind = l + t(10.5);
+    let stem = |y: f32, n: &str, s: &str| {
+        text(Pos2::new(l, y), n, &num, PAPER_INK);
+        text(Pos2::new(ind, y), s, &body, PAPER_INK);
+    };
+    let bubble = |c: Pos2, letter: &str| {
+        painter.circle_stroke(c, t(4.2), ring);
+        if !letter.is_empty() {
+            painter.text(c, Align2::CENTER_CENTER, letter, small.clone(), PAPER_SOFT);
+        }
+    };
+    // 1. Multiple choice, with answer bubbles.
+    stem(y, "1.", "Solve for x:   3x + 5 = 20");
+    y += t(15.0);
+    let mut x = ind;
+    for (letter, val) in [("A", "3"), ("B", "5"), ("C", "15"), ("D", "25")] {
+        bubble(Pos2::new(x + t(4.2), y + t(4.6)), letter);
+        text(Pos2::new(x + t(11.0), y), val, &body, PAPER_INK);
+        x += g(42.0);
+    }
+    y += t(20.0);
+    // 2. A question with a small figure.
+    stem(y, "2.", "Which line has a slope of 2?");
+    y += t(14.0);
+    let fig = Rect::from_min_size(Pos2::new(ind, y), Vec2::new(g(64.0), g(46.0)));
+    for i in 1..8 {
+        painter.vline(fig.left() + g(i as f32 * 8.0), fig.y_range(), Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
+    }
+    for i in 1..6 {
+        painter.hline(fig.x_range(), fig.top() + g(i as f32 * 7.7), Stroke::new(0.5, PAPER_RULE.gamma_multiply(0.45)));
+    }
+    painter.rect_stroke(fig, CornerRadius::ZERO, Stroke::new(0.9, PAPER_RULE), StrokeKind::Inside);
+    let o = Pos2::new(fig.left() + g(24.0), fig.top() + g(30.8));
+    painter.hline(fig.x_range(), o.y, ring);
+    painter.vline(o.x, fig.y_range(), ring);
+    let at = |dx: f32, dy: f32| fig.min + Vec2::new(g(dx), g(dy));
+    painter.line_segment([at(10.0, 42.0), at(30.0, 3.5)], Stroke::new(1.3, PAPER_INK));
+    painter.line_segment([at(2.0, 26.0), at(62.0, 12.0)], Stroke::new(1.3, PAPER_SOFT));
+    painter.text(at(32.0, 2.0), Align2::LEFT_TOP, "p", FontId::proportional(t(6.5)), PAPER_INK);
+    painter.text(at(55.0, 3.0), Align2::LEFT_TOP, "q", FontId::proportional(t(6.5)), PAPER_SOFT);
+    let ax = fig.right() + g(14.0);
+    for (i, s) in ["line p", "line q"].iter().enumerate() {
+        let yy = fig.top() + g(8.0) + i as f32 * t(16.0);
+        bubble(Pos2::new(ax + t(4.2), yy + t(4.6)), "");
+        text(Pos2::new(ax + t(12.0), yy), s, &body, PAPER_INK);
+    }
+    y = fig.bottom() + g(12.0);
+    // 3. Short answer.
+    stem(y, "3.", "Simplify:   2(x + 4) \u{2212} 3x");
+    y += t(16.0);
+    let aw = text(Pos2::new(ind, y), "Answer", &body, PAPER_SOFT);
+    painter.hline(ind + aw + 4.0..=ind + g(104.0), y + t(8.5), hair);
+    y += t(20.0);
+    // 4. Written answer on ruled lines.
+    stem(y, "4.", "Explain how you checked your answer to 1.");
+    y += t(20.0);
+    for _ in 0..2 {
+        painter.hline(ind..=r, y, hair);
+        y += t(13.0);
+    }
+    painter.text(
+        Pos2::new(page.center().x, page.bottom() - g(12.0)),
+        Align2::CENTER_CENTER,
+        "Page 1 of 2",
+        FontId::proportional(t(6.4)),
+        PAPER_SOFT,
+    );
+}
+
 pub fn step_cell(ui: &mut egui::Ui, i: usize, big: bool) {
     let Some((title, body)) = STEPS.get(i) else { return };
     // Left-aligned rows (a `columns` cell is justified, which stretched the copy).
@@ -326,8 +503,11 @@ pub fn step_cell(ui: &mut egui::Ui, i: usize, big: bool) {
             step_badge(ui, i);
             ui.add_space(2.0);
             ui.add(egui::Label::new(theme::serif(*title).size(if big { 18.5 } else { 16.0 })).wrap());
-            ui.add_space(if big { 6.0 } else { 4.0 });
-            ui.add(egui::Label::new(step_body(body, if big { 13.5 } else { 12.5 })).wrap());
+            ui.add_space(6.0);
+            // Narrow (2 x 2): a size up and looser lines, so the two-line bodies keep up with
+            // their headings instead of reading as small, tight print under them.
+            let text = if big { step_body(body, 13.5) } else { step_body(body, 13.5).line_height(Some(20.0)) };
+            ui.add(egui::Label::new(text).wrap());
         });
     });
 }
@@ -347,17 +527,16 @@ fn no_widow(body: &str) -> String {
     }
 }
 
-/// The numbered disc that heads a step.
+/// The step number that heads a step: a plain accent numeral, set flush with its title.
 fn step_badge(ui: &mut egui::Ui, i: usize) {
-    // An accent ring with an accent number: the pale disc barely registered, and a solid one repeated
-    // the call to action's fill four times over.
+    // No ring or disc: an outlined circle read as a step control or workflow button, as if a step
+    // could be clicked. The same 28 px slot keeps the titles and bodies where they were.
     let (r, _) = ui.allocate_exact_size(Vec2::splat(28.0), egui::Sense::hover());
-    ui.painter().circle(r.center(), 13.0, theme::card(), Stroke::new(1.5, theme::accent_col()));
     ui.painter().text(
-        r.center(),
-        Align2::CENTER_CENTER,
+        r.left_center(),
+        Align2::LEFT_CENTER,
         format!("{}", i + 1),
-        egui::FontId::new(13.0, theme::bold_family()),
+        egui::FontId::new(20.0, theme::bold_family()),
         theme::accent_col(),
     );
 }
@@ -757,14 +936,12 @@ impl crate::App {
     // ---------- welcome ----------
 
     pub fn draw_welcome(&mut self, ctx: &egui::Context) {
-        const FOOT_GAP: f32 = 24.0;
         let fresh = self.store.banks.is_empty() && self.store.exams.is_empty();
         shell_frame(self, ctx, false, |app, ui| {
+            let desk = ui.max_rect();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                // Balance the page: the hero and the steps sit as one block a little above the middle,
-                // and the footer holds the bottom. The block's height is last frame's measure; every
-                // spare pixel used to pile into one band under the cards, which the critics read as
-                // the page running out.
+                // Hero and steps sit as one block near the top. The block's height is last frame's
+                // measure; it decides how much of the spare height opens the gap before the steps.
                 let content_id = egui::Id::new("welcome_content_h");
                 let view_h = ui.available_height();
                 // A wide window gets the landing page at landing-page size. At the old sizes the hero,
@@ -772,37 +949,60 @@ impl crate::App {
                 // the leftover third was read as a dead band somewhere.
                 let roomy = ui.available_width() >= 940.0;
                 let block_h = ui.ctx().data(|d| d.get_temp::<f32>(content_id));
+                // The headline sits a fixed, modest distance under the top edge. Centring the block
+                // left a tall empty band above it and pushed the four steps into the bottom third
+                // of the window (the critics' words).
                 let lead = if !fresh {
                     70.0
-                } else if let Some(h) = block_h {
-                    // Centre hero, steps and footer as one block (the footer sits FOOT_GAP under
-                    // the steps instead of floating at the window's bottom edge).
-                    ((view_h - h - 40.0 - FOOT_GAP) * 0.5).clamp(24.0, 220.0)
+                } else if roomy {
+                    52.0
                 } else {
-                    (view_h * 0.10).clamp(24.0, 88.0)
+                    40.0
+                };
+                // What is left below the panel: a little of it opens the break between the hero
+                // and "How it works", the rest falls under the panel. `block_h` is measured without
+                // this extra, so the two do not chase each other.
+                let extra = match block_h {
+                    Some(h) if fresh => ((view_h - lead - h) * 0.3).clamp(0.0, if roomy { 20.0 } else { 16.0 }),
+                    _ => 0.0,
                 };
                 let block_top = ui.cursor().top() + lead;
-                ui.vertical_centered(|ui| {
-                    ui.add_space(lead);
-                    ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 50.0 } else { 40.0 }));
-                    ui.add_space(if roomy { 16.0 } else { 12.0 });
+                // The grid fades out behind the hero: a slot under the hero's text, filled once the
+                // text is placed. Grid lines running through the lead and the small print competed
+                // with their letterforms (the critics' words).
+                let backing = ui.painter().add(egui::Shape::Noop);
+                let hero: Rect;
+                // The headline and the gap under it. Narrow, it runs across the whole column above the
+                // rest of the hero and the page beside it.
+                let hero_head = |ui: &mut egui::Ui, hero: &mut Rect| {
+                    // 43 px on a wide window, not 50: larger, it outweighed the lead, button and preview beside
+                    // it and left them reading as a second tier (the critics' words).
+                    *hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 43.0 } else { 40.0 })).rect;
+                    ui.add_space(if roomy { 14.0 } else { 12.0 });
+                };
+                // The rest of the hero's text, top to bottom, flush left in its column.
+                let mut hero_text = |ui: &mut egui::Ui, hero: &mut Rect| {
+                    let lead_w = ui.available_width().min(if roomy { 620.0 } else { 560.0 });
                     // Narrower than the step column below it at every width (the critics read a lead
                     // running wider than the cards as a page with no single column edge), and about
                     // 80 characters a line.
                     // The one sentence that explains the product, in softened ink: the pale tan was
                     // the hardest text on the page to read.
-                    crate::pageshell::prose_centered_ink(
-                        ui,
-                        "PDFs, scans, screenshots, old Word documents, questions you type \
-                         yourself: verSHion gathers them into Question Banks and lays \
-                         them out as a clean, printable exam.",
-                        if roomy { 16.5 } else { 14.5 },
-                        if roomy { 620.0 } else { 560.0 },
-                    );
+                    let lead_text = "PDFs, scans, screenshots, old Word documents, questions you type \
+                                     yourself: verSHion gathers them into Question Banks and lays \
+                                     them out as a clean, printable exam.";
+                    let r = ui.allocate_ui_with_layout(Vec2::new(lead_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        ui.set_width(lead_w);
+                        let size = if roomy { 16.5 } else { 14.5 };
+                        ui.label(RichText::new(lead_text).size(size).color(theme::ink().gamma_multiply(0.82)));
+                    });
+                    *hero |= r.response.rect;
                     ui.add_space(if roomy { 28.0 } else { 22.0 });
                     // A returning teacher is not a first-run visitor: the button goes back to work,
-                    // and a second way in sits beside it.
-                    let cta = if fresh { "Get started, it's free" } else { "Back to your work" };
+                    // and a second way in sits beside it. A first run names where the button leads:
+                    // Home, whose lit tile and first card are about making the first Question Bank
+                    // ("Get started" told the critics nothing about what opens).
+                    let cta = if fresh { "Make your first Question Bank" } else { "Back to your work" };
                     if crate::pageshell::primary_large(ui, cta).clicked() {
                         app.screen = crate::Screen::Home;
                     }
@@ -818,7 +1018,7 @@ impl crate::App {
                     ui.add_space(6.0);
                     ui.label(
                         theme::muted(if fresh {
-                            "Runs on your machine. Nothing to install, no account to make."
+                            "Free. Runs on your machine, no account needed."
                         } else {
                             "Everything is saved on this machine, and nothing leaves it."
                         })
@@ -826,24 +1026,105 @@ impl crate::App {
                         .size(13.5)
                         .color(theme::ink().gamma_multiply(0.8)),
                     );
-                    ui.add_space(8.0);
-                });
+                    // The installed build is offered here, where a teacher decides how to start: a quiet
+                    // text link under the note, clearly weaker than the button. As an outlined button
+                    // beside the hero's it competed with it; alone in a footer under the steps it read
+                    // as an afterthought, far from the decision.
+                    // One treatment, all of it the link: the whole phrase in accent, underlined at
+                    // rest, at body size. A muted lead-in beside green text left it unclear what
+                    // could be pressed, and a smaller hover-only underline read as plain text.
+                    ui.add_space(4.0);
+                    let size = if roomy { 14.5 } else { 14.0 };
+                    let icon = RichText::new(egui_phosphor::regular::DOWNLOAD_SIMPLE).font(theme::icon_font(size + 1.0)).color(theme::accent_col());
+                    let text = theme::accent("Prefer to install? Get the desktop app for Linux").size(size).underline();
+                    let link = egui::Button::new((icon, text)).frame(false);
+                    let resp = ui.add(link).on_hover_cursor(egui::CursorIcon::PointingHand);
+                    *hero |= resp.rect;
+                    if resp.clicked() {
+                        crate::platform::open_url(DESKTOP_RELEASES);
+                    }
+                };
+                if roomy {
+                    // Two columns on the steps' own edges: the text flush left, and on the right a
+                    // printed page, so the promised exam is shown and not only described.
+                    let row_w = ui.available_width().min(STEPS_W);
+                    let x0 = ui.max_rect().center().x - row_w / 2.0;
+                    ui.add_space(lead);
+                    let top = ui.cursor().top();
+                    let text_w = 660.0_f32.min(row_w - PREVIEW_SIZE.x - 60.0);
+                    let col = Rect::from_min_size(Pos2::new(x0, top), Vec2::new(text_w, ui.available_height().max(0.0)));
+                    let mut text = Rect::NOTHING;
+                    ui.scope_builder(UiBuilder::new().max_rect(col).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
+                        hero_head(ui, &mut text);
+                        hero_text(ui, &mut text);
+                    });
+                    // The page sits midway across the space right of the text, its middle level with
+                    // the text's middle.
+                    let cx = (x0 + text_w + x0 + row_w) / 2.0;
+                    let page = Rect::from_center_size(Pos2::new(cx, text.center().y), PREVIEW_SIZE);
+                    paint_exam_preview(ui.painter(), page);
+                    hero = text | page;
+                    let below = page.bottom() + 8.0 - ui.cursor().top();
+                    if below > 0.0 {
+                        ui.add_space(below);
+                    }
+                } else {
+                    // Narrow: the same printed page, smaller, so the exam is shown here too and not
+                    // only described. The headline runs across the steps' column; under it the rest
+                    // of the hero sits flush left with the page beside it, on the steps' own edges.
+                    let row_w = ui.available_width().min(NARROW_STEPS_W);
+                    let x0 = ui.max_rect().center().x - row_w / 2.0;
+                    ui.add_space(lead);
+                    let top = ui.cursor().top();
+                    let col = Rect::from_min_size(Pos2::new(x0, top), Vec2::new(row_w, ui.available_height().max(0.0)));
+                    let mut head = Rect::NOTHING;
+                    ui.scope_builder(UiBuilder::new().max_rect(col).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
+                        hero_head(ui, &mut head);
+                    });
+                    let body_top = head.bottom() + 12.0;
+                    // The page's right edge sits in from the column's, leaving room for the answer
+                    // key that peeks out behind it. A column too narrow to hold the text beside it
+                    // goes without the page.
+                    let with_page = row_w >= 520.0;
+                    let page = Rect::from_min_size(
+                        Pos2::new(x0 + row_w - NARROW_PREVIEW_SIZE.x - 18.0, body_top + 4.0),
+                        NARROW_PREVIEW_SIZE,
+                    );
+                    let text_w = if with_page { page.left() - 36.0 - x0 } else { row_w };
+                    let body = Rect::from_min_size(Pos2::new(x0, body_top), Vec2::new(text_w, ui.available_height().max(0.0)));
+                    let mut text = Rect::NOTHING;
+                    ui.scope_builder(UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
+                        hero_text(ui, &mut text);
+                    });
+                    hero = if with_page { head | text | page } else { head | text };
+                    if with_page {
+                        paint_exam_preview(ui.painter(), page);
+                        let below = page.bottom() + 8.0 - ui.cursor().top();
+                        if below > 0.0 {
+                            ui.add_space(below);
+                        }
+                    }
+                }
+                if !theme::chem_skin() && hero.is_positive() {
+                    let mut painter = ui.painter().clone();
+                    painter.set_clip_rect(desk);
+                    let feather = if roomy { Vec2::new(150.0, 54.0) } else { Vec2::new(56.0, 34.0) };
+                    let core = hero.expand2(if roomy { Vec2::new(16.0, 10.0) } else { Vec2::new(8.0, 8.0) });
+                    painter.set(backing, soft_backing(core, feather, theme::cream()));
+                }
 
-                // A short page used to pile every spare pixel into one band under the cards, and the
-                // critics read the hero and the steps as two disconnected halves. Keep the air between
-                // them small and let the footer take the slack instead.
-                let spare = (ui.available_height() - 300.0).max(0.0);
-                // A narrow window is short of height for the four stacked steps: keep this gap tight
-                // there, so the panel ends inside the window instead of being cut by its bottom edge.
+                // Hero and steps are one block: a wide band between the install link and "How it
+                // works" left the steps detached and pushed down. A section break a little larger
+                // than the hero's own gaps, plus a share of any spare height (`extra`).
                 let narrow_page = ui.available_width() < 940.0;
-                ui.add_space(if narrow_page { 18.0 } else { 18.0 + (spare * 0.10).min(10.0) });
+                ui.add_space(if narrow_page { 14.0 } else { 18.0 } + extra);
 
                 // The steps sit in a centred column of their own, not the whole window: the hero is a
                 // narrow centred column, and a card row running to both edges under it read as a
                 // different page. (`set_max_width` cannot narrow a Ui the hero has already widened.)
                 let full = ui.available_width();
                 let wide = full >= 940.0;
-                let col_w = full.min(if wide { 920.0 } else { 640.0 });
+                let col_w = full.min(if wide { STEPS_W } else { NARROW_STEPS_W });
                 let top = ui.cursor().top();
                 let left = ui.max_rect().center().x - col_w / 2.0;
                 let area = egui::Rect::from_min_size(egui::pos2(left, top), Vec2::new(col_w, ui.available_height().max(0.0)));
@@ -857,7 +1138,10 @@ impl crate::App {
                     // read as four buttons beside the one real action (the critics' words), and their
                     // uneven text left each card a different empty floor.
                     let w = ui.available_width();
-                    let panel = crate::kit::card().inner_margin(Margin::symmetric(4, if wide { 26 } else { 16 })).show(ui, |ui| {
+                    // Narrow: a little less above the first numerals, whose 28 px slot already
+                    // holds space over the figure, so the panel's top and bottom read even.
+                    let pad = if wide { Margin::symmetric(4, 26) } else { Margin { left: 4, right: 4, top: 10, bottom: 16 } };
+                    crate::kit::card().inner_margin(pad).show(ui, |ui| {
                         ui.set_width(w - 10.0);
                         if wide {
                             ui.columns(4, |cols| {
@@ -870,93 +1154,39 @@ impl crate::App {
                                 let x = r.left() + r.width() * k as f32 / 4.0;
                                 ui.painter().vline(x, r.top() + 4.0..=r.bottom() - 4.0, Stroke::new(1.0, theme::border()));
                             }
-                            None
                         } else {
                             // Narrow: two rows of two. Four stacked rows ran past the bottom of the window
                             // and left the page with no visible end.
-                            // One clean cross: a single column rule through both rows, a row rule across,
-                            // both inset the same from the frame. Drawn per row they met in a broken joint.
                             for row in 0..2 {
+                                // The rows sit closer than they did (the critics named the gaps
+                                // between the panel's short blocks as large), which also makes room
+                                // for the printed page above.
                                 if row > 0 {
-                                    ui.add_space(14.0);
+                                    ui.add_space(6.0);
                                     let (rule, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
-                                    // Frame edge to frame edge, like the column rule: a table's cross, not a
-                                    // short dash floating between rows.
-                                    ui.painter().hline(rule.x_range().expand(4.0), rule.center().y, Stroke::new(1.0, theme::border()));
-                                    ui.add_space(16.0);
+                                    for cell in 0..2 {
+                                        let half = rule.width() / 2.0;
+                                        let x = rule.left() + half * cell as f32;
+                                        ui.painter().hline(x + 20.0..=x + half - 20.0, rule.center().y, Stroke::new(1.0, theme::border()));
+                                    }
+                                    ui.add_space(8.0);
                                 }
+                                let row_top = ui.cursor().top();
                                 ui.columns(2, |cols| {
                                     for (k, col) in cols.iter_mut().enumerate() {
                                         step_cell(col, row * 2 + k, false);
                                     }
                                 });
+                                let x = ui.min_rect().center().x;
+                                ui.painter().vline(x, row_top + 6.0..=ui.cursor().top() - 10.0, Stroke::new(1.0, theme::border()));
                             }
-                            Some(ui.min_rect().center().x)
                         }
                     });
-                    // The column rule spans the frame itself, edge to edge, meeting the row rule in a
-                    // clean cross (measured from the cursor it overshot the frame's bottom edge).
-                    if let Some(x) = panel.inner {
-                        let r = panel.response.rect.shrink(1.0);
-                        ui.painter().vline(x, r.y_range(), Stroke::new(1.0, theme::border()));
-                    }
                 });
-                let measured = ui.cursor().top() - block_top;
+                let measured = ui.cursor().top() - block_top - extra;
                 if block_h.is_none_or(|h| (h - measured).abs() > 0.5) {
                     ui.ctx().data_mut(|d| d.insert_temp(content_id, measured));
                     ui.ctx().request_repaint();
-                }
-                // The page is shorter than the window: a quiet footer holds the bottom instead of
-                // leaving a third of the screen as empty grid.
-                let rest = ui.available_height();
-                if rest > if narrow_page { 66.0 } else { 90.0 } {
-                    // The footer (the note and the desktop button) needs about 64 px. It sits
-                    // a fixed gap under the steps: pinned to the window's bottom edge they floated loose
-                    // under a band of empty grid.
-                    ui.add_space((rest - 40.0).clamp(0.0, if narrow_page { 18.0 } else { FOOT_GAP }));
-                    // A hairline the width of the steps above the footer row: the row is the page's
-                    // footer, not a line and a button left floating under the panel.
-                    {
-                        let w = ui.available_width().min(if narrow_page { 640.0 } else { 920.0 });
-                        let x0 = ui.max_rect().center().x - w / 2.0;
-                        let (rule, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
-                        ui.painter().hline(x0..=x0 + w, rule.center().y, Stroke::new(1.0, theme::border()));
-                        ui.add_space(14.0);
-                    }
-                    // One centred row: the note, then the desktop build as a small second action beside
-                    // it. On a line of its own under the note the button floated in a band by itself.
-                    let note = "Banks · exams · printing · figures — all on this machine, no account needed";
-                    let label = "Get the desktop app for Linux";
-                    // The second way in: an outlined button in ink, regular weight. Cream on cream it all
-                    // but disappeared, green outlined it competed with the hero's call to action, and as
-                    // bare text it did not read as clickable.
-                    let desktop_button = |ui: &mut egui::Ui| {
-                        // A small outlined button with a download icon: as a bare link it read as a
-                        // footnote; beside the now larger hero button it no longer competes.
-                        let t = RichText::new(label).size(13.5).color(theme::ink());
-                        let icon = RichText::new(egui_phosphor::regular::FILE_ARROW_DOWN).font(theme::icon_font(16.0)).color(theme::accent_col());
-                        let b = egui::Button::new((icon, t))
-                            .fill(theme::card())
-                            .stroke(Stroke::new(1.0, theme::border()))
-                            .corner_radius(CornerRadius::same(10))
-                            .min_size(Vec2::new(0.0, 34.0));
-                        if ui.add(b).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                            crate::platform::open_url(DESKTOP_RELEASES);
-                        }
-                    };
-                    // A footer bar on the steps panel's own edges: the note flush left, the button
-                    // flush right. As a centred pair it read as an off-centre cluster, and as a lone
-                    // button under the rule it read as an afterthought.
-                    let w = ui.available_width().min(if narrow_page { 640.0 } else { 920.0 });
-                    let x0 = ui.max_rect().center().x - w / 2.0;
-                    let row = egui::Rect::from_min_size(egui::pos2(x0, ui.cursor().top()), Vec2::new(w, 36.0));
-                    let short = if narrow_page { "Everything stays on this machine." } else { note };
-                    ui.scope_builder(UiBuilder::new().max_rect(row).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
-                        ui.label(RichText::new(short).size(13.0).color(theme::ink().gamma_multiply(0.78)));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            desktop_button(ui);
-                        });
-                    });
                 }
             });
         });
@@ -1772,75 +2002,31 @@ impl crate::App {
                     pageshell::NavItem { icon: crate::handicons::SPARKLE, label: "AI conversion" },
                     pageshell::NavItem { icon: crate::handicons::HELP, label: "Help & community" },
                 ];
-                // What is on this machine, beside the section list: the page's own subtitle says to
-                // keep a copy, and this is where that copy is one press away.
+                // A full-width closing row keeps local storage separate from section navigation.
                 let (n_banks, n_exams) = (app.store.banks.len(), app.store.exams.len());
                 let n_q: usize = app.store.banks.iter().map(|b| b.questions.len()).sum();
                 let mut backup = false;
                 let aside = |ui: &mut egui::Ui| {
                     let plural = |n: usize, one: &str| format!("{n} {one}{}", if n == 1 { "" } else { "s" });
                     let counts = [plural(n_banks, "bank"), plural(n_exams, "exam"), plural(n_q, "question")];
-                    let soft = theme::ink().gamma_multiply(0.78);
-                    // Narrow: a slimmer frame, so the page ends clear of the window's corner button.
-                    let slim = ui.available_width() > 360.0;
-                    let frame = if slim {
-                        Frame::new()
-                            .fill(theme::card())
-                            .stroke(Stroke::new(1.0, theme::border()))
-                            .corner_radius(CornerRadius::same(16))
-                            .inner_margin(Margin::symmetric(20, 12))
-                    } else {
-                        Frame::new()
-                            .fill(theme::card())
-                            .stroke(Stroke::new(1.0, theme::border()))
-                            .corner_radius(CornerRadius::same(16))
-                            .inner_margin(Margin::same(20))
-                    };
                     let w = ui.available_width();
-                    frame.show(ui, |ui| {
+                    kit::card().inner_margin(Margin::symmetric(20, 14)).show(ui, |ui| {
                         ui.set_width(w - 42.0);
-                        if ui.available_width() > 360.0 {
-                            // Under the content (the list collapsed into chips): one row, not a tall
-                            // full-width card of three short lines.
-                            ui.horizontal(|ui| {
-                                ui.vertical(|ui| {
-                                    ui.label(RichText::new("On this machine").family(theme::bold_family()).size(13.5).color(theme::ink()));
-                                    ui.label(RichText::new(counts.join(" · ")).size(13.0).color(soft));
-                                });
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    // Small and regular weight: at the outline button's size it competed
-                                    // with Connect as a second primary action.
-                                    let b = egui::Button::new(RichText::new("Download backup").size(13.0).color(theme::ink()))
-                                        .fill(theme::card())
-                                        .stroke(Stroke::new(1.0, theme::border()))
-                                        .corner_radius(CornerRadius::same(10))
-                                        .min_size(Vec2::new(0.0, 32.0));
-                                    if ui.add(b).clicked() {
-                                        backup = true;
-                                    }
-                                });
+                        ui.horizontal(|ui| {
+                            ui.vertical(|ui| {
+                                ui.label(theme::strong("On this machine").size(14.0));
+                                ui.label(theme::muted(counts.join(" · ")).size(13.0));
                             });
-                        } else {
-                            ui.label(RichText::new("On this machine").family(theme::bold_family()).size(13.5).color(theme::ink()));
-                            ui.add_space(6.0);
-                            for line in &counts {
-                                ui.label(RichText::new(line).size(13.0).color(soft));
-                            }
-                            ui.add_space(10.0);
-                            // Small and regular weight, as in the one-row version: full size it
-                            // competed with Connect, the page's primary action.
-                            let b = egui::Button::new(RichText::new("Download backup").size(13.0).color(theme::ink()))
-                                .fill(theme::card())
-                                .stroke(Stroke::new(1.0, theme::border()))
-                                .corner_radius(CornerRadius::same(10))
-                                .min_size(Vec2::new(0.0, 32.0));
-                            if ui.add(b).clicked() {
-                                backup = true;
-                            }
-                        }
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let label = format!("{}  Download backup", egui_phosphor::regular::FILE_ARROW_DOWN);
+                                backup = pageshell::outline(ui, &label).clicked();
+                            });
+                        });
                     });
                 };
-                pageshell::sections_aside(ui, "settings", &items, aside, |ui, section| {
+                // On the account page the always-available local backup comes first and the optional
+                // sharing setup follows it.
+                pageshell::sections_aside(ui, "settings", &items, &[SETTINGS_ACCOUNT], aside, |ui, section| {
                 // fields and menus share the buttons' 12 px corners
                 let w = &mut ui.visuals_mut().widgets;
                 for state in [&mut w.inactive, &mut w.hovered, &mut w.active] {
@@ -1851,18 +2037,58 @@ impl crate::App {
                 // --- Account (optional): the sign-in forms, or the signed-in account's status ---
                 app.account.pin();
                 pageshell::card(ui, |ui| {
+                    let narrow_window = ui.ctx().content_rect().width() < 900.0;
+                    // A desktop window: the form and what an account adds side by side, split by a
+                    // hairline. Stacked, both sat in the left part of the wide card and left its right
+                    // half empty; the status page (signed in) fills the card on its own.
+                    if !narrow_window && !matches!(app.account.model.page, crate::share::model::Page::Status) {
+                        let inner = ui.available_width();
+                        let gutter = 24.0;
+                        // narrow enough that the address field gets more room than it had stacked;
+                        // the descriptions are cut short to fit one line each here (a wider column
+                        // squeezed the form and lost 3 of 4 side-by-side verdicts)
+                        let right_w = (inner * 0.27).clamp(200.0, 260.0);
+                        let left_w = (inner - right_w - 2.0 * gutter - 1.0).max(320.0);
+                        let top = ui.cursor().top();
+                        let row = ui.horizontal_top(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            ui.allocate_ui_with_layout(Vec2::new(left_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                                ui.set_width(left_w);
+                                ui.spacing_mut().item_spacing.x = 8.0;
+                                ui.add_space(4.0);
+                                pageshell::heading(ui, app.account.page_title());
+                                ui.add_space(6.0);
+                                // The server form says where an address comes from under its
+                                // helper line, not in a separate inset box below it.
+                                app.account.draw_account_section(ui);
+                            });
+                            ui.add_space(2.0 * gutter + 1.0);
+                            ui.allocate_ui_with_layout(Vec2::new(right_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                                ui.set_width(right_w);
+                                ui.spacing_mut().item_spacing.x = 8.0;
+                                // level with the card's title across the hairline
+                                ui.add_space(10.0);
+                                // Sized so the three end about level with the compact form beside
+                                // them (at 40 px the column ran well below it).
+                                crate::share::shared_ui::account_reasons_inline(ui, 20.0);
+                                ui.add_space(6.0);
+                            });
+                        });
+                        let x = ui.min_rect().left() + left_w + gutter + 0.5;
+                        ui.painter().vline(x, top + 2.0..=row.response.rect.bottom() - 2.0, Stroke::new(1.0, theme::border()));
+                        return;
+                    }
                     // The card used to open on a plain grey sentence; say what it is first.
                     pageshell::heading(ui, app.account.page_title());
                     ui.add_space(2.0);
-                    app.account.draw_section(ui);
+                    app.account.draw_account_section(ui);
                     // What an account adds belongs to this card, under a hairline, not in a row of
                     // tile-like cards of its own below it.
-                    let narrow_window = ui.ctx().content_rect().width() < 900.0;
-                    ui.add_space(if narrow_window { 8.0 } else { 20.0 });
+                    ui.add_space(if narrow_window { 4.0 } else { 12.0 });
                     let (rule, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
                     ui.painter().hline(rule.x_range(), rule.center().y, Stroke::new(1.0, theme::border()));
-                    ui.add_space(if narrow_window { 10.0 } else { 18.0 });
-                    crate::share::shared_ui::account_reasons_inline(ui);
+                    ui.add_space(if narrow_window { 4.0 } else { 12.0 });
+                    crate::share::shared_ui::account_reasons_inline(ui, if narrow_window { 3.0 } else { 20.0 });
                 });
                 }
                 1 => {
@@ -2052,7 +2278,6 @@ impl crate::App {
                     app.draw_community(ui, ctx);
                 }
                 }
-                ui.add_space(16.0);
                 });
                 if backup {
                     app.backup_now();
@@ -2062,7 +2287,11 @@ impl crate::App {
                 // holds the bottom of the viewport instead.
                 crate::pageshell::footer(
                     ui,
-                    "verSHion · your work is saved on this machine, and nothing leaves it unless you share it",
+                    if ui.ctx().content_rect().width() < 900.0 {
+                        "verSHion · saved on this machine"
+                    } else {
+                        "verSHion · your work is saved on this machine, and nothing leaves it unless you share it"
+                    },
                 );
             });
           }

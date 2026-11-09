@@ -257,6 +257,39 @@ pub fn primary_on(ui: &mut Ui, text: &str, on: bool) -> egui::Response {
     )
 }
 
+/// The three colours of a button that is not available yet: fill, text, outline. A true neutral
+/// grey, not the beige field colour (read as washed out) or an accent outline (read as live); the
+/// text stays above 4:1 against its fill in both palettes so the label reads as a button's.
+pub fn unavailable_colors() -> (Color32, Color32, Color32) {
+    if theme::is_dark() {
+        (Color32::from_rgb(0x46, 0x42, 0x3e), Color32::from_rgb(0xb5, 0xb0, 0xaa), Color32::from_rgb(0x5c, 0x57, 0x52))
+    } else {
+        (Color32::from_rgb(0xe6, 0xe4, 0xe1), Color32::from_rgb(0x6e, 0x6a, 0x66), Color32::from_rgb(0xc8, 0xc5, 0xc1))
+    }
+}
+
+/// A button `h` tall that cannot be pressed yet: grey fill, mid-grey label, no hover, no click
+/// (`add_enabled(false, ..)`), drawn at full strength rather than egui's half-faded disabled look.
+/// `why` is the tooltip shown on hover, saying what makes it available.
+pub fn unavailable(ui: &mut Ui, text: &str, h: f32, why: &str) -> egui::Response {
+    let (fill, fg, edge) = unavailable_colors();
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = Vec2::new(18.0, 4.0);
+        ui.visuals_mut().disabled_alpha = 1.0;
+        ui.visuals_mut().widgets.noninteractive.expansion = 0.0;
+        ui.add_enabled(
+            false,
+            egui::Button::new(RichText::new(text).family(theme::bold_family()).size(15.2).color(fg))
+                .fill(fill)
+                .stroke(Stroke::new(1.0, edge))
+                .corner_radius(CornerRadius::same(12))
+                .min_size(Vec2::new(0.0, h)),
+        )
+        .on_disabled_hover_text(why)
+    })
+    .inner
+}
+
 /// The outlined action.
 pub fn outline(ui: &mut Ui, text: &str) -> egui::Response {
     button(ui, text, theme::card(), theme::hover_bg(), theme::accent_faded(), Stroke::new(1.0, theme::rule()), theme::ink())
@@ -295,7 +328,10 @@ fn progress(now: f64, t0: f64, secs: f64) -> f32 {
 /// The one content column every page uses (Home, Banks, Exams, Import, Shared, Account, Settings).
 pub const PAGE_W: f32 = 980.0;
 
+// A narrower 196 px menu (more room for the content column) lost 2 of 4 side-by-side verdicts.
 const NAV_W: f32 = 236.0;
+/// The gap between the section menu and the content column.
+const NAV_COL_GAP: f32 = 28.0;
 const NAV_ITEM_H: f32 = 44.0;
 const NAV_GAP: f32 = 4.0;
 const NAV_COLLAPSE_W: f32 = 700.0;
@@ -315,13 +351,20 @@ pub fn select_section(ctx: &egui::Context, salt: &str, i: usize) {
 }
 
 pub fn sections(ui: &mut Ui, salt: &str, items: &[NavItem], content: impl FnOnce(&mut Ui, usize)) {
-    sections_aside(ui, salt, items, |_| {}, content);
+    sections_aside(ui, salt, items, &[], |_| {}, content);
 }
 
-/// [`sections`] with a small panel of its own: under the section list when the list is a column (the
-/// column used to stop after four links and leave the left half of the page as empty grid), and
-/// after the content when the list collapses into chips.
-pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl FnOnce(&mut Ui), content: impl FnOnce(&mut Ui, usize)) {
+/// [`sections`] with a closing panel under the section's content (in the content column on a wide
+/// window, under the chips' content on a narrow one). In the sections listed in `aside_leads` the
+/// panel comes first, above the content, with the same gap between them.
+pub fn sections_aside(
+    ui: &mut Ui,
+    salt: &str,
+    items: &[NavItem],
+    aside_leads: &[usize],
+    aside: impl FnOnce(&mut Ui),
+    content: impl FnOnce(&mut Ui, usize),
+) {
     if items.is_empty() {
         return;
     }
@@ -333,37 +376,60 @@ pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl Fn
         .data(|d| d.get_temp::<usize>(id.with("sel")))
         .unwrap_or_else(|| std::env::var("VERSHION_SECTION").ok().and_then(|v| v.parse().ok()).unwrap_or(0))
         .min(items.len() - 1);
+    let lead = aside_leads.contains(&selected);
     if ui.available_width() >= NAV_COLLAPSE_W {
-        let content_w = (ui.available_width() - NAV_W - 28.0).clamp(280.0, 960.0);
+        let content_w = (ui.available_width() - NAV_W - NAV_COL_GAP).clamp(280.0, 960.0);
+        let settings = salt == "settings";
         ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 28.0;
+            ui.spacing_mut().item_spacing.x = NAV_COL_GAP;
             ui.vertical(|ui| {
                 ui.set_width(NAV_W);
-                nav_column(ui, id, items, &mut selected);
-                ui.add_space(20.0);
-                aside(ui);
+                nav_column(ui, id, items, &mut selected, settings);
+                if settings {
+                    // The account-optional note sits right under the menu it qualifies, not at the foot
+                    // of the rail where it read as a stray caption belonging to nothing.
+                    ui.add_space(24.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(18.0);
+                        ui.vertical(|ui| {
+                            ui.set_width(NAV_W - 30.0);
+                            crate::kit::small_caps(ui, "Account optional");
+                            ui.add_space(6.0);
+                            ui.add(egui::Label::new(theme::muted("Create banks, build exams and print on this machine. Connect when you want to share.").size(13.0)).wrap());
+                        });
+                    });
+                }
             });
             ui.vertical(|ui| {
                 ui.set_width(content_w);
-                ease_in_content(ui, id, selected, content);
+                // The panel belongs to the content column, on the cards' own edges: run under the
+                // menu as well, it read as belonging to neither.
+                if lead {
+                    aside(ui);
+                    ui.add_space(12.0);
+                    ease_in_content(ui, id, selected, content);
+                } else {
+                    ease_in_content(ui, id, selected, content);
+                    ui.add_space(12.0);
+                    aside(ui);
+                }
             });
         });
     } else {
-        ui.horizontal_wrapped(|ui| {
-            for (i, it) in items.iter().enumerate() {
-                if crate::kit::chip_toggle(ui, it.label, i == selected).clicked() {
-                    selected = i;
-                }
-            }
-        });
+        nav_strip(ui, items, &mut selected);
         ui.add_space(12.0);
-        ease_in_content(ui, id, selected, content);
-        aside(ui);
+        if lead {
+            aside(ui);
+            ease_in_content(ui, id, selected, content);
+        } else {
+            ease_in_content(ui, id, selected, content);
+            aside(ui);
+        }
     }
     ctx.data_mut(|d| d.insert_temp(id.with("sel"), selected));
 }
 
-fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize) {
+fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize, quiet: bool) {
     let ctx = ui.ctx().clone();
     let now = ctx.input(|i| i.time);
     ui.spacing_mut().item_spacing.y = NAV_GAP;
@@ -406,7 +472,65 @@ fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize) {
         let mid = rect.left_center();
         // Left-aligned font glyphs sit with their left edge at x = 18; a centred icon goes half its width in.
         crate::handicons::paint_glyph(ui.painter(), mid + Vec2::new(18.0 + 9.0, 0.0), it.icon, 18.0, col);
-        ui.painter().text(mid + Vec2::new(46.0, 0.0), Align2::LEFT_CENTER, it.label, egui::FontId::new(15.2, theme::bold_family()), col);
+        ui.painter().text(mid + Vec2::new(46.0, 0.0), Align2::LEFT_CENTER, it.label, egui::FontId::new(if quiet { 14.0 } else { 15.2 }, if quiet && !on { egui::FontFamily::Proportional } else { theme::bold_family() }), col);
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
+        if resp.clicked() {
+            *selected = i;
+        }
+    }
+}
+
+/// The narrow window's section list: one segmented strip across the content column (a shared
+/// rounded frame, segments split by hairlines, the chosen one filled), so it reads as navigation.
+/// Separate outlined chips with small bold labels read as a row of secondary buttons.
+fn nav_strip(ui: &mut Ui, items: &[NavItem], selected: &mut usize) {
+    const SEG_H: f32 = 40.0;
+    const PAD: f32 = 3.0;
+    let n = items.len();
+    let font = egui::FontId::new(14.0, egui::FontFamily::Proportional);
+    let w = ui.available_width();
+    // One row when every label fits its equal share; otherwise two per row.
+    let widest = items
+        .iter()
+        .map(|it| ui.painter().layout_no_wrap(it.label.to_owned(), font.clone(), theme::ink()).size().x)
+        .fold(0.0_f32, f32::max);
+    let cols = if widest + 28.0 <= w / n as f32 { n } else { 2.min(n) };
+    let rows = n.div_ceil(cols);
+    let (frame, _) = ui.allocate_exact_size(Vec2::new(w, SEG_H * rows as f32), Sense::hover());
+    let painter = ui.painter();
+    painter.rect(frame, CornerRadius::same(12), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+    let seg_w = w / cols as f32;
+    let seg = |i: usize| Rect::from_min_size(frame.min + Vec2::new((i % cols) as f32 * seg_w, (i / cols) as f32 * SEG_H), Vec2::new(seg_w, SEG_H));
+    // Hairlines between neighbours, left out beside the chosen segment so its fill stands alone.
+    for i in 0..n {
+        let r = seg(i);
+        if i % cols != 0 && i != *selected && i - 1 != *selected {
+            painter.line_segment(
+                [Pos2::new(r.left(), r.top() + 10.0), Pos2::new(r.left(), r.bottom() - 10.0)],
+                Stroke::new(1.0, theme::border()),
+            );
+        }
+        if i >= cols && i % cols == 0 {
+            painter.line_segment([Pos2::new(frame.left() + 10.0, r.top()), Pos2::new(frame.right() - 10.0, r.top())], Stroke::new(1.0, theme::border()));
+        }
+    }
+    for (i, it) in items.iter().enumerate() {
+        let r = seg(i);
+        let resp = ui.interact(r, ui.id().with(("nav_strip", i)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+        let on = i == *selected;
+        let inner = r.shrink(PAD);
+        if on {
+            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::accent_faded());
+        } else if resp.is_pointer_button_down_on() {
+            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::accent_faded().gamma_multiply(0.7));
+        } else if resp.hovered() {
+            ui.painter().rect_filled(inner, CornerRadius::same(9), theme::hover_bg());
+        }
+        if resp.has_focus() {
+            ui.painter().rect_stroke(inner, CornerRadius::same(9), Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
+        }
+        let col = if on { theme::accent_col() } else { theme::ink() };
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, it.label, font.clone(), col);
         resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
         if resp.clicked() {
             *selected = i;

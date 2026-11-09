@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unblind one Opus climb round: controls, mirrors, per-screen new/old means, and the named gaps.
 
-Usage: python3 score.py N   (reads ui-climb/blind-rN/out/opus.jsonl and key-climb-rN.json)
+Usage: python3 score.py N [judge]   (reads ui-climb/blind-rN/out/<judge>.jsonl, default opus, and key-climb-rN.json)
 The level is the mean of the NEW build's four-dimension average over the six primary pairs.
 """
 import json
@@ -12,7 +12,8 @@ n = sys.argv[1]
 here = os.path.dirname(os.path.abspath(__file__))
 key = json.load(open(os.path.expanduser(f'~/.local/state/ui-hill-climb/key-climb-r{n}.json')))
 rows = {}
-for line in open(f'{here}/blind-r{n}/out/opus.jsonl'):
+judge = sys.argv[2] if len(sys.argv) > 2 else 'opus'
+for line in open(f'{here}/blind-r{n}/out/{judge}.jsonl'):
     line = line.strip()
     if line:
         r = json.loads(line)
