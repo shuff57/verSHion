@@ -208,7 +208,9 @@ fn old_saves_render_byte_identically() {
 #[test]
 fn migration_writes_the_numbers_the_old_table_drew() {
     let mut p = with(&[("cells", "1,,3\n4\nabc, 2")]);
-    migrate(&crate::model::FigureSpec { id: ID.into(), params: Default::default() }, &mut p);
+    // an old save holds every old param and none of the new ones
+    let old = crate::model::FigureSpec { id: ID.into(), params: OLD_KEYS.iter().map(|k| (k.to_string(), crate::figures::spec::value_to_json(p.0.get(*k).unwrap()))).collect() };
+    migrate(&old, &mut p);
     // three lines, so a third row; empty boxes and words drew 0, short lines were padded with 0
     assert_eq!(p.s("cells"), "1, 0, 3\n4, 0, 0\n0, 2, 0");
 }
@@ -603,7 +605,8 @@ fn first_click_keeps_the_choice_blanks_and_a_second_click_undoes_it() {
     let mut p = p0.clone();
     toggle(&mut p, Slot::Cell(0, 1));
     assert_eq!(p.s("blank"), CHOOSE);
-    assert_eq!(p.s("cells"), "24, [18], 8 = [50]\n19, 27, 4 = [50]\nTotal, [43], [45], [12] = [100]");
+    // the totals the choice blanked stay blank and worked out ("?"), so they follow the counts
+    assert_eq!(p.s("cells"), "24, [18], 8 = ?\n19, 27, 4 = ?\nTotal, ?, ?, ? = ?");
     let (student1, key1) = crate::figures::answer_pair(&def(), &p).unwrap();
     let mut gone = texts(&student0);
     gone.retain(|t| t != "18");
@@ -618,7 +621,7 @@ fn first_click_keeps_the_choice_blanks_and_a_second_click_undoes_it() {
     // a table read from a pasted spreadsheet keeps its names when clicked
     let mut h = with(&[("cells", "\tWalk\tBus\nYear 7\t1\t2\nYear 8\t3\t4")]);
     toggle(&mut h, Slot::Cell(1, 1));
-    assert_eq!((h.s("row_labels"), h.s("col_labels"), h.s("cells")), ("Year 7, Year 8", "Walk, Bus", "1, 2 = [3]\n3, [4] = [7]\nTotal, [4], [6] = [10]"));
+    assert_eq!((h.s("row_labels"), h.s("col_labels"), h.s("cells")), ("Year 7, Year 8", "Walk, Bus", "1, 2 = ?\n3, [4] = ?\nTotal, ?, ? = ?"));
 }
 
 #[test]
@@ -734,4 +737,153 @@ fn every_new_control_changes_the_drawing() {
     assert_ne!(render(&with(&[("row_title", "G"), ("col_title", "L"), ("corner_split", "true")])), render(&titled));
     let some = with(&[("blank", "Some cells")]);
     assert_ne!(render(&with(&[("blank", "Some cells"), ("totals_bold", "true")])), render(&some));
+}
+
+// ---------- checker round 2: old links, notes in the shown units, letters, totals that follow ----------
+
+fn link(cells: &str, v: Option<u32>) -> String {
+    let json = serde_json::json!({ "cells": cells }).to_string();
+    let p = crate::figures::share::b64url_encode(json.as_bytes());
+    match v {
+        Some(v) => format!("vershion://figure/two-way-table?p={p}&v={v}"),
+        None => format!("vershion://figure/two-way-table?p={p}"),
+    }
+}
+
+fn open(text: &str) -> Params {
+    let (id, changed) = crate::figures::share::decode(text).unwrap();
+    assert_eq!(id, ID);
+    crate::figures::share::link_params(&def(), changed, crate::figures::share::version(text))
+}
+
+/// A link made before version 7 that left counts off a short line (the old hint: "Missing counts are
+/// 0") opens drawing those 0s, byte for byte as it did.
+#[test]
+fn old_share_links_open_as_they_drew() {
+    let mut old_cases = 0;
+    for cells in ["24, 18\n19, 27, 4", "1,,3\n4", "24, x\n19, 27, 4", "Total, 1, 2\n3 = 4", "", "24 18 8\n19 27 4"] {
+        for v in [None, Some(2), Some(6)] {
+            let p = open(&link(cells, v));
+            let mut old = crate::figures::start_params(&def());
+            old.set_s("cells", cells);
+            assert_eq!(render(&p), legacy::render(&old), "{cells:?} v{v:?}");
+            old_cases += 1;
+        }
+    }
+    assert_eq!(old_cases, 18);
+    // by hand: Girls 24 + 18 + 0 = 42, Salad 0 + 4 = 4, grand 42 + 50 = 92
+    let p = open(&link("24, 18\n19, 27, 4", Some(6)));
+    let t = texts(&render(&p));
+    for v in ["0", "42", "4", "92"] {
+        assert!(t.contains(&v.to_string()), "{v}: {t:?}");
+    }
+    // the same counts in a link of this version are a blank for students
+    let q = open(&link("24, 18\n19, 27, 4", Some(crate::figures::share::VERSION)));
+    assert_eq!(Worked::new(&q).m.cells[0][2], Entry::Empty);
+}
+
+#[test]
+fn a_new_link_round_trips() {
+    let start = crate::figures::start_params(&def());
+    for mut p in layouts() {
+        p.set_s("title", "Lunch, survey");
+        let text = crate::figures::share::encode(ID, &p, &start);
+        assert!(text.ends_with("v=7"), "{text}");
+        let back = open(&text);
+        let mut want = p.clone();
+        want.normalize(&params(), false);
+        assert_eq!(back.0, want.0, "{text}");
+        assert_eq!(render(&back), render(&p));
+    }
+}
+
+#[test]
+fn links_for_other_figures_are_unchanged_by_the_bump() {
+    for d in crate::figures::registry() {
+        if d.id == ID {
+            continue;
+        }
+        for v in 1..=crate::figures::share::VERSION {
+            assert!(crate::figures::share::dropped_before(d.id, v).is_empty(), "{}", d.id);
+        }
+        // a v6 link opens exactly as a v7 one with the same payload (nothing for these figures changed)
+        let a = crate::figures::share::link_params(&d, Default::default(), 6);
+        let b = crate::figures::share::link_params(&d, Default::default(), 7);
+        assert_eq!(a.0, b.0, "{}", d.id);
+    }
+}
+
+/// Only a spec holding every old param and none of the new ones is an old save: a pasted or AI-made
+/// spec that lists a few params keeps its marks.
+#[test]
+fn partial_specs_are_not_migrated() {
+    let spec = crate::model::FigureSpec { id: ID.into(), params: [("cells".to_string(), serde_json::json!("12, , 8 = 30\nx, 4, 5"))].into_iter().collect() };
+    assert!(!predates_change(&spec));
+    let p = crate::figures::spec::params_from_spec(&def(), &spec);
+    assert_eq!(p.s("cells"), "12, , 8 = 30\nx, 4, 5");
+    let full: std::collections::BTreeMap<String, serde_json::Value> = OLD_KEYS.iter().map(|k| (k.to_string(), crate::figures::spec::value_to_json(defaults().0.get(*k).unwrap()))).collect();
+    assert!(predates_change(&crate::model::FigureSpec { id: ID.into(), params: full.clone() }));
+    let mut newer = full;
+    newer.insert("lines".into(), serde_json::json!("Every cell"));
+    assert!(!predates_change(&crate::model::FigureSpec { id: ID.into(), params: newer }));
+}
+
+/// The note says what students can work out from what the table SHOWS: row percents can be added
+/// along a row (each row is 100%) and along the Total row, but not down a column.
+#[test]
+fn the_note_follows_the_values_shown() {
+    // Totals blank under row percents: the row totals are 100% and the grand total 100%, but the Total
+    // row (43%, 45%, 12%) needs the rows' sizes
+    let row = with(&[("values", OF_ROW)]);
+    assert_eq!(warnings(&row), vec!["Students can't work out 3 of the 6 blank boxes from what the table shows: Pizza total; Tacos total; Salad total.".to_string()]);
+    // the same under counts or relative frequencies of the grand total: everything follows
+    assert!(warnings(&defaults()).is_empty());
+    assert!(warnings(&with(&[("values", OF_TOTAL)])).is_empty());
+    // column percents: the Total column needs the columns' sizes
+    let col = with(&[("values", OF_COL)]);
+    assert_eq!(warnings(&col), vec!["Students can't work out 2 of the 6 blank boxes from what the table shows: Girls total; Boys total.".to_string()]);
+    // a 2 x 2 with row one hidden: under counts its column totals give it (30 = 40 - 10, 20 = 60 - 40);
+    // under row percents students see only 100% for that row and can't split it
+    let two = |values: &str| with(&[("row_labels", "A, B"), ("col_labels", "X, Y"), ("cells", "[30], [20]\n10, 40"), ("blank", CHOOSE), ("values", values)]);
+    assert!(warnings(&two(COUNTS)).is_empty());
+    assert_eq!(warnings(&two(OF_ROW)), vec!["Students can't work out any of the 2 blank boxes from what the table shows: A, X; A, Y.".to_string()]);
+    // under column percents the column sums do it: 30/40 = 75% is 100% - 25%
+    assert!(warnings(&two(OF_COL)).is_empty());
+    // one hidden box in a row of row percents is 100% less the rest
+    let one = with(&[("cells", "24, [18], 8\n19, 27, 4"), ("blank", CHOOSE), ("values", OF_ROW)]);
+    assert!(warnings(&one).is_empty());
+}
+
+#[test]
+fn a_letter_box_clicked_twice_comes_back() {
+    let mut p = with(&[("row_labels", "Year 10, Year 11"), ("col_labels", "School lunch, Packed lunch"), ("cells", "46, x = 80\n38, 41 = ?\nTotal, 84, 75 = 159"), ("blank", CHOOSE)]);
+    toggle(&mut p, Slot::Cell(0, 1));
+    assert!(p.s("cells").starts_with("46, [x] = 80"), "{}", p.s("cells"));
+    let (student, key) = crate::figures::answer_pair(&def(), &p).unwrap();
+    assert!(!texts(&student).iter().any(|t| t.contains('x')) && texts(&key).contains(&"x = 34".to_string()));
+    toggle(&mut p, Slot::Cell(0, 1));
+    assert!(p.s("cells").starts_with("46, x = 80"), "{}", p.s("cells"));
+    assert!(texts(&render(&p)).contains(&"x = 34".to_string()));
+}
+
+#[test]
+fn totals_left_blank_by_a_click_follow_later_edits() {
+    let mut p = defaults();
+    toggle(&mut p, Slot::Cell(0, 1));
+    // the teacher changes Girls' Pizza from 24 to 25 afterwards
+    let edited = p.s("cells").replacen("24", "25", 1);
+    p.set_s("cells", &edited);
+    let w = Worked::new(&p);
+    // 25 + 18 + 8 = 51, Pizza 25 + 19 = 44, all 101; no note about totals that don't add up
+    assert_eq!((w.truth(Slot::RowTot(0)), w.truth(Slot::ColTot(0)), w.truth(Slot::Grand)), (Some(51.0), Some(44.0), Some(101.0)));
+    assert!(!warnings(&p).iter().any(|w| w.contains("add up")), "{:?}", warnings(&p));
+    // a shown total clicked blank and back is worked out again ("sum" on a Total line)
+    let mut q = with(&[("blank", CHOOSE)]);
+    toggle(&mut q, Slot::ColTot(1));
+    assert_eq!(q.s("cells"), "24, 18, 8\n19, 27, 4\nTotal, sum, ?, sum");
+    toggle(&mut q, Slot::ColTot(1));
+    assert_eq!(render(&q), render(&with(&[("blank", CHOOSE), ("cells", "24, 18, 8\n19, 27, 4\nTotal, sum, sum, sum")])));
+    let edited = q.s("cells").replacen("18", "20", 1);
+    q.set_s("cells", &edited);
+    assert_eq!(Worked::new(&q).truth(Slot::ColTot(1)), Some(47.0), "20 + 27");
 }

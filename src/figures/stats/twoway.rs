@@ -182,8 +182,16 @@ pub enum Entry {
     Empty,
     /// A letter like `x`, drawn as itself; the key adds its value.
     Letter(String),
-    /// A total that was not typed: worked out from the counts.
+    /// `[x]`: a letter box blanked for students (a click on `x`); the key writes `x = 34`.
+    HiddenLetter(String),
+    /// A total that was not typed (or typed `sum`): worked out from the counts.
     Absent,
+}
+
+/// A total's box: as [`entry`], and `sum` for "worked out from the counts" (how a click writes a
+/// total it leaves shown on a Total line that also holds a typed or blank one).
+fn total_entry(s: &str) -> Entry {
+    if s.trim().eq_ignore_ascii_case("sum") { Entry::Absent } else { entry(s) }
 }
 
 /// A box of the table.
@@ -230,7 +238,12 @@ pub fn entry(s: &str) -> Entry {
         return Entry::Empty;
     }
     if let Some(inner) = t.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
-        return number(inner).map_or(Entry::Empty, Entry::Hidden);
+        let inner = inner.trim();
+        return match number(inner) {
+            Some(v) => Entry::Hidden(v),
+            None if inner.is_empty() || inner == "?" => Entry::Empty,
+            None => Entry::HiddenLetter(inner.chars().take(MAX_LETTER).collect()),
+        };
     }
     match number(t) {
         Some(v) => Entry::Num(v),
@@ -370,11 +383,12 @@ pub fn headed(text: &str) -> Option<Model> {
     let tot_row = body.len() >= 2 && is_total_name(&body.last().unwrap()[0]);
     let total = if tot_row { body.pop() } else { None };
     let get = |l: &Vec<String>, i: usize| l.get(i).map_or(Entry::Empty, |s| entry(s));
+    let get_total = |l: &Vec<String>, i: usize| l.get(i).map_or(Entry::Empty, |s| total_entry(s));
     let rows: Vec<String> = body.iter().map(|l| tidy(&l[0])).collect();
     let cells = body.iter().map(|l| (0..nc).map(|c| get(l, 1 + c)).collect()).collect();
-    let row_tot = body.iter().map(|l| if tot_col { get(l, tot_idx) } else { Entry::Absent }).collect();
+    let row_tot = body.iter().map(|l| if tot_col { get_total(l, tot_idx) } else { Entry::Absent }).collect();
     let (col_tot, grand) = match total {
-        Some(l) => ((0..nc).map(|c| get(l, 1 + c)).collect(), if tot_col { get(l, tot_idx) } else { Entry::Absent }),
+        Some(l) => ((0..nc).map(|c| get_total(l, 1 + c)).collect(), if tot_col { get_total(l, tot_idx) } else { Entry::Absent }),
         None => (vec![Entry::Absent; nc], Entry::Absent),
     };
     Some(Model { rows, cols, cells, row_tot, col_tot, grand, headed: true, corner: lines[0][0].trim().to_string() })
@@ -403,13 +417,13 @@ pub fn model(p: &Params) -> Model {
     let cols = labels(p.s("col_labels"), "Column", typed_cols.min(MAX_LINES));
     let (nr, nc) = (rows.len(), cols.len());
     let cells = (0..nr).map(|r| (0..nc).map(|c| cell_lines.get(r).and_then(|(l, _)| l.get(c)).map_or(Entry::Empty, |s| entry(s))).collect()).collect();
-    let row_tot = (0..nr).map(|r| cell_lines.get(r).and_then(|(_, t)| t.as_deref()).map_or(Entry::Absent, entry)).collect();
+    let row_tot = (0..nr).map(|r| cell_lines.get(r).and_then(|(_, t)| t.as_deref()).map_or(Entry::Absent, total_entry)).collect();
     let (col_tot, grand) = match &total {
         Some((l, eq)) => (
-            (0..nc).map(|c| l.get(c).map_or(Entry::Absent, |s| entry(s))).collect(),
+            (0..nc).map(|c| l.get(c).map_or(Entry::Absent, |s| total_entry(s))).collect(),
             match eq {
-                Some(g) => entry(g),
-                None => l.get(nc).map_or(Entry::Absent, |s| entry(s)),
+                Some(g) => total_entry(g),
+                None => l.get(nc).map_or(Entry::Absent, |s| total_entry(s)),
             },
         ),
         None => (vec![Entry::Absent; nc], Entry::Absent),
@@ -444,19 +458,59 @@ fn equations(m: &Model) -> Vec<Vec<(Slot, f64)>> {
     eqs
 }
 
-/// Every box whose value the `known` ones fix (Gauss-Jordan on the table's sums: a box is fixed when
-/// its pivot row has nothing left in a free column). Values are rounded to 1e-9.
+/// The relations a student can use between the values the table SHOWS, as (boxes with coefficients,
+/// what they add to). Counts and relative frequencies of the grand total keep every sum of the counts
+/// (the latter also has the grand total 1). Relative frequencies of each row keep only each row's sum
+/// (each row total is 1) and the Total row's (each column's share of the grand total, adding to 1): a
+/// column of row percents can't be added up without the rows' sizes, which the table doesn't show.
+/// Each column is the mirror image.
+pub fn shown_equations(m: &Model, values: &str) -> Vec<(Vec<(Slot, f64)>, f64)> {
+    let (nr, nc) = (m.nr(), m.nc());
+    let eqs = equations(m);
+    let one = |s: Slot| (vec![(s, 1.0)], 1.0);
+    let mut out: Vec<(Vec<(Slot, f64)>, f64)> = Vec::new();
+    match values {
+        OF_TOTAL => {
+            out.extend(eqs.into_iter().map(|e| (e, 0.0)));
+            out.push(one(Slot::Grand));
+        }
+        OF_ROW => {
+            // rows, then the Total row (the last equation adds the column totals to the grand total)
+            out.extend(eqs[..nr].iter().cloned().map(|e| (e, 0.0)));
+            out.push((eqs[nr + nc + 1].clone(), 0.0));
+            out.extend((0..nr).map(|r| one(Slot::RowTot(r))));
+            out.push(one(Slot::Grand));
+        }
+        OF_COL => {
+            out.extend(eqs[nr..nr + nc].iter().cloned().map(|e| (e, 0.0)));
+            out.push((eqs[nr + nc].clone(), 0.0));
+            out.extend((0..nc).map(|c| one(Slot::ColTot(c))));
+            out.push(one(Slot::Grand));
+        }
+        _ => out.extend(eqs.into_iter().map(|e| (e, 0.0))),
+    }
+    out
+}
+
+/// Every box whose value the `known` ones fix through the counts' sums.
 pub fn solve(m: &Model, known: &[Option<f64>]) -> Vec<Option<f64>> {
+    solve_with(m, &equations(m).into_iter().map(|e| (e, 0.0)).collect::<Vec<_>>(), known)
+}
+
+/// Every box whose value the `known` ones fix through the relations `eqs` (Gauss-Jordan: a box is
+/// fixed when its pivot row has nothing left in a free column). Values are rounded to 1e-9.
+pub fn solve_with(m: &Model, eqs: &[(Vec<(Slot, f64)>, f64)], known: &[Option<f64>]) -> Vec<Option<f64>> {
     let unk: Vec<usize> = (0..known.len()).filter(|&i| known[i].is_none()).collect();
     let k = unk.len();
     let mut col_of = vec![usize::MAX; known.len()];
     for (j, &i) in unk.iter().enumerate() {
         col_of[i] = j;
     }
-    let mut a: Vec<Vec<f64>> = equations(m)
+    let mut a: Vec<Vec<f64>> = eqs
         .iter()
-        .map(|eq| {
+        .map(|(eq, rhs)| {
             let mut row = vec![0.0; k + 1];
+            row[k] = *rhs;
             for &(s, coef) in eq {
                 let i = m.index(s);
                 match known[i] {
@@ -593,7 +647,7 @@ impl Worked {
     pub fn seen(&self, s: Slot) -> Seen {
         match self.m.at(s) {
             Entry::Letter(_) => Seen::Letter,
-            Entry::Hidden(_) | Entry::Empty => Seen::Blank,
+            Entry::Hidden(_) | Entry::HiddenLetter(_) | Entry::Empty => Seen::Blank,
             Entry::Num(_) | Entry::Absent => {
                 let auto = match s {
                     Slot::Cell(r, c) => self.picks.contains(&(r * self.m.nc() + c)),
@@ -608,9 +662,21 @@ impl Worked {
         self.m.slots().into_iter().filter(|&s| self.drawn(s) && self.seen(s) != Seen::Shown).collect()
     }
     /// What a student can work out from the boxes shown to them.
-    pub fn student(&self) -> Vec<Option<f64>> {
-        let known: Vec<Option<f64>> = self.m.slots().into_iter().map(|s| if self.drawn(s) && self.seen(s) == Seen::Shown { self.truth(s) } else { None }).collect();
-        solve(&self.m, &known)
+    /// What a student can work out from the values the table shows, in the units it shows them: counts,
+    /// or the relative frequencies chosen in In the cells (see [`shown_equations`]).
+    pub fn student(&self, p: &Params) -> Vec<Option<f64>> {
+        let values = p.s("values");
+        let rf = matches!(values, OF_TOTAL | OF_ROW | OF_COL);
+        let shown = |s: Slot| -> Option<f64> {
+            let v = self.truth(s)?;
+            if !rf {
+                return Some(v);
+            }
+            let d = self.truth(denominator(values, s))?;
+            (d != 0.0).then(|| v / d)
+        };
+        let known: Vec<Option<f64>> = self.m.slots().into_iter().map(|s| if self.drawn(s) && self.seen(s) == Seen::Shown { shown(s) } else { None }).collect();
+        solve_with(&self.m, &shown_equations(&self.m, values), &known)
     }
 }
 
@@ -638,7 +704,7 @@ fn disp(w: &Worked, p: &Params, s: Slot) -> Option<Disp> {
     let v = w.truth(s);
     let shown = v.and_then(|v| value_disp(w, p, s, v));
     match w.m.at(s) {
-        Entry::Letter(l) => Some(Disp::Letter(
+        Entry::Letter(l) | Entry::HiddenLetter(l) => Some(Disp::Letter(
             l.clone(),
             shown.map(|d| match d {
                 Disp::Frac(a, b) => format!("{a}/{b}"),
@@ -958,13 +1024,15 @@ fn tok(e: &Entry) -> String {
     match e {
         Entry::Num(v) => num_tok(*v),
         Entry::Hidden(v) => format!("[{}]", num_tok(*v)),
-        Entry::Empty | Entry::Absent => "?".into(),
+        Entry::Empty => "?".into(),
+        Entry::Absent => "sum".into(),
         Entry::Letter(s) => s.clone(),
+        Entry::HiddenLetter(s) => format!("[{s}]"),
     }
 }
 
 /// The Counts text for `m`: one line per row, ` = total` where a total is typed, a Total line when any is.
-pub fn write_counts(w: &Worked, m: &Model) -> String {
+pub fn write_counts(m: &Model) -> String {
     let mut lines: Vec<String> = (0..m.nr())
         .map(|r| {
             let mut s = m.cells[r].iter().map(tok).collect::<Vec<_>>().join(", ");
@@ -975,11 +1043,8 @@ pub fn write_counts(w: &Worked, m: &Model) -> String {
         })
         .collect();
     if m.col_tot.iter().any(|e| *e != Entry::Absent) || m.grand != Entry::Absent {
-        // a total left to be worked out is written as its value, so the line keeps its places
-        let cols: Vec<String> = (0..m.nc()).map(|c| match &m.col_tot[c] {
-            Entry::Absent => w.truth(Slot::ColTot(c)).map_or("?".into(), num_tok),
-            e => tok(e),
-        }).collect();
+        // a total still worked out from the counts is written "sum", so it keeps following them
+        let cols: Vec<String> = m.col_tot.iter().map(tok).collect();
         let mut s = format!("Total, {}", cols.join(", "));
         if m.grand != Entry::Absent {
             s.push_str(&format!(" = {}", tok(&m.grand)));
@@ -989,7 +1054,7 @@ pub fn write_counts(w: &Worked, m: &Model) -> String {
     lines.join("\n")
 }
 
-fn write_model(p: &mut Params, w: &Worked, m: &Model) {
+fn write_model(p: &mut Params, m: &Model) {
     if m.headed {
         p.set_s("row_labels", &m.rows.join(", "));
         p.set_s("col_labels", &m.cols.join(", "));
@@ -997,7 +1062,7 @@ fn write_model(p: &mut Params, w: &Worked, m: &Model) {
             p.set_s("row_title", &m.corner.replace([',', ';'], " "));
         }
     }
-    p.set_s("cells", &write_counts(w, m));
+    p.set_s("cells", &write_counts(m));
 }
 
 /// A click on box `s` of the table: shown to students becomes blank for them and back. The first click
@@ -1008,21 +1073,31 @@ pub fn toggle(p: &mut Params, s: Slot) {
     let mut m = w.m.clone();
     if p.s("blank") != CHOOSE {
         for t in m.slots() {
-            if w.drawn(t) && w.seen(t) == Seen::Blank && matches!(m.at(t), Entry::Num(_) | Entry::Absent) {
-                *m.at_mut(t) = w.truth(t).map_or(Entry::Empty, Entry::Hidden);
+            // a count keeps its value for the key; a total stays worked out from the counts (blank, "?"),
+            // so a count edited later still adds up
+            if w.drawn(t) && w.seen(t) == Seen::Blank {
+                match m.at(t).clone() {
+                    Entry::Num(v) => *m.at_mut(t) = Entry::Hidden(v),
+                    Entry::Absent => *m.at_mut(t) = Entry::Empty,
+                    _ => {}
+                }
             }
         }
         p.set_s("blank", CHOOSE);
     }
     let truth = w.truth(s);
+    let is_total = !matches!(s, Slot::Cell(..));
     let e = m.at_mut(s);
     *e = match e.clone() {
         Entry::Num(v) => Entry::Hidden(v),
         Entry::Hidden(v) => Entry::Num(v),
-        Entry::Absent | Entry::Letter(_) => truth.map_or(Entry::Empty, Entry::Hidden),
+        Entry::Letter(l) => Entry::HiddenLetter(l),
+        Entry::HiddenLetter(l) => Entry::Letter(l),
+        Entry::Absent => Entry::Empty,
+        Entry::Empty if is_total => Entry::Absent,
         Entry::Empty => truth.map_or(Entry::Empty, Entry::Num),
     };
-    write_model(p, &w, &m);
+    write_model(p, &m);
 }
 
 /// Click handles: one over every value box of the table.
@@ -1068,9 +1143,8 @@ pub fn pasted(old: &Value, p: &mut Params) -> bool {
     };
     let tc = m.row_tot.iter().any(|e| *e != Entry::Absent);
     let tr = m.col_tot.iter().any(|e| *e != Entry::Absent) || m.grand != Entry::Absent;
-    let gaps = m.cells.iter().flatten().chain(&m.row_tot).chain(&m.col_tot).chain([&m.grand]).any(|e| matches!(e, Entry::Empty | Entry::Letter(_) | Entry::Hidden(_)));
-    let w = Worked::from_model(m.clone(), p);
-    write_model(p, &w, &m);
+    let gaps = m.cells.iter().flatten().chain(&m.row_tot).chain(&m.col_tot).chain([&m.grand]).any(|e| matches!(e, Entry::Empty | Entry::Letter(_) | Entry::Hidden(_) | Entry::HiddenLetter(_)));
+    write_model(p, &m);
     if tc {
         p.set_b("total_col", true);
     }
@@ -1123,11 +1197,25 @@ pub fn positional_totals(text: &str) -> Option<String> {
     Some(out.join("\n"))
 }
 
-/// Upgrades a two-way table saved before typed totals, blank boxes and letters (its spec has no
-/// `total_col`): the counts are rewritten as the numbers it drew, every box filled in (a box that was
-/// empty or a word drew 0), so nothing it typed reads as one of the new marks.
+/// Every param the two-way table had before typed totals, blank boxes and letters: a saved figure
+/// stores every param, so an old save holds all of these.
+pub const OLD_KEYS: [&str; 11] = ["row_labels", "col_labels", "cells", "row_title", "col_title", "title", "blank", "blank_count", "style", "label_size", "show_answers"];
+/// The params added with them (share links of version 7 and later know them).
+pub const NEW_KEYS: [&str; 10] = ["total_col", "total_row", "values", "rf_as", "rf_places", "corner_split", "title_mode", "headings", "lines", "totals_bold"];
+
+/// Whether `spec` is a two-way table saved before the change: it holds every old param and none of
+/// the new ones. A spec written now holds the new ones; a partial spec (pasted JSON, an AI fit) that
+/// leaves out some old params is read as written now, so its `= 30`, `?` and `x` keep their meaning.
+pub fn predates_change(spec: &crate::model::FigureSpec) -> bool {
+    OLD_KEYS.iter().all(|k| spec.params.contains_key(*k)) && !NEW_KEYS.iter().any(|k| spec.params.contains_key(*k))
+}
+
+/// Upgrades a two-way table saved before typed totals, blank boxes and letters ([`predates_change`]),
+/// or opened from a share link older than version 7 (the link opener drops the new keys first): the
+/// counts are rewritten as the numbers it drew, every box filled in (a box that was empty, a word or
+/// left off a short line drew 0), so nothing it typed reads as one of the new marks.
 pub fn migrate(spec: &crate::model::FigureSpec, p: &mut Params) {
-    if spec.params.contains_key("total_col") {
+    if !predates_change(spec) {
         return;
     }
     let text = p.s("cells").to_string();
@@ -1154,7 +1242,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
     let w = Worked::new(p);
     let mut out = Vec::new();
     let missing = w.missing();
-    let student = w.student();
+    let student = w.student(p);
     let stuck: Vec<Slot> = missing.iter().copied().filter(|&s| student[w.m.index(s)].is_none()).collect();
     if !stuck.is_empty() {
         let mut names: Vec<String> = stuck.iter().take(4).map(|&s| w.m.name(s)).collect();

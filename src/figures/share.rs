@@ -85,8 +85,47 @@ pub fn encode(id: &str, cur: &Params, base: &Params) -> String {
 /// opening-state keys newer than its version (`start::newer_than`) as plain defaults, so it
 /// opens as it did when made. v2: round 5 (vector resultant dashed); v3: P4 (orbital diagram
 /// without the configuration line, bare angles and parallel lines); v4: the micropipette opens
-/// on the reference's short body; v5: the projectile ball opens centred on the ground line; v6: the vector diagram opens bold, on the reference's 7 x 6 grid.
-pub const VERSION: u32 = 6;
+/// on the reference's short body; v5: the projectile ball opens centred on the ground line; v6: the vector diagram opens bold, on the reference's 7 x 6 grid;
+/// v7: the two-way table reads empty boxes, words, `=` and `Total` lines in its counts as blanks,
+/// letters and typed totals (an older link's counts are rewritten as the numbers they drew, see
+/// `dropped_before`).
+///
+/// Readers ignore what they don't know: an older build given a newer link parses its `v=` and finds
+/// no opening keys newer than it (`start::newer_than` is empty), and drops param keys it doesn't
+/// have; so a v7 link opens in a v6 build with the new params at their defaults, never an error.
+pub const VERSION: u32 = 7;
+
+/// Params a figure gained in link version `since` together with a change in what its older params
+/// mean. For a link older than that they are left out before the link's params are read, so the
+/// figure's saved-spec migration sees an old figure and rewrites it (the two-way table:
+/// `stats::twoway::migrate`).
+pub fn dropped_before(id: &str, v: u32) -> &'static [&'static str] {
+    match id {
+        super::stats::twoway::ID if v < 7 => &super::stats::twoway::NEW_KEYS,
+        _ => &[],
+    }
+}
+
+/// The params figure `def` opens with from a link of version `v` whose payload is `changed`: the
+/// opening state, with the opening keys newer than the link at what it opened with then, the keys
+/// in `dropped_before` left out, then the link's own params, through the saved-spec path (type
+/// checks, migrations, clamping).
+pub fn link_params(def: &super::FigureDef, changed: serde_json::Map<String, serde_json::Value>, v: u32) -> Params {
+    use super::spec::{params_from_spec, value_to_json};
+    let mut params: std::collections::BTreeMap<String, serde_json::Value> = super::start_params(def).0.iter().map(|(k, v)| (k.clone(), value_to_json(v))).collect();
+    // an older link was made against an older opening state: its newer keys read as defaults
+    let defs = (def.params)();
+    for (k, was) in super::start::older_values(def.id, v) {
+        if let Some(d) = defs.iter().find(|d| d.key == k) {
+            params.insert(k.to_string(), value_to_json(&was.unwrap_or_else(|| d.default.clone())));
+        }
+    }
+    for k in dropped_before(def.id, v) {
+        params.remove(*k);
+    }
+    params.extend(changed);
+    params_from_spec(def, &crate::model::FigureSpec { id: def.id.to_string(), params })
+}
 
 /// Pasted text with whitespace dropped and HTML-escaped ampersands (`&amp;`, from a link copied
 /// out of a mail or web page) turned back into `&`.

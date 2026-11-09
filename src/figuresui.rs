@@ -15,7 +15,7 @@ use egui::{
     ScrollArea, Sense, Stroke, TextEdit, TextureHandle, Ui, Vec2,
 };
 
-use crate::figures::spec::{flatten_white, params_from_spec, spec_for, value_to_json};
+use crate::figures::spec::{flatten_white, params_from_spec, spec_for};
 use crate::figures::{self, FigureDef, Kind, ParamDef, Params, Subject, Value};
 use crate::model::{FigureSpec, Id, Question};
 use crate::theme;
@@ -823,17 +823,8 @@ impl Workspace {
     fn apply_link(&mut self, text: &str) -> Result<(), String> {
         let (id, changed) = figures::share::decode(text)?;
         let (i, def) = find_def(&id).ok_or_else(|| format!("this link is for a figure this version doesn't have (\"{id}\")"))?;
-        let mut params: BTreeMap<String, serde_json::Value> =
-            figures::start_params(def).0.iter().map(|(k, v)| (k.clone(), value_to_json(v))).collect();
-        // an older link was made against an older opening state: its newer keys read as defaults
-        let defs = (def.params)();
-        for (k, was) in figures::start::older_values(&id, figures::share::version(text)) {
-            if let Some(d) = defs.iter().find(|d| d.key == k) {
-                params.insert(k.to_string(), value_to_json(&was.unwrap_or_else(|| d.default.clone())));
-            }
-        }
-        params.extend(changed);
-        let p = params_from_spec(def, &FigureSpec { id: id.clone(), params });
+        // the opening state as the link knew it, its params, and the migrations an older link needs
+        let p = figures::share::link_params(def, changed, figures::share::version(text));
         self.imp = None;
         // a link that opens a figure fresh starts its history clean (Undo greyed, as on the
         // reference's first screen); a link pasted over an open figure is one undo step
@@ -5723,7 +5714,7 @@ mod tests {
                 assert_eq!(format!("{:?}", ws.params.0), format!("{:?}", was.0), "{id}: {old} opens as before");
             }
             // what a v2 sender changed still wins
-            let v2 = format!("vershion://figure/{id}?p={}&v=2", figures::share::b64url_encode(format!("{{\"title\":\"T\",\"{key}\":{}}}", value_to_json(start.0.get(key).unwrap())).as_bytes()));
+            let v2 = format!("vershion://figure/{id}?p={}&v=2", figures::share::b64url_encode(format!("{{\"title\":\"T\",\"{key}\":{}}}", crate::figures::spec::value_to_json(start.0.get(key).unwrap())).as_bytes()));
             ws.apply_link(&v2).unwrap();
             assert_eq!(ws.params.0.get(key), start.0.get(key), "{id}: sender's {key} wins");
         }
