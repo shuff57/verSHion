@@ -56,8 +56,11 @@ fn an_empty_sector_takes_the_rest_and_is_blank_on_the_student_copy() {
 fn own_label_letter_and_blank_line_and_none() {
     let t = svg(&[("data", s("A, 1\nB, 1\nC")), ("total", s("4")), ("labels", s("Name")), ("own", s("\n-\nx\u{b0}")), ("show_answers", Value::B(false))]);
     assert!(t.contains(">x\u{b0}<") && !t.contains(">B<"));
-    let t = svg(&[("data", s("A, 1\nB, 1")), ("own", s("_"))]);
+    let t = svg(&[("data", s("A, 1\nB, 1")), ("own", s("_")), ("show_answers", Value::B(false))]);
     assert!(t.contains("<line") && !t.contains(">A<") && t.contains(">B<"));
+    // the key writes the answer where the student writes on the line
+    let t = svg(&[("data", s("A, 1\nB, 1")), ("own", s("_"))]);
+    assert!(t.contains(">1<"), "{t}");
 }
 
 #[test]
@@ -198,7 +201,7 @@ fn outside_labels_have_a_leader_each() {
 #[test]
 fn the_student_copy_description_never_leaks_a_hidden_value() {
     let over = |show: bool| {
-        vec![("data", s("Soccer, 20\nBasketball\nTennis, 10")), ("total", s("60")), ("show_answers", Value::B(show))]
+        vec![("data", s("Soccer, 20\nBasketball\nTennis, 10")), ("total", s("60")), ("labels", s("Name and value")), ("show_answers", Value::B(show))]
     };
     let desc = |show: bool| {
         let t = svg(&over(show));
@@ -231,8 +234,7 @@ fn thousands_groups_are_read_and_never_silently_truncated() {
 #[test]
 fn a_negative_is_refused_with_a_note_and_is_not_a_heading() {
     let (rows, notes) = parse("A, -5\nB, 3");
-    assert_eq!(rows.len(), 2);
-    assert_eq!(rows[0].value, None);
+    assert_eq!(rows.len(), 1, "the negative row is ignored, not turned into an empty sector");
     assert!(notes.iter().any(|n| n.contains("cannot be negative")) && !notes.iter().any(|n| n.contains("headings")), "{notes:?}");
 }
 
@@ -264,4 +266,62 @@ fn one_decimal_count_per_chart_and_a_readable_value_and_percent_outside() {
     let data: String = (1..=20).map(|i| format!("N{i}, {}\n", if i % 2 == 0 { 1 } else { 40 })).collect();
     let t = svg(&[("data", s(&data)), ("labels", s("Value and percent"))]);
     assert!(t.contains(">1, "), "joined with a separator: {t}");
+}
+
+fn desc_of(over: &[(&'static str, Value)]) -> String {
+    let t = svg(over);
+    t.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap().to_string()
+}
+
+#[test]
+fn the_student_description_leaks_nothing_an_own_label_or_no_label_hides() {
+    let d = desc_of(&[("data", s("Red, 110\nYellow, 70\nBlue, 180")), ("values", s("Degrees")), ("labels", s("Name and angle")), ("own", s("\nx\u{b0}")), ("show_answers", Value::B(false))]);
+    assert!(d.contains("Red 30.6") && d.contains("Yellow") && !d.contains("Yellow 19.4"), "{d}");
+    let d = desc_of(&[("data", s("A, 70\nB, 30")), ("values", s("Percents")), ("labels", s("Name and percent")), ("own", s("\n_")), ("show_answers", Value::B(false))]);
+    assert!(d.contains("A 70") && !d.contains("B 30"), "{d}");
+    let d = desc_of(&[("data", s("A, 70\nB, 30")), ("values", s("Percents")), ("labels", s("None")), ("show_answers", Value::B(false))]);
+    assert!(!d.contains("70") && !d.contains("30"), "{d}");
+}
+
+#[test]
+fn the_key_shows_the_answer_for_a_letter_label() {
+    let over = [("data", s("Red, 110\nBlue, 80\nGreen, 100\nYellow")), ("values", s("Degrees")), ("labels", s("Name and angle")), ("own", s("\n\n\nx\u{b0}"))];
+    let t = svg(&over);
+    assert!(t.contains(">x = 70\u{b0}<"), "{t}");
+    let mut stu = over.to_vec();
+    stu.push(("show_answers", Value::B(false)));
+    let stu = svg(&stu);
+    assert!(stu.contains(">x\u{b0}<") && !stu.contains(">x = "), "{stu}");
+}
+
+#[test]
+fn a_long_name_inside_a_sector_wraps_or_moves_outside() {
+    let t = svg(&[("data", s("Walking with friends, 14\nCar, 12\nBus, 10\nBike, 4"))]);
+    assert!(!t.contains(">Walking with friends<") || t.contains("<polyline"), "{t}");
+    let t = svg(&[("data", s("Tom & Jerry, 43\nOthers, 57")), ("values", s("Percents"))]);
+    assert!(t.contains("Tom &amp;"));
+}
+
+#[test]
+fn fractions_stay_fractions_across_the_chart() {
+    let t = svg(&[("data", s("A, 250\nB, 137\nC, 613")), ("labels", s("Fraction"))]);
+    assert!(t.contains(">1/4<") && t.contains(">137/1000<") && t.contains(">613/1000<"), "{t}");
+}
+
+#[test]
+fn a_negative_percent_is_never_the_remainder() {
+    let m = model(&params(&[("data", s("A, 60\nB, -10\nC, 30")), ("values", s("Percents"))]));
+    assert!(m.rows.iter().all(|r| r.name != "B"), "the negative row is gone");
+    assert!(m.notes.iter().any(|n| n.contains("ignored")));
+}
+
+#[test]
+fn tiny_values_spaced_thousands_and_contrast() {
+    assert_eq!(fixed(0.0004, 3), "<0.001");
+    assert_eq!(fixed(0.5, 0), "1");
+    let (rows, notes) = parse("New York 1 200");
+    assert_eq!(rows[0].name, "New York 1");
+    assert!(notes.iter().any(|n| n.contains("put a comma")), "{notes:?}");
+    assert!(!hex_dark("#17becf"), "dark type on cyan");
+    assert!(hex_dark("#000000"));
 }

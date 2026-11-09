@@ -233,8 +233,13 @@ pub fn parse(text: &str) -> (Vec<Row>, Vec<String>) {
             continue;
         }
         if value.is_none() && typed.is_some() {
-            notes.push(format!("Line {}: {} cannot be negative, so {} is an empty sector.", n + 1, cell.trim(), clip(&name, MAX_NAME)));
-        } else if value.is_none() && !cell.trim().is_empty() {
+            notes.push(format!("Line {}: {} cannot be negative, so the row for {} is ignored.", n + 1, cell.trim(), clip(&name, MAX_NAME)));
+            continue;
+        }
+        if !line.contains(['\t', ',', ';']) && cell.len() == 3 && cell.chars().all(|c| c.is_ascii_digit()) && name.split_whitespace().last().is_some_and(|w| w.len() <= 3 && w.chars().all(|c| c.is_ascii_digit())) {
+            notes.push(format!("Line {}: read as the name \"{}\" and the value {}. For a thousand put a comma between the name and the value (name, 1 200).", n + 1, clip(&name, MAX_NAME), cell));
+        }
+        if value.is_none() && !cell.trim().is_empty() {
             notes.push(format!("Line {}: \"{}\" is not a number, so {} is an empty sector.", n + 1, cell.trim(), clip(&name, MAX_NAME)));
         }
         if extra {
@@ -319,6 +324,9 @@ pub fn model(p: &Params) -> Model {
 pub fn warnings(p: &Params) -> Vec<String> {
     let m = model(p);
     let mut w = m.notes.clone();
+    if p.s("labels").contains("raction") && !fractions_ok(&m) {
+        w.push("Some sectors are not simple fractions of the circle, so every fraction label shows a percent instead.".into());
+    }
     if p.s("title_kind") == TITLES[1] && p.s("title").trim().chars().count() > MAX_TITLE {
         w.push(format!("The title is longer than {MAX_TITLE} characters, so it is cut."));
     }
@@ -362,6 +370,9 @@ fn places_needed(v: f64, max: usize) -> usize {
 fn fixed(v: f64, d: usize) -> String {
     let f = 10f64.powi(d as i32);
     let r = (v * f).round() / f;
+    if v > 0.0 && r == 0.0 {
+        return format!("<{:.*}", d, 1.0 / f);
+    }
     format!("{:.*}", d, if r == 0.0 { 0.0 } else { r })
 }
 
@@ -382,12 +393,39 @@ fn decs(m: &Model, max: usize) -> Decs {
     d
 }
 
-/// A share of the circle as a reduced fraction (denominator up to 720), or `None`.
+fn gcd(a: u64, b: u64) -> u64 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+/// A sector's fraction of the circle: from whole numbers when the table has them (137/1000),
+/// else from its share (denominator up to 1000).
+fn frac_text(m: &Model, i: usize) -> Option<String> {
+    let whole_ok = m.whole >= 1.0 && m.whole.fract() == 0.0 && m.whole <= 1e9;
+    if let (Some(v), true) = (m.rows[i].value, whole_ok) {
+        if v.fract() == 0.0 && v <= m.whole && (v / m.whole - m.share[i]).abs() < 1e-9 {
+            let (n, d) = (v as u64, m.whole as u64);
+            let g = gcd(n, d).max(1);
+            return Some(match (n / g, d / g) {
+                (0, _) => "0".into(),
+                (n, 1) => n.to_string(),
+                (n, d) => format!("{n}/{d}"),
+            });
+        }
+    }
+    fraction(m.share[i])
+}
+
+/// Whether every sector can be written as a fraction; if not the whole chart shows percents.
+pub fn fractions_ok(m: &Model) -> bool {
+    (0..m.real).all(|i| m.share[i] <= 1e-9 || frac_text(m, i).is_some())
+}
+
+/// A share of the circle as a reduced fraction (denominator up to 1000), or `None`.
 pub fn fraction(share: f64) -> Option<String> {
     if !share.is_finite() || share < 0.0 {
         return None;
     }
-    for d in 1..=720u32 {
+    for d in 1..=1000u32 {
         let n = (share * d as f64).round();
         if (share * d as f64 - n).abs() < 1e-6 {
             return Some(match (n as u32, d) {
@@ -415,7 +453,7 @@ fn lines_for(m: &Model, i: usize, mode: &str, dec: Decs, computed: bool) -> Vec<
     };
     let percent = || format!("{}%", fixed(share * 100.0, dec.pct));
     let angle = || format!("{}\u{b0}", fixed(share * 360.0, dec.ang));
-    let frac = || fraction(share).unwrap_or_else(|| percent());
+    let frac = || if fractions_ok(m) { frac_text(m, i).unwrap_or_else(|| percent()) } else { percent() };
     let named = |x: String| if computed { vec![name.clone(), x] } else { vec![name.clone()] };
     let only = |x: String| if computed { vec![x] } else { vec![] };
     let mut out = match mode {
@@ -447,13 +485,18 @@ const DARK: u8 = 0;
 const LIGHT: u8 = 1;
 const PATTERN: u8 = 2;
 
+/// Whether white type reads better than the ink on `hex` (the higher WCAG contrast).
 fn hex_dark(hex: &str) -> bool {
     let h = hex.trim_start_matches('#');
     if h.len() != 6 {
         return false;
     }
-    let c = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).unwrap_or(0) as f64 / 255.0;
-    0.299 * c(0) + 0.587 * c(2) + 0.114 * c(4) < 0.56
+    let c = |i: usize| {
+        let v = u8::from_str_radix(&h[i..i + 2], 16).unwrap_or(0) as f64 / 255.0;
+        if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+    };
+    let l = 0.2126 * c(0) + 0.7152 * c(2) + 0.0722 * c(4);
+    1.05 / (l + 0.05) > (l + 0.05) / 0.059
 }
 
 fn bw(i: usize) -> Paint {
@@ -613,13 +656,24 @@ fn render(p: &Params) -> String {
                 continue;
             }
             let mut blank_line = false;
-            let lines: Vec<String> = match own.get(i).map(String::as_str) {
+            let given = own.get(i).map(String::as_str);
+            let lines: Vec<String> = match given {
+                // on the key, a blank line to write on and a letter for the value show the answer
+                Some("_") if key_on => lines_for(&m, i, "Value", dec, true),
                 Some("_") => {
                     blank_line = true;
                     vec![]
                 }
                 Some("-") => vec![],
-                Some(t) if !t.is_empty() => vec![clip(t, MAX_NAME)],
+                Some(t) if !t.is_empty() => {
+                    let t = clip(t, MAX_NAME);
+                    if key_on && t.chars().count() <= 3 {
+                        let v = lines_for(&m, i, "Value", dec, true).join("");
+                        vec![format!("{} = {}", t.trim_end_matches('\u{b0}'), v)]
+                    } else {
+                        vec![t]
+                    }
+                }
                 _ => lines_for(&m, i, mode, dec, !m.blank[i] || key_on),
             };
             if lines.is_empty() && !blank_line {
@@ -627,24 +681,68 @@ fn render(p: &Params) -> String {
             }
             let mid = starts[i] + sh * 180.0; // degrees clockwise from 12
             let (sx, sy) = ((mid.to_radians()).sin(), -(mid.to_radians()).cos());
-            let w = if blank_line { 56.0 * k } else { lines.iter().enumerate().map(|(j, l)| tw(l, fl) * if j == 0 && lines.len() > 1 { 1.1 } else { 1.0 }).fold(0.0, f64::max) };
-            let h = if blank_line { line_h } else { lines.len() as f64 * line_h };
-            let th = sh * std::f64::consts::TAU;
-            let rin = if sh > 0.9999 { 0.0 } else { 0.62 * R };
-            let chord = if sh >= 0.5 { 2.0 * rin.max(0.62 * R) } else { 2.0 * rin * (th / 2.0).sin().abs() };
-            let fits = chord >= w + 8.0 && (sh > 0.45 || h + 6.0 <= 0.55 * R);
+            let box_of = |ls: &[String]| -> (f64, f64) {
+                if blank_line {
+                    (56.0 * k, line_h)
+                } else {
+                    (ls.iter().enumerate().map(|(j, l)| tw(l, fl) * if j == 0 && ls.len() > 1 { 1.1 } else { 1.0 }).fold(0.0, f64::max), ls.len() as f64 * line_h)
+                }
+            };
+            // the label's whole box must sit inside the circle and between the sector's two radii
+            let (a_start, span) = (starts[i], sh * 360.0);
+            let box_fits = |bx: f64, by: f64, w: f64, h: f64| -> bool {
+                for (dx, dy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                    let (px, py) = (bx + dx * (w / 2.0 + 3.0), by + dy * (h / 2.0 + 3.0));
+                    let dist = (px * px + py * py).sqrt();
+                    if dist > R - 4.0 {
+                        return false;
+                    }
+                    if sh < 0.9999 && dist > 6.0 {
+                        let ang = px.atan2(-py).to_degrees().rem_euclid(360.0);
+                        let rel = (ang - a_start).rem_euclid(360.0);
+                        if span < 359.0 && (rel < 1.0 || rel > span - 1.0) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            };
+            let mut cands: Vec<Vec<String>> = vec![lines.clone()];
+            if !blank_line {
+                for wmax in [0.95 * R, 0.7 * R, 0.5 * R] {
+                    let mut out: Vec<String> = Vec::new();
+                    for l in &lines {
+                        out.extend(crate::figures::stats::bar::wrap(l, wmax, fl, true).unwrap_or_else(|| vec![l.clone()]));
+                    }
+                    if out.len() <= 4 && !cands.contains(&out) {
+                        cands.push(out);
+                    }
+                }
+            }
+            let radii: &[f64] = if sh > 0.9999 { &[0.0] } else { &[0.62, 0.5, 0.72, 0.42, 0.8, 0.3] };
+            let mut found: Option<(Vec<String>, f64, f64, f64, f64)> = None;
+            'search: for c in &cands {
+                let (w, h) = box_of(c);
+                for r in radii {
+                    let (bx, by) = (r * R * sx, r * R * sy);
+                    if box_fits(bx, by, w, h) {
+                        found = Some((c.clone(), w, h, bx, by));
+                        break 'search;
+                    }
+                }
+            }
             let sector = shown(i);
-            if fits {
-                let (x, y) = (cx0 + rin * sx, cy0 + rin * sy);
+            if let Some((ls, w, h, bx, by)) = found {
                 let white = sector.kind == DARK;
-                placed.push(Placed { lines, blank: blank_line, x, y: y - h / 2.0 + fl, anchor: "middle", leader: None, plate: sector.kind == PATTERN, white, w });
+                placed.push(Placed { lines: ls, blank: blank_line, x: bx, y: by - h / 2.0 + fl, anchor: "middle", leader: None, plate: sector.kind == PATTERN, white, w });
             } else {
                 let right = sx >= 0.0;
-                let (x0, y0) = (cx0 + R * sx, cy0 + R * sy);
-                let (x1, y1) = (cx0 + (R + 12.0) * sx, cy0 + (R + 12.0) * sy);
+                let (x0, y0) = (R * sx, R * sy);
+                let (x1, y1) = ((R + 12.0) * sx, (R + 12.0) * sy);
                 let joined = if lines.len() > 1 { vec![lines.join(if mode == "Value and percent" { ", " } else { " " })] } else { lines };
-                let w = if blank_line { w } else { tw(&joined[0.min(joined.len().saturating_sub(1))], fl) };
-                let hx = x1 + if right { 6.0 } else { -6.0 };
+                let w = if blank_line { 56.0 * k } else { tw(&joined[0.min(joined.len().saturating_sub(1))], fl) };
+                // every outside label of a side stands in one column, so a leader never runs through another label
+                let hx = if right { R + 30.0 } else { -(R + 30.0) };
                 placed.push(Placed { lines: joined, blank: blank_line, x: hx, y: y1 + fl * 0.35, anchor: if right { "start" } else { "end" }, leader: Some(((x0, y0), (x1, y1))), plate: false, white: false, w });
             }
         }
@@ -659,6 +757,7 @@ fn render(p: &Params) -> String {
         if m == 0 {
             continue;
         }
+        let orig: f64 = side.iter().map(|&j| placed[j].y).sum();
         for _ in 0..2 {
             for w in 1..m {
                 let min = placed[side[w - 1]].y + line_h;
@@ -676,11 +775,18 @@ fn render(p: &Params) -> String {
                 }
             }
         }
+        // centre the stack on where its labels started, so leaders fan out evenly instead of all running down
+        let now: f64 = side.iter().map(|&j| placed[j].y).sum();
+        let mut shift = (orig - now) / m as f64;
+        let (first, last) = (placed[side[0]].y + shift, placed[side[m - 1]].y + shift);
+        if last > lim {
+            shift -= last - lim;
+        }
+        if first < -lim {
+            shift += -lim - first;
+        }
         for &j in &side {
-            let (y0, y1) = (placed[j].y - fl, placed[j].y + 4.0);
-            let yc = if y0 <= 0.0 && y1 >= 0.0 { 0.0 } else if y0 > 0.0 { y0 } else { y1 };
-            let hw = if yc.abs() < R { (R * R - yc * yc).sqrt() } else { 0.0 };
-            placed[j].x = if right { placed[j].x.max(hw + 14.0) } else { placed[j].x.min(-(hw + 14.0)) };
+            placed[j].y += shift;
         }
     }
 
@@ -856,6 +962,9 @@ fn render(p: &Params) -> String {
                 parts.push("an empty sector".into());
             } else if m.blank[i] && (!key_on || m.share[i] <= 1e-9) {
                 parts.push(format!("{} (empty)", m.rows[i].name));
+            } else if !key_on && (own.get(i).is_some_and(|t| !t.is_empty()) || mode == "None" || mode == "Name") {
+                // the picture shows no number for this sector, so neither does its description
+                parts.push(m.rows[i].name.clone());
             } else {
                 parts.push(format!("{} {}", m.rows[i].name, num(m.share[i] * 100.0, dec_max)));
             }

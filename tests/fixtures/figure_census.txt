@@ -244,8 +244,8 @@ photosynthesis__defaults dfb8cc6d0924778f
 photosynthesis__start 5096e6ef2e8575e6
 piano-keyboard__defaults 8eaa086cccfc036c
 piano-keyboard__start 8eaa086cccfc036c
-pie-chart__defaults fdd492b3ca46a651
-pie-chart__start 5c63d8ba7822f640
+pie-chart__defaults 5dc3acda20bcf1c1
+pie-chart__start 85ee3b272392625f
 plate-boundaries__defaults 902cec21e2eb9cc1
 plate-boundaries__start 902cec21e2eb9cc1
 plot-arc__defaults 7a80ecd90bf2d7c5
