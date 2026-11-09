@@ -22,13 +22,14 @@ pub(super) const OLD: &str = "old_scale";
 
 const KINDS: [&str; 5] = ["At rest", "Constant velocity forward", "Constant velocity back", "Speeding up", "Slowing down"];
 /// The opening motion (the reference's): speed up to 4 m/s in 4 s, 4 s at 4 m/s, slow to a stop in 4 s, 3 s at rest.
+/// A rest keeps a speed of 4 m/s in reserve, so turning it into a constant velocity or a speed-up moves at once.
 const SDEF: [(&str, f64, f64); 6] = [
     ("Speeding up", 4.0, 4.0),
     ("Constant velocity forward", 4.0, 4.0),
     ("Slowing down", 0.0, 4.0),
-    ("At rest", 0.0, 3.0),
-    ("At rest", 0.0, 2.0),
-    ("At rest", 0.0, 3.0),
+    ("At rest", 4.0, 3.0),
+    ("At rest", 4.0, 2.0),
+    ("At rest", 4.0, 3.0),
 ];
 const MODES: [&str; 3] = ["Text", "Blank line", "None"];
 pub(super) const ON_DOTS: [&str; 4] = ["None", "Times", "A letter on every dot", "Letters at the segment ends"];
