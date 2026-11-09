@@ -483,6 +483,30 @@ pub fn opt_x(s: &S, c: &Cond) -> f64 {
     best.0
 }
 
+/// How steep a fall counts as steep: the drawn rate falling by this share of the curve's own top per degree C.
+pub const STEEP: f64 = 0.05;
+
+/// The temperature above which curve `c`, as drawn, falls steeply: the first temperature past the peak where the
+/// photosynthesis drawn falls by more than STEEP of its own top per degree. A bright-light curve starts falling just
+/// past the optimum; a dim-light curve stays flat (light limits it) until the enzymes' loss catches up with the light
+/// limit, a few degrees later (light 15: about 39 degrees C), so this is read off each curve, not taken from T_DENAT.
+/// On a net graph respiration also takes a little more each degree, a gentle slope all the way; the steep fall is
+/// the photosynthesis part plunging, so the drop is read off that part (gross, in the units drawn).
+pub fn drop_x(s: &S, c: &Cond) -> f64 {
+    let r = |t: f64| { let (l, co2, tt) = s.at(c, t); s.shown_rate(gross(l, co2, tt)) };
+    let mut to = 0.0;
+    let mut top = f64::NEG_INFINITY;
+    for k in 0..=5000 { let t = k as f64 * 0.01; let v = r(t); if v > top + 1e-12 { top = v; to = t; } }
+    let top = top.abs().max(1e-9);
+    let h = 0.05;
+    let mut t = to;
+    while t < 50.0 {
+        if (r(t + h) - r(t - h)) / (2.0 * h) < -STEEP * top { return t; }
+        t += 0.01;
+    }
+    50.0
+}
+
 /// Which factor limits the plateau of curve `c`, as a label.
 fn plateau_limit(s: &S, c: &Cond) -> &'static str {
     match s.g {
@@ -566,7 +590,7 @@ fn boxes_meet(a: Bx, b: Bx) -> bool { a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1
 
 /// Puts a box of `w` x `h` near `anchor`: the first clear spot (inside `area`, clear of every box and segment) on
 /// rings of growing radius, trying the `prefer` directions (degrees, screen y down) first.
-fn place(anchor: P, w: f64, h: f64, prefer: &[f64], segs: &[(P, P)], boxes: &[Bx], area: Bx) -> Option<Bx> {
+fn place(anchor: P, w: f64, h: f64, prefer: &[f64], segs: &[(P, P)], boxes: &[Bx], area: Bx, ok: &dyn Fn(Bx) -> bool) -> Option<Bx> {
     let mut dirs: Vec<f64> = prefer.to_vec();
     for k in 0..16 { let a = k as f64 * 22.5; if !dirs.iter().any(|d| (d - a).abs() < 1e-9) { dirs.push(a); } }
     for rad in [10.0, 15.0, 21.0, 28.0, 37.0, 48.0, 62.0, 80.0] {
@@ -577,7 +601,7 @@ fn place(anchor: P, w: f64, h: f64, prefer: &[f64], segs: &[(P, P)], boxes: &[Bx
             let bx = (cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0);
             if bx.0 < area.0 || bx.2 > area.2 || bx.1 < area.1 || bx.3 > area.3 { continue; }
             let eb = expand(bx, 2.5);
-            if boxes.iter().any(|b| boxes_meet(*b, eb)) || segs.iter().any(|(p, q)| seg_hits_box(*p, *q, eb)) { continue; }
+            if boxes.iter().any(|b| boxes_meet(*b, eb)) || segs.iter().any(|(p, q)| seg_hits_box(*p, *q, eb)) || !ok(bx) { continue; }
             return Some(bx);
         }
     }
@@ -850,10 +874,63 @@ pub fn render(p: &Params) -> Out {
     let lbl_answers = s.key && s.mark_lab == MARK_LABS[0];
     let lbl_blank = s.mark_lab == MARK_LABS[1] || (!s.key && s.mark_lab == MARK_LABS[0]);
     // the respiration line for a compensation point on a gross graph
-    let mut deferred: Vec<(P, String, Vec<f64>)> = Vec::new(); // (anchor, label text, preferred directions)
+    // (anchor, label text, preferred directions, the curve it belongs to)
+    let mut deferred: Vec<(P, String, Vec<f64>, Option<usize>)> = Vec::new();
+    // labels that may not reach left of a given x
+    let mut min_x: Vec<(&str, f64)> = Vec::new();
     let dot = |o: &mut String, q: P, c: &str| o.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.4" fill="{c}" stroke="#ffffff" stroke-width="1.4"/>"##, q.0, q.1));
     let mut dots: Vec<P> = Vec::new();
     let x_in = |x: f64| x >= x_ax.lo - 1e-9 && x <= x_ax.hi + 1e-9;
+    // the direction of travel on the CO2 against O2 graph
+    if s.g == G::GasXy && show_lines && lines[0].pts.len() > 2 {
+        let pts = &lines[0].pts;
+        let jo = s.off.filter(|o| *o < s.tmax).and_then(|o| path_times.iter().position(|q| *q >= o - 1e-9)).unwrap_or(pts.len() - 1);
+        let legs: Vec<(usize, usize, &str)> = if jo < pts.len() - 1 { vec![(0, jo, "In the light"), (jo, pts.len() - 1, "In the dark")] } else { vec![(0, pts.len() - 1, "In the light")] };
+        // the side the light leg's arrow is offset to; the dark leg's goes on the other side (they run along the same line)
+        let (p0, p1) = ((px(pts[0].0), py(pts[0].1)), (px(pts[jo].0), py(pts[jo].1)));
+        let l0 = (p1.0 - p0.0).hypot(p1.1 - p0.1).max(1e-9);
+        let n0 = (-(p1.1 - p0.1) / l0, (p1.0 - p0.0) / l0);
+        // where the lettered points will be (the same times as below), so the arrows are set clear of them
+        let letter_pts: Vec<P> = if mark == "Lettered points" && applies {
+            lettered_times(&s).iter().map(|tv| { let j = path_times.iter().position(|q| *q >= *tv - 1e-9).unwrap_or(path_times.len().saturating_sub(1)); (px(pts[j].0), py(pts[j].1)) }).collect()
+        } else { vec![] };
+        for (k, (a, z, word)) in legs.iter().enumerate() {
+            let (pa, pz) = ((px(pts[*a].0), py(pts[*a].1)), (px(pts[*z].0), py(pts[*z].1)));
+            let len = (pz.0 - pa.0).hypot(pz.1 - pa.1);
+            if len < 30.0 { continue; }
+            let (ux, uy) = ((pz.0 - pa.0) / len, (pz.1 - pa.1) / len);
+            let side = if k == 0 { 1.0 } else { -1.0 };
+            let (nx, ny) = (n0.0 * side * 18.0, n0.1 * side * 18.0);
+            let half = (len * 0.22).min(55.0);
+            // the arrow's middle: halfway along the leg, or the place along it farthest from the lettered points
+            let at = |f: f64| (pa.0 + (pz.0 - pa.0) * f + nx, pa.1 + (pz.1 - pa.1) * f + ny);
+            let clearance = |f: f64| {
+                // the shortest distance from a lettered point to the arrow drawn there
+                let c = at(f);
+                let (a, z) = ((c.0 - ux * half, c.1 - uy * half), (c.0 + ux * half, c.1 + uy * half));
+                letter_pts.iter().map(|q| { let t = (((q.0 - a.0) * (z.0 - a.0) + (q.1 - a.1) * (z.1 - a.1)) / (2.0 * half).powi(2)).clamp(0.0, 1.0); (q.0 - a.0 - (z.0 - a.0) * t).hypot(q.1 - a.1 - (z.1 - a.1) * t) }).fold(f64::INFINITY, f64::min)
+            };
+            let f_best = if letter_pts.is_empty() { 0.5 } else { [0.5, 0.4, 0.6, 0.3, 0.7].into_iter().max_by(|x, y| clearance(*x).total_cmp(&clearance(*y))).unwrap_or(0.5) };
+            let m = ((pa.0 + pz.0) / 2.0 + (pz.0 - pa.0) * (f_best - 0.5), (pa.1 + pz.1) / 2.0 + (pz.1 - pa.1) * (f_best - 0.5));
+            let (a0, a1) = ((m.0 + nx - ux * half, m.1 + ny - uy * half), (m.0 + nx + ux * half, m.1 + ny + uy * half));
+            let mut d2 = Doc::new(1.0, 1.0);
+            d2.arrow(a0.0, a0.1, a1.0, a1.1, if s.print { INK } else { "#555555" }, 1.8);
+            over.push_str(&d2.cut(0));
+            segs.push((a0, a1));
+            // the arrowhead is a box the letters and labels keep clear of
+            boxes.push((a1.0 - 10.0, a1.1 - 10.0, a1.0 + 10.0, a1.1 + 10.0));
+            let f = 0.95 * fs;
+            let w = rw(word, f);
+            let all_boxes: Vec<Bx> = boxes.clone();
+            let mid = ((a0.0 + a1.0) / 2.0 + nx * 0.6, (a0.1 + a1.1) / 2.0 + ny * 0.6);
+            let away = (ny.atan2(nx)).to_degrees().rem_euclid(360.0);
+            if let Some(bx) = place(mid, w, f, &[away, away - 30.0, away + 30.0], &segs, &all_boxes, area, &|_| true) {
+                over.push_str(&backing(bx));
+                over.push_str(&rich((bx.0 + bx.2) / 2.0, bx.3 - 0.22 * f, f, "middle", INK, false, word));
+                boxes.push(bx);
+            }
+        }
+    }
     // the dashed guides the marks add (from here to the end of the marks) are soft: a leader may cross them
     let soft_from = segs.len();
     if applies {
@@ -869,7 +946,7 @@ pub fn render(p: &Params) -> Out {
                         dots.push(q);
                         dot(&mut over, q, col(i));
                         // one label names the kind of mark; the other curves' dots and guides read the same way
-                        if !deferred.iter().any(|d| d.1 == "Saturation point") { deferred.push((q, "Saturation point".into(), if s.g == G::Distance { vec![315.0, 45.0] } else { vec![225.0, 315.0, 135.0] })); }
+                        if !deferred.iter().any(|d| d.1 == "Saturation point") { deferred.push((q, "Saturation point".into(), if s.g == G::Distance { vec![315.0, 45.0] } else { vec![225.0, 315.0, 135.0] }, Some(i))); }
                     }
                     _ => notes.push(format!("The saturation point of {} is beyond the end of the x-axis, so it is not marked.", curve_word(&s, i))),
                 }
@@ -880,7 +957,7 @@ pub fn render(p: &Params) -> Out {
                     let c = &s.conds[i];
                     let xr = if s.g == G::Distance { xs + 0.4 * (s.x_model(x_ax.hi) - xs) } else { 0.45 * xs };
                     let rise = match s.g { G::Co2 => "CO~2 limiting", _ => "Light limiting" };
-                    if x_in(s.x_shown(xr)) { deferred.push(((px(s.x_shown(xr)), py(s.rate_at(c, xr))), rise.into(), vec![300.0, 240.0, 60.0, 120.0])); }
+                    if x_in(s.x_shown(xr)) { deferred.push(((px(s.x_shown(xr)), py(s.rate_at(c, xr))), rise.into(), vec![300.0, 240.0, 60.0, 120.0], Some(i))); }
                 }
                 if s.g == G::Temp {
                     let c = &s.conds[0];
@@ -888,13 +965,17 @@ pub fn render(p: &Params) -> Out {
                     let (l0, c0, _) = s.at(c, to);
                     // below the optimum the enzymes are slow (temperature limits) where light does not cap the rate
                     let tr = 0.55 * to;
-                    if pmax(c0, tr) < 0.9 * ALPHA * l0 { deferred.push(((px(tr), py(s.rate_at(c, tr))), "Temperature limiting".into(), vec![300.0, 240.0, 330.0])); }
-                    let tf = to + 0.45 * (temp_comp(l0, c0).unwrap_or(48.0).min(48.0) - to).max(2.0);
-                    deferred.push(((px(tf), py(s.rate_at(c, tf))), "Enzymes denaturing".into(), vec![330.0, 300.0, 30.0]));
-                    for c in &s.conds {
+                    if pmax(c0, tr) < 0.9 * ALPHA * l0 { deferred.push(((px(tr), py(s.rate_at(c, tr))), "Temperature limiting".into(), vec![300.0, 240.0, 330.0], Some(0))); }
+                    // on the steep fall of this curve as drawn, a little past where it starts
+                    let td = drop_x(&s, c);
+                    let tf = (td + 2.5).min(x_ax.hi - 1.0);
+                    deferred.push(((px(tf), py(s.rate_at(c, tf))), "Enzymes denaturing".into(), vec![330.0, 0.0, 30.0, 300.0], Some(0)));
+                    // the label starts where the steep fall does, so it is never read against the flat part before it
+                    min_x.push(("Enzymes denaturing", px(td) - 2.0));
+                    for (i, c) in s.conds.iter().enumerate() {
                         if ALPHA * c.light < 0.9 * pmax(c.co2, t_opt()) {
                             let tl = t_opt() - 3.0;
-                            deferred.push(((px(tl), py(s.rate_at(c, tl))), "Light limiting".into(), vec![270.0, 90.0]));
+                            deferred.push(((px(tl), py(s.rate_at(c, tl))), "Light limiting".into(), vec![270.0, 90.0], Some(i)));
                         }
                     }
                 } else {
@@ -903,7 +984,7 @@ pub fn render(p: &Params) -> Out {
                         let hi = s.x_model(x_ax.hi);
                         let xp = if s.g == G::Distance { (DIST_MIN + xs) / 2.0 } else { xs + 0.55 * (hi - xs) };
                         if xs < hi && x_in(s.x_shown(xp)) {
-                            deferred.push(((px(s.x_shown(xp)), py(s.rate_at(c, xp))), plateau_limit(&s, c).into(), vec![270.0, 90.0]));
+                            deferred.push(((px(s.x_shown(xp)), py(s.rate_at(c, xp))), plateau_limit(&s, c).into(), vec![270.0, 90.0], Some(i)));
                         } else { notes.push(format!("The plateau of {} is beyond the end of the x-axis, so what limits it is not marked.", curve_word(&s, i))); }
                     }
                 }
@@ -918,7 +999,7 @@ pub fn render(p: &Params) -> Out {
                 segs.push(((l, q.1), (q.0, q.1)));
                 dots.push(q);
                 dot(&mut over, q, col(0));
-                deferred.push((q, "Optimum".into(), vec![300.0, 240.0, 270.0]));
+                deferred.push((q, "Optimum".into(), vec![300.0, 240.0, 270.0], Some(0)));
             }
             "Compensation point" => {
                 if s.rate_graph() {
@@ -928,7 +1009,7 @@ pub fn render(p: &Params) -> Out {
                             let yr = py(rr);
                             ln(&mut guides, (l, yr), (r, yr), col(i), 1.4, "3 3");
                             segs.push(((l, yr), (r, yr)));
-                            if i == 0 { deferred.push(((r - 40.0, yr), "Respiration".into(), vec![270.0, 90.0])); }
+                            if i == 0 { deferred.push(((r - 40.0, yr), "Respiration".into(), vec![270.0, 90.0], None)); }
                         }
                         let lo = if s.g == G::Distance { DIST_MIN } else { 0.0 };
                         match comp_x(&s, c) {
@@ -939,7 +1020,7 @@ pub fn render(p: &Params) -> Out {
                                 let shared = dots.iter().any(|d| (d.0 - q.0).hypot(d.1 - q.1) < 6.0);
                                 dots.push(q);
                                 dot(&mut over, q, col(i));
-                                if !shared && !deferred.iter().any(|d| d.1 == "Compensation point") { deferred.push((q, "Compensation point".into(), vec![300.0, 240.0, 330.0, 210.0, 30.0])); }
+                                if !shared && !deferred.iter().any(|d| d.1 == "Compensation point") { deferred.push((q, "Compensation point".into(), vec![300.0, 240.0, 330.0, 210.0, 30.0], Some(i))); }
                             }
                             _ => notes.push(format!("The compensation point of {} is not on the x-axis shown, so it is not marked.", curve_word(&s, i))),
                         }
@@ -956,7 +1037,7 @@ pub fn render(p: &Params) -> Out {
                                 levels.push(yg);
                                 ln(&mut guides, (l, yg), (r, yg), GUIDE, 1.4, "3 3");
                                 segs.push(((l, yg), (r, yg)));
-                                deferred.push(((l + 0.62 * (r - l), yg), "Compensation point".into(), vec![270.0, 90.0]));
+                                deferred.push(((l + 0.62 * (r - l), yg), "Compensation point".into(), vec![270.0, 90.0], None));
                             }
                             _ => notes.push(format!("At light {} the CO2 never falls (the light is below the compensation point), so {} has no compensation level to mark.", num(c.light), curve_word(&s, i))),
                         }
@@ -969,7 +1050,7 @@ pub fn render(p: &Params) -> Out {
                     G::Light | G::Co2 => { let hi = s.x_model(x_ax.hi); let xs = sat_x(&s, c).unwrap_or(hi / 2.0).min(hi * 0.8); vec![0.4 * xs, xs, xs + 0.6 * (hi - xs)] }
                     G::Distance => { let hi = s.x_model(x_ax.hi); let ds = sat_x(&s, c).unwrap_or(hi / 3.0).clamp(DIST_MIN + 2.0, hi * 0.6); vec![(DIST_MIN + ds) / 2.0 + 1.0, ds, ds + 0.6 * (hi - ds)] }
                     G::Temp => { let to = opt_x(&s, c); vec![to * 0.5, to, (to + 8.0).min(x_ax.hi)] }
-                    _ => match s.off.filter(|o| *o < s.tmax) { Some(o) => vec![o * 0.3, o, o + 0.7 * (s.tmax - o)], None => vec![0.1 * s.tmax, 0.4 * s.tmax, 0.85 * s.tmax] },
+                    _ => lettered_times(&s),
                 };
                 for (k, xv) in xs.iter().enumerate() {
                     let q = match s.g {
@@ -983,7 +1064,7 @@ pub fn render(p: &Params) -> Out {
                     let f = 1.1 * fs;
                     let w = rw(letter, f);
                     let all_boxes: Vec<Bx> = boxes.iter().copied().chain(dots.iter().map(|d| (d.0 - 5.0, d.1 - 5.0, d.0 + 5.0, d.1 + 5.0))).collect();
-                    match place(q, w, f, &[225.0, 315.0, 135.0, 45.0], &segs, &all_boxes, area) {
+                    match place(q, w, f, &[225.0, 315.0, 135.0, 45.0], &segs, &all_boxes, area, &|_| true) {
                         Some(bx) => { over.push_str(&backing(bx)); over.push_str(&rich((bx.0 + bx.2) / 2.0, bx.3 - 0.2 * f, f, "middle", INK, true, letter)); boxes.push(bx); }
                         None => notes.push(format!("The letter {letter} could not be placed clear of the lines, so only its dot is drawn.")),
                     }
@@ -1007,41 +1088,6 @@ pub fn render(p: &Params) -> Out {
                     over.push_str(&rich(cx, bx.3 - 0.22 * f, f, "middle", INK, false, word));
                     boxes.push(bx);
                 }
-            }
-        }
-    }
-    // the direction of travel on the CO2 against O2 graph
-    if s.g == G::GasXy && show_lines && lines[0].pts.len() > 2 {
-        let pts = &lines[0].pts;
-        let jo = s.off.filter(|o| *o < s.tmax).and_then(|o| path_times.iter().position(|q| *q >= o - 1e-9)).unwrap_or(pts.len() - 1);
-        let legs: Vec<(usize, usize, &str)> = if jo < pts.len() - 1 { vec![(0, jo, "In the light"), (jo, pts.len() - 1, "In the dark")] } else { vec![(0, pts.len() - 1, "In the light")] };
-        // the side the light leg's arrow is offset to; the dark leg's goes on the other side (they run along the same line)
-        let (p0, p1) = ((px(pts[0].0), py(pts[0].1)), (px(pts[jo].0), py(pts[jo].1)));
-        let l0 = (p1.0 - p0.0).hypot(p1.1 - p0.1).max(1e-9);
-        let n0 = (-(p1.1 - p0.1) / l0, (p1.0 - p0.0) / l0);
-        for (k, (a, z, word)) in legs.iter().enumerate() {
-            let (pa, pz) = ((px(pts[*a].0), py(pts[*a].1)), (px(pts[*z].0), py(pts[*z].1)));
-            let len = (pz.0 - pa.0).hypot(pz.1 - pa.1);
-            if len < 30.0 { continue; }
-            let (ux, uy) = ((pz.0 - pa.0) / len, (pz.1 - pa.1) / len);
-            let side = if k == 0 { 1.0 } else { -1.0 };
-            let (nx, ny) = (n0.0 * side * 18.0, n0.1 * side * 18.0);
-            let m = ((pa.0 + pz.0) / 2.0, (pa.1 + pz.1) / 2.0);
-            let half = (len * 0.3).min(70.0);
-            let (a0, a1) = ((m.0 + nx - ux * half, m.1 + ny - uy * half), (m.0 + nx + ux * half, m.1 + ny + uy * half));
-            let mut d2 = Doc::new(1.0, 1.0);
-            d2.arrow(a0.0, a0.1, a1.0, a1.1, if s.print { INK } else { "#555555" }, 1.8);
-            over.push_str(&d2.cut(0));
-            segs.push((a0, a1));
-            let f = 0.95 * fs;
-            let w = rw(word, f);
-            let all_boxes: Vec<Bx> = boxes.clone();
-            let mid = ((a0.0 + a1.0) / 2.0 + nx * 0.6, (a0.1 + a1.1) / 2.0 + ny * 0.6);
-            let away = (ny.atan2(nx)).to_degrees().rem_euclid(360.0);
-            if let Some(bx) = place(mid, w, f, &[away, away - 30.0, away + 30.0], &segs, &all_boxes, area) {
-                over.push_str(&backing(bx));
-                over.push_str(&rich((bx.0 + bx.2) / 2.0, bx.3 - 0.22 * f, f, "middle", INK, false, word));
-                boxes.push(bx);
             }
         }
     }
@@ -1078,14 +1124,39 @@ pub fn render(p: &Params) -> Out {
         }
     }
     // the marks' labels
-    for (anchor, text, prefer) in &deferred {
+    // each curve's points on screen, to keep a label nearer its own curve than any other
+    let curve_pts: Vec<Vec<P>> = lines.iter().map(|ln_| ln_.pts.iter().map(|q| (px(q.0), py(q.1))).filter(|q| in_plot(*q)).collect()).collect();
+    let to_box = |q: P, bx: Bx| (q.0.clamp(bx.0, bx.2) - q.0).hypot(q.1.clamp(bx.1, bx.3) - q.1);
+    let curve_dist = |k: usize, bx: Bx| curve_pts[k].iter().map(|q| to_box(*q, bx)).fold(f64::INFINITY, f64::min);
+    let grid_ys: Vec<f64> = if s.grid { y_ticks.iter().map(|v| py(*v)).collect() } else { vec![] };
+    for (anchor, text, prefer, owner) in &deferred {
         if s.mark_lab == MARK_LABS[2] { break; }
         let blank = lbl_blank || !lbl_answers;
-        let w = if blank { 76.0 * lab } else { rw(text, fs) };
-        let h = 1.15 * fs;
+        let left_limit = min_x.iter().find(|m| m.0 == text.as_str()).map(|m| m.1);
         let all_boxes: Vec<Bx> = boxes.iter().copied().chain(dots.iter().map(|d| (d.0 - 5.0, d.1 - 5.0, d.0 + 5.0, d.1 + 5.0))).collect();
-        match place(*anchor, w, h, prefer, &segs, &all_boxes, area) {
-            Some(bx) => {
+        let ok = |bx: Bx| -> bool {
+            // a label (or its blank) is nearer the curve it names than any other curve, so it is read with that one
+            let mine = owner.filter(|o| *o < curve_pts.len() && curve_pts.len() > 1).map_or(true, |o| {
+                let d = curve_dist(o, bx);
+                (0..curve_pts.len()).filter(|k| *k != o).all(|k| curve_dist(k, bx) > d + 2.0)
+            });
+            // a blank's rule never lies along a gridline, where it could not be told from it
+            let clear_of_grid = !blank || grid_ys.iter().all(|gy| (gy - (bx.3 - 1.0)).abs() > 3.0);
+            mine && clear_of_grid && left_limit.map_or(true, |x| bx.0 >= x)
+        };
+        // one line, or (a label with a space that does not fit on one) two
+        let words: Vec<&str> = text.split(' ').collect();
+        let mut shapes: Vec<Vec<String>> = vec![vec![text.clone()]];
+        if !blank && words.len() > 1 {
+            let k = (1..words.len()).min_by(|a, z| (rw(&words[..*a].join(" "), fs) - rw(&words[*a..].join(" "), fs)).abs().total_cmp(&(rw(&words[..*z].join(" "), fs) - rw(&words[*z..].join(" "), fs)).abs())).unwrap_or(1);
+            shapes.push(vec![words[..k].join(" "), words[k..].join(" ")]);
+        }
+        let placed = shapes.iter().find_map(|sh| {
+            let (w, h) = if blank { (76.0 * lab, 1.15 * fs) } else { (sh.iter().map(|t| rw(t, fs)).fold(0.0, f64::max), 1.15 * fs * sh.len() as f64) };
+            place(*anchor, w, h, prefer, &segs, &all_boxes, area, &ok).map(|bx| (bx, sh.clone()))
+        });
+        match placed {
+            Some((bx, rows)) => {
                 // a label set away from its mark gets a thin leader to it, unless the leader would cross a line
                 let near = (anchor.0.clamp(bx.0, bx.2), anchor.1.clamp(bx.1, bx.3));
                 let dist = (near.0 - anchor.0).hypot(near.1 - anchor.1);
@@ -1098,7 +1169,10 @@ pub fn render(p: &Params) -> Out {
                         segs.push((a, z));
                     }
                 }
-                if blank { ln(&mut over, (bx.0, bx.3 - 1.0), (bx.2, bx.3 - 1.0), INK, 1.1, ""); } else { over.push_str(&backing(bx)); over.push_str(&rich((bx.0 + bx.2) / 2.0, bx.3 - 0.27 * fs, fs, "middle", INK, false, text)); }
+                if blank { ln(&mut over, (bx.0, bx.3 - 1.0), (bx.2, bx.3 - 1.0), INK, 1.1, ""); } else {
+                    over.push_str(&backing(bx));
+                    for (k, row) in rows.iter().enumerate() { over.push_str(&rich((bx.0 + bx.2) / 2.0, bx.1 + (k as f64 + 1.0) * 1.15 * fs - 0.27 * fs, fs, "middle", INK, false, row)); }
+                }
                 boxes.push(bx);
             }
             None => notes.push(format!("A label ({}) could not be placed clear of the lines, so only the mark is drawn.", plain(text))),
@@ -1119,7 +1193,7 @@ pub fn render(p: &Params) -> Out {
             tail.push_str(&rich(x0 + sample_w + 8.0, ry + 0.35 * fs, fs, "start", INK, false, &key_names[*k]));
         }
     }
-    let caps: Vec<String> = if s.key { readouts(&s) } else { vec![] };
+    let caps: Vec<String> = if s.key { readouts(&s, x_hi_d) } else { vec![] };
     let cap_lines: Vec<String> = caps.iter().flat_map(|c| wrap_rich(c, W - 2.0 * MARGIN, fc)).collect();
     let cap_y = yy;
     for (k, cl) in cap_lines.iter().enumerate() { tail.push_str(&rich(MARGIN, cap_y + fc + k as f64 * 1.35 * fc, fc, "start", "#222222", false, cl)); }
@@ -1142,6 +1216,11 @@ pub fn render(p: &Params) -> Out {
     d.raw(&over);
     d.raw(&tail);
     Out { svg: d.finish(), notes }
+}
+
+/// The times of the lettered points A, B, C on the chamber and gas graphs: in the light, when it goes off, in the dark.
+fn lettered_times(s: &S) -> Vec<f64> {
+    match s.off.filter(|o| *o < s.tmax) { Some(o) => vec![o * 0.3, o, o + 0.7 * (s.tmax - o)], None => vec![0.1 * s.tmax, 0.4 * s.tmax, 0.85 * s.tmax] }
 }
 
 fn poly(pts: &[P], col: &str, sw: f64, dash: &str) -> String {
@@ -1168,7 +1247,23 @@ pub fn describe(s: &S) -> (String, String) {
 }
 
 /// What the key says under the graph: per curve, the features a student reads off it, in the units the graph shows.
-pub fn readouts(s: &S) -> Vec<String> {
+/// The right end of the x-axis in the unit shown: typed, or the graph's own.
+pub fn x_end_shown(s: &S, p: &Params) -> f64 {
+    let (lo, hi) = s.x_default();
+    typed_end(p.s("rg_xmax"), "", lo).ok().flatten().unwrap_or(hi)
+}
+
+/// "1 arbitrary units" reads "1 arbitrary unit" (and a bubble).
+fn singular(t: &str) -> String {
+    let mut out = t.to_string();
+    for (pl, sg) in [("1 arbitrary units", "1 arbitrary unit"), ("1 bubbles a minute", "1 bubble a minute")] {
+        for lead in [" ", "("] { out = out.replace(&format!("{lead}{pl}"), &format!("{lead}{sg}")); }
+        if out.starts_with(pl) { out = format!("{sg}{}", &out[pl.len()..]); }
+    }
+    out
+}
+
+pub fn readouts(s: &S, x_end: f64) -> Vec<String> {
     let ru = s.rate_unit();
     let mut v = Vec::new();
     let tag = |i: usize| if s.conds.len() > 1 || s.typed_names.iter().any(|t| !t.is_empty()) { format!("{}: ", s.name(i)) } else { String::new() };
@@ -1179,7 +1274,11 @@ pub fn readouts(s: &S) -> Vec<String> {
             G::Light => {
                 let xs = sat_x(s, c).unwrap_or(0.0);
                 let comp = if s.net || s.mark == "Compensation point" { light_comp(c.co2, c.temp).map_or(String::new(), |l| format!(" Photosynthesis just balances respiration (the net rate is zero) at a light intensity of about {}, the compensation point.", sig2(l))) } else { String::new() };
-                format!("{}light limits the rate as it rises; by a light intensity of about {} (the saturation point) the rate has nearly levelled off, and it levels off at about {} {ru}, limited by {}.{comp}{}", tag(i), sig2(xs), lvl(plateau(s, c)), plateau_limit_words(s, c), resp_note(c))
+                if s.x_shown(xs) > x_end + 1e-9 {
+                    format!("{}light limits the rate as it rises, and the curve has not levelled off by the end of the x-axis: its saturation point, a light intensity of about {}, is off the graph; it would level off at about {} {ru}, limited by {}.{comp}{}", tag(i), sig2(xs), lvl(plateau(s, c)), plateau_limit_words(s, c), resp_note(c))
+                } else {
+                    format!("{}light limits the rate as it rises; by a light intensity of about {} (the saturation point) the rate has nearly levelled off, and it levels off at about {} {ru}, limited by {}.{comp}{}", tag(i), sig2(xs), lvl(plateau(s, c)), plateau_limit_words(s, c), resp_note(c))
+                }
             }
             G::Distance => {
                 let ds = sat_x(s, c).unwrap_or(0.0);
@@ -1188,16 +1287,21 @@ pub fn readouts(s: &S) -> Vec<String> {
             G::Co2 => {
                 let xs = sat_x(s, c).unwrap_or(0.0);
                 let comp = if s.net || s.mark == "Compensation point" { co2_comp(c.light, c.temp).map_or(String::new(), |g| format!(" Photosynthesis just balances respiration (the net rate is zero) at about {} {} CO~2, the compensation point.", sig2(s.co2_shown(g)), s.co2_unit())) } else { String::new() };
-                format!("{}CO~2 limits the rate as it rises; by about {} {} (the saturation point) the rate has nearly levelled off, and it levels off at about {} {ru}, limited by {}.{comp}{}", tag(i), sig2(s.co2_shown(xs)), s.co2_unit(), lvl(plateau(s, c)), plateau_limit_words(s, c), resp_note(c))
+                if s.co2_shown(xs) > x_end + 1e-9 {
+                    format!("{}CO~2 limits the rate as it rises, and the curve has not levelled off by the end of the x-axis: its saturation point, about {} {}, is off the graph; it would level off at about {} {ru}, limited by {}.{comp}{}", tag(i), sig2(s.co2_shown(xs)), s.co2_unit(), lvl(plateau(s, c)), plateau_limit_words(s, c), resp_note(c))
+                } else {
+                    format!("{}CO~2 limits the rate as it rises; by about {} {} (the saturation point) the rate has nearly levelled off, and it levels off at about {} {ru}, limited by {}.{comp}{}", tag(i), sig2(s.co2_shown(xs)), s.co2_unit(), lvl(plateau(s, c)), plateau_limit_words(s, c), resp_note(c))
+                }
             }
             G::Temp => {
                 let to = opt_x(s, c);
                 let flat = ALPHA * c.light < 0.9 * pmax(c.co2, t_opt());
                 let comp = if s.net || s.mark == "Compensation point" { temp_comp(c.light, c.co2).map_or(String::new(), |t| format!(" Above about {} \u{b0}C respiration is faster than photosynthesis (the compensation point is there).", sig2(t))) } else { String::new() };
                 let (to, r) = (sig2(to), sig2(s.rate_at(c, to)));
-                let dn = num(T_DENAT);
+                // where this curve, as drawn, starts to fall steeply
+                let dn = sig2(drop_x(s, c));
                 match (flat, s.net) {
-                    (false, _) => format!("{}the rate is highest at about {to} \u{b0}C ({r} {ru}); below that, enzymes work more slowly; above it the rate falls steeply as enzymes denature.{comp}", tag(i)),
+                    (false, _) => format!("{}the rate is highest at about {to} \u{b0}C ({r} {ru}); below that, enzymes work more slowly; above it the rate falls, and above about {dn} \u{b0}C it falls steeply as enzymes denature.{comp}", tag(i)),
                     (true, false) => format!("{}light limits the rate over most of the range, so the curve is flat-topped at about {r} {ru}; it falls steeply above about {dn} \u{b0}C as enzymes denature.{comp}", tag(i)),
                     (true, true) => format!("{}light limits photosynthesis over most of the range, so the net rate is highest at about {to} \u{b0}C ({r} {ru}); warmer than that respiration, which doubles every 10 \u{b0}C, takes more of it, and above about {dn} \u{b0}C enzymes denature.{comp}", tag(i)),
                 }
@@ -1207,7 +1311,15 @@ pub fn readouts(s: &S) -> Vec<String> {
                 if c.light <= 0.0 { format!("{}in the dark the plant only respires, so the CO~2 rises steadily, by about {rise} {} a minute.", tag(i), s.co2_unit()) }
                 else {
                     let gm = co2_comp(c.light, c.temp);
-                    let mut t = match gm { Some(gm) if gm < s.c0 => format!("{}in the light photosynthesis is faster than respiration, so the CO~2 falls, levelling off at about {} {} (the compensation point, where photosynthesis just balances respiration).", tag(i), sig2(s.co2_shown(gm)), s.co2_unit()), Some(gm) => format!("{}at this light the compensation point, {} {}, is above the starting CO~2, so the CO~2 rises towards it.", tag(i), sig2(s.co2_shown(gm)), s.co2_unit()), None => format!("{}the light is too dim for photosynthesis to keep up with respiration, so the CO~2 rises.", tag(i)) };
+                    // what the curve reaches in the light within the time shown, read off the drawn series
+                    let t_lit = s.off.filter(|o| *o < s.tmax).unwrap_or(s.tmax);
+                    let ser = chamber_series(c, s.c0, s.tmax, s.off, 600);
+                    let reached = ser.iter().rev().find(|q| q.0 <= t_lit + 1e-9).map_or(s.c0, |q| q.1);
+                    let mut t = match gm {
+                        // within a tenth of the way left to go it has levelled off where it is drawn
+                        // levelled off: falling, at the end of the light, at under a tenth of the rate it started falling at
+                        Some(gm) if gm < s.c0 && net(c.light, reached, c.temp) <= 0.1 * net(c.light, s.c0, c.temp) => format!("{}in the light photosynthesis is faster than respiration, so the CO~2 falls, levelling off at about {} {} (the compensation point, where photosynthesis just balances respiration).", tag(i), sig2(s.co2_shown(gm)), s.co2_unit()),
+                        Some(gm) if gm < s.c0 => format!("{}in the light photosynthesis is faster than respiration, so the CO~2 falls, to about {} {} by {} minutes; it is still falling there, towards the compensation point, about {} {}, where photosynthesis would just balance respiration.", tag(i), sig2(s.co2_shown(reached)), s.co2_unit(), num(t_lit), sig2(s.co2_shown(gm)), s.co2_unit()), Some(gm) => format!("{}at this light the compensation point, {} {}, is above the starting CO~2, so the CO~2 rises towards it.", tag(i), sig2(s.co2_shown(gm)), s.co2_unit()), None => format!("{}the light is too dim for photosynthesis to keep up with respiration, so the CO~2 rises.", tag(i)) };
                     if let Some(o) = s.off.filter(|o| *o < s.tmax) { t.push_str(&format!(" After the light goes off at {} minutes the plant only respires and the CO~2 rises by about {rise} {} a minute.", num(o), s.co2_unit())); }
                     t
                 }
@@ -1219,7 +1331,7 @@ pub fn readouts(s: &S) -> Vec<String> {
                 t
             }
         };
-        v.push(cap(&line));
+        v.push(singular(&cap(&line)));
         if matches!(s.g, G::GasTime | G::GasXy) { break; }
     }
     v
@@ -1231,7 +1343,7 @@ pub fn curve_help(title: &str, p: &Params) -> String {
     let Some(i) = title.strip_prefix("Curve ").and_then(|n| n.trim().parse::<usize>().ok()).and_then(|n| n.checked_sub(1)) else { return String::new() };
     let s = settings(p);
     if i >= s.conds.len() || matches!(s.g, G::GasTime | G::GasXy) { return String::new(); }
-    let all = readouts(&s);
+    let all = readouts(&s, x_end_shown(&s, p));
     let Some(line) = all.get(i) else { return String::new() };
     let tag = format!("{}: ", s.name(i));
     let body = line.strip_prefix(&tag).map(cap).unwrap_or_else(|| line.clone());

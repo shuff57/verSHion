@@ -199,7 +199,7 @@ fn o2_mirrors_co2_one_for_one_on_both_gas_graphs() {
 fn the_key_reads_off_each_curve_in_the_units_the_graph_shows() {
     let p = with(&[]);
     let st = settings(&p);
-    let r = readouts(&st);
+    let r = readouts(&st, x_end_shown(&st, &p));
     assert_eq!(r.len(), 3);
     let x0 = sat_x(&st, &st.conds[0]).unwrap();
     assert!(r[0].contains(&format!("about {}", sig2(x0))) && r[0].contains(&format!("about {} arbitrary units", sig2(pmax(0.1, 25.0)))), "{}", r[0]);
@@ -207,13 +207,13 @@ fn the_key_reads_off_each_curve_in_the_units_the_graph_shows() {
     // bubbles: three a unit, net
     let p = with(&[s("rg_unit", UNITS[1]), s("rg_rate", RATES[1]), i("rg_curves", 1)]);
     let st = settings(&p);
-    let r = readouts(&st);
+    let r = readouts(&st, x_end_shown(&st, &p));
     assert!(r[0].contains(&format!("{} bubbles a minute", sig2(3.0 * (pmax(0.1, 25.0) - resp(25.0))))), "{}", r[0]);
     // ppm on the CO2 graph
     let p = with(&[s("rg_graph", GRAPHS[1]), s("rg_co2_unit", "ppm"), i("rg_curves", 1), f("c1_light", 20.0)]);
     let st = settings(&p);
     let xs = sat_x(&st, &st.conds[0]).unwrap();
-    assert!(readouts(&st)[0].contains(&format!("{} ppm", sig2(xs * 1e4))));
+    assert!(readouts(&st, x_end_shown(&st, &p))[0].contains(&format!("{} ppm", sig2(xs * 1e4))));
     assert_eq!(sig2(41.2), "41");
     assert_eq!(sig2(9.83), "9.8");
     assert_eq!(sig2(0.00615), "0.0062");
@@ -588,4 +588,190 @@ fn mark_labels_and_letters_sit_clear_of_every_curve() {
         }
     }
     assert!(n > 100, "{n}");
+}
+
+
+// ---------------------------------------------------------------- the drop on the temperature graph, read off each curve
+
+/// The drawn curve of a one-curve render as (T, rate) pairs read back from the SVG: the polyline spans the axis from
+/// 0 to its right end, and the x-axis line (1.8 wide) is rate 0 on a gross graph.
+fn drawn_curve(svg: &str, x_hi: f64, top_value: f64) -> Vec<(f64, f64)> {
+    let doc = roxmltree::Document::parse(svg).unwrap();
+    let pl = doc.descendants().find(|n| n.has_tag_name("polyline") && n.attribute("stroke-width") == Some("2.8") && n.ancestors().any(|a| a.attribute("clip-path").is_some())).unwrap();
+    let pts: Vec<(f64, f64)> = pl.attribute("points").unwrap().split(' ').map(|q| { let (a, c) = q.split_once(',').unwrap(); (a.parse().unwrap(), c.parse().unwrap()) }).collect();
+    let base = doc.descendants().filter(|n| n.has_tag_name("line") && n.attribute("stroke-width") == Some("1.8") && n.attribute("y1") == n.attribute("y2")).map(|n| n.attribute("y1").unwrap().parse::<f64>().unwrap()).fold(f64::NEG_INFINITY, f64::max);
+    let (x0, x1) = (pts[0].0, pts[pts.len() - 1].0);
+    let ymin = pts.iter().map(|q| q.1).fold(f64::INFINITY, f64::min);
+    pts.iter().map(|q| ((q.0 - x0) / (x1 - x0) * x_hi, (base - q.1) / (base - ymin) * top_value)).collect()
+}
+
+#[test]
+fn the_steep_fall_is_read_off_each_temperature_curve_as_drawn_and_the_key_and_note_say_the_same() {
+    for light in [10.0, 15.0, 20.0, 30.0, 50.0, 80.0, 100.0] {
+        let l = [s("rg_graph", GRAPHS[2]), i("rg_curves", 1), f("c1_light", light), f("c1_co2", 0.1), s("rg_mark", "Limiting factors")];
+        let p = with(&l);
+        let st = settings(&p);
+        let c = st.conds[0];
+        let drop = drop_x(&st, &c);
+        // read off the drawn curve: where it falls below 95 % of its own top, past the peak
+        let svg = svg_of(&l);
+        let top = st.rate_at(&c, opt_x(&st, &c));
+        let curve = drawn_curve(&svg, 50.0, top);
+        let peak = curve.iter().enumerate().max_by(|a, z| a.1 .1.total_cmp(&z.1 .1)).unwrap().0;
+        let t95 = curve[peak..].iter().find(|q| q.1 < 0.95 * top).unwrap().0;
+        assert!((drop - t95).abs() < 0.6, "light {light}: drop {drop:.2} but the drawn curve leaves 95 % of its top at {t95:.2}");
+        // dim light stays flat for longer: the drop is later the dimmer the light, and none of them is the fixed 34
+        if light <= 20.0 { assert!(drop > 37.0, "light {light}: {drop}"); }
+        // the key and the panel note give that temperature, to two figures
+        let key = readouts(&st, 50.0);
+        let want = format!("above about {} \u{b0}C", sig2(drop));
+        assert!(key[0].contains(&want), "light {light}: {}", key[0]);
+        assert!(curve_help("Curve 1", &p).contains(&want.replace("~", "")), "{}", curve_help("Curve 1", &p));
+        // the Enzymes denaturing label sits by the steep part of this curve, not before the drop
+        let (cx0, cx1) = { let (pts, _) = curves_and_grid(&svg); (pts[0][0].0, pts[0][pts[0].len() - 1].0) };
+        let rows: Vec<(f64, f64, f64, f64)> = ink(&svg).into_iter().filter(|t| ["Enzymes denaturing", "Enzymes", "denaturing"].contains(&t.0.as_str())).map(|t| t.1).collect();
+        assert!(!rows.is_empty(), "light {light}: the label is drawn");
+        let left = rows.iter().map(|r| r.0).fold(f64::INFINITY, f64::min);
+        let t_left = (left - cx0) / (cx1 - cx0) * 50.0;
+        assert!(t_left > drop - 1.0, "light {light}: the label starts at {t_left:.1} degrees, before the drop at {drop:.1}");
+    }
+    // net: the steep fall is the photosynthesis part plunging, not respiration's gentle climb
+    for light in [10.0, 15.0, 30.0] {
+        let p = with(&[s("rg_graph", GRAPHS[2]), i("rg_curves", 1), f("c1_light", light), f("c1_co2", 0.1), s("rg_rate", RATES[1])]);
+        let st = settings(&p);
+        let c = st.conds[0];
+        let drop = drop_x(&st, &c);
+        let slope = |t: f64| (st.rate_at(&c, t + 0.1) - st.rate_at(&c, t - 0.1)) / 0.2;
+        let top = (opt_x(&st, &c), st.rate_at(&c, opt_x(&st, &c))).1;
+        assert!(drop > 35.0, "light {light}: {drop}");
+        let _ = top;
+        // before the drop the net curve falls only about as fast as respiration climbs (it doubles every 10 degrees,
+        // so its slope is R ln 2 / 10); after it, at least three times faster
+        let resp_slope = resp(drop - 3.0) * 2f64.ln() / 10.0;
+        assert!(slope(drop - 3.0) > -1.5 * resp_slope && slope(drop + 1.5) < 3.0 * slope(drop - 3.0).min(-1e-3), "light {light}: {} then {} (respiration {resp_slope})", slope(drop - 3.0), slope(drop + 1.5));
+        assert!(readouts(&st, 50.0)[0].contains(&format!("above about {} \u{b0}C enzymes denature", sig2(drop))));
+    }
+}
+
+#[test]
+fn the_chamber_key_says_what_the_curve_reaches_in_the_time_shown() {
+    let l = [s("rg_graph", GRAPHS[3]), i("rg_curves", 2), f("c1_light", 10.0), f("c1_temp", 25.0), f("c2_light", 80.0), f("c2_temp", 25.0)];
+    let p = with(&l);
+    let st = settings(&p);
+    let r = readouts(&st, 60.0);
+    let dim_end = chamber_series(&st.conds[0], st.c0, 60.0, None, 600).last().unwrap().1;
+    assert!(r[0].contains("still falling") && r[0].contains(&format!("to about {} % by 60 minutes", sig2(dim_end))) && !r[0].contains("levelling off"), "{}", r[0]);
+    let g = co2_comp(80.0, 25.0).unwrap();
+    assert!(r[1].contains(&format!("levelling off at about {} %", sig2(g))), "{}", r[1]);
+    // long enough, the dim one levels off too
+    let p = with(&[s("rg_graph", GRAPHS[3]), i("rg_curves", 1), f("c1_light", 10.0), f("c1_temp", 25.0), f("rg_tmax", 240.0)]);
+    assert!(readouts(&settings(&p), 240.0)[0].contains("levelling off"));
+}
+
+#[test]
+fn a_saturation_point_past_the_end_of_the_axis_is_said_to_be_off_the_graph() {
+    let p = with(&[s("rg_graph", GRAPHS[1]), s("rg_co2_unit", "ppm")]);
+    let st = settings(&p);
+    let end = x_end_shown(&st, &p);
+    assert_eq!(end, 4000.0);
+    let r = readouts(&st, end);
+    let xs = sat_x(&st, &st.conds[0]).unwrap() * 1e4;
+    assert!(xs > end && r[0].contains("off the graph") && r[0].contains(&format!("about {} ppm", sig2(xs))), "{}", r[0]);
+    assert!(!r[2].contains("off the graph"), "{}", r[2]);
+    // typing a longer axis brings it on
+    let p = with(&[s("rg_graph", GRAPHS[1]), s("rg_co2_unit", "ppm"), s("rg_xmax", "6000")]);
+    let st = settings(&p);
+    assert!(!readouts(&st, x_end_shown(&st, &p))[0].contains("off the graph"));
+}
+
+#[test]
+fn one_of_a_unit_is_singular() {
+    let p = with(&[s("rg_graph", GRAPHS[1]), s("rg_rate", RATES[1])]);
+    let r = readouts(&settings(&p), 0.4).join(" ");
+    assert!(r.contains("is 1 arbitrary unit,") && !r.contains(" 1 arbitrary units"), "{r}");
+    assert_eq!(singular("about 1 arbitrary units (1 bubbles a minute) and 11 arbitrary units"), "about 1 arbitrary unit (1 bubble a minute) and 11 arbitrary units");
+    assert_eq!(singular("0.1 arbitrary units"), "0.1 arbitrary units");
+}
+
+/// The curves of a render, as screen points, and the horizontal gridlines' y.
+fn curves_and_grid(svg: &str) -> (Vec<Vec<(f64, f64)>>, Vec<f64>) {
+    let doc = roxmltree::Document::parse(svg).unwrap();
+    let curves = doc.descendants().filter(|n| n.has_tag_name("polyline") && n.attribute("stroke-width") == Some("2.8") && n.ancestors().any(|a| a.attribute("clip-path").is_some())).map(|n| n.attribute("points").unwrap().split(' ').map(|q| { let (a, c) = q.split_once(',').unwrap(); (a.parse().unwrap(), c.parse().unwrap()) }).collect()).collect();
+    let grid = doc.descendants().filter(|n| n.has_tag_name("line") && n.attribute("stroke-width") == Some("1") && n.attribute("y1") == n.attribute("y2")).map(|n| n.attribute("y1").unwrap().parse().unwrap()).collect();
+    (curves, grid)
+}
+
+fn dist_to(c: &[(f64, f64)], bx: (f64, f64, f64, f64)) -> f64 {
+    c.iter().map(|q| (q.0.clamp(bx.0, bx.2) - q.0).hypot(q.1.clamp(bx.1, bx.3) - q.1)).fold(f64::INFINITY, f64::min)
+}
+
+#[test]
+fn each_plateau_label_and_blank_sits_by_its_own_curve_and_no_blank_lies_on_a_gridline() {
+    let mut checked = 0;
+    for size in ["Small", "Medium", "Large"] {
+        for g in [GRAPHS[0], GRAPHS[1]] {
+            for lx in LIGHT_X {
+                if g == GRAPHS[1] && lx == LIGHT_X[1] { continue; }
+                let base = vec![s("rg_graph", g), s("rg_light_x", lx), s("rg_mark", "Limiting factors"), s("label_size", size)];
+                let p = with(&base);
+                let st = settings(&p);
+                // labels: the curve nearest each plateau label is a curve that label names
+                let svg = svg_of(&base);
+                let (curves, grid) = curves_and_grid(&svg);
+                for (txt, bx, _) in ink(&svg) {
+                    let names: Vec<usize> = (0..st.conds.len()).filter(|k| plain(plateau_limit(&st, &st.conds[*k])) == txt).collect();
+                    if names.is_empty() { continue; }
+                    let near = (0..curves.len()).min_by(|a, z| dist_to(&curves[*a], bx).total_cmp(&dist_to(&curves[*z], bx))).unwrap();
+                    assert!(names.contains(&near), "{txt:?} is nearest curve {near}, which it does not name ({base:?})");
+                    checked += 1;
+                }
+                // blanks: each rule is clearly nearer one curve than any other, and not along a gridline
+                let mut bl = base.clone();
+                bl.push(s("rg_mark_lab", "Blank line"));
+                let svg = svg_of(&bl);
+                let (curves, grid2) = curves_and_grid(&svg);
+                let _ = grid;
+                let doc = roxmltree::Document::parse(&svg).unwrap();
+                for n in doc.descendants().filter(|n| n.has_tag_name("line") && n.attribute("stroke-width") == Some("1.1")) {
+                    let v = |k: &str| n.attribute(k).unwrap().parse::<f64>().unwrap();
+                    let bx = (v("x1"), v("y1") - 12.0, v("x2"), v("y1"));
+                    let mut d: Vec<f64> = curves.iter().map(|c| dist_to(c, bx)).collect();
+                    d.sort_by(|a, z| a.total_cmp(z));
+                    if d.len() > 1 { assert!(d[1] > d[0] + 2.0, "a blank between two curves: {d:?} ({bl:?})"); }
+                    assert!(grid2.iter().all(|gy| (gy - v("y1")).abs() > 2.0), "a blank on a gridline at y {} ({bl:?})", v("y1"));
+                    checked += 1;
+                }
+            }
+        }
+    }
+    assert!(checked > 30, "{checked}");
+}
+
+#[test]
+fn letters_keep_clear_of_the_direction_arrows_on_co2_against_o2() {
+    for size in ["Small", "Medium", "Large"] {
+        for off in [20.0, 30.0, 45.0] {
+            let l = [s("rg_graph", GRAPHS[5]), s("rg_mark", "Lettered points"), b("rg_light_off", true), f("rg_off_at", off), s("label_size", size)];
+            let svg = svg_of(&l);
+            let doc = roxmltree::Document::parse(&svg).unwrap();
+            // the arrows: the shafts drawn 1.8 wide in grey, and their heads (filled triangles)
+            let heads: Vec<(f64, f64, f64, f64)> = doc.descendants().filter(|n| n.has_tag_name("polygon") && n.attribute("stroke-width") == Some("0.5")).map(|n| {
+                let pts: Vec<(f64, f64)> = n.attribute("points").unwrap().split(' ').map(|q| { let (a, c) = q.split_once(',').unwrap(); (a.parse().unwrap(), c.parse().unwrap()) }).collect();
+                (pts.iter().map(|q| q.0).fold(f64::INFINITY, f64::min), pts.iter().map(|q| q.1).fold(f64::INFINITY, f64::min), pts.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max), pts.iter().map(|q| q.1).fold(f64::NEG_INFINITY, f64::max))
+            }).collect();
+            let shafts: Vec<((f64, f64), (f64, f64))> = doc.descendants().filter(|n| n.has_tag_name("line") && n.attribute("stroke-width") == Some("1.8") && n.attribute("y1") != n.attribute("y2") && n.attribute("x1") != n.attribute("x2")).map(|n| { let v = |k: &str| n.attribute(k).unwrap().parse::<f64>().unwrap(); ((v("x1"), v("y1")), (v("x2"), v("y2"))) }).collect();
+            assert!(!heads.is_empty() && !shafts.is_empty(), "{l:?}");
+            let dots: Vec<(f64, f64)> = doc.descendants().filter(|n| n.has_tag_name("circle") && n.attribute("r") == Some("4.4")).map(|n| (n.attribute("cx").unwrap().parse().unwrap(), n.attribute("cy").unwrap().parse().unwrap())).collect();
+            for (txt, bx, _) in ink(&svg) {
+                if !["A", "B", "C"].contains(&txt.as_str()) { continue; }
+                for h in &heads { assert!(!(bx.0 < h.2 + 1.0 && h.0 - 1.0 < bx.2 && bx.1 < h.3 + 1.0 && h.1 - 1.0 < bx.3), "{txt} touches an arrowhead ({l:?})"); }
+                for (a, z) in &shafts {
+                    let hit = (0..=60).any(|k| { let t = k as f64 / 60.0; let q = (a.0 + (z.0 - a.0) * t, a.1 + (z.1 - a.1) * t); q.0 > bx.0 - 1.0 && q.0 < bx.2 + 1.0 && q.1 > bx.1 - 1.0 && q.1 < bx.3 + 1.0 });
+                    assert!(!hit, "{txt} touches an arrow ({l:?})");
+                }
+            }
+            // and no arrowhead is drawn over a lettered point's dot
+            for h in &heads { for d in &dots { assert!(!(d.0 > h.0 - 5.0 && d.0 < h.2 + 5.0 && d.1 > h.1 - 5.0 && d.1 < h.3 + 5.0), "an arrowhead over a dot at {d:?} ({l:?})"); } }
+        }
+    }
 }
