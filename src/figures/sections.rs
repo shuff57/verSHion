@@ -435,12 +435,15 @@ static FIG_49: [RefSection; 7] = [
 ];
 
 /// Statistics figures (original designs, not mirrored from a reference page).
-static HISTOGRAM: [RefSection; 5] = [
-    s("Data", &["data"], "Type or paste numbers, open a CSV, or generate sample data from a seed."),
+static HISTOGRAM: [RefSection; 8] = [
+    s("Data", &["input", "data", "table_start", "table"], "A data set: type or paste numbers, open a CSV, or generate sample data. A frequency table: each bin's upper end and its frequency; bins can have different widths."),
     s("Bins", &["auto_bins", "bin_width", "bin_start", "closed"], ""),
-    s("Bars", &["measure", "auto_y", "y_max", "values", "show_answers"], "Turn off Show answers for a student copy: the bars and values are hidden and the axes stay."),
-    s("Labels and text", &["title", "x_title", "y_title"], ""),
-    s("Appearance", &["style", "label_size", "grid"], ""),
+    s("Bars", &["fill", "polygon", "poly_closed", "values", "show_answers"], "Turn off Show answers for a student copy: the bars, polygon and values are hidden and the axes stay."),
+    s("Vertical axis", &["measure", "auto_y", "y_max", "y_step", "y_numbers"], ""),
+    s("Horizontal axis", &["x_numbers", "x_auto", "x_from", "x_to", "x_step"], ""),
+    s("Titles", &["title_mode", "title", "x_title_mode", "x_title", "y_title_mode", "y_title"], ""),
+    s("Grid", &["grid", "grid_weight", "minor"], ""),
+    s("Appearance", &["style", "label_size"], ""),
 ];
 
 static SCATTERPLOT: [RefSection; 4] = [

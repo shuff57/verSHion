@@ -1798,7 +1798,11 @@ const HISTOGRAM: &[Faq] = &[
     },
     Faq {
         q: "Should I use frequency, relative frequency or density?",
-        a: "Frequency counts the values in each bin. Relative frequency shows each bin's share of all the values. Density divides that share by the bin width, so the bars' areas add to 1; use it whenever the bins are not all the same width.",
+        a: "Frequency counts the values in each bin. Relative frequency shows each bin's share of all the values, as a decimal or a percent. Frequency density is the frequency divided by the bin width; Density divides the share by the width, so the bars' areas add to 1. When the bins are not all the same width, Frequency and Relative frequency draw density for you, so each bar's area stands for its frequency.",
+    },
+    Faq {
+        q: "How do I make a histogram from a frequency table, or with unequal bins?",
+        a: "Set Data to Frequency table. Type where the first bin starts, then one bin per line: its upper end and its frequency (70, 5). The bins can be any widths. Rows pasted from a worksheet work too (140 < h \u{2264} 150, 7), and class limits like 10-19 are drawn at the boundaries 9.5 and 19.5 so the bars touch. Leave a frequency empty for a bar students draw.",
     },
     Faq {
         q: "How do I paste data from a spreadsheet?",

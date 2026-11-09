@@ -763,6 +763,10 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     if id == "predator-prey" {
         biology::popdyn::pp_panel_changed(key, p);
     }
+    // switching the histogram to a frequency table fills it with the data set's bins
+    if id == stats::histogram::ID {
+        stats::histogram::panel_changed(key, p);
+    }
     // a table pasted into a two-way table's counts with its headings or totals is split into the boxes they belong in
     if (id, key) == (stats::twoway::ID, "cells") {
         stats::twoway::pasted(old, p);
@@ -778,6 +782,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
+    if id == stats::histogram::ID {
+        return stats::histogram::warnings(p);
+    }
     match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => physics::ray_warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "boltzmann-distribution" => chemistry::boltzmann::warnings(p), "vsepr-shapes" => chemistry::vsepr::warnings(p), "periodic-table" => chemistry::periodic::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), "xylem-phloem" => biology::xylem::warnings(p), "ogive" => stats::ogive::warnings(p), "bar-chart" => stats::bar::warnings(p), "pie-chart" => stats::pie::warnings(p), "frequency-table" => stats::frequency::warnings(p), "two-way-table" => stats::twoway::warnings(p), _ => vec![] }
 }
 
