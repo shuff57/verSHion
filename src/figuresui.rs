@@ -2005,21 +2005,22 @@ impl Workspace {
         if self.hide_handles {
             return;
         }
-        let mut hs = def.handles(&self.params, (cw, ch));
+        let hs = def.handles(&self.params, (cw, ch));
         // Zones first so knobs on top win the hit test; movable labels last of all, so a press on
         // a label's own text moves the label (their hit box is the text, not the 9 pt minimum).
-        hs.sort_by_key(|h| (h.label_drag, h.shape != Shape::Zone));
+        // The order and the boxes are interact's, which its tests share (`interact::pick`).
+        let order = figures::interact::hit_order(&hs);
         let has_labels = hs.iter().any(|h| h.label_drag);
         let painter = ui.painter_at(full.expand(8.0));
         let acc = theme::accent_col();
         let mut changed = false;
         let math_quiet = (def.subject == figures::Subject::Math && def.id != "composite-shape" && theme::chem_skin()) || def.subject == figures::Subject::Biology;
         let mut start_edit: Option<(&'static str, String)> = None;
-        for (i, h) in hs.iter().enumerate() {
+        for i in order {
+            let h = &hs[i];
             let c = to_screen(h.pos);
-            let min_half = if h.label_drag { 5.0 } else { 9.0 };
-            let hx = (h.half.0 * k).max(min_half) as f32;
-            let hy = (h.half.1 * k).max(min_half) as f32;
+            let (hx, hy) = figures::interact::hit_half(h, k);
+            let (hx, hy) = ((hx * k) as f32, (hy * k) as f32);
             let hit = egui::Rect::from_center_size(c, Vec2::new(hx * 2.0, hy * 2.0));
             let sense = if h.drag.is_some() { Sense::click_and_drag() } else { Sense::click() };
             let r = ui.interact(hit, UiId::new(("fig_handle", si, i)), sense);
@@ -2119,7 +2120,21 @@ impl Workspace {
                     }
                 }
             }
-            if r.hovered() && !active && !h.tip.is_empty() {
+            // an area that acts on the part under the pointer outlines that part and names what a click does there
+            let part = match (&h.hover_at, r.hovered() && !active) {
+                (Some(f), true) => ui.input(|inp| inp.pointer.hover_pos()).and_then(|ptr| f(to_svg(ptr))),
+                _ => None,
+            };
+            if let Some(hv) = &part {
+                let pts: Vec<egui::Pos2> = hv.outline.iter().map(|q| to_screen(*q)).collect();
+                let st = Stroke::new(2.5, acc);
+                if hv.closed && pts.len() > 2 {
+                    painter.add(egui::Shape::closed_line(pts, st));
+                } else if pts.len() > 1 {
+                    painter.add(egui::Shape::line(pts, st));
+                }
+                r.on_hover_text(&hv.tip);
+            } else if r.hovered() && !active && !h.tip.is_empty() && h.hover_at.is_none() {
                 r.on_hover_text(&h.tip);
             }
         }

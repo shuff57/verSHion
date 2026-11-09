@@ -20,6 +20,16 @@ pub type ClickFn = Arc<dyn Fn(&mut Params) + Send + Sync>;
 pub type ScrollFn = Arc<dyn Fn(&mut Params, f64) + Send + Sync>;
 /// A click that needs to know where it landed (in SVG units): an editor's "click the circle to add a point here".
 pub type ClickAtFn = Arc<dyn Fn(&mut Params, Pt) + Send + Sync>;
+/// What an area's click would act on under the pointer (SVG units), for the hover: None when nothing.
+pub type HoverFn = Arc<dyn Fn(Pt) -> Option<Hover> + Send + Sync>;
+
+/// The part of an area a click there would act on: its outline (a line, an arc, an area's edge) and what the click does.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hover {
+    pub outline: Vec<Pt>,
+    pub closed: bool,
+    pub tip: String,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shape {
@@ -55,6 +65,8 @@ pub struct Handle {
     /// Click that receives the pointer position (SVG units); for an area whose parts act differently
     /// (a ring that adds a point where it is clicked, a region that is shaded where it is clicked).
     pub click_at: Option<ClickAtFn>,
+    /// With `click_at`: the part under the pointer, outlined on hover with its own tip (the area's `tip` is its summary).
+    pub hover_at: Option<HoverFn>,
     /// Text param edited inline on double-click.
     pub edit: Option<&'static str>,
     /// A movable figure label (`labels::handles`): hit only over its own text box and drawn on
@@ -64,7 +76,7 @@ pub struct Handle {
 
 impl Handle {
     fn base(pos: Pt, shape: Shape, cursor: Cursor, tip: &str) -> Self {
-        Handle { pos, half: (7.0, 7.0), shape, cursor, tip: tip.to_string(), drag: None, click: None, scroll: None, click_at: None, edit: None, label_drag: false }
+        Handle { pos, half: (7.0, 7.0), shape, cursor, tip: tip.to_string(), drag: None, click: None, scroll: None, click_at: None, hover_at: None, edit: None, label_drag: false }
     }
     /// Round knob that drives params when dragged.
     pub fn knob(pos: Pt, tip: &str, f: impl Fn(&mut Params, Pt) + Send + Sync + 'static) -> Self {
@@ -93,6 +105,10 @@ impl Handle {
     /// Double-click a label to edit text param `key` in place.
     pub fn label(centre: Pt, size: Pt, key: &'static str, tip: &str) -> Self {
         Handle { half: (size.0 / 2.0, size.1 / 2.0), edit: Some(key), ..Handle::base(centre, Shape::Zone, Cursor::Pointer, tip) }
+    }
+    pub fn with_hover(mut self, f: impl Fn(Pt) -> Option<Hover> + Send + Sync + 'static) -> Self {
+        self.hover_at = Some(Arc::new(f));
+        self
     }
     pub fn with_scroll(mut self, f: impl Fn(&mut Params, f64) + Send + Sync + 'static) -> Self {
         self.scroll = Some(Arc::new(f));
@@ -139,6 +155,29 @@ pub fn cycle(p: &mut Params, key: &str, opts: &[&str]) {
 /// Linear map of `v` from [a0,a1] to [b0,b1] (unclamped).
 pub fn lerp_map(v: f64, a0: f64, a1: f64, b0: f64, b1: f64) -> f64 {
     if (a1 - a0).abs() < 1e-12 { b0 } else { b0 + (v - a0) / (a1 - a0) * (b1 - b0) }
+}
+
+// ---------- hit testing ----------
+
+/// The order the workspace hit-tests handles in: areas and zones first, then knobs, then movable labels; where two overlap, the
+/// later one takes the pointer (the workspace registers them in this order, and egui gives the pointer to the last).
+pub fn hit_order(hs: &[Handle]) -> Vec<usize> {
+    let mut v: Vec<usize> = (0..hs.len()).collect();
+    v.sort_by_key(|&i| (hs[i].label_drag, hs[i].shape != Shape::Zone));
+    v
+}
+
+/// A handle's hit box half extent in SVG units at `k` screen px per SVG unit: its own, but never under 9 px on screen (5 for a
+/// movable label, whose box is its text).
+pub fn hit_half(h: &Handle, k: f64) -> Pt {
+    let min = if h.label_drag { 5.0 } else { 9.0 };
+    let k = if k > 0.0 { k } else { 1.0 };
+    ((h.half.0 * k).max(min) / k, (h.half.1 * k).max(min) / k)
+}
+
+/// The handle a press at `q` (SVG units) goes to, as the workspace decides it.
+pub fn pick(hs: &[Handle], q: Pt, k: f64) -> Option<usize> {
+    hit_order(hs).into_iter().filter(|&i| { let (hx, hy) = hit_half(&hs[i], k); (q.0 - hs[i].pos.0).abs() <= hx && (q.1 - hs[i].pos.1).abs() <= hy }).last()
 }
 
 // ---------- dispatch ----------
@@ -312,6 +351,12 @@ mod tests {
                         q.normalize(&defs, true);
                         in_range(&defs, &q).unwrap_or_else(|e| panic!("{} click {i} ({}): {e}", d.id, h.tip));
                         assert!(!(d.render)(&q).is_empty());
+                    }
+                    if let Some(f) = &h.hover_at {
+                        let (c, hh) = (h.pos, h.half);
+                        for t in [c, (c.0 - hh.0, c.1 - hh.1), (c.0 + hh.0 * 0.3, c.1 - hh.1 * 0.7), (f64::NAN, 3.0)] {
+                            if let Some(hv) = f(t) { assert!(hv.outline.iter().all(|q| q.0.is_finite() && q.1.is_finite()), "{} hover {i}", d.id); }
+                        }
                     }
                     if let Some(f) = &h.click_at {
                         // at its centre, at its corners and far outside: in range, and the figure still renders
