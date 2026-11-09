@@ -477,11 +477,13 @@ static OGIVE: [RefSection; 6] = [
     s("Appearance", &["style", "label_size"], ""),
 ];
 
-static BAR_CHART: [RefSection; 5] = [
-    s("Data", &["data", "name1", "name2"], "One category per line: a name, a comma and its count. A second count after another comma draws two groups side by side. Repeated names are added together."),
-    s("Bars", &["orient", "measure", "order", "gap", "values", "decimals"], "Relative frequency is each category's percent of its own group, so each group's bars add to 100%. Pareto sorts tallest first and adds the cumulative percent line."),
-    s("Scale", &["scale_auto", "scale_min", "scale_max", "grid"], "A scale that does not start at 0 makes the bars' lengths out of proportion; the editor warns when it does."),
-    s("Labels and text", &["title", "cat_title", "val_title"], ""),
+static BAR_CHART: [RefSection; 7] = [
+    s("Data", &["data", "name1", "name2"], "One category per line: a name, a comma and its value (a count, or a measurement with up to three decimals). More values after more commas draw up to six groups. A first line of headings names the groups; a heading of \u{b1}, SEM or SD makes that column the error bars of the one before it. Repeated names are added together."),
+    s("Bars", &["layout", "orient", "measure", "order", "gap", "values", "values_at", "decimals"], "Several groups sit side by side or stacked into one bar per category. Relative frequency is each category's percent of its own group, so each group's bars add to 100%; stacked, each bar is its category's split. Pareto sorts tallest first and adds the cumulative percent line."),
+    s("Error bars", &["err_caps", "err_note"], "Each error bar runs from the value minus its error to the value plus it."),
+    s("Look", &["look", "fill_list", "key"], "Black and white uses greys and hatching that photocopy; White leaves every bar for students to shade."),
+    s("Scale and grid", &["scale_auto", "scale_min", "scale_max", "scale_step", "numbers", "grid", "grid_weight", "minor"], "A scale that does not start at 0 makes the bars' lengths out of proportion; the editor warns when it does."),
+    s("Titles", &["title_kind", "title", "cat_kind", "cat_title", "val_kind", "val_title"], "A title can be a blank line for students to write on; the key writes the typed title on it."),
     s("Student copy and appearance", &["blank", "questions", "show_answers", "style", "label_size"], "Turn off Show answers for a student copy: it leaves out the values, the bars (students draw them from a table) or the scale numbers, and the answers to the questions."),
 ];
 

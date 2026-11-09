@@ -151,7 +151,7 @@ fn shapes(svg: &str) -> Shapes {
             }
             "line" => {
                 let c = e.a("stroke").unwrap();
-                if c == GRID || c == "#cccccc" || c == "#999999" || c == PRINT_GRID {
+                if c == GRID || c == "#cccccc" || c == "#999999" || c == PRINT_GRID || [GRID_LIGHT, GRID_BOLD, PRINT_GRID_LIGHT, PRINT_GRID_BOLD, MINOR, PRINT_MINOR].contains(&c.as_str()) {
                     continue;
                 }
                 s.segs.push(((e.n("x1"), e.n("y1")), (e.n("x2"), e.n("y2")), e.n("stroke-width")));
@@ -386,19 +386,19 @@ fn the_thousands_reading_is_always_stated_and_can_be_rewritten_both_ways() {
 
 #[test]
 fn the_too_many_counts_refusal_keeps_every_count() {
-    // MAJOR: a line with more than two counts is refused with the limit stated and every typed
-    // count named; there is no rewrite that would drop one (the old advice kept only two)
+    // MAJOR: a line with more than six counts is refused with the limit stated and every typed
+    // count named; there is no rewrite that would drop one (the old advice kept only some)
     for (data, line, counts) in [
-        ("A, 5, 7, 3\nB, 1, 2", "Line 1 (\u{201c}A, 5, 7, 3\u{201d})", ["5", "7", "3"]),
-        ("A, 9, 12,5", "Line 1 (\u{201c}A, 9, 12,5\u{201d})", ["9", "12", "5"]),
-        ("B, 3, 4, 9", "Line 1 (\u{201c}B, 3, 4, 9\u{201d})", ["3", "4", "9"]),
+        ("A, 5, 7, 3, 1, 1, 1, 8\nB, 1, 2", "Line 1 (\u{201c}A, 5, 7, 3, 1, 1, 1, 8\u{201d})", ["5", "7", "3", "8"]),
+        ("A, 9, 1, 1, 1, 1, 12,5", "Line 1 (\u{201c}A, 9, 1, 1, 1, 1, 12,5\u{201d})", ["9", "12", "5", "1"]),
+        ("B, 3, 4, 9, 9, 9, 9, 9", "Line 1 (\u{201c}B, 3, 4, 9, 9, 9, 9, 9\u{201d})", ["3", "4", "9", "9"]),
         // a thousands count is quoted as it was typed, in every spelling (LOW)
-        ("A, 1,200, 3, 4", "Line 1 (\u{201c}A, 1,200, 3, 4\u{201d})", ["1,200", "3", "4"]),
-        ("A, 1 200, 3, 4", "Line 1 (\u{201c}A, 1 200, 3, 4\u{201d})", ["1 200", "3", "4"]),
-        ("A, 1200, 3, 4", "Line 1 (\u{201c}A, 1200, 3, 4\u{201d})", ["1200", "3", "4"]),
+        ("A, 1,200, 3, 4, 5, 6, 7, 8", "Line 1 (\u{201c}A, 1,200, 3, 4, 5, 6, 7, 8\u{201d})", ["1,200", "3", "4", "8"]),
+        ("A, 1 200, 3, 4, 5, 6, 7, 8", "Line 1 (\u{201c}A, 1 200, 3, 4, 5, 6, 7, 8\u{201d})", ["1 200", "3", "4", "8"]),
+        ("A, 1200, 3, 4, 5, 6, 7, 8", "Line 1 (\u{201c}A, 1200, 3, 4, 5, 6, 7, 8\u{201d})", ["1200", "3", "4", "8"]),
     ] {
         let e = parse(data).unwrap_err();
-        assert!(e.contains("this figure takes at most two counts per category"), "{data}: {e}");
+        assert!(e.contains("this figure takes at most 6 counts per category"), "{data}: {e}");
         assert!(e.contains(line), "{data}: the line and its cells are named: {e}");
         for c in counts {
             assert!(e.contains(&format!("\u{201c}{c}\u{201d}")), "{data}: {c} is named, not dropped: {e}");
@@ -408,9 +408,13 @@ fn the_too_many_counts_refusal_keeps_every_count() {
         assert!(e.contains("second chart"), "{data}: a route that keeps the data: {e}");
     }
     // the refused text still holds every count: nothing was edited on the way
-    let data = "A, 5, 7, 3\nB, 1, 2";
+    let data = "A, 5, 7, 3, 1, 1, 1, 8\nB, 1, 2";
     assert!(parse(data).is_err());
-    assert!(data.contains(", 3"));
+    assert!(data.contains(", 8"));
+    // three to six counts are three to six groups
+    let t = parse("A, 5, 7, 3\nB, 1, 2, 4").unwrap();
+    assert_eq!((t.groups, t.cats[1].counts.clone()), (3, vec![1, 2, 4]));
+    assert_eq!(parse("A, 1, 2, 3, 4, 5, 6\nB, 6, 5, 4, 3, 2, 1").unwrap().groups, 6);
 }
 
 #[test]
@@ -917,13 +921,15 @@ fn every_refusal_and_note_has_a_fix_that_keeps_the_meaning() {
         (one("Red, 12 people\nBlue, 3"), End::Chart(rows(&[("Red", &[12]), ("Blue", &[3])]))),
         (one("Red, 25%\nBlue, 75%"), End::Chart(rows(&[("Red", &[25]), ("Blue", &[75])]))),
         (one("Red, -3\nBlue, 3"), End::Chart(rows(&[("Red", &[3]), ("Blue", &[3])]))),
-        (one("Red, 12.5\nBlue, 3"), End::Chart(rows(&[("Red", &[12]), ("Blue", &[3])]))),
+        // a value may have up to three decimal places (a mean); a fourth is rounded by the fix
+        (one("Red, 12.5678\nBlue, 3"), End::Chart(rows(&[("Red", &[12568]), ("Blue", &[3000])]))),
         (one("Red, NaN\nBlue, inf"), End::Refused("is not a number")),
         (one("Red\nBlue, 3\nGreen, 2"), End::Chart(rows(&[("Blue", &[3]), ("Green", &[2])]))),
         (one(", 12\nBlue, 3"), End::Chart(rows(&[("Category 1", &[12]), ("Blue", &[3])]))),
         (one("Grade 9 12\nGrade 10 7"), End::Chart(rows(&[("Grade 9", &[12]), ("Grade 10", &[7])]))),
         // MAJOR: the >2-count refusal states the limit and drops nothing, so there is no fix to apply
-        (one("Red, 1, 2, 3\nBlue, 3, 4"), End::Refused("at most two counts per category")),
+        (one("Red, 1, 2, 3, 4, 5, 6, 7\nBlue, 3, 4"), End::Refused("at most 6 counts per category")),
+        (one("Red, 1, 2, 3\nBlue, 3, 4"), End::Refused("holds 2 counts (3 and 4), but line 1")),
         // MAJOR 2: a counts mismatch names the lines and offers the two shapes, never a rewrite
         (one("Red, 1, 2\nBlue, 3\nGreen, 4, 5"), End::Refused("holds 1 count (3), but line 1")),
         (one("Red, 1\nBlue, 3, 5"), End::Refused("holds 2 counts (3 and 5), but line 1")),
@@ -1012,7 +1018,7 @@ fn every_refusal_and_note_has_a_fix_that_keeps_the_meaning() {
 
 #[test]
 fn refusals_draw_the_note_and_never_a_chart() {
-    for data in ["", "Red, -1", "Red, 2.5", "Red, 0", "Red, x\nBlue, y"] {
+    for data in ["", "Red, -1", "Red, 2.5555", "Red, 0", "Red, x\nBlue, y"] {
         let p = with(&[("data", data)]);
         let svg = render(&p);
         let note = &warnings(&p)[0];
@@ -1033,7 +1039,7 @@ fn default_and_examples_raise_no_unexpected_note() {
         let notes = warnings(&p);
         if e.name.starts_with("Misleading") {
             assert!(notes.len() == 1 && notes[0].contains("starts at 40, not 0"), "{notes:?}");
-        } else if e.name.starts_with("Two classes") {
+        } else if e.name.starts_with("Two classes") || e.name.starts_with("Stacked") || e.name.starts_with("Error bars") {
             assert!(notes.iter().all(|n| n.contains("read as headings")), "{notes:?}");
         } else {
             assert!(notes.is_empty(), "{}: {notes:?}", e.name);
@@ -1902,3 +1908,517 @@ fn dump_pngs() {
     }
 }
 
+
+// ───────────────────────── batch 4: groups, stacks, error bars, fills, key, titles, grid ─────────────────────────
+
+const THREE: &str = "Year, Walk, Bus, Car\nYear 7, 12, 10, 8\nYear 8, 15, 8, 6\nYear 9, 9, 14, 5";
+const MEANS: &str = "Treatment, Height, SEM\nNone, 12.4, 1.1\nFertilizer A, 18.9, 1.6\nFertilizer B, 15.2, 2.3";
+const TWO_ERR: &str = "Plant, Day 7, \u{b1}, Day 14, \u{b1}\nBean, 4.2, 0.6, 9.8, 1.1\nPea, 3.1, 0.4, 7.5, 0.9\nCorn, 5.5, 0.8, 12.1, 1.6";
+
+/// The value axis read back from the drawing: the pixel of value 0 and of the top tick, from the
+/// tick marks (the short ink lines left of a vertical axis, or under a horizontal one) and their
+/// numbers.
+fn value_axis(svg: &str, horizontal: bool) -> (f64, f64, f64, f64) {
+    // (pixel at the first tick, its value, pixel at the last numbered tick, its value)
+    let mut marks: Vec<(f64, f64)> = Vec::new();
+    for e in texts(svg) {
+        let v: f64 = match e.text.replace(',', "").trim_end_matches('%').parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let anchor = e.a("text-anchor").unwrap_or_default();
+        if horizontal && anchor == "middle" && e.raw.contains("y=") {
+            marks.push((e.n("x"), v));
+        } else if !horizontal && anchor == "end" && e.n("x") < 200.0 {
+            marks.push((e.n("y") - 14.0 * 0.35, v));
+        }
+    }
+    marks.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    let (a, b) = (marks[0], *marks.last().unwrap());
+    (a.0, a.1, b.0, b.1)
+}
+
+fn px_of(axis: (f64, f64, f64, f64), v: f64) -> f64 {
+    axis.0 + (v - axis.1) / (axis.3 - axis.1) * (axis.2 - axis.0)
+}
+
+/// Ink lines of the error bars: (x1, y1, x2, y2) of every 1.6-wide ink line that is not a tick.
+fn ink_lines(svg: &str, w: f64) -> Vec<(f64, f64, f64, f64)> {
+    elements(svg)
+        .into_iter()
+        .filter(|e| e.tag == "line" && (e.n("stroke-width") - w).abs() < 1e-9 && (e.a("stroke").as_deref() == Some(INK) || e.a("stroke").as_deref() == Some("#000000")))
+        .map(|e| (e.n("x1"), e.n("y1"), e.n("x2"), e.n("y2")))
+        .collect()
+}
+
+#[test]
+fn three_to_six_groups_draw_side_by_side_named_by_the_headings() {
+    for (data, groups) in [(THREE, 3), ("Sport, A, B, C, D\nSoccer, 12, 10, 8, 9\nTennis, 5, 8, 6, 4", 4), ("X, 1, 2, 3, 4, 5, 6\nY, 6, 5, 4, 3, 2, 1", 6)] {
+        let t = parse(data).unwrap();
+        assert_eq!(t.groups, groups);
+        let p = with(&[("data", data), ("title", ""), ("cat_title", "")]);
+        let svg = render(&p);
+        let b = bars(&svg, 1.0);
+        assert_eq!(b.len(), t.cats.len() * groups, "one bar per category and group");
+        // every group has its own fill, and the key names each group
+        let fills: std::collections::BTreeSet<String> = b.iter().map(|r| r.4.clone()).collect();
+        assert_eq!(fills.len(), groups, "{data}");
+        let words: Vec<String> = texts(&svg).into_iter().map(|e| e.text).collect();
+        let o = opts(&p, &t);
+        for g in 0..groups {
+            assert!(words.contains(&o.names[g]), "key names {}", o.names[g]);
+        }
+        if groups == 3 {
+            assert_eq!(o.names, ["Walk", "Bus", "Car"]);
+        } else if groups == 6 {
+            assert_eq!(o.names[5], "Group 6", "no headings: Group k");
+        }
+        // bars in proportion: height per unit is the same for every bar
+        let per: Vec<f64> = b.iter().zip(t.cats.iter().flat_map(|c| c.counts.clone())).map(|(r, v)| r.3 / v as f64).collect();
+        assert!(per.iter().all(|x| (x - per[0]).abs() < 0.02), "{per:?}");
+        // bars of one category never touch the next category's
+        for j in 1..t.cats.len() {
+            assert!(b[j * groups].0 > b[j * groups - 1].0 + b[j * groups - 1].2 + 4.0, "a gap between categories");
+        }
+        assert!(audit(&svg).is_empty(), "{:?}", audit(&svg));
+    }
+    // a line with a different number of counts is still refused with both lines named
+    assert!(parse("A, 1, 2, 3\nB, 1, 2").unwrap_err().contains("holds 2 counts (1 and 2), but line 1"));
+}
+
+#[test]
+fn stacked_bars_are_end_to_end_and_their_totals_are_the_sums() {
+    for orient in ["Vertical", "Horizontal"] {
+        let horizontal = orient == "Horizontal";
+        let p = with(&[("data", THREE), ("layout", "Stacked"), ("orient", orient)]);
+        let svg = render(&p);
+        let t = parse(THREE).unwrap();
+        let b = bars(&svg, 1.0);
+        assert_eq!(b.len(), 9);
+        let axis = value_axis(&svg, horizontal);
+        for (j, c) in t.cats.iter().enumerate() {
+            let parts = &b[j * 3..j * 3 + 3];
+            let mut acc = 0u64;
+            for (g, r) in parts.iter().enumerate() {
+                // each part runs from the sum of the parts before it to that plus its own count
+                let (lo, hi) = (px_of(axis, acc as f64), px_of(axis, (acc + c.counts[g]) as f64));
+                acc += c.counts[g];
+                if horizontal {
+                    assert!((r.0 - lo).abs() < 0.02 && (r.0 + r.2 - hi).abs() < 0.02, "{orient} {} part {g}", c.name);
+                } else {
+                    assert!((r.1 + r.3 - lo).abs() < 0.02 && (r.1 - hi).abs() < 0.02, "{orient} {} part {g}: {r:?} {lo} {hi}", c.name);
+                }
+                assert_eq!(r.4, Fills::new(&p).series(g), "group {g}'s fill in every bar");
+            }
+            // the value written at the stack's end is its total, and it sits past the stack's end
+            let total: u64 = c.counts.iter().sum();
+            let anchor = if horizontal { "start" } else { "middle" };
+            let label = texts(&svg).into_iter().find(|e| e.text == total.to_string() && e.a("text-anchor").as_deref() == Some(anchor)).unwrap_or_else(|| panic!("total {total} written"));
+            let end = px_of(axis, total as f64);
+            if horizontal {
+                assert!(label.n("x") > end && label.n("x") < end + 12.0);
+            } else {
+                assert!(label.n("y") < end && label.n("y") > end - 30.0);
+            }
+        }
+        assert!(audit(&svg).is_empty(), "{:?}", audit(&svg));
+    }
+    // a stacked relative-frequency bar is its own category's split: every bar reaches 100%, each
+    // part's printed percent is its share of the bar, and the parts are written inside
+    let p = with(&[("data", THREE), ("layout", "Stacked"), ("measure", PERCENT)]);
+    let svg = render(&p);
+    let axis = value_axis(&svg, false);
+    let b = bars(&svg, 1.0);
+    for j in 0..3 {
+        assert!((b[j * 3 + 2].1 - px_of(axis, 100.0)).abs() < 0.02, "bar {j} reaches 100%");
+    }
+    let words: Vec<String> = texts(&svg).into_iter().map(|e| e.text).collect();
+    for want in ["40%", "33%", "27%", "52%", "28%", "21%", "32%", "50%", "18%"] {
+        assert!(words.contains(&want.to_string()), "{want} in {words:?}");
+    }
+    // Year 8 is 15/29, 8/29, 6/29 = 51.7, 27.6, 20.7: rounded one by one they add to 101%, and the
+    // editor says so and which setting fixes it
+    let n = warnings(&p);
+    assert!(n.iter().any(|w| w.contains("101% for \u{201c}Year 8\u{201d}") && w.contains("not 100% in every bar")), "{n:?}");
+    // sorted stacks go by their totals
+    let t = parse(THREE).unwrap();
+    assert_eq!(order_by(&t, false, true, "Tallest first"), [0, 1, 2]);
+    assert_eq!(order_by(&t, false, true, "Shortest first"), [2, 1, 0]);
+    // one group: nothing to stack, the chart is the side-by-side one
+    assert_eq!(render(&with(&[("layout", "Stacked")])), render(&defaults()));
+}
+
+#[test]
+fn values_inside_sit_on_white_chips_inside_their_own_bars() {
+    for (data, extra) in [
+        ("Walk, 12\nCar, 9\nBus, 6\nBike, 3", vec![]),
+        (THREE, vec![("layout", "Stacked")]),
+        (THREE, vec![("orient", "Horizontal")]),
+        (TWO_ERR, vec![]),
+        (TWO_ERR, vec![("orient", "Horizontal")]),
+        (THREE, vec![("layout", "Stacked"), ("orient", "Horizontal"), ("label_size", "Large")]),
+    ] {
+        let mut pairs = vec![("data", data), ("values_at", "Inside")];
+        pairs.extend(extra.iter().cloned());
+        let p = with(&pairs);
+        let svg = render(&p);
+        let b = bars(&svg, 1.0);
+        let chips: Vec<El> = elements(&svg).into_iter().filter(|e| e.tag == "rect" && e.a("fill").as_deref() == Some("#ffffff") && e.a("stroke").as_deref() == Some("none")).collect();
+        let t = parse(data).unwrap();
+        let o = opts(&p, &t);
+        let labels: Vec<String> = value_labels(&t, &o).into_iter().flatten().collect();
+        let mut inside = 0;
+        for e in texts(&svg).into_iter().filter(|e| labels.contains(&e.text)) {
+            let (x, y) = (e.n("x"), e.n("y"));
+            let in_bar = b.iter().any(|r| x > r.0 && x < r.0 + r.2 + 0.01 && y > r.1 && y < r.1 + r.3 + 0.01);
+            if in_bar {
+                inside += 1;
+                assert!(chips.iter().any(|c| x >= c.n("x") - 0.01 && x <= c.n("x") + c.n("width") + 0.01 && y > c.n("y") && y < c.n("y") + c.n("height") + 4.0), "{data} {extra:?}: {} sits on a chip", e.text);
+            }
+        }
+        assert!(inside >= labels.len() / 2, "{data} {extra:?}: {inside} of {} values inside", labels.len());
+        assert!(audit(&svg).is_empty(), "{data} {extra:?}: {:?}", audit(&svg));
+    }
+    // a bar too short to hold its value keeps it at the end
+    let p = with(&[("data", "Tall, 100\nShort, 1"), ("values_at", "Inside")]);
+    let svg = render(&p);
+    let one = texts(&svg).into_iter().find(|e| e.text == "1").unwrap();
+    let short = bars(&svg, 1.0)[1].clone();
+    assert!(one.n("y") < short.1, "the 1 sits above its short bar");
+    // and the student copy leaves the values out wherever they sit
+    let mut stu = p.clone();
+    stu.set_b(SHOW_ANSWERS, false);
+    assert!(!texts(&render(&stu)).iter().any(|e| e.text == "100" && e.n("x") > 100.0 && e.a("text-anchor").as_deref() == Some("middle")));
+}
+
+#[test]
+fn error_columns_are_read_from_their_headings() {
+    for h in ["\u{b1}", "+/-", "+-", "SEM", "sd", "SE", "\u{b1} SEM", "\u{b1}1 SD", "S.E.M."] {
+        assert!(err_head(h), "{h}");
+    }
+    for h in ["Boys", "Seminar", "Sd card", "Error rate", "2019"] {
+        assert!(!err_head(h), "{h}");
+    }
+    let t = parse(MEANS).unwrap();
+    assert!(t.has_err && t.groups == 1 && t.dec == 1);
+    assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [124, 189, 152]);
+    assert_eq!(t.cats.iter().map(|c| c.errs[0]).collect::<Vec<_>>(), [Some(1.1), Some(1.6), Some(2.3)]);
+    let t = parse(TWO_ERR).unwrap();
+    assert_eq!((t.groups, t.cats[2].errs.clone()), (2, vec![Some(0.8), Some(1.6)]));
+    // an empty error cell (or a missing last one) is no error bar
+    let t = parse("Way, A, \u{b1}, B, \u{b1}\nWalk, 3, , 4, 1\nCar, 5, 2, 6").unwrap();
+    assert_eq!(t.cats[0].errs, [None, Some(1.0)]);
+    assert_eq!(t.cats[1].errs, [Some(2.0), None]);
+    // an error column must follow its values; a non-number in one is refused, not guessed
+    let e = parse("Way, \u{b1}, A\nWalk, 1, 3").unwrap_err();
+    assert!(e.contains("error column") && !e.contains("change line"), "{e}");
+    let e = parse("Way, A, \u{b1}, \u{b1}\nWalk, 3, 1, 1").unwrap_err();
+    assert!(e.contains("right after its values"), "{e}");
+    let e = parse("Way, A, \u{b1}\nWalk, 3, lots").unwrap_err();
+    assert!(e.contains("error bar's size"), "{e}");
+    assert!(parse("Way, A, \u{b1}\nWalk, 3, -1").is_err());
+    let e = parse("Way, A, \u{b1}\nWalk, 3, 1, 9").unwrap_err();
+    assert!(e.contains("names 2 columns") && e.contains("Nothing is dropped"), "{e}");
+    // relevance: the error-bar controls show only with error columns, through the stats hook
+    let with_err = with(&[("data", MEANS)]);
+    assert!(crate::figures::stats::relevant(ID, "err_caps", &with_err) && crate::figures::stats::relevant(ID, "err_note", &with_err));
+    assert!(!crate::figures::stats::relevant(ID, "err_caps", &defaults()));
+}
+
+#[test]
+fn error_bars_run_from_value_minus_to_value_plus_the_error() {
+    for orient in ["Vertical", "Horizontal"] {
+        let horizontal = orient == "Horizontal";
+        for (data, measure) in [(MEANS, COUNT), (TWO_ERR, COUNT), (TWO_ERR, PERCENT)] {
+            for caps in [true, false] {
+                let p = with(&[("data", data), ("orient", orient), ("measure", measure), ("err_caps", if caps { "true" } else { "false" })]);
+                let svg = render(&p);
+                let t = parse(data).unwrap();
+                let axis = value_axis(&svg, horizontal);
+                let b = bars(&svg, 1.0);
+                let lines = ink_lines(&svg, 1.6);
+                let mut stems = 0;
+                let mut crossbars = 0;
+                for (j, c) in t.cats.iter().enumerate() {
+                    for g in 0..t.groups {
+                        let r = &b[j * t.groups + g];
+                        let tot = t.total(g) as f64 * t.unit();
+                        let scale = if measure == PERCENT { 100.0 / tot } else { 1.0 };
+                        let v = c.counts[g] as f64 * t.unit() * scale;
+                        let e = c.errs[g].unwrap() * scale;
+                        let (lo, hi) = (px_of(axis, v - e), px_of(axis, v + e));
+                        let mid = if horizontal { r.1 + r.3 / 2.0 } else { r.0 + r.2 / 2.0 };
+                        let stem = lines.iter().find(|l| if horizontal { (l.1 - mid).abs() < 0.02 && (l.3 - mid).abs() < 0.02 && (l.0 - l.2).abs() > 1.0 } else { (l.0 - mid).abs() < 0.02 && (l.2 - mid).abs() < 0.02 && (l.1 - l.3).abs() > 1.0 });
+                        let s = stem.unwrap_or_else(|| panic!("{orient} {measure} {}: an error bar", c.name));
+                        stems += 1;
+                        let (a, bb) = if horizontal { (s.0, s.2) } else { (s.1, s.3) };
+                        assert!((a - lo).abs() < 0.05 && (bb - hi).abs() < 0.05, "{orient} {measure} {} {g}: {a}-{bb} vs {lo}-{hi}", c.name);
+                        // a crossbar across each end, centred on the stem
+                        for end in [a, bb] {
+                            crossbars += lines
+                                .iter()
+                                .filter(|l| if horizontal { (l.0 - end).abs() < 0.02 && (l.2 - end).abs() < 0.02 && ((l.1 + l.3) / 2.0 - mid).abs() < 0.02 } else { (l.1 - end).abs() < 0.02 && (l.3 - end).abs() < 0.02 && ((l.0 + l.2) / 2.0 - mid).abs() < 0.02 })
+                                .count();
+                        }
+                    }
+                }
+                assert_eq!(crossbars, if caps { 2 * stems } else { 0 }, "{orient} {measure} caps {caps}");
+                assert!(audit(&svg).is_empty(), "{orient} {data}: {:?}", audit(&svg));
+            }
+        }
+    }
+    // the scale holds the tallest bar's error bar, and the value label sits above the error bar
+    let p = with(&[("data", MEANS)]);
+    let s = scale_for(&p, &parse(MEANS).unwrap(), &opts(&p, &parse(MEANS).unwrap()));
+    assert!(s.hi >= 18.9 + 1.6, "{s:?}");
+    let svg = render(&p);
+    let lab = texts(&svg).into_iter().find(|e| e.text == "18.9").unwrap();
+    let top_err = ink_lines(&svg, 1.6).iter().filter(|l| (l.0 - lab.n("x")).abs() < 0.02 && (l.2 - lab.n("x")).abs() < 0.02).map(|l| l.1.min(l.3)).fold(f64::INFINITY, f64::min);
+    assert!(top_err.is_finite());
+    assert!(lab.n("y") < top_err - 4.0, "18.9 above its error bar");
+    // the note under the graph, on the student copy too; none when it is empty
+    let p = with(&[("data", MEANS), ("err_note", "Error bars show \u{b1}1 SEM"), ("show_answers", "false")]);
+    let svg = render(&p);
+    let note = texts(&svg).into_iter().find(|e| e.text == "Error bars show \u{b1}1 SEM").expect("the note is drawn");
+    let lowest_name = texts(&svg).into_iter().filter(|e| e.text.starts_with("Fertilizer")).map(|e| e.n("y")).fold(0.0, f64::max);
+    assert!(note.n("y") > lowest_name, "the note is under the graph");
+    assert!(audit(&svg).is_empty());
+    assert!(!render(&with(&[("data", MEANS)])).contains("Error bars show"));
+    // stacked bars and Pareto charts draw none, and the editor says why
+    let p = with(&[("data", TWO_ERR), ("layout", "Stacked")]);
+    assert!(warnings(&p).iter().any(|w| w.contains("Error bars are drawn on bars side by side only")));
+    assert!(ink_lines(&render(&p), 1.6).len() < 20, "no error bars on stacks");
+    // student copy that leaves out the bars leaves out their error bars too, and its table gives the errors
+    let p = with(&[("data", MEANS), ("blank", BLANKS[1]), ("show_answers", "false")]);
+    let svg = render(&p);
+    let words: Vec<String> = texts(&svg).into_iter().map(|e| e.text).collect();
+    for w in ["\u{b1}", "\u{b1}1.1", "\u{b1}1.6", "\u{b1}2.3", "12.4", "Value"] {
+        assert!(words.contains(&w.to_string()), "{w} in the table: {words:?}");
+    }
+    assert!(audit(&svg).is_empty(), "{:?}", audit(&svg));
+}
+
+#[test]
+fn decimal_values_are_read_to_three_places_and_printed_as_typed() {
+    let t = parse("A, 12.4\nB, 18.95\nC, 3").unwrap();
+    assert_eq!((t.dec, t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>()), (2, vec![1240, 1895, 300]));
+    assert_eq!([t.fmt(1240), t.fmt(1895), t.fmt(300), t.fmt(123456789)], ["12.4", "18.95", "3", "1,234,567.89"]);
+    assert_eq!(t.plain(123456789), "1234567.89");
+    let svg = render(&with(&[("data", "A, 12.4\nB, 18.95\nC, 3")]));
+    let words: Vec<String> = texts(&svg).into_iter().map(|e| e.text).collect();
+    for w in ["12.4", "18.95", "3", "Value"] {
+        assert!(words.contains(&w.to_string()), "{w}: {words:?}");
+    }
+    // whole counts are stored and drawn exactly as before
+    assert_eq!(parse("Walk, 12\nCar, 9").unwrap().dec, 0);
+    // a fourth decimal place is refused with a rounding that keeps three
+    let e = parse("A, 1.23456").unwrap_err();
+    assert!(e.contains("change line 1 to \u{201c}A, 1.235\u{201d}"), "{e}");
+}
+
+#[test]
+fn fills_white_black_and_white_and_picked_for_each_group() {
+    let two = "Way, Boys, Girls\nWalk, 12, 10\nCar, 9, 11";
+    // White: every bar and swatch white, for students to shade
+    let svg = render(&with(&[("data", two), ("look", "White")]));
+    assert!(elements(&svg).iter().filter(|e| e.tag == "rect" && e.a("stroke").as_deref() == Some(INK)).all(|e| e.a("fill").as_deref() == Some("#ffffff")));
+    // Black and white on the colour style uses Print's fills (a grey, then hatching)
+    let bw = bars(&render(&with(&[("data", two), ("look", "Black and white")])), 1.0);
+    let pr = bars(&render(&with(&[("data", two), ("style", "Print")])), 1.0);
+    assert_eq!(bw.iter().map(|b| b.4.clone()).collect::<Vec<_>>(), pr.iter().map(|b| b.4.clone()).collect::<Vec<_>>());
+    // a pick per group, in group order; a blank pick keeps the automatic fill
+    let p = with(&[("data", two), ("fill_list", "Red, Hatching")]);
+    let svg = render(&p);
+    let b = bars(&svg, 1.0);
+    assert!(b[0].4.starts_with('#') && b[0].4 != Fills::new(&p).series(0), "Red replaces the automatic blue");
+    assert!(b[1].4.starts_with("url(#pie-p") && svg.contains(&format!("id=\"{}\"", b[1].4.trim_start_matches("url(#").trim_end_matches(')'))), "the hatch is defined");
+    let b2 = bars(&render(&with(&[("data", two), ("fill_list", ", Dots")])), 1.0);
+    assert_eq!(b2[0].4, Fills::new(&p).series(0));
+    // the key's swatches match the bars
+    let swatches: Vec<String> = elements(&svg).into_iter().filter(|e| e.tag == "rect" && (e.n("width") - 18.0).abs() < 0.01).map(|e| e.a("fill").unwrap()).collect();
+    assert_eq!(swatches, [b[0].4.clone(), b[1].4.clone()]);
+    // Print stays grey whatever is picked
+    let svg = render(&with(&[("data", two), ("fill_list", "Red, Green"), ("style", "Print")]));
+    let grey = |v: &str| {
+        let h = v.trim_start_matches('#');
+        v.starts_with("url(") || v == "none" || (h.len() == 3 && h[0..1] == h[1..2] && h[1..2] == h[2..3]) || (h.len() == 6 && h[0..2] == h[2..4] && h[2..4] == h[4..6])
+    };
+    for e in elements(&svg) {
+        for a in ["fill", "stroke"] {
+            if let Some(v) = e.a(a) {
+                assert!(grey(&v), "{a}={v} in Print");
+            }
+        }
+    }
+    assert!(svg.split("<defs>").nth(1).unwrap().split("</defs>").next().unwrap().split('"').filter(|v| v.starts_with('#')).all(grey));
+}
+
+#[test]
+fn the_key_sits_above_right_or_below_or_is_left_out() {
+    let data = "Way, Boys, Girls, Staff\nWalk, 12, 10, 3\nCar, 9, 11, 8";
+    let swatches = |svg: &str| -> Vec<(f64, f64)> { elements(svg).into_iter().filter(|e| e.tag == "rect" && (e.n("width") - 18.0).abs() < 0.01 && (e.n("height") - 13.0).abs() < 0.01).map(|e| (e.n("x"), e.n("y"))).collect() };
+    for orient in ["Vertical", "Horizontal"] {
+        let base = [("data", data), ("orient", orient)];
+        let above = render(&with(&base));
+        let right = render(&with(&[base[0], base[1], ("key", "Right")]));
+        let below = render(&with(&[base[0], base[1], ("key", "Below")]));
+        let none = render(&with(&[base[0], base[1], ("key", "None")]));
+        let plot = |svg: &str| {
+            let b = bars(svg, 1.0);
+            (b.iter().map(|r| r.0 + r.2).fold(0.0, f64::max), b.iter().map(|r| r.1).fold(f64::INFINITY, f64::min), b.iter().map(|r| r.1 + r.3).fold(0.0, f64::max))
+        };
+        let (_, top_a, _) = plot(&above);
+        assert!(swatches(&above).iter().all(|s| s.1 < top_a), "{orient}: above the bars");
+        let (right_r, _, _) = plot(&right);
+        let sw = swatches(&right);
+        assert!(sw.iter().all(|s| s.0 > right_r + 10.0) && sw.windows(2).all(|w| w[1].1 > w[0].1 && w[1].0 == w[0].0), "{orient}: a column right of the plot");
+        let names_bottom = texts(&below).into_iter().filter(|e| e.text == "Walk" || e.text == "Car").map(|e| e.n("y")).fold(0.0, f64::max);
+        assert!(swatches(&below).iter().all(|s| s.1 > names_bottom), "{orient}: below the category names");
+        assert!(swatches(&none).is_empty());
+        for svg in [&above, &right, &below, &none] {
+            assert!(audit(svg).is_empty(), "{orient}: {:?}", audit(svg));
+        }
+    }
+    // the default (above) is the chart as it always was
+    let p = with(&[("data", data)]);
+    let mut q = p.clone();
+    q.set_s("key", "Above");
+    assert_eq!(render(&p), render(&q));
+}
+
+#[test]
+fn a_blank_title_line_leaves_the_student_copy_to_write_it() {
+    let p = with(&[("title", "How we get to school"), ("cat_title", "Way to school"), ("title_kind", "Blank line"), ("cat_kind", "Blank line"), ("val_kind", "Blank line")]);
+    for orient in ["Vertical", "Horizontal"] {
+        let mut p = p.clone();
+        p.set_s("orient", orient);
+        let (stu, key) = crate::figures::answer_pair(&def(), &p).unwrap();
+        assert_eq!(size(&stu), size(&key), "both copies the same size");
+        let words = |s: &str| texts(s).into_iter().map(|e| e.text).collect::<Vec<_>>();
+        for t in ["How we get to school", "Way to school", "Frequency"] {
+            assert!(words(&key).contains(&t.to_string()) && !words(&stu).contains(&t.to_string()), "{orient}: {t} on the key only");
+            assert!(!stu.contains(t), "{orient}: {t} nowhere in the student SVG");
+        }
+        // three lines to write on, in both copies, each clear of the text above it
+        let rules = |s: &str| elements(s).into_iter().filter(|e| e.tag == "line" && e.n("stroke-width") == 1.2).count();
+        assert_eq!((rules(&stu), rules(&key)), (3, 3));
+        assert!(audit(&key).is_empty() && audit(&stu).is_empty(), "{orient}: {:?}", audit(&key));
+    }
+    // a blank chart title with nothing typed still leaves a line
+    let svg = render(&with(&[("title", ""), ("title_kind", "Blank line")]));
+    assert_eq!(elements(&svg).into_iter().filter(|e| e.tag == "line" && e.n("stroke-width") == 1.2).count(), 1);
+}
+
+#[test]
+fn count_by_numbered_lines_gridline_weight_and_minor_lines() {
+    let grid_lines = |svg: &str, colour: &str| elements(svg).into_iter().filter(|e| e.tag == "line" && e.a("stroke").as_deref() == Some(colour)).count();
+    let numbers = |svg: &str| -> Vec<String> { texts(svg).into_iter().filter(|e| e.a("text-anchor").as_deref() == Some("end") && e.n("x") < 120.0).map(|e| e.text).collect() };
+    // count by 2 on the default 0..12 data: 0, 2, ..., 12 is seven lines
+    let p = with(&[("scale_step", "2")]);
+    assert_eq!(scale_for(&p, &parse(p.s("data")).unwrap(), &opts(&p, &parse(p.s("data")).unwrap())), Scale { lo: 0.0, hi: 12.0, step: 2.0 });
+    assert_eq!(grid_lines(&render(&p), GRID), 7);
+    assert_eq!(numbers(&render(&p)), ["0", "2", "4", "6", "8", "10", "12"]);
+    // every 5th line: 0 and 10
+    let p = with(&[("scale_step", "2"), ("numbers", "Every 5th line")]);
+    assert_eq!(numbers(&render(&p)), ["0", "10"]);
+    assert_eq!(grid_lines(&render(&p), GRID), 7, "every line is still drawn");
+    assert!(numbers(&render(&with(&[("numbers", "No numbers")]))).is_empty());
+    assert_eq!(numbers(&render(&with(&[("numbers", "Every 2nd line")]))), ["0", "10"], "0, 5, 10, 15: every 2nd");
+    // a count-by too small to number every line is thinned so the numbers never touch
+    let p = with(&[("scale_step", "0.25")]);
+    let svg = render(&p);
+    assert_eq!(grid_lines(&svg, GRID), 49, "0 to 12 by 0.25");
+    assert!(numbers(&svg).len() < 20 && audit(&svg).is_empty(), "{:?}", numbers(&svg));
+    // a typed manual range keeps its count-by
+    let p = with(&[("scale_auto", "false"), ("scale_min", "0"), ("scale_max", "30"), ("scale_step", "3")]);
+    assert_eq!(numbers(&render(&p)).len(), 11);
+    // more than 100 lines is refused for the automatic step, and the editor says what works
+    let p = with(&[("scale_step", "0.01")]);
+    assert!(warnings(&p).iter().any(|w| w.contains("more than 100 gridlines") && w.contains("at least 0.12")), "{:?}", warnings(&p));
+    assert_eq!(render(&p), render(&defaults()));
+    // weights: light, standard (the original), bold, on screen and in Print
+    assert_eq!(grid_lines(&render(&with(&[("grid_weight", "Light")])), GRID_LIGHT), 4);
+    assert_eq!(grid_lines(&render(&with(&[("grid_weight", "Bold")])), GRID_BOLD), 4);
+    assert_eq!(grid_lines(&render(&with(&[("grid_weight", "Bold"), ("style", "Print")])), PRINT_GRID_BOLD), 4);
+    assert_eq!(render(&with(&[("grid_weight", "Standard")])), render(&defaults()));
+    // minor lines split each of the 3 blocks into 2, 4 or 5
+    for (m, per) in [("2 per block", 1), ("4 per block", 3), ("5 per block", 4)] {
+        let svg = render(&with(&[("minor", m)]));
+        assert_eq!(grid_lines(&svg, MINOR), 3 * per, "{m}");
+        assert!(audit(&svg).is_empty());
+    }
+    assert_eq!(grid_lines(&render(&with(&[("minor", "5 per block"), ("grid", "false")])), MINOR), 0);
+}
+
+#[test]
+fn new_options_never_collide_over_data_and_sizes() {
+    let sets: Vec<Vec<(&str, &str)>> = vec![
+        vec![("layout", "Stacked"), ("values_at", "Inside")],
+        vec![("layout", "Stacked")],
+        vec![("layout", "Stacked"), ("measure", PERCENT)],
+        vec![("values_at", "Inside"), ("key", "Right")],
+        vec![("key", "Below"), ("title_kind", "Blank line"), ("cat_kind", "Blank line"), ("val_kind", "Blank line")],
+        vec![("key", "Right"), ("orient", "Horizontal"), ("values_at", "Inside")],
+        vec![("scale_step", "1"), ("numbers", "Every 2nd line"), ("minor", "4 per block"), ("grid_weight", "Bold")],
+        vec![("look", "Black and white"), ("fill_list", "Dots, Black, White"), ("key", "Below")],
+    ];
+    let mut bad = Vec::new();
+    let mut data: Vec<(&str, String)> = data_sets().into_iter().filter(|(n, _)| ["default", "two", "thirteen", "one", "zeros_ties", "big", "two_many_long"].contains(n)).collect();
+    data.push(("three", THREE.into()));
+    data.push(("means", MEANS.into()));
+    data.push(("two_err", TWO_ERR.into()));
+    data.push(("six", "Sport, Group with a long name A, B, C, D, E, F\nSoccer, 12, 10, 8, 9, 1, 0\nTennis, 5, 8, 6, 4, 7, 7\nSwimming and diving, 9, 14, 5, 7, 2, 3".into()));
+    for (name, d) in &data {
+        for set in &sets {
+            for orient in ["Vertical", "Horizontal"] {
+                for size in ["Large", "Small"] {
+                    let mut p = with(set);
+                    p.set_s("data", d);
+                    if !set.iter().any(|(k, _)| *k == "orient") {
+                        p.set_s("orient", orient);
+                    }
+                    p.set_s("label_size", size);
+                    p.set_s("err_note", "Error bars show \u{b1}1 standard error of the mean, from three trials of each");
+                    let (stu, key) = crate::figures::answer_pair(&def(), &p).unwrap();
+                    for svg in [stu, key] {
+                        for b in audit(&svg) {
+                            bad.push(format!("{name} {set:?} {orient} {size}: {b}"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad[..bad.len().min(20)].join("\n"));
+}
+
+#[test]
+fn old_saved_figures_render_as_before_the_new_options() {
+    // every new option at its default is the chart as it was: a saved figure (which stores only
+    // the old keys) loads with these defaults
+    let new_keys = ["layout", "values_at", "scale_step", "numbers", "grid_weight", "minor", "err_caps", "err_note", "look", "fill_list", "key", "title_kind", "cat_kind", "val_kind"];
+    let defs = params();
+    for k in new_keys {
+        assert!(defs.iter().any(|d| d.key == k), "{k} is a param");
+    }
+    let defaults = defaults();
+    assert_eq!(defaults.s("layout"), "Side by side");
+    assert_eq!(defaults.s("values_at"), "At the end");
+    assert_eq!(defaults.f("scale_step"), 0.0);
+    assert_eq!(defaults.s("key"), "Above");
+    assert_eq!(defaults.s("grid_weight"), "Standard");
+    // the two-group example, Print, horizontal: the new keys absent or at their defaults agree
+    // the examples that existed before these options (they set none of them)
+    for ex in examples(ID).unwrap().into_iter().filter(|e| !e.params.iter().any(|(k, _)| new_keys.contains(k))) {
+        let mut p = Params::defaults(&params());
+        for (k, v) in &ex.params {
+            p.0.insert(k.to_string(), v.clone());
+        }
+        let before = render(&p);
+        for (k, _) in new_keys.iter().map(|k| (*k, ())) {
+            let d = defs.iter().find(|d| d.key == k).unwrap().default.clone();
+            p.0.insert(k.to_string(), d);
+        }
+        assert_eq!(before, render(&p), "{}", ex.name);
+    }
+}

@@ -518,8 +518,8 @@ fn lines_for(m: &Model, i: usize, mode: &str, dec: Decs, computed: bool) -> Vec<
 // ---- fills ----
 
 #[derive(Clone, Debug)]
-struct Paint {
-    css: String,
+pub(crate) struct Paint {
+    pub(crate) css: String,
     /// Dark enough for white type, plain light, or a pattern (type sits on a white plate).
     kind: u8,
 }
@@ -601,7 +601,7 @@ fn solid(hex: &str) -> Paint {
 }
 
 /// The fill named by `tok` (a Fills token typed by the teacher), or `None` when blank/unknown.
-fn named(tok: &str, print: bool) -> Option<Paint> {
+pub(crate) fn named(tok: &str, print: bool) -> Option<Paint> {
     let t = tok.trim().to_ascii_lowercase().replace(['-', ' '], "");
     let colour = |hex: &str, i: usize| Some(if print { bw(i) } else { solid(hex) });
     match t.as_str() {
@@ -621,7 +621,7 @@ fn named(tok: &str, print: bool) -> Option<Paint> {
     }
 }
 
-fn patterns() -> String {
+pub(crate) fn patterns() -> String {
     let line = |d: &str, w: f64| format!(r##"<path d="{d}" stroke="#444" stroke-width="{w}" fill="none"/>"##);
     let fwd = "M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4";
     let back = "M-2,6 l4,4 M0,0 l8,8 M6,-2 l4,4";

@@ -30,6 +30,19 @@ pub const PERCENT: &str = "Relative frequency (percent)";
 pub const ORDERS: [&str; 5] = ["As typed", "Tallest first", "Shortest first", "A to Z", "Pareto (tallest first, cumulative line)"];
 pub const PARETO: &str = ORDERS[4];
 pub const BLANKS: [&str; 3] = ["The values on the bars", "The bars", "The scale numbers"];
+/// Most groups (count columns) per category.
+pub const MAX_GROUPS: usize = 6;
+const ORDINALS: [&str; MAX_GROUPS] = ["first", "second", "third", "fourth", "fifth", "sixth"];
+pub const LAYOUTS: [&str; 2] = ["Side by side", "Stacked"];
+pub const VALUES_AT: [&str; 2] = ["At the end", "Inside"];
+pub const LOOKS: [&str; 3] = ["Color", "Black and white", "White"];
+pub const KEYS: [&str; 4] = ["Above", "Right", "Below", "None"];
+pub const TITLE_KINDS: [&str; 2] = ["Text", "Blank line"];
+pub const NUMBERS: [&str; 5] = ["Every line", "Every 2nd line", "Every 5th line", "Every 10th line", "No numbers"];
+pub const GRID_WEIGHTS: [&str; 3] = ["Light", "Standard", "Bold"];
+pub const MINORS: [&str; 4] = ["None", "2 per block", "4 per block", "5 per block"];
+/// Most gridlines a typed count-by may draw across the value axis.
+pub const MAX_LINES: f64 = 100.0;
 const FONT: &str = "Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif";
 /// Print's bars and gridlines. The shared Print palette's first series is a plain `#d9d9d9` wash
 /// and its grid is `#cccccc`: both are lighter than a 66% bitonal copy's threshold, so a bar
@@ -59,21 +72,36 @@ pub fn def() -> FigureDef {
 fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::long("data", "Categories and counts", "Walk, 12\nCar, 9\nBus, 6\nBike, 3")
-            .hint("One category per line: its name, a comma, then how many. A second count after another comma compares two groups. A comma between groups of three digits (1,200, no space after it) or spaces between them (1 200) are thousands groups, so Walk, 1,200 is 1200. A first line of headings (Way, Boys, Girls) names the axis and the groups"),
-        ParamDef::text("name1", "First group's name", "").hint("Shown in the legend when there are two counts per line; blank uses the headings line, or Group 1"),
+            .hint("One category per line: its name, a comma, then how many. More counts after more commas compare groups (up to six). A comma between groups of three digits (1,200, no space after it) or spaces between them (1 200) are thousands groups, so Walk, 1,200 is 1200. A first line of headings (Way, Boys, Girls) names the axis and the groups; a heading of \u{b1}, SEM or SD makes that column the error bars of the column before it (Plant, Height, \u{b1})"),
+        ParamDef::text("name1", "First group's name", "").hint("Shown in the key when there are two or more counts per line; blank uses the headings line, or Group 1"),
         ParamDef::text("name2", "Second group's name", "").hint("Blank uses the headings line, or Group 2"),
+        ParamDef::choice("layout", "Several groups", &LAYOUTS, LAYOUTS[0]).hint("Stacked puts a category's groups end to end in one bar, so its length is the category's total; with relative frequency each bar is 100% of its category"),
         ParamDef::choice("orient", "Bars", &["Vertical", "Horizontal"], "Vertical"),
         ParamDef::choice("measure", "Bar height", &[COUNT, PERCENT], COUNT).hint("Relative frequency is each category's percent of its group's total, so each group's bars add to 100%"),
         ParamDef::choice("order", "Order", &ORDERS, "As typed").hint("Categories have no natural order unless they are ordered words (like Never, Sometimes, Often): keep those as typed"),
         ParamDef::choice("gap", "Gap between bars", &["Narrow", "Medium", "Wide"], "Medium").hint("Bars of a bar chart never touch: the categories are separate"),
         ParamDef::bool("values", "Write the value on each bar", true),
+        ParamDef::choice("values_at", "Values sit", &VALUES_AT, VALUES_AT[0]).hint("Inside writes each value in its bar, on a white chip; a bar too short for it keeps its value at the end"),
         ParamDef::int("decimals", "Decimals in percents", 0, 2, 0),
         ParamDef::bool("scale_auto", "Choose the scale automatically", true),
         ParamDef::float("scale_min", "Scale start", 0.0, 1e9, 1.0, 0.0).hint("Anything above 0 cuts the bars short, so their lengths are no longer in proportion"),
         ParamDef::float("scale_max", "Scale top", 0.0, 1e12, 1.0, 20.0),
+        ParamDef::float("scale_step", "Count by (0 = automatic)", 0.0, 1e12, 1.0, 0.0).hint("The gap between gridlines. The automatic scale then runs up to the first multiple of it that holds the tallest bar"),
+        ParamDef::choice("numbers", "Numbered gridlines", &NUMBERS, NUMBERS[0]),
         ParamDef::bool("grid", "Gridlines", true),
+        ParamDef::choice("grid_weight", "Gridline weight", &GRID_WEIGHTS, GRID_WEIGHTS[1]).hint("Bold survives a photocopy"),
+        ParamDef::choice("minor", "Minor gridlines", &MINORS, MINORS[0]).hint("Thinner lines splitting each block between two gridlines"),
+        ParamDef::bool("err_caps", "Crossbars on the error bars", true),
+        ParamDef::text("err_note", "Note under the graph", "").hint("Says what the error bars show, like Error bars show \u{b1}1 SEM"),
+        ParamDef::choice("look", "Fills", &LOOKS, LOOKS[0]).hint("Black and white uses greys and hatching that photocopy; White leaves every bar for students to shade"),
+        ParamDef::list("fill_list", "A group's own fill", "")
+            .hint("Fills in group order, separated by commas, blank for the automatic one: Blue, Red, Green, Orange, Purple, Gray, White, Hatching, Dots, Cross-hatching, Back hatching, Black"),
+        ParamDef::choice("key", "Key", &KEYS, KEYS[0]),
+        ParamDef::choice("title_kind", "Chart title is", &TITLE_KINDS, TITLE_KINDS[0]).hint("A blank line for students to write the title on; the key writes the typed title on it"),
         ParamDef::text("title", "Title", ""),
+        ParamDef::choice("cat_kind", "Category axis title is", &TITLE_KINDS, TITLE_KINDS[0]),
         ParamDef::text("cat_title", "Category axis title", ""),
+        ParamDef::choice("val_kind", "Value axis title is", &TITLE_KINDS, TITLE_KINDS[0]),
         ParamDef::text("val_title", "Value axis title (blank = the bar height)", ""),
         ParamDef::choice("blank", "Student copy leaves out", &BLANKS, BLANKS[0])
             .hint("The bars: students draw them from a table of the counts. The scale numbers: students number the axis from the values on the bars"),
@@ -88,7 +116,11 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
     match (fig, key) {
         (ID, "scale_min" | "scale_max") => !p.b("scale_auto"),
         (ID, "decimals") => p.s("measure") == PERCENT || p.b("questions"),
-        (ID, "name1" | "name2") => parse(p.s("data")).is_ok_and(|t| t.groups == 2),
+        (ID, "name1" | "name2" | "layout" | "key") => parse(p.s("data")).is_ok_and(|t| t.groups >= 2),
+        (ID, "fill_list") => p.s("look") != LOOKS[2],
+        (ID, "values_at") => p.b("values"),
+        (ID, "grid_weight" | "minor") => p.b("grid"),
+        (ID, "err_caps" | "err_note") => parse(p.s("data")).is_ok_and(|t| t.has_err),
         _ => true,
     }
 }
@@ -134,6 +166,26 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
                     ("title", s("Is Brand A really twice as popular?")),
                 ],
             },
+            Example {
+                name: "Stacked: how each year travels",
+                params: vec![
+                    ("data", s("Year, Walk, Bus, Car\nYear 7, 12, 10, 8\nYear 8, 15, 8, 6\nYear 9, 9, 14, 5")),
+                    ("layout", s(LAYOUTS[1])),
+                    ("values_at", s(VALUES_AT[1])),
+                    ("key", s("Below")),
+                    ("title", s("How students travel to school")),
+                    ("val_title", s("Number of students")),
+                ],
+            },
+            Example {
+                name: "Error bars: mean plant height",
+                params: vec![
+                    ("data", s("Treatment, Height, SEM\nNone, 12.4, 1.1\nFertilizer A, 18.9, 1.6\nFertilizer B, 15.2, 2.3")),
+                    ("err_note", s("Error bars show \u{b1}1 SEM")),
+                    ("val_title", s("Mean height (cm)")),
+                    ("look", s("Black and white")),
+                ],
+            },
         ],
         _ => return None,
     })
@@ -144,10 +196,13 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cat {
     pub name: String,
-    /// One count per group.
+    /// One count per group, in units of 10^-[`Table::dec`] (whole counts when `dec` is 0).
     pub counts: Vec<u64>,
     /// The (1-based) line it was first typed on.
     pub line: usize,
+    /// One error-bar size per group (in the values' own unit, not scaled), from an error column
+    /// (`±`, SEM, SD) after that group's column; `None` for no error bar.
+    pub errs: Vec<Option<f64>>,
 }
 
 /// Categories typed more than once and merged: the name as first typed, its lines, and each
@@ -173,11 +228,33 @@ pub struct Table {
     pub ambiguous: Vec<(usize, String, Vec<String>, u64)>,
     /// Lines with a comma inside a number but no three digits after it: line, text, its two sides.
     pub short_comma: Vec<(usize, String, u64, u64)>,
+    /// Decimal places the values need (0 to 3): every count is stored times 10^dec.
+    pub dec: u32,
+    /// The headings line named error columns (`±`, SEM, SD).
+    pub has_err: bool,
 }
 
 impl Table {
     pub fn total(&self, g: usize) -> u64 {
         self.cats.iter().map(|c| c.counts[g]).sum()
+    }
+    /// The size of one stored unit: 1 for whole counts, 0.1 for one decimal place.
+    pub fn unit(&self) -> f64 {
+        1.0 / 10f64.powi(self.dec as i32)
+    }
+    /// A stored value as printed: thousands commas, and its decimal places (no trailing zeros).
+    pub fn fmt(&self, v: u64) -> String {
+        if self.dec == 0 {
+            return fmt_count(v);
+        }
+        let p = 10u64.pow(self.dec);
+        let frac = format!("{:0w$}", v % p, w = self.dec as usize);
+        let frac = frac.trim_end_matches('0');
+        if frac.is_empty() { fmt_count(v / p) } else { format!("{}.{frac}", fmt_count(v / p)) }
+    }
+    /// A stored value as plain digits (no thousands commas), for a line the teacher can type.
+    pub fn plain(&self, v: u64) -> String {
+        plain_milli(v * 10u64.pow(3 - self.dec))
     }
 }
 
@@ -563,7 +640,62 @@ enum CountErr {
     TooBig(f64),
 }
 
+/// Values are read in thousandths: a value may have up to three decimal places (a mean, 12.4),
+/// and the table keeps the fewest places any value needs ([`Table::dec`]).
+const MILLI: u64 = 1000;
+
+/// A value typed in a cell, in thousandths (`12.4` is 12400).
 fn parse_count(cell: &str) -> Result<u64, CountErr> {
+    let whole = parse_whole(cell);
+    match whole {
+        Ok(v) => Ok(v * MILLI),
+        Err(CountErr::Fraction(v)) => {
+            let m = v * MILLI as f64;
+            if (m - m.round()).abs() <= 1e-6 * m.abs().max(1.0) {
+                Ok(m.round() as u64)
+            } else {
+                Err(CountErr::Fraction(v))
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// A heading cell that names an error column: `±`, `+/-`, `+-`, SEM, SD or SE (with or without
+/// the ± in front). Its numbers are the error bars of the column before it.
+pub fn err_head(c: &str) -> bool {
+    let t = c.trim().to_lowercase();
+    let (signed, rest) = match t.strip_prefix('\u{b1}').or_else(|| t.strip_prefix("+/-")).or_else(|| t.strip_prefix("+-")) {
+        Some(r) => (true, r.trim().to_string()),
+        None => (false, t.clone()),
+    };
+    let word: String = rest.chars().filter(|c| !matches!(c, '.' | ' ')).collect();
+    let word = word.trim_start_matches('1');
+    (signed && word.is_empty()) || matches!(word, "sem" | "sd" | "se" | "stdev" | "stddev" | "error" | "errors")
+}
+
+/// An error-bar size typed in an error column: a number 0 or more (a leading ± is allowed), or
+/// nothing for no error bar on that bar.
+fn parse_err(cell: &str) -> Result<Option<f64>, String> {
+    let t = cell.trim();
+    let t = t.strip_prefix('\u{b1}').or_else(|| t.strip_prefix("+/-")).or_else(|| t.strip_prefix("+-")).unwrap_or(t).trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    match t.parse::<f64>() {
+        Ok(v) if numeric_like(t) && v.is_finite() && v >= 0.0 && v <= MAX_COUNT as f64 => Ok(Some(v)),
+        _ => Err(t.to_string()),
+    }
+}
+
+/// Plain digits of a value held in thousandths (`12400` is `12.4`): no thousands commas, so the
+/// text can be typed back.
+fn plain_milli(v: u64) -> String {
+    let (w, f) = (v / MILLI, v % MILLI);
+    if f == 0 { w.to_string() } else { format!("{w}.{}", format!("{f:03}").trim_end_matches('0')) }
+}
+
+fn parse_whole(cell: &str) -> Result<u64, CountErr> {
     let c = cell.trim().replace('\u{2212}', "-");
     if c.is_empty() {
         return Err(CountErr::Missing);
@@ -654,9 +786,22 @@ pub fn parse(text: &str) -> Result<Table, String> {
         if let Ok(Cells { cells, .. }) = split_line(l) {
             // a heading cell is a name: a cell is a count only if the whole cell is one, so
             // `9th grade` and `None` name groups and `12 students` is a mistyped count (MED 1)
-            let words_only = cells[1..].iter().all(|c| name_cell(c));
+            let words_only = cells[1..].iter().all(|c| name_cell(c) || err_head(c));
             let separated = l.contains('\t') || l.contains(',') || l.contains(';');
             if words_only && (cells.len() >= 2 || !separated) && !cells[0].is_empty() {
+                // an error column belongs to the column before it: never first, never two in a row
+                let errs: Vec<bool> = cells[1..].iter().map(|c| err_head(c)).collect();
+                if separated && errs.iter().any(|e| *e) {
+                    if let Some(j) = (0..errs.len()).find(|&j| errs[j] && (j == 0 || errs[j - 1])) {
+                        return Err(format!(
+                            "Line {n} ({}) is a line of headings, and its column {} is an error column, but an error column holds the error bars of the column of values just before it. Put each {} column right after its values, like {}.",
+                            q(l),
+                            q(cells[j + 1].trim()),
+                            q("\u{b1}"),
+                            q("Way, Boys, \u{b1}, Girls, \u{b1}")
+                        ));
+                    }
+                }
                 head = Some((n, l.to_string(), if separated { cells } else { Vec::new() }));
                 start = 1;
             } else {
@@ -688,6 +833,11 @@ pub fn parse(text: &str) -> Result<Table, String> {
             }
         }
     }
+    // the columns' roles when the headings name error columns: true for an error column
+    let roles: Option<Vec<bool>> = head.as_ref().and_then(|h| {
+        let r: Vec<bool> = h.2.iter().skip(1).map(|c| err_head(c)).collect();
+        r.iter().any(|e| *e).then_some(r)
+    });
     let mut cats: Vec<Cat> = Vec::new();
     let mut merged: Vec<Merge> = Vec::new();
     let mut ambiguous: Vec<(usize, String, Vec<String>, u64)> = Vec::new();
@@ -728,14 +878,23 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 q(&example_line(&name, &vec!["0".to_string(); want]))
             ));
         }
-        if raw.len() > 2 {
-            // MAJOR: no rewrite. The old advice ("change line n to …" with the first two counts)
+        if let Some(r) = &roles {
+            if raw.len() > r.len() {
+                return Err(format!(
+                    "Line {n} ({}) holds {} cells after its name, but the headings line names {} columns. Nothing is dropped for you here: add a heading for the extra column, or take the extra cell off line {n}.",
+                    q(l),
+                    raw.len(),
+                    r.len()
+                ));
+            }
+        } else if raw.len() > MAX_GROUPS {
+            // MAJOR: no rewrite. The old advice ("change line n to …" with the first counts)
             // silently dropped the extra count; the limit is stated and the data is left alone
             // quote each count as it was typed (`1 200` stays `1 200`, not `1,200`)
             let mut at = 0;
             let shown: Vec<String> = raw
                 .iter()
-                .map(|c| match (parse_count(c), typed_count(l, at, parse_count(c).unwrap_or(0))) {
+                .map(|c| match (parse_count(c), typed_count(l, at, parse_count(c).unwrap_or(0) / MILLI)) {
                     (Ok(_), Some((text, end))) => {
                         at = end;
                         q(&text)
@@ -744,21 +903,44 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 })
                 .collect();
             return Err(format!(
-                "Line {n} ({}) holds {} ({}), and this figure takes at most two counts per category: one count, or two to compare two groups. Nothing is dropped for you here: type the line with two counts, or draw the extra counts in a second chart (a second table).",
+                "Line {n} ({}) holds {} ({}), and this figure takes at most {MAX_GROUPS} counts per category, one for each group. Nothing is dropped for you here: type the line with at most {MAX_GROUPS} counts, or draw the extra counts in a second chart (a second table).",
                 q(l),
                 plural(raw.len(), "count", "counts"),
                 and_list(&shown)
             ));
         }
         let mut counts = Vec::new();
+        let mut errs: Vec<Option<f64>> = Vec::new();
         for (i, cell) in raw.iter().enumerate() {
             let fix = |v: String| {
                 let mut c = raw.clone();
                 c[i] = v;
                 format!("change line {n} to {}", q(&example_line(&name, &c)))
             };
+            if roles.as_ref().is_some_and(|r| r[i]) {
+                // an error column: the size of the error bar on the value just before it
+                match parse_err(cell) {
+                    Ok(e) => {
+                        if let Some(last) = errs.last_mut() {
+                            *last = e;
+                        }
+                    }
+                    Err(bad) => {
+                        return Err(format!(
+                            "Line {n} ({}): {} is in an error column, and an error bar's size is a number 0 or more (or nothing, for no error bar). For example, {}.",
+                            q(l),
+                            q(&bad),
+                            fix("1".into())
+                        ));
+                    }
+                }
+                continue;
+            }
             match parse_count(cell) {
-                Ok(v) => counts.push(v),
+                Ok(v) => {
+                    counts.push(v);
+                    errs.push(None);
+                }
                 Err(CountErr::Missing) => {
                     return Err(format!("Line {n} ({}) has an empty count. Type 0 if there were none: {}.", q(l), fix("0".into())));
                 }
@@ -809,11 +991,10 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 }
                 Err(CountErr::Fraction(v)) => {
                     return Err(format!(
-                        "Line {n} ({}): {} is not a whole number, and a count is. Round it: {} (or {}).",
+                        "Line {n} ({}): {} has more than three decimal places, and a value takes at most three. Round it: {}.",
                         q(l),
                         q(cell),
-                        fix(digits(v.floor())),
-                        digits(v.ceil())
+                        fix(plain_milli((v * MILLI as f64).round().clamp(0.0, (MAX_COUNT * MILLI) as f64) as u64))
                     ));
                 }
                 Err(CountErr::TooBig(v)) => {
@@ -843,7 +1024,7 @@ pub fn parse(text: &str) -> Result<Table, String> {
             let (fn_, fl, fc) = first_row.as_ref().expect("the first line sets the shape");
             let hint = |a: &Option<Vec<String>>, line: &str, c: &[u64]| -> String {
                 match a {
-                    Some(a) if a.len() == 3 => format!(" {} is one count, {}; two counts would be {}.", q(line), fmt_count(c[0]), q(&example_line(&a[0], &a[1..]))),
+                    Some(a) if a.len() == 3 => format!(" {} is one count, {}; two counts would be {}.", q(line), fmt_count(c[0] / MILLI), q(&example_line(&a[0], &a[1..]))),
                     _ => String::new(),
                 }
             };
@@ -852,10 +1033,10 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 "Line {n} ({}) holds {} ({}), but line {fn_} ({}) holds {} ({}). Every line must hold the same number of counts: either add the missing count on the lines that hold fewer, or write one count on every line.{alt_hint} A comma with no space after it, between groups of three digits, is a thousands separator, so a thousands group is one count.",
                 q(l),
                 plural(counts.len(), "count", "counts"),
-                counts.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" and "),
+                counts.iter().map(|v| plain_milli(*v)).collect::<Vec<_>>().join(" and "),
                 q(fl),
                 plural(groups, "count", "counts"),
-                fc.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" and "),
+                fc.iter().map(|v| plain_milli(*v)).collect::<Vec<_>>().join(" and "),
             ));
         }
         // J1: the thousands reading was a choice; keep it so the editor can say which it used
@@ -864,7 +1045,7 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 let other: Option<Vec<u64>> = a[1..].iter().map(|c| parse_count(c).ok()).collect();
                 if let Some(other) = other {
                     if (1..=2).contains(&other.len()) && other[0] != counts[0] {
-                        ambiguous.push((n, l.to_string(), a.clone(), counts[0]));
+                        ambiguous.push((n, l.to_string(), a.clone(), counts[0] / MILLI));
                     }
                 }
             }
@@ -897,15 +1078,27 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 for (a, b) in cat.counts.iter_mut().zip(&counts) {
                     *a += b;
                 }
+                // an error bar belongs to one line's value, not to a sum of lines
+                cat.errs = vec![None; cat.counts.len()];
             }
             None => {
                 index.insert(key, cats.len());
-                cats.push(Cat { name, counts, line: n });
+                cats.push(Cat { name, counts, line: n, errs });
             }
         }
     }
+    // the fewest decimal places every value needs; the counts are stored at that precision
+    let all = || cats.iter().flat_map(|c| c.counts.iter()).chain(merged.iter().flat_map(|m| m.parts.iter().flatten()));
+    let dec = (0..=3u32).find(|d| all().all(|v| v % 10u64.pow(3 - d) == 0)).unwrap_or(3);
+    let div = 10u64.pow(3 - dec);
+    for c in cats.iter_mut() {
+        c.counts.iter_mut().for_each(|v| *v /= div);
+    }
+    for m in merged.iter_mut() {
+        m.parts.iter_mut().flatten().for_each(|v| *v /= div);
+    }
     if cats.len() > MAX_CATS {
-        let (other, n_small) = combine_smallest(&cats, groups);
+        let (other, n_small) = combine_smallest(&cats, groups, dec);
         return Err(format!(
             "There are {} categories; this chart takes at most {MAX_CATS}. Combine the {n_small} smallest into one line, like {}.",
             cats.len(),
@@ -915,19 +1108,19 @@ pub fn parse(text: &str) -> Result<Table, String> {
     for g in 0..groups {
         if cats.iter().all(|c| c.counts[g] == 0) {
             let c0 = &cats[0];
-            let mut c: Vec<String> = c0.counts.iter().map(|v| v.to_string()).collect();
+            let mut c: Vec<String> = c0.counts.iter().map(|v| plain_milli(v * div)).collect();
             c[g] = "1".into();
-            let which = if groups == 1 { "Every count is 0".to_string() } else { format!("Every count in the {} group is 0", ["first", "second"][g]) };
+            let which = if groups == 1 { "Every count is 0".to_string() } else { format!("Every count in the {} group is 0", ORDINALS[g]) };
             return Err(format!("{which}, so there are no bars to draw. For example, change line {} to {}.", c0.line, q(&example_line(&c0.name, &c))));
         }
     }
-    Ok(Table { cats, groups, head, merged, ambiguous, short_comma: short_commas })
+    Ok(Table { cats, groups, head, merged, ambiguous, short_comma: short_commas, dec, has_err: roles.is_some() })
 }
 
 /// The rule the too-many message gives: the smallest categories (by their total over the groups,
 /// the later-typed first among equals) that leave `MAX_CATS - 1` standing, combined into a line
 /// named Other. Returns that line and how many were combined.
-pub fn combine_smallest(cats: &[Cat], groups: usize) -> (String, usize) {
+pub fn combine_smallest(cats: &[Cat], groups: usize, dec: u32) -> (String, usize) {
     let mut idx: Vec<usize> = (0..cats.len()).collect();
     let tot = |i: usize| cats[i].counts.iter().sum::<u64>();
     idx.sort_by(|&a, &b| tot(a).cmp(&tot(b)).then(cats[b].line.cmp(&cats[a].line)));
@@ -938,7 +1131,8 @@ pub fn combine_smallest(cats: &[Cat], groups: usize) -> (String, usize) {
             *s += c;
         }
     }
-    (example_line("Other", &sums.iter().map(|v| v.to_string()).collect::<Vec<_>>()), n_small)
+    let div = 10u64.pow(3 - dec.min(3));
+    (example_line("Other", &sums.iter().map(|v| plain_milli(v * div)).collect::<Vec<_>>()), n_small)
 }
 
 // ───────────────────────── numbers and text ─────────────────────────
@@ -1055,27 +1249,90 @@ struct Opts {
     blank: usize,
     questions: bool,
     print: bool,
-    fills: Fills,
     k: f64,
-    names: [String; 2],
+    /// One name per group.
+    names: Vec<String>,
     /// Pareto asked for and drawable (one group, vertical bars).
     pareto: bool,
+    /// Two or more groups drawn end to end in one bar per category.
+    stacked: bool,
+    /// Values written inside the bars (on a white chip) rather than at their ends.
+    inside: bool,
+    err_caps: bool,
+    err_note: String,
+    /// Each group's fill, and the pattern definitions the fills need.
+    fill: Vec<String>,
+    defs: String,
+    /// Index into [`KEYS`].
+    key: usize,
+    /// Titles drawn as a blank line for students (the key writes the typed title on it).
+    title_line: bool,
+    cat_line: bool,
+    val_line: bool,
+    /// Index into [`NUMBERS`], [`GRID_WEIGHTS`] and [`MINORS`].
+    numbers: usize,
+    grid_weight: usize,
+    minor: usize,
+    /// The scale counts by a typed step (set once the scale is chosen).
+    typed_step: bool,
+}
+
+/// Each group's fill and the `<defs>` they need: a picked fill (`fill_list`), else the automatic
+/// one: the shared series colours, or in Print and Black and white a solid grey first and the
+/// shared hatches after. White makes every bar white for students to shade.
+fn fills_for(p: &Params, groups: usize) -> (Vec<String>, String) {
+    let print = p.s("style") == "Print";
+    let look = p.s("look");
+    if look == LOOKS[2] {
+        return (vec!["#ffffff".to_string(); groups], String::new());
+    }
+    let bw = print || look == LOOKS[1];
+    let mut hatch = p.clone();
+    hatch.set_s("style", if bw { "Print" } else { "Colour" });
+    let auto = Fills::new(&hatch);
+    let picks: Vec<String> = p.s("fill_list").split(',').map(|s| s.trim().to_string()).collect();
+    let mut pie_pats = false;
+    let mut shared = false;
+    let fill: Vec<String> = (0..groups)
+        .map(|g| match picks.get(g).and_then(|t| crate::figures::stats::pie::named(t, bw)) {
+            Some(pk) => {
+                pie_pats |= pk.css.starts_with("url(#pie-p");
+                pk.css
+            }
+            None if bw && g == 0 => PRINT_BAR.to_string(),
+            None => {
+                shared |= bw;
+                auto.series(g)
+            }
+        })
+        .collect();
+    let mut defs = if shared || print { auto.defs() } else { String::new() };
+    if pie_pats {
+        defs.push_str(&crate::figures::stats::pie::patterns());
+    }
+    (fill, defs)
 }
 
 fn opts(p: &Params, t: &Table) -> Opts {
     let head_cells = t.head.as_ref().map(|h| h.2.clone()).unwrap_or_default();
-    let names = [0, 1].map(|g| {
-        let typed = p.s(["name1", "name2"][g]).trim();
-        let from_head = head_cells.get(g + 1).map(|s| s.trim()).unwrap_or("");
-        let n = if !typed.is_empty() { typed } else if !from_head.is_empty() { from_head } else { ["Group 1", "Group 2"][g] };
-        clip_chars(n, MAX_NAME)
-    });
+    // the headings of the value columns, skipping error columns
+    let series_heads: Vec<String> = head_cells.iter().skip(1).filter(|c| !(t.has_err && err_head(c))).cloned().collect();
+    let names: Vec<String> = (0..t.groups.max(2))
+        .map(|g| {
+            let typed = if g < 2 { p.s(["name1", "name2"][g]).trim().to_string() } else { String::new() };
+            let from_head = series_heads.get(g).map(|s| s.trim().to_string()).unwrap_or_default();
+            let n = if !typed.is_empty() { typed } else if !from_head.is_empty() { from_head } else { format!("Group {}", g + 1) };
+            clip_chars(&n, MAX_NAME)
+        })
+        .collect();
     let order = ORDERS.iter().position(|o| *o == p.s("order")).unwrap_or(0);
     let horizontal = p.s("orient") == "Horizontal";
     let cat_title = match p.s("cat_title").trim() {
         "" => head_cells.first().map(|s| s.trim().to_string()).unwrap_or_default(),
         s => s.to_string(),
     };
+    let (fill, defs) = fills_for(p, t.groups);
+    let pos = |list: &[&str], key: &str| list.iter().position(|o| *o == p.s(key)).unwrap_or(0);
     Opts {
         horizontal,
         percent: p.s("measure") == PERCENT,
@@ -1094,32 +1351,87 @@ fn opts(p: &Params, t: &Table) -> Opts {
         blank: BLANKS.iter().position(|b| *b == p.s("blank")).unwrap_or(0),
         questions: p.b("questions"),
         print: p.s("style") == "Print",
-        fills: Fills::new(p),
         k: svg::label_factor(p.s("label_size")),
         names,
         pareto: order == 4 && t.groups == 1 && !horizontal,
+        stacked: p.s("layout") == LAYOUTS[1] && t.groups >= 2,
+        inside: p.s("values_at") == VALUES_AT[1],
+        err_caps: p.b("err_caps"),
+        err_note: clip_chars(p.s("err_note").trim(), MAX_TITLE),
+        fill,
+        defs,
+        key: pos(&KEYS, "key"),
+        title_line: p.s("title_kind") == TITLE_KINDS[1],
+        cat_line: p.s("cat_kind") == TITLE_KINDS[1],
+        val_line: p.s("val_kind") == TITLE_KINDS[1],
+        numbers: pos(&NUMBERS, "numbers"),
+        grid_weight: if p.s("grid_weight").is_empty() { 1 } else { pos(&GRID_WEIGHTS, "grid_weight") },
+        minor: pos(&MINORS, "minor"),
+        typed_step: false,
     }
 }
 
-/// Bar heights: counts, or percents of each group's own total.
+/// Bar heights: counts (in the values' own unit), or percents of each group's own total.
 fn heights(t: &Table, percent: bool) -> Vec<Vec<f64>> {
     let totals: Vec<u64> = (0..t.groups).map(|g| t.total(g)).collect();
-    t.cats.iter().map(|c| (0..t.groups).map(|g| if percent { c.counts[g] as f64 * 100.0 / totals[g].max(1) as f64 } else { c.counts[g] as f64 }).collect()).collect()
+    let unit = t.unit();
+    t.cats.iter().map(|c| (0..t.groups).map(|g| if percent { c.counts[g] as f64 * 100.0 / totals[g].max(1) as f64 } else { c.counts[g] as f64 * unit }).collect()).collect()
+}
+
+/// The lengths drawn: [`heights`], except that stacked percents are each category's own split,
+/// so every stacked bar is 100%.
+fn drawn_heights(t: &Table, o: &Opts) -> Vec<Vec<f64>> {
+    if !(o.stacked && o.percent) {
+        return heights(t, o.percent);
+    }
+    t.cats
+        .iter()
+        .map(|c| {
+            let tot: u64 = c.counts.iter().sum();
+            c.counts.iter().map(|v| if tot == 0 { 0.0 } else { *v as f64 * 100.0 / tot as f64 }).collect()
+        })
+        .collect()
+}
+
+/// Each bar's error-bar size in the drawn unit (a percent of its group's total on a percent
+/// chart), or `None`. Stacked bars draw none.
+fn err_sizes(t: &Table, o: &Opts) -> Vec<Vec<Option<f64>>> {
+    let totals: Vec<u64> = (0..t.groups).map(|g| t.total(g)).collect();
+    let unit = t.unit();
+    t.cats
+        .iter()
+        .map(|c| {
+            (0..t.groups)
+                .map(|g| match c.errs.get(g).copied().flatten() {
+                    Some(e) if !o.stacked && !o.pareto && e > 0.0 => Some(if o.percent { e * 100.0 / (totals[g].max(1) as f64 * unit) } else { e }),
+                    _ => None,
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// The drawing order of the categories (indices into `t.cats`). Equal bars keep their typed
 /// order: the comparison is an exact integer, and a tie falls back to the typed index, so no
 /// float sum and no sorting algorithm can swap two equal categories.
 pub fn order(t: &Table, percent: bool, how: &str) -> Vec<usize> {
+    order_by(t, percent, false, how)
+}
+
+/// [`order`], for stacked bars too: a stacked bar is as long as its category's total.
+pub fn order_by(t: &Table, percent: bool, stacked: bool, how: &str) -> Vec<usize> {
     let totals: Vec<u64> = (0..t.groups).map(|g| t.total(g)).collect();
     // the sum of a category's two bars, in integers: relative frequencies are c*100/total, so
     // c0*T1 + c1*T0 orders them exactly the way their sum does (LOW 1: no float tie)
     let size = |i: usize| -> u128 {
         let c = &t.cats[i].counts;
-        if !percent || t.groups == 1 {
+        if !percent || t.groups == 1 || stacked {
             c.iter().map(|v| *v as u128).sum()
-        } else {
+        } else if t.groups == 2 {
             c[0] as u128 * totals[1] as u128 + c[1] as u128 * totals[0] as u128
+        } else {
+            // three or more groups: the sum of the shares, to 12 places
+            (c.iter().zip(&totals).map(|(v, tot)| *v as f64 / (*tot).max(1) as f64).sum::<f64>() * 1e12).round() as u128
         }
     };
     let mut idx: Vec<usize> = (0..t.cats.len()).collect();
@@ -1179,6 +1491,12 @@ fn auto_scale(top: f64, counts: bool) -> Scale {
     Scale { lo: 0.0, hi: ((top / step) - 1e-9).ceil().max(1.0) * step, step }
 }
 
+/// The typed count-by, when it is usable on a range of `span` (at most [`MAX_LINES`] gridlines).
+fn typed_step(p: &Params, span: f64) -> Option<f64> {
+    let s = p.f("scale_step");
+    (s.is_finite() && s > 0.0 && span / s <= MAX_LINES + 1e-9).then_some(s)
+}
+
 /// The manual scale when it is usable (finite, top above start).
 fn manual_scale(p: &Params, counts: bool) -> Option<Scale> {
     let (lo, hi) = (p.f("scale_min"), p.f("scale_max"));
@@ -1189,26 +1507,42 @@ fn manual_scale(p: &Params, counts: bool) -> Option<Scale> {
     if counts && hi - lo >= 5.0 {
         step = step.max(1.0);
     }
+    if let Some(s) = typed_step(p, hi - lo) {
+        step = s;
+    }
     Some(Scale { lo, hi, step })
 }
 
+/// The longest bar the scale must hold: the tallest bar plus its error bar, or the longest stack.
+fn longest(t: &Table, o: &Opts) -> f64 {
+    let h = drawn_heights(t, o);
+    if o.stacked {
+        return h.iter().map(|r| r.iter().sum::<f64>()).fold(0.0, f64::max);
+    }
+    let e = err_sizes(t, o);
+    h.iter().zip(&e).flat_map(|(hr, er)| hr.iter().zip(er).map(|(v, e)| v + e.unwrap_or(0.0))).fold(0.0, f64::max)
+}
+
 fn scale_for(p: &Params, t: &Table, o: &Opts) -> Scale {
-    let h = heights(t, o.percent);
-    let top = h.iter().flatten().cloned().fold(0.0, f64::max);
+    let top = longest(t, o);
     if o.pareto {
-        let total = if o.percent { 100.0 } else { t.total(0) as f64 };
+        let total = if o.percent { 100.0 } else { t.total(0) as f64 * t.unit() };
         let mut step = chart::nice_step(total, 5.0);
-        if !o.percent {
+        if !o.percent && t.dec == 0 {
             step = step.max(1.0);
         }
         return Scale { lo: 0.0, hi: total, step };
     }
+    let counts = !o.percent && t.dec == 0;
     if !p.b("scale_auto") {
-        if let Some(s) = manual_scale(p, !o.percent) {
+        if let Some(s) = manual_scale(p, counts) {
             return s;
         }
     }
-    auto_scale(top, !o.percent)
+    if let Some(step) = typed_step(p, top) {
+        return Scale { lo: 0.0, hi: ((top / step) - 1e-9).ceil().max(1.0) * step, step };
+    }
+    auto_scale(top, counts)
 }
 
 fn tick_text(v: f64, percent: bool) -> String {
@@ -1221,10 +1555,22 @@ fn tick_text(v: f64, percent: bool) -> String {
     }
 }
 
-/// The value written on each bar, [cat][group].
+/// The value written on each bar (or each part of a stacked bar), [cat][group].
 fn value_labels(t: &Table, o: &Opts) -> Vec<Vec<String>> {
     let totals: Vec<u64> = (0..t.groups).map(|g| t.total(g)).collect();
-    t.cats.iter().map(|c| (0..t.groups).map(|g| if o.percent { pct_text(c.counts[g], totals[g], o.decimals) } else { fmt_count(c.counts[g]) }).collect()).collect()
+    t.cats
+        .iter()
+        .map(|c| {
+            let row: u64 = c.counts.iter().sum();
+            (0..t.groups)
+                .map(|g| match (o.percent, o.stacked) {
+                    (true, true) => pct_text(c.counts[g], row, o.decimals),
+                    (true, false) => pct_text(c.counts[g], totals[g], o.decimals),
+                    _ => t.fmt(c.counts[g]),
+                })
+                .collect()
+        })
+        .collect()
 }
 
 // ───────────────────────── notes ─────────────────────────
@@ -1288,15 +1634,15 @@ pub fn warnings(p: &Params) -> Vec<String> {
     // MED 1: the first line read as data whose counts are all years is probably a headings line
     if t.head.is_none() && t.groups == 2 && t.cats.len() > 1 {
         let c0 = &t.cats[0];
-        let is_year = |v: u64| (1900..=2100).contains(&v);
+        let is_year = |v: u64| t.dec == 0 && (1900..=2100).contains(&v);
         let later_plain = t.cats[1..].iter().any(|c| c.counts.iter().any(|v| !is_year(*v)));
         if c0.counts.iter().all(|v| is_year(*v)) && later_plain {
             out.push(format!(
                 "Line {} is the category {} with counts {} and {}, but those are years, so it may be a line of headings. If it is, delete line {} and type the group names in {} and {}.",
                 c0.line,
                 q(&c0.name),
-                fmt_count(c0.counts[0]),
-                fmt_count(c0.counts[1]),
+                t.fmt(c0.counts[0]),
+                t.fmt(c0.counts[1]),
                 c0.line,
                 q("Group 1 name"),
                 q("Group 2 name")
@@ -1306,11 +1652,11 @@ pub fn warnings(p: &Params) -> Vec<String> {
     for m in &t.merged {
         let sums: Vec<String> = (0..t.groups)
             .map(|g| {
-                let mut parts: Vec<String> = m.parts.iter().take(6).map(|c| c[g].to_string()).collect();
+                let mut parts: Vec<String> = m.parts.iter().take(6).map(|c| t.plain(c[g])).collect();
                 if m.parts.len() > 6 {
                     parts.push("\u{2026}".into());
                 }
-                format!("{} = {}", parts.join(" + "), m.parts.iter().map(|c| c[g]).sum::<u64>())
+                format!("{} = {}", parts.join(" + "), t.plain(m.parts.iter().map(|c| c[g]).sum::<u64>()))
             })
             .collect();
         let taken: Vec<String> = t.cats.iter().map(|c| name_key(&c.name)).collect();
@@ -1326,9 +1672,15 @@ pub fn warnings(p: &Params) -> Vec<String> {
             k += 1;
         };
         let second = m.lines[1];
-        let counts: Vec<String> = m.parts[1].iter().map(|v| v.to_string()).collect();
+        let counts: Vec<String> = m.parts[1].iter().map(|v| t.plain(*v)).collect();
+        // with error columns a rewritten line would lose its error cells: name the change instead
+        let keep = if t.has_err {
+            format!("rename the category on line {second} to {}; their error bars are left out, because an error bar belongs to one line's value", q(&fresh))
+        } else {
+            format!("change line {second} to {}", q(&example_line(&fresh, &counts)))
+        };
         out.push(format!(
-            "{} is on lines {}, so their counts were added ({}). To keep them apart, change line {second} to {}.",
+            "{} is on lines {}, so their counts were added ({}). To keep them apart, {}.",
             q(&m.name),
             if m.lines.len() <= 6 {
                 and_list(&m.lines.iter().map(|l| l.to_string()).collect::<Vec<_>>())
@@ -1336,7 +1688,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
                 format!("{}, {} and {} more", m.lines[0], m.lines[1], m.lines.len() - 2)
             },
             sums.join("; "),
-            q(&example_line(&fresh, &counts))
+            keep
         ));
     }
     for (key, label, max) in [("title", "Title", MAX_TITLE), ("cat_title", "Category axis title", MAX_AXIS_TITLE), ("val_title", "Value axis title (blank = the bar height)", MAX_AXIS_TITLE)] {
@@ -1345,7 +1697,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
             out.push(format!("{} has {} characters and is cut at {max}. Set {} to {}.", q(label), s.chars().count(), q(label), q(&s.chars().take(max).collect::<String>())));
         }
     }
-    if t.groups == 2 {
+    if t.groups >= 2 {
         for (key, label) in [("name1", "First group's name"), ("name2", "Second group's name")] {
             let s = p.s(key).trim();
             if s.chars().count() > MAX_NAME {
@@ -1354,7 +1706,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
         }
     }
     if o.order == 4 && !o.pareto {
-        if t.groups == 2 {
+        if t.groups >= 2 {
             out.push(format!(
                 "A Pareto chart shows one group, so the bars are sorted tallest first with no cumulative line. Choose {} for {}.",
                 q("Tallest first"),
@@ -1364,8 +1716,12 @@ pub fn warnings(p: &Params) -> Vec<String> {
             out.push(format!("The cumulative line is drawn on vertical bars only, so it is left out. Choose {} for {}.", q("Vertical"), q("Bars")));
         }
     }
-    let h = heights(&t, o.percent);
-    let top = h.iter().flatten().cloned().fold(0.0, f64::max);
+    // what each category reaches (a stack's end, or a bar with its error bar) and its shortest bar
+    let h = drawn_heights(&t, &o);
+    let errs = err_sizes(&t, &o);
+    let reach: Vec<f64> = h.iter().zip(&errs).map(|(r, e)| if o.stacked { r.iter().sum() } else { r.iter().zip(e).map(|(v, e)| v + e.unwrap_or(0.0)).fold(0.0, f64::max) }).collect();
+    let low: Vec<f64> = h.iter().map(|r| if o.stacked { r.iter().sum() } else { r.iter().cloned().fold(f64::INFINITY, f64::min) }).collect();
+    let top = longest(&t, &o);
     let unit = |v: f64| if o.percent { format!("{}%", chart::fmt((v * 100.0).round() / 100.0)) } else { chart::fmt(v) };
     if o.pareto && !p.b("scale_auto") {
         out.push(format!(
@@ -1373,7 +1729,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
             q("Choose the scale automatically")
         ));
     } else if !p.b("scale_auto") {
-        match manual_scale(p, !o.percent) {
+        match manual_scale(p, !o.percent && t.dec == 0) {
             None => {
                 let need = top.max(p.f("scale_min").max(0.0) + 1.0);
                 let need = if o.percent { (need * 100.0).ceil() / 100.0 } else { need.ceil() };
@@ -1389,7 +1745,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
             }
             Some(s) => {
                 if s.lo > 0.0 {
-                    let below: Vec<String> = t.cats.iter().zip(&h).filter(|(_, v)| v.iter().any(|x| *x <= s.lo)).map(|(c, _)| q(&c.name)).collect();
+                    let below: Vec<String> = t.cats.iter().zip(&low).filter(|(_, v)| **v <= s.lo).map(|(c, _)| q(&c.name)).collect();
                     let hidden = if below.is_empty() { String::new() } else { format!(" The bars for {} do not reach the start and do not show.", and_list(&below)) };
                     out.push(format!(
                         "The value axis starts at {}, not 0, so the bars' lengths are not in proportion to the values: a bar twice as long does not show twice as many.{hidden} Set {} to 0.",
@@ -1397,7 +1753,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
                         q("Scale start")
                     ));
                 }
-                let over: Vec<String> = t.cats.iter().zip(&h).filter(|(_, v)| v.iter().any(|x| *x > s.hi + 1e-9)).map(|(c, _)| q(&c.name)).collect();
+                let over: Vec<String> = t.cats.iter().zip(&reach).filter(|(_, v)| **v > s.hi + 1e-9).map(|(c, _)| q(&c.name)).collect();
                 if !over.is_empty() {
                     let need = if o.percent { (top * 100.0).ceil() / 100.0 } else { top };
                     out.push(format!(
@@ -1419,25 +1775,33 @@ pub fn warnings(p: &Params) -> Vec<String> {
     // column adding to 100; when none does, say so and offer the counts instead -- one note for
     // the table, so two groups can never undo each other
     let printed = o.percent && (o.values || o.blank == 1);
+    // the sets of printed percents that should add to 100: each group's column, or with stacked
+    // bars each bar's parts (a stacked percent bar is its own category's split)
+    let sets: Vec<(Vec<u64>, String)> = if o.stacked {
+        t.cats.iter().filter(|c| c.counts.iter().sum::<u64>() > 0).map(|c| (c.counts.clone(), c.name.clone())).collect()
+    } else {
+        (0..t.groups).map(|g| (t.cats.iter().map(|c| c.counts[g]).collect(), o.names[g].clone())).collect()
+    };
     if printed {
-        let column_sum = |g: usize, d: u32| -> u128 { let total = t.total(g); t.cats.iter().map(|c| pct_scaled(c.counts[g], total, d)).sum() };
+        let set_sum = |i: usize, d: u32| -> u128 { let total: u64 = sets[i].0.iter().sum(); sets[i].0.iter().map(|c| pct_scaled(*c, total, d)).sum() };
         let exact = |d: u32| 100 * 10u128.pow(d);
-        let bad = |d: u32| (0..t.groups).any(|g| column_sum(g, d) != exact(d));
+        let bad = |d: u32| (0..sets.len()).any(|i| set_sum(i, d) != exact(d));
         if bad(o.decimals) {
-            let shown: Vec<String> = (0..t.groups)
-                .map(|g| if t.groups == 1 { pct_from_scaled(column_sum(g, o.decimals), o.decimals) } else { format!("{} for {}", pct_from_scaled(column_sum(g, o.decimals), o.decimals), q(&o.names[g])) })
+            let shown: Vec<String> = (0..sets.len())
+                .filter(|&i| !o.stacked || set_sum(i, o.decimals) != exact(o.decimals))
+                .map(|i| if sets.len() == 1 { pct_from_scaled(set_sum(i, o.decimals), o.decimals) } else { format!("{} for {}", pct_from_scaled(set_sum(i, o.decimals), o.decimals), q(&sets[i].1)) })
                 .collect();
             let fix = (0..=2u32).filter(|d| !bad(*d)).min_by_key(|d| (*d as i32 - o.decimals as i32).abs());
             let fix = match fix {
                 Some(d) => format!(" Set {} to {d}.", q("Decimals in percents")),
                 None => format!(
                     " No Decimals setting makes {} add to 100%. Choose {} for {} if they must add up exactly.",
-                    if t.groups == 1 { "them" } else { "every group" },
+                    if sets.len() == 1 { "them" } else if o.stacked { "every bar" } else { "every group" },
                     q(COUNT),
                     q("Bar height")
                 ),
             };
-            let tail = if t.groups == 1 { "not 100%" } else { "not 100% in every group" };
+            let tail = if sets.len() == 1 { "not 100%" } else if o.stacked { "not 100% in every bar" } else { "not 100% in every group" };
             out.push(format!("The printed percents add to {}, {tail}, because each is rounded.{fix}", and_list(&shown)));
         }
     }
@@ -1453,6 +1817,42 @@ pub fn warnings(p: &Params) -> Vec<String> {
             "The student copy leaves out the scale numbers, and with {} off nothing on it gives the scale. Turn on {}.",
             q("Write the value on each bar"),
             q("Write the value on each bar")
+        ));
+    }
+    let any_err = t.cats.iter().any(|c| c.errs.iter().any(|e| e.is_some_and(|e| e > 0.0)));
+    if o.stacked && any_err {
+        out.push(format!(
+            "Error bars are drawn on bars side by side only: in a stacked bar each part would need its own. Choose {} for {} to draw them.",
+            q(LAYOUTS[0]),
+            q("Several groups")
+        ));
+    } else if o.pareto && any_err {
+        out.push(format!("A Pareto chart draws no error bars: its bars are counts in order. Choose {} for {} to draw them.", q("Tallest first"), q("Order")));
+    }
+    let step = p.f("scale_step");
+    if step.is_finite() && step > 0.0 {
+        if o.pareto {
+            out.push(format!("A Pareto chart sets its own scale, so {} is not used. Set {} to 0.", q("Count by"), q("Count by")));
+        } else {
+            let span = match (p.b("scale_auto"), manual_scale(p, false)) {
+                (false, Some(m)) => m.hi - m.lo,
+                _ => top,
+            };
+            if span / step > MAX_LINES + 1e-9 {
+                out.push(format!(
+                    "Counting by {} would draw more than {} gridlines, so the count-by is chosen automatically. Set {} to at least {}.",
+                    chart::fmt(step),
+                    MAX_LINES,
+                    q("Count by"),
+                    chart::fmt(span / MAX_LINES)
+                ));
+            }
+        }
+    }
+    if t.dec > 0 && o.questions {
+        out.push(format!(
+            "The values have decimals, so they are measurements rather than counts, and the questions ask about counts (how many observations). Turn off {}, or type whole counts.",
+            q("Questions under the chart")
         ));
     }
     out
@@ -1493,8 +1893,9 @@ fn render(p: &Params) -> String {
         Ok(t) => t,
         Err(msg) => return message(&msg),
     };
-    let o = opts(p, &t);
+    let mut o = opts(p, &t);
     let scale = scale_for(p, &t, &o);
+    o.typed_step = !o.pareto && p.f("scale_step") > 0.0 && scale.step == p.f("scale_step");
     draw(&t, &o, scale, p.b(SHOW_ANSWERS))
 }
 
@@ -1507,25 +1908,75 @@ struct Col {
     w: f64,
 }
 
+/// Gridline colour and width for a weight ([`GRID_WEIGHTS`] index), on screen and in Print.
+/// Standard is the chart's original grid; Bold is dark enough to survive a photocopy.
+pub const GRID_LIGHT: &str = "#eceff4";
+pub const GRID_BOLD: &str = "#9ca3af";
+pub const PRINT_GRID_LIGHT: &str = "#b3b3b3";
+pub const PRINT_GRID_BOLD: &str = "#595959";
+/// Minor gridlines: lighter and thinner than any major line.
+pub const MINOR: &str = "#f0f2f6";
+pub const PRINT_MINOR: &str = "#c4c4c4";
+
+fn grid_style(o: &Opts) -> (&'static str, f64) {
+    match (o.print, o.grid_weight) {
+        (false, 0) => (GRID_LIGHT, 0.8),
+        (false, 2) => (GRID_BOLD, 1.6),
+        (false, _) => (GRID, 1.0),
+        (true, 0) => (PRINT_GRID_LIGHT, 2.0),
+        (true, 2) => (PRINT_GRID_BOLD, 3.0),
+        (true, _) => (PRINT_GRID, PRINT_GRID_W),
+    }
+}
+
+/// A title's lines and how many lines it takes: a blank line for students takes at least one,
+/// and only the key writes its text on it.
+fn reserved(lines: &[String], blank: bool) -> usize {
+    if blank { lines.len().max(1) } else { lines.len() }
+}
+
+/// The line students write a title on, under the last of `n` lines of text of size `size`:
+/// across at baseline + descent, centred on `c` (or up the page when `up`).
+fn blank_line(d: &mut Doc, up: bool, base0: f64, c: f64, n: usize, size: f64, len: f64, ink: &str) {
+    let at = base0 + (n.max(1) - 1) as f64 * size * PITCH + size * DES + 1.5;
+    if up {
+        d.line(at, c - len / 2.0, at, c + len / 2.0, ink, 1.2);
+    } else {
+        d.line(c - len / 2.0, at, c + len / 2.0, at, ink, 1.2);
+    }
+}
+
 fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
-    let fills = o.fills;
     let ink = if o.print { "#000000" } else { INK };
-    let grid_col = if o.print { PRINT_GRID } else { GRID };
-    // Print: the first series is a solid grey that survives a copy; the others keep the hatch
-    let series = |g: usize| if o.print && g == 0 { PRINT_BAR.to_string() } else { fills.series(g) };
-    let grid_w = if o.print { PRINT_GRID_W } else { 1.0 };
+    let (grid_col, grid_w) = grid_style(o);
+    let series = |g: usize| o.fill[g].clone();
     let k = o.k;
     let (fs, fv, ft, fa) = (14.0 * k, 12.6 * k, 18.2 * k, 15.4 * k);
     let g_n = t.groups;
-    let idx = order(t, o.percent, ORDERS[o.order]);
+    let stacked = o.stacked;
+    // bars side by side in one category's cluster
+    let gb = if stacked { 1 } else { g_n };
+    let idx = order_by(t, o.percent, stacked, ORDERS[o.order]);
     let n = idx.len();
-    let h = heights(t, o.percent);
+    let h = drawn_heights(t, o);
+    let errs = err_sizes(t, o);
     let labels = value_labels(t, o);
     let totals: Vec<u64> = (0..g_n).map(|g| t.total(g)).collect();
+    // stacked bars write the stack's total at its end; a percent stack is always 100%, so its
+    // parts are written inside instead
+    let parts_inside = o.inside || (stacked && o.percent);
+    let end_labels: Vec<String> = if stacked { t.cats.iter().map(|c| t.fmt(c.counts.iter().sum())).collect() } else { Vec::new() };
     let mut ticks: Vec<(f64, String)> = chart::ticks(s.lo, s.hi, s.step).into_iter().map(|(v, _)| (v, tick_text(v, o.percent))).collect();
     let tick_w = ticks.iter().map(|t| tw(&t.1, fs)).fold(0.0, f64::max);
-    let val_title = if o.val_title.is_empty() { if o.percent { "Relative frequency" } else { "Frequency" }.to_string() } else { o.val_title.clone() };
-    let vl_w = if o.values { labels.iter().flatten().map(|l| tw(l, fv)).fold(0.0, f64::max) } else { 0.0 };
+    let default_title = if o.percent { "Relative frequency" } else if t.dec > 0 { "Value" } else { "Frequency" };
+    let val_title = if o.val_title.is_empty() { default_title.to_string() } else { o.val_title.clone() };
+    let vl_w = if !o.values {
+        0.0
+    } else if stacked && !parts_inside {
+        end_labels.iter().map(|l| tw(l, fv)).fold(0.0, f64::max)
+    } else {
+        labels.iter().flatten().map(|l| tw(l, fv)).fold(0.0, f64::max)
+    };
     let show_vals = o.values && (key || o.blank == 2);
     let show_bars = key || o.blank != 1;
     let show_ticks = key || o.blank != 2;
@@ -1539,29 +1990,42 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
         cols.push(Col { head: vec!["Category".into()], cells: names, answer: false, w: name_w });
         let head_of = |g: usize, pct: bool| -> String {
             match (g_n, pct) {
-                (1, false) => "Frequency".into(),
+                (1, false) => if t.dec > 0 { "Value" } else { "Frequency" }.into(),
                 (1, true) => "Relative frequency".into(),
                 (_, false) => o.names[g].clone(),
                 (_, true) => format!("{} (%)", o.names[g]),
             }
         };
+        let grand: u64 = totals.iter().sum();
         for pct in [false, true] {
             if pct && !o.percent {
                 continue;
             }
             for g in 0..g_n {
                 // the Total row prints what the cells add to: on a percent column that is the
-                // rounded sum (100% when they add up), never a 100% the cells contradict (MED 4)
-                let (mut cells, total_cell): (Vec<String>, String) = if pct {
+                // rounded sum (100% when they add up), never a 100% the cells contradict (MED 4).
+                // Stacked percents are each category's own split, so the cells are row percents
+                // and the Total row is the group's share of everything.
+                let (mut cells, total_cell): (Vec<String>, String) = if pct && stacked {
+                    (idx.iter().map(|&i| pct_text(t.cats[i].counts[g], t.cats[i].counts.iter().sum(), o.decimals)).collect(), pct_text(totals[g], grand, o.decimals))
+                } else if pct {
                     let col = pct_column(&idx.iter().map(|&i| t.cats[i].counts[g]).collect::<Vec<_>>(), totals[g], o.decimals);
                     (col.iter().map(|s| pct_from_scaled(*s, o.decimals)).collect(), pct_from_scaled(col.iter().sum::<u128>(), o.decimals))
                 } else {
-                    (idx.iter().map(|&i| fmt_count(t.cats[i].counts[g])).collect(), fmt_count(totals[g]))
+                    (idx.iter().map(|&i| t.fmt(t.cats[i].counts[g])).collect(), t.fmt(totals[g]))
                 };
                 cells.push(total_cell);
                 let head = wrap(&head_of(g, pct), 150.0 * k, fs, true).unwrap_or_default();
                 let w = head.iter().chain(cells.iter()).map(|c| tw(c, fs)).fold(40.0 * k, f64::max);
                 cols.push(Col { head, cells, answer: pct, w });
+                // the error sizes beside their values: data students draw from, never answers
+                if !pct && t.cats.iter().any(|c| c.errs[g].is_some()) {
+                    let mut cells: Vec<String> = idx.iter().map(|&i| t.cats[i].errs[g].map(|e| format!("\u{b1}{}", chart::fmt(e))).unwrap_or_default()).collect();
+                    cells.push(String::new());
+                    let head = vec!["\u{b1}".to_string()];
+                    let w = cells.iter().map(|c| tw(c, fs)).fold(30.0 * k, f64::max);
+                    cols.push(Col { head, cells, answer: false, w });
+                }
             }
         }
     }
@@ -1575,7 +2039,7 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
                 if names.len() > 1 { format!("{} (tied)", and_list(&names)) } else { names[0].clone() }
             })
             .collect();
-        let per = |v: Vec<String>| if g_n == 1 { v[0].clone() } else { format!("{}: {}; {}: {}", o.names[0], v[0], o.names[1], v[1]) };
+        let per = |v: Vec<String>| if g_n == 1 { v[0].clone() } else { (0..g_n).map(|g| format!("{}: {}", o.names[g], v[g])).collect::<Vec<_>>().join("; ") };
         let first = &t.cats[idx[0]];
         qa.push((
             if g_n == 1 { "1. Which category has the most?".into() } else { "1. In each group, which category has the most?".into() },
@@ -1583,7 +2047,7 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
         ));
         qa.push((
             if g_n == 1 { "2. How many observations are there in all?".into() } else { "2. How many observations are in each group?".into() },
-            per(totals.iter().map(|v| fmt_count(*v)).collect()),
+            per(totals.iter().map(|v| t.fmt(*v)).collect()),
         ));
         qa.push((
             if g_n == 1 { format!("3. What percent of the observations are in {}?", q(&first.name)) } else { format!("3. In each group, what percent are in {}?", q(&first.name)) },
@@ -1591,39 +2055,55 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
         ));
     }
 
-    // widths
-    let legend: Vec<(usize, f64)> = if g_n == 2 { (0..2).map(|g| (g, 18.0 * k + 6.0 + tw(&o.names[g], fs))).collect() } else { Vec::new() };
-    let legend_row_w: f64 = legend.iter().map(|l| l.1).sum::<f64>() + 24.0;
-    let slot_min = (g_n as f64 * fv * 1.45 / (1.0 - o.gap)).max(fs * 1.45);
+    // the key: one swatch and name per group
+    let key_on = g_n >= 2 && o.key != 3;
+    let legend: Vec<(usize, f64)> = if key_on { (0..g_n).map(|g| (g, 18.0 * k + 6.0 + tw(&o.names[g], fs))).collect() } else { Vec::new() };
+    // one row of items `24` apart (two items: the original single row)
+    let row_w = |items: &[(usize, f64)]| items.iter().map(|l| l.1).sum::<f64>() + 24.0 * (items.len().max(2) - 1) as f64;
+    let legend_row_w: f64 = row_w(&legend);
+    let legend_row_h = fs * PITCH + 4.0;
+    let key_col_w = legend.iter().map(|l| l.1).fold(0.0, f64::max);
+    let key_right = key_on && o.key == 1;
+    let slot_min = (gb as f64 * fv * 1.45 / (1.0 - o.gap)).max(fs * 1.45);
     let plot_h_v = 260.0 + (k - 1.0) * 60.0;
     let mut w: f64 = 640.0;
-    let (l, r);
+    let (l, mut r);
     let mut vt_lines: Vec<String> = Vec::new();
     let mut ct_lines: Vec<String> = Vec::new();
     let mut name_lines: Vec<Vec<String>> = Vec::new();
     let plot_h;
     if !o.horizontal {
         vt_lines = wrap(&val_title, plot_h_v - 8.0, fa, true).unwrap_or_default();
-        l = 14.0 + vt_lines.len() as f64 * fa * PITCH + 6.0 + tick_w + 12.0;
+        l = 14.0 + reserved(&vt_lines, o.val_line) as f64 * fa * PITCH + 6.0 + tick_w + 12.0;
         // the right axis is the cumulative percent, so a percent bar chart already has it on the left
         r = if o.pareto && !o.percent { 12.0 + tw("100%", fs) + 10.0 + fa * PITCH + 12.0 } else { 24.0 };
+        if key_right {
+            r += 20.0 + key_col_w;
+        }
         w = w.max(l + (n as f64 * slot_min).max(420.0) + r);
         plot_h = plot_h_v;
     } else {
         let name_w = idx.iter().map(|&i| tw(&t.cats[i].name, fs)).fold(0.0, f64::max).min(200.0 * k);
         name_lines = idx.iter().map(|&i| wrap(&t.cats[i].name, name_w, fs, true).unwrap_or_default()).collect();
         let max_lines = name_lines.iter().map(|v| v.len()).max().unwrap_or(1).max(1) as f64;
-        let slot_h = (max_lines * fs * PITCH + 8.0).max(g_n as f64 * fv * 1.45 / (1.0 - o.gap));
+        let slot_h = (max_lines * fs * PITCH + 8.0).max(gb as f64 * fv * 1.45 / (1.0 - o.gap));
         plot_h = (n as f64 * slot_h).max(150.0);
         ct_lines = if o.cat_title.is_empty() { Vec::new() } else { wrap(&o.cat_title, plot_h - 8.0, fa, true).unwrap_or_default() };
-        l = 14.0 + ct_lines.len() as f64 * fa * PITCH + if ct_lines.is_empty() { 0.0 } else { 6.0 } + name_w + 12.0;
+        let ct_n = reserved(&ct_lines, o.cat_line);
+        l = 14.0 + ct_n as f64 * fa * PITCH + if ct_n == 0 { 0.0 } else { 6.0 } + name_w + 12.0;
         r = (vl_w + 18.0).max(tick_w / 2.0 + 10.0).max(24.0);
+        if key_right {
+            r += 20.0 + key_col_w;
+        }
         w = w.max(l + 260.0 + r);
     }
     w = w.max(table_w + 32.0);
     let plot_w = w - l - r;
+    // which gridlines carry a number: every line, or every 2nd, 5th or 10th from the start
+    let every = [1usize, 2, 5, 10, 0][o.numbers.min(4)];
+    let plain_numbers = every == 1 && !o.typed_step;
     // horizontal: the scale numbers sit side by side under the axis; a wider step keeps them apart
-    if o.horizontal {
+    if o.horizontal && plain_numbers {
         let mut step = s.step;
         for _ in 0..8 {
             let gap = step / (s.hi - s.lo).max(1e-12) * plot_w;
@@ -1635,10 +2115,27 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
             ticks = chart::ticks(s.lo, s.hi, step).into_iter().map(|(v, _)| (v, tick_text(v, o.percent))).collect();
         }
     }
+    // a typed count-by or a numbering choice keeps every gridline; numbers too close together to
+    // read are thinned further (every 2nd, 5th, 10th ... line) so they never overlap
+    let mut number_every = every;
+    if every > 0 && !(o.horizontal && plain_numbers) && ticks.len() > 1 {
+        let gap = (ticks[1].0 - ticks[0].0) / (s.hi - s.lo).max(1e-12) * if o.horizontal { plot_w } else { plot_h };
+        let need = if o.horizontal { ticks.iter().map(|t| tw(&t.1, fs)).fold(0.0, f64::max) + 14.0 } else { fs * (ASC + DES) + 4.0 };
+        let mut m = every;
+        for cand in [1usize, 2, 5, 10, 20, 50, 100, 200, 500] {
+            if cand >= every && cand % every == 0 && gap * cand as f64 >= need {
+                m = cand;
+                break;
+            }
+            m = cand;
+        }
+        number_every = m;
+    }
+    let numbered = |i: usize| number_every > 0 && i % number_every == 0;
     let slot = if o.horizontal { plot_h / n as f64 } else { plot_w / n as f64 };
     // a few categories on a wide chart: the bars keep a classroom width, centred in their slots
     let cluster = (slot * (1.0 - o.gap)).min(170.0 * k);
-    let bar_t = cluster / g_n as f64;
+    let bar_t = cluster / gb as f64;
 
     // vertical: category names wrapped in their slot, or turned when a word does not fit
     let mut names_up = false;
@@ -1655,19 +2152,38 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
         vt_lines = wrap(&val_title, plot_w, fa, true).unwrap_or_default();
     }
     // value labels across or turned
-    let vals_up = !o.horizontal && o.values && !(if g_n == 1 { vl_w <= slot - 4.0 } else { vl_w <= bar_t - 2.0 });
+    let vals_up = !o.horizontal && o.values && !(if gb == 1 { vl_w <= slot - 4.0 } else { vl_w <= bar_t - 2.0 });
     let label_ext = if vals_up { vl_w } else { fv * (ASC + DES) };
 
     // vertical stack
     let title_lines = if o.title.is_empty() { Vec::new() } else { wrap(&o.title, w - 32.0, ft, true).unwrap_or_default() };
+    let title_n = reserved(&title_lines, o.title_line);
     let mut y = 12.0;
     let title_y = y;
-    y += title_lines.len() as f64 * ft * PITCH + if title_lines.is_empty() { 0.0 } else { 6.0 };
+    y += title_n as f64 * ft * PITCH + if title_n == 0 { 0.0 } else { 6.0 };
     let legend_stacked = legend_row_w > w - 32.0;
+    // the key's rows: one row when it fits; else two groups one under the other (as always), and
+    // three or more in as few centred rows as fit
+    let legend_rows: Vec<Vec<(usize, f64)>> = if !legend_stacked {
+        vec![legend.clone()]
+    } else if g_n == 2 {
+        legend.iter().map(|l| vec![*l]).collect()
+    } else {
+        let mut rows: Vec<Vec<(usize, f64)>> = vec![Vec::new()];
+        for it in &legend {
+            let mut cand = rows.last().unwrap().clone();
+            cand.push(*it);
+            if !rows.last().unwrap().is_empty() && row_w(&cand) > w - 32.0 {
+                rows.push(vec![*it]);
+            } else {
+                *rows.last_mut().unwrap() = cand;
+            }
+        }
+        rows
+    };
     let legend_y = y;
-    let legend_row_h = fs * PITCH + 4.0;
-    if g_n == 2 {
-        y += legend_row_h * if legend_stacked { 2.0 } else { 1.0 } + 6.0;
+    if key_on && o.key == 0 {
+        y += legend_row_h * legend_rows.len() as f64 + 6.0;
     }
     let headroom = if o.horizontal { 10.0 } else if o.values { label_ext + 6.0 + if o.pareto { 9.0 } else { 0.0 } + 4.0 } else { 12.0 };
     let top = y + headroom;
@@ -1682,8 +2198,24 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
     };
     yb += names_h;
     let below_lines = if o.horizontal { &vt_lines } else { &ct_lines };
+    let below_blank = if o.horizontal { o.val_line } else { o.cat_line };
+    let below_n = reserved(below_lines, below_blank);
     let below_title_y = yb;
-    yb += below_lines.len() as f64 * fa * PITCH + if below_lines.is_empty() { 0.0 } else { 6.0 };
+    yb += below_n as f64 * fa * PITCH + if below_n == 0 { 0.0 } else { 6.0 };
+    // a key on the right runs down from the top of the plot; nothing below may start above its end
+    if key_right {
+        yb = yb.max(top + g_n as f64 * legend_row_h + 6.0);
+    }
+    let key_below_y = yb;
+    if key_on && o.key == 2 {
+        yb += legend_row_h * legend_rows.len() as f64 + 6.0;
+    }
+    // the note on what the error bars show
+    let note_lines = if t.has_err && !o.err_note.is_empty() { wrap(&o.err_note, w - 40.0, fs, true).unwrap_or_default() } else { Vec::new() };
+    let note_y = yb + 4.0;
+    if !note_lines.is_empty() {
+        yb = note_y + note_lines.len() as f64 * fs * PITCH + 4.0;
+    }
     // table rows
     let row_lines: Vec<usize> = if cols.is_empty() {
         Vec::new()
@@ -1707,20 +2239,28 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
     let hgt = yb + 14.0;
 
     let mut d = Doc::new(w.ceil(), hgt.ceil());
-    d.defs(&fills.defs());
-    for (i, line) in title_lines.iter().enumerate() {
-        put(&mut d, w / 2.0, title_y + ft * ASC + i as f64 * ft * PITCH, ft, "middle", line, ink);
+    d.defs(&o.defs);
+    if !o.title_line || key {
+        for (i, line) in title_lines.iter().enumerate() {
+            put(&mut d, w / 2.0, title_y + ft * ASC + i as f64 * ft * PITCH, ft, "middle", line, ink);
+        }
     }
-    if g_n == 2 {
-        let sw = 18.0 * k;
-        let sh = 13.0 * k;
-        let mut x = if legend_stacked { 16.0 } else { (w - legend_row_w + 24.0) / 2.0 };
-        for (row, (g, iw)) in legend.iter().enumerate() {
-            let ry = legend_y + if legend_stacked { row as f64 * legend_row_h } else { 0.0 };
-            let cy = ry + legend_row_h / 2.0;
-            d.rect(x, cy - sh / 2.0, sw, sh, &series(*g), ink, 1.2);
-            put(&mut d, x + sw + 6.0, cy + fs * 0.35, fs, "start", &o.names[*g], ink);
-            if !legend_stacked {
+    if o.title_line {
+        let len = title_lines.iter().map(|s| tw(s, ft)).fold(240.0 * k, f64::max).min(w - 64.0) + 20.0;
+        blank_line(&mut d, false, title_y + ft * ASC, w / 2.0, title_n, ft, len.min(w - 40.0), ink);
+    }
+    let swatch = |d: &mut Doc, x: f64, ry: f64, g: usize| {
+        let (sw, sh) = (18.0 * k, 13.0 * k);
+        let cy = ry + legend_row_h / 2.0;
+        d.rect(x, cy - sh / 2.0, sw, sh, &series(g), ink, 1.2);
+        put(d, x + sw + 6.0, cy + fs * 0.35, fs, "start", &o.names[g], ink);
+    };
+    if key_on && o.key != 1 {
+        let ky = if o.key == 0 { legend_y } else { key_below_y };
+        for (row, items) in legend_rows.iter().enumerate() {
+            let mut x = if legend_stacked && g_n == 2 { 16.0 } else { (w - row_w(items) + 24.0) / 2.0 };
+            for (g, iw) in items {
+                swatch(&mut d, x, ky + row as f64 * legend_row_h, *g);
                 x += iw + 24.0;
             }
         }
@@ -1732,25 +2272,53 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
         let f = ((v - s.lo) / span).clamp(0.0, 1.0);
         if o.horizontal { l + f * plot_w } else { bottom - f * plot_h }
     };
-    // gridlines
+    // gridlines: the minor ones first, under the major
+    if o.grid && o.minor > 0 && ticks.len() > 1 {
+        let parts = [1usize, 2, 4, 5][o.minor.min(3)];
+        let (mc, mw) = if o.print { (PRINT_MINOR, 1.5) } else { (MINOR, 0.7) };
+        let st = ticks[1].0 - ticks[0].0;
+        let first = ticks[0].0 - st;
+        let mut v = first;
+        while v <= s.hi + 1e-9 {
+            for m in 1..parts {
+                let mv = v + st * m as f64 / parts as f64;
+                if mv > s.lo + 1e-9 && mv < s.hi - 1e-9 {
+                    let p = vpos(mv);
+                    if o.horizontal { d.line(p, top, p, bottom, mc, mw) } else { d.line(l, p, w - r, p, mc, mw) };
+                }
+            }
+            v += st;
+        }
+    }
     if o.grid {
         for (v, _) in &ticks {
             let p = vpos(*v);
             if o.horizontal { d.line(p, top, p, bottom, grid_col, grid_w) } else { d.line(l, p, w - r, p, grid_col, grid_w) };
         }
     }
-    // bars
+    // bars: (x, y, width, height) of category j's bar for group g (its part, when stacked)
     let bar_geom = |j: usize, g: usize| -> (f64, f64, f64, f64) {
-        // (x, y, width, height) of the bar of the j-th drawn category, group g
         let i = idx[j];
         let v = h[i][g];
-        let (a, b) = (vpos(s.lo), vpos(v.min(s.hi)));
-        let start = j as f64 * slot + (slot - cluster) / 2.0 + g as f64 * bar_t;
+        let (a, b) = if stacked {
+            let below: f64 = h[i][..g].iter().sum();
+            (vpos(below.max(s.lo)), vpos((below + v).min(s.hi)))
+        } else {
+            (vpos(s.lo), vpos(v.min(s.hi)))
+        };
+        let start = j as f64 * slot + (slot - cluster) / 2.0 + if stacked { 0.0 } else { g as f64 * bar_t };
         if o.horizontal {
             (a, top + start, (b - a).max(0.0), bar_t)
         } else {
             (l + start, b, bar_t, (a - b).max(0.0))
         }
+    };
+    // a whole stacked bar, base to end
+    let stack_geom = |j: usize| -> (f64, f64, f64, f64) {
+        let tot: f64 = h[idx[j]].iter().sum();
+        let (a, b) = (vpos(s.lo), vpos(tot.min(s.hi)));
+        let start = j as f64 * slot + (slot - cluster) / 2.0;
+        if o.horizontal { (a, top + start, (b - a).max(0.0), bar_t) } else { (l + start, b, bar_t, (a - b).max(0.0)) }
     };
     if show_bars {
         for j in 0..n {
@@ -1762,35 +2330,86 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
             }
         }
     }
+    // error bars: value minus to value plus the error, clipped to the axis; a crossbar at each end
+    // that is not clipped
+    let err_ends = |j: usize, g: usize| -> Option<(f64, f64, bool, bool)> {
+        let e = errs[idx[j]][g]?;
+        let v = h[idx[j]][g];
+        let (lo, hi) = ((v - e).max(s.lo), (v + e).min(s.hi));
+        (hi > lo).then(|| (vpos(lo), vpos(hi), v - e >= s.lo - 1e-9, v + e <= s.hi + 1e-9))
+    };
+    if show_bars {
+        for j in 0..n {
+            for g in 0..g_n {
+                let Some((p_lo, p_hi, cap_lo, cap_hi)) = err_ends(j, g) else { continue };
+                let (x, yy, bw, bh) = bar_geom(j, g);
+                let half = (if o.horizontal { bh } else { bw } * 0.25).clamp(3.0, 8.0 * k);
+                if o.horizontal {
+                    let cy = yy + bh / 2.0;
+                    d.line(p_lo, cy, p_hi, cy, ink, 1.6);
+                    for (p, on) in [(p_lo, cap_lo), (p_hi, cap_hi)] {
+                        if on && o.err_caps {
+                            d.line(p, cy - half, p, cy + half, ink, 1.6);
+                        }
+                    }
+                } else {
+                    let cx = x + bw / 2.0;
+                    d.line(cx, p_lo, cx, p_hi, ink, 1.6);
+                    for (p, on) in [(p_lo, cap_lo), (p_hi, cap_hi)] {
+                        if on && o.err_caps {
+                            d.line(cx - half, p, cx + half, p, ink, 1.6);
+                        }
+                    }
+                }
+            }
+        }
+    }
     // axes over the bars' feet
     d.line(l, bottom, w - r, bottom, ink, 2.0);
     d.line(l, top, l, bottom, ink, 2.0);
-    for (v, label) in &ticks {
+    for (ti, (v, label)) in ticks.iter().enumerate() {
         let p = vpos(*v);
         if o.horizontal {
             d.line(p, bottom, p, bottom + 6.0, ink, 1.6);
-            if show_ticks {
+            if show_ticks && numbered(ti) {
                 put(&mut d, p, bottom + 8.0 + fs * ASC, fs, "middle", label, ink);
             }
         } else {
             d.line(l - 6.0, p, l, p, ink, 1.6);
-            if show_ticks {
+            if show_ticks && numbered(ti) {
                 put(&mut d, l - 10.0, p + fs * 0.35, fs, "end", label, ink);
             }
         }
     }
-    // axis titles
-    if o.horizontal {
-        for (i, line) in ct_lines.iter().enumerate() {
-            put_up(&mut d, 14.0 + fa * ASC + i as f64 * fa * PITCH, (top + bottom) / 2.0, fa, "middle", line, ink);
-        }
-    } else {
-        for (i, line) in vt_lines.iter().enumerate() {
+    // axis titles: the turned one at the left, the other under the axis
+    let (left_lines, left_blank) = if o.horizontal { (&ct_lines, o.cat_line) } else { (&vt_lines, o.val_line) };
+    if !left_blank || key {
+        for (i, line) in left_lines.iter().enumerate() {
             put_up(&mut d, 14.0 + fa * ASC + i as f64 * fa * PITCH, (top + bottom) / 2.0, fa, "middle", line, ink);
         }
     }
-    for (i, line) in below_lines.iter().enumerate() {
-        put(&mut d, (l + w - r) / 2.0, below_title_y + fa * ASC + i as f64 * fa * PITCH, fa, "middle", line, ink);
+    if left_blank {
+        let len = left_lines.iter().map(|s| tw(s, fa)).fold(160.0 * k, f64::max).min(plot_h - 10.0);
+        blank_line(&mut d, true, 14.0 + fa * ASC, (top + bottom) / 2.0, reserved(left_lines, true), fa, len, ink);
+    }
+    if !below_blank || key {
+        for (i, line) in below_lines.iter().enumerate() {
+            put(&mut d, (l + w - r) / 2.0, below_title_y + fa * ASC + i as f64 * fa * PITCH, fa, "middle", line, ink);
+        }
+    }
+    if below_blank {
+        let len = below_lines.iter().map(|s| tw(s, fa)).fold(200.0 * k, f64::max).min(plot_w - 10.0) + 20.0;
+        blank_line(&mut d, false, below_title_y + fa * ASC, (l + w - r) / 2.0, below_n, fa, len.min(plot_w), ink);
+    }
+    // the key on the right, from the top of the plot
+    if key_right {
+        let x = w - 16.0 - key_col_w;
+        for (row, (g, _)) in legend.iter().enumerate() {
+            swatch(&mut d, x, top + row as f64 * legend_row_h, *g);
+        }
+    }
+    for (i, line) in note_lines.iter().enumerate() {
+        put(&mut d, w / 2.0, note_y + fs * ASC + i as f64 * fs * PITCH, fs, "middle", line, ink);
     }
     // category names
     for (j, lines) in name_lines.iter().enumerate() {
@@ -1838,57 +2457,109 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
             }
         }
     }
-    // value labels, each in its own bar's column
+    // value labels: inside a bar on a white chip when asked and there is room, otherwise in the
+    // bar's own column past its end (and past its error bar)
     if show_vals {
+        let ext_in = fv * (ASC + DES);
+        // a white chip `ch` tall centred on `cy`, and the value on it: digits stand 0.72 em above
+        // their baseline, so a baseline 0.35 em below the centre centres them
+        let chip_text = |d: &mut Doc, cx: f64, cy: f64, ch: f64, text: &str, anchor: &str| {
+            let lw = tw(text, fv);
+            let x0 = match anchor {
+                "end" => cx - lw - 2.0,
+                _ => cx - lw / 2.0 - 2.0,
+            };
+            d.rect(x0, cy - ch / 2.0, lw + 4.0, ch, "#ffffff", "none", 0.0);
+            put(d, cx, cy + fv * 0.35, fv, anchor, text, ink);
+        };
+        // the shortest chip that holds a value's digits (and a comma's tail)
+        let ch_min = fv + 1.0;
+        let mut at_end: Vec<((f64, f64, f64, f64), String, Option<(f64, f64, bool, bool)>)> = Vec::new();
         for j in 0..n {
+            if stacked && !parts_inside {
+                at_end.push((stack_geom(j), end_labels[idx[j]].clone(), None));
+                continue;
+            }
             for g in 0..g_n {
                 let text = &labels[idx[j]][g];
                 let (x, yy, bw, bh) = bar_geom(j, g);
                 let lw = tw(text, fv);
-                if o.horizontal {
-                    put(&mut d, x + bw + 6.0, yy + bh / 2.0 + fv * 0.35, fv, "start", text, ink);
+                let ee = err_ends(j, g);
+                if stacked {
+                    // each part's value centred in the part, when the part can hold it
+                    let (along, across) = if o.horizontal { (bw, bh) } else { (bh, bw) };
+                    let room = if o.horizontal { across } else { along };
+                    if (if o.horizontal { along } else { across }) >= lw + 8.0 && room >= ch_min + 4.0 {
+                        chip_text(&mut d, x + bw / 2.0, yy + bh / 2.0, (ext_in + 4.0).min(room - 4.0), text, "middle");
+                    }
                     continue;
                 }
-                let cx = x + bw / 2.0;
-                // the label's box sits on the bar; with a cumulative line it must also clear the
-                // line (and its markers) across the label's width, so it goes above the line there
-                // the label's box sits on its bar, in the bar's own column; with a cumulative line it
-                // must also clear the line (and its markers) across the label's width: then it goes
-                // inside the top of the bar on a white chip, or else above the line there
-                let ext = if vals_up { lw } else { fv * (ASC + DES) };
-                let mut bot = yy - 5.0;
-                let mut chip = false;
-                if key && !line_pts.is_empty() {
-                    let half = if vals_up { fv * 0.7 } else { lw / 2.0 } + 3.0 + 3.5;
-                    let (x0, x1) = (cx - half, cx + half);
-                    let at = |px: f64| -> Option<f64> {
-                        line_pts.windows(2).find(|w| w[0].0 <= px && px <= w[1].0).map(|w| w[0].1 + (w[1].1 - w[0].1) * (px - w[0].0) / (w[1].0 - w[0].0))
-                    };
-                    let mut ys: Vec<f64> = [x0, x1].iter().filter_map(|px| at(*px)).collect();
-                    ys.extend(line_pts.iter().filter(|p| p.0 >= x0 && p.0 <= x1).map(|p| p.1));
-                    if !ys.is_empty() {
-                        let line_top = ys.iter().cloned().fold(f64::INFINITY, f64::min) - 3.5;
-                        let line_low = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + 3.5;
-                        let clear = |b: f64| b - ext > line_low + 3.0 || b < line_top - 3.0;
-                        let inside = yy + 4.5 + 4.0 + ext;
-                        if clear(bot) {
-                        } else if inside <= bottom - 4.0 && clear(inside) && (if vals_up { fv * 1.25 } else { lw }) + 4.0 <= bw - 4.0 {
-                            bot = inside;
-                            chip = true;
-                        } else {
-                            bot = line_top - 3.0;
+                if parts_inside {
+                    if o.horizontal {
+                        // right-aligned inside the bar's end, left of the error bar's low end
+                        let right = (x + bw - 6.5).min(ee.map(|e| e.0 - 4.0).unwrap_or(f64::INFINITY));
+                        if right - lw - 4.0 >= x + 4.0 && bh >= ch_min + 4.0 {
+                            chip_text(&mut d, right - 2.0, yy + bh / 2.0, (ext_in + 4.0).min(bh - 4.0), text, "end");
+                            continue;
+                        }
+                    } else {
+                        // under the bar's top, and under the error bar's low end
+                        let chip_top = (yy + 6.5).max(ee.map(|e| e.0 + 4.0).unwrap_or(f64::NEG_INFINITY));
+                        let ch = ext_in + 4.0;
+                        if chip_top + ch + 4.0 <= yy + bh && lw + 8.0 <= bw {
+                            chip_text(&mut d, x + bw / 2.0, chip_top + ch / 2.0, ch, text, "middle");
+                            continue;
                         }
                     }
                 }
-                if chip {
-                    let cw = if vals_up { fv * 1.25 } else { lw } + 4.0;
-                    d.rect(cx - cw / 2.0, bot - ext - 2.0, cw, ext + 4.0, "#ffffff", "none", 0.0);
+                at_end.push(((x, yy, bw, bh), text.clone(), ee));
+            }
+        }
+        for ((x, yy, bw, bh), text, ee) in &at_end {
+            let (x, yy, bw, bh) = (*x, *yy, *bw, *bh);
+            let lw = tw(text, fv);
+            if o.horizontal {
+                let end = (x + bw).max(ee.map(|e| e.1).unwrap_or(f64::NEG_INFINITY));
+                put(&mut d, end + 6.0, yy + bh / 2.0 + fv * 0.35, fv, "start", text, ink);
+                continue;
+            }
+            let cx = x + bw / 2.0;
+            // the label's box sits on its bar (or on its error bar), in the bar's own column; with a
+            // cumulative line it must also clear the line (and its markers) across the label's
+            // width: then it goes inside the top of the bar on a white chip, or else above the line
+            let ext = if vals_up { lw } else { fv * (ASC + DES) };
+            let mut bot = yy.min(ee.map(|e| e.1).unwrap_or(f64::INFINITY)) - 5.0;
+            let mut chip = false;
+            if key && !line_pts.is_empty() {
+                let half = if vals_up { fv * 0.7 } else { lw / 2.0 } + 3.0 + 3.5;
+                let (x0, x1) = (cx - half, cx + half);
+                let at = |px: f64| -> Option<f64> {
+                    line_pts.windows(2).find(|w| w[0].0 <= px && px <= w[1].0).map(|w| w[0].1 + (w[1].1 - w[0].1) * (px - w[0].0) / (w[1].0 - w[0].0))
+                };
+                let mut ys: Vec<f64> = [x0, x1].iter().filter_map(|px| at(*px)).collect();
+                ys.extend(line_pts.iter().filter(|p| p.0 >= x0 && p.0 <= x1).map(|p| p.1));
+                if !ys.is_empty() {
+                    let line_top = ys.iter().cloned().fold(f64::INFINITY, f64::min) - 3.5;
+                    let line_low = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + 3.5;
+                    let clear = |b: f64| b - ext > line_low + 3.0 || b < line_top - 3.0;
+                    let inside = yy + 4.5 + 4.0 + ext;
+                    if clear(bot) {
+                    } else if inside <= bottom - 4.0 && clear(inside) && (if vals_up { fv * 1.25 } else { lw }) + 4.0 <= bw - 4.0 {
+                        bot = inside;
+                        chip = true;
+                    } else {
+                        bot = line_top - 3.0;
+                    }
                 }
-                if vals_up {
-                    put_up(&mut d, cx + fv * 0.33, bot, fv, "start", text, ink);
-                } else {
-                    put(&mut d, cx, bot - fv * DES, fv, "middle", text, ink);
-                }
+            }
+            if chip {
+                let cw = if vals_up { fv * 1.25 } else { lw } + 4.0;
+                d.rect(cx - cw / 2.0, bot - ext - 2.0, cw, ext + 4.0, "#ffffff", "none", 0.0);
+            }
+            if vals_up {
+                put_up(&mut d, cx + fv * 0.33, bot, fv, "start", text, ink);
+            } else {
+                put(&mut d, cx, bot - fv * DES, fv, "middle", text, ink);
             }
         }
     }
@@ -1923,6 +2594,8 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
                     for (m, line) in wrap(&c.cells[rw], c.w, fs, true).unwrap_or_default().iter().enumerate() {
                         put(&mut d, xs[ci] + 8.0, base + m as f64 * fs * PITCH, fs, "start", line, ink);
                     }
+                } else if c.cells[rw].is_empty() {
+                    // no error bar on this bar, or the error column's Total: nothing to write
                 } else if c.answer && !key || (rw == n && !key) {
                     d.line(xs[ci] + 10.0, base + fs * DES, xs[ci] + c.w + 6.0, base + fs * DES, ink, 1.0);
                 } else {
