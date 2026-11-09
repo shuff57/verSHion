@@ -482,11 +482,12 @@ static STEM_AND_LEAF: [RefSection; 4] = [
     s("Appearance", &["label_size"], ""),
 ];
 
-static TWO_WAY_TABLE: [RefSection; 4] = [
-    s("Table", &["row_labels", "col_labels", "cells", "row_title", "col_title"], "Name the rows and columns, then type the counts one line per row. The totals are worked out for you."),
-    s("Student copy", &["blank", "blank_count", "show_answers"], "Turn off Show answers for a student copy: the chosen boxes are left empty. Show answers fills them in, in bold."),
-    s("Labels and text", &["title"], ""),
-    s("Appearance", &["style", "label_size"], ""),
+static TWO_WAY_TABLE: [RefSection; 5] = [
+    s("Table", &["row_labels", "col_labels", "cells", "total_col", "total_row"], "Name the rows and columns, then type the counts one line per row or paste a table. Leave a count empty for students to find."),
+    s("In the cells", &["values", "rf_as", "rf_places"], "Counts, or relative frequencies: each box over the grand total, its row's total or its column's total."),
+    s("Student copy", &["blank", "blank_count", "show_answers"], "Turn off Show answers for a student copy: the chosen boxes are left empty. Click a box on the table to leave it blank or show it again. Show answers fills the blanks in, in bold."),
+    s("Titles", &["title", "title_mode", "row_title", "col_title", "corner_split"], ""),
+    s("Look", &["headings", "lines", "totals_bold", "style", "label_size"], ""),
 ];
 
 static LOGIC_CIRCUIT: [RefSection; 5] = [

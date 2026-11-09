@@ -23,7 +23,7 @@ mod residual;
 mod samplingdist;
 mod scatter;
 mod stem;
-mod twoway;
+pub(crate) mod twoway;
 mod venn;
 
 pub fn defs() -> Vec<FigureDef> {

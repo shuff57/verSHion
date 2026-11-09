@@ -2787,23 +2787,27 @@ const STEM_AND_LEAF: &[Faq] = &[
 const TWO_WAY_TABLE: &[Faq] = &[
     Faq {
         q: "How do I make a student copy?",
-        a: "Turn off Show answers. By default the row totals, column totals and grand total are left as empty boxes. Use Blank for students to leave some counts empty as well, or instead. Student + key saves both versions, with the answers in bold on the key.",
+        a: "Turn off Show answers. By default the row totals, column totals and grand total are left as empty boxes. Pick another choice in Blank for students, or click any box on the table to leave it blank (click it again to show it). Student + key saves both versions, with the answers in bold on the key.",
     },
     Faq {
-        q: "How do I enter the counts?",
-        a: "Type the row names and column names separated by commas, then one line of counts per row. The table is as big as the names you give. Counts left out are 0.",
+        q: "How do I enter the counts and totals?",
+        a: "Name the rows and columns, then type one line of counts per row, or paste a table from a spreadsheet with its headings and totals. Totals left out are worked out. To type one, add = 30 at the end of a row's line, or a line starting Total for the Total row. The Total column and Total row switches turn each one off.",
     },
     Faq {
-        q: "Which cells are left blank?",
-        a: "The blanks are taken along the table's diagonals, so they do not all land in one row or column. Change How many cells to leave more or fewer.",
+        q: "How do I leave a gap students work out from the totals?",
+        a: "Leave that count empty (or type ?) and type the totals: 12, , 8 = 30. The key fills the gap in from the rest, and a note says if a gap can't be worked out from what the table shows. Type [12] to hide 12 from students but keep it on the key, or a letter like x for an unknown: the key writes x = 10.",
     },
     Faq {
-        q: "Can I show percentages?",
-        a: "Not yet. The table shows counts and their totals. Type percentages as the counts if you want a table of percentages; the totals add them up.",
+        q: "Can I show relative frequencies?",
+        a: "Set In the cells to a relative frequency of the grand total, of each row or of each column. Write them as decimals or percents rounded to the places you choose, or as fractions in lowest terms.",
     },
     Faq {
-        q: "Can I print it in black and white?",
-        a: "Set Style to Print. The shaded header, side and total cells become light grey.",
+        q: "Where do the variable names go?",
+        a: "The column variable goes above the columns and the row variable in the corner box. Turn on Variable names in a split corner to put both in the corner, either side of a diagonal. Table title can be a blank line for students to write on.",
+    },
+    Faq {
+        q: "Can I print it in black and white or change the lines?",
+        a: "Set Style to Print: the shaded headings become light grey. Headings Plain drops the shading, Lines Header and totals keeps only the rules under the headings and before the totals, and Totals in bold sets every total in bold.",
     },
 ];
 

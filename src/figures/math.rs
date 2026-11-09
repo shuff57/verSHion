@@ -6939,6 +6939,7 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::Handle>> {
     super::math_plot::handles(id, p, size).or_else(|| super::math_geo::handles(id, p, size)).or_else(|| super::circle::handles(id, p, size)).or_else(|| super::trig::handles(id, p, size)).or_else(|| super::unitcircle::handles(id, p, size))
         .or_else(|| (id == super::transform::ID).then(|| super::transform::handles(p)))
+        .or_else(|| (id == super::stats::twoway::ID).then(|| super::stats::twoway::handles(p)))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's
