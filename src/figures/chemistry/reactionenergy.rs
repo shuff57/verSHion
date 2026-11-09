@@ -2748,6 +2748,75 @@ mod tests {
         }
     }
 
+    /// The figures saved and shared before batch 4 (one-step, two-step, catalysed, every old choice and switch): their
+    /// saved spec (every old key, as a saved figure stores it) and their share link (only the keys that differ from the
+    /// opening state), with the hash of what they drew. Both must still draw exactly that. Written once from the build
+    /// before batch 4 with VERSHION_RE_OLD_BLESS=1.
+    fn old_cases() -> Vec<Vec<(&'static str, Value)>> {
+        let mut cases: Vec<Vec<(&'static str, Value)>> = vec![vec![]];
+        for e in examples(ID).unwrap().into_iter().take(5) { cases.push(e.params); }
+        let two = || vec![s("steps", "Two steps"), f("reactants", 100.0), f("products", 20.0), f("ea", 60.0), f("intermediate", 110.0), f("ea2", 70.0)];
+        let opts: Vec<(&'static str, Value)> = vec![
+            s("steps", "Two steps"), s("axis", "Unlabelled"), s("ts_label", "Transition state"), s("ts_label", "None"),
+            b("catalyst", true), b("level_values", false), b("axis_titles", false), b("label_reactants", false), b("label_products", false),
+            b("show_ea", false), b("show_ea_rev", false), b("show_dh", false), b("readout", false), b(SHOW_ANSWERS, false),
+            s("style", "Print"), s("label_size", "Large"), s("label_size", "Small"), f("reactants", -20.0), f("products", 150.0), f("ea", 200.0),
+            s("reactant_text", "N_2 + 3H_2"), s("product_text", "2NH_3"), f("ea_cat", 25.0),
+        ];
+        for o in &opts {
+            cases.push(vec![o.clone()]);
+            let mut t = two();
+            t.push(o.clone());
+            cases.push(t);
+            cases.push(vec![b("catalyst", true), o.clone()]);
+        }
+        cases.push(vec![s("axis", "Unlabelled"), b("catalyst", true), b(SHOW_ANSWERS, false), s("label_size", "Large")]);
+        let mut t = two();
+        t.extend([b("catalyst", true), s("style", "Print"), b(SHOW_ANSWERS, false), s("ts_label", "Transition state")]);
+        cases.push(t);
+        cases
+    }
+
+    fn old_fixture() -> std::path::PathBuf { std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/reaction_energy_old.txt") }
+
+    fn fnv(s: &str) -> String {
+        let mut h: u64 = 0xcbf29ce484222325;
+        for b in s.as_bytes() { h ^= *b as u64; h = h.wrapping_mul(0x100000001b3); }
+        format!("{h:016x}")
+    }
+
+    #[test]
+    fn old_saved_figures_and_links_render_as_before() {
+        use crate::figures::{share, spec, start_params};
+        let d = def();
+        if std::env::var("VERSHION_RE_OLD_BLESS").is_ok_and(|v| v == "1") {
+            let mut out = String::new();
+            for c in old_cases() {
+                let p = with(&c);
+                let saved = serde_json::to_string(&spec::spec_for(ID, &p)).unwrap();
+                let link = share::encode(ID, &p, &start_params(&d));
+                out.push_str(&format!("{}\t{saved}\t{link}\n", fnv(&d.svg(&p))));
+            }
+            std::fs::write(old_fixture(), out).unwrap();
+            return;
+        }
+        let text = std::fs::read_to_string(old_fixture()).expect("tests/fixtures/reaction_energy_old.txt");
+        let mut n = 0;
+        for line in text.lines().filter(|l| !l.is_empty()) {
+            let mut it = line.split('\t');
+            let (hash, saved, link) = (it.next().unwrap(), it.next().unwrap(), it.next().unwrap());
+            let sp: crate::model::FigureSpec = serde_json::from_str(saved).unwrap();
+            let p = spec::params_from_spec(&d, &sp);
+            assert_eq!(fnv(&d.svg(&p)), hash, "an old saved figure draws differently: {saved}");
+            let (id, changed) = share::decode(link).unwrap();
+            assert_eq!(id, ID);
+            let p = share::link_params(&d, changed, share::version(link));
+            assert_eq!(fnv(&d.svg(&p)), hash, "an old share link draws differently: {link}");
+            n += 1;
+        }
+        assert!(n >= 60, "only {n} old cases");
+    }
+
     /// Writes the review renders to $VERSHION_PNG_DIR.
     #[test]
     fn reaction_energy_pngs() {
