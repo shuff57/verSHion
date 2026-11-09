@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-09T14:50:47+00:00 · probe: 2026-11-09T06:50:47
+Generated: 2026-11-09T15:05:14+00:00 · probe: 2026-11-09T07:05:14
 
-**Pooled 81.8** · mean 83.1 over 70 figures · built 71 of 71 reference figures
+**Pooled 82.4** · mean 84.0 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -13,13 +13,6 @@ Comparable with the frozen baseline: **yes**
   - cap-01g [core 5] CO₂ and O₂ around one plant against each other — no evidence
   - cap-02a [core 5] Up to three curves on one graph — no evidence
   - cap-02b [core 5] Set each curve's CO₂ concentration, temperature or light intensity — no evidence
-- `venn-diagram`: 38 (20/53)
-  - cap-01c [core 5] List each set's members and have them sorted into the regions — no evidence
-  - cap-01b [control 3] Split a region's text into lines with commas — no evidence
-  - cap-02a [control 3] Draw one set — no evidence
-  - cap-02c [control 3] Draw two sets separate — no evidence
-  - cap-02d [control 3] Draw one set inside the other — no evidence
-  - cap-04 [control 3] Name the universal set U, xi, S, epsilon, a word or nothing — no evidence
 - `motion-map`: 40 (35/87)
   - cap-01a [core 5] Build the motion from up to six segments in any order — no evidence
   - cap-01b [core 5] Set each segment at rest, constant velocity forward or back, speeding up or slowing down — no evidence
@@ -259,3 +252,4 @@ Comparable with the frozen baseline: **yes**
 - `stem-and-leaf`: 100 (67/67)
 - `titration-curve`: 100 (64/64)
 - `two-way-table`: 100 (68/68)
+- `venn-diagram`: 100 (53/53)

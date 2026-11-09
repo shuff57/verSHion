@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-09T06:50:47",
- "ours_built_at": "2026-11-09T14:48:40+00:00",
- "git": "9601147",
+ "checked_at": "2026-11-09T07:05:14",
+ "ours_built_at": "2026-11-09T15:05:00+00:00",
+ "git": "6595949",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -8803,27 +8803,45 @@
       {
        "token": "changes:counts=x, 2x+1, 5, 4",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/99aadce67780c63c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/c2a9f76880c136a2.png"
       }
      ]
     },
     "cap-01b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:counts=red flesh; mushy; savory, 9, 5, 4",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/2c3034e8a8cfa9b8.png"
+      }
+     ]
     },
     "cap-01c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"mode\":\"Sets\",\"u_set\":\"1-12\",\"a_set\":\"2, 4, 6, 8, 10, 12\",\"b_set\":\"2, 3, 5, 7, 11\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/f9a9f3766f293b5c.png"
+      }
+     ]
     },
     "cap-02a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:sets=1",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/9b421f4386040634.png"
+      }
+     ]
     },
     "cap-02b": {
      "pass": true,
@@ -8833,21 +8851,33 @@
       {
        "token": "changes:sets=3",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/b0ed35f7b375f439.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/15db1949477d790f.png"
       }
      ]
     },
     "cap-02c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:arrangement=Separate",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/82b661e993584c20.png"
+      }
+     ]
     },
     "cap-02d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:arrangement=B inside A",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/5c302be46a91c3cb.png"
+      }
+     ]
     },
     "cap-03": {
      "pass": true,
@@ -8857,20 +8887,26 @@
       {
        "token": "changes:a_name=A",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/8c3a73a36f7bca1f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/bbabd22370c567b2.png"
       },
       {
        "token": "changes:b_name=Prime",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/9e88ab6e3af51611.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/3275fced5020f9dd.png"
       }
      ]
     },
     "cap-04": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:universal=ξ",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/8298dee6e60f3200.png"
+      }
+     ]
     },
     "cap-05a": {
      "pass": true,
@@ -8880,15 +8916,21 @@
       {
        "token": "changes:shade=A and B",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/00f935431a5889af.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/a405e4e9a4518b5f.png"
       }
      ]
     },
     "cap-05b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:shade=A only, B only",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/2b1872e0ee285a29.png"
+      }
+     ]
     },
     "cap-05c": {
      "pass": true,
@@ -8898,15 +8940,21 @@
       {
        "token": "changes:{\"shade\": \"A and B\", \"style\": \"Print\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/26d13c5ea921e042.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/c49ce03a81d2ec40.png"
       }
      ]
     },
     "cap-05d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"shade\":\"A and B\",\"fill\":\"Hatching\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/8bfe8c437029c010.png"
+      }
+     ]
     },
     "cap-06a": {
      "pass": true,
@@ -8916,25 +8964,31 @@
       {
        "token": "changes:show_answers=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/20a8636854938617.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/c9628d95f7e4e47b.png"
       }
      ]
     },
     "cap-06b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\":false,\"empty\":\"A blank line\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/4f4d50443ba677d9.png"
+      }
+     ]
     },
     "cap-i01": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-i02": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     }

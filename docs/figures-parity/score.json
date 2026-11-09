@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-09T14:50:47+00:00",
- "probe_checked_at": "2026-11-09T06:50:47",
+ "generated_at": "2026-11-09T15:05:14+00:00",
+ "probe_checked_at": "2026-11-09T07:05:14",
  "comparable": true,
  "drift": [],
- "pooled": 81.8,
- "mean": 83.1,
+ "pooled": 82.4,
+ "mean": 84.0,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -2593,89 +2593,11 @@
    ]
   },
   "venn-diagram": {
-   "score": 37.7,
-   "got": 20.0,
+   "score": 100.0,
+   "got": 53.0,
    "total": 53.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "List each set's members and have them sorted into the regions",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Split a region's text into lines with commas",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw one set",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw two sets separate",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw one set inside the other",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the universal set U, xi, S, epsilon, a word or nothing",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Shade any chosen combination of regions",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Shade with a black-and-white pattern",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Give empty regions a blank line for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i01",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a region on the figure to type what goes in it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i02",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a region on the figure to shade it",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "volume-by-displacement": {
    "score": 94.8,

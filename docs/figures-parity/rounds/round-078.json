@@ -1,0 +1,35 @@
+{
+ "round": 78,
+ "figure": "venn-diagram",
+ "capability": "cap-04",
+ "hypothesis": "Batch 3 venn-diagram: cap-04; evidence changes:universal=ξ",
+ "started_at": "2026-11-09T07:05:10",
+ "git": "6595949",
+ "before": {
+  "figure": 69.8,
+  "pooled": 82.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T07:05:11",
+ "after": {
+  "figure": 75.5,
+  "pooled": 82.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:universal=ξ",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/8298dee6e60f3200.png"
+   }
+  ]
+ },
+ "checker": "pass: universal set label",
+ "result": "hit",
+ "evidence": "venn tests + workspace click/double-click test; old saved specs and links as before except text that ran over a line (fixed, nothing lost); shared inline-edit snapping regression fixed in 6595949; task run reference 15 actions, ours 19 on the figure or 11 in the panel",
+ "next": "venn-diagram (remaining)"
+}

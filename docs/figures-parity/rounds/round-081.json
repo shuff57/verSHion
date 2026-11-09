@@ -1,0 +1,35 @@
+{
+ "round": 81,
+ "figure": "venn-diagram",
+ "capability": "cap-06b",
+ "hypothesis": "Batch 3 venn-diagram: cap-06b; evidence changes:{\"show_answers\":false,\"empty\":\"A blank line\"}",
+ "started_at": "2026-11-09T07:05:12",
+ "git": "6595949",
+ "before": {
+  "figure": 86.8,
+  "pooled": 82.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T07:05:13",
+ "after": {
+  "figure": 92.5,
+  "pooled": 82.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:{\"show_answers\":false,\"empty\":\"A blank line\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/venn-diagram/4f4d50443ba677d9.png"
+   }
+  ]
+ },
+ "checker": "pass: blank line in empty regions for students",
+ "result": "hit",
+ "evidence": "venn tests + workspace click/double-click test; old saved specs and links as before except text that ran over a line (fixed, nothing lost); shared inline-edit snapping regression fixed in 6595949; task run reference 15 actions, ours 19 on the figure or 11 in the panel",
+ "next": "venn-diagram (remaining)"
+}

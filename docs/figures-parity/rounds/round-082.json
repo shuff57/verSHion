@@ -1,0 +1,29 @@
+{
+ "round": 82,
+ "figure": "venn-diagram",
+ "capability": "cap-i01",
+ "hypothesis": "Batch 3 venn-diagram: cap-i01; evidence handle:click:double-click a region to type",
+ "started_at": "2026-11-09T07:05:13",
+ "git": "6595949",
+ "before": {
+  "figure": 92.5,
+  "pooled": 82.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T07:05:14",
+ "after": {
+  "figure": 96.2,
+  "pooled": 82.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: double-click a region to type in it (workspace test through the real egui loop)",
+ "result": "hit",
+ "evidence": "venn tests + workspace click/double-click test; old saved specs and links as before except text that ran over a line (fixed, nothing lost); shared inline-edit snapping regression fixed in 6595949; task run reference 15 actions, ours 19 on the figure or 11 in the panel",
+ "next": "venn-diagram (remaining)"
+}

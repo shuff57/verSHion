@@ -14,22 +14,22 @@
    "id": "cap-01b",
    "text": "Split a region's text into lines with commas",
    "class": "control",
-   "evidence": "",
-   "note": "a comma separates regions in verSHion"
+   "evidence": "changes:counts=red flesh; mushy; savory, 9, 5, 4",
+   "note": "Built in batch 2, round 73 (2026-11-08). a comma separates regions in verSHion"
   },
   {
    "id": "cap-01c",
    "text": "List each set's members and have them sorted into the regions",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"mode\":\"Sets\",\"u_set\":\"1-12\",\"a_set\":\"2, 4, 6, 8, 10, 12\",\"b_set\":\"2, 3, 5, 7, 11\"}",
+   "note": "Built in batch 2, round 74 (2026-11-08)."
   },
   {
    "id": "cap-02a",
    "text": "Draw one set",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:sets=1",
+   "note": "Built in batch 2, round 75 (2026-11-08)."
   },
   {
    "id": "cap-02b",
@@ -42,15 +42,15 @@
    "id": "cap-02c",
    "text": "Draw two sets separate",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:arrangement=Separate",
+   "note": "Built in batch 2, round 76 (2026-11-08)."
   },
   {
    "id": "cap-02d",
    "text": "Draw one set inside the other",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:arrangement=B inside A",
+   "note": "Built in batch 2, round 77 (2026-11-08)."
   },
   {
    "id": "cap-03",
@@ -63,8 +63,8 @@
    "id": "cap-04",
    "text": "Name the universal set U, xi, S, epsilon, a word or nothing",
    "class": "control",
-   "evidence": "",
-   "note": "always U"
+   "evidence": "changes:universal=ξ",
+   "note": "Built in batch 2, round 78 (2026-11-08). always U"
   },
   {
    "id": "cap-05a",
@@ -77,8 +77,8 @@
    "id": "cap-05b",
    "text": "Shade any chosen combination of regions",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:shade=A only, B only",
+   "note": "Built in batch 2, round 79 (2026-11-08)."
   },
   {
    "id": "cap-05c",
@@ -91,8 +91,8 @@
    "id": "cap-05d",
    "text": "Shade with a black-and-white pattern",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"shade\":\"A and B\",\"fill\":\"Hatching\"}",
+   "note": "Built in batch 2, round 80 (2026-11-08)."
   },
   {
    "id": "cap-06a",
@@ -105,22 +105,22 @@
    "id": "cap-06b",
    "text": "Give empty regions a blank line for students",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\":false,\"empty\":\"A blank line\"}",
+   "note": "Built in batch 2, round 81 (2026-11-08)."
   },
   {
    "id": "cap-i01",
    "text": "Click a region on the figure to type what goes in it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: Click any region on the figure to fill it in or shade it. No handles on our Venn diagram."
+   "evidence": "handle:click:double-click a region to type",
+   "note": "Built in batch 2, round 82 (2026-11-08). From the page controls, not the bullets. The page says: Click any region on the figure to fill it in or shade it. No handles on our Venn diagram."
   },
   {
    "id": "cap-i02",
    "text": "Click a region on the figure to shade it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Same sentence; cap-05b is the setting, this is the click."
+   "evidence": "handle:click:Click a region to shade it",
+   "note": "Built in batch 2, round 83 (2026-11-08). From the page controls, not the bullets. Same sentence; cap-05b is the setting, this is the click."
   }
  ]
 }
