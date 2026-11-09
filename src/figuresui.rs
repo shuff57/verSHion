@@ -6339,6 +6339,34 @@ mod tests {
         assert_eq!(figures::cards::summary("free-body-diagram", "motion", &ws.params).as_deref(), Some("velocity 0°, acceleration 0°"));
     }
 
+    /// Motion map: the motion graphs' Segment cards edit its segments (add, remove, reorder), each with the
+    /// map's own worked line, and the hidden first-version scale switch never shows.
+    #[test]
+    fn motion_map_segment_cards_in_the_panel() {
+        use egui_phosphor::regular::{ARROW_UP, TRASH};
+        let (ctx, mut ws) = open_tall("motion-map");
+        open_section(&ctx, &mut ws, "Motion");
+        assert_eq!(count_text(&ctx, &mut ws, "Segment 4"), 1);
+        assert_eq!(count_named(&ctx, &mut ws, TRASH), 4);
+        assert_eq!(count_text(&ctx, &mut ws, "A to B (0\u{2013}4 s): speeding up from 0 to 4 m/s, a = 1 m/s\u{b2}; 0 m to 8 m"), 1);
+        click_nth(&ctx, &mut ws, "+ Constant velocity back", 0);
+        assert_eq!((ws.params.i("n"), ws.params.s("s5_kind")), (5, "Constant velocity back"));
+        // segment 2 moves up (its up arrow is the second), then segment 1 goes
+        click_nth(&ctx, &mut ws, ARROW_UP, 1);
+        assert_eq!((ws.params.s("s1_kind"), ws.params.s("s2_kind")), ("Constant velocity forward", "Speeding up"));
+        click_nth(&ctx, &mut ws, TRASH, 0);
+        assert_eq!((ws.params.i("n"), ws.params.s("s1_kind")), (4, "Speeding up"));
+        // the map's own worked line: speeding up from rest again, so it asks which way
+        assert_eq!(count_text(&ctx, &mut ws, "A to B (0\u{2013}4 s): speeding up from 0 to 4 m/s, a = 1 m/s\u{b2}; 0 m to 8 m"), 1);
+        assert_eq!(count_named(&ctx, &mut ws, "Back"), 1);
+        // the old four-stage controls are gone, and the first-version scale switch never shows
+        let defs = (reg()[ws.sel.unwrap()].params)();
+        assert!(defs.iter().all(|d| !["up", "accel", "cruise", "down", "rest", "dir"].contains(&d.key)));
+        open_section(&ctx, &mut ws, "Number line");
+        assert_eq!(count_named(&ctx, &mut ws, "Keep the first version's scale") + count_text(&ctx, &mut ws, "Keep the first version's scale"), 0);
+        assert_eq!(count_named(&ctx, &mut ws, "Mark the origin") + count_text(&ctx, &mut ws, "Mark the origin"), 1);
+    }
+
     /// Vector diagram: cards with remove, reorder and "Add a vector".
     #[test]
     fn vector_cards_in_the_panel() {

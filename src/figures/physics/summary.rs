@@ -203,19 +203,52 @@ pub(super) fn summary(id: &str, title: &str, p: &Params) -> Option<String> {
         }
 
         ("motion-map", "Motion") => {
-            let mut v: Vec<&str> = Vec::new();
-            if p.f("up") > 0.0 { v.push("speeding up"); }
-            if p.f("cruise") > 0.0 { v.push(if p.s("dir") == "Back" { "back" } else { "forward" }); }
-            if p.f("down") > 0.0 { v.push("slowing down"); }
-            if p.f("rest") > 0.0 { v.push("rest"); }
-            or_none(v.into_iter().map(String::from).collect(), ", ")
+            let n = p.i("n").clamp(1, 6);
+            let v: Vec<String> = (1..=n).map(|i| match p.s(&format!("s{i}_kind")) {
+                "At rest" => "rest",
+                "Constant velocity forward" => "forward",
+                "Constant velocity back" => "back",
+                "Speeding up" => "speeding up",
+                _ => "slowing down",
+            }.to_string()).collect();
+            or_none(v, ", ")
         }
-        ("motion-map", "Dots") => format!("every {} s", trim(p.f("dt"), 2)),
-        ("motion-map", "Arrows") => if p.s("arrows") == "Velocity" { "velocity".into() } else { "none".into() },
-        ("motion-map", "Number line") => if p.b("numbers") { "numbered".into() } else { "not numbered".into() },
+        ("motion-map", "Dots") => {
+            let mut v = vec![format!("every {} s", trim(p.f("dt"), 2))];
+            match p.s("on_dots") {
+                "Times" => v.push("times".into()),
+                "A letter on every dot" => v.push("letters".into()),
+                "Letters at the segment ends" => v.push("letters at the ends".into()),
+                _ => {}
+            }
+            match p.s("obj_mode") {
+                "Text" if !p.s("obj").trim().is_empty() => v.push(format!("\u{201c}{}\u{201d}", p.s("obj").trim())),
+                "Blank line" => v.push("object blank".into()),
+                _ => {}
+            }
+            v.join(DOT)
+        }
+        ("motion-map", "Arrows") => {
+            let mut v: Vec<String> = Vec::new();
+            if p.s("arrows") == "Velocity" { v.push("velocity".into()); }
+            if p.b("acc_arrows") { v.push("acceleration".into()); }
+            if p.b("disp") {
+                v.push(match p.s("disp_mode") {
+                    "Text" if !p.s("disp_lab").trim().is_empty() => format!("displacement \u{201c}{}\u{201d}", p.s("disp_lab").trim()),
+                    "Blank line" => "displacement, blank".into(),
+                    _ => "displacement".into(),
+                });
+            }
+            if v.is_empty() { "dots only".into() } else { v.join(DOT) }
+        }
+        ("motion-map", "Number line") => {
+            let mut s = if p.b("numbers") { "numbered".to_string() } else { "not numbered".to_string() };
+            if p.b("origin") { s.push_str(DOT); s.push_str("origin"); }
+            s
+        }
         ("motion-map", "Title and answer key") => {
             let t = p.s("title").trim();
-            format!("{}{DOT}no answer key", if t.is_empty() { "no title".to_string() } else { format!("title \u{201c}{t}\u{201d}") })
+            format!("{}{DOT}{}", if t.is_empty() { "no title".to_string() } else { format!("title \u{201c}{t}\u{201d}") }, if p.b("key") { "answer key" } else { "no answer key" })
         }
         ("ray-diagram", "Lens or mirror") => format!("{}{DOT}f = {} cm", p.s("kind"), trim(p.f("f"), 1)),
         ("ray-diagram", "Object") => format!("{} cm away{DOT}{} cm tall", trim(p.f("dist"), 1), trim(p.f("height"), 1)),

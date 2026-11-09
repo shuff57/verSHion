@@ -1051,12 +1051,14 @@ static LENGTH_PHYS: [RefSection; 5] = [
     s("Title and answer key", &["title_style", "title", "answer"], ""),
 ];
 
-static MOTION_MAP: [RefSection; 5] = [
-    s("Motion", &["up", "accel", "cruise", "down", "rest", "dir"], ""),
-    s("Dots", &["dt"], ""),
-    s("Arrows", &["arrows"], ""),
-    s("Number line", &["numbers", "xlabel"], ""),
-    s("Title and answer key", &["title", "label_size"], ""),
+/// The motion map: its segments are edited in the Motion section's Segments card (as on the motion graphs).
+static MOTION_MAP: [RefSection; 6] = [
+    s("Motion", &["n", "x0"], ""),
+    s("Dots", &["dt", "on_dots", "obj_mode", "obj"], ""),
+    s("Arrows", &["arrows", "acc_arrows", "disp", "disp_mode", "disp_lab"], ""),
+    s("Number line", &["numbers", "origin", "xlabel", "old_scale"], ""),
+    s("Title and answer key", &["title", "key", "label_size"], ""),
+    s("Figure", &["color"], ""),
 ];
 
 static RAY_DIAGRAM: [RefSection; 5] = [
@@ -1322,8 +1324,8 @@ pub fn phys_tip(fig: &str, key: &str, p: &super::Params) -> Option<String> {
         ("length-reading", "offset") => "You can also drag the object along the ruler in the figure.",
         ("length-reading", "dashes") => "Lines from the object\u{2019}s ends down to the ruler, for marbles and rocks, whose ends are above where they touch it.",
         ("length-reading", "mag_show") => "One on the object\u{2019}s right end, and one on its left end when that isn\u{2019}t lined up with 0.",
-        ("motion-map", "up") => "Speeding up and slowing down carry on from the velocity before them. The Motion Graph Generator opens with the same segments and starting position, so its graphs and this map show the same motion.",
-        ("motion-map", "dt") => "A dot every \u{394}t, where the object is at that moment. Dots at one spot while it\u{2019}s at rest are drawn as one, with the times it\u{2019}s there. Each time it turns back, the dots carry on above the ones before. At a segment end a dot takes the next segment\u{2019}s velocity.",
+        ("motion-map", "x0") => "Speeding up and slowing down keep going the way the object was already moving; only a speed-up from rest asks which way. The motion graphs take the same segments, so the same numbers give the same motion there.",
+        ("motion-map", "dt") => "Each dot is where the object is at that instant, \u{394}t apart. While it is at rest its dots sit on one spot and are labelled together (12\u{2013}15 s). Each time it turns back its dots move up a row. A dot where one segment ends and the next begins takes the next one\u{2019}s velocity and row.",
         ("ray-diagram", "kind") => "Drawn to scale in cm. The image is where 1/f = 1/do + 1/di puts it. Rays bend at the line through the middle of a lens, and reflect at the line through a mirror\u{2019}s vertex, as textbooks draw them, so they meet exactly at the image. The answer key takes real as positive.",
         _ => return None,
     };

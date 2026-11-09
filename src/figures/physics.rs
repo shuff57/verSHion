@@ -8,6 +8,7 @@ mod graphs;
 mod instr;
 mod mech;
 mod optics;
+mod motion_map;
 mod pulley;
 pub(crate) use pulley::{pulley_relevant, pulley_setup_changed};
 mod examples;
@@ -26,22 +27,35 @@ pub fn skin_summary(id: &str, title: &str, p: &Params) -> Option<String> {
         "inclined-plane" => mech::incline_summary(title, p),
         _ if summary::summary(id, title, p).is_some() => summary::summary(id, title, p),
         // the reference words the Figure card's summary as "black and white" (or "color")
-        _ if title == "Figure" && matches!(id, "free-body-diagram" | "vector-diagram" | "pulley" | "projectile-motion" | "motion-graphs" | "circuit-diagram") => {
+        _ if title == "Figure" && matches!(id, "free-body-diagram" | "vector-diagram" | "pulley" | "projectile-motion" | "motion-graphs" | "motion-map" | "circuit-diagram") => {
             Some(if p.b("color") { "color" } else { "black and white" }.into())
         }
         _ => None,
     }
 }
 
-/// The grey worked line under a motion-graph segment: "A to B (0-4 s): speeding up from 0 to 4 m/s, ...".
-pub fn segment_caption(p: &Params, i: usize) -> String {
-    graphs::segment_caption(p, i)
+/// The grey worked line under segment `i` of figure `fig`'s Segments card (the motion graphs or the motion map):
+/// "A to B (0-4 s): speeding up from 0 to 4 m/s, ...".
+pub fn segment_caption_for(fig: &str, p: &Params, i: usize) -> String {
+    if fig == "motion-map" { motion_map::caption(p, i) } else { graphs::segment_caption(p, i) }
 }
 
-/// Whether segment `i` (1-based) of the motion graphs asks which way it speeds up: only a
+/// Whether segment `i` (1-based) of figure `fig`'s Segments card asks which way it speeds up: only a
 /// speed-up from rest has a direction of its own.
-pub fn segment_has_way(p: &Params, i: usize) -> bool {
-    graphs::segment_has_way(p, i)
+pub fn segment_has_way_for(fig: &str, p: &Params, i: usize) -> bool {
+    if fig == "motion-map" { motion_map::has_way(p, i) } else { graphs::segment_has_way(p, i) }
+}
+
+/// Whether the motion map's control `key` applies to `p` (other figures: always).
+pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
+    fig != "motion-map" || motion_map::relevant(key, p)
+}
+
+/// A motion map saved or shared before its segments: rewritten as the same motion in segments.
+pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
+    if id == "motion-map" {
+        motion_map::migrate(spec, p);
+    }
 }
 
 /// How many objects the inclined plane draws.
@@ -86,7 +100,7 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
                 set: vec![("v{n}_mag", Value::F(3.0)), ("v{n}_ang", Value::F(90.0)), ("v{n}_lab", Value::S("{L}".into())), ("v{n}_lab_mode", Value::S("Text".into()))],
             }],
         }),
-        "motion-graphs" => {
+        "motion-graphs" | "motion-map" => {
             // the reference's "Add a segment" buttons: kind, speed, 3 s, forward
             let seg = |label: &'static str, v: f64| Chip {
                 label,

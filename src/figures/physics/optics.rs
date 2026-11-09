@@ -1,102 +1,11 @@
-//! Motion map and ray diagram (the reference physics site's two figures with a one-line setup).
+//! Ray diagram, and the motion map's entry (its code is in `motion_map.rs`): the reference physics site's two
+//! figures with a one-line setup.
 use super::common::*;
 use crate::figures::{answers_param, FigureDef, ParamDef, Params, Subject, SHOW_ANSWERS};
 use std::fmt::Write;
 
 /// The reference's ink colour for these two figures.
 const NAVY: &str = "#111827";
-
-// ---------------------------------------------------------------- motion map
-
-fn map_params() -> Vec<ParamDef> {
-    vec![
-        ParamDef::float("up", "Speeding up for (s)", 0.0, 12.0, 0.5, 4.0),
-        ParamDef::float("accel", "Acceleration (m/s\u{b2})", 0.1, 6.0, 0.1, 1.0),
-        ParamDef::float("cruise", "Constant velocity for (s)", 0.0, 12.0, 0.5, 4.0),
-        ParamDef::float("down", "Slowing down for (s)", 0.0, 12.0, 0.5, 4.0),
-        ParamDef::float("rest", "At rest for (s)", 0.0, 12.0, 0.5, 3.0),
-        ParamDef::choice("dir", "Direction", &["Forward", "Back"], "Forward"),
-        ParamDef::float("dt", "Time between dots (s)", 0.25, 4.0, 0.25, 1.0),
-        ParamDef::choice("arrows", "Arrows", &["Velocity", "None"], "Velocity"),
-        ParamDef::bool("numbers", "Numbers on the number line", true),
-        ParamDef::text("xlabel", "Number line label", "x (m)"),
-        ParamDef::text("title", "Chart title", ""),
-    ]
-}
-
-/// Position and velocity at time `t` of the four-phase motion.
-fn map_state(p: &Params, t: f64) -> (f64, f64) {
-    let (a, tu, tc, td) = (p.f("accel"), p.f("up"), p.f("cruise"), p.f("down"));
-    let v1 = a * tu;
-    let x1 = 0.5 * a * tu * tu;
-    let x2 = x1 + v1 * tc;
-    let dec = if td > 0.0 { v1 / td } else { 0.0 };
-    let x3 = x2 + v1 * td - 0.5 * dec * td * td;
-    if t <= tu { (0.5 * a * t * t, a * t) }
-    else if t <= tu + tc { (x1 + v1 * (t - tu), v1) }
-    else if t <= tu + tc + td { let d = t - tu - tc; (x2 + v1 * d - 0.5 * dec * d * d, v1 - dec * d) }
-    else { (x3, 0.0) }
-}
-
-fn map_render(p: &Params) -> String {
-    let total = p.f("up") + p.f("cruise") + p.f("down") + p.f("rest");
-    let dt = p.f("dt").max(0.05);
-    let n = ((total / dt) + 1e-6).floor() as usize + 1;
-    let sign = if p.s("dir") == "Back" { -1.0 } else { 1.0 };
-    let dots: Vec<(f64, f64)> = (0..n.min(400)).map(|i| map_state(p, i as f64 * dt)).collect();
-    let xmax = dots.iter().map(|d| d.0).fold(1.0, f64::max);
-    // ticks every 1, numbered every 5, the line one past the last numbered tick
-    let last = (xmax / 5.0).ceil() * 5.0;
-    let len = last + 1.0;
-    let r = 3.93;
-    let (axis_len, pad) = (782.0, 16.0);
-    let k = axis_len / len;
-    let xo = |m: f64| r + m * k;
-    let xlab = p.s("xlabel").trim().to_string();
-    let lab_w = if p.b("numbers") && !xlab.is_empty() { 8.0 + 4.69 * xlab.chars().count() as f64 } else { 0.0 };
-    let w = 2.0 * pad + axis_len + r + 4.0 + lab_w + if lab_w > 0.0 { 6.0 } else { 0.0 };
-    let title = p.s("title").trim().to_string();
-    let top = if title.is_empty() { 0.0 } else { 32.0 };
-    let h = 2.0 * pad + 60.04 + top;
-    let mut g = G::new(w, h, false);
-    if !title.is_empty() { g.title_text(w / 2.0, pad + 14.0, 19.0, &title); }
-    g.raw(&format!(r#"<g transform="translate({pad} {})" font-family="Arial, Helvetica, sans-serif">"#, pad + top));
-    let ay = 34.64;
-    g.line(r, ay, r + axis_len, ay, NAVY, 2.0);
-    let ticks = last as i64;
-    for m in 0..=ticks {
-        let major = m % 5 == 0;
-        let (y0, y1, sw) = if major { (ay - 6.0, ay + 6.0, 1.5) } else { (ay - 3.5, ay + 3.5, 1.0) };
-        g.line(xo(m as f64), y0, xo(m as f64), y1, NAVY, sw);
-    }
-    g.poly(&[(r + axis_len + 2.0, ay), (r + axis_len - 10.0, ay - 5.0), (r + axis_len - 10.0, ay + 5.0)], NAVY, NAVY, 0.0);
-    if p.b("numbers") {
-        for m in (0..=ticks).step_by(5) {
-            g.text(xo(m as f64), 55.84, 14.0, "middle", &format!("{m}"), true);
-        }
-        if !xlab.is_empty() { g.text(r + axis_len + 8.0, 39.54, 14.0, "start", &xlab, true); }
-    }
-    let at = |m: f64| xo(sign * m + if sign < 0.0 { last } else { 0.0 });
-    for &(x, v) in &dots {
-        g.circle(at(x), 16.71, r, NAVY, NAVY, 0.0);
-        if p.s("arrows") == "Velocity" && v > 1e-9 {
-            let l = (v * 2.0 * r).max(2.0 * r);
-            let (x0, tip) = (at(x), at(x) + sign * l);
-            let head = 9.0_f64.min(l);
-            let base = tip - sign * head;
-            let shaft = (base - x0).abs();
-            let (dash, gap) = if shaft < 1.0 { (shaft.max(1.0), 0.0) } else {
-                let n = (shaft / 12.0).round().max(1.0);
-                let d = shaft / (n + 0.625 * (n - 1.0));
-                (d, 0.625 * d)
-            };
-            g.raw(&format!(r#"<line x1="{x0:.2}" y1="3.78" x2="{base:.2}" y2="3.78" stroke="{NAVY}" stroke-width="3" stroke-dasharray="{dash:.2} {gap:.2}" stroke-linecap="butt"/>"#));
-            g.poly(&[(tip, 3.78), (base, 7.56), (base, 0.0)], NAVY, NAVY, 0.0);
-        }
-    }
-    g.raw("</g>");
-    g.finish()
-}
 
 // ---------------------------------------------------------------- ray diagram
 
@@ -342,7 +251,7 @@ pub fn defs() -> Vec<FigureDef> {
     vec![
         FigureDef { id: "motion-map", subject: Subject::Physics, title: "Motion Map",
             blurb: "Dots along a number line, one per tick of the clock, each moving dot with its velocity arrow.",
-            params: || ls(map_params()), render: |p| crate::figures::svg::with_label_size(map_render(p), p) },
+            params: || ls(super::motion_map::params()), render: |p| crate::figures::svg::with_label_size(super::motion_map::render(p), p) },
         FigureDef { id: "ray-diagram", subject: Subject::Physics, title: "Ray Diagram",
             blurb: "Principal rays and the image for a lens or a mirror, with the focal points marked.",
             params: || ls(ray_params()), render: |p| crate::figures::svg::with_label_size(ray_render(p), p) },
@@ -351,8 +260,8 @@ pub fn defs() -> Vec<FigureDef> {
 
 #[cfg(test)]
 mod tests {
-    //! Ported from the figures-gapfill motion map and ray diagram (their own implementations were dropped in the merge
-    //! for these), adapted to this file's models: four-stage motion from rest, and lenses or mirrors drawn to scale.
+    //! Ported from the figures-gapfill ray diagram (its own implementation was dropped in the merge), adapted to this
+    //! file's model: lenses or mirrors drawn to scale. The motion map's tests are in `motion_map_tests.rs`.
     use super::*;
     use crate::figures::{answer_pair, registry, to_png, Value};
 
@@ -368,12 +277,6 @@ mod tests {
     fn s(k: &'static str, v: &str) -> (&'static str, Value) { (k, Value::S(v.to_string())) }
     fn b(k: &'static str, v: bool) -> (&'static str, Value) { (k, Value::B(v)) }
     fn ray(list: &[(&'static str, Value)]) -> String { (def("ray-diagram").render)(&with("ray-diagram", list)) }
-    fn map(list: &[(&'static str, Value)]) -> String { (def("motion-map").render)(&with("motion-map", list)) }
-    fn width(svg: &str) -> f64 { svg.split("width=\"").nth(1).and_then(|s| s.split('"').next()).and_then(|s| s.parse().ok()).unwrap_or(0.0) }
-    fn circle_xs(svg: &str) -> Vec<f64> {
-        svg.split("<circle cx=\"").skip(1).filter_map(|s| s.split('"').next()).filter_map(|s| s.parse().ok()).collect()
-    }
-
     // ------------------------------------------------------------ ray diagram
 
     #[test]
@@ -548,69 +451,4 @@ mod tests {
         }
     }
 
-    // ------------------------------------------------------------ motion map
-
-    fn states(list: &[(&'static str, Value)]) -> Vec<(f64, f64)> {
-        let p = with("motion-map", list);
-        let dt = p.f("dt");
-        let total = p.f("up") + p.f("cruise") + p.f("down") + p.f("rest");
-        let n = ((total / dt) + 1e-6).floor() as usize + 1;
-        (0..n).map(|i| map_state(&p, i as f64 * dt)).collect()
-    }
-
-    #[test]
-    fn the_constant_velocity_stage_gives_equal_gaps() {
-        // 1 m/s^2 for 4 s reaches 4 m/s; at a dot every second the cruise covers 4 m between dots
-        let st = states(&[f("up", 4.0), f("accel", 1.0), f("cruise", 4.0), f("down", 0.0), f("rest", 0.0), f("dt", 1.0)]);
-        let gaps: Vec<f64> = st.windows(2).map(|w| w[1].0 - w[0].0).collect();
-        for g in &gaps[4..] { assert!((g - 4.0).abs() < 1e-12, "{gaps:?}"); }
-    }
-
-    #[test]
-    fn speeding_up_grows_the_gaps_by_a_dt_squared() {
-        // from rest the gap from dot k to k+1 is a dt^2 (k + 1/2), so consecutive gaps differ by a dt^2
-        let st = states(&[f("up", 8.0), f("accel", 2.0), f("cruise", 0.0), f("down", 0.0), f("rest", 0.0), f("dt", 0.5)]);
-        let gaps: Vec<f64> = st.windows(2).map(|w| w[1].0 - w[0].0).collect();
-        for w in gaps.windows(2) { assert!((w[1] - w[0] - 2.0 * 0.25).abs() < 1e-12, "{gaps:?}"); }
-        // and the velocities rise by a dt
-        for w in st.windows(2) { assert!((w[1].1 - w[0].1 - 1.0).abs() < 1e-12, "{st:?}"); }
-    }
-
-    #[test]
-    fn slowing_down_stops_rather_than_reversing() {
-        // the defaults: 4 s speeding up, 4 s cruising, 4 s slowing down, 3 s at rest, a dot a second
-        let st = states(&[]);
-        assert!(st.windows(2).all(|w| w[1].0 >= w[0].0 - 1e-12), "the object went backwards: {st:?}");
-        // it comes exactly to rest at 12 s and the dots after it sit on the stopping point
-        assert!(st[12].1.abs() < 1e-12, "{st:?}");
-        for d in &st[12..] { assert!((d.0 - st[12].0).abs() < 1e-12 && d.1 == 0.0, "{st:?}"); }
-        // a dot at rest has no arrow: one arrowhead per moving dot
-        let moving = st.iter().filter(|d| d.1 > 1e-9).count();
-        assert_eq!(map(&[]).matches("<polygon").count() - 1, moving, "arrowheads (less the axis head) != moving dots");
-    }
-
-    #[test]
-    fn every_dot_fits_the_canvas_even_at_the_longest_settings() {
-        for dir in ["Forward", "Back"] {
-            let svg = map(&[f("up", 12.0), f("accel", 6.0), f("cruise", 12.0), f("down", 12.0), f("rest", 12.0), f("dt", 0.25), s("dir", dir)]);
-            let w = width(&svg);
-            // the dots are drawn inside a group moved 16 px in from the left edge
-            for x in circle_xs(&svg) { assert!(x + 16.0 >= 0.0 && x + 16.0 <= w, "{dir}: a dot at {x} is off the {w} px canvas"); }
-        }
-    }
-
-    /// Writes the examples and the extremes to $VERSHION_PNG_DIR.
-    #[test]
-    fn motion_pngs() {
-        let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
-        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![
-            ("default".into(), vec![]),
-            ("back".into(), vec![s("dir", "Back")]),
-            ("longest".into(), vec![f("up", 12.0), f("accel", 6.0), f("cruise", 12.0), f("down", 12.0), f("rest", 12.0), f("dt", 0.25)]),
-        ];
-        for (i, e) in crate::figures::examples_for("motion-map").into_iter().enumerate() { cases.push((format!("ex{i}"), e.params)); }
-        for (tag, list) in cases {
-            std::fs::write(format!("{dir}/motion-{tag}.png"), to_png(&map(&list), 1.0).unwrap()).unwrap();
-        }
-    }
 }

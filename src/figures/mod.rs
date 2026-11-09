@@ -175,7 +175,7 @@ pub fn label_for(fig: &str, key: &str, p: &Params) -> Option<&'static str> {
             "ang_lab_mode" => Some("Angle label"),
             _ => None,
         },
-        "motion-graphs" => {
+        "motion-graphs" | "motion-map" => {
             let (l, i) = layout::item_of(key)?;
             if l != "s" {
                 return None;
@@ -837,6 +837,8 @@ pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
     if id == stats::twoway::ID {
         stats::twoway::migrate(spec, p);
     }
+    // a motion map from before its segments: its four stages become segments with the same motion
+    physics::migrate(id, spec, p);
     math::migrate(id, spec, p)
 }
 

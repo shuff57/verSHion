@@ -36,7 +36,7 @@ pub fn replaces(fig: &str, key: &str) -> Option<Card> {
         ("free-body-diagram", "n") => Card::Forces,
         ("free-body-diagram", "motion") => Card::Motion,
         ("vector-diagram", "n") => Card::Vectors,
-        ("motion-graphs", "n") => Card::Segments,
+        ("motion-graphs" | "motion-map", "n") => Card::Segments,
         ("population-growth", "fit") => Card::GrowthFit,
         ("predator-prey", "x_fit") => Card::PpFit(true),
         ("predator-prey", "y_fit") => Card::PpFit(false),
@@ -66,7 +66,7 @@ pub fn owner(fig: &str, key: &str) -> Option<Card> {
         "free-body-diagram" if item_of(key).is_some_and(|(l, _)| l == "f") => Card::Forces,
         "free-body-diagram" if FBD_MOTION.contains(&key) => Card::Motion,
         "vector-diagram" if item_of(key).is_some_and(|(l, _)| l == "v") => Card::Vectors,
-        "motion-graphs" if item_of(key).is_some_and(|(l, _)| l == "s") => Card::Segments,
+        "motion-graphs" | "motion-map" if item_of(key).is_some_and(|(l, _)| l == "s") => Card::Segments,
         "line-spectrum" if SPECTRUM_OLD.contains(&key) => Card::Strips,
         "particle-diagram" if atoms::is_kind_key(key) => Card::Particles,
         _ => return None,
@@ -81,7 +81,7 @@ pub fn owns(fig: &str, key: &str) -> bool {
 
 /// Figures whose "Add ..." chips live inside a card instead of their own card above the sections.
 pub fn embeds_chips(fig: &str) -> bool {
-    matches!(fig, "free-body-diagram" | "vector-diagram" | "particle-diagram" | "motion-graphs")
+    matches!(fig, "free-body-diagram" | "vector-diagram" | "particle-diagram" | "motion-graphs" | "motion-map")
 }
 
 /// The section header summary when the section holds a card's anchor `key`.
@@ -141,6 +141,7 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         ("ph-reading", "places" | "meter") => p.s("instrument") == "Digital meter",
         ("dna-protein-synthesis", _) => super::biology::dna::relevant(key, p),
         ("photosynthesis", _) => super::biology::photosynthesis::relevant(key, p),
+        ("motion-map", _) => super::physics::relevant(fig, key, p),
         _ => super::stats::relevant(fig, key, p) && super::computing::relevant(fig, key, p) && super::electric::relevant(fig, key, p) && super::accounting::relevant(fig, key, p) && super::economics::relevant(fig, key, p) && super::earth::relevant(fig, key, p) && super::geography::relevant(fig, key, p) && super::music::relevant(fig, key, p) && super::business::relevant(fig, key, p) && super::language::relevant(fig, key, p) && super::health::relevant(fig, key, p) && super::art::relevant(fig, key, p),
     }
 }
@@ -169,7 +170,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(anchors, 13);
+        assert_eq!(anchors, 14);
     }
 
     #[test]

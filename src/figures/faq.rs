@@ -4282,24 +4282,24 @@ const MOTION_MAP: &[Faq] = &[
         a: "Each dot is the object's position at one tick of the clock. Dots that are farther apart mean a larger velocity, evenly spaced dots mean constant velocity, and dots that bunch together mean it is slowing down.",
     },
     Faq {
-        q: "How do I make an object speed up, cruise and slow down?",
-        a: "Set how long it speeds up, how long it keeps a constant velocity and how long it slows down. The acceleration sets how quickly the velocity changes in the first and last stages.",
+        q: "How do I build the motion?",
+        a: "Give it up to six segments, in any order: at rest, constant velocity forward or back, speeding up or slowing down, each with the speed it reaches and how long it lasts, and set where it starts. Speeding up and slowing down carry on from the velocity before them, so the acceleration is the change in velocity over the segment's time.",
     },
     Faq {
         q: "Why is there no arrow on some dots?",
         a: "A dot gets a velocity arrow only while the object is moving. A dot at rest has no arrow, because its velocity is zero.",
     },
     Faq {
-        q: "Can the object move backwards?",
-        a: "Yes. Choose Back for the direction and the dots run toward the left with their arrows pointing left.",
+        q: "What happens when the object turns back?",
+        a: "Its dots move up a row, so the way back does not sit on top of the way there, and their arrows point the new way. The dot where it turns takes the new segment's velocity and row.",
     },
     Faq {
-        q: "What does each dot mean?",
-        a: "One flash of a strobe: the object's position at that instant. The flashes are equally spaced in time, so the diagram is a record of position against time with the time axis hidden \u{2014} which is why the gaps between dots carry the information.",
+        q: "Which way does the acceleration arrow point?",
+        a: "Along the velocity while the object speeds up, against it while it slows down, and a = 0 over a constant velocity or a rest. A segment has one acceleration, so it gets one arrow, drawn the same length for every segment: it shows the direction, not the size.",
     },
     Faq {
-        q: "Why does the object stop instead of going backwards?",
-        a: "A slowing object cannot reverse without something pushing it back. The slowing-down stage brings it exactly to rest, and while it is at rest the dots sit on the stopping point, with no arrow.",
+        q: "What does the answer key say?",
+        a: "Each segment from letter to letter with its times, velocities, acceleration and positions, then the total displacement (end minus start) and the distance travelled (every metre moved, either way). It is worked out from the same motion the dots are drawn from.",
     },
 ];
 

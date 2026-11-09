@@ -430,7 +430,7 @@ impl Workspace {
             Card::Forces => self.forces_card(ui, pdefs),
             Card::Motion => self.motion_card(ui),
             Card::Vectors => self.vectors_card(ui, pdefs),
-            Card::Segments => self.segments_card(ui, pdefs),
+            Card::Segments => self.segments_card(ui, fig, pdefs),
             Card::GrowthFit => self.growth_fit_card(ui, fig),
             Card::PpFit(x) => self.pp_fit_box(ui, x),
             Card::PpReadout => {
@@ -1171,10 +1171,10 @@ impl Workspace {
         ui.add_space(4.0);
     }
 
-    /// The motion graphs' Segment 1..n blocks, as the reference lays them out: a bold title with
-    /// move up / move down / delete icons, "What it does", the speed and duration side by side,
-    /// "Which way" where it applies and a grey worked line, a rule between blocks.
-    fn segments_card(&mut self, ui: &mut Ui, pdefs: &[ParamDef]) {
+    /// The motion graphs' (and the motion map's) Segment 1..n blocks, as the reference lays them out: a
+    /// bold title with move up / move down / delete icons, "What it does", the speed and duration side by
+    /// side, "Which way" where it applies and a grey worked line, a rule between blocks.
+    fn segments_card(&mut self, ui: &mut Ui, fig: &str, pdefs: &[ParamDef]) {
         let n = self.params.i("n").clamp(1, 6) as usize;
         let (mut remove, mut swap) = (None, None);
         let skin = theme::chem_skin();
@@ -1200,7 +1200,7 @@ impl Workspace {
                 });
             });
             if let Some(pd) = def(&k("kind")) {
-                param_control(ui, "motion-graphs", &pd, &mut self.params);
+                param_control(ui, fig, &pd, &mut self.params);
             }
             ui.add_space(6.0);
             let (kv, kt) = (def(&k("v")), def(&k("t")));
@@ -1214,10 +1214,10 @@ impl Workspace {
             ui.spacing_mut().item_spacing.x = 10.0;
             ui.columns(cols, |c| {
                 for (ci, pd) in fields.iter().enumerate() {
-                    param_control(&mut c[ci], "motion-graphs", pd, &mut self.params);
+                    param_control(&mut c[ci], fig, pd, &mut self.params);
                 }
             });
-            if figures::physics::segment_has_way(&self.params, i) {
+            if figures::physics::segment_has_way_for(fig, &self.params, i) {
                 ui.add_space(6.0);
                 ui.label(super::chem_shell::label_name(ui.ctx(), "Which way", 14.08));
                 let mut cur = self.params.s(&k("dir")).to_string();
@@ -1228,7 +1228,7 @@ impl Workspace {
                 }
             }
             ui.add_space(8.0);
-            ui.add(egui::Label::new(theme::muted(figures::physics::segment_caption(&self.params, i)).size(13.6).line_height(Some(19.72))).wrap());
+            ui.add(egui::Label::new(theme::muted(figures::physics::segment_caption_for(fig, &self.params, i)).size(13.6).line_height(Some(19.72))).wrap());
             ui.add_space(10.0);
             if i < n {
                 let y = ui.cursor().top();
@@ -1244,7 +1244,7 @@ impl Workspace {
             items::swap_items(&mut q, pdefs, "s", a, b);
             self.card_commit(q, true);
         }
-        self.add_chips(ui, "motion-graphs", pdefs);
+        self.add_chips(ui, fig, pdefs);
         ui.add_space(4.0);
     }
 

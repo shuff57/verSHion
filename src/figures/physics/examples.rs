@@ -13,9 +13,21 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
     let _ = (f(0.0), i(0));
     Some(match id {
         "motion-map" => vec![
-            ex("Motion map of a cart that speeds up, moves at a constant velocity, slows down and stops", vec![("dt", f(1.0)), ("rest", f(3.0))]),
-            ex("Motion map of an object speeding up from rest", vec![("up", f(8.0)), ("cruise", f(0.0)), ("down", f(0.0)), ("rest", f(0.0))]),
+            ex("Motion map of a cart that speeds up, moves at a constant velocity, slows down and stops", vec![("dt", f(1.0)), ("s4_t", f(3.0))]),
+            ex("Motion map of an object speeding up from rest", vec![("n", i(1)), ("s1_v", f(8.0)), ("s1_t", f(8.0))]),
             ex("Dots-only motion map: draw the velocity arrows", vec![("arrows", s("None"))]),
+            ex("Ball rolled up a ramp: it slows, turns back and speeds up", vec![
+                ("n", i(3)), ("s1_kind", s("Constant velocity forward")), ("s1_v", f(6.0)), ("s1_t", f(1.0)),
+                ("s2_kind", s("Slowing down")), ("s2_v", f(0.0)), ("s2_t", f(4.0)),
+                ("s3_kind", s("Speeding up")), ("s3_v", f(6.0)), ("s3_t", f(4.0)), ("s3_dir", s("Back")),
+                ("acc_arrows", b(true)), ("on_dots", s("Times")),
+            ]),
+            ex("Walk there and back: find the displacement and the distance", vec![
+                ("n", i(3)), ("s1_kind", s("Constant velocity forward")), ("s1_v", f(2.0)), ("s1_t", f(5.0)),
+                ("s2_kind", s("At rest")), ("s2_t", f(3.0)),
+                ("s3_kind", s("Constant velocity back")), ("s3_v", f(1.0)), ("s3_t", f(6.0)),
+                ("on_dots", s("Letters at the segment ends")), ("disp", b(true)), ("disp_mode", s("Blank line")), ("origin", b(true)),
+            ]),
         ],
         "ray-diagram" => vec![
             ex("Converging lens ray diagram: object beyond 2F", vec![("dist", f(30.0))]),

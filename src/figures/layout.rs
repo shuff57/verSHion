@@ -24,7 +24,7 @@ fn item_noun(fig: &str, letters: &str) -> &'static str {
     match (fig, letters) {
         ("free-body-diagram", _) => "Force",
         ("vector-diagram", _) => "Vector",
-        ("motion-graphs", _) => "Segment",
+        ("motion-graphs" | "motion-map", _) => "Segment",
         ("circuit-diagram", _) => "Component",
         ("osmosis", _) => "Solute",
         _ => "Item",
