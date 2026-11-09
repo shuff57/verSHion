@@ -198,7 +198,7 @@ fn number(c: &str) -> Option<f64> {
 }
 
 /// "1,200" or "12,345,678.5": digits in comma-separated groups of three after a first group of 1-3.
-fn thousands_grouped(s: &str) -> bool {
+pub(crate) fn thousands_grouped(s: &str) -> bool {
     let int = s.split('.').next().unwrap_or("");
     let mut groups = int.split(',');
     let first = groups.next().unwrap_or("");

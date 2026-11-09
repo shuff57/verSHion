@@ -802,3 +802,22 @@ fn the_figure_renders_to_png_in_every_new_state() {
     let svg = render(&p);
     assert!(crate::figures::to_png(&svg, 1.0).is_ok());
 }
+
+#[test]
+fn a_frequency_in_thousands_groups_or_with_an_exponent_reads_as_one_number() {
+    let read = |t: &str| { let mut n = Vec::new(); let r = rows(t, &mut n); (r.iter().map(|r| (r.lo, r.hi, r.f)).collect::<Vec<_>>(), n) };
+    // the checker found "10, 1,000" refused as overlapping bins and 2e3 read as 2
+    assert_eq!(read("10, 1,000\n20, 1,250").0, vec![(None, 10.0, Some(1000.0)), (None, 20.0, Some(1250.0))]);
+    assert_eq!(read("10, 2e3").0, vec![(None, 10.0, Some(2000.0))]);
+    assert_eq!(read("10, 1.5E1").0, vec![(None, 10.0, Some(15.0))]);
+    // too big to hold is said, not read as something else
+    let (r, n) = read("10, 1e400");
+    assert_eq!(r, vec![(None, 10.0, None)]);
+    assert!(n.iter().any(|m| m.contains("not a number")), "{n:?}");
+    // a class and a frequency separated by commas read as before
+    assert_eq!(read("60,100,5").0, vec![(Some(60.0), 100.0, Some(5.0))]);
+    assert_eq!(read("60,100, 5").0, vec![(Some(60.0), 100.0, Some(5.0))]);
+    assert_eq!(read("60, 100, 5").0, vec![(Some(60.0), 100.0, Some(5.0))]);
+    assert_eq!(read("140 < h \u{2264} 150\t1,000\n150 < h \u{2264} 165\t1,200").0, vec![(Some(140.0), 150.0, Some(1000.0)), (Some(150.0), 165.0, Some(1200.0))]);
+    assert_eq!(read("140 < h \u{2264} 150\t7").0, vec![(Some(140.0), 150.0, Some(7.0))]);
+}

@@ -165,6 +165,23 @@ fn numbers_in(s: &str) -> (Vec<f64>, bool) {
                 t.push(cs[j]);
                 j += 1;
             }
+            // an exponent, `2e3` or `1.5E-2`: without this 2e3 was read as 2
+            if j < cs.len() && matches!(cs[j], 'e' | 'E') {
+                let mut k = j + 1;
+                let mut e = String::from("e");
+                if k < cs.len() && matches!(cs[k], '+' | '-') {
+                    e.push(cs[k]);
+                    k += 1;
+                }
+                if k < cs.len() && cs[k].is_ascii_digit() {
+                    while k < cs.len() && cs[k].is_ascii_digit() {
+                        e.push(cs[k]);
+                        k += 1;
+                    }
+                    t.push_str(&e);
+                    j = k;
+                }
+            }
             if let Ok(v) = t.parse::<f64>() {
                 if v.is_finite() {
                     out.push(v);
@@ -185,6 +202,26 @@ fn numbers_in(s: &str) -> (Vec<f64>, bool) {
     (out, range)
 }
 
+/// The fields of a table line, split at tabs, commas, semicolons or bars. A frequency written in
+/// thousands groups after a comma and a space (`10, 1,000`) stays one number; only the last field
+/// (the frequency) is read that way, and only when no other field has a comma in it, so `60,100,5`
+/// and `60,100, 5` still read as a class from 60 to 100 with frequency 5. A pasted row
+/// (`140 < h ≤ 150<tab>1,000`) is read the same way with the tab as the separator.
+fn fields_of(line: &str) -> Vec<String> {
+    let plain = || line.split(['\t', ',', ';', '|']).map(|f| f.trim().to_string()).collect();
+    // a pasted worksheet row is split at tabs; a typed one at a comma and a space
+    let sep = if line.contains('\t') { "\t" } else { ", " };
+    if line.contains([';', '|']) || !line.contains(sep) {
+        return plain();
+    }
+    let parts: Vec<&str> = line.split(sep).map(str::trim).collect();
+    let (last, rest) = parts.split_last().expect("split gives at least one part");
+    if rest.iter().any(|f| f.contains(',')) || !super::pie::thousands_grouped(last) {
+        return plain();
+    }
+    rest.iter().map(|f| f.to_string()).chain(std::iter::once(last.replace(',', ""))).collect()
+}
+
 /// The rows of the typed table. A line is split into fields at tabs, commas, semicolons or bars;
 /// the last field is the frequency (empty for no bar) and the rest say where the bin ends (and
 /// where it starts, when they give two numbers). A line with one field is read by its numbers:
@@ -196,11 +233,11 @@ fn rows(text: &str, notes: &mut Vec<String>) -> Vec<Row> {
         if line.is_empty() {
             continue;
         }
-        let fields: Vec<&str> = line.split(['\t', ',', ';', '|']).map(str::trim).collect();
+        let fields = fields_of(line);
         let (lo, hi, f, freq_text) = if fields.len() >= 2 {
             let class = fields[..fields.len() - 1].join(" ");
             let (cn, _) = numbers_in(&class);
-            let last = fields[fields.len() - 1];
+            let last = fields[fields.len() - 1].as_str();
             let (fv, _) = numbers_in(last);
             match cn.len() {
                 0 => {
