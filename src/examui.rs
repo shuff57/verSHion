@@ -167,6 +167,15 @@ struct EditUi {
     zoom: f32,
     /// The zoom the page actually drew at last frame, for the bar's percentage.
     zoom_eff: f32,
+    /// Narrow window only: the work area shows the question bank instead of the page.
+    bank_tab: bool,
+    /// This frame's narrow-or-not decision (see [`narrow_mode`]).
+    narrow: bool,
+    /// Height of the format bar's zoom well when last drawn, held while the bank tab hides it.
+    zoom_well_h: f32,
+    /// This frame the bank fills the work area on its own (narrow window, bank tab), so there
+    /// is no page beside it to drag onto.
+    shelf_alone: bool,
 }
 
 #[derive(Clone)]
@@ -1095,6 +1104,10 @@ fn draw_editor(
     exam_id: &Id,
     st: &mut EditUi,
 ) {
+    // One narrow-or-not decision a frame, from the editor's full width, for both the format
+    // bar's zoom well and the work area below it.
+    st.narrow = narrow_mode(ui.available_width(), &mut st.bank_tab);
+    st.shelf_alone = st.narrow && st.bank_tab;
     draw_top_card(app, ui, exam_id, st);
     ui.add_space(10.0);
     if !FORMAT_POPOVER {
@@ -1106,14 +1119,22 @@ fn draw_editor(
     // Under ~860 px the shelf beside the page squeezed the paper to about 50%, which is the one
     // thing a teacher can not do at that size: read their own questions. Below that width the
     // shelf moves under the desk instead of beside it, so the page gets the whole column.
-    let narrow = rest.width() < 860.0;
+    // Stacked, though, neither half was usable at 760 x 800: the page was cut off half way
+    // through its first question and the bank's questions sat below the window's edge. So a
+    // narrow window switches between the two, each at the full height of the work area.
+    let narrow = st.narrow;
     let (desk_rect, shelf_rect) = if narrow {
-        let shelf_h = (rest.height() * 0.34).clamp(150.0, 260.0);
-        let split = (rest.bottom() - shelf_h - 10.0).max(rest.top() + 160.0);
-        (
-            Rect::from_min_max(rest.left_top(), Pos2::new(rest.right(), split)),
-            Rect::from_min_max(Pos2::new(rest.left(), split + 10.0), rest.right_bottom()),
-        )
+        let strip = Rect::from_min_size(rest.left_top(), Vec2::new(rest.width(), NARROW_SWITCH_H));
+        let items: Vec<ExamItem> = app.store.exam(exam_id).map(|e| e.items.clone()).unwrap_or_default();
+        let on_page = items.len();
+        // The bank's questions not on the page yet: what the other tab has to offer.
+        let n = app.panel_bank.as_ref().and_then(|b| app.store.bank(b)).map(|b| {
+            b.questions.iter().filter(|q| !items.iter().any(|it| it.bank_id == b.id && it.question_id == q.id)).count()
+        });
+        narrow_switch(ui, strip, &mut st.bank_tab, on_page, n);
+        st.shelf_alone = st.bank_tab;
+        let body = Rect::from_min_max(Pos2::new(rest.left(), strip.bottom() + 10.0), rest.right_bottom());
+        if st.bank_tab { (Rect::NOTHING, body) } else { (body, Rect::NOTHING) }
     } else {
         let shelf_w = SHELF_W.min((rest.width() * 0.4).max(260.0));
         (
@@ -1121,25 +1142,105 @@ fn draw_editor(
             Rect::from_min_max(Pos2::new(rest.right() - shelf_w, rest.top()), rest.right_bottom()),
         )
     };
-    st.desk_rect = Some(desk_rect);
+    st.desk_rect = (!st.shelf_alone).then_some(desk_rect);
     ui.allocate_rect(rest, Sense::hover());
 
-    // Desk: the table colour (with grid) behind the paper.
-    {
-        let p = ui.painter();
-        p.rect_filled(desk_rect, CornerRadius::same(18), theme::table());
-        theme::paint_grid(&p.with_clip_rect(desk_rect.shrink(6.0)), desk_rect);
-        p.rect_stroke(desk_rect, CornerRadius::same(18), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+    if !st.shelf_alone {
+        // Desk: the table colour (with grid) behind the paper.
+        {
+            let p = ui.painter();
+            p.rect_filled(desk_rect, CornerRadius::same(18), theme::table());
+            theme::paint_grid(&p.with_clip_rect(desk_rect.shrink(6.0)), desk_rect);
+            p.rect_stroke(desk_rect, CornerRadius::same(18), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+        }
+        ui.scope_builder(UiBuilder::new().max_rect(desk_rect.shrink(1.0)), |ui| {
+            ui.set_clip_rect(desk_rect.shrink(1.0));
+            draw_page(app, ui, ctx, exam_id, st);
+        });
     }
-    ui.scope_builder(UiBuilder::new().max_rect(desk_rect.shrink(1.0)), |ui| {
-        ui.set_clip_rect(desk_rect.shrink(1.0));
-        draw_page(app, ui, ctx, exam_id, st);
-    });
-    ui.scope_builder(UiBuilder::new().max_rect(shelf_rect), |ui| {
-        draw_shelf(app, ui, ctx, exam_id, st, shelf_rect);
-    });
+    if !narrow || st.shelf_alone {
+        ui.scope_builder(UiBuilder::new().max_rect(shelf_rect), |ui| {
+            draw_shelf(app, ui, ctx, exam_id, st, shelf_rect);
+        });
+    }
 
     drag_overlay(app, ctx, exam_id, st);
+}
+
+/// Height of the narrow window's Page / Question bank switch.
+const NARROW_SWITCH_H: f32 = 36.0;
+
+/// Below this work-area width the page and the bank take turns instead of sitting side by side.
+fn narrow_work(width: f32) -> bool {
+    width < 860.0
+}
+
+/// This frame's narrow decision for an editor `width` wide. Past the breakpoint the bank tab
+/// is dropped, so a window that grows while the bank is showing gets the normal page and
+/// bank side by side (and opens on the page if it narrows again).
+fn narrow_mode(width: f32, bank_tab: &mut bool) -> bool {
+    let narrow = narrow_work(width);
+    if !narrow {
+        *bank_tab = false;
+    }
+    narrow
+}
+
+/// The narrow switch's two segments: (is the bank, title, note). `to_add` is the open bank's
+/// questions not on the page yet, or `None` when no bank is open.
+fn narrow_switch_labels(on_page: usize, to_add: Option<usize>) -> [(bool, &'static str, String); 2] {
+    let page_note = format!("{on_page} question{}", if on_page == 1 { "" } else { "s" });
+    let bank_note = match to_add {
+        None => "no bank open".to_string(),
+        Some(0) => "all on the page".to_string(),
+        Some(n) => format!("{n} to add"),
+    };
+    [(false, "Exam page", page_note), (true, "Question bank", bank_note)]
+}
+
+/// The narrow window's two-way switch: the exam page or the question bank, one at a time. A
+/// segmented track like the Cards/List toggle, the chosen half in the accent wash. Each half
+/// is a selectable tab: Tab reaches it, Enter or Space picks it, the arrow keys move between
+/// the two, and a focused half wears the accent ring.
+fn narrow_switch(ui: &mut egui::Ui, rect: Rect, bank_tab: &mut bool, on_page: usize, to_add: Option<usize>) {
+    let p = ui.painter();
+    p.rect(rect, CornerRadius::same((rect.height() / 2.0) as u8), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+    let half = rect.width() / 2.0;
+    let ids = [ui.id().with(("exam_narrow_switch", 0)), ui.id().with(("exam_narrow_switch", 1))];
+    for (i, (is_bank, title, note)) in narrow_switch_labels(on_page, to_add).into_iter().enumerate() {
+        let seg = Rect::from_min_size(rect.min + Vec2::new(i as f32 * half, 0.0), Vec2::new(half, rect.height())).shrink(3.0);
+        let resp = ui.interact(seg, ids[i], Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+        let on = *bank_tab == is_bank;
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, format!("{title}, {note}")));
+        let r = CornerRadius::same((seg.height() / 2.0) as u8);
+        if on {
+            ui.painter().rect_filled(seg, r, theme::accent_faded());
+        } else if resp.hovered() {
+            ui.painter().rect_filled(seg, r, theme::hover_bg());
+        }
+        if resp.has_focus() {
+            ui.painter().rect_stroke(seg, r, Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
+        }
+        let mut job = egui::text::LayoutJob::default();
+        let (fg, fam) = if on { (theme::accent_col(), theme::bold_family()) } else { (theme::text_col(), theme::medium_family()) };
+        job.append(title, 0.0, egui::TextFormat::simple(FontId::new(13.5, fam), fg));
+        job.append(&format!("  ·  {note}"), 0.0, egui::TextFormat::simple(FontId::proportional(12.0), theme::muted_col()));
+        let g = ui.painter().layout_job(job);
+        ui.painter().galley(seg.center() - g.size() / 2.0, g, fg);
+        // `clicked` covers Enter and Space on a focused half as well as the pointer.
+        if resp.clicked() {
+            *bank_tab = is_bank;
+        }
+        if resp.has_focus() {
+            let (left, right) = ui.input_mut(|inp| {
+                (inp.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft), inp.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight))
+            });
+            if left || right {
+                *bank_tab = right;
+                ui.memory_mut(|m| m.request_focus(ids[usize::from(right)]));
+            }
+        }
+    }
 }
 
 // ----- top card -------------------------------------------------------------
@@ -1691,7 +1792,7 @@ fn format_control(ui: &mut egui::Ui, which: u8, f: &mut model::Exam, salt: &str,
 
 /// Page zoom: fit, smaller, larger. The page is drawn at 57.6 dpi base, so a fit on a wide
 /// window is already more than 100% of that.
-fn zoom_controls(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) {
+fn zoom_controls(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) -> f32 {
     // A quiet well around the three zoom controls, so they read as one readout with two buttons
     // rather than as loose text next to the status line.
     let frame = egui::Frame::new()
@@ -1699,7 +1800,7 @@ fn zoom_controls(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) {
         .stroke(egui::Stroke::new(1.0, theme::border()))
         .corner_radius(egui::CornerRadius::same(8))
         .inner_margin(egui::Margin::symmetric(6, 1));
-    frame.show(ui, |ui| zoom_controls_inner(ui, zoom, zoom_eff));
+    frame.show(ui, |ui| zoom_controls_inner(ui, zoom, zoom_eff)).response.rect.height()
 }
 
 fn zoom_controls_inner(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) {
@@ -1763,9 +1864,13 @@ fn draw_format_bar(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &m
                 format!("{n_q} question{} · {} pts", if n_q == 1 { "" } else { "s" }, fmt_number(pts))
             };
             // Wide: one row with the summary pushed right. Narrow: controls wrap, summary last.
+            // With the bank filling the narrow work area there is no page to zoom, and the last
+            // zoom it drew at would be a stale figure, so the zoom well leaves the bar.
+            let page_shown = !st.shelf_alone;
             let mut margins_open = st.margins_open;
             let mut zoom = st.zoom;
             let zoom_eff = st.zoom_eff;
+            let mut zoom_h = st.zoom_well_h;
             let mut body = |ui: &mut egui::Ui, range: std::ops::Range<usize>| {
                 ui.spacing_mut().item_spacing.x = 8.0;
                 for (label, which) in [("Paper", 4u8), ("Heading", 0), ("Text size", 1), ("Margins", 2), ("Answer blanks", 3)]
@@ -1791,14 +1896,20 @@ fn draw_format_bar(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &m
                 ui.horizontal(|ui| body(ui, 0..3));
                 ui.horizontal(|ui| {
                     body(ui, 3..5);
-                    bar_sep(ui);
-                    zoom_controls(ui, &mut zoom, zoom_eff);
+                    if page_shown {
+                        bar_sep(ui);
+                        zoom_h = zoom_controls(ui, &mut zoom, zoom_eff);
+                    } else {
+                        // Hold the row at the zoom well's height so the switch below never jumps.
+                        ui.allocate_exact_size(Vec2::new(0.0, zoom_h), Sense::hover());
+                    }
                     bar_sep(ui);
                     ui.label(muted(RichText::new(&summary).size(12.0)));
                 });
             }
             st.margins_open = margins_open;
             st.zoom = zoom;
+            st.zoom_well_h = zoom_h;
         });
     if changed {
         write_format(app, exam_id, &f);
@@ -3741,7 +3852,10 @@ fn draw_shelf_inner(
     let in_exam: Vec<ExamItem> = app.store.exam(exam_id).map(|e| e.items.clone()).unwrap_or_default();
 
     ui.add_space(4.0);
-    ui.label(theme::serif("Question bank").size(17.0));
+    // Under the narrow window's switch the tab already says "Question bank".
+    if !st.shelf_alone {
+        ui.label(theme::serif("Question bank").size(17.0));
+    }
     ui.add_space(4.0);
     ui.add(
         egui::TextEdit::singleline(&mut st.search)
@@ -3901,7 +4015,8 @@ fn draw_shelf_inner(
 
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        ui.label(muted(RichText::new("Click + or drag onto the page").size(11.5)));
+        let hint = if st.shelf_alone { "Click + to add it to the end of the page" } else { "Click + or drag onto the page" };
+        ui.label(muted(RichText::new(hint).size(11.5)));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(muted(RichText::new(format!("of {} used", bank.questions.len())).size(11.5)));
             ui.label(RichText::new(used.to_string()).family(theme::bold_family()).size(11.5).color(theme::ink()));
@@ -3931,15 +4046,18 @@ fn shelf_row(
     let stem_txt = crate::equation::stem_preview(&q.stem);
     let galley = clamped_galley(&p, &stem_txt, FontId::proportional(12.5), theme::ink(), stem_w, 2);
     let h = galley.size().y + 34.0;
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click_and_drag());
+    // Alone in the narrow window the bank has no page beside it to drop on, so its cards do not
+    // drag (no grab cursor, no ghost) and + is the way onto the page.
+    let alone = st.shelf_alone;
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), if alone { Sense::hover() } else { Sense::click_and_drag() });
     let drag_this = matches!(&st.drag, Some(DragState { src: DragSrc::Shelf { question_id, .. }, .. }) if *question_id == q.id);
 
     let fill = if already { theme::hover_bg() } else { theme::card() };
     p.rect(
         rect,
         CornerRadius::same(9),
-        if resp.hovered() || drag_this { theme::accent_faded() } else { fill },
-        Stroke::new(1.0, if resp.hovered() { theme::accent_col() } else { theme::border() }),
+        if (resp.hovered() && !alone) || drag_this { theme::accent_faded() } else { fill },
+        Stroke::new(1.0, if resp.hovered() && !alone { theme::accent_col() } else { theme::border() }),
         StrokeKind::Inside,
     );
     // TYPE label (+ part count) and badges.
@@ -3999,7 +4117,12 @@ fn shelf_row(
     };
     let (er, eresp) = small("shelf_edit", "Edit question");
     let (cr, cresp) = small("shelf_copy", "Copy: duplicate this question in the bank");
-    let (br, bresp) = small("shelf_add", if already { "Already in this exam. Drag the card to add it again." } else { "Add to the exam" });
+    let add_tip = match (already, alone) {
+        (false, _) => "Add to the exam",
+        (true, false) => "Already in this exam. Drag the card to add it again.",
+        (true, true) => "Already in this exam. Click to add it again.",
+    };
+    let (br, bresp) = small("shelf_add", add_tip);
     let ink = Stroke::new(1.5, theme::muted_col());
     {
         // Edit: the hand-drawn pencil-and-square.
@@ -4031,22 +4154,26 @@ fn shelf_row(
             }
         }
     }
-    if bresp.clicked() && !already {
+    if bresp.clicked() && (!already || alone) {
         let len = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
         if let Some(idx) = add_item(app, st, exam_id, bank_id, &q.id, len) {
             st.just_added = Some((idx, ctx.input(|i| i.time)));
+            if st.shelf_alone {
+                // The page is behind the other tab, so say where the question went.
+                screens::toast(app, &format!("Added to the page as question {}", idx + 1), false);
+            }
         }
     }
 
     let on_button = eresp.hovered() || cresp.hovered() || bresp.hovered();
-    if resp.drag_started() && !on_button {
+    if resp.drag_started() && !on_button && !alone {
         st.drag = Some(DragState {
             src: DragSrc::Shelf { bank_id: bank_id.clone(), question_id: q.id.clone() },
             stem: q.stem.clone(),
             label: kind_pill(q.kind.qkind()),
         });
     }
-    if resp.hovered() && !on_button {
+    if resp.hovered() && !on_button && !alone {
         ctx.set_cursor_icon(egui::CursorIcon::Grab);
     }
 }
@@ -6845,6 +6972,36 @@ mod examed_tests {
         assert_eq!(exam_sig(&a), exam_sig(&b));
         a.items.push(it("q1"));
         assert_ne!(exam_sig(&a), exam_sig(&b));
+    }
+
+    #[test]
+    fn narrow_switch_names_both_halves_with_honest_counts() {
+        let notes = narrow_switch_labels;
+        assert_eq!(
+            notes(1, Some(9)),
+            [(false, "Exam page", "1 question".to_string()), (true, "Question bank", "9 to add".to_string())]
+        );
+        assert_eq!(notes(0, Some(1))[0].2, "0 questions");
+        assert_eq!(notes(3, Some(1))[1].2, "1 to add");
+        // Every question of the open bank is on the page.
+        assert_eq!(notes(4, Some(0))[1].2, "all on the page");
+        // No bank open: nothing to add, and not "all on the page" either.
+        assert_eq!(notes(2, None)[1].2, "no bank open");
+        assert!(narrow_work(759.0) && !narrow_work(860.0));
+    }
+
+    #[test]
+    fn growing_past_the_breakpoint_drops_the_bank_tab() {
+        // Narrow with the bank showing: it stays showing.
+        let mut bank_tab = true;
+        assert!(narrow_mode(700.0, &mut bank_tab));
+        assert!(bank_tab);
+        // The window grows past 860: desktop layout, and the bank tab is forgotten...
+        assert!(!narrow_mode(1100.0, &mut bank_tab));
+        assert!(!bank_tab);
+        // ...so narrowing again opens on the page, not the bank on its own.
+        assert!(narrow_mode(700.0, &mut bank_tab));
+        assert!(!bank_tab);
     }
 
     #[test]

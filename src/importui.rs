@@ -835,33 +835,56 @@ fn intake(app: &mut crate::App, ctx: &egui::Context, st: &mut State) {
     }
 }
 
-/// Split a group's chips into lines that fit `width`, measuring each pill (its 11 pt bold label
-/// plus the 9 px side padding and the 6 px gap) rather than trusting egui to wrap a frame.
-fn chip_rows<'a>(ui: &egui::Ui, items: &[&'a str], width: f32) -> Vec<Vec<&'a str>> {
-    let font = egui::FontId::new(11.0, theme::bold_family());
+/// Text size of the format names and of their row labels (one size, so a row reads on one baseline).
+const FORMAT_PT: f32 = 13.0;
+/// What goes between two format names.
+const FORMAT_SEP: &str = "  ·  ";
+
+/// Split a group's format names into lines that fit `width`, measuring each name and the
+/// middot between names, so a line breaks only between two names and never inside one
+/// ("Photos of a worksheet" stays whole).
+fn format_lines<'a>(ui: &egui::Ui, items: &[&'a str], width: f32) -> Vec<Vec<&'a str>> {
+    let font = FontId::proportional(FORMAT_PT);
+    let w_of = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), theme::text_col()).size().x;
+    break_between(items, width, w_of(FORMAT_SEP), w_of)
+}
+
+/// The line breaking behind [`format_lines`]: names go on a line while they fit with a
+/// separator `sep` wide between them; a name that does not fit starts the next line (alone if
+/// it is wider than the whole line), so a break always falls between two names.
+fn break_between<'a>(items: &[&'a str], width: f32, sep: f32, w_of: impl Fn(&str) -> f32) -> Vec<Vec<&'a str>> {
     let mut rows: Vec<Vec<&str>> = vec![Vec::new()];
     let mut used = 0.0_f32;
     for it in items {
-        let text = ui
-            .painter()
-            .layout_no_wrap((*it).to_string(), font.clone(), theme::text_col())
-            .size()
-            .x;
-        let w = text + 18.0 + 2.0;
-        let gap = if used > 0.0 { 6.0 } else { 0.0 };
-        if used > 0.0 && used + gap + w > width {
+        let w = w_of(it);
+        if used > 0.0 && used + sep + w > width {
             rows.push(Vec::new());
             used = 0.0;
         }
-        let gap = if used > 0.0 { 6.0 } else { 0.0 };
-        used += gap + w;
+        used += if used > 0.0 { sep + w } else { w };
         rows.last_mut().expect("one row to start with").push(*it);
     }
     rows
 }
 
+/// One line of format names: the names in body text, the middots between them muted. Plain
+/// text on purpose: these are what the importer reads, not things to press, so the only
+/// button-shaped things on the page are Choose files, Paste text and Add photo.
+fn format_line(items: &[&str]) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let name = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::text_col());
+    let sep = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::muted_col());
+    for (i, it) in items.iter().enumerate() {
+        if i > 0 {
+            job.append(FORMAT_SEP, 0.0, sep.clone());
+        }
+        job.append(it, 0.0, name.clone());
+    }
+    job
+}
+
 /// What the importer can read, grouped so a teacher can scan for their tool instead of
-/// picking a format out of one faint dot-separated line.
+/// picking a format out of one long line.
 fn formats_panel(ui: &mut egui::Ui) {
     kit::card().inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -879,37 +902,27 @@ fn formats_panel(ui: &mut egui::Ui) {
                 &["Respondus", "Canvas QTI", "Blackboard", "Moodle XML", "GIFT", "Aiken", "Kahoot", "Quizlet", "Test Parrot .json"],
             ),
         ];
-        // The chips break inside the card's own width. A pill is a `Frame`, and a frame reports
-        // its size only after it is placed, so egui's wrapping never fires for one: at 760 the
-        // quiz-tool row ran off the card and the last chip was squeezed to one letter a line.
-        // So measure each chip and choose the line breaks here.
+        // A fixed label column: every list starts at the same x whatever its label's length.
+        // The lines are broken here, between names, so a long list wraps under its own column.
         let inner = ui.available_width();
-        let lab_w = 104.0_f32.min(inner * 0.4);
-        for (group, items) in groups {
+        let lab_w = 104.0_f32.min(inner * 0.3);
+        let rest = (inner - lab_w).max(120.0);
+        for (gi, (group, items)) in groups.into_iter().enumerate() {
+            if gi > 0 {
+                ui.add_space(7.0);
+            }
             ui.horizontal_top(|ui| {
-                ui.allocate_ui_with_layout(
-                    Vec2::new(lab_w, 0.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.label(theme::muted(group).size(11.5));
-                    },
-                );
-                let rest = (inner - lab_w - ui.spacing().item_spacing.x).max(120.0);
-                ui.allocate_ui_with_layout(
-                    Vec2::new(rest, 0.0),
-                    Layout::top_down(Align::Min),
-                    |ui| {
-                        for row in chip_rows(ui, items, rest) {
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-                                for it in row {
-                                    kit::pill_no_wrap(ui, it, theme::field(), theme::text_col());
-                                }
-                            });
-                            ui.add_space(6.0);
-                        }
-                    },
-                );
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.allocate_ui_with_layout(Vec2::new(lab_w, 0.0), Layout::left_to_right(Align::Min), |ui| {
+                    ui.set_min_width(lab_w);
+                    ui.label(theme::muted(group).size(FORMAT_PT));
+                });
+                ui.allocate_ui_with_layout(Vec2::new(rest, 0.0), Layout::top_down(Align::Min), |ui| {
+                    ui.spacing_mut().item_spacing.y = 3.0;
+                    for line in format_lines(ui, items, rest) {
+                        ui.add(egui::Label::new(format_line(&line)).wrap_mode(egui::TextWrapMode::Extend));
+                    }
+                });
             });
         }
     });
@@ -2987,6 +3000,25 @@ fn history(app: &mut crate::App, ui: &mut egui::Ui) {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn format_lists_break_only_between_names() {
+        // One unit a character, a 5-unit "  ·  " between names.
+        let w = |t: &str| t.chars().count() as f32;
+        let items = ["PDF", "Word", "Photos of a worksheet", "Pasted text"];
+        // Everything fits on one line: 3 + 5 + 4 + 5 + 21 + 5 + 11 = 54.
+        assert_eq!(break_between(&items, 54.0, 5.0, w), vec![items.to_vec()]);
+        // One unit short: the last name moves down whole, never split at its space.
+        assert_eq!(break_between(&items, 53.0, 5.0, w), vec![vec!["PDF", "Word", "Photos of a worksheet"], vec!["Pasted text"]]);
+        // A name wider than the line still gets a line of its own, unbroken.
+        let lines = break_between(&items, 10.0, 5.0, w);
+        assert_eq!(lines, vec![vec!["PDF"], vec!["Word"], vec!["Photos of a worksheet"], vec!["Pasted text"]]);
+        // Every name lands exactly once, in order, whatever the width.
+        for width in [1.0, 12.0, 30.0, 200.0] {
+            let flat: Vec<&str> = break_between(&items, width, 5.0, w).into_iter().flatten().collect();
+            assert_eq!(flat, items.to_vec(), "width {width}");
+        }
+    }
 
     #[test]
     fn paste_reads_format_and_counts_live() {
