@@ -720,28 +720,33 @@ fn exam_menu(ui: &mut egui::Ui, rect: Rect, row: &ExamRow, st: &mut ListUi) {
     });
 }
 
-/// The page thumbnail area of an exam card (points): the Exams screen and the Home screen's
-/// recent-exam cards draw the first page at this same size, so both show the same detail
-/// (and share one cached rasterisation).
-pub(crate) const CARD_THUMB: Vec2 = Vec2::new(112.0, 152.0);
+/// The Exams screen's page thumbnail: a small, fixed letter-page box, so the card is no taller
+/// than its facts and actions need.
+const EXAMS_THUMB: Vec2 = Vec2::new(88.0, 114.0);
 
+/// The exam cards: the first page on the left; on the right the name, its counts and bank, and
+/// a bottom row (edited date, Open, the "..." menu) level with the page's foot. One 16 px gutter
+/// between cards and rows, and a row exactly as wide as the toolbar above it.
 fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st: &mut ListUi) {
-    let gap = 14.0;
+    let gap = 16.0;
+    let pad = 16.0;
     let avail = ui.available_width();
     let n = (((avail + gap) / (420.0 + gap)).floor() as usize).max(1);
     // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
     let fit = rows.len().clamp(1, n);
     let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
-    let card_h = CARD_THUMB.y + 24.0;
-    let thumb_w = CARD_THUMB.x;
+    let card_h = EXAMS_THUMB.y + pad * 2.0;
     ui.spacing_mut().item_spacing = Vec2::splat(gap);
     for chunk in rows.chunks(n) {
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing = Vec2::splat(gap);
         for row in chunk {
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(card_w, card_h), Sense::click());
+            if resp.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
             let hover = kit::hover_t(ui.ctx(), resp.id.with("hover"), resp.hovered());
-            let p = ui.painter();
+            let p = ui.painter().clone();
             p.rect(
                 rect,
                 CornerRadius::same(kit::R_CARD),
@@ -749,63 +754,63 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
                 Stroke::new(1.0, theme::border().lerp_to_gamma(theme::accent_col(), hover)),
                 StrokeKind::Inside,
             );
-            let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::new(14.0, 12.0), Vec2::new(thumb_w, card_h - 24.0));
+            let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::splat(pad), EXAMS_THUMB);
             let ctx = ui.ctx().clone();
-            let tp = ui.painter().clone();
-            if paint_exam_thumb(app, &ctx, &tp, thumb_area, &row.id).is_none() {
-                paint_thumb(&tp, rect.left_top() + Vec2::new(14.0 + thumb_w / 2.0, 14.0 + 60.0), -0.05, row.q.max(2));
+            if paint_exam_thumb(app, &ctx, &p, thumb_area, &row.id).is_none() {
+                paint_thumb(&p, thumb_area.center(), -0.05, row.q.max(2));
             }
-            let tx = rect.left() + 14.0 + thumb_w + 12.0;
-            let tw = rect.right() - 36.0 - tx;
-            let g = clamped_galley(p, &row.name, FontId::new(16.0, theme::serif_family()), theme::ink(), tw, 2);
+            let tx = thumb_area.right() + pad;
+            let tw = rect.right() - pad - tx;
+            let mut y = rect.top() + pad - 3.0;
+            let g = clamped_galley(&p, &row.name, FontId::new(17.0, theme::serif_family()), theme::ink(), tw, 2);
             let gh = g.size().y;
-            p.galley(Pos2::new(tx, rect.top() + 14.0), g, theme::ink());
-            let facts = [
-                ("Questions", row.q.to_string()),
-                ("Points", fmt_number(row.pts)),
-                ("Bank", row.bank.clone()),
-                ("Edited", bankui::fmt_date(row.modified)),
-            ];
-            if tw >= 420.0 {
-                // A wide card reads as a row: the four facts run across it instead of stacking
-                // in a column and leaving the card's right half blank.
-                let weights = [0.7_f32, 0.6, 1.8, 1.0];
-                let total: f32 = weights.iter().sum();
-                let mut x = tx;
-                for (i, (k, v)) in facts.iter().enumerate() {
-                    let cw = (tw * weights[i] / total) - 8.0;
-                    let y = rect.top() + 14.0 + gh + 8.0;
-                    p.text(Pos2::new(x, y), Align2::LEFT_TOP, *k, FontId::proportional(10.5), theme::muted_col());
-                    let gv = clamped_galley(p, v, FontId::new(11.5, theme::bold_family()), theme::ink(), cw.max(20.0), 2);
-                    p.galley(Pos2::new(x, y + 14.0), gv, theme::ink());
-                    x += cw + 8.0;
-                }
-            } else {
-                let mut y = rect.top() + 14.0 + gh + 6.0;
-                for (k, v) in facts {
-                    p.text(Pos2::new(tx, y), Align2::LEFT_TOP, k, FontId::proportional(11.5), theme::muted_col());
-                    if k == "Bank" {
-                        // Let the bank name have the card's real width, over two lines, rather than
-                        // an arbitrary character count that cuts it while the card has room.
-                        let gv = clamped_galley(p, &row.bank, FontId::new(11.5, theme::bold_family()), theme::ink(), tw - 66.0, 2);
-                        let h = gv.size().y.max(15.0);
-                        p.galley(Pos2::new(tx + 66.0, y), gv, theme::ink());
-                        y += h;
-                    } else {
-                        p.text(Pos2::new(tx + 66.0, y), Align2::LEFT_TOP, v, FontId::new(11.5, theme::bold_family()), theme::ink());
-                        y += 15.0;
-                    }
-                }
+            p.galley(Pos2::new(tx, y), g, theme::ink());
+            y += gh + 5.0;
+            // Counts, then the bank the questions came from.
+            let counts = format!(
+                "{} question{} · {} point{}",
+                row.q,
+                if row.q == 1 { "" } else { "s" },
+                fmt_number(row.pts),
+                if (row.pts - 1.0).abs() < 1e-9 { "" } else { "s" },
+            );
+            let gc = clamped_galley(&p, &counts, FontId::proportional(12.5), theme::text_col(), tw, 1);
+            let ch = gc.size().y;
+            p.galley(Pos2::new(tx, y), gc, theme::text_col());
+            y += ch + 3.0;
+            let bank_label = "Bank  ";
+            let lw = p.layout_no_wrap(bank_label.to_string(), FontId::proportional(12.0), theme::muted_col()).size().x;
+            p.text(Pos2::new(tx, y), Align2::LEFT_TOP, bank_label, FontId::proportional(12.0), theme::muted_col());
+            let gb = clamped_galley(&p, &row.bank, FontId::new(12.0, theme::bold_family()), theme::ink(), tw - lw, 1);
+            p.galley(Pos2::new(tx + lw, y), gb, theme::ink());
+            // Bottom row, level with the foot of the page: when, then the card's actions.
+            let foot = Rect::from_min_max(Pos2::new(tx, thumb_area.bottom() - 28.0), Pos2::new(rect.right() - pad, thumb_area.bottom()));
+            p.line_segment([Pos2::new(tx, foot.top() - 8.0), Pos2::new(foot.right(), foot.top() - 8.0)], Stroke::new(1.0, theme::border()));
+            let menu = Rect::from_min_size(Pos2::new(foot.right() - 30.0, foot.center().y - 12.0), Vec2::new(30.0, 24.0));
+            let mut open = false;
+            let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 6.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
+            let ob = crate::pageshell::styled_button(
+                &mut btn,
+                RichText::new("Open").family(theme::bold_family()).size(12.5).color(theme::accent_col()),
+                theme::card(),
+                theme::hover_bg(),
+                theme::accent_faded(),
+                Stroke::new(1.0, theme::rule()),
+                28.0,
+            );
+            if ob.clicked() {
+                open = true;
             }
-            if resp.clicked() {
+            let when_w = (ob.rect.left() - 10.0 - tx).max(20.0);
+            let when = format!("{}Edited {}", if row.archived { "Archived · " } else { "" }, bankui::fmt_date(row.modified));
+            let gw = clamped_galley(&p, &when, FontId::proportional(11.5), theme::muted_col(), when_w, 1);
+            let wy = foot.center().y - gw.size().y / 2.0;
+            p.galley(Pos2::new(tx, wy), gw, theme::muted_col());
+            if open || resp.clicked() {
                 open_exam_screen(app, &row.id);
             }
-            exam_menu(
-                ui,
-                Rect::from_min_size(Pos2::new(rect.right() - 36.0, rect.top() + 8.0), Vec2::new(30.0, 22.0)),
-                row,
-                st,
-            );
+            // (a child ui: the menu must not move this row's cursor, which set the gutter)
+            exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, row, st);
         }
     });
     }

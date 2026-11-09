@@ -518,7 +518,12 @@ impl App {
             // quarter-width tile with three quarters of empty page beside it.
             let fit = rows.len().clamp(1, cols);
             let cw = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
-            for chunk in rows.chunks(cols) {
+            for (ri, chunk) in rows.chunks(cols).enumerate() {
+                // The cards of a row share one height (the tallest card's, from the last frame),
+                // so a two-line name or legend does not leave its neighbours short.
+                let hid = key.with(("bank_row_h", ri, cols));
+                let row_h = ctx.data(|d| d.get_temp::<f32>(hid)).unwrap_or(0.0);
+                let mut tallest = 0.0_f32;
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
                     for r in chunk {
@@ -527,11 +532,15 @@ impl App {
                             Layout::top_down(Align::Min),
                             |ui| {
                                 ui.set_width(cw);
-                                bank_card(ui, self, ctx, key, r);
+                                tallest = tallest.max(bank_card(ui, self, ctx, key, r, row_h));
                             },
                         );
                     }
                 });
+                if (tallest - row_h).abs() > 0.5 {
+                    ctx.data_mut(|d| d.insert_temp(hid, tallest));
+                    ctx.request_repaint();
+                }
                 ui.add_space(gap);
             }
         }
@@ -663,23 +672,7 @@ impl App {
             let r = match t {
                 Tool::Add => {
                     let r = crate::pageshell::primary(ui, "Add question");
-                    // The type is chosen first and the editor opens already set to it. Keyboard: Enter on the
-                    // focused Add opens the menu, arrows and Enter pick, 1-6 pick directly.
-                    let opened_now = r.clicked();
-                    egui::Popup::menu(&r).show(|ui| {
-                        ui.set_min_width(190.0);
-                        for (n, k) in crate::bankops::KINDS.into_iter().enumerate() {
-                            let hot = [egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6][n];
-                            let b = ui.button(format!("{}   {}", n + 1, k.label()));
-                            if n == 0 && opened_now {
-                                b.request_focus();
-                            }
-                            if b.clicked() || ui.input(|i| i.key_pressed(hot)) {
-                                self.qedit = Some(qedit::Draft::new_of(bank_id.clone(), k));
-                                ui.close();
-                            }
-                        }
-                    });
+                    self.add_question_menu(&r, bank_id);
                     r
                 }
                 Tool::Export => {
@@ -775,6 +768,27 @@ impl App {
             width += r.rect.width() + gap;
         }
         width - gap
+    }
+
+    /// The type menu under an "Add question" button: the type is chosen first and the editor opens
+    /// already set to it. Keyboard: Enter on the focused button opens the menu, arrows and Enter
+    /// pick, 1-6 pick directly.
+    fn add_question_menu(&mut self, r: &egui::Response, bank_id: &Id) {
+        let opened_now = r.clicked();
+        egui::Popup::menu(r).show(|ui| {
+            ui.set_min_width(190.0);
+            for (n, k) in crate::bankops::KINDS.into_iter().enumerate() {
+                let hot = [egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6][n];
+                let b = ui.button(format!("{}   {}", n + 1, k.label()));
+                if n == 0 && opened_now {
+                    b.request_focus();
+                }
+                if b.clicked() || ui.input(|i| i.key_pressed(hot)) {
+                    self.qedit = Some(qedit::Draft::new_of(bank_id.clone(), k));
+                    ui.close();
+                }
+            }
+        });
     }
 
     fn bank_edit_body(&mut self, ui: &mut Ui, ctx: &egui::Context, key: UiId, bank_id: &Id) {
@@ -1194,13 +1208,20 @@ impl App {
 
         if questions.is_empty() && !new_open {
             ui.add_space(12.0);
-            crate::pageshell::empty_state(
+            // The card's own buttons do what the toolbar's Add question and Import do.
+            let b = crate::pageshell::empty_state_buttons(
                 ui,
                 crate::handicons::EDIT,
                 "No questions yet",
-                "Use Add question above to write the first one, or Import to bring a test in.",
-                &[],
+                "Write the first question yourself, or import a test you already have.",
+                &[("Add question", true), ("Import questions", false)],
             );
+            if let Some(add) = b.first() {
+                self.add_question_menu(add, bank_id);
+            }
+            if b.get(1).cloned().is_some_and(|r| r.on_hover_text("Import files or pasted questions into this bank").clicked()) {
+                crate::importui::open_import_modal(ctx, bank_id);
+            }
         } else if order.is_empty() {
             ui.label(theme::muted("No questions match those filters.").size(12.5));
         }
@@ -1455,14 +1476,31 @@ fn counts_line(r: &BankRow) -> String {    format!(
     )
 }
 
-/// One bank tile: serif name, counts, type-mix bar, edited time.
-fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow) {
+/// A bank card's name: wrapped to the width it is given, ellipsised only past two lines.
+fn card_title(ui: &Ui, name: &str, size: f32, width: f32) -> std::sync::Arc<egui::Galley> {
+    let font = egui::FontId::new(size, theme::serif_family());
+    let mut job = egui::text::LayoutJob::simple(name.to_string(), font, theme::ink(), width.max(40.0));
+    job.wrap.max_rows = 2;
+    job.wrap.break_anywhere = false;
+    job.wrap.overflow_character = Some('…');
+    ui.painter().layout_job(job)
+}
+
+/// One bank tile: serif name, counts, type-mix bar, edited time. `row_h`: the content height
+/// of its row's tallest card, which this one grows to (the space goes above its usage line, so
+/// the usage and edited lines of a row line up). Returns its own content height.
+fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, row_h: f32) -> f32 {
     let mut link: Option<Rect> = None;
     let mut menu_rect = Rect::NOTHING;
+    let nat_id = key.with(("bank_card_h", &r.id));
+    let extra = (row_h - ctx.data(|d| d.get_temp::<f32>(nat_id)).unwrap_or(row_h)).max(0.0);
+    let mut natural = 0.0;
     let resp = kit::card().inner_margin(Margin::same(14)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.horizontal(|ui| {
-            ui.label(theme::serif(truncate(&r.name, 30)).size(18.0));
+        // The name wraps beside the "..." button (two lines at most), never under it.
+        let title = card_title(ui, &r.name, 18.0, ui.available_width() - MENU_BTN.x - 12.0);
+        ui.horizontal_top(|ui| {
+            ui.label(title);
             ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                 menu_rect = ui.allocate_exact_size(MENU_BTN, Sense::hover()).0;
             });
@@ -1474,20 +1512,25 @@ fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &Ban
         ui.label(theme::muted(mix_legend(&r.mix)).size(11.0));
         ui.add_space(4.0);
         paint_mix_bar(ui, ui.available_width(), &r.mix);
-        ui.add_space(8.0);
+        ui.add_space(8.0 + extra);
         link = Some(usage_link(ui, r.used_in.len(), 12.0).rect);
         ui.add_space(2.0);
         ui.label(theme::muted(format!("Edited {}", rel_time(r.modified))).size(11.5));
+        natural = ui.min_rect().height() - extra;
     });
+    if (ctx.data(|d| d.get_temp::<f32>(nat_id)).unwrap_or(-1.0) - natural).abs() > 0.5 {
+        ctx.data_mut(|d| d.insert_temp(nat_id, natural));
+        ctx.request_repaint();
+    }
     let click = ui.interact(resp.response.rect, ui.id().with(("bank_card", &r.id)), Sense::click());
     let (menu_act, over_menu) = bank_menu(ui, menu_rect, r);
     if menu_act.is_some() {
         apply_bank_menu(app, ctx, key, r, menu_act);
-        return;
+        return natural;
     }
     if usage_clicked(&click, link, r) {
         open_usage(ctx, r.name.clone(), r.used_in.clone());
-        return;
+        return natural;
     }
     let t = kit::hover_t(ctx, click.id.with("hover"), click.hovered());
     if t > 0.0 {
@@ -1501,6 +1544,7 @@ fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &Ban
     if click.clicked() && !over_menu {
         app.open_bank(&r.id);
     }
+    natural
 }
 
 /// True when the card click landed on its "Used in N exams" link (and there are exams).

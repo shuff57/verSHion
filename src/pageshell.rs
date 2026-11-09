@@ -166,7 +166,12 @@ fn button(ui: &mut Ui, text: &str, rest: Color32, hover: Color32, press: Color32
 /// An empty list's card: an icon, what is missing, and the buttons that fix it (`actions`: label
 /// and whether it is the primary one). Returns the index of the button pressed.
 pub fn empty_state(ui: &mut Ui, icon: &str, title: &str, body: &str, actions: &[(&str, bool)]) -> Option<usize> {
-    let mut pressed = None;
+    empty_state_buttons(ui, icon, title, body, actions).iter().position(|r| r.clicked())
+}
+
+/// [`empty_state`] returning each button's response, for a button that opens a menu of its own.
+pub fn empty_state_buttons(ui: &mut Ui, icon: &str, title: &str, body: &str, actions: &[(&str, bool)]) -> Vec<egui::Response> {
+    let mut pressed = Vec::new();
     Frame::new()
         .fill(theme::card())
         .stroke(Stroke::new(1.0, theme::border()))
@@ -189,11 +194,8 @@ pub fn empty_state(ui: &mut Ui, icon: &str, title: &str, body: &str, actions: &[
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = gap;
                         ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
-                        for (i, (label, primary_btn)) in actions.iter().enumerate() {
-                            let r = if *primary_btn { primary(ui, label) } else { outline(ui, label) };
-                            if r.clicked() {
-                                pressed = Some(i);
-                            }
+                        for (label, primary_btn) in actions {
+                            pressed.push(if *primary_btn { primary(ui, label) } else { outline(ui, label) });
                         }
                     });
                 }

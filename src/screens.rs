@@ -2818,12 +2818,6 @@ fn paint_fact(p: &egui::Painter, pos: Pos2, w: f32, label: &str, value: &str) {
     paint_fit(p, pos + Vec2::new(0.0, 12.0), value, bold(13.0), theme::ink(), w);
 }
 
-/// Where a Home exam card's page thumbnail goes in its preview band `pv`: the Exams screen's
-/// thumbnail size, centred (smaller only when the card is too narrow).
-fn home_thumb_area(pv: Rect) -> Rect {
-    Rect::from_center_size(pv.center(), crate::examui::CARD_THUMB.min(pv.shrink2(Vec2::new(10.0, 9.0)).size()))
-}
-
 fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_right: bool) -> bool {
     // A landscape card: the first page on the left, the facts beside it, so one exam on a
     // dashboard row does not read as a tall, half-empty slab. The card is only as tall as the
@@ -2948,8 +2942,19 @@ fn paint_bank_glyph(p: &egui::Painter, r: Rect) {
     draw_nav_icon_k(p, NavIcon::Banks, r.center(), theme::accent_col(), 1.05);
 }
 
+/// Text wrapped to `width` over at most `rows` lines (ellipsised past them), laid out for painting.
+fn wrap_galley(p: &egui::Painter, text: &str, font: egui::FontId, col: Color32, width: f32, rows: usize) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple(text.to_string(), font, col, width.max(1.0));
+    job.wrap.max_rows = rows;
+    job.wrap.break_anywhere = false;
+    job.wrap.overflow_character = Some('…');
+    p.layout_job(job)
+}
+
+/// A bank on Home: the glyph with the name beside it (two lines before it is cut), then the
+/// facts and the type legend across the card's full width, so similar names stay apart.
 fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 164.0), egui::Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 166.0), egui::Sense::click());
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
@@ -2957,32 +2962,27 @@ fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
     p.rect(rect, CornerRadius::same(16), theme::card(), hover_border(&resp), StrokeKind::Inside);
     let g = Rect::from_min_size(rect.min + Vec2::new(14.0, 13.0), Vec2::splat(34.0));
     paint_bank_glyph(p, g);
-    let x = rect.min.x + 14.0 + 34.0 + 11.0;
+    let x = g.right() + 11.0;
     let iw = rect.right() - x - 14.0;
-    paint_fit(p, Pos2::new(x, rect.min.y + 13.0), &b.name, serif_font(15.0), theme::ink(), iw);
-    if iw >= 420.0 {
-        // Fixed columns, grouped to the left: the same three facts, without a void between them.
-        let cols = [110.0_f32, 110.0, 190.0];
-        let facts = [
-            ("Questions", b.qs.to_string()),
-            ("Topics", b.topics.to_string()),
-            ("Edited", rel_time(b.edited)),
-        ];
-        let mut fx = x;
-        for (i, (label, value)) in facts.iter().enumerate() {
-            let cw = cols[i].min(iw * 0.34);
-            paint_fact(p, Pos2::new(fx, rect.min.y + 42.0), cw - 8.0, label, value);
-            fx += cw;
-        }
-    } else {
-        let half = (iw - 10.0) / 2.0;
-        paint_fact(p, Pos2::new(x, rect.min.y + 42.0), half, "Questions", &b.qs.to_string());
-        paint_fact(p, Pos2::new(x + half + 10.0, rect.min.y + 42.0), half, "Topics", &b.topics.to_string());
-        paint_fact(p, Pos2::new(x, rect.min.y + 78.0), iw, "Edited", &rel_time(b.edited));
+    let title = wrap_galley(p, &b.name, serif_font(15.0), theme::ink(), iw, 2);
+    let ty = (g.center().y - title.size().y / 2.0).max(rect.min.y + 9.0);
+    p.galley(Pos2::new(x, ty), title, theme::ink());
+    // Below the header the card's whole inner width is free.
+    let x0 = rect.min.x + 14.0;
+    let fw = rect.right() - 14.0 - x0;
+    let fy = rect.min.y + 61.0;
+    let facts = [("Questions", b.qs.to_string()), ("Topics", b.topics.to_string()), ("Edited", rel_time(b.edited))];
+    // Fixed columns grouped to the left on a wide card, thirds otherwise.
+    let cols: [f32; 3] = if fw >= 470.0 { [110.0, 110.0, 190.0] } else { [fw * 0.3, fw * 0.28, fw * 0.42] };
+    let mut fx = x0;
+    for (i, (label, value)) in facts.iter().enumerate() {
+        paint_fact(p, Pos2::new(fx, fy), cols[i] - 8.0, label, value);
+        fx += cols[i];
     }
-    // The bar is a question-type breakdown: say which types it is counting.
-    paint_fit(p, Pos2::new(x, rect.min.y + 112.0), &crate::bankui::mix_legend(&b.counts), sans(10.5), theme::muted_col(), iw);
-    mix_bar(p, Rect::from_min_size(Pos2::new(x, rect.min.y + 132.0), Vec2::new(iw, 5.0)), &b.mix);
+    // The bar is a question-type breakdown: say which types it is counting, over two lines.
+    let legend = wrap_galley(p, &crate::bankui::mix_legend(&b.counts), sans(11.0), theme::muted_col(), fw, 2);
+    p.galley(Pos2::new(x0, fy + 40.0), legend, theme::muted_col());
+    mix_bar(p, Rect::from_min_size(Pos2::new(x0, rect.bottom() - 19.0), Vec2::new(fw, 5.0)), &b.mix);
     resp.clicked()
 }
 
@@ -3178,18 +3178,6 @@ fn read_backup(path: &std::path::Path) -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Home's recent-exam cards show the first page as large as the Exams screen does.
-    #[test]
-    fn home_exam_thumbnail_matches_the_exams_screen() {
-        let band = Rect::from_min_size(Pos2::new(10.0, 20.0), Vec2::new(300.0, crate::examui::CARD_THUMB.y + 18.0));
-        let a = home_thumb_area(band);
-        assert_eq!(a.size(), crate::examui::CARD_THUMB);
-        assert!((a.center() - band.center()).length() < 1e-3);
-        // a very narrow card shrinks it rather than overflowing
-        let narrow = Rect::from_min_size(Pos2::ZERO, Vec2::new(100.0, band.height()));
-        assert!(home_thumb_area(narrow).width() <= 80.0 + 1e-3);
-    }
 
     #[test]
     fn epoch_start_formats() {
