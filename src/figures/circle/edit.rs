@@ -134,6 +134,8 @@ enum Target {
     Angle(String, V, V, V),
     /// a label on arc XY (the major one?)
     Arc(String, String, bool),
+    /// the word beside the tangent at this point
+    TanWord(String),
     /// a new point at this direction
     Rim(f64),
     /// the enclosed area round this spot (unit coordinates)
@@ -167,10 +169,26 @@ impl Hit {
         let mut lines: Vec<(Pt, Pt, Target, String)> = vec![];
         // the circle's own lines step through the label they already have
         if pt.radius { lines.push((scr(uo), scr(ua), Target::Cycle("r_label", &R_LABEL), format!("Click radius {}{} to label it: r = its value, the letter r, or none", n.o, n.a))); }
+        // OA drawn for the central angle, a sector or a tangent while the radius switch is off: a length label
+        else if pt.a && (pt.central || pt.sector != 0 || pt.tan) { lines.push((scr(uo), scr(ua), Target::Line(n.o.clone(), n.a.clone()), format!("Click to label line {}{} with its length (again to clear it)", n.o, n.a))); }
         if pt.chord && !pt.deg { lines.push((scr(ua), scr(ub), Target::Cycle("g_chord", &STATES), format!("Click chord {}{} to label it: its length Given, Ask (a blank on the student copy) or Hidden", n.a, n.b))); }
         if pt.diam { lines.push((scr(ua), scr(upt(g.a + 180.0)), Target::Cycle("g_diameter", &STATES), format!("Click the diameter through {} to label it: its length Given, Ask or Hidden", n.a))); }
         let um = end_pos(p, End::M);
         if pt.bis && !pt.deg && um.0.hypot(um.1) > 0.05 { lines.push((scr(uo), scr(um), Target::Cycle("g_om", &STATES), format!("Click {}{} to label it: its length Given, Ask or Hidden", n.o, n.m))); }
+        // the rest of the bisector, the secant's runs past A and B, and the tangents
+        if pt.bis && !pt.deg {
+            let md = g.s + g.d / 2.0;
+            lines.push((scr(upt(md + 180.0)), scr(upt(md)), Target::Cycle("g_om", &STATES), format!("Click the perpendicular bisector to label {}{}: Given, Ask or Hidden", n.o, n.m)));
+        }
+        for (x, y) in drawn_secant_runs(p) {
+            let (t, tip) = if pt.chord { (Target::Cycle("g_chord", &STATES), format!("Click the secant to label chord {}{}: its length Given, Ask or Hidden", n.a, n.b)) } else { (Target::Line(n.a.clone(), n.b.clone()), format!("Click the secant to label line {}{} with its length (again to clear it)", n.a, n.b)) };
+            lines.push((scr(x), scr(y), t, tip));
+        }
+        let pts_named = circle_points(p);
+        for (d, e0, e1) in drawn_tangents(p) {
+            let nm = pts_named.iter().find(|x| angdiff(x.1, d) < 1e-6).map(|x| x.0.clone()).unwrap_or_default();
+            lines.push((scr(e0), scr(e1), Target::TanWord(nm.clone()), format!("Click the tangent at {nm} to label it (again to change it back)")));
+        }
         // the lines with no label of their own (and the lines between points) take a length label
         let mut plain: Vec<(String, String, V, V)> = vec![];
         if (pt.central || pt.sector != 0) && pt.b && !pt.deg { plain.push((n.o.clone(), n.b.clone(), uo, ub)); }
@@ -285,6 +303,7 @@ impl Hit {
             Target::Line(a, b) => cycle_mark(p, false, false, &a, &b),
             Target::Angle(head, v, a, b) => cycle_angle(p, &head, v, a, b),
             Target::Arc(x, y, major) => cycle_mark(p, true, major, &x, &y),
+            Target::TanWord(x) => cycle_tangent_word(p, &x),
             Target::Rim(d) => add_point(p, d),
             Target::Shade(u) => toggle_shade(p, u),
         }
@@ -293,12 +312,12 @@ impl Hit {
 
 /// The knobs of the More points, and one click area over the circle and round it that acts on the part clicked (see `Hit`): it
 /// outlines that part on hover and names what a click does there.
-pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
-    let centre = (cx + pad, CY + pad);
+pub fn handles(p: &Params, cx: f64, off: Pt) -> Vec<Handle> {
+    let centre = (cx + off.0, CY + off.1);
     let mut v = vec![];
     for (i, (nm, d)) in extras(p).into_iter().enumerate() {
         let q = on_circle(cx, d);
-        let at = (q.0 + pad, q.1 + pad);
+        let at = (q.0 + off.0, q.1 + off.1);
         let nm2 = nm.clone();
         v.push(Handle::knob(at, &format!("Drag point {nm} round the circle; click it for the tangent there"), move |p, t| {
             if unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
@@ -534,6 +553,8 @@ pub fn angle_spots(p: &Params) -> Vec<Spot> {
         for (nm, e) in [(a, x), (b, y)] { if !corners.iter().any(|(_, f)| same_place(p, *f, *e)) { corners.push((nm.clone(), *e)); } }
     }
     if m_ok(p) && !corners.iter().any(|(_, f)| same_place(p, *f, End::M)) { corners.push((n.m.clone(), End::M)); }
+    // the centre too, for lines that run through it (a diameter typed as AC)
+    if !corners.iter().any(|(_, f)| same_place(p, *f, End::O)) { corners.push((n.o.clone(), End::O)); }
     let tans = tangent_dirs(p);
     let mut out = vec![];
     for (vn, ve) in corners {
@@ -607,13 +628,7 @@ pub fn edges(p: &Params) -> Vec<(V, V)> {
     let o = (0.0, 0.0);
     let mut v: Vec<(V, V)> = vec![];
     if (pt.chord || pt.sec) && !pt.deg { v.push((c(g.a), c(g.b))); }
-    if pt.sec && !pt.deg {
-        let (a, b) = (c(g.a), c(g.b));
-        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-        let (l, e) = (dx.hypot(dy).max(1e-9), 60.0 / R);
-        v.push((b, (b.0 + dx / l * e, b.1 + dy / l * e)));
-        v.push((a, (a.0 - dx / l * e, a.1 - dy / l * e)));
-    }
+    for (x, y) in drawn_secant_runs(p) { v.push((x, y)); }
     if pt.insc { v.push((c(g.c), c(g.a))); v.push((c(g.c), c(g.b))); }
     if pt.diam { v.push((c(g.a), c(g.a + 180.0))); }
     if pt.bis && !pt.deg { let m = g.s + g.d / 2.0; v.push((c(m), c(m + 180.0))); }
@@ -621,10 +636,47 @@ pub fn edges(p: &Params) -> Vec<(V, V)> {
     if pt.a && (pt.radius || both || pt.tan) { v.push((o, c(g.a))); }
     if both && !pt.deg { v.push((o, c(g.b))); }
     for (_, x, y) in joins(p) { v.push((end_pos(p, x), end_pos(p, y))); }
-    for (d, back, fwd) in tangent_lines(p) {
-        let q = c(d);
-        let t = (-q.1, q.0);
-        v.push(((q.0 - t.0 * back / R, q.1 - t.1 * back / R), (q.0 + t.0 * fwd / R, q.1 + t.1 * fwd / R)));
+    for (_, e0, e1) in drawn_tangents(p) { v.push((e0, e1)); }
+    v
+}
+
+/// The drawing area before the label room is added (it may only be larger as drawn): the canvas inside its margins, grown for the
+/// tangents, in screen units, with the circle's centre at (cx, CY).
+fn drawn_area(p: &Params) -> (Rect, f64) {
+    let lay = layout_of(p);
+    let gr = tangent_grow(p);
+    (Rect { x0: 10.0 - gr.l, y0: 14.0 - gr.t, x1: lay.w - 10.0 + gr.r, y1: draw_bottom(p) + gr.b }, lay.w / 2.0)
+}
+
+fn to_unit(cx: f64, q: Pt) -> V { ((q.0 - cx) / R, (CY - q.1) / R) }
+
+/// Each tangent as drawn: its point's direction and its two ends (unit coordinates), clipped where the drawing clips it, so an area
+/// is never bounded by a part of a tangent that is not drawn.
+pub fn drawn_tangents(p: &Params) -> Vec<(f64, V, V)> {
+    let (area, cx) = drawn_area(p);
+    tangent_lines(p).into_iter().map(|(d, back, fwd)| {
+        let q = on_circle(cx, d);
+        let fv = (-d.to_radians().sin(), -d.to_radians().cos());
+        let (tf, tb) = (clip_len(q, fv, fwd, &area), clip_len(q, (-fv.0, -fv.1), back, &area));
+        (d, to_unit(cx, (q.0 - fv.0 * tb, q.1 - fv.1 * tb)), to_unit(cx, (q.0 + fv.0 * tf, q.1 + fv.1 * tf)))
+    }).collect()
+}
+
+/// The secant's dashed runs past B and past A as drawn (60 px, clipped at the drawing area as the figure clips them), unit
+/// coordinates.
+fn drawn_secant_runs(p: &Params) -> Vec<(V, V)> {
+    let (g, pt) = (geom(p), parts(p));
+    if !(pt.sec && !pt.deg) { return vec![]; }
+    let (area, cx) = drawn_area(p);
+    let (pa, pb) = (on_circle(cx, g.a), on_circle(cx, g.b));
+    let (dx, dy) = (pb.0 - pa.0, pb.1 - pa.1);
+    let len = dx.hypot(dy).max(1e-9);
+    let (ux, uy) = (dx / len, dy / len);
+    let mut v = vec![];
+    for (from, sign) in [(pb, 1.0), (pa, -1.0)] {
+        let d = (sign * ux, sign * uy);
+        let t = clip_len(from, d, 60.0, &Rect { x0: 10.0, y0: 14.0, x1: 2.0 * cx - 10.0, y1: area.y1 });
+        if t > 3.0 { v.push((to_unit(cx, from), to_unit(cx, (from.0 + d.0 * t, from.1 + d.1 * t)))); }
     }
     v
 }
@@ -786,9 +838,19 @@ pub fn toggle_shade(p: &mut Params, seed: V) {
     let keep: Vec<String> = rs.iter().filter(|r| !row_region(p, &pts, r).is_some_and(|pieces| pieces.iter().any(|poly| pt_in_poly(seed, poly)))).cloned().collect();
     if keep.len() < rs.len() {
         set_rows(p, "shade", &keep);
-    } else if !cell(p, seed).is_empty() {
+    } else if let Some(face) = cell(p, seed).into_iter().next() {
+        // the spot is written to 4 places; if that rounding leaves the area (a click on its very edge), it moves in towards the
+        // area's middle until it is inside
+        let mid = { let k = face.len() as f64; (face.iter().map(|v| v.0).sum::<f64>() / k, face.iter().map(|v| v.1).sum::<f64>() / k) };
+        let round = |v: V| ((v.0 * 1e4).round() / 1e4, (v.1 * 1e4).round() / 1e4);
+        let mut q = round(seed);
+        for k in 1..=10 {
+            if pt_in_poly(q, &face) && cell(p, q).first() == Some(&face) { break; }
+            let t = k as f64 / 10.0;
+            q = round((seed.0 + (mid.0 - seed.0) * t, seed.1 + (mid.1 - seed.1) * t));
+        }
         let mut r = rs;
-        r.push(format!("at {:.2} {:.2}", seed.0, seed.1));
+        r.push(format!("at {} {}", q.0, q.1));
         set_rows(p, "shade", &r);
     }
 }
@@ -805,7 +867,7 @@ pub enum Say { Degrees, Length, Text(String) }
 pub enum Mark { Arc { start: f64, span: f64, say: Say }, Line { a: V, b: V, say: Say }, Angle { v: V, a: V, b: V, say: Say } }
 
 /// A row of Arc and line labels taken apart.
-enum Row { Arc { major: bool, a: String, b: String, say: Say }, Line { a: String, b: String, say: Say }, Angle { a: String, v: String, b: String, say: Say }, Tangent { x: String, d: String, obtuse: bool, say: Say } }
+enum Row { Arc { major: bool, a: String, b: String, say: Say }, Line { a: String, b: String, say: Say }, Angle { a: String, v: String, b: String, say: Say }, Tangent { x: String, d: String, obtuse: bool, say: Say }, TanWord { x: String, text: String } }
 
 /// `arc BC 70°`, `major arc BC degrees`, `arc BC length`, `BD length`, `BD x`, `angle BDC`, `angle BDC 40°`. The letters are one word
 /// (`BC`, `B-C`, `BDC`); an angle's may also be three words (`angle B D C`). `tangent angle CD` is the angle at C between the tangent
@@ -826,6 +888,12 @@ fn parse_mark(row: &str, known: &[String]) -> Option<Row> {
         let k = 3 + usize::from(obtuse || low.get(3).map(String::as_str) == Some("acute"));
         let say = say_of(&text_of(&toks[k.min(toks.len())..]), Say::Degrees);
         return Some(Row::Tangent { x, d, obtuse, say: if say == Say::Length { Say::Degrees } else { say } });
+    }
+    if low.first().map(String::as_str) == Some("tangent") {
+        let x = toks.get(1)?.to_string();
+        let rest = toks[2..].join(" ");
+        let text = match rest.to_lowercase().as_str() { "" => "tangent".to_string(), "none" => String::new(), _ => rest.chars().filter(|c| !c.is_control()).take(24).collect() };
+        return Some(Row::TanWord { x, text });
     }
     if low.first().map(String::as_str) == Some("angle") {
         let is = |s: &str| known.iter().any(|k| k.eq_ignore_ascii_case(s));
@@ -876,6 +944,8 @@ fn mark_of(p: &Params, pts: &[(String, f64)], row: Row) -> Option<Mark> {
             let r = tangent_ray(q, qd, obtuse);
             Some(Mark::Angle { v: q, a: (q.0 + r.0 * 0.5, q.1 + r.1 * 0.5), b: qd, say })
         }
+        // (the tangents' words are drawn with the tangents, see `tangent_words`)
+        Row::TanWord { .. } => None,
     }
 }
 
@@ -890,7 +960,12 @@ pub fn marks(p: &Params) -> Vec<Mark> {
 pub fn unknown_marks(p: &Params) -> Vec<String> {
     let pts = circle_points(p);
     let known = known_names(p, &pts);
-    rows(p.s("marks")).into_iter().filter(|r| parse_mark(r, &known).and_then(|m| mark_of(p, &pts, m)).is_none()).collect()
+    let tans = tangent_dirs(p);
+    rows(p.s("marks")).into_iter().filter(|r| match parse_mark(r, &known) {
+        Some(Row::TanWord { x, .. }) => !matches!(find(p, &pts, &x), Some(End::At(d)) if tans.iter().any(|t| angdiff(*t, d) < 1e-6)),
+        Some(m) => mark_of(p, &pts, m).is_none(),
+        None => true,
+    }).collect()
 }
 
 /// A click on arc or line `xy`: no label, then its degrees (an arc), then its length, then no label again. A typed label is cleared.
@@ -911,6 +986,38 @@ pub fn cycle_mark(p: &mut Params, arc: bool, major: bool, x: &str, y: &str) {
             Some(Row::Arc { say: Say::Degrees, .. }) => r[i] = format!("{head} length"),
             _ => { r.remove(i); }
         },
+    }
+    set_rows(p, "marks", &r);
+}
+
+/// The words beside the tangents, from the label rows `tangent C` (the word "tangent"), `tangent C t` (that text) and
+/// `tangent C none` (no word): (the point's direction, the text, empty for none). The tangent at A says "tangent" without a row.
+pub fn tangent_words(p: &Params) -> Vec<(f64, String)> {
+    let pts = circle_points(p);
+    let known = known_names(p, &pts);
+    let tans = tangent_dirs(p);
+    let mut v: Vec<(f64, String)> = vec![];
+    for r in rows(p.s("marks")).iter().take(24) {
+        if let Some(Row::TanWord { x, text }) = parse_mark(r, &known)
+            && let Some(End::At(d)) = find(p, &pts, &x)
+            && tans.iter().any(|t| angdiff(*t, d) < 1e-6)
+            && !v.iter().any(|e| angdiff(e.0, d) < 1e-6)
+        {
+            v.push((d, text));
+        }
+    }
+    v
+}
+
+/// A click on the tangent at `x`: its word on (`tangent C`), or for A, whose tangent says "tangent" already, off (`tangent A none`);
+/// a second click takes the row away again.
+pub fn cycle_tangent_word(p: &mut Params, x: &str) {
+    let pts = circle_points(p);
+    let known = known_names(p, &pts);
+    let mut r = rows(p.s("marks"));
+    match r.iter().position(|row| matches!(parse_mark(row, &known), Some(Row::TanWord { x: y, .. }) if y == x)) {
+        Some(i) => { r.remove(i); }
+        None => r.push(if x == names(p).a && p.b("show_tangent") { format!("tangent {x} none") } else { format!("tangent {x}") }),
     }
     set_rows(p, "marks", &r);
 }
@@ -996,7 +1103,7 @@ mod tests {
         assert!(parts(&q).b, "B was not drawn, so the click puts B there");
         let mut q = p.clone();
         (area.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 60.0, R * 0.5));
-        assert_eq!(q.s("shade"), "at 0.25 0.43");
+        assert_eq!(q.s("shade"), "at 0.25 0.433");
         assert_eq!(q.s("more_points"), p.s("more_points"));
     }
 
@@ -1227,7 +1334,7 @@ mod tests {
         r
     }
 
-    fn centre_of(p: &Params) -> Pt { let rep = build(p).1; (layout_of(p).cx + rep.pad, CY + rep.pad) }
+    fn centre_of(p: &Params) -> Pt { let rep = build(p).1; (layout_of(p).cx + rep.ox, CY + rep.oy) }
 
     #[test]
     fn clicking_beside_an_arc_labels_it_in_degrees_then_by_length_then_not() {
@@ -1433,7 +1540,7 @@ mod tests {
         let c = centre_of(&p);
         let mut e = p.clone();
         e.set_s("shade", "");
-        assert_eq!(regions(&click(&e, interact::polar(c, 50.0, R * 1.12))).len(), 1, "through the hit test");
+        assert_eq!(regions(&click(&e, interact::polar(c, 50.0, R * 1.1))).len(), 1, "through the hit test, 7 px from either tangent");
         let q = click(&p, interact::polar(c, 230.0, R * 1.3));
         assert_eq!(q.s("shade"), p.s("shade"));
     }
@@ -1506,7 +1613,7 @@ mod tests {
             Some((_, t)) if t.starts_with("Click to shade") => "shade",
             Some((_, t)) if t.starts_with("Click to label arc") => "arc",
             Some((_, t)) if t.starts_with("Click angle") || t.starts_with("Click to label angle") || t.starts_with("Click to label tangent angle") => "angle",
-            Some((_, t)) if t.starts_with("Click to label line") || t.starts_with("Click radius") || t.starts_with("Click chord") || t.starts_with("Click the diameter") => "line",
+            Some((_, t)) if ["Click to label line", "Click radius", "Click chord", "Click the diameter", "Click the tangent", "Click the secant", "Click the perpendicular", "Click OM"].iter().any(|x| t.starts_with(x)) => "line",
             Some(_) => "other",
         }
     }
@@ -1575,46 +1682,51 @@ mod tests {
         assert!(seen["line"] > 100 && seen["shade"] > 10_000 && seen["arc"] > 1000 && seen["rim"] > 500, "{seen:?}");
     }
 
-    /// Two tangents 40 degrees apart (at A 20 and B 60, with radius OA): the thin area between them and the circle shades, though it
-    /// is only a few px deep and sits where the arc ring would be; the angle between the tangent at A and OA is labelled from its
-    /// whole wedge (12 to 40 px from A, on the circle's side of the tangent).
+    /// Two tangents 60 degrees apart (at A 20 and B 80, with radius OA): a click on either tangent (5 px, away from its ends) labels
+    /// it, the area between them and the circle shades, and the angle between the tangent at A and OA is labelled from its whole
+    /// wedge (12 to 40 px from A, on the circle's side of the tangent).
     #[test]
     fn every_pixel_does_what_is_under_it_tangents_and_their_angle() {
-        let mut p = params(&[("show_b", Value::B(true)), ("a2", Value::F(60.0)), ("show_tangent", Value::B(true))]);
+        let mut p = params(&[("show_b", Value::B(true)), ("a2", Value::F(80.0)), ("show_tangent", Value::B(true))]);
         p.set_s("tangents", "B");
         let want = |q: Pt, c: Pt| -> Option<&'static str> {
-            let (pa, pb) = (interact::polar(c, 20.0, R), interact::polar(c, 60.0, R));
+            let (pa, pb) = (interact::polar(c, 20.0, R), interact::polar(c, 80.0, R));
             let r = interact::dist(c, q);
             for k in [pa, pb] {
                 let (dx, dy) = ((q.0 - k.0).abs(), (q.1 - k.1).abs());
                 if edge(dx, 9.0) && dy <= 9.75 || edge(dy, 9.0) && dx <= 9.75 { return None; }
                 if dx <= 9.0 && dy <= 9.0 { return Some("point"); }
             }
-            let (dl, da, dc) = (pt_seg_dist(q, c, pa), interact::dist(q, pa), interact::dist(q, c));
-            if edge(dl, 5.0) || (dl < 5.75 && (edge(da, 8.0) || edge(dc, 8.0))) { return None; }
-            if dl <= 5.0 && da > 8.0 && dc > 8.0 { return Some("line"); }
+            // the lines: OA and the two tangents (130 px each way from their points)
+            let tan = |d: f64| { let k = interact::polar(c, d, R); let f = (-d.to_radians().sin() * 130.0, -d.to_radians().cos() * 130.0); ((k.0 - f.0, k.1 - f.1), (k.0 + f.0, k.1 + f.1)) };
+            for (a, b) in [(c, pa), tan(20.0), tan(80.0)] {
+                let (dl, da, db) = (pt_seg_dist(q, a, b), interact::dist(q, a), interact::dist(q, b));
+                if edge(dl, 5.0) || (dl < 5.75 && (edge(da, 8.0) || edge(db, 8.0))) { return None; }
+                if dl <= 5.0 && da > 8.0 && db > 8.0 { return Some("line"); }
+            }
             if [R - 6.0, R + 6.0, R + 30.0].iter().any(|b| edge(r, *b)) { return None; }
             if (r - R).abs() <= 6.0 { return Some("rim"); }
             // how far inside (towards the centre) each tangent line q is
             let inside = |d: f64| { let u = (d.to_radians().cos(), -d.to_radians().sin()); R - ((q.0 - c.0) * u.0 + (q.1 - c.1) * u.1) };
-            let (ia, ib) = (inside(20.0), inside(60.0));
+            let (ia, ib) = (inside(20.0), inside(80.0));
+            let da = interact::dist(q, pa);
             if edge(da, 12.0) || edge(da, 40.0) || (da < 40.75 && edge(ia, 0.0)) { return None; }
             if (12.0..=40.0).contains(&da) && ia > 0.0 { return Some("angle"); }
             if r < R { return Some("shade"); }
             // the area between the tangents and the circle: inside both tangents, between the touch points' directions
             let phi = interact::angle_deg(c, q);
-            if edge(ia, 0.0) || edge(ib, 0.0) || angdiff(phi, 20.0) < 0.5 || angdiff(phi, 60.0) < 0.5 { return None; }
-            if ia > 0.0 && ib > 0.0 && (20.0..=60.0).contains(&phi) { return Some("shade"); }
+            if edge(ia, 0.0) || edge(ib, 0.0) || angdiff(phi, 20.0) < 0.5 || angdiff(phi, 80.0) < 0.5 { return None; }
+            if ia > 0.0 && ib > 0.0 && (20.0..=80.0).contains(&phi) { return Some("shade"); }
             if r <= R + 30.0 { return Some("arc"); }
             if r > 130.0 + R + 20.0 - 1.0 { return None; }
             Some("none")
         };
         let seen = sweep(&p, &want);
-        assert!(seen["angle"] > 300 && seen["shade"] > 10_000, "{seen:?}");
-        // and some of the shading is the thin area outside, between the tangents
+        assert!(seen["angle"] > 300 && seen["shade"] > 10_000 && seen["line"] > 800, "{seen:?}");
+        // and some of the shading is the area outside, between the tangents
         let hs = super::super::handles("circle", &p, (0.0, 0.0)).unwrap();
         let c = centre_of(&p);
-        let outside = (0..40).filter(|i| kind_at(&hs, interact::polar(c, 38.0 + *i as f64 * 0.1, R + 7.5)) == "shade").count();
+        let outside = (0..40).filter(|i| kind_at(&hs, interact::polar(c, 48.0 + *i as f64 * 0.1, R + 12.0)) == "shade").count();
         assert!(outside > 30, "{outside}");
     }
 
@@ -1660,5 +1772,108 @@ mod tests {
         let pc = interact::polar(c, 110.0, R);
         let lab = rep.placed.iter().find(|l| l.text == "180\u{b0}").unwrap();
         assert!(interact::dist(lab.anchor, pc) > 14.0, "the label points at {:?}, C is at {pc:?}", lab.anchor);
+    }
+
+    /// Two tangents that meet below the circle (A 210, B 330, meeting 2 radii below the centre): the canvas grows downward only, the
+    /// readout moves below the drawing, the tangents are drawn to where they meet, and the area between them shades by a click and
+    /// stays inside what is drawn.
+    #[test]
+    fn tangents_meeting_below_grow_the_canvas_downward_and_are_drawn_to_their_meeting_point() {
+        let mut p = params(&[("a1", Value::F(210.0)), ("show_b", Value::B(true)), ("a2", Value::F(330.0)), ("show_tangent", Value::B(true))]);
+        p.set_s("tangents", "B");
+        let g = tangent_grow(&p);
+        assert!(g.b > 0.0 && g.l == 0.0 && g.r == 0.0 && g.t == 0.0, "only downward: {g:?}");
+        let rep = build(&p).1;
+        let c = centre_of(&p);
+        let meet = interact::polar(c, 270.0, 2.0 * R);
+        assert!(rep.solid.iter().filter(|(a, b)| interact::dist(*a, meet) < 16.0 || interact::dist(*b, meet) < 16.0).count() == 2, "both drawn to the meeting point");
+        assert!(rep.rows.iter().all(|r| r.y0 > meet.1 + 10.0), "the readout is below the drawing");
+        assert!(meet.1 < rep.h);
+        let q = click(&p, interact::polar(c, 270.0, 1.5 * R));
+        let r = regions(&q);
+        let want = 60f64.to_radians().tan() - 60f64.to_radians();
+        assert!((area(&r[0]) - want).abs() < want * 0.03, "{}", q.s("shade"));
+        // every corner of the area is on the drawing: no lower than the meeting point
+        assert!(r[0][0].iter().all(|v| v.1 >= -2.0 - 1e-6), "{:?}", r[0][0]);
+        // three tangents (90, 210, 330): the bottom corner is drawn too, so its area is a real one
+        let mut t = params(&[("a1", Value::F(210.0)), ("show_b", Value::B(true)), ("a2", Value::F(330.0)), ("show_c", Value::B(true)), ("c_angle", Value::F(90.0)), ("show_tangent", Value::B(true))]);
+        t.set_s("tangents", "B, C");
+        for (d, e0, e1) in drawn_tangents(&t) {
+            let full = tangent_lines(&t).into_iter().find(|x| angdiff(x.0, d) < 1e-9).unwrap();
+            let q = upt(d);
+            let (b, f) = ((e0.0 - q.0).hypot(e0.1 - q.1) * R, (e1.0 - q.0).hypot(e1.1 - q.1) * R);
+            assert!((b - full.1).abs() < 0.5 && (f - full.2).abs() < 0.5, "the tangent at {d} is drawn whole: {b} {f} vs {full:?}");
+        }
+    }
+
+    /// Every drawn line labels by a click: OA drawn for the central angle while the radius switch is off (the shipped example), the
+    /// tangents (also within the 30 px ring outside the circle, where the arc labels are), and the secant's dashed runs.
+    #[test]
+    fn every_drawn_line_is_labelled_by_a_click_on_it() {
+        let ex = examples("circle").unwrap().into_iter().find(|e| e.name == "Central and inscribed angle on the same arc").unwrap();
+        let p = params(&ex.params);
+        assert!(!p.b("show_radius") && p.b("show_central"));
+        let c = centre_of(&p);
+        let on_oa = interact::polar(c, p.f("a1"), R * 0.5);
+        assert_eq!(click(&p, on_oa).s("marks"), "OA length");
+        // the tangent at A (its own switch): a click on it, 20 px past the circle, hides its word, and again shows it
+        let mut t = abcd();
+        t.set_b("show_tangent", true);
+        t.set_s("tangents", "C");
+        let c = centre_of(&t);
+        let along = |d: f64, s: f64| { let q = interact::polar(c, d, R); (q.0 - d.to_radians().sin() * s, q.1 - d.to_radians().cos() * s) };
+        let q = click(&t, along(20.0, 75.0));
+        assert_eq!(q.s("marks"), "tangent A none");
+        assert!(!render(&q).contains(">tangent<"));
+        assert_eq!(click(&q, along(20.0, 75.0)).s("marks"), "");
+        // the tangent at C: its word on
+        let q = click(&t, along(100.0, -40.0));
+        assert_eq!(q.s("marks"), "tangent C");
+        assert!(render(&q).matches(">tangent<").count() == 2);
+        let mut q = t.clone();
+        q.set_s("marks", "tangent C t1");
+        assert!(render(&q).contains(">t1<"));
+        // the secant's dashed run past B
+        let s = params(&[("show_secant", Value::B(true))]);
+        let c = centre_of(&s);
+        let (a, b) = (interact::polar(c, 20.0, R), interact::polar(c, 110.0, R));
+        let l = interact::dist(a, b);
+        let run = (b.0 + (b.0 - a.0) / l * 30.0, b.1 + (b.1 - a.1) / l * 30.0);
+        assert_eq!(click(&s, run).s("marks"), "AB length");
+    }
+
+    #[test]
+    fn a_spot_saved_from_a_click_on_an_areas_edge_still_shades_it() {
+        // tangents 60 degrees apart (A 20, B 80); a click 0.4 px inside the tangent at A, between A and where they meet
+        let mut p = params(&[("show_b", Value::B(true)), ("a2", Value::F(80.0)), ("show_tangent", Value::B(true))]);
+        p.set_s("tangents", "B");
+        let q = upt(20.0);
+        let t = (-q.1, q.0);
+        let s = 40.0 / R;
+        let seed = (q.0 + t.0 * s - q.0 * 0.4 / R, q.1 + t.1 * s - q.1 * 0.4 / R);
+        assert!(!cell(&p, seed).is_empty(), "the click is in the area");
+        toggle_shade(&mut p, seed);
+        assert_eq!(regions(&p).len(), 1, "the saved spot {} shades it", p.s("shade"));
+    }
+
+    #[test]
+    fn an_arc_label_moved_off_a_point_stays_on_its_own_arc() {
+        // arc AB (20 to 60) with C at its middle: the label moves off C but stays between A and B
+        let mut p = params(&[("show_b", Value::B(true)), ("a2", Value::F(60.0)), ("show_c", Value::B(true)), ("c_angle", Value::F(40.0))]);
+        p.set_s("marks", "arc AB length");
+        let rep = build(&p).1;
+        let c = centre_of(&p);
+        let lab = rep.placed.iter().find(|l| l.text.ends_with(" cm") && !l.text.starts_with("r")).unwrap();
+        let d = interact::angle_deg(c, lab.anchor);
+        assert!(d > 20.0 && d < 60.0 && angdiff(d, 40.0) > 5.0, "anchored at {d}");
+    }
+
+    #[test]
+    fn diameters_typed_as_rows_offer_the_angles_where_they_cross_at_o() {
+        let mut p = params(&[("show_b", Value::B(true)), ("show_c", Value::B(true)), ("c_angle", Value::F(200.0))]);
+        p.set_s("more_points", "D 290");
+        p.set_s("joins", "AC, BD");
+        let at_o: Vec<String> = angle_spots(&p).into_iter().map(|s| s.head).filter(|h| h.chars().nth(7) == Some('O')).collect();
+        assert_eq!(at_o.len(), 4, "{at_o:?}");
     }
 }

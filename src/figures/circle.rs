@@ -893,7 +893,9 @@ fn clip_len(p: Pt, d: Pt, max: f64, b: &Rect) -> f64 {
 
 /// What a render also knows about itself (for tests): the placed labels, the drawn line segments, the points, the readout boxes.
 #[derive(Clone, Debug)]
-pub struct Report { pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
+/// `pad` is the room added round the figure for its labels; `ox`, `oy` how far the drawing is shifted right and down (the label
+/// room plus any room the tangents need on the left and the top).
+pub struct Report { pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
 
 fn render(p: &Params) -> String { build(p).0 }
 
@@ -922,38 +924,53 @@ pub fn control_label(key: &str, p: &Params) -> Option<String> {
 
 /// How hard a render tries to fit its labels: whether the figure labels drop the unit, how much room is added round the figure
 /// (left, right and top; the canvas grows and the drawing is shifted), and the labels that were moved into the readout.
-struct Opt { drop_unit: bool, pad: f64, exclude: Vec<(usize, String, Option<K>)> }
+struct Opt { drop_unit: bool, pad: f64, grow: Grow, exclude: Vec<(usize, String, Option<K>)> }
+
+/// Room the drawing needs beyond the canvas on each side (left, right, top, bottom), for tangents drawn on to where they meet.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Grow { pub l: f64, pub r: f64, pub t: f64, pub b: f64 }
 
 /// The figure, with its labels fitted: as drawn, then without the unit on the figure labels (the readout keeps it), then with room
 /// added round the figure, and as a last resort with the labels that still do not fit moved into the readout. No label overlaps another or leaves the canvas.
 pub fn build(p: &Params) -> (String, Report) {
-    let need = tangent_room(p);
-    let levels = [(false, 0.0f64), (true, 0.0), (true, 40.0), (true, 90.0), (true, 150.0)];
+    let grow = tangent_grow(p);
+    let levels = [(false, 0.0), (true, 0.0), (true, 40.0), (true, 90.0), (true, 150.0)];
     for (d, pad) in levels {
-        let (svg, rep, bad) = core(p, &Opt { drop_unit: d, pad: pad.max(need), exclude: vec![] });
+        let (svg, rep, bad) = core(p, &Opt { drop_unit: d, pad, grow, exclude: vec![] });
         if bad.is_empty() { return (svg, rep); }
     }
-    let last = 150f64.max(need);
-    let (_, _, bad) = core(p, &Opt { drop_unit: true, pad: last, exclude: vec![] });
-    let (svg, rep, _) = core(p, &Opt { drop_unit: true, pad: last, exclude: bad });
+    let (_, _, bad) = core(p, &Opt { drop_unit: true, pad: 150.0, grow, exclude: vec![] });
+    let (svg, rep, _) = core(p, &Opt { drop_unit: true, pad: 150.0, grow, exclude: bad });
     (svg, rep)
 }
 
-/// The room (left, right and top) the tangents need beyond the canvas to reach where they meet, at most 300 px.
-fn tangent_room(p: &Params) -> f64 {
+/// The bottom of the drawing area (above the readout) before any growth.
+fn draw_bottom(p: &Params) -> f64 {
+    let lay = layout_of(p);
+    (if rows(&ctx(p)).is_empty() { BASE_H - 6.0 } else { lay.rule_y - 6.0 }) - 8.0
+}
+
+/// The room the tangents need beyond the drawing area, side by side, to be drawn on to where they meet (at most 400 px a side; the
+/// readout moves down below a drawing that grows downward). Nothing when no tangent runs past its usual 130 px.
+pub fn tangent_grow(p: &Params) -> Grow {
     let lines = edit::tangent_lines(p);
-    if lines.iter().all(|t| t.1 <= 130.0 && t.2 <= 130.0) { return 0.0; }
+    if lines.iter().all(|t| t.1 <= 130.0 && t.2 <= 130.0) { return Grow::default(); }
     let lay = layout_of(p);
     let cx = lay.w / 2.0;
-    let mut need: f64 = 0.0;
+    let bottom = draw_bottom(p);
+    let mut g = Grow::default();
     for (d, back, fwd) in lines {
         let q = on_circle(cx, d);
         let fv = (-d.to_radians().sin(), -d.to_radians().cos());
         for e in [(q.0 + fv.0 * fwd, q.1 + fv.1 * fwd), (q.0 - fv.0 * back, q.1 - fv.1 * back)] {
-            need = need.max(10.0 - e.0).max(e.0 - (lay.w - 10.0)).max(14.0 - e.1);
+            g.l = g.l.max(10.0 - e.0);
+            g.r = g.r.max(e.0 - (lay.w - 10.0));
+            g.t = g.t.max(14.0 - e.1);
+            g.b = g.b.max(e.1 - bottom);
         }
     }
-    (need + 4.0).clamp(0.0, 300.0)
+    let side = |x: f64| if x > 0.0 { (x + 4.0).min(400.0) } else { 0.0 };
+    Grow { l: side(g.l), r: side(g.r), t: side(g.t), b: side(g.b) }
 }
 
 fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>)>) {
@@ -977,6 +994,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         }
     }
     let pad = opt.pad;
+    // the drawing's shift right and down, the room on its right and below it (the readout moves down by `gb`)
+    let (ox, oy, rx, gb) = (pad + opt.grow.l, pad + opt.grow.t, pad + opt.grow.r, opt.grow.b);
     let lay = layout(&rws, f);
     let (cx, w, h) = (lay.cx, lay.w, lay.h);
     let o = (cx, CY);
@@ -988,10 +1007,10 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let col = |i: usize| -> &'static str { if print { ["#000000", "#333333", "#555555", "#222222"][i % 4] } else { ["#1f5fbf", "#2f8f4e", "#c0392b", "#7a4fc4"][i % 4] } };
     let aux = if print { "#666666" } else { "#2f8f4e" };
     let aw = 2.0;
-    let bounds = Rect { x0: 4.0 - pad, y0: 4.0 - pad, x1: w - 4.0 + pad, y1: if rws.is_empty() { BASE_H - 6.0 } else { lay.rule_y - 6.0 } };
+    let bounds = Rect { x0: 4.0 - ox, y0: 4.0 - oy, x1: w - 4.0 + rx, y1: if rws.is_empty() { BASE_H - 6.0 } else { lay.rule_y - 6.0 } + gb };
     let area = Rect { x0: 10.0, y0: 14.0, x1: w - 10.0, y1: bounds.y1 - 8.0 };
 
-    let mut sc = Sc { d: Doc::new(w + 2.0 * pad, h + pad), segs: vec![], solid: vec![], dots: vec![], marks: 0 };
+    let mut sc = Sc { d: Doc::new(w + ox + rx, h + oy + gb), segs: vec![], solid: vec![], dots: vec![], marks: 0 };
     sc.d.describe("Circle", "A circle with chosen parts (radius, diameter, chord, tangent, secant, angles, arc, sector) and its measures");
 
     let (pa, pb, pc) = (on_circle(cx, g.a), on_circle(cx, g.b), on_circle(cx, g.c));
@@ -1064,7 +1083,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     // a tangent is drawn 130 px each way, or on to where it meets another tangent (the canvas grows to hold that meeting point,
     // see `build`; it is clipped only at the canvas)
     let tlines = edit::tangent_lines(p);
-    let tclip = Rect { x0: 10.0 - pad, y0: 14.0 - pad, x1: w - 10.0 + pad, y1: area.y1 };
+    let tclip = Rect { x0: 10.0 - ox, y0: 14.0 - oy, x1: w - 10.0 + rx, y1: area.y1 };
     let tan_seg = |d: f64| -> (Pt, Pt) {
         let (back, fwd) = tlines.iter().find(|t| angdiff(t.0, d) < 1e-6).map(|t| (t.1, t.2)).unwrap_or((130.0, 130.0));
         let q = on_circle(cx, d);
@@ -1095,11 +1114,13 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         let radius = matches!(x, edit::End::O) || matches!(y, edit::End::O);
         sc.ln(at_end(*x), at_end(*y), col(if radius { 0 } else { 1 }), 2.4);
     }
+    let mut list_tan_ends: Vec<(f64, [Pt; 2])> = vec![];
     for (_, d) in edit::tangent_points(p) {
         let (q, u) = (on_circle(cx, d), unit(d));
         let tq = (-u.1, u.0);
         let (e0, e1) = tan_seg(d);
         let ends = [e0, e1];
+        list_tan_ends.push((d, ends));
         sc.ln(ends[0], ends[1], col(2), 2.2);
         sc.solid.push((ends[0], ends[1]));
         // the right angle with a radius drawn to the same point
@@ -1301,7 +1322,18 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         for e in ends { cands.extend(near_cands(*e, (e.0 - cx, e.1 - CY), bw, bh, 4.0)); }
         if let Some(e) = ends.first() { labs.push(Lab { keep_out: None, kind: None, text: t.to_string(), size, bold: false, prio: 3, anchor: *e, cands, leader_from: Some(*e), id: 0, wide: None, force: false, froms: vec![] }); }
     };
-    if !tan_ends.is_empty() { word(&mut labs, "tangent", &tan_ends); }
+    // the tangent at A says "tangent" unless a label row changes it; the other tangents say what their rows say
+    let tan_words = edit::tangent_words(p);
+    if !tan_ends.is_empty() {
+        match tan_words.iter().find(|(d, _)| angdiff(*d, g.a) < 1e-6) {
+            Some((_, t)) if t.is_empty() => {}
+            Some((_, t)) => word(&mut labs, t, &tan_ends),
+            None => word(&mut labs, "tangent", &tan_ends),
+        }
+    }
+    for (d, ends) in &list_tan_ends {
+        if let Some((_, t)) = tan_words.iter().find(|(e, _)| angdiff(*e, *d) < 1e-6) && !t.is_empty() { word(&mut labs, t, ends); }
+    }
     if !sec_ends.is_empty() { word(&mut labs, "secant", &sec_ends); }
     // the labels a teacher put on arcs (outside the arc's middle) and on lines (beside the line's middle, away from the centre)
     let sp = |v: edit::V| (cx + R * v.0, CY - R * v.1);
@@ -1315,8 +1347,10 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                 let mut mid = start + span / 2.0;
                 // a point at the arc's middle (C on a semicircle's arc): the label goes beside it, so it does not read as the point's
                 if let Some((_, d)) = edit::circle_points(p).into_iter().find(|(_, d)| angdiff(*d, mid) < 8.0) && span > 30.0 {
-                    let side = if (mid - d).rem_euclid(360.0) < 180.0 { 1.0 } else { -1.0 };
-                    mid = d + side * 11.0;
+                    // towards the arc's longer side from the point, and never past 4 degrees from its ends
+                    let off = (d - start).rem_euclid(360.0);
+                    let side = if off > span / 2.0 { -1.0 } else { 1.0 };
+                    mid = start + (off + side * 11.0).clamp(4.0, span - 4.0);
                 }
                 let t = say(&s, span, m.r * span.to_radians());
                 let (bw, bh) = box_of(&t, size, true);
@@ -1396,9 +1430,9 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     // the readout
     let mut row_rects = vec![];
     if !rws.is_empty() {
-        sc.d.line(24.0, lay.rule_y, w - 24.0, lay.rule_y, if print { "#888888" } else { "#b0b0b0" }, 1.0);
+        sc.d.line(24.0, lay.rule_y + gb, w - 24.0, lay.rule_y + gb, if print { "#888888" } else { "#b0b0b0" }, 1.0);
         for (i, r) in rws.iter().enumerate() {
-            let y = BASE_H + 4.0 + lay.size * 0.8 + i as f64 * lay.rh;
+            let y = BASE_H + 4.0 + lay.size * 0.8 + i as f64 * lay.rh + gb;
             if !ans && r.stu.is_empty() { continue; }
             let name = format!("{}:", if ans { &r.name } else { &r.sname });
             sc.d.raw(&text_el(lay.name_x, y, lay.size, "start", false, false, &name));
@@ -1415,9 +1449,9 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         pat.find("id=\"").is_some_and(|i| { let id = &pat[i + 4..]; id.split('"').next().is_some_and(|id| all.contains(&format!("url(#{id})"))) })
     }).collect();
     sc.d.defs(&defs);
-    if pad > 0.0 { sc.d.raw(&format!(r##"<g transform="translate({pad},{pad})">{all}</g>"##)); } else { sc.d.raw(&all); }
-    let sh = |q: Pt| (q.0 + pad, q.1 + pad);
-    let shr = |r: Rect| Rect { x0: r.x0 + pad, y0: r.y0 + pad, x1: r.x1 + pad, y1: r.y1 + pad };
+    if ox > 0.0 || oy > 0.0 { sc.d.raw(&format!(r##"<g transform="translate({ox},{oy})">{all}</g>"##)); } else { sc.d.raw(&all); }
+    let sh = |q: Pt| (q.0 + ox, q.1 + oy);
+    let shr = |r: Rect| Rect { x0: r.x0 + ox, y0: r.y0 + oy, x1: r.x1 + ox, y1: r.y1 + oy };
     let placed: Vec<Placed> = placed.into_iter().map(|mut pl| { pl.rect = shr(pl.rect); pl.anchor = sh(pl.anchor); pl.line = pl.line.map(|(a, b)| (sh(a), sh(b))); pl.c = sh(pl.c); pl }).collect();
     let report = Report {
         placed,
@@ -1425,7 +1459,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         dots: sc.dots.iter().map(|r| shr(*r)).collect(),
         rows: row_rects.into_iter().map(shr).collect(),
         hatch: hatch.into_iter().map(sh).collect(),
-        w: w + 2.0 * pad, h: h + pad, marks: sc.marks, pad, excluded: opt.exclude.len(), unit_dropped: unit_lost, solid: sc.solid.iter().map(|(a, b)| (sh(*a), sh(*b))).collect(),
+        w: w + ox + rx, h: h + oy + gb, marks: sc.marks, pad, ox, oy, excluded: opt.exclude.len(), unit_dropped: unit_lost, solid: sc.solid.iter().map(|(a, b)| (sh(*a), sh(*b))).collect(),
     };
     (sc.d.finish(), report, severe)
 }
@@ -1501,11 +1535,12 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if id != "circle" { return None; }
     let g = geom(p);
     let pt = parts(p);
-    // the canvas may have grown to make room for the labels: the drawing is shifted by `pad`
-    let pad = build(p).1.pad;
+    // the canvas may have grown to make room for the labels or the tangents: the drawing is shifted by (ox, oy)
+    let rep = build(p).1;
+    let off = (rep.ox, rep.oy);
     let cx = layout_of(p).cx;
-    let centre = (cx + pad, CY + pad);
-    let at = |deg: f64| { let q = on_circle(cx, deg); (q.0 + pad, q.1 + pad) };
+    let centre = (cx + off.0, CY + off.1);
+    let at = |deg: f64| { let q = on_circle(cx, deg); (q.0 + off.0, q.1 + off.1) };
     let n = names(p);
     let mut v = vec![];
     let tan = |nm: &str| { let nm = nm.to_string(); move |p: &mut Params| edit::toggle_tangent(p, &nm) };
@@ -1513,7 +1548,7 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if pt.b { v.push(gap_handle(centre, at(g.b), &format!("Drag point {} round the circle (the angle snaps to 30, 45, 60, 90, ...); click it for the tangent there", n.b)).with_click(tan(&n.b))); }
     if pt.c { v.push(angle_handle("c_angle", centre, at(g.c), &format!("Drag point {} round the circle; click it for the tangent there", n.c)).with_click(tan(&n.c))); }
     // the More points' knobs, then the click area (the workspace puts every area under the knobs)
-    v.extend(edit::handles(p, cx, pad));
+    v.extend(edit::handles(p, cx, off));
     Some(v)
 }
 
