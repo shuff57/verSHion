@@ -747,7 +747,8 @@ fn the_share_migration_is_the_documented_note_path() {
     // this one would need a global share-version bump and a was_overridden value for every figure. This test pins
     // that documented decision rather than silently pretending a link predates the switch.
     assert!(crate::figures::start::added_in(ID).is_empty(), "a migration entry was added without revisiting this note");
-    assert_eq!(crate::figures::share::VERSION, 6, "the global share version moved; revisit the Boltzmann migration note");
+    // v7 (the Venn diagram's tint) changed nothing here: this figure still has no versioned opening key
+    assert_eq!(crate::figures::share::VERSION, 7, "the global share version moved; revisit the Boltzmann migration note");
     let src = include_str!("../boltzmann.rs");
     assert!(src.contains("new and unreleased"), "the header note is missing");
     assert!(src.contains("saved specification or link can predate"), "the header note is incomplete");

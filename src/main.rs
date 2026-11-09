@@ -190,7 +190,7 @@ fn main() -> Result<(), eframe::Error> {
                     .into_iter()
                     .filter_map(|(on, name)| on.then_some(name))
                     .collect();
-                println!("{}\t{}\t{}\t{}", d.id, acts.join(","), h.edit.unwrap_or("-"), h.tip.replace(['\t', '\n'], " "));
+                println!("{}\t{}\t{}\t{}", d.id, acts.join(","), h.edit.or(h.edit_at.as_ref().map(|e| e.0)).unwrap_or("-"), h.tip.replace(['\t', '\n'], " "));
             }
         }
         return Ok(());

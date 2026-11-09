@@ -6894,6 +6894,7 @@ pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon" | "angles" | "parallel-lines" => flat::migrate(id, spec, p),
         // the reference calls the rectangle sides "Boxes"
         "mapping-diagram" => if spec.params.get("shape").and_then(|v| v.as_str()) == Some("Rectangles") { p.set_s("shape", "Boxes"); },
+        super::stats::venn::ID => super::stats::venn::migrate(spec, p),
         _ => {}
     }
 }
@@ -6940,6 +6941,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::H
     super::math_plot::handles(id, p, size).or_else(|| super::math_geo::handles(id, p, size)).or_else(|| super::circle::handles(id, p, size)).or_else(|| super::trig::handles(id, p, size)).or_else(|| super::unitcircle::handles(id, p, size))
         .or_else(|| (id == super::transform::ID).then(|| super::transform::handles(p)))
         .or_else(|| (id == super::stats::twoway::ID).then(|| super::stats::twoway::handles(p)))
+        .or_else(|| (id == super::stats::venn::ID).then(|| super::stats::venn::handles(p)))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's

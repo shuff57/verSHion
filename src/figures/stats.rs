@@ -24,7 +24,7 @@ mod samplingdist;
 mod scatter;
 mod stem;
 pub(crate) mod twoway;
-mod venn;
+pub(crate) mod venn;
 
 pub fn defs() -> Vec<FigureDef> {
     vec![ogive::def(), bar::def(), pie::def(), frequency::def(), chisq::def(), hypothesis::def(), samplingdist::def(), discrete::def(), interval::def(), residual::def(), dot::def(), normal::def(), prob_tree::def(), scatter::def(), stem::def(), twoway::def(), venn::def(), FigureDef {

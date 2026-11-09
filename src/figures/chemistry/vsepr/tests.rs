@@ -1175,7 +1175,8 @@ fn the_header_and_faq_state_the_chemistry() {
 #[test]
 fn the_share_migration_is_the_documented_note_path() {
     assert!(crate::figures::start::added_in(ID).is_empty(), "a migration entry was added without revisiting this note");
-    assert_eq!(crate::figures::share::VERSION, 6, "the global share version moved; revisit the VSEPR migration note");
+    // v7 (the Venn diagram's tint) changed nothing here: this figure still has no versioned opening key
+    assert_eq!(crate::figures::share::VERSION, 7, "the global share version moved; revisit the VSEPR migration note");
     let src = include_str!("../vsepr.rs");
     let flat = src.replace("//!", " ").split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(flat.contains("new and unreleased"), "the header note is missing");

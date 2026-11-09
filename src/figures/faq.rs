@@ -2502,8 +2502,12 @@ const DISCRETE_DISTRIBUTION: &[Faq] = &[
 
 const VENN_DIAGRAM: &[Faq] = &[
     Faq {
-        q: "In what order do I enter the region values?",
-        a: "Two sets: A only, B only, both, neither. Three sets: A only, B only, C only, A and B only, A and C only, B and C only, all three, none. Separate them with commas. A value can be a count or short text such as 2 4 6 to list elements.",
+        q: "How do I fill in a region?",
+        a: "Double-click the region on the figure and type: a number, a letter, an expression such as 2x + 1, or words. Commas split it into lines. Or type every region at once under Region values, in this order with commas between: one set: A, outside; two sets: A only, B only, both, neither (separate sets: A, B, neither; B inside A: A only, B, neither); three sets: A only, B only, C only, A and B only, A and C only, B and C only, all three, none. There a semicolon starts a new line.",
+    },
+    Faq {
+        q: "Can it sort members into the regions for me?",
+        a: "Yes: set In each region to Sets and list each set's members with commas, or a range such as 1-20. Each member lands where its sets meet; the universal set's members that are in no set go outside the circles. List a member twice to put it in twice, as for prime factors (12: 2, 2, 3 and 18: 2, 3, 3 put 2 and 3 in the middle).",
     },
     Faq {
         q: "How are the totals worked out?",
@@ -2511,15 +2515,15 @@ const VENN_DIAGRAM: &[Faq] = &[
     },
     Faq {
         q: "How do I shade a region?",
-        a: "Choose one under Shade: a set, both sets, either set, one set only, outside a set, or everything outside all the circles. The shading stays in the student copy so it can be the question.",
+        a: "Click it on the figure; click again to clear it. Any regions can be shaded together. Or type them under Shaded regions with commas between: A only, A and B, A or B, not A, outside, or (A or B) and not C. Shading picks a colour tint, grey, hatching, cross-hatching or dots. The shading stays in the student copy so it can be the question.",
     },
     Faq {
         q: "How do I make a student copy?",
         a: "Turn off Show answers. The circles, names and shading stay and the region values and totals are left empty. Student + key saves both copies.",
     },
     Faq {
-        q: "Can I name the sets?",
-        a: "Yes, up to 12 characters each. Set C is only used with three sets.",
+        q: "Can I name the sets, or draw them another way?",
+        a: "Name each in the panel or double-click its name on the figure (up to 12 characters). Universal set label names the box U, \u{3be}, S, \u{3b5}, a word of your own, or nothing. Sets picks one, two or three; with two, Arrangement draws them overlapping, separate, or B inside A.",
     },
 ];
 

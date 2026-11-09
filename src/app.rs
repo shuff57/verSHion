@@ -134,6 +134,8 @@ pub struct App {
     /// QA hook: VERSHION_SHOT=<file.png> saves a screenshot of this window's own contents and exits.
     pub qa_shot: Option<(String, u32)>,
     pub qa_frame: u64,
+    /// QA hook: input for the next frames, one list per frame (a `dclick`'s presses and releases).
+    pub qa_next: std::collections::VecDeque<Vec<egui::Event>>,
 }
 
 /// Shared constructor so the window path and the headless selftest path build the
@@ -217,6 +219,7 @@ impl App {
                 .map(|v| v.split(';').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
                 .unwrap_or_default(),
             qa_frame: 0,
+            qa_next: Default::default(),
         };
         let mut app = app; // non-mut unless the capture hook below needs it
         // Opened from a mailed link (/account/verify#token=..., reset, enrol): straight to it.
@@ -392,6 +395,10 @@ impl App {
                 }
             }
         }
+        if let Some(mut evs) = self.qa_next.pop_front() {
+            raw.events.append(&mut evs);
+            ctx.request_repaint();
+        }
         if self.qa_steps.is_empty() {
             return;
         }
@@ -454,12 +461,13 @@ impl App {
                 raw.events.push(egui::Event::PointerMoved(p));
                 raw.events.push(egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed: cmd == "down", modifiers: mods });
             }
+            // a double-click: press, release, press, release on four frames in a row (all in one frame read as a
+            // single click, and two `click` steps ten frames apart can be slower than a double-click under Xvfb)
             "dclick" => {
                 let p = pt(arg);
                 raw.events.push(egui::Event::PointerMoved(p));
-                for _ in 0..2 {
-                    raw.events.push(egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed: true, modifiers: mods });
-                    raw.events.push(egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed: false, modifiers: mods });
+                for pressed in [true, false, true, false] {
+                    self.qa_next.push_back(vec![egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: mods }]);
                 }
             }
             "text" => raw.events.push(egui::Event::Text(arg.to_string())),

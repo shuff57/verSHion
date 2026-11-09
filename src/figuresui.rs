@@ -603,8 +603,11 @@ pub struct Workspace {
     hide_handles: bool,
     /// A handle is being dragged: render without waiting for the debounce.
     live: bool,
-    /// Inline label edit: (param key, buffer, just-opened).
-    editing: Option<(&'static str, String, bool)>,
+    /// Inline edit: (what it writes and where it opened, buffer, just-opened).
+    editing: Option<(InlineEdit, String, bool)>,
+    /// The last click on an area that also takes a double-click to type (when, where in SVG units, the params before it),
+    /// so the double-click that follows can take that click back.
+    click_undo: Option<(Instant, (f64, f64), Params)>,
     qa_init: bool,
     /// An action chosen on the preview toolbar this frame (chemistry skin), handed up by `workspace_view`.
     tool_act: Option<Act>,
@@ -695,6 +698,20 @@ fn chem_whole(id: &str) -> bool {
     matches!(id, "titration-curve" | "heating-cooling-curve" | "mass-spectrum" | "line-spectrum" | "photoelectron-spectrum" | "bohr-model" | "particle-diagram" | "lewis-structures" | "orbital-diagram" | "gas-syringe" | "length-reading" | "mass-reading" | "ph-reading" | "temperature-reading" | "volume-by-displacement" | "volume-reading" | "population-growth" | "predator-prey" | "punnett-square" | "pedigree" | "gel-electrophoresis" | "micropipette-reading")
 }
 
+/// What an inline edit box writes: a label's text param, or the part of an area that was double-clicked (`interact::EditAt`).
+struct InlineEdit {
+    set: figures::interact::SetFn,
+    hint: String,
+    /// Where the double-click was (SVG units), for a part's edit; None for a label's.
+    at: Option<(f64, f64)>,
+}
+
+impl InlineEdit {
+    fn key(key: &'static str) -> Self {
+        InlineEdit { set: std::sync::Arc::new(move |p: &mut Params, s: &str| p.set_s(key, s)), hint: "Edit label".to_string(), at: None }
+    }
+}
+
 impl Workspace {
     pub fn new(modal: bool) -> Self {
         Workspace { modal, ..Default::default() }
@@ -748,6 +765,10 @@ impl Workspace {
 
     fn flush_history(&mut self) {
         if let Some(base) = self.hist_base.take() {
+            // a change taken straight back (a click a double-click undid) is not a step
+            if self.sel.is_some_and(|si| hash_params(reg()[si].id, &base) == hash_params(reg()[si].id, &self.params)) {
+                return;
+            }
             self.undo.push(base);
             self.redo.clear();
             if self.undo.len() > 200 {
@@ -874,6 +895,7 @@ impl Workspace {
         self.ped_sel = None;
         self.kinds_keep = [false; 4];
         self.editing = None;
+        self.click_undo = None;
         self.shown = None;
         self.view = None;
         self.content = None;
@@ -2006,7 +2028,7 @@ impl Workspace {
         let acc = theme::accent_col();
         let mut changed = false;
         let math_quiet = (def.subject == figures::Subject::Math && def.id != "composite-shape" && theme::chem_skin()) || def.subject == figures::Subject::Biology;
-        let mut start_edit: Option<(&'static str, String)> = None;
+        let mut start_edit: Option<(InlineEdit, String)> = None;
         // the widget id is the place in the hit order (as it was before the order came from interact), so a drag that outlives a
         // change in the handle list passes to the same handle as before
         for (pos, i) in order.into_iter().enumerate() {
@@ -2050,10 +2072,27 @@ impl Workspace {
                 self.live = true;
                 changed = true;
             }
+            let edit_here = match (&h.edit_at, r.double_clicked(), r.interact_pointer_pos()) {
+                // two quick clicks on two different parts are two clicks, not a double-click on the second
+                (Some((_, f)), true, Some(ptr)) => Some(to_svg(ptr))
+                    .filter(|q| !self.click_undo.as_ref().is_some_and(|(t, at, _)| t.elapsed() < Duration::from_millis(800) && (at.0 - q.0).abs().max((at.1 - q.1).abs()) * k >= 8.0))
+                    .and_then(|q| f(&self.params, q).map(|e| (q, e))),
+                _ => None,
+            };
             if r.double_clicked()
                 && let Some(key) = h.edit
             {
-                start_edit = Some((key, self.params.s(key).to_string()));
+                start_edit = Some((InlineEdit::key(key), self.params.s(key).to_string()));
+            } else if let Some((q, e)) = edit_here {
+                // the double-click's first click acted on the part (shaded a region): take it back, then type there
+                if let Some((t, at, before)) = self.click_undo.take()
+                    && t.elapsed() < Duration::from_millis(800)
+                    && (at.0 - q.0).abs().max((at.1 - q.1).abs()) * k < 8.0
+                {
+                    self.params = before;
+                    changed = true;
+                }
+                start_edit = Some((InlineEdit { set: e.set, hint: e.hint, at: Some(q) }, e.text));
             } else if r.clicked()
                 && let Some(f) = &h.click
             {
@@ -2063,6 +2102,9 @@ impl Workspace {
             } else if r.clicked()
                 && let (Some(f), Some(ptr)) = (&h.click_at, r.interact_pointer_pos())
             {
+                if h.edit_at.is_some() {
+                    self.click_undo = Some((Instant::now(), to_svg(ptr), self.params.clone()));
+                }
                 f(&mut self.params, to_svg(ptr));
                 self.params.normalize(&pdefs, true);
                 changed = true;
@@ -2137,18 +2179,40 @@ impl Workspace {
         if start_edit.is_some() {
             self.editing = start_edit.map(|(k, v)| (k, v, true));
         }
-        if let Some((key, mut buf, fresh)) = self.editing.take() {
-            let at = egui::Rect::from_center_size(area.center_top() + Vec2::new(0.0, 22.0), Vec2::new(220.0, 26.0));
-            let resp = ui.put(at, TextEdit::singleline(&mut buf).desired_width(220.0).hint_text("Edit label"));
+        if let Some((target, mut buf, fresh)) = self.editing.take() {
+            // a part's edit opens just under where it was double-clicked (kept on the card), a label's at the top
+            let at = match target.at {
+                Some(q) => {
+                    let c = to_screen(q) + Vec2::new(0.0, 26.0);
+                    let x = c.x.clamp(full.left() + 116.0, (full.right() - 116.0).max(full.left() + 116.0));
+                    let y = c.y.clamp(full.top() + 16.0, (full.bottom() - 16.0).max(full.top() + 16.0));
+                    egui::Rect::from_center_size(egui::pos2(x, y), Vec2::new(220.0, 26.0))
+                }
+                None => egui::Rect::from_center_size(area.center_top() + Vec2::new(0.0, 22.0), Vec2::new(220.0, 26.0)),
+            };
+            // each part its own box (by its placeholder), so the click that closes one box does not close the next one it opens
+            let resp = ui.put(at, TextEdit::singleline(&mut buf).id_salt(("fig_inline_edit", target.hint.as_str())).desired_width(220.0).hint_text(target.hint.as_str()));
             if fresh {
                 resp.request_focus();
+                // a region's text opens selected, so typing replaces it
+                if target.at.is_some() {
+                    let mut st = TextEdit::load_state(ui.ctx(), resp.id).unwrap_or_default();
+                    let n = buf.chars().count();
+                    st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(egui::text::CharIndex::from(0usize)), egui::text::CCursor::new(egui::text::CharIndex::from(n)))));
+                    TextEdit::store_state(ui.ctx(), resp.id, st);
+                }
             }
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
             if enter || (resp.lost_focus() && !esc) {
-                self.params.set_s(key, &buf);
+                (target.set)(&mut self.params, &buf);
+                // the click that closed the box may be the first of a double-click that takes itself back: keep the text then too
+                if let Some((_, _, before)) = &mut self.click_undo {
+                    (target.set)(before, &buf);
+                }
+                self.params.normalize(&pdefs, true);
             } else if !esc {
-                self.editing = Some((key, buf, false));
+                self.editing = Some((target, buf, false));
             }
         }
         if !hs.is_empty() && !chem && !theme::chem_skin() && !matches!(def.subject, figures::Subject::Math | figures::Subject::Physics) {
@@ -5102,6 +5166,111 @@ mod tests {
         assert_eq!(hash_params(id, &ws.params), before, "undo restores the previous params");
         ws.step_history(false);
         assert_eq!(hash_params(id, &ws.params), after, "redo reapplies the pasted params");
+    }
+
+    /// On the Venn diagram in the workspace: a click in a region shades it; a double-click there types in it instead (the
+    /// click it began with is taken back), and Enter writes the text into that region only.
+    #[test]
+    fn venn_click_shades_and_double_click_types() {
+        let (ctx, mut ws) = open_fig("venn-diagram");
+        assert!(ws.preview_map.is_some(), "preview drawn");
+        let (o, k) = ws.preview_map.unwrap();
+        let at = |q: (f64, f64)| egui::pos2(o.x + (q.0 * k) as f32, o.y + (q.1 * k) as f32);
+        let a_only = at((150.0, 165.0));
+        let both = at((260.0, 165.0));
+        let click = |ws: &mut Workspace, p: egui::Pos2| {
+            comp_frame(&ctx, ws, vec![egui::Event::PointerMoved(p)]);
+            comp_frame(&ctx, ws, btn(p, true));
+            comp_frame(&ctx, ws, btn(p, false));
+        };
+        click(&mut ws, a_only);
+        assert_eq!(ws.params.s("shade"), "A only");
+        for _ in 0..30 {
+            comp_frame(&ctx, &mut ws, vec![]);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        // a double-click in the overlap: no shading change, an edit box holding the overlap's value
+        click(&mut ws, both);
+        assert_eq!(ws.params.s("shade"), "A", "the first click of the pair shades (A only and the overlap: all of A)");
+        click(&mut ws, both);
+        comp_frame(&ctx, &mut ws, vec![]);
+        assert_eq!(ws.params.s("shade"), "A only", "the double-click takes its first click back");
+        let (_, buf, _) = ws.editing.as_ref().expect("an edit box opened");
+        assert_eq!(buf, "5");
+        // the text opens selected: typing replaces it
+        comp_frame(&ctx, &mut ws, vec![egui::Event::Text("pears, plums".into())]);
+        comp_frame(&ctx, &mut ws, vec![egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+        comp_frame(&ctx, &mut ws, vec![]);
+        assert_eq!(ws.params.s("counts"), "12, 9, pears; plums, 4");
+        assert!(ws.editing.is_none());
+        // typing, then double-clicking the next region straight away keeps what was typed (no Enter needed)
+        for _ in 0..30 {
+            comp_frame(&ctx, &mut ws, vec![]);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let b_only = at((370.0, 165.0));
+        click(&mut ws, both);
+        click(&mut ws, both);
+        comp_frame(&ctx, &mut ws, vec![egui::Event::Text("2".into())]);
+        // (typing takes a moment: within 0.6 s of the last pair, egui would read the next pair as a triple-click)
+        for _ in 0..40 {
+            comp_frame(&ctx, &mut ws, vec![]);
+        }
+        click(&mut ws, b_only);
+        click(&mut ws, b_only);
+        comp_frame(&ctx, &mut ws, vec![]);
+        assert_eq!(ws.params.s("counts"), "12, 9, 2, 4", "the overlap kept its text");
+        assert_eq!(ws.params.s("shade"), "A only", "and neither click shaded anything");
+        assert_eq!(ws.editing.as_ref().map(|e| e.1.as_str()), Some("9"), "the next region is open");
+        comp_frame(&ctx, &mut ws, vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+        comp_frame(&ctx, &mut ws, vec![]);
+        // two quick clicks in two regions shade both (they are not a double-click on the second)
+        for _ in 0..30 {
+            comp_frame(&ctx, &mut ws, vec![]);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        click(&mut ws, both);
+        click(&mut ws, at((370.0, 165.0)));
+        comp_frame(&ctx, &mut ws, vec![]);
+        assert!(ws.editing.is_none(), "no edit box");
+        assert_eq!(ws.params.s("shade"), "A or B");
+    }
+
+    /// Share links made before the Venn rework (v6 and older: only the keys that differ from the old opening state) open
+    /// through `apply_link` and draw byte for byte what that build drew (the hashes it wrote), except where its drawing ran
+    /// over a line (`golden::mended`, the same cases as for saved figures).
+    #[test]
+    fn old_venn_share_links_draw_as_before() {
+        use figures::stats::venn::tests::golden;
+        let (_, def) = find_def("venn-diagram").unwrap();
+        let fixture = std::fs::read_to_string(golden::fixture()).unwrap();
+        let want: std::collections::BTreeMap<&str, &str> = fixture.lines().filter_map(|l| l.split_once(' ')).collect();
+        let old_open = serde_json::json!({"sets": "2", "a_name": "Music", "b_name": "Sport", "c_name": "Art", "counts": "12, 9, 5, 4", "shade": "None", "totals": true, "title": "", "style": "Colour", "label_size": "Medium", "show_answers": true});
+        let (mut same, mut mended) = (0, 0);
+        for (name, spec) in golden::old_specs() {
+            let diff: serde_json::Map<String, serde_json::Value> = spec.params.iter().filter(|(k, v)| old_open.get(k.as_str()) != Some(*v)).map(|(k, v)| (k.clone(), v.clone())).collect();
+            let v = if same % 2 == 0 { "&v=6" } else { "" };
+            let link = format!("vershion://figure/venn-diagram?p={}{v}", figures::share::b64url_encode(serde_json::to_string(&diff).unwrap().as_bytes()));
+            let mut ws = Workspace::new(false);
+            ws.apply_link(&link).unwrap();
+            let got = format!("{:016x}", golden::fnv64(&def.svg(&ws.params)));
+            if golden::mended(&name) {
+                mended += 1;
+                continue;
+            }
+            assert_eq!(Some(got.as_str()), want.get(name.as_str()).copied(), "{name}: {link}");
+            same += 1;
+        }
+        assert!(same > 400 && mended > 0);
+        // a link made now keeps the light tint it was made with
+        let mut ws = Workspace::new(false);
+        ws.select(find_def("venn-diagram").unwrap().0);
+        ws.params.set_s("shade", "A and B");
+        let link = ws.share_link().unwrap();
+        let mut back = Workspace::new(false);
+        back.apply_link(&link).unwrap();
+        assert_eq!(back.params.s("fill"), "Blue");
+        assert_eq!(def.svg(&back.params), def.svg(&ws.params));
     }
 
     /// Pointer drag on the figure preview from SVG point `a` to `b` (one press, four moves, release).

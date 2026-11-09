@@ -22,6 +22,19 @@ pub type ScrollFn = Arc<dyn Fn(&mut Params, f64) + Send + Sync>;
 pub type ClickAtFn = Arc<dyn Fn(&mut Params, Pt) + Send + Sync>;
 /// What an area's click would act on under the pointer (SVG units), for the hover: None when nothing.
 pub type HoverFn = Arc<dyn Fn(Pt) -> Option<Hover> + Send + Sync>;
+/// Writes text typed in an inline edit box back into the params.
+pub type SetFn = Arc<dyn Fn(&mut Params, &str) + Send + Sync>;
+/// The text a double-click at a point (SVG units) edits in place: None where there is nothing to type.
+pub type EditAtFn = Arc<dyn Fn(&Params, Pt) -> Option<EditAt> + Send + Sync>;
+
+/// An inline edit a double-click opens on one part of an area (a Venn region's text): what the box starts with, its
+/// placeholder, and how the typed text is written back.
+#[derive(Clone)]
+pub struct EditAt {
+    pub text: String,
+    pub hint: String,
+    pub set: SetFn,
+}
 
 /// The part of an area a click there would act on: its outline (a line, an arc, an area's edge) and what the click does.
 #[derive(Clone, Debug, PartialEq)]
@@ -69,6 +82,9 @@ pub struct Handle {
     pub hover_at: Option<HoverFn>,
     /// Text param edited inline on double-click.
     pub edit: Option<&'static str>,
+    /// With `click_at`: a double-click edits the text of the part under the pointer in place (the param it writes, for
+    /// listings, and the edit there). The click the double-click began with is taken back first.
+    pub edit_at: Option<(&'static str, EditAtFn)>,
     /// A movable figure label (`labels::handles`): hit only over its own text box and drawn on
     /// top of the other handles, so a drag that starts on the label moves the label.
     pub label_drag: bool,
@@ -76,7 +92,7 @@ pub struct Handle {
 
 impl Handle {
     fn base(pos: Pt, shape: Shape, cursor: Cursor, tip: &str) -> Self {
-        Handle { pos, half: (7.0, 7.0), shape, cursor, tip: tip.to_string(), drag: None, click: None, scroll: None, click_at: None, hover_at: None, edit: None, label_drag: false }
+        Handle { pos, half: (7.0, 7.0), shape, cursor, tip: tip.to_string(), drag: None, click: None, scroll: None, click_at: None, hover_at: None, edit: None, edit_at: None, label_drag: false }
     }
     /// Round knob that drives params when dragged.
     pub fn knob(pos: Pt, tip: &str, f: impl Fn(&mut Params, Pt) + Send + Sync + 'static) -> Self {
@@ -108,6 +124,11 @@ impl Handle {
     }
     pub fn with_hover(mut self, f: impl Fn(Pt) -> Option<Hover> + Send + Sync + 'static) -> Self {
         self.hover_at = Some(Arc::new(f));
+        self
+    }
+    /// Double-click a part of this area to type its text in place (see `edit_at`); `key` is the param it writes.
+    pub fn with_edit_at(mut self, key: &'static str, f: impl Fn(&Params, Pt) -> Option<EditAt> + Send + Sync + 'static) -> Self {
+        self.edit_at = Some((key, Arc::new(f)));
         self
     }
     pub fn with_scroll(mut self, f: impl Fn(&mut Params, f64) + Send + Sync + 'static) -> Self {
@@ -380,6 +401,22 @@ mod tests {
                     if let Some(k) = h.edit {
                         assert!(defs.iter().any(|x| x.key == k), "{}: edit key {k} unknown", d.id);
                     }
+                    if let Some((k, f)) = &h.edit_at {
+                        assert!(defs.iter().any(|x| x.key == *k), "{}: edit-at key {k} unknown", d.id);
+                        // typing at its centre and corners keeps the params in range and the figure drawing
+                        let (c, hh) = (h.pos, h.half);
+                        for t in [c, (c.0 - hh.0, c.1 - hh.1), (c.0 + hh.0, c.1 + hh.1), (f64::NAN, 1e9)] {
+                            if let Some(e) = f(&p, t) {
+                                for typed in ["", "x, 2x + 1", &e.text, "a, b; c,,"] {
+                                    let mut q = p.clone();
+                                    (e.set)(&mut q, typed);
+                                    q.normalize(&defs, true);
+                                    in_range(&defs, &q).unwrap_or_else(|er| panic!("{} edit-at {i} -> {typed:?}: {er}", d.id));
+                                    assert!((d.render)(&q).contains("<svg"), "{} edit-at {i}", d.id);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -404,7 +441,7 @@ mod tests {
         "sampling-distribution", "scatterplot", "sentence-diagram", "sine-cosine", "slope-triangle", "soil-texture", "solid-net", "sorting-passes", "standing-wave", "state-machine",
         "stem-and-leaf", "strata", "structure-chart", "supply-demand", "swot", "t-account", "time-value",
         "timeline", "topo-contours", "trace-table", "tree-diagram", "trial-balance", "triangle-centres",
-        "venn-diagram", "vsepr-shapes", "xylem-phloem",
+        "vsepr-shapes", "xylem-phloem",
     ];
 
     #[test]

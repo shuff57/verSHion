@@ -86,7 +86,9 @@ pub fn encode(id: &str, cur: &Params, base: &Params) -> String {
 /// opens as it did when made. v2: round 5 (vector resultant dashed); v3: P4 (orbital diagram
 /// without the configuration line, bare angles and parallel lines); v4: the micropipette opens
 /// on the reference's short body; v5: the projectile ball opens centred on the ground line; v6: the vector diagram opens bold, on the reference's 7 x 6 grid;
-/// v7: the two-way table reads empty boxes, words, `=` and `Total` lines in its counts as blanks,
+/// v7: the Venn diagram shades in a light tint (older links keep the strong blue, and region values
+/// over 14 characters are cut as the old figure drew them, see `stats::venn::migrate_link`); the
+/// two-way table reads empty boxes, words, `=` and `Total` lines in its counts as blanks,
 /// letters and typed totals (an older link's counts are rewritten as the numbers they drew, see
 /// `dropped_before`).
 ///
@@ -124,6 +126,7 @@ pub fn link_params(def: &super::FigureDef, changed: serde_json::Map<String, serd
         params.remove(*k);
     }
     params.extend(changed);
+    super::stats::venn::migrate_link(def.id, v, &mut params);
     params_from_spec(def, &crate::model::FigureSpec { id: def.id.to_string(), params })
 }
 

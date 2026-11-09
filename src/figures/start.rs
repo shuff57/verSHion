@@ -77,6 +77,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         "vector-diagram" => vec![("res_style", st("Dashed")), ("bold", Value::B(true))],
         // the reference's ball sits centred on the ground line (share links v5)
         "projectile-motion" => vec![("ball_at", st("Is centred on the ground line"))],
+        // a Venn diagram shades in a light tint black text reads on (share links v7; before, the strong blue default)
+        "venn-diagram" => vec![("fill", st("Blue"))],
         _ => Vec::new(),
     }
 }
@@ -96,6 +98,7 @@ pub fn added_in(id: &str) -> &'static [(u32, &'static [&'static str])] {
         "length-reading" => &[(3, &["mag_show"])],
         "micropipette-reading" => &[(4, &["shape"])],
         "projectile-motion" => &[(5, &["ball_at"])],
+        "venn-diagram" => &[(7, &["fill"])],
         _ => &[],
     }
 }

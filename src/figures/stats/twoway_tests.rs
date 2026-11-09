@@ -806,7 +806,12 @@ fn links_for_other_figures_are_unchanged_by_the_bump() {
         for v in 1..=crate::figures::share::VERSION {
             assert!(crate::figures::share::dropped_before(d.id, v).is_empty(), "{}", d.id);
         }
-        // a v6 link opens exactly as a v7 one with the same payload (nothing for these figures changed)
+        // a v6 link opens exactly as a v7 one with the same payload (nothing for these figures changed),
+        // except the Venn diagram, which changed at v7 on purpose (new links open on a light tint, older
+        // ones keep the strong blue: see venn's old_venn_share_links_draw_as_before)
+        if d.id == crate::figures::stats::venn::ID {
+            continue;
+        }
         let a = crate::figures::share::link_params(&d, Default::default(), 6);
         let b = crate::figures::share::link_params(&d, Default::default(), 7);
         assert_eq!(a.0, b.0, "{}", d.id);
