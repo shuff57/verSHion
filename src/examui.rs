@@ -3754,17 +3754,39 @@ fn draw_shelf(
     st: &mut EditUi,
     rect: Rect,
 ) {
+    // The floating "Report an issue" pill sits in the bottom right corner, over the shelf's last
+    // row (the used count and the hint were under it). The card ends a gap above the pill instead.
+    let inset = match crate::alphanote::corner_rect(ctx) {
+        Some(b) if b.left() < rect.right() && b.right() > rect.left() && b.top() < rect.bottom() => (rect.bottom() - b.top() + 10.0).max(0.0),
+        _ => 0.0,
+    };
+    let size = Vec2::new(rect.width(), (rect.height() - inset).max(160.0)) - Vec2::new(30.0, 26.0);
     kit::card()
         .inner_margin(Margin::symmetric(14, 12))
         .show(ui, |ui| {
-            ui.set_min_size(rect.size() - Vec2::new(30.0, 26.0));
-            ui.set_max_width(rect.width() - 30.0);
+            ui.set_min_size(size);
+            ui.set_max_size(size);
             draw_shelf_inner(app, ui, ctx, exam_id, st);
         });
 }
 
 /// Shelf sort orders (index into [`SORTS`]).
 const SORTS: [&str; 5] = ["Newest", "Oldest", "Bank order", "Question type", "A to Z"];
+
+/// The shelf's "Open bank" control: an outlined button at the shelf's compact height that opens
+/// the menu of banks not open yet. It was a bare 14 px "+" beside the tabs, easy to miss.
+fn open_bank_button(ui: &mut egui::Ui) -> egui::Response {
+    crate::pageshell::styled_button(
+        ui,
+        RichText::new(format!("{}  Open bank", egui_phosphor::regular::PLUS)).family(theme::bold_family()).size(12.5).color(theme::ink()),
+        theme::card(),
+        theme::hover_bg(),
+        theme::accent_faded(),
+        Stroke::new(1.0, theme::rule()),
+        28.0,
+    )
+    .on_hover_text("Open another question bank in this panel")
+}
 
 /// A shelf filter button that opens a popup (highlighted while a filter is active).
 fn filter_button(ui: &mut egui::Ui, label: &str, active: usize) -> egui::Response {
@@ -3787,21 +3809,65 @@ fn draw_shelf_inner(
     }
     st.open_banks.retain(|b| app.store.bank(b).is_some());
     let mut close: Option<Id> = None;
+    let mut open_menu: Option<egui::Response> = None;
+    // Beside the page the shelf has its title on the left and "Open bank" on the right, and the
+    // tabs get the whole row under them, so a bank's name shows in full where it fits. Alone in
+    // the narrow window the switch above already says "Question bank": the tabs come first and
+    // the button follows them.
+    if !st.shelf_alone {
+        ui.horizontal(|ui| {
+            ui.label(theme::serif("Question bank").size(17.0));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                open_menu = Some(open_bank_button(ui));
+            });
+        });
+        ui.add_space(6.0);
+    }
+    // The wrapped row's height comes from the interact size when it is made: at the app's 34 px
+    // a tab stood half again as tall as its text.
+    let interact_y = std::mem::replace(&mut ui.spacing_mut().interact_size.y, 18.0);
     ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+        ui.spacing_mut().interact_size.y = interact_y;
+        ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+        let row_w = ui.max_rect().width();
+        let font = FontId::proportional(12.5);
+        // tab chrome: 8 px margins each side, the gap, and the close button
+        let chrome = 16.0 + 4.0 + 18.0 + 2.0;
         for b in st.open_banks.clone() {
             let name = app.store.bank(&b).map(|x| x.name.clone()).unwrap_or_default();
             let on = app.panel_bank.as_ref() == Some(&b);
+            let text_w = ui.fonts_mut(|f| f.layout_no_wrap(name.clone(), font.clone(), theme::ink()).size().x);
+            let tab_w = (text_w + chrome).min(row_w);
+            if tab_w > ui.available_size_before_wrap().x + 0.5 && ui.cursor().min.x > ui.max_rect().left() + 1.0 {
+                ui.end_row();
+            }
             egui::Frame::new()
                 .fill(if on { theme::card() } else { theme::field() })
                 .stroke(Stroke::new(1.0, if on { theme::accent_col() } else { theme::border() }))
                 .corner_radius(CornerRadius::same(8))
-                .inner_margin(Margin::symmetric(8, 3))
+                .inner_margin(Margin::symmetric(8, 4))
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
+                    // a tab, not a 34 px button: it hugs its text
+                    ui.spacing_mut().interact_size.y = 18.0;
+                    ui.spacing_mut().button_padding = egui::vec2(2.0, 0.0);
+                    // Cut with "…" only when the whole row is still too short; the cut name
+                    // shows in full under the pointer.
+                    ui.set_max_width(tab_w - 16.0);
+                    let cut = text_w + chrome > row_w;
+                    let label_w = if cut { (tab_w - chrome).max(40.0) } else { text_w + 1.0 };
                     let r = ui
-                        .add(egui::Label::new(RichText::new(truncate_str(&name, 22)).size(12.5).color(if on { theme::ink() } else { theme::muted_col() })).sense(Sense::click()))
-                        .on_hover_text(&name);
+                        .allocate_ui(Vec2::new(label_w, 18.0), |ui| {
+                            ui.add(
+                                egui::Label::new(RichText::new(&name).font(font.clone()).color(if on { theme::ink() } else { theme::muted_col() }))
+                                    .truncate()
+                                    .show_tooltip_when_elided(false)
+                                    .sense(Sense::click()),
+                            )
+                        })
+                        .inner;
+                    // the cut name in full under the pointer
+                    let r = if cut { r.on_hover_text(&name) } else { r };
                     if r.clicked() {
                         app.panel_bank = Some(b.clone());
                     }
@@ -3810,7 +3876,12 @@ fn draw_shelf_inner(
                     }
                 });
         }
-        let plus = ui.add(egui::Button::new(RichText::new("+").size(14.0)).frame(false)).on_hover_text("Open another question bank");
+        if st.shelf_alone {
+            open_menu = Some(open_bank_button(ui));
+        }
+    });
+    ui.spacing_mut().interact_size.y = interact_y;
+    if let Some(plus) = open_menu {
         egui::Popup::menu(&plus).show(|ui| {
             ui.set_min_width(220.0);
             ui.label(kit::small_caps_text("Open question bank"));
@@ -3831,7 +3902,7 @@ fn draw_shelf_inner(
                 }
             }
         });
-    });
+    }
     if let Some(c) = close {
         st.open_banks.retain(|b| *b != c);
         if app.panel_bank.as_ref() == Some(&c) {
@@ -3841,8 +3912,7 @@ fn draw_shelf_inner(
 
     let Some(bank_id) = app.panel_bank.clone() else {
         ui.add_space(12.0);
-        ui.label(theme::serif("Question bank").size(17.0));
-        ui.add(egui::Label::new(muted("Open a bank with + above (create one on the Banks screen first).")));
+        ui.add(egui::Label::new(muted("Open a bank with Open bank above (create one on the Banks screen first).")));
         return;
     };
     let Some(bank) = app.store.bank(&bank_id).cloned() else {
@@ -3851,12 +3921,7 @@ fn draw_shelf_inner(
     };
     let in_exam: Vec<ExamItem> = app.store.exam(exam_id).map(|e| e.items.clone()).unwrap_or_default();
 
-    ui.add_space(4.0);
-    // Under the narrow window's switch the tab already says "Question bank".
-    if !st.shelf_alone {
-        ui.label(theme::serif("Question bank").size(17.0));
-    }
-    ui.add_space(4.0);
+    ui.add_space(8.0);
     ui.add(
         egui::TextEdit::singleline(&mut st.search)
             .hint_text("Search questions")
@@ -3953,12 +4018,18 @@ fn draw_shelf_inner(
         .map(|(_, q)| q.id.clone())
         .collect();
 
-    // ---- sort + Add all ----
+    let used = bank
+        .questions
+        .iter()
+        .filter(|q| in_exam.iter().any(|it| it.bank_id == bank_id && it.question_id == q.id))
+        .count();
+
+    // ---- sort + Add all, and how many of the bank are on the exam ----
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         egui::ComboBox::from_id_salt("shelf_sort")
             .selected_text(SORTS[st.sort.min(SORTS.len() as u8 - 1) as usize])
-            .width(130.0)
+            .width(112.0)
             .show_ui(ui, |ui| {
                 for (k, l) in SORTS.iter().enumerate() {
                     ui.selectable_value(&mut st.sort, k as u8, *l);
@@ -3984,16 +4055,19 @@ fn draw_shelf_inner(
                 screens::toast(app, &format!("Added {n} question{}{skipped}", if n == 1 { "" } else { "s" }), false);
             }
         }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 3.0;
+            ui.label(muted(RichText::new(format!("of {} used", bank.questions.len())).size(11.5)));
+            ui.label(RichText::new(used.to_string()).family(theme::bold_family()).size(11.5).color(theme::ink()));
+        })
+        .response
+        .on_hover_text("Questions from this bank already on the exam");
     });
     ui.add_space(6.0);
 
-    let used = bank
-        .questions
-        .iter()
-        .filter(|q| in_exam.iter().any(|it| it.bank_id == bank_id && it.question_id == q.id))
-        .count();
-
-    let list_h = (ui.available_height() - 34.0).max(60.0);
+    // The list runs to the card's foot: the used count sits on the sort row above, and the
+    // card's own + and grab cursor say how a question gets onto the page.
+    let list_h = ui.available_height().max(60.0);
     egui::ScrollArea::vertical()
         .id_salt("bank_panel_scroll")
         .max_height(list_h)
@@ -4003,30 +4077,23 @@ fn draw_shelf_inner(
                 ui.add(egui::Label::new(muted("No questions match.")));
                 return;
             }
+            // 8 px between cards (the item spacing used to add 8 more), so four show beside the page
+            ui.spacing_mut().item_spacing.y = 0.0;
             for (_, q) in &qs {
                 let count = in_exam
                     .iter()
                     .filter(|it| it.bank_id == bank_id && it.question_id == q.id)
                     .count();
                 shelf_row(app, ui, st, ctx, &bank_id, exam_id, q, count);
-                ui.add_space(6.0);
+                ui.add_space(8.0);
             }
         });
 
-    ui.add_space(4.0);
-    ui.horizontal(|ui| {
-        let hint = if st.shelf_alone { "Click + to add it to the end of the page" } else { "Click + or drag onto the page" };
-        ui.label(muted(RichText::new(hint).size(11.5)));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(muted(RichText::new(format!("of {} used", bank.questions.len())).size(11.5)));
-            ui.label(RichText::new(used.to_string()).family(theme::bold_family()).size(11.5).color(theme::ink()));
-        });
-    });
 }
 
-/// One shelf card (Test Parrot's layout): TYPE label with "In exam" / "Image" badges, the
-/// stem on two lines, and edit / copy / add (or in-exam check) buttons. The card drags
-/// onto the page.
+/// One shelf card (Test Parrot's layout): TYPE label with "In exam" / "Image" badges and quiet
+/// edit / copy icons, the stem on two lines, and the add button (or in-exam check) in a column
+/// of its own on the right. The card drags onto the page.
 #[allow(clippy::too_many_arguments)]
 fn shelf_row(
     app: &mut crate::App,
@@ -4039,13 +4106,17 @@ fn shelf_row(
     in_count: usize,
 ) {
     let w = ui.available_width();
-    let btn_w = 3.0 * 26.0 + 2.0 * 4.0;
-    let stem_w = w - 12.0 - btn_w - 18.0;
+    // The add button is the card's one action and gets a column of its own on the right; edit and
+    // copy are quiet icons on the type line, so the stem keeps most of the card's width (three
+    // equal icons used to take a third of it).
+    const ADD_SZ: f32 = 30.0;
+    const ICON_SZ: f32 = 24.0;
+    let stem_w = w - 12.0 - 10.0 - ADD_SZ - 10.0;
     let already = in_count > 0;
     let p = ui.painter().clone();
     let stem_txt = crate::equation::stem_preview(&q.stem);
     let galley = clamped_galley(&p, &stem_txt, FontId::proportional(12.5), theme::ink(), stem_w, 2);
-    let h = galley.size().y + 34.0;
+    let h = galley.size().y + 31.0;
     // Alone in the narrow window the bank has no page beside it to drop on, so its cards do not
     // drag (no grab cursor, no ghost) and + is the way onto the page.
     let alone = st.shelf_alone;
@@ -4060,85 +4131,119 @@ fn shelf_row(
         Stroke::new(1.0, if resp.hovered() && !alone { theme::accent_col() } else { theme::border() }),
         StrokeKind::Inside,
     );
-    // TYPE label (+ part count) and badges.
+    let add_rect = Rect::from_center_size(Pos2::new(rect.right() - 10.0 - ADD_SZ / 2.0, rect.center().y), Vec2::splat(ADD_SZ));
+    let ty_y = rect.top() + 8.0;
+    // Edit and copy sit at the right end of the type line, left of the add column.
+    let icon_cy = ty_y + 6.0;
+    let copy_rect = Rect::from_center_size(Pos2::new(add_rect.left() - 6.0 - ICON_SZ / 2.0, icon_cy), Vec2::splat(ICON_SZ));
+    let edit_rect = copy_rect.translate(Vec2::new(-ICON_SZ - 2.0, 0.0));
+    let meta_right = edit_rect.left() - 6.0;
+    // TYPE label (+ part count) and badges; a badge that would run under the icons is left out.
     let mut x = rect.left() + 12.0;
     let ty = match &q.kind {
         Kind::Multipart { parts } => format!("{} · {} PARTS", q.kind.qkind().label().to_uppercase(), parts.len()),
         _ => q.kind.qkind().label().to_uppercase(),
     };
     let tg = p.layout_no_wrap(ty, FontId::new(9.5, theme::bold_family()), theme::muted_col());
-    let ty_y = rect.top() + 8.0;
     let tw = tg.size().x;
     p.galley(Pos2::new(x, ty_y), tg, theme::muted_col());
     x += tw + 8.0;
-    let mut badge = |label: &str, strong: bool| {
-        let g = p.layout_no_wrap(label.to_string(), FontId::new(9.5, theme::bold_family()), if strong { theme::ink() } else { theme::muted_col() });
-        let r = Rect::from_min_size(Pos2::new(x, ty_y - 1.5), g.size() + Vec2::new(10.0, 3.0));
-        p.rect_filled(r, CornerRadius::same(6), if strong { theme::highlighter().gamma_multiply(0.55) } else { theme::field() });
-        x = r.right() + 6.0;
+    let badge_g = |label: &str, fg: Color32| p.layout_no_wrap(label.to_string(), FontId::new(9.5, theme::bold_family()), fg);
+    let put_badge = |x: &mut f32, g: std::sync::Arc<egui::Galley>, bg: Color32| {
+        let r = Rect::from_min_size(Pos2::new(*x, ty_y - 1.5), g.size() + Vec2::new(10.0, 3.0));
+        p.rect_filled(r, CornerRadius::same(6), bg);
+        *x = r.right() + 6.0;
         p.galley(r.min + Vec2::new(5.0, 1.5), g, Color32::PLACEHOLDER);
     };
-    if already {
-        badge(if in_count > 1 { "In exam ×2+" } else { "In exam" }, true);
-    }
-    if q.image.is_some() {
-        badge("Image", false);
-    }
-    // an unfinished question says so before it is clicked (it can not be added; see `qcheck`)
-    if let Some((label, _)) = crate::qcheck::chip(q) {
+    // An unfinished question says so before it is clicked (it can not be added; see `qcheck`).
+    // That warning is placed first and is never left out: "In exam", "Image" and the points
+    // give way to it, and where even the badge has no room a warning mark stands in for it
+    // (the card's tooltip spells the warning out).
+    let warning = crate::qcheck::chip(q);
+    if let Some((label, _)) = &warning {
         let (fg, bg) = if ui.visuals().dark_mode {
             (Color32::from_rgb(235, 175, 90), Color32::from_rgba_unmultiplied(235, 175, 90, 36))
         } else {
             (Color32::from_rgb(140, 78, 0), Color32::from_rgba_unmultiplied(196, 120, 20, 40))
         };
-        let g = p.layout_no_wrap(if label == "No answer key" { label.to_string() } else { "Draft".to_string() }, FontId::new(9.5, theme::bold_family()), fg);
-        let r = Rect::from_min_size(Pos2::new(x, ty_y - 1.5), g.size() + Vec2::new(10.0, 3.0));
-        p.rect_filled(r, CornerRadius::same(6), bg);
-        p.galley(r.min + Vec2::new(5.0, 1.5), g, Color32::PLACEHOLDER);
+        let g = badge_g(if *label == "No answer key" { label } else { "Draft" }, fg);
+        if x + g.size().x + 10.0 <= meta_right {
+            put_badge(&mut x, g, bg);
+        } else {
+            let mark = p.layout_no_wrap(egui_phosphor::regular::WARNING.to_string(), FontId::proportional(12.0), fg);
+            let mx = x.min(meta_right - mark.size().x);
+            p.galley(Pos2::new(mx, ty_y - 1.5), mark.clone(), Color32::PLACEHOLDER);
+            x = mx + mark.size().x + 6.0;
+        }
+    }
+    let optional = |x: &mut f32, label: &str, fg: Color32, bg: Color32| {
+        let g = badge_g(label, fg);
+        if *x + g.size().x + 10.0 <= meta_right {
+            put_badge(x, g, bg);
+        }
+    };
+    if already {
+        optional(&mut x, if in_count > 1 { "In exam ×2+" } else { "In exam" }, theme::ink(), theme::highlighter().gamma_multiply(0.55));
+    }
+    if q.image.is_some() {
+        optional(&mut x, "Image", theme::muted_col(), theme::field());
     }
     if let Some(pts) = q.points {
         let g = p.layout_no_wrap(format!("{} pt", fmt_number(pts)), FontId::proportional(10.5), theme::muted_col());
-        p.galley(Pos2::new(rect.right() - btn_w - 14.0 - g.size().x, ty_y), g, Color32::PLACEHOLDER);
+        let gx = meta_right - g.size().x;
+        if gx > x {
+            p.galley(Pos2::new(gx, ty_y), g, Color32::PLACEHOLDER);
+        }
     }
     // Stem.
-    p.galley(Pos2::new(rect.left() + 12.0, rect.top() + 24.0), galley, theme::ink());
+    p.galley(Pos2::new(rect.left() + 12.0, rect.top() + 22.0), galley, theme::ink());
 
-    // Buttons: edit, copy, add / in-exam check.
-    let cy = rect.center().y;
-    let mut bx = rect.right() - 10.0 - 13.0 - 2.0 * 30.0;
-    let mut small = |id: &str, tip: &str| -> (Rect, egui::Response) {
-        let br = Rect::from_center_size(Pos2::new(bx, cy), Vec2::splat(26.0));
-        bx += 30.0;
-        let r = ui.interact(br, ui.id().with((id, &q.id)), Sense::click()).on_hover_text(tip);
+    // Buttons: edit and copy (quiet), add (the accent square) or the in-exam check.
+    let hit = |br: Rect, id: &str, tip: &str| -> egui::Response {
+        let r = ui.interact(br, ui.id().with((id, &q.id)), Sense::click()).on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand);
         if r.hovered() {
-            ui.painter().rect_filled(br, CornerRadius::same(7), theme::card());
+            ui.painter().rect_filled(br, CornerRadius::same(6), theme::field());
         }
-        (br, r)
+        r
     };
-    let (er, eresp) = small("shelf_edit", "Edit question");
-    let (cr, cresp) = small("shelf_copy", "Copy: duplicate this question in the bank");
+    let eresp = hit(edit_rect, "shelf_edit", "Edit question");
+    let cresp = hit(copy_rect, "shelf_copy", "Copy: duplicate this question in the bank");
+    // Beside the page an added question is done (drag the card for a second copy); alone in the
+    // narrow window there is no page to drag to, so its button stays a + that adds it again.
     let add_tip = match (already, alone) {
         (false, _) => "Add to the exam",
         (true, false) => "Already in this exam. Drag the card to add it again.",
-        (true, true) => "Already in this exam. Click to add it again.",
+        (true, true) => "Add again: this question is already on the page",
     };
-    let (br, bresp) = small("shelf_add", add_tip);
-    let ink = Stroke::new(1.5, theme::muted_col());
+    let bresp = ui
+        .interact(add_rect, ui.id().with(("shelf_add", &q.id)), if already && !alone { Sense::hover() } else { Sense::click() })
+        .on_hover_text(add_tip);
     {
+        let quiet = theme::muted_col();
         // Edit: the hand-drawn pencil-and-square.
-        crate::handicons::paint_glyph(&p, er.center(), crate::handicons::EDIT, 15.0, theme::muted_col());
+        crate::handicons::paint_glyph(&p, edit_rect.center(), crate::handicons::EDIT, 13.5, quiet);
         // Copy: two sheets.
-        let c = cr.center();
-        p.rect_stroke(Rect::from_center_size(c + Vec2::new(-1.5, -1.5), Vec2::new(7.5, 8.5)), CornerRadius::same(1), ink, StrokeKind::Middle);
-        p.rect_filled(Rect::from_center_size(c + Vec2::new(1.8, 1.8), Vec2::new(7.5, 8.5)), CornerRadius::same(1), fill);
-        p.rect_stroke(Rect::from_center_size(c + Vec2::new(1.8, 1.8), Vec2::new(7.5, 8.5)), CornerRadius::same(1), ink, StrokeKind::Middle);
-        let c = br.center();
-        let s = Stroke::new(2.0, theme::accent_col());
-        if already {
+        let ink = Stroke::new(1.3, quiet);
+        let c = copy_rect.center();
+        let back = if cresp.hovered() { theme::field() } else if (resp.hovered() && !alone) || drag_this { theme::accent_faded() } else { fill };
+        p.rect_stroke(Rect::from_center_size(c + Vec2::new(-1.5, -1.5), Vec2::new(7.0, 8.0)), CornerRadius::same(1), ink, StrokeKind::Middle);
+        p.rect_filled(Rect::from_center_size(c + Vec2::new(1.6, 1.6), Vec2::new(7.0, 8.0)), CornerRadius::same(1), back);
+        p.rect_stroke(Rect::from_center_size(c + Vec2::new(1.6, 1.6), Vec2::new(7.0, 8.0)), CornerRadius::same(1), ink, StrokeKind::Middle);
+        let c = add_rect.center();
+        if already && !alone {
+            // Done: a check on a pale square, not a button.
+            p.rect_filled(add_rect, CornerRadius::same(8), theme::accent_faded());
+            let s = Stroke::new(2.0, theme::accent_col());
             p.line_segment([c + Vec2::new(-4.5, 0.5), c + Vec2::new(-1.5, 3.5)], s);
             p.line_segment([c + Vec2::new(-1.5, 3.5), c + Vec2::new(4.5, -3.5)], s);
         } else {
-            crate::handicons::paint_glyph(&p, c, crate::handicons::ADD, 14.0, theme::accent_col());
+            let (rest, hover, press) = crate::pageshell::accent_states();
+            let bg = if bresp.is_pointer_button_down_on() { press } else if bresp.hovered() { hover } else { rest };
+            p.rect_filled(add_rect, CornerRadius::same(8), bg);
+            crate::handicons::paint_glyph(&p, c, crate::handicons::ADD, 15.0, theme::on_accent_col());
+            if bresp.hovered() {
+                ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
         }
     }
     if eresp.clicked() {
@@ -4175,6 +4280,28 @@ fn shelf_row(
     }
     if resp.hovered() && !on_button && !alone {
         ctx.set_cursor_icon(egui::CursorIcon::Grab);
+    }
+    // Under the pointer the card reads out in full: its warning, the whole stem (the card cuts
+    // it at two lines) and how it gets onto the page.
+    if resp.hovered() && !on_button && st.drag.is_none() {
+        let how = match (already, alone) {
+            (false, false) => "Drag onto the page, or press + to add it at the end",
+            (true, false) => "Already in this exam. Drag onto the page to add another copy.",
+            (false, true) => "Press + to add it to the end of the page",
+            (true, true) => "Already on the page. Press + to add it again.",
+        };
+        let tip = |ui: &mut egui::Ui| {
+            ui.set_max_width(360.0);
+            if let Some((label, why)) = &warning {
+                let col = if ui.visuals().dark_mode { Color32::from_rgb(235, 175, 90) } else { Color32::from_rgb(140, 78, 0) };
+                ui.add(egui::Label::new(RichText::new(format!("{label}: {why}")).size(12.0).color(col)).wrap());
+                ui.add_space(4.0);
+            }
+            ui.add(egui::Label::new(RichText::new(&stem_txt).size(12.5).color(theme::ink())).wrap());
+            ui.add_space(4.0);
+            ui.label(muted(RichText::new(how).size(11.5)));
+        };
+        resp.on_hover_ui(tip);
     }
 }
 

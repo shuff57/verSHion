@@ -671,7 +671,13 @@ impl App {
             first = false;
             let r = match t {
                 Tool::Add => {
-                    let r = crate::pageshell::primary(ui, "Add question");
+                    // An empty bank's card below has its own filled Add question, the page's one
+                    // primary; here it steps back to an outline so the two do not compete.
+                    let r = if questions.is_empty() {
+                        crate::pageshell::outline(ui, "Add question")
+                    } else {
+                        crate::pageshell::primary(ui, "Add question")
+                    };
                     self.add_question_menu(&r, bank_id);
                     r
                 }
@@ -925,7 +931,8 @@ impl App {
         // Usage counts per question for the cards (one pass per frame).
         let usage = crate::bankops::question_usage(&self.store.exams, bank_id);
         ctx.data_mut(|d| d.insert_temp(key.with("usage"), usage));
-        let wide = ui.available_width() >= 860.0;
+        // An empty bank has nothing to outline or filter: the empty card takes the whole width.
+        let wide = ui.available_width() >= 860.0 && !questions.is_empty();
         if wide {
             let side_w = 200.0;
             ui.horizontal_top(|ui| {
@@ -961,6 +968,10 @@ impl App {
         let st = with_state(ctx, key, |s: &mut BankEditState| s.clone());
         let mut search = st.search.clone();
         let mut list = self.settings.bank_edit_list_view;
+        // An empty bank has nothing to search, sort or filter: its rows (and the lone "All 0"
+        // chip) stay hidden until the first question is in.
+        let filters = !questions.is_empty();
+        if filters {
         ui.horizontal(|ui| {
             if search_pill(ui, &mut search, 280.0, "Search questions") {
                 with_state(ctx, key, |s: &mut BankEditState| s.search = search.clone());
@@ -1006,9 +1017,10 @@ impl App {
             save_settings(self);
         }
         ui.add_space(6.0);
+        }
 
         // Narrow windows: type + topic chips stand in for the outline panel.
-        if !wide {
+        if !wide && filters {
         // Toolbar row 2: type chips with counts.
         let mut counts = [0usize; 6];
         for q in &questions {
@@ -1207,7 +1219,8 @@ impl App {
         let cw = ((avail - gap * (cols as f32 - 1.0)) / cols as f32).floor();
 
         if questions.is_empty() && !new_open {
-            ui.add_space(12.0);
+            // (the filter rows above are hidden for an empty bank, so the gap is the header's)
+            ui.add_space(4.0);
             // The card's own buttons do what the toolbar's Add question and Import do.
             let b = crate::pageshell::empty_state_buttons(
                 ui,
