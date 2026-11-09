@@ -349,7 +349,7 @@ struct BankRow {
     archived: bool,
 }
 
-fn mix_index(k: QKind) -> usize {
+pub(crate) fn mix_index(k: QKind) -> usize {
     match k {
         QKind::Mc => 0,
         QKind::Tf => 1,
@@ -518,12 +518,9 @@ impl App {
             // quarter-width tile with three quarters of empty page beside it.
             let fit = rows.len().clamp(1, cols);
             let cw = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
-            for (ri, chunk) in rows.chunks(cols).enumerate() {
-                // The cards of a row share one height (the tallest card's, from the last frame),
-                // so a two-line name or legend does not leave its neighbours short.
-                let hid = key.with(("bank_row_h", ri, cols));
-                let row_h = ctx.data(|d| d.get_temp::<f32>(hid)).unwrap_or(0.0);
-                let mut tallest = 0.0_f32;
+            // Each card is as tall as what it holds and a row's cards share its top edge: a
+            // short card is not stretched into a blank band to match a two-line neighbour.
+            for chunk in rows.chunks(cols) {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
                     for r in chunk {
@@ -532,15 +529,11 @@ impl App {
                             Layout::top_down(Align::Min),
                             |ui| {
                                 ui.set_width(cw);
-                                tallest = tallest.max(bank_card(ui, self, ctx, key, r, row_h));
+                                bank_card(ui, self, ctx, key, r);
                             },
                         );
                     }
                 });
-                if (tallest - row_h).abs() > 0.5 {
-                    ctx.data_mut(|d| d.insert_temp(hid, tallest));
-                    ctx.request_repaint();
-                }
                 ui.add_space(gap);
             }
         }
@@ -1358,8 +1351,14 @@ const MIX_ALPHA: [u8; 6] = [255, 205, 160, 120, 85, 55];
 
 fn paint_mix_bar(ui: &mut Ui, w: f32, mix: &[usize; 6]) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 6.0), Sense::hover());
+    mix_bar_at(ui.painter(), rect, mix);
+}
+
+/// The type-mix bar painted into `rect` (6 px tall on the bank cards), one shade per type in
+/// [`mix_index`] order, the shades [`mix_key`] names.
+pub(crate) fn mix_bar_at(p: &egui::Painter, rect: Rect, mix: &[usize; 6]) {
     let total: usize = mix.iter().sum();
-    ui.painter().rect_filled(rect, CornerRadius::same(3), theme::field());
+    p.rect_filled(rect, CornerRadius::same(3), theme::field());
     if total == 0 {
         return;
     }
@@ -1371,13 +1370,66 @@ fn paint_mix_bar(ui: &mut Ui, w: f32, mix: &[usize; 6]) {
         }
         let seg_w = rect.width() * (*n as f32 / total as f32);
         let col = Color32::from_rgba_unmultiplied(ac.r(), ac.g(), ac.b(), MIX_ALPHA[i]);
-        ui.painter().rect_filled(
-            Rect::from_min_size(Pos2::new(x, rect.top()), Vec2::new(seg_w.max(2.0), 6.0)),
+        p.rect_filled(
+            Rect::from_min_size(Pos2::new(x, rect.top()), Vec2::new(seg_w.max(2.0), rect.height())),
             CornerRadius::same(3),
             col,
         );
         x += seg_w;
     }
+}
+
+/// The type-mix bar's key: a swatch in each type's shade (pale ones edged a step darker, so each
+/// stands off the card) before its count, wrapped to `w` without splitting a swatch from its
+/// words; an empty bank says so. Painted at `at` when given; returns the height it takes.
+/// `mix` is counted in [`mix_index`] order. Home's bank cards draw the same key.
+pub(crate) fn mix_key(p: &egui::Painter, at: Option<Pos2>, w: f32, mix: &[usize; 6]) -> f32 {
+    let font = egui::FontId::proportional(12.0);
+    let col = theme::muted_col();
+    let labels = ["multiple choice", "true/false", "multipart", "matching", "fill in the blank", "short answer"];
+    let (sw, sgap, igap, lgap) = (8.0, 5.0, 12.0, 3.0);
+    let mut items: Vec<(Option<usize>, std::sync::Arc<egui::Galley>)> = (0..6)
+        .filter(|i| mix[*i] > 0)
+        .map(|i| (Some(i), p.layout_no_wrap(format!("{} {}", mix[i], labels[i]), font.clone(), col)))
+        .collect();
+    if items.is_empty() {
+        items.push((None, p.layout_no_wrap("No questions yet".to_string(), font.clone(), col)));
+    }
+    let line_h = items.iter().map(|(_, g)| g.size().y).fold(0.0, f32::max);
+    let mut place: Vec<(f32, usize)> = Vec::new();
+    let (mut x, mut line) = (0.0_f32, 0usize);
+    for (i, g) in &items {
+        let iw = if i.is_some() { sw + sgap } else { 0.0 } + g.size().x;
+        if x > 0.0 && x + iw > w {
+            x = 0.0;
+            line += 1;
+        }
+        place.push((x, line));
+        x += iw + igap;
+    }
+    let h = line_h * (line + 1) as f32 + lgap * line as f32;
+    let Some(at) = at else { return h };
+    let ac = theme::accent_col();
+    for ((i, g), (x, l)) in items.into_iter().zip(place) {
+        let top = at.y + l as f32 * (line_h + lgap);
+        let mut tx = at.x + x;
+        if let Some(i) = i {
+            let sr = Rect::from_center_size(Pos2::new(tx + sw / 2.0, top + line_h / 2.0), Vec2::splat(sw));
+            let fill = Color32::from_rgba_unmultiplied(ac.r(), ac.g(), ac.b(), MIX_ALPHA[i]);
+            let edge = Color32::from_rgba_unmultiplied(ac.r(), ac.g(), ac.b(), MIX_ALPHA[i].max(190));
+            p.rect(sr, CornerRadius::same(2), fill, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+            tx += sw + sgap;
+        }
+        p.galley(Pos2::new(tx, top), g, col);
+    }
+    h
+}
+
+/// [`mix_key`] laid out in a `Ui`, `w` wide.
+fn paint_mix_key(ui: &mut Ui, w: f32, mix: &[usize; 6]) {
+    let h = mix_key(ui.painter(), None, w, mix);
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, h), Sense::hover());
+    mix_key(ui.painter(), Some(rect.min), w, mix);
 }
 
 /// What the bank "..." menu asks for.
@@ -1454,31 +1506,6 @@ fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, a
     }
 }
 
-/// "2 multiple choice · 1 fill in the blank" — what the type-mix bar is counting.
-pub(crate) fn mix_legend(mix: &[usize; 6]) -> String {
-    let kinds = [
-        (QKind::Mc, "multiple choice"),
-        (QKind::Tf, "true/false"),
-        (QKind::Multipart, "multipart"),
-        (QKind::Matching, "matching"),
-        (QKind::Blank, "fill in the blank"),
-        (QKind::Short, "short answer"),
-    ];
-    let mut parts: Vec<String> = kinds
-        .iter()
-        .filter_map(|(k, label)| {
-            let n = mix[mix_index(*k)];
-            (n > 0).then(|| format!("{n} {label}"))
-        })
-        .collect();
-    if parts.len() > 3 {
-        let rest = parts.len() - 3;
-        parts.truncate(3);
-        parts.push(format!("{rest} more types"));
-    }
-    if parts.is_empty() { "No questions yet".to_string() } else { parts.join(" · ") }
-}
-
 fn counts_line(r: &BankRow) -> String {    format!(
         "{}{} question{} · {} topic{}",
         if r.archived { "Archived · " } else { "" },
@@ -1499,15 +1526,12 @@ fn card_title(ui: &Ui, name: &str, size: f32, width: f32) -> std::sync::Arc<egui
     ui.painter().layout_job(job)
 }
 
-/// One bank tile: serif name, counts, type-mix bar, edited time. `row_h`: the content height
-/// of its row's tallest card, which this one grows to (the space goes above its usage line, so
-/// the usage and edited lines of a row line up). Returns its own content height.
-fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, row_h: f32) -> f32 {
+/// One bank tile: serif name, counts, the type key over the type-mix bar, usage and edited time.
+/// An empty bank offers "Add questions" where the key and bar would be.
+fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow) {
     let mut link: Option<Rect> = None;
     let mut menu_rect = Rect::NOTHING;
-    let nat_id = key.with(("bank_card_h", &r.id));
-    let extra = (row_h - ctx.data(|d| d.get_temp::<f32>(nat_id)).unwrap_or(row_h)).max(0.0);
-    let mut natural = 0.0;
+    let mut add: Option<Rect> = None;
     let resp = kit::card().inner_margin(Margin::same(14)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         // The name wraps beside the "..." button (two lines at most), never under it.
@@ -1520,30 +1544,41 @@ fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &Ban
         });
         crate::share::bank_links_ui::badge(ui, app, &r.id);
         ui.label(theme::muted(counts_line(r)).size(12.5));
-        ui.add_space(8.0);
-        // Name the mix: the bar is a question-type breakdown, so say which types it counts.
-        ui.label(theme::muted(mix_legend(&r.mix)).size(11.0));
-        ui.add_space(4.0);
-        paint_mix_bar(ui, ui.available_width(), &r.mix);
-        ui.add_space(8.0 + extra);
+        ui.add_space(10.0);
+        if r.nq == 0 {
+            // Nothing to break down yet: the card's next step instead of an empty bar.
+            add = Some(
+                crate::pageshell::styled_button(
+                    ui,
+                    RichText::new("Add questions").family(theme::bold_family()).size(12.5).color(theme::accent_col()),
+                    theme::card(),
+                    theme::hover_bg(),
+                    theme::accent_faded(),
+                    Stroke::new(1.0, theme::rule()),
+                    30.0,
+                )
+                .rect,
+            );
+        } else {
+            // Name the mix with a swatch per type, so each shade of the bar has its key.
+            paint_mix_key(ui, ui.available_width(), &r.mix);
+            ui.add_space(5.0);
+            paint_mix_bar(ui, ui.available_width(), &r.mix);
+        }
+        ui.add_space(9.0);
         link = Some(usage_link(ui, r.used_in.len(), 12.0).rect);
         ui.add_space(2.0);
         ui.label(theme::muted(format!("Edited {}", rel_time(r.modified))).size(11.5));
-        natural = ui.min_rect().height() - extra;
     });
-    if (ctx.data(|d| d.get_temp::<f32>(nat_id)).unwrap_or(-1.0) - natural).abs() > 0.5 {
-        ctx.data_mut(|d| d.insert_temp(nat_id, natural));
-        ctx.request_repaint();
-    }
     let click = ui.interact(resp.response.rect, ui.id().with(("bank_card", &r.id)), Sense::click());
     let (menu_act, over_menu) = bank_menu(ui, menu_rect, r);
     if menu_act.is_some() {
         apply_bank_menu(app, ctx, key, r, menu_act);
-        return natural;
+        return;
     }
     if usage_clicked(&click, link, r) {
         open_usage(ctx, r.name.clone(), r.used_in.clone());
-        return natural;
+        return;
     }
     let t = kit::hover_t(ctx, click.id.with("hover"), click.hovered());
     if t > 0.0 {
@@ -1554,10 +1589,16 @@ fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &Ban
             egui::StrokeKind::Inside,
         );
     }
+    // The card owns the click; "Add questions" opens the bank to write them, as the card does.
+    if let Some(a) = add
+        && click.hovered()
+        && ui.rect_contains_pointer(a)
+    {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
     if click.clicked() && !over_menu {
         app.open_bank(&r.id);
     }
-    natural
 }
 
 /// True when the card click landed on its "Used in N exams" link (and there are exams).

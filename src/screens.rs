@@ -1274,8 +1274,10 @@ impl crate::App {
             (NavIcon::Import, "Import", "Anything: text, files, photos", false),
         ];
         let mut tile_hit: Option<usize> = None;
+        // A narrow window keeps the three actions on one row of equal compact tiles, so the
+        // recent work still starts near the top instead of under three full-width slabs.
         let widths: Vec<f32> = if stacked {
-            vec![avail; 3]
+            vec![((avail - 2.0 * gap) / 3.0).floor(); 3]
         } else {
             let unit = (avail - 2.0 * gap) / 3.25;
             vec![unit * 1.25, unit, unit]
@@ -1285,19 +1287,13 @@ impl crate::App {
                 ui.spacing_mut().item_spacing.x = gap;
                 for i in range {
                     let (icon, title, sub, pri) = tiles[i];
-                    if home_tile(ui, widths[i], icon, title, sub, pri) {
+                    if home_tile(ui, widths[i], icon, title, sub, pri, stacked) {
                         tile_hit = Some(i);
                     }
                 }
             });
         };
-        if stacked {
-            for i in 0..3 {
-                tile_row(ui, i..i + 1);
-            }
-        } else {
-            tile_row(ui, 0..3);
-        }
+        tile_row(ui, 0..3);
         match tile_hit {
             Some(0) => self.first_exam(),
             Some(1) => self.first_bank(),
@@ -1435,10 +1431,12 @@ impl crate::App {
             cols = exams.len().clamp(1, cols);
             let cw = (ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32;
             for chunk in exams.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
+                // The cards of a row share the height of the one with the most text.
+                let h = chunk.iter().map(|e| exam_card_h(ui.painter(), cw, e)).fold(0.0, f32::max);
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
                     for (k, e) in chunk.iter().enumerate() {
-                        if exam_card(ui, self, cw, e, k % 2 == 1) {
+                        if exam_card(ui, self, cw, h, e, k % 2 == 1) {
                             open_ex = Some(e.id.clone());
                         }
                     }
@@ -1467,18 +1465,14 @@ impl crate::App {
                 topics.dedup();
                 let mut counts = [0usize; 6];
                 for q in &b.questions {
-                    counts[q.kind.qkind() as usize] += 1;
+                    counts[crate::bankui::mix_index(q.kind.qkind())] += 1;
                 }
-                let total = b.questions.len().max(1) as f32;
-                let mut mix: Vec<f32> = counts.iter().filter(|c| **c > 0).map(|c| *c as f32 / total).collect();
-                mix.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
                 BankRow {
                     id: b.id.clone(),
                     name: b.name.clone(),
                     qs: b.questions.len(),
                     topics: topics.len(),
                     edited: b.modified,
-                    mix,
                     counts,
                 }
             })
@@ -1510,6 +1504,7 @@ impl crate::App {
             cols = banks.len().clamp(1, cols);
             let cw = (ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32;
             for chunk in banks.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
+                // Each card is as tall as its type key needs; a row's cards share its top edge.
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
                     for b in chunk {
@@ -2653,8 +2648,7 @@ struct BankRow {
     qs: usize,
     topics: usize,
     edited: i64,
-    mix: Vec<f32>,
-    /// Question counts by kind, in the bank screen's mix order, for the type legend.
+    /// Question counts by kind, in the bank screen's mix order, for the type key and bar.
     counts: [usize; 6],
 }
 
@@ -2727,13 +2721,29 @@ fn serif_font(size: f32) -> egui::FontId {
     egui::FontId::new(size, theme::serif_family())
 }
 
+/// A Home card under the pointer: its border warms a little toward the accent and the card lifts
+/// on a soft shadow. A full accent outline read as a selected item on a page with no selection.
 fn hover_border(resp: &egui::Response) -> Stroke {
-    if resp.hovered() { Stroke::new(1.0, theme::accent_col()) } else { Stroke::new(1.0, theme::border()) }
+    if resp.hovered() {
+        Stroke::new(1.0, theme::border().lerp_to_gamma(theme::accent_col(), 0.3))
+    } else {
+        Stroke::new(1.0, theme::border())
+    }
 }
 
-/// One of the three big action tiles. Returns true when clicked.
-fn home_tile(ui: &mut egui::Ui, w: f32, icon: NavIcon, title: &str, sub: &str, primary: bool) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 72.0), egui::Sense::click());
+/// The soft shadow under a hovered Home card; paint it before the card.
+fn hover_lift(p: &egui::Painter, rect: Rect, resp: &egui::Response, radius: u8) {
+    if resp.hovered() {
+        let col = if theme::is_dark() { Color32::from_black_alpha(70) } else { Color32::from_black_alpha(22) };
+        p.add(egui::Shadow { offset: [0, 3], blur: 12, spread: 0, color: col }.as_shape(rect, CornerRadius::same(radius)));
+    }
+}
+
+/// One of the three action tiles. Returns true when clicked. `compact`: the narrow-window form,
+/// one third of the row, a smaller glyph and the title alone.
+fn home_tile(ui: &mut egui::Ui, w: f32, icon: NavIcon, title: &str, sub: &str, primary: bool, compact: bool) -> bool {
+    let h = if compact { 58.0 } else { 72.0 };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
@@ -2744,6 +2754,21 @@ fn home_tile(ui: &mut egui::Ui, w: f32, icon: NavIcon, title: &str, sub: &str, p
     } else {
         (theme::card(), hover_border(&resp), theme::ink(), theme::accent_faded(), theme::accent_col())
     };
+    if !primary {
+        hover_lift(p, rect, &resp, if compact { 16 } else { 18 });
+    }
+    if compact {
+        p.rect(rect, CornerRadius::same(16), fill, stroke, StrokeKind::Inside);
+        let g = Rect::from_min_size(Pos2::new(rect.min.x + 12.0, rect.center().y - 17.0), Vec2::splat(34.0));
+        p.rect_filled(g, CornerRadius::same(11), glyph_bg);
+        draw_nav_icon_k(p, icon, g.center(), glyph_fg, 1.1);
+        let tx = g.right() + 11.0;
+        let tw = rect.right() - tx - 8.0;
+        let font = serif_font(17.0);
+        let gh = p.layout_no_wrap(title.to_string(), font.clone(), fg).size().y;
+        paint_fit(p, Pos2::new(tx, rect.center().y - gh / 2.0), title, font, fg, tw);
+        return resp.clicked();
+    }
     p.rect(rect, CornerRadius::same(18), fill, stroke, StrokeKind::Inside);
     let g = Rect::from_min_size(rect.min + Vec2::new(18.0, 15.0), Vec2::splat(42.0));
     p.rect_filled(g, CornerRadius::same(13), glyph_bg);
@@ -2818,44 +2843,74 @@ fn paint_fact(p: &egui::Painter, pos: Pos2, w: f32, label: &str, value: &str) {
     paint_fit(p, pos + Vec2::new(0.0, 12.0), value, bold(13.0), theme::ink(), w);
 }
 
-fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_right: bool) -> bool {
-    // A landscape card: the first page on the left, the facts beside it, so one exam on a
-    // dashboard row does not read as a tall, half-empty slab. The card is only as tall as the
-    // page thumbnail it holds, and the facts sit in a two-by-two block rather than being spread
-    // to the four corners of a wide surface.
-    let h = 148.0;
+/// The first page on a Home exam card, the size the Exams screen uses, so the text beside it
+/// keeps most of the card.
+const HOME_THUMB: Vec2 = Vec2::new(88.0, 114.0);
+
+/// Where a Home exam card's text starts (from the card's left edge) and how wide it may run.
+fn exam_card_text_x(w: f32) -> (f32, f32) {
+    // card edge, 6 px, the preview strip (8 + page + 8), 14 px, the text, 16 px.
+    let x = 6.0 + 8.0 + HOME_THUMB.x + 8.0 + 14.0;
+    (x, (w - x - 16.0).max(60.0))
+}
+
+/// The exam's name (two lines before it is cut) and its bank's name (likewise), laid out for a
+/// card `w` wide.
+fn exam_card_galleys(p: &egui::Painter, w: f32, e: &ExamRow) -> (std::sync::Arc<egui::Galley>, std::sync::Arc<egui::Galley>) {
+    let (_, iw) = exam_card_text_x(w);
+    (
+        wrap_galley(p, &e.name, serif_font(16.0), theme::ink(), iw, 2),
+        wrap_galley(p, &e.bank, bold(13.0), theme::ink(), iw, 2),
+    )
+}
+
+/// The height a Home exam card needs: the page with its margins, or its text, whichever is taller.
+fn exam_card_h(p: &egui::Painter, w: f32, e: &ExamRow) -> f32 {
+    let (title, bank) = exam_card_galleys(p, w, e);
+    let text = 13.0 + title.size().y + 9.0 + 30.0 + 6.0 + 13.0 + bank.size().y + 6.0 + 15.0 + 13.0;
+    text.max(HOME_THUMB.y + 24.0).ceil()
+}
+
+fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, h: f32, e: &ExamRow, tilt_right: bool) -> bool {
+    // A landscape card: the first page on the left (the Exams screen's size), and beside it the
+    // name over two lines, the counts, the bank on a line of its own (names are read, not guessed
+    // from an ellipsis), then when it was edited.
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     let p = ui.painter();
+    hover_lift(p, rect, &resp, 16);
     p.rect(rect, CornerRadius::same(16), theme::card(), hover_border(&resp), StrokeKind::Inside);
-    let thumb_area = Rect::from_min_size(rect.min + Vec2::new(14.0, 12.0), Vec2::new(96.0, 124.0));
-    let pv = thumb_area.expand2(Vec2::new(8.0, 0.0));
+    let pv = Rect::from_min_max(
+        Pos2::new(rect.min.x + 6.0, rect.min.y + 12.0),
+        Pos2::new(rect.min.x + 6.0 + 8.0 + HOME_THUMB.x + 8.0, rect.max.y - 12.0),
+    );
+    let thumb_area = Rect::from_center_size(pv.center(), HOME_THUMB);
     paint_preview_bg(p, pv);
     let ctx = ui.ctx().clone();
     let page = crate::examui::paint_exam_thumb(app, &ctx, p, thumb_area, &e.id);
     let p = ui.painter();
     if page.is_none() {
-        paper_thumb(p, thumb_area.center(), Vec2::new(62.0, 80.0), if tilt_right { 3.0 } else { -3.0 }, e.id.len() % 2 == 0, true);
+        paper_thumb(p, thumb_area.center(), Vec2::new(60.0, 78.0), if tilt_right { 3.0 } else { -3.0 }, e.id.len() % 2 == 0, true);
     }
-    let x = pv.right() + 16.0;
-    let iw = (rect.right() - 22.0 - x).max(60.0);
-    paint_fit(p, Pos2::new(x, rect.min.y + 14.0), &e.name, serif_font(16.0), theme::ink(), iw);
-    let y1 = rect.min.y + 44.0;
-    if iw >= 380.0 {
-        // Four facts, two rows of two: a table, not a row stretched to the card's edges.
-        let cw = ((iw - 18.0) / 2.0).min(230.0);
-        paint_fact(p, Pos2::new(x, y1), cw, "Questions", &e.qs.to_string());
-        paint_fact(p, Pos2::new(x + cw + 18.0, y1), cw, "Points", &fmt_pts(e.pts));
-        paint_fact(p, Pos2::new(x, y1 + 38.0), cw, "Bank", &e.bank);
-        paint_fact(p, Pos2::new(x + cw + 18.0, y1 + 38.0), cw, "Edited", &rel_time(e.edited));
-    } else {
-        let half = (iw - 12.0) / 2.0;
-        paint_fact(p, Pos2::new(x, y1), half, "Questions", &e.qs.to_string());
-        paint_fact(p, Pos2::new(x + half + 12.0, y1), half, "Points", &fmt_pts(e.pts));
-        paint_fact(p, Pos2::new(x, y1 + 38.0), iw, "Bank", &e.bank);
-    }
+    let (dx, iw) = exam_card_text_x(w);
+    let x = rect.min.x + dx;
+    let (title, bank) = exam_card_galleys(p, w, e);
+    let mut y = rect.min.y + 13.0;
+    let th = title.size().y;
+    p.galley(Pos2::new(x, y), title, theme::ink());
+    y += th + 9.0;
+    let half = (iw - 12.0) / 2.0;
+    paint_fact(p, Pos2::new(x, y), half, "Questions", &e.qs.to_string());
+    paint_fact(p, Pos2::new(x + half + 12.0, y), half, "Points", &fmt_pts(e.pts));
+    y += 30.0 + 6.0;
+    paint_fit(p, Pos2::new(x, y), "BANK", bold(9.5), theme::muted_col(), iw);
+    y += 13.0;
+    let bh = bank.size().y;
+    p.galley(Pos2::new(x, y), bank, theme::ink());
+    y += bh + 6.0;
+    paint_fit(p, Pos2::new(x, y), &format!("Edited {}", rel_time(e.edited)), sans(11.5), theme::muted_col(), iw);
     resp.clicked()
 }
 
@@ -2916,27 +2971,6 @@ fn exam_list(ui: &mut egui::Ui, rows: &[&ExamRow]) -> Option<Id> {
     hit
 }
 
-/// Thin segmented question-type bar; shares are fractions, shades fade out.
-fn mix_bar(p: &egui::Painter, r: Rect, mix: &[f32]) {
-    p.rect_filled(r, CornerRadius::same(3), theme::accent_faded());
-    let total: f32 = mix.iter().sum::<f32>().max(0.001);
-    let n = mix.len();
-    let mut x = r.left();
-    for (i, f) in mix.iter().enumerate() {
-        let seg_w = r.width() * f / total;
-        let alpha = match i {
-            0 => 1.0,
-            1 => 0.6,
-            2 => 0.35,
-            _ => 0.2,
-        };
-        let gap = if i + 1 < n { 2.0 } else { 0.0 };
-        let seg = Rect::from_min_size(Pos2::new(x, r.top()), Vec2::new((seg_w - gap).max(1.0), r.height()));
-        p.rect_filled(seg, CornerRadius::same(3), theme::accent_col().gamma_multiply(alpha));
-        x += seg_w;
-    }
-}
-
 fn paint_bank_glyph(p: &egui::Painter, r: Rect) {
     p.rect_filled(r, CornerRadius::same(10), theme::accent_faded());
     draw_nav_icon_k(p, NavIcon::Banks, r.center(), theme::accent_col(), 1.05);
@@ -2952,13 +2986,18 @@ fn wrap_galley(p: &egui::Painter, text: &str, font: egui::FontId, col: Color32, 
 }
 
 /// A bank on Home: the glyph with the name beside it (two lines before it is cut), then the
-/// facts and the type legend across the card's full width, so similar names stay apart.
+/// facts, the type key (the Banks screen's, swatch per type) and its bar across the card's full
+/// width. The card is as tall as its key needs.
 fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 166.0), egui::Sense::click());
+    let fw = w - 28.0;
+    let key_h = crate::bankui::mix_key(ui.painter(), None, fw, &b.counts);
+    let h = 61.0 + 40.0 + key_h + 8.0 + 5.0 + 16.0;
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     let p = ui.painter();
+    hover_lift(p, rect, &resp, 16);
     p.rect(rect, CornerRadius::same(16), theme::card(), hover_border(&resp), StrokeKind::Inside);
     let g = Rect::from_min_size(rect.min + Vec2::new(14.0, 13.0), Vec2::splat(34.0));
     paint_bank_glyph(p, g);
@@ -2969,7 +3008,6 @@ fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
     p.galley(Pos2::new(x, ty), title, theme::ink());
     // Below the header the card's whole inner width is free.
     let x0 = rect.min.x + 14.0;
-    let fw = rect.right() - 14.0 - x0;
     let fy = rect.min.y + 61.0;
     let facts = [("Questions", b.qs.to_string()), ("Topics", b.topics.to_string()), ("Edited", rel_time(b.edited))];
     // Fixed columns grouped to the left on a wide card, thirds otherwise.
@@ -2979,10 +3017,10 @@ fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
         paint_fact(p, Pos2::new(fx, fy), cols[i] - 8.0, label, value);
         fx += cols[i];
     }
-    // The bar is a question-type breakdown: say which types it is counting, over two lines.
-    let legend = wrap_galley(p, &crate::bankui::mix_legend(&b.counts), sans(11.0), theme::muted_col(), fw, 2);
-    p.galley(Pos2::new(x0, fy + 40.0), legend, theme::muted_col());
-    mix_bar(p, Rect::from_min_size(Pos2::new(x0, rect.bottom() - 19.0), Vec2::new(fw, 5.0)), &b.mix);
+    // The bar is a question-type breakdown: the key names each shade.
+    let ky = fy + 40.0;
+    crate::bankui::mix_key(p, Some(Pos2::new(x0, ky)), fw, &b.counts);
+    crate::bankui::mix_bar_at(p, Rect::from_min_size(Pos2::new(x0, ky + key_h + 8.0), Vec2::new(fw, 5.0)), &b.counts);
     resp.clicked()
 }
 
@@ -3013,7 +3051,7 @@ fn bank_list(ui: &mut egui::Ui, rows: &[&BankRow]) -> Option<Id> {
         paint_fit(p, at(2) - Vec2::new(0.0, 8.0), &b.qs.to_string(), bold(13.0), theme::ink(), cols[2].1);
         paint_fit(p, at(3) - Vec2::new(0.0, 8.0), &b.topics.to_string(), sans(13.0), theme::text_col(), cols[3].1);
         paint_fit(p, at(4) - Vec2::new(0.0, 8.0), &rel_time(b.edited), sans(13.0), theme::text_col(), cols[4].1);
-        mix_bar(p, Rect::from_min_size(Pos2::new(outer.min.x + cols[5].0, cy - 2.5), Vec2::new(cols[5].1, 5.0)), &b.mix);
+        crate::bankui::mix_bar_at(p, Rect::from_min_size(Pos2::new(outer.min.x + cols[5].0, cy - 2.5), Vec2::new(cols[5].1, 5.0)), &b.counts);
         if resp.clicked() {
             hit = Some(b.id.clone());
         }
