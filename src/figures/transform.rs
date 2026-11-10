@@ -883,8 +883,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let py = |y: f64| fr.py(y);
     let names = vertex_names(p);
     let (title_room, letter_room) = top_room(p);
-    // which images are drawn (and listed): the last one, the in-between ones when asked; on the key or the question
-    let listed = |k: usize| k + 1 == n || p.b("show_between");
+    // which images are drawn (and listed): the last one, the in-between ones when asked; on the key or the question.
+    // The question copy shows the pre-image and the last image only: an in-between image would name the steps.
+    let listed = |k: usize| k + 1 == n || (p.b("show_between") && !qv);
     let drawn_img = |k: usize| (ans || qv) && listed(k);
     // mirror lines and centres: part of the question on the student copy, the answer on the question copy
     let guides = p.b("show_guides") && !qv;

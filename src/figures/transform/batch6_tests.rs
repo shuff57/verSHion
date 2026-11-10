@@ -275,9 +275,13 @@ fn the_question_version_draws_both_figures_and_gives_nothing_away() {
         let (svg, rep) = build(&p);
         let t = texts(&svg);
         // both figures, the image's letters and coordinates
-        assert_eq!(polylines(&svg).len(), 1 + rep.images.len(), "{l:?}: pre-image and every image drawn");
-        assert!(t.lines().any(|x| x == "A\u{2032}"), "{l:?}: {t}");
-        assert!(t.contains(&format!("A\u{2032}({}, {})", num(rep.images[0][0].0, 2), num(rep.images[0][0].1, 2))), "{l:?}: {t}");
+        // (the last image only: an in-between one would name the steps)
+        assert_eq!(polylines(&svg).len(), 2, "{l:?}: the pre-image and the last image drawn");
+        let k = rep.images.len() - 1;
+        let a = format!("A{}", primes(k));
+        assert!(t.lines().any(|x| x == a), "{l:?}: {t}");
+        assert!(t.contains(&format!("{a}({}, {})", num(rep.images[k][0].0, 2), num(rep.images[k][0].1, 2))), "{l:?}: {t}");
+        assert!(k == 0 || !t.contains("A\u{2032}"), "{l:?}: an in-between image is shown: {t}");
         // no rule, no mirror line or its name, no centre, no arrow: in the drawing or the alt text
         assert!(t.contains(&format!("Rule  {RULE_BLANK}")), "{t}");
         for word in ["translate", "reflect", "turn", "enlarge", "rotate", "dilate", "x = 2", "y = x", "\u{2192}", "about", "clockwise", "y-axis"] {
