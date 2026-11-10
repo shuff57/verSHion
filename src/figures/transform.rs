@@ -1,13 +1,18 @@
 //! Transformations on a coordinate grid: a pre-image (a polygon, an open path or one point, up to ten vertices) and
-//! its image after one of translate, reflect, rotate or enlarge, drawn on the same grid, with the rule written under
-//! it and the image vertices named A', B', C' and on.
+//! its images after up to four transformations done in turn (translate, reflect, rotate or enlarge), each acting on
+//! the image the one before made, drawn on the same grid, with the rules written under it and the image vertices
+//! named A', A'', A''' (or after the teacher's own letters).
 //!
 //! The pre-image's vertices are typed (one `x, y` row each) or dragged on the grid, where they snap to grid points
-//! and the image follows live. The grid runs over a stated range (−10 to 10 to start), grown when a shape runs past
-//! it so nothing is ever cut off, or shrunk to fit the shapes on request.
+//! and the images follow live. The first transformation has its own controls; the later ones are typed one per line
+//! in "Then" ("reflect in the y-axis", "rotate 90 clockwise about (1, 2)"), and their centres and mirror lines are
+//! dragged on the grid like the first one's. The grid runs over a stated range (-10 to 10 to start), grown when a
+//! shape runs past it so nothing is ever cut off, or shrunk to fit the shapes on request; its numbering, gridlines,
+//! titles, axis letters and arrowheads are set as on the coordinate grid.
 //!
-//! The pre-image is always drawn; the image is the answer, so it is drawn (and its coordinates printed) only when
-//! Show answers is on. Drawn with `svg::Doc` only, with the same light grid and ink as the other Math figures.
+//! Three versions: the student copy (the pre-image and the rules, the images left to draw), the question copy (both
+//! figures drawn, the rules left blank, no mirror line or centre that would give them away) and the answer key.
+//! Drawn with `svg::Doc` only, with the same light grid and ink as the other Math figures.
 use super::circle::{num, tw, Rect};
 use super::interact::Handle;
 use super::svg::{self, Doc};
@@ -24,12 +29,13 @@ const PRE_PRINT: &str = "#777777";
 const GRID_COLOUR: &str = "#e6ebf1";
 const GRID_PRINT: &str = "#787878"; // dark enough to survive a 66% bitonal copy at the 1.3x raster the tests use
 const BLANK: &str = "_____";
+/// A rule left for the student to name, on the question copy.
+const RULE_BLANK: &str = "____________________";
 /// The canvas and the plot area inside it (px).
 const W: f64 = 640.0;
 const PLOT: f64 = 520.0;
 const L: f64 = 62.0;
 const T: f64 = 18.0;
-const ROWS_Y0: f64 = T + PLOT + 30.0;
 const ROW_H: f64 = 18.0;
 const ROW_FS: f64 = 15.0;
 /// The pre-image a new figure starts with.
@@ -39,6 +45,10 @@ pub const MAX_V: usize = 10;
 const NAMES: [&str; MAX_V] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
 /// A typed vertex is kept within this many units of the origin, so a stray 1e9 cannot make a grid of a billion lines.
 const VMAX: f64 = 30.0;
+/// At most this many transformations in all: the first and three more typed under "Then".
+pub const MAX_STEPS: usize = 4;
+/// A typed vertex letter is cut to this many characters.
+const NAME_MAX: usize = 3;
 
 const OPS: [&str; 4] = ["Translate", "Reflect", "Rotate", "Dilate"];
 const AXES: [&str; 8] = [
@@ -46,6 +56,24 @@ const AXES: [&str; 8] = [
     "the line x = a", "the line y = a", "the line y = x + a", "the line y = -x + a",
 ];
 const ANGLES: [&str; 5] = ["90 degrees anticlockwise", "180 degrees", "270 degrees anticlockwise", "90 degrees clockwise", "270 degrees clockwise"];
+/// The colours a figure can be given. Every one but the grey (the pre-image's own colour, as it always was) keeps its
+/// letters at 4.5:1 or more on white.
+const SWATCHES: [&str; 7] = ["#8a8f99", "#1f5fbf", "#c0392b", "#1e7b34", "#7d3c98", "#a0522d", "#111111"];
+/// The colours the images of the second, third and fourth transformations take unless their line names one.
+const STEP_COLOURS: [&str; 3] = ["#7d3c98", "#1e7b34", "#a0522d"];
+/// Words a "Then" line may carry to colour its image.
+const COLOUR_WORDS: [(&str, &str); 9] = [
+    ("grey", "#8a8f99"), ("gray", "#8a8f99"), ("blue", "#1f5fbf"), ("red", "#c0392b"), ("green", "#1e7b34"),
+    ("purple", "#7d3c98"), ("brown", "#a0522d"), ("orange", "#a0522d"), ("black", "#111111"),
+];
+const LINES: [&str; 4] = ["Automatic", "Solid", "Dashed", "Dotted"];
+const WEIGHTS: [&str; 4] = ["Automatic", "Thin", "Medium", "Thick"];
+const TITLE_MODES: [&str; 3] = ["None", "Text", "Blank line"];
+const NUMBERING: [&str; 6] = ["Automatic", "Every line", "Every 2nd line", "Every 5th line", "Every 10th line", "No numbers"];
+const POINT_LABELS: [&str; 3] = ["Letters", "Letters and coordinates", "None"];
+const ENDS: [&str; 3] = ["None", "Both ends", "Positive ends"];
+const GRIDLINES: [&str; 4] = ["Standard", "Light", "Bold", "None"];
+const MINOR: [&str; 4] = ["None", "2 per block", "4 per block", "5 per block"];
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -87,6 +115,43 @@ fn params() -> Vec<ParamDef> {
         answers_param(),
         svg::style_param(),
         svg::label_size_param(),
+        // ---- batch 6: every key below defaults to the look a figure had before it, so old saved figures and share
+        // links (which list only the keys that differ from the opening state) draw exactly as they did
+        ParamDef::long("then", "Then, one per line", "")
+            .hint("More transformations, done in turn, each on the last image: reflect in the y-axis; reflect in y = x + 2; rotate 90 clockwise about (1, 2); rotate 180; translate 3, -1; dilate 2 about (0, 0). Add a colour (red, green, purple, brown, blue, black, grey), solid, dashed or dotted, and thin, medium or thick to style its image."),
+        ParamDef::text("names", "Vertex letters", "")
+            .hint("In order, for example P, Q, R. Empty: A, B, C and on."),
+        ParamDef::bool("question", "Question version: draw the image, leave the transformation to name", false)
+            .hint("With Show answers off. The rule is left blank and no mirror line or centre is drawn."),
+        ParamDef::bool("show_between", "Show the in-between images", true),
+        ParamDef::bool("show_guides", "Show mirror lines and centres", true),
+        ParamDef::bool("show_arrows", "Show translation arrows", false),
+        ParamDef::choice("pt_labels", "Point labels", &POINT_LABELS, POINT_LABELS[0]),
+        ParamDef::bool("coord_list", "List the image coordinates under the grid", true),
+        ParamDef::color("pre_colour", "Pre-image colour", &SWATCHES, PRE_COLOUR),
+        ParamDef::choice("pre_line", "Pre-image line", &LINES, LINES[0])
+            .hint("Automatic: dashed under an image, solid on its own."),
+        ParamDef::choice("pre_weight", "Pre-image thickness", &WEIGHTS, WEIGHTS[0]),
+        ParamDef::color("image_colour", "Image colour (A\u{2032})", &SWATCHES, IMAGE_COLOUR),
+        ParamDef::choice("image_line", "Image line (A\u{2032})", &LINES, LINES[0])
+            .hint("Automatic: solid, or dotted when more transformations follow it."),
+        ParamDef::choice("image_weight", "Image thickness (A\u{2032})", &WEIGHTS, WEIGHTS[0]),
+        ParamDef::choice("title_mode", "Chart title", &TITLE_MODES, TITLE_MODES[0]),
+        ParamDef::text("title", "Chart title text", ""),
+        ParamDef::choice("xtitle_mode", "x-axis title", &TITLE_MODES, TITLE_MODES[0]),
+        ParamDef::text("xtitle", "x-axis title text", ""),
+        ParamDef::choice("ytitle_mode", "y-axis title", &TITLE_MODES, TITLE_MODES[0]),
+        ParamDef::text("ytitle", "y-axis title text", ""),
+        ParamDef::int("x_step", "x-axis count by", 1, 10, 1),
+        ParamDef::int("y_step", "y-axis count by", 1, 10, 1),
+        ParamDef::choice("x_num", "x-axis numbers", &NUMBERING, NUMBERING[0])
+            .hint("Automatic: every 2nd line, or fewer when the units are small."),
+        ParamDef::choice("y_num", "y-axis numbers", &NUMBERING, NUMBERING[0]),
+        ParamDef::text("x_label", "x-axis letter", "").hint("At the right end, for example x. Empty: none."),
+        ParamDef::text("y_label", "y-axis letter", "").hint("At the top end, for example y. Empty: none."),
+        ParamDef::choice("ends", "Axis ends", &ENDS, ENDS[0]),
+        ParamDef::choice("gridlines", "Gridlines", &GRIDLINES, GRIDLINES[0]).hint("Bold for photocopies."),
+        ParamDef::choice("minor", "Minor gridlines", &MINOR, MINOR[0]),
     ]
 }
 
@@ -99,16 +164,33 @@ pub fn vertices(p: &Params) -> Vec<Pt> {
     data::pairs(p.s("pre")).into_iter().filter(|q| q.0.is_finite() && q.1.is_finite()).take(MAX_V).map(|q| (q.0.clamp(-VMAX, VMAX), q.1.clamp(-VMAX, VMAX))).collect()
 }
 
+/// The pre-image's vertex letters: the ones typed in "Vertex letters" (commas, semicolons or spaces between them, each
+/// cut to [`NAME_MAX`] characters), then A, B, C ... for the rest, skipping a letter already typed.
+pub fn vertex_names(p: &Params) -> Vec<String> {
+    let typed: Vec<String> = p.s("names").split(|c: char| c == ',' || c == ';' || c.is_whitespace()).filter(|t| !t.is_empty()).map(|t| t.chars().take(NAME_MAX).collect()).collect();
+    let mut spare = NAMES.iter().filter(|n| !typed.iter().any(|t| t == *n));
+    (0..MAX_V).map(|i| typed.get(i).cloned().unwrap_or_else(|| spare.next().unwrap_or(&NAMES[i]).to_string())).collect()
+}
+
+/// The marks after an image's letters: one prime for the first transformation's image, two for the second's ...
+fn primes(k: usize) -> &'static str {
+    ["\u{2032}", "\u{2033}", "\u{2034}", "\u{2057}"][k.min(3)]
+}
+
 /// The centre a turn or an enlargement is about.
 pub fn centre(p: &Params) -> Pt { (fin(p.f("cx"), -10.0, 10.0, 0.0), fin(p.f("cy"), -10.0, 10.0, 0.0)) }
 
 /// The number a in a mirror line x = a, y = a or y = x + a, y = -x + a.
 fn line_a(p: &Params) -> f64 { fin(p.f("line_a"), -10.0, 10.0, 0.0) }
 
+/// A scale factor: the first transformation's slider runs 0.5 to 3 by halves; a typed one may be any factor from 0.1
+/// to 5 (one third, a quarter).
+fn factor(p: &Params) -> f64 { fin(p.f("scale"), 0.1, 5.0, 1.0) }
+
 /// Is the transformation about a centre (a turn or an enlargement)?
 fn has_centre(p: &Params) -> bool { matches!(p.s("op"), "Rotate" | "Dilate") }
 
-/// Where a point goes under the chosen transformation.
+/// Where a point goes under the chosen transformation (the first one; a later one is a `Step`'s own params).
 pub fn map_point(p: &Params, pt: Pt) -> Pt {
     let (x, y) = pt;
     match p.s("op") {
@@ -136,12 +218,266 @@ pub fn map_point(p: &Params, pt: Pt) -> Pt {
             (u + a, v + b)
         }
         "Dilate" => {
-            let k = fin(p.f("scale"), 0.5, 3.0, 1.0);
+            let k = factor(p);
             let (a, b) = centre(p);
             (a + (x - a) * k, b + (y - b) * k)
         }
         _ => (x + fin(p.f("dx"), -8.0, 8.0, 0.0), y + fin(p.f("dy"), -8.0, 8.0, 0.0)),
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Transformations one after another
+
+/// A line style for a figure's sides.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Stroke { Solid, Dashed, Dotted, DashDot, Short }
+
+/// The look a "Then" line gives its image with words such as "red dotted thick"; `None` is the automatic look.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Look {
+    pub colour: Option<&'static str>,
+    pub stroke: Option<Stroke>,
+    pub weight: Option<f64>,
+}
+
+/// One transformation of the chain, held as the first transformation's keys (op, dx, dy, axis, line_a, angle, scale,
+/// cx, cy) so every function that reads a transformation reads a later one the same way.
+#[derive(Clone)]
+pub struct Step {
+    pub p: Params,
+    pub look: Look,
+    /// The "Then" line it was typed on (`None` for the first transformation, which has its own controls).
+    pub line: Option<usize>,
+}
+
+/// Every number in `s`, in order: signed, with a decimal point or as a fraction (1/3).
+fn numbers_in(s: &str) -> Vec<f64> {
+    let c: Vec<char> = s.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    let digit = |i: usize| c.get(i).is_some_and(|ch| ch.is_ascii_digit());
+    while i < c.len() {
+        let starts = digit(i) || (c[i] == '.' && digit(i + 1)) || (c[i] == '-' && (digit(i + 1) || (c.get(i + 1) == Some(&'.') && digit(i + 2))));
+        // a digit glued to a letter before it (x2, p1) is part of a word, not a number
+        if !starts || (i > 0 && c[i - 1].is_alphabetic()) {
+            i += 1;
+            continue;
+        }
+        let from = i;
+        i += 1;
+        while i < c.len() && (c[i].is_ascii_digit() || c[i] == '.') { i += 1; }
+        let mut v: f64 = c[from..i].iter().collect::<String>().parse().unwrap_or(f64::NAN);
+        if c.get(i) == Some(&'/') && digit(i + 1) {
+            let d0 = i + 1;
+            i += 1;
+            while i < c.len() && (c[i].is_ascii_digit() || c[i] == '.') { i += 1; }
+            let d: f64 = c[d0..i].iter().collect::<String>().parse().unwrap_or(f64::NAN);
+            v = if d != 0.0 { v / d } else { f64::NAN };
+        }
+        if v.is_finite() { out.push(v); }
+    }
+    out
+}
+
+/// The two shifts of a translation written as its rule, `(x, y) -> (x + 3, y - 2)`: what is added to x and to y.
+fn rule_shifts(rest: &str) -> Option<Vec<f64>> {
+    let t: String = rest.chars().filter(|c| !c.is_whitespace()).collect();
+    let tail = &t[t.rfind("(x")? + 2..];
+    let (a, b) = tail.split_once(',')?;
+    let b = b.strip_prefix('y')?.split(')').next()?;
+    let v = |s: &str| if s.is_empty() { Some(0.0) } else { let n = numbers_in(s); (n.len() == 1).then(|| n[0]) };
+    Some(vec![v(a)?, v(b)?])
+}
+
+/// A mirror line written as an equation (`y = -x + 2`, `x = 3`, `y=x`), as the axis choice and its number a.
+fn mirror_of(eq: &str) -> Result<(&'static str, f64), String> {
+    let t: String = eq.chars().filter(|c| !c.is_whitespace()).collect();
+    if t.contains("x-axis") || t.contains("xaxis") { return Ok((AXES[0], 0.0)); }
+    if t.contains("y-axis") || t.contains("yaxis") { return Ok((AXES[1], 0.0)); }
+    let Some(at) = t.find('=') else { return Err("name the mirror line: the x-axis, the y-axis, y = x, x = 2, y = -x + 1".into()) };
+    let lhs = t[..at].chars().last();
+    let rhs: String = t[at + 1..].chars().take_while(|c| c.is_ascii_digit() || matches!(c, '.' | '+' | '-' | 'x' | 'y' | '/')).collect();
+    // the right side as terms: a slope on x (only 1 or -1) and a number
+    let (mut slope, mut a, mut any) = (0.0, 0.0, false);
+    let mut term = String::new();
+    let mut terms = Vec::new();
+    for ch in rhs.chars() {
+        if (ch == '+' || ch == '-') && !term.is_empty() { terms.push(std::mem::take(&mut term)); }
+        term.push(ch);
+    }
+    if !term.is_empty() { terms.push(term); }
+    for tm in terms {
+        if let Some(coef) = tm.strip_suffix('x') {
+            let k = match coef { "" | "+" | "+1" | "1" => 1.0, "-" | "-1" => -1.0, _ => return Err("a slanted mirror line must be y = x + a or y = -x + a".into()) };
+            slope += k;
+        } else if tm.contains('x') || tm.contains('y') {
+            return Err("a slanted mirror line must be y = x + a or y = -x + a".into());
+        } else {
+            match numbers_in(&tm).first() { Some(v) => a += v, None => return Err(format!("could not read \"{tm}\" in the mirror line")) }
+        }
+        any = true;
+    }
+    if !any { return Err("name the mirror line: the x-axis, the y-axis, y = x, x = 2, y = -x + 1".into()); }
+    match (lhs, slope) {
+        (Some('x'), s) if s == 0.0 => Ok((AXES[4], a)),
+        (Some('y'), s) if s == 0.0 => Ok((AXES[5], a)),
+        (Some('y'), s) if s == 1.0 => Ok(if a == 0.0 { (AXES[2], 0.0) } else { (AXES[6], a) }),
+        (Some('y'), s) if s == -1.0 => Ok(if a == 0.0 { (AXES[3], 0.0) } else { (AXES[7], a) }),
+        _ => Err("the mirror line must be x = a, y = a, y = x + a or y = -x + a".into()),
+    }
+}
+
+/// One "Then" line read as a transformation: its keys and its look, or why it cannot be read. Values past the first
+/// transformation's ranges are held at the end of the range, with a note.
+pub fn parse_step(raw: &str) -> Result<(Vec<(&'static str, Value)>, Look, Vec<String>), String> {
+    let s: String = raw.to_lowercase().chars().map(|c| match c {
+        '\u{2212}' | '\u{2013}' | '\u{2014}' => '-',
+        '\u{27e8}' | '\u{27e9}' | '<' | '>' | '[' | ']' | '{' | '}' | '\u{b0}' => ' ',
+        c => c,
+    }).collect();
+    let words: Vec<&str> = s.split(|c: char| !(c.is_alphanumeric() || c == '-')).filter(|w| !w.is_empty()).collect();
+    let mut look = Look::default();
+    for w in &words {
+        if let Some((_, c)) = COLOUR_WORDS.iter().find(|(n, _)| n == w) { look.colour = Some(c); }
+        match *w {
+            "solid" => look.stroke = Some(Stroke::Solid),
+            "dashed" => look.stroke = Some(Stroke::Dashed),
+            "dotted" => look.stroke = Some(Stroke::Dotted),
+            "thin" => look.weight = Some(weight_px("Thin")),
+            "medium" => look.weight = Some(weight_px("Medium")),
+            "thick" => look.weight = Some(weight_px("Thick")),
+            _ => {}
+        }
+    }
+    let Some(first) = words.first() else { return Err("empty".into()) };
+    let rest = s.split_once(first).map(|(_, r)| r).unwrap_or("");
+    let mut notes = Vec::new();
+    let mut hold = |v: f64, lo: f64, hi: f64, what: &str| -> f64 {
+        if v < lo || v > hi { notes.push(format!("{what} {} is held at {}", num(v, 2), num(v.clamp(lo, hi), 2))); }
+        v.clamp(lo, hi)
+    };
+    let f = |k: &'static str, v: f64| (k, Value::F(v));
+    let st = |k: &'static str, v: &str| (k, Value::S(v.to_string()));
+    let keys = match *first {
+        "translate" | "translation" | "move" | "slide" | "shift" => {
+            let n = rule_shifts(rest).unwrap_or_else(|| numbers_in(rest));
+            if n.len() < 2 { return Err("a translation needs two numbers, right and up: translate 3, -1".into()); }
+            vec![st("op", OPS[0]), f("dx", hold(n[0], -8.0, 8.0, "a shift of")), f("dy", hold(n[1], -8.0, 8.0, "a shift of"))]
+        }
+        "reflect" | "reflection" | "flip" | "mirror" => {
+            let (axis, a) = mirror_of(rest)?;
+            vec![st("op", OPS[1]), st("axis", axis), f("line_a", hold(a, -10.0, 10.0, "the line's number"))]
+        }
+        "rotate" | "rotation" | "turn" => {
+            let n = numbers_in(rest);
+            let Some(&deg) = n.first() else { return Err("a rotation needs its angle: rotate 90 clockwise".into()) };
+            let anti = words.iter().any(|w| matches!(*w, "anticlockwise" | "anti-clockwise" | "counterclockwise" | "counter-clockwise" | "ccw" | "acw"));
+            let cw = !anti && words.iter().any(|w| matches!(*w, "clockwise" | "cw"));
+            // a negative angle turns clockwise
+            let (deg, cw) = if deg < 0.0 { (-deg, !cw) } else { (deg, cw) };
+            let angle = match (deg.round() as i64, cw) {
+                (180, _) => ANGLES[1],
+                (90, false) => ANGLES[0],
+                (270, false) => ANGLES[2],
+                (90, true) => ANGLES[3],
+                (270, true) => ANGLES[4],
+                _ => return Err("a rotation turns 90, 180 or 270 degrees".into()),
+            };
+            let (cx, cy) = if n.len() >= 3 { (n[1], n[2]) } else { (0.0, 0.0) };
+            vec![st("op", OPS[2]), st("angle", angle), f("cx", hold(cx, -10.0, 10.0, "a centre at")), f("cy", hold(cy, -10.0, 10.0, "a centre at"))]
+        }
+        "dilate" | "dilation" | "enlarge" | "enlargement" | "scale" => {
+            let n = numbers_in(rest);
+            let Some(&k) = n.first() else { return Err("a dilation needs its scale factor: dilate 2".into()) };
+            if k <= 0.0 { return Err("a scale factor must be above 0".into()); }
+            let (cx, cy) = if n.len() >= 3 { (n[1], n[2]) } else { (0.0, 0.0) };
+            vec![st("op", OPS[3]), f("scale", hold(k, 0.1, 5.0, "a scale factor of")), f("cx", hold(cx, -10.0, 10.0, "a centre at")), f("cy", hold(cy, -10.0, 10.0, "a centre at"))]
+        }
+        _ => return Err("start with translate, reflect, rotate or dilate".into()),
+    };
+    Ok((keys, look, notes))
+}
+
+/// The "Then" lines, by line number: each read as a transformation or the reason it could not be. Blank lines are
+/// skipped.
+fn then_lines(p: &Params) -> Vec<(usize, Result<(Vec<(&'static str, Value)>, Look, Vec<String>), String>)> {
+    p.s("then").split('\n').enumerate().filter(|(_, l)| !l.trim().is_empty()).map(|(i, l)| (i, parse_step(l))).collect()
+}
+
+/// Every transformation in turn: the first (from its own controls), then each "Then" line that reads as one, up to
+/// [`MAX_STEPS`] in all.
+pub fn steps(p: &Params) -> Vec<Step> {
+    let mut v = vec![Step { p: p.clone(), look: Look::default(), line: None }];
+    for (i, r) in then_lines(p) {
+        if v.len() >= MAX_STEPS { break; }
+        if let Ok((keys, look, _)) = r {
+            let mut q = p.clone();
+            for (k, val) in keys {
+                match val { Value::F(x) => q.set_f(k, x), Value::S(s) => q.set_s(k, &s), _ => {} }
+            }
+            v.push(Step { p: q, look, line: Some(i) });
+        }
+    }
+    v
+}
+
+/// A "Then" line as the figure writes it back after its centre or mirror line is dragged: the transformation, then
+/// the words of its look.
+fn step_line(q: &Params, look: &Look) -> String {
+    let n = |v: f64| num(v, 2).replace('\u{2212}', "-");
+    let (a, b) = centre(q);
+    let mut s = match q.s("op") {
+        "Reflect" => match q.s("axis") {
+            "the x-axis" => "reflect in the x-axis".to_string(),
+            "the y-axis" => "reflect in the y-axis".to_string(),
+            _ => format!("reflect in {}", line_name(q).unwrap_or_default().replace('\u{2212}', "-")),
+        },
+        "Rotate" => {
+            let turn = match q.s("angle") {
+                "180 degrees" => "180",
+                "270 degrees anticlockwise" => "270 anticlockwise",
+                "90 degrees clockwise" => "90 clockwise",
+                "270 degrees clockwise" => "270 clockwise",
+                _ => "90 anticlockwise",
+            };
+            format!("rotate {turn} about ({}, {})", n(a), n(b))
+        }
+        "Dilate" => format!("dilate {} about ({}, {})", factor_text(factor(q)).replace('\u{2212}', "-"), n(a), n(b)),
+        _ => format!("translate {}, {}", n(fin(q.f("dx"), -8.0, 8.0, 0.0)), n(fin(q.f("dy"), -8.0, 8.0, 0.0))),
+    };
+    if let Some(c) = look.colour.and_then(|c| COLOUR_WORDS.iter().find(|(_, h)| *h == c)) { s.push_str(&format!(" {}", c.0)); }
+    match look.stroke {
+        Some(Stroke::Solid) => s.push_str(" solid"),
+        Some(Stroke::Dashed) => s.push_str(" dashed"),
+        Some(Stroke::Dotted) => s.push_str(" dotted"),
+        _ => {}
+    }
+    if let Some(w) = look.weight { s.push_str(if w == weight_px("Thin") { " thin" } else if w == weight_px("Thick") { " thick" } else { " medium" }); }
+    s
+}
+
+/// Writes `text` into "Then" line `i`, every other line kept exactly as typed.
+fn set_then_line(p: &mut Params, i: usize, text: &str) {
+    let mut lines: Vec<String> = p.s("then").split('\n').map(str::to_string).collect();
+    if let Some(l) = lines.get_mut(i) {
+        // a line typed with a Windows line ending keeps it
+        *l = if l.ends_with('\r') { format!("{text}\r") } else { text.to_string() };
+    }
+    p.set_s("then", &lines.join("\n"));
+}
+
+/// A line thickness in px.
+fn weight_px(w: &str) -> f64 { match w { "Thin" => 1.5, "Thick" => 4.0, _ => 2.5 } }
+
+/// A scale factor as the rule writes it: 2, 0.5, or a third as 1/3 rather than 0.33.
+fn factor_text(k: f64) -> String {
+    if ((k * 100.0).round() - k * 100.0).abs() < 1e-9 { return num(k, 2); }
+    for d in [3.0, 6.0, 7.0, 9.0, 12.0] {
+        let n = k * d;
+        if (n - n.round()).abs() < 1e-9 { return format!("{}/{}", n.round() as i64, d as i64); }
+    }
+    num(k, 2)
 }
 
 /// `a x + b y + c` as a rule writes it: `x`, `−y + 3`, `2x − 1`, `0`.
@@ -205,7 +541,7 @@ fn rule_name(p: &Params) -> String {
             // about the origin a turn reads as it always did: only the half turn names the origin
             if a == 0.0 && b == 0.0 && p.s("angle") != "180 degrees" { turn.to_string() } else { format!("{turn} about {about}") }
         }
-        "Dilate" => format!("enlarge by {} about {about}", num(fin(p.f("scale"), 0.5, 3.0, 1.0), 2)),
+        "Dilate" => format!("enlarge by {} about {about}", factor_text(factor(p))),
         _ => "translate".into(),
     }
 }
@@ -221,7 +557,7 @@ pub fn rule_text(p: &Params) -> String {
     }
     // an enlargement about the origin keeps its old wording, which writes the factor even when it is 1 (1x, 1y)
     if p.s("op") == "Dilate" && centre(p) == (0.0, 0.0) {
-        let k = num(fin(p.f("scale"), 0.5, 3.0, 1.0), 2);
+        let k = factor_text(factor(p));
         return format!("{}: (x, y) \u{2192} ({k}x, {k}y)", rule_name(p));
     }
     let o = map_point(p, (0.0, 0.0));
@@ -236,6 +572,22 @@ pub fn warnings(p: &Params) -> Vec<String> {
     let mut w = Vec::new();
     if vertices(p).is_empty() {
         w.push("No pre-image yet: type its vertices, one x, y pair per line.".to_string());
+    }
+    let mut read = 1;
+    for (i, r) in then_lines(p) {
+        match r {
+            Err(e) => w.push(format!("Then, line {}: {e}; it is left out.", i + 1)),
+            Ok((_, _, notes)) => {
+                read += 1;
+                if read > MAX_STEPS {
+                    w.push(format!("Then, line {}: at most {MAX_STEPS} transformations in all; it is left out.", i + 1));
+                }
+                for n in notes { w.push(format!("Then, line {}: {n}.", i + 1)); }
+            }
+        }
+    }
+    if layout(p).clipped {
+        w.push("An image runs past the largest grid (120 each way) and is cut off at its edge.".to_string());
     }
     w
 }
@@ -291,6 +643,7 @@ impl Frame {
     pub fn to_xy(&self, s: Pt) -> Pt { (self.x0 + (s.0 - self.ox) / self.u, self.y1 - (s.1 - self.oy) / self.u) }
     fn gw(&self) -> f64 { (self.x1 - self.x0) * self.u }
     fn gh(&self) -> f64 { (self.y1 - self.y0) * self.u }
+    fn holds(&self, q: Pt) -> bool { q.0 >= self.x0 - 1e-9 && q.0 <= self.x1 + 1e-9 && q.1 >= self.y0 - 1e-9 && q.1 <= self.y1 + 1e-9 }
 }
 
 /// The plot area's side and the canvas width: the fitted (pre-November 2026) figure keeps its old, smaller canvas.
@@ -299,7 +652,9 @@ fn plot_size(p: &Params) -> (f64, f64) { if p.b("fit") { (340.0, 470.0) } else {
 /// Upgrades a transformations figure saved before the grid range existed (its spec has none of the range keys, not
 /// merely their defaults): it turns "Shrink the grid to the shapes" on, so the figure opens exactly as it was saved.
 /// Every other old key (op, dx, dy, axis, angle, scale) means what it meant: the old choices are still options, and
-/// the new keys (vertices, centre, line number) default to the old fixed triangle, the origin and no line.
+/// the new keys (vertices, centre, line number) default to the old fixed triangle, the origin and no line. The keys
+/// batch 6 added (Then, letters, versions, looks, the grid's settings) all default to the look a figure had before
+/// them, so nothing needs upgrading for them.
 pub fn migrate(spec: &crate::model::FigureSpec, p: &mut Params) {
     if !["x_from", "x_to", "y_from", "y_to"].iter().any(|k| spec.params.contains_key(*k)) {
         p.set_b("fit", true);
@@ -309,7 +664,8 @@ pub fn migrate(spec: &crate::model::FigureSpec, p: &mut Params) {
 /// Whether param `key` applies to the chosen transformation (the panel hides the rest; hidden values are kept, so
 /// switching back restores them): the shifts for a translation, the line for a reflection (its number only for a line
 /// that has one), the turn for a rotation, the factor for an enlargement, the centre for both of those, the range
-/// unless the grid is shrunk to the shapes.
+/// unless the grid is shrunk to the shapes, a title's text only when it is written, the in-between images only when
+/// there are some.
 pub fn relevant(key: &str, p: &Params) -> bool {
     let op = p.s("op");
     match key {
@@ -320,6 +676,16 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "scale" => op == "Dilate",
         "cx" | "cy" => matches!(op, "Rotate" | "Dilate"),
         "x_from" | "x_to" | "y_from" | "y_to" => !p.b("fit"),
+        "title" => p.s("title_mode") == "Text",
+        "xtitle" => p.s("xtitle_mode") == "Text",
+        "ytitle" => p.s("ytitle_mode") == "Text",
+        "show_between" => !p.s("then").trim().is_empty(),
+        // the question copy is a student copy: offered once Show answers is off
+        "question" => !p.b(SHOW_ANSWERS),
+        // the images' looks only while an image is drawn; arrows only on the key, for a translation
+        "image_colour" | "image_line" | "image_weight" => p.b(SHOW_ANSWERS) || p.b("question"),
+        "show_arrows" => p.b(SHOW_ANSWERS) && steps(p).iter().any(|st| st.p.s("op") == "Translate"),
+        "show_guides" => steps(p).iter().any(|st| st.p.s("op") != "Translate"),
         _ => true,
     }
 }
@@ -329,25 +695,51 @@ fn stated(p: &Params) -> (f64, f64, f64, f64) {
     (p.i("x_from").clamp(-30, 0) as f64, p.i("x_to").clamp(0, 30) as f64, p.i("y_from").clamp(-30, 0) as f64, p.i("y_to").clamp(0, 30) as f64)
 }
 
-/// Everything the drawing and the handles share: the pre-image, its image and the grid.
+/// Whether a title is drawn: written text, or a blank line for the student to fill.
+fn shows_title(p: &Params, mode: &str, text: &str) -> bool {
+    match p.s(mode) { "Text" => !p.s(text).trim().is_empty(), "Blank line" => true, _ => false }
+}
+
+/// Room above the grid: for the chart title, and for the y-axis letter at the top end.
+fn top_room(p: &Params) -> (f64, f64) {
+    let f = svg::label_factor(p.s("label_size"));
+    let title = if shows_title(p, "title_mode", "title") { 30.0 * f } else { 0.0 };
+    let letter = if p.s("y_label").trim().is_empty() { 0.0 } else { 16.0 * f };
+    (title, letter)
+}
+
+/// Everything the drawing and the handles share: the pre-image, its images and the grid.
 pub struct Layout {
     pub pre: Vec<Pt>,
+    /// The last image (the image, when there is one transformation).
     pub image: Vec<Pt>,
+    /// Every image in turn: `images[k]` is what transformation k makes of the one before.
+    pub images: Vec<Vec<Pt>>,
+    pub steps: Vec<Step>,
     pub frame: Frame,
+    /// Some image runs past the largest grid and is cut off at its edge.
+    pub clipped: bool,
 }
 
 pub fn layout(p: &Params) -> Layout {
     let pre = vertices(p);
-    let image: Vec<Pt> = pre.iter().map(|&q| map_point(p, q)).collect();
+    let steps = steps(p);
+    let mut images: Vec<Vec<Pt>> = Vec::new();
+    for st in &steps {
+        let from = images.last().unwrap_or(&pre);
+        let next: Vec<Pt> = from.iter().map(|&q| map_point(&st.p, q)).collect();
+        images.push(next);
+    }
+    let image = images.last().cloned().unwrap_or_default();
     let fit = p.b("fit");
-    // the shapes that decide the grid: both of them, answers or not, since a student has to plot the image and the
-    // room for it must be there. Fitting leaves a hidden pre-image out (the old fitted look); a stated range keeps it,
-    // so hiding it does not move the grid under a vertex being dragged.
+    // the shapes that decide the grid: all of them, answers or not, since a student has to plot the images and the
+    // room for them must be there. Fitting leaves a hidden pre-image out (the old fitted look); a stated range keeps
+    // it, so hiding it does not move the grid under a vertex being dragged.
     let mut pts: Vec<Pt> = Vec::new();
     if p.b("show_pre") || !fit { pts.extend(pre.iter().copied()); }
-    pts.extend(image.iter().copied());
+    for im in &images { pts.extend(im.iter().copied()); }
     // the centre of a turn or an enlargement is drawn, so the grid takes it in too
-    if has_centre(p) { pts.push(centre(p)); }
+    for st in &steps { if has_centre(&st.p) { pts.push(centre(&st.p)); } }
     let lim = 4.0 * VMAX;
     let lo = |v: f64| v.clamp(-lim, lim);
     let (mut x0, mut x1, mut y0, mut y1) = if fit {
@@ -376,13 +768,17 @@ pub fn layout(p: &Params) -> Layout {
     let (plot, _) = plot_size(p);
     let u = (plot / (x1 - x0)).min(plot / (y1 - y0));
     let (gw, gh) = ((x1 - x0) * u, (y1 - y0) * u);
-    let frame = Frame { x0, x1, y0, y1, u, ox: L + (plot - gw) / 2.0, oy: T + (plot - gh) / 2.0 };
-    Layout { pre, image, frame }
+    let (title, letter) = top_room(p);
+    let frame = Frame { x0, x1, y0, y1, u, ox: L + (plot - gw) / 2.0, oy: T + title + letter + (plot - gh) / 2.0 };
+    let clipped = pts.iter().any(|&q| !frame.holds(q));
+    Layout { pre, image, images, steps, frame, clipped }
 }
 
 pub struct Report {
-    /// The image's vertices, in the same order as the pre-image.
+    /// The last image's vertices, in the same order as the pre-image.
     pub image: Vec<Pt>,
+    /// Every image in turn.
+    pub images: Vec<Vec<Pt>>,
     /// The grid's extent in units (used by tests to check the grid covers both shapes).
     pub bounds: (f64, f64, f64, f64),
     pub labels: Vec<Rect>,
@@ -408,7 +804,7 @@ fn box_cost(r: &Rect, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt, f64)]) -> f
 /// least blocked one is used. `sides` carries a weight per side: the other figure's edges and the mirror line weigh
 /// more than the letter's own figure, so a letter is kept clear of them first.
 #[allow(clippy::too_many_arguments)]
-fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt, f64)]) -> (f64, f64, &'static str) {
+fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt, f64)], page: (f64, f64)) -> (f64, f64, &'static str) {
     let n = pts.len() as f64;
     let c = (pts.iter().map(|q| q.0).sum::<f64>() / n, pts.iter().map(|q| q.1).sum::<f64>() / n);
     let (vx, vy) = (fr.px(pts[i].0), fr.py(pts[i].1));
@@ -426,11 +822,17 @@ fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[
     let own_dot = |d: &&Pt| (d.0 - vx).abs() + (d.1 - vy).abs() > 1.0;
     let dots: Vec<Pt> = dots.iter().filter(own_dot).copied().collect();
     let mut best = (f64::MAX, at(dx, dy, 4.0));
-    for gap in [4.0, 8.0, 13.0] {
+    // a long label (typed letters, coordinates) may need to stand further off to find a clear spot; a plain letter
+    // (A, A') searches as it always did
+    let gaps: &[f64] = if text.chars().count() > 2 { &[4.0, 8.0, 13.0, 20.0, 28.0] } else { &[4.0, 8.0, 13.0] };
+    for &gap in gaps {
         for turn in [0.0f64, 45.0, -45.0, 90.0, -90.0, 135.0, -135.0, 180.0, 22.5, -22.5, 67.5, -67.5, 112.5, -112.5, 157.5, -157.5] {
             let (s, co) = turn.to_radians().sin_cos();
             let spot = at(dx * co - dy * s, dx * s + dy * co, gap);
-            let k = box_cost(&text_rect(spot.0, spot.1, size, spot.2, text), taken, &dots, sides);
+            let r = text_rect(spot.0, spot.1, size, spot.2, text);
+            // off the page is the worst place of all (a long letter with its coordinates at the grid's edge)
+            let off = if r.x0 < 1.0 || r.y0 < 1.0 || r.x1 > page.0 - 1.0 || r.y1 > page.1 - 1.0 { 1000.0 } else { 0.0 };
+            let k = box_cost(&r, taken, &dots, sides) + off;
             if k == 0.0 { return spot; }
             if k < best.0 { best = (k, spot); }
         }
@@ -438,77 +840,216 @@ fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[
     best.1
 }
 
+/// The `stroke-dasharray` (and round caps for dots) a line style draws with at width `sw`; empty for a solid line.
+fn dash_attr(s: Stroke, sw: f64) -> String {
+    match s {
+        Stroke::Solid => String::new(),
+        Stroke::Dashed => r#" stroke-dasharray="7 5""#.to_string(),
+        // dots: a dash of next to nothing with round caps, so each is a round dot as wide as the line
+        Stroke::Dotted => format!(r#" stroke-dasharray="0.01 {:.1}" stroke-linecap="round""#, sw * 1.6 + 3.0),
+        Stroke::DashDot => format!(r#" stroke-dasharray="10 {g:.1} 0.01 {g:.1}" stroke-linecap="round""#, g = sw + 3.5),
+        Stroke::Short => r#" stroke-dasharray="3 3""#.to_string(),
+    }
+}
+
+fn stroke_choice(s: &str) -> Option<Stroke> {
+    match s { "Solid" => Some(Stroke::Solid), "Dashed" => Some(Stroke::Dashed), "Dotted" => Some(Stroke::Dotted), _ => None }
+}
+
+/// One figure as drawn: the pre-image (`k` = 0) or the image of transformation `k` - 1.
+struct Drawn {
+    k: usize,
+    pts: Vec<Pt>,
+    col: String,
+    sw: f64,
+    stroke: Stroke,
+    letters: Vec<String>,
+}
+
 pub fn build(p: &Params) -> (String, Report) {
     let dec = p.i("dec").clamp(0, 2);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
+    // the question copy: both figures drawn, the transformation left to name
+    let qv = !ans && p.b("question");
     let f = svg::label_factor(p.s("label_size"));
-    let Layout { pre, image, frame: fr } = layout(p);
+    let Layout { pre, image, images, steps, frame: fr, clipped } = layout(p);
+    let n = steps.len();
     let show_pre = p.b("show_pre");
     let closed = p.b("closed");
     let (ox, oy, gw, gh) = (fr.ox, fr.oy, fr.gw(), fr.gh());
     let (x0, x1, y0, y1) = (fr.x0, fr.x1, fr.y0, fr.y1);
     let px = |x: f64| fr.px(x);
     let py = |y: f64| fr.py(y);
+    let names = vertex_names(p);
+    let (title_room, letter_room) = top_room(p);
+    // which images are drawn (and listed): the last one, the in-between ones when asked; on the key or the question
+    let listed = |k: usize| k + 1 == n || p.b("show_between");
+    let drawn_img = |k: usize| (ans || qv) && listed(k);
+    // mirror lines and centres: part of the question on the student copy, the answer on the question copy
+    let guides = p.b("show_guides") && !qv;
 
-    let (ink, image_col, pre_col, grid) = (if print { "#555555" } else { INK }, if print { IMAGE_PRINT } else { IMAGE_COLOUR }, if print { PRE_PRINT } else { PRE_COLOUR }, if print { GRID_PRINT } else { GRID_COLOUR });
+    let (ink, pre_col, grid) = (if print { "#555555" } else { INK }, if print { PRE_PRINT.to_string() } else { p.s("pre_colour").to_string() }, if print { GRID_PRINT } else { GRID_COLOUR });
     // the fitted figure is drawn exactly as before the grid range existed (saved figures from then open with it on):
     // its canvas, its letters at fixed offsets, no vertex dots, its axis numbers and its one-line readout
     let old = p.b("fit");
     let (plot, wbase) = plot_size(p);
-    let rows_y0 = T + plot + 30.0;
+    // under the grid: the x-axis title (below the numbers when the x-axis is the grid's bottom edge), then the readout
+    let xtitle = shows_title(p, "xtitle_mode", "xtitle");
+    let xtitle_room = if xtitle { 26.0 * f + if y0 >= 0.0 { 14.0 } else { 0.0 } } else { 0.0 };
+    let rows_y0 = T + title_room + letter_room + plot + 30.0 + xtitle_room;
     let cw = (wbase * (1.0 + 0.75 * (f - 1.0))).max(wbase);
 
-    // the readout under the grid: the rule, then the image vertices, wrapped to the canvas
+    // the readout under the grid: the rules, then the image vertices, wrapped to the canvas
     let room = cw - L * 0.8;
     let fs = ROW_FS * f;
     let mut rows: Vec<String> = Vec::new();
-    let rule = rule_text(p);
-    let row1 = format!("Rule  {rule}");
-    match rule.split_once(": ") {
-        Some((name, map)) if !old && tw(&row1, fs, false) > room => {
-            rows.push(format!("Rule  {name}:"));
-            rows.push(format!("      {map}"));
+    for (k, st) in steps.iter().enumerate() {
+        let head = if k == 0 { "Rule" } else { "Then" };
+        let rule = if qv { RULE_BLANK.to_string() } else { rule_text(&st.p) };
+        let row1 = format!("{head}  {rule}");
+        match rule.split_once(": ") {
+            Some((name, map)) if !old && tw(&row1, fs, false) > room => {
+                rows.push(format!("{head}  {name}:"));
+                rows.push(format!("      {map}"));
+            }
+            _ => rows.push(row1),
         }
-        _ => rows.push(row1),
     }
-    let v = |i: usize| if ans { format!("{}\u{2032}({}, {})", NAMES[i], num(image[i].0, dec), num(image[i].1, dec)) } else { format!("{}\u{2032}({BLANK})", NAMES[i]) };
-    let mut line = "Image ".to_string();
-    for i in 0..image.len() {
-        let item = format!(" {}{}", v(i), if i + 1 < image.len() { "," } else { "" });
-        if line.trim() != "Image" && (!old || image.len() > 3) && tw(&format!("{line}{item}"), fs, false) > room {
+    if p.b("coord_list") {
+        for (k, im) in images.iter().enumerate().filter(|(k, _)| listed(*k)) {
+            let v = |i: usize| {
+                let nm = format!("{}{}", names[i], primes(k));
+                if ans || qv { format!("{nm}({}, {})", num(im[i].0, dec), num(im[i].1, dec)) } else { format!("{nm}({BLANK})") }
+            };
+            let mut line = "Image ".to_string();
+            for i in 0..im.len() {
+                let item = format!(" {}{}", v(i), if i + 1 < im.len() { "," } else { "" });
+                if line.trim() != "Image" && (!old || im.len() > 3) && tw(&format!("{line}{item}"), fs, false) > room {
+                    rows.push(line);
+                    line = "      ".to_string();
+                }
+                line.push_str(&item);
+            }
+            if im.is_empty() { line.push_str(" \u{2014}"); }
             rows.push(line);
-            line = "      ".to_string();
         }
-        line.push_str(&item);
     }
-    if image.is_empty() { line.push_str(" \u{2014}"); }
-    rows.push(line);
 
-    let mut d = Doc::new(cw, rows_y0 + rows.len() as f64 * ROW_H * f + 8.0);
-    d.describe("Transformations", if old { "A triangle and its image after a transformation, on one coordinate grid" } else { "A shape and its image after a transformation, on one coordinate grid" });
+    let page = (cw, rows_y0 + rows.len() as f64 * ROW_H * f + 8.0);
+    let mut d = Doc::new(page.0, page.1);
+    let desc = if n > 1 {
+        format!("A shape and its images after {n} transformations, one after another, on one coordinate grid")
+    } else if old {
+        "A triangle and its image after a transformation, on one coordinate grid".to_string()
+    } else {
+        "A shape and its image after a transformation, on one coordinate grid".to_string()
+    };
+    d.describe("Transformations", &desc);
 
-    // the grid: one line per unit
-    let mut k = x0.ceil();
-    while k <= x1 + 1e-9 { d.line(px(k), oy, px(k), oy + gh, grid, 1.0); k += 1.0; }
-    let mut k = y0.ceil();
-    while k <= y1 + 1e-9 { d.line(ox, py(k), ox + gw, py(k), grid, 1.0); k += 1.0; }
-    // the axes
+    // the grid: a line every count-by units (and at the grid's edges), minor lines between them
+    let (xs, ys) = (p.i("x_step").clamp(1, 10) as f64, p.i("y_step").clamp(1, 10) as f64);
+    let (grid_col, grid_w) = match p.s("gridlines") {
+        "Light" => (if print { "#b4b4b4" } else { "#f0f3f7" }, 1.0),
+        "Bold" => (if print { "#4a4a4a" } else { "#b9c3d0" }, 1.4),
+        "None" => ("", 0.0),
+        _ => (grid, 1.0),
+    };
+    let minor = match p.s("minor") { "2 per block" => 2.0, "4 per block" => 4.0, "5 per block" => 5.0, _ => 0.0 };
+    if minor > 0.0 {
+        let mcol = if print { "#bdbdbd" } else { "#f1f4f8" };
+        for (step, from, to, vertical) in [(xs, x0, x1, true), (ys, y0, y1, false)] {
+            let ms = step / minor;
+            if ms * fr.u < 4.0 { continue; }
+            let mut k = (from / ms).ceil() * ms;
+            while k <= to + 1e-9 {
+                if ((k / step) - (k / step).round()).abs() > 1e-6 {
+                    if vertical { d.line(px(k), oy, px(k), oy + gh, mcol, 0.6); } else { d.line(ox, py(k), ox + gw, py(k), mcol, 0.6); }
+                }
+                k += ms;
+            }
+        }
+    }
+    if grid_w > 0.0 {
+        if xs == 1.0 {
+            let mut k = x0.ceil();
+            while k <= x1 + 1e-9 { d.line(px(k), oy, px(k), oy + gh, grid_col, grid_w); k += 1.0; }
+        } else {
+            let mut ks = vec![x0];
+            let mut k = (x0 / xs).ceil() * xs;
+            while k <= x1 + 1e-9 { if (k - x0).abs() > 1e-9 { ks.push(k); } k += xs; }
+            if (ks[ks.len() - 1] - x1).abs() > 1e-9 { ks.push(x1); }
+            for k in ks { d.line(px(k), oy, px(k), oy + gh, grid_col, grid_w); }
+        }
+        if ys == 1.0 {
+            let mut k = y0.ceil();
+            while k <= y1 + 1e-9 { d.line(ox, py(k), ox + gw, py(k), grid_col, grid_w); k += 1.0; }
+        } else {
+            let mut ks = vec![y0];
+            let mut k = (y0 / ys).ceil() * ys;
+            while k <= y1 + 1e-9 { if (k - y0).abs() > 1e-9 { ks.push(k); } k += ys; }
+            if (ks[ks.len() - 1] - y1).abs() > 1e-9 { ks.push(y1); }
+            for k in ks { d.line(ox, py(k), ox + gw, py(k), grid_col, grid_w); }
+        }
+    }
+    // the axes, with arrowheads past the grid's edge when asked
     d.line(ox, py(0.0), ox + gw, py(0.0), ink, 1.8);
     d.line(px(0.0), oy, px(0.0), oy + gh, ink, 1.8);
+    let ends = p.s("ends");
+    if ends != "None" {
+        let tip = 11.0;
+        d.arrow(ox + gw - 1.0, py(0.0), ox + gw + tip, py(0.0), ink, 1.8);
+        d.arrow(px(0.0), oy + 1.0, px(0.0), oy - tip, ink, 1.8);
+        if ends == "Both ends" {
+            d.arrow(ox + 1.0, py(0.0), ox - tip, py(0.0), ink, 1.8);
+            d.arrow(px(0.0), oy + gh - 1.0, px(0.0), oy + gh + tip, ink, 1.8);
+        }
+    }
     // a reflected shape needs its mirror line: every line but the two axes is drawn as a dashed helper, named at its
     // upper end (on the student copy too: the line is part of the question)
-    let mut line_label: Option<(Pt, Pt, String)> = None;
-    let mut mirror_side: Option<(Pt, Pt)> = None;
-    if p.s("op") == "Reflect"
-        && let (Some((a, b)), Some(name)) = (mirror_seg(p, &fr), line_name(p))
-        && let Some((s, e)) = clip_seg(px(a.0), py(a.1), px(b.0), py(b.1), ox, oy, ox + gw, oy + gh)
-    {
-        d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{pre_col}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, s.0, s.1, e.0, e.1));
-        mirror_side = Some((s, e));
-        // the upper end (the right one on a level line): the name is placed later, once the letters are down
-        let (top, other) = if e.1 < s.1 - 1e-6 || ((e.1 - s.1).abs() <= 1e-6 && e.0 > s.0) { (e, s) } else { (s, e) };
-        if !old || p.s("axis").ends_with('a') { line_label = Some((top, other, name)); }
+    let mut line_labels: Vec<(Pt, Pt, String)> = Vec::new();
+    let mut mirror_sides: Vec<(Pt, Pt)> = Vec::new();
+    for st in steps.iter().filter(|_| guides) {
+        let q = &st.p;
+        if q.s("op") == "Reflect"
+            && let (Some((a, b)), Some(name)) = (mirror_seg(q, &fr), line_name(q))
+            && let Some((s, e)) = clip_seg(px(a.0), py(a.1), px(b.0), py(b.1), ox, oy, ox + gw, oy + gh)
+        {
+            d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, s.0, s.1, e.0, e.1, if print { PRE_PRINT } else { PRE_COLOUR }));
+            mirror_sides.push((s, e));
+            // the upper end (the right one on a level line): the name is placed later, once the letters are down
+            let (top, other) = if e.1 < s.1 - 1e-6 || ((e.1 - s.1).abs() <= 1e-6 && e.0 > s.0) { (e, s) } else { (s, e) };
+            // a line drawn twice (two reflections in the same line) is named once
+            if (!old || q.s("axis").ends_with('a')) && !line_labels.iter().any(|l| l.2 == name) { line_labels.push((top, other, name)); }
+        }
+    }
+
+    // every figure drawn, in turn: its colour, thickness and line, and its letters
+    let (pt_letters, pt_coords) = match p.s("pt_labels") { "None" => (false, false), "Letters and coordinates" => (true, true), _ => (true, false) };
+    let mut figs: Vec<Drawn> = Vec::new();
+    if show_pre && !pre.is_empty() {
+        let under = ans || qv;
+        let stroke = stroke_choice(p.s("pre_line")).unwrap_or(if under { Stroke::Dashed } else { Stroke::Solid });
+        let sw = match p.s("pre_weight") { "Automatic" => if under { 2.0 } else { 2.6 }, w => weight_px(w) };
+        let letters = (0..pre.len()).map(|i| if pt_coords { format!("{}({}, {})", names[i], num(pre[i].0, dec), num(pre[i].1, dec)) } else { names[i].clone() }).collect();
+        figs.push(Drawn { k: 0, pts: pre.clone(), col: pre_col.clone(), sw, stroke, letters });
+    }
+    for (k, im) in images.iter().enumerate() {
+        if !drawn_img(k) || im.is_empty() { continue; }
+        let last = k + 1 == n;
+        let look = &steps[k].look;
+        let between = [Stroke::Dotted, Stroke::DashDot, Stroke::Short][k.min(2)];
+        let (col, stroke, sw) = if k == 0 {
+            (p.s("image_colour").to_string(), stroke_choice(p.s("image_line")).unwrap_or(if last { Stroke::Solid } else { between }), match p.s("image_weight") { "Automatic" => if last { 3.0 } else { 2.2 }, w => weight_px(w) })
+        } else {
+            (look.colour.unwrap_or(STEP_COLOURS[(k - 1).min(2)]).to_string(), look.stroke.unwrap_or(if last { Stroke::Solid } else { between }), look.weight.unwrap_or(if last { 3.0 } else { 2.2 }))
+        };
+        let col = if print { if last { IMAGE_PRINT.to_string() } else { "#444444".to_string() } } else { col };
+        let letters = (0..im.len()).map(|i| {
+            let nm = format!("{}{}", names[i], primes(k));
+            if pt_coords { format!("{nm}({}, {})", num(im[i].0, dec), num(im[i].1, dec)) } else { nm }
+        }).collect();
+        figs.push(Drawn { k: k + 1, pts: im.clone(), col, sw, stroke, letters });
     }
 
     let mut labels: Vec<Rect> = Vec::new();
@@ -518,38 +1059,35 @@ pub fn build(p: &Params) -> (String, Report) {
         labels.push(text_rect(x, y, size, anchor, s));
     }
     // one shape: its sides (closed back to the first vertex when asked), a dot on each vertex
-    let shape = |d: &mut Doc, pts: &[Pt], col: &str, sw: f64, dashed: bool| {
+    let shape = |d: &mut Doc, pts: &[Pt], col: &str, sw: f64, stroke: Stroke| {
+        let mut poly: Vec<Pt> = pts.iter().map(|&q| fr.to_svg(q)).collect();
+        if closed && pts.len() >= 3 { poly.push(poly[0]); }
+        let pts_attr = || poly.iter().map(|q| format!("{:.2},{:.2}", q.0, q.1)).collect::<Vec<_>>().join(" ");
         if old && pts.len() >= 2 {
             // the old markup: a dashed pre-image as a bare polyline, a solid side through Doc::polyline
-            let mut poly: Vec<Pt> = pts.iter().map(|&q| fr.to_svg(q)).collect();
-            if closed && pts.len() >= 3 { poly.push(poly[0]); }
-            if dashed {
-                d.raw(&format!(
-                    r##"<polyline points="{}" fill="none" stroke="{col}" stroke-width="2.0" stroke-dasharray="7 5"/>"##,
-                    poly.iter().map(|q| format!("{:.2},{:.2}", q.0, q.1)).collect::<Vec<_>>().join(" ")
-                ));
-            } else {
-                d.polyline(&poly, col, sw);
+            match stroke {
+                Stroke::Dashed if sw == 2.0 => {
+                    d.raw(&format!(r##"<polyline points="{}" fill="none" stroke="{col}" stroke-width="2.0" stroke-dasharray="7 5"/>"##, pts_attr()));
+                    return;
+                }
+                Stroke::Solid => {
+                    d.polyline(&poly, col, sw);
+                    return;
+                }
+                _ => {}
             }
-            return;
         }
         if pts.len() >= 2 {
-            let mut poly: Vec<Pt> = pts.iter().map(|&q| fr.to_svg(q)).collect();
-            if closed && pts.len() >= 3 { poly.push(poly[0]); }
-            let dash = if dashed { r#" stroke-dasharray="7 5""# } else { "" };
-            d.raw(&format!(
-                r##"<polyline points="{}" fill="none" stroke="{col}" stroke-width="{sw:.1}" stroke-linejoin="round"{dash}/>"##,
-                poly.iter().map(|q| format!("{:.2},{:.2}", q.0, q.1)).collect::<Vec<_>>().join(" ")
-            ));
+            d.raw(&format!(r##"<polyline points="{}" fill="none" stroke="{col}" stroke-width="{sw:.1}" stroke-linejoin="round"{}/>"##, pts_attr(), dash_attr(stroke, sw)));
         }
-        for q in pts {
-            d.circle(fr.px(q.0), fr.py(q.1), if pts.len() == 1 { 4.0 } else { 2.8 }, col, col, 0.0);
+        if !old || pts.len() < 2 {
+            for q in pts {
+                d.circle(fr.px(q.0), fr.py(q.1), if pts.len() == 1 { 4.0 } else { 2.8 }, col, col, 0.0);
+            }
         }
     };
     // every vertex dot drawn, which no letter may cover
-    let mut dots: Vec<Pt> = Vec::new();
-    if show_pre { dots.extend(pre.iter().map(|&q| fr.to_svg(q))); }
-    if ans { dots.extend(image.iter().map(|&q| fr.to_svg(q))); }
+    let dots: Vec<Pt> = figs.iter().flat_map(|g| g.pts.iter().map(|&q| fr.to_svg(q))).collect();
     // and every side drawn, which no letter may sit on
     let edges = |pts: &[Pt]| -> Vec<(Pt, Pt)> {
         let q: Vec<Pt> = pts.iter().map(|&q| fr.to_svg(q)).collect();
@@ -557,35 +1095,64 @@ pub fn build(p: &Params) -> (String, Report) {
         if closed && q.len() >= 3 { e.push((q[q.len() - 1], q[0])); }
         e
     };
-    // weighted per figure: a letter's own figure 1, the other figure and the mirror line 4
-    let weigh = |e: Vec<(Pt, Pt)>, w: f64| e.into_iter().map(move |(a, b)| (a, b, w));
-    let (pre_e, img_e) = (if show_pre { edges(&pre) } else { Vec::new() }, if ans { edges(&image) } else { Vec::new() });
-    let mirror_e: Vec<(Pt, Pt)> = mirror_side.into_iter().collect();
-    let pre_sides: Vec<(Pt, Pt, f64)> = weigh(pre_e.clone(), 1.0).chain(weigh(img_e.clone(), 4.0)).chain(weigh(mirror_e.clone(), 4.0)).collect();
-    let img_sides: Vec<(Pt, Pt, f64)> = weigh(pre_e.clone(), 4.0).chain(weigh(img_e.clone(), 1.0)).chain(weigh(mirror_e.clone(), 4.0)).collect();
-    let all_sides: Vec<(Pt, Pt, f64)> = weigh(pre_e, 1.0).chain(weigh(img_e, 1.0)).collect();
-    let stroke_sides: Vec<(Pt, Pt, f64)> = all_sides.iter().copied().chain(weigh(mirror_e, 1.0)).collect();
-    // the pre-image, dashed when the image is drawn on top of it
-    if show_pre && !pre.is_empty() {
-        shape(&mut d, &pre, pre_col, if ans { 2.0 } else { 2.6 }, ans);
-        for i in 0..pre.len() {
-            let (x, y, a) = if old { (px(pre[i].0) - 8.0, py(pre[i].1) - 6.0, "end") } else { label_spot(&fr, &pre, i, size, NAMES[i], &labels, &dots, &pre_sides) };
-            put(&mut d, &mut labels, x, y, a, NAMES[i], pre_col, size);
+    let fig_edges: Vec<Vec<(Pt, Pt)>> = figs.iter().map(|g| edges(&g.pts)).collect();
+    // translation arrows: from each vertex of the figure a translation starts from to where it lands, on the key
+    let mut arrows: Vec<(Pt, Pt, String)> = Vec::new();
+    if p.b("show_arrows") && ans {
+        for (k, st) in steps.iter().enumerate() {
+            if st.p.s("op") != "Translate" { continue; }
+            let Some(to) = figs.iter().find(|g| g.k == k + 1) else { continue };
+            let from = if k == 0 { &pre } else { &images[k - 1] };
+            for (a, b) in from.iter().zip(&to.pts) {
+                let (s, e) = (fr.to_svg(*a), fr.to_svg(*b));
+                let len = ((e.0 - s.0).powi(2) + (e.1 - s.1).powi(2)).sqrt();
+                // clear of both vertex dots
+                if len < 20.0 { continue; }
+                let (ux, uy) = ((e.0 - s.0) / len, (e.1 - s.1) / len);
+                arrows.push(((s.0 + ux * 5.0, s.1 + uy * 5.0), (e.0 - ux * 5.0, e.1 - uy * 5.0), to.col.clone()));
+            }
         }
     }
-    // the image
-    if ans && !image.is_empty() {
-        shape(&mut d, &image, image_col, 3.0, false);
-        for i in 0..image.len() {
-            let name = format!("{}\u{2032}", NAMES[i]);
-            let (x, y, a) = if old { (px(image[i].0) + 8.0, py(image[i].1) - 6.0, "start") } else { label_spot(&fr, &image, i, size, &name, &labels, &dots, &img_sides) };
-            put(&mut d, &mut labels, x, y, a, &name, image_col, size);
+    // weighted per figure: a letter's own figure 1, every other figure, the mirror lines and the arrows 4
+    let weigh = |e: &[(Pt, Pt)], w: f64| e.iter().map(move |&(a, b)| (a, b, w)).collect::<Vec<_>>();
+    let arrow_e: Vec<(Pt, Pt)> = arrows.iter().map(|a| (a.0, a.1)).collect();
+    let sides_for = |j: usize| -> Vec<(Pt, Pt, f64)> {
+        let mut v: Vec<(Pt, Pt, f64)> = Vec::new();
+        for (i, e) in fig_edges.iter().enumerate() { v.extend(weigh(e, if i == j { 1.0 } else { 4.0 })); }
+        v.extend(weigh(&mirror_sides, 4.0));
+        v.extend(weigh(&arrow_e, 4.0));
+        v
+    };
+    let all_sides: Vec<(Pt, Pt, f64)> = fig_edges.iter().flat_map(|e| weigh(e, 1.0)).chain(weigh(&arrow_e, 1.0)).collect();
+    let stroke_sides: Vec<(Pt, Pt, f64)> = all_sides.iter().copied().chain(weigh(&mirror_sides, 1.0)).collect();
+    // an image past the largest grid is cut at its edge (its letters left off)
+    if clipped {
+        d.raw(&format!(r#"<clipPath id="tf-grid"><rect x="{ox:.2}" y="{oy:.2}" width="{gw:.2}" height="{gh:.2}"/></clipPath><g clip-path="url(#tf-grid)">"#));
+    }
+    for (s, e, col) in &arrows { d.arrow_with(s.0, s.1, e.0, e.1, col, 1.3, "", false); }
+    for (j, g) in figs.iter().enumerate() {
+        shape(&mut d, &g.pts, &g.col, g.sw, g.stroke);
+        if !pt_letters { continue; }
+        let sides = sides_for(j);
+        // a long label (typed letters, coordinates) is kept off the axes too; a plain letter is placed as it always was
+        let mut long_sides = sides.clone();
+        long_sides.extend([((ox, py(0.0)), (ox + gw, py(0.0)), 2.0), ((px(0.0), oy), (px(0.0), oy + gh), 2.0)]);
+        for i in 0..g.pts.len() {
+            if !fr.holds(g.pts[i]) { continue; }
+            let text = &g.letters[i];
+            let (x, y, a) = match (old, g.k) {
+                (true, 0) if !pt_coords => (px(g.pts[i].0) - 8.0, py(g.pts[i].1) - 6.0, "end"),
+                (true, _) if !pt_coords => (px(g.pts[i].0) + 8.0, py(g.pts[i].1) - 6.0, "start"),
+                _ => label_spot(&fr, &g.pts, i, size, text, &labels, &dots, if text.chars().count() > 2 { &long_sides } else { &sides }, page),
+            };
+            put(&mut d, &mut labels, x, y, a, text, &g.col, size);
         }
     }
+    if clipped { d.raw("</g>"); }
 
     // the mirror line's name: near its upper end, on whichever side and as far along as keeps it off both axes, the
     // figures, their letters and the line itself (an axis through "x = -1" strikes out the equals sign)
-    if let Some((top, other, name)) = &line_label {
+    for (top, other, name) in &line_labels {
         let ls = 13.0 * f;
         let len = ((other.0 - top.0).powi(2) + (other.1 - top.1).powi(2)).sqrt().max(1e-9);
         let dir = ((other.0 - top.0) / len, (other.1 - top.1) / len);
@@ -593,7 +1160,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let axes = [((ox, py(0.0)), (ox + gw, py(0.0)), 6.0), ((px(0.0), oy), (px(0.0), oy + gh), 6.0)];
         let mut obstacles: Vec<(Pt, Pt, f64)> = all_sides.clone();
         obstacles.extend(axes);
-        obstacles.extend(mirror_side.map(|(a, b)| (a, b, 6.0)));
+        obstacles.extend(mirror_sides.iter().map(|&(a, b)| (a, b, 6.0)));
         let mut best: (f64, (f64, f64, &str)) = (f64::MAX, (0.0, 0.0, "start"));
         'search: for along in [20.0, 45.0, 75.0, 110.0, 150.0, 200.0] {
             if along > len - 10.0 { break; }
@@ -611,49 +1178,133 @@ pub fn build(p: &Params) -> (String, Report) {
         }
         if best.0 == f64::MAX { best.1 = (top.0 + n.0 * 10.0, top.1 + 20.0, if n.0 > 0.2 { "start" } else { "end" }); }
         let (x, y, a) = best.1;
-        put(&mut d, &mut labels, x, y, a, name, pre_col, ls);
+        put(&mut d, &mut labels, x, y, a, name, if print { PRE_PRINT } else { PRE_COLOUR }, ls);
     }
     // the centre of a turn or an enlargement: an open ring (on the student copy too, it is part of the question)
-    if has_centre(p) && !(old && centre(p) == (0.0, 0.0)) {
-        let c = fr.to_svg(centre(p));
-        d.circle(c.0, c.1, 4.5, "#ffffff", ink, 1.8);
+    let mut rings: Vec<Pt> = Vec::new();
+    for st in steps.iter().filter(|_| guides) {
+        if has_centre(&st.p) && !(old && centre(&st.p) == (0.0, 0.0)) && !rings.contains(&centre(&st.p)) {
+            rings.push(centre(&st.p));
+            let c = fr.to_svg(centre(&st.p));
+            d.circle(c.0, c.1, 4.5, "#ffffff", ink, 1.8);
+        }
+    }
+
+    // the axis letters, at the right end of the x-axis (inside the grid's corner when the margin is too narrow) and
+    // the top end of the y-axis; before the numbers, so a number under one is left out
+    let past = if ends != "None" { 15.0 } else { 6.0 };
+    let xl = p.s("x_label").trim();
+    if !xl.is_empty() {
+        let fits = ox + gw + past + tw(xl, size, false) <= cw - 4.0;
+        let (x, y, a) = if fits { (ox + gw + past, py(0.0) + size * 0.35, "start") } else { (ox + gw - 4.0, py(0.0) - 6.0, "end") };
+        put(&mut d, &mut labels, x, y, a, xl, ink, size);
+    }
+    let yl = p.s("y_label").trim();
+    if !yl.is_empty() {
+        put(&mut d, &mut labels, px(0.0) + 8.0, oy - if ends != "None" { 3.0 } else { 4.0 }, "start", yl, ink, size);
     }
 
     // the axis numbers, drawn after the shapes so a side cannot swallow a digit (they carry a halo); every 2nd line,
-    // or every 5th, 10th ... when the units are too small for that
-    // a number is left out where a vertex letter or the line's name already sits: the letter matters more there
-    let number = |d: &mut Doc, x: f64, y: f64, anchor: &str, k: f64| {
+    // or every 5th, 10th ... when the units are too small for that, or as chosen
+    // a number is left out where a vertex letter or the line's name already sits: the letter matters more there, and
+    // where it would touch the number before it
+    let mut last: Option<Rect> = None;
+    // a chosen numbering may be closer than the automatic one's 26 px: a number touching the one before is left out
+    let number = |d: &mut Doc, x: f64, y: f64, anchor: &str, k: f64, last: &mut Option<Rect>, chosen: bool| {
         let t = format!("{}", k as i64);
         let r = text_rect(x, y, 12.0, anchor, &t);
         let hit = labels.iter().any(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1)
             // a side or the mirror line through the number: its white halo would cut a gap in the stroke
-            || box_cost(&Rect { x0: r.x0 + 1.0, y0: r.y0 + 2.0, x1: r.x1 - 1.0, y1: r.y1 }, &[], &[], &stroke_sides) > 0.0;
-        if k.abs() > 0.5 && !hit { d.raw(&text_el(x, y, 12.0, anchor, ink, &t)); }
+            || box_cost(&Rect { x0: r.x0 + 1.0, y0: r.y0 + 2.0, x1: r.x1 - 1.0, y1: r.y1 }, &[], &[], &stroke_sides) > 0.0
+            || (chosen && last.as_ref().is_some_and(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1));
+        if k.abs() > 0.5 && !hit {
+            d.raw(&text_el(x, y, 12.0, anchor, ink, &t));
+            *last = Some(r);
+        }
     };
+    let every = |key: &str, s: f64| -> Option<f64> {
+        match p.s(key) {
+            "Every line" => Some(s),
+            "Every 2nd line" => Some(2.0 * s),
+            "Every 5th line" => Some(5.0 * s),
+            "Every 10th line" => Some(10.0 * s),
+            "No numbers" => None,
+            // automatic: every 2nd line, or every 5th, 10th ... when the units are too small for that (counting by
+            // more than 1, every line when there is room)
+            _ => Some(if s == 1.0 { [2.0, 5.0, 10.0, 20.0, 50.0].into_iter().find(|s| s * fr.u >= 26.0).unwrap_or(100.0) } else { [1.0, 2.0, 5.0, 10.0, 20.0, 50.0].into_iter().map(|m| m * s).find(|s| s * fr.u >= 26.0).unwrap_or(100.0 * s) }),
+        }
+    };
+    let (auto_x, auto_y) = (p.s("x_num") == "Automatic" && xs == 1.0, p.s("y_num") == "Automatic" && ys == 1.0);
     if old {
         // the old numbering: every even line from -6 to 12, never left out
-        let mut k = (x0.max(-6.0)).ceil();
-        while k <= x1.min(12.0) {
-            if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(k), py(0.0) + 16.0, 12.0, "middle", ink, &format!("{}", k as i64))); }
-            k += 1.0;
+        if auto_x {
+            let mut k = (x0.max(-6.0)).ceil();
+            while k <= x1.min(12.0) {
+                if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(k), py(0.0) + 16.0, 12.0, "middle", ink, &format!("{}", k as i64))); }
+                k += 1.0;
+            }
         }
-        let mut k = (y0.max(-6.0)).ceil();
-        while k <= y1.min(12.0) {
-            if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(0.0) - 6.0, py(k) + 4.0, 12.0, "end", ink, &format!("{}", k as i64))); }
-            k += 1.0;
+        if auto_y {
+            let mut k = (y0.max(-6.0)).ceil();
+            while k <= y1.min(12.0) {
+                if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(0.0) - 6.0, py(k) + 4.0, 12.0, "end", ink, &format!("{}", k as i64))); }
+                k += 1.0;
+            }
         }
     }
-    let step = [2.0, 5.0, 10.0, 20.0, 50.0].into_iter().find(|s| s * fr.u >= 26.0).unwrap_or(100.0);
-    let (x0n, y0n) = if old { (f64::INFINITY, f64::INFINITY) } else { (x0, y0) };
-    let mut k = (x0n / step).ceil() * step;
-    while k <= x1 + 1e-9 {
-        number(&mut d, px(k), py(0.0) + 16.0, "middle", k);
-        k += step;
+    if let Some(step) = every("x_num", xs) {
+        let x0n = if old && auto_x { f64::INFINITY } else { x0 };
+        let mut k = (x0n / step).ceil() * step;
+        while k <= x1 + 1e-9 {
+            number(&mut d, px(k), py(0.0) + 16.0, "middle", k, &mut last, !auto_x);
+            k += step;
+        }
     }
-    let mut k = (y0n / step).ceil() * step;
-    while k <= y1 + 1e-9 {
-        number(&mut d, px(0.0) - 6.0, py(k) + 4.0, "end", k);
-        k += step;
+    last = None;
+    if let Some(step) = every("y_num", ys) {
+        let y0n = if old && auto_y { f64::INFINITY } else { y0 };
+        let mut k = (y0n / step).ceil() * step;
+        while k <= y1 + 1e-9 {
+            number(&mut d, px(0.0) - 6.0, py(k) + 4.0, "end", k, &mut last, !auto_y);
+            k += step;
+        }
+    }
+
+    // the titles: the chart's over the grid, the x-axis's under it, the y-axis's up its left side; a blank line for
+    // the student to write on when asked. A title too long for its room is set smaller to fit.
+    let fit_size = |s: &str, want: f64, room: f64| -> f64 { let w = tw(s, want, false); if w > room { (want * room / w).max(8.0) } else { want } };
+    let blank = |d: &mut Doc, cx: f64, y: f64, w: f64| { d.line(cx - w / 2.0, y, cx + w / 2.0, y, ink, 1.2); };
+    if shows_title(p, "title_mode", "title") {
+        let y = T + 22.0 * f - 4.0;
+        if p.s("title_mode") == "Text" {
+            let s = p.s("title").trim();
+            let ts = fit_size(s, 18.0 * f, cw - 24.0);
+            d.raw(&format!(r##"<text x="{:.2}" y="{y:.2}" font-size="{ts:.1}" font-weight="bold" text-anchor="middle" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{ink}">{}</text>"##, cw / 2.0, svg::esc(s)));
+        } else {
+            blank(&mut d, cw / 2.0, y, 240.0 * f);
+        }
+    }
+    if xtitle {
+        let y = oy + gh + if y0 >= 0.0 { 14.0 } else { 0.0 } + 22.0 * f;
+        let cx = ox + gw / 2.0;
+        if p.s("xtitle_mode") == "Text" {
+            let s = p.s("xtitle").trim();
+            let ts = fit_size(s, 15.0 * f, cw - 24.0);
+            d.raw(&format!(r##"<text x="{cx:.2}" y="{y:.2}" font-size="{ts:.1}" text-anchor="middle" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{ink}">{}</text>"##, svg::esc(s)));
+        } else {
+            blank(&mut d, cx, y, 180.0 * f);
+        }
+    }
+    if shows_title(p, "ytitle_mode", "ytitle") {
+        let (x, cy) = (18.0 * f, oy + gh / 2.0);
+        if p.s("ytitle_mode") == "Text" {
+            let s = p.s("ytitle").trim();
+            let ts = fit_size(s, 15.0 * f, gh.max(120.0));
+            d.raw(&format!(r##"<text x="{x:.2}" y="{cy:.2}" font-size="{ts:.1}" text-anchor="middle" transform="rotate(-90 {x:.2} {cy:.2})" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{ink}">{}</text>"##, svg::esc(s)));
+        } else {
+            let w = 180.0 * f;
+            d.line(x, cy - w / 2.0, x, cy + w / 2.0, ink, 1.2);
+        }
     }
 
     for (i, line) in rows.iter().enumerate() {
@@ -665,7 +1316,7 @@ pub fn build(p: &Params) -> (String, Report) {
         ));
     }
 
-    (d.finish(), Report { image, bounds: (x0, x1, y0, y1), labels })
+    (d.finish(), Report { image, images, bounds: (x0, x1, y0, y1), labels })
 }
 
 /// The mirror line across the grid, in units (the axes return `None`: they are drawn already).
@@ -689,14 +1340,77 @@ fn snap(m: f64, cur: f64, lo: f64, hi: f64) -> f64 {
     if !m.is_finite() || (m - cur).abs() < 0.5 { cur } else { m.round().clamp(lo, hi) }
 }
 
-/// The drag handles: every pre-image vertex, snapping to grid points, with the image following live; the centre of a
-/// turn or an enlargement; a mirror line x = a, y = a or y = x + a, y = -x + a.
+/// Where a mirror line's knob sits: where the line passes nearest the middle of the grid.
+fn mirror_knob(q: &Params, fr: &Frame) -> Pt {
+    let a = line_a(q);
+    let (gx, gy) = ((fr.x0 + fr.x1) / 2.0, (fr.y0 + fr.y1) / 2.0);
+    match q.s("axis") {
+        "the line x = a" => (a, gy),
+        "the line y = a" => (gx, a),
+        "the line y = x + a" => { let s = (gx + gy - a) / 2.0; (s, s + a) }
+        _ => { let s = (gx - gy + a) / 2.0; (s, a - s) }
+    }
+}
+
+/// The number a a mirror line takes when dragged to `m` (grid units), snapped to whole units.
+fn mirror_drag(axis: &str, m: Pt, cur: f64) -> f64 {
+    let raw = match axis { "the line x = a" => m.0, "the line y = a" => m.1, "the line y = x + a" => m.1 - m.0, _ => m.1 + m.0 };
+    snap(raw, cur, -10.0, 10.0)
+}
+
+/// The drag handles: every pre-image vertex, snapping to grid points, with the images following live; the centre of
+/// each turn or enlargement; each mirror line x = a, y = a or y = x + a, y = -x + a. A later transformation's centre
+/// or line is written back into its own "Then" line.
 pub fn handles(p: &Params) -> Vec<Handle> {
     let lay = layout(p);
     let fr = lay.frame;
     let mut hs = Vec::new();
     let (lx0, lx1, ly0, ly1) = if p.b("fit") { (fr.x0, fr.x1, fr.y0, fr.y1) } else { stated(p) };
-    let inside = |q: Pt| q.0 >= fr.x0 - 1e-9 && q.0 <= fr.x1 + 1e-9 && q.1 >= fr.y0 - 1e-9 && q.1 <= fr.y1 + 1e-9;
+    let names = vertex_names(p);
+    // the later transformations' centres and lines first, so the first one's (and the vertices) stay on top
+    for (k, st) in lay.steps.iter().enumerate().skip(1).rev() {
+        let Some(line) = st.line else { continue };
+        let q = st.p.clone();
+        let look = st.look;
+        if has_centre(&q) {
+            let (cx0, cx1, cy0, cy1) = (lx0.max(-10.0), lx1.min(10.0), ly0.max(-10.0), ly1.min(10.0));
+            let tip = format!("Drag the centre of transformation {} ({})", k + 1, if q.s("op") == "Rotate" { "the turn" } else { "the enlargement" });
+            let q2 = q.clone();
+            hs.push(Handle::diamond(fr.to_svg(centre(&q)), &tip, move |p, m| {
+                let (mx, my) = fr.to_xy(m);
+                let c = centre(&q2);
+                let to = (snap(mx, c.0, cx0, cx1), snap(my, c.1, cy0, cy1));
+                if to != c {
+                    let mut r = q2.clone();
+                    r.set_f("cx", to.0);
+                    r.set_f("cy", to.1);
+                    set_then_line(p, line, &step_line(&r, &look));
+                }
+            }));
+        }
+        if q.s("op") == "Reflect" && q.s("axis").ends_with('a') {
+            let at = mirror_knob(&q, &fr);
+            if fr.holds(at) {
+                let tip = format!("Drag the mirror line of transformation {}", k + 1);
+                let axis = q.s("axis").to_string();
+                let q2 = q.clone();
+                let drag = move |p: &mut Params, m: Pt| {
+                    let a = line_a(&q2);
+                    let to = mirror_drag(&axis, fr.to_xy(m), a);
+                    if to != a {
+                        let mut r = q2.clone();
+                        r.set_f("line_a", to);
+                        set_then_line(p, line, &step_line(&r, &look));
+                    }
+                };
+                hs.push(match q.s("axis") {
+                    "the line x = a" => Handle::bar(fr.to_svg(at), false, &tip, drag),
+                    "the line y = a" => Handle::bar(fr.to_svg(at), true, &tip, drag),
+                    _ => Handle::knob(fr.to_svg(at), &tip, drag).with_cursor(super::interact::Cursor::Move),
+                });
+            }
+        }
+    }
     // the centre: first, so a pre-image vertex on the same grid point stays on top (the centre can be typed)
     if has_centre(p) {
         let tip = if p.s("op") == "Rotate" { "Drag the centre of rotation" } else { "Drag the centre of enlargement" };
@@ -713,21 +1427,12 @@ pub fn handles(p: &Params) -> Vec<Handle> {
     }
     // a mirror line with a number in it: a knob where it passes nearest the middle of the grid
     if p.s("op") == "Reflect" && p.s("axis").ends_with('a') {
-        let a = line_a(p);
-        let (gx, gy) = ((fr.x0 + fr.x1) / 2.0, (fr.y0 + fr.y1) / 2.0);
-        let axis = p.s("axis").to_string();
-        let at = match axis.as_str() {
-            "the line x = a" => (a, gy),
-            "the line y = a" => (gx, a),
-            "the line y = x + a" => { let s = (gx + gy - a) / 2.0; (s, s + a) }
-            _ => { let s = (gx - gy + a) / 2.0; (s, a - s) }
-        };
-        if inside(at) {
+        let at = mirror_knob(p, &fr);
+        if fr.holds(at) {
+            let axis = p.s("axis").to_string();
             let drag = move |p: &mut Params, m: Pt| {
-                let (mx, my) = fr.to_xy(m);
-                let raw = match axis.as_str() { "the line x = a" => mx, "the line y = a" => my, "the line y = x + a" => my - mx, _ => my + mx };
                 let a = line_a(p);
-                let to = snap(raw, a, -10.0, 10.0);
+                let to = mirror_drag(&axis, fr.to_xy(m), a);
                 if to != a { p.set_f("line_a", to); }
             };
             let tip = "Drag the mirror line";
@@ -739,9 +1444,10 @@ pub fn handles(p: &Params) -> Vec<Handle> {
         }
     }
     // a translation is set by moving its image: drag A' and the whole image follows the pointer, snapping to whole
-    // units (before the pre-image's knobs, so a pre-image vertex under A' stays on top)
-    if p.s("op") == "Translate" && p.b(SHOW_ANSWERS) && !lay.image.is_empty() {
-        hs.push(Handle::square(fr.to_svg(lay.image[0]), "Drag A\u{2032} to set the translation", move |p, m| {
+    // units (before the pre-image's knobs, so a pre-image vertex under A' stays on top). Only where A' is drawn.
+    let first_drawn = lay.steps.len() == 1 || p.b("show_between");
+    if p.s("op") == "Translate" && p.b(SHOW_ANSWERS) && first_drawn && !lay.images[0].is_empty() {
+        hs.push(Handle::square(fr.to_svg(lay.images[0][0]), &format!("Drag {}\u{2032} to set the translation", names[0]), move |p, m| {
             let (mx, my) = fr.to_xy(m);
             let Some(&a) = vertices(p).first() else { return };
             let cur = (fin(p.f("dx"), -8.0, 8.0, 0.0), fin(p.f("dy"), -8.0, 8.0, 0.0));
@@ -778,7 +1484,7 @@ pub fn handles(p: &Params) -> Vec<Handle> {
             p.set_s("pre", &data::pairs_text(&v));
         }));
     } else if translating {
-        hs.push(Handle::area(grid_mid, grid_size, "Click where A\u{2032} should go to set the translation", move |p, m| {
+        hs.push(Handle::area(grid_mid, grid_size, &format!("Click where {}\u{2032} should go to set the translation", names[0]), move |p, m| {
             let Some(q) = point_at(m) else { return };
             let Some(&a) = vertices(p).first() else { return };
             p.set_f("dx", (q.0 - a.0).clamp(-8.0, 8.0));
@@ -794,11 +1500,11 @@ pub fn handles(p: &Params) -> Vec<Handle> {
             let closes = i == 0 && n >= 3;
             let finishes = adding && i + 1 == n && !closes;
             let tip = if closes {
-                format!("Drag vertex {} to a grid point, or click it to {} the shape", NAMES[i], if p.b("closed") && !adding { "open" } else { "close" })
+                format!("Drag vertex {} to a grid point, or click it to {} the shape", names[i], if p.b("closed") && !adding { "open" } else { "close" })
             } else if finishes {
-                format!("Drag vertex {} to a grid point, or click it to finish the {}", NAMES[i], if n == 1 { "point" } else { "path" })
+                format!("Drag vertex {} to a grid point, or click it to finish the {}", names[i], if n == 1 { "point" } else { "path" })
             } else {
-                format!("Drag vertex {} to a grid point", NAMES[i])
+                format!("Drag vertex {} to a grid point", names[i])
             };
             let h = Handle::knob(fr.to_svg(*q), &tip, move |p, m| {
                 let (mx, my) = fr.to_xy(m);
@@ -839,12 +1545,21 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Reflect in the line x = -1", params: vec![s("op", OPS[1]), s("axis", AXES[4]), f("line_a", -1.0)] },
         Example { name: "Turn 90 degrees clockwise about (-1, 2)", params: vec![s("op", OPS[2]), s("angle", ANGLES[3]), f("cx", -1.0), f("cy", 2.0)] },
         Example { name: "Enlarge by 2 from (2, 4)", params: vec![s("op", OPS[3]), f("scale", 2.0), f("cx", 2.0), f("cy", 4.0)] },
+        Example { name: "Reflect in the y-axis, then turn 90 degrees clockwise", params: vec![s("op", OPS[1]), s("axis", AXES[1]), s("then", "rotate 90 clockwise about (0, 0)")] },
+        Example { name: "Name the transformation (question)", params: vec![s("op", OPS[2]), s("angle", ANGLES[1]), (SHOW_ANSWERS, Value::B(false)), ("question", Value::B(true))] },
     ])
 }
 
 /// The figure as it was before batch 2, kept as a fixture: saved figures from then must load and render unchanged.
 #[cfg(test)]
 mod before;
+
+/// The figure as it was before batch 6, kept as a fixture: figures saved or shared from then must render unchanged.
+#[cfg(test)]
+mod batch5;
+
+#[cfg(test)]
+mod batch6_tests;
 
 #[cfg(test)]
 mod tests {
