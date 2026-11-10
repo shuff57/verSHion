@@ -149,6 +149,9 @@ pub fn skin_summary(id: &str, title: &str, p: &Params) -> Option<String> {
     if id == "lewis-structures" {
         return lewis::skin_summary(title, p);
     }
+    if id == dotcross::ID {
+        return dotcross::section_summary(title, p);
+    }
     if let Some(s) = super::math::flat_skin_summary(id, title, p) {
         return Some(s);
     }

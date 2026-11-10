@@ -606,6 +606,42 @@ pub fn relevant(key: &str, p: &Params) -> bool {
     }
 }
 
+/// The side panel's one-line summaries of the four sections, worded as the reference words them
+/// ("MgCl₂, ionic compound", "Outer shell, every ion", "Electrons drawn, 2 edits").
+pub fn section_summary(title: &str, p: &Params) -> Option<String> {
+    Some(match title {
+        "Molecule, compound or atom" => match model(p) {
+            Ok(m) => {
+                let what = match m.kind {
+                    Kind::Molecule => "molecule",
+                    Kind::Ionic => "ionic compound",
+                    Kind::Single if m.atoms[0].charge != 0 => "ion",
+                    Kind::Single => "atom",
+                };
+                let f = if m.kind == Kind::Single { format!("{}{}", m.formula, charge_ascii(m.atoms[0].charge)) } else { m.formula.clone() };
+                format!("{f}, {what}")
+            }
+            Err(_) => "Can't draw that; see the note".into(),
+        },
+        "Drawing" => {
+            let mut s = if p.s("shells") == "Every shell" { "All shells".to_string() } else { "Outer shell".to_string() };
+            if matches!(pick(p), Ok(Pick::Ionic(..))) && p.s("ion_layout") == "Every ion" { s.push_str(", every ion"); }
+            if p.b("swap") { s.push_str(", swapped"); }
+            if p.s("style") == "Print" { s.push_str(", black"); }
+            s
+        }
+        "Question" => {
+            let e = parse_edits(p.s("edits"));
+            let n = e.e.len() + e.s.len() + e.q.len();
+            let mut s = if p.b("blank") { "Electrons blank".to_string() } else { "Electrons drawn".to_string() };
+            if n > 0 { s.push_str(&format!(", {n} edit{}", if n == 1 { "" } else { "s" })); }
+            s
+        }
+        "Title and answer key" => format!("{}, {}", if p.s("title").trim().is_empty() { "No title" } else { "Title" }, if p.b(SHOW_ANSWERS) { "answer key" } else { "no answer key" }),
+        _ => return None,
+    })
+}
+
 /// A pick from the lists replaces the typed text; a new structure, layout or shells clears the clicked changes.
 pub fn panel_changed(key: &str, p: &mut Params) {
     if matches!(key, "kind" | "molecule" | "ionic" | "element" | "charge") { p.set_s("formula", ""); }

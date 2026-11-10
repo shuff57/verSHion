@@ -881,8 +881,9 @@ impl Workspace {
         self.examples_open = false;
         self.sel = Some(i);
         // the drag knobs show on every figure but the physics ones, whose reference draws a bare
-        // figure; the Handles chip toggles them
-        self.hide_handles = matches!(reg()[i].subject, figures::Subject::Physics | figures::Subject::Chemistry);
+        // figure; the Handles chip toggles them. The dot-and-cross diagram's electrons, symbols and charges are
+        // clicked straight away, as on the reference (its handles are invisible click areas, outlined on hover only)
+        self.hide_handles = matches!(reg()[i].subject, figures::Subject::Physics | figures::Subject::Chemistry) && reg()[i].id != figures::chemistry::dotcross::ID;
         self.params = figures::start_params(&reg()[i]);
         // the composite shape opens on a blank canvas with its "Start with" screen, as the
         // reference does. Its opening state (share links, Reset all) keeps the arch, so links
