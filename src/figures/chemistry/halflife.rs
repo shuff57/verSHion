@@ -315,3 +315,6 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
     })
     .with_scroll(|q: &mut Params, dy: f64| { q.set_f("span", (q.f("span") + dy.signum() * 0.5).clamp(1.0, 8.0)); })])
 }
+
+#[cfg(test)]
+mod tests;
