@@ -393,14 +393,16 @@ fn angle_marks_cycle_and_draw_round_the_angle() {
     let seq: Vec<(usize, bool)> = (0..5).map(|_| { cycle_marks(&mut p, 1); marks_of(&p, 1) }).collect();
     assert_eq!(seq, vec![(1, false), (2, false), (3, false), (0, true), (0, false)]);
     let svg = angles_render(&with(&[("arcs3", s("1")), ("shaded", s("1"))]));
-    // three arcs from the baseline to ray 2 (0 to 60 degrees), 36, 40 and 44 from the vertex
-    let arcs: Vec<f64> = polys(&svg, "polyline").into_iter().filter(|(t, _)| t.contains(r#"stroke-width="1.4""#)).map(|(_, pts)| {
+    // three heavier congruence arcs from the baseline to ray 2 (0 to 60 degrees), 36, 41 and 46 from the vertex, in place of the
+    // thin arc (no 1.4 arc is left on the angle)
+    assert!(!polys(&svg, "polyline").iter().any(|(t, _)| t.contains(r#"stroke-width="1.4""#)), "the thin arc is replaced");
+    let arcs: Vec<f64> = polys(&svg, "polyline").into_iter().filter(|(t, _)| t.contains(r#"stroke-width="2.6""#)).map(|(_, pts)| {
         let rs: Vec<f64> = pts.iter().map(|q| interact::dist(*q, C)).collect();
         assert!(rs.iter().all(|r| (r - rs[0]).abs() < 0.02));
         assert!((interact::angle_deg(C, pts[0]) - 0.0).abs() < 0.1 && (interact::angle_deg(C, *pts.last().unwrap()) - 60.0).abs() < 0.1);
         rs[0]
     }).collect();
-    assert_eq!(arcs.iter().map(|r| r.round() as i64).collect::<Vec<_>>(), vec![36, 40, 44]);
+    assert_eq!(arcs.iter().map(|r| r.round() as i64).collect::<Vec<_>>(), vec![36, 41, 46]);
     // the shading: the angle itself, out to its mark
     let shade: Vec<Vec<Pt>> = polys(&svg, "polygon").into_iter().filter(|(t, _)| t.contains(SHADE)).map(|x| x.1).collect();
     assert_eq!(shade.len(), 1);
@@ -409,10 +411,80 @@ fn angle_marks_cycle_and_draw_round_the_angle() {
     }
     // the label clears the outermost arc
     let (x, y, _, _) = texts(&svg).into_iter().find(|t| t.3 == "60\u{b0}").unwrap();
-    assert!(interact::dist((x, y), C) > 44.0 + 8.0);
+    assert!(interact::dist((x, y), C) > 46.0 + 8.0);
     // with "Shade the angles" on, a shaded angle still shows (a darker tint over the light one)
     let svg = angles_render(&with(&[("shade", b(true)), ("shaded", s("1"))]));
     assert!(svg.find("#eef4fb").unwrap() < svg.find(SHADE).unwrap());
+}
+
+/// Every step of the mark cycle changes the drawing, the first one too: one congruence arc is a heavier arc in place of the thin
+/// one every angle has, so a marked angle is told from a plain one (on several figures, right angles and crowded ones included).
+#[test]
+fn every_click_on_an_angle_changes_the_drawing() {
+    for base in [
+        with(&[]),
+        with(&[("ray2", s("90")), ("ray3", s("200")), ("ray_count", i(3)), ("around", b(true))]),
+        with(&[("ray_count", i(9)), ("label_size", s("Large"))]),
+        with(&[("ray2", s("50")), ("ray1_line", s("Line")), ("ray2_line", s("Line")), ("turn", f(30.0))]),
+    ] {
+        for n in 1..=layout(&base).secs.len() {
+            let mut p = base.clone();
+            let mut seen = vec![angles_render(&p)];
+            for step in 0..5 {
+                cycle_marks(&mut p, n);
+                let svg = angles_render(&p);
+                assert!(svg != *seen.last().unwrap(), "angle {n}: click {} changed nothing", step + 1);
+                if step < 4 { assert!(!seen.contains(&svg), "angle {n}: click {} looks like an earlier state", step + 1); }
+                seen.push(svg);
+            }
+            assert_eq!(seen[5], seen[0], "the fifth click is plain again");
+        }
+    }
+    // one arc, as a param, differs from the opening state; the congruence arc is heavier than the plain one
+    let one = angles_render(&with(&[("arcs1", s("1"))]));
+    assert_ne!(one, angles_render(&with(&[])));
+    assert!(one.contains(r#"stroke-width="2.6""#) && !angles_render(&with(&[])).contains(r#"stroke-width="2.6""#));
+}
+
+/// On a crowded figure a label with no clear spot between its rays goes out past the rays' ends with a leader line from its mark,
+/// never across a ray (the batch 6 checker: 7 rays 15 degrees apart at Large with a point on ray 7, 12 rays 10 degrees apart).
+#[test]
+fn a_crowded_label_goes_out_past_the_rays_with_a_leader_never_across_a_ray() {
+    let fan = |n: usize, step: f64| -> Vec<(&'static str, Value)> { (1..n).map(|k| (RAY_V[k], s(&format!("{}", k as f64 * step)))).collect() };
+    let mut a = fan(7, 15.0);
+    a.extend([("label_size", s("Large")), ("points", s("P: ray 7"))]);
+    let mut c = fan(12, 10.0);
+    c.push(("label_size", s("Large")));
+    let mut e = fan(12, 10.0);
+    e.extend([("arcs2", s("3, 7")), ("letters", b(true)), ("turn", f(-40.0))]);
+    let mut leaders = 0;
+    for (ci, p) in [with(&a), with(&c), with(&e)].iter().enumerate() {
+        let svg = angles_render(p);
+        let l = layout(p);
+        let rays: Vec<(Pt, Pt)> = l.dirs.iter().map(|(a, _)| (C, interact::polar(C, a + l.turn, LEN))).collect();
+        for (t, bx) in ink_boxes(&svg) {
+            let cc = ((bx.0 + bx.2) / 2.0, (bx.1 + bx.3) / 2.0);
+            let hb = ((bx.2 - bx.0) / 2.0, (bx.3 - bx.1) / 2.0);
+            for (r0, r1) in &rays { assert!(!seg_hits_box(*r0, *r1, cc, hb, 0.5), "case {ci}: {t} lies across a ray"); }
+            assert!(bx.0 >= 0.0 && bx.1 >= 0.0 && bx.2 <= 480.0 && bx.3 <= 360.0, "case {ci}: {t} off the page");
+        }
+        // the leaders: from inside the label's own angle, straight out along its middle, then past the rays' ends to the label
+        for (_, pts) in polys(&svg, "polyline").into_iter().filter(|(t, _)| t.contains(r#"stroke-width="0.8""#)) {
+            leaders += 1;
+            assert_eq!(pts.len(), 3);
+            assert!((interact::dist(pts[1], C) - LEN - 6.0).abs() < 0.02, "case {ci}: the leader bends past the ends");
+            for (r0, r1) in &rays {
+                // the last leg runs past the rays' ends and crosses none
+                assert!(seg_dist_seg(pts[1], pts[2], *r0, *r1) > 0.5, "case {ci}: a leader crosses a ray");
+            }
+        }
+    }
+    assert!(leaders > 0, "the crowded cases need leaders");
+}
+
+fn seg_dist_seg(a: Pt, b: Pt, c: Pt, d: Pt) -> f64 {
+    let n = 200;
+    (0..=n).map(|k| { let t = k as f64 / n as f64; seg_dist((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t), c, d) }).fold(f64::INFINITY, f64::min)
 }
 
 #[test]

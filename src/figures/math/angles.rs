@@ -35,6 +35,10 @@ pub(crate) const C: Pt = (240.0, 180.0);
 pub(crate) const LEN: f64 = 140.0;
 /// Fill of a shaded angle: a light tint the labels' white halo reads over (darker than "Shade the angles", so it shows over it).
 const SHADE: &str = "#d9e6f6";
+/// Congruence arcs are drawn heavier than the thin arc every angle is drawn with (1.4), and in place of it, so one congruence arc
+/// reads as a mark: an angle with one arc is told from a plain angle, and k arcs go MARK_GAP apart.
+const MARK_W: f64 = 2.6;
+const MARK_GAP: f64 = 5.0;
 /// A click within this of the vertex or a ray's end puts a point there; within WEDGE_R of the vertex, between two rays, marks
 /// that angle; within LINE_D of a ray, acts on the ray: out to THROUGH_R runs it through the vertex (or cuts a line back), on to
 /// DEL_R steps its style, beyond that deletes it. (The parts are all on the ray: the workspace zooms to the drawing, so the empty
@@ -546,7 +550,7 @@ fn label_texts(p: &Params, l: &Lay) -> Vec<String> {
 /// Where each angle's label goes (screen), with its box: on the angle's bisector just past its mark, as the figure has always put
 /// it; on a crowded figure (rays 7-12 in use) at the first distance out from there where the box keeps clear of every ray, ray end,
 /// end name and label placed before it (if none does, the first).
-pub(crate) fn label_boxes(p: &Params, l: &Lay, scene: &mut Scene) -> Vec<Option<Bx>> {
+pub(crate) fn label_boxes(p: &Params, l: &Lay, scene: &mut Scene) -> Vec<Option<Spot>> {
     let size = 15.0 * fscale(p);
     let texts = label_texts(p, l);
     let mut out = vec![];
@@ -556,20 +560,53 @@ pub(crate) fn label_boxes(p: &Params, l: &Lay, scene: &mut Scene) -> Vec<Option<
         let hb = half_box(&texts[i], size);
         let mid = ((s.a0 + s.a1) / 2.0 + l.turn).to_radians();
         let m = (mid.cos(), -mid.sin());
-        let r0 = s.rad + 4.0 * k.saturating_sub(1) as f64 + 8.0 + hb.0 * m.0.abs() + hb.1 * m.1.abs();
+        let r0 = s.rad + MARK_GAP * k.saturating_sub(1) as f64 + 8.0 + hb.0 * m.0.abs() + hb.1 * m.1.abs();
         let at = |r: f64| ((C.0 + m.0 * r, C.1 + m.1 * r), hb);
-        let mut b = at(r0);
+        let mut spot = Spot { b: at(r0), leader: None };
         if l.crowded {
+            let mut found = None;
             let mut r = r0;
             while r <= LEN + 40.0 {
-                if scene.clear(at(r)) { b = at(r); break; }
+                if scene.clear(at(r)) { found = Some(at(r)); break; }
                 r += 2.0;
             }
+            spot = match found {
+                Some(b) => Spot { b, leader: None },
+                None => {
+                    // no clear spot between its rays: out past the rays' ends, a little either side of its middle, with a leader
+                    // line from its mark (a label never lies across a ray); if no spot there is clear either, straight out past them
+                    let mid_deg = (s.a0 + s.a1) / 2.0 + l.turn;
+                    let past = |a: f64, r: f64| {
+                        let u = interact::polar((0.0, 0.0), a, 1.0);
+                        let rr = r + hb.0 * u.0.abs() + hb.1 * u.1.abs();
+                        ((C.0 + u.0 * rr, C.1 + u.1 * rr), hb)
+                    };
+                    let offs: Vec<f64> = std::iter::once(0.0).chain((1..=10).flat_map(|j| [3.0 * j as f64, -3.0 * j as f64])).collect();
+                    let b = (0..=40).map(|j| LEN + 12.0 + 3.0 * j as f64).flat_map(|r| offs.iter().map(move |o| (r, *o)))
+                        .map(|(r, o)| past(mid_deg + o, r)).find(|b| scene.clear(*b)).unwrap_or_else(|| past(mid_deg, LEN + 14.0));
+                    let from = interact::polar(C, mid_deg, s.rad + MARK_GAP * k.saturating_sub(1) as f64 + 2.0);
+                    let bend = interact::polar(C, mid_deg, LEN + 6.0);
+                    Spot { b, leader: Some((from, bend)) }
+                }
+            };
         }
-        scene.taken.push(b);
-        out.push(Some(b));
+        scene.taken.push(spot.b);
+        out.push(Some(spot));
     }
     out
+}
+
+/// A label's place: its box, and (when it had to go out past the rays' ends) its leader line's start at the mark and its bend
+/// straight out past the ends.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Spot { pub b: Bx, pub leader: Option<(Pt, Pt)> }
+
+/// Where a leader line from `bend` meets the edge of box `b` (aimed at its centre).
+fn box_edge(b: Bx, from: Pt) -> Pt {
+    let (dx, dy) = (b.0 .0 - from.0, b.0 .1 - from.1);
+    let t = [if dx.abs() > 1e-9 { (dx.abs() - b.1 .0 - 2.0) / dx.abs() } else { 1.0 }, if dy.abs() > 1e-9 { (dy.abs() - b.1 .1 - 2.0) / dy.abs() } else { 1.0 }];
+    let t = t[0].max(t[1]).clamp(0.0, 1.0);
+    (from.0 + dx * t, from.1 + dy * t)
 }
 
 /// Where the vertex's name goes: the first spot, going out from the vertex along the middle of the gap the rays leave (where the
@@ -587,7 +624,7 @@ fn vertex_name_at(p: &Params, l: &Lay, name: &str, size: f64, scene: &Scene) -> 
     for i in order {
         let s = &l.secs[i];
         let (k, span) = (marks_of(p, i + 1).0, s.a1 - s.a0);
-        let band = if k == 0 && p.b("right") && (span - 90.0).abs() < 0.3 { (0.0, 0.78 * s.rad + 2.0) } else { (s.rad - 2.0, s.rad + 4.0 * k.saturating_sub(1) as f64 + 2.0) };
+        let band = if k == 0 && p.b("right") && (span - 90.0).abs() < 0.3 { (0.0, 0.78 * s.rad + 2.0) } else { (s.rad - 2.0, s.rad + MARK_GAP * k.saturating_sub(1) as f64 + 2.0) };
         regions.push(((s.a0 + s.a1) / 2.0, Some(band)));
     }
     for (mid, band) in regions {
@@ -679,10 +716,14 @@ pub(crate) fn angles_render(p: &Params) -> String {
             sector(&mut d, c, a0t, a1t, rad, txt, p.b("right"), lsz);
             continue;
         }
-        // the mark: the right-angle square or arc, or k congruence arcs (rad, rad + 4, ...), then the label where it was placed
+        // the mark: the right-angle square or thin arc, or k heavier congruence arcs in its place (rad, rad + MARK_GAP, ...), then
+        // the label where it was placed (with its leader line when it went out past the rays' ends)
         if k == 0 { sector(&mut d, c, a0t, a1t, rad, "", p.b("right"), lsz); }
-        for j in 0..k { d.polyline(&arc_pts(c, a0t, a1t, rad + 4.0 * j as f64), INK, 1.4); }
-        if let Some(b) = boxes[i] { mlabel(&mut d, b.0 .0, b.0 .1, lsz, txt, ""); }
+        for j in 0..k { d.polyline(&arc_pts(c, a0t, a1t, rad + MARK_GAP * j as f64), INK, MARK_W); }
+        if let Some(sp) = boxes[i] {
+            if let Some((from, bend)) = sp.leader { d.polyline(&[from, bend, box_edge(sp.b, bend)], INK, 0.8); }
+            mlabel(&mut d, sp.b.0 .0, sp.b.0 .1, lsz, txt, "");
+        }
     }
     // named points' names on top (their dots are drawn with the rays and the vertex)
     for (name, (bc, _), named) in &ends {
@@ -876,7 +917,7 @@ pub(crate) fn handles(p: &Params) -> Vec<Handle> {
         }).with_click(move |p| toggle_point(p, pl)));
     }
     // each angle's label spot: click cycles degrees -> x -> blank (on a crowded figure, over the label where it is placed)
-    let placed: Vec<Option<Bx>> = if l.crowded {
+    let placed: Vec<Option<Spot>> = if l.crowded {
         let mut scene = Scene::new(&l);
         scene.taken.extend(end_names(p, &l, &points(p, &l)).into_iter().map(|x| x.1));
         label_boxes(p, &l, &mut scene)
@@ -886,7 +927,7 @@ pub(crate) fn handles(p: &Params) -> Vec<Handle> {
         let mid = (s.a0 + s.a1) / 2.0;
         let span = s.a1 - s.a0;
         // (the label boxes are turned with the figure; the zones turn with the other handles below)
-        let at = placed.get(i).copied().flatten().map(|b| turn_scr(b.0, C, -l.turn)).unwrap_or_else(|| interact::polar(C, mid, if span < 28.0 { 70.0 } else { 58.0 }));
+        let at = placed.get(i).copied().flatten().map(|sp| turn_scr(sp.b.0, C, -l.turn)).unwrap_or_else(|| interact::polar(C, mid, if span < 28.0 { 70.0 } else { 58.0 }));
         out.push(Handle::zone(at, (34.0, 24.0), "Click: show degrees / x / blank", move |p| cycle_label(p, idx)));
     }
     let mut hs = turned(out, C, l.turn);
