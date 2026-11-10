@@ -9,6 +9,9 @@ mod instr;
 mod mech;
 mod optics;
 mod motion_map;
+mod ray_diagram;
+#[cfg(test)]
+mod ray_diagram_tests;
 mod pulley;
 pub(crate) use pulley::{pulley_relevant, pulley_setup_changed};
 mod examples;
@@ -20,7 +23,11 @@ mod summary;
 pub fn instr_warnings(p: &Params) -> Vec<String> { instr::circuit_warnings(p) }
 
 /// Editor notes for the ray diagram: an image it was asked for but could not draw or fit.
-pub fn ray_warnings(p: &Params) -> Vec<String> { optics::ray_warnings(p) }
+pub fn ray_warnings(p: &Params) -> Vec<String> { ray_diagram::warnings(p) }
+
+/// After the panel changed the ray diagram's control `key` from `old`: a quick place moves the object, a lens turned
+/// into a mirror shows C (see `ray_diagram::panel_changed`).
+pub fn ray_panel_changed(key: &str, old: &Value, p: &mut Params) { ray_diagram::panel_changed(key, old, p) }
 
 /// The collapsed-row summary of a section on the physics page skin, where the page has one.
 pub fn skin_summary(id: &str, title: &str, p: &Params) -> Option<String> {
@@ -48,15 +55,24 @@ pub fn segment_has_way_for(fig: &str, p: &Params, i: usize) -> bool {
     if fig == "motion-map" { motion_map::has_way(p, i) } else { graphs::segment_has_way(p, i) }
 }
 
-/// Whether the motion map's control `key` applies to `p` (other figures: always).
+/// Whether the motion map's or the ray diagram's control `key` applies to `p` (other figures: always).
 pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
-    fig != "motion-map" || motion_map::relevant(key, p)
+    match fig {
+        "motion-map" => motion_map::relevant(key, p),
+        "ray-diagram" => ray_diagram::relevant(key, p),
+        _ => true,
+    }
 }
 
-/// A motion map saved or shared before its segments: rewritten as the same motion in segments.
+/// A motion map saved or shared before its segments: rewritten as the same motion in segments. A ray diagram's old ray
+/// count and image switch: rewritten as the newer controls.
 pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
     if id == "motion-map" {
         motion_map::migrate(spec, p);
+    }
+    // a ray diagram from before the switch per ray and Show: the same drawing in the new controls
+    if id == "ray-diagram" {
+        ray_diagram::migrate(p);
     }
 }
 

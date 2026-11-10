@@ -78,7 +78,7 @@ fn ray_diagram_frozen() {
         return;
     }
     let text = std::fs::read_to_string(fixture()).unwrap();
-    let mut n = 0;
+    let (mut n, mut changed) = (0, 0);
     for line in text.lines().filter(|l| !l.trim().is_empty()) {
         let mut it = line.split('\t');
         let (hash, spec, link) = (it.next().unwrap(), it.next().unwrap(), it.next().unwrap());
@@ -86,13 +86,39 @@ fn ray_diagram_frozen() {
         let link: serde_json::Map<String, serde_json::Value> = serde_json::from_str(link).unwrap();
         // a saved figure
         let saved = params_from_spec(&d, &crate::model::FigureSpec { id: d.id.into(), params: spec.clone().into_iter().collect() });
-        assert_eq!(format!("{:016x}", fnv64(&d.svg(&saved))), hash, "saved figure {spec:?} draws differently");
-        // its share link, made at the current link version and at the first
-        for v in [crate::figures::share::VERSION, 1] {
-            let shared = crate::figures::share::link_params(&d, link.clone(), v);
-            assert_eq!(format!("{:016x}", fnv64(&d.svg(&shared))), hash, "share link {link:?} (v{v}) draws differently");
+        let shared: Vec<Params> = [crate::figures::share::VERSION, 1].iter().map(|v| crate::figures::share::link_params(&d, link.clone(), *v)).collect();
+        if intended(&spec) {
+            // the intended changes (see `intended`): the image at C drawn, the infinite ray at F left out
+            for p in std::iter::once(&saved).chain(&shared) {
+                let svg = d.svg(p);
+                assert_ne!(format!("{:016x}", fnv64(&svg)), hash, "{spec:?}: drawn as before");
+                assert!(!svg.contains("inf") && !svg.contains("NaN"), "{spec:?}: a coordinate is not finite");
+                if (spec["dist"].as_f64().unwrap() - spec["f"].as_f64().unwrap()).abs() > 1e-9 {
+                    assert!(svg.contains(r#"stroke-width="3"/><polygon points=""#), "{spec:?}: no image drawn");
+                }
+            }
+            changed += 1;
+        } else {
+            assert_eq!(format!("{:016x}", fnv64(&d.svg(&saved))), hash, "saved figure {spec:?} draws differently");
+            // its share link, made at the current link version and at the first
+            for p in &shared {
+                assert_eq!(format!("{:016x}", fnv64(&d.svg(p))), hash, "share link {link:?} draws differently");
+            }
         }
         n += 1;
     }
     assert_eq!(n, 160);
+    assert!(changed <= 8, "{changed} old figures changed on purpose");
+    eprintln!("ray diagram frozen: {n} old figures, {changed} changed on purpose");
+}
+
+/// The old figures changed on purpose: a concave mirror with its object on C (twice the focal length) whose image the
+/// key copy would show, and a converging lens or concave mirror with its object on F drawing its third ray (the old
+/// figure wrote it with infinite coordinates, a stray line along the top of the drawing; it is left out now).
+fn intended(spec: &serde_json::Map<String, serde_json::Value>) -> bool {
+    let num = |k: &str| spec[k].as_f64().unwrap();
+    let conv = spec["kind"] == "Concave mirror" || spec["kind"] == "Converging lens";
+    let at_c = spec["kind"] == "Concave mirror" && (num("dist") - 2.0 * num("f")).abs() < 1e-9 && spec["image"] == true && spec["show_answers"] == true;
+    let at_f = conv && (num("dist") - num("f")).abs() < 1e-9 && spec["rays"] == 3;
+    at_c || at_f
 }

@@ -778,6 +778,10 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     if let ("pulley", "setup", Value::S(old)) = (id, key, old) {
         physics::pulley_setup_changed(old, p);
     }
+    // a quick place on the ray diagram moves the object; a lens switched to a mirror shows C and its ray
+    if id == "ray-diagram" {
+        physics::ray_panel_changed(key, old, p);
+    }
 }
 
 /// Values worked out from the typed ones, as (value_key, text) pairs shown grey in empty boxes

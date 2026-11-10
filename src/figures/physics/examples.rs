@@ -34,9 +34,12 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
             ex("Converging lens with the object at 2F", vec![("dist", f(20.0))]),
             ex("Magnifying glass ray diagram: object inside F", vec![("dist", f(6.0))]),
             ex("Diverging lens ray diagram", vec![("kind", s("Diverging lens"))]),
-            ex("Concave mirror ray diagram: object between C and F", vec![("kind", s("Concave mirror")), ("dist", f(15.0))]),
-            ex("Convex mirror ray diagram", vec![("kind", s("Convex mirror"))]),
-            ex("Blank converging lens ray diagram worksheet", vec![("image", b(false))]),
+            ex("Concave mirror ray diagram: object between C and F", vec![("kind", s("Concave mirror")), ("dist", f(15.0)), ("mirror_c", b(true)), ("ray_c", b(true)), ("hatch", b(true))]),
+            ex("Convex mirror ray diagram", vec![("kind", s("Convex mirror")), ("mirror_c", b(true)), ("ray_c", b(true)), ("hatch", b(true))]),
+            ex("Blank converging lens ray diagram worksheet", vec![("show", s("Rays"))]),
+            ex("Plane mirror: the image is as far behind as the object is in front", vec![("kind", s("Plane mirror")), ("dist", f(12.0)), ("hatch", b(true)), ("mark_do", b(true)), ("mark_di", b(true))]),
+            ex("Lens problem with the distances marked and an answer key", vec![("place", s("Between F and 2F")), ("dist", f(15.0)), ("mark_do", b(true)), ("mark_di", b(true)), ("mark_f", b(true)), ("scale", b(true)), ("key", b(true))]),
+            ex("Find the image: the setup alone with blank labels", vec![("show", s("Setup")), ("lab_f_mode", s("Blank line")), ("lab_2f_mode", s("Blank line")), ("lab_f2_mode", s("Blank line")), ("lab_2f2_mode", s("Blank line"))]),
         ],
         "circuit-diagram" => vec![
             ex("Series circuit with three resistors and an ammeter", vec![

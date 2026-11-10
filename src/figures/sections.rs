@@ -1072,12 +1072,14 @@ static MOTION_MAP: [RefSection; 6] = [
     s("Figure", &["color"], ""),
 ];
 
-static RAY_DIAGRAM: [RefSection; 5] = [
-    s("Lens or mirror", &["kind", "f"], ""),
-    s("Object", &["dist", "height"], ""),
-    s("Rays and image", &["rays", "image"], ""),
-    s("Labels", &["show_labels", "lab_f", "lab_f2", "lab_2f", "lab_2f2", "lab_o", "lab_i"], ""),
-    s("Title and answer key", &["title", "label_size", "show_answers"], "Turn off Show answers for a student copy: the image, its label and the dashed lines back to a virtual image are hidden and the object and the rays stay."),
+static RAY_DIAGRAM: [RefSection; 7] = [
+    s("Lens or mirror", &["kind", "lens_as", "hatch", "f"], "You can also drag F along the axis in the figure."),
+    s("Object", &["dist", "height", "place", "arrow"], "You can also drag the object's tip in the figure; drag it below the axis to turn it upside down. For a mirror, 2F is C."),
+    s("Rays and image", &["show", "ray_par", "ray_ctr", "ray_foc", "ray_c", "rays", "image"], ""),
+    s("Labels", &["show_labels", "lab_f_mode", "lab_f", "lab_f2_mode", "lab_f2", "lab_2f_mode", "lab_2f", "lab_2f2_mode", "lab_2f2", "mirror_c", "lab_c_mode", "lab_c", "lab_o_mode", "lab_o", "lab_i_mode", "lab_i"], "Blank line leaves a line for students to write the label on."),
+    s("Marks", &["mark_do", "do_mode", "lab_do", "mark_di", "di_mode", "lab_di", "mark_f", "fm_mode", "lab_fm", "mark_ho", "ho_mode", "lab_ho", "mark_hi", "hi_mode", "lab_hi", "scale"], "The scale counts cm out from the lens or mirror. The image's marks are answers: the student copy leaves them off."),
+    s("Title and answer key", &["title", "key", "label_size", "show_answers"], "Turn off Show answers for a student copy: the image, its label, its marks, the answer key line and the dashed lines back to a virtual image are hidden and the object and the rays stay."),
+    s("Figure", &["color"], ""),
 ];
 
 static DNA_PROTEIN_SYNTHESIS: [RefSection; 8] = [
@@ -1338,7 +1340,7 @@ pub fn phys_tip(fig: &str, key: &str, p: &super::Params) -> Option<String> {
         ("length-reading", "mag_show") => "One on the object\u{2019}s right end, and one on its left end when that isn\u{2019}t lined up with 0.",
         ("motion-map", "x0") => "Speeding up and slowing down keep going the way the object was already moving; only a speed-up from rest asks which way. The motion graphs take the same segments, so the same numbers give the same motion there.",
         ("motion-map", "dt") => "Each dot is where the object is at that instant, \u{394}t apart. While it is at rest its dots sit on one spot and are labelled together (12\u{2013}15 s). Each time it turns back its dots move up a row. A dot where one segment ends and the next begins takes the next one\u{2019}s velocity and row.",
-        ("ray-diagram", "kind") => "Drawn to scale in cm. The image is where 1/f = 1/do + 1/di puts it. Rays bend at the line through the middle of a lens, and reflect at the line through a mirror\u{2019}s vertex, as textbooks draw them, so they meet exactly at the image. The answer key takes real as positive.",
+        ("ray-diagram", "kind") => "Drawn to scale in cm. The image is where 1/f = 1/do + 1/di puts it. Rays bend at the line through the middle of a lens, and reflect at the line through a mirror\u{2019}s vertex, as textbooks draw them, so they meet exactly at the image. The answer key takes real as positive: di is negative for a virtual image, f for a diverging lens or a convex mirror, and m = \u{2212}di/do is negative for an inverted image. A plane mirror\u{2019}s image is as far behind it as the object is in front.",
         _ => return None,
     };
     Some(t.to_string())

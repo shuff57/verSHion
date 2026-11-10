@@ -4318,7 +4318,7 @@ const MOTION_MAP: &[Faq] = &[
 const RAY_DIAGRAM: &[Faq] = &[
     Faq {
         q: "Which principal rays are drawn?",
-        a: "One ray travels parallel to the axis and bends through the focal point, one passes through the centre of a lens (or strikes the middle of a mirror) and one goes through the focal point and comes out parallel. Where they meet is the image.",
+        a: "One ray travels parallel to the axis and bends through the focal point, one passes through the centre of a lens (or strikes the middle of a mirror) and one goes through the focal point and comes out parallel. A curved mirror can also show the ray through C, the centre of curvature, which comes straight back on itself. Each ray has its own switch, and Show: Setup draws the lens or mirror and the object alone. Where the rays meet is the image.",
     },
     Faq {
         q: "When is the image real and when is it virtual?",
@@ -4326,7 +4326,7 @@ const RAY_DIAGRAM: &[Faq] = &[
     },
     Faq {
         q: "How do I change the object distance and focal length?",
-        a: "Use the sliders for the focal length and the object distance, both in centimetres. The image distance and size update to match the lens or mirror equation.",
+        a: "Drag the object's tip sideways and F along the axis in the figure, or type them in centimetres; Place it puts the object beyond 2F, at 2F, between F and 2F, at F or inside F in one click. The image distance and size update to match the lens or mirror equation, and the answer key line prints them with real taken as positive (1/f = 1/do + 1/di, m = \u{2212}di/do).",
     },
     Faq {
         q: "Can I hide the labels for a student copy?",
