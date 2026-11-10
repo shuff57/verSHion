@@ -1575,10 +1575,10 @@ fn edited_forms(edited: i64) -> [String; 3] {
 }
 
 /// One bank tile, `w` wide and [`BANK_TILE_H`] tall, the same on Banks and Home: the serif name
-/// (two lines kept), the counts (and the circle badge on Banks), the type key over the type-mix
-/// bar (or, for an empty bank, "No questions yet" and Add questions), a hairline, then where it
-/// is used and when it was edited. One card interact: a click on the usage link, Add questions or
-/// the "…" menu returns that act and never `Open`.
+/// (two lines kept), the counts and when it was edited (or the circle badge on Banks), the type
+/// key over the type-mix bar (or, for an empty bank, a dashed placeholder holding Add questions),
+/// a hairline, then where it is used (an underlined link) and "Open →". One card interact: a
+/// click on the usage link, Add questions or the "…" menu returns that act and never `Open`.
 pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: TileVariant) -> Option<TileAct> {
     let (rect, card) = ui.allocate_exact_size(Vec2::new(w, BANK_TILE_H), Sense::click());
     card.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &t.name));
@@ -1622,51 +1622,56 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
         crate::handicons::paint_glyph(ui.painter(), g.center(), crate::handicons::BANKS, 16.8, theme::accent_col());
     }
 
-    // Meta: the counts, and on Banks the circle badge in what is left of the row.
+    // Meta: the counts (or "No questions yet"), and when it was edited, right, in the first form
+    // that fits; on Banks a circle badge takes the rest of the row instead of the edited text.
     let meta_y = top + T_HEAD + 6.0;
     let meta_c = meta_y + T_META / 2.0;
     let badged = v == TileVariant::Banks && app.shared.circles.edit.with_link(&t.id, |_| ()).is_some();
-    let counts = ui.painter().layout_no_wrap(counts_line(t, !badged), egui::FontId::new(kit::ty::META, theme::sans_family()), theme::text_col());
+    let meta_font = egui::FontId::new(kit::ty::META, theme::sans_family());
+    let measure = |s: &str| ui.painter().layout_no_wrap(s.to_string(), meta_font.clone(), theme::text_col()).size().x;
+    let forms = edited_forms(t.edited);
+    let edited_w = [measure(&forms[0]), measure(&forms[1]), measure(&forms[2])];
+    let empty_text = format!("{}No questions yet", if t.archived { "Archived · " } else { "" });
+    let (topics, edited) = if t.questions == 0 {
+        let w = measure(&empty_text);
+        (true, if badged { None } else { (0..3).find(|&k| w + 12.0 + edited_w[k] <= iw) })
+    } else if badged {
+        (false, None)
+    } else {
+        meta_fit(measure(&counts_line(t, true)), measure(&counts_line(t, false)), edited_w, iw)
+    };
+    let counts_text = if t.questions == 0 { empty_text } else { counts_line(t, topics) };
+    let counts = ui.painter().layout_no_wrap(counts_text, meta_font.clone(), theme::text_col());
     let counts_w = counts.size().x;
-    ui.painter().galley(Pos2::new(x0, meta_c - counts.size().y / 2.0), counts, theme::text_col());
+    let counts_col = if t.questions == 0 { theme::muted_col() } else { theme::text_col() };
+    ui.painter().galley(Pos2::new(x0, meta_c - counts.size().y / 2.0), counts, counts_col);
+    if let Some(k) = edited {
+        let g = ui.painter().layout_no_wrap(forms[k].clone(), meta_font.clone(), theme::muted_col());
+        ui.painter().galley(Pos2::new(x0 + iw - g.size().x, meta_c - g.size().y / 2.0), g, theme::muted_col());
+    }
 
-    // Key: the type key over the bar, or an empty bank's next step.
+    // Key: the type key over the bar; an empty bank has no bar to show, so the key and bar slots
+    // hold one dashed placeholder with its next step, Add questions, in the middle.
     let key_y = meta_y + T_META + 10.0;
     let bar_y = key_y + T_KEY + 8.0;
     let mut add_btn: Option<Rect> = None;
     if t.questions == 0 {
-        let text = ui.painter().layout_no_wrap("No questions yet".to_string(), egui::FontId::new(kit::ty::META, theme::sans_family()), theme::muted_col());
+        let slot = Rect::from_min_max(Pos2::new(x0, key_y), Pos2::new(x0 + iw, bar_y + T_BAR));
+        dashed_round_rect(ui.painter(), slot, 8.0, Stroke::new(1.0, theme::edge()));
         let btn_w = ui.painter().layout_no_wrap("Add questions".to_string(), egui::FontId::new(kit::ty::BUTTON_SM, theme::bold_family()), theme::ink()).size().x + 28.0;
-        let both = text.size().x + 12.0 + btn_w <= iw;
-        let row_c = key_y + T_KEY / 2.0;
-        if both {
-            ui.painter().galley(Pos2::new(x0, row_c - text.size().y / 2.0), text, theme::muted_col());
-            add_btn = Some(Rect::from_min_size(Pos2::new(x0 + iw - btn_w.ceil(), row_c - 16.0), Vec2::new(btn_w.ceil(), 32.0)));
-        } else {
-            add_btn = Some(Rect::from_min_size(Pos2::new(x0, row_c - 16.0), Vec2::new(btn_w.ceil(), 32.0)));
-        }
+        add_btn = Some(Rect::from_center_size(slot.center(), Vec2::new(btn_w.ceil(), 32.0)));
     } else {
         paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix);
+        mix_bar_at(ui.painter(), Rect::from_min_size(Pos2::new(x0, bar_y), Vec2::new(iw, T_BAR)), &t.mix);
     }
-    mix_bar_at(ui.painter(), Rect::from_min_size(Pos2::new(x0, bar_y), Vec2::new(iw, T_BAR)), &t.mix);
 
-    // Hairline, then the footer: usage left, edited right.
+    // Hairline, then the footer: where it is used (a link to those exams) left, Open right.
     let rule_y = bar_y + T_BAR + 12.0;
     ui.painter().hline(x0..=x0 + iw, rule_y + 0.5, Stroke::new(1.0, theme::border()));
     let foot_y = rule_y + 1.0 + 10.0;
     let foot_c = foot_y + T_FOOT / 2.0;
-    let usage = crate::bankops::usage_label(t.used_in.len());
-    let font = |f: egui::FontFamily| egui::FontId::new(kit::ty::META, f);
-    let left_w = ui.painter().layout_no_wrap(usage.clone(), font(if t.used_in.is_empty() { theme::sans_family() } else { theme::semibold() }), theme::ink()).size().x;
-    let forms = edited_forms(t.edited);
-    let right = forms
-        .iter()
-        .map(|f| ui.painter().layout_no_wrap(f.clone(), font(theme::sans_family()), theme::muted_col()))
-        .find(|g| left_w + 12.0 + g.size().x <= iw)
-        .unwrap_or_else(|| ui.painter().layout_no_wrap(forms[2].clone(), font(theme::sans_family()), theme::muted_col()));
-    ui.painter().galley(Pos2::new(x0 + iw - right.size().x, foot_c - right.size().y / 2.0), right, theme::muted_col());
     if t.used_in.is_empty() {
-        let g = ui.painter().layout_no_wrap(usage, font(theme::sans_family()), theme::muted_col());
+        let g = ui.painter().layout_no_wrap(usage_text(t), meta_font.clone(), theme::muted_col());
         ui.painter().galley(Pos2::new(x0, foot_c - g.size().y / 2.0), g, theme::muted_col());
     }
 
@@ -1677,9 +1682,14 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
     {
         act = Some(TileAct::AddQuestions);
     }
+    let open_w = ui.painter().layout_no_wrap("Open".to_string(), egui::FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()).size().x + 17.0;
+    let open_r = Rect::from_min_size(Pos2::new(x0 + iw - open_w.ceil(), foot_c - T_FOOT / 2.0), Vec2::new(open_w.ceil(), T_FOOT));
+    if kit::link(&mut placed(ui, open_r, ("tile_open", &t.id)), "Open", true).clicked() {
+        act = Some(TileAct::Open);
+    }
     if !t.used_in.is_empty() {
-        let r = Rect::from_min_size(Pos2::new(x0, foot_c - 9.0), Vec2::new(iw, T_FOOT));
-        if kit::link(&mut placed(ui, r, ("tile_usage", &t.id)), &usage_text(t), false).clicked() {
+        let r = Rect::from_min_max(Pos2::new(x0, foot_c - T_FOOT / 2.0), Pos2::new(open_r.left() - 12.0, foot_c + T_FOOT / 2.0));
+        if tile_usage_link(&mut placed(ui, r, ("tile_usage", &t.id)), &usage_text(t)).clicked() {
             act = Some(TileAct::Usage);
         }
     }
@@ -1698,10 +1708,65 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
             act = Some(TileAct::Menu(a));
         }
     }
+    let card = if edited.is_none() { card.on_hover_text(forms[0].clone()) } else { card };
     if act.is_none() && card.clicked() {
         act = Some(TileAct::Open);
     }
     act
+}
+
+/// Which meta row fits `room`: the counts with topics (`full`) or without (`short`), then the
+/// edited text in its first form that fits 12 after them. The long "Edited 24 days ago" wins over
+/// the topics (so a row of narrow tiles reads alike: "11 questions", "Edited 24 days ago" right), then
+/// the month-day forms; with no room for any edited form the counts stand alone (topics kept
+/// when they fit).
+fn meta_fit(full: f32, short: f32, edited: [f32; 3], room: f32) -> (bool, Option<usize>) {
+    const GAP: f32 = 12.0;
+    let order = [(true, 0), (false, 0), (true, 1), (false, 1), (true, 2), (false, 2)];
+    order
+        .iter()
+        .find(|&&(t, k)| if t { full } else { short } + GAP + edited[k] <= room)
+        .map(|&(t, k)| (t, Some(k)))
+        .unwrap_or((full <= room, None))
+}
+
+/// A link that reads as one at rest: 13 pt accent, regular weight (a step below the semibold
+/// "Open"), with a quiet underline that turns solid under the pointer or focus.
+fn tile_usage_link(ui: &mut Ui, label: &str) -> egui::Response {
+    let col = theme::accent_col();
+    let g = ui.painter().layout_no_wrap(label.to_owned(), egui::FontId::new(kit::ty::META, theme::sans_family()), col);
+    let text = g.size();
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(text.x.ceil(), text.y.max(18.0)), Sense::click());
+    let top = rect.center().y - text.y / 2.0;
+    ui.painter().galley(Pos2::new(rect.left(), top), g, col);
+    let hot = resp.hovered() || resp.has_focus();
+    let line = if hot { col } else { col.gamma_multiply(0.45) };
+    ui.painter().hline(rect.left()..=rect.left() + text.x, (top + text.y - 1.0).round() + 0.5, Stroke::new(1.0, line));
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect.expand(2.0), CornerRadius::same(4), Stroke::new(2.0, col), egui::StrokeKind::Outside);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Link, true, label));
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// A dashed outline round `r` with corners of radius `rad` (an intentional empty slot).
+fn dashed_round_rect(p: &egui::Painter, r: Rect, rad: f32, stroke: Stroke) {
+    let r = r.shrink(0.5);
+    let mut pts = Vec::new();
+    let corners = [
+        (Pos2::new(r.right() - rad, r.top() + rad), -90.0_f32),
+        (Pos2::new(r.right() - rad, r.bottom() - rad), 0.0),
+        (Pos2::new(r.left() + rad, r.bottom() - rad), 90.0),
+        (Pos2::new(r.left() + rad, r.top() + rad), 180.0),
+    ];
+    for (c, a0) in corners {
+        for s in 0..=6 {
+            let a = (a0 + 90.0 * s as f32 / 6.0).to_radians();
+            pts.push(Pos2::new(c.x + rad * a.cos(), c.y + rad * a.sin()));
+        }
+    }
+    pts.push(pts[0]);
+    p.extend(egui::Shape::dashed_line(&pts, stroke, 5.0, 4.0));
 }
 
 /// The usage link's words ("Used in 1 exam").
@@ -4120,6 +4185,22 @@ mod tests {
         assert!(f[0].starts_with("Edited "));
         assert_eq!(f[1], "Edited Oct 17");
         assert_eq!(f[2], "Oct 17");
+    }
+
+    /// The meta row keeps the long edited form before the topics, then shortens the date.
+    #[test]
+    fn the_meta_row_drops_topics_before_the_long_edited_form() {
+        let ed = [101.0, 75.0, 38.0];
+        // Banks (283 inside): everything.
+        assert_eq!(meta_fit(119.0, 70.0, ed, 283.0), (true, Some(0)));
+        // Home (200 inside): the topics go first, the long form stays.
+        assert_eq!(meta_fit(119.0, 70.0, ed, 200.0), (false, Some(0)));
+        // Tighter: the month-day form, then the bare date.
+        assert_eq!(meta_fit(119.0, 70.0, ed, 160.0), (false, Some(1)));
+        assert_eq!(meta_fit(119.0, 70.0, ed, 125.0), (false, Some(2)));
+        // No room for any form: the counts alone.
+        assert_eq!(meta_fit(119.0, 70.0, ed, 119.0), (true, None));
+        assert_eq!(meta_fit(119.0, 70.0, ed, 100.0), (false, None));
     }
 
     /// A badge's room comes from dropping the topics, never from a taller row.

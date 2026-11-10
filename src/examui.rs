@@ -415,30 +415,6 @@ fn paint_tilted_card(
     painter.add(TextShape::new(pos, g, theme::ink()).with_angle(angle));
 }
 
-/// Tiny tilted page thumbnail for exam cards.
-fn paint_thumb(painter: &egui::Painter, c: Pos2, angle: f32, lines: usize) {
-    let (w, h) = (62.0_f32, 82.0_f32);
-    let corners = [
-        Vec2::new(-w / 2.0, -h / 2.0),
-        Vec2::new(w / 2.0, -h / 2.0),
-        Vec2::new(w / 2.0, h / 2.0),
-        Vec2::new(-w / 2.0, h / 2.0),
-    ];
-    let shadow: Vec<Pos2> = corners.iter().map(|d| c + rot(angle, *d) + Vec2::new(1.0, 5.0)).collect();
-    painter.add(Shape::convex_polygon(shadow, Color32::from_black_alpha(34), Stroke::NONE));
-    let pts: Vec<Pos2> = corners.iter().map(|d| c + rot(angle, *d)).collect();
-    painter.add(Shape::convex_polygon(pts, theme::paper(), Stroke::new(1.0, theme::paper_edge())));
-    let seg = |a: Vec2, b: Vec2, s: Stroke| {
-        painter.line_segment([c + rot(angle, a), c + rot(angle, b)], s);
-    };
-    seg(Vec2::new(-14.0, -h / 2.0 + 12.0), Vec2::new(14.0, -h / 2.0 + 12.0), Stroke::new(2.0, PAPER_SOFT));
-    for i in 0..lines.clamp(2, 7) {
-        let y = -h / 2.0 + 24.0 + i as f32 * 8.0;
-        let len = if i % 3 == 2 { 16.0 } else { 23.0 };
-        seg(Vec2::new(-23.0, y), Vec2::new(-23.0 + len * 2.0 - 8.0, y), Stroke::new(1.4, PAPER_RULE.gamma_multiply(0.6)));
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Exam list screen
 // ---------------------------------------------------------------------------
@@ -732,108 +708,46 @@ fn exam_menu(ui: &mut egui::Ui, rect: Rect, side: f32, row: &ExamRow, st: &mut L
     });
 }
 
-/// The Exams screen's page thumbnail (a mitigation: big enough to tell a page with a table from
-/// one of text; the name and the meta still say which exam it is).
-const EXAMS_THUMB: Vec2 = Vec2::new(112.0, 145.0);
-/// The thumbnail in a narrow window, so three cards and their actions show above the fold.
-const EXAMS_THUMB_NARROW: Vec2 = Vec2::new(88.0, 114.0);
 /// A card's action height (Open and its "…").
 const EXAMS_ACT_H: f32 = 32.0;
 
-/// The exam cards: the first page on the left; on the right the name (two lines kept), its
-/// counts, "From <bank>", and a footer under a hairline, level with the page's foot (edited date;
-/// Open, then "…"). Every card is the page plus its 16 px pads tall. One 16 px gutter between
-/// cards and rows.
+/// The exam cards (screens::exams_card): the top of the first page across the card, readable;
+/// then the name, its counts, "From <bank>", a hairline and the footer (edited date; Open, then
+/// "…"). Every card in a size is one height. One 16 px gutter between cards and rows.
 fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st: &mut ListUi) {
     let gap = kit::GUTTER;
-    let pad = kit::CARD_PAD;
     let avail = ui.available_width();
     let n = (((avail + gap) / (420.0 + gap)).floor() as usize).max(1);
     // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
     let fit = rows.len().clamp(1, n);
     let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
-    let thumb = if avail < 760.0 { EXAMS_THUMB_NARROW } else { EXAMS_THUMB };
-    let card_h = thumb.y + pad * 2.0;
+    let narrow = avail < 760.0;
     ui.spacing_mut().item_spacing = Vec2::splat(gap);
     for chunk in rows.chunks(n) {
-    ui.horizontal_top(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::splat(gap);
-        for row in chunk {
-            let (rect, resp) = ui.allocate_exact_size(Vec2::new(card_w, card_h), Sense::click());
-            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &row.name));
-            if resp.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::splat(gap);
+            for row in chunk {
+                let card = screens::ExamsCard {
+                    id: &row.id,
+                    name: &row.name,
+                    counts: format!(
+                        "{} question{} · {} point{}",
+                        row.q,
+                        if row.q == 1 { "" } else { "s" },
+                        fmt_number(row.pts),
+                        if (row.pts - 1.0).abs() < 1e-9 { "" } else { "s" },
+                    ),
+                    bank: &row.bank,
+                    when: format!("{}Edited {}", if row.archived { "Archived · " } else { "" }, bankui::fmt_date(row.modified)),
+                };
+                let out = screens::exams_card(ui, app, card_w, narrow, &card);
+                // (a child ui: the menu must not move this row's cursor, which set the gutter)
+                exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(out.menu)), out.menu, EXAMS_ACT_H, row, st);
+                if out.open {
+                    open_exam_screen(app, &row.id);
+                }
             }
-            let hover = kit::hover_t(ui.ctx(), resp.id.with("hover"), resp.hovered() || resp.has_focus());
-            let p = ui.painter().clone();
-            p.rect(
-                rect,
-                CornerRadius::same(kit::R_CARD),
-                theme::card(),
-                Stroke::new(1.0, theme::border().lerp_to_gamma(theme::accent_col(), hover * 0.6)),
-                StrokeKind::Inside,
-            );
-            if resp.has_focus() {
-                p.rect_stroke(rect.expand(1.0), CornerRadius::same(kit::R_CARD + 1), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
-            }
-            let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::splat(pad), thumb);
-            let ctx = ui.ctx().clone();
-            if paint_exam_thumb(app, &ctx, &p, thumb_area, &row.id).is_none() {
-                paint_thumb(&p, thumb_area.center(), -0.05, row.q.max(2));
-            }
-            let tx = thumb_area.right() + pad;
-            let tw = rect.right() - pad - tx;
-            let mut y = rect.top() + pad - 2.0;
-            // Name (two lines at most), then the facts right under it: the card's height is the
-            // page's, so the text flows from the top and only the footer is pinned.
-            let mut job = egui::text::LayoutJob::default();
-            job.append(&row.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
-            // (the narrow card is wide but short: one line, so the facts stay above the footer)
-            let rows = if thumb.y < EXAMS_THUMB.y { 1 } else { 2 };
-            job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: rows, break_anywhere: false, overflow_character: Some('…') };
-            let name = p.layout_job(job);
-            let name_h = name.rows.len().max(1) as f32 * kit::ty::CARD_LINE;
-            p.galley(Pos2::new(tx, y), name, theme::ink());
-            y += name_h + 4.0;
-            // Counts, then the bank the questions came from.
-            let counts = format!(
-                "{} question{} · {} point{}",
-                row.q,
-                if row.q == 1 { "" } else { "s" },
-                fmt_number(row.pts),
-                if (row.pts - 1.0).abs() < 1e-9 { "" } else { "s" },
-            );
-            let meta = FontId::new(kit::ty::META, theme::sans_family());
-            let gc = clamped_galley(&p, &counts, meta.clone(), theme::text_col(), tw, 1);
-            p.galley(Pos2::new(tx, y), gc, theme::text_col());
-            y += 18.0 + 4.0;
-            let from = p.layout_no_wrap("From ".to_string(), meta.clone(), theme::muted_col());
-            let lw = from.size().x;
-            p.galley(Pos2::new(tx, y), from, theme::muted_col());
-            let gb = clamped_galley(&p, &row.bank, FontId::new(kit::ty::META, theme::semibold()), theme::text_col(), tw - lw, 1);
-            p.galley(Pos2::new(tx + lw, y), gb, theme::text_col());
-            // Footer, level with the foot of the page: when, then the card's actions.
-            let foot = Rect::from_min_max(Pos2::new(tx, thumb_area.bottom() - EXAMS_ACT_H), Pos2::new(rect.right() - pad, thumb_area.bottom()));
-            p.hline(tx..=foot.right(), foot.top() - 9.5, Stroke::new(1.0, theme::border()));
-            let menu = Rect::from_min_size(Pos2::new(foot.right() - EXAMS_ACT_H, foot.top()), Vec2::splat(EXAMS_ACT_H));
-            let mut open = false;
-            let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 8.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
-            let ob = kit::secondary_accent(&mut btn, "Open", EXAMS_ACT_H);
-            if ob.clicked() {
-                open = true;
-            }
-            let when_w = (ob.rect.left() - 12.0 - tx).max(20.0);
-            let when = format!("{}Edited {}", if row.archived { "Archived · " } else { "" }, bankui::fmt_date(row.modified));
-            let gw = clamped_galley(&p, &when, meta, theme::muted_col(), when_w, 1);
-            let wy = foot.center().y - gw.size().y / 2.0;
-            p.galley(Pos2::new(tx, wy), gw, theme::muted_col());
-            // (a child ui: the menu must not move this row's cursor, which set the gutter)
-            exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, EXAMS_ACT_H, row, st);
-            if open || resp.clicked() {
-                open_exam_screen(app, &row.id);
-            }
-        }
-    });
+        });
     }
 }
 
@@ -2853,6 +2767,7 @@ fn margin_tip(kind: u8) -> &'static str {
         5 => "Merge with section above",
         6 => "Delete section and its questions",
         7 => "Edit question",
+        8 => "Remove question",
         _ => "Move down",
     }
 }
@@ -2873,6 +2788,15 @@ fn margin_button_side(ui: &mut egui::Ui, id: egui::Id, center: Pos2, kind: u8, s
 /// Paints a margin button's glyph (see [`margin_button`] for the kinds).
 fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
     let p = ui.painter();
+    if kind == 8 {
+        // The narrow page's remove: a trash can, red at rest (the paper is always light, so the
+        // light palette's red), a red wash under the pointer.
+        if hovered {
+            p.rect_filled(rect, CornerRadius::same(5), PAPER_DANGER.gamma_multiply(0.12));
+        }
+        crate::handicons::paint_glyph(p, rect.center(), egui_phosphor::regular::TRASH, 15.0, PAPER_DANGER);
+        return;
+    }
     // Remove and delete warn under the pointer: the red, not the accent the editing handles take.
     let danger = matches!(kind, 0 | 6);
     if hovered {
@@ -2924,6 +2848,19 @@ fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
 /// The grip's slot in [`MarginHandles`] (the other kinds are [`margin_tip`]'s).
 const GRIP: u8 = 255;
 
+/// The narrow page's remove handle (a trash can; desktop keeps the × of kind 0).
+const NARROW_REMOVE: u8 = 8;
+
+/// Red of the narrow remove handle: the light palette's red, as the paper is always light.
+const PAPER_DANGER: Color32 = Color32::from_rgb(0xa3, 0x3b, 0x2e);
+
+/// Room around the handles inside a narrow page's handle frame.
+const HANDLE_PAD: f32 = 2.0;
+
+/// Extra room between ↓ and remove in the narrow right frame (a hairline divides them).
+const REMOVE_GAP: f32 = 8.0;
+
+
 /// Where a placed question's handles go: the left gutter's (grip, pencil, "…") and the right
 /// gutter's (×, ↑, ↓), each a kind and a centre, `side` square.
 #[derive(Debug)]
@@ -2933,39 +2870,100 @@ struct MarginHandles {
     side: f32,
     /// ↑/↓ beside the question (false: they are in its "…" menu).
     tall: bool,
+    /// Narrow only: one quiet frame per gutter group (left, then right), drawn at rest.
+    frames: Vec<Rect>,
+    /// Narrow only: the hairline between ↓ and remove inside the right frame.
+    divider: Option<[Pos2; 2]>,
+}
+
+/// The frame around a group of `side` square handles.
+fn handle_frame(group: &[(u8, Pos2)], side: f32) -> Rect {
+    let mut r = Rect::NOTHING;
+    for h in group {
+        r = r.union(Rect::from_center_size(h.1, Vec2::splat(side)));
+    }
+    r.expand(HANDLE_PAD)
+}
+
+/// Frames for the two groups, and the divider before remove when it follows ↓.
+fn with_frames(mut hs: MarginHandles) -> MarginHandles {
+    hs.frames = vec![handle_frame(&hs.left, hs.side), handle_frame(&hs.right, hs.side)];
+    let n = hs.right.len();
+    if n >= 2 && hs.right[n - 1].0 == NARROW_REMOVE {
+        let (a, b) = (hs.right[n - 2].1, hs.right[n - 1].1);
+        let f = hs.frames[1];
+        let mid = Pos2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+        hs.divider = Some(if (a.y - b.y).abs() > (a.x - b.x).abs() {
+            [Pos2::new(f.left() + 5.0, mid.y), Pos2::new(f.right() - 5.0, mid.y)]
+        } else {
+            [Pos2::new(mid.x, f.top() + 5.0), Pos2::new(mid.x, f.bottom() - 5.0)]
+        });
+    }
+    hs
 }
 
 /// The handles of a question at `rect` with gutters `ml`/`mr` wide. Desktop: grip and "…" left,
-/// ×/↑/↓ right, 18 square. Narrow: 24 square, 26 apart, and a pencil between grip and "…"; under
-/// 76 tall only grip, "…" and ×. A gutter under 30 wide puts them in a 26-tall strip above the
-/// question, right-aligned.
+/// ×/↑/↓ right, 18 square, no frames. Narrow: 24 square, 26 apart, in one quiet frame per
+/// gutter: grip, pencil, "…" left; ↑, ↓ and then the trash-can remove (set apart by a hairline)
+/// right; on a question shorter than the right frame only grip and "…" left and remove right (↑/↓ go in the menu). A
+/// gutter under 30 wide puts both groups in a strip above the question, right-aligned.
 fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32, narrow: bool) -> MarginHandles {
-    let tall = !narrow || rect.height() >= 76.0;
     let side = if narrow { 24.0 } else { 18.0 };
     let step = if narrow { 26.0 } else { 20.0 };
+    // Narrow: ↑/↓ beside the question only when the whole right frame (from the first line's
+    // centre down past remove) ends inside the question.
+    let tall = !narrow || rect.height() >= bp * 0.75 + 2.0 * step + REMOVE_GAP + side / 2.0 + HANDLE_PAD;
     let left_k: &[u8] = if narrow && tall { &[GRIP, 7, 4] } else { &[GRIP, 4] };
-    let right_k: &[u8] = if tall { &[0, 1, 2] } else { &[0] };
+    let right_k: &[u8] = match (narrow, tall) {
+        (false, _) => &[0, 1, 2],
+        (true, true) => &[1, 2, NARROW_REMOVE],
+        (true, false) => &[NARROW_REMOVE],
+    };
+    // The gap after the handle at `k` in the right group (remove sits apart from ↓).
+    let rgap = |k: usize| if narrow && right_k.get(k + 1) == Some(&NARROW_REMOVE) { step + REMOVE_GAP } else { step };
     if narrow && ml.min(mr) < 30.0 {
         let y = rect.top() - 13.0;
-        let total = left_k.len() + right_k.len();
-        let at = |k: usize| Pos2::new(rect.right() - side / 2.0 - (total - 1 - k) as f32 * step, y);
-        return MarginHandles {
+        let mut xs = Vec::new();
+        let mut x = 0.0;
+        for k in 0..left_k.len() {
+            xs.push(x);
+            x += if k + 1 == left_k.len() { side + 2.0 * HANDLE_PAD + 12.0 } else { step };
+        }
+        for k in 0..right_k.len() {
+            xs.push(x);
+            x += rgap(k);
+        }
+        let shift = rect.right() - HANDLE_PAD - side / 2.0 - xs.last().copied().unwrap_or(0.0);
+        let at = |k: usize| Pos2::new(xs[k] + shift, y);
+        return with_frames(MarginHandles {
             left: left_k.iter().enumerate().map(|(k, &kind)| (kind, at(k))).collect(),
             right: right_k.iter().enumerate().map(|(k, &kind)| (kind, at(left_k.len() + k))).collect(),
             side,
             tall,
-        };
+            frames: Vec::new(),
+            divider: None,
+        });
     }
     let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
     let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
-    let y0 = rect.top() + if narrow { 12.0 } else { 9.0 };
+    // Narrow: both columns start on the question's first line.
+    let y0 = if narrow { gc.y } else { rect.top() + 9.0 };
     let lstep = if narrow { step } else { 24.0 };
-    MarginHandles {
+    let mut right = Vec::new();
+    let mut y = y0;
+    for (k, &kind) in right_k.iter().enumerate() {
+        right.push((kind, Pos2::new(rx, y)));
+        y += rgap(k);
+    }
+    let hs = MarginHandles {
         left: left_k.iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * lstep))).collect(),
-        right: right_k.iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y0 + k as f32 * step))).collect(),
+        right,
         side,
         tall,
-    }
+        frames: Vec::new(),
+        divider: None,
+    };
+    if narrow { with_frames(hs) } else { hs }
 }
 
 /// One question on the page, with its work space. Returns the item's screen rect (for drop
@@ -3031,6 +3029,15 @@ fn draw_item(
     if let Some(q) = q {
         let hs = margin_handles(rect, ml, mr, bp, narrow);
         let (tall, side) = (hs.tall, hs.side);
+        // Narrow: each gutter group in one quiet frame, so they read as this question's controls.
+        if show {
+            for f in &hs.frames {
+                ui.painter().rect(*f, CornerRadius::same(8), theme::paper(), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
+            }
+            if let Some(d) = hs.divider {
+                ui.painter().line_segment(d, Stroke::new(1.0, theme::border()));
+            }
+        }
         let left_pos: Vec<Pos2> = hs.left.iter().map(|h| h.1).collect();
         let left_n = left_pos.len();
         let gc = left_pos[0];
@@ -3054,7 +3061,7 @@ fn draw_item(
         }
         for &(kind, at) in &hs.right {
             let (salt, d) = match kind {
-                0 => ("it_x", 0),
+                0 | NARROW_REMOVE => ("it_x", 0),
                 1 => ("it_up", -1),
                 _ => ("it_dn", 1),
             };
@@ -7664,9 +7671,9 @@ mod system_pass_tests {
         let short = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 40.0));
         let kinds = |v: &[(u8, Pos2)]| v.iter().map(|h| h.0).collect::<Vec<_>>();
         let h = margin_handles(tall, 60.0, 60.0, 14.0, true);
-        assert_eq!((kinds(&h.left), kinds(&h.right), h.side, h.tall), (vec![GRIP, 7, 4], vec![0, 1, 2], 24.0, true));
+        assert_eq!((kinds(&h.left), kinds(&h.right), h.side, h.tall), (vec![GRIP, 7, 4], vec![1, 2, NARROW_REMOVE], 24.0, true));
         let s = margin_handles(short, 60.0, 60.0, 14.0, true);
-        assert_eq!((kinds(&s.left), kinds(&s.right), s.tall), (vec![GRIP, 4], vec![0], false));
+        assert_eq!((kinds(&s.left), kinds(&s.right), s.tall), (vec![GRIP, 4], vec![NARROW_REMOVE], false));
         for hs in [&h, &s] {
             let all: Vec<Rect> = hs.left.iter().chain(&hs.right).map(|p| Rect::from_center_size(p.1, Vec2::splat(hs.side))).collect();
             for (a, ra) in all.iter().enumerate() {
@@ -7677,15 +7684,40 @@ mod system_pass_tests {
             }
             // The left column stays inside the question's height plus its gap.
             assert!(hs.left.last().unwrap().1.y + hs.side / 2.0 <= tall.top() + 14.0 * 0.75 + 52.0 + 12.0 + 0.5);
+            // One frame per gutter group, clear of the question's text and of each other.
+            assert_eq!(hs.frames.len(), 2);
+            assert!(hs.frames[0].right() < tall.left() && hs.frames[1].left() > tall.right());
+            for (f, g) in hs.frames.iter().zip([&hs.left, &hs.right]) {
+                assert!(g.iter().all(|p| f.contains_rect(Rect::from_center_size(p.1, Vec2::splat(hs.side)))));
+            }
         }
+        // Both columns start on the first line; ↑/↓ 26 apart, remove set apart behind a divider.
+        assert!((h.left[0].1.y - h.right[0].1.y).abs() < 0.01);
         assert!((h.left[1].1.y - h.left[0].1.y - 26.0).abs() < 0.01 && (h.right[1].1.y - h.right[0].1.y - 26.0).abs() < 0.01);
-        // A gutter under 30: one strip above the question, right-aligned.
+        assert!((h.right[2].1.y - h.right[1].1.y - 34.0).abs() < 0.01);
+        let [a, b] = h.divider.expect("a divider before remove");
+        assert!(a.y > h.right[1].1.y + 12.0 && a.y < h.right[2].1.y - 12.0 && (a.y - b.y).abs() < 0.01);
+        assert!(s.divider.is_none());
+        // The right frame never runs past the question's foot: just short of it, the short layout.
+        assert!(h.frames[1].bottom() <= tall.bottom());
+        let foot = h.frames[1].bottom() - tall.top();
+        let edge = Rect::from_min_size(tall.min, Vec2::new(400.0, foot));
+        assert!(margin_handles(edge, 60.0, 60.0, 14.0, true).tall);
+        let under = Rect::from_min_size(tall.min, Vec2::new(400.0, foot - 1.0));
+        assert!(!margin_handles(under, 60.0, 60.0, 14.0, true).tall);
+        // A gutter under 30: one strip above the question, right-aligned, two frames apart.
         let n = margin_handles(tall, 24.0, 60.0, 14.0, true);
         assert!(n.left.iter().chain(&n.right).all(|p| (p.1.y - (tall.top() - 13.0)).abs() < 0.01));
-        assert!((n.right.last().unwrap().1.x - (tall.right() - 12.0)).abs() < 0.01);
-        // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart, 18 square, as before.
+        assert!((n.right.last().unwrap().1.x - (tall.right() - 14.0)).abs() < 0.01);
+        assert!((n.frames[1].right() - tall.right()).abs() < 0.01);
+        assert!(n.frames[1].left() - n.frames[0].right() >= 12.0 - 0.01);
+        let [a, b] = n.divider.expect("a divider before remove");
+        assert!((a.x - b.x).abs() < 0.01 && a.x > n.right[1].1.x + 12.0 && a.x < n.right[2].1.x - 12.0);
+        // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart, 18 square, no frames, as before.
         let d = margin_handles(short, 60.0, 60.0, 14.0, false);
         assert_eq!((kinds(&d.left), kinds(&d.right), d.side), (vec![GRIP, 4], vec![0, 1, 2], 18.0));
+        assert!(d.frames.is_empty() && d.divider.is_none());
+        assert!((d.right[0].1.y - (short.top() + 9.0)).abs() < 0.01 && (d.right[1].1.y - d.right[0].1.y - 20.0).abs() < 0.01);
     }
 
     /// The pencil (kind 7) is named "Edit question", never the catch-all "Move down".
@@ -7694,6 +7726,7 @@ mod system_pass_tests {
         assert_eq!(margin_tip(7), "Edit question");
         assert_eq!(margin_tip(2), "Move down");
         assert_eq!(margin_tip(4), "Question actions");
+        assert_eq!(margin_tip(NARROW_REMOVE), "Remove question");
     }
 
     #[test]

@@ -956,7 +956,15 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
             let empty = st.sources.is_empty();
             ui.add_space(12.0);
             drop_area(app, ui, st);
-            ui.add_space(12.0);
+            if empty && !st.in_modal {
+                // The privacy facts sit under the drop zone, left-aligned, so the zone holds only
+                // its title and the actions.
+                ui.add_space(6.0);
+                privacy_below(app, ui);
+                ui.add_space(10.0);
+            } else {
+                ui.add_space(12.0);
+            }
             if empty {
                 formats_panel(ui);
             } else {
@@ -1081,13 +1089,6 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                         }
                     });
                 }
-                if !compact && !st.in_modal {
-                    // The privacy facts close the drop zone (where a file is handed over), as one
-                    // wrapped line, instead of a band of their own that pushed the history below
-                    // the window.
-                    ui.add_space(4.0);
-                    privacy_line(app, ui);
-                }
             });
         });
     // Dashed accent outline (the frame itself has no stroke).
@@ -1135,30 +1136,59 @@ fn ctx_hovering(ctx: &egui::Context) -> bool {
     ctx.input(|i| !i.raw.hovered_files.is_empty())
 }
 
-/// The privacy facts, truthful about the configured provider: a lock, "Private by default." in
-/// bold ink, then the sentence in `text`, `size` pt.
-fn privacy_job(app: &crate::App, size: f32) -> egui::text::LayoutJob {
+/// The privacy sentence, truthful about the configured provider.
+fn privacy_text(app: &crate::App) -> String {
     let (dest, leaves) = provider_label(&app.settings);
-    let msg = if leaves {
+    if leaves {
         format!(
             "Text and spreadsheets are read on this computer. Nothing leaves it until you press Convert, and then only the photo goes to {dest}."
         )
     } else {
         format!("Everything is read on this computer. When you press Convert, the photo goes to {dest}, which runs here too.")
-    };
+    }
+}
+
+/// "Private by default." in bold ink, then the sentence in `text`, `size` pt.
+fn privacy_words(job: &mut egui::text::LayoutJob, app: &crate::App, size: f32) {
+    job.append("Private by default.", 0.0, egui::TextFormat::simple(FontId::new(size, theme::bold_family()), theme::ink()));
+    // The provider and its model ("Ollama Cloud · gemma4:31b") never break across lines.
+    let text = privacy_text(app).replace(" · ", "\u{a0}·\u{a0}");
+    job.append(&format!(" {text}"), 0.0, egui::TextFormat::simple(FontId::new(size, theme::sans_family()), theme::text_col()));
+}
+
+/// The privacy facts as one run (the Import dialog and the workspace): a lock, the bold lead,
+/// then the sentence.
+fn privacy_job(app: &crate::App, size: f32) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     job.append(egui_phosphor::regular::LOCK_SIMPLE, 0.0, egui::TextFormat::simple(theme::icon_font(size + 1.0), theme::accent_col()));
     job.append(" Private by default.", 4.0, egui::TextFormat::simple(FontId::new(size, theme::bold_family()), theme::ink()));
-    job.append(&format!(" {msg}"), 0.0, egui::TextFormat::simple(FontId::new(size, theme::sans_family()), theme::text_col()));
+    job.append(&format!(" {}", privacy_text(app)), 0.0, egui::TextFormat::simple(FontId::new(size, theme::sans_family()), theme::text_col()));
     job
 }
 
-/// The privacy line closing the drop zone: 14 pt, centred, wrapped at the measure.
-fn privacy_line(app: &crate::App, ui: &mut egui::Ui) {
-    let w = ui.available_width().min(crate::pageshell::MEASURE);
-    ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Center), |ui| {
-        ui.set_max_width(w);
-        ui.add(egui::Label::new(privacy_job(app, kit::ty::BODY)).wrap());
+/// Longest line of the note under the drop zone: about 80 characters at 14 pt, so the facts
+/// take two lines at both widths and the history stays in the first view.
+const PRIVACY_W: f32 = 540.0;
+
+/// The privacy note under the drop zone: a 24 pt accent_faded disc holding the lock, then the
+/// bold lead and the sentence at 14 pt, left-aligned, wrapped under the text (never under the
+/// disc) at [`PRIVACY_W`].
+fn privacy_below(app: &crate::App, ui: &mut egui::Ui) {
+    const DISC: f32 = 24.0;
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        let (r, _) = ui.allocate_exact_size(Vec2::splat(DISC), Sense::hover());
+        ui.painter().circle_filled(r.center(), DISC / 2.0, theme::accent_faded());
+        crate::handicons::paint_glyph(ui.painter(), r.center(), egui_phosphor::regular::LOCK_SIMPLE, 14.0, theme::accent_col());
+        let w = ui.available_width().min(PRIVACY_W);
+        ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Min), |ui| {
+            ui.set_max_width(w);
+            // the first line's centre on the disc's centre
+            ui.add_space(2.0);
+            let mut job = egui::text::LayoutJob::default();
+            privacy_words(&mut job, app, kit::ty::BODY);
+            ui.add(egui::Label::new(job).wrap());
+        });
     });
 }
 
