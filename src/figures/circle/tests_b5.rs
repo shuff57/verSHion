@@ -878,3 +878,44 @@ fn a_letter_the_figure_cannot_read_is_refused() {
         assert_eq!((q.s("name_a"), q.s("joins")), ("A", p.s("joins")), "box {bad}");
     }
 }
+
+/// A new letter that would change how a row that never named the point reads is refused: with points AB and D, a chord row ABD
+/// reads AB to D; a point renamed BD would make it read A to BD (another chord, another length, another angle).
+#[test]
+fn a_rename_that_would_change_another_rows_meaning_is_refused() {
+    let p = with(&[s("more_points", "AB 200, D 300, E 100"), b("show_c", true), f("c_angle", 150.0), s("joins", "ABD, OD"), s("marks", "ABD length, angle ABDO")]);
+    assert_eq!(not_drawn(&p), 0, "{:?}", warnings(&p));
+    let before = (def().render)(&p);
+    let q = type_at(&p, at_dir(&p, 100.0, 1.0), "BD");
+    assert_eq!(q.s("more_points"), p.s("more_points"), "E keeps its letter");
+    assert!((def().render)(&q) == before, "the figure is unchanged");
+    // in the panel: C renamed BD is refused, and the box goes back to C
+    let q = type_box(&p, "name_c", "BD");
+    assert_eq!(q.s("name_c"), "C");
+    assert!((def().render)(&q) == before);
+    // a letter that changes no other row's reading is still taken, and every length and angle stays
+    let q = type_at(&p, at_dir(&p, 100.0, 1.0), "E2");
+    assert_eq!(q.s("more_points"), "AB 200, D 300, E2 100");
+    assert_eq!(texts(&q).iter().filter(|t| t.ends_with(" cm") || t.ends_with('\u{b0}')).collect::<Vec<_>>(), texts(&p).iter().filter(|t| t.ends_with(" cm") || t.ends_with('\u{b0}')).collect::<Vec<_>>());
+}
+
+/// A letter with a space inside it is refused, in the panel's letter boxes (the box goes back) and on the figure.
+#[test]
+fn a_letter_with_a_space_inside_it_is_refused() {
+    let p = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "D 300"), s("joins", "AD, OD"), s("marks", "AD length")]);
+    let before = (def().render)(&p);
+    for (key, bad) in [("name_a", "P Q"), ("name_o", "X Y"), ("name_b", "D 1"), ("name_a", " P Q ")] {
+        let q = type_box(&p, key, bad);
+        assert_eq!(q.s(key), p.s(key), "{key} {bad:?}");
+        assert!((def().render)(&q) == before, "{key} {bad:?}");
+    }
+    for bad in ["X Y", "D 1"] {
+        let q = type_at(&p, at_dir(&p, 300.0, 1.0), bad);
+        assert_eq!((q.s("more_points"), q.s("joins")), (p.s("more_points"), p.s("joins")), "{bad:?}");
+    }
+    // spaces round a letter are not inside it: " P " is P
+    let q = type_box(&p, "name_a", "PQ");
+    assert_eq!((q.s("name_a"), q.s("joins")), ("PQ", "PQD, OD"));
+    let q = type_at(&p, at_dir(&p, 300.0, 1.0), " X ");
+    assert_eq!(q.s("more_points"), "X 300");
+}

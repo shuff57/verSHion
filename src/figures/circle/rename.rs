@@ -79,10 +79,24 @@ fn letters_but(p: &Params, skip: &str) -> Vec<(String, (i64, i64))> {
 
 fn not_drawn(p: &Params) -> usize { warnings(p).iter().filter(|w| w.contains("not drawn")).count() }
 
+/// What every row resolves to, by place and not by letter: the points, the lines between points, the tangents (at points and from
+/// points outside), the midpoints and crossings, the labels (with what they say), the marks and styles, the shaded areas. A rename
+/// moves no point and changes no row's meaning, so this is the same before and after it, whichever rows name the renamed point.
+fn resolved(p: &Params) -> String {
+    let joins: Vec<(edit::V, edit::V)> = edit::joins(p).into_iter().map(|(_, x, y)| (edit::end_pos(p, x), edit::end_pos(p, y))).collect();
+    let circle: Vec<f64> = edit::circle_points(p).into_iter().map(|x| x.1).collect();
+    let free: Vec<edit::V> = pts::free_points(p).into_iter().map(|x| x.1).collect();
+    let outs: Vec<(edit::V, Vec<f64>)> = pts::outside_tangents(p).into_iter().map(|t| (t.at, t.touch.into_iter().map(|x| x.1).collect())).collect();
+    format!("{circle:?}|{free:?}|{joins:?}|{:?}|{outs:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}", edit::tangent_dirs(p), edit::marks(p), edit::tangent_words(p),
+        style::lines(p).into_iter().map(|l| (l.a, l.b, l.st.ticks, l.st.arrows, l.st.dash, l.st.arcs, l.past_a, l.past_b)).collect::<Vec<_>>(), style::arcs(p), style::angles(p), edit::regions(p), pts::polygon_vertices(p).into_iter().map(|x| x.1).collect::<Vec<_>>())
+}
+
 /// Renames point `old` to `new` everywhere. Returns false (and changes nothing) when `new` is another point's letter, or a letter
 /// the figure would not read back as that point (`to`, `-`, `x-1`): the renamed figure must read `new` as the same point, read a
 /// line from it to the centre written either way (`XO`, `X O`), draw every row it drew, and keep every other point on its letter.
 pub fn rename(p: &mut Params, old: &str, new: &str) -> bool {
+    // a letter with a space inside it (P Q) is not one letter: the figure would read it as two words
+    if new.trim().chars().any(char::is_whitespace) { return false; }
     let new = clean(new);
     if new.is_empty() || new == old { return true; }
     if refusal(p, old, &new).is_some() { return false; }
@@ -102,7 +116,10 @@ pub fn rename(p: &mut Params, old: &str, new: &str) -> bool {
         .all(|(i, t)| edit::pair_names(t, &known) == Some(if i < 2 { (new.clone(), other.clone()) } else { (other.clone(), new.clone()) }));
     let rows_kept = not_drawn(&r) <= not_drawn(p);
     let others_kept = letters_but(&r, &new) == letters_but(p, old);
-    if !(reads && pairs && rows_kept && others_kept) { return false; }
+    // and every row means what it meant: the same points, lines, labels and marks in the same places (a new letter BD must not
+    // turn a row ABD that read AB to D into A to BD)
+    let same_meaning = resolved(&r) == resolved(p);
+    if !(reads && pairs && rows_kept && others_kept && same_meaning) { return false; }
     *p = r;
     true
 }
