@@ -212,6 +212,9 @@ pub fn panel_changed(key: &str, old: &Value, p: &mut Params) {
     let eff = |s: &str| { let t: String = s.chars().filter(|c| !c.is_control()).collect::<String>().trim().chars().take(3).collect(); if t.is_empty() { dflt.to_string() } else { t } };
     let (from, to) = (eff(old), eff(p.s(key)));
     if from == to { return; }
+    // the figure keeps the first three characters after trimming, so `PQ R` reads as `PQ ` with a space in it, which no
+    // row can name: refuse it like any other letter the figure cannot read back (the batch 5 checker)
+    if to.chars().any(char::is_whitespace) { p.set_s(key, old); return; }
     let typed = p.s(key).to_string();
     if rename(&mut before, &from, &to) {
         // keep what was typed in the box (spaces and all); the rows carry the effective letter

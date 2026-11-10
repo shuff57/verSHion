@@ -904,7 +904,7 @@ fn a_rename_that_would_change_another_rows_meaning_is_refused() {
 fn a_letter_with_a_space_inside_it_is_refused() {
     let p = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "D 300"), s("joins", "AD, OD"), s("marks", "AD length")]);
     let before = (def().render)(&p);
-    for (key, bad) in [("name_a", "P Q"), ("name_o", "X Y"), ("name_b", "D 1"), ("name_a", " P Q ")] {
+    for (key, bad) in [("name_a", "P Q"), ("name_o", "X Y"), ("name_b", "D 1"), ("name_a", " P Q "), ("name_a", "PQ R"), ("name_o", "XY Z"), ("name_c", "AB C"), ("name_m", "Q  R")] {
         let q = type_box(&p, key, bad);
         assert_eq!(q.s(key), p.s(key), "{key} {bad:?}");
         assert!((def().render)(&q) == before, "{key} {bad:?}");
