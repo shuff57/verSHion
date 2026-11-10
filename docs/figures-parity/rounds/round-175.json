@@ -1,0 +1,35 @@
+{
+ "round": 175,
+ "figure": "reaction-energy-diagram",
+ "capability": "cap-06d",
+ "hypothesis": "Batch 4 reaction-energy-diagram: cap-06d; evidence changes:{\"ts_label\":\"Text\",\"ts_label_text\":\"[N\\u2082H\\u2083]\\u2021\"}",
+ "started_at": "2026-11-09T17:58:29",
+ "git": "1e922c9",
+ "before": {
+  "figure": 76.2,
+  "pooled": 88.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T17:58:29",
+ "after": {
+  "figure": 79.2,
+  "pooled": 88.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"ts_label\":\"Text\",\"ts_label_text\":\"[N\\u2082H\\u2083]\\u2021\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/9b15e8aa26086d0c.png"
+   }
+  ]
+ },
+ "checker": "pass: transition state labelled with subscripts",
+ "result": "hit",
+ "evidence": "reactionenergy tests (77 old saved figures and share links frozen in tests/fixtures/reaction_energy_old.txt render byte-identically; three steps checked by hand; new handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker compared the enzyme task: reference 4 actions, ours 5",
+ "next": "reaction-energy-diagram (remaining)"
+}

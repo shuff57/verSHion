@@ -1,0 +1,37 @@
+{
+ "round": 164,
+ "figure": "reaction-energy-diagram",
+ "capability": "cap-01b",
+ "hypothesis": "Batch 4 reaction-energy-diagram: cap-01b; evidence changes:{\"catalyst\":true,\"path_names\":\"Enzyme\"}",
+ "started_at": "2026-11-09T17:58:20",
+ "git": "1e922c9",
+ "before": {
+  "figure": 41.6,
+  "pooled": 87.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T17:58:22",
+ "after": {
+  "figure": 44.6,
+  "pooled": 87.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"catalyst\":true,\"path_names\":\"Enzyme\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/82ed2b9ed374f281.png"
+   }
+  ]
+ },
+ "checker": "pass: with and without enzyme in the key and on the arrow",
+ "result": "hit",
+ "evidence": "reactionenergy tests (77 old saved figures and share links frozen in tests/fixtures/reaction_energy_old.txt render byte-identically; three steps checked by hand; new handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker compared the enzyme task: reference 4 actions, ours 5",
+ "next": "reaction-energy-diagram (remaining)"
+}

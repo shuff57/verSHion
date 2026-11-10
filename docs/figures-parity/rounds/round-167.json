@@ -1,0 +1,35 @@
+{
+ "round": 167,
+ "figure": "reaction-energy-diagram",
+ "capability": "cap-02e",
+ "hypothesis": "Batch 4 reaction-energy-diagram: cap-02e; evidence changes:unit=kJ mol⁻¹",
+ "started_at": "2026-11-09T17:58:23",
+ "git": "1e922c9",
+ "before": {
+  "figure": 52.5,
+  "pooled": 87.7
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T17:58:24",
+ "after": {
+  "figure": 55.4,
+  "pooled": 87.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:unit=kJ mol⁻¹",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/1414177ff9b86109.png"
+   }
+  ]
+ },
+ "checker": "pass: unit on the axis and in the key",
+ "result": "hit",
+ "evidence": "reactionenergy tests (77 old saved figures and share links frozen in tests/fixtures/reaction_energy_old.txt render byte-identically; three steps checked by hand; new handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker compared the enzyme task: reference 4 actions, ours 5",
+ "next": "reaction-energy-diagram (remaining)"
+}

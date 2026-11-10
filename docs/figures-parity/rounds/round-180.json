@@ -1,0 +1,35 @@
+{
+ "round": 180,
+ "figure": "reaction-energy-diagram",
+ "capability": "cap-07f",
+ "hypothesis": "Batch 4 reaction-energy-diagram: cap-07f; evidence changes:fit=false",
+ "started_at": "2026-11-09T17:58:32",
+ "git": "1e922c9",
+ "before": {
+  "figure": 91.1,
+  "pooled": 88.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T17:58:33",
+ "after": {
+  "figure": 94.1,
+  "pooled": 88.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:fit=false",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/ea7b6632f61d400e.png"
+   }
+  ]
+ },
+ "checker": "pass: typed energy range, widened by whole steps with a note",
+ "result": "hit",
+ "evidence": "reactionenergy tests (77 old saved figures and share links frozen in tests/fixtures/reaction_energy_old.txt render byte-identically; three steps checked by hand; new handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker compared the enzyme task: reference 4 actions, ours 5",
+ "next": "reaction-energy-diagram (remaining)"
+}

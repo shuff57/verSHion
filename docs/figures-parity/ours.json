@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-09T19:45:51+00:00",
-  "src_mtime": 1794253197.2043436,
-  "git": "7529bc6",
+  "built_at": "2026-11-10T01:58:20+00:00",
+  "src_mtime": 1794274266.219176,
+  "git": "1e922c9",
   "figures": 191
  },
  "figures": {
@@ -14359,7 +14359,8 @@
      "kind": "choice",
      "options": [
       "One step",
-      "Two steps"
+      "Two steps",
+      "Three steps"
      ],
      "default": "One step"
     },
@@ -14450,7 +14451,9 @@
      "options": [
       "Activated complex",
       "Transition state",
-      "None"
+      "None",
+      "Text",
+      "Blank line"
      ],
      "default": "Activated complex"
     },
@@ -14481,6 +14484,355 @@
      "kind": "bool",
      "options": [],
      "default": "true"
+    },
+    {
+     "key": "view",
+     "label": "Diagram",
+     "kind": "choice",
+     "options": [
+      "Energy profile",
+      "Level diagram"
+     ],
+     "default": "Energy profile"
+    },
+    {
+     "key": "enter",
+     "label": "Type",
+     "kind": "choice",
+     "options": [
+      "Each level's energy",
+      "Ea and ΔH"
+     ],
+     "default": "Each level's energy"
+    },
+    {
+     "key": "dh",
+     "label": "ΔH (kJ/mol)): number -10000..10000, default -60.0 - E(products) − E(reactants",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "intermediate2",
+     "label": "Second intermediate energy (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "100.0"
+    },
+    {
+     "key": "ea3",
+     "label": "Ea of step 3 (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "50.0"
+    },
+    {
+     "key": "rds",
+     "label": "Rate-determining step in the key",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "unit",
+     "label": "Unit",
+     "kind": "choice",
+     "options": [
+      "kJ/mol",
+      "kJ mol⁻¹",
+      "kJ"
+     ],
+     "default": "kJ/mol"
+    },
+    {
+     "key": "path_names",
+     "label": "Names in the key",
+     "kind": "choice",
+     "options": [
+      "Catalyst",
+      "Enzyme",
+      "Text"
+     ],
+     "default": "Catalyst"
+    },
+    {
+     "key": "uncat_text",
+     "label": "Uncatalysed path's name",
+     "kind": "text",
+     "options": [],
+     "default": "Without catalyst"
+    },
+    {
+     "key": "cat_text",
+     "label": "Catalysed path's name",
+     "kind": "text",
+     "options": [],
+     "default": "With catalyst"
+    },
+    {
+     "key": "ea_label",
+     "label": "Ea arrow's label",
+     "kind": "choice",
+     "options": [
+      "Symbol",
+      "Value",
+      "Letter or number",
+      "Blank line",
+      "None"
+     ],
+     "default": "Symbol"
+    },
+    {
+     "key": "dh_label",
+     "label": "ΔH arrow's label",
+     "kind": "choice",
+     "options": [
+      "Symbol",
+      "Value",
+      "Letter or number",
+      "Blank line",
+      "None"
+     ],
+     "default": "Symbol"
+    },
+    {
+     "key": "ear_label",
+     "label": "Ea (reverse) arrow's label",
+     "kind": "choice",
+     "options": [
+      "Symbol",
+      "Value",
+      "Letter or number",
+      "Blank line",
+      "None"
+     ],
+     "default": "Symbol"
+    },
+    {
+     "key": "tags",
+     "label": "Letters or numbers",
+     "kind": "choice",
+     "options": [
+      "Letters (A, B, C)",
+      "Numbers (1, 2, 3)"
+     ],
+     "default": "Letters (A, B, C)"
+    },
+    {
+     "key": "both_heads",
+     "label": "Arrowheads at both ends",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "level_lines",
+     "label": "Dashed lines from the levels",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "reactant_mode",
+     "label": "Reactants label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "product_mode",
+     "label": "Products label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "ts_label_text",
+     "label": "Peak label text",
+     "kind": "text",
+     "options": [],
+     "default": "Transition state"
+    },
+    {
+     "key": "inter_label",
+     "label": "Intermediate label",
+     "kind": "choice",
+     "options": [
+      "Same as the peaks",
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Same as the peaks"
+    },
+    {
+     "key": "inter_label_text",
+     "label": "Intermediate label text",
+     "kind": "text",
+     "options": [],
+     "default": "Intermediate"
+    },
+    {
+     "key": "line_color",
+     "label": "Line color",
+     "kind": "choice",
+     "options": [
+      "Blue",
+      "Orange",
+      "Green",
+      "Red",
+      "Purple",
+      "Black"
+     ],
+     "default": "Blue"
+    },
+    {
+     "key": "cat_color",
+     "label": "Catalysed path's color",
+     "kind": "choice",
+     "options": [
+      "Blue",
+      "Orange",
+      "Green",
+      "Red",
+      "Purple",
+      "Black"
+     ],
+     "default": "Orange"
+    },
+    {
+     "key": "title_mode",
+     "label": "Chart title",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Text",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "title",
+     "label": "Chart title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "x_title_mode",
+     "label": "x-axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "x_title",
+     "label": "x-axis title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "y_title_mode",
+     "label": "y-axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "y_title",
+     "label": "y-axis title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "fit",
+     "label": "Fit the axis to the levels",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "y_from",
+     "label": "Energy axis from",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "y_to",
+     "label": "Energy axis to",
+     "kind": "float",
+     "options": [],
+     "default": "200.0"
+    },
+    {
+     "key": "y_step",
+     "label": "Count by",
+     "kind": "float",
+     "options": [],
+     "default": "20.0"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Light",
+      "Standard",
+      "Bold"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines",
+     "kind": "choice",
+     "options": [
+      "None",
+      "2 per block",
+      "4 per block",
+      "5 per block"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "y_end",
+     "label": "Energy axis top",
+     "kind": "choice",
+     "options": [
+      "Arrow",
+      "Line arrow",
+      "None"
+     ],
+     "default": "Arrow"
+    },
+    {
+     "key": "x_end",
+     "label": "Reaction progress end",
+     "kind": "choice",
+     "options": [
+      "Arrow",
+      "Line arrow",
+      "None"
+     ],
+     "default": "Arrow"
     },
     {
      "key": "show_answers",

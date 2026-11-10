@@ -14,8 +14,8 @@
    "id": "cap-01b",
    "text": "With and without an enzyme (biology), with the paths named for the enzyme",
    "class": "control",
-   "evidence": "",
-   "note": "Ours' catalyst key names are fixed ('Without catalyst', 'With catalyst')."
+   "evidence": "changes:{\"catalyst\":true,\"path_names\":\"Enzyme\"}",
+   "note": "Built in batch 4, round 164 (2026-11-09). Ours' catalyst key names are fixed ('Without catalyst', 'With catalyst')."
   },
   {
    "id": "cap-02a",
@@ -28,8 +28,8 @@
    "id": "cap-02b",
    "text": "Type Ea and dH directly instead of the levels",
    "class": "control",
-   "evidence": "",
-   "note": "Narrow form only: ours types Ea, but dH only by moving the products' level."
+   "evidence": "changes:{\"enter\":\"Ea and \\u0394H\",\"dh\":30.0}",
+   "note": "Built in batch 4, round 165 (2026-11-09). Narrow form only: ours types Ea, but dH only by moving the products' level."
   },
   {
    "id": "cap-02c",
@@ -42,15 +42,15 @@
    "id": "cap-02d",
    "text": "Three steps",
    "class": "core",
-   "evidence": "",
-   "note": "Ours stops at two."
+   "evidence": "changes:steps=Three steps",
+   "note": "Built in batch 4, round 166 (2026-11-09). Ours stops at two."
   },
   {
    "id": "cap-02e",
    "text": "Units kJ mol-1 or kJ instead of kJ/mol",
    "class": "control",
-   "evidence": "",
-   "note": "Ours writes kJ/mol only."
+   "evidence": "changes:unit=kJ mol⁻¹",
+   "note": "Built in batch 4, round 167 (2026-11-09). Ours writes kJ/mol only."
   },
   {
    "id": "cap-03a",
@@ -63,15 +63,15 @@
    "id": "cap-03b",
    "text": "Your own names for the paths in the key",
    "class": "control",
-   "evidence": "",
-   "note": "Ours' key names are fixed (see cap-01b)."
+   "evidence": "changes:{\"catalyst\":true,\"path_names\":\"Text\",\"cat_text\":\"Over platinum\"}",
+   "note": "Built in batch 4, round 168 (2026-11-09). Ours' key names are fixed (see cap-01b)."
   },
   {
    "id": "cap-04",
    "text": "A level diagram of the reactants and products alone, instead of the energy profile",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:view=Level diagram",
+   "note": "Built in batch 4, round 169 (2026-11-09)."
   },
   {
    "id": "cap-05a",
@@ -84,36 +84,36 @@
    "id": "cap-05b",
    "text": "Arrow labeled with its value (Ea = 80 kJ/mol) instead of the symbol",
    "class": "control",
-   "evidence": "",
-   "note": "Ours labels arrows with the symbol only; the values are in the working under the diagram."
+   "evidence": "changes:ea_label=Value",
+   "note": "Built in batch 4, round 170 (2026-11-09). Ours labels arrows with the symbol only; the values are in the working under the diagram."
   },
   {
    "id": "cap-05c",
    "text": "Arrow labeled with a letter or number",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:ea_label=Letter or number",
+   "note": "Built in batch 4, round 171 (2026-11-09)."
   },
   {
    "id": "cap-05d",
    "text": "Arrow labeled with a blank line",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:ea_label=Blank line",
+   "note": "Built in batch 4, round 172 (2026-11-09)."
   },
   {
    "id": "cap-05e",
    "text": "Arrowheads at both ends",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:both_heads=true",
+   "note": "Built in batch 4, round 173 (2026-11-09)."
   },
   {
    "id": "cap-05f",
    "text": "Dashed lines from the levels, on or off",
    "class": "control",
-   "evidence": "",
-   "note": "Ours always draws them; no toggle."
+   "evidence": "changes:level_lines=false",
+   "note": "Built in batch 4, round 174 (2026-11-09). Ours always draws them; no toggle."
   },
   {
    "id": "cap-06a",
@@ -140,15 +140,15 @@
    "id": "cap-06d",
    "text": "Transition states and intermediates labeled with your own text",
    "class": "control",
-   "evidence": "",
-   "note": "Ours' peak label is a fixed choice."
+   "evidence": "changes:{\"ts_label\":\"Text\",\"ts_label_text\":\"[N\\u2082H\\u2083]\\u2021\"}",
+   "note": "Built in batch 4, round 175 (2026-11-09). Ours' peak label is a fixed choice."
   },
   {
    "id": "cap-06e",
    "text": "Level labels as blank lines",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:reactant_mode=Blank line",
+   "note": "Built in batch 4, round 176 (2026-11-09)."
   },
   {
    "id": "cap-06f",
@@ -161,15 +161,15 @@
    "id": "cap-07a",
    "text": "Line colors",
    "class": "control",
-   "evidence": "",
-   "note": "Ours has Colour/Print only, no color choice."
+   "evidence": "changes:line_color=Red",
+   "note": "Built in batch 4, round 177 (2026-11-09). Ours has Colour/Print only, no color choice."
   },
   {
    "id": "cap-07b",
    "text": "A chart title",
    "class": "control",
-   "evidence": "",
-   "note": "No chart title in ours."
+   "evidence": "changes:title_mode=Text",
+   "note": "Built in batch 4, round 178 (2026-11-09). No chart title in ours."
   },
   {
    "id": "cap-07c",
@@ -182,8 +182,8 @@
    "id": "cap-07d",
    "text": "Axis titles as your own text or blank lines, each separately",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:x_title=Time",
+   "note": "Built in batch 4, round 179 (2026-11-09)."
   },
   {
    "id": "cap-07e",
@@ -196,22 +196,22 @@
    "id": "cap-07f",
    "text": "The energy axis range (from, to, count by)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:fit=false",
+   "note": "Built in batch 4, round 180 (2026-11-09)."
   },
   {
    "id": "cap-07g",
    "text": "Gridlines (light, standard, bold, none) and minor gridlines",
    "class": "control",
-   "evidence": "",
-   "note": "Ours has no gridlines."
+   "evidence": "changes:grid=Light",
+   "note": "Built in batch 4, round 181 (2026-11-09). Ours has no gridlines."
   },
   {
    "id": "cap-07h",
    "text": "Axis arrow ends chosen",
    "class": "control",
-   "evidence": "",
-   "note": "Ours always draws arrowheads on both axes."
+   "evidence": "changes:y_end=None",
+   "note": "Built in batch 4, round 182 (2026-11-09). Ours always draws arrowheads on both axes."
   },
   {
    "id": "cap-07i",

@@ -1,18 +1,11 @@
 # Figures parity score
 
-Generated: 2026-11-09T19:46:22+00:00 · probe: 2026-11-09T11:46:22
+Generated: 2026-11-10T01:58:34+00:00 · probe: 2026-11-09T17:58:34
 
-**Pooled 87.5** · mean 88.1 over 70 figures · built 71 of 71 reference figures
+**Pooled 88.6** · mean 88.9 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `reaction-energy-diagram`: 42 (42/101)
-  - cap-02d [core 5] Three steps — no evidence
-  - cap-01b [control 3] With and without an enzyme (biology), with the paths named for the enzyme — no evidence
-  - cap-02b [control 3] Type Ea and dH directly instead of the levels — no evidence
-  - cap-02e [control 3] Units kJ mol-1 or kJ instead of kJ/mol — no evidence
-  - cap-03b [control 3] Your own names for the paths in the key — no evidence
-  - cap-04 [control 3] A level diagram of the reactants and products alone, instead of the energy profile — no evidence
 - `parallel-lines`: 50 (23/46)
   - cap-01c [core 5] Four or more parallel lines — no evidence
   - cap-01d [core 5] Three or more transversals — no evidence
@@ -218,6 +211,7 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `reaction-energy-diagram`: 100 (101/101)
 - `sphere`: 100 (35/35)
 - `stem-and-leaf`: 100 (67/67)
 - `titration-curve`: 100 (64/64)

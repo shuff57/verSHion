@@ -1,0 +1,35 @@
+{
+ "round": 169,
+ "figure": "reaction-energy-diagram",
+ "capability": "cap-04",
+ "hypothesis": "Batch 4 reaction-energy-diagram: cap-04; evidence changes:view=Level diagram",
+ "started_at": "2026-11-09T17:58:25",
+ "git": "1e922c9",
+ "before": {
+  "figure": 58.4,
+  "pooled": 87.8
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T17:58:25",
+ "after": {
+  "figure": 61.4,
+  "pooled": 87.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:view=Level diagram",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/reaction-energy-diagram/f1f950b16b8cf102.png"
+   }
+  ]
+ },
+ "checker": "pass: level diagram right for exo and endothermic",
+ "result": "hit",
+ "evidence": "reactionenergy tests (77 old saved figures and share links frozen in tests/fixtures/reaction_energy_old.txt render byte-identically; three steps checked by hand; new handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker compared the enzyme task: reference 4 actions, ours 5",
+ "next": "reaction-energy-diagram (remaining)"
+}
