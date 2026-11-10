@@ -58,7 +58,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
         "kite" => kite(p)?,
         "regular-polygon" => regular_polygon(p)?,
         "angles" => angles(p),
-        "parallel-lines" => parallel_lines(p),
+        "parallel-lines" => super::math::parallel_handles(p),
         "prism" => prism(p)?,
         "pyramid" => pyramid(p)?,
         "cylinder" => round_solid(id, p, true)?,
@@ -255,50 +255,7 @@ fn angles(p: &Params) -> Vec<Handle> {
     turned(out, AC, p.f("turn"))
 }
 
-// ---------- parallel lines ----------
-
-fn parallel_lines(p: &Params) -> Vec<Handle> {
-    let (w, h, ys) = super::math::pl_layout(p);
-    let nl = ys.len();
-    let nt = p.i("transversals").clamp(1, 2) as usize;
-    let mut out = Vec::new();
-    let rad = 26.0;
-    for ti in 0..nt {
-        let th = if ti == 0 { p.f("angle") } else { p.f("angle_b").clamp(15.0, 165.0) };
-        let key = if ti == 0 { "angle" } else { "angle_b" };
-        let cx0 = super::math::pl_cx0(p, ti, &ys, w);
-        let tr = th.to_radians();
-        let slope = (tr.cos(), -tr.sin());
-        let cross: Vec<Pt> = ys.iter().map(|y| { let t = (*y - ys[0]) / slope.1; (cx0 + slope.0 * t, *y) }).collect();
-        let tl = 90.0 / slope.1.abs().max(0.2);
-        let tip = (cross[0].0 + slope.0 * tl, cross[0].1 + slope.1 * tl);
-        let c0 = cross[0];
-        out.push(Handle::knob(tip, "Drag the transversal to change the angle", move |p, s| {
-            let a = angle_deg(c0, s);
-            p.set_f(key, if a > 180.0 { a - 180.0 } else { a });
-        }));
-        for (i, c) in cross.iter().enumerate() {
-            let secs = [(th, 180.0, 1usize), (0.0, th, 2), (360.0 - (180.0 - th), 360.0, 3), (180.0, 180.0 + th, 4)];
-            for (a0, a1, k) in secs {
-                let num = (ti * 4 * nl + i * 4 + k) as f64;
-                let mid = (a0 + a1) / 2.0;
-                let r = if a1 - a0 < 50.0 { rad + 16.0 } else { rad + 8.0 };
-                out.push(Handle::zone(dirp(*c, mid, r), (30.0, 22.0), "Click to label or unlabel this angle", move |p| {
-                    let on = nums(p.s("marked")).contains(&num);
-                    toggle(p, "marked", num, !on);
-                }));
-            }
-        }
-    }
-    let last = ys[nl - 1];
-    out.push(Handle::bar((100.0, last), true, "Drag to change the gap between lines", move |p, s| {
-        // last line sits at 120 + gap * (lines - 1) (see math::pl_layout)
-        let nl = p.i("lines").clamp(2, 3) as f64;
-        p.set_f("gap", (s.1 - 120.0) / (nl - 1.0) / 100.0);
-    }));
-    let _ = h;
-    turned(out, (w / 2.0, h / 2.0), p.f("turn"))
-}
+// ---------- parallel lines: math/parallel.rs (`handles`) ----------
 
 /// Handles laid out for an unturned figure, turned with it about `c` (drags see unturned points).
 fn turned(hs: Vec<Handle>, c: Pt, turn: f64) -> Vec<Handle> {

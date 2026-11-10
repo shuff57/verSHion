@@ -692,6 +692,9 @@ pub struct ChipsCard {
     pub chips: Vec<Chip>,
 }
 
+/// In a chip's `set`, `Value::I(CHIP_ONE_MORE)` means "one more than now, up to the param's maximum" (Add parallel line).
+pub const CHIP_ONE_MORE: i64 = i64::MIN + 1;
+
 /// `count_key == ""` makes the chips plain actions (no slot is added); `Value::I(i64::MIN)` in a
 /// chip's `set` means "a fresh random number" (a new seed, e.g. "New pedigree").
 pub fn chips_for(id: &str) -> Option<ChipsCard> {

@@ -212,8 +212,8 @@ static FIG_23: [RefSection; 6] = [
 ];
 
 static FIG_24: [RefSection; 2] = [
-    s("Figure", &["lines", "transversals", "name_m", "name_n", "name_p", "name_t", "name_u", "angle", "angle_b", "gap", "labels", "marked", "unknown", "angle_text", "names", "dec", "turn", "line_ends", "label_size"], ""),
-    s("More options", &["m_style", "m_arrows", "n_style", "n_arrows", "p_style", "p_arrows", "t_style", "t_arrows", "u_style", "u_arrows"], ""),
+    s("Figure", &["lines", "transversals", "name_m", "name_n", "name_p", "name_q", "name_r", "name_s", "name_t", "name_u", "name_v", "name_w", "angle", "angle_b", "angle_c", "angle_d", "gap", "labels", "marked", "unknown", "angle_text", "arcs1", "arcs2", "arcs3", "shaded", "points", "names", "dec", "turn", "line_ends", "label_size"], "On the figure: click a line to change its style, double-click it to rename it; click near an angle's corner for congruence arcs or shading; click where lines cross or at a line's end for a named point."),
+    s("More options", &["m_style", "m_arrows", "n_style", "n_arrows", "p_style", "p_arrows", "q_style", "q_arrows", "r_style", "r_arrows", "s_style", "s_arrows", "t_style", "t_arrows", "u_style", "u_arrows", "v_style", "v_arrows", "w_style", "w_arrows"], ""),
 ];
 
 static FIG_25: [RefSection; 6] = [

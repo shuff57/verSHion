@@ -1539,6 +1539,10 @@ const PARALLEL_LINES: &[Faq] = &[
         q: "How can a figure be used to prove lines are parallel?",
         a: "If a pair of corresponding or alternate interior angles are equal, or same-side interior angles add to 180°, then the lines must be parallel.",
     },
+    Faq {
+        q: "How do I mark two angles congruent or name a point where lines cross?",
+        a: "Click near an angle's corner: each click adds a congruence arc, up to three, then shades it. Click where two lines cross, or at a line's end, to put a lettered point there, and double-click it to rename it. A line changes style when clicked, renames on a double-click, and is deleted from the spot just past its start.",
+    },
 ];
 
 const PRISM: &[Faq] = &[

@@ -3998,6 +3998,10 @@ fn apply_chip(p: &mut Params, pdefs: &[ParamDef], card: &figures::ChipsCard, chi
                 let t = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.subsec_nanos() as i64).unwrap_or(7);
                 Value::I(lo + t.rem_euclid((hi - lo).max(1)))
             }
+            Value::I(figures::CHIP_ONE_MORE) => {
+                let hi = match &def.kind { Kind::Int { max, .. } => *max, _ => i64::MAX };
+                Value::I(p.i(&key).saturating_add(1).min(hi))
+            }
             other => other.clone(),
         };
         p.0.insert(key, val);
@@ -5529,6 +5533,34 @@ mod tests {
         apply_chip(&mut q, &vdefs, &vcard, &vcard.chips[0]);
         assert_eq!(q.i("n"), before + 1);
         assert_eq!(q.s(&format!("v{}_lab", before + 1)), ((b'A' + before as u8) as char).to_string());
+    }
+
+    /// Add parallel line and Add transversal add one each time, up to six lines and four transversals, and change nothing else.
+    #[test]
+    fn parallel_line_chips_add_one_more_each_time() {
+        let d = figures::registry().into_iter().find(|d| d.id == "parallel-lines").unwrap();
+        let defs = (d.params)();
+        let mut p = figures::start_params(&d);
+        let card = figures::chips_for("parallel-lines").unwrap();
+        let (line, trans) = (&card.chips[0], &card.chips[1]);
+        for want in 3..=6 {
+            apply_chip(&mut p, &defs, &card, line);
+            assert_eq!(p.i("lines"), want);
+        }
+        apply_chip(&mut p, &defs, &card, line);
+        assert_eq!(p.i("lines"), 6, "six at most");
+        for want in 2..=4 {
+            apply_chip(&mut p, &defs, &card, trans);
+            assert_eq!(p.i("transversals"), want);
+        }
+        apply_chip(&mut p, &defs, &card, trans);
+        assert_eq!(p.i("transversals"), 4, "four at most");
+        let mut q = figures::start_params(&d);
+        q.set_i("lines", 6);
+        q.set_i("transversals", 4);
+        assert_eq!(p.0, q.0, "only the counts change");
+        // a plain set value still sets (the free-body chips above), and the random seed is not one more
+        assert_ne!(figures::CHIP_ONE_MORE, i64::MIN);
     }
 
     // ---------- composite-shape canvas (driven with synthetic pointer events) ----------

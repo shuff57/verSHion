@@ -1777,144 +1777,7 @@ pub(crate) fn angles_computed(p: &Params) -> Vec<(&'static str, String)> {
     out
 }
 
-// ----- parallel lines (lines card) -----
-
-pub(crate) const PL_NAMES: [&str; 5] = ["name_m", "name_n", "name_p", "name_t", "name_u"];
-pub(crate) const PL_STYLE: [&str; 5] = ["m_style", "n_style", "p_style", "t_style", "u_style"];
-pub(crate) const PL_ARROWS: [&str; 5] = ["m_arrows", "n_arrows", "p_arrows", "t_arrows", "u_arrows"];
-
-pub(crate) fn parallel_lines_params() -> Vec<ParamDef> {
-    let mut v = vec![
-        ParamDef::int("lines", "Parallel lines", 2, 3, 2),
-        ParamDef::int("transversals", "Transversals", 1, 2, 1),
-        ParamDef::text("name_m", "Name of the first line", "m"),
-        ParamDef::text("name_n", "Name of the second line", "n"),
-        ParamDef::text("name_p", "Name of the third line", "p"),
-        ParamDef::text("name_t", "Name of the transversal", "t"),
-        ParamDef::text("name_u", "Name of the second transversal", "u"),
-        ParamDef::float("angle", "Angle above m, right of the transversal", 10.0, 170.0, 1.0, 65.0)
-            .hint("Degrees."),
-        ParamDef::float("angle_b", "Second transversal angle", 10.0, 170.0, 1.0, 115.0)
-            .hint("Degrees; its angles number on after the first's."),
-    ];
-    for i in 0..5 {
-        v.push(ParamDef::choice(PL_STYLE[i], "Line", &STYLES, "Solid"));
-        v.push(ParamDef::choice(PL_ARROWS[i], "Parallel arrows", &TICKS, if i < 3 { "1" } else { "None" }));
-    }
-    v.extend([
-        ParamDef::float("gap", "Gap between lines", 0.5, 3.0, 0.1, 1.0),
-        ParamDef::choice("labels", "Label style", &["Degrees", "Numbers"], "Degrees"),
-        ParamDef::list("marked", "Angles to label", "2, 6")
-            .hint("1-8 at the first two crossings, 5-8 at m and n, 9-12 at the third line, for example 2, 6."),
-        ParamDef::list("unknown", "Marked angles shown as x", "6"),
-        ParamDef::long("angle_text", "Text labels for marked angles, e.g. 2 = 3x + 5; 6 = y", ""),
-        ParamDef::bool("names", "Line names", true)
-            .hint("M, n, t."),
-        ParamDef::int("dec", "Round measures to", 0, 3, 1)
-            .hint("Decimal places."),
-        ParamDef::float("turn", "Turn the figure", -180.0, 180.0, 1.0, 0.0)
-            .hint("Degrees."),
-        ParamDef::choice("line_ends", "Line ends", &["Arrowheads", "Plain"], "Arrowheads"),
-        ParamDef::choice("label_size", "Label size", &["Large", "Medium", "Small"], "Medium"),
-    ]);
-    v
-}
-
-/// `k` parallel-arrow chevrons centred at c pointing along unit u.
-fn chevrons(d: &mut Doc, c: Pt, u: Pt, k: u8) {
-    let nn = (-u.1, u.0);
-    for j in 0..k {
-        let o = (j as f64 - (k as f64 - 1.0) / 2.0) * 8.0;
-        let m = (c.0 + u.0 * o, c.1 + u.1 * o);
-        let tip = (m.0 + u.0 * 3.0, m.1 + u.1 * 3.0);
-        let back = (m.0 - u.0 * 3.0, m.1 - u.1 * 3.0);
-        d.polyline(&[(back.0 + nn.0 * 5.0, back.1 + nn.1 * 5.0), tip, (back.0 - nn.0 * 5.0, back.1 - nn.1 * 5.0)], INK, 1.6);
-    }
-}
-
-pub(crate) fn parallel_lines_render(p: &Params) -> String {
-    let (w, h, ys) = pl_layout(p);
-    let nl = ys.len();
-    let turn = p.f("turn");
-    let fs = fscale(p);
-    let cc = (w / 2.0, h / 2.0);
-    let t = |q: Pt| turn_scr(q, cc, turn);
-    let mut d = new_doc(w, h);
-    let unk = nums(p.s("unknown")).iter().map(|v| *v as usize).collect::<Vec<_>>();
-    let marked = nums(p.s("marked")).iter().map(|v| *v as usize).collect::<Vec<_>>();
-    let texts = num_text_map(p.s("angle_text"));
-    let nm = |k: &str, dflt: &str| { let v = p.s(k).trim(); if v.is_empty() { dflt.to_string() } else { v.to_string() } };
-    let names = [nm("name_m", "m"), nm("name_n", "n"), nm("name_p", "p")];
-    let ends = p.s("line_ends") != "Plain";
-    let (x0, x1) = ((w - 300.0) / 2.0, (w + 300.0) / 2.0);
-    // the first transversal's crossing x on line y, for placing the line's parallel marks like the reference
-    let cx_first = pl_cx0(p, 0, &ys, w);
-    let cot0 = { let r = p.f("angle").clamp(10.0, 170.0).to_radians(); r.cos() / r.sin() };
-    for (i, y) in ys.iter().enumerate() {
-        let (a, b) = (t((x0, *y)), t((x1, *y)));
-        dline(&mut d, a, b, INK, 2.2, style_dash(p.s(PL_STYLE[i])));
-        if ends { line_heads(&mut d, a, b); }
-        let k = tick_n(p, PL_ARROWS[i]);
-        let cross_x = cx_first - cot0 * (*y - ys[0]);
-        if k > 0 { chevrons(&mut d, t(((cross_x - 86.6).max(x0 + 20.0), *y)), unit_v(a, b), k); }
-        if p.b("names") { let q = t((x1 + 8.0 + 10.0 * fs, *y)); mlabel(&mut d, q.0, q.1, 21.0 * fs, &names[i], ""); }
-    }
-    let nt = p.i("transversals").clamp(1, 2) as usize;
-    let rad = 26.0;
-    let lsz = 15.0 * fs;
-    for ti in 0..nt {
-        let th = if ti == 0 { p.f("angle").clamp(10.0, 170.0) } else { p.f("angle_b").clamp(10.0, 170.0) };
-        let cx0 = pl_cx0(p, ti, &ys, w);
-        let tr = th.to_radians();
-        let slope = (tr.cos(), -tr.sin());
-        let cross: Vec<Pt> = ys.iter().map(|y| { let s = (*y - ys[0]) / slope.1; (cx0 + slope.0 * s, *y) }).collect();
-        let tl = 90.0 / slope.1.abs().max(0.2);
-        let a = (cross[0].0 + slope.0 * tl, cross[0].1 + slope.1 * tl);
-        let last = cross[nl - 1];
-        let b = (last.0 - slope.0 * tl, last.1 - slope.1 * tl);
-        let (ta, tb) = (t(a), t(b));
-        dline(&mut d, ta, tb, INK, 2.0, style_dash(p.s(PL_STYLE[3 + ti])));
-        if ends { line_heads(&mut d, ta, tb); }
-        let k = tick_n(p, PL_ARROWS[3 + ti]);
-        if k > 0 {
-            let m = t((a.0 * 0.45 + cross[0].0 * 0.55, a.1 * 0.45 + cross[0].1 * 0.55));
-            chevrons(&mut d, m, unit_v(tb, ta), k);
-        }
-        if p.b("names") {
-            let tn = if ti == 0 { nm("name_t", "t") } else { nm("name_u", "u") };
-            let q = t((a.0 + slope.0 * 18.0, a.1 + slope.1 * 18.0));
-            mlabel(&mut d, q.0, q.1, 18.0 * fs, &tn, "");
-        }
-        for (i, c) in cross.iter().enumerate() {
-            let secs = [(th, 180.0, 1usize), (0.0, th, 2), (180.0 + th, 360.0, 3), (180.0, 180.0 + th, 4)];
-            let c = t(*c);
-            for (a0, a1, k) in secs {
-                let num = ti * 4 * nl + i * 4 + k;
-                let (a0t, a1t) = (a0 + turn, a1 + turn);
-                if !marked.contains(&num) {
-                    if p.s("labels") == "Numbers" { sector(&mut d, c, a0t, a1t, rad, &num.to_string(), false, lsz); }
-                    continue;
-                }
-                let span = a1 - a0;
-                let txt = if p.s("labels") == "Numbers" { num.to_string() }
-                    else if let Some((_, s)) = texts.iter().find(|(k, _)| *k == num) { s.clone() }
-                    else if unk.contains(&num) { "x".to_string() } else { format!("{}\u{b0}", fmt(span, p.i("dec"))) };
-                let r = if span < 50.0 { rad + 8.0 } else { rad };
-                sector(&mut d, c, a0t, a1t, r, &txt, true, lsz);
-            }
-        }
-    }
-    d.finish()
-}
-
-pub(crate) fn pl_computed(p: &Params) -> Vec<(&'static str, String)> {
-    let keys = ["m_line", "n_line", "p_line"];
-    (0..3).map(|i| {
-        let k = tick_n(p, PL_ARROWS[i]);
-        let arrows = "\u{203a}".repeat(k as usize);
-        (keys[i], format!("{} {arrows}", p.s(PL_STYLE[i])).trim().to_string())
-    }).collect()
-}
+// ----- parallel lines: see math/parallel.rs -----
 
 // ----- Measures cards -----
 
@@ -1991,25 +1854,7 @@ pub(crate) fn card(id: &str) -> Option<MeasureCard> {
                 groups: vec![MeasureGroup { title: "", rows }],
             }
         }
-        "parallel-lines" => {
-            let line_keys = ["m_line", "n_line", "p_line"];
-            let lines = (0..3).map(|i| {
-                let mut r = row(["Line 1", "Line 2", "Line 3"][i], line_keys[i], "", PL_STYLE[i], "", Some(PL_ARROWS[i]));
-                r.name_key = Some(PL_NAMES[i]);
-                r.equals = Some("\u{2225}");
-                r
-            }).collect();
-            let trans = (0..2).map(|i| {
-                let mut r = row(["Transversal 1", "Transversal 2"][i], ["angle", "angle_b"][i], "\u{b0}", PL_STYLE[3 + i], "", Some(PL_ARROWS[3 + i]));
-                r.name_key = Some(PL_NAMES[3 + i]);
-                r
-            }).collect();
-            MeasureCard {
-                title: "Parallel lines",
-                help: "The parallel lines run across the page, evenly spaced. Each transversal crosses them at the angle you give: the angle above the top line, to the right of the transversal. Click any angle or line on the figure to label or style it. Click where lines cross, or near the end of a line, to put a named point there.",
-                groups: vec![MeasureGroup { title: "Parallel lines", rows: lines }, MeasureGroup { title: "Transversals", rows: trans }],
-            }
-        }
+        "parallel-lines" => super::parallel::card(),
         _ => return None,
     })
 }
@@ -2029,7 +1874,7 @@ pub(crate) fn computed(id: &str, p: &Params) -> Option<Vec<(&'static str, String
         "rectangle" | "parallelogram" | "trapezoid" | "kite" => quad_computed(id, p),
         "regular-polygon" => rp_computed(p),
         "angles" => angles_computed(p),
-        "parallel-lines" => pl_computed(p),
+        "parallel-lines" => super::parallel::computed(p),
         _ => return None,
     })
 }
@@ -2209,7 +2054,7 @@ pub(crate) fn migrate(id: &str, spec: &Spec, p: &mut Params) {
             if has(spec, "m_arrows") || !has(spec, "angle") { return; }
             // the old figure drew double chevrons on every parallel line when `arrows` was on
             let k = if jb(spec, "arrows").unwrap_or(true) { "2" } else { "None" };
-            for key in &PL_ARROWS[..3] { p.set_s(key, k); }
+            for key in &super::parallel::L_ARROWS[..3] { p.set_s(key, k); }
         }
         _ => {}
     }
@@ -2457,7 +2302,8 @@ mod tests {
 
 pub(super) use flat::{flat_skin_summary, angle_dirs, quad_solve, quad_vals_of, regular_polygon_pts, tri_solve, write_givens, RAY_V, TRI_V, Q_V};
 mod parallel;
-use flat::{angles_params, angles_render, kite_params, kite_render, parallel_lines_params, parallel_lines_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
+pub(crate) use parallel::handles as parallel_handles;
+use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
 
 // ───────────────────────── coordinate grid ─────────────────────────
 
@@ -4528,35 +4374,6 @@ fn sector(d: &mut Doc, c: Pt, a0: f64, a1: f64, r: f64, text: &str, right: bool,
         let mid = dir((a0 + a1) / 2.0);
         let tr = r + 8.0 + 0.5 * (tw(text, size) * 0.85 * mid.0.abs() + size * mid.1.abs());
         mlabel(d, c.0 + mid.0 * tr, c.1 + mid.1 * tr, size, text, "");
-    }
-}
-
-/// Canvas size and parallel-line rows (screen y) for the parallel-lines figure.
-/// x where transversal `ti` crosses the first line: the transversal passes through the middle of
-/// the lines at the figure's centre (the reference centres the crossings, not the first one).
-pub(super) fn pl_cx0(p: &Params, ti: usize, ys: &[f64], w: f64) -> f64 {
-    let nt = p.i("transversals").clamp(1, 2);
-    let th = (if ti == 0 { p.f("angle").clamp(10.0, 170.0) } else { p.f("angle_b").clamp(10.0, 170.0) }).to_radians();
-    let mid = if nt == 1 { w / 2.0 } else if ti == 0 { w / 2.0 - 70.0 } else { w / 2.0 + 70.0 };
-    mid + th.cos() / th.sin() * (ys[ys.len() - 1] - ys[0]) / 2.0
-}
-
-pub(super) fn pl_layout(p: &Params) -> (f64, f64, Vec<f64>) {
-    let nl = p.i("lines").clamp(2, 3) as usize;
-    // the reference's lines are 300 long and 100 apart, the transversal runs 90 past the outer lines
-    let gap = 100.0 * p.f("gap").clamp(0.5, 3.0);
-    let (w, h) = (400.0, 240.0 + gap * (nl as f64 - 1.0));
-    let ys = (0..nl).map(|i| h / 2.0 - gap * (nl as f64 - 1.0) / 2.0 + gap * i as f64).collect();
-    (w, h, ys)
-}
-
-/// Filled arrowheads at both ends of line a-b (a line, not a segment).
-fn line_heads(d: &mut Doc, a: Pt, b: Pt) {
-    for (from, to) in [(a, b), (b, a)] {
-        let u = unit_v(from, to);
-        let nn = (-u.1, u.0);
-        let back = (to.0 - u.0 * 12.0, to.1 - u.1 * 12.0);
-        d.poly(&[to, (back.0 + nn.0 * 5.0, back.1 + nn.1 * 5.0), (back.0 - nn.0 * 5.0, back.1 - nn.1 * 5.0)], INK, INK, 1.0);
     }
 }
 
@@ -6872,8 +6689,7 @@ pub fn card_visible(id: &str, group: &str, row: Option<&str>, p: &Params) -> boo
             i < p.i("ray_count").clamp(2, 6) as usize || !p.s(k).trim().is_empty()
         }
         // parallel lines: the third line / second transversal rows once added
-        ("parallel-lines", _, Some("p_line")) => p.i("lines") >= 3,
-        ("parallel-lines", _, Some("angle_b")) => p.i("transversals") >= 2,
+        ("parallel-lines", _, Some(k)) if parallel::row_visible(k, p).is_some() => parallel::row_visible(k, p).unwrap_or(true),
         _ => true,
     }
 }
@@ -6912,8 +6728,9 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
             count_key: "",
             max: 0,
             chips: vec![
-                Chip { label: "Add parallel line", set: vec![("lines", Value::I(3))] },
-                Chip { label: "Add transversal", set: vec![("transversals", Value::I(2))] },
+                // one more each time, up to six lines and four transversals
+                Chip { label: "Add parallel line", set: vec![("lines", Value::I(super::CHIP_ONE_MORE))] },
+                Chip { label: "Add transversal", set: vec![("transversals", Value::I(super::CHIP_ONE_MORE))] },
             ],
         },
         "mapping-diagram" => ChipsCard {
@@ -6989,7 +6806,7 @@ pub fn defs() -> Vec<FigureDef> {
         f("kite", "Kite", "A kite from its two side lengths and the angle between the short sides.", || super::labels::with_param(kite_params()), |p| super::labels::rendering(p, || kite_render(p))),
         f("regular-polygon", "Regular Polygon", "Any regular polygon from 3 to 20 sides, sized by side, radius or apothem.", || super::labels::with_param(regular_polygon_params()), |p| super::labels::rendering(p, || regular_polygon_render(p))),
         f("angles", "Angles", "Single, adjacent, straight-line, around-a-point or vertical angles with measures.", angles_params, angles_render),
-        f("parallel-lines", "Parallel Lines and Transversal", "Parallel lines cut by a transversal with chosen angles marked in degrees or by number.", parallel_lines_params, parallel_lines_render),
+        f("parallel-lines", "Parallel Lines and Transversal", "Parallel lines cut by a transversal with chosen angles marked in degrees or by number.", parallel::params, parallel::render),
         f("prism", "Prism", "A prism on a rectangle, triangle or regular-polygon base, right or oblique, with dashed hidden edges.", || super::labels::with_param(with_solid_fill(prism_params())), |p| super::labels::rendering(p, || solid_fill(prism_render(p), p))),
         f("cylinder", "Cylinder", "A cylinder, right or oblique, with radius or diameter and height.", || super::labels::with_param(with_solid_fill(cylinder_params())), |p| super::labels::rendering(p, || solid_fill(cylinder_render(p), p))),
         f("pyramid", "Pyramid", "A pyramid on a rectangle or regular-polygon base with optional height and slant height.", || super::labels::with_param(with_solid_fill(pyramid_params())), |p| super::labels::rendering(p, || solid_fill(pyramid_render(p), p))),
