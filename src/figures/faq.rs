@@ -3821,11 +3821,11 @@ const UNIT_CIRCLE: &[Faq] = &[
 const TRANSFORMATIONS: &[Faq] = &[
     Faq {
         q: "Where does the image go for each transformation?",
-        a: "Translate moves every corner by the same amount. Reflect flips the shape over the named line: over the x-axis y changes sign, over the y-axis x does, over y = x the coordinates swap. Rotate turns the shape a quarter, a half or three quarters of a turn, either way, about the centre (the origin unless you move it). Enlarge stretches every vertex's distance from the centre by the scale factor. Reflect also takes any line x = a, y = a, y = x + a or y = -x + a.",
+        a: "Translate moves every corner by the same amount. Reflect flips the shape over the named line: over the x-axis y changes sign, over the y-axis x does, over y = x the coordinates swap. Rotate turns the shape a quarter, a half or three quarters of a turn, either way, about the centre (the origin unless you move it). Enlarge stretches every vertex's distance from the centre by the scale factor. Reflect also takes any line x = a, y = a, y = x + a or y = -x + a. To do more than one in turn, type the others under Then, one per line (reflect in the y-axis, rotate 90 clockwise about (1, 2), translate 3, -1, dilate 2): each acts on the image the one before made, and its image is named A'', then A'''.",
     },
     Faq {
         q: "Why is the image not drawn?",
-        a: "The image is the answer. It is drawn, with its corners named A', B' and C' and its coordinates printed, only while Show answers is on. Turn it off to give a student the pre-image and the rule and leave the image to them.",
+        a: "The image is the answer. It is drawn, with its corners named A', B' and C' and its coordinates printed, only while Show answers is on. Turn it off to give a student the pre-image and the rule and leave the image to them. To ask instead which transformation was done, turn Question version on as well: both figures are drawn and the rule is left blank, with no mirror line or centre to give it away.",
     },
     Faq {
         q: "Does the shape stay the same size?",
@@ -3841,7 +3841,7 @@ const TRANSFORMATIONS: &[Faq] = &[
     },
     Faq {
         q: "How big is the grid?",
-        a: "It runs from -10 to 10 on both axes to start; set each axis's ends in the grid settings. A shape that runs past the range grows the grid, so nothing is cut off. Shrink the grid to the shapes for the tightest grid that holds both shapes and the origin: the compact figure every transformations figure had before November 2026, and how one saved then still opens.",
+        a: "It runs from -10 to 10 on both axes to start; set each axis's ends, what it counts by, which lines are numbered, its letter and arrowheads, the gridlines and minor gridlines in the grid settings. A shape that runs past the range grows the grid, so nothing is cut off. Shrink the grid to the shapes for the tightest grid that holds both shapes and the origin: the compact figure every transformations figure had before November 2026, and how one saved then still opens.",
     },
 ];
 

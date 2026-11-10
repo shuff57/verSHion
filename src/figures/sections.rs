@@ -69,6 +69,16 @@ static FIG_6: [RefSection; 4] = [
     s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label"], ""),
 ];
 
+static TRANSFORMATIONS: [RefSection; 7] = [
+    s("Show", &["show_answers", "question", "show_pre", "show_between", "show_guides", "show_arrows", "pt_labels", "coord_list", "style", "label_size"], "Show answers off is the student copy, where the images are left to draw; with Question on as well, the images are drawn and the transformations left to name."),
+    s("Pre-image", &["pre", "closed", "adding", "names", "pre_colour", "pre_line", "pre_weight"], "Click grid points on the figure to add vertices, or type them, one x, y pair per line. Drag a vertex to move it."),
+    s("Transformations", &["op", "dx", "dy", "axis", "line_a", "angle", "scale", "cx", "cy", "dec", "then", "image_colour", "image_line", "image_weight"], "Type more transformations under Then, one per line: each acts on the image the one before made. Drag a centre or a mirror line on the grid to move it."),
+    s("Titles", &["title_mode", "title", "xtitle_mode", "xtitle", "ytitle_mode", "ytitle"], ""),
+    s("x-axis", &["x_from", "x_to", "x_step", "x_num", "x_label", "ends"], ""),
+    s("y-axis", &["y_from", "y_to", "y_step", "y_num", "y_label"], ""),
+    s("Grid", &["gridlines", "minor", "fit"], ""),
+];
+
 static FIG_7: [RefSection; 5] = [
     s("Lines", &["lean", "radius", "height", "show_height", "edge", "give_d"], ""),
     s("Position", &["stands"], ""),
@@ -1208,6 +1218,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "composite-shape" => &FIG_4,
         "cone" => &FIG_5,
         "coordinate-grid" => &FIG_6,
+        "transformations" => &TRANSFORMATIONS,
         "cylinder" => &FIG_7,
         "free-body-diagram" => &FIG_8,
         "gas-syringe" => &FIG_9,
