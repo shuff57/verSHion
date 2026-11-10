@@ -269,6 +269,11 @@ fn phys_view(pr: PhysRef, b: [f64; 4], id: &str) -> [f64; 4] {
 /// The box the reference's sheet gives that canvas: the sheet less 16 px of padding on a desktop; on a
 /// phone as wide as the sheet allows but never past the natural size, and as tall as the natural
 /// height up to the window less 219 px, centred (the figure is fitted inside, as the svg does).
+/// A handle's click box kept to the preview (plus the 8 px the handle painter allows round it). Unclipped, a figure's
+/// canvas-sized click area reached past the preview when zoomed: circle's opening area ran about 157 px above it, over the
+/// preview's toolbar, and angles' once covered the settings panel (the batch 6 checker). An empty box is never hovered.
+fn clip_hit(hit: egui::Rect, full: egui::Rect) -> egui::Rect { hit.intersect(full.expand(8.0)) }
+
 fn phys_area(full: egui::Rect, id: &str, win_h: f32) -> egui::Rect {
     let inner = full.shrink(16.0);
     if full.width() >= 600.0 {
@@ -2037,7 +2042,7 @@ impl Workspace {
             let c = to_screen(h.pos);
             let (hx, hy) = figures::interact::hit_half(h, k);
             let (hx, hy) = ((hx * k) as f32, (hy * k) as f32);
-            let hit = egui::Rect::from_center_size(c, Vec2::new(hx * 2.0, hy * 2.0));
+            let hit = clip_hit(egui::Rect::from_center_size(c, Vec2::new(hx * 2.0, hy * 2.0)), full);
             let sense = if h.drag.is_some() { Sense::click_and_drag() } else { Sense::click() };
             let r = ui.interact(hit, UiId::new(("fig_handle", si, pos)), sense);
             let active = r.dragged();
@@ -5256,6 +5261,21 @@ mod tests {
 
     /// Closing an inline label edit sets the text and nothing else: numbers stay off their step grid (coordinate-grid's
     /// x "count by" of 1, min 0.05 step 0.5, once snapped to 1.05 after renaming an axis).
+    #[test]
+    fn a_handle_click_box_stays_within_the_preview() {
+        let full = egui::Rect::from_min_max(egui::pos2(300.0, 60.0), egui::pos2(900.0, 700.0));
+        // a canvas-sized area reaching 157 px above the preview and past its left edge is cut to the preview and its margin
+        let big = egui::Rect::from_min_max(egui::pos2(250.0, -97.0), egui::pos2(850.0, 650.0));
+        assert_eq!(clip_hit(big, full), egui::Rect::from_min_max(egui::pos2(292.0, 52.0), egui::pos2(850.0, 650.0)));
+        // a knob inside is untouched; one at the edge keeps its part within the margin; one far outside is never hit
+        let knob = egui::Rect::from_center_size(egui::pos2(400.0, 300.0), egui::vec2(16.0, 16.0));
+        assert_eq!(clip_hit(knob, full), knob);
+        let edge = egui::Rect::from_center_size(egui::pos2(902.0, 300.0), egui::vec2(16.0, 16.0));
+        assert_eq!(clip_hit(edge, full).right(), 908.0);
+        let off = egui::Rect::from_center_size(egui::pos2(100.0, 300.0), egui::vec2(16.0, 16.0));
+        assert!(!clip_hit(off, full).is_positive());
+    }
+
     #[test]
     fn an_inline_label_edit_moves_no_numbers() {
         let (ctx, mut ws) = open_fig("coordinate-grid");
