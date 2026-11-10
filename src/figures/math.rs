@@ -6443,7 +6443,8 @@ fn composite_svg_boxes(p: &Params, view: Option<CompositeView>) -> (String, Vec<
         let (a, b) = (mp(s.a), mp(s.b));
         match st.as_str() {
             "dashed" => dline(&mut d, a, b, INK, sw, &format!("{:.1} {:.1}", sw * 3.0 + 4.0, sw * 2.0 + 3.0)),
-            "dotted" => dline(&mut d, a, b, INK, sw, &format!("0.01 {:.1}", sw * 2.0 + 3.5)),
+            // round caps make each 0.01 dash a dot; with flat caps the dotted side drew nothing (batch 5 checker)
+            "dotted" => { d.raw(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{INK}" stroke-width="{sw}" stroke-dasharray="0.01 {:.1}" stroke-linecap="round"/>"#, a.0, a.1, b.0, b.1, sw * 2.0 + 3.5)); }
             _ => { d.line(a.0, a.1, b.0, b.1, INK, sw); }
         }
     }
@@ -6455,11 +6456,22 @@ fn composite_svg_boxes(p: &Params, view: Option<CompositeView>) -> (String, Vec<
         d.polyline(&[(v.0 + e1.0 * 12.0, v.1 + e1.1 * 12.0), (v.0 + e1.0 * 12.0 + e2.0 * 12.0, v.1 + e1.1 * 12.0 + e2.1 * 12.0), (v.0 + e2.0 * 12.0, v.1 + e2.1 * 12.0)], INK, 1.3);
     }
     // congruence ticks / parallel arrows across the middle of a side
+    let same = |a: Pt, b: Pt, c: Pt, e: Pt| (a == c && b == e) || (a == e && b == c);
     for (a, b, k, arrows) in &marks {
         let (pa, pb) = (mp(*a), mp(*b));
         let u = unit_v(pa, pb);
         let nn = (-u.1, u.0);
-        let c = ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0);
+        // ticks and arrows on one side sit side by side, ticks first, 12 px apart; drawn at the middle together they
+        // ran into one unreadable mark (the batch 5 checker)
+        let other = marks.iter().find(|m| m.3 != *arrows && same(m.0, m.1, *a, *b));
+        let shift = match other {
+            Some(_) if *arrows => (*k as f64 - 1.0) * 4.0 + 3.0 + 6.0,
+            Some(_) => -((*k as f64 - 1.0) * 3.0 + 6.0),
+            None => 0.0,
+        };
+        // measured from the side's lower end (in spec order), so a side named b-a by the other mark shifts the same way
+        let sign = if (a.0, a.1) <= (b.0, b.1) { 1.0 } else { -1.0 };
+        let c = ((pa.0 + pb.0) / 2.0 + u.0 * shift * sign, (pa.1 + pb.1) / 2.0 + u.1 * shift * sign);
         for j in 0..*k {
             let o = (j as f64 - (*k as f64 - 1.0) / 2.0) * if *arrows { 8.0 } else { 6.0 };
             let q = (c.0 + u.0 * o, c.1 + u.1 * o);
@@ -8959,6 +8971,37 @@ mod cfg_math_tests {
     }
 
     #[test]
+    fn composite_ticks_and_arrows_on_one_side_sit_apart() {
+        // the batch 5 checker: 2 ticks and 1 arrow on one side drew as one unreadable mark at its middle
+        let xs = |svg: &str, open: &str| -> Vec<f64> {
+            svg.split(open).skip(1).filter(|t| t.contains(r#"stroke-width="1.6""#)).flat_map(|t| {
+                let t = &t[..t.find("/>").unwrap()];
+                if open == "<line " {
+                    let g = |k: &str| t.split(&format!("{k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse::<f64>().unwrap();
+                    vec![g("x1"), g("x2")]
+                } else {
+                    t.split("points=\"").nth(1).unwrap().split('"').next().unwrap().split(' ').map(|q| q.split(',').next().unwrap().parse::<f64>().unwrap()).collect()
+                }
+            }).collect()
+        };
+        for arrows in ["arrows 0 0 6 0 1", "arrows 6 0 0 0 1", "arrows 0 0 6 0 3"] {
+            let svg = composite_render(&params("composite-shape", &[("spec", s(&format!("rect 0 0 6 4; ticks 0 0 6 0 2; {arrows}")))]));
+            let (t, a) = (xs(&svg, "<line "), xs(&svg, "<polyline "));
+            assert!(!t.is_empty() && !a.is_empty(), "{arrows}: {svg}");
+            let t_max = t.iter().cloned().fold(f64::MIN, f64::max);
+            let a_min = a.iter().cloned().fold(f64::MAX, f64::min);
+            assert!(a_min - t_max >= 10.0, "{arrows}: ticks end at {t_max:.1}, arrows start at {a_min:.1}");
+        }
+        // alone, each kind still sits on the middle of its side
+        let svg = composite_render(&params("composite-shape", &[("spec", s("rect 0 0 6 4; ticks 0 0 6 0 1"))]));
+        let t = xs(&svg, "<line ");
+        let mid = (t[0] + t[1]) / 2.0;
+        let svg0 = composite_render(&params("composite-shape", &[("spec", s("rect 0 0 6 4; ticks 0 4 6 4 1"))]));
+        let t0 = xs(&svg0, "<line ");
+        assert!((mid - (t0[0] + t0[1]) / 2.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn composite_side_lines_angles_points_and_turn() {
         let base = "rect 0 0 6 4; tri 0 4 6 4 3 7";
         let svg = |extra: &str, more: &[(&str, Value)]| {
@@ -8972,7 +9015,7 @@ mod cfg_math_tests {
         // side lines: dashed and dotted dash arrays, a hidden side not drawn at all
         let st = svg("; side 6 0 6 4 dashed thick; side 0 0 6 0 dotted thin; side 0 4 0 0 hidden", &[]);
         assert!(st.contains(r#"stroke-width="4.5" stroke-dasharray="17.5 12.0""#), "{st}");
-        assert!(st.contains(r#"stroke-dasharray="0.01 6.3""#), "{st}");
+        assert!(st.contains(r#"stroke-dasharray="0.01 6.3" stroke-linecap="round""#), "a dotted side needs round caps to show: {st}");
         let solid5 = st.matches(r#"stroke-width="5" stroke-linecap="round"/>"#).count();
         assert_eq!(solid5, 2, "only the two roof sides keep the plain line: {st}");
         // angles: measure rounded by Round angles, arcs, shading, the exterior's extended side

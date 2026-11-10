@@ -6243,6 +6243,18 @@ mod tests {
         let (a, b) = ((0.0, 0.0), (6.0, 0.0));
         assert_eq!((cs::side_marks(&items, a, b, false), cs::side_marks(&items, a, b, true)), (2, 1), "{}", ws.params.s("spec"));
         assert_eq!(cs::side_style(&items, a, b), ("dotted".to_string(), "regular".to_string()));
+        // and the export draws them: the dotted side as visible dots (round caps), the ticks and the arrow apart
+        let out = ws.output().unwrap().svg.unwrap();
+        assert!(out.contains(r#"stroke-dasharray="0.01 8.5" stroke-linecap="round""#), "a visible dotted side: {out}");
+        let tick_x: Vec<f64> = out.split("<line ").skip(1).filter(|t| t.contains(r#"stroke-width="1.6""#))
+            .map(|t| t.split("x1=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap()).collect();
+        let arrow_x: Vec<f64> = out.split("<polyline ").skip(1).filter(|t| t.contains(r#"stroke-width="1.6""#))
+            .flat_map(|t| t.split("points=\"").nth(1).unwrap().split('"').next().unwrap().split(' ').map(|q| q.split(',').next().unwrap().parse::<f64>().unwrap()).collect::<Vec<_>>()).collect();
+        assert_eq!(tick_x.len(), 2, "two ticks drawn");
+        assert!(!arrow_x.is_empty(), "the arrow is drawn");
+        let lo = |v: &[f64]| v.iter().cloned().fold(f64::MAX, f64::min);
+        let hi = |v: &[f64]| v.iter().cloned().fold(f64::MIN, f64::max);
+        assert!(lo(&arrow_x) - hi(&tick_x) >= 10.0 || lo(&tick_x) - hi(&arrow_x) >= 10.0, "ticks {tick_x:?} and arrow {arrow_x:?} apart");
     }
 
     /// Label tool: an angle's popover labels it (typed text), marks it right and shades it.
