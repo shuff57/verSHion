@@ -127,13 +127,18 @@ static FIG_13: [RefSection; 6] = [
     s("More options", &["ab_arrows", "bc_arrows", "cd_arrows", "da_arrows"], ""),
 ];
 
-static FIG_14: [RefSection; 6] = [
+static FIG_14: [RefSection; 11] = [
+    s("Instrument", &["instrument"], ""),
     s("Ruler", &["units", "ruler", "marks", "read_to"], ""),
     s("Length and position", &["length", "offset"], "From 0.50 to 15.00 cm, to 2 decimal places."),
     s("Object", &["object", "dashes"], ""),
+    s("Caliper", &["least_count", "lc_print"], ""),
+    s("Micrometer", &["mic_read_to"], ""),
+    s("Reading", &["cal_reading", "mic_reading", "zero_error", "show_closed"], ""),
+    s("In the jaws", &["held", "held_label"], ""),
     s("Title and answer key", &["answer", "title"], ""),
     s("More options", &["title_style"], ""),
-    s("Magnifiers", &["mag_show", "mag_marks"], ""),
+    s("Magnifiers", &["mag_show", "mag_marks", "close_up"], ""),
 ];
 
 static FIG_15: [RefSection; 6] = [
@@ -1043,11 +1048,17 @@ static CHI_SQUARE_TABLE: [RefSection; 4] = [
     s("Appearance", &["style", "label_size"], ""),
 ];
 
-static LENGTH_PHYS: [RefSection; 5] = [
+static LENGTH_PHYS: [RefSection; 11] = [
+    s("Instrument", &["instrument"], ""),
     s("Ruler", &["units", "ruler", "marks", "read_to"], ""),
     s("Length and position", &["length", "offset"], "From 0.50 to 15.00 cm, to 2 decimal places."),
     s("Object", &["object", "dashes"], ""),
     s("Magnifiers", &["mag_show", "mag_marks"], ""),
+    s("Caliper", &["least_count", "lc_print"], ""),
+    s("Micrometer", &["mic_read_to"], ""),
+    s("Reading", &["cal_reading", "mic_reading", "zero_error", "show_closed"], ""),
+    s("In the jaws", &["held", "held_label"], ""),
+    s("Close-up", &["close_up"], ""),
     s("Title and answer key", &["title_style", "title", "answer"], ""),
 ];
 
@@ -1287,7 +1298,8 @@ pub fn note_after(fig: &str, key: &str, p: &super::Params) -> Option<String> {
             let mut q = p.clone();
             q.0.insert("answer".into(), super::Value::B(true));
             let svg = super::chemistry::length_svg(&q);
-            let at = svg.find("Length: ")?;
+            // the ruler prints "Length: ...", the caliper and micrometer "Reading: ..." (and a zero error line)
+            let at = svg.find("Length: ").or_else(|| svg.find("Reading: "))?;
             let rest = &svg[at..];
             let text = &rest[..rest.find('<')?];
             Some(format!("Print \u{201c}{text}\u{201d} under the figure."))

@@ -129,6 +129,7 @@ fn num_trim(v: f64) -> String { let s = format!("{v:.3}"); s.trim_end_matches('0
 
 /// Random reading on the volume instrument's scale, to its readable decimal places.
 pub fn random_reading(id: &str, p: &mut Params, seed: u64) -> bool {
+    if id == "length-reading" { return super::length::random(p, seed); }
     if id != "volume-reading" { return false; }
     let (max, _, minor, _) = vol_scale(p);
     let dp = read_dp(minor) as i32;
@@ -558,7 +559,8 @@ fn syringe_render(p: &Params) -> String {
 // ---------------------------------------------------------------------------------------------
 
 fn length_params() -> Vec<ParamDef> {
-    vec![
+    let mut v = vec![
+        super::length::instrument_param(),
         ParamDef::choice("units", "Units", &["Metric (cm)", "Imperial (in)"], "Metric (cm)"),
         ParamDef::choice("ruler", "Ruler length", &["15 cm", "20 cm", "30 cm", "50 cm", "100 cm"], "15 cm"),
         ParamDef::choice("marks", "Smallest marks", &["10 cm", "5 cm", "1 cm", "0.5 cm", "1 mm"], "1 mm"),
@@ -575,7 +577,9 @@ fn length_params() -> Vec<ParamDef> {
         magnify::show_param(&LENGTH_SHOW, "Ruler only"),
         magnify::marks_param(),
         title_style(false),
-    ]
+    ];
+    v.extend(super::length::params());
+    v
 }
 
 /// Length reading "Show": one magnifier above the object's right end (the reference's opening
@@ -594,6 +598,9 @@ const LEN_PAD: f64 = 22.0;
 fn length_geom(total: f64) -> (f64, f64, f64) { ((LEN_W - 480.0) / 2.0 + 0.0, 480.0 / total, 70.0) }
 
 pub(super) fn length_render(p: &Params) -> String {
+    if !super::length::is_ruler(p) {
+        return super::length::render(p);
+    }
     let imperial = p.s("units").starts_with("Imp");
     let cm: f64 = p.s("ruler").split_whitespace().next().and_then(|t| t.parse().ok()).unwrap_or(15.0);
     let (total, unit) = if imperial { (match cm as i64 { 15 => 6.0, 20 => 8.0, 30 => 12.0, 50 => 20.0, _ => 40.0 }, "in") } else { (cm, "cm") };
@@ -1122,6 +1129,7 @@ fn ruler_total(p: &Params) -> f64 {
 }
 
 fn length_handles(p: &Params) -> Vec<Handle> {
+    if !super::length::is_ruler(p) { return super::length::handles(p); }
     if magnify::magnifier_only(p) { return vec![]; }
     let total = ruler_total(p);
     let (rx0, ppu, ry) = length_geom(total);
@@ -1300,6 +1308,16 @@ pub(super) fn examples(id: &str) -> Option<Vec<Example>> {
             ex("Ruler measuring not from zero (rock)", vec![("object", sv("Rock")), ("offset", fv(2.0)), ("length", fv(4.6)), ("dashes", bv(true))]),
             ex("Meter stick reading 62.4 cm", vec![("ruler", sv("100 cm")), ("marks", sv("1 cm")), ("length", fv(62.4))]),
             ex("Inch ruler reading 3 5/16 inches", vec![("units", sv("Imperial (in)")), ("length", fv(3.3125)), ("read_to", sv("Nearest mark")), ("answer", bv(true))]),
+            // the caliper and micrometer (batch 5); the five rulers above stay first (the old-figure fixture reads them)
+            ex("Vernier caliper at 23.45 mm, holding a block", vec![("instrument", sv("Caliper")), ("cal_reading", fv(23.45))]),
+            ex("Caliper to 0.1 mm: 34.7 mm", vec![("instrument", sv("Caliper")), ("least_count", sv("0.1 mm")), ("cal_reading", fv(34.7)), ("held", sv("Cylinder"))]),
+            ex("Caliper to 0.02 mm: 41.38 mm", vec![("instrument", sv("Caliper")), ("least_count", sv("0.02 mm")), ("cal_reading", fv(41.38)), ("held", sv("Ball"))]),
+            ex("Caliper with a +0.10 mm zero error, shown closed", vec![("instrument", sv("Caliper")), ("zero_error", fv(0.1)), ("show_closed", bv(true)), ("answer", bv(true))]),
+            ex("Caliper scales only: 62.35 mm", vec![("instrument", sv("Caliper")), ("cal_reading", fv(62.35)), ("close_up", sv("Close-up only"))]),
+            ex("Micrometer at 7.38 mm", vec![("instrument", sv("Micrometer")), ("mic_reading", fv(7.38))]),
+            ex("Micrometer past the half millimetre: 5.51 mm", vec![("instrument", sv("Micrometer")), ("mic_reading", fv(5.51))]),
+            ex("Micrometer to an estimated 0.001 mm: 6.847 mm", vec![("instrument", sv("Micrometer")), ("mic_read_to", sv("One estimated digit (0.001 mm)")), ("mic_reading", fv(6.847)), ("held", sv("Wire"))]),
+            ex("Micrometer with a \u{2212}0.03 mm zero error", vec![("instrument", sv("Micrometer")), ("mic_reading", fv(3.62)), ("zero_error", fv(-0.03)), ("show_closed", bv(true)), ("held", sv("Ball"))]),
         ],
         "mass-reading" => vec![
             ex("Triple beam balance reading 263.47 g", vec![("mass", fv(263.47)), m.clone()]),

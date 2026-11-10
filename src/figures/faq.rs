@@ -996,6 +996,14 @@ const LENGTH_READING: &[Faq] = &[
         q: "How do you read an inch ruler?",
         a: "Count whole inches, then the fraction from the smaller marks: halves, quarters, eighths and sixteenths, depending on the ruler. Reduce the fraction, so 4/16 in is written 1/4 in.",
     },
+    Faq {
+        q: "How do you read a vernier caliper?",
+        a: "Take the whole millimetres from the main scale just left of the sliding scale's 0. Then look along the sliding scale for the one mark that lines up exactly with a main-scale mark: its number of divisions times the least count is the decimal part. At 31 mm with the 7th mark of a 0.05 mm scale lined up, the reading is 31 + 7 \u{d7} 0.05 = 31.35 mm. The least count is one main division less one sliding division (1 \u{2212} 0.98 = 0.02 mm on a scale of 50 divisions over 49 mm).",
+    },
+    Faq {
+        q: "How do you read a micrometer, and what is a zero error?",
+        a: "Read the sleeve at the thimble's edge: whole millimetres above the line, plus 0.5 mm if a half mark below it shows. Add the thimble mark on the line in hundredths (a 0.5 mm screw turned through 50 divisions), estimating tenths of a division for a third decimal: 4.5 + 0.27 = 4.77 mm. A zero error is what the instrument reads closed; subtract it from every reading, so a reading of 4.77 mm with a \u{2212}0.02 mm zero error is a length of 4.79 mm.",
+    },
 ];
 
 const LEWIS_STRUCTURES: &[Faq] = &[

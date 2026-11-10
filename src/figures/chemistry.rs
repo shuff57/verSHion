@@ -108,6 +108,7 @@ pub fn live_help(id: &str, title: &str, p: &Params) -> Option<String> {
         ("volume-reading", "Reading") | ("volume-by-displacement", "Readings") | ("gas-syringe", "Volume of gas")
         | ("length-reading", "Length and position") | ("mass-reading", "Mass") | ("temperature-reading", "Temperature")
         | ("ph-reading", "pH") => measure::range_note(id, p),
+        ("length-reading", "Reading") => length::range_note(p),
         _ => None,
     }
 }
@@ -120,6 +121,9 @@ pub fn mass_spectrum_info(p: &Params) -> Option<(String, String)> {
 /// The chemistry page's one-line section summaries ("100 mL graduated cylinder"), where the
 /// reference words them differently from the generic "value · value" digest.
 pub fn skin_summary_in(id: &str, title: &str, p: &Params, physics: bool) -> Option<String> {
+    if id == "length-reading" && let Some(s) = length::summary(title, p) {
+        return Some(s);
+    }
     if physics && id == "length-reading" {
         // the physics page words these two rows plainly ("15 cm, 1 mm marks", "4.37 cm, from 0")
         let imperial = p.s("units").starts_with("Imp");
@@ -285,6 +289,9 @@ pub fn skin_intro(id: &str) -> Option<&'static str> {
 }
 
 /// The length reading's SVG (the answer-key note reads the printed value back from it).
+/// Whether a length-reading control applies to the chosen instrument (ruler, caliper or micrometer).
+pub fn length_relevant(key: &str, p: &Params) -> bool { length::relevant(key, p) }
+
 pub fn length_svg(p: &Params) -> String {
     measure::length_render(p)
 }

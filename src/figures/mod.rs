@@ -742,6 +742,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "enzyme-kinetics" => biology::enzyme::relevant(key, p),
         // only the chosen setup's controls: two or three steps' valleys, the catalysed path's, the typed axis range
         "reaction-energy-diagram" => chemistry::reactionenergy::relevant(key, p),
+        // only the chosen instrument's controls: the ruler's, the caliper's or the micrometer's
+        "length-reading" => chemistry::length_relevant(key, p) && cards::relevant(id, key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -845,6 +847,12 @@ pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
 }
 
 /// The param a "Random" button sits under (the reference's Random reading on instrument figures).
+/// Whether `key` is a reading with a Random button: the figure's `random_key`, or the length
+/// reading's caliper and micrometer readings.
+pub fn is_random_key(id: &str, key: &str) -> bool {
+    random_key(id) == Some(key) || (id == "length-reading" && matches!(key, "cal_reading" | "mic_reading"))
+}
+
 pub fn random_key(id: &str) -> Option<&'static str> {
     match id {
         "spring-scale" => Some("reading"),

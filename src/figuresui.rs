@@ -2635,7 +2635,7 @@ impl Workspace {
                                         ui.add_space(if def.subject == figures::Subject::Biology && page { gap - 7.0 } else if next_bool { gap - 2.0 } else { gap });
                                         help_left = false;
                                     }
-                                    if figures::random_key(def.id) == Some(pdefs[i].key)
+                                    if figures::is_random_key(def.id, pdefs[i].key)
                                         && !skin
                                         && ui.button(RichText::new("Random").size(12.0)).on_hover_text("Set a random reading").clicked()
                                     {
@@ -4300,11 +4300,11 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
         return;
     }
     match &pd.kind {
-        Kind::Float { min, max, .. } if theme::chem_skin() && figures::random_key(fig) == Some(pd.key) => {
+        Kind::Float { min, max, .. } if theme::chem_skin() && figures::is_random_key(fig, pd.key) => {
             // the chemistry page's reading: a text box with its unit and an outlined Random button
             param_label(ui, label, pd.hint);
             ui.add_space(if fig == "micropipette-reading" { -2.0 } else { 1.0 });
-            let unit = if fig == "spring-scale" { "N".to_string() } else if fig == "volume-reading" && !p.s("unit").is_empty() { p.s("unit").to_string() } else if fig == "micropipette-reading" { "µL".to_string() } else { "mL".to_string() };
+            let unit = if fig == "length-reading" { "mm".to_string() } else if fig == "spring-scale" { "N".to_string() } else if fig == "volume-reading" && !p.s("unit").is_empty() { p.s("unit").to_string() } else if fig == "micropipette-reading" { "µL".to_string() } else { "mL".to_string() };
             let id = ui.make_persistent_id(("chem_reading", fig, pd.key));
             let ctx = ui.ctx().clone();
             let focused = ctx.memory(|m| m.has_focus(id));
@@ -4346,6 +4346,7 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             let unit = match (fig, pd.key) {
                 ("spring-scale", "offset") => Some("N".to_string()),
                 ("length-reading", "length" | "offset") => Some(if p.s("units").starts_with("Imp") { "in" } else { "cm" }.to_string()),
+                ("length-reading", "zero_error") => Some("mm".to_string()),
                 _ => None,
             };
             let r = ui.horizontal(|ui| {
