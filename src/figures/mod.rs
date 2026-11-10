@@ -753,6 +753,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "dot-and-cross" => chemistry::dotcross::relevant(key, p) && cards::relevant(id, key, p),
         // the CH3-ends switch only where it draws: a skeletal chain
         "organic-structure" => chemistry::organic::relevant(key, p) && cards::relevant(id, key, p),
+        // only the custom isotope's boxes for Custom, the activity unit for activity, the typed axis ranges with Fit off
+        "half-life-graph" => chemistry::halflife::relevant(key, p) && cards::relevant(id, key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -772,6 +774,10 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     // typing an x-axis range on the titration takes the axis off "fit to the titration"
     if id == "titration-curve" && key.starts_with("xaxis_") && key != "xaxis_fit" && p.b("xaxis_fit") {
         p.set_b("xaxis_fit", false);
+    }
+    // unticking the half-life graph's "Fit the axes" fills the range boxes with the fitted axes
+    if id == chemistry::halflife::ID {
+        chemistry::halflife::panel_changed(key, old, p);
     }
     if id == "predator-prey" {
         biology::popdyn::pp_panel_changed(key, p);

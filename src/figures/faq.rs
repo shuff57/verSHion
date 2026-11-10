@@ -866,6 +866,10 @@ const HALF_LIFE_GRAPH: &[Faq] = &[
         q: "Can several isotopes share one graph?",
         a: "Yes, up to three. The time axis is fitted to the longest half-life, so a short-lived isotope falls almost vertically; hide the names to make an identify-the-curve question, and the answer key gives each half-life and decay constant.",
     },
+    Faq {
+        q: "Why does activity, or counts per minute, fall along the same curve?",
+        a: "Activity is the number of decays per second, A = \u{3bb}N, so it is proportional to the nuclei left and halves each half-life with them. A counter registers a steady fraction of those decays, so its counts per minute halve too. Untick Fit the axes to type your own ranges; they start from the fitted ones.",
+    },
 ];
 
 const DOT_AND_CROSS: &[Faq] = &[

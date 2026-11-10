@@ -1126,8 +1126,21 @@ static PHOTOSYNTHESIS: [RefSection; 10] = [
     s("More options", &["show_answers", "style", "label_size"], ""),
 ];
 
+static HALF_LIFE: [RefSection; 9] = [
+    s("Isotopes", &["count", "iso1", "iso2", "iso3", "custom_name", "custom_half", "custom_unit"], "Every curve halves once per half-life, N = N\u{2080}(\u{bd})^(t/T\u{bd}); the mass, the number of nuclei and the activity all follow it."),
+    s("Up the side", &["y", "act_unit", "amount"], ""),
+    s("Time in", &["unit", "span", "fit"], ""),
+    s("Guide lines", &["guides", "guide_labels"], ""),
+    s("Curves", &["curves", "dots", "daughter", "hide_names", "style"], ""),
+    s("Titles", &["title", "xtitle_mode", "xtitle", "ytitle_mode", "ytitle"], ""),
+    s("x-axis", &["x_from", "x_to", "x_by", "x_num"], "Times in the unit the axis shows."),
+    s("y-axis", &["y_from", "y_to", "y_by", "y_num"], ""),
+    s("Grid", &["minor_grid"], ""),
+];
+
 pub fn reference(id: &str) -> Option<&'static [RefSection]> {
     Some(match id {
+        "half-life-graph" => &HALF_LIFE,
         "angles" => &FIG_0,
         "histogram" => &HISTOGRAM,
         "logic-circuit" => &LOGIC_CIRCUIT,
