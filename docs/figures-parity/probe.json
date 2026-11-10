@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-09T20:02:59",
- "ours_built_at": "2026-11-10T04:02:10+00:00",
- "git": "0ca39e2",
+ "checked_at": "2026-11-09T20:03:33",
+ "ours_built_at": "2026-11-10T04:03:29+00:00",
+ "git": "d20ab8d",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -4146,8 +4146,8 @@
      "renders": []
     },
     "cap-i07": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },

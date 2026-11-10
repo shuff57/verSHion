@@ -12,7 +12,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | bar-graph | `bar-chart` | 35 | 0 | 7 | — | 100 |
 | box-plot | `box-plot` | 37 | 0 | 6 | reference has a student version; ours has no show_answers | 90 |
 | circle | `circle` | 76 | 2 | 7 | — | 52 |
-| composite-shape | `composite-shape` | 9 | 10 | 3 | — | 96 |
+| composite-shape | `composite-shape` | 9 | 10 | 3 | — | 100 |
 | cone | `cone` | 26 | 4 | 6 | — | 91 |
 | coordinate-grid | `coordinate-grid` | 41 | 2 | 7 | — | 83 |
 | cumulative-frequency | `ogive` | 45 | 0 | 7 | — | 100 |
@@ -101,7 +101,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-10T04:03:00+00:00 · probe: 2026-11-09T20:02:59
+Generated: 2026-11-10T04:03:33+00:00 · probe: 2026-11-09T20:03:33
 
 **Pooled 90.7** · mean 90.9 over 70 figures · built 71 of 71 reference figures
 
@@ -265,8 +265,6 @@ Comparable with the frozen baseline: **yes**
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `projectile-motion`: 96 (71/74)
   - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
-- `composite-shape`: 96 (48/50)
-  - cap-i07 [interaction 2] Click a side on the figure to give it congruence ticks, parallel arrows or a line style — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
 - `predator-prey`: 97 (93/96)
@@ -279,6 +277,7 @@ Comparable with the frozen baseline: **yes**
   - cap-02d [interaction 2] Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F — weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:
 - `bar-chart`: 100 (87/87)
 - `circuit-diagram`: 100 (61/61)
+- `composite-shape`: 100 (50/50)
 - `dna-protein-synthesis`: 100 (102/102)
 - `enzyme-kinetics`: 100 (85/85)
 - `histogram`: 100 (90/90)

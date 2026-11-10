@@ -1,0 +1,31 @@
+{
+ "round": 217,
+ "figure": "composite-shape",
+ "capability": "cap-i07",
+ "hypothesis": "Batch 5 composite-shape: cap-i07; evidence ui-test:figuresui::tests::composite_canvas_marks_a_sides_ticks_arrows_and_line",
+ "started_at": "2026-11-09T20:03:29",
+ "git": "d20ab8d",
+ "before": {
+  "figure": 96.0,
+  "pooled": 90.7
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T20:03:33",
+ "after": {
+  "figure": 100.0,
+  "pooled": 90.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass on re-check: ticks, arrows and line styles from the side pop-up, drawn readable and apart (0ca39e2)",
+ "result": "hit",
+ "evidence": "canvas test drives the side pop-up and checks the export; dotted sides visible and ticks and arrows apart since 0ca39e2, re-checked",
+ "next": "composite-shape (remaining)"
+}

@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-10T04:03:00+00:00",
- "probe_checked_at": "2026-11-09T20:02:59",
+ "generated_at": "2026-11-10T04:03:33+00:00",
+ "probe_checked_at": "2026-11-09T20:03:33",
  "comparable": true,
  "drift": [],
  "pooled": 90.7,
@@ -343,19 +343,11 @@
    "gaps": []
   },
   "composite-shape": {
-   "score": 96.0,
-   "got": 48.0,
+   "score": 100.0,
+   "got": 50.0,
    "total": 50.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-i07",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a side on the figure to give it congruence ticks, parallel arrows or a line style",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "cone": {
    "score": 90.9,

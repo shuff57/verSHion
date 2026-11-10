@@ -91,8 +91,8 @@
    "id": "cap-i07",
    "text": "Click a side on the figure to give it congruence ticks, parallel arrows or a line style",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the side's pop-up has Congruence ticks, Parallel arrows, Line and Thickness."
+   "evidence": "ui-test:figuresui::tests::composite_canvas_marks_a_sides_ticks_arrows_and_line",
+   "note": "Built in batch 5, round 217 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the side's pop-up has Congruence ticks, Parallel arrows, Line and Thickness."
   },
   {
    "id": "cap-i08",
