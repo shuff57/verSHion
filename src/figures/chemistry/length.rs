@@ -185,6 +185,23 @@ pub fn summary(title: &str, p: &Params) -> Option<String> {
 
 /// The Reading section's range line.
 pub fn range_note(p: &Params) -> Option<String> {
+    let base = range_text(p)?;
+    // a typed reading the scale cannot show is drawn at the nearest one: say so, since the box still shows what was typed
+    let (typed, rd) = if is_caliper(p) { (p.f("cal_reading"), cal_read(p)) } else { (p.f("mic_reading"), mic_read(p)) };
+    if (typed - rd.r).abs() > 1e-9 {
+        return Some(format!("{base} {} mm is drawn as {} mm, the nearest reading this scale shows.", fmt_typed(typed), num(rd.r, rd.dp)));
+    }
+    Some(base)
+}
+
+/// A typed number as the teacher typed it, without trailing zeros.
+fn fmt_typed(v: f64) -> String {
+    let t = format!("{v:.6}");
+    let t = t.trim_end_matches('0').trim_end_matches('.');
+    t.replace('-', "\u{2212}")
+}
+
+fn range_text(p: &Params) -> Option<String> {
     if is_caliper(p) {
         let v = vern(p);
         let lc = num(v.lc, if v.lc >= 0.1 { 1 } else { 2 });
@@ -577,6 +594,14 @@ fn mic_h(p: &Params, rd: &Read, closed: bool) -> f64 {
     mic_top(p, rd, closed) + 100f64.max(hh + 6.0) + 4.0
 }
 
+/// Where a sleeve number centred on its mark at `x` goes: moved left just enough to clear the
+/// thimble's edge `xe`, so a reading on a multiple of 5 mm does not hide half its number (10.000 mm
+/// showed only "1", which a student could read as 1).
+fn num_x(x: f64, xe: f64, size: f64, m: i64) -> f64 {
+    let half = 0.3 * size * m.to_string().len() as f64;
+    x.min(xe - 1.5 - half)
+}
+
 /// Where the sleeve begins, in mm on its scale (the frame's hub is before it).
 fn sleeve_start(rd: &Read) -> f64 { -(MXZ0 - MXS) / MK - rd.z }
 
@@ -600,7 +625,7 @@ fn micrometer(d: &mut Doc, p: &Params, rd: &Read, oy: f64, closed: bool, region:
         if mm <= rd.r + 1e-9 {
             let x = xz + mm * MK;
             tick(d, "sl", x, ya, x, ya - if m % 5 == 0 { 7.0 } else { 5.0 }, 0.9);
-            if m % 5 == 0 { tx(d, x, ya - 8.0, 8.5, "middle", INK, false, &m.to_string()); }
+            if m % 5 == 0 { tx(d, num_x(x, xe, 8.5, m), ya - 8.0, 8.5, "middle", INK, false, &m.to_string()); }
         }
         if m < 25 && mm + 0.5 <= rd.r + 1e-9 {
             let x = xz + (mm + 0.5) * MK;
@@ -665,7 +690,7 @@ fn micrometer_panel(d: &mut Doc, p: &Params, rd: &Read, py: f64, id: usize) {
         let mm = m as f64;
         if mm <= rd.r + 1e-9 {
             tick(d, "csl", x(mm), ym, x(mm), ym - if m % 5 == 0 { 34.0 } else { 26.0 }, 1.4);
-            if m % 5 == 0 { tx(d, x(mm), ym - 42.0, 17.0, "middle", INK, false, &m.to_string()); }
+            if m % 5 == 0 { tx(d, num_x(x(mm), xe, 17.0, m), ym - 42.0, 17.0, "middle", INK, false, &m.to_string()); }
         }
         if m < 25 && mm + 0.5 >= a && mm + 0.5 <= rd.r + 1e-9 {
             tick(d, "csh", x(mm + 0.5), ym, x(mm + 0.5), ym + 26.0, 1.4);
@@ -965,6 +990,37 @@ mod tests {
         if j_of(ib) == 49 && frac > 0.95 { th = 50.0; }
         let r = if whole < 0.0 { -0.5 + th * 0.01 } else { whole + if half { 0.5 } else { 0.0 } + th * 0.01 };
         (r * 1e6).round() / 1e6
+    }
+
+    #[test]
+    fn a_reading_the_scale_cannot_show_is_said_to_be_rounded() {
+        // the batch 5 checker: 23.45 on the 0.02 mm scale drew and keyed 23.46 with no word of it
+        let p = with(&[s("instrument", "Caliper"), s("least_count", "0.02 mm"), f("cal_reading", 23.45)]);
+        let n = range_note(&p).unwrap();
+        assert!(n.contains("23.45 mm is drawn as 23.46 mm"), "{n}");
+        let p = with(&[s("instrument", "Caliper"), f("cal_reading", 23.45)]);
+        assert!(!range_note(&p).unwrap().contains("drawn as"));
+        let p = with(&mic(&[f("mic_reading", 7.384)]));
+        assert!(range_note(&p).unwrap().contains("7.384 mm is drawn as 7.38 mm"));
+    }
+
+    #[test]
+    fn a_sleeve_number_is_never_under_the_thimble() {
+        // the batch 5 checker: at 10.000 mm the close-up showed "1", at 25.00 "2"
+        for r in [5.0, 10.0, 15.0, 20.0, 25.0, 10.02, 4.99] {
+            let svg = def().svg(&with(&mic(&[f("mic_reading", r)])));
+            let body = panel(&svg, 0);
+            let edge = lines(&body, "cdl")[0].2;
+            for t in texts(&body).iter().filter(|t| t.2 > 16.5 && t.0 <= edge) {
+                if let Ok(v) = t.3.parse::<i64>() {
+                    if v % 5 != 0 { continue; }
+                    let half = 0.3 * t.2 * t.3.len() as f64;
+                    assert!(t.0 + half <= edge + 1e-6, "{r} mm: sleeve number {v} runs under the thimble (ends {:.1}, edge {edge:.1})", t.0 + half);
+                }
+            }
+            // and it still reads right
+            assert!((read_micrometer(&body, false) - r).abs() < 1e-9, "{r}");
+        }
     }
 
     #[test]
