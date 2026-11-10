@@ -166,6 +166,7 @@ pub fn add_point(p: &mut Params, deg: f64) {
 }
 
 /// Moves More point `i` to `deg`, keeping its letter (a point that had the next free letter keeps the one it was drawn with).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn move_extra(p: &mut Params, i: usize, deg: f64) {
     let d = extras_all(p).get(i).map(|e| e.2).unwrap_or(1.0);
     move_extra_to(p, i, deg, d);
@@ -204,6 +205,8 @@ enum Target {
     Rim(f64),
     /// the enclosed area round this spot (unit coordinates)
     Shade(V),
+    /// the middle of a chord, or a crossing (unit coordinates)
+    Spot(super::clicks::Spot, V),
 }
 
 const STATES: [&str; 3] = ["Given", "Ask", "Hidden"];
@@ -221,6 +224,10 @@ pub struct Hit {
     angles: Vec<(V, f64, f64, Target, String)>,
     pts: Vec<(String, f64)>,
     faces: Vec<Vec<V>>,
+    /// the middles of chords and the crossings a click names a point at (SVG units), before everything else within 7 px
+    spots: Vec<(Pt, super::clicks::Spot, String, V)>,
+    /// the letters of the centre, A, B, C and M
+    nm: [String; 5],
 }
 
 fn dir_deg(o: V, q: V) -> f64 { wrap((q.1 - o.1).atan2(q.0 - o.0).to_degrees()) }
@@ -282,7 +289,8 @@ impl Hit {
         }
         let mut pts = circle_points(p);
         pts.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        Hit { centre, lines, angles, pts, faces: faces(&edges(p)) }
+        let spots = super::clicks::spots(p).into_iter().map(|(u, s, tip)| (scr(u), s, tip, u)).collect();
+        Hit { centre, lines, angles, pts, faces: faces(&edges(p)), spots, nm: [n.o, n.a, n.b, n.c, n.m] }
     }
 
     fn unit(&self, q: Pt) -> V { ((q.0 - self.centre.0) / R, (self.centre.1 - q.1) / R) }
@@ -322,6 +330,11 @@ impl Hit {
             let n = (span / 3.0).ceil().max(2.0) as usize;
             (0..=n).map(|i| interact::polar(c, a0 + span * i as f64 / n as f64, rad)).collect()
         };
+        // the middle of a chord, or a crossing: within 7 px of it
+        if let Some((s, sp, tip, u)) = self.spots.iter().filter(|x| interact::dist(q, x.0) <= 7.0).min_by(|x, y| interact::dist(q, x.0).partial_cmp(&interact::dist(q, y.0)).unwrap_or(std::cmp::Ordering::Equal)) {
+            let ring: Vec<Pt> = (0..=24).map(|i| interact::polar(*s, i as f64 * 15.0, 7.0)).collect();
+            return Some((Target::Spot(sp.clone(), *u), interact::Hover { outline: ring, closed: true, tip: tip.clone() }));
+        }
         // a line, within 5 px of it and more than 8 px from both its ends
         let near = self.lines.iter().filter(|(a, b, _, _)| pt_seg_dist(q, *a, *b) <= 5.0 && interact::dist(q, *a) > 8.0 && interact::dist(q, *b) > 8.0)
             .min_by(|x, y| pt_seg_dist(q, x.0, x.1).partial_cmp(&pt_seg_dist(q, y.0, y.1)).unwrap_or(std::cmp::Ordering::Equal));
@@ -360,9 +373,30 @@ impl Hit {
     }
 
     /// A click at `q`: whatever `at` names there.
+    /// The part a double-click at `q` types the marks and style of: `BD`, `arc BC`, `major arc BC` or `angle BDC` (None for a part
+    /// with no style: the rim, an area, a tangent, the diameter).
+    pub fn part_at(&self, q: Pt) -> Option<String> {
+        let [o, a, b, c, m] = &self.nm;
+        match self.at(q)?.0 {
+            Target::Line(x, y) => Some(format!("{x}{y}")),
+            Target::Cycle("r_label", _) => Some(format!("{o}{a}")),
+            Target::Cycle("g_chord", _) => Some(format!("{a}{b}")),
+            Target::Cycle("g_om", _) => Some(format!("{o}{m}")),
+            Target::Cycle("g_central", _) => Some(format!("angle {a}{o}{b}")),
+            Target::Cycle("g_inscribed", _) => Some(format!("angle {a}{c}{b}")),
+            Target::Angle(head, ..) if head.starts_with("angle ") => Some(head),
+            Target::Arc(x, y, major) => Some(format!("{}arc {x}{y}", if major { "major " } else { "" })),
+            _ => None,
+        }
+    }
+
     fn act(&self, p: &mut Params, q: Pt) {
+        // a click anywhere but on a point ends the wait for a second point
+        p.set_s("join_from", "");
         let Some((t, _)) = self.at(q) else { return };
         match t {
+            Target::Spot(super::clicks::Spot::Mid(a, b), _) => super::clicks::cycle_midpoint(p, &a, &b),
+            Target::Spot(super::clicks::Spot::Cross(spec), u) => super::clicks::toggle_crossing(p, &spec, u),
             Target::Cycle(key, opts) => interact::cycle(p, key, opts),
             Target::Line(a, b) => cycle_mark(p, false, false, &a, &b),
             Target::Angle(head, v, a, b) => cycle_angle(p, &head, v, a, b),
@@ -386,9 +420,9 @@ pub fn handles(p: &Params, cx: f64, off: Pt) -> Vec<Handle> {
         let q = (cx + R * r0 * d.to_radians().cos(), CY - R * r0 * d.to_radians().sin());
         let at = (q.0 + off.0, q.1 + off.1);
         let nm2 = nm.clone();
-        let tip = if on_rim(r0) { format!("Drag point {nm} round the circle (pull it well away to take it off the circle); click it for the tangent there") }
-            else if r0 > 1.0 { format!("Drag point {nm} anywhere (bring it to the circle to put it back on); click it for the tangents from it") }
-            else { format!("Drag point {nm} anywhere (bring it to the circle to put it back on)") };
+        let tip = if on_rim(r0) { format!("Drag point {nm} round the circle (pull it well away to take it off the circle); click it for the tangent there, or click it and then another point to join them; double-click it to rename it") }
+            else if r0 > 1.0 { format!("Drag point {nm} anywhere (bring it to the circle to put it back on); click it for the tangents from it, or click it and then another point to join them; double-click it to rename it") }
+            else { format!("Drag point {nm} anywhere (bring it to the circle to put it back on); click it and then another point to join them; double-click it to rename it") };
         let k = Handle::knob(at, &tip, move |p, t| {
             if unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
             let r = interact::dist(centre, t) / R;
@@ -398,16 +432,36 @@ pub fn handles(p: &Params, cx: f64, off: Pt) -> Vec<Handle> {
             let dist = if on_rim(cur) { if (r - 1.0).abs() > 0.2 { snapd(r) } else { 1.0 } } else if (r - 1.0).abs() < 0.08 { 1.0 } else { snapd(r) };
             move_extra_to(p, i, deg, dist);
         });
-        v.push(if on_rim(r0) { k.with_click(move |p| toggle_tangent(p, &nm2)) } else if r0 > 1.0 { k.with_click(move |p| toggle_outside_tangents(p, &nm2)) } else { k });
+        let nm3 = nm.clone();
+        let k = k.with_click(move |p| super::clicks::click_point(p, &nm2, r0 >= 1.0)).with_edit_at("more_points", move |p, _| super::clicks::rename_point(p, &nm3));
+        v.push(k);
     }
     let hit = std::sync::Arc::new(Hit::new(p, centre));
     // wide enough for the arc rings, for the tangents as far as they are drawn and for the points off the circle
     let far = off_points(p).iter().map(|(_, q)| q.0.hypot(q.1) * R + 30.0 - R).fold(0.0, f64::max);
     let reach = tangent_lines(p).iter().map(|t| t.1.max(t.2)).fold(130.0f64.max(far), f64::max) + R + 20.0;
     let h2 = hit.clone();
-    v.push(Handle::area(centre, (2.0 * reach, 2.0 * reach), "Click the circle to put a point there, a line, angle or arc to label it, or an enclosed area to shade it", move |p, q| hit.act(p, q))
-        .with_hover(move |q| h2.at(q).map(|x| x.1)));
+    // while a clicked point waits for a second one, the area rings it and says what the next click does
+    let armed = {
+        let f = p.s("join_from").to_string();
+        let pts = circle_points(p);
+        find(p, &pts, &f).filter(|_| !f.is_empty()).map(|e| { let u = end_pos(p, e); ((centre.0 + R * u.0, centre.1 - R * u.1), f) })
+    };
+    v.push(Handle::area(centre, (2.0 * reach, 2.0 * reach), AREA_TIP, move |p, q| hit.act(p, q))
+        .with_hover(move |q| match &armed {
+            Some((at, f)) => Some(interact::Hover { outline: (0..=24).map(|i| interact::polar(*at, i as f64 * 15.0, 11.0)).collect(), closed: true, tip: format!("Click another point to join it to {f}, or {f} again to undo the click") }),
+            None => h2.at(q).map(|x| x.1),
+        })
+        .with_edit_at("styles", move |p, q| super::clicks::edit_at(p, centre, q)));
     v
+}
+
+/// What the click area does, in one line (the part under the pointer has its own tip).
+pub const AREA_TIP: &str = "Click the circle to put a point there, a line, angle or arc to label it, or an enclosed area to shade it; click the middle of a chord to name its midpoint or join it to the centre, or where lines cross or meet the circle to name a point there; double-click a point or the centre to rename it, or a line, angle or arc to mark or style it; click a point outside the circle for the tangents from it; drag any point, pulling it off the circle or back on";
+
+/// A click on point `nm` for its tangent: the tangents from it when it is outside the circle, else the tangent at it.
+pub fn toggle_tangent_or_outside(p: &mut Params, nm: &str) {
+    if off_points(p).iter().any(|o| o.0 == nm && o.1 .0.hypot(o.1 .1) > 1.0) { toggle_outside_tangents(p, nm) } else { toggle_tangent(p, nm) }
 }
 
 // ------------------------------------------------------------------------------------------------ lines between points, tangents
@@ -1395,7 +1449,8 @@ mod tests {
         let area_h = hs.iter().find(|h| h.click_at.is_some()).unwrap();
         let c = area_h.pos;
         let mut q = p.clone();
-        (area_h.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 300.0, R * 0.9));
+        // (0.75 radii: the middle of chord BD, at 0.87, names its midpoint)
+        (area_h.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 300.0, R * 0.75));
         assert_eq!(regions(&q).len(), 1);
         let mut q = p.clone();
         (area_h.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 45.0, R + 4.0));
@@ -1729,6 +1784,8 @@ mod tests {
             Some((_, t)) if t.starts_with("Click to put a point") || t.starts_with("A point is already") => "rim",
             Some((_, t)) if t.starts_with("Click to shade") => "shade",
             Some((_, t)) if t.starts_with("Click to label arc") => "arc",
+            Some((_, t)) if t.starts_with("Click to name the midpoint") || t.starts_with("Click to join midpoint") || t.starts_with("Click to clear midpoint") => "mid",
+            Some((_, t)) if t.starts_with("Click to name the point here") || t.starts_with("Click to clear point") => "cross",
             Some((_, t)) if t.starts_with("Click angle") || t.starts_with("Click to label angle") || t.starts_with("Click to label tangent angle") => "angle",
             Some((_, t)) if ["Click to label line", "Click radius", "Click chord", "Click the diameter", "Click the tangent", "Click the secant", "Click the perpendicular", "Click OM"].iter().any(|x| t.starts_with(x)) => "line",
             Some(_) => "other",
@@ -1780,6 +1837,16 @@ mod tests {
                 if edge(dx, 9.0) && dy <= 9.75 || edge(dy, 9.0) && dx <= 9.75 { return None; }
                 if dx <= 9.0 && dy <= 9.0 { return Some("point"); }
             }
+            // the middle of chord BD names its midpoint, and where BD crosses OA names a point (batch 5): 7 px round each
+            let mid = ((pts[1].0 + pts[2].0) / 2.0, (pts[1].1 + pts[2].1) / 2.0);
+            let (u, w) = (|q: Pt| ((q.0 - c.0) / R, (c.1 - q.1) / R), |v: V| (c.0 + R * v.0, c.1 - R * v.1));
+            let x = super::super::pts::cross(u(c), u(pts[0]), u(pts[1]), u(pts[2])).map(w);
+            for (s, k) in [(Some(mid), "mid"), (x, "cross")] {
+                let Some(s) = s else { continue };
+                let d = interact::dist(q, s);
+                if edge(d, 7.0) { return None; }
+                if d <= 7.0 { return Some(k); }
+            }
             for (a, b) in [(c, pts[0]), (pts[1], pts[2])] {
                 let (dl, da, db) = (pt_seg_dist(q, a, b), interact::dist(q, a), interact::dist(q, b));
                 if edge(dl, 5.0) || (dl < 5.75 && (edge(da, 8.0) || edge(db, 8.0))) { return None; }
@@ -1796,7 +1863,7 @@ mod tests {
             Some("none")
         };
         let seen = sweep(&p, &want);
-        assert!(seen["line"] > 100 && seen["shade"] > 10_000 && seen["arc"] > 1000 && seen["rim"] > 500, "{seen:?}");
+        assert!(seen["line"] > 100 && seen["shade"] > 10_000 && seen["arc"] > 1000 && seen["rim"] > 500 && seen["mid"] > 20, "{seen:?}");
     }
 
     /// Two tangents 60 degrees apart (at A 20 and B 80, with radius OA): a click on either tangent (5 px, away from its ends) labels

@@ -2097,6 +2097,13 @@ impl Workspace {
             } else if r.clicked()
                 && let Some(f) = &h.click
             {
+                // a knob that also edits in place on a double-click (a circle point's letter): its click is kept to be taken
+                // back if it was the first of the double-click, as an area's is
+                if h.edit_at.is_some()
+                    && let Some(ptr) = r.interact_pointer_pos()
+                {
+                    self.click_undo = Some((Instant::now(), to_svg(ptr), self.params.clone()));
+                }
                 f(&mut self.params);
                 self.params.normalize(&pdefs, true);
                 changed = true;

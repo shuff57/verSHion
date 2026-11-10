@@ -465,3 +465,165 @@ fn labelled_angles_obey_the_circle_theorems() {
     assert_eq!(t.len(), 2, "{:?}", texts(&p));
     assert!(close(t[0], t[1], 0.11), "{t:?}");
 }
+
+// ------------------------------------------------------------------------------------------------ on the figure, through the hit test
+
+fn at_dir(p: &Params, deg: f64, r: f64) -> Pt { sp(p, (r * deg.to_radians().cos(), r * deg.to_radians().sin())) }
+
+/// A More point dragged well off the circle leaves it (its row gets a distance), moves anywhere, and comes back on when brought
+/// near the circle; a small pull stays on the circle. Every press goes through the workspace's hit test.
+#[test]
+fn a_point_is_dragged_off_the_circle_and_back_on() {
+    let p = with(&[s("more_points", "D 270")]);
+    let q = drag(&p, at_dir(&p, 270.0, 1.0), at_dir(&p, 260.0, 1.1));
+    assert_eq!(q.s("more_points"), "D 260", "a small pull keeps D on the circle");
+    let q = drag(&p, at_dir(&p, 270.0, 1.0), at_dir(&p, 240.0, 1.62));
+    assert_eq!(q.s("more_points"), "D 240 1.6r", "pulled well away, D leaves the circle (to the nearest 0.05 radii)");
+    let q2 = drag(&q, at_dir(&q, 240.0, 1.6), at_dir(&q, 200.0, 0.43));
+    assert_eq!(q2.s("more_points"), "D 200 0.45r", "off the circle it goes anywhere, inside too");
+    let q3 = drag(&q2, at_dir(&q2, 200.0, 0.45), at_dir(&q2, 150.0, 0.95));
+    assert_eq!(q3.s("more_points"), "D 150", "brought within 0.08 radii of the circle, it is back on");
+    // the knob's tip says so, and the click area's summary names it for the figure's opening state
+    let h = handle_at(&p, at_dir(&p, 270.0, 1.0)).unwrap();
+    assert!(h.tip.contains("pull it well away to take it off the circle"));
+    let o = with(&[]);
+    assert!(super::handles("circle", &o, (0.0, 0.0)).unwrap().iter().any(|h| h.tip.contains("drag any point, pulling it off the circle or back on")));
+}
+
+/// A click on a point outside the circle draws the two tangents from it; a click on it again (after a click elsewhere has ended
+/// the wait for a second point) takes them off.
+#[test]
+fn a_click_on_a_point_outside_the_circle_draws_the_tangents_from_it() {
+    let p = with(&[s("more_points", "P 30 2r")]);
+    let at = at_dir(&p, 30.0, 2.0);
+    let h = handle_at(&p, at).unwrap();
+    assert!(h.tip.contains("click it for the tangents from it"));
+    let q = click(&p, at);
+    assert_eq!(q.s("tangents"), "P");
+    assert_eq!(pts::outside_tangents(&q)[0].touch.len(), 2);
+    let q = click(&q, at_dir(&q, 200.0, 0.5));
+    assert_eq!(q.s("join_from"), "", "a click elsewhere ends the wait");
+    let q = click(&q, at_dir(&q, 30.0, 2.0));
+    assert_eq!(q.s("tangents"), "");
+}
+
+/// Click a point and then another: they are joined (the first click's tangent is taken back); clicking the same point twice
+/// still puts its tangent on and takes it off as before.
+#[test]
+fn clicking_a_point_then_another_joins_them() {
+    let p = with(&[b("show_b", true), b("show_c", true), s("more_points", "D 300")]);
+    let q = click(&p, at_dir(&p, 20.0, 1.0));
+    assert!(q.b("show_tangent"), "the first click is the tangent, as before");
+    assert_eq!(q.s("join_from"), "A");
+    let q = click(&q, at_dir(&q, 300.0, 1.0));
+    assert_eq!(q.s("joins"), "AD");
+    assert!(!q.b("show_tangent") && q.s("tangents").is_empty() && q.s("join_from").is_empty(), "the first click's tangent is taken back");
+    assert!(edit::joins(&q).len() == 1);
+    // the same two clicks again take the line away
+    let q2 = click(&click(&q, at_dir(&q, 20.0, 1.0)), at_dir(&q, 300.0, 1.0));
+    assert_eq!(q2.s("joins"), "");
+    // a point and the same point: its tangent, then nothing
+    let t = click(&p, at_dir(&p, 110.0, 1.0));
+    assert_eq!(t.s("tangents"), "B");
+    let t = click(&t, at_dir(&t, 110.0, 1.0));
+    assert_eq!(t.s("tangents"), "");
+    // while a point waits, the area rings it and says what the next click does
+    let w = click(&p, at_dir(&p, 250.0, 1.0));
+    let area = super::handles("circle", &w, (0.0, 0.0)).unwrap().into_iter().find(|h| h.click_at.is_some()).unwrap();
+    let hv = (area.hover_at.as_ref().unwrap())(centre_of(&w)).unwrap();
+    assert!(hv.tip.starts_with("Click another point to join it to C"));
+    // the waiting point is not a control in the panel and changes nothing drawn
+    assert!(!crate::figures::param_relevant("circle", "join_from", &w));
+    assert_eq!(svg_of(&[b("show_b", true)]), { let mut x = with(&[b("show_b", true)]); x.set_s("join_from", "A"); (def().render)(&x) });
+}
+
+/// The middle of a chord: one click names its midpoint, a second joins it to the centre (with the right angle there, since the
+/// line from the centre to a chord's midpoint is perpendicular to the chord), a third clears both.
+#[test]
+fn clicking_the_middle_of_a_chord_names_its_midpoint_then_joins_it_to_the_centre() {
+    let p = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "D 250"), s("joins", "BD")]);
+    let mid = { let (b_, d_) = (at_dir(&p, 110.0, 1.0), at_dir(&p, 250.0, 1.0)); ((b_.0 + d_.0) / 2.0, (b_.1 + d_.1) / 2.0) };
+    let q = click(&p, (mid.0 + 3.0, mid.1 - 2.0));
+    assert_eq!(q.s("midpoints"), "E BD");
+    assert!(svg_of(&[]).len() > 0 && (def().render)(&q).contains(">E</text>"));
+    let q = click(&q, mid);
+    assert_eq!(q.s("joins"), "BD, O E");
+    let marks = build(&q).1.marks;
+    assert_eq!(marks, 1, "the right angle at E");
+    let mut r = q.clone();
+    r.set_s("marks", "angle OEB");
+    assert!(texts(&r).contains(&"90\u{b0}".to_string()));
+    let q = click(&q, mid);
+    assert_eq!((q.s("midpoints"), q.s("joins")), ("", "BD"));
+    // chord AB's midpoint is M
+    let p = with(&[b("show_chord", true), f("a2", 110.0)]);
+    let m = { let (a, b_) = (at_dir(&p, 20.0, 1.0), at_dir(&p, 110.0, 1.0)); ((a.0 + b_.0) / 2.0, (a.1 + b_.1) / 2.0) };
+    let q = click(&p, m);
+    assert_eq!(q.s("midpoints"), "M AB");
+    let q = click(&q, m);
+    assert_eq!(q.s("joins"), "O M");
+    assert_eq!(build(&q).1.marks, 1);
+}
+
+/// Where two lines cross, and where a line meets the circle: a click names a point there with the next free letter, and a click on
+/// it again clears it.
+#[test]
+fn clicking_where_lines_cross_names_a_point_there() {
+    let p = with(&[b("show_b", true), b("show_c", true), f("a2", 110.0), f("c_angle", 230.0), s("more_points", "D 300"), s("joins", "AC, BD")]);
+    let up = |d: f64| (d.to_radians().cos(), d.to_radians().sin());
+    let x = pts::cross(up(20.0), up(230.0), up(110.0), up(300.0)).unwrap();
+    let at = sp(&p, x);
+    let q = click(&p, (at.0 + 2.0, at.1 + 3.0));
+    assert_eq!(q.s("crossings"), "E AC BD");
+    assert!((def().render)(&q).contains(">E</text>"));
+    let q = click(&q, sp(&q, x));
+    assert_eq!(q.s("crossings"), "");
+    // a line from inside the circle out past it meets the circle at no point of its own: a click there names one
+    let p = with(&[s("more_points", "P 0 0.5r, Q 90 2r"), s("joins", "PQ")]);
+    let e = pts::meets_circle((0.5, 0.0), (0.0, 2.0))[0];
+    let q = click(&p, sp(&p, e));
+    assert_eq!(q.s("crossings"), "D PQ circle");
+}
+
+/// A double-click on a point's knob, on the centre, or on a named midpoint types its new letter in place; on a line, an arc or an
+/// angle it types that part's marks and style, written back as one Marks and line styles row.
+#[test]
+fn a_double_click_renames_a_point_or_marks_a_part() {
+    let p = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "D 300"), s("joins", "BD")]);
+    let edit_at = |p: &Params, q: Pt| { let h = handle_at(p, q).unwrap(); let (_, f) = h.edit_at.clone().expect("types in place"); f(p, q).expect("something to type") };
+    let e = edit_at(&p, at_dir(&p, 20.0, 1.0));
+    assert_eq!(e.text, "A");
+    let mut q = p.clone();
+    (e.set)(&mut q, "P");
+    assert_eq!(q.s("name_a"), "P");
+    let e = edit_at(&p, at_dir(&p, 300.0, 1.0));
+    let mut q = p.clone();
+    (e.set)(&mut q, "X");
+    assert_eq!(q.s("more_points"), "X 300");
+    let e = edit_at(&p, centre_of(&p));
+    let mut q = p.clone();
+    (e.set)(&mut q, "Z");
+    assert_eq!(q.s("name_o"), "Z");
+    // a line: its marks and style
+    let b_ = at_dir(&p, 110.0, 1.0);
+    let d_ = at_dir(&p, 300.0, 1.0);
+    let on = (b_.0 + (d_.0 - b_.0) * 0.3, b_.1 + (d_.1 - b_.1) * 0.3);
+    let e = edit_at(&p, on);
+    assert_eq!(e.text, "");
+    let mut q = p.clone();
+    (e.set)(&mut q, "ticks 2 dashed");
+    assert_eq!(q.s("styles"), "BD ticks 2 dashed");
+    assert_eq!(edit_at(&q, on).text, "ticks 2 dashed");
+    let mut r = q.clone();
+    (edit_at(&q, on).set)(&mut r, "");
+    assert_eq!(r.s("styles"), "");
+    // an arc, from the ring outside it, and an angle from its wedge
+    let e = edit_at(&p, at_dir(&p, 65.0, 1.12));
+    let mut q = p.clone();
+    (e.set)(&mut q, "ticks 1");
+    assert_eq!(q.s("styles"), "arc AB ticks 1");
+    let mut c = with(&[b("show_b", true), f("a2", 110.0), b("show_central", true)]);
+    let e = edit_at(&c, at_dir(&c, 65.0, 0.17));
+    (e.set)(&mut c, "arcs 2");
+    assert_eq!(c.s("styles"), "angle AOB arcs 2");
+}

@@ -728,6 +728,8 @@ pub fn card_visible(id: &str, group: &str, row: Option<&str>, p: &Params) -> boo
 pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
     match id {
         "pulley" => physics::pulley_relevant(key, p),
+        // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
+        "circle" if key == "join_from" => false,
         // the reference has no "Show resultant" box (the arrow's "Left off" does it) and no bold switch
         "vector-diagram" if matches!(key, "resultant" | "bold") => false,
         "vector-diagram" if matches!(key, "ang_lab_mode" | "ang_lab") => p.b("mark_angle"),

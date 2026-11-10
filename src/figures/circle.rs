@@ -16,6 +16,7 @@ use super::svg::{self, Doc, Fills};
 use super::*;
 use std::f64::consts::PI;
 
+mod clicks;
 mod edit;
 mod pts;
 mod style;
@@ -86,6 +87,7 @@ fn params() -> Vec<ParamDef> {
         b("show_secant", "Secant through A and B", false),
         b("show_central", "Central angle AOB", false),
         b("show_inscribed", "Inscribed angle ACB", false),
+        ParamDef::text("join_from", "Point waiting to be joined", "").hint("Set by a click on a point on the figure: a click on another point joins the two"),
         ParamDef::list("joins", "Lines between points", "").hint("Two letters per row: BD is a chord, OC a radius. Any point on the figure, and the centre"),
         ParamDef::list("tangents", "Tangents at points", "").hint("A point's letter per row, such as C. Or click a point on the figure. A point outside the circle gets both tangents from it (P), with touch points lettered (P T U), or one of them (P T - or P - U)"),
         ParamDef::list("midpoints", "Midpoints", "").hint("A letter and two points per row: N BD is the midpoint of BD. Or click the middle of a chord on the figure"),
@@ -1188,6 +1190,17 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         let radius = matches!(x, edit::End::O) || matches!(y, edit::End::O);
         sline(&mut sc, &lst, at_end(*x), at_end(*y), col(if radius { 0 } else { 1 }), 2.4, cx, &area);
     }
+    // a line from the centre to the midpoint of a chord that a midpoints row names meets it at a right angle: marked like the
+    // bisector's (a line OM typed before midpoints rows existed draws no mark, as it did not then)
+    {
+        for (m0, end) in pts::chord_mids(p) {
+            let joined = joins.iter().any(|(_, x, y)| { let (u, w) = (edit::end_pos(p, *x), edit::end_pos(p, *y)); let z = |v: edit::V| v.0.hypot(v.1) < 1e-9; let at = |v: edit::V| (v.0 - m0.0).hypot(v.1 - m0.1) < 1e-6; (z(u) && at(w)) || (z(w) && at(u)) });
+            let (q, e) = (sp_u(m0), sp_u(end));
+            let (to_e, to_o) = ((e.0 - q.0, e.1 - q.1), (o.0 - q.0, o.1 - q.1));
+            let (le, lo) = (to_e.0.hypot(to_e.1), to_o.0.hypot(to_o.1));
+            if joined && rr && le > 1e-6 && lo > 14.0 { sc.right(q, (to_e.0 / le, to_e.1 / le), (to_o.0 / lo, to_o.1 / lo), 10.0, col(1), 2.0, rm); }
+        }
+    }
     // the inscribed polygon's sides (a side that is chord AB is drawn once, as the chord)
     let poly = pts::polygon_vertices(p);
     for i in 0..poly.len() {
@@ -1672,10 +1685,12 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     let at = |deg: f64| { let q = on_circle(cx, deg); (q.0 + off.0, q.1 + off.1) };
     let n = names(p);
     let mut v = vec![];
-    let tan = |nm: &str| { let nm = nm.to_string(); move |p: &mut Params| edit::toggle_tangent(p, &nm) };
-    if pt.a { v.push(angle_handle("a1", centre, at(g.a), &format!("Drag point {} round the circle; click it for the tangent there", n.a)).with_click(tan(&n.a))); }
-    if pt.b { v.push(gap_handle(centre, at(g.b), &format!("Drag point {} round the circle (the angle snaps to 30, 45, 60, 90, ...); click it for the tangent there", n.b)).with_click(tan(&n.b))); }
-    if pt.c { v.push(angle_handle("c_angle", centre, at(g.c), &format!("Drag point {} round the circle; click it for the tangent there", n.c)).with_click(tan(&n.c))); }
+    let tan = |nm: &str| { let nm = nm.to_string(); move |p: &mut Params| clicks::click_point(p, &nm, true) };
+    let ren = |nm: &str| { let nm = nm.to_string(); move |p: &Params, _: Pt| clicks::rename_point(p, &nm) };
+    let key = |nm: &str| if nm == n.a { "name_a" } else if nm == n.b { "name_b" } else { "name_c" };
+    if pt.a { v.push(angle_handle("a1", centre, at(g.a), &format!("Drag point {} round the circle; click it for the tangent there, or click it and then another point to join them; double-click it to rename it", n.a)).with_click(tan(&n.a)).with_edit_at(key(&n.a), ren(&n.a))); }
+    if pt.b { v.push(gap_handle(centre, at(g.b), &format!("Drag point {} round the circle (the angle snaps to 30, 45, 60, 90, ...); click it for the tangent there, or click it and then another point to join them; double-click it to rename it", n.b)).with_click(tan(&n.b)).with_edit_at(key(&n.b), ren(&n.b))); }
+    if pt.c { v.push(angle_handle("c_angle", centre, at(g.c), &format!("Drag point {} round the circle; click it for the tangent there, or click it and then another point to join them; double-click it to rename it", n.c)).with_click(tan(&n.c)).with_edit_at(key(&n.c), ren(&n.c))); }
     // the More points' knobs, then the click area (the workspace puts every area under the knobs)
     v.extend(edit::handles(p, cx, off));
     Some(v)

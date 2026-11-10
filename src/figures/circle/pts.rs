@@ -102,6 +102,22 @@ pub fn free_points(p: &Params) -> Vec<(String, V)> {
     free
 }
 
+/// The midpoints of chords (both ends on the circle) that midpoints rows name: (the midpoint, one end of its chord), unit coordinates.
+pub fn chord_mids(p: &Params) -> Vec<(V, V)> {
+    let pts = edit::circle_points(p);
+    let known = edit::known_names(p, &pts);
+    let mut v = vec![];
+    for r in edit::rows(p.s("midpoints")).iter().take(24) {
+        let toks: Vec<&str> = r.split_whitespace().collect();
+        let Some((a, b)) = toks.get(1..).and_then(|t| edit::pair_names(&t.join(" "), &known)) else { continue };
+        if let (Some(edit::End::At(x)), Some(edit::End::At(y))) = (edit::find(p, &pts, &a), edit::find(p, &pts, &b)) {
+            let (u, w) = ((x.to_radians().cos(), x.to_radians().sin()), (y.to_radians().cos(), y.to_radians().sin()));
+            v.push((((u.0 + w.0) / 2.0, (u.1 + w.1) / 2.0), w));
+        }
+    }
+    v
+}
+
 /// `N BD`: the midpoint of BD, named N.
 pub fn midpoint_row(p: &Params, pts: &[(String, f64)], free: &[(String, V)], row: &str) -> Option<(String, V)> {
     let toks: Vec<&str> = row.split_whitespace().collect();

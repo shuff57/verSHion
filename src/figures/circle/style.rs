@@ -35,11 +35,9 @@ pub struct AngleSt { pub v: V, pub a: V, pub b: V, pub arcs: u8 }
 
 fn count(t: Option<&String>) -> Option<u8> { t.and_then(|s| s.parse::<u8>().ok()).filter(|n| *n <= 3) }
 
-/// Reads a row: its part, then its words. None when a word is not understood.
-fn parse(row: &str, known: &[String]) -> Option<(Part, Style)> {
-    let toks: Vec<&str> = row.split_whitespace().collect();
-    let low: Vec<String> = toks.iter().map(|t| t.to_lowercase()).collect();
-    let (part, mut i) = match low.first().map(String::as_str)? {
+/// The part a row begins with, and how many words name it.
+fn head(toks: &[&str], low: &[String], known: &[String]) -> Option<(Part, usize)> {
+    Some(match low.first().map(String::as_str)? {
         "angle" => {
             let is = |s: &str| known.iter().any(|k| k.eq_ignore_ascii_case(s));
             if toks.len() >= 4 && is(toks[1]) && is(toks[2]) && is(toks[3]) && !is(&toks[1..3].concat()) {
@@ -52,7 +50,65 @@ fn parse(row: &str, known: &[String]) -> Option<(Part, Style)> {
         "arc" => { let (a, b) = edit::pair_names(toks.get(1)?, known)?; (Part::Arc { major: false, a, b }, 2) }
         "major" if low.get(1).map(String::as_str) == Some("arc") => { let (a, b) = edit::pair_names(toks.get(2)?, known)?; (Part::Arc { major: true, a, b }, 3) }
         _ => { let (a, b) = edit::pair_names(toks.first()?, known)?; (Part::Line(a, b), 1) }
-    };
+    })
+}
+
+fn split(row: &str) -> (Vec<&str>, Vec<String>) {
+    let toks: Vec<&str> = row.split_whitespace().collect();
+    let low = toks.iter().map(|t| t.to_lowercase()).collect();
+    (toks, low)
+}
+
+fn res_of(p: &Params, pts: &[(String, f64)], known: &[String], part: &str) -> Option<Res> {
+    let (toks, low) = split(part);
+    let (part, _) = head(&toks, &low, known)?;
+    resolve(p, pts, part, Style::default())
+}
+
+fn same_res(a: &Res, b: &Res) -> bool {
+    let dir = |o: V, q: V| wrap((q.1 - o.1).atan2(q.0 - o.0).to_degrees());
+    match (a, b) {
+        (Res::Line(x), Res::Line(y)) => (same(x.a, y.a) && same(x.b, y.b)) || (same(x.a, y.b) && same(x.b, y.a)),
+        (Res::Arc(x), Res::Arc(y)) => angdiff(x.start, y.start) < 1e-6 && (x.span - y.span).abs() < 1e-6,
+        (Res::Angle(x), Res::Angle(y)) => {
+            let (xa, xb, ya, yb) = (dir(x.v, x.a), dir(x.v, x.b), dir(y.v, y.a), dir(y.v, y.b));
+            same(x.v, y.v) && ((angdiff(xa, ya) < 0.5 && angdiff(xb, yb) < 0.5) || (angdiff(xa, yb) < 0.5 && angdiff(xb, ya) < 0.5))
+        }
+        _ => false,
+    }
+}
+
+/// Whether row `r` marks the same part as `want`; with the row's words.
+fn row_for<'a>(p: &Params, pts: &[(String, f64)], known: &[String], r: &'a str, want: &Res) -> Option<String> {
+    let (toks, low) = split(r);
+    let (_, i) = head(&toks, &low, known)?;
+    res_of(p, pts, known, &toks[..i].join(" ")).filter(|x| same_res(x, want)).map(|_| toks[i..].join(" "))
+}
+
+/// The words of every row that marks the part `part` names (`BD`, `arc BC`, `angle BDC`), as one line: what a double-click on
+/// that part opens to edit.
+pub fn words_for(p: &Params, part: &str) -> String {
+    let pts = edit::circle_points(p);
+    let known = edit::known_names(p, &pts);
+    let Some(want) = res_of(p, &pts, &known, part) else { return String::new() };
+    edit::rows(p.s("styles")).iter().filter_map(|r| row_for(p, &pts, &known, r, &want)).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+/// Replaces the rows that mark the part `part` names with one row of `words` (none when they are empty).
+pub fn set_words(p: &mut Params, part: &str, words: &str) {
+    let pts = edit::circle_points(p);
+    let known = edit::known_names(p, &pts);
+    let want = res_of(p, &pts, &known, part);
+    let mut rows: Vec<String> = edit::rows(p.s("styles")).into_iter().filter(|r| !want.as_ref().is_some_and(|w| row_for(p, &pts, &known, r, w).is_some())).collect();
+    let w: String = words.chars().filter(|c| !c.is_control() && *c != ',' && *c != ';').collect();
+    if !w.trim().is_empty() { rows.push(format!("{part} {}", w.trim())); }
+    edit::set_rows(p, "styles", &rows);
+}
+
+/// Reads a row: its part, then its words. None when a word is not understood.
+fn parse(row: &str, known: &[String]) -> Option<(Part, Style)> {
+    let (toks, low) = split(row);
+    let (part, mut i) = head(&toks, &low, known)?;
     let mut st = Style::default();
     while i < low.len() {
         let w = low[i].as_str();
