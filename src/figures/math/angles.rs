@@ -845,6 +845,21 @@ fn turned(hs: Vec<Handle>, c: Pt, turn: f64) -> Vec<Handle> {
         .collect()
 }
 
+/// The smallest box (screen, turned; centre and size) holding every part a click on the area acts on: the vertex, each angle out to
+/// WEDGE_R, each ray with its end out to END_R.
+pub(crate) fn area_box(l: &Lay) -> (Pt, Pt) {
+    let t = |q: Pt| turn_scr(q, C, l.turn);
+    let mut pts: Vec<Pt> = [(-VERTEX_R, 0.0), (VERTEX_R, 0.0), (0.0, -VERTEX_R), (0.0, VERTEX_R)].iter().map(|d| (C.0 + d.0, C.1 + d.1)).collect();
+    for s in &l.secs { pts.extend(arc_pts(C, s.a0 + l.turn, s.a1 + l.turn, WEDGE_R)); }
+    for (a, _) in &l.dirs {
+        let e = t(interact::polar(C, *a, LEN));
+        pts.extend([(e.0 - END_R, e.1 - END_R), (e.0 + END_R, e.1 + END_R)]);
+    }
+    let (x0, x1) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), q| (a.min(q.0), b.max(q.0)));
+    let (y0, y1) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), q| (a.min(q.1), b.max(q.1)));
+    (((x0 + x1) / 2.0, (y0 + y1) / 2.0), (x1 - x0, y1 - y0))
+}
+
 pub(crate) fn handles(p: &Params) -> Vec<Handle> {
     let l = layout(p);
     if l.dirs.len() < 2 { return vec![]; }
@@ -875,10 +890,13 @@ pub(crate) fn handles(p: &Params) -> Vec<Handle> {
         out.push(Handle::zone(at, (34.0, 24.0), "Click: show degrees / x / blank", move |p| cycle_label(p, idx)));
     }
     let mut hs = turned(out, C, l.turn);
-    // one area under everything: the vertex, the rays, the spots behind them, ray ends and angles near their corner
+    // one area under everything: the vertex, the rays, their ends and the angles near their corner. It is only as big as those
+    // parts: the workspace zooms to the drawing and does not clip a handle to the preview, so an area the size of the whole canvas
+    // would sit over the settings panel and take its clicks (the opening state is drawn at about 4x).
     let hit = std::sync::Arc::new(Hit::new(p));
     let (h2, h3) = (hit.clone(), hit.clone());
-    let area = Handle::area(C, (480.0, 360.0), SUMMARY, move |p, q| hit.act(p, q))
+    let (centre, size) = area_box(&l);
+    let area = Handle::area(centre, size, SUMMARY, move |p, q| hit.act(p, q))
         .with_hover(move |q| h2.at(q).map(|x| x.1))
         .with_edit_at(POINTS, move |p, q| h3.edit(p, q));
     hs.insert(0, area);

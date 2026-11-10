@@ -601,6 +601,11 @@ fn the_opening_state_offers_every_click() {
     let p = start_params(&d);
     let hs = d.handles(&p, (480.0, 360.0));
     let area = hs.iter().find(|h| h.click_at.is_some()).unwrap();
+    // the area keeps to the drawing (the workspace zooms to it and would let a canvas-sized area cover the settings panel): at the
+    // opening state from just left of the vertex to just past the baseline's arrow, from above ray 2's end to just below the vertex
+    let (l0, r0, t0, b0) = (area.pos.0 - area.half.0, area.pos.0 + area.half.0, area.pos.1 - area.half.1, area.pos.1 + area.half.1);
+    assert!((l0 - (C.0 - VERTEX_R)).abs() < 0.01 && (r0 - (C.0 + LEN + END_R)).abs() < 0.01, "{l0} {r0}");
+    assert!(t0 > C.1 - LEN - END_R && (b0 - (C.1 + VERTEX_R.max(END_R))).abs() < 0.01, "{t0} {b0}");
     for part in ["near the vertex to run it on through the vertex as a line", "along its middle to change its style", "near its end to delete it", "near an angle's corner for congruence arcs or shading", "Click the vertex or a ray's end to put a named point there"] {
         assert!(area.tip.contains(part), "{part}");
     }
