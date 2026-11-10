@@ -661,15 +661,19 @@ pub(super) fn render(p: &Params) -> String {
         // label's side of the axis: an image at C, or an inverted object's real image at 2F'
         let stems: Vec<(f64, f64)> = img_x.into_iter().chain((yt > ya).then_some((xo, yt))).collect();
         let aside = |x: f64, below: bool| if stems.iter().any(|&(sx, sy)| (sx - x).abs() < 14.0 && (sy > ya) == below) { x + 20.0 } else { x };
+        // an upside-down object sends its rays below the axis on its own side and above it on the far side, so the
+        // point labels swap sides to stay clear of them
+        let inv = yt > ya;
+        let (yn, yf) = if inv { (ya - 12.0, ya + 26.0) } else { (ya + 26.0, ya - 12.0) };
         if curved {
-            lab(aside(xl - fp, true), ya + 26.0, p.s("lab_f"), p.s("lab_f_mode"));
-            let xc = aside(xl - 2.0 * fp, true);
-            if p.b("mirror_c") { lab(xc, ya + 26.0, p.s("lab_c"), p.s("lab_c_mode")); } else { lab(xc, ya + 26.0, p.s("lab_2f"), p.s("lab_2f_mode")); }
+            lab(aside(xl - fp, !inv), yn, p.s("lab_f"), p.s("lab_f_mode"));
+            let xc = aside(xl - 2.0 * fp, !inv);
+            if p.b("mirror_c") { lab(xc, yn, p.s("lab_c"), p.s("lab_c_mode")); } else { lab(xc, yn, p.s("lab_2f"), p.s("lab_2f_mode")); }
         } else if !mirror {
-            lab(aside(xl - 2.0 * fp, true), ya + 26.0, p.s("lab_2f"), p.s("lab_2f_mode"));
-            lab(aside(xl - fp, true), ya + 26.0, p.s("lab_f"), p.s("lab_f_mode"));
-            lab(aside(xl + fp, false), ya - 12.0, p.s("lab_f2"), p.s("lab_f2_mode"));
-            lab(aside(xl + 2.0 * fp, false), ya - 12.0, p.s("lab_2f2"), p.s("lab_2f2_mode"));
+            lab(aside(xl - 2.0 * fp, !inv), yn, p.s("lab_2f"), p.s("lab_2f_mode"));
+            lab(aside(xl - fp, !inv), yn, p.s("lab_f"), p.s("lab_f_mode"));
+            lab(aside(xl + fp, inv), yf, p.s("lab_f2"), p.s("lab_f2_mode"));
+            lab(aside(xl + 2.0 * fp, inv), yf, p.s("lab_2f2"), p.s("lab_2f2_mode"));
         }
         // with its height marked, the object's name moves off its left side to beyond its tip
         // and with the ray through C, which runs back past its left side, to the right of its foot
