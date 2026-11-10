@@ -659,7 +659,7 @@ fn renaming_a_point_on_the_figure_carries_it_through_every_row() {
     let q = type_at(&p, at_dir(&p, 300.0, 1.0), "X");
     assert_eq!(q.s("more_points"), "X 300");
     assert_eq!(q.s("joins"), "BX");
-    assert_eq!(q.s("marks"), "BX length, arc BX degrees, angle AXB");
+    assert_eq!(q.s("marks"), "BX length, arc BX degrees, angle AXB degrees");
     assert_eq!(q.s("tangents"), "X");
     assert_eq!(q.s("styles"), "BX ticks 2 past X arrow");
     assert_eq!(q.s("shade"), "segment BX");
@@ -694,7 +694,7 @@ fn a_rename_changes_whole_letters_only() {
     assert_eq!(q.s("marks"), "AD A, AAQ length");
     // renaming AA (a More point) leaves A alone
     let q = type_at(&p, at_dir(&p, 200.0, 1.0), "K");
-    assert_eq!(q.s("joins"), "AB, KD, B K, AD");
+    assert_eq!(q.s("joins"), "AB, KD, BK, AD");
     assert_eq!(q.s("tangents"), "K");
     assert_eq!(q.s("more_points"), "K 200, D 300");
 }
@@ -723,15 +723,15 @@ fn a_letter_already_in_use_is_refused() {
 fn the_panel_letter_box_carries_the_rows() {
     let p = with(&[b("show_b", true), b("show_c", true), f("a2", 110.0), s("more_points", "D 300"), s("joins", "AD, OC"), s("marks", "AD length, angle CAD"), s("styles", "AD dashed")]);
     let q = type_box(&p, "name_a", "P");
-    assert_eq!((q.s("joins"), q.s("marks"), q.s("styles")), ("PD, OC", "PD length, angle CPD", "PD dashed"));
+    assert_eq!((q.s("joins"), q.s("marks"), q.s("styles")), ("PD, OC", "PD length, angle CPD degrees", "PD dashed"));
     let q = type_box(&q, "name_a", "PQ");
-    assert_eq!((q.s("joins"), q.s("marks")), ("PQD, OC", "PQD length, angle CPQD"));
+    assert_eq!((q.s("joins"), q.s("marks")), ("PQ D, OC", "PQD length, angle CPQD degrees"));
     assert_eq!(edit::joins(&q).len(), 2);
     assert!(edit::unknown_marks(&q).is_empty() && style::unknown(&q).is_empty());
     let q = type_box(&p, "name_o", "Z");
     assert_eq!(q.s("joins"), "AD, ZC");
     let q = type_box(&p, "name_c", "K");
-    assert_eq!((q.s("joins"), q.s("marks")), ("AD, OK", "AD length, angle KAD"));
+    assert_eq!((q.s("joins"), q.s("marks")), ("AD, OK", "AD length, angle KAD degrees"));
     // an emptied box is the default letter again, and the rows follow it back
     let q = type_box(&type_box(&p, "name_a", "P"), "name_a", "");
     assert_eq!(q.s("joins"), "AD, OC");
@@ -745,4 +745,78 @@ fn the_panel_letter_box_carries_the_rows() {
     assert_eq!((r.s("tangents"), r.s("joins")), ("P K U", "OK"));
     let r = type_at(&t, at_dir(&t, 30.0, 2.0), "Q");
     assert_eq!((r.s("more_points"), r.s("tangents")), ("Q 30 2r", "Q T U"));
+}
+
+/// Every drawn point's letter by where it is (the centre, the points on the circle, the points off it), for comparing a figure
+/// before and after a rename.
+fn letters(p: &Params) -> Vec<(String, (i64, i64))> {
+    let key = |v: edit::V| ((v.0 * 1e6).round() as i64, (v.1 * 1e6).round() as i64);
+    let mut v: Vec<(String, (i64, i64))> = vec![(names(p).o, (0, 0))];
+    v.extend(edit::circle_points(p).into_iter().map(|(n, d)| (n, key((d.to_radians().cos(), d.to_radians().sin())))));
+    v.extend(pts::free_points(p).into_iter().map(|(n, q)| (n, key(q))));
+    v.sort();
+    v
+}
+
+/// Every note about a row that is not drawn.
+fn not_drawn(p: &Params) -> usize { warnings(p).iter().filter(|w| w.contains("not drawn")).count() }
+
+/// A rename at `q` (through the hit test) to `new`, checked by rendering: every point keeps its letter except the renamed one, no row
+/// stops being drawn, and the drawing is the old one with the letter swapped (the letters have the same width, so nothing moves).
+fn renamed_well(p: &Params, q: Pt, old: &str, new: &str) -> Params {
+    let r = type_at(p, q, new);
+    let want: Vec<(String, (i64, i64))> = { let mut v: Vec<_> = letters(p).into_iter().map(|(n, k)| (if n == old { new.to_string() } else { n }, k)).collect(); v.sort(); v };
+    assert_eq!(letters(&r), want, "{old} to {new}: every other point keeps its letter");
+    assert_eq!(not_drawn(&r), not_drawn(p), "{old} to {new}: {:?}", warnings(&r));
+    let swap = (def().render)(p).replace(&format!(">{old}</text>"), &format!(">{new}</text>"));
+    assert_eq!((def().render)(&r), swap, "{old} to {new}: the same drawing with the letter swapped");
+    r
+}
+
+/// The re-check's rows: every form the figure reads (lowercase, `B to D`, `O - D`, `N B to D`, `bd length`, `segment bd`, a tangent
+/// row `d`, a style `b-d`) is drawn before the rename and carries the new letter after it; the figure then draws what the same rows
+/// retyped with X draw.
+#[test]
+fn a_rename_reads_every_row_the_way_the_figure_does() {
+    let rows = |d: &str, low: &str| vec![b("show_b", true), f("a2", 110.0), s("more_points", &format!("{d} 300")), s("joins", &format!("b{low}, A to {d}, O - {d}")), s("midpoints", &format!("N B to {d}")), s("marks", &format!("b{low} length, arc b{low} degrees, angle a{low}b")), s("shade", &format!("segment b{low}")), s("tangents", low), s("styles", &format!("b-{low} dashed past {low} arrow")), s("crossings", &format!("E b{low} OA"))];
+    let p = with(&rows("D", "d"));
+    assert_eq!(not_drawn(&p), 0, "{:?}", warnings(&p));
+    let q = renamed_well(&p, at_dir(&p, 300.0, 1.0), "D", "X");
+    assert_eq!(q.s("joins"), "BX, AX, OX");
+    assert_eq!(q.s("tangents"), "X");
+    let retyped = with(&rows("X", "x"));
+    assert_eq!((def().render)(&q), (def().render)(&retyped));
+}
+
+/// Renaming B does not re-letter the polygon's corners (with a square from A, B on a corner, the corners D and E stay D and E, and
+/// line DE stays where it was), nor a More point typed without a letter (`270` drawn as D stays D, and chord AD stays).
+#[test]
+fn a_rename_keeps_every_automatic_letter() {
+    let p = with(&[s("polygon", "4 sides"), b("show_b", true), f("a2", 110.0), s("joins", "BD, DE")]);
+    assert_eq!(pts::polygon_vertices(&p).into_iter().map(|v| v.0).collect::<Vec<_>>(), vec!["A", "B", "D", "E"]);
+    let q = renamed_well(&p, at_dir(&p, 110.0, 1.0), "B", "Q");
+    assert_eq!(pts::polygon_vertices(&q).into_iter().map(|v| v.0).collect::<Vec<_>>(), vec!["A", "Q", "D", "E"]);
+    assert_eq!(q.s("joins"), "QD, DE");
+    // and back: B is free again, nothing else moves
+    let q2 = renamed_well(&q, at_dir(&q, 110.0, 1.0), "Q", "B");
+    assert_eq!(letters(&q2), letters(&p));
+    let p = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "270, 200"), s("joins", "AD, BE")]);
+    assert_eq!(edit::extras(&p).into_iter().map(|e| e.0).collect::<Vec<_>>(), vec!["D", "E"]);
+    let q = renamed_well(&p, at_dir(&p, 110.0, 1.0), "B", "Q");
+    assert_eq!(edit::extras(&q).into_iter().map(|e| e.0).collect::<Vec<_>>(), vec!["D", "E"]);
+    assert_eq!(q.s("joins"), "AD, QE");
+    // through the panel's letter box too
+    let r = type_box(&p, "name_b", "Q");
+    assert_eq!(letters(&r), letters(&q));
+    assert_eq!((def().render)(&r), (def().render)(&q));
+    // every point of a busy figure, one at a time
+    let busy = with(&[b("show_b", true), b("show_c", true), f("a2", 110.0), f("c_angle", 230.0), s("polygon", "6 sides"), s("more_points", "300, P 60 2r"), s("tangents", "P T U, d"), s("joins", "ac, B to D, OT"), s("midpoints", "N b-d"), s("crossings", "K AC BD"), s("marks", "bd length, angle tpu"), s("styles", "ac ticks 1")]);
+    assert_eq!(not_drawn(&busy), 0, "{:?}", warnings(&busy));
+    let at_letter = |p: &Params, nm: &str| -> Pt {
+        if let Some((_, d)) = edit::circle_points(p).into_iter().find(|x| x.0 == nm) { return at_dir(p, d, 1.0); }
+        sp(p, pts::free_points(p).into_iter().find(|x| x.0 == nm).unwrap().1)
+    };
+    for nm in ["A", "B", "C", "D", "P", "N", "K"] {
+        renamed_well(&busy, at_letter(&busy, nm), nm, "Z");
+    }
 }

@@ -89,6 +89,7 @@ fn params() -> Vec<ParamDef> {
         b("show_central", "Central angle AOB", false),
         b("show_inscribed", "Inscribed angle ACB", false),
         ParamDef::text("join_from", "Point waiting to be joined", "").hint("Set by a click on a point on the figure: a click on another point joins the two"),
+        ParamDef::list("poly_names", "Letters kept for the polygon's corners", "").hint("Written when a point is renamed, so that the polygon's corners keep their letters"),
         ParamDef::list("joins", "Lines between points", "").hint("Two letters per row: BD is a chord, OC a radius. Any point on the figure, and the centre"),
         ParamDef::list("tangents", "Tangents at points", "").hint("A point's letter per row, such as C. Or click a point on the figure. A point outside the circle gets both tangents from it (P), with touch points lettered (P T U), or one of them (P T - or P - U)"),
         ParamDef::list("midpoints", "Midpoints", "").hint("A letter and two points per row: N BD is the midpoint of BD. Or click the middle of a chord on the figure"),

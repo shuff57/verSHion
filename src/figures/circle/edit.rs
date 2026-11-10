@@ -487,17 +487,21 @@ pub(super) fn m_ok(p: &Params) -> bool { let pt = parts(p); pt.a && pt.b && !pt.
 pub(super) fn find(p: &Params, pts: &[(String, f64)], nm: &str) -> Option<End> { find_with(p, pts, &super::pts::free_points(p), nm) }
 
 /// `find`, with the places off the circle given (points off it, midpoints, crossings): the circle's points first, then those.
-pub(super) fn find_with(p: &Params, pts: &[(String, f64)], free: &[(String, V)], nm: &str) -> Option<End> {
+pub(super) fn find_with(p: &Params, pts: &[(String, f64)], free: &[(String, V)], nm: &str) -> Option<End> { find_named(p, pts, free, nm).map(|x| x.1) }
+
+/// `find_with`, with the letter of the point the name reads as (`d` reads as D when no point is lettered d): the one reader every
+/// row is read with, so a rename can tell which written letters name the point it renames.
+pub(super) fn find_named(p: &Params, pts: &[(String, f64)], free: &[(String, V)], nm: &str) -> Option<(String, End)> {
     let n = names(p);
     let m = m_ok(p);
-    if nm == n.o { return Some(End::O); }
-    if let Some((_, d)) = pts.iter().find(|(x, _)| x == nm) { return Some(End::At(*d)); }
-    if m && nm == n.m { return Some(End::M); }
-    if let Some((_, q)) = free.iter().find(|(x, _)| x == nm) { return Some(End::Q(q.0, q.1)); }
-    if nm.eq_ignore_ascii_case(&n.o) { return Some(End::O); }
-    if let Some((_, d)) = pts.iter().find(|(x, _)| x.eq_ignore_ascii_case(nm)) { return Some(End::At(*d)); }
-    if m && nm.eq_ignore_ascii_case(&n.m) { return Some(End::M); }
-    free.iter().find(|(x, _)| x.eq_ignore_ascii_case(nm)).map(|(_, q)| End::Q(q.0, q.1))
+    if nm == n.o { return Some((n.o, End::O)); }
+    if let Some((x, d)) = pts.iter().find(|(x, _)| x == nm) { return Some((x.clone(), End::At(*d))); }
+    if m && nm == n.m { return Some((n.m, End::M)); }
+    if let Some((x, q)) = free.iter().find(|(x, _)| x == nm) { return Some((x.clone(), End::Q(q.0, q.1))); }
+    if nm.eq_ignore_ascii_case(&n.o) { return Some((n.o, End::O)); }
+    if let Some((x, d)) = pts.iter().find(|(x, _)| x.eq_ignore_ascii_case(nm)) { return Some((x.clone(), End::At(*d))); }
+    if m && nm.eq_ignore_ascii_case(&n.m) { return Some((n.m, End::M)); }
+    free.iter().find(|(x, _)| x.eq_ignore_ascii_case(nm)).map(|(x, q)| (x.clone(), End::Q(q.0, q.1)))
 }
 
 /// The letter the figure gives an end.
@@ -1085,6 +1089,23 @@ fn parse_mark(row: &str, known: &[String]) -> Option<Row> {
     let (a, b) = pair_names(toks.get(k)?, known)?;
     let text = text_of(&toks[k + 1..]);
     Some(if arc { Row::Arc { major, a, b, say: say_of(&text, Say::Degrees) } } else { Row::Line { a, b, say: say_of(&text, Say::Length) } })
+}
+
+/// A label row with the letters `f` changes carried to their new letters (`f` gets each letter as the row writes it and gives the
+/// new letter for the renamed point), read with the figure's own reader; None when the row names nothing `f` changes.
+pub(super) fn relabel_mark(row: &str, known: &[String], f: &dyn Fn(&str) -> Option<String>, canon: &dyn Fn(&str) -> String) -> Option<String> {
+    let say = |s: &Say| match s { Say::Degrees => "degrees".to_string(), Say::Length => "length".to_string(), Say::Text(t) => t.clone() };
+    let g = |x: &String| f(x).unwrap_or_else(|| canon(x));
+    let hit = |xs: &[&String]| xs.iter().any(|x| f(x).is_some());
+    let out = match parse_mark(row, known)? {
+        Row::Arc { major, a, b, say: s } if hit(&[&a, &b]) => format!("{}arc {}{} {}", if major { "major " } else { "" }, g(&a), g(&b), say(&s)),
+        Row::Line { a, b, say: s } if hit(&[&a, &b]) => format!("{}{} {}", g(&a), g(&b), say(&s)),
+        Row::Angle { a, v, b, say: s } if hit(&[&a, &v, &b]) => format!("angle {}{}{} {}", g(&a), g(&v), g(&b), say(&s)),
+        Row::Tangent { x, d, obtuse, say: s } if hit(&[&x, &d]) => format!("tangent angle {}{}{} {}", g(&x), g(&d), if obtuse { " obtuse" } else { "" }, say(&s)),
+        Row::TanWord { x, text } if hit(&[&x]) => format!("tangent {} {}", g(&x), if text.is_empty() { "none" } else { text.as_str() }),
+        _ => return None,
+    };
+    Some(out.trim_end().to_string())
 }
 
 /// The mark a row draws, when every letter it names is on the figure.

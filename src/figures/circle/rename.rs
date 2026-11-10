@@ -20,105 +20,104 @@ fn in_use(p: &Params) -> Vec<String> {
 pub fn refusal(p: &Params, old: &str, new: &str) -> Option<String> {
     let new = clean(new);
     if new.is_empty() || new == old { return None; }
-    in_use(p).iter().any(|x| *x == new).then(|| format!("{new} is already a point's letter, so {old} keeps its letter."))
+    // (letters are read ignoring case where no exact one is found, so d is refused while there is a D, but A may become a)
+    in_use(p).iter().any(|x| x != old && x.eq_ignore_ascii_case(&new)).then(|| format!("{new} is already a point's letter, so {old} keeps its letter."))
+}
+
+/// Writes the letters the figure gives automatically into the rows, so that a rename that frees or takes a letter re-letters
+/// nothing else: a More points row typed without a letter gets the letter it is drawn with, and the polygon's own corners keep
+/// theirs (`poly_names`). Nothing drawn changes.
+fn keep_automatic_letters(p: &mut Params) {
+    let ex = edit::extras_all(p);
+    let mut more = edit::rows(p.s("more_points"));
+    let mut changed = false;
+    for (i, row) in more.iter_mut().enumerate().take(ex.len()) {
+        if edit::parse_point_full(row).0.is_empty() {
+            let (nm, d, dist) = (&ex[i].0, ex[i].1, ex[i].2);
+            *row = if edit::on_rim(dist) { format!("{nm} {}", edit::fmt_deg(d)) } else { format!("{nm} {} {}", edit::fmt_deg(d), edit::fmt_dist(dist)) };
+            changed = true;
+        }
+    }
+    if changed { edit::set_rows(p, "more_points", &more); }
+    let corners: Vec<String> = pts::polygon_points(p).into_iter().map(|c| c.0).collect();
+    if !corners.is_empty() { edit::set_rows(p, "poly_names", &corners); }
 }
 
 /// Renames point `old` to `new` everywhere. Returns false (and changes nothing) when `new` is another point's letter.
+///
+/// Every row is read with the figure's own reader (`find_named`, `pair_names`, the label and style parsers), so any form the figure
+/// draws (`bd`, `B to D`, `O - D`, `N B to D`, `segment bd`, a tangent row `d`) carries the new letter; a row that names the point is
+/// rewritten in a plain form (`BX`), the others are left exactly as typed.
 pub fn rename(p: &mut Params, old: &str, new: &str) -> bool {
     let new = clean(new);
     if new.is_empty() || new == old { return true; }
     if refusal(p, old, &new).is_some() { return false; }
-    let pts = edit::circle_points(p);
-    let known = edit::known_names(p, &pts);
-    let one = |t: &str| if t == old { new.clone() } else { t.to_string() };
-    let pair = |t: &str| -> String {
-        match edit::pair_names(t, &known) {
-            Some((a, b)) if a == old || b == old => format!("{}{}", one(&a), one(&b)),
-            _ => t.to_string(),
-        }
-    };
-    let triple = |t: &str| -> String {
-        match edit::triple_names(t, &known) {
-            Some((a, v, b)) if a == old || v == old || b == old => format!("{}{}{}", one(&a), one(&v), one(&b)),
-            _ => t.to_string(),
-        }
-    };
+    keep_automatic_letters(p);
+    let q = p.clone();
+    let pts = edit::circle_points(&q);
+    let free = pts::free_points(&q);
+    let known = edit::known_with(&q, &pts, &free);
+    // the new letter for a written letter that reads as the renamed point
+    let f = |x: &str| -> Option<String> { edit::find_named(&q, &pts, &free, x).filter(|(nm, _)| nm == old).map(|_| new.clone()) };
+    // the letter a written letter reads as (`b` is B), for the other letters of a row that is rewritten
+    let canon = |x: &str| -> String { edit::find_named(&q, &pts, &free, x).map(|(nm, _)| nm).unwrap_or_else(|| x.to_string()) };
+    let g = |x: &str| f(x).unwrap_or_else(|| canon(x));
+    let two = |a: &str, b: &str| { let (x, y) = (g(a), g(b)); if x.chars().count() > 1 || y.chars().count() > 1 { format!("{x} {y}") } else { format!("{x}{y}") } };
+    let pair = |t: &str| -> Option<String> { let (a, b) = edit::pair_names(t, &known)?; (f(&a).is_some() || f(&b).is_some()).then(|| two(&a, &b)) };
     let words = |r: &str| -> Vec<String> { r.split_whitespace().map(str::to_string).collect() };
-    // lines between points: one pair, as one word (BD) or two (B D)
-    let joins: Vec<String> = edit::rows(p.s("joins")).iter().map(|r| {
+    // lines between points: the row is one pair, however it is written
+    let joins: Vec<String> = edit::rows(q.s("joins")).iter().map(|r| pair(r).unwrap_or_else(|| r.clone())).collect();
+    // tangents: a point on the circle (the whole row), or a point outside it and its touch points' letters
+    let tangents: Vec<String> = edit::rows(q.s("tangents")).iter().map(|r| {
+        if let Some(n) = f(r.trim()) { return n; }
         let w = words(r);
-        match w.len() { 1 => pair(&w[0]), 2 if known.contains(&w[0]) && known.contains(&w[1]) => format!("{} {}", one(&w[0]), one(&w[1])), _ => r.clone() }
+        if w.iter().any(|t| f(t).is_some()) { w.iter().map(|t| if t == "-" || t == "_" { t.clone() } else { g(t) }).collect::<Vec<_>>().join(" ") } else { r.clone() }
     }).collect();
-    // tangents: a point's letter, then for a point outside the circle its touch points' letters
-    let tangents: Vec<String> = edit::rows(p.s("tangents")).iter().map(|r| words(r).iter().map(|t| one(t)).collect::<Vec<_>>().join(" ")).collect();
-    // midpoints (N BD) and crossings (E AC BD, E PQ circle 2): a letter, then pairs
-    let mids: Vec<String> = edit::rows(p.s("midpoints")).iter().map(|r| {
+    // midpoints: a letter, then a pair (N BD, N B to D)
+    let mids: Vec<String> = edit::rows(q.s("midpoints")).iter().map(|r| {
         let w = words(r);
-        let mut out = vec![one(&w[0])];
-        match w.len() { 2 => out.push(pair(&w[1])), 3 if known.contains(&w[1]) && known.contains(&w[2]) => { out.push(one(&w[1])); out.push(one(&w[2])); } _ => out.extend(w[1..].iter().cloned()) }
-        out.join(" ")
-    }).collect();
-    let cross: Vec<String> = edit::rows(p.s("crossings")).iter().map(|r| {
-        let w = words(r);
-        w.iter().enumerate().map(|(i, t)| match i { 0 => one(t), 1 => pair(t), 2 if !t.eq_ignore_ascii_case("circle") => pair(t), _ => t.clone() }).collect::<Vec<_>>().join(" ")
-    }).collect();
-    // labels: the part's letters only (a typed label after them is text, not a letter)
-    let marks: Vec<String> = edit::rows(p.s("marks")).iter().map(|r| {
-        let mut w = words(r);
-        let low: Vec<String> = w.iter().map(|t| t.to_lowercase()).collect();
-        let at = |i: usize| low.get(i).map(String::as_str);
-        match (at(0), at(1)) {
-            (Some("tangent"), Some("angle")) if w.len() > 2 => w[2] = pair(&w[2]),
-            (Some("tangent"), _) if w.len() > 1 => w[1] = one(&w[1]),
-            (Some("angle"), _) if w.len() >= 4 && known.contains(&w[1]) && known.contains(&w[2]) && known.contains(&w[3]) && !known.contains(&w[1..3].concat()) => { for i in 1..4 { w[i] = one(&w[i]); } }
-            (Some("angle"), _) if w.len() > 1 => w[1] = triple(&w[1]),
-            (Some("major"), Some("arc")) if w.len() > 2 => w[2] = pair(&w[2]),
-            (Some("arc"), _) if w.len() > 1 => w[1] = pair(&w[1]),
-            (Some(_), _) => w[0] = pair(&w[0]),
-            _ => {}
+        if w.len() < 2 { return r.clone(); }
+        let rest = w[1..].join(" ");
+        match (f(&w[0]), pair(&rest)) {
+            (None, None) => r.clone(),
+            (a, b) => format!("{} {}", a.unwrap_or_else(|| w[0].clone()), b.unwrap_or(rest)),
         }
-        w.join(" ")
     }).collect();
-    // styles: the part's letters, and the point a line runs on past
-    let styles: Vec<String> = edit::rows(p.s("styles")).iter().map(|r| {
-        let mut w = words(r);
-        let low: Vec<String> = w.iter().map(|t| t.to_lowercase()).collect();
-        let at = |i: usize| low.get(i).map(String::as_str);
-        let start = match (at(0), at(1)) {
-            (Some("angle"), _) if w.len() >= 4 && known.contains(&w[1]) && known.contains(&w[2]) && known.contains(&w[3]) && !known.contains(&w[1..3].concat()) => { for i in 1..4 { w[i] = one(&w[i]); } 4 }
-            (Some("angle"), _) if w.len() > 1 => { w[1] = triple(&w[1]); 2 }
-            (Some("major"), Some("arc")) if w.len() > 2 => { w[2] = pair(&w[2]); 3 }
-            (Some("arc"), _) if w.len() > 1 => { w[1] = pair(&w[1]); 2 }
-            (Some(_), _) => { w[0] = pair(&w[0]); 1 }
-            _ => 0,
-        };
-        for i in start..w.len() {
-            if (low[i] == "past" || low[i] == "beyond") && i + 1 < w.len() { w[i + 1] = one(&w[i + 1]); }
-        }
-        w.join(" ")
+    // crossings: a letter, a pair, then a pair or `circle` (and which time)
+    let cross: Vec<String> = edit::rows(q.s("crossings")).iter().map(|r| {
+        let w = words(r);
+        let mut out = w.clone();
+        let mut hit = false;
+        if let Some(n) = w.first().and_then(|t| f(t)) { out[0] = n; hit = true; }
+        if let Some(n) = w.get(1).and_then(|t| pair(t)) { out[1] = n; hit = true; }
+        if let Some(t) = w.get(2) && !t.eq_ignore_ascii_case("circle") && let Some(n) = pair(t) { out[2] = n; hit = true; }
+        if hit { out.join(" ") } else { r.clone() }
     }).collect();
-    // shaded areas: segment BD, major sector BD (a spot `at x y` names no point)
-    let shade: Vec<String> = edit::rows(p.s("shade")).iter().map(|r| {
-        let mut w = words(r);
+    let marks: Vec<String> = edit::rows(q.s("marks")).iter().map(|r| edit::relabel_mark(r, &known, &f, &canon).unwrap_or_else(|| r.clone())).collect();
+    let styles: Vec<String> = edit::rows(q.s("styles")).iter().map(|r| style::relabel(r, &known, &f, &canon).unwrap_or_else(|| r.clone())).collect();
+    // shaded areas: [major] segment|sector and a pair (a spot `at x y` names no point)
+    let shade: Vec<String> = edit::rows(q.s("shade")).iter().map(|r| {
+        let w = words(r);
         let k = usize::from(w.first().is_some_and(|t| t.eq_ignore_ascii_case("major")));
-        if w.get(k).is_some_and(|t| t.eq_ignore_ascii_case("segment") || t.eq_ignore_ascii_case("sector")) && w.len() > k + 1 { w[k + 1] = pair(&w[k + 1]); }
-        w.join(" ")
+        let kind = w.get(k).filter(|t| t.eq_ignore_ascii_case("segment") || t.eq_ignore_ascii_case("sector"));
+        match kind.and_then(|_| pair(&w[k + 1..].join(" "))) { Some(n) => format!("{} {n}", w[..=k].join(" ")), None => r.clone() }
     }).collect();
-    // the point's own letter: the centre, A, B, C, M, or a More points row (midpoints and crossings were done above)
-    let n = names(p);
-    let own = [("name_o", &n.o), ("name_a", &n.a), ("name_b", &n.b), ("name_c", &n.c), ("name_m", &n.m)];
-    let ex = edit::extras_all(p);
-    let mut more = edit::rows(p.s("more_points"));
+    // the point's own letter: a More points row, the centre, A, B, C or M (midpoints and crossings were done above)
+    let ex = edit::extras_all(&q);
+    let mut more = edit::rows(q.s("more_points"));
     if let Some(i) = ex.iter().position(|e| e.0 == old) && let Some(row) = more.get_mut(i) {
         let (d, dist) = (ex[i].1, ex[i].2);
         *row = if edit::on_rim(dist) { format!("{new} {}", edit::fmt_deg(d)) } else { format!("{new} {} {}", edit::fmt_deg(d), edit::fmt_dist(dist)) };
     }
-    for (key, rows) in [("joins", joins), ("tangents", tangents), ("midpoints", mids), ("crossings", cross), ("marks", marks), ("styles", styles), ("shade", shade), ("more_points", more)] {
-        // a list keeps its own separator; an untouched list is left exactly as it was typed
-        let now = edit::rows(p.s(key));
-        if now != rows { edit::set_rows(p, key, &rows); }
+    let kept: Vec<String> = edit::rows(q.s("poly_names")).into_iter().map(|x| if x == old { new.clone() } else { x }).collect();
+    for (key, rows) in [("joins", joins), ("tangents", tangents), ("midpoints", mids), ("crossings", cross), ("marks", marks), ("styles", styles), ("shade", shade), ("more_points", more), ("poly_names", kept)] {
+        // an untouched list is left exactly as it was typed
+        if edit::rows(p.s(key)) != rows { edit::set_rows(p, key, &rows); }
     }
-    if let Some((key, _)) = own.iter().find(|(_, l)| **l == old) { p.set_s(key, &new); }
+    let n = names(&q);
+    for (key, l) in [("name_o", &n.o), ("name_a", &n.a), ("name_b", &n.b), ("name_c", &n.c), ("name_m", &n.m)] {
+        if *l == old { p.set_s(key, &new); }
+    }
     // a point waiting for a second click keeps waiting under its new letter
     if p.s("join_from") == old { p.set_s("join_from", &new); }
     true

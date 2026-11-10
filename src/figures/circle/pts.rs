@@ -21,11 +21,15 @@ pub fn polygon_vertices(p: &Params) -> Vec<(String, f64)> {
     let a = geom(p).a;
     let on = edit::base_points(p);
     let mut used = edit::taken_letters(p, false);
+    // letters kept for the corners when a point was renamed (so that freeing a letter does not re-letter the corners), in order
+    let kept: Vec<String> = edit::rows(p.s("poly_names"));
+    let mut ki = 0;
     (0..n).map(|k| {
         let d = wrap(a + 360.0 * k as f64 / n as f64);
         if k == 0 { return (names(p).a, d); }
         if let Some((nm, e)) = on.iter().find(|(_, e)| angdiff(*e, d) < 0.5) { return (nm.clone(), *e); }
-        let l = edit::next_free(&used);
+        let l = match kept.get(ki) { Some(l) if !l.is_empty() && !used.contains(l) => l.clone(), _ => edit::next_free(&used) };
+        ki += 1;
         used.push(l.clone());
         (l, d)
     }).collect()

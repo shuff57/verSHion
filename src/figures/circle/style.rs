@@ -53,6 +53,33 @@ fn head(toks: &[&str], low: &[String], known: &[String]) -> Option<(Part, usize)
     })
 }
 
+/// A styles row with the letters `f` changes carried to their new letters (the part's letters, and the point a line runs on past),
+/// read with the figure's own reader; None when the row names nothing `f` changes.
+pub(super) fn relabel(row: &str, known: &[String], f: &dyn Fn(&str) -> Option<String>, canon: &dyn Fn(&str) -> String) -> Option<String> {
+    let (toks, low) = split(row);
+    let (part, i) = head(&toks, &low, known)?;
+    let g = |x: &String| f(x).unwrap_or_else(|| canon(x));
+    let mut hit = false;
+    let mut mark = |x: &String| { if f(x).is_some() { hit = true; } g(x) };
+    let mut out = vec![match &part {
+        Part::Line(a, b) => format!("{}{}", mark(a), mark(b)),
+        Part::Arc { major, a, b } => format!("{}arc {}{}", if *major { "major " } else { "" }, mark(a), mark(b)),
+        Part::Angle(a, v, b) => format!("angle {}{}{}", mark(a), mark(v), mark(b)),
+    }];
+    let mut j = i;
+    while j < toks.len() {
+        out.push(toks[j].to_string());
+        if (low[j] == "past" || low[j] == "beyond") && j + 1 < toks.len() {
+            let t = toks[j + 1].to_string();
+            out.push(mark(&t));
+            j += 2;
+            continue;
+        }
+        j += 1;
+    }
+    hit.then(|| out.join(" "))
+}
+
 fn split(row: &str) -> (Vec<&str>, Vec<String>) {
     let toks: Vec<&str> = row.split_whitespace().collect();
     let low = toks.iter().map(|t| t.to_lowercase()).collect();
