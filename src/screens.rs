@@ -1427,14 +1427,19 @@ impl crate::App {
 
         let mut exam_mode = if self.settings.home_exams_list { kit::ViewMode::List } else { kit::ViewMode::Cards };
         let mut link_exams = false;
+        // A narrow page has one view of its recent exams, the compact rows, so it shows no
+        // cards/list switch (a switch there named a view that was not the one shown).
+        let compact_exams = ui.available_width() < HOME_COMPACT_W;
         ui.horizontal(|ui| {
             kit::label(ui, "Recent exams");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if kit::view_toggle(ui, &mut exam_mode, "home_exams") {
-                    self.settings.home_exams_list = exam_mode == kit::ViewMode::List;
-                    self.save_view_prefs();
+                if !compact_exams {
+                    if kit::view_toggle(ui, &mut exam_mode, "home_exams") {
+                        self.settings.home_exams_list = exam_mode == kit::ViewMode::List;
+                        self.save_view_prefs();
+                    }
+                    ui.add_space(4.0);
                 }
-                ui.add_space(4.0);
                 if kit::link(ui, "All exams", true).clicked() {
                     link_exams = true;
                 }
@@ -1448,6 +1453,11 @@ impl crate::App {
         if exams.is_empty() {
             if crate::pageshell::empty_line(ui, crate::handicons::EXAMS, "No exams yet. An exam you start is listed here.", Some("New exam")).is_some() {
                 self.first_exam();
+            }
+        } else if compact_exams {
+            let rows: Vec<&ExamRow> = exams.iter().take(3).collect();
+            if let Some(id) = exam_rows_compact(ui, self, &rows) {
+                open_ex = Some(id);
             }
         } else if exam_mode == kit::ViewMode::Cards {
             let mut cols = grid_cols(ui.available_width(), 230.0, grid_gap, 3);
@@ -2919,6 +2929,83 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_
     resp.clicked() || open
 }
 
+/// Below this page width Home's recent exams are compact rows, not the card grid: two columns of
+/// 164-tall cards left a half-empty second row and pushed the banks below the window.
+const HOME_COMPACT_W: f32 = 700.0;
+/// Each compact recent-exam row is this tall: pad 10, the name (one line of 22), the facts and
+/// when it was edited (18), "From <bank>" (18), pad 8.
+const HOME_ROW_H: f32 = 76.0;
+/// The page thumbnail in a compact row, and the green strip it sits on.
+const HOME_ROW_THUMB: Vec2 = Vec2::new(40.0, 52.0);
+const HOME_ROW_STRIP: f32 = 60.0;
+
+/// One line of `text` in `font`, cut with an ellipsis at `width`.
+fn line_job(text: &str, font: egui::FontId, col: Color32, width: f32) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::single_section(text.to_string(), egui::text::TextFormat { font_id: font, color: col, ..Default::default() });
+    job.wrap = egui::text::TextWrapping { max_width: width.max(1.0), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+    job
+}
+
+/// Home's recent exams in a narrow window: one card of rows, each [`HOME_ROW_H`] tall, a small
+/// first page on its green strip, then the name, "11 questions · 26 points · Edited Oct 25" and
+/// "From <bank>", with Open on the right. A row (or its Open) opens the exam; returns which.
+fn exam_rows_compact(ui: &mut egui::Ui, app: &mut crate::App, rows: &[&ExamRow]) -> Option<Id> {
+    use crate::kit;
+    let w = ui.available_width();
+    let (outer, _) = ui.allocate_exact_size(Vec2::new(w, HOME_ROW_H * rows.len() as f32 + 2.0), egui::Sense::hover());
+    ui.painter().rect(outer, CornerRadius::same(16), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+    let open_font = egui::FontId::new(kit::ty::META, theme::semibold());
+    let open_w = (ui.painter().layout_no_wrap("Open".to_string(), open_font, theme::accent_col()).size().x + 17.0).ceil();
+    let ctx = ui.ctx().clone();
+    let mut hit = None;
+    for (i, e) in rows.iter().enumerate() {
+        let r = Rect::from_min_size(outer.min + Vec2::new(1.0, 1.0 + HOME_ROW_H * i as f32), Vec2::new(w - 2.0, HOME_ROW_H));
+        let resp = ui.interact(r, ui.id().with(("home_exam_row", &e.id)), egui::Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &e.name));
+        let p = ui.painter().with_clip_rect(outer.shrink(1.0).intersect(ui.clip_rect()));
+        if resp.hovered() {
+            // The first and last rows keep the card's rounded corners.
+            let cr = CornerRadius { nw: if i == 0 { 15 } else { 0 }, ne: if i == 0 { 15 } else { 0 }, sw: if i + 1 == rows.len() { 15 } else { 0 }, se: if i + 1 == rows.len() { 15 } else { 0 } };
+            p.rect_filled(r, cr, theme::hover_bg());
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        if resp.has_focus() {
+            p.rect_stroke(r.shrink(2.0), CornerRadius::same(12), Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
+        }
+        if i + 1 < rows.len() {
+            p.hline(r.left() + 16.0..=r.right() - 16.0, r.bottom() - 0.5, Stroke::new(1.0, theme::border()));
+        }
+        let strip = Rect::from_min_size(Pos2::new(r.left() + 8.0, r.top() + 8.0), Vec2::new(HOME_ROW_STRIP, HOME_ROW_H - 16.0));
+        p.rect_filled(strip, CornerRadius::same(8), theme::accent_faded().gamma_multiply(0.7));
+        let thumb = Rect::from_center_size(strip.center(), HOME_ROW_THUMB);
+        if crate::examui::paint_exam_thumb(app, &ctx, &p, thumb, &e.id).is_none() {
+            paper_thumb(&p, thumb.center(), Vec2::new(34.0, 44.0), 0.0, false, true);
+        }
+        let x = strip.right() + 14.0;
+        let tw = (r.right() - 16.0 - open_w - 12.0 - x).max(60.0);
+        let mut y = r.top() + 10.0;
+        p.galley(Pos2::new(x, y), p.layout_job(line_job(&e.name, kit::card_title_font(), theme::ink(), tw)), theme::ink());
+        y += kit::ty::CARD_LINE;
+        let facts = format!("{} · {} point{} · {}", plural(e.qs, "question"), fmt_pts(e.pts), if (e.pts - 1.0).abs() < 0.05 { "" } else { "s" }, edited_label(e.edited));
+        let g = p.layout_job(line_job(&facts, sans(kit::ty::META), theme::text_col(), tw));
+        p.galley(Pos2::new(x, y + (18.0 - g.size().y) / 2.0), g, theme::text_col());
+        y += 18.0;
+        let mut job = egui::text::LayoutJob::default();
+        job.append("From ", 0.0, egui::TextFormat { font_id: sans(kit::ty::META), color: theme::muted_col(), ..Default::default() });
+        job.append(&e.bank, 0.0, egui::TextFormat { font_id: egui::FontId::new(kit::ty::META, theme::semibold()), color: theme::text_col(), ..Default::default() });
+        job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+        let g = p.layout_job(job);
+        p.galley(Pos2::new(x, y + (18.0 - g.size().y) / 2.0), g, theme::text_col());
+        // Open, right, level with the row's middle; a child Ui so it takes its own click.
+        let lr = Rect::from_min_size(Pos2::new(r.right() - 16.0 - open_w, r.center().y - 9.0), Vec2::new(open_w, 18.0));
+        let open = kit::link(&mut ui.new_child(UiBuilder::new().max_rect(lr).id_salt(("home_exam_row_open", &e.id))), "Open", true).clicked();
+        if resp.clicked() || open {
+            hit = Some(e.id.clone());
+        }
+    }
+    hit
+}
+
 fn list_columns(w: f32, fr: &[f32]) -> Vec<(f32, f32)> {
     // First column is the fixed 56 px thumb/icon column; the rest share the space.
     let gap = 12.0;
@@ -3184,6 +3271,15 @@ mod tests {
         assert_eq!(HOME_EXAM_H, 164.0);
         // At 1280 the text column is 316 - 124 - 16 = 176 wide.
         assert_eq!(exam_card_text_x(316.0), (124.0, 176.0));
+    }
+
+    /// A compact recent-exam row (narrow Home) is the sum of its lines, and three of them are
+    /// shorter than one row of the two-column cards they replace.
+    #[test]
+    fn a_compact_home_exam_row_is_its_lines() {
+        assert_eq!(10.0 + crate::kit::ty::CARD_LINE + 18.0 + 18.0 + 8.0, HOME_ROW_H);
+        assert!(HOME_ROW_THUMB.y + 8.0 <= HOME_ROW_H - 16.0, "the thumb sits inside its strip");
+        assert!(3.0 * HOME_ROW_H + 2.0 < 2.0 * HOME_EXAM_H + 16.0);
     }
 
     #[test]

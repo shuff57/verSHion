@@ -1355,35 +1355,74 @@ fn measure_card(
 
 // ---------- banks list pieces ----------
 
-const MIX_ALPHA: [u8; 6] = [255, 205, 160, 120, 85, 55];
-
 fn paint_mix_bar(ui: &mut Ui, w: f32, mix: &[usize; 6]) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 6.0), Sense::hover());
     mix_bar_at(ui.painter(), rect, mix);
 }
 
-/// The type-mix bar painted into `rect` (6 px tall on the bank cards), one shade per type in
-/// [`mix_index`] order, the shades [`mix_key`] names.
+/// The type-mix bar painted into `rect` (6 px tall on the bank cards), one segment per type in
+/// [`mix_index`] order, each in its [`theme::type_hue`] (the key's swatches), with a 2 px gap of
+/// card between segments so neighbours stay apart.
 pub(crate) fn mix_bar_at(p: &egui::Painter, rect: Rect, mix: &[usize; 6]) {
+    mix_bar_folded(p, rect, mix, &[]);
+}
+
+/// The gap of card between two bar segments.
+const BAR_GAP: f32 = 2.0;
+
+/// Each bar segment as (its type, or None for the folded rest, its x span), `w` wide from 0:
+/// shown types in [`mix_index`] order, then the `folded` types (the key's "+N more") as one
+/// segment at the end, [`BAR_GAP`] between segments, none narrower than 4.
+fn bar_segments(mix: &[usize; 6], folded: &[usize], w: f32) -> Vec<(Option<usize>, f32, f32)> {
     let total: usize = mix.iter().sum();
-    p.rect_filled(rect, CornerRadius::same(3), theme::field());
     if total == 0 {
+        return Vec::new();
+    }
+    let mut parts: Vec<(Option<usize>, usize)> = (0..6).filter(|i| mix[*i] > 0 && !folded.contains(i)).map(|i| (Some(i), mix[i])).collect();
+    let rest: usize = folded.iter().map(|&i| mix[i]).sum();
+    if rest > 0 {
+        parts.push((None, rest));
+    }
+    let k = parts.len() as f32;
+    let room = (w - BAR_GAP * (k - 1.0)).max(0.0);
+    // Widths in proportion, each at least 4; the widest gives back what the small ones took.
+    let mut ws: Vec<f32> = parts.iter().map(|&(_, n)| (room * n as f32 / total as f32).max(4.0)).collect();
+    let over: f32 = ws.iter().sum::<f32>() - room;
+    if over > 0.0
+        && let Some(m) = ws.iter_mut().max_by(|a, b| a.total_cmp(b))
+    {
+        *m = (*m - over).max(4.0);
+    }
+    let mut x = 0.0;
+    parts
+        .iter()
+        .zip(ws)
+        .map(|(&(t, _), sw)| {
+            let seg = (t, x, x + sw);
+            x += sw + BAR_GAP;
+            seg
+        })
+        .collect()
+}
+
+/// [`mix_bar_at`] with the types the key folded into "+N more" drawn as one hollow segment at
+/// the end, the same outline as the "+N more" swatch, so every segment matches a key entry.
+fn mix_bar_folded(p: &egui::Painter, rect: Rect, mix: &[usize; 6], folded: &[usize]) {
+    let segs = bar_segments(mix, folded, rect.width());
+    if segs.is_empty() {
+        p.rect_filled(rect, CornerRadius::same(3), theme::field());
         return;
     }
-    let mut x = rect.left();
-    let ac = theme::accent_col();
-    for (i, n) in mix.iter().enumerate() {
-        if *n == 0 {
-            continue;
+    for (t, a, b) in segs {
+        let r = Rect::from_min_max(Pos2::new(rect.left() + a, rect.top()), Pos2::new(rect.left() + b, rect.bottom()));
+        match t {
+            Some(i) => {
+                p.rect_filled(r, CornerRadius::same(3), theme::type_hue(i));
+            }
+            None => {
+                p.rect(r, CornerRadius::same(3), theme::card(), Stroke::new(1.0, theme::muted_col()), egui::StrokeKind::Inside);
+            }
         }
-        let seg_w = rect.width() * (*n as f32 / total as f32);
-        let col = Color32::from_rgba_unmultiplied(ac.r(), ac.g(), ac.b(), MIX_ALPHA[i]);
-        p.rect_filled(
-            Rect::from_min_size(Pos2::new(x, rect.top()), Vec2::new(seg_w.max(2.0), rect.height())),
-            CornerRadius::same(3),
-            col,
-        );
-        x += seg_w;
     }
 }
 
@@ -1661,8 +1700,8 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
         let btn_w = ui.painter().layout_no_wrap("Add questions".to_string(), egui::FontId::new(kit::ty::BUTTON_SM, theme::bold_family()), theme::ink()).size().x + 28.0;
         add_btn = Some(Rect::from_center_size(slot.center(), Vec2::new(btn_w.ceil(), 32.0)));
     } else {
-        paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix);
-        mix_bar_at(ui.painter(), Rect::from_min_size(Pos2::new(x0, bar_y), Vec2::new(iw, T_BAR)), &t.mix);
+        let folded = paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix);
+        mix_bar_folded(ui.painter(), Rect::from_min_size(Pos2::new(x0, bar_y), Vec2::new(iw, T_BAR)), &t.mix, &folded);
     }
 
     // Hairline, then the footer: where it is used (a link to those exams) left, Open right.
@@ -1774,41 +1813,52 @@ fn usage_text(t: &BankTile) -> String {
     crate::bankops::usage_label(t.used_in.len())
 }
 
-/// The tile's type key at `at`, `w` wide, two 13 pt lines with a swatch in each type's bar shade.
-fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6]) {
+/// The tile's type key at `at`, `w` wide: two 13 pt lines, each item a swatch in its type's
+/// [`theme::type_hue`] (the bar segment's colour), the count in semibold ink and the type in
+/// `text`. Returns the types folded into "+N more" (the bar draws them as one hollow segment, the
+/// outline the "+N more" swatch has).
+fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6]) -> Vec<usize> {
     const SW: f32 = 9.0;
     const SGAP: f32 = 5.0;
-    let font = egui::FontId::new(kit::ty::META, theme::sans_family());
     let p = ui.painter().clone();
-    let galleys: Vec<_> = (0..6).map(|i| p.layout_no_wrap(format!("{} {}", mix[i], KEY_LABELS[i]), font.clone(), theme::text_col())).collect();
+    let galleys: Vec<_> = (0..6).map(|i| p.layout_job(key_item_job(mix[i], KEY_LABELS[i]))).collect();
     // "+N more" is a link-style reveal: accent semibold, underlined under the pointer, its tooltip
-    // listing the types it stands for (the bar still shows their shades).
+    // listing the types it stands for; its hollow swatch is the bar's last, hollow segment.
     let more_font = egui::FontId::new(kit::ty::META, theme::semibold());
     let more_g = |n: usize| p.layout_no_wrap(more_label(n), more_font.clone(), theme::accent_col());
-    let key = layout_tile_key(mix, w, |i| SW + SGAP + galleys[i].size().x, |n| more_g(n).size().x);
-    let ac = theme::accent_col();
+    let key = layout_tile_key(mix, w, |i| SW + SGAP + galleys[i].size().x, |n| SW + SGAP + more_g(n).size().x);
     for (i, x, l) in key.items {
         let ly = at.y + l as f32 * (KEY_LINE + KEY_LGAP);
         let sr = Rect::from_center_size(Pos2::new(at.x + x + SW / 2.0, ly + KEY_LINE / 2.0), Vec2::splat(SW));
-        let fill = Color32::from_rgba_unmultiplied(ac.r(), ac.g(), ac.b(), MIX_ALPHA[i]);
-        let edge = Color32::from_rgba_unmultiplied(ac.r(), ac.g(), ac.b(), MIX_ALPHA[i].max(190));
-        p.rect(sr, CornerRadius::same(2), fill, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+        p.rect_filled(sr, CornerRadius::same(3), theme::type_hue(i));
         let g = galleys[i].clone();
         p.galley(Pos2::new(at.x + x + SW + SGAP, ly + (KEY_LINE - g.size().y) / 2.0), g, theme::text_col());
     }
-    if let Some((x, rest)) = key.more {
-        let g = more_g(rest.len());
-        let ly = at.y + KEY_LINE + KEY_LGAP;
-        let r = Rect::from_min_size(Pos2::new(at.x + x, ly + (KEY_LINE - g.size().y) / 2.0), g.size());
-        p.galley(r.min, g, theme::accent_col());
-        let tip = rest.iter().map(|&i| format!("{} {}", mix[i], KEY_LABELS[i])).collect::<Vec<_>>().join("\n");
-        let h = ui.interact(r.expand(2.0), ui.id().with(("tile_more", at.x as i32, at.y as i32)), Sense::hover());
-        if h.hovered() {
-            p.hline(r.x_range(), (r.bottom() - 2.0).round() + 0.5, Stroke::new(1.0, theme::accent_col()));
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
-        }
-        h.on_hover_text(format!("Also in this bank:\n{tip}"));
+    let Some((x, rest)) = key.more else {
+        return Vec::new();
+    };
+    let g = more_g(rest.len());
+    let ly = at.y + KEY_LINE + KEY_LGAP;
+    let sr = Rect::from_center_size(Pos2::new(at.x + x + SW / 2.0, ly + KEY_LINE / 2.0), Vec2::splat(SW));
+    p.rect(sr, CornerRadius::same(3), theme::card(), Stroke::new(1.0, theme::muted_col()), egui::StrokeKind::Inside);
+    let r = Rect::from_min_size(Pos2::new(at.x + x + SW + SGAP, ly + (KEY_LINE - g.size().y) / 2.0), g.size());
+    p.galley(r.min, g, theme::accent_col());
+    let tip = rest.iter().map(|&i| format!("{} {}", mix[i], KEY_LABELS[i])).collect::<Vec<_>>().join("\n");
+    let h = ui.interact(r.expand(2.0), ui.id().with(("tile_more", at.x as i32, at.y as i32)), Sense::hover());
+    if h.hovered() {
+        p.hline(r.x_range(), (r.bottom() - 2.0).round() + 0.5, Stroke::new(1.0, theme::accent_col()));
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
     }
+    h.on_hover_text(format!("Also in this bank:\n{tip}"));
+    rest
+}
+
+/// One key item's words: the count in semibold ink, then the type in `text`, both 13 pt.
+fn key_item_job(n: usize, label: &str) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    job.append(&n.to_string(), 0.0, egui::TextFormat { font_id: egui::FontId::new(kit::ty::META, theme::semibold()), color: theme::ink(), ..Default::default() });
+    job.append(&format!(" {label}"), 0.0, egui::TextFormat { font_id: egui::FontId::new(kit::ty::META, theme::sans_family()), color: theme::text_col(), ..Default::default() });
+    job
 }
 
 fn bank_list_row(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &BankTile) {
@@ -4211,6 +4261,32 @@ mod tests {
         assert_eq!(counts_line(&t, false), "11 questions");
         let a = BankTile { archived: true, questions: 1, topics: 1, ..t };
         assert_eq!(counts_line(&a, true), "Archived · 1 question · 1 topic");
+    }
+
+    /// The bar's segments: shown types in mix order with a 2 px gap between them, the folded types
+    /// as one segment at the end, none under 4, and the whole bar inside its width.
+    #[test]
+    fn bar_segments_have_gaps_and_fold_the_rest_last() {
+        let mix = [5, 2, 1, 1, 1, 1];
+        let s = bar_segments(&mix, &[], 284.0);
+        assert_eq!(s.iter().map(|x| x.0).collect::<Vec<_>>(), (0..6).map(Some).collect::<Vec<_>>());
+        for w in s.windows(2) {
+            assert!((w[1].1 - w[0].2 - BAR_GAP).abs() < 0.01, "a 2 px gap between neighbours");
+        }
+        assert!(s.iter().all(|x| x.2 - x.1 >= 4.0 - 0.01));
+        assert!(s.last().unwrap().2 <= 284.0 + 0.01);
+        // MC takes 5/11 of what the gaps leave.
+        assert!(((s[0].2 - s[0].1) - (284.0 - 5.0 * BAR_GAP) * 5.0 / 11.0).abs() < 0.01);
+        // Folded types (a suffix in mix order) are one segment, last.
+        let s = bar_segments(&mix, &[3, 4, 5], 201.0);
+        assert_eq!(s.iter().map(|x| x.0).collect::<Vec<_>>(), vec![Some(0), Some(1), Some(2), None]);
+        assert!(s.last().unwrap().2 <= 201.0 + 0.01);
+        // Absent types draw nothing; an empty bank has no segments.
+        assert_eq!(bar_segments(&[0, 3, 0, 0, 0, 0], &[], 80.0), vec![(Some(1), 0.0, 80.0)]);
+        assert!(bar_segments(&[0; 6], &[], 80.0).is_empty());
+        // A sliver is at least 4 and the bar still fits.
+        let s = bar_segments(&[100, 1, 0, 0, 0, 0], &[], 80.0);
+        assert!(s[1].2 - s[1].1 >= 4.0 - 0.01 && s[1].2 <= 80.0 + 0.01);
     }
 
 }

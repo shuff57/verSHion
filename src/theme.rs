@@ -420,6 +420,32 @@ pub fn edge() -> Color32 {
         (false, false) => Color32::from_rgb(0x9c, 0x86, 0x72),
     }
 }
+/// The question-type hues of a bank's type key and type-mix bar, in `bankui::mix_index` order:
+/// multiple choice (the theme green), true/false (ochre), multipart (slate blue), matching
+/// (plum), fill in the blank (teal), short answer (a warm neutral). One set for the key's swatches
+/// and the bar's segments, so a swatch names its segment. Each is 3:1 or more on `card` (light
+/// 3.1-13.2 on #fffdf8, dark 3.1-8.3 on #2b2520); every pair is at least 14.9 (light) / 13.3
+/// (dark) apart in OKLab x100, and 10.2 / 6.4 under protan and deutan simulation (the key's
+/// words carry the rest). The chemistry skin uses the same values.
+pub fn type_hue(i: usize) -> Color32 {
+    const LIGHT: [Color32; 6] = [
+        Color32::from_rgb(0x2f, 0x61, 0x44),
+        Color32::from_rgb(0xb4, 0x7f, 0x2f),
+        Color32::from_rgb(0x2a, 0x42, 0x78),
+        Color32::from_rgb(0x92, 0x59, 0x85),
+        Color32::from_rgb(0x57, 0x9c, 0x9e),
+        Color32::from_rgb(0x3b, 0x2c, 0x20),
+    ];
+    const DARK: [Color32; 6] = [
+        Color32::from_rgb(0x9d, 0xcb, 0xa0),
+        Color32::from_rgb(0xd2, 0x90, 0x46),
+        Color32::from_rgb(0x78, 0x96, 0xdc),
+        Color32::from_rgb(0xdc, 0x9c, 0xc0),
+        Color32::from_rgb(0x26, 0x9e, 0x9b),
+        Color32::from_rgb(0x85, 0x6d, 0x61),
+    ];
+    (if is_dark() { DARK } else { LIGHT })[i.min(5)]
+}
 pub fn ink() -> Color32 { pal().ink }
 pub fn text_col() -> Color32 { pal().text }
 pub fn muted_col() -> Color32 { pal().muted }
@@ -769,6 +795,27 @@ mod tests {
             assert!(contrast(edge(), card()) >= 3.0, "dark {dark}: {} on card", contrast(edge(), card()));
             assert!(contrast(edge(), cream()) >= 3.0, "dark {dark}: {} on cream", contrast(edge(), cream()));
             assert!(contrast(rule(), card()) < 3.0, "dark {dark}: rule already passes");
+        }
+        begin_frame(false);
+    }
+
+    /// The type hues (bank key swatches and bar segments) hold 3:1 on the card in both palettes,
+    /// and no two are near-twins: every pair differs by 60 or more in summed RGB channels.
+    #[test]
+    fn the_type_hues_read_on_the_card_and_apart() {
+        for dark in [false, true] {
+            begin_frame(dark);
+            for i in 0..6 {
+                assert!(contrast(type_hue(i), card()) >= 3.0, "dark {dark}: hue {i} {} on card", contrast(type_hue(i), card()));
+            }
+            for i in 0..6 {
+                for j in i + 1..6 {
+                    let (a, b) = (type_hue(i), type_hue(j));
+                    let d = (a.r() as i32 - b.r() as i32).abs() + (a.g() as i32 - b.g() as i32).abs() + (a.b() as i32 - b.b() as i32).abs();
+                    assert!(d >= 60, "dark {dark}: hues {i} and {j} are {d} apart");
+                }
+            }
+            assert_eq!(type_hue(0), if dark { Color32::from_rgb(0x9d, 0xcb, 0xa0) } else { Color32::from_rgb(0x2f, 0x61, 0x44) }, "multiple choice keeps the theme green");
         }
         begin_frame(false);
     }
