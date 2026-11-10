@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-09T20:03:33",
- "ours_built_at": "2026-11-10T04:03:29+00:00",
- "git": "d20ab8d",
+ "checked_at": "2026-11-09T20:10:02",
+ "ours_built_at": "2026-11-10T04:09:58+00:00",
+ "git": "2c5d97c",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -15223,7 +15223,7 @@
       {
        "token": "changes:lines=3",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/80f5b861d10b51dc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/c0e609cf3a8d267f.png"
       }
      ]
     },
@@ -15235,21 +15235,33 @@
       {
        "token": "changes:transversals=2",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/655e08831295f827.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/b37e1038df48d071.png"
       }
      ]
     },
     "cap-01c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:lines=4",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/86af19946d75a9c0.png"
+      }
+     ]
     },
     "cap-01d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:transversals=3",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/4c5338772fab3d8a.png"
+      }
+     ]
     },
     "cap-03": {
      "pass": true,
@@ -15259,12 +15271,12 @@
       {
        "token": "changes:angle=50",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/32e2add6819d0030.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/88146e29fe9d2b03.png"
       },
       {
        "token": "changes:{\"transversals\":2,\"angle_b\":\"80\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/5415334ea85bf0bd.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/8c9a2c717e700892.png"
       }
      ]
     },
@@ -15276,17 +15288,17 @@
       {
        "token": "changes:marked=1, 3",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/cb83a49ecea026d1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/4c0d2c5ff6f9b72b.png"
       },
       {
        "token": "changes:{\"marked\":\"2\",\"unknown\":\"2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/c6d83e0000463b2b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/6373302ea61840f8.png"
       },
       {
        "token": "changes:{\"marked\":\"2\",\"angle_text\":\"2 = 3y\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/0afcbe1e07990769.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/d7b1fd8b429bbf50.png"
       }
      ]
     },
@@ -15298,12 +15310,12 @@
       {
        "token": "changes:m_style=Dashed",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/921719d246535c24.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/cba277be3c8f4ec8.png"
       },
       {
        "token": "changes:t_style=Dotted",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/3cd1e4b0e9e93a11.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/33047972f628acb9.png"
       }
      ]
     },
@@ -15314,38 +15326,44 @@
      "renders": []
     },
     "cap-04d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-05a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"points\":\"A: L1 T1; B: L2 left\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallel-lines/de16e45b66144b74.png"
+      }
+     ]
     },
     "cap-05b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-i01": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-i02": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-i03": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     }

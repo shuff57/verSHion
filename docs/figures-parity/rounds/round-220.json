@@ -1,0 +1,29 @@
+{
+ "round": 220,
+ "figure": "parallel-lines",
+ "capability": "cap-04d",
+ "hypothesis": "Batch 5 parallel-lines: cap-04d; evidence handle:click:Click a line to change its style",
+ "started_at": "2026-11-09T20:09:59",
+ "git": "2c5d97c",
+ "before": {
+  "figure": 71.7,
+  "pooled": 90.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:10:00",
+ "after": {
+  "figure": 76.1,
+  "pooled": 90.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: a click on a line steps solid, dashed, dotted",
+ "result": "hit",
+ "evidence": "math::parallel tests (angles read off the drawn SVG up to 6x4 and turned; every pixel of four layouts through interact::pick; 148 frozen old links byte-identical; L0/T0 crash fixed in 2c5d97c); census unchanged; task run reference 12 actions, ours 5, before not possible",
+ "next": "parallel-lines (remaining)"
+}

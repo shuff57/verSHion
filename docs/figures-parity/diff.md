@@ -22,7 +22,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | length-reading | `ruler-reading` | 17 | 3 | 6 | — | 95 |
 | mapping-diagram | `mapping-diagram` | 14 | 0 | 4 | reference mentions click/drag; ours has no handles; reference has a student version; ours has no show_answers | 100 |
 | number-line | `number-line` | 18 | 0 | 6 | — | 72 |
-| parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 50 |
+| parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 100 |
 | parallelogram | `parallelogram` | 57 | 9 | 6 | — | 90 |
 | pie-chart | `pie-chart` | 16 | 0 | 5 | — | 100 |
 | prism | `prism` | 35 | 6 | 8 | — | 90 |
@@ -101,19 +101,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-10T04:03:33+00:00 · probe: 2026-11-09T20:03:33
+Generated: 2026-11-10T04:10:02+00:00 · probe: 2026-11-09T20:10:02
 
-**Pooled 90.7** · mean 90.9 over 70 figures · built 71 of 71 reference figures
+**Pooled 91.1** · mean 91.6 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `parallel-lines`: 50 (23/46)
-  - cap-01c [core 5] Four or more parallel lines — no evidence
-  - cap-01d [core 5] Three or more transversals — no evidence
-  - cap-05a [control 3] Put a named point where lines cross or at a line's end — no evidence
-  - cap-04d [interaction 2] Click a line on the figure to style it — no evidence
-  - cap-05b [interaction 2] Click a crossing or a line's end on the figure to add a point — no evidence
-  - cap-i01 [interaction 2] Click an angle on the figure to give it congruence arcs or shade it — no evidence
 - `circle`: 52 (84/163)
   - cap-i02 [editor 4] Click a point on the figure to join it to another point — no evidence
   - cap-01c [control 3] Place a point off the circle by its distance in radii — no evidence
@@ -292,6 +285,7 @@ Comparable with the frozen baseline: **yes**
 - `ogive`: 100 (75/75)
 - `orbital-diagram`: 100 (61/61)
 - `osmosis`: 100 (140/140)
+- `parallel-lines`: 100 (46/46)
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)

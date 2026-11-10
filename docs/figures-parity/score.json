@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-10T04:03:33+00:00",
- "probe_checked_at": "2026-11-09T20:03:33",
+ "generated_at": "2026-11-10T04:10:02+00:00",
+ "probe_checked_at": "2026-11-09T20:10:02",
  "comparable": true,
  "drift": [],
- "pooled": 90.7,
- "mean": 90.9,
+ "pooled": 91.1,
+ "mean": 91.6,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -967,68 +967,11 @@
    "gaps": []
   },
   "parallel-lines": {
-   "score": 50.0,
-   "got": 23.0,
+   "score": 100.0,
+   "got": 46.0,
    "total": 46.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Four or more parallel lines",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01d",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Three or more transversals",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Put a named point where lines cross or at a line's end",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04d",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a line on the figure to style it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a crossing or a line's end on the figure to add a point",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i01",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click an angle on the figure to give it congruence arcs or shade it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i02",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a line on the figure to rename it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i03",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a line on the figure to delete it",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "parallelogram": {
    "score": 90.4,

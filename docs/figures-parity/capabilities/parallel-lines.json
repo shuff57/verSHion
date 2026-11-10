@@ -21,15 +21,15 @@
    "id": "cap-01c",
    "text": "Four or more parallel lines",
    "class": "core",
-   "evidence": "",
-   "note": "WIDE: lines is capped at 3; the reference's Add parallel line has no stated limit."
+   "evidence": "changes:lines=4",
+   "note": "Built in batch 5, round 218 (2026-11-10). WIDE: lines is capped at 3; the reference's Add parallel line has no stated limit."
   },
   {
    "id": "cap-01d",
    "text": "Three or more transversals",
    "class": "core",
-   "evidence": "",
-   "note": "WIDE: transversals is capped at 2."
+   "evidence": "changes:transversals=3",
+   "note": "Built in batch 5, round 219 (2026-11-10). WIDE: transversals is capped at 2."
   },
   {
    "id": "cap-03",
@@ -63,43 +63,43 @@
    "id": "cap-04d",
    "text": "Click a line on the figure to style it",
    "class": "interaction",
-   "evidence": "",
-   "note": "Lines have drag handles (angle, gap) only."
+   "evidence": "handle:click:Click a line to change its style",
+   "note": "Built in batch 5, round 220 (2026-11-10). Lines have drag handles (angle, gap) only."
   },
   {
    "id": "cap-05a",
    "text": "Put a named point where lines cross or at a line's end",
    "class": "control",
-   "evidence": "",
-   "note": "Only the lines are named; no parameter adds a named point."
+   "evidence": "changes:{\"points\":\"A: L1 T1; B: L2 left\"}",
+   "note": "Built in batch 5, round 221 (2026-11-10). Only the lines are named; no parameter adds a named point."
   },
   {
    "id": "cap-05b",
    "text": "Click a crossing or a line's end on the figure to add a point",
    "class": "interaction",
-   "evidence": "",
-   "note": "No click handle adds a point."
+   "evidence": "handle:click:click where lines cross or at a line's end to put a named point there",
+   "note": "Built in batch 5, round 222 (2026-11-10). No click handle adds a point."
   },
   {
    "id": "cap-i01",
    "text": "Click an angle on the figure to give it congruence arcs or shade it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says click any angle to label or style it; the live pop-up has Label, Congruence arcs and Shading. Our click handle only labels or unlabels."
+   "evidence": "handle:click:near an angle's corner for congruence arcs or shading",
+   "note": "Built in batch 5, round 223 (2026-11-10). From the page controls, not the bullets. The page says click any angle to label or style it; the live pop-up has Label, Congruence arcs and Shading. Our click handle only labels or unlabels."
   },
   {
    "id": "cap-i02",
    "text": "Click a line on the figure to rename it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the line's pop-up has a Name box."
+   "evidence": "handle-edit:name_m",
+   "note": "Built in batch 5, round 224 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the line's pop-up has a Name box."
   },
   {
    "id": "cap-i03",
    "text": "Click a line on the figure to delete it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the line's pop-up has Delete this line."
+   "evidence": "handle:click:Click to delete transversal",
+   "note": "Built in batch 5, round 225 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the line's pop-up has Delete this line."
   }
  ]
 }

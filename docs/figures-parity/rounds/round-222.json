@@ -1,0 +1,29 @@
+{
+ "round": 222,
+ "figure": "parallel-lines",
+ "capability": "cap-05b",
+ "hypothesis": "Batch 5 parallel-lines: cap-05b; evidence handle:click:click where lines cross or at a line's end to put a named point there",
+ "started_at": "2026-11-09T20:10:00",
+ "git": "2c5d97c",
+ "before": {
+  "figure": 82.6,
+  "pooled": 91.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:10:01",
+ "after": {
+  "figure": 87.0,
+  "pooled": 91.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: a click at a crossing or end toggles the next free letter",
+ "result": "hit",
+ "evidence": "math::parallel tests (angles read off the drawn SVG up to 6x4 and turned; every pixel of four layouts through interact::pick; 148 frozen old links byte-identical; L0/T0 crash fixed in 2c5d97c); census unchanged; task run reference 12 actions, ours 5, before not possible",
+ "next": "parallel-lines (remaining)"
+}

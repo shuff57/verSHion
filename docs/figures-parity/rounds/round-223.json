@@ -1,0 +1,29 @@
+{
+ "round": 223,
+ "figure": "parallel-lines",
+ "capability": "cap-i01",
+ "hypothesis": "Batch 5 parallel-lines: cap-i01; evidence handle:click:near an angle's corner for congruence arcs or shading",
+ "started_at": "2026-11-09T20:10:01",
+ "git": "2c5d97c",
+ "before": {
+  "figure": 87.0,
+  "pooled": 91.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:10:01",
+ "after": {
+  "figure": 91.3,
+  "pooled": 91.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: arcs then shading on that angle only",
+ "result": "hit",
+ "evidence": "math::parallel tests (angles read off the drawn SVG up to 6x4 and turned; every pixel of four layouts through interact::pick; 148 frozen old links byte-identical; L0/T0 crash fixed in 2c5d97c); census unchanged; task run reference 12 actions, ours 5, before not possible",
+ "next": "parallel-lines (remaining)"
+}
