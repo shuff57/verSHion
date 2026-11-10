@@ -312,3 +312,7 @@ fn build(p: &Params) -> String {
     }
     d.finish()
 }
+
+#[cfg(test)]
+#[path = "organic_tests.rs"]
+mod batch6_tests;

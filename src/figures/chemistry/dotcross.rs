@@ -423,3 +423,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "dotcross_tests.rs"]
+mod batch6_tests;
