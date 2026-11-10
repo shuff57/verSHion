@@ -21,6 +21,29 @@ fn clean_name(s: &str) -> String { s.chars().filter(|c| !c.is_control() && !c.is
 
 fn number(s: &str) -> Option<f64> { s.trim().trim_end_matches('\u{b0}').parse::<f64>().ok().filter(|x| x.is_finite()) }
 
+/// A row of More points with its distance from the centre in radii: a last word such as `1.8r` (or `1.8 r`) after the direction
+/// takes the point off the circle (`D 30 1.8r`); without one it is on the circle (1). Rows of three or more words with such an
+/// ending drew a point with a garbled letter at 0 degrees before, so no row that read sensibly reads differently.
+pub fn parse_point_full(row: &str) -> (String, f64, f64) {
+    let toks: Vec<&str> = row.split(|c: char| c.is_whitespace() || c == '=' || c == ':').filter(|t| !t.is_empty()).collect();
+    let k = toks.len();
+    let dist = if k >= 3 && toks[k - 1].len() > 1 && toks[k - 1].ends_with(['r', 'R']) && number(toks[k - 2]).is_some() {
+        number(&toks[k - 1][..toks[k - 1].len() - 1]).map(|d| (d, k - 1))
+    } else if k >= 4 && toks[k - 1].eq_ignore_ascii_case("r") && number(toks[k - 3]).is_some() {
+        number(toks[k - 2]).map(|d| (d, k - 2))
+    } else { None };
+    match dist {
+        Some((d, n)) => {
+            let (nm, deg) = parse_point(&toks[..n].join(" "));
+            (nm, deg, if d.is_finite() { d.clamp(0.1, super::pts::MAX_DIST) } else { 1.0 })
+        }
+        None => { let (nm, deg) = parse_point(row); (nm, deg, 1.0) }
+    }
+}
+
+/// Whether a distance in radii puts a point on the circle.
+pub fn on_rim(d: f64) -> bool { (d - 1.0).abs() < 1e-9 }
+
 /// A row of More points: its letter (empty when the row has none) and its direction in degrees. `D 270`, `D = 270°`, `D270`,
 /// `270` (no letter) and `D` (at 0) all read.
 pub fn parse_point(row: &str) -> (String, f64) {
@@ -60,16 +83,25 @@ fn own_letters(p: &Params) -> Vec<String> {
     vec![n.o, n.a, n.b, n.c, n.m]
 }
 
-/// The More points that are drawn, each with its letter (a row without one gets the next free letter) and its direction.
-pub fn extras(p: &Params) -> Vec<(String, f64)> {
-    let raw: Vec<(String, f64)> = rows(p.s("more_points")).iter().take(MAX_EXTRA).map(|r| parse_point(r)).collect();
+/// Every More points row that is drawn, in row order, with its letter (a row without one gets the next free letter), its
+/// direction and its distance from the centre in radii (1 on the circle).
+pub fn extras_all(p: &Params) -> Vec<(String, f64, f64)> {
+    let raw: Vec<(String, f64, f64)> = rows(p.s("more_points")).iter().take(MAX_EXTRA).map(|r| parse_point_full(r)).collect();
     let mut used = own_letters(p);
     used.extend(raw.iter().filter(|r| !r.0.is_empty()).map(|r| r.0.clone()));
-    raw.into_iter().map(|(nm, d)| if nm.is_empty() { let f = next_free(&used); used.push(f.clone()); (f, d) } else { (nm, d) }).collect()
+    raw.into_iter().map(|(nm, d, r)| if nm.is_empty() { let f = next_free(&used); used.push(f.clone()); (f, d, r) } else { (nm, d, r) }).collect()
 }
 
-/// Every point drawn on the circle: (letter, direction in degrees), A, B and C first.
-pub fn circle_points(p: &Params) -> Vec<(String, f64)> {
+/// The More points on the circle: (letter, direction).
+pub fn extras(p: &Params) -> Vec<(String, f64)> { extras_all(p).into_iter().filter(|e| on_rim(e.2)).map(|e| (e.0, e.1)).collect() }
+
+/// The More points off the circle: (letter, place in unit coordinates).
+pub fn off_points(p: &Params) -> Vec<(String, V)> {
+    extras_all(p).into_iter().filter(|e| !on_rim(e.2)).map(|(nm, d, r)| (nm, (r * d.to_radians().cos(), r * d.to_radians().sin()))).collect()
+}
+
+/// A, B and C (when drawn) and the More points on the circle.
+pub fn base_points(p: &Params) -> Vec<(String, f64)> {
     let (g, pt, n) = (geom(p), parts(p), names(p));
     let mut v = vec![];
     if pt.a { v.push((n.a, g.a)); }
@@ -77,6 +109,28 @@ pub fn circle_points(p: &Params) -> Vec<(String, f64)> {
     if pt.c { v.push((n.c, g.c)); }
     v.extend(extras(p));
     v
+}
+
+/// Every point drawn on the circle: (letter, direction in degrees), A, B and C first, then the More points, the polygon's own
+/// vertices and the lettered touch points of tangents from outside points.
+pub fn circle_points(p: &Params) -> Vec<(String, f64)> {
+    let mut v = base_points(p);
+    v.extend(super::pts::polygon_points(p));
+    v.extend(super::pts::touch_points(p));
+    v
+}
+
+/// The letters in use: the figure's own, the More points', the touch points', the midpoints' and crossings' (and, with `poly`, the
+/// polygon's), so that a new point takes a letter of its own.
+pub fn taken_letters(p: &Params, poly: bool) -> Vec<String> {
+    let mut used = own_letters(p);
+    used.extend(extras_all(p).into_iter().map(|e| e.0));
+    for key in ["midpoints", "crossings"] {
+        used.extend(rows(p.s(key)).iter().filter_map(|r| r.split_whitespace().next().map(clean_name)));
+    }
+    used.extend(super::pts::touch_points(p).into_iter().map(|t| t.0));
+    if poly { used.extend(super::pts::polygon_points(p).into_iter().map(|t| t.0)); }
+    used
 }
 
 /// A direction as a row writes it: whole degrees when it is whole, else tenths.
@@ -103,9 +157,7 @@ pub fn add_point(p: &mut Params, deg: f64) {
         p.set_b("show_c", true);
         return;
     }
-    let ex = extras(p);
-    let mut used = own_letters(p);
-    used.extend(ex.into_iter().map(|e| e.0));
+    let used = taken_letters(p, true);
     let mut r = rows(p.s("more_points"));
     // past the limit the click still writes its row (one only, the last click), which is not drawn and which the notes name
     r.truncate(MAX_EXTRA);
@@ -115,10 +167,22 @@ pub fn add_point(p: &mut Params, deg: f64) {
 
 /// Moves More point `i` to `deg`, keeping its letter (a point that had the next free letter keeps the one it was drawn with).
 pub fn move_extra(p: &mut Params, i: usize, deg: f64) {
-    let ex = extras(p);
+    let d = extras_all(p).get(i).map(|e| e.2).unwrap_or(1.0);
+    move_extra_to(p, i, deg, d);
+}
+
+/// A distance in radii as a row writes it: `1.8r`.
+pub fn fmt_dist(d: f64) -> String {
+    let s = format!("{:.2}", d);
+    format!("{}r", s.trim_end_matches('0').trim_end_matches('.'))
+}
+
+/// Moves More points row `i` to `deg` at `dist` radii from the centre (1: on the circle), keeping its letter.
+pub fn move_extra_to(p: &mut Params, i: usize, deg: f64, dist: f64) {
+    let ex = extras_all(p);
     let mut r = rows(p.s("more_points"));
     if let (Some(e), Some(row)) = (ex.get(i), r.get_mut(i)) {
-        *row = format!("{} {}", e.0, fmt_deg(deg));
+        *row = if on_rim(dist) { format!("{} {}", e.0, fmt_deg(deg)) } else { format!("{} {} {}", e.0, fmt_deg(deg), fmt_dist(dist)) };
         set_rows(p, "more_points", &r);
     }
 }
@@ -315,18 +379,31 @@ impl Hit {
 pub fn handles(p: &Params, cx: f64, off: Pt) -> Vec<Handle> {
     let centre = (cx + off.0, CY + off.1);
     let mut v = vec![];
-    for (i, (nm, d)) in extras(p).into_iter().enumerate() {
-        let q = on_circle(cx, d);
+    // every More points row has a knob (in row order, so a point taken off the circle keeps its knob): one on the circle moves round
+    // it and leaves it when pulled well away (more than 0.2 radii, 30 px); one off it goes anywhere and comes back on when brought
+    // within 0.08 radii (12 px) of the circle
+    for (i, (nm, d, r0)) in extras_all(p).into_iter().enumerate() {
+        let q = (cx + R * r0 * d.to_radians().cos(), CY - R * r0 * d.to_radians().sin());
         let at = (q.0 + off.0, q.1 + off.1);
         let nm2 = nm.clone();
-        v.push(Handle::knob(at, &format!("Drag point {nm} round the circle; click it for the tangent there"), move |p, t| {
+        let tip = if on_rim(r0) { format!("Drag point {nm} round the circle (pull it well away to take it off the circle); click it for the tangent there") }
+            else if r0 > 1.0 { format!("Drag point {nm} anywhere (bring it to the circle to put it back on); click it for the tangents from it") }
+            else { format!("Drag point {nm} anywhere (bring it to the circle to put it back on)") };
+        let k = Handle::knob(at, &tip, move |p, t| {
             if unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
-            move_extra(p, i, snap_angle(interact::angle_deg(centre, t)) % 360.0);
-        }).with_click(move |p| toggle_tangent(p, &nm2)));
+            let r = interact::dist(centre, t) / R;
+            let deg = snap_angle(interact::angle_deg(centre, t)) % 360.0;
+            let cur = extras_all(p).get(i).map(|e| e.2).unwrap_or(1.0);
+            let snapd = |r: f64| ((r * 20.0).round() / 20.0).clamp(0.1, super::pts::MAX_DIST);
+            let dist = if on_rim(cur) { if (r - 1.0).abs() > 0.2 { snapd(r) } else { 1.0 } } else if (r - 1.0).abs() < 0.08 { 1.0 } else { snapd(r) };
+            move_extra_to(p, i, deg, dist);
+        });
+        v.push(if on_rim(r0) { k.with_click(move |p| toggle_tangent(p, &nm2)) } else if r0 > 1.0 { k.with_click(move |p| toggle_outside_tangents(p, &nm2)) } else { k });
     }
     let hit = std::sync::Arc::new(Hit::new(p, centre));
-    // wide enough for the arc rings and for the tangents as far as they are drawn
-    let reach = tangent_lines(p).iter().map(|t| t.1.max(t.2)).fold(130.0, f64::max) + R + 20.0;
+    // wide enough for the arc rings, for the tangents as far as they are drawn and for the points off the circle
+    let far = off_points(p).iter().map(|(_, q)| q.0.hypot(q.1) * R + 30.0 - R).fold(0.0, f64::max);
+    let reach = tangent_lines(p).iter().map(|t| t.1.max(t.2)).fold(130.0f64.max(far), f64::max) + R + 20.0;
     let h2 = hit.clone();
     v.push(Handle::area(centre, (2.0 * reach, 2.0 * reach), "Click the circle to put a point there, a line, angle or arc to label it, or an enclosed area to shade it", move |p, q| hit.act(p, q))
         .with_hover(move |q| h2.at(q).map(|x| x.1)));
@@ -337,7 +414,7 @@ pub fn handles(p: &Params, cx: f64, off: Pt) -> Vec<Handle> {
 
 /// One end of a line: the centre, a point on the circle (its direction in degrees), or the midpoint M of chord AB.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum End { O, At(f64), M }
+pub enum End { O, At(f64), M, Q(f64, f64) }
 
 /// Where an end is, in unit coordinates.
 pub fn end_pos(p: &Params, e: End) -> V {
@@ -345,22 +422,28 @@ pub fn end_pos(p: &Params, e: End) -> V {
         End::O => (0.0, 0.0),
         End::At(d) => upt(d),
         End::M => { let g = geom(p); let (a, b) = (upt(g.a), upt(g.b)); ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0) }
+        End::Q(x, y) => (x, y),
     }
 }
 
 /// Whether the midpoint M of chord AB can be a line's end: A and B are drawn and apart.
-fn m_ok(p: &Params) -> bool { let pt = parts(p); pt.a && pt.b && !pt.deg }
+pub(super) fn m_ok(p: &Params) -> bool { let pt = parts(p); pt.a && pt.b && !pt.deg }
 
 /// The point named `nm` on the figure: the centre, a point drawn on the circle, or M (exact letter first, then ignoring case).
-fn find(p: &Params, pts: &[(String, f64)], nm: &str) -> Option<End> {
+pub(super) fn find(p: &Params, pts: &[(String, f64)], nm: &str) -> Option<End> { find_with(p, pts, &super::pts::free_points(p), nm) }
+
+/// `find`, with the places off the circle given (points off it, midpoints, crossings): the circle's points first, then those.
+pub(super) fn find_with(p: &Params, pts: &[(String, f64)], free: &[(String, V)], nm: &str) -> Option<End> {
     let n = names(p);
     let m = m_ok(p);
     if nm == n.o { return Some(End::O); }
     if let Some((_, d)) = pts.iter().find(|(x, _)| x == nm) { return Some(End::At(*d)); }
     if m && nm == n.m { return Some(End::M); }
+    if let Some((_, q)) = free.iter().find(|(x, _)| x == nm) { return Some(End::Q(q.0, q.1)); }
     if nm.eq_ignore_ascii_case(&n.o) { return Some(End::O); }
     if let Some((_, d)) = pts.iter().find(|(x, _)| x.eq_ignore_ascii_case(nm)) { return Some(End::At(*d)); }
-    (m && nm.eq_ignore_ascii_case(&n.m)).then_some(End::M)
+    if m && nm.eq_ignore_ascii_case(&n.m) { return Some(End::M); }
+    free.iter().find(|(x, _)| x.eq_ignore_ascii_case(nm)).map(|(_, q)| End::Q(q.0, q.1))
 }
 
 /// The letter the figure gives an end.
@@ -370,13 +453,14 @@ fn name_of(p: &Params, pts: &[(String, f64)], e: End) -> String {
         End::O => n.o,
         End::M => n.m,
         End::At(d) => pts.iter().find(|x| angdiff(x.1, d) < 1e-9).map(|x| x.0.clone()).unwrap_or_default(),
+        End::Q(x, y) => super::pts::free_points(p).into_iter().find(|f| (f.1 .0 - x).hypot(f.1 .1 - y) < 1e-9).map(|f| f.0).unwrap_or_default(),
     }
 }
 
-fn same_place(p: &Params, x: End, y: End) -> bool { let (u, w) = (end_pos(p, x), end_pos(p, y)); (u.0 - w.0).hypot(u.1 - w.1) < 1e-3 }
+pub(super) fn same_place(p: &Params, x: End, y: End) -> bool { let (u, w) = (end_pos(p, x), end_pos(p, y)); (u.0 - w.0).hypot(u.1 - w.1) < 1e-3 }
 
 /// The two letters of a row such as `BD`, `B D`, `B-D` or `B to D` (letters of more than one character need a space).
-fn pair_names(row: &str, known: &[String]) -> Option<(String, String)> {
+pub(super) fn pair_names(row: &str, known: &[String]) -> Option<(String, String)> {
     let toks: Vec<&str> = row.split(|c: char| c.is_whitespace() || c == '-').filter(|t| !t.is_empty() && !t.eq_ignore_ascii_case("to")).collect();
     match toks.as_slice() {
         [a, b] => Some((a.to_string(), b.to_string())),
@@ -392,7 +476,7 @@ fn pair_names(row: &str, known: &[String]) -> Option<(String, String)> {
 
 /// The three letters of an angle written as one word (`BDC`): the split whose three parts are letters on the figure, else one
 /// character each.
-fn triple_names(tok: &str, known: &[String]) -> Option<(String, String, String)> {
+pub(super) fn triple_names(tok: &str, known: &[String]) -> Option<(String, String, String)> {
     let is = |s: &str| known.iter().any(|k| k.eq_ignore_ascii_case(s));
     let cs: Vec<usize> = tok.char_indices().map(|(i, _)| i).skip(1).collect();
     for (a, i) in cs.iter().enumerate() {
@@ -405,11 +489,14 @@ fn triple_names(tok: &str, known: &[String]) -> Option<(String, String, String)>
     (ch.len() == 3).then(|| (ch[0].clone(), ch[1].clone(), ch[2].clone()))
 }
 
-fn known_names(p: &Params, pts: &[(String, f64)]) -> Vec<String> {
+pub(super) fn known_names(p: &Params, pts: &[(String, f64)]) -> Vec<String> { known_with(p, pts, &super::pts::free_points(p)) }
+
+pub(super) fn known_with(p: &Params, pts: &[(String, f64)], free: &[(String, V)]) -> Vec<String> {
     let mut v: Vec<String> = pts.iter().map(|x| x.0.clone()).collect();
     let n = names(p);
     v.push(n.o);
     if m_ok(p) { v.push(n.m); }
+    v.extend(free.iter().map(|f| f.0.clone()));
     v
 }
 
@@ -458,10 +545,28 @@ pub fn unknown_rows(p: &Params) -> Vec<String> {
     if more.len() > MAX_EXTRA {
         v.push(format!("Only {MAX_EXTRA} More points are drawn: {} is not. Remove a point to add another.", more[MAX_EXTRA..].join(", ")));
     }
+    let outs = super::pts::outside_tangents(p);
     for r in rows(p.s("tangents")) {
+        let first = r.split_whitespace().next().unwrap_or("");
+        if outs.iter().any(|t| t.from.eq_ignore_ascii_case(first)) { continue; }
+        if super::pts::free_points(p).iter().any(|f| f.0.eq_ignore_ascii_case(first) && f.1 .0.hypot(f.1 .1) <= 1.0) {
+            v.push(format!("No tangent can be drawn from {first}: it is inside the circle."));
+            continue;
+        }
         if !matches!(find(p, &pts, r.trim()), Some(End::At(_))) { v.push(format!("The tangent at {r} is not drawn: there is no point {r} on the circle.")); }
     }
+    v.extend(super::pts::unknown(p));
+    for r in super::style::unknown(p) { v.push(format!("Style {r} is not drawn: name a drawn line (BD), an arc (arc BC) or an angle (angle BDC), then ticks 2, arrows 1, dashed, dotted, past D arrow or arcs 2.")); }
     v
+}
+
+/// A click on point `nm` outside the circle: the two tangents from it on (a Tangents row `nm`), or off again (every row from it).
+pub fn toggle_outside_tangents(p: &mut Params, nm: &str) {
+    let mut r = rows(p.s("tangents"));
+    let before = r.len();
+    r.retain(|x| x.split_whitespace().next() != Some(nm));
+    if r.len() == before { r.push(nm.to_string()); }
+    set_rows(p, "tangents", &r);
 }
 
 /// A click on point `nm`: its tangent on, or off again (A's is its own switch, so its mark and angle come with it).
@@ -483,7 +588,7 @@ pub fn toggle_tangent(p: &mut Params, nm: &str) {
 
 /// Every drawn line between two named points: (letters, ends). The radius, chord, the inscribed angle's sides, OM and the lines
 /// between points; the diameter and tangents end at no named point and are left out (a tangent's angles come from `tangent_dirs`).
-fn named_lines(p: &Params) -> Vec<(String, End, String, End)> {
+pub(super) fn named_lines(p: &Params) -> Vec<(String, End, String, End)> {
     let (g, pt, n) = (geom(p), parts(p), names(p));
     let mut v = vec![];
     if pt.a && (pt.radius || pt.central || pt.sector != 0 || pt.tan) { v.push((n.o.clone(), End::O, n.a.clone(), End::At(g.a))); }
@@ -495,6 +600,14 @@ fn named_lines(p: &Params) -> Vec<(String, End, String, End)> {
     }
     if pt.bis && !pt.deg && mode(p, K::Om) != Md::Hidden && !same_place(p, End::O, End::M) { v.push((n.o.clone(), End::O, n.m.clone(), End::M)); }
     for ((a, b), x, y) in joins(p) { v.push((a, x, b, y)); }
+    // the inscribed polygon's sides
+    let vs = super::pts::polygon_vertices(p);
+    for i in 0..vs.len() {
+        let (x, y) = (&vs[i], &vs[(i + 1) % vs.len()]);
+        if !v.iter().any(|l| (same_place(p, l.1, End::At(x.1)) && same_place(p, l.3, End::At(y.1))) || (same_place(p, l.3, End::At(x.1)) && same_place(p, l.1, End::At(y.1)))) {
+            v.push((x.0.clone(), End::At(x.1), y.0.clone(), End::At(y.1)));
+        }
+    }
     v
 }
 
@@ -637,12 +750,16 @@ pub fn edges(p: &Params) -> Vec<(V, V)> {
     if both && !pt.deg { v.push((o, c(g.b))); }
     for (_, x, y) in joins(p) { v.push((end_pos(p, x), end_pos(p, y))); }
     for (_, e0, e1) in drawn_tangents(p) { v.push((e0, e1)); }
+    let vs = super::pts::polygon_vertices(p);
+    for i in 0..vs.len() { v.push((upt(vs[i].1), upt(vs[(i + 1) % vs.len()].1))); }
+    v.extend(super::style::run_edges(p));
+    for (a, t, e) in super::pts::outside_segments(p) { v.push((a, t)); v.push((t, e)); }
     v
 }
 
 /// The drawing area before the label room is added (it may only be larger as drawn): the canvas inside its margins, grown for the
 /// tangents, in screen units, with the circle's centre at (cx, CY).
-fn drawn_area(p: &Params) -> (Rect, f64) {
+pub(super) fn drawn_area(p: &Params) -> (Rect, f64) {
     let lay = layout_of(p);
     let gr = tangent_grow(p);
     (Rect { x0: 10.0 - gr.l, y0: 14.0 - gr.t, x1: lay.w - 10.0 + gr.r, y1: draw_bottom(p) + gr.b }, lay.w / 2.0)

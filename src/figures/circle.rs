@@ -17,6 +17,8 @@ use super::*;
 use std::f64::consts::PI;
 
 mod edit;
+mod pts;
+mod style;
 #[cfg(test)]
 mod tests_b5;
 
@@ -69,6 +71,7 @@ fn params() -> Vec<ParamDef> {
         b("show_b", "Point B", false).hint("B on its own, without a chord; a chord, arc, sector or angle through B draws it anyway"),
         b("show_c", "Point C", false).hint("C on its own, without the inscribed angle"),
         ParamDef::list("more_points", "More points (letter and degrees)", "").hint("One point per row, such as D 270 (its letter, then its direction in degrees from the right, counterclockwise). Or click the circle on the figure to put a point there; a row without a letter gets the next free one"),
+        ParamDef::choice("polygon", "Inscribed polygon", &pts::POLYGONS, "None").hint("A regular polygon with a corner at A, the other corners lettered after the points already on the figure; drag A to turn it"),
         ParamDef::choice("define", "Define the chord by", &["Points", "Angle", "Chord length", "OM distance"], "Points").hint("Points: drag B or type its angle. Angle: B is A plus the central angle. Chord length or OM distance: type the length and B follows (c = 2r sin(theta/2), OM = r cos(theta/2))"),
         ParamDef::float("chord_len", "Chord length", 0.0, 20000.0, 0.1, 8.0),
         ParamDef::float("om_dist", "Distance OM (centre to chord)", 0.0, 10000.0, 0.1, 3.0),
@@ -84,10 +87,13 @@ fn params() -> Vec<ParamDef> {
         b("show_central", "Central angle AOB", false),
         b("show_inscribed", "Inscribed angle ACB", false),
         ParamDef::list("joins", "Lines between points", "").hint("Two letters per row: BD is a chord, OC a radius. Any point on the figure, and the centre"),
-        ParamDef::list("tangents", "Tangents at points", "").hint("A point's letter per row, such as C. Or click a point on the figure"),
+        ParamDef::list("tangents", "Tangents at points", "").hint("A point's letter per row, such as C. Or click a point on the figure. A point outside the circle gets both tangents from it (P), with touch points lettered (P T U), or one of them (P T - or P - U)"),
+        ParamDef::list("midpoints", "Midpoints", "").hint("A letter and two points per row: N BD is the midpoint of BD. Or click the middle of a chord on the figure"),
+        ParamDef::list("crossings", "Points where lines cross", "").hint("A letter and two lines per row: E AC BD is where AC crosses BD; E PQ circle is where PQ meets the circle (E PQ circle 2 the second time). Or click the crossing on the figure"),
         ParamDef::choice("arc", "Arc AB", &["None", "Minor", "Major"], "None"),
         ParamDef::choice("sector", "Sector", &["None", "Minor", "Major"], "None"),
         ParamDef::list("shade", "Shaded areas", "").hint("Click inside an enclosed area on the figure to shade it, and again to clear it. Or type segment BD, major segment BD, sector BD or major sector BD"),
+        ParamDef::choice("shade_colour", "Shading colour", &["Blue", "Green", "Yellow", "Orange", "Red", "Purple"], "Blue").hint("The colour of the shaded sector and areas (Print shades them with a grey hatch)"),
         ParamDef::choice("right_marks", "Right-angle marks", &["Show always", "Key only", "Hide"], "Show always").hint("Key only hides the right-angle marks on the student copy, where they would give the answer away"),
         b("show_names", "Letter the points", true),
         ParamDef::text("name_o", "Centre letter", "O"),
@@ -97,8 +103,10 @@ fn params() -> Vec<ParamDef> {
         ParamDef::text("name_m", "Midpoint letter", "M"),
         ParamDef::choice("r_label", "Radius label", &["Value", "Letter only", "None"], "Value"),
         ParamDef::list("marks", "Arc and line labels", "").hint("One per row: arc BC 70\u{b0}, arc BC degrees, arc BC length, major arc BC degrees, BD length or BD x. Or click beside an arc or on a line on the figure"),
+        ParamDef::list("styles", "Marks and line styles", "").hint("One per row: BD ticks 2, BD arrows 1, BD dashed, BD dotted, BD past D arrow, BD past both dot, BD past B line arrow, arc BC ticks 1, angle BDC arcs 2. Or double-click a line, arc or angle on the figure"),
         ParamDef::choice("angle_unit", "Angles in", &["Degrees", "Radians"], "Degrees"),
         ParamDef::int("dec", "Decimal places", 0, 4, 2),
+        ParamDef::choice("pi_form", "Circumference, areas and arc lengths", &["Decimals", "In terms of \u{3c0}", "Both"], "Decimals").hint("In terms of \u{3c0}: 10\u{3c0} cm. Both: 10\u{3c0} cm \u{2248} 31.42 cm"),
         b("hints", "Show formula hints", false),
     ];
     for e in KINDS {
@@ -266,10 +274,32 @@ fn clean_unit(p: &Params) -> String { p.s("unit").trim().chars().filter(|c| !c.i
 /// The blank for an asked value: wide enough for "000\u{b0}", the same on the figure and in the readout.
 const BLANK: &str = "_____";
 
-struct Ctx<'a> { p: &'a Params, m: Meas, g: Geom, n: Names, rad: bool, unit: String, dec: i64 }
+/// `pi`: lengths and areas that have pi in them (circumference, area, arc length, sector area) as decimals (0), as a multiple of pi (1)
+/// or both (2, the multiple then the decimal).
+struct Ctx<'a> { p: &'a Params, m: Meas, g: Geom, n: Names, rad: bool, unit: String, dec: i64, pi: u8 }
+
+fn pi_mode(p: &Params) -> u8 { match p.s("pi_form") { "In terms of \u{3c0}" => 1, "Both" => 2, _ => 0 } }
 
 fn ctx(p: &Params) -> Ctx<'_> {
-    Ctx { p, m: meas(p), g: geom(p), n: names(p), rad: p.s("angle_unit") == "Radians", unit: clean_unit(p), dec: p.i("dec").clamp(0, 4) }
+    Ctx { p, m: meas(p), g: geom(p), n: names(p), rad: p.s("angle_unit") == "Radians", unit: clean_unit(p), dec: p.i("dec").clamp(0, 4), pi: pi_mode(p) }
+}
+
+/// A multiple of pi for print: `10\u{3c0}`, `\u{3c0}/2`, `25\u{3c0}/18` when the multiple is a fraction with a denominator up to 36, else
+/// the multiple rounded to the decimal places (`1.39\u{3c0}`).
+pub fn pi_text(coef: f64, dec: i64) -> String {
+    if !coef.is_finite() { return "?".into(); }
+    for den in 1..=36i64 {
+        let n = coef * den as f64;
+        if (n - n.round()).abs() < 1e-6 * n.abs().max(1.0) && n.round().abs() < 1e12 {
+            let n = n.round() as i64;
+            if n == 0 { return "0".into(); }
+            let g = gcd(n, den);
+            let (n, den) = (n / g, den / g);
+            let top = match n { 1 => "\u{3c0}".to_string(), -1 => "\u{2212}\u{3c0}".to_string(), n => format!("{}\u{3c0}", num(n as f64, 0)) };
+            return if den == 1 { top } else { format!("{top}/{den}") };
+        }
+    }
+    format!("{}\u{3c0}", num(coef, dec))
 }
 
 impl Ctx<'_> {
@@ -278,15 +308,24 @@ impl Ctx<'_> {
         if self.unit.is_empty() { return v; }
         if unit_is_squared(&self.unit) { format!("{v} {}", self.unit) } else { format!("{v} {}\u{b2}", self.unit) }
     }
+    /// A length (`sq` false) or an area that has pi in it, as the pi setting asks: `12\u{3c0} cm`, `37.7 cm` or `12\u{3c0} cm \u{2248} 37.7 cm`.
+    fn with_pi(&self, v: f64, sq: bool) -> String {
+        let u = |s: String| if sq { self.sq(s) } else { self.with_u(s) };
+        match self.pi {
+            1 => u(pi_text(v / PI, self.dec)),
+            2 => format!("{} \u{2248} {}", u(pi_text(v / PI, self.dec)), u(num(v, self.dec))),
+            _ => u(num(v, self.dec)),
+        }
+    }
     fn value(&self, k: K) -> String {
         let (m, d) = (&self.m, self.dec);
         match k {
             K::Radius => self.with_u(num(m.r, d)),
             K::Diameter => self.with_u(num(m.diameter, d)),
-            K::Circ => self.with_u(num(m.circumference, d)),
-            K::Area => self.sq(num(m.area, d)),
-            K::Arc => self.with_u(num(m.arc_len, d)),
-            K::Sector => self.sq(num(m.sector_area, d)),
+            K::Circ => self.with_pi(m.circumference, false),
+            K::Area => self.with_pi(m.area, true),
+            K::Arc => self.with_pi(m.arc_len, false),
+            K::Sector => self.with_pi(m.sector_area, true),
             K::Chord => self.with_u(num(m.chord, d)),
             K::Om => self.with_u(num(m.om, d)),
             K::Am => self.with_u(num(m.am, d)),
@@ -487,7 +526,7 @@ fn parts(p: &Params) -> Parts {
     let two = chord || bis || sec || central || insc || arc != 0 || sector != 0 || row_on(K::Chord) || row_on(K::Om) || row_on(K::Am) || row_on(K::Central) || row_on(K::Arc) || row_on(K::Sector);
     let deg = g.d < 0.5;
     let insc = insc && !m.c_clash && !deg;
-    Parts { radius, diam, chord, bis, tan, sec, central, arc, sector, two, a: radius || diam || tan || two, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc, deg }
+    Parts { radius, diam, chord, bis, tan, sec, central, arc, sector, two, a: radius || diam || tan || two || pts::polygon_n(p) >= 3, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc, deg }
 }
 
 /// Editor-only notes about what the figure could not do as asked (never drawn into the SVG).
@@ -885,6 +924,16 @@ impl Sc {
     }
 }
 
+/// A line between two named places, in the style a `styles` row gives it (else plain).
+#[allow(clippy::too_many_arguments)]
+fn sline(sc: &mut Sc, ls: &[style::LineSt], a: Pt, b: Pt, col: &str, w: f64, cx: f64, area: &Rect) {
+    let tu = |q: Pt| ((q.0 - cx) / R, (CY - q.1) / R);
+    match style::line_for(ls, tu(a), tu(b)) {
+        Some(st) => sc.styled(a, b, col, w, st, cx, area),
+        None => sc.ln(a, b, col, w),
+    }
+}
+
 /// How far from `p` along the unit direction `d` the line stays inside `b`, at most `max`.
 fn clip_len(p: Pt, d: Pt, max: f64, b: &Rect) -> f64 {
     let mut t = max;
@@ -900,6 +949,12 @@ fn clip_len(p: Pt, d: Pt, max: f64, b: &Rect) -> f64 {
 pub struct Report { pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
 
 fn render(p: &Params) -> String { build(p).0 }
+
+/// The shading colours (light, so black text with its white halo reads on them at well over 4.5:1); Blue is the one the figure
+/// always had. Print draws a grey hatch whatever is chosen.
+pub const SHADES: [(&str, &str); 6] = [("Blue", "#dbe7fb"), ("Green", "#d4f0dc"), ("Yellow", "#fbf0bf"), ("Orange", "#fde0c5"), ("Red", "#f8d5d2"), ("Purple", "#e7ddf7")];
+
+fn shade_fill(p: &Params) -> &'static str { SHADES.iter().find(|e| e.0 == p.s("shade_colour")).map(|e| e.1).unwrap_or(SHADES[0].1) }
 
 /// The editor's control labels, following the renamed letters (None leaves the control's own label).
 pub fn control_label(key: &str, p: &Params) -> Option<String> {
@@ -956,20 +1011,29 @@ fn draw_bottom(p: &Params) -> f64 {
 /// readout moves down below a drawing that grows downward). Nothing when no tangent runs past its usual 130 px.
 pub fn tangent_grow(p: &Params) -> Grow {
     let lines = edit::tangent_lines(p);
-    if lines.iter().all(|t| t.1 <= 130.0 && t.2 <= 130.0) { return Grow::default(); }
+    // points off the circle (with room for their letters) and the tangents drawn from them
+    let off = edit::off_points(p);
+    let outs = pts::outside_segments(p);
+    if lines.iter().all(|t| t.1 <= 130.0 && t.2 <= 130.0) && off.is_empty() && outs.is_empty() { return Grow::default(); }
     let lay = layout_of(p);
     let cx = lay.w / 2.0;
     let bottom = draw_bottom(p);
     let mut g = Grow::default();
+    let mut ends: Vec<(Pt, f64)> = vec![];
     for (d, back, fwd) in lines {
         let q = on_circle(cx, d);
         let fv = (-d.to_radians().sin(), -d.to_radians().cos());
-        for e in [(q.0 + fv.0 * fwd, q.1 + fv.1 * fwd), (q.0 - fv.0 * back, q.1 - fv.1 * back)] {
-            g.l = g.l.max(10.0 - e.0);
-            g.r = g.r.max(e.0 - (lay.w - 10.0));
-            g.t = g.t.max(14.0 - e.1);
-            g.b = g.b.max(e.1 - bottom);
-        }
+        ends.push(((q.0 + fv.0 * fwd, q.1 + fv.1 * fwd), 0.0));
+        ends.push(((q.0 - fv.0 * back, q.1 - fv.1 * back), 0.0));
+    }
+    let sp = |v: edit::V| (cx + R * v.0, CY - R * v.1);
+    for (_, q) in &off { ends.push((sp(*q), 30.0)); }
+    for (_, _, e) in &outs { ends.push((sp(*e), 0.0)); }
+    for (e, m) in ends {
+        g.l = g.l.max(10.0 - (e.0 - m));
+        g.r = g.r.max(e.0 + m - (lay.w - 10.0));
+        g.t = g.t.max(14.0 - (e.1 - m));
+        g.b = g.b.max(e.1 + m - bottom);
     }
     let side = |x: f64| if x > 0.0 { (x + 4.0).min(400.0) } else { 0.0 };
     Grow { l: side(g.l), r: side(g.r), t: side(g.t), b: side(g.b) }
@@ -1029,7 +1093,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let box_of = |text: &str, size: f64, bold: bool| (tw(text, size, bold) + 2.0, size * 1.15);
 
     // sector under everything (and, in Print, its outline as the region labels keep off)
-    let sector_fill = if print { fills.series(1) } else { "#dbe7fb".to_string() };
+    let sector_fill = if print { fills.series(1) } else { shade_fill(p).to_string() };
     let mut hatch: Vec<Pt> = vec![];
     let (sa0, sa1) = match pt.sector { 1 if !pt.deg => (g.s, g.s + g.d), 2 => (g.s + g.d, g.s + 360.0), _ => (0.0, 0.0) };
     if sa1 > sa0 {
@@ -1061,6 +1125,11 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         2 => { sc.d.arc(cx, CY, R, g.s + g.d, g.s + 360.0, col(3), 5.0); }
         _ => {}
     }
+    for a in style::arcs(p) { if a.ticks > 0 { sc.arc_ticks(cx, &a, INK); } }
+    // congruence arcs asked for on angles: each is drawn with the angle's own arc (the central, the inscribed or a labelled angle),
+    // or on its own at the end
+    let angst = style::angles(p);
+    let mut ang_done = vec![false; angst.len()];
 
     // the perpendicular bisector and the secant's extensions: fine dashed lines, lighter than the figure's own
     if pt.bis && !pt.deg {
@@ -1103,18 +1172,42 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     }
     let opp = on_circle(cx, g.a + 180.0);
     if pt.diam { sc.ln(pa, opp, col(0), 2.4); }
+    // the lines between named points take the style their row gives them (dashed, dotted, ticks, arrows, run on past a point)
+    let lst = style::lines(p);
     let both_radii = pt.central || pt.sector != 0;
-    if pt.radius || both_radii { sc.ln(o, pa, col(0), 2.4); } else if pt.tan { sc.ln(o, pa, col(1), 1.6); }
-    if both_radii && !pt.deg { sc.ln(o, pb, col(0), 2.4); }
-    if (pt.chord || pt.sec) && !pt.deg { sc.ln(pa, pb, col(1), 2.4); }
+    if pt.radius || both_radii { sline(&mut sc, &lst, o, pa, col(0), 2.4, cx, &area); } else if pt.tan { sline(&mut sc, &lst, o, pa, col(1), 1.6, cx, &area); }
+    if both_radii && !pt.deg { sline(&mut sc, &lst, o, pb, col(0), 2.4, cx, &area); }
+    if (pt.chord || pt.sec) && !pt.deg { sline(&mut sc, &lst, pa, pb, col(1), 2.4, cx, &area); }
     // lines between chosen points (a radius in the radius colour, a chord in the chord colour), and tangents at chosen points
-    let at_end = |e: edit::End| match e { edit::End::O => o, edit::End::At(d) => on_circle(cx, d), edit::End::M => mid };
+    let sp_u = |v: edit::V| (cx + R * v.0, CY - R * v.1);
+    let at_end = |e: edit::End| match e { edit::End::O => o, edit::End::At(d) => on_circle(cx, d), edit::End::M => mid, edit::End::Q(x, y) => sp_u((x, y)) };
     let joins = edit::joins(p);
     // a line to M draws M (with its letter) when the bisector does not
     let m_used = !(pt.bis && !pt.deg) && joins.iter().any(|(_, x, y)| *x == edit::End::M || *y == edit::End::M);
     for (_, x, y) in &joins {
         let radius = matches!(x, edit::End::O) || matches!(y, edit::End::O);
-        sc.ln(at_end(*x), at_end(*y), col(if radius { 0 } else { 1 }), 2.4);
+        sline(&mut sc, &lst, at_end(*x), at_end(*y), col(if radius { 0 } else { 1 }), 2.4, cx, &area);
+    }
+    // the inscribed polygon's sides (a side that is chord AB is drawn once, as the chord)
+    let poly = pts::polygon_vertices(p);
+    for i in 0..poly.len() {
+        let (x, y) = (poly[i].1, poly[(i + 1) % poly.len()].1);
+        let ab = (pt.chord || pt.sec) && !pt.deg && ((angdiff(x, g.a) < 1e-6 && angdiff(y, g.b) < 1e-6) || (angdiff(x, g.b) < 1e-6 && angdiff(y, g.a) < 1e-6));
+        if !ab { sline(&mut sc, &lst, on_circle(cx, x), on_circle(cx, y), col(1), 2.4, cx, &area); }
+    }
+    // the tangents from points outside the circle, from the point through the touch point and a little past it, with the
+    // right angle where a radius is drawn to a lettered touch point
+    for t in pts::outside_tangents(p) {
+        for (nm, d) in &t.touch {
+            let (e0, tq) = (sp_u(t.at), on_circle(cx, *d));
+            let (dx, dy) = (tq.0 - e0.0, tq.1 - e0.1);
+            let l = dx.hypot(dy).max(1e-9);
+            let e1 = (tq.0 + dx / l * pts::TOUCH_RUN, tq.1 + dy / l * pts::TOUCH_RUN);
+            sc.ln(e0, e1, col(2), 2.2);
+            sc.solid.push((e0, e1));
+            let radius = !nm.is_empty() && joins.iter().any(|(_, x, y)| matches!((x, y), (edit::End::O, edit::End::At(w)) | (edit::End::At(w), edit::End::O) if angdiff(*w, *d) < 0.5));
+            if rr && radius { let u = unit(*d); sc.right(tq, (-u.0, -u.1), (-dx / l, -dy / l), 10.0, col(2), 2.0, rm); }
+        }
     }
     let mut list_tan_ends: Vec<(f64, [Pt; 2])> = vec![];
     for (_, d) in edit::tangent_points(p) {
@@ -1133,13 +1226,18 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     if pt.bis && !pt.deg {
         let (to_b, to_o) = ((pb.0 - mid.0, pb.1 - mid.1), (o.0 - mid.0, o.1 - mid.1));
         let (lb, lo) = (to_b.0.hypot(to_b.1), to_o.0.hypot(to_o.1));
-        if om_on && lo > 1.0 { sc.ln(o, mid, col(2), 1.6); }
+        if om_on && lo > 1.0 { sline(&mut sc, &lst, o, mid, col(2), 1.6, cx, &area); }
         if rr && lb > 1e-6 && lo > 1e-6 && lo > 14.0 { sc.right(mid, (to_b.0 / lb, to_b.1 / lb), (to_o.0 / lo, to_o.1 / lo), 10.0, col(1), 2.0, rm); }
         sc.dot(mid);
     }
     if pt.central && !pt.deg {
         sc.d.angle_mark(o, cen_s, cen_s + cen_d, 30.0, None, 0, col(3), aw);
         sc.arc_pts(o, 30.0, cen_s, cen_s + cen_d);
+        let up = |d: f64| (d.to_radians().cos(), d.to_radians().sin());
+        if let Some(i) = style::angle_index(&angst, (0.0, 0.0), up(cen_s), up(cen_s + cen_d)) {
+            ang_done[i] = true;
+            sc.more_arcs(o, unit(cen_s), unit(cen_s + cen_d), 30.0, angst[i].arcs.saturating_sub(1), col(3), aw);
+        }
     }
     let semi = (g.d - 180.0).abs() < 0.5;
     if pt.insc {
@@ -1151,6 +1249,11 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         if semi && rr { sc.right(pc, u, wv, 12.0, col(3), aw, rm); }
         {
             if !(semi && rm) { sc.d.arc_dirs(pc, u, wv, 24.0, col(3), aw); }
+            let up = |d: f64| (d.to_radians().cos(), d.to_radians().sin());
+            if let Some(i) = style::angle_index(&angst, up(g.c), up(g.a), up(g.b)) {
+                ang_done[i] = true;
+                if !(semi && rr) { sc.more_arcs(pc, u, wv, 24.0, angst[i].arcs.saturating_sub(1), col(3), aw); }
+            }
             let au = (-u.1).atan2(u.0).to_degrees();
             let mut dd = (-wv.1).atan2(wv.0).to_degrees() - au;
             while dd > 180.0 { dd -= 360.0; }
@@ -1163,8 +1266,14 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     if pt.a { sc.dot(pa); }
     if pt.b { sc.dot(pb); }
     if pt.c { sc.dot(pc); }
-    let ex = edit::extras(p);
+    let mut ex = edit::extras(p);
+    ex.extend(pts::polygon_points(p));
+    ex.extend(pts::touch_points(p));
     for (_, d) in &ex { sc.dot(on_circle(cx, *d)); }
+    // the places off the circle: More points off it, midpoints and crossings (M once, when the figure draws it already)
+    let m_drawn = (pt.bis && !pt.deg) || m_used;
+    let free: Vec<(String, edit::V)> = pts::free_points(p).into_iter().filter(|(nm, q)| !(m_drawn && *nm == n.m && { let e = edit::end_pos(p, edit::End::M); (e.0 - q.0).hypot(e.1 - q.1) < 1e-6 })).collect();
+    for (_, q) in &free { sc.dot(sp_u(*q)); }
     if p.b("show_centre") { sc.dot(o); }
     if m_used && (mid.0 - o.0).hypot(mid.1 - o.1) >= 4.0 { sc.dot(mid); }
 
@@ -1180,6 +1289,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         if pt.b { letter(&mut labs, &n.b, pb, unit(g.b)); }
         if pt.c { letter(&mut labs, &n.c, pc, unit(g.c)); }
         for (nm, d) in &ex { letter(&mut labs, nm, on_circle(cx, *d), unit(*d)); }
+        for (nm, q) in &free { let l = q.0.hypot(q.1); letter(&mut labs, nm, sp_u(*q), if l > 0.05 { (q.0 / l, -q.1 / l) } else { (0.6, 0.8) }); }
         if p.b("show_centre") {
             let t = if p.b("show_coords") { format!("{} ({}, {})", n.o, num(fin(p.f("centre_x")), 2), num(fin(p.f("centre_y")), 2)) } else { n.o.clone() };
             letter(&mut labs, &t, o, (0.6, 0.8));
@@ -1343,7 +1453,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let mut at_corner: Vec<(edit::V, usize)> = vec![];
     for mk in edit::marks(p) {
         let size = sz(13.0);
-        let say = |s: &edit::Say, deg: f64, len: f64| match s { edit::Say::Degrees => angle_text(deg, c.rad), edit::Say::Length => cf.with_u(num(len, c.dec)), edit::Say::Text(t) => t.clone() };
+        // (an arc's length has pi in it and follows the pi setting; a line's does not)
+        let say = |s: &edit::Say, deg: f64, len: f64, arc: bool| match s { edit::Say::Degrees => angle_text(deg, c.rad), edit::Say::Length if arc => cf.with_pi(len, false), edit::Say::Length => cf.with_u(num(len, c.dec)), edit::Say::Text(t) => t.clone() };
         match mk {
             edit::Mark::Arc { start, span, say: s } => {
                 let mut mid = start + span / 2.0;
@@ -1354,7 +1465,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                     let side = if off > span / 2.0 { -1.0 } else { 1.0 };
                     mid = start + (off + side * 11.0).clamp(4.0, span - 4.0);
                 }
-                let t = say(&s, span, m.r * span.to_radians());
+                let t = say(&s, span, m.r * span.to_radians(), true);
                 let (bw, bh) = box_of(&t, size, true);
                 let at = on_circle(cx, mid);
                 // always outside the circle: inside, a number in degrees reads as an angle
@@ -1362,7 +1473,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             }
             edit::Mark::Line { a, b, say: s } => {
                 let (u, w) = (sp(a), sp(b));
-                let t = say(&s, 0.0, m.r * (a.0 - b.0).hypot(a.1 - b.1));
+                let t = say(&s, 0.0, m.r * (a.0 - b.0).hypot(a.1 - b.1), false);
                 let (bw, bh) = box_of(&t, size, true);
                 let mid = ((u.0 + w.0) / 2.0, (u.1 + w.1) / 2.0);
                 let l = (w.0 - u.0).hypot(w.1 - u.1).max(1e-9);
@@ -1383,7 +1494,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                 };
                 let gc = (g.c.to_radians().cos(), g.c.to_radians().sin());
                 let base = if pt.central && !pt.deg && v.0.hypot(v.1) < 1e-6 { 40.0 } else if pt.insc && (v.0 - gc.0).hypot(v.1 - gc.1) < 1e-6 { 34.0 } else { 22.0 };
-                let ar = base + 8.0 * k as f64;
+                let ar0 = base + 8.0 * k as f64;
+                let mut ar = ar0;
                 if (deg - 90.0).abs() < 0.5 {
                     sc.right(q, u, wv, ar * 0.55, col(3), aw, true);
                 } else {
@@ -1393,8 +1505,14 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                     while dd > 180.0 { dd -= 360.0; }
                     while dd < -180.0 { dd += 360.0; }
                     sc.arc_pts(q, ar, au, au + dd);
+                    if let Some(i) = style::angle_index(&angst, v, a, b) && !ang_done[i] {
+                        ang_done[i] = true;
+                        let n = angst[i].arcs.saturating_sub(1);
+                        sc.more_arcs(q, u, wv, ar0, n, col(3), aw);
+                        ar = ar0 + 5.0 * n as f64;
+                    }
                 }
-                let t = say(&s, deg, 0.0);
+                let t = say(&s, deg, 0.0, false);
                 let (bw, bh) = box_of(&t, size, true);
                 let bis = (u.0 + wv.0, u.1 + wv.1);
                 let lbis = bis.0.hypot(bis.1).max(1e-9);
@@ -1410,6 +1528,15 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         }
     }
 
+    // congruence arcs on an angle that has no arc of its own yet
+    for (i, st) in angst.iter().enumerate() {
+        if ang_done[i] || st.arcs == 0 { continue; }
+        let (q, qa, qb) = (sp_u(st.v), sp_u(st.a), sp_u(st.b));
+        let (la, lb) = ((qa.0 - q.0).hypot(qa.1 - q.1).max(1e-9), (qb.0 - q.0).hypot(qb.1 - q.1).max(1e-9));
+        let (u, wv) = (((qa.0 - q.0) / la, (qa.1 - q.1) / la), ((qb.0 - q.0) / lb, (qb.1 - q.1) / lb));
+        if ((u.0 * wv.0 + u.1 * wv.1).clamp(-1.0, 1.0).acos().to_degrees() - 90.0).abs() < 0.5 { continue; }
+        sc.more_arcs(q, u, wv, 17.0, st.arcs, col(3), aw);
+    }
     for (i, l) in labs.iter_mut().enumerate() { l.id = i; }
     labs.retain(|l| !opt.exclude.iter().any(|(id, _, _)| *id == l.id));
     // whether a label that stays on the figure lost its unit
