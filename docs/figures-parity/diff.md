@@ -11,7 +11,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | angles | `angles` | 29 | 2 | 6 | — | 66 |
 | bar-graph | `bar-chart` | 35 | 0 | 7 | — | 100 |
 | box-plot | `box-plot` | 37 | 0 | 6 | reference has a student version; ours has no show_answers | 90 |
-| circle | `circle` | 69 | 2 | 7 | — | 52 |
+| circle | `circle` | 76 | 2 | 7 | — | 52 |
 | composite-shape | `composite-shape` | 9 | 10 | 3 | — | 56 |
 | cone | `cone` | 26 | 4 | 6 | — | 91 |
 | coordinate-grid | `coordinate-grid` | 41 | 2 | 7 | — | 83 |
@@ -22,7 +22,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | length-reading | `ruler-reading` | 17 | 3 | 6 | — | 95 |
 | mapping-diagram | `mapping-diagram` | 14 | 0 | 4 | reference mentions click/drag; ours has no handles; reference has a student version; ours has no show_answers | 100 |
 | number-line | `number-line` | 18 | 0 | 6 | — | 72 |
-| parallel-lines | `parallel-lines` | 29 | 10 | 7 | — | 50 |
+| parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 50 |
 | parallelogram | `parallelogram` | 57 | 9 | 6 | — | 90 |
 | pie-chart | `pie-chart` | 16 | 0 | 5 | — | 100 |
 | prism | `prism` | 35 | 6 | 8 | — | 90 |
@@ -49,7 +49,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | motion-map | `motion-map` | 43 | 0 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 100 |
 | projectile-motion | `projectile-motion` | 31 | 4 | 7 | reference has black-and-white; ours has no style switch | 96 |
 | pulley | `pulley` | 38 | 6 | 7 | reference has black-and-white; ours has no style switch | 90 |
-| ray-diagram | `ray-diagram` | 16 | 1 | 8 | reference has black-and-white; ours has no style switch | 53 |
+| ray-diagram | `ray-diagram` | 52 | 2 | 8 | reference has black-and-white; ours has no style switch | 98 |
 | spring-scale | `spring-scale` | 15 | 4 | 7 | reference has black-and-white; ours has no style switch | 94 |
 | vector-diagram | `vector-diagram` | 35 | 5 | 5 | reference has black-and-white; ours has no style switch | 84 |
 | waves | `waves` | 37 | 7 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 97 |
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-10T02:49:08+00:00 · probe: 2026-11-09T18:49:08
+Generated: 2026-11-10T03:40:13+00:00 · probe: 2026-11-09T19:40:13
 
-**Pooled 89.3** · mean 89.6 over 70 figures · built 71 of 71 reference figures
+**Pooled 90.3** · mean 90.3 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -121,13 +121,6 @@ Comparable with the frozen baseline: **yes**
   - cap-03b [control 3] One or both tangents from a point outside the circle — no evidence
   - cap-04e [control 3] Label any angle the lines make, not only ∠AOB and ∠ACB — no evidence
   - cap-04b [control 3] Label an angle with typed text — no evidence
-- `ray-diagram`: 53 (60/114)
-  - cap-01e [core 5] A plane mirror — no evidence
-  - cap-04c [core 5] A ray through C for a mirror — no evidence
-  - cap-01f [control 3] Draw a lens as the line symbol — no evidence
-  - cap-01g [control 3] Hatch a mirror on its back — no evidence
-  - cap-03 [control 3] Point the object arrow down (an inverted object) — no evidence
-  - cap-04b [control 3] Turn each principal ray on or off independently — no evidence
 - `composite-shape`: 56 (28/50)
   - cap-i02 [editor 4] Click a piece on the figure to type its exact sizes — no evidence
   - cap-i03 [editor 4] Click a piece on the figure to delete it — no evidence
@@ -287,6 +280,8 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
 - `waves`: 97 (97/100)
   - cap-07e [control 3] End caps on the axes — no evidence
+- `ray-diagram`: 98 (112/114)
+  - cap-02d [interaction 2] Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F — weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:
 - `bar-chart`: 100 (87/87)
 - `circuit-diagram`: 100 (61/61)
 - `dna-protein-synthesis`: 100 (102/102)

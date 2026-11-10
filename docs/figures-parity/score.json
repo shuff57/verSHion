@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-10T02:49:08+00:00",
- "probe_checked_at": "2026-11-09T18:49:08",
+ "generated_at": "2026-11-10T03:40:13+00:00",
+ "probe_checked_at": "2026-11-09T19:40:13",
  "comparable": true,
  "drift": [],
- "pooled": 89.3,
- "mean": 89.6,
+ "pooled": 90.3,
+ "mean": 90.3,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -1358,129 +1358,17 @@
    ]
   },
   "ray-diagram": {
-   "score": 52.6,
-   "got": 60.0,
+   "score": 98.2,
+   "got": 112.0,
    "total": 114.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-01e",
-     "class": "core",
-     "weight": 5.0,
-     "text": "A plane mirror",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "A ray through C for a mirror",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw a lens as the line symbol",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Hatch a mirror on its back",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Point the object arrow down (an inverted object)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Turn each principal ray on or off independently",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Show the setup alone, with no rays",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label C for a mirror",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Make a point label a blank line for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Arrow marking the object distance",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Arrow marking the image distance",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Arrow marking the focal length",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Arrows marking the object and image heights",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "A numbered cm scale under the figure",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Print an answer key line (image distance, magnification, nature of the image)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Color for slides",
-     "why": "no evidence"
-    },
     {
      "id": "cap-02d",
      "class": "interaction",
      "weight": 2.0,
      "text": "Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F",
-     "why": "no evidence"
+     "why": "weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:"
     }
    ]
   },

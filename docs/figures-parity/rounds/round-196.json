@@ -1,0 +1,29 @@
+{
+ "round": 196,
+ "figure": "ray-diagram",
+ "capability": "cap-02d",
+ "hypothesis": "Batch 5 ray-diagram: cap-02d; evidence changes:place=At 2F",
+ "started_at": "2026-11-09T19:39:34",
+ "git": "d85e18f",
+ "before": {
+  "figure": 62.3,
+  "pooled": 89.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T19:39:37",
+ "after": {
+  "figure": 62.3,
+  "pooled": 89.5
+ },
+ "probe": {
+  "pass": false,
+  "why": "weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: quick places, image at 2F'",
+ "result": "miss",
+ "evidence": "ray_diagram tests (12 cases worked by hand; every principal ray reaches the image; key against the drawn image; 154 of 160 frozen old figures byte-identical, 6 fixes of wrong output judged by the checker); census unchanged; task run reference 8, ours 10, before not possible",
+ "next": "ray-diagram (remaining)"
+}

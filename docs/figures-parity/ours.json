@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-10T02:49:02+00:00",
-  "src_mtime": 1794278409.8801355,
-  "git": "da9c765",
+  "built_at": "2026-11-10T03:39:11+00:00",
+  "src_mtime": 1794281836.155733,
+  "git": "d85e18f",
   "figures": 191
  },
  "figures": {
@@ -4231,7 +4231,8 @@
       "Converging lens",
       "Diverging lens",
       "Concave mirror",
-      "Convex mirror"
+      "Convex mirror",
+      "Plane mirror"
      ],
      "default": "Converging lens"
     },
@@ -4334,6 +4335,323 @@
      "default": "true"
     },
     {
+     "key": "lens_as",
+     "label": "Lens drawn as",
+     "kind": "choice",
+     "options": [
+      "Lens shape",
+      "Line symbol"
+     ],
+     "default": "Lens shape"
+    },
+    {
+     "key": "hatch",
+     "label": "Hatch the back of the mirror",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "place",
+     "label": "Place it",
+     "kind": "choice",
+     "options": [
+      "Typed distance",
+      "Beyond 2F",
+      "At 2F",
+      "Between F and 2F",
+      "At F",
+      "Inside F"
+     ],
+     "default": "Typed distance"
+    },
+    {
+     "key": "arrow",
+     "label": "Object arrow",
+     "kind": "choice",
+     "options": [
+      "Upright",
+      "Inverted"
+     ],
+     "default": "Upright"
+    },
+    {
+     "key": "show",
+     "label": "Show",
+     "kind": "choice",
+     "options": [
+      "Setup",
+      "Rays",
+      "Rays and image"
+     ],
+     "default": "Rays and image"
+    },
+    {
+     "key": "ray_par",
+     "label": "Parallel, then through F",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "ray_ctr",
+     "label": "Through the centre (a mirror: to the vertex)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "ray_foc",
+     "label": "Through F, then parallel",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "ray_c",
+     "label": "Through C, back on itself (a mirror)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "mirror_c",
+     "label": "Mark C, the centre of curvature, in place of 2F",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lab_f_mode",
+     "label": "Focal point label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_f2_mode",
+     "label": "Other focal point label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_2f_mode",
+     "label": "Twice the focal length label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_2f2_mode",
+     "label": "Other twice label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_c_mode",
+     "label": "Centre of curvature label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_c",
+     "label": "Centre of curvature label",
+     "kind": "text",
+     "options": [],
+     "default": "C"
+    },
+    {
+     "key": "lab_o_mode",
+     "label": "Object label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_i_mode",
+     "label": "Image label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "mark_do",
+     "label": "Object distance",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "do_mode",
+     "label": "Object distance label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_do",
+     "label": "Object distance label",
+     "kind": "text",
+     "options": [],
+     "default": "d_o"
+    },
+    {
+     "key": "mark_di",
+     "label": "Image distance",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "di_mode",
+     "label": "Image distance label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_di",
+     "label": "Image distance label",
+     "kind": "text",
+     "options": [],
+     "default": "d_i"
+    },
+    {
+     "key": "mark_f",
+     "label": "Focal length",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "fm_mode",
+     "label": "Focal length label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_fm",
+     "label": "Focal length label",
+     "kind": "text",
+     "options": [],
+     "default": "f"
+    },
+    {
+     "key": "mark_ho",
+     "label": "Object height",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "ho_mode",
+     "label": "Object height label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_ho",
+     "label": "Object height label",
+     "kind": "text",
+     "options": [],
+     "default": "h_o"
+    },
+    {
+     "key": "mark_hi",
+     "label": "Image height",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "hi_mode",
+     "label": "Image height label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_hi",
+     "label": "Image height label",
+     "kind": "text",
+     "options": [],
+     "default": "h_i"
+    },
+    {
+     "key": "scale",
+     "label": "Numbered cm scale",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "key",
+     "label": "Answer key line",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "color",
+     "label": "Color (for slides)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
      "key": "label_size",
      "label": "Label size",
      "kind": "choice",
@@ -4351,7 +4669,14 @@
       "drag"
      ],
      "edit": null,
-     "tip": "Drag the object: sideways sets its distance, up and down its height"
+     "tip": "Drag F: sideways sets the focal length"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag the object: sideways sets its distance, up and down its height (below the axis turns it upside down)"
     }
    ],
    "handles": true,
@@ -21486,15 +21811,244 @@
       "Small"
      ],
      "default": "Medium"
+    },
+    {
+     "key": "name_q",
+     "label": "Name of the fourth line",
+     "kind": "text",
+     "options": [],
+     "default": "q"
+    },
+    {
+     "key": "name_r",
+     "label": "Name of the fifth line",
+     "kind": "text",
+     "options": [],
+     "default": "r"
+    },
+    {
+     "key": "name_s",
+     "label": "Name of the sixth line",
+     "kind": "text",
+     "options": [],
+     "default": "s"
+    },
+    {
+     "key": "name_v",
+     "label": "Name of the third transversal",
+     "kind": "text",
+     "options": [],
+     "default": "v"
+    },
+    {
+     "key": "name_w",
+     "label": "Name of the fourth transversal",
+     "kind": "text",
+     "options": [],
+     "default": "w"
+    },
+    {
+     "key": "angle_c",
+     "label": "Third transversal angle",
+     "kind": "float",
+     "options": [],
+     "default": "45.0"
+    },
+    {
+     "key": "angle_d",
+     "label": "Fourth transversal angle",
+     "kind": "float",
+     "options": [],
+     "default": "140.0"
+    },
+    {
+     "key": "q_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "q_arrows",
+     "label": "Parallel arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1",
+      "2",
+      "3"
+     ],
+     "default": "1"
+    },
+    {
+     "key": "r_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "r_arrows",
+     "label": "Parallel arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1",
+      "2",
+      "3"
+     ],
+     "default": "1"
+    },
+    {
+     "key": "s_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "s_arrows",
+     "label": "Parallel arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1",
+      "2",
+      "3"
+     ],
+     "default": "1"
+    },
+    {
+     "key": "v_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "v_arrows",
+     "label": "Parallel arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1",
+      "2",
+      "3"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "w_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "w_arrows",
+     "label": "Parallel arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1",
+      "2",
+      "3"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "arcs1",
+     "label": "Angles with one congruence arc",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "arcs2",
+     "label": "Angles with two congruence arcs",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "arcs3",
+     "label": "Angles with three congruence arcs",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "shaded",
+     "label": "Shaded angles",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "points",
+     "label": "Named points",
+     "kind": "long",
+     "options": [],
+     "default": ""
     }
    ],
    "handle_list": [
     {
      "actions": [
-      "drag"
+      "click"
+     ],
+     "edit": "name_m",
+     "tip": "Click a line to change its style, double-click it to rename it; click near an angle's corner for congruence arcs or shading; click where lines cross or at a line's end to put a named point there"
+    },
+    {
+     "actions": [
+      "click"
      ],
      "edit": null,
-     "tip": "Drag the transversal to change the angle"
+     "tip": "Click to delete transversal t"
+    },
+    {
+     "actions": [],
+     "edit": "name_m",
+     "tip": "Double-click to rename line m"
+    },
+    {
+     "actions": [],
+     "edit": "name_n",
+     "tip": "Double-click to rename line n"
+    },
+    {
+     "actions": [],
+     "edit": "name_t",
+     "tip": "Double-click to rename transversal t"
+    },
+    {
+     "actions": [
+      "drag",
+      "click"
+     ],
+     "edit": null,
+     "tip": "Drag the transversal to change the angle; click its end for a named point"
     },
     {
      "actions": [
@@ -23681,6 +24235,21 @@
      "default": ""
     },
     {
+     "key": "polygon",
+     "label": "Inscribed polygon",
+     "kind": "choice",
+     "options": [
+      "None",
+      "3 sides",
+      "4 sides",
+      "5 sides",
+      "6 sides",
+      "7 sides",
+      "8 sides"
+     ],
+     "default": "None"
+    },
+    {
      "key": "define",
      "label": "Define the chord by",
      "kind": "choice",
@@ -23784,6 +24353,13 @@
      "default": "false"
     },
     {
+     "key": "join_from",
+     "label": "Point waiting to be joined",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "joins",
      "label": "Lines between points",
      "kind": "list",
@@ -23793,6 +24369,20 @@
     {
      "key": "tangents",
      "label": "Tangents at points",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "midpoints",
+     "label": "Midpoints",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "crossings",
+     "label": "Points where lines cross",
      "kind": "list",
      "options": [],
      "default": ""
@@ -23825,6 +24415,20 @@
      "kind": "list",
      "options": [],
      "default": ""
+    },
+    {
+     "key": "shade_colour",
+     "label": "Shading colour",
+     "kind": "choice",
+     "options": [
+      "Blue",
+      "Green",
+      "Yellow",
+      "Orange",
+      "Red",
+      "Purple"
+     ],
+     "default": "Blue"
     },
     {
      "key": "right_marks",
@@ -23898,6 +24502,13 @@
      "default": ""
     },
     {
+     "key": "styles",
+     "label": "Marks and line styles",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "angle_unit",
      "label": "Angles in",
      "kind": "choice",
@@ -23913,6 +24524,17 @@
      "kind": "int",
      "options": [],
      "default": "2"
+    },
+    {
+     "key": "pi_form",
+     "label": "Circumference, areas and arc lengths",
+     "kind": "choice",
+     "options": [
+      "Decimals",
+      "In terms of π",
+      "Both"
+     ],
+     "default": "Decimals"
     },
     {
      "key": "hints",
@@ -24172,15 +24794,15 @@
       "drag",
       "click"
      ],
-     "edit": null,
-     "tip": "Drag point A round the circle; click it for the tangent there"
+     "edit": "name_a",
+     "tip": "Drag point A round the circle; click it for the tangent there, or click it and then another point to join them; double-click it to rename it"
     },
     {
      "actions": [
       "click"
      ],
-     "edit": null,
-     "tip": "Click the circle to put a point there, a line, angle or arc to label it, or an enclosed area to shade it"
+     "edit": "styles",
+     "tip": "Click the circle to put a point there, a line, angle or arc to label it, or an enclosed area to shade it; click the middle of a chord to name its midpoint or join it to the centre, or where lines cross or meet the circle to name a point there; double-click a point or the centre to rename it, or a line, angle or arc to mark or style it; click a point outside the circle for the tangents from it; drag any point, pulling it off the circle or back on"
     }
    ],
    "handles": true,

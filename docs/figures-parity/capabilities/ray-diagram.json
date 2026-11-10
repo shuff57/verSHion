@@ -35,22 +35,22 @@
    "id": "cap-01e",
    "text": "A plane mirror",
    "class": "core",
-   "evidence": "",
-   "note": "Not among our types."
+   "evidence": "changes:kind=Plane mirror",
+   "note": "Built in batch 5, round 193 (2026-11-10). Not among our types."
   },
   {
    "id": "cap-01f",
    "text": "Draw a lens as the line symbol",
    "class": "control",
-   "evidence": "",
-   "note": "We draw the lens shape only."
+   "evidence": "changes:lens_as=Line symbol",
+   "note": "Built in batch 5, round 194 (2026-11-10). We draw the lens shape only."
   },
   {
    "id": "cap-01g",
    "text": "Hatch a mirror on its back",
    "class": "control",
-   "evidence": "",
-   "note": "Our mirrors are a plain arc, no hatching."
+   "evidence": "changes:{\"kind\":\"Concave mirror\",\"hatch\":true}",
+   "note": "Built in batch 5, round 195 (2026-11-10). Our mirrors are a plain arc, no hatching."
   },
   {
    "id": "cap-02a",
@@ -77,15 +77,15 @@
    "id": "cap-02d",
    "text": "Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F",
    "class": "interaction",
-   "evidence": "",
-   "note": "No quick-place buttons or handle snaps; distance is typed or dragged."
+   "evidence": "changes:place=At 2F",
+   "note": "Built in batch 5, round 196 (2026-11-10). No quick-place buttons or handle snaps; distance is typed or dragged."
   },
   {
    "id": "cap-03",
    "text": "Point the object arrow down (an inverted object)",
    "class": "control",
-   "evidence": "",
-   "note": "height has a 0.5 cm minimum; no inverted object."
+   "evidence": "changes:arrow=Inverted",
+   "note": "Built in batch 5, round 197 (2026-11-10). height has a 0.5 cm minimum; no inverted object."
   },
   {
    "id": "cap-04a",
@@ -98,22 +98,22 @@
    "id": "cap-04b",
    "text": "Turn each principal ray on or off independently",
    "class": "control",
-   "evidence": "",
-   "note": "Only the first N rays in a fixed order; e.g. the through-F ray cannot be shown alone."
+   "evidence": "changes:ray_foc=false",
+   "note": "Built in batch 5, round 198 (2026-11-10). Only the first N rays in a fixed order; e.g. the through-F ray cannot be shown alone."
   },
   {
    "id": "cap-04c",
    "text": "A ray through C for a mirror",
    "class": "core",
-   "evidence": "",
-   "note": "Our mirror rays are parallel, to the vertex, and through F (looked at the concave-mirror render); no ray through C."
+   "evidence": "changes:{\"kind\":\"Concave mirror\",\"ray_c\":true}",
+   "note": "Built in batch 5, round 199 (2026-11-10). Our mirror rays are parallel, to the vertex, and through F (looked at the concave-mirror render); no ray through C."
   },
   {
    "id": "cap-05a",
    "text": "Show the setup alone, with no rays",
    "class": "version",
-   "evidence": "",
-   "note": "rays is clamped to at least 1."
+   "evidence": "changes:show=Setup",
+   "note": "Built in batch 5, round 200 (2026-11-10). rays is clamped to at least 1."
   },
   {
    "id": "cap-05b",
@@ -140,15 +140,15 @@
    "id": "cap-06b",
    "text": "Label C for a mirror",
    "class": "control",
-   "evidence": "",
-   "note": "Our mirror labels 2F, not C."
+   "evidence": "changes:{\"kind\":\"Concave mirror\",\"mirror_c\":true}",
+   "note": "Built in batch 5, round 201 (2026-11-10). Our mirror labels 2F, not C."
   },
   {
    "id": "cap-06c",
    "text": "Make a point label a blank line for students",
    "class": "version",
-   "evidence": "",
-   "note": "Labels are text only; no blank-line mode."
+   "evidence": "changes:lab_f_mode=Blank line",
+   "note": "Built in batch 5, round 202 (2026-11-10). Labels are text only; no blank-line mode."
   },
   {
    "id": "cap-06d",
@@ -161,36 +161,36 @@
    "id": "cap-07a",
    "text": "Arrow marking the object distance",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:mark_do=true",
+   "note": "Built in batch 5, round 203 (2026-11-10)."
   },
   {
    "id": "cap-07b",
    "text": "Arrow marking the image distance",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:mark_di=true",
+   "note": "Built in batch 5, round 204 (2026-11-10)."
   },
   {
    "id": "cap-07c",
    "text": "Arrow marking the focal length",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:mark_f=true",
+   "note": "Built in batch 5, round 205 (2026-11-10)."
   },
   {
    "id": "cap-07d",
    "text": "Arrows marking the object and image heights",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"mark_ho\":true,\"mark_hi\":true}",
+   "note": "Built in batch 5, round 206 (2026-11-10)."
   },
   {
    "id": "cap-07e",
    "text": "A numbered cm scale under the figure",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:scale=true",
+   "note": "Built in batch 5, round 207 (2026-11-10)."
   },
   {
    "id": "cap-08a",
@@ -203,8 +203,8 @@
    "id": "cap-08b",
    "text": "Print an answer key line (image distance, magnification, nature of the image)",
    "class": "version",
-   "evidence": "",
-   "note": "Our answer switch hides or shows the image; there is no answer text line."
+   "evidence": "changes:key=true",
+   "note": "Built in batch 5, round 208 (2026-11-10). Our answer switch hides or shows the image; there is no answer text line."
   },
   {
    "id": "cap-08c",
@@ -217,8 +217,8 @@
    "id": "cap-08d",
    "text": "Color for slides",
    "class": "control",
-   "evidence": "",
-   "note": "No color parameter."
+   "evidence": "changes:color=true",
+   "note": "Built in batch 5, round 209 (2026-11-10). No color parameter."
   }
  ]
 }

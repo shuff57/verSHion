@@ -1,0 +1,35 @@
+{
+ "round": 200,
+ "figure": "ray-diagram",
+ "capability": "cap-05a",
+ "hypothesis": "Batch 5 ray-diagram: cap-05a; evidence changes:show=Setup",
+ "started_at": "2026-11-09T19:39:45",
+ "git": "d85e18f",
+ "before": {
+  "figure": 71.9,
+  "pooled": 89.7
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T19:39:48",
+ "after": {
+  "figure": 74.6,
+  "pooled": 89.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:show=Setup",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/5c7c3f05e943ce63.png"
+   }
+  ]
+ },
+ "checker": "pass: setup alone",
+ "result": "hit",
+ "evidence": "ray_diagram tests (12 cases worked by hand; every principal ray reaches the image; key against the drawn image; 154 of 160 frozen old figures byte-identical, 6 fixes of wrong output judged by the checker); census unchanged; task run reference 8, ours 10, before not possible",
+ "next": "ray-diagram (remaining)"
+}

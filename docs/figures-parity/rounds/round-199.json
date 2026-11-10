@@ -1,0 +1,35 @@
+{
+ "round": 199,
+ "figure": "ray-diagram",
+ "capability": "cap-04c",
+ "hypothesis": "Batch 5 ray-diagram: cap-04c; evidence changes:{\"kind\":\"Concave mirror\",\"ray_c\":true}",
+ "started_at": "2026-11-09T19:39:43",
+ "git": "d85e18f",
+ "before": {
+  "figure": 67.5,
+  "pooled": 89.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T19:39:45",
+ "after": {
+  "figure": 71.9,
+  "pooled": 89.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"kind\":\"Concave mirror\",\"ray_c\":true}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/a53625b8cd27dabc.png"
+   }
+  ]
+ },
+ "checker": "pass: the ray through C",
+ "result": "hit",
+ "evidence": "ray_diagram tests (12 cases worked by hand; every principal ray reaches the image; key against the drawn image; 154 of 160 frozen old figures byte-identical, 6 fixes of wrong output judged by the checker); census unchanged; task run reference 8, ours 10, before not possible",
+ "next": "ray-diagram (remaining)"
+}

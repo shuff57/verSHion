@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-09T18:49:08",
- "ours_built_at": "2026-11-10T02:49:02+00:00",
- "git": "da9c765",
+ "checked_at": "2026-11-09T19:40:13",
+ "ours_built_at": "2026-11-10T03:39:11+00:00",
+ "git": "d85e18f",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -16003,7 +16003,7 @@
       {
        "token": "changes:f=15.0",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/9ad7c8b303f71595.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/b06b7ce56125a37e.png"
       }
      ]
     },
@@ -16015,7 +16015,7 @@
       {
        "token": "changes:kind=Diverging lens",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/6ae938921f1d5d69.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/175879e389502e96.png"
       }
      ]
     },
@@ -16027,7 +16027,7 @@
       {
        "token": "changes:kind=Concave mirror",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/4a17adba6d20f39f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/3104510381197186.png"
       }
      ]
     },
@@ -16039,27 +16039,45 @@
       {
        "token": "changes:kind=Convex mirror",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/68a2ff04f562eb16.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/bfc3f4d336556c8d.png"
       }
      ]
     },
     "cap-01e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:kind=Plane mirror",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/f6bcaefffa901292.png"
+      }
+     ]
     },
     "cap-01f": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:lens_as=Line symbol",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/84dc1109134c3be5.png"
+      }
+     ]
     },
     "cap-01g": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"kind\":\"Concave mirror\",\"hatch\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/7dc7d3429426f330.png"
+      }
+     ]
     },
     "cap-02a": {
      "pass": true,
@@ -16069,7 +16087,7 @@
       {
        "token": "changes:f=15.0",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/9ad7c8b303f71595.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/b06b7ce56125a37e.png"
       }
      ]
     },
@@ -16081,7 +16099,7 @@
       {
        "token": "changes:dist=15.0",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/be04394a1bee8eb9.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/bee7732433893216.png"
       }
      ]
     },
@@ -16093,21 +16111,27 @@
       {
        "token": "changes:height=6.0",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/d246f2abc662c6a5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/9f9b93b3d26f0d49.png"
       }
      ]
     },
     "cap-02d": {
      "pass": false,
-     "why": "no evidence",
+     "why": "weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:",
      "class": "interaction",
      "renders": []
     },
     "cap-03": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:arrow=Inverted",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/0f7563ec34ebdaa3.png"
+      }
+     ]
     },
     "cap-04a": {
      "pass": true,
@@ -16117,27 +16141,45 @@
       {
        "token": "changes:rays=1",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/927b4bc3e6922eea.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/5853d3fac042077f.png"
       }
      ]
     },
     "cap-04b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:ray_foc=false",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/bef59d62fe83b22a.png"
+      }
+     ]
     },
     "cap-04c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"kind\":\"Concave mirror\",\"ray_c\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/a53625b8cd27dabc.png"
+      }
+     ]
     },
     "cap-05a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:show=Setup",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/5c7c3f05e943ce63.png"
+      }
+     ]
     },
     "cap-05b": {
      "pass": true,
@@ -16147,12 +16189,12 @@
       {
        "token": "changes:image=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/e32bdd3b34942f3e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/32e6be5d52128b2b.png"
       },
       {
        "token": "changes:show_answers=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/3e3b1fd8861d1a46.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/91e902af6ccfb10d.png"
       }
      ]
     },
@@ -16164,7 +16206,7 @@
       {
        "token": "changes:dist=15.0",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/be04394a1bee8eb9.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/bee7732433893216.png"
       }
      ]
     },
@@ -16176,26 +16218,38 @@
       {
        "token": "changes:lab_f=f",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/0b5f345a8691177b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/7f95671c6bd3f11e.png"
       },
       {
        "token": "changes:lab_o=A",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/83be9a1f1f6cd0a1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/c2fd92806f3e833f.png"
       }
      ]
     },
     "cap-06b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"kind\":\"Concave mirror\",\"mirror_c\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/83ab3d0117ecf61a.png"
+      }
+     ]
     },
     "cap-06c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:lab_f_mode=Blank line",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/f065bfcdb1810218.png"
+      }
+     ]
     },
     "cap-06d": {
      "pass": true,
@@ -16205,44 +16259,74 @@
       {
        "token": "changes:lab_f=",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/273ca582e4213ed2.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/5dfd3fd17b302390.png"
       },
       {
        "token": "changes:show_labels=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/87e92414b738a1ab.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/86203ebdc22f5a28.png"
       }
      ]
     },
     "cap-07a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:mark_do=true",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/5ca25ec599af2dbf.png"
+      }
+     ]
     },
     "cap-07b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:mark_di=true",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/006e50ae079005e3.png"
+      }
+     ]
     },
     "cap-07c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:mark_f=true",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/14868da5f89083f0.png"
+      }
+     ]
     },
     "cap-07d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"mark_ho\":true,\"mark_hi\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/78f6d7db0944d365.png"
+      }
+     ]
     },
     "cap-07e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:scale=true",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/f68409726d1733cc.png"
+      }
+     ]
     },
     "cap-08a": {
      "pass": true,
@@ -16252,15 +16336,21 @@
       {
        "token": "changes:title=Converging lens",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/66f1bb08c654f734.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/0df2cbc1f4859e9b.png"
       }
      ]
     },
     "cap-08b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:key=true",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/767b0800e4b157b2.png"
+      }
+     ]
     },
     "cap-08c": {
      "pass": true,
@@ -16270,15 +16360,21 @@
       {
        "token": "changes:label_size=Large",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/cc24df740339598e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/392f74c2c8b09fe7.png"
       }
      ]
     },
     "cap-08d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:color=true",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/65f7593bde106100.png"
+      }
+     ]
     }
    }
   },
