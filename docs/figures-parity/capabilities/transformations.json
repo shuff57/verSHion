@@ -28,15 +28,15 @@
    "id": "cap-01d",
    "text": "A label for each preimage vertex",
    "class": "control",
-   "evidence": "",
-   "note": "Vertices are lettered A, B, C automatically; no label parameter."
+   "evidence": "changes:{\"names\":\"P, Q, R\"}",
+   "note": "Built in batch 6, round 252 (2026-11-10). Vertices are lettered A, B, C automatically; no label parameter."
   },
   {
    "id": "cap-02a",
    "text": "Add transformations one after another, each acting on the last image",
    "class": "editor",
-   "evidence": "",
-   "note": "One transformation only (op)."
+   "evidence": "changes:{\"then\":\"reflect in the y-axis\"}",
+   "note": "Built in batch 6, round 253 (2026-11-10). One transformation only (op)."
   },
   {
    "id": "cap-02b",
@@ -112,29 +112,29 @@
    "id": "cap-03b",
    "text": "Images told apart by dashed and dotted lines",
    "class": "control",
-   "evidence": "",
-   "note": "Only one image exists; the preimage is dashed and the image solid in both styles, so there is nothing more to tell apart."
+   "evidence": "changes:{\"then\":\"reflect in the y-axis\\nrotate 180\"}",
+   "note": "Built in batch 6, round 254 (2026-11-10). Only one image exists; the preimage is dashed and the image solid in both styles, so there is nothing more to tell apart."
   },
   {
    "id": "cap-03c",
    "text": "Give each figure its own colour",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:pre_colour=#c0392b + changes:image_colour=#1e7b34",
+   "note": "Built in batch 6, round 255 (2026-11-10). No parameter."
   },
   {
    "id": "cap-03d",
    "text": "Give each figure a solid, dashed or dotted line",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:pre_line=Dotted + changes:image_line=Dashed",
+   "note": "Built in batch 6, round 256 (2026-11-10). No parameter."
   },
   {
    "id": "cap-03e",
    "text": "Give each figure a thin, medium or thick line",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:pre_weight=Thick + changes:image_weight=Thin",
+   "note": "Built in batch 6, round 257 (2026-11-10). No parameter."
   },
   {
    "id": "cap-04a",
@@ -147,8 +147,8 @@
    "id": "cap-04b",
    "text": "Question version: both figures shown, the transformation to name",
    "class": "version",
-   "evidence": "",
-   "note": "No version hides the rule while showing the image."
+   "evidence": "changes:{\"show_answers\":false,\"question\":true}",
+   "note": "Built in batch 6, round 258 (2026-11-10). No version hides the rule while showing the image."
   },
   {
    "id": "cap-04c",
@@ -168,22 +168,22 @@
    "id": "cap-04e",
    "text": "Show or hide in-between images",
    "class": "control",
-   "evidence": "",
-   "note": "There is only one transformation, so there are none."
+   "evidence": "changes:{\"then\":\"reflect in the y-axis\",\"show_between\":false}",
+   "note": "Built in batch 6, round 259 (2026-11-10). There is only one transformation, so there are none."
   },
   {
    "id": "cap-04f",
    "text": "Show or hide lines of reflection and centers",
    "class": "control",
-   "evidence": "",
-   "note": "The mirror line is always drawn for a reflection; no switch, and no centers."
+   "evidence": "changes:{\"op\":\"Reflect\",\"axis\":\"the line x = a\",\"show_guides\":false}",
+   "note": "Built in batch 6, round 260 (2026-11-10). The mirror line is always drawn for a reflection; no switch, and no centers."
   },
   {
    "id": "cap-04g",
    "text": "Show or hide translation arrows",
    "class": "control",
-   "evidence": "",
-   "note": "No translation arrow is drawn."
+   "evidence": "changes:show_arrows=true",
+   "note": "Built in batch 6, round 261 (2026-11-10). No translation arrow is drawn."
   },
   {
    "id": "cap-04h",
@@ -203,29 +203,29 @@
    "id": "cap-05b",
    "text": "Axis numbering (count by, which lines numbered)",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:x_step=2 + changes:x_num=Every line",
+   "note": "Built in batch 6, round 262 (2026-11-10). No parameter."
   },
   {
    "id": "cap-05c",
    "text": "Chart and axis titles",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:{\"title_mode\":\"Text\",\"title\":\"Transformations\"} + changes:{\"xtitle_mode\":\"Text\",\"xtitle\":\"x\"}",
+   "note": "Built in batch 6, round 263 (2026-11-10). No parameter."
   },
   {
    "id": "cap-05d",
    "text": "Axis labels and end caps",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:x_label=x + changes:ends=Positive ends",
+   "note": "Built in batch 6, round 264 (2026-11-10). No parameter."
   },
   {
    "id": "cap-05e",
    "text": "Gridline weight and minor gridlines",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:gridlines=Bold + changes:minor=2 per block",
+   "note": "Built in batch 6, round 265 (2026-11-10). No parameter."
   },
   {
    "id": "cap-05f",

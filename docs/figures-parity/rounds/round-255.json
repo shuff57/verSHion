@@ -1,0 +1,40 @@
+{
+ "round": 255,
+ "figure": "transformations",
+ "capability": "cap-03c",
+ "hypothesis": "Batch 6 transformations: cap-03c; evidence changes:pre_colour=#c0392b + changes:image_colour=#1e7b34",
+ "started_at": "2026-11-10T08:27:08",
+ "git": "2759993",
+ "before": {
+  "figure": 68.9,
+  "pooled": 92.7
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:27:09",
+ "after": {
+  "figure": 71.3,
+  "pooled": 92.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:pre_colour=#c0392b",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/b45e7601b11e5344.png"
+   },
+   {
+    "token": "changes:image_colour=#1e7b34",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/5a525f6c18cf0a7e.png"
+   }
+  ]
+ },
+ "checker": "pass: each figure its own colour",
+ "result": "hit",
+ "evidence": "transform tests (geometry measured by hand: reflections, rotations, translations, dilations, four-step chains; module frozen at e0d5cd4 with 300+ old figures byte-identical; batch-2 migrate passes); census unchanged; task run reference 5, ours 8, before not possible",
+ "next": "transformations cap-04h (coordinate labels overlap, back with the builder), cap-02j (handles only after a setting change)"
+}

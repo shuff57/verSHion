@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-10T06:39:34+00:00",
-  "src_mtime": 1794292326.9246628,
-  "git": "7387e55",
+  "built_at": "2026-11-10T16:27:03+00:00",
+  "src_mtime": 1794327920.4689827,
+  "git": "2759993",
   "figures": 191
  },
  "figures": {
@@ -21525,15 +21525,226 @@
      "kind": "int",
      "options": [],
      "default": "2"
+    },
+    {
+     "key": "ray7",
+     "label": "Ray 7 direction",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ray8",
+     "label": "Ray 8 direction",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ray9",
+     "label": "Ray 9 direction",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ray10",
+     "label": "Ray 10 direction",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ray11",
+     "label": "Ray 11 direction",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ray12",
+     "label": "Ray 12 direction",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ray7_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "ray7_line",
+     "label": "Drawn as",
+     "kind": "choice",
+     "options": [
+      "Ray",
+      "Line"
+     ],
+     "default": "Ray"
+    },
+    {
+     "key": "ray8_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "ray8_line",
+     "label": "Drawn as",
+     "kind": "choice",
+     "options": [
+      "Ray",
+      "Line"
+     ],
+     "default": "Ray"
+    },
+    {
+     "key": "ray9_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "ray9_line",
+     "label": "Drawn as",
+     "kind": "choice",
+     "options": [
+      "Ray",
+      "Line"
+     ],
+     "default": "Ray"
+    },
+    {
+     "key": "ray10_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "ray10_line",
+     "label": "Drawn as",
+     "kind": "choice",
+     "options": [
+      "Ray",
+      "Line"
+     ],
+     "default": "Ray"
+    },
+    {
+     "key": "ray11_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "ray11_line",
+     "label": "Drawn as",
+     "kind": "choice",
+     "options": [
+      "Ray",
+      "Line"
+     ],
+     "default": "Ray"
+    },
+    {
+     "key": "ray12_style",
+     "label": "Line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "ray12_line",
+     "label": "Drawn as",
+     "kind": "choice",
+     "options": [
+      "Ray",
+      "Line"
+     ],
+     "default": "Ray"
+    },
+    {
+     "key": "arcs1",
+     "label": "Angles with one congruence arc",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "arcs2",
+     "label": "Angles with two congruence arcs",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "arcs3",
+     "label": "Angles with three congruence arcs",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "shaded",
+     "label": "Shaded angles",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "points",
+     "label": "Named points",
+     "kind": "long",
+     "options": [],
+     "default": ""
     }
    ],
    "handle_list": [
     {
      "actions": [
-      "drag"
+      "click"
+     ],
+     "edit": "points",
+     "tip": "Click a ray near the vertex to run it on through the vertex as a line (again to cut it back to a ray), along its middle to change its style, or near its end to delete it (once there are two or more rays). Click near an angle's corner for congruence arcs or shading. Click the vertex or a ray's end to put a named point there. Double-click a point to rename it, an angle to type its label, a ray to type its direction."
+    },
+    {
+     "actions": [
+      "drag",
+      "click"
      ],
      "edit": null,
-     "tip": "Drag the ray to change its direction"
+     "tip": "Drag the ray to change its direction; click its end for a named point"
     },
     {
      "actions": [
@@ -25474,6 +25685,289 @@
       "Small"
      ],
      "default": "Medium"
+    },
+    {
+     "key": "then",
+     "label": "Then, one per line",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "names",
+     "label": "Vertex letters",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "question",
+     "label": "Question version: draw the image, leave the transformation to name",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_between",
+     "label": "Show the in-between images",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_guides",
+     "label": "Show mirror lines and centres",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_arrows",
+     "label": "Show translation arrows",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "pt_labels",
+     "label": "Point labels",
+     "kind": "choice",
+     "options": [
+      "Letters",
+      "Letters and coordinates",
+      "None"
+     ],
+     "default": "Letters"
+    },
+    {
+     "key": "coord_list",
+     "label": "List the image coordinates under the grid",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "pre_colour",
+     "label": "Pre-image colour",
+     "kind": "color",
+     "options": [
+      "#8a8f99",
+      "#1f5fbf",
+      "#c0392b",
+      "#1e7b34",
+      "#7d3c98",
+      "#a0522d",
+      "#111111"
+     ],
+     "default": "#8a8f99"
+    },
+    {
+     "key": "pre_line",
+     "label": "Pre-image line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "pre_weight",
+     "label": "Pre-image thickness",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Thin",
+      "Medium",
+      "Thick"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "image_colour",
+     "label": "Image colour (A′)",
+     "kind": "color",
+     "options": [
+      "#8a8f99",
+      "#1f5fbf",
+      "#c0392b",
+      "#1e7b34",
+      "#7d3c98",
+      "#a0522d",
+      "#111111"
+     ],
+     "default": "#1f5fbf"
+    },
+    {
+     "key": "image_line",
+     "label": "Image line (A′)",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "image_weight",
+     "label": "Image thickness (A′)",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Thin",
+      "Medium",
+      "Thick"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "title_mode",
+     "label": "Chart title",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Text",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "title",
+     "label": "Chart title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "xtitle_mode",
+     "label": "x-axis title",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Text",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "xtitle",
+     "label": "x-axis title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ytitle_mode",
+     "label": "y-axis title",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Text",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "ytitle",
+     "label": "y-axis title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "x_step",
+     "label": "x-axis count by",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "y_step",
+     "label": "y-axis count by",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "x_num",
+     "label": "x-axis numbers",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "y_num",
+     "label": "y-axis numbers",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "x_label",
+     "label": "x-axis letter",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "y_label",
+     "label": "y-axis letter",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ends",
+     "label": "Axis ends",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Both ends",
+      "Positive ends"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "gridlines",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Standard",
+      "Light",
+      "Bold",
+      "None"
+     ],
+     "default": "Standard"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines",
+     "kind": "choice",
+     "options": [
+      "None",
+      "2 per block",
+      "4 per block",
+      "5 per block"
+     ],
+     "default": "None"
     }
    ],
    "handle_list": [

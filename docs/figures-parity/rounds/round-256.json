@@ -1,0 +1,40 @@
+{
+ "round": 256,
+ "figure": "transformations",
+ "capability": "cap-03d",
+ "hypothesis": "Batch 6 transformations: cap-03d; evidence changes:pre_line=Dotted + changes:image_line=Dashed",
+ "started_at": "2026-11-10T08:27:09",
+ "git": "2759993",
+ "before": {
+  "figure": 71.3,
+  "pooled": 92.7
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:27:11",
+ "after": {
+  "figure": 73.8,
+  "pooled": 92.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:pre_line=Dotted",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/90dbd1e531b41425.png"
+   },
+   {
+    "token": "changes:image_line=Dashed",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/031619578029c984.png"
+   }
+  ]
+ },
+ "checker": "pass: each figure its own line style",
+ "result": "hit",
+ "evidence": "transform tests (geometry measured by hand: reflections, rotations, translations, dilations, four-step chains; module frozen at e0d5cd4 with 300+ old figures byte-identical; batch-2 migrate passes); census unchanged; task run reference 5, ours 8, before not possible",
+ "next": "transformations cap-04h (coordinate labels overlap, back with the builder), cap-02j (handles only after a setting change)"
+}

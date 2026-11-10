@@ -1,18 +1,11 @@
 # Figures parity score
 
-Generated: 2026-11-10T06:39:35+00:00 · probe: 2026-11-09T22:39:35
+Generated: 2026-11-10T16:27:31+00:00 · probe: 2026-11-10T08:27:31
 
-**Pooled 92.5** · mean 92.3 over 70 figures · built 71 of 71 reference figures
+**Pooled 93.3** · mean 92.8 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `transformations`: 61 (74/122)
-  - cap-02a [editor 4] Add transformations one after another, each acting on the last image — no evidence
-  - cap-01d [control 3] A label for each preimage vertex — no evidence
-  - cap-03b [control 3] Images told apart by dashed and dotted lines — no evidence
-  - cap-03c [control 3] Give each figure its own colour — no evidence
-  - cap-03d [control 3] Give each figure a solid, dashed or dotted line — no evidence
-  - cap-03e [control 3] Give each figure a thin, medium or thick line — no evidence
 - `dot-and-cross`: 64 (36/56)
   - cap-01d [core 5] Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki — no evidence
   - cap-03a [control 3] Draw an ionic compound with every ion drawn separately — no evidence
@@ -150,6 +143,9 @@ Comparable with the frozen baseline: **yes**
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `projectile-motion`: 96 (71/74)
   - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
+- `transformations`: 96 (117/122)
+  - cap-04h [control 3] Show or hide point labels and coordinates — no evidence
+  - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 96 (157/163)
   - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
   - cap-01f [interaction 2] Drag a point off the circle and back on — no evidence

@@ -1,0 +1,35 @@
+{
+ "round": 259,
+ "figure": "transformations",
+ "capability": "cap-04e",
+ "hypothesis": "Batch 6 transformations: cap-04e; evidence changes:{\"then\":\"reflect in the y-axis\",\"show_between\":false}",
+ "started_at": "2026-11-10T08:27:15",
+ "git": "2759993",
+ "before": {
+  "figure": 78.7,
+  "pooled": 92.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:27:17",
+ "after": {
+  "figure": 81.1,
+  "pooled": 93.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"then\":\"reflect in the y-axis\",\"show_between\":false}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/f851db9e69f6aa74.png"
+   }
+  ]
+ },
+ "checker": "pass: in-between images hidden",
+ "result": "hit",
+ "evidence": "transform tests (geometry measured by hand: reflections, rotations, translations, dilations, four-step chains; module frozen at e0d5cd4 with 300+ old figures byte-identical; batch-2 migrate passes); census unchanged; task run reference 5, ours 8, before not possible",
+ "next": "transformations cap-04h (coordinate labels overlap, back with the builder), cap-02j (handles only after a setting change)"
+}

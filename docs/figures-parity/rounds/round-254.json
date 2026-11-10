@@ -1,0 +1,35 @@
+{
+ "round": 254,
+ "figure": "transformations",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 6 transformations: cap-03b; evidence changes:{\"then\":\"reflect in the y-axis\\nrotate 180\"}",
+ "started_at": "2026-11-10T08:27:07",
+ "git": "2759993",
+ "before": {
+  "figure": 66.4,
+  "pooled": 92.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:27:08",
+ "after": {
+  "figure": 68.9,
+  "pooled": 92.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"then\":\"reflect in the y-axis\\nrotate 180\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/72cfab6406326ebe.png"
+   }
+  ]
+ },
+ "checker": "pass: images told apart by dotted, dash-dot and solid lines",
+ "result": "hit",
+ "evidence": "transform tests (geometry measured by hand: reflections, rotations, translations, dilations, four-step chains; module frozen at e0d5cd4 with 300+ old figures byte-identical; batch-2 migrate passes); census unchanged; task run reference 5, ours 8, before not possible",
+ "next": "transformations cap-04h (coordinate labels overlap, back with the builder), cap-02j (handles only after a setting change)"
+}

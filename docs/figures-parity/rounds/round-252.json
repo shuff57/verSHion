@@ -1,0 +1,37 @@
+{
+ "round": 252,
+ "figure": "transformations",
+ "capability": "cap-01d",
+ "hypothesis": "Batch 6 transformations: cap-01d; evidence changes:{\"names\":\"P, Q, R\"}",
+ "started_at": "2026-11-10T08:27:03",
+ "git": "2759993",
+ "before": {
+  "figure": 60.7,
+  "pooled": 92.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-10T08:27:05",
+ "after": {
+  "figure": 63.1,
+  "pooled": 92.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"names\":\"P, Q, R\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/53e483f742d610fd.png"
+   }
+  ]
+ },
+ "checker": "pass: named vertices on the figure and in the key",
+ "result": "hit",
+ "evidence": "transform tests (geometry measured by hand: reflections, rotations, translations, dilations, four-step chains; module frozen at e0d5cd4 with 300+ old figures byte-identical; batch-2 migrate passes); census unchanged; task run reference 5, ours 8, before not possible",
+ "next": "transformations cap-04h (coordinate labels overlap, back with the builder), cap-02j (handles only after a setting change)"
+}
