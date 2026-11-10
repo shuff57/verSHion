@@ -1,18 +1,11 @@
 # Figures parity score
 
-Generated: 2026-11-10T04:10:02+00:00 · probe: 2026-11-09T20:10:02
+Generated: 2026-11-10T04:13:23+00:00 · probe: 2026-11-09T20:13:22
 
-**Pooled 91.1** · mean 91.6 over 70 figures · built 71 of 71 reference figures
+**Pooled 92.5** · mean 92.3 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `circle`: 52 (84/163)
-  - cap-i02 [editor 4] Click a point on the figure to join it to another point — no evidence
-  - cap-01c [control 3] Place a point off the circle by its distance in radii — no evidence
-  - cap-02g [control 3] Run a line on past its point with an arrow, a line arrow or a dot — no evidence
-  - cap-03b [control 3] One or both tangents from a point outside the circle — no evidence
-  - cap-04e [control 3] Label any angle the lines make, not only ∠AOB and ∠ACB — no evidence
-  - cap-04b [control 3] Label an angle with typed text — no evidence
 - `transformations`: 61 (74/122)
   - cap-02a [editor 4] Add transformations one after another, each acting on the last image — no evidence
   - cap-01d [control 3] A label for each preimage vertex — no evidence
@@ -150,6 +143,11 @@ Comparable with the frozen baseline: **yes**
   - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
 - `volume-by-displacement`: 95 (55/58)
   - cap-03b [control 3] Pick random before and after readings — no evidence
+- `circle`: 95 (155/163)
+  - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
+  - cap-01f [interaction 2] Drag a point off the circle and back on — no evidence
+  - cap-i10 [interaction 2] Drag a line's label across the line to put it on the other side — no evidence
+  - cap-i12 [interaction 2] Click a point or the center on the figure to rename it — no evidence
 - `ruler-reading`: 95 (59/62)
   - cap-04c [control 3] Pick the length and position at random — no evidence
 - `population-growth`: 95 (125/131)

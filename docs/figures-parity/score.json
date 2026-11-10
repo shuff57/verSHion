@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-10T04:10:02+00:00",
- "probe_checked_at": "2026-11-09T20:10:02",
+ "generated_at": "2026-11-10T04:13:23+00:00",
+ "probe_checked_at": "2026-11-09T20:13:22",
  "comparable": true,
  "drift": [],
- "pooled": 91.1,
- "mean": 91.6,
+ "pooled": 92.5,
+ "mean": 92.3,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -125,151 +125,11 @@
    ]
   },
   "circle": {
-   "score": 51.5,
-   "got": 84.0,
+   "score": 95.1,
+   "got": 155.0,
    "total": 163.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-i02",
-     "class": "editor",
-     "weight": 4.0,
-     "text": "Click a point on the figure to join it to another point",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Place a point off the circle by its distance in radii",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Run a line on past its point with an arrow, a line arrow or a dot",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "One or both tangents from a point outside the circle",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label any angle the lines make, not only ∠AOB and ∠ACB",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label an angle with typed text",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Congruence arcs on an angle",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label an arc in degrees",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label an arc by its length",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label an arc with typed text",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Congruence ticks on an arc",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05k",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label any line with its length, not only the radius and chord",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label a line with typed text",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05h",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Congruence ticks on a line",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05i",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Parallel arrows on a line",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05j",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw a chosen line solid, dashed or dotted",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose the shading colour",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Give areas in terms of π",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the point where lines cross or meet the circle",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "An inscribed polygon of 3 to 8 sides",
-     "why": "no evidence"
-    },
     {
      "id": "cap-01g",
      "class": "interaction",
@@ -285,45 +145,10 @@
      "why": "no evidence"
     },
     {
-     "id": "cap-i04",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a point outside the circle on the figure to draw the tangents from it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i05",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click the middle of a chord on the figure to name its midpoint",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i06",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click the middle of a chord on the figure to join its midpoint to the center",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i08",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a line, angle or arc on the figure to mark or style it",
-     "why": "no evidence"
-    },
-    {
      "id": "cap-i10",
      "class": "interaction",
      "weight": 2.0,
      "text": "Drag a line's label across the line to put it on the other side",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i11",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click where lines cross, or where a line meets the circle, on the figure to name a point there",
      "why": "no evidence"
     },
     {

@@ -1,0 +1,29 @@
+{
+ "round": 247,
+ "figure": "circle",
+ "capability": "cap-i05",
+ "hypothesis": "Batch 5 circle: cap-i05; evidence handle:click:click the middle of a chord to name its midpoint",
+ "started_at": "2026-11-09T20:13:21",
+ "git": "b2d5934",
+ "before": {
+  "figure": 90.2,
+  "pooled": 92.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:21",
+ "after": {
+  "figure": 91.4,
+  "pooled": 92.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: click a chord's middle to name its midpoint",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

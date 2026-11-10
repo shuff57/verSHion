@@ -1,0 +1,29 @@
+{
+ "round": 246,
+ "figure": "circle",
+ "capability": "cap-i04",
+ "hypothesis": "Batch 5 circle: cap-i04; evidence handle:click:click a point outside the circle for the tangents from it",
+ "started_at": "2026-11-09T20:13:21",
+ "git": "b2d5934",
+ "before": {
+  "figure": 89.0,
+  "pooled": 92.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:21",
+ "after": {
+  "figure": 90.2,
+  "pooled": 92.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: an outside point's click toggles both tangents",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

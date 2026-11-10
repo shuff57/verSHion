@@ -1,0 +1,29 @@
+{
+ "round": 249,
+ "figure": "circle",
+ "capability": "cap-i08",
+ "hypothesis": "Batch 5 circle: cap-i08; evidence handle-edit:styles",
+ "started_at": "2026-11-09T20:13:22",
+ "git": "b2d5934",
+ "before": {
+  "figure": 92.6,
+  "pooled": 92.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:22",
+ "after": {
+  "figure": 93.9,
+  "pooled": 92.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: double-click a line, angle or arc to mark or style it",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

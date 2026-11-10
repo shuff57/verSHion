@@ -1,0 +1,29 @@
+{
+ "round": 245,
+ "figure": "circle",
+ "capability": "cap-i02",
+ "hypothesis": "Batch 5 circle: cap-i02; evidence handle:click:click it and then another point to join them",
+ "started_at": "2026-11-09T20:13:20",
+ "git": "b2d5934",
+ "before": {
+  "figure": 86.5,
+  "pooled": 92.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:21",
+ "after": {
+  "figure": 89.0,
+  "pooled": 92.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "editor",
+  "renders": []
+ },
+ "checker": "pass: click a point then another to join them, through the hit test",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

@@ -1,0 +1,29 @@
+{
+ "round": 248,
+ "figure": "circle",
+ "capability": "cap-i06",
+ "hypothesis": "Batch 5 circle: cap-i06; evidence handle:click:or join it to the centre",
+ "started_at": "2026-11-09T20:13:22",
+ "git": "b2d5934",
+ "before": {
+  "figure": 91.4,
+  "pooled": 92.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:22",
+ "after": {
+  "figure": 92.6,
+  "pooled": 92.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: join a midpoint to the centre with a right angle",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

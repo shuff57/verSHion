@@ -1,0 +1,29 @@
+{
+ "round": 250,
+ "figure": "circle",
+ "capability": "cap-i11",
+ "hypothesis": "Batch 5 circle: cap-i11; evidence handle:click:where lines cross or meet the circle to name a point there",
+ "started_at": "2026-11-09T20:13:22",
+ "git": "b2d5934",
+ "before": {
+  "figure": 93.9,
+  "pooled": 92.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:23",
+ "after": {
+  "figure": 95.1,
+  "pooled": 92.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: name a crossing or a point on the circle",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

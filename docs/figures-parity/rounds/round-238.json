@@ -1,0 +1,35 @@
+{
+ "round": 238,
+ "figure": "circle",
+ "capability": "cap-05h",
+ "hypothesis": "Batch 5 circle: cap-05h; evidence changes:styles=OA ticks 2",
+ "started_at": "2026-11-09T20:13:17",
+ "git": "b2d5934",
+ "before": {
+  "figure": 73.6,
+  "pooled": 91.8
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:17",
+ "after": {
+  "figure": 75.5,
+  "pooled": 91.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:styles=OA ticks 2",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/4a3e20c4ba239b23.png"
+   }
+  ]
+ },
+ "checker": "pass: line ticks",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

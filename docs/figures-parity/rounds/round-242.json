@@ -1,0 +1,35 @@
+{
+ "round": 242,
+ "figure": "circle",
+ "capability": "cap-06e",
+ "hypothesis": "Batch 5 circle: cap-06e; evidence changes:pi_form=In terms of π",
+ "started_at": "2026-11-09T20:13:19",
+ "git": "b2d5934",
+ "before": {
+  "figure": 81.0,
+  "pooled": 92.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:19",
+ "after": {
+  "figure": 82.8,
+  "pooled": 92.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:pi_form=In terms of π",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/715c8205e0f17981.png"
+   }
+  ]
+ },
+ "checker": "pass: values in terms of pi",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

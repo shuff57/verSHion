@@ -1,0 +1,35 @@
+{
+ "round": 228,
+ "figure": "circle",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 5 circle: cap-03b; evidence changes:{\"more_points\":\"P 30 2r\",\"tangents\":\"P\"}",
+ "started_at": "2026-11-09T20:13:12",
+ "git": "b2d5934",
+ "before": {
+  "figure": 55.2,
+  "pooled": 91.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:12",
+ "after": {
+  "figure": 57.1,
+  "pooled": 91.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"more_points\":\"P 30 2r\",\"tangents\":\"P\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/b04c11e729e6c995.png"
+   }
+  ]
+ },
+ "checker": "pass: tangents from an outside point, r*sqrt(d^2-1) checked",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

@@ -1,0 +1,35 @@
+{
+ "round": 230,
+ "figure": "circle",
+ "capability": "cap-04c",
+ "hypothesis": "Batch 5 circle: cap-04c; evidence changes:{\"show_chord\":true,\"styles\":\"angle OAB arcs 2\"}",
+ "started_at": "2026-11-09T20:13:13",
+ "git": "b2d5934",
+ "before": {
+  "figure": 58.9,
+  "pooled": 91.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:13:13",
+ "after": {
+  "figure": 60.7,
+  "pooled": 91.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"show_chord\":true,\"styles\":\"angle OAB arcs 2\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/0e7db57af16b5709.png"
+   }
+  ]
+ },
+ "checker": "pass: angle arcs",
+ "result": "hit",
+ "evidence": "circle tests (theorems read off the drawn labels; clicks through interact::pick with pixel sweeps; 220 frozen old figures byte-identical); census unchanged; task run reference 3 actions, ours 5, before not possible",
+ "next": "circle cap-i12 (re-check), 01f/01g (need handles at a non-opening state), i10 (not built)"
+}

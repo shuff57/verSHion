@@ -21,8 +21,8 @@
    "id": "cap-01c",
    "text": "Place a point off the circle by its distance in radii",
    "class": "control",
-   "evidence": "",
-   "note": "Points sit on the circle only."
+   "evidence": "changes:more_points=D 300 1.8r",
+   "note": "Built in batch 5, round 226 (2026-11-10). Points sit on the circle only."
   },
   {
    "id": "cap-01d",
@@ -98,8 +98,8 @@
    "id": "cap-02g",
    "text": "Run a line on past its point with an arrow, a line arrow or a dot",
    "class": "control",
-   "evidence": "",
-   "note": "Lines stop at their points; no line-end parameter."
+   "evidence": "changes:styles=OA past A arrow",
+   "note": "Built in batch 5, round 227 (2026-11-10). Lines stop at their points; no line-end parameter."
   },
   {
    "id": "cap-03a",
@@ -119,8 +119,8 @@
    "id": "cap-03b",
    "text": "One or both tangents from a point outside the circle",
    "class": "control",
-   "evidence": "",
-   "note": "No outside point exists."
+   "evidence": "changes:{\"more_points\":\"P 30 2r\",\"tangents\":\"P\"}",
+   "note": "Built in batch 5, round 228 (2026-11-10). No outside point exists."
   },
   {
    "id": "cap-04a",
@@ -133,22 +133,22 @@
    "id": "cap-04e",
    "text": "Label any angle the lines make, not only ∠AOB and ∠ACB",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: only the central and inscribed angles can be shown (cap-04a passes that narrow form)."
+   "evidence": "changes:{\"show_chord\":true,\"marks\":\"angle OAB\"}",
+   "note": "Built in batch 5, round 231 (2026-11-10). WIDE: only the central and inscribed angles can be shown (cap-04a passes that narrow form)."
   },
   {
    "id": "cap-04b",
    "text": "Label an angle with typed text",
    "class": "control",
-   "evidence": "",
-   "note": "No angle-label text parameter."
+   "evidence": "changes:{\"show_chord\":true,\"marks\":\"angle OAB x\"}",
+   "note": "Built in batch 5, round 229 (2026-11-10). No angle-label text parameter."
   },
   {
    "id": "cap-04c",
    "text": "Congruence arcs on an angle",
    "class": "control",
-   "evidence": "",
-   "note": "No congruence-arc parameter."
+   "evidence": "changes:{\"show_chord\":true,\"styles\":\"angle OAB arcs 2\"}",
+   "note": "Built in batch 5, round 230 (2026-11-10). No congruence-arc parameter."
   },
   {
    "id": "cap-04d",
@@ -161,29 +161,29 @@
    "id": "cap-05a",
    "text": "Label an arc in degrees",
    "class": "control",
-   "evidence": "",
-   "note": "arc highlights the arc but writes no measure on it."
+   "evidence": "changes:{\"show_b\":true,\"marks\":\"arc AB degrees\"}",
+   "note": "Built in batch 5, round 232 (2026-11-10). arc highlights the arc but writes no measure on it."
   },
   {
    "id": "cap-05b",
    "text": "Label an arc by its length",
    "class": "control",
-   "evidence": "",
-   "note": "Arc length is only a row in the table below the figure (m_arc), not a label on the arc."
+   "evidence": "changes:{\"show_b\":true,\"marks\":\"arc AB length\"}",
+   "note": "Built in batch 5, round 233 (2026-11-10). Arc length is only a row in the table below the figure (m_arc), not a label on the arc."
   },
   {
    "id": "cap-05c",
    "text": "Label an arc with typed text",
    "class": "control",
-   "evidence": "",
-   "note": "No arc-label text parameter."
+   "evidence": "changes:{\"show_b\":true,\"marks\":\"arc AB x\"}",
+   "note": "Built in batch 5, round 234 (2026-11-10). No arc-label text parameter."
   },
   {
    "id": "cap-05d",
    "text": "Congruence ticks on an arc",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:{\"show_b\":true,\"styles\":\"arc AB ticks 2\"}",
+   "note": "Built in batch 5, round 235 (2026-11-10). No parameter."
   },
   {
    "id": "cap-05e",
@@ -203,36 +203,36 @@
    "id": "cap-05k",
    "text": "Label any line with its length, not only the radius and chord",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: length labels come with the radius and chord only (cap-05f passes that narrow form)."
+   "evidence": "changes:{\"show_c\":true,\"more_points\":\"D 300\",\"joins\":\"CD\",\"marks\":\"CD length\"}",
+   "note": "Built in batch 5, round 237 (2026-11-10). WIDE: length labels come with the radius and chord only (cap-05f passes that narrow form)."
   },
   {
    "id": "cap-05g",
    "text": "Label a line with typed text",
    "class": "control",
-   "evidence": "",
-   "note": "r_label offers Value, Letter only (a fixed r) or None; no typed text, and no labels for other lines."
+   "evidence": "changes:{\"show_b\":true,\"joins\":\"OB\",\"marks\":\"OB x\"}",
+   "note": "Built in batch 5, round 236 (2026-11-10). r_label offers Value, Letter only (a fixed r) or None; no typed text, and no labels for other lines."
   },
   {
    "id": "cap-05h",
    "text": "Congruence ticks on a line",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:styles=OA ticks 2",
+   "note": "Built in batch 5, round 238 (2026-11-10). No parameter."
   },
   {
    "id": "cap-05i",
    "text": "Parallel arrows on a line",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:styles=OA arrows 1",
+   "note": "Built in batch 5, round 239 (2026-11-10). No parameter."
   },
   {
    "id": "cap-05j",
    "text": "Draw a chosen line solid, dashed or dotted",
    "class": "control",
-   "evidence": "",
-   "note": "No per-line style parameter."
+   "evidence": "changes:styles=OA dashed",
+   "note": "Built in batch 5, round 240 (2026-11-10). No per-line style parameter."
   },
   {
    "id": "cap-06a",
@@ -252,8 +252,8 @@
    "id": "cap-06c",
    "text": "Choose the shading colour",
    "class": "control",
-   "evidence": "",
-   "note": "No colour parameter; style switches only Colour/Print."
+   "evidence": "changes:{\"sector\":\"Minor\",\"shade_colour\":\"Green\"}",
+   "note": "Built in batch 5, round 241 (2026-11-10). No colour parameter; style switches only Colour/Print."
   },
   {
    "id": "cap-06d",
@@ -266,22 +266,22 @@
    "id": "cap-06e",
    "text": "Give areas in terms of π",
    "class": "control",
-   "evidence": "",
-   "note": "The table gives decimals only."
+   "evidence": "changes:pi_form=In terms of π",
+   "note": "Built in batch 5, round 242 (2026-11-10). The table gives decimals only."
   },
   {
    "id": "cap-07a",
    "text": "Name the point where lines cross or meet the circle",
    "class": "control",
-   "evidence": "",
-   "note": "Only O, A, B, C and M can be named."
+   "evidence": "changes:{\"show_b\":true,\"show_c\":true,\"more_points\":\"D 300\",\"joins\":\"AC, BD\",\"crossings\":\"E AC BD\"}",
+   "note": "Built in batch 5, round 243 (2026-11-10). Only O, A, B, C and M can be named."
   },
   {
    "id": "cap-07b",
    "text": "An inscribed polygon of 3 to 8 sides",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:polygon=6 sides",
+   "note": "Built in batch 5, round 244 (2026-11-10). No parameter."
   },
   {
    "id": "cap-07c",
@@ -322,8 +322,8 @@
    "id": "cap-i02",
    "text": "Click a point on the figure to join it to another point",
    "class": "editor",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: Click a point to join it to another."
+   "evidence": "handle:click:click it and then another point to join them",
+   "note": "Built in batch 5, round 245 (2026-11-10). From the page controls, not the bullets. The page says: Click a point to join it to another."
   },
   {
    "id": "cap-i03",
@@ -336,22 +336,22 @@
    "id": "cap-i04",
    "text": "Click a point outside the circle on the figure to draw the tangents from it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: from a point outside the circle, the tangents from it."
+   "evidence": "handle:click:click a point outside the circle for the tangents from it",
+   "note": "Built in batch 5, round 246 (2026-11-10). From the page controls, not the bullets. The page says: from a point outside the circle, the tangents from it."
   },
   {
    "id": "cap-i05",
    "text": "Click the middle of a chord on the figure to name its midpoint",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: Click the middle of a chord to name its midpoint."
+   "evidence": "handle:click:click the middle of a chord to name its midpoint",
+   "note": "Built in batch 5, round 247 (2026-11-10). From the page controls, not the bullets. The page says: Click the middle of a chord to name its midpoint."
   },
   {
    "id": "cap-i06",
    "text": "Click the middle of a chord on the figure to join its midpoint to the center",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: or join it to the center."
+   "evidence": "handle:click:or join it to the centre",
+   "note": "Built in batch 5, round 248 (2026-11-10). From the page controls, not the bullets. The page says: or join it to the center."
   },
   {
    "id": "cap-i07",
@@ -364,8 +364,8 @@
    "id": "cap-i08",
    "text": "Click a line, angle or arc on the figure to mark or style it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Same sentence; marks and line style, apart from the label."
+   "evidence": "handle-edit:styles",
+   "note": "Built in batch 5, round 249 (2026-11-10). From the page controls, not the bullets. Same sentence; marks and line style, apart from the label."
   },
   {
    "id": "cap-i09",
@@ -385,8 +385,8 @@
    "id": "cap-i11",
    "text": "Click where lines cross, or where a line meets the circle, on the figure to name a point there",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says so; cap-07a is the setting, this is the click on the figure."
+   "evidence": "handle:click:where lines cross or meet the circle to name a point there",
+   "note": "Built in batch 5, round 250 (2026-11-10). From the page controls, not the bullets. The page says so; cap-07a is the setting, this is the click on the figure."
   },
   {
    "id": "cap-i12",
