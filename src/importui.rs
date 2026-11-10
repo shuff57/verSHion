@@ -438,17 +438,57 @@ fn add_paths(app: &mut crate::App, st: &mut State, paths: Vec<std::path::PathBuf
 
 // ---------- AI hand-off ----------
 
+/// The host of a base URL ("http://127.0.0.1:11434/api" -> "127.0.0.1").
+fn url_host(base: &str) -> &str {
+    let rest = base.split_once("://").map_or(base, |(_, r)| r);
+    let auth = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let auth = auth.rsplit_once('@').map_or(auth, |(_, h)| h);
+    if let Some(v6) = auth.strip_prefix('[') {
+        return v6.split(']').next().unwrap_or("");
+    }
+    auth.split(':').next().unwrap_or("")
+}
+
+/// True when a base URL points at this computer.
+fn on_this_machine(base: &str) -> bool {
+    let h = url_host(base).to_ascii_lowercase();
+    let h = h.trim_start_matches('[').trim_end_matches(']');
+    // Parse IP literals instead of matching prefixes: "127.example.com" is a DNS name, not loopback.
+    match h.parse::<std::net::IpAddr>() {
+        Ok(ip) => ip.is_loopback() || ip.is_unspecified(),
+        Err(_) => h == "localhost" || h.ends_with(".localhost"),
+    }
+}
+
+/// Where a converted photo goes, three ways: `short` names the place in a few words for the
+/// one-line note under the drop zone, `detail` adds the model (and the server for a custom
+/// endpoint) for the dialog, the workspace and the note's tooltip, and `leaves` says whether
+/// it leaves this computer at all.
+struct Dest {
+    short: String,
+    detail: String,
+    leaves: bool,
+}
+
+fn provider_dest(s: &crate::Settings) -> Dest {
+    let cfg = crate::ai::AiCfg::from(s);
+    let d = |short: &str, detail: String, leaves| Dest { short: short.to_string(), detail, leaves };
+    match cfg.provider.as_str() {
+        "account" => d("verSHion's server", "the verSHion server, paid with credits from your account".to_string(), true),
+        "workers" => d("the verSHion relay", "the verSHion relay".to_string(), true),
+        "cloud" => d("Ollama Cloud", format!("Ollama Cloud · {}", cfg.model), true),
+        "openrouter" => d("OpenRouter", format!("OpenRouter · {}", cfg.model), true),
+        "custom" => d("your own AI server", format!("{} · {}", cfg.base, cfg.model), true),
+        // Local Ollama: on this computer unless its address names another machine.
+        _ if on_this_machine(&cfg.base) => d("Ollama", format!("Ollama on this computer · {}", cfg.model), false),
+        _ => d("your Ollama server", format!("Ollama at {} · {}", url_host(&cfg.base), cfg.model), true),
+    }
+}
+
 /// Truthful description of where a photo goes: (destination text, leaves_computer).
 fn provider_label(s: &crate::Settings) -> (String, bool) {
-    let cfg = crate::ai::AiCfg::from(s);
-    match cfg.provider.as_str() {
-        "account" => ("the verSHion server, paid with credits from your account".to_string(), true),
-        "workers" => ("the verSHion relay".to_string(), true),
-        "cloud" => (format!("Ollama Cloud · {}", cfg.model), true),
-        "openrouter" => (format!("OpenRouter · {}", cfg.model), true),
-        "custom" => (format!("{} · {}", cfg.base, cfg.model), true),
-        _ => (format!("Ollama on this computer · {}", cfg.model), false),
-    }
+    let d = provider_dest(s);
+    (d.detail, d.leaves)
 }
 
 impl crate::App {
@@ -959,9 +999,11 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
             if empty && !st.in_modal {
                 // The privacy facts sit under the drop zone, left-aligned, so the zone holds only
                 // its title and the actions.
-                ui.add_space(6.0);
+                // Close under the zone (the 8 pt item gap alone, about 10 pt to the disc with the
+                // zone's dashed edge), so it reads as the zone's caption, and well clear of What
+                // it reads (14 + 8: about 24 pt).
                 privacy_below(app, ui);
-                ui.add_space(10.0);
+                ui.add_space(14.0);
             } else {
                 ui.add_space(12.0);
             }
@@ -1148,14 +1190,6 @@ fn privacy_text(app: &crate::App) -> String {
     }
 }
 
-/// "Private by default." in bold ink, then the sentence in `text`, `size` pt.
-fn privacy_words(job: &mut egui::text::LayoutJob, app: &crate::App, size: f32) {
-    job.append("Private by default.", 0.0, egui::TextFormat::simple(FontId::new(size, theme::bold_family()), theme::ink()));
-    // The provider and its model ("Ollama Cloud · gemma4:31b") never break across lines.
-    let text = privacy_text(app).replace(" · ", "\u{a0}·\u{a0}");
-    job.append(&format!(" {text}"), 0.0, egui::TextFormat::simple(FontId::new(size, theme::sans_family()), theme::text_col()));
-}
-
 /// The privacy facts as one run (the Import dialog and the workspace): a lock, the bold lead,
 /// then the sentence.
 fn privacy_job(app: &crate::App, size: f32) -> egui::text::LayoutJob {
@@ -1166,30 +1200,51 @@ fn privacy_job(app: &crate::App, size: f32) -> egui::text::LayoutJob {
     job
 }
 
-/// Longest line of the note under the drop zone: about 80 characters at 14 pt, so the facts
-/// take two lines at both widths and the history stays in the first view.
-const PRIVACY_W: f32 = 540.0;
+/// The note under the drop zone, one short line: what stays here and the one place what you
+/// convert goes (photos and PDF pages: the only sources with a Convert button), by name only. The model and the longer sentence are in its tooltip.
+fn privacy_short(s: &crate::Settings) -> String {
+    let d = provider_dest(s);
+    if d.leaves {
+        format!("Read on this computer. Only what you convert goes to {}.", d.short)
+    } else {
+        "Read on this computer, even what you convert: Ollama runs here.".to_string()
+    }
+}
 
-/// The privacy note under the drop zone: a 24 pt accent_faded disc holding the lock, then the
-/// bold lead and the sentence at 14 pt, left-aligned, wrapped under the text (never under the
-/// disc) at [`PRIVACY_W`].
+/// The note's tooltip and accessible description: the full sentence (with the model), so the
+/// short line drops nothing.
+fn privacy_detail(app: &crate::App) -> String {
+    format!("Private by default. {}", privacy_text(app))
+}
+
+/// The privacy note under the drop zone, one line at both widths: a 24 pt accent_faded disc
+/// holding the lock, then the bold lead and the short sentence at 14 pt, left-aligned (a
+/// narrower window wraps it under the text, never under the disc). Hovering it shows the full
+/// sentence with the model.
 fn privacy_below(app: &crate::App, ui: &mut egui::Ui) {
     const DISC: f32 = 24.0;
-    ui.horizontal_top(|ui| {
+    let row = ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
         let (r, _) = ui.allocate_exact_size(Vec2::splat(DISC), Sense::hover());
         ui.painter().circle_filled(r.center(), DISC / 2.0, theme::accent_faded());
         crate::handicons::paint_glyph(ui.painter(), r.center(), egui_phosphor::regular::LOCK_SIMPLE, 14.0, theme::accent_col());
-        let w = ui.available_width().min(PRIVACY_W);
+        let w = ui.available_width();
         ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Min), |ui| {
             ui.set_max_width(w);
             // the first line's centre on the disc's centre
             ui.add_space(2.0);
+            let size = kit::ty::BODY;
             let mut job = egui::text::LayoutJob::default();
-            privacy_words(&mut job, app, kit::ty::BODY);
-            ui.add(egui::Label::new(job).wrap());
-        });
+            job.append("Private by default.", 0.0, egui::TextFormat::simple(FontId::new(size, theme::bold_family()), theme::ink()));
+            job.append(&format!(" {}", privacy_short(&app.settings)), 0.0, egui::TextFormat::simple(FontId::new(size, theme::sans_family()), theme::text_col()));
+            ui.add(egui::Label::new(job).wrap().sense(Sense::hover()))
+        })
+        .inner
     });
+    let detail = privacy_detail(app);
+    let label = row.inner;
+    label.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, detail.clone()));
+    label.on_hover_text(detail);
 }
 
 /// The same facts as one left-aligned 13 pt paragraph, for the Import dialog and the
@@ -3203,6 +3258,53 @@ mod tests {
         assert_eq!(source_title(&st.sources[0]), "Chemistry Chapter 4 Quiz (5A and 5B)");
         st.sources[0].doc.as_mut().unwrap().name = "  ".into();
         assert_eq!(source_title(&st.sources[0]), "ch4-quiz-5a-5b.parrot.json");
+    }
+
+    #[test]
+    fn privacy_note_is_one_short_truthful_line_per_provider() {
+        let set = |provider: &str, model: &str, base: &str, ollama: &str| crate::Settings {
+            ai_provider: provider.to_string(),
+            ai_model: model.to_string(),
+            ai_base: base.to_string(),
+            ollama_base: ollama.to_string(),
+            ..Default::default()
+        };
+        let cases = [
+            (set("cloud", "gemma4:31b", "", ""), Some("Ollama Cloud"), "Ollama Cloud · gemma4:31b"),
+            (set("openrouter", "m/x", "", ""), Some("OpenRouter"), "OpenRouter · m/x"),
+            (set("account", "", "", ""), Some("verSHion's server"), "the verSHion server, paid with credits"),
+            (set("workers", "", "https://relay.example", ""), Some("the verSHion relay"), "the verSHion relay"),
+            (set("custom", "llm", "https://ai.example/v1", ""), Some("your own AI server"), "https://ai.example/v1 · llm"),
+            // Nothing configured falls back to local Ollama, as AiCfg does.
+            (set("", "", "", ""), None, "Ollama on this computer"),
+            (set("ollama", "q", "", "http://localhost:11434"), None, "Ollama on this computer · q"),
+            // An Ollama address naming another machine is not "here".
+            (set("ollama", "q", "", "http://192.168.1.9:11434"), Some("your Ollama server"), "Ollama at 192.168.1.9 · q"),
+        ];
+        for (s, goes_to, detail) in cases {
+            let line = privacy_short(&s);
+            // One short scannable line after the lead, with no model id or address in it: at most
+            // 72 characters, which fits on one line beside the lead at 760 wide.
+            assert!(line.chars().count() <= 72, "{line}");
+            assert!(!line.contains('·') && !line.contains("://") && !line.contains(":3") && !line.contains("192"), "{line}");
+            match goes_to {
+                Some(dest) => {
+                    assert_eq!(line, format!("Read on this computer. Only what you convert goes to {dest}."));
+                    assert!(provider_dest(&s).leaves);
+                }
+                None => {
+                    assert_eq!(line, "Read on this computer, even what you convert: Ollama runs here.");
+                    assert!(!provider_dest(&s).leaves);
+                }
+            }
+            // The full facts, model included, are kept for the tooltip, dialog and workspace.
+            assert!(provider_label(&s).0.contains(detail), "{:?}", provider_label(&s));
+        }
+        assert_eq!(url_host("http://[::1]:11434/api"), "::1");
+        assert_eq!(url_host("https://user@Host.example:8443/v1"), "Host.example");
+        assert!(on_this_machine("http://127.0.0.1:11434") && !on_this_machine("https://ollama.com"));
+        assert!(on_this_machine("http://127.1.2.3:11434") && on_this_machine("http://[::1]:11434") && on_this_machine("http://localhost:11434"));
+        assert!(!on_this_machine("http://127.example.com:11434") && !on_this_machine("http://10.0.0.5:11434"));
     }
 
     #[test]

@@ -118,6 +118,17 @@ fn save_settings(app: &App) {
 }
 
 const MAX_W: f32 = crate::pageshell::PAGE_W;
+/// The Banks screen's widest content: past this the tiles would be too wide to scan.
+const BANKS_MAX_W: f32 = 1600.0;
+/// The narrowest a Banks tile gets before the grid drops a column (inner 248: two lines of key
+/// for five types, the footer's long form).
+const BANK_TILE_MIN_W: f32 = 280.0;
+
+/// Columns of the Banks tile grid in `avail` points with `gap` between tiles: as many tiles of at
+/// least [`BANK_TILE_MIN_W`] as fit (at least one); the tiles then share the width equally.
+fn banks_grid_cols(avail: f32, gap: f32) -> usize {
+    (((avail + gap) / (BANK_TILE_MIN_W + gap)).floor() as usize).max(1)
+}
 
 /// Draws a clickable crumb "Banks" that returns to the list.
 fn crumb_row(ui: &mut Ui, app: &mut App, tail: Option<&str>) {
@@ -405,7 +416,9 @@ impl App {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.scope(|ui| {
-                        ui.set_max_width(ui.available_width().min(MAX_W));
+                        // The grid page uses the window's width (to a wide cap), so the tiles reach
+                        // the right edge rather than stopping at the reading width of a text page.
+                        ui.set_max_width(ui.available_width().min(BANKS_MAX_W));
                         self.banks_body(ui, &ctx, key);
                     });
                 });
@@ -526,7 +539,7 @@ impl App {
         } else {
             let avail = ui.available_width();
             let gap = kit::GUTTER;
-            let cols = if avail >= 760.0 { 3 } else if avail >= 500.0 { 2 } else { 1 };
+            let cols = banks_grid_cols(avail, gap);
             // Fewer banks than columns still fills the row: one bank is a wide card, not a
             // quarter-width tile with three quarters of empty page beside it.
             let fit = rows.len().clamp(1, cols);
@@ -648,7 +661,7 @@ impl App {
         };
         // Read left to right by rank: the bank's main action first, then the outlined actions
         // that bring questions in or send them out, then the quiet ones that only show the
-        // bank (its details, its own window), and the overflow last as a bare icon.
+        // bank (its details, its own window) and the overflow, as one segmented group.
         // An empty bank's card below has its own filled Add question with the type menu, the
         // page's one primary; the toolbar's would only repeat it, so it is hidden until the first
         // question is in (judged on the whole bank, never on a filter).
@@ -662,18 +675,26 @@ impl App {
             tools.reverse();
         }
         let gap = ui.spacing().item_spacing.x;
+        // Details, Preview and the overflow are one segmented group: one outlined container on the
+        // paper fill (quieter than Share's card-white box and bold label), hairlines between.
+        let quiet = |t: Tool| matches!(t, Tool::Details | Tool::Popover | Tool::More);
+        let mut group = Rect::NOTHING;
+        let mut seams: Vec<f32> = Vec::new();
+        // The container is painted under the segments once their rects are known.
+        let group_bg = ui.painter().add(egui::Shape::Noop);
         let mut width = 0.0;
+        let mut last_gap = 0.0;
         let mut first = true;
-        for t in tools {
+        for (i, &t) in tools.iter().enumerate() {
+            // The space after this tool: none inside the segmented group, the usual gap elsewhere.
+            let after = if quiet(t) && tools.get(i + 1).is_some_and(|&n| quiet(n)) { 0.0 } else { gap };
+            ui.spacing_mut().item_spacing.x = after;
             if ltr && !first {
                 // pageshell buttons are laid out where the cursor is: start the next line first.
-                let tertiary_w = |label: &str| {
-                    ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), egui::FontId::new(kit::ty::BUTTON, theme::semibold()), Color32::WHITE).size().x) + 36.0 + 16.0 + 7.0
-                };
+                // The group moves to the next line whole: its first segment carries its width.
                 let w = match t {
-                    Tool::More => MORE_W,
-                    Tool::Details => tertiary_w("Details"),
-                    Tool::Popover => tertiary_w("Preview"),
+                    Tool::More | Tool::Popover => 0.0,
+                    Tool::Details => quiet_tool_w(ui, "Details") + quiet_tool_w(ui, "Preview") + MORE_W,
                     Tool::Import => crate::pageshell::button_width(ui, "Import"),
                     Tool::Share => crate::pageshell::button_width(ui, share_label.as_str()),
                     Tool::Export => crate::pageshell::button_width(ui, "Export"),
@@ -738,14 +759,14 @@ impl App {
                     r
                 }
                 Tool::Popover => {
-                    let r = kit::tertiary(ui, egui_phosphor::regular::EYE, "Preview", TOOL_H).on_hover_text("Open this bank in its own window");
+                    let r = quiet_tool(ui, Some(egui_phosphor::regular::EYE), Some("Preview"), "Preview", CornerRadius::ZERO).on_hover_text("Open this bank in its own window");
                     if r.clicked() {
                         open_popover(ctx, bank_id);
                     }
                     r
                 }
                 Tool::Details => {
-                    let r = kit::tertiary(ui, crate::handicons::INFO, "Details", TOOL_H).on_hover_text("Description, author and license");
+                    let r = quiet_tool(ui, Some(crate::handicons::INFO), Some("Details"), "Details", CornerRadius { nw: QUIET_R, sw: QUIET_R, ne: 0, se: 0 }).on_hover_text("Description, author and license");
                     if r.clicked() {
                         let d = self.store.bank(bank_id).map(|b| b.details.clone()).unwrap_or_default();
                         with_state(ctx, key, |s: &mut BankEditState| s.details = Some(d));
@@ -754,7 +775,7 @@ impl App {
                 }
                 // (Details has its own button beside this menu; the menu keeps what has none.)
                 Tool::More => {
-                    let r = kit::more_dots(ui, MORE_W, "More bank actions");
+                    let r = quiet_tool(ui, None, None, "More bank actions", CornerRadius { nw: 0, sw: 0, ne: QUIET_R, se: QUIET_R });
                     egui::Popup::menu(&r).show(|ui| {
                         ui.set_min_width(170.0);
                         let tidy = ui
@@ -768,9 +789,27 @@ impl App {
                     r
                 }
             };
-            width += r.rect.width() + gap;
+            if quiet(t) {
+                if group.is_positive() {
+                    seams.push(if r.rect.left() >= group.right() { r.rect.left() } else { r.rect.right() } .round() + 0.5);
+                }
+                group = group.union(r.rect);
+            }
+            width += r.rect.width() + after;
+            last_gap = after;
         }
-        width - gap
+        ui.spacing_mut().item_spacing.x = gap;
+        if group.is_positive() {
+            // Container: paper fill, 1 pt edge, Share's radius; a hairline at each inner seam
+            // (every segment edge strictly inside the group), inset from top and bottom.
+            ui.painter().set(group_bg, egui::Shape::rect_filled(group, CornerRadius::same(QUIET_R), theme::cream()));
+            let p = ui.painter();
+            p.rect_stroke(group, CornerRadius::same(QUIET_R), Stroke::new(1.0, theme::edge()), egui::StrokeKind::Inside);
+            for x in seams {
+                p.vline(x, (group.top() + 9.0)..=(group.bottom() - 9.0), Stroke::new(1.0, theme::edge()));
+            }
+        }
+        width - last_gap
     }
 
     /// The type menu under an "Add question" button: the type is chosen first and the editor opens
@@ -816,6 +855,7 @@ impl App {
         let name_need = ui.fonts_mut(|f| f.layout_no_wrap(bank_name.clone(), egui::FontId::new(34.0, theme::serif_family()), theme::ink()).size().x) + 48.0;
         let one_row = beside >= name_need.max(300.0);
         let mut drawn_w = None;
+        let mut name_row: Option<egui::Rect> = None;
         ui.horizontal(|ui| {
             // On a row of its own the name may use the whole width, less its rename pencil.
             let name_w = if one_row { beside.min(680.0) } else { avail - 30.0 }.max(160.0);
@@ -826,7 +866,7 @@ impl App {
                 // The name field hugs its text so the rename pencil sits right after it.
                 let text_w = ui.fonts_mut(|f| f.layout_no_wrap(name_buf.clone(), name_font.clone(), theme::ink()).size().x);
                 let field_w = (text_w + 12.0).clamp(160.0, name_w);
-                let resp = ui
+                let row = ui
                     .horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
                         let resp = ui.add(
@@ -842,8 +882,9 @@ impl App {
                             resp.request_focus();
                         }
                         resp
-                    })
-                    .inner;
+                    });
+                name_row = Some(row.response.rect);
+                let resp = row.inner;
                 if resp.changed() && !name_buf.trim().is_empty() && name_buf.trim() != bank_name {
                     let t = now_secs();
                     if let Some(b) = self.store.bank_mut(bank_id) {
@@ -891,9 +932,16 @@ impl App {
                 });
             });
             if one_row {
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    drawn_w = Some(self.bank_toolbar(ui, ctx, key, bank_id, &questions, false));
-                });
+                // Centred on the name's line (not on name + meta), right-aligned to the page edge.
+                let left = ui.cursor().min.x;
+                let row = name_row.unwrap_or_else(|| ui.min_rect());
+                let mid = row.center().y;
+                let band = egui::Rect::from_min_max(
+                    Pos2::new(left, mid - TOOL_H / 2.0 - 4.0),
+                    Pos2::new(ui.max_rect().right(), mid + TOOL_H / 2.0 + 4.0),
+                );
+                let mut bar = ui.new_child(egui::UiBuilder::new().max_rect(band).id_salt("bank_toolbar").layout(Layout::right_to_left(Align::Center)));
+                drawn_w = Some(self.bank_toolbar(&mut bar, ctx, key, bank_id, &questions, false));
             }
         });
         if !one_row {
@@ -3180,6 +3228,64 @@ fn pencil_button(ui: &mut Ui) -> egui::Response {
 const MORE_W: f32 = 40.0;
 /// The bank toolbar's button height.
 const TOOL_H: f32 = 40.0;
+/// Side padding of a quiet toolbar button (Details, Preview): its hover wash reaches this far
+/// past the icon and the label.
+const QUIET_PAD: f32 = 12.0;
+/// Corner radius of the segmented Details / Preview / … group (Share's 12).
+const QUIET_R: u8 = 12;
+
+/// Width of a quiet toolbar button with a 16 pt icon and `label`.
+fn quiet_tool_w(ui: &Ui, label: &str) -> f32 {
+    let text = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), egui::FontId::new(kit::ty::BUTTON, theme::semibold()), Color32::WHITE).size().x);
+    (QUIET_PAD * 2.0 + 16.0 + 7.0 + text).ceil()
+}
+
+/// One segment of the bank toolbar's quiet group (Details, Preview, the overflow). The toolbar
+/// draws the group's container (paper fill, 1 pt `edge`, radius [`QUIET_R`]) and the hairlines
+/// between segments; the segment adds, inside its corners `r`, a hover_bg wash under the pointer
+/// or keyboard focus, accent_faded while pressed or while its menu is open, and the 2 pt focus
+/// ring. `icon`: a 16 pt ink glyph before `label`, in ink semibold (Share is bold on card white,
+/// so the group stays a step below it); `label` None draws the three overflow dots in a `TOOL_H`
+/// square. `name` is the accessible name (and, for the dots, the hover text).
+fn quiet_tool(ui: &mut Ui, icon: Option<&str>, label: Option<&str>, name: &str, r: CornerRadius) -> egui::Response {
+    let w = match label {
+        Some(l) => quiet_tool_w(ui, l),
+        None => MORE_W,
+    };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, TOOL_H), Sense::click());
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    let p = ui.painter();
+    // The group's outline is drawn over the segments afterwards, so a wash fills to it.
+    if resp.is_pointer_button_down_on() || open {
+        p.rect_filled(rect, r, theme::accent_faded());
+    } else if resp.hovered() || resp.has_focus() {
+        p.rect_filled(rect, r, theme::hover_bg());
+    }
+    let fg = theme::ink();
+    match label {
+        Some(l) => {
+            let galley = p.layout_no_wrap(l.to_owned(), egui::FontId::new(kit::ty::BUTTON, theme::semibold()), fg);
+            let mut x = rect.left() + QUIET_PAD;
+            if let Some(icon) = icon {
+                crate::handicons::paint_glyph(p, Pos2::new(x + 8.0, rect.center().y), icon, 16.0, fg);
+                x += 16.0 + 7.0;
+            }
+            p.galley(Pos2::new(x, rect.center().y - galley.size().y / 2.0), galley, fg);
+        }
+        None => {
+            for dx in [-6.5, 0.0, 6.5] {
+                p.circle_filled(rect.center() + Vec2::new(dx, 0.0), 2.0, fg);
+            }
+        }
+    }
+    if resp.has_focus() {
+        let ring = CornerRadius { nw: r.nw.saturating_add(1), ne: r.ne.saturating_add(1), sw: r.sw.saturating_add(1), se: r.se.saturating_add(1) };
+        ui.painter().rect_stroke(rect.expand(1.0), ring, Stroke::new(2.0, theme::accent_col()), egui::StrokeKind::Outside);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name));
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    if label.is_none() { resp.on_hover_text(name) } else { resp }
+}
 
 /// Writes edited details onto a bank; returns true when anything changed.
 pub(crate) fn apply_details(bank: &mut crate::model::QuestionBank, draft: &crate::model::BankDetails, now: i64) -> bool {
@@ -4018,6 +4124,23 @@ mod tests {
 
     fn mc(texts: &[&str]) -> crate::model::Kind {
         crate::model::Kind::Mc { answers: texts.iter().enumerate().map(|(i, t)| crate::model::Answer { text: t.to_string(), correct: i == 0, locked: false }).collect() }
+    }
+
+    /// The Banks grid fills its width: 1280 (about 1110 of page) is three wide tiles, 760 (about
+    /// 614) two, a phone one; a wide window gains columns instead of a dead strip.
+    #[test]
+    fn the_banks_grid_takes_as_many_tiles_as_fit() {
+        let g = kit::GUTTER;
+        assert_eq!(banks_grid_cols(1110.0, g), 3);
+        assert_eq!(banks_grid_cols(614.0, g), 2);
+        assert_eq!(banks_grid_cols(400.0, g), 1);
+        assert_eq!(banks_grid_cols(100.0, g), 1);
+        assert_eq!(banks_grid_cols(1600.0, g), 5);
+        // Every tile stays at least the minimum wide.
+        for avail in [300.0f32, 575.0, 576.0, 900.0, 1110.0, 1600.0] {
+            let n = banks_grid_cols(avail, g) as f32;
+            assert!((avail - g * (n - 1.0)) / n >= BANK_TILE_MIN_W, "{avail}");
+        }
     }
 
     #[test]
