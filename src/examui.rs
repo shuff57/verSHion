@@ -415,6 +415,30 @@ fn paint_tilted_card(
     painter.add(TextShape::new(pos, g, theme::ink()).with_angle(angle));
 }
 
+/// Tiny tilted page thumbnail for exam cards.
+fn paint_thumb(painter: &egui::Painter, c: Pos2, angle: f32, lines: usize) {
+    let (w, h) = (62.0_f32, 82.0_f32);
+    let corners = [
+        Vec2::new(-w / 2.0, -h / 2.0),
+        Vec2::new(w / 2.0, -h / 2.0),
+        Vec2::new(w / 2.0, h / 2.0),
+        Vec2::new(-w / 2.0, h / 2.0),
+    ];
+    let shadow: Vec<Pos2> = corners.iter().map(|d| c + rot(angle, *d) + Vec2::new(1.0, 5.0)).collect();
+    painter.add(Shape::convex_polygon(shadow, Color32::from_black_alpha(34), Stroke::NONE));
+    let pts: Vec<Pos2> = corners.iter().map(|d| c + rot(angle, *d)).collect();
+    painter.add(Shape::convex_polygon(pts, theme::paper(), Stroke::new(1.0, theme::paper_edge())));
+    let seg = |a: Vec2, b: Vec2, s: Stroke| {
+        painter.line_segment([c + rot(angle, a), c + rot(angle, b)], s);
+    };
+    seg(Vec2::new(-14.0, -h / 2.0 + 12.0), Vec2::new(14.0, -h / 2.0 + 12.0), Stroke::new(2.0, PAPER_SOFT));
+    for i in 0..lines.clamp(2, 7) {
+        let y = -h / 2.0 + 24.0 + i as f32 * 8.0;
+        let len = if i % 3 == 2 { 16.0 } else { 23.0 };
+        seg(Vec2::new(-23.0, y), Vec2::new(-23.0 + len * 2.0 - 8.0, y), Stroke::new(1.4, PAPER_RULE.gamma_multiply(0.6)));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Exam list screen
 // ---------------------------------------------------------------------------
@@ -708,46 +732,108 @@ fn exam_menu(ui: &mut egui::Ui, rect: Rect, side: f32, row: &ExamRow, st: &mut L
     });
 }
 
+/// The Exams screen's page thumbnail (a mitigation: big enough to tell a page with a table from
+/// one of text; the name and the meta still say which exam it is).
+const EXAMS_THUMB: Vec2 = Vec2::new(112.0, 145.0);
+/// The thumbnail in a narrow window, so three cards and their actions show above the fold.
+const EXAMS_THUMB_NARROW: Vec2 = Vec2::new(88.0, 114.0);
 /// A card's action height (Open and its "…").
 const EXAMS_ACT_H: f32 = 32.0;
 
-/// The exam cards (screens::exams_card): the top of the first page across the card, readable;
-/// then the name, its counts, "From <bank>", a hairline and the footer (edited date; Open, then
-/// "…"). Every card in a size is one height. One 16 px gutter between cards and rows.
+/// The exam cards: the first page on the left; on the right the name (two lines kept), its
+/// counts, "From <bank>", and a footer under a hairline, level with the page's foot (edited date;
+/// Open, then "…"). Every card is the page plus its 16 px pads tall. One 16 px gutter between
+/// cards and rows.
 fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st: &mut ListUi) {
     let gap = kit::GUTTER;
+    let pad = kit::CARD_PAD;
     let avail = ui.available_width();
     let n = (((avail + gap) / (420.0 + gap)).floor() as usize).max(1);
     // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
     let fit = rows.len().clamp(1, n);
     let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
-    let narrow = avail < 760.0;
+    let thumb = if avail < 760.0 { EXAMS_THUMB_NARROW } else { EXAMS_THUMB };
+    let card_h = thumb.y + pad * 2.0;
     ui.spacing_mut().item_spacing = Vec2::splat(gap);
     for chunk in rows.chunks(n) {
-        ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::splat(gap);
-            for row in chunk {
-                let card = screens::ExamsCard {
-                    id: &row.id,
-                    name: &row.name,
-                    counts: format!(
-                        "{} question{} · {} point{}",
-                        row.q,
-                        if row.q == 1 { "" } else { "s" },
-                        fmt_number(row.pts),
-                        if (row.pts - 1.0).abs() < 1e-9 { "" } else { "s" },
-                    ),
-                    bank: &row.bank,
-                    when: format!("{}Edited {}", if row.archived { "Archived · " } else { "" }, bankui::fmt_date(row.modified)),
-                };
-                let out = screens::exams_card(ui, app, card_w, narrow, &card);
-                // (a child ui: the menu must not move this row's cursor, which set the gutter)
-                exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(out.menu)), out.menu, EXAMS_ACT_H, row, st);
-                if out.open {
-                    open_exam_screen(app, &row.id);
-                }
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::splat(gap);
+        for row in chunk {
+            let (rect, resp) = ui.allocate_exact_size(Vec2::new(card_w, card_h), Sense::click());
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &row.name));
+            if resp.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             }
-        });
+            let hover = kit::hover_t(ui.ctx(), resp.id.with("hover"), resp.hovered() || resp.has_focus());
+            let p = ui.painter().clone();
+            p.rect(
+                rect,
+                CornerRadius::same(kit::R_CARD),
+                theme::card(),
+                Stroke::new(1.0, theme::border().lerp_to_gamma(theme::accent_col(), hover * 0.6)),
+                StrokeKind::Inside,
+            );
+            if resp.has_focus() {
+                p.rect_stroke(rect.expand(1.0), CornerRadius::same(kit::R_CARD + 1), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+            }
+            let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::splat(pad), thumb);
+            let ctx = ui.ctx().clone();
+            if paint_exam_thumb(app, &ctx, &p, thumb_area, &row.id).is_none() {
+                paint_thumb(&p, thumb_area.center(), -0.05, row.q.max(2));
+            }
+            let tx = thumb_area.right() + pad;
+            let tw = rect.right() - pad - tx;
+            let mut y = rect.top() + pad - 2.0;
+            // Name (two lines at most), then the facts right under it: the card's height is the
+            // page's, so the text flows from the top and only the footer is pinned.
+            let mut job = egui::text::LayoutJob::default();
+            job.append(&row.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
+            // (the narrow card is wide but short: one line, so the facts stay above the footer)
+            let rows = if thumb.y < EXAMS_THUMB.y { 1 } else { 2 };
+            job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: rows, break_anywhere: false, overflow_character: Some('…') };
+            let name = p.layout_job(job);
+            let name_h = name.rows.len().max(1) as f32 * kit::ty::CARD_LINE;
+            p.galley(Pos2::new(tx, y), name, theme::ink());
+            y += name_h + 4.0;
+            // Counts, then the bank the questions came from.
+            let counts = format!(
+                "{} question{} · {} point{}",
+                row.q,
+                if row.q == 1 { "" } else { "s" },
+                fmt_number(row.pts),
+                if (row.pts - 1.0).abs() < 1e-9 { "" } else { "s" },
+            );
+            let meta = FontId::new(kit::ty::META, theme::sans_family());
+            let gc = clamped_galley(&p, &counts, meta.clone(), theme::text_col(), tw, 1);
+            p.galley(Pos2::new(tx, y), gc, theme::text_col());
+            y += 18.0 + 4.0;
+            let from = p.layout_no_wrap("From ".to_string(), meta.clone(), theme::muted_col());
+            let lw = from.size().x;
+            p.galley(Pos2::new(tx, y), from, theme::muted_col());
+            let gb = clamped_galley(&p, &row.bank, FontId::new(kit::ty::META, theme::semibold()), theme::text_col(), tw - lw, 1);
+            p.galley(Pos2::new(tx + lw, y), gb, theme::text_col());
+            // Footer, level with the foot of the page: when, then the card's actions.
+            let foot = Rect::from_min_max(Pos2::new(tx, thumb_area.bottom() - EXAMS_ACT_H), Pos2::new(rect.right() - pad, thumb_area.bottom()));
+            p.hline(tx..=foot.right(), foot.top() - 9.5, Stroke::new(1.0, theme::border()));
+            let menu = Rect::from_min_size(Pos2::new(foot.right() - EXAMS_ACT_H, foot.top()), Vec2::splat(EXAMS_ACT_H));
+            let mut open = false;
+            let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 8.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
+            let ob = kit::secondary_accent(&mut btn, "Open", EXAMS_ACT_H);
+            if ob.clicked() {
+                open = true;
+            }
+            let when_w = (ob.rect.left() - 12.0 - tx).max(20.0);
+            let when = format!("{}Edited {}", if row.archived { "Archived · " } else { "" }, bankui::fmt_date(row.modified));
+            let gw = clamped_galley(&p, &when, meta, theme::muted_col(), when_w, 1);
+            let wy = foot.center().y - gw.size().y / 2.0;
+            p.galley(Pos2::new(tx, wy), gw, theme::muted_col());
+            // (a child ui: the menu must not move this row's cursor, which set the gutter)
+            exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, EXAMS_ACT_H, row, st);
+            if open || resp.clicked() {
+                open_exam_screen(app, &row.id);
+            }
+        }
+    });
     }
 }
 
