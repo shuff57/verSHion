@@ -2303,6 +2303,7 @@ mod tests {
 pub(super) use flat::{flat_skin_summary, angle_dirs, quad_solve, quad_vals_of, regular_polygon_pts, tri_solve, write_givens, RAY_V, TRI_V, Q_V};
 mod parallel;
 pub(crate) use parallel::handles as parallel_handles;
+mod angles;
 use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
 
 // ───────────────────────── coordinate grid ─────────────────────────
