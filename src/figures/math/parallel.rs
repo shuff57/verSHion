@@ -287,7 +287,8 @@ fn place_token(t: &str) -> Option<(char, usize)> {
     let head = c.next()?;
     if !matches!(head, 'L' | 'T') { return None; }
     let n: usize = c.as_str().parse().ok()?;
-    (n >= 1).then_some((head, n - 1))
+    // `then`, not `then_some`: then_some works out n - 1 first, which overflows for L0 or T0 (the batch 5 checker)
+    (n >= 1).then(|| (head, n - 1))
 }
 fn is_place_word(t: &str) -> bool { place_token(t).is_some() || matches!(t.to_lowercase().as_str(), "left" | "right" | "top" | "bottom") }
 

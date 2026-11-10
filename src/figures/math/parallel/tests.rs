@@ -626,3 +626,13 @@ fn every_range_end_draws() {
         assert!(hs.iter().all(|h| h.pos.0.is_finite() && h.pos.1.is_finite()));
     }
 }
+
+#[test]
+fn a_named_point_on_line_or_transversal_zero_is_refused_not_a_crash() {
+    // the batch 5 checker: "A: L0 T1" overflowed in place_token and panicked the debug build
+    for row in ["A: L0 T1", "B: L1 T0", "C: T0 top", "D: L0 left"] {
+        assert!(parse_point(row).is_none(), "{row}");
+    }
+    let svg = (def().render)(&with(&[("points", s("A: L0 T1; B: L1 T1"))]));
+    assert!(svg.contains(">B<"), "the good row still draws");
+}
