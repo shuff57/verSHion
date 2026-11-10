@@ -1167,14 +1167,19 @@ impl crate::App {
                             }
                         } else {
                             // Narrow: two rows of two, each cell its own column with real side
-                            // padding, split by one divider that runs the panel's height and a
-                            // gap between the rows (no broken cross of short rules).
+                            // padding, split by one divider down the panel and one hairline across
+                            // it that meet in a clean cross.
                             let top = ui.cursor().top();
                             let full = ui.available_width();
                             let cell_w = ((full - 1.0) / 2.0).floor();
+                            let mut mid = 0.0;
                             for row in 0..2 {
                                 if row > 0 {
-                                    ui.add_space(18.0);
+                                    // Rows read 1, 2 then 3, 4: a full-width hairline between them
+                                    // that crosses the divider cleanly, with room above and below.
+                                    ui.add_space(16.0);
+                                    mid = ui.cursor().top().round() + 0.5;
+                                    ui.add_space(17.0);
                                 }
                                 ui.horizontal_top(|ui| {
                                     ui.spacing_mut().item_spacing.x = 1.0;
@@ -1187,7 +1192,10 @@ impl crate::App {
                                 });
                             }
                             let x = ui.min_rect().left() + cell_w + 0.5;
-                            ui.painter().vline(x, top + 6.0..=ui.cursor().top() - 4.0, Stroke::new(1.0, theme::border()));
+                            let rule = Stroke::new(1.0, theme::border());
+                            ui.painter().vline(x, top + 6.0..=ui.cursor().top() - 4.0, rule);
+                            let r = ui.min_rect();
+                            ui.painter().hline(r.left() + 16.0..=r.right() - 16.0, mid, rule);
                         }
                     });
                 });

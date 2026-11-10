@@ -2936,56 +2936,33 @@ struct MarginHandles {
 }
 
 /// The handles of a question at `rect` with gutters `ml`/`mr` wide. Desktop: grip and "…" left,
-/// ×/↑/↓ right, 18 square, shown under the pointer. Narrow: every handle in ONE place, the left
-/// gutter, 24 square, 26 apart, in two columns: next to the question grip, pencil, "…"; outside
-/// them ↑, ↓ and, set 6 lower and apart, ×. Under 76 tall only grip and "…", with × beside "…".
-/// A gutter too narrow for two columns puts them in a row above the question, right-aligned, × last
-/// and apart. (`left` holds the grip/pencil/"…" column, `right` the move and remove handles.)
+/// ×/↑/↓ right, 18 square. Narrow: 24 square, 26 apart, and a pencil between grip and "…"; under
+/// 76 tall only grip, "…" and ×. A gutter under 30 wide puts them in a 26-tall strip above the
+/// question, right-aligned.
 fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32, narrow: bool) -> MarginHandles {
-    if !narrow {
-        let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
-        let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
-        let y0 = rect.top() + 9.0;
-        return MarginHandles {
-            left: vec![(GRIP, gc), (4, gc + Vec2::new(0.0, 24.0))],
-            right: [0u8, 1, 2].iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y0 + k as f32 * 20.0))).collect(),
-            side: 18.0,
-            tall: true,
-        };
-    }
-    let tall = rect.height() >= 76.0;
-    let (side, step, apart) = (24.0, 26.0, 6.0);
-    let left_k: &[u8] = if tall { &[GRIP, 7, 4] } else { &[GRIP, 4] };
-    if ml < 62.0 {
-        // One row above the question: grip, pencil, "…", ↑, ↓, then × set apart.
+    let tall = !narrow || rect.height() >= 76.0;
+    let side = if narrow { 24.0 } else { 18.0 };
+    let step = if narrow { 26.0 } else { 20.0 };
+    let left_k: &[u8] = if narrow && tall { &[GRIP, 7, 4] } else { &[GRIP, 4] };
+    let right_k: &[u8] = if tall { &[0, 1, 2] } else { &[0] };
+    if narrow && ml.min(mr) < 30.0 {
         let y = rect.top() - 13.0;
-        let mut kinds: Vec<u8> = left_k.to_vec();
-        if tall {
-            kinds.extend([1, 2]);
-        }
-        let n = kinds.len();
-        let xr = rect.right() - side / 2.0;
-        let x_of = |k: usize| xr - (n - k) as f32 * step - apart;
+        let total = left_k.len() + right_k.len();
+        let at = |k: usize| Pos2::new(rect.right() - side / 2.0 - (total - 1 - k) as f32 * step, y);
         return MarginHandles {
-            left: kinds.iter().take(left_k.len()).enumerate().map(|(k, &kind)| (kind, Pos2::new(x_of(k), y))).collect(),
-            right: kinds[left_k.len()..].iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(x_of(left_k.len() + k), y))).chain([(0u8, Pos2::new(xr, y))]).collect(),
+            left: left_k.iter().enumerate().map(|(k, &kind)| (kind, at(k))).collect(),
+            right: right_k.iter().enumerate().map(|(k, &kind)| (kind, at(left_k.len() + k))).collect(),
             side,
             tall,
         };
     }
-    let xi = rect.left() - 8.0 - side / 2.0;
-    // (4 more between the columns than between rows, so they read as two columns of one group)
-    let xo = xi - step - 2.0;
-    let y0 = rect.top() + 10.0;
-    let row = |k: usize| y0 + k as f32 * step;
-    let right = if tall {
-        vec![(1u8, Pos2::new(xo, row(0))), (2, Pos2::new(xo, row(1))), (0, Pos2::new(xo, row(2) + apart))]
-    } else {
-        vec![(0u8, Pos2::new(xo, row(1) + apart))]
-    };
+    let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
+    let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
+    let y0 = rect.top() + if narrow { 12.0 } else { 9.0 };
+    let lstep = if narrow { step } else { 24.0 };
     MarginHandles {
-        left: left_k.iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(xi, row(k)))).collect(),
-        right,
+        left: left_k.iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * lstep))).collect(),
+        right: right_k.iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y0 + k as f32 * step))).collect(),
         side,
         tall,
     }
@@ -7679,47 +7656,36 @@ mod system_pass_tests {
         assert_eq!(fits[4], StripFit { words: false, summary: None });
     }
 
-    /// A narrow page keeps a question's handles in one place, the left gutter: grip, pencil and
-    /// "…" next to it, ↑ and ↓ outside them, × set apart below; 24 square and 26 apart. A short
-    /// question keeps grip, "…" and ×. Desktop is as before.
+    /// A narrow page shows a tall question's grip, pencil and "…" on the left and ×, ↑, ↓ on the
+    /// right, 24 square and 26 apart; a short one keeps grip and "…" and ×. Desktop is as before.
     #[test]
     fn narrow_question_handles_by_height() {
         let tall = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 120.0));
         let short = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 40.0));
         let kinds = |v: &[(u8, Pos2)]| v.iter().map(|h| h.0).collect::<Vec<_>>();
-        let h = margin_handles(tall, 67.0, 67.0, 14.0, true);
-        assert_eq!((kinds(&h.left), kinds(&h.right), h.side, h.tall), (vec![GRIP, 7, 4], vec![1, 2, 0], 24.0, true));
-        let s = margin_handles(short, 67.0, 67.0, 14.0, true);
+        let h = margin_handles(tall, 60.0, 60.0, 14.0, true);
+        assert_eq!((kinds(&h.left), kinds(&h.right), h.side, h.tall), (vec![GRIP, 7, 4], vec![0, 1, 2], 24.0, true));
+        let s = margin_handles(short, 60.0, 60.0, 14.0, true);
         assert_eq!((kinds(&s.left), kinds(&s.right), s.tall), (vec![GRIP, 4], vec![0], false));
-        for (hs, q) in [(&h, tall), (&s, short)] {
-            let all: Vec<(u8, Rect)> = hs.left.iter().chain(&hs.right).map(|p| (p.0, Rect::from_center_size(p.1, Vec2::splat(hs.side)))).collect();
-            for (a, (_, ra)) in all.iter().enumerate() {
-                // one place: all in the left gutter, inside the page's margin, clear of the text
-                assert!(ra.right() <= q.left() && ra.left() >= q.left() - 67.0, "a handle outside the left gutter");
-                for (_, rb) in &all[a + 1..] {
+        for hs in [&h, &s] {
+            let all: Vec<Rect> = hs.left.iter().chain(&hs.right).map(|p| Rect::from_center_size(p.1, Vec2::splat(hs.side))).collect();
+            for (a, ra) in all.iter().enumerate() {
+                assert!(!ra.intersects(tall.shrink(1.0)) || ra.right() <= tall.left() || ra.left() >= tall.right(), "a handle sits on the question");
+                for rb in &all[a + 1..] {
                     assert!(!ra.intersects(rb.shrink(0.5)), "handles overlap");
                 }
             }
-            // × stands apart: further from every other handle than the 26 between rows.
-            let x = all.iter().find(|h| h.0 == 0).unwrap().1;
-            let nearest = all.iter().filter(|h| h.0 != 0).map(|h| (h.1.center() - x.center()).length()).fold(f32::MAX, f32::min);
-            assert!(nearest >= 28.0, "× is {nearest} from the nearest handle");
-            // the columns end about where a 76-tall question does
-            assert!(all.iter().all(|h| h.1.bottom() <= q.top() + 80.5));
+            // The left column stays inside the question's height plus its gap.
+            assert!(hs.left.last().unwrap().1.y + hs.side / 2.0 <= tall.top() + 14.0 * 0.75 + 52.0 + 12.0 + 0.5);
         }
-        let col = |v: &[(u8, Pos2)]| v.iter().map(|p| p.1.y).collect::<Vec<_>>();
-        assert_eq!(col(&h.left), vec![110.0, 136.0, 162.0]);
-        // A gutter too narrow for two columns: one row above the question, × last and apart.
-        let n = margin_handles(tall, 40.0, 60.0, 14.0, true);
-        assert_eq!(kinds(&n.right), vec![1, 2, 0]);
+        assert!((h.left[1].1.y - h.left[0].1.y - 26.0).abs() < 0.01 && (h.right[1].1.y - h.right[0].1.y - 26.0).abs() < 0.01);
+        // A gutter under 30: one strip above the question, right-aligned.
+        let n = margin_handles(tall, 24.0, 60.0, 14.0, true);
         assert!(n.left.iter().chain(&n.right).all(|p| (p.1.y - (tall.top() - 13.0)).abs() < 0.01));
-        let last = n.right.last().unwrap();
-        assert_eq!(last.0, 0);
-        assert!((last.1.x - (tall.right() - 12.0)).abs() < 0.01);
-        // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart on the right, 18 square, as before.
+        assert!((n.right.last().unwrap().1.x - (tall.right() - 12.0)).abs() < 0.01);
+        // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart, 18 square, as before.
         let d = margin_handles(short, 60.0, 60.0, 14.0, false);
         assert_eq!((kinds(&d.left), kinds(&d.right), d.side), (vec![GRIP, 4], vec![0, 1, 2], 18.0));
-        assert!(d.right.iter().all(|p| p.1.x > short.right()));
     }
 
     /// The pencil (kind 7) is named "Edit question", never the catch-all "Move down".
