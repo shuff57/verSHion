@@ -18,6 +18,7 @@ mod curves;
 pub mod data;
 mod lewis;
 mod measure;
+mod length;
 pub mod notes;
 pub mod reactionenergy;
 pub mod ratesgraph;
