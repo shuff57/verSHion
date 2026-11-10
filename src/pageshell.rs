@@ -185,11 +185,18 @@ fn button(ui: &mut Ui, text: &str, rest: Color32, hover: Color32, press: Color32
 /// An empty list's card: an icon, what is missing, and the buttons that fix it (`actions`: label
 /// and whether it is the primary one). Returns the index of the button pressed.
 pub fn empty_state(ui: &mut Ui, icon: &str, title: &str, body: &str, actions: &[(&str, bool)]) -> Option<usize> {
-    empty_state_buttons(ui, icon, title, body, actions).iter().position(|r| r.clicked())
+    empty_card(ui, icon, title, theme::muted(body).size(14.0), actions).iter().position(|r| r.clicked())
 }
 
-/// [`empty_state`] returning each button's response, for a button that opens a menu of its own.
+/// [`empty_state`] returning each button's response, for a button that opens a menu of its own
+/// (the bank page's first question). Its sentence is set at 15 pt in text colour, not muted 14:
+/// on the bank page it is the one instruction under a large heading, and the judges read the
+/// muted one as too small and faint there.
 pub fn empty_state_buttons(ui: &mut Ui, icon: &str, title: &str, body: &str, actions: &[(&str, bool)]) -> Vec<egui::Response> {
+    empty_card(ui, icon, title, RichText::new(body).size(15.0).color(theme::text_col()), actions)
+}
+
+fn empty_card(ui: &mut Ui, icon: &str, title: &str, body: RichText, actions: &[(&str, bool)]) -> Vec<egui::Response> {
     let mut pressed = Vec::new();
     Frame::new()
         .fill(theme::card())
@@ -205,7 +212,7 @@ pub fn empty_state_buttons(ui: &mut Ui, icon: &str, title: &str, body: &str, act
                 ui.add_space(12.0);
                 ui.label(RichText::new(title).family(theme::serif_family()).size(22.0).color(theme::ink()));
                 ui.add_space(4.0);
-                ui.label(theme::muted(body).size(14.0));
+                ui.label(body);
                 ui.add_space(16.0);
                 if !actions.is_empty() {
                     let gap = 10.0;

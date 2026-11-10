@@ -895,27 +895,28 @@ impl App {
                 }
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label(kit::meta(format!(
+                    // Body size under the title: the page's facts, read before anything is pressed.
+                    ui.label(RichText::new(format!(
                         "{} question{} · {} topic{} · edited {} · ",
                         questions.len(),
                         if questions.len() == 1 { "" } else { "s" },
                         topics.len(),
                         if topics.len() == 1 { "" } else { "s" },
                         rel_time(modified),
-                    )));
+                    )).size(kit::ty::BODY).color(theme::text_col()));
                     let used: Vec<Id> = crate::bankops::exams_using_bank(&self.store.exams, bank_id).iter().map(|e| e.id.clone()).collect();
-                    let r = usage_link(ui, used.len(), 13.0);
+                    let r = usage_link(ui, used.len(), kit::ty::BODY);
                     if !used.is_empty() && ui.interact(r.rect, ui.id().with("bank_usage_link"), Sense::click()).clicked() {
                         open_usage(ctx, bank_name.clone(), used);
                     }
                     let pics: usize = questions.iter().map(crate::bankops::pictures_needed).sum();
                     if pics > 0 {
-                        ui.label(kit::meta(" · "));
+                        ui.label(RichText::new(" · ").size(kit::ty::BODY).color(theme::text_col()));
                         let link = ui
                             .add(
                                 egui::Label::new(
                                     RichText::new(format!("{pics} picture{} needed", if pics == 1 { "" } else { "s" }))
-                                        .size(13.0)
+                                        .size(kit::ty::BODY)
                                         .color(theme::bad())
                                         .underline(),
                                 )
