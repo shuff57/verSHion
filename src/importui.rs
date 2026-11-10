@@ -41,7 +41,6 @@ enum Ic {
     Clip,
     Camera,
     Sparkle,
-    Lock,
 }
 
 struct Source {
@@ -439,17 +438,57 @@ fn add_paths(app: &mut crate::App, st: &mut State, paths: Vec<std::path::PathBuf
 
 // ---------- AI hand-off ----------
 
+/// The host of a base URL ("http://127.0.0.1:11434/api" -> "127.0.0.1").
+fn url_host(base: &str) -> &str {
+    let rest = base.split_once("://").map_or(base, |(_, r)| r);
+    let auth = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let auth = auth.rsplit_once('@').map_or(auth, |(_, h)| h);
+    if let Some(v6) = auth.strip_prefix('[') {
+        return v6.split(']').next().unwrap_or("");
+    }
+    auth.split(':').next().unwrap_or("")
+}
+
+/// True when a base URL points at this computer.
+fn on_this_machine(base: &str) -> bool {
+    let h = url_host(base).to_ascii_lowercase();
+    let h = h.trim_start_matches('[').trim_end_matches(']');
+    // Parse IP literals instead of matching prefixes: "127.example.com" is a DNS name, not loopback.
+    match h.parse::<std::net::IpAddr>() {
+        Ok(ip) => ip.is_loopback() || ip.is_unspecified(),
+        Err(_) => h == "localhost" || h.ends_with(".localhost"),
+    }
+}
+
+/// Where a converted photo goes, three ways: `short` names the place in a few words for the
+/// one-line note under the drop zone, `detail` adds the model (and the server for a custom
+/// endpoint) for the dialog, the workspace and the note's tooltip, and `leaves` says whether
+/// it leaves this computer at all.
+struct Dest {
+    short: String,
+    detail: String,
+    leaves: bool,
+}
+
+fn provider_dest(s: &crate::Settings) -> Dest {
+    let cfg = crate::ai::AiCfg::from(s);
+    let d = |short: &str, detail: String, leaves| Dest { short: short.to_string(), detail, leaves };
+    match cfg.provider.as_str() {
+        "account" => d("verSHion's server", "the verSHion server, paid with credits from your account".to_string(), true),
+        "workers" => d("the verSHion relay", "the verSHion relay".to_string(), true),
+        "cloud" => d("Ollama Cloud", format!("Ollama Cloud · {}", cfg.model), true),
+        "openrouter" => d("OpenRouter", format!("OpenRouter · {}", cfg.model), true),
+        "custom" => d("your own AI server", format!("{} · {}", cfg.base, cfg.model), true),
+        // Local Ollama: on this computer unless its address names another machine.
+        _ if on_this_machine(&cfg.base) => d("Ollama", format!("Ollama on this computer · {}", cfg.model), false),
+        _ => d("your Ollama server", format!("Ollama at {} · {}", url_host(&cfg.base), cfg.model), true),
+    }
+}
+
 /// Truthful description of where a photo goes: (destination text, leaves_computer).
 fn provider_label(s: &crate::Settings) -> (String, bool) {
-    let cfg = crate::ai::AiCfg::from(s);
-    match cfg.provider.as_str() {
-        "account" => ("the verSHion server, paid with credits from your account".to_string(), true),
-        "workers" => ("the verSHion relay".to_string(), true),
-        "cloud" => (format!("Ollama Cloud · {}", cfg.model), true),
-        "openrouter" => (format!("OpenRouter · {}", cfg.model), true),
-        "custom" => (format!("{} · {}", cfg.base, cfg.model), true),
-        _ => (format!("Ollama on this computer · {}", cfg.model), false),
-    }
+    let d = provider_dest(s);
+    (d.detail, d.leaves)
 }
 
 impl crate::App {
@@ -544,7 +583,6 @@ fn paint_icon(p: &Painter, ic: Ic, c: Pos2, col: Color32, k: f32) {
         Ic::Clip => ph::PAPERCLIP,
         Ic::Camera => ph::CAMERA,
         Ic::Sparkle => crate::handicons::SPARKLE,
-        Ic::Lock => ph::LOCK_SIMPLE,
     };
     crate::handicons::paint_glyph(p, c, glyph, 16.0 * k, col);
 }
@@ -835,42 +873,73 @@ fn intake(app: &mut crate::App, ctx: &egui::Context, st: &mut State) {
     }
 }
 
-/// Split a group's chips into lines that fit `width`, measuring each pill (its 11 pt bold label
-/// plus the 9 px side padding and the 6 px gap) rather than trusting egui to wrap a frame.
-fn chip_rows<'a>(ui: &egui::Ui, items: &[&'a str], width: f32) -> Vec<Vec<&'a str>> {
-    let font = egui::FontId::new(11.0, theme::bold_family());
+/// Text size of the format names and of their row labels (one size, so a row reads on one baseline).
+const FORMAT_PT: f32 = 13.0;
+/// What goes between two format names.
+const FORMAT_SEP: &str = "  ·  ";
+
+/// Split a group's format names into lines that fit `width`, measuring each name and the
+/// middot between names, so a line breaks only between two names and never inside one
+/// ("Photos of a worksheet" stays whole).
+fn format_lines<'a>(ui: &egui::Ui, items: &[&'a str], width: f32) -> Vec<Vec<&'a str>> {
+    let font = FontId::proportional(FORMAT_PT);
+    let w_of = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), theme::text_col()).size().x;
+    break_between(items, width, w_of(FORMAT_SEP), w_of)
+}
+
+/// The line breaking behind [`format_lines`]: names go on a line while they fit with a
+/// separator `sep` wide between them; a name that does not fit starts the next line (alone if
+/// it is wider than the whole line), so a break always falls between two names. A line that
+/// continues ends with the separator (see [`format_line`]), so every name but the last keeps
+/// one `sep` of room after it.
+fn break_between<'a>(items: &[&'a str], width: f32, sep: f32, w_of: impl Fn(&str) -> f32) -> Vec<Vec<&'a str>> {
     let mut rows: Vec<Vec<&str>> = vec![Vec::new()];
     let mut used = 0.0_f32;
-    for it in items {
-        let text = ui
-            .painter()
-            .layout_no_wrap((*it).to_string(), font.clone(), theme::text_col())
-            .size()
-            .x;
-        let w = text + 18.0 + 2.0;
-        let gap = if used > 0.0 { 6.0 } else { 0.0 };
-        if used > 0.0 && used + gap + w > width {
+    for (i, it) in items.iter().enumerate() {
+        let w = w_of(it);
+        let trail = if i + 1 < items.len() { sep } else { 0.0 };
+        if used > 0.0 && used + sep + w + trail > width {
             rows.push(Vec::new());
             used = 0.0;
         }
-        let gap = if used > 0.0 { 6.0 } else { 0.0 };
-        used += gap + w;
+        used += if used > 0.0 { sep + w } else { w };
         rows.last_mut().expect("one row to start with").push(*it);
     }
     rows
 }
 
+/// One line of format names: the names in body text, the middots between them muted. A line
+/// that `continues` ends with the muted separator, so the list reads on into the next line; a
+/// line never starts with one. Plain text on purpose: these are what the importer reads, not
+/// things to press, so the only button-shaped things on the page are Choose files, Paste text
+/// and Add photo.
+fn format_line(items: &[&str], continues: bool) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let name = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::text_col());
+    let sep = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::muted_col());
+    for (i, it) in items.iter().enumerate() {
+        if i > 0 {
+            job.append(FORMAT_SEP, 0.0, sep.clone());
+        }
+        job.append(it, 0.0, name.clone());
+    }
+    if continues {
+        job.append(FORMAT_SEP.trim_end(), 0.0, sep);
+    }
+    job
+}
+
 /// What the importer can read, grouped so a teacher can scan for their tool instead of
-/// picking a format out of one faint dot-separated line.
+/// picking a format out of one long line.
 fn formats_panel(ui: &mut egui::Ui) {
     kit::card().inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal_wrapped(|ui| {
-            kit::small_caps(ui, "What it reads");
+            kit::label(ui, "What it reads");
             ui.add_space(2.0);
-            ui.label(theme::muted("Detected from the file itself — nothing is converted until you press Convert.").size(11.5));
+            ui.label(kit::meta("Detected from the file itself — nothing is converted until you press Convert."));
         });
-        ui.add_space(10.0);
+        ui.add_space(8.0);
         let groups: [(&str, &[&str]); 3] = [
             ("Documents", &["PDF", "Word", "Photos of a worksheet", "Pasted text"]),
             ("Spreadsheets", &["Excel", "CSV"]),
@@ -879,37 +948,29 @@ fn formats_panel(ui: &mut egui::Ui) {
                 &["Respondus", "Canvas QTI", "Blackboard", "Moodle XML", "GIFT", "Aiken", "Kahoot", "Quizlet", "Test Parrot .json"],
             ),
         ];
-        // The chips break inside the card's own width. A pill is a `Frame`, and a frame reports
-        // its size only after it is placed, so egui's wrapping never fires for one: at 760 the
-        // quiz-tool row ran off the card and the last chip was squeezed to one letter a line.
-        // So measure each chip and choose the line breaks here.
+        // A fixed label column: every list starts at the same x whatever its label's length.
+        // The lines are broken here, between names, so a long list wraps under its own column.
         let inner = ui.available_width();
-        let lab_w = 104.0_f32.min(inner * 0.4);
-        for (group, items) in groups {
+        let lab_w = 104.0_f32.min(inner * 0.3);
+        let rest = (inner - lab_w).max(120.0);
+        for (gi, (group, items)) in groups.into_iter().enumerate() {
+            if gi > 0 {
+                ui.add_space(5.0);
+            }
             ui.horizontal_top(|ui| {
-                ui.allocate_ui_with_layout(
-                    Vec2::new(lab_w, 0.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.label(theme::muted(group).size(11.5));
-                    },
-                );
-                let rest = (inner - lab_w - ui.spacing().item_spacing.x).max(120.0);
-                ui.allocate_ui_with_layout(
-                    Vec2::new(rest, 0.0),
-                    Layout::top_down(Align::Min),
-                    |ui| {
-                        for row in chip_rows(ui, items, rest) {
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-                                for it in row {
-                                    kit::pill_no_wrap(ui, it, theme::field(), theme::text_col());
-                                }
-                            });
-                            ui.add_space(6.0);
-                        }
-                    },
-                );
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.allocate_ui_with_layout(Vec2::new(lab_w, 0.0), Layout::left_to_right(Align::Min), |ui| {
+                    ui.set_min_width(lab_w);
+                    ui.label(theme::muted(group).size(FORMAT_PT));
+                });
+                ui.allocate_ui_with_layout(Vec2::new(rest, 0.0), Layout::top_down(Align::Min), |ui| {
+                    ui.spacing_mut().item_spacing.y = 3.0;
+                    let lines = format_lines(ui, items, rest);
+                    let n = lines.len();
+                    for (li, line) in lines.into_iter().enumerate() {
+                        ui.add(egui::Label::new(format_line(&line, li + 1 < n)).selectable(false).wrap_mode(egui::TextWrapMode::Extend));
+                    }
+                });
             });
         }
     });
@@ -917,7 +978,9 @@ fn formats_panel(ui: &mut egui::Ui) {
 
 fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut State) {    fix_pick(st);
     let view_h = ui.available_height();
-    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+    // The page's bar floats and shows only under the pointer: a solid handle ran down the right
+    // edge as a dark rule whenever the page was a few points taller than the window.
+    kit::quiet_scroll_area(ui, egui::ScrollArea::vertical().auto_shrink([false, false]), |ui| {
         let full = ui.available_width();
         let w = if st.sources.is_empty() { full.min(crate::pageshell::PAGE_W) } else { (full - 14.0).min(1500.0) };
         ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Min), |ui| {
@@ -928,18 +991,29 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
                 "Import questions",
                 Some("One place for everything: pasted text, files, spreadsheets or a photo of a worksheet. We work out the format for you."),
             );
-            ui.add_space(14.0);
+            // Spaced so the history heading and its first line sit in the first view at 1280x800
+            // and at 760 wide while nothing is staged.
+            let empty = st.sources.is_empty();
+            ui.add_space(12.0);
             drop_area(app, ui, st);
-            ui.add_space(14.0);
-            if st.sources.is_empty() {
-                formats_panel(ui);
+            if empty && !st.in_modal {
+                // The privacy facts sit under the drop zone, left-aligned, so the zone holds only
+                // its title and the actions.
+                // Close under the zone (the 8 pt item gap alone, about 10 pt to the disc with the
+                // zone's dashed edge), so it reads as the zone's caption, and well clear of What
+                // it reads (14 + 8: about 24 pt).
+                privacy_below(app, ui);
                 ui.add_space(14.0);
-                privacy_note(app, ui);
+            } else {
+                ui.add_space(12.0);
+            }
+            if empty {
+                formats_panel(ui);
             } else {
                 let flags = dup_flags(app, st);
                 workspace(app, ui, ctx, st, &flags, w, view_h);
             }
-            ui.add_space(26.0);
+            ui.add_space(if empty { 14.0 } else { 26.0 });
             history(app, ui);
             ui.add_space(20.0);
             crate::pageshell::footer(
@@ -989,17 +1063,17 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
     let inner = egui::Frame::new()
         .fill(fill)
         .corner_radius(CornerRadius::same(16))
-        .inner_margin(if compact { Margin::symmetric(16, 10) } else { Margin { left: 16, right: 16, top: 18, bottom: 14 } })
+        .inner_margin(if compact { Margin::symmetric(16, 10) } else { Margin { left: 16, right: 16, top: 14, bottom: 12 } })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.vertical_centered(|ui| {
                 if !compact {
-                    let (r, _) = ui.allocate_exact_size(Vec2::splat(46.0), Sense::hover());
-                    ui.painter().rect_filled(r, CornerRadius::same(14), theme::card());
+                    let (r, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
+                    ui.painter().rect_filled(r, CornerRadius::same(12), theme::card());
                     paint_icon(ui.painter(), Ic::Upload, r.center(), theme::accent_col(), 1.25);
                     ui.add_space(4.0);
                     ui.label(theme::serif("Drop anything here").size(19.0).color(theme::ink()));
-                    ui.label(theme::text("Files, photos, or paste text straight in.").size(12.5));
+                    ui.label(kit::meta("Files, photos, or paste text straight in."));
                     ui.add_space(8.0);
                 }
                 ui.horizontal(|ui| {
@@ -1042,7 +1116,7 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                             ),
                     );
                     paste_live_line(app, ui, st);
-                    ui.label(theme::muted("* marks the correct answer. One blank line between questions.").size(11.5));
+                    ui.label(kit::meta("* marks the correct answer. One blank line between questions."));
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         ui.add_space(((ui.available_width() - 250.0) / 2.0).max(0.0));
@@ -1056,10 +1130,6 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                             st.paste_open = false;
                         }
                     });
-                }
-                if !compact && !st.in_modal {
-                    ui.add_space(2.0);
-                    ui.label(theme::muted("Any file, text or photo — the format is detected after the drop.").size(11.5));
                 }
             });
         });
@@ -1108,21 +1178,79 @@ fn ctx_hovering(ctx: &egui::Context) -> bool {
     ctx.input(|i| !i.raw.hovered_files.is_empty())
 }
 
-/// Privacy note, truthful about the configured provider.
-fn privacy_note(app: &crate::App, ui: &mut egui::Ui) {
+/// The privacy sentence, truthful about the configured provider.
+fn privacy_text(app: &crate::App) -> String {
     let (dest, leaves) = provider_label(&app.settings);
-    let msg = if leaves {
+    if leaves {
         format!(
             "Text and spreadsheets are read on this computer. Nothing leaves it until you press Convert, and then only the photo goes to {dest}."
         )
     } else {
         format!("Everything is read on this computer. When you press Convert, the photo goes to {dest}, which runs here too.")
-    };
-    ui.horizontal_top(|ui| {
-        let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, 16.0), Sense::hover());
-        paint_icon(ui.painter(), Ic::Lock, r.center() + Vec2::new(0.0, 2.0), theme::accent_col(), 0.8);
-        ui.add(egui::Label::new(theme::muted(msg).size(12.0)).wrap());
+    }
+}
+
+/// The privacy facts as one run (the Import dialog and the workspace): a lock, the bold lead,
+/// then the sentence.
+fn privacy_job(app: &crate::App, size: f32) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    job.append(egui_phosphor::regular::LOCK_SIMPLE, 0.0, egui::TextFormat::simple(theme::icon_font(size + 1.0), theme::accent_col()));
+    job.append(" Private by default.", 4.0, egui::TextFormat::simple(FontId::new(size, theme::bold_family()), theme::ink()));
+    job.append(&format!(" {}", privacy_text(app)), 0.0, egui::TextFormat::simple(FontId::new(size, theme::sans_family()), theme::text_col()));
+    job
+}
+
+/// The note under the drop zone, one short line: what stays here and the one place what you
+/// convert goes (photos and PDF pages: the only sources with a Convert button), by name only. The model and the longer sentence are in its tooltip.
+fn privacy_short(s: &crate::Settings) -> String {
+    let d = provider_dest(s);
+    if d.leaves {
+        format!("Read on this computer. Only what you convert goes to {}.", d.short)
+    } else {
+        "Read on this computer, even what you convert: Ollama runs here.".to_string()
+    }
+}
+
+/// The note's tooltip and accessible description: the full sentence (with the model), so the
+/// short line drops nothing.
+fn privacy_detail(app: &crate::App) -> String {
+    format!("Private by default. {}", privacy_text(app))
+}
+
+/// The privacy note under the drop zone, one line at both widths: a 24 pt accent_faded disc
+/// holding the lock, then the bold lead and the short sentence at 14 pt, left-aligned (a
+/// narrower window wraps it under the text, never under the disc). Hovering it shows the full
+/// sentence with the model.
+fn privacy_below(app: &crate::App, ui: &mut egui::Ui) {
+    const DISC: f32 = 24.0;
+    let row = ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        let (r, _) = ui.allocate_exact_size(Vec2::splat(DISC), Sense::hover());
+        ui.painter().circle_filled(r.center(), DISC / 2.0, theme::accent_faded());
+        crate::handicons::paint_glyph(ui.painter(), r.center(), egui_phosphor::regular::LOCK_SIMPLE, 14.0, theme::accent_col());
+        let w = ui.available_width();
+        ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Min), |ui| {
+            ui.set_max_width(w);
+            // the first line's centre on the disc's centre
+            ui.add_space(2.0);
+            let size = kit::ty::BODY;
+            let mut job = egui::text::LayoutJob::default();
+            job.append("Private by default.", 0.0, egui::TextFormat::simple(FontId::new(size, theme::bold_family()), theme::ink()));
+            job.append(&format!(" {}", privacy_short(&app.settings)), 0.0, egui::TextFormat::simple(FontId::new(size, theme::sans_family()), theme::text_col()));
+            ui.add(egui::Label::new(job).wrap().sense(Sense::hover()))
+        })
+        .inner
     });
+    let detail = privacy_detail(app);
+    let label = row.inner;
+    label.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, detail.clone()));
+    label.on_hover_text(detail);
+}
+
+/// The same facts as one left-aligned 13 pt paragraph, for the Import dialog and the
+/// workspace's details column.
+fn privacy_note(app: &crate::App, ui: &mut egui::Ui) {
+    ui.add(egui::Label::new(privacy_job(app, kit::ty::META)).wrap());
 }
 
 // ----- the three-pane workspace: import list | page preview | details -----
@@ -2906,10 +3034,10 @@ impl crate::App {
 
 fn history(app: &mut crate::App, ui: &mut egui::Ui) {
     ui.label(theme::serif("Import history").size(22.0).color(theme::ink()));
-    ui.label(theme::muted("Everything verSHion has read: pasted, converted by the AI, or read from a file.").size(12.5));
-    ui.add_space(8.0);
+    ui.label(kit::lead("Everything verSHion has read: pasted, converted by the AI, or read from a file."));
+    ui.add_space(4.0);
     if app.store.imports.is_empty() {
-        ui.label(theme::muted("No imports yet."));
+        crate::pageshell::empty_line(ui, crate::handicons::IMPORT, "Nothing imported yet. What you import is listed here.", None);
         return;
     }
     let mut sorted = app.store.imports.clone();
@@ -2987,6 +3115,36 @@ fn history(app: &mut crate::App, ui: &mut egui::Ui) {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn format_lists_break_only_between_names() {
+        // One unit a character, a 5-unit "  ·  " between names.
+        let w = |t: &str| t.chars().count() as f32;
+        let items = ["PDF", "Word", "Photos of a worksheet", "Pasted text"];
+        // Everything fits on one line: 3 + 5 + 4 + 5 + 21 + 5 + 11 = 54.
+        assert_eq!(break_between(&items, 54.0, 5.0, w), vec![items.to_vec()]);
+        // One unit short: the last name moves down whole, never split at its space.
+        assert_eq!(break_between(&items, 53.0, 5.0, w), vec![vec!["PDF", "Word", "Photos of a worksheet"], vec!["Pasted text"]]);
+        // A line that continues ends with a separator, so a name that is not the last keeps room
+        // for one after it: "PDF  ·  Word  ·  Photos of a worksheet" (38) fills a 38 line, but then
+        // its trailing "·" would not fit, so Photos moves down with Pasted text.
+        assert_eq!(
+            break_between(&items, 38.0, 5.0, w),
+            vec![vec!["PDF", "Word"], vec!["Photos of a worksheet", "Pasted text"]]
+        );
+        // A continued line never starts with the separator; the line before ends with it.
+        let job = |items: &[&str], continues| format_line(items, continues).text;
+        assert_eq!(job(&["Kahoot", "Quizlet"], true), "Kahoot  ·  Quizlet  ·");
+        assert_eq!(job(&["Test Parrot .json"], false), "Test Parrot .json");
+        // A name wider than the line still gets a line of its own, unbroken.
+        let lines = break_between(&items, 10.0, 5.0, w);
+        assert_eq!(lines, vec![vec!["PDF"], vec!["Word"], vec!["Photos of a worksheet"], vec!["Pasted text"]]);
+        // Every name lands exactly once, in order, whatever the width.
+        for width in [1.0, 12.0, 30.0, 200.0] {
+            let flat: Vec<&str> = break_between(&items, width, 5.0, w).into_iter().flatten().collect();
+            assert_eq!(flat, items.to_vec(), "width {width}");
+        }
+    }
 
     #[test]
     fn paste_reads_format_and_counts_live() {
@@ -3100,6 +3258,53 @@ mod tests {
         assert_eq!(source_title(&st.sources[0]), "Chemistry Chapter 4 Quiz (5A and 5B)");
         st.sources[0].doc.as_mut().unwrap().name = "  ".into();
         assert_eq!(source_title(&st.sources[0]), "ch4-quiz-5a-5b.parrot.json");
+    }
+
+    #[test]
+    fn privacy_note_is_one_short_truthful_line_per_provider() {
+        let set = |provider: &str, model: &str, base: &str, ollama: &str| crate::Settings {
+            ai_provider: provider.to_string(),
+            ai_model: model.to_string(),
+            ai_base: base.to_string(),
+            ollama_base: ollama.to_string(),
+            ..Default::default()
+        };
+        let cases = [
+            (set("cloud", "gemma4:31b", "", ""), Some("Ollama Cloud"), "Ollama Cloud · gemma4:31b"),
+            (set("openrouter", "m/x", "", ""), Some("OpenRouter"), "OpenRouter · m/x"),
+            (set("account", "", "", ""), Some("verSHion's server"), "the verSHion server, paid with credits"),
+            (set("workers", "", "https://relay.example", ""), Some("the verSHion relay"), "the verSHion relay"),
+            (set("custom", "llm", "https://ai.example/v1", ""), Some("your own AI server"), "https://ai.example/v1 · llm"),
+            // Nothing configured falls back to local Ollama, as AiCfg does.
+            (set("", "", "", ""), None, "Ollama on this computer"),
+            (set("ollama", "q", "", "http://localhost:11434"), None, "Ollama on this computer · q"),
+            // An Ollama address naming another machine is not "here".
+            (set("ollama", "q", "", "http://192.168.1.9:11434"), Some("your Ollama server"), "Ollama at 192.168.1.9 · q"),
+        ];
+        for (s, goes_to, detail) in cases {
+            let line = privacy_short(&s);
+            // One short scannable line after the lead, with no model id or address in it: at most
+            // 72 characters, which fits on one line beside the lead at 760 wide.
+            assert!(line.chars().count() <= 72, "{line}");
+            assert!(!line.contains('·') && !line.contains("://") && !line.contains(":3") && !line.contains("192"), "{line}");
+            match goes_to {
+                Some(dest) => {
+                    assert_eq!(line, format!("Read on this computer. Only what you convert goes to {dest}."));
+                    assert!(provider_dest(&s).leaves);
+                }
+                None => {
+                    assert_eq!(line, "Read on this computer, even what you convert: Ollama runs here.");
+                    assert!(!provider_dest(&s).leaves);
+                }
+            }
+            // The full facts, model included, are kept for the tooltip, dialog and workspace.
+            assert!(provider_label(&s).0.contains(detail), "{:?}", provider_label(&s));
+        }
+        assert_eq!(url_host("http://[::1]:11434/api"), "::1");
+        assert_eq!(url_host("https://user@Host.example:8443/v1"), "Host.example");
+        assert!(on_this_machine("http://127.0.0.1:11434") && !on_this_machine("https://ollama.com"));
+        assert!(on_this_machine("http://127.1.2.3:11434") && on_this_machine("http://[::1]:11434") && on_this_machine("http://localhost:11434"));
+        assert!(!on_this_machine("http://127.example.com:11434") && !on_this_machine("http://10.0.0.5:11434"));
     }
 
     #[test]

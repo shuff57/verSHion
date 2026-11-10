@@ -118,13 +118,24 @@ fn save_settings(app: &App) {
 }
 
 const MAX_W: f32 = crate::pageshell::PAGE_W;
+/// The Banks screen's widest content: past this the tiles would be too wide to scan.
+const BANKS_MAX_W: f32 = 1600.0;
+/// The narrowest a Banks tile gets before the grid drops a column (inner 248: two lines of key
+/// for five types, the footer's long form).
+const BANK_TILE_MIN_W: f32 = 280.0;
+
+/// Columns of the Banks tile grid in `avail` points with `gap` between tiles: as many tiles of at
+/// least [`BANK_TILE_MIN_W`] as fit (at least one); the tiles then share the width equally.
+fn banks_grid_cols(avail: f32, gap: f32) -> usize {
+    (((avail + gap) / (BANK_TILE_MIN_W + gap)).floor() as usize).max(1)
+}
 
 /// Draws a clickable crumb "Banks" that returns to the list.
 fn crumb_row(ui: &mut Ui, app: &mut App, tail: Option<&str>) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         let b = ui.add(
-            Button::new(RichText::new("Banks").size(11.5).color(theme::muted_col())).frame(false),
+            Button::new(kit::meta_muted("Banks")).frame(false),
         );
         if tail.is_some() && b.clicked() {
             app.screen = Screen::Banks;
@@ -132,9 +143,9 @@ fn crumb_row(ui: &mut Ui, app: &mut App, tail: Option<&str>) {
             app.qedit = None;
         }
         if let Some(t) = tail {
-            ui.label(RichText::new("/").size(11.5).color(theme::muted_col()));
+            ui.label(kit::meta_muted("/"));
             // A long name is shortened to the row, never widening the page.
-            ui.add(egui::Label::new(RichText::new(t).size(11.5).color(theme::muted_col())).truncate());
+            ui.add(egui::Label::new(kit::meta_muted(t)).truncate());
         }
     });
 }
@@ -255,12 +266,12 @@ fn usage_key() -> UiId {
     UiId::new("bank_usage_dialog")
 }
 
-fn open_usage(ctx: &egui::Context, title: String, exams: Vec<Id>) {
+pub(crate) fn open_usage(ctx: &egui::Context, title: String, exams: Vec<Id>) {
     with_state(ctx, usage_key(), |s: &mut UsageDialog| s.open = Some((title, exams)));
 }
 
 /// Lists the exams that use a bank / question; a row opens that exam.
-fn draw_usage_dialog(app: &mut App, ctx: &egui::Context) {
+pub(crate) fn draw_usage_dialog(app: &mut App, ctx: &egui::Context) {
     let Some((title, ids)) = with_state(ctx, usage_key(), |s: &mut UsageDialog| s.open.clone()) else {
         return;
     };
@@ -337,19 +348,40 @@ fn usage_link(ui: &mut Ui, n: usize, size: f32) -> egui::Response {
 
 // ---------- screen 1: the Question Banks list ----------
 
-struct BankRow {
-    id: Id,
-    name: String,
-    nq: usize,
-    topics: usize,
-    modified: i64,
-    mix: [usize; 6],
+/// One bank as its tile shows it, on Banks and on Home (spec section 3).
+pub(crate) struct BankTile {
+    pub id: Id,
+    pub name: String,
+    pub questions: usize,
+    pub topics: usize,
+    pub mix: [usize; 6],
     /// Exams placing at least one of its questions.
-    used_in: Vec<Id>,
-    archived: bool,
+    pub used_in: Vec<Id>,
+    pub edited: i64,
+    pub archived: bool,
 }
 
-fn mix_index(k: QKind) -> usize {
+impl BankTile {
+    /// The tile's facts for `b`, read from the store.
+    pub(crate) fn of(store: &crate::store::Store, b: &crate::model::QuestionBank) -> BankTile {
+        let mut mix = [0usize; 6];
+        for q in &b.questions {
+            mix[mix_index(q.kind.qkind())] += 1;
+        }
+        BankTile {
+            id: b.id.clone(),
+            name: b.name.clone(),
+            questions: b.questions.len(),
+            topics: unique_topics(&b.questions).len(),
+            mix,
+            used_in: crate::bankops::exams_using_bank(&store.exams, &b.id).iter().map(|e| e.id.clone()).collect(),
+            edited: b.modified,
+            archived: store.is_archived(&b.id),
+        }
+    }
+}
+
+pub(crate) fn mix_index(k: QKind) -> usize {
     match k {
         QKind::Mc => 0,
         QKind::Tf => 1,
@@ -384,7 +416,9 @@ impl App {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.scope(|ui| {
-                        ui.set_max_width(ui.available_width().min(MAX_W));
+                        // The grid page uses the window's width (to a wide cap), so the tiles reach
+                        // the right edge rather than stopping at the reading width of a text page.
+                        ui.set_max_width(ui.available_width().min(BANKS_MAX_W));
                         self.banks_body(ui, &ctx, key);
                     });
                 });
@@ -467,35 +501,27 @@ impl App {
 
         let query = search.trim().to_lowercase();
         let show_archived = with_state(ctx, key, |s: &mut BanksState| s.show_archived);
-        let rows: Vec<BankRow> = self
+        let rows: Vec<BankTile> = self
             .store
             .banks
             .iter()
             .filter(|b| show_archived || !self.store.is_archived(&b.id))
             .filter(|b| query.is_empty() || b.name.to_lowercase().contains(&query))
-            .map(|b| {
-                let mut mix = [0usize; 6];
-                for q in &b.questions {
-                    mix[mix_index(q.kind.qkind())] += 1;
-                }
-                BankRow {
-                    id: b.id.clone(),
-                    name: b.name.clone(),
-                    nq: b.questions.len(),
-                    topics: unique_topics(&b.questions).len(),
-                    modified: b.modified,
-                    mix,
-                    used_in: crate::bankops::exams_using_bank(&self.store.exams, &b.id).iter().map(|e| e.id.clone()).collect(),
-                    archived: self.store.is_archived(&b.id),
-                }
-            })
+            .map(|b| BankTile::of(&self.store, b))
             .collect();
         if rows.is_empty() {
             if query.is_empty() {
-                ui.label(theme::muted("Every bank is archived. Press Show archived to see them."));
+                let r = crate::pageshell::empty_line(ui, crate::handicons::BANKS, "Every bank is archived.", Some("Show archived"));
+                if r.is_some() {
+                    with_state(ctx, key, |s: &mut BanksState| s.show_archived = true);
+                }
             } else {
-                ui.label(theme::muted(format!("No banks match \"{search}\".")));
+                let r = crate::pageshell::empty_line(ui, crate::handicons::BANKS, &format!("No banks match \"{search}\"."), Some("Clear search"));
+                if r.is_some() {
+                    with_state(ctx, key, |s: &mut BanksState| s.search.clear());
+                }
             }
+            crate::pageshell::end_pad(ui);
             return;
         }
 
@@ -503,7 +529,7 @@ impl App {
             // Header row.
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                kit::small_caps(ui, "Bank");
+                kit::label(ui, "Bank");
             });
             ui.add_space(2.0);
             for r in &rows {
@@ -512,29 +538,29 @@ impl App {
             }
         } else {
             let avail = ui.available_width();
-            let gap = 12.0;
-            let cols = if avail >= 760.0 { 3 } else if avail >= 500.0 { 2 } else { 1 };
+            let gap = kit::GUTTER;
+            let cols = banks_grid_cols(avail, gap);
             // Fewer banks than columns still fills the row: one bank is a wide card, not a
             // quarter-width tile with three quarters of empty page beside it.
             let fit = rows.len().clamp(1, cols);
             let cw = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
+            // Every tile has the same slots, so every tile is BANK_TILE_H and a row ends on one line.
             for chunk in rows.chunks(cols) {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
                     for r in chunk {
-                        ui.allocate_ui_with_layout(
-                            Vec2::new(cw, 0.0),
-                            Layout::top_down(Align::Min),
-                            |ui| {
-                                ui.set_width(cw);
-                                bank_card(ui, self, ctx, key, r);
-                            },
-                        );
+                        match bank_tile(ui, self, cw, r, TileVariant::Banks) {
+                            Some(TileAct::Menu(a)) => apply_bank_menu(self, ctx, key, r, Some(a)),
+                            Some(TileAct::Usage) => open_usage(ctx, r.name.clone(), r.used_in.clone()),
+                            Some(TileAct::Open | TileAct::AddQuestions) => self.open_bank(&r.id),
+                            None => {}
+                        }
                     }
                 });
                 ui.add_space(gap);
             }
         }
+        crate::pageshell::end_pad(ui);
     }
 
     /// The bank editor: breadcrumb, serif editable name, subtitle, toolbar (search,
@@ -580,6 +606,7 @@ impl App {
                     ui.scope(|ui| {
                         ui.set_max_width(ui.available_width().min(MAX_W));
                         self.bank_edit_body(ui, &ctx, key, &bank_id);
+                        crate::pageshell::end_pad(ui);
                     });
                 });
         });
@@ -632,30 +659,48 @@ impl App {
         } else {
             format!("Share {}", egui_phosphor::regular::CARET_DOWN)
         };
-        let mut tools = vec![Tool::More, Tool::Details, Tool::Popover, Tool::Import, Tool::Share];
+        // Read left to right by rank: the bank's main action first, then the outlined actions
+        // that bring questions in or send them out, then the quiet ones that only show the
+        // bank (its details, its own window) and the overflow, as one segmented group.
+        // An empty bank's card below has its own filled Add question with the type menu, the
+        // page's one primary; the toolbar's would only repeat it, so it is hidden until the first
+        // question is in (judged on the whole bank, never on a filter).
+        // Import likewise: the empty card offers Import questions beside its Add question.
+        let mut tools = if questions.is_empty() { vec![Tool::Share] } else { vec![Tool::Add, Tool::Import, Tool::Share] };
         if !questions.is_empty() {
             tools.push(Tool::Export);
         }
-        tools.push(Tool::Add);
+        tools.extend([Tool::Details, Tool::Popover, Tool::More]);
         if !ltr {
             tools.reverse();
         }
         let gap = ui.spacing().item_spacing.x;
+        // Details, Preview and the overflow are one segmented group: one outlined container on the
+        // paper fill (quieter than Share's card-white box and bold label), hairlines between.
+        let quiet = |t: Tool| matches!(t, Tool::Details | Tool::Popover | Tool::More);
+        let mut group = Rect::NOTHING;
+        let mut seams: Vec<f32> = Vec::new();
+        // The container is painted under the segments once their rects are known.
+        let group_bg = ui.painter().add(egui::Shape::Noop);
         let mut width = 0.0;
+        let mut last_gap = 0.0;
         let mut first = true;
-        for t in tools {
+        for (i, &t) in tools.iter().enumerate() {
+            // The space after this tool: none inside the segmented group, the usual gap elsewhere.
+            let after = if quiet(t) && tools.get(i + 1).is_some_and(|&n| quiet(n)) { 0.0 } else { gap };
+            ui.spacing_mut().item_spacing.x = after;
             if ltr && !first {
                 // pageshell buttons are laid out where the cursor is: start the next line first.
-                let label = match t {
-                    Tool::More => "…",
-                    Tool::Details => "Details",
-                    Tool::Popover => "Preview",
-                    Tool::Import => "Import",
-                    Tool::Share => share_label.as_str(),
-                    Tool::Export => "Export",
-                    Tool::Add => "Add question",
+                // The group moves to the next line whole: its first segment carries its width.
+                let w = match t {
+                    Tool::More | Tool::Popover => 0.0,
+                    Tool::Details => quiet_tool_w(ui, "Details") + quiet_tool_w(ui, "Preview") + MORE_W,
+                    Tool::Import => crate::pageshell::button_width(ui, "Import"),
+                    Tool::Share => crate::pageshell::button_width(ui, share_label.as_str()),
+                    Tool::Export => crate::pageshell::button_width(ui, "Export"),
+                    Tool::Add => crate::pageshell::button_width(ui, "Add question"),
                 };
-                if crate::pageshell::button_width(ui, label) > ui.max_rect().right() - ui.cursor().min.x {
+                if w > ui.max_rect().right() - ui.cursor().min.x {
                     ui.end_row();
                 }
             }
@@ -663,34 +708,18 @@ impl App {
             let r = match t {
                 Tool::Add => {
                     let r = crate::pageshell::primary(ui, "Add question");
-                    // The type is chosen first and the editor opens already set to it. Keyboard: Enter on the
-                    // focused Add opens the menu, arrows and Enter pick, 1-6 pick directly.
-                    let opened_now = r.clicked();
-                    egui::Popup::menu(&r).show(|ui| {
-                        ui.set_min_width(190.0);
-                        for (n, k) in crate::bankops::KINDS.into_iter().enumerate() {
-                            let hot = [egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6][n];
-                            let b = ui.button(format!("{}   {}", n + 1, k.label()));
-                            if n == 0 && opened_now {
-                                b.request_focus();
-                            }
-                            if b.clicked() || ui.input(|i| i.key_pressed(hot)) {
-                                self.qedit = Some(qedit::Draft::new_of(bank_id.clone(), k));
-                                ui.close();
-                            }
-                        }
-                    });
+                    self.add_question_menu(&r, bank_id);
                     r
                 }
                 Tool::Export => {
-                    let r = crate::pageshell::outline(ui, "Export").on_hover_text("Preview and download the bank file (PDF, answers included) or its JSON");
+                    let r = kit::secondary(ui, "Export", TOOL_H).on_hover_text("Preview and download the bank file (PDF, answers included) or its JSON");
                     if r.clicked() {
                         open_bank_export(ctx, bank_id);
                     }
                     r
                 }
                 Tool::Share => {
-                    let r = crate::pageshell::outline(ui, &share_label).on_hover_text(if update {
+                    let r = kit::secondary(ui, &share_label, TOOL_H).on_hover_text(if update {
                         "Share this bank with other teachers, or copy in questions they shared. The pool has a newer version of something imported here."
                     } else {
                         "Share this bank with other teachers, or copy in questions they shared (needs a sharing account)"
@@ -723,58 +752,85 @@ impl App {
                     r
                 }
                 Tool::Import => {
-                    let r = crate::pageshell::outline(ui, "Import").on_hover_text("Import files or pasted questions into this bank");
+                    let r = kit::secondary(ui, "Import", TOOL_H).on_hover_text("Import files or pasted questions into this bank");
                     if r.clicked() {
                         crate::importui::open_import_modal(ctx, bank_id);
                     }
                     r
                 }
                 Tool::Popover => {
-                    let r = crate::pageshell::outline(ui, "Preview").on_hover_text("Open this bank in its own window");
+                    let r = quiet_tool(ui, Some(egui_phosphor::regular::EYE), Some("Preview"), "Preview", CornerRadius::ZERO).on_hover_text("Open this bank in its own window");
                     if r.clicked() {
                         open_popover(ctx, bank_id);
                     }
                     r
                 }
                 Tool::Details => {
-                    let r = crate::pageshell::outline(ui, "Details").on_hover_text("Description, author and license");
+                    let r = quiet_tool(ui, Some(crate::handicons::INFO), Some("Details"), "Details", CornerRadius { nw: QUIET_R, sw: QUIET_R, ne: 0, se: 0 }).on_hover_text("Description, author and license");
                     if r.clicked() {
                         let d = self.store.bank(bank_id).map(|b| b.details.clone()).unwrap_or_default();
                         with_state(ctx, key, |s: &mut BankEditState| s.details = Some(d));
                     }
                     r
                 }
-                // (Details has its own button next to this menu; the menu keeps what has none.)
-                Tool::More => ui
-                    .scope(|ui| {
-                        // the same 40 px, 12 px-corner look as the buttons beside it
-                        ui.spacing_mut().interact_size.y = 40.0;
-                        ui.spacing_mut().button_padding = egui::Vec2::new(16.0, 4.0);
-                        let w = &mut ui.visuals_mut().widgets;
-                        for (state, fill) in [(&mut w.inactive, theme::card()), (&mut w.hovered, theme::hover_bg()), (&mut w.active, theme::accent_faded()), (&mut w.open, theme::accent_faded())] {
-                            state.weak_bg_fill = fill;
-                            state.bg_fill = fill;
-                            state.bg_stroke = Stroke::new(1.0, theme::rule());
-                            state.expansion = 0.0;
+                // (Details has its own button beside this menu; the menu keeps what has none.)
+                Tool::More => {
+                    let r = quiet_tool(ui, None, None, "More bank actions", CornerRadius { nw: 0, sw: 0, ne: QUIET_R, se: QUIET_R });
+                    egui::Popup::menu(&r).show(|ui| {
+                        ui.set_min_width(170.0);
+                        let tidy = ui
+                            .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
+                            .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
+                        if tidy.clicked() {
+                            open_tidy(self, ctx, key, bank_id);
+                            ui.close();
                         }
-                        ui.menu_button(RichText::new("…").size(16.0).color(theme::ink()), |ui| {
-                            ui.set_min_width(170.0);
-                            let tidy = ui
-                                .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
-                                .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
-                            if tidy.clicked() {
-                                open_tidy(self, ctx, key, bank_id);
-                                ui.close();
-                            }
-                        })
-                        .response
-                    })
-                    .inner
-                    .on_hover_text("More bank actions"),
+                    });
+                    r
+                }
             };
-            width += r.rect.width() + gap;
+            if quiet(t) {
+                if group.is_positive() {
+                    seams.push(if r.rect.left() >= group.right() { r.rect.left() } else { r.rect.right() } .round() + 0.5);
+                }
+                group = group.union(r.rect);
+            }
+            width += r.rect.width() + after;
+            last_gap = after;
         }
-        width - gap
+        ui.spacing_mut().item_spacing.x = gap;
+        if group.is_positive() {
+            // Container: paper fill, 1 pt edge, Share's radius; a hairline at each inner seam
+            // (every segment edge strictly inside the group), inset from top and bottom.
+            ui.painter().set(group_bg, egui::Shape::rect_filled(group, CornerRadius::same(QUIET_R), theme::cream()));
+            let p = ui.painter();
+            p.rect_stroke(group, CornerRadius::same(QUIET_R), Stroke::new(1.0, theme::edge()), egui::StrokeKind::Inside);
+            for x in seams {
+                p.vline(x, (group.top() + 9.0)..=(group.bottom() - 9.0), Stroke::new(1.0, theme::edge()));
+            }
+        }
+        width - last_gap
+    }
+
+    /// The type menu under an "Add question" button: the type is chosen first and the editor opens
+    /// already set to it. Keyboard: Enter on the focused button opens the menu, arrows and Enter
+    /// pick, 1-6 pick directly.
+    fn add_question_menu(&mut self, r: &egui::Response, bank_id: &Id) {
+        let opened_now = r.clicked();
+        egui::Popup::menu(r).show(|ui| {
+            ui.set_min_width(190.0);
+            for (n, k) in crate::bankops::KINDS.into_iter().enumerate() {
+                let hot = [egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6][n];
+                let b = ui.button(format!("{}   {}", n + 1, k.label()));
+                if n == 0 && opened_now {
+                    b.request_focus();
+                }
+                if b.clicked() || ui.input(|i| i.key_pressed(hot)) {
+                    self.qedit = Some(qedit::Draft::new_of(bank_id.clone(), k));
+                    ui.close();
+                }
+            }
+        });
     }
 
     fn bank_edit_body(&mut self, ui: &mut Ui, ctx: &egui::Context, key: UiId, bank_id: &Id) {
@@ -799,6 +855,7 @@ impl App {
         let name_need = ui.fonts_mut(|f| f.layout_no_wrap(bank_name.clone(), egui::FontId::new(34.0, theme::serif_family()), theme::ink()).size().x) + 48.0;
         let one_row = beside >= name_need.max(300.0);
         let mut drawn_w = None;
+        let mut name_row: Option<egui::Rect> = None;
         ui.horizontal(|ui| {
             // On a row of its own the name may use the whole width, less its rename pencil.
             let name_w = if one_row { beside.min(680.0) } else { avail - 30.0 }.max(160.0);
@@ -809,7 +866,7 @@ impl App {
                 // The name field hugs its text so the rename pencil sits right after it.
                 let text_w = ui.fonts_mut(|f| f.layout_no_wrap(name_buf.clone(), name_font.clone(), theme::ink()).size().x);
                 let field_w = (text_w + 12.0).clamp(160.0, name_w);
-                let resp = ui
+                let row = ui
                     .horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
                         let resp = ui.add(
@@ -825,8 +882,9 @@ impl App {
                             resp.request_focus();
                         }
                         resp
-                    })
-                    .inner;
+                    });
+                name_row = Some(row.response.rect);
+                let resp = row.inner;
                 if resp.changed() && !name_buf.trim().is_empty() && name_buf.trim() != bank_name {
                     let t = now_secs();
                     if let Some(b) = self.store.bank_mut(bank_id) {
@@ -837,30 +895,28 @@ impl App {
                 }
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label(
-                        theme::muted(format!(
-                            "{} question{} · {} topic{} · edited {} · ",
-                            questions.len(),
-                            if questions.len() == 1 { "" } else { "s" },
-                            topics.len(),
-                            if topics.len() == 1 { "" } else { "s" },
-                            rel_time(modified),
-                        ))
-                        .size(13.0),
-                    );
+                    // Body size under the title: the page's facts, read before anything is pressed.
+                    ui.label(RichText::new(format!(
+                        "{} question{} · {} topic{} · edited {} · ",
+                        questions.len(),
+                        if questions.len() == 1 { "" } else { "s" },
+                        topics.len(),
+                        if topics.len() == 1 { "" } else { "s" },
+                        rel_time(modified),
+                    )).size(kit::ty::BODY).color(theme::text_col()));
                     let used: Vec<Id> = crate::bankops::exams_using_bank(&self.store.exams, bank_id).iter().map(|e| e.id.clone()).collect();
-                    let r = usage_link(ui, used.len(), 13.0);
+                    let r = usage_link(ui, used.len(), kit::ty::BODY);
                     if !used.is_empty() && ui.interact(r.rect, ui.id().with("bank_usage_link"), Sense::click()).clicked() {
                         open_usage(ctx, bank_name.clone(), used);
                     }
                     let pics: usize = questions.iter().map(crate::bankops::pictures_needed).sum();
                     if pics > 0 {
-                        ui.label(theme::muted(" · ").size(13.0));
+                        ui.label(RichText::new(" · ").size(kit::ty::BODY).color(theme::text_col()));
                         let link = ui
                             .add(
                                 egui::Label::new(
                                     RichText::new(format!("{pics} picture{} needed", if pics == 1 { "" } else { "s" }))
-                                        .size(13.0)
+                                        .size(kit::ty::BODY)
                                         .color(theme::bad())
                                         .underline(),
                                 )
@@ -877,9 +933,16 @@ impl App {
                 });
             });
             if one_row {
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    drawn_w = Some(self.bank_toolbar(ui, ctx, key, bank_id, &questions, false));
-                });
+                // Centred on the name's line (not on name + meta), right-aligned to the page edge.
+                let left = ui.cursor().min.x;
+                let row = name_row.unwrap_or_else(|| ui.min_rect());
+                let mid = row.center().y;
+                let band = egui::Rect::from_min_max(
+                    Pos2::new(left, mid - TOOL_H / 2.0 - 4.0),
+                    Pos2::new(ui.max_rect().right(), mid + TOOL_H / 2.0 + 4.0),
+                );
+                let mut bar = ui.new_child(egui::UiBuilder::new().max_rect(band).id_salt("bank_toolbar").layout(Layout::right_to_left(Align::Center)));
+                drawn_w = Some(self.bank_toolbar(&mut bar, ctx, key, bank_id, &questions, false));
             }
         });
         if !one_row {
@@ -911,7 +974,8 @@ impl App {
         // Usage counts per question for the cards (one pass per frame).
         let usage = crate::bankops::question_usage(&self.store.exams, bank_id);
         ctx.data_mut(|d| d.insert_temp(key.with("usage"), usage));
-        let wide = ui.available_width() >= 860.0;
+        // An empty bank has nothing to outline or filter: the empty card takes the whole width.
+        let wide = ui.available_width() >= 860.0 && !questions.is_empty();
         if wide {
             let side_w = 200.0;
             ui.horizontal_top(|ui| {
@@ -947,13 +1011,17 @@ impl App {
         let st = with_state(ctx, key, |s: &mut BankEditState| s.clone());
         let mut search = st.search.clone();
         let mut list = self.settings.bank_edit_list_view;
+        // An empty bank has nothing to search, sort or filter: its rows (and the lone "All 0"
+        // chip) stay hidden until the first question is in.
+        let filters = !questions.is_empty();
+        if filters {
         ui.horizontal(|ui| {
             if search_pill(ui, &mut search, 280.0, "Search questions") {
                 with_state(ctx, key, |s: &mut BankEditState| s.search = search.clone());
             }
             let mut sort_val = st.sort;
             ComboBox::from_id_salt("banks_sort")
-                .selected_text(theme::text(format!("Sort: {}", sort_val.label())).size(12.0))
+                .selected_text(kit::meta(format!("Sort: {}", sort_val.label())))
                 .show_ui(ui, |ui| {
                     for s in Sort::all() {
                         ui.selectable_value(&mut sort_val, s, s.label());
@@ -969,7 +1037,7 @@ impl App {
                         Some(d) => format!("Difficulty: {}", diff_label(d)),
                         None => "Difficulty: All".to_string(),
                     })
-                    .size(12.0),
+                    .size(kit::ty::META),
                 )
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut diff_val, None, "All");
@@ -992,9 +1060,10 @@ impl App {
             save_settings(self);
         }
         ui.add_space(6.0);
+        }
 
         // Narrow windows: type + topic chips stand in for the outline panel.
-        if !wide {
+        if !wide && filters {
         // Toolbar row 2: type chips with counts.
         let mut counts = [0usize; 6];
         for q in &questions {
@@ -1030,7 +1099,7 @@ impl App {
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
-                kit::small_caps(ui, "Topics");
+                kit::label(ui, "Topics");
                 for t in &topics {
                     let n = questions
                         .iter()
@@ -1075,8 +1144,8 @@ impl App {
                 if let Some(t) = &st.topic {
                     parts.push(format!("topic “{t}”"));
                 }
-                ui.label(theme::muted(format!("Showing {}", parts.join(" · "))).size(12.0));
-                if ui.add(Button::new(theme::accent("Clear").size(12.0)).frame(false)).clicked() {
+                ui.label(kit::meta_muted(format!("Showing {}", parts.join(" · "))));
+                if kit::link(ui, "Clear", false).clicked() {
                     with_state(ctx, key, |s: &mut BankEditState| {
                         s.kind = None;
                         s.topic = None;
@@ -1090,7 +1159,7 @@ impl App {
         if let Some((dq, idx)) = st.last_deleted.clone() {
             kit::card().inner_margin(Margin::symmetric(14, 8)).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(theme::text(format!("Question deleted: {}", truncate(&crate::equation::stem_preview(&dq.stem), 60))).size(12.5));
+                    ui.label(theme::text(format!("Question deleted: {}", truncate(&crate::equation::stem_preview(&dq.stem), 60))).size(kit::ty::META));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui
                             .add(Button::new(RichText::new("Dismiss").color(theme::muted_col())).frame(false))
@@ -1120,7 +1189,7 @@ impl App {
                 ui.horizontal(|ui| {
                     let file = std::path::Path::new(&u.backup).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
                     let n = u.before.len();
-                    ui.label(theme::text(format!("Tidied {n} question{} · backup saved as {file}", if n == 1 { "" } else { "s" })).size(12.5))
+                    ui.label(theme::text(format!("Tidied {n} question{} · backup saved as {file}", if n == 1 { "" } else { "s" })).size(kit::ty::META))
                         .on_hover_text(u.backup.clone());
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui.add(Button::new(RichText::new("Dismiss").color(theme::muted_col())).frame(false)).clicked() {
@@ -1193,16 +1262,31 @@ impl App {
         let cw = ((avail - gap * (cols as f32 - 1.0)) / cols as f32).floor();
 
         if questions.is_empty() && !new_open {
-            ui.add_space(12.0);
-            crate::pageshell::empty_state(
+            // (the filter rows above are hidden for an empty bank, so the gap is the header's)
+            ui.add_space(4.0);
+            // The card's own buttons do what the toolbar's Add question and Import do.
+            let b = crate::pageshell::empty_state_buttons(
                 ui,
                 crate::handicons::EDIT,
                 "No questions yet",
-                "Use Add question above to write the first one, or Import to bring a test in.",
-                &[],
+                "Write the first question yourself, or import a test you already have.",
+                &[("Add question", true), ("Import questions", false)],
             );
+            if let Some(add) = b.first() {
+                self.add_question_menu(add, bank_id);
+            }
+            if b.get(1).cloned().is_some_and(|r| r.on_hover_text("Import files or pasted questions into this bank").clicked()) {
+                crate::importui::open_import_modal(ctx, bank_id);
+            }
         } else if order.is_empty() {
-            ui.label(theme::muted("No questions match those filters.").size(12.5));
+            if crate::pageshell::empty_line(ui, crate::handicons::BANKS, "No questions match those filters.", Some("Clear filters")).is_some() {
+                with_state(ctx, key, |s: &mut BankEditState| {
+                    s.search.clear();
+                    s.kind = None;
+                    s.topic = None;
+                    s.diff = None;
+                });
+            }
         }
 
         let mut pending: Vec<usize> = Vec::new();
@@ -1224,7 +1308,7 @@ impl App {
                         order.len(),
                         questions.len()
                     ))
-                    .size(12.0),
+                    .size(kit::ty::META),
                 );
             });
         }
@@ -1320,35 +1404,80 @@ fn measure_card(
 
 // ---------- banks list pieces ----------
 
-const MIX_ALPHA: [u8; 6] = [255, 205, 160, 120, 85, 55];
-
 fn paint_mix_bar(ui: &mut Ui, w: f32, mix: &[usize; 6]) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 6.0), Sense::hover());
+    mix_bar_at(ui.painter(), rect, mix);
+}
+
+/// The type-mix bar painted into `rect` (6 px tall on the bank cards), one segment per type in
+/// [`mix_index`] order, each in its [`theme::type_hue`] (the key's swatches), with a 2 px gap of
+/// card between segments so neighbours stay apart.
+pub(crate) fn mix_bar_at(p: &egui::Painter, rect: Rect, mix: &[usize; 6]) {
+    mix_bar_folded(p, rect, mix, &[]);
+}
+
+/// The gap of card between two bar segments.
+const BAR_GAP: f32 = 2.0;
+
+/// Each bar segment as (its type, or None for the folded rest, its x span), `w` wide from 0:
+/// shown types in [`mix_index`] order, then the `folded` types (the key's "+N more") as one
+/// segment at the end, [`BAR_GAP`] between segments, none narrower than 4.
+fn bar_segments(mix: &[usize; 6], folded: &[usize], w: f32) -> Vec<(Option<usize>, f32, f32)> {
     let total: usize = mix.iter().sum();
-    ui.painter().rect_filled(rect, CornerRadius::same(3), theme::field());
     if total == 0 {
+        return Vec::new();
+    }
+    let mut parts: Vec<(Option<usize>, usize)> = (0..6).filter(|i| mix[*i] > 0 && !folded.contains(i)).map(|i| (Some(i), mix[i])).collect();
+    let rest: usize = folded.iter().map(|&i| mix[i]).sum();
+    if rest > 0 {
+        parts.push((None, rest));
+    }
+    let k = parts.len() as f32;
+    let room = (w - BAR_GAP * (k - 1.0)).max(0.0);
+    // Widths in proportion, each at least 4; the widest gives back what the small ones took.
+    let mut ws: Vec<f32> = parts.iter().map(|&(_, n)| (room * n as f32 / total as f32).max(4.0)).collect();
+    let over: f32 = ws.iter().sum::<f32>() - room;
+    if over > 0.0
+        && let Some(m) = ws.iter_mut().max_by(|a, b| a.total_cmp(b))
+    {
+        *m = (*m - over).max(4.0);
+    }
+    let mut x = 0.0;
+    parts
+        .iter()
+        .zip(ws)
+        .map(|(&(t, _), sw)| {
+            let seg = (t, x, x + sw);
+            x += sw + BAR_GAP;
+            seg
+        })
+        .collect()
+}
+
+/// [`mix_bar_at`] with the types the key folded into "+N more" drawn as one hollow segment at
+/// the end, the same outline as the "+N more" swatch, so every segment matches a key entry.
+fn mix_bar_folded(p: &egui::Painter, rect: Rect, mix: &[usize; 6], folded: &[usize]) {
+    let segs = bar_segments(mix, folded, rect.width());
+    if segs.is_empty() {
+        p.rect_filled(rect, CornerRadius::same(3), theme::field());
         return;
     }
-    let mut x = rect.left();
-    let ac = theme::accent_col();
-    for (i, n) in mix.iter().enumerate() {
-        if *n == 0 {
-            continue;
+    for (t, a, b) in segs {
+        let r = Rect::from_min_max(Pos2::new(rect.left() + a, rect.top()), Pos2::new(rect.left() + b, rect.bottom()));
+        match t {
+            Some(i) => {
+                p.rect_filled(r, CornerRadius::same(3), theme::type_hue(i));
+            }
+            None => {
+                p.rect(r, CornerRadius::same(3), theme::card(), Stroke::new(1.0, theme::muted_col()), egui::StrokeKind::Inside);
+            }
         }
-        let seg_w = rect.width() * (*n as f32 / total as f32);
-        let col = Color32::from_rgba_unmultiplied(ac.r(), ac.g(), ac.b(), MIX_ALPHA[i]);
-        ui.painter().rect_filled(
-            Rect::from_min_size(Pos2::new(x, rect.top()), Vec2::new(seg_w.max(2.0), 6.0)),
-            CornerRadius::same(3),
-            col,
-        );
-        x += seg_w;
     }
 }
 
 /// What the bank "..." menu asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BankAct {
+pub(crate) enum BankAct {
     Open,
     Popover,
     Export,
@@ -1372,40 +1501,43 @@ fn bank_menu_items(nq: usize, archived: bool) -> Vec<Option<(BankAct, &'static s
     ]
 }
 
-/// Room for the "..." button in a card header (the button itself is drawn by [`bank_menu`]
-/// after the card's click area, so it sits on top and gets its own clicks).
-const MENU_BTN: Vec2 = Vec2::new(30.0, 24.0);
-
-/// The "..." menu drawn into `rect`; returns (clicked item, pointer over the button or menu).
-fn bank_menu(ui: &mut Ui, rect: Rect, r: &BankRow) -> (Option<BankAct>, bool) {
+/// The bank menu's items, drawn into an open popup; returns the one clicked.
+fn bank_menu_body(ui: &mut Ui, nq: usize, archived: bool) -> Option<BankAct> {
     let mut act = None;
-    let resp = ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(Layout::right_to_left(Align::Center)), |ui| {
-        ui.spacing_mut().button_padding = Vec2::new(8.0, 3.0);
-        ui.menu_button(RichText::new("…").size(14.0).color(theme::muted_col()), |ui| {
-            ui.set_min_width(150.0);
-            for it in bank_menu_items(r.nq, r.archived) {
-                match it {
-                    None => {
-                        ui.separator();
-                    }
-                    Some((a, label, enabled)) => {
-                        let text = if a == BankAct::Delete { RichText::new(label).color(theme::bad()) } else { RichText::new(label) };
-                        let b = ui.add_enabled(enabled, egui::Button::new(text));
-                        let b = if a == BankAct::Export && !enabled { b.on_disabled_hover_text("Add a question first") } else { b };
-                        if b.clicked() {
-                            act = Some(a);
-                            ui.close();
-                        }
-                    }
+    ui.set_min_width(150.0);
+    for it in bank_menu_items(nq, archived) {
+        match it {
+            None => {
+                ui.separator();
+            }
+            Some((a, label, enabled)) => {
+                let text = if a == BankAct::Delete { RichText::new(label).color(theme::bad()) } else { RichText::new(label) };
+                let b = ui.add_enabled(enabled, egui::Button::new(text));
+                let b = if a == BankAct::Export && !enabled { b.on_disabled_hover_text("Add a question first") } else { b };
+                if b.clicked() {
+                    act = Some(a);
+                    ui.close();
                 }
             }
-        })
-    });
-    let over = resp.inner.response.contains_pointer();
-    (act, over)
+        }
+    }
+    act
 }
 
-fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, act: Option<BankAct>) {
+/// The list row's "…" (32 square, the icon tier) at `rect`'s centre; returns the item clicked.
+fn bank_menu(ui: &mut Ui, rect: Rect, r: &BankTile) -> Option<BankAct> {
+    // (a child Ui: placing the button never moves the parent's cursor)
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt(("bank_menu", &r.id)));
+    let b = kit::more_dots(&mut child, MENU_SIDE, "Bank actions");
+    egui::Popup::menu(&b).show(|ui| bank_menu_body(ui, r.questions, r.archived)).and_then(|p| p.inner)
+}
+
+/// A Ui in `r` that does not move `ui`'s cursor (a tile places its controls in its own rect).
+fn placed(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash + std::fmt::Debug) -> Ui {
+    ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(salt).layout(Layout::left_to_right(Align::Center)))
+}
+
+pub(crate) fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankTile, act: Option<BankAct>) {
     match act {
         Some(BankAct::Open) => app.open_bank(&r.id),
         Some(BankAct::Popover) => open_popover(ctx, &r.id),
@@ -1420,95 +1552,365 @@ fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, a
     }
 }
 
-/// "2 multiple choice · 1 fill in the blank" — what the type-mix bar is counting.
-pub(crate) fn mix_legend(mix: &[usize; 6]) -> String {
-    let kinds = [
-        (QKind::Mc, "multiple choice"),
-        (QKind::Tf, "true/false"),
-        (QKind::Multipart, "multipart"),
-        (QKind::Matching, "matching"),
-        (QKind::Blank, "fill in the blank"),
-        (QKind::Short, "short answer"),
-    ];
-    let mut parts: Vec<String> = kinds
+/// "11 questions · 4 topics" (with "Archived · " first on an archived bank); `topics` false
+/// leaves the topics off (a circle badge needs the room).
+fn counts_line(r: &BankTile, topics: bool) -> String {
+    let mut s = format!("{}{} question{}", if r.archived { "Archived · " } else { "" }, r.questions, if r.questions == 1 { "" } else { "s" });
+    if topics {
+        s += &format!(" · {} topic{}", r.topics, if r.topics == 1 { "" } else { "s" });
+    }
+    s
+}
+
+// ---------- the bank tile, shared by Banks and Home (spec section 3) ----------
+
+/// Every bank tile is this tall on both screens: each slot is filled on every tile, so a row's
+/// tiles end on one line without being stretched. The slots, top down: pad, header (2 name
+/// lines), gap, meta, gap, key (2 lines), gap, bar, gap, hairline, gap, footer, pad.
+pub(crate) const BANK_TILE_H: f32 = T_PAD + T_HEAD + 6.0 + T_META + 10.0 + T_KEY + 8.0 + T_BAR + 12.0 + 1.0 + 10.0 + T_FOOT + T_PAD;
+const T_PAD: f32 = 16.0;
+const T_HEAD: f32 = 44.0;
+const T_META: f32 = 18.0;
+const T_KEY: f32 = 40.0;
+const T_BAR: f32 = 6.0;
+const T_FOOT: f32 = 18.0;
+/// The "…" on a Banks tile (and the list row): a 32 square in the icon tier.
+const MENU_SIDE: f32 = 32.0;
+/// The glyph beside the name on a Home tile.
+const T_GLYPH: f32 = 34.0;
+/// The type key's two lines, 18 each with 4 between.
+const KEY_LINE: f32 = 18.0;
+const KEY_LGAP: f32 = 4.0;
+const KEY_LABELS: [&str; 6] = ["multiple choice", "true/false", "multipart", "matching", "fill in the blank", "short answer"];
+
+/// Where a tile is drawn: Home has a glyph and no menu; Banks has the "…" menu and the circle badge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TileVariant {
+    Home,
+    Banks,
+}
+
+/// What a click on a tile asks for; the caller applies it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TileAct {
+    Open,
+    Usage,
+    AddQuestions,
+    Menu(BankAct),
+}
+
+/// The type key laid out for a tile: each shown type's mix index, x and line, and the "+N more"
+/// (its x on line 2 and the types it stands for) when two lines do not hold them all.
+#[derive(Debug, PartialEq)]
+struct TileKey {
+    items: Vec<(usize, f32, usize)>,
+    more: Option<(f32, Vec<usize>)>,
+}
+
+/// The "+N more" text.
+fn more_label(n: usize) -> String {
+    format!("+{n} more")
+}
+
+/// Lays out the type key in `w`: items in [`mix_index`] order, two lines at most. If a third
+/// line would be needed, line 2 drops items from its end until "+N more" fits 12 after the last.
+/// `item_w(i)` is item i's width (swatch, gap and words); `more_w(n)` the width of "+n more".
+fn layout_tile_key(mix: &[usize; 6], w: f32, item_w: impl Fn(usize) -> f32, more_w: impl Fn(usize) -> f32) -> TileKey {
+    const IGAP: f32 = 12.0;
+    let shown: Vec<usize> = (0..6).filter(|&i| mix[i] > 0).collect();
+    let mut items: Vec<(usize, f32, usize)> = Vec::new();
+    let mut rest: Vec<usize> = Vec::new();
+    let (mut x, mut line) = (0.0_f32, 0usize);
+    for &i in &shown {
+        let iw = item_w(i);
+        if x > 0.0 && x + iw > w {
+            x = 0.0;
+            line += 1;
+        }
+        if line > 1 {
+            rest.push(i);
+            continue;
+        }
+        items.push((i, x, line));
+        x += iw + IGAP;
+    }
+    if rest.is_empty() {
+        return TileKey { items, more: None };
+    }
+    // Make room on line 2 for "+N more", dropping its last items as needed.
+    loop {
+        let end = items.iter().filter(|it| it.2 == 1).map(|&(i, x, _)| x + item_w(i)).fold(0.0, f32::max);
+        let at = if end > 0.0 { end + IGAP } else { 0.0 };
+        if at + more_w(rest.len()) <= w || !items.iter().any(|it| it.2 == 1) {
+            return TileKey { items, more: Some((at, rest)) };
+        }
+        let (i, _, _) = items.pop().expect("line 2 has an item");
+        rest.insert(0, i);
+    }
+}
+
+/// The footer's "Edited …" in the form that fits `room`: "Edited 23 days ago", then the
+/// month-day form "Edited Oct 16", then "Oct 16".
+fn edited_forms(edited: i64) -> [String; 3] {
+    let md = if edited > 0 {
+        let (_, m, d) = time::civil_from_days(edited.div_euclid(86_400));
+        const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        format!("{} {d}", MONTHS[(m as usize).clamp(1, 12) - 1])
+    } else {
+        "—".to_string()
+    };
+    [format!("Edited {}", rel_time(edited)), format!("Edited {md}"), md]
+}
+
+/// One bank tile, `w` wide and [`BANK_TILE_H`] tall, the same on Banks and Home: the serif name
+/// (two lines kept), the counts and when it was edited (or the circle badge on Banks), the type
+/// key over the type-mix bar (or, for an empty bank, a dashed placeholder holding Add questions),
+/// a hairline, then where it is used (an underlined link) and "Open →". One card interact: a
+/// click on the usage link, Add questions or the "…" menu returns that act and never `Open`.
+pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: TileVariant) -> Option<TileAct> {
+    let (rect, card) = ui.allocate_exact_size(Vec2::new(w, BANK_TILE_H), Sense::click());
+    card.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &t.name));
+    let mut act = None;
+    let hot = card.hovered() || card.has_focus();
+    {
+        let p = ui.painter();
+        if card.hovered() {
+            let col = if theme::is_dark() { Color32::from_black_alpha(70) } else { Color32::from_black_alpha(22) };
+            p.add(egui::Shadow { offset: [0, 3], blur: 12, spread: 0, color: col }.as_shape(rect, CornerRadius::same(kit::R_CARD)));
+        }
+        let edge = if hot { theme::border().lerp_to_gamma(theme::accent_col(), 0.45) } else { theme::border() };
+        p.rect(rect, CornerRadius::same(kit::R_CARD), theme::card(), Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+        if card.has_focus() {
+            p.rect_stroke(rect.expand(1.0), CornerRadius::same(kit::R_CARD + 1), Stroke::new(2.0, theme::accent_col()), egui::StrokeKind::Outside);
+        }
+    }
+    if card.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let x0 = rect.left() + T_PAD;
+    let iw = w - 2.0 * T_PAD;
+    let top = rect.top() + T_PAD;
+
+    // Header: the name, two lines kept, top-aligned; "…" top right (Banks) or the glyph (Home).
+    let (name_x, name_w) = match v {
+        TileVariant::Banks => (x0, iw - MENU_SIDE - 12.0),
+        TileVariant::Home => (x0 + T_GLYPH + 11.0, iw - T_GLYPH - 11.0),
+    };
+    let mut job = egui::text::LayoutJob::default();
+    job.append(&t.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
+    job.wrap = egui::text::TextWrapping { max_width: name_w.max(40.0), max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
+    let name = ui.painter().layout_job(job);
+    let one_line = name.rows.len() <= 1;
+    // On Home a one-line name sits level with the glyph's middle; it never moves the meta line.
+    let name_y = if v == TileVariant::Home && one_line { top + (T_GLYPH - kit::ty::CARD_LINE) / 2.0 } else { top };
+    ui.painter().galley(Pos2::new(name_x, name_y), name, theme::ink());
+    if v == TileVariant::Home {
+        let g = Rect::from_min_size(Pos2::new(x0, top), Vec2::splat(T_GLYPH));
+        ui.painter().rect_filled(g, CornerRadius::same(10), theme::accent_faded());
+        crate::handicons::paint_glyph(ui.painter(), g.center(), crate::handicons::BANKS, 16.8, theme::accent_col());
+    }
+
+    // Meta: the counts (or "No questions yet"), and when it was edited, right, in the first form
+    // that fits; on Banks a circle badge takes the rest of the row instead of the edited text.
+    let meta_y = top + T_HEAD + 6.0;
+    let meta_c = meta_y + T_META / 2.0;
+    let badged = v == TileVariant::Banks && app.shared.circles.edit.with_link(&t.id, |_| ()).is_some();
+    let meta_font = egui::FontId::new(kit::ty::META, theme::sans_family());
+    let measure = |s: &str| ui.painter().layout_no_wrap(s.to_string(), meta_font.clone(), theme::text_col()).size().x;
+    let forms = edited_forms(t.edited);
+    let edited_w = [measure(&forms[0]), measure(&forms[1]), measure(&forms[2])];
+    let empty_text = format!("{}No questions yet", if t.archived { "Archived · " } else { "" });
+    let (topics, edited) = if t.questions == 0 {
+        let w = measure(&empty_text);
+        (true, if badged { None } else { (0..3).find(|&k| w + 12.0 + edited_w[k] <= iw) })
+    } else if badged {
+        (false, None)
+    } else {
+        meta_fit(measure(&counts_line(t, true)), measure(&counts_line(t, false)), edited_w, iw)
+    };
+    let counts_text = if t.questions == 0 { empty_text } else { counts_line(t, topics) };
+    let counts = ui.painter().layout_no_wrap(counts_text, meta_font.clone(), theme::text_col());
+    let counts_w = counts.size().x;
+    let counts_col = if t.questions == 0 { theme::muted_col() } else { theme::text_col() };
+    ui.painter().galley(Pos2::new(x0, meta_c - counts.size().y / 2.0), counts, counts_col);
+    if let Some(k) = edited {
+        let g = ui.painter().layout_no_wrap(forms[k].clone(), meta_font.clone(), theme::muted_col());
+        ui.painter().galley(Pos2::new(x0 + iw - g.size().x, meta_c - g.size().y / 2.0), g, theme::muted_col());
+    }
+
+    // Key: the type key over the bar; an empty bank has no bar to show, so the key and bar slots
+    // hold one dashed placeholder with its next step, Add questions, in the middle.
+    let key_y = meta_y + T_META + 10.0;
+    let bar_y = key_y + T_KEY + 8.0;
+    let mut add_btn: Option<Rect> = None;
+    if t.questions == 0 {
+        let slot = Rect::from_min_max(Pos2::new(x0, key_y), Pos2::new(x0 + iw, bar_y + T_BAR));
+        dashed_round_rect(ui.painter(), slot, 8.0, Stroke::new(1.0, theme::edge()));
+        let btn_w = ui.painter().layout_no_wrap("Add questions".to_string(), egui::FontId::new(kit::ty::BUTTON_SM, theme::bold_family()), theme::ink()).size().x + 28.0;
+        add_btn = Some(Rect::from_center_size(slot.center(), Vec2::new(btn_w.ceil(), 32.0)));
+    } else {
+        let folded = paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix);
+        mix_bar_folded(ui.painter(), Rect::from_min_size(Pos2::new(x0, bar_y), Vec2::new(iw, T_BAR)), &t.mix, &folded);
+    }
+
+    // Hairline, then the footer: where it is used (a link to those exams) left, Open right.
+    let rule_y = bar_y + T_BAR + 12.0;
+    ui.painter().hline(x0..=x0 + iw, rule_y + 0.5, Stroke::new(1.0, theme::border()));
+    let foot_y = rule_y + 1.0 + 10.0;
+    let foot_c = foot_y + T_FOOT / 2.0;
+    if t.used_in.is_empty() {
+        let g = ui.painter().layout_no_wrap(usage_text(t), meta_font.clone(), theme::muted_col());
+        ui.painter().galley(Pos2::new(x0, foot_c - g.size().y / 2.0), g, theme::muted_col());
+    }
+
+    // The tile's own controls, added after its interact so each takes its own clicks.
+    if t.questions == 0
+        && let Some(r) = add_btn
+        && kit::secondary(&mut placed(ui, r, ("tile_add", &t.id)), "Add questions", 32.0).clicked()
+    {
+        act = Some(TileAct::AddQuestions);
+    }
+    let open_w = ui.painter().layout_no_wrap("Open".to_string(), egui::FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()).size().x + 17.0;
+    let open_r = Rect::from_min_size(Pos2::new(x0 + iw - open_w.ceil(), foot_c - T_FOOT / 2.0), Vec2::new(open_w.ceil(), T_FOOT));
+    if kit::link(&mut placed(ui, open_r, ("tile_open", &t.id)), "Open", true).clicked() {
+        act = Some(TileAct::Open);
+    }
+    if !t.used_in.is_empty() {
+        let r = Rect::from_min_max(Pos2::new(x0, foot_c - T_FOOT / 2.0), Pos2::new(open_r.left() - 12.0, foot_c + T_FOOT / 2.0));
+        if tile_usage_link(&mut placed(ui, r, ("tile_usage", &t.id)), &usage_text(t)).clicked() {
+            act = Some(TileAct::Usage);
+        }
+    }
+    if badged {
+        let bx = x0 + counts_w + 12.0;
+        let r = Rect::from_min_max(Pos2::new(bx, meta_c - 11.0), Pos2::new(x0 + iw, meta_c + 11.0));
+        if r.width() > 24.0 {
+            let mut b = placed(ui, r, ("tile_badge", &t.id));
+            b.set_clip_rect(r.intersect(b.clip_rect()));
+            crate::share::bank_links_ui::badge(&mut b, app, &t.id);
+        }
+    }
+    if v == TileVariant::Banks {
+        let r = Rect::from_min_size(Pos2::new(x0 + iw - MENU_SIDE, top - 4.0), Vec2::splat(MENU_SIDE));
+        if let Some(a) = bank_menu(ui, r, t) {
+            act = Some(TileAct::Menu(a));
+        }
+    }
+    let card = if edited.is_none() { card.on_hover_text(forms[0].clone()) } else { card };
+    if act.is_none() && card.clicked() {
+        act = Some(TileAct::Open);
+    }
+    act
+}
+
+/// Which meta row fits `room`: the counts with topics (`full`) or without (`short`), then the
+/// edited text in its first form that fits 12 after them. The long "Edited 24 days ago" wins over
+/// the topics (so a row of narrow tiles reads alike: "11 questions", "Edited 24 days ago" right), then
+/// the month-day forms; with no room for any edited form the counts stand alone (topics kept
+/// when they fit).
+fn meta_fit(full: f32, short: f32, edited: [f32; 3], room: f32) -> (bool, Option<usize>) {
+    const GAP: f32 = 12.0;
+    let order = [(true, 0), (false, 0), (true, 1), (false, 1), (true, 2), (false, 2)];
+    order
         .iter()
-        .filter_map(|(k, label)| {
-            let n = mix[mix_index(*k)];
-            (n > 0).then(|| format!("{n} {label}"))
-        })
-        .collect();
-    if parts.len() > 3 {
-        let rest = parts.len() - 3;
-        parts.truncate(3);
-        parts.push(format!("{rest} more types"));
-    }
-    if parts.is_empty() { "No questions yet".to_string() } else { parts.join(" · ") }
+        .find(|&&(t, k)| if t { full } else { short } + GAP + edited[k] <= room)
+        .map(|&(t, k)| (t, Some(k)))
+        .unwrap_or((full <= room, None))
 }
 
-fn counts_line(r: &BankRow) -> String {    format!(
-        "{}{} question{} · {} topic{}",
-        if r.archived { "Archived · " } else { "" },
-        r.nq,
-        if r.nq == 1 { "" } else { "s" },
-        r.topics,
-        if r.topics == 1 { "" } else { "s" }
-    )
+/// A link that reads as one at rest: 13 pt accent, regular weight (a step below the semibold
+/// "Open"), with a quiet underline that turns solid under the pointer or focus.
+fn tile_usage_link(ui: &mut Ui, label: &str) -> egui::Response {
+    let col = theme::accent_col();
+    let g = ui.painter().layout_no_wrap(label.to_owned(), egui::FontId::new(kit::ty::META, theme::sans_family()), col);
+    let text = g.size();
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(text.x.ceil(), text.y.max(18.0)), Sense::click());
+    let top = rect.center().y - text.y / 2.0;
+    ui.painter().galley(Pos2::new(rect.left(), top), g, col);
+    let hot = resp.hovered() || resp.has_focus();
+    let line = if hot { col } else { col.gamma_multiply(0.45) };
+    ui.painter().hline(rect.left()..=rect.left() + text.x, (top + text.y - 1.0).round() + 0.5, Stroke::new(1.0, line));
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect.expand(2.0), CornerRadius::same(4), Stroke::new(2.0, col), egui::StrokeKind::Outside);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Link, true, label));
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-/// One bank tile: serif name, counts, type-mix bar, edited time.
-fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow) {
-    let mut link: Option<Rect> = None;
-    let mut menu_rect = Rect::NOTHING;
-    let resp = kit::card().inner_margin(Margin::same(14)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.horizontal(|ui| {
-            ui.label(theme::serif(truncate(&r.name, 30)).size(18.0));
-            ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                menu_rect = ui.allocate_exact_size(MENU_BTN, Sense::hover()).0;
-            });
-        });
-        crate::share::bank_links_ui::badge(ui, app, &r.id);
-        ui.label(theme::muted(counts_line(r)).size(12.5));
-        ui.add_space(8.0);
-        // Name the mix: the bar is a question-type breakdown, so say which types it counts.
-        ui.label(theme::muted(mix_legend(&r.mix)).size(11.0));
-        ui.add_space(4.0);
-        paint_mix_bar(ui, ui.available_width(), &r.mix);
-        ui.add_space(8.0);
-        link = Some(usage_link(ui, r.used_in.len(), 12.0).rect);
-        ui.add_space(2.0);
-        ui.label(theme::muted(format!("Edited {}", rel_time(r.modified))).size(11.5));
-    });
-    let click = ui.interact(resp.response.rect, ui.id().with(("bank_card", &r.id)), Sense::click());
-    let (menu_act, over_menu) = bank_menu(ui, menu_rect, r);
-    if menu_act.is_some() {
-        apply_bank_menu(app, ctx, key, r, menu_act);
-        return;
+/// A dashed outline round `r` with corners of radius `rad` (an intentional empty slot).
+fn dashed_round_rect(p: &egui::Painter, r: Rect, rad: f32, stroke: Stroke) {
+    let r = r.shrink(0.5);
+    let mut pts = Vec::new();
+    let corners = [
+        (Pos2::new(r.right() - rad, r.top() + rad), -90.0_f32),
+        (Pos2::new(r.right() - rad, r.bottom() - rad), 0.0),
+        (Pos2::new(r.left() + rad, r.bottom() - rad), 90.0),
+        (Pos2::new(r.left() + rad, r.top() + rad), 180.0),
+    ];
+    for (c, a0) in corners {
+        for s in 0..=6 {
+            let a = (a0 + 90.0 * s as f32 / 6.0).to_radians();
+            pts.push(Pos2::new(c.x + rad * a.cos(), c.y + rad * a.sin()));
+        }
     }
-    if usage_clicked(&click, link, r) {
-        open_usage(ctx, r.name.clone(), r.used_in.clone());
-        return;
-    }
-    let t = kit::hover_t(ctx, click.id.with("hover"), click.hovered());
-    if t > 0.0 {
-        ui.painter().rect_stroke(
-            resp.response.rect,
-            CornerRadius::same(kit::R_CARD),
-            Stroke::new(1.0, theme::accent_col().gamma_multiply(t)),
-            egui::StrokeKind::Inside,
-        );
-    }
-    if click.clicked() && !over_menu {
-        app.open_bank(&r.id);
-    }
+    pts.push(pts[0]);
+    p.extend(egui::Shape::dashed_line(&pts, stroke, 5.0, 4.0));
 }
 
-/// True when the card click landed on its "Used in N exams" link (and there are exams).
-fn usage_clicked(click: &egui::Response, link: Option<Rect>, r: &BankRow) -> bool {
-    click.clicked() && !r.used_in.is_empty() && link.zip(click.interact_pointer_pos()).is_some_and(|(l, p)| l.expand(2.0).contains(p))
+/// The usage link's words ("Used in 1 exam").
+fn usage_text(t: &BankTile) -> String {
+    crate::bankops::usage_label(t.used_in.len())
 }
 
-fn bank_list_row(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow) {
+/// The tile's type key at `at`, `w` wide: two 13 pt lines, each item a swatch in its type's
+/// [`theme::type_hue`] (the bar segment's colour), the count in semibold ink and the type in
+/// `text`. Returns the types folded into "+N more" (the bar draws them as one hollow segment, the
+/// outline the "+N more" swatch has).
+fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6]) -> Vec<usize> {
+    const SW: f32 = 9.0;
+    const SGAP: f32 = 5.0;
+    let p = ui.painter().clone();
+    let galleys: Vec<_> = (0..6).map(|i| p.layout_job(key_item_job(mix[i], KEY_LABELS[i]))).collect();
+    // "+N more" is a link-style reveal: accent semibold, underlined under the pointer, its tooltip
+    // listing the types it stands for; its hollow swatch is the bar's last, hollow segment.
+    let more_font = egui::FontId::new(kit::ty::META, theme::semibold());
+    let more_g = |n: usize| p.layout_no_wrap(more_label(n), more_font.clone(), theme::accent_col());
+    let key = layout_tile_key(mix, w, |i| SW + SGAP + galleys[i].size().x, |n| SW + SGAP + more_g(n).size().x);
+    for (i, x, l) in key.items {
+        let ly = at.y + l as f32 * (KEY_LINE + KEY_LGAP);
+        let sr = Rect::from_center_size(Pos2::new(at.x + x + SW / 2.0, ly + KEY_LINE / 2.0), Vec2::splat(SW));
+        p.rect_filled(sr, CornerRadius::same(3), theme::type_hue(i));
+        let g = galleys[i].clone();
+        p.galley(Pos2::new(at.x + x + SW + SGAP, ly + (KEY_LINE - g.size().y) / 2.0), g, theme::text_col());
+    }
+    let Some((x, rest)) = key.more else {
+        return Vec::new();
+    };
+    let g = more_g(rest.len());
+    let ly = at.y + KEY_LINE + KEY_LGAP;
+    let sr = Rect::from_center_size(Pos2::new(at.x + x + SW / 2.0, ly + KEY_LINE / 2.0), Vec2::splat(SW));
+    p.rect(sr, CornerRadius::same(3), theme::card(), Stroke::new(1.0, theme::muted_col()), egui::StrokeKind::Inside);
+    let r = Rect::from_min_size(Pos2::new(at.x + x + SW + SGAP, ly + (KEY_LINE - g.size().y) / 2.0), g.size());
+    p.galley(r.min, g, theme::accent_col());
+    let tip = rest.iter().map(|&i| format!("{} {}", mix[i], KEY_LABELS[i])).collect::<Vec<_>>().join("\n");
+    let h = ui.interact(r.expand(2.0), ui.id().with(("tile_more", at.x as i32, at.y as i32)), Sense::hover());
+    if h.hovered() {
+        p.hline(r.x_range(), (r.bottom() - 2.0).round() + 0.5, Stroke::new(1.0, theme::accent_col()));
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
+    }
+    h.on_hover_text(format!("Also in this bank:\n{tip}"));
+    rest
+}
+
+/// One key item's words: the count in semibold ink, then the type in `text`, both 13 pt.
+fn key_item_job(n: usize, label: &str) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    job.append(&n.to_string(), 0.0, egui::TextFormat { font_id: egui::FontId::new(kit::ty::META, theme::semibold()), color: theme::ink(), ..Default::default() });
+    job.append(&format!(" {label}"), 0.0, egui::TextFormat { font_id: egui::FontId::new(kit::ty::META, theme::sans_family()), color: theme::text_col(), ..Default::default() });
+    job
+}
+
+fn bank_list_row(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &BankTile) {
     let mut link: Option<Rect> = None;
     let mut menu_rect = Rect::NOTHING;
     let resp = kit::card().inner_margin(Margin::symmetric(14, 9)).show(ui, |ui| {
@@ -1516,35 +1918,36 @@ fn bank_list_row(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: 
         ui.horizontal(|ui| {
             let total = ui.available_width();
             ui.allocate_ui(Vec2::new((total * 0.38).floor(), 22.0), |ui| {
-                ui.label(theme::serif(truncate(&r.name, 40)).size(16.0));
+                ui.label(theme::serif(truncate(&r.name, 40)).size(kit::ty::CARD));
             });
             ui.allocate_ui(Vec2::new((total * 0.27).floor(), 22.0), |ui| {
-                ui.label(theme::muted(counts_line(r)).size(12.5));
+                ui.label(kit::meta(counts_line(r, true)));
             });
             ui.allocate_ui(Vec2::new(90.0, 22.0), |ui| {
                 paint_mix_bar(ui, 80.0, &r.mix);
             });
             ui.allocate_ui(Vec2::new(118.0, 22.0), |ui| {
-                link = Some(usage_link(ui, r.used_in.len(), 12.0).rect);
+                link = Some(usage_link(ui, r.used_in.len(), kit::ty::META).rect);
             });
-            ui.label(theme::muted(format!("Edited {}", rel_time(r.modified))).size(12.0));
+            ui.label(kit::meta_muted(format!("Edited {}", rel_time(r.edited))));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                menu_rect = ui.allocate_exact_size(MENU_BTN, Sense::hover()).0;
+                menu_rect = ui.allocate_exact_size(Vec2::splat(MENU_SIDE), Sense::hover()).0;
             });
         });
         crate::share::bank_links_ui::badge(ui, app, &r.id);
     });
     // The "..." sits centred on the row, also when a circle line makes it taller.
-    menu_rect = Rect::from_center_size(egui::pos2(menu_rect.center().x, resp.response.rect.center().y), MENU_BTN);
+    menu_rect = Rect::from_center_size(egui::pos2(menu_rect.center().x, resp.response.rect.center().y), Vec2::splat(MENU_SIDE));
     let click = ui.interact(resp.response.rect, ui.id().with(("bank_row", &r.id)), Sense::click());
-    let (menu_act, over_menu) = bank_menu(ui, menu_rect, r);
+    let menu_act = bank_menu(ui, menu_rect, r);
     // (the menu is placed inside the row: the next row still starts below this one)
     ui.advance_cursor_after_rect(resp.response.rect);
     if menu_act.is_some() {
         apply_bank_menu(app, ctx, key, r, menu_act);
         return;
     }
-    if usage_clicked(&click, link, r) {
+    let on_link = click.clicked() && !r.used_in.is_empty() && link.zip(click.interact_pointer_pos()).is_some_and(|(l, p)| l.expand(2.0).contains(p));
+    if on_link {
         open_usage(ctx, r.name.clone(), r.used_in.clone());
         return;
     }
@@ -1556,7 +1959,7 @@ fn bank_list_row(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: 
             egui::StrokeKind::Inside,
         );
     }
-    if click.clicked() && !over_menu {
+    if click.clicked() {
         app.open_bank(&r.id);
     }
 }
@@ -1971,8 +2374,8 @@ fn side_row(ui: &mut Ui, label: &str, n: usize, on: bool, right_pad: f32) -> egu
         p.rect_filled(rect, CornerRadius::same(8), theme::hover_bg());
     }
     let fg = if on { theme::accent_col() } else { theme::text_col() };
-    let font = egui::FontId::new(12.5, if on { theme::bold_family() } else { egui::FontFamily::Proportional });
-    let cg = p.layout_no_wrap(n.to_string(), egui::FontId::new(11.5, theme::bold_family()), theme::muted_col());
+    let font = egui::FontId::new(kit::ty::META, if on { theme::bold_family() } else { egui::FontFamily::Proportional });
+    let cg = p.layout_no_wrap(n.to_string(), egui::FontId::new(kit::ty::LABEL, theme::bold_family()), theme::muted_col());
     let cx = rect.right() - 10.0 - right_pad;
     let mut job = egui::text::LayoutJob::simple_singleline(label.to_string(), font, fg);
     job.wrap.max_width = (cx - cg.size().x - 8.0 - (rect.left() + 10.0)).max(20.0);
@@ -1993,7 +2396,7 @@ fn side_row(ui: &mut Ui, label: &str, n: usize, on: bool, right_pad: f32) -> egu
 fn outline_panel(ui: &mut Ui, ctx: &egui::Context, key: UiId, questions: &[Question]) {
     let st = with_state(ctx, key, |s: &mut BankEditState| s.clone());
     ui.spacing_mut().item_spacing.y = 2.0;
-    kit::small_caps(ui, "Outline");
+    kit::label(ui, "Outline");
     ui.add_space(4.0);
     if side_row(ui, "All questions", questions.len(), st.kind.is_none() && st.topic.is_none(), 0.0).clicked() {
         with_state(ctx, key, |s: &mut BankEditState| {
@@ -2012,12 +2415,12 @@ fn outline_panel(ui: &mut Ui, ctx: &egui::Context, key: UiId, questions: &[Quest
         }
     }
     ui.add_space(16.0);
-    kit::small_caps(ui, "Topics");
+    kit::label(ui, "Topics");
     ui.add_space(4.0);
     let tc = crate::bankops::topic_counts(questions);
     if tc.is_empty() {
         ui.add(
-            egui::Label::new(theme::muted("No topics yet. Topics added to a question are listed here.").size(12.0)).wrap(),
+            egui::Label::new(kit::meta_muted("No topics yet. Topics added to a question are listed here.")).wrap(),
         );
         return;
     }
@@ -2304,12 +2707,29 @@ fn draft_chip(ui: &mut Ui, q: &Question) {
         } else {
             (Color32::from_rgb(140, 78, 0), Color32::from_rgba_unmultiplied(196, 120, 20, 40))
         };
-        kit::pill(ui, label, bg, fg).on_hover_text(tip);
+        chip(ui, label, bg, fg).on_hover_text(tip);
     }
 }
 
 fn meta_chip(ui: &mut Ui, text: &str) {
-    kit::pill(ui, text, theme::field(), theme::text_col());
+    chip(ui, text, theme::field(), theme::text_col());
+}
+
+/// A bank card's chip (type, topic, draft): `kit::pill`'s look with its label at the 12 pt floor.
+fn chip(ui: &mut Ui, label: &str, fill: Color32, fg: Color32) -> egui::Response {
+    Frame::new()
+        .fill(fill)
+        .corner_radius(CornerRadius::same(255))
+        .inner_margin(Margin::symmetric(9, 1))
+        .show(ui, |ui| {
+            ui.add(egui::Label::new(RichText::new(label).family(theme::bold_family()).size(kit::ty::LABEL).color(fg)).wrap_mode(egui::TextWrapMode::Extend));
+        })
+        .response
+}
+
+/// A bank card's type chip: accent wash, accent text.
+fn type_chip(ui: &mut Ui, label: &str) {
+    chip(ui, label, theme::accent_faded(), theme::accent_col());
 }
 
 /// A fill-in-the-blank key as one line: each blank's accepted answers joined by " / ",
@@ -2389,7 +2809,7 @@ fn answer_block(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
     ui.add_space(5.0);
     let out = Frame::new().inner_margin(Margin { left: 12, right: 0, top: 1, bottom: 2 }).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.label(kit::small_caps_text(title));
+        ui.label(kit::label_text(title));
         ui.add_space(2.0);
         add(ui);
     });
@@ -2573,8 +2993,8 @@ fn draw_card(
                 let q = q.unwrap();
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 10.0;
-                    ui.allocate_ui(Vec2::new(54.0, 18.0), |ui| kit::type_pill(ui, qedit::type_tag(kind)));
-                    ui.label(RichText::new(format!("Q{n}")).family(theme::bold_family()).size(11.5).color(theme::muted_col()));
+                    ui.allocate_ui(Vec2::new(54.0, 18.0), |ui| type_chip(ui, qedit::type_tag(kind)));
+                    ui.label(RichText::new(format!("Q{n}")).family(theme::bold_family()).size(kit::ty::LABEL).color(theme::muted_col()));
                     draft_chip(ui, q);
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         paint_chevron(ui, false);
@@ -2586,7 +3006,7 @@ fn draw_card(
                             let r = ui.add(
                                 egui::Label::new(
                                     RichText::new(format!("in {used} exam{}", if used == 1 { "" } else { "s" }))
-                                        .size(11.5)
+                                        .size(kit::ty::LABEL)
                                         .color(theme::accent_col())
                                         .underline(),
                                 )
@@ -2595,7 +3015,7 @@ fn draw_card(
                             usage_rect = Some(r.rect);
                         }
                         if let Some(d) = q.difficulty {
-                            ui.label(theme::muted(diff_label(d)).size(11.5));
+                            ui.label(theme::muted(diff_label(d)).size(kit::ty::LABEL));
                         }
                         if let Some(t) = q.topics.iter().map(|t| t.trim()).find(|t| !t.is_empty()) {
                             meta_chip(ui, &truncate(t, 16));
@@ -2607,10 +3027,10 @@ fn draw_card(
             } else {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
-                    kit::type_pill(ui, qedit::type_tag(kind));
+                    type_chip(ui, qedit::type_tag(kind));
                     match q {
                         Some(q) => {
-                            ui.label(RichText::new(format!("Q{n}")).family(theme::bold_family()).size(11.5).color(theme::muted_col()));
+                            ui.label(RichText::new(format!("Q{n}")).family(theme::bold_family()).size(kit::ty::LABEL).color(theme::muted_col()));
                             draft_chip(ui, q);
                         }
                         None => {
@@ -2644,10 +3064,10 @@ fn draw_card(
                             meta_chip(ui, &truncate(t, 18));
                         }
                         if let Some(d) = q.difficulty {
-                            ui.label(theme::muted(diff_label(d)).size(11.5));
+                            ui.label(theme::muted(diff_label(d)).size(kit::ty::LABEL));
                         }
                         if used > 0 {
-                            usage_rect = Some(usage_link(ui, used, 11.5).rect);
+                            usage_rect = Some(usage_link(ui, used, kit::ty::LABEL).rect);
                         }
                     });
                 }
@@ -2803,6 +3223,69 @@ fn pencil_button(ui: &mut Ui) -> egui::Response {
     }
     crate::handicons::paint_glyph(ui.painter(), rect.center(), crate::handicons::EDIT, 15.0, col);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// Width of the bank toolbar's overflow button.
+const MORE_W: f32 = 40.0;
+/// The bank toolbar's button height.
+const TOOL_H: f32 = 40.0;
+/// Side padding of a quiet toolbar button (Details, Preview): its hover wash reaches this far
+/// past the icon and the label.
+const QUIET_PAD: f32 = 12.0;
+/// Corner radius of the segmented Details / Preview / … group (Share's 12).
+const QUIET_R: u8 = 12;
+
+/// Width of a quiet toolbar button with a 16 pt icon and `label`.
+fn quiet_tool_w(ui: &Ui, label: &str) -> f32 {
+    let text = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), egui::FontId::new(kit::ty::BUTTON, theme::semibold()), Color32::WHITE).size().x);
+    (QUIET_PAD * 2.0 + 16.0 + 7.0 + text).ceil()
+}
+
+/// One segment of the bank toolbar's quiet group (Details, Preview, the overflow). The toolbar
+/// draws the group's container (paper fill, 1 pt `edge`, radius [`QUIET_R`]) and the hairlines
+/// between segments; the segment adds, inside its corners `r`, a hover_bg wash under the pointer
+/// or keyboard focus, accent_faded while pressed or while its menu is open, and the 2 pt focus
+/// ring. `icon`: a 16 pt ink glyph before `label`, in ink semibold (Share is bold on card white,
+/// so the group stays a step below it); `label` None draws the three overflow dots in a `TOOL_H`
+/// square. `name` is the accessible name (and, for the dots, the hover text).
+fn quiet_tool(ui: &mut Ui, icon: Option<&str>, label: Option<&str>, name: &str, r: CornerRadius) -> egui::Response {
+    let w = match label {
+        Some(l) => quiet_tool_w(ui, l),
+        None => MORE_W,
+    };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, TOOL_H), Sense::click());
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    let p = ui.painter();
+    // The group's outline is drawn over the segments afterwards, so a wash fills to it.
+    if resp.is_pointer_button_down_on() || open {
+        p.rect_filled(rect, r, theme::accent_faded());
+    } else if resp.hovered() || resp.has_focus() {
+        p.rect_filled(rect, r, theme::hover_bg());
+    }
+    let fg = theme::ink();
+    match label {
+        Some(l) => {
+            let galley = p.layout_no_wrap(l.to_owned(), egui::FontId::new(kit::ty::BUTTON, theme::semibold()), fg);
+            let mut x = rect.left() + QUIET_PAD;
+            if let Some(icon) = icon {
+                crate::handicons::paint_glyph(p, Pos2::new(x + 8.0, rect.center().y), icon, 16.0, fg);
+                x += 16.0 + 7.0;
+            }
+            p.galley(Pos2::new(x, rect.center().y - galley.size().y / 2.0), galley, fg);
+        }
+        None => {
+            for dx in [-6.5, 0.0, 6.5] {
+                p.circle_filled(rect.center() + Vec2::new(dx, 0.0), 2.0, fg);
+            }
+        }
+    }
+    if resp.has_focus() {
+        let ring = CornerRadius { nw: r.nw.saturating_add(1), ne: r.ne.saturating_add(1), sw: r.sw.saturating_add(1), se: r.se.saturating_add(1) };
+        ui.painter().rect_stroke(rect.expand(1.0), ring, Stroke::new(2.0, theme::accent_col()), egui::StrokeKind::Outside);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name));
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    if label.is_none() { resp.on_hover_text(name) } else { resp }
 }
 
 /// Writes edited details onto a bank; returns true when anything changed.
@@ -3644,6 +4127,23 @@ mod tests {
         crate::model::Kind::Mc { answers: texts.iter().enumerate().map(|(i, t)| crate::model::Answer { text: t.to_string(), correct: i == 0, locked: false }).collect() }
     }
 
+    /// The Banks grid fills its width: 1280 (about 1110 of page) is three wide tiles, 760 (about
+    /// 614) two, a phone one; a wide window gains columns instead of a dead strip.
+    #[test]
+    fn the_banks_grid_takes_as_many_tiles_as_fit() {
+        let g = kit::GUTTER;
+        assert_eq!(banks_grid_cols(1110.0, g), 3);
+        assert_eq!(banks_grid_cols(614.0, g), 2);
+        assert_eq!(banks_grid_cols(400.0, g), 1);
+        assert_eq!(banks_grid_cols(100.0, g), 1);
+        assert_eq!(banks_grid_cols(1600.0, g), 5);
+        // Every tile stays at least the minimum wide.
+        for avail in [300.0f32, 575.0, 576.0, 900.0, 1110.0, 1600.0] {
+            let n = banks_grid_cols(avail, g) as f32;
+            assert!((avail - g * (n - 1.0)) / n >= BANK_TILE_MIN_W, "{avail}");
+        }
+    }
+
     #[test]
     fn popover_filters_and_sorts() {
         let mut a = q("Which gas is $CO_2$?", mc(&["carbon dioxide", "oxygen"]), 1);
@@ -3817,4 +4317,100 @@ mod tests {
         assert_eq!(points_label(Some(2.0)), Some("2 pt".to_string()));
         assert_eq!(points_label(Some(2.5)), Some("2.5 pt".to_string()));
     }
+
+    /// Every bank tile is the sum of its slots, 205, on Banks and on Home (spec section 3).
+    #[test]
+    fn a_bank_tile_is_205_tall() {
+        assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 10.0 + 40.0 + 8.0 + 6.0 + 12.0 + 1.0 + 10.0 + 18.0 + 16.0);
+        assert_eq!(BANK_TILE_H, 205.0);
+    }
+
+    /// The key keeps two lines: what a third would hold folds into "+N more" on line 2, dropping
+    /// line 2's last items until it fits 12 after them.
+    #[test]
+    fn the_tile_key_folds_a_third_line_into_more() {
+        let widths = [110.0, 80.0, 80.0, 80.0, 115.0, 100.0];
+        let item_w = |i: usize| widths[i];
+        let more_w = |_n: usize| 44.0;
+        // Everything in two lines: no "+N more".
+        let k = layout_tile_key(&[1, 1, 0, 0, 0, 0], 284.0, item_w, more_w);
+        assert_eq!(k.items, vec![(0, 0.0, 0), (1, 122.0, 0)]);
+        assert_eq!(k.more, None);
+        // A third line's items become "+2 more" after line 2's last item.
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 284.0, item_w, more_w);
+        assert_eq!(k.items.iter().map(|i| (i.0, i.2)).collect::<Vec<_>>(), vec![(0, 0), (1, 0), (2, 1), (3, 1)]);
+        assert_eq!(k.more, Some((184.0, vec![4, 5])));
+        // No room after line 2's items: its last item gives way, and is counted in "+N more".
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 250.0, item_w, more_w);
+        let (x, rest) = k.more.clone().unwrap();
+        assert!(x + 44.0 <= 250.0, "+N more ends inside the key");
+        assert_eq!(rest.len() + k.items.len(), 6, "every type is shown or counted");
+        assert!(k.items.iter().all(|it| it.2 <= 1), "two lines at most");
+        // Types stay in mix order: shown ones first, the folded ones after.
+        let mut order: Vec<usize> = k.items.iter().map(|i| i.0).collect();
+        order.extend(rest);
+        assert_eq!(order, vec![0, 1, 2, 3, 4, 5]);
+    }
+
+    /// The footer's edited text has a long, a month-day and a bare form.
+    #[test]
+    fn edited_forms_shorten_to_the_month_day() {
+        let f = edited_forms(1_760_659_200); // Oct 17, 2025 (UTC)
+        assert!(f[0].starts_with("Edited "));
+        assert_eq!(f[1], "Edited Oct 17");
+        assert_eq!(f[2], "Oct 17");
+    }
+
+    /// The meta row keeps the long edited form before the topics, then shortens the date.
+    #[test]
+    fn the_meta_row_drops_topics_before_the_long_edited_form() {
+        let ed = [101.0, 75.0, 38.0];
+        // Banks (283 inside): everything.
+        assert_eq!(meta_fit(119.0, 70.0, ed, 283.0), (true, Some(0)));
+        // Home (200 inside): the topics go first, the long form stays.
+        assert_eq!(meta_fit(119.0, 70.0, ed, 200.0), (false, Some(0)));
+        // Tighter: the month-day form, then the bare date.
+        assert_eq!(meta_fit(119.0, 70.0, ed, 160.0), (false, Some(1)));
+        assert_eq!(meta_fit(119.0, 70.0, ed, 125.0), (false, Some(2)));
+        // No room for any form: the counts alone.
+        assert_eq!(meta_fit(119.0, 70.0, ed, 119.0), (true, None));
+        assert_eq!(meta_fit(119.0, 70.0, ed, 100.0), (false, None));
+    }
+
+    /// A badge's room comes from dropping the topics, never from a taller row.
+    #[test]
+    fn counts_line_drops_topics_for_a_badge() {
+        let t = BankTile { id: "b".into(), name: "B".into(), questions: 11, topics: 4, mix: [11, 0, 0, 0, 0, 0], used_in: vec![], edited: 0, archived: false };
+        assert_eq!(counts_line(&t, true), "11 questions · 4 topics");
+        assert_eq!(counts_line(&t, false), "11 questions");
+        let a = BankTile { archived: true, questions: 1, topics: 1, ..t };
+        assert_eq!(counts_line(&a, true), "Archived · 1 question · 1 topic");
+    }
+
+    /// The bar's segments: shown types in mix order with a 2 px gap between them, the folded types
+    /// as one segment at the end, none under 4, and the whole bar inside its width.
+    #[test]
+    fn bar_segments_have_gaps_and_fold_the_rest_last() {
+        let mix = [5, 2, 1, 1, 1, 1];
+        let s = bar_segments(&mix, &[], 284.0);
+        assert_eq!(s.iter().map(|x| x.0).collect::<Vec<_>>(), (0..6).map(Some).collect::<Vec<_>>());
+        for w in s.windows(2) {
+            assert!((w[1].1 - w[0].2 - BAR_GAP).abs() < 0.01, "a 2 px gap between neighbours");
+        }
+        assert!(s.iter().all(|x| x.2 - x.1 >= 4.0 - 0.01));
+        assert!(s.last().unwrap().2 <= 284.0 + 0.01);
+        // MC takes 5/11 of what the gaps leave.
+        assert!(((s[0].2 - s[0].1) - (284.0 - 5.0 * BAR_GAP) * 5.0 / 11.0).abs() < 0.01);
+        // Folded types (a suffix in mix order) are one segment, last.
+        let s = bar_segments(&mix, &[3, 4, 5], 201.0);
+        assert_eq!(s.iter().map(|x| x.0).collect::<Vec<_>>(), vec![Some(0), Some(1), Some(2), None]);
+        assert!(s.last().unwrap().2 <= 201.0 + 0.01);
+        // Absent types draw nothing; an empty bank has no segments.
+        assert_eq!(bar_segments(&[0, 3, 0, 0, 0, 0], &[], 80.0), vec![(Some(1), 0.0, 80.0)]);
+        assert!(bar_segments(&[0; 6], &[], 80.0).is_empty());
+        // A sliver is at least 4 and the bar still fits.
+        let s = bar_segments(&[100, 1, 0, 0, 0, 0], &[], 80.0);
+        assert!(s[1].2 - s[1].1 >= 4.0 - 0.01 && s[1].2 <= 80.0 + 0.01);
+    }
+
 }

@@ -318,6 +318,12 @@ pub fn semibold_family() -> FontFamily {
     if noto() { FontFamily::Name("vs-noto-semibold".into()) } else { bold_family() }
 }
 /// The chemistry skin's medium (500) and extra-bold (800) faces; the nearest plain faces elsewhere.
+/// The real semibold (600) sans: Source Sans 3 Semibold ("vs-sans-semibold"), or Noto's semibold
+/// under the chemistry skin. What the type scale means by "medium" and "semibold" (meta-strong,
+/// links, tertiary buttons). `semibold_family`/`medium_family` stay bold for the figures.
+pub fn semibold() -> FontFamily {
+    FontFamily::Name(if noto() { "vs-noto-semibold" } else { "vs-sans-semibold" }.into())
+}
 pub fn medium_family() -> FontFamily {
     if noto() { FontFamily::Name("vs-noto-medium".into()) } else { bold_family() }
 }
@@ -404,6 +410,42 @@ pub fn cream() -> Color32 { pal().cream }
 pub fn card() -> Color32 { pal().card }
 pub fn border() -> Color32 { pal().border }
 pub fn rule() -> Color32 { pal().rule }
+/// The 3:1 control edge: the hairline of secondary, tertiary and outline buttons, strong enough
+/// to read as a control's border (WCAG 1.4.11) where `border` (1.45:1) and `rule` (2.2:1) read as
+/// disabled. Light #9c8672, dark #85725f; the chemistry skin keeps its own `rule`.
+pub fn edge() -> Color32 {
+    match (noto(), is_dark()) {
+        (true, _) => pal().rule,
+        (false, true) => Color32::from_rgb(0x85, 0x72, 0x5f),
+        (false, false) => Color32::from_rgb(0x9c, 0x86, 0x72),
+    }
+}
+/// The question-type hues of a bank's type key and type-mix bar, in `bankui::mix_index` order:
+/// multiple choice (the theme green), true/false (ochre), multipart (slate blue), matching
+/// (plum), fill in the blank (teal), short answer (a warm neutral). One set for the key's swatches
+/// and the bar's segments, so a swatch names its segment. Each is 3:1 or more on `card` (light
+/// 3.1-13.2 on #fffdf8, dark 3.1-8.3 on #2b2520); every pair is at least 14.9 (light) / 13.3
+/// (dark) apart in OKLab x100, and 10.2 / 6.4 under protan and deutan simulation (the key's
+/// words carry the rest). The chemistry skin uses the same values.
+pub fn type_hue(i: usize) -> Color32 {
+    const LIGHT: [Color32; 6] = [
+        Color32::from_rgb(0x2f, 0x61, 0x44),
+        Color32::from_rgb(0xb4, 0x7f, 0x2f),
+        Color32::from_rgb(0x2a, 0x42, 0x78),
+        Color32::from_rgb(0x92, 0x59, 0x85),
+        Color32::from_rgb(0x57, 0x9c, 0x9e),
+        Color32::from_rgb(0x3b, 0x2c, 0x20),
+    ];
+    const DARK: [Color32; 6] = [
+        Color32::from_rgb(0x9d, 0xcb, 0xa0),
+        Color32::from_rgb(0xd2, 0x90, 0x46),
+        Color32::from_rgb(0x78, 0x96, 0xdc),
+        Color32::from_rgb(0xdc, 0x9c, 0xc0),
+        Color32::from_rgb(0x26, 0x9e, 0x9b),
+        Color32::from_rgb(0x85, 0x6d, 0x61),
+    ];
+    (if is_dark() { DARK } else { LIGHT })[i.min(5)]
+}
 pub fn ink() -> Color32 { pal().ink }
 pub fn text_col() -> Color32 { pal().text }
 pub fn muted_col() -> Color32 { pal().muted }
@@ -466,7 +508,7 @@ egui_phosphor::subset! {
             PALETTE, PAPERCLIP, PENCIL_SIMPLE, PENCIL_SIMPLE_LINE, PLAY_CIRCLE, PLUS, PRINTER,
             PROHIBIT, QUESTION, ROWS, RULER, SELECTION, SHAPES, SLIDERS_HORIZONTAL, SPARKLE, SUN,
             TABLE, TAG, TEXT_AA, TEXT_H, TEXT_T, THERMOMETER, TRASH, TREE_STRUCTURE,
-            UPLOAD_SIMPLE, USER_CIRCLE, USERS_THREE, WAVE_SINE, X,
+            UPLOAD_SIMPLE, USER_CIRCLE, USERS_THREE, WARNING, WAVE_SINE, X,
         };
     }
 }
@@ -546,6 +588,8 @@ fn load_fonts() -> FontDefinitions {
         )
     };
     let (fam, fonts) = named("vs-sans-bold", vec!["SourceSans3-Bold", "SourceSans3-Semibold", "SourceSans3-Regular"]);
+    defs.families.insert(fam, fonts);
+    let (fam, fonts) = named("vs-sans-semibold", vec!["SourceSans3-Semibold", "SourceSans3-Bold", "SourceSans3-Regular"]);
     defs.families.insert(fam, fonts);
     // the chemistry page skin's sans (Source Sans stays behind it for glyphs it lacks)
     let (fam, fonts) = named("vs-noto", vec!["NotoSans-Regular", "SourceSans3-Regular"]);
@@ -713,7 +757,7 @@ mod tests {
         ] {
             assert!(defs.font_data.contains_key(key), "missing font {key}");
         }
-        for family in ["vs-sans-bold", "vs-serif", "vs-serif-bold", "vs-serif-italic", "vs-serif-bold-italic", "vs-sans-italic"] {
+        for family in ["vs-sans-bold", "vs-sans-semibold", "vs-serif", "vs-serif-bold", "vs-serif-italic", "vs-serif-bold-italic", "vs-sans-italic"] {
             let list = defs
                 .families
                 .get(&FontFamily::Name(family.into()))
@@ -728,6 +772,52 @@ mod tests {
         }
         let prop = &defs.families[&FontFamily::Proportional];
         assert_eq!(prop.first().map(String::as_str), Some("SourceSans3-Regular"));
+    }
+
+    fn contrast(a: Color32, b: Color32) -> f32 {
+        let lum = |c: Color32| {
+            let ch = |v: u8| {
+                let v = v as f32 / 255.0;
+                if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+            };
+            0.2126 * ch(c.r()) + 0.7152 * ch(c.g()) + 0.0722 * ch(c.b())
+        };
+        let (x, y) = (lum(a), lum(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    /// The control edge holds 3:1 against the card and the page in both palettes, where `border`
+    /// and `rule` do not (so an outlined button no longer reads as disabled).
+    #[test]
+    fn the_control_edge_is_three_to_one_on_card_and_page() {
+        for dark in [false, true] {
+            begin_frame(dark);
+            assert!(contrast(edge(), card()) >= 3.0, "dark {dark}: {} on card", contrast(edge(), card()));
+            assert!(contrast(edge(), cream()) >= 3.0, "dark {dark}: {} on cream", contrast(edge(), cream()));
+            assert!(contrast(rule(), card()) < 3.0, "dark {dark}: rule already passes");
+        }
+        begin_frame(false);
+    }
+
+    /// The type hues (bank key swatches and bar segments) hold 3:1 on the card in both palettes,
+    /// and no two are near-twins: every pair differs by 60 or more in summed RGB channels.
+    #[test]
+    fn the_type_hues_read_on_the_card_and_apart() {
+        for dark in [false, true] {
+            begin_frame(dark);
+            for i in 0..6 {
+                assert!(contrast(type_hue(i), card()) >= 3.0, "dark {dark}: hue {i} {} on card", contrast(type_hue(i), card()));
+            }
+            for i in 0..6 {
+                for j in i + 1..6 {
+                    let (a, b) = (type_hue(i), type_hue(j));
+                    let d = (a.r() as i32 - b.r() as i32).abs() + (a.g() as i32 - b.g() as i32).abs() + (a.b() as i32 - b.b() as i32).abs();
+                    assert!(d >= 60, "dark {dark}: hues {i} and {j} are {d} apart");
+                }
+            }
+            assert_eq!(type_hue(0), if dark { Color32::from_rgb(0x9d, 0xcb, 0xa0) } else { Color32::from_rgb(0x2f, 0x61, 0x44) }, "multiple choice keeps the theme green");
+        }
+        begin_frame(false);
     }
 
     /// Every Phosphor icon the code names (`egui_phosphor::regular::X`, or `ph::X` where a file

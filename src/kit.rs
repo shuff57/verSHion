@@ -96,7 +96,7 @@ pub fn gated_reason(ui: &mut Ui, reason: &str) -> egui::Response {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(15.0)).color(warn_col()));
-        ui.add(egui::Label::new(RichText::new(reason).family(theme::bold_family()).size(12.5).color(warn_col())).wrap_mode(egui::TextWrapMode::Extend));
+        ui.add(egui::Label::new(RichText::new(reason).family(theme::bold_family()).size(ty::META).color(warn_col())).wrap_mode(egui::TextWrapMode::Extend));
     })
     .response
 }
@@ -191,7 +191,7 @@ pub fn ghost_button(ui: &mut Ui, label: &str) -> egui::Response {
         theme::card(),
         theme::hover_bg(),
         theme::accent_faded(),
-        Stroke::new(1.0, theme::rule()),
+        Stroke::new(1.0, theme::edge()),
         36.0,
     )
 }
@@ -254,14 +254,19 @@ pub fn small_caps(ui: &mut Ui, text: &str) {
     ui.label(small_caps_text(text));
 }
 
+/// [`small_caps`]'s text at 10.5 (ungraded screens keep it; graded ones use [`label_text`]).
 pub fn small_caps_text(text: &str) -> RichText {
+    caps_text(text, 10.5)
+}
+
+fn caps_text(text: &str, size: f32) -> RichText {
     // egui has no letter-spacing; thin spaces between letters approximate .09em.
     let spaced: String = text
         .to_uppercase()
         .chars()
         .flat_map(|c| [c, '\u{200A}'])
         .collect();
-    RichText::new(spaced).family(theme::bold_family()).size(10.5).color(theme::muted_col())
+    RichText::new(spaced).family(theme::bold_family()).size(size).color(theme::muted_col())
 }
 
 /// Filled chip: pill with a wash fill and bold small label.
@@ -392,4 +397,329 @@ pub fn ui_font(size: f32) -> FontId {
 /// Used by painter code that needs a centered label.
 pub fn center_text(ui: &Ui, pos: Pos2, text: &str, size: f32, col: Color32) {
     ui.painter().text(pos, egui::Align2::CENTER_CENTER, text, ui_font(size), col);
+}
+
+// ---------------------------------------------------------------- type scale
+
+/// The type scale of the graded screens, in egui points (spec section 2). Call sites name a role
+/// here instead of typing a size. Theme `Body` stays 13 for egui's own widgets in dialogs.
+pub mod ty {
+    /// Welcome headline (serif, ink).
+    pub const DISPLAY: f32 = 43.0;
+    /// Welcome headline below the narrow breakpoint.
+    pub const DISPLAY_NARROW: f32 = 40.0;
+    /// Welcome lead line (sans, ink x0.82).
+    pub const HERO_LEAD: f32 = 16.5;
+    /// Welcome lead line, narrow.
+    pub const HERO_LEAD_NARROW: f32 = 15.0;
+    /// Page title (serif, ink).
+    pub const TITLE: f32 = 34.0;
+    /// Section heading, stat values, step numerals (serif, ink).
+    pub const SECTION: f32 = 22.0;
+    /// Panel / tile heading (serif, ink).
+    pub const PANEL: f32 = 19.0;
+    /// Card name (serif, ink), on a [`CARD_LINE`] line.
+    pub const CARD: f32 = 17.0;
+    /// Line height reserved per line of a [`CARD`] name.
+    pub const CARD_LINE: f32 = 22.0;
+    /// Lead / subtitle prose (sans, muted).
+    pub const LEAD: f32 = 14.0;
+    /// Body prose (sans, text).
+    pub const BODY: f32 = 14.0;
+    /// Meta lines, status words, links (sans).
+    pub const META: f32 = 13.0;
+    /// Section labels, badges, pills: bold caps, muted. The only role at the floor.
+    pub const LABEL: f32 = 12.0;
+    /// Nothing on a graded screen is smaller (dock and printed content are exempt).
+    pub const FLOOR: f32 = 12.0;
+    /// Button text on a 36-40 tall button.
+    pub const BUTTON: f32 = 15.2;
+    /// Button text on a compact (under 38 tall) button.
+    pub const BUTTON_SM: f32 = 13.5;
+    /// The page's one large call to action (`pageshell::primary_large`).
+    pub const BUTTON_LG: f32 = 17.5;
+}
+
+/// The gap between cards on the grids this pass touches (Banks, Home banks).
+pub const GUTTER: f32 = 16.0;
+/// A card's inner padding on those grids.
+pub const CARD_PAD: f32 = 16.0;
+
+/// Body prose: 14 pt, `text` colour.
+pub fn body(t: impl Into<String>) -> RichText {
+    RichText::new(t).size(ty::BODY).color(theme::text_col())
+}
+
+/// Lead / subtitle prose: 14 pt, muted (on card or cream only).
+pub fn lead(t: impl Into<String>) -> RichText {
+    RichText::new(t).size(ty::LEAD).color(theme::muted_col())
+}
+
+/// A meta line ("11 questions · 4 topics") or status word ("Saved"): 13 pt, `text` colour.
+pub fn meta(t: impl Into<String>) -> RichText {
+    RichText::new(t).size(ty::META).color(theme::text_col())
+}
+
+/// The quiet meta line ("Edited 23 days ago"): 13 pt, muted (on card or cream only).
+pub fn meta_muted(t: impl Into<String>) -> RichText {
+    RichText::new(t).size(ty::META).color(theme::muted_col())
+}
+
+/// The stressed meta word (a bank name after "From"): 13 pt semibold, `text` colour.
+pub fn meta_strong(t: impl Into<String>) -> RichText {
+    RichText::new(t).size(ty::META).family(theme::semibold()).color(theme::text_col())
+}
+
+/// A section label: 12 pt bold caps, hair-spaced, muted. Names a section, never a fact on a card.
+pub fn label_text(t: &str) -> RichText {
+    caps_text(t, ty::LABEL)
+}
+
+/// [`label_text`] as a label (the graded screens' replacement for [`small_caps`]).
+pub fn label(ui: &mut Ui, t: &str) {
+    ui.label(label_text(t));
+}
+
+/// A card name's font: serif 17 (lay it out on [`ty::CARD_LINE`] lines).
+pub fn card_title_font() -> FontId {
+    FontId::new(ty::CARD, theme::serif_family())
+}
+
+// ---------------------------------------------------------------- button tiers
+
+/// One tier's rest look: fill, outline, label colour and face.
+struct Tier {
+    fill: Color32,
+    stroke: Stroke,
+    fg: Color32,
+    family: egui::FontFamily,
+}
+
+/// The 2 pt accent ring outside a focused control, 1 pt clear of its edge.
+fn focus_ring(ui: &Ui, rect: Rect, radius: u8) {
+    ui.painter().rect_stroke(rect.expand(1.0), CornerRadius::same(radius.saturating_add(1)), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+}
+
+/// True while the popup anchored on `resp` (`egui::Popup::menu(&resp)`) is open.
+fn popup_open(ui: &Ui, resp: &egui::Response) -> bool {
+    egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(resp))
+}
+
+/// A painted text button of one tier, `h` tall: hover_bg under the pointer, accent_faded while
+/// pressed, a focus ring, PointingHand, Enter/Space (egui's click sense), and its label as the
+/// accessible name. Inside a disabled `Ui` it takes the `unavailable` look and is not focusable.
+fn tier_button(ui: &mut Ui, icon: Option<&str>, label: &str, h: f32, tier: Tier) -> egui::Response {
+    let enabled = ui.is_enabled();
+    let (size, pad) = if h >= 38.0 { (ty::BUTTON, 18.0) } else { (ty::BUTTON_SM, 14.0) };
+    let (fill, stroke, fg) = if enabled {
+        (tier.fill, tier.stroke, tier.fg)
+    } else {
+        let (f, t, e) = crate::pageshell::unavailable_colors();
+        (f, Stroke::new(1.0, e), t)
+    };
+    let family = if enabled { tier.family } else { theme::bold_family() };
+    let galley = ui.painter().layout_no_wrap(label.to_owned(), FontId::new(size, family), fg);
+    let (icon_w, icon_gap) = if icon.is_some() { (16.0, 7.0) } else { (0.0, 0.0) };
+    let w = pad * 2.0 + icon_w + icon_gap + galley.size().x;
+    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w.ceil(), h), sense);
+    let bg = if !enabled {
+        fill
+    } else if resp.is_pointer_button_down_on() || popup_open(ui, &resp) {
+        theme::accent_faded()
+    } else if resp.hovered() {
+        theme::hover_bg()
+    } else {
+        fill
+    };
+    let r = CornerRadius::same(12);
+    ui.painter().rect(rect, r, bg, stroke, StrokeKind::Inside);
+    let mut x = rect.left() + pad;
+    if let Some(icon) = icon {
+        crate::handicons::paint_glyph(ui.painter(), Pos2::new(x + icon_w / 2.0, rect.center().y), icon, 16.0, fg);
+        x += icon_w + icon_gap;
+    }
+    ui.painter().galley(Pos2::new(x, rect.center().y - galley.size().y / 2.0), galley, fg);
+    if resp.has_focus() {
+        focus_ring(ui, rect, 12);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    if enabled { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp }
+}
+
+/// Secondary tier, `h` tall (32 on cards, 40 in toolbars): card fill, 1 pt [`theme::edge`], ink
+/// bold label (15.2 at 38+ tall, else 13.5).
+pub fn secondary(ui: &mut Ui, label: &str, h: f32) -> egui::Response {
+    tier_button(ui, None, label, h, Tier { fill: theme::card(), stroke: Stroke::new(1.0, theme::edge()), fg: theme::ink(), family: theme::bold_family() })
+}
+
+/// A card's main action (exams Open): card fill, 1.5 pt accent outline, accent bold label. Never
+/// filled; the page region's one filled primary stays `pageshell::primary`.
+pub fn secondary_accent(ui: &mut Ui, label: &str, h: f32) -> egui::Response {
+    tier_button(ui, None, label, h, Tier { fill: theme::card(), stroke: Stroke::new(1.5, theme::accent_col()), fg: theme::accent_col(), family: theme::bold_family() })
+}
+
+/// Tertiary tier (Details, Preview, How it works): no fill, 1 pt [`theme::edge`], a 16 pt ink
+/// `icon` (anything `handicons::paint_glyph` takes), then the label in ink semibold.
+pub fn tertiary(ui: &mut Ui, icon: &str, label: &str, h: f32) -> egui::Response {
+    tier_button(ui, Some(icon), label, h, Tier { fill: Color32::TRANSPARENT, stroke: Stroke::new(1.0, theme::edge()), fg: theme::ink(), family: theme::semibold() })
+}
+
+/// The square shared by [`icon_button`] and [`more_dots`]: a `side` square in the secondary look
+/// at rest (card fill, 1 pt [`theme::edge`], radius 12, ink glyph), hover_bg / accent_faded (also
+/// while its popup is open), focus ring, `tip` as the hover text and the accessible name. Returns
+/// the response and the colour to draw the glyph in.
+fn icon_well(ui: &mut Ui, side: f32, tip: &str) -> (egui::Response, Color32) {
+    let enabled = ui.is_enabled();
+    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(side), sense);
+    let r = CornerRadius::same(12);
+    let (fill, edge, fg) = if !enabled {
+        let (f, t, e) = crate::pageshell::unavailable_colors();
+        (f, e, t)
+    } else if resp.is_pointer_button_down_on() || popup_open(ui, &resp) {
+        (theme::accent_faded(), theme::edge(), theme::ink())
+    } else if resp.hovered() {
+        (theme::hover_bg(), theme::edge(), theme::ink())
+    } else {
+        (theme::card(), theme::edge(), theme::ink())
+    };
+    ui.painter().rect(rect, r, fill, Stroke::new(1.0, edge), StrokeKind::Inside);
+    if resp.has_focus() {
+        focus_ring(ui, rect, 12);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tip));
+    let resp = if enabled { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp };
+    (resp.on_hover_text(tip), fg)
+}
+
+/// Icon tier: a `side` square in the secondary look holding one ink glyph (`icon`: anything
+/// `handicons::paint_glyph` takes). `tip` is both the hover text and the accessible name.
+pub fn icon_button(ui: &mut Ui, icon: &str, side: f32, tip: &str) -> egui::Response {
+    let (resp, fg) = icon_well(ui, side, tip);
+    let glyph = (side * 0.45).clamp(14.0, 20.0);
+    crate::handicons::paint_glyph(ui.painter(), resp.rect.center(), icon, glyph, fg);
+    resp
+}
+
+/// The overflow "…": three painted ink dots in a `side` square in the secondary look. Anchor its
+/// menu on the returned response (`egui::Popup::menu(&r)`); it stays pressed while open.
+pub fn more_dots(ui: &mut Ui, side: f32, tip: &str) -> egui::Response {
+    let (resp, fg) = icon_well(ui, side, tip);
+    let step = if side >= 36.0 { 6.5 } else { 5.5 };
+    for dx in [-step, 0.0, step] {
+        ui.painter().circle_filled(resp.rect.center() + Vec2::new(dx, 0.0), 2.0, fg);
+    }
+    resp
+}
+
+/// A text link: 13 pt accent semibold, no underline at rest, underlined under the pointer and
+/// when focused (plus the ring); `arrow` adds a trailing →. At least 18 tall. Returns its own click.
+pub fn link(ui: &mut Ui, label: &str, arrow: bool) -> egui::Response {
+    let enabled = ui.is_enabled();
+    let col = if enabled { theme::accent_col() } else { theme::muted_col() };
+    let galley = ui.painter().layout_no_wrap(label.to_owned(), FontId::new(ty::META, theme::semibold()), col);
+    let text = galley.size();
+    let arrow_w = if arrow { 4.0 + 13.0 } else { 0.0 };
+    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new((text.x + arrow_w).ceil(), text.y.max(18.0)), sense);
+    let top = rect.center().y - text.y / 2.0;
+    ui.painter().galley(Pos2::new(rect.left(), top), galley, col);
+    if arrow {
+        crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.right() - 6.5, rect.center().y + 0.5), egui_phosphor::regular::ARROW_RIGHT, 13.0, col);
+    }
+    if enabled && (resp.hovered() || resp.has_focus()) {
+        let y = (top + text.y - 2.0).round() + 0.5;
+        ui.painter().hline(rect.left()..=rect.left() + text.x, y, Stroke::new(1.0, col));
+    }
+    if resp.has_focus() {
+        focus_ring(ui, rect.expand(2.0), 4);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    if enabled { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::{kittest::{NodeT, Queryable}, Harness};
+
+    const NAMES: [&str; 6] = ["Import", "Open", "Details", "Preview bank", "Exam actions", "All exams"];
+
+    /// One row of every tier; each click pushes its name. `enabled` false draws them disabled.
+    fn tiers(enabled: bool) -> Harness<'static, Vec<&'static str>> {
+        let mut first = true;
+        Harness::builder().build_ui_state(
+            move |ui, clicks: &mut Vec<&'static str>| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                ui.add_enabled_ui(enabled, |ui| {
+                    ui.horizontal(|ui| {
+                        let rs = [
+                            secondary(ui, "Import", 40.0),
+                            secondary_accent(ui, "Open", 32.0),
+                            tertiary(ui, crate::handicons::INFO, "Details", 40.0),
+                            icon_button(ui, egui_phosphor::regular::EYE, 40.0, "Preview bank"),
+                            more_dots(ui, 32.0, "Exam actions"),
+                            link(ui, "All exams", true),
+                        ];
+                        for (r, n) in rs.iter().zip(NAMES) {
+                            if r.clicked() {
+                                clicks.push(n);
+                            }
+                        }
+                    });
+                });
+            },
+            Vec::new(),
+        )
+    }
+
+    /// Every tier is a button named by its label (icon tiers by their tip), Tab reaches each in
+    /// order, and Enter presses the focused one (spec section 4, "Every tier").
+    #[test]
+    fn every_tier_is_a_named_button_that_tab_reaches_and_enter_presses() {
+        let mut h = tiers(true);
+        h.run();
+        for n in NAMES {
+            let node = h.get_by_label(n);
+            assert_eq!(node.accesskit_node().role(), egui::accesskit::Role::Button, "{n}");
+            assert!(!node.accesskit_node().is_disabled(), "{n}");
+        }
+        for n in NAMES {
+            h.key_press(egui::Key::Tab);
+            h.run();
+            assert!(h.get_by_label(n).is_focused(), "Tab reaches {n}");
+            h.key_press(egui::Key::Enter);
+            h.run();
+            assert_eq!(h.state().last(), Some(&n), "Enter presses {n}");
+        }
+        assert_eq!(h.state().len(), NAMES.len());
+    }
+
+    /// Inside a disabled Ui every tier is reported disabled and Tab skips it.
+    #[test]
+    fn disabled_tiers_are_marked_and_not_focusable() {
+        let mut h = tiers(false);
+        h.run();
+        for n in NAMES {
+            assert!(h.get_by_label(n).accesskit_node().is_disabled(), "{n}");
+        }
+        h.key_press(egui::Key::Tab);
+        h.run();
+        for n in NAMES {
+            assert!(!h.get_by_label(n).is_focused(), "{n} took focus while disabled");
+        }
+    }
+
+    /// The type roles sit at or above the floor, and only the label role sits on it.
+    #[test]
+    fn the_type_scale_keeps_the_floor() {
+        let all = [ty::DISPLAY, ty::DISPLAY_NARROW, ty::HERO_LEAD, ty::HERO_LEAD_NARROW, ty::TITLE, ty::SECTION, ty::PANEL, ty::CARD, ty::LEAD, ty::BODY, ty::META, ty::LABEL, ty::BUTTON, ty::BUTTON_SM, ty::BUTTON_LG];
+        assert!(all.iter().all(|&s| s >= ty::FLOOR));
+        assert_eq!(all.iter().filter(|&&s| s == ty::FLOOR).count(), 1);
+    }
 }
