@@ -18,7 +18,7 @@ const fn items(title: &'static str) -> RefSection {
 }
 
 static FIG_0: [RefSection; 2] = [
-    s("Figure", &["around", "unknown", "hide", "sector_text", "arcs1", "arcs2", "arcs3", "shaded", "points", "right", "letters", "dec", "turn", "ray_ends", "shade", "label_size", "ray_count"], "On the figure: click a ray to change its style, near the vertex to delete it, or in line with it behind the vertex to run it through as a line; click near an angle's corner for congruence arcs or shading; click the vertex or near a ray's end for a named point."),
+    s("Figure", &["around", "unknown", "hide", "sector_text", "arcs1", "arcs2", "arcs3", "shaded", "points", "right", "letters", "dec", "turn", "ray_ends", "shade", "label_size", "ray_count"], "On the figure: click a ray near the vertex to run it through as a line, along its middle to change its style, or near its end to delete it; click near an angle's corner for congruence arcs or shading; click the vertex or a ray's end for a named point."),
     s("More options", &["ray2", "ray3", "ray4", "ray5", "ray6", "ray7", "ray8", "ray9", "ray10", "ray11", "ray12"], ""),
 ];
 

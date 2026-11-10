@@ -36,15 +36,17 @@ pub(crate) const LEN: f64 = 140.0;
 /// Fill of a shaded angle: a light tint the labels' white halo reads over (darker than "Shade the angles", so it shows over it).
 const SHADE: &str = "#d9e6f6";
 /// A click within this of the vertex or a ray's end puts a point there; within WEDGE_R of the vertex, between two rays, marks
-/// that angle; within LINE_D of a ray, the ray (nearer the vertex than INNER_R: deletes it); in line with a ray behind the vertex,
-/// runs it through.
+/// that angle; within LINE_D of a ray, acts on the ray: out to THROUGH_R runs it through the vertex (or cuts a line back), on to
+/// DEL_R steps its style, beyond that deletes it. (The parts are all on the ray: the workspace zooms to the drawing, so the empty
+/// side behind the vertex is often off the screen.)
 const VERTEX_R: f64 = 10.0;
 const END_R: f64 = 10.0;
 const WEDGE_R: f64 = 32.0;
 const LINE_D: f64 = 5.0;
-const INNER_R: f64 = 64.0;
+const THROUGH_R: f64 = 60.0;
+const DEL_R: f64 = 108.0;
 
-pub(crate) const SUMMARY: &str = "Click a ray to change its style; with two or more rays, click a ray near the vertex to delete it; click in line with a ray behind the vertex to run it through the vertex as a line. Click near an angle's corner for congruence arcs or shading. Click the vertex or near a ray's end to put a named point there; double-click a point to rename it, an angle to type its label, a ray to type its direction.";
+pub(crate) const SUMMARY: &str = "Click a ray near the vertex to run it on through the vertex as a line (again to cut it back to a ray), along its middle to change its style, or near its end to delete it (once there are two or more rays). Click near an angle's corner for congruence arcs or shading. Click the vertex or a ray's end to put a named point there. Double-click a point to rename it, an angle to type its label, a ray to type its direction.";
 
 // ------------------------------------------------------------------------------------------------ params and rays
 
@@ -696,10 +698,14 @@ pub(crate) fn angles_render(p: &Params) -> String {
 
 // ------------------------------------------------------------------------------------------------ on the figure
 
-/// What a click on the figure acts on. A ray's `inner` part (nearer the vertex than INNER_R) deletes it (the far half of a line:
-/// cuts the line back to a ray); `Through` is the empty spot in line with a ray behind the vertex.
+/// What a click on the figure acts on: a point's place, an angle near its corner, or a part of a ray (`Part`).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Target { Point(Place), Wedge(usize), Ray(Half, bool), Through(usize) }
+pub(crate) enum Target { Point(Place), Wedge(usize), Ray(Half, Part) }
+
+/// The three parts of a ray a click acts on: near the vertex (out to THROUGH_R) it runs the ray on through the vertex as a line or
+/// cuts a line back to a ray; along the middle it steps the style; near the end (past DEL_R) it deletes the ray.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Part { Inner, Middle, Outer }
 
 pub(crate) struct Hit { l: Lay, p: Params, pts: Vec<(String, Place)>, deletable: bool }
 
@@ -711,17 +717,10 @@ impl Hit {
     }
     fn unturn(&self, q: Pt) -> Pt { turn_scr(q, C, -self.l.turn) }
     fn scr(&self, q: Pt) -> Pt { turn_scr(q, C, self.l.turn) }
+    fn is_line(&self, src: usize) -> bool { self.p.s(RAY_LINE[src]) == "Line" }
     fn ray_name(&self, src: usize) -> String {
-        if src == 0 { return if self.p.s(RAY_LINE[0]) == "Line" { "the baseline (a line)".into() } else { "the baseline".into() }; }
-        format!("{} {}", if self.p.s(RAY_LINE[src]) == "Line" { "line" } else { "ray" }, src + 1)
-    }
-    /// The rows not drawn as lines whose far side is free: a click there runs them through.
-    fn throughs(&self) -> Vec<(usize, f64)> {
-        self.l.dirs.iter().filter(|(_, h)| !h.back && self.p.s(RAY_LINE[h.src]) != "Line").filter_map(|(a, h)| {
-            let b = (a + 180.0).rem_euclid(360.0);
-            let free = self.l.dirs.iter().all(|(x, _)| { let dd = (x - b).rem_euclid(360.0); dd.min(360.0 - dd) > 2.0 });
-            free.then_some((h.src, b))
-        }).collect()
+        if src == 0 { return "the baseline".into(); }
+        format!("{} {}", if self.is_line(src) { "line" } else { "ray" }, src + 1)
     }
 
     /// The target under `q` (screen canvas units), without its hover.
@@ -738,16 +737,20 @@ impl Hit {
         // along a ray: distance out (t) and off it (perpendicular)
         let along = |a: f64| { let d = (phi - a).to_radians(); (r * d.cos(), (r * d.sin()).abs()) };
         let near_ray = self.l.dirs.iter().map(|(a, h)| (*h, along(*a))).filter(|(_, (t, off))| *off <= LINE_D && *t >= WEDGE_R && *t <= LEN).min_by(|a, b| a.1 .1.total_cmp(&b.1 .1));
-        if let Some((h, (t, _))) = near_ray { return Some(Target::Ray(h, t < INNER_R)); }
-        self.throughs().into_iter().map(|(s, b)| (s, along(b))).filter(|(_, (t, off))| *off <= LINE_D && *t >= WEDGE_R && *t <= LEN - END_R).min_by(|a, b| a.1 .1.total_cmp(&b.1 .1)).map(|x| Target::Through(x.0))
+        near_ray.map(|(h, (t, _))| Target::Ray(h, if t < THROUGH_R { Part::Inner } else if t < DEL_R { Part::Middle } else { Part::Outer }))
     }
 
     fn point_at(&self, pl: Place) -> Option<&String> { self.pts.iter().find(|x| x.1 == pl).map(|x| &x.0) }
 
-    /// What a click on a ray does: delete it (its inner part, while another ray is left), cut a line's far half back to a ray, or
-    /// step its style.
-    fn ray_action(&self, h: Half, inner: bool) -> RayAct {
-        if inner && h.back { RayAct::Cut } else if inner && !h.back && h.src > 0 && self.deletable { RayAct::Delete } else { RayAct::Style }
+    /// What a click on a part of a ray does. Near the end: delete the ray (not the baseline, not a line's far half, and not the
+    /// only other ray: there it steps the style like the middle).
+    fn ray_action(&self, h: Half, part: Part) -> RayAct {
+        match part {
+            Part::Inner if self.is_line(h.src) => RayAct::Cut,
+            Part::Inner => RayAct::Through,
+            Part::Outer if !h.back && h.src > 0 && self.deletable => RayAct::Delete,
+            _ => RayAct::Style,
+        }
     }
 
     pub(crate) fn at(&self, q: Pt) -> Option<(Target, Hover)> {
@@ -771,23 +774,20 @@ impl Hit {
                 o.extend(arc_pts(C, s.a1, s.a0, WEDGE_R - 6.0).into_iter().map(|q| self.scr(q)));
                 Hover { outline: o, closed: true, tip: format!("Angle {n}: click for {} (arcs, then shading); double-click to type its label", next_marks_word(&self.p, n)) }
             }
-            Target::Ray(h, inner) => {
+            Target::Ray(h, part) => {
                 let a = self.l.dir_of(h)?;
                 let name = self.ray_name(h.src);
-                match self.ray_action(h, inner) {
-                    RayAct::Delete => Hover { outline: seg(a, WEDGE_R, INNER_R), closed: false, tip: format!("Click to delete {name}") },
-                    RayAct::Cut => Hover { outline: seg(a, WEDGE_R, INNER_R), closed: false, tip: format!("Click to cut {name} back to a ray") },
+                let edit = if h.src > 0 { "; double-click to type its direction" } else { "" };
+                match self.ray_action(h, part) {
+                    RayAct::Through => Hover { outline: seg(a, WEDGE_R, THROUGH_R), closed: false, tip: format!("Click to run {name} on through the vertex as a line{edit}") },
+                    RayAct::Cut => Hover { outline: seg(a, WEDGE_R, THROUGH_R), closed: false, tip: format!("Click to cut {name} back to a ray{edit}") },
+                    RayAct::Delete => Hover { outline: seg(a, DEL_R, LEN - END_R), closed: false, tip: format!("Click to delete {name}{edit}") },
                     RayAct::Style => {
                         let next = match self.p.s(RAY_STYLE[h.src]) { "Solid" => "dashed", "Dashed" => "dotted", _ => "solid" };
-                        let (t0, more) = if inner && h.src > 0 { (WEDGE_R, "") } else { (if h.src > 0 || h.back { INNER_R } else { WEDGE_R }, "") };
-                        let edit = if h.src > 0 { "; double-click to type its direction" } else { "" };
-                        Hover { outline: seg(a, t0, LEN - END_R), closed: false, tip: format!("Click to make {name} {next}{more}{edit}") }
+                        let t1 = if part == Part::Outer { LEN - END_R } else { DEL_R };
+                        Hover { outline: seg(a, THROUGH_R, t1), closed: false, tip: format!("Click to make {name} {next}{edit}") }
                     }
                 }
-            }
-            Target::Through(src) => {
-                let a = self.l.dirs.iter().find(|x| x.1 == Half { src, back: false })?.0 + 180.0;
-                Hover { outline: seg(a, WEDGE_R, LEN), closed: false, tip: format!("Click to run {} on through the vertex as a line", self.ray_name(src)) }
             }
         };
         Some((t, hv))
@@ -797,12 +797,12 @@ impl Hit {
         match self.target(q) {
             Some(Target::Point(pl)) => toggle_point(p, pl),
             Some(Target::Wedge(n)) => cycle_marks(p, n),
-            Some(Target::Ray(h, inner)) => match self.ray_action(h, inner) {
+            Some(Target::Ray(h, part)) => match self.ray_action(h, part) {
                 RayAct::Delete => { delete_ray(p, h.src); }
                 RayAct::Cut => set_line(p, h.src, false),
+                RayAct::Through => set_line(p, h.src, true),
                 RayAct::Style => interact::cycle(p, RAY_STYLE[h.src], &STYLES),
             },
-            Some(Target::Through(src)) => set_line(p, src, true),
             None => {}
         }
     }
@@ -829,7 +829,7 @@ impl Hit {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum RayAct { Delete, Cut, Style }
+enum RayAct { Through, Cut, Delete, Style }
 
 /// Handles laid out for an unturned figure, turned with it about `c` (drags see unturned points).
 fn turned(hs: Vec<Handle>, c: Pt, turn: f64) -> Vec<Handle> {

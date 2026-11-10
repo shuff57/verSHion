@@ -179,9 +179,9 @@ fn did(before: &Params, after: &Params) -> Did {
 }
 
 /// Sweeps every pixel of several layouts through `interact::pick` (the workspace's own hit test) and clicks what it picks: within
-/// 5 px of a ray it restyles that ray (nearer the vertex: deletes it, or cuts a line's far half back to a ray), in line with a ray
-/// behind the vertex it runs it through as a line, at the vertex or a ray's end it puts a point exactly there, near the vertex
-/// between two rays it marks exactly that angle; every ray, end, angle, deletion and line-through is reached by some pixel.
+/// 5 px of a ray, near the vertex it runs the ray through as a line (or cuts a line back to a ray), along its middle it restyles it,
+/// near its end it deletes it; at the vertex or a ray's end it puts a point exactly there; near the vertex between two rays it
+/// marks exactly that angle. Every ray, end, angle, deletion, line-through and cut is reached by some pixel.
 #[test]
 fn every_pixel_does_what_is_under_it() {
     let d = def();
@@ -213,7 +213,7 @@ fn every_pixel_does_what_is_under_it() {
                         let u = un(q);
                         match did(&p, &a) {
                             Did::Style(r) => {
-                                assert!(l.dirs.iter().any(|(ang, h)| h.src == r && near(u, *ang, WEDGE_R, LEN)), "{name}: {q:?} restyled ray {r} away from it");
+                                assert!(l.dirs.iter().any(|(ang, h)| h.src == r && near(u, *ang, THROUGH_R, LEN)), "{name}: {q:?} restyled ray {r} away from its middle");
                                 styled.insert(r);
                             }
                             Did::Point(pl) => {
@@ -227,17 +227,16 @@ fn every_pixel_does_what_is_under_it() {
                             }
                             Did::Delete(r) => {
                                 let ang = l.dir_of(Half { src: r, back: false }).unwrap();
-                                assert!(near(u, ang, WEDGE_R, INNER_R), "{name}: {q:?} deleted ray {r} away from its inner part");
+                                assert!(near(u, ang, DEL_R, LEN), "{name}: {q:?} deleted ray {r} away from its end part");
                                 deleted.insert(r);
                             }
                             Did::Through(r) => {
-                                let ang = l.dir_of(Half { src: r, back: false }).unwrap() + 180.0;
-                                assert!(near(u, ang, WEDGE_R, LEN), "{name}: {q:?} ran ray {r} through away from its far side");
+                                let ang = l.dir_of(Half { src: r, back: false }).unwrap();
+                                assert!(near(u, ang, WEDGE_R, THROUGH_R), "{name}: {q:?} ran ray {r} through away from its part by the vertex");
                                 through.insert(r);
                             }
                             Did::Cut(r) => {
-                                let ang = l.dir_of(Half { src: r, back: true }).unwrap();
-                                assert!(near(u, ang, WEDGE_R, INNER_R), "{name}: {q:?} cut line {r} away from its far half");
+                                assert!(l.dirs.iter().any(|(ang, h)| h.src == r && near(u, *ang, WEDGE_R, THROUGH_R)), "{name}: {q:?} cut line {r} away from its parts by the vertex");
                                 cut.insert(r);
                             }
                             Did::Nothing => {
@@ -263,7 +262,8 @@ fn every_pixel_does_what_is_under_it() {
         assert_eq!(marked, (1..=l.secs.len()).collect::<BTreeSet<_>>(), "{name}: every angle can be marked");
         let others: BTreeSet<usize> = rows.iter().copied().filter(|r| *r > 0).collect();
         if others.len() >= 2 { assert_eq!(deleted, others, "{name}: every ray but the baseline can be deleted"); } else { assert!(deleted.is_empty(), "{name}: the only ray stays"); }
-        assert_eq!(through, hit.throughs().into_iter().map(|x| x.0).collect::<BTreeSet<_>>(), "{name}: every ray can run through");
+        let _ = &hit;
+        assert_eq!(through, rows.iter().copied().filter(|r| p.s(RAY_LINE[*r]) != "Line").collect::<BTreeSet<_>>(), "{name}: every ray can run through");
         assert!(!through.is_empty());
         assert_eq!(cut, l.dirs.iter().filter(|x| x.1.back).map(|x| x.1.src).collect::<BTreeSet<_>>(), "{name}: every line can be cut back");
         // a ray's end knob: a click puts the point there (picked there, not the area)
@@ -293,20 +293,25 @@ fn hover_says_what_a_click_does() {
     assert!(tip(C).contains("take away point A"));
     assert!(tip(interact::polar(C, 0.0, 100.0)).contains("Click to make the baseline dashed"));
     assert!(tip(interact::polar(C, 60.0, 100.0)).contains("Click to make ray 2 dashed; double-click to type its direction"));
-    assert!(tip(interact::polar(C, 60.0, 45.0)).contains("Click to delete ray 2"));
-    assert!(tip(interact::polar(C, 240.0, 90.0)).contains("Click to run ray 2 on through the vertex as a line"));
-    assert!(tip(interact::polar(C, 180.0, 90.0)).contains("Click to run the baseline on through the vertex as a line"));
+    assert!(tip(interact::polar(C, 60.0, 120.0)).contains("Click to delete ray 2"));
+    assert!(tip(interact::polar(C, 60.0, 45.0)).contains("Click to run ray 2 on through the vertex as a line"));
+    assert!(tip(interact::polar(C, 0.0, 45.0)).contains("Click to run the baseline on through the vertex as a line"));
+    assert!(tip(interact::polar(C, 0.0, 120.0)).contains("Click to make the baseline dashed"), "the baseline is not deleted");
     assert!(tip(interact::polar(C, 30.0, 20.0)).contains("Angle 1: click for one congruence arc"));
     assert!(tip(interact::polar(C, 130.0, LEN)).contains("named point at the end of ray 3"));
-    // the opening state's only ray is not deleted: its inner part styles it
+    // the opening state's only ray is not deleted: the part by its end styles it
     let o = Hit::new(&with(&[]));
-    assert!(o.at(interact::polar(C, 60.0, 45.0)).unwrap().1.tip.contains("Click to make ray 2 dashed"));
+    assert!(o.at(interact::polar(C, 60.0, 120.0)).unwrap().1.tip.contains("Click to make ray 2 dashed"));
+    let mut a = with(&[]);
+    o.act(&mut a, interact::polar(C, 60.0, 120.0));
+    assert_eq!((a.s("ray2"), a.s("ray2_style")), ("60", "Dashed"));
+    // at the opening state, a click by the vertex runs ray 2 through as a line
     let mut a = with(&[]);
     o.act(&mut a, interact::polar(C, 60.0, 45.0));
-    assert_eq!((a.s("ray2"), a.s("ray2_style")), ("60", "Dashed"));
-    // a line's far half: its inner part cuts it back to a ray
+    assert_eq!(a.s("ray2_line"), "Line");
+    // a line: either half by the vertex cuts it back to a ray
     let q = with(&[("ray2_line", s("Line"))]);
-    assert!(Hit::new(&q).at(interact::polar(C, 240.0, 45.0)).unwrap().1.tip.contains("Click to cut line 2 back to a ray"));
+    for ang in [60.0, 240.0] { assert!(Hit::new(&q).at(interact::polar(C, ang, 45.0)).unwrap().1.tip.contains("Click to cut line 2 back to a ray")); }
 }
 
 // ------------------------------------------------------------------------------------------------ deleting, lines through
@@ -596,7 +601,7 @@ fn the_opening_state_offers_every_click() {
     let p = start_params(&d);
     let hs = d.handles(&p, (480.0, 360.0));
     let area = hs.iter().find(|h| h.click_at.is_some()).unwrap();
-    for part in ["Click a ray to change its style", "click a ray near the vertex to delete it", "to run it through the vertex as a line", "near an angle's corner for congruence arcs or shading", "Click the vertex or near a ray's end to put a named point there"] {
+    for part in ["near the vertex to run it on through the vertex as a line", "along its middle to change its style", "near its end to delete it", "near an angle's corner for congruence arcs or shading", "Click the vertex or a ray's end to put a named point there"] {
         assert!(area.tip.contains(part), "{part}");
     }
     assert!(hs.iter().any(|h| h.tip == "Drag the ray to change its direction; click its end for a named point" && h.click.is_some() && h.drag.is_some()));
