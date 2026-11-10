@@ -824,8 +824,9 @@ pub(crate) fn handles(p: &Params) -> Vec<Handle> {
             for (a0, a1, k) in sectors(tr.th) {
                 let n = num(ti, i, k, nl);
                 let mid = (a0 + a1) / 2.0;
-                let r = if a1 - a0 < 50.0 { RAD + 16.0 } else { RAD + 8.0 };
-                out.push(Handle::zone(dirp(*c, mid, r), (30.0, 22.0), "Click to label or unlabel this angle", move |p| {
+                // over the label, outside the arc: nearer the corner a click marks the angle (the area below)
+                let r = if a1 - a0 < 50.0 { RAD + 24.0 } else { RAD + 18.0 };
+                out.push(Handle::zone(dirp(*c, mid, r), (26.0, 18.0), "Click to label or unlabel this angle", move |p| {
                     let on = list_has(p, "marked", n);
                     toggle(p, "marked", n, !on);
                 }));
