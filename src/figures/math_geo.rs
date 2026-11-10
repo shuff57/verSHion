@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 use std::sync::Arc;
 
-use super::interact::{angle_deg, Cursor, Handle};
+use super::interact::{Cursor, Handle};
 use super::math::{poly_base, probe_map, render_for};
 use super::Params;
 
@@ -57,7 +57,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
         "trapezoid" => trapezoid(p)?,
         "kite" => kite(p)?,
         "regular-polygon" => regular_polygon(p)?,
-        "angles" => angles(p),
+        "angles" => super::math::angles_handles(p),
         "parallel-lines" => super::math::parallel_handles(p),
         "prism" => prism(p)?,
         "pyramid" => pyramid(p)?,
@@ -72,7 +72,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
 // The flat shapes are given by measures (text rows), so a drag works out the new shape and writes
 // the new values back into the rows that were given (computed rows stay blank).
 
-use super::math::{quad_vals_of, write_givens, Q_V, RAY_V, TRI_V};
+use super::math::{quad_vals_of, write_givens, Q_V, TRI_V};
 
 fn tri_measures(a: Pt, b: Pt, c: Pt) -> [Option<f64>; 6] {
     let ang = |v: Pt, p: Pt, q: Pt| {
@@ -200,76 +200,7 @@ fn regular_polygon(p: &Params) -> Option<Vec<Handle>> {
     Some(out)
 }
 
-// ---------- angles ----------
-
-const AC: Pt = (240.0, 180.0);
-const ALEN: f64 = 140.0;
-
-fn nums(s: &str) -> Vec<f64> {
-    s.split(|c: char| c == ',' || c == ';' || c.is_whitespace()).filter_map(|t| t.trim().parse().ok()).collect()
-}
-fn put_list(p: &mut Params, key: &str, v: &[f64]) {
-    let s: Vec<String> = v.iter().map(|x| if (x - x.round()).abs() < 1e-9 { format!("{}", *x as i64) } else { format!("{x}") }).collect();
-    p.set_s(key, &s.join(", "));
-}
-fn toggle(p: &mut Params, key: &str, n: f64, on: bool) {
-    let mut v = nums(p.s(key));
-    v.retain(|x| *x != n);
-    if on { v.push(n); v.sort_by(|a, b| a.partial_cmp(b).unwrap()); }
-    put_list(p, key, &v);
-}
-fn dirp(c: Pt, a: f64, r: f64) -> Pt { (c.0 + r * a.to_radians().cos(), c.1 - r * a.to_radians().sin()) }
-
-fn angles(p: &Params) -> Vec<Handle> {
-    let (dirs, wrap) = super::math::angle_dirs(p);
-    if dirs.len() < 2 { return vec![]; }
-    let mut out = Vec::new();
-    for (r, src, back) in &dirs {
-        if *src == 0 { continue; }
-        let key = RAY_V[*src];
-        let off = if *back { 180.0 } else { 0.0 };
-        out.push(Handle::knob(dirp(AC, *r, ALEN), "Drag the ray to change its direction", move |p, s| {
-            let a = (angle_deg(AC, s) - off).rem_euclid(360.0).round();
-            p.set_s(key, &format!("{}", a as i64));
-        }));
-    }
-    // Sector label zones: click cycles degrees -> x -> blank.
-    let rays: Vec<f64> = dirs.iter().map(|d| d.0).collect();
-    let mut secs: Vec<(f64, f64)> = rays.windows(2).map(|w| (w[0], w[1])).collect();
-    if wrap { secs.push((*rays.last().unwrap(), rays[0] + 360.0)); }
-    for (i, (a0, a1)) in secs.iter().enumerate() {
-        let idx = (i + 1) as f64;
-        let mid = (a0 + a1) / 2.0;
-        let span = a1 - a0;
-        let r = if span < 28.0 { 70.0 } else { 58.0 };
-        out.push(Handle::zone(dirp(AC, mid, r), (34.0, 24.0), "Click: show degrees / x / blank", move |p| {
-            let unk = nums(p.s("unknown")).contains(&idx);
-            let hid = nums(p.s("hide")).contains(&idx);
-            match (unk, hid) {
-                (false, false) => toggle(p, "unknown", idx, true),
-                (true, _) => { toggle(p, "unknown", idx, false); toggle(p, "hide", idx, true); }
-                (false, true) => toggle(p, "hide", idx, false),
-            }
-        }));
-    }
-    turned(out, AC, p.f("turn"))
-}
-
-// ---------- parallel lines: math/parallel.rs (`handles`) ----------
-
-/// Handles laid out for an unturned figure, turned with it about `c` (drags see unturned points).
-fn turned(hs: Vec<Handle>, c: Pt, turn: f64) -> Vec<Handle> {
-    if turn.abs() < 1e-9 { return hs; }
-    hs.into_iter()
-        .map(|mut h| {
-            h.pos = super::math::turn_scr(h.pos, c, turn);
-            if let Some(f) = h.drag.take() {
-                h.drag = Some(Arc::new(move |p: &mut Params, s: Pt| f(p, super::math::turn_scr(s, c, -turn))));
-            }
-            h
-        })
-        .collect()
-}
+// ---------- angles: math/angles.rs (`handles`); parallel lines: math/parallel.rs (`handles`) ----------
 
 // ---------- 3D solids ----------
 

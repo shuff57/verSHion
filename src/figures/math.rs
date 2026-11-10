@@ -1624,158 +1624,11 @@ pub(crate) fn rp_computed(p: &Params) -> Vec<(&'static str, String)> {
     vec![("m_side", fmt(side, dec)), ("m_angle", format!("{}\u{b0}", fmt(ang, dec))), ("m_apothem", fmt(a, dec)), ("m_radius", fmt(r, dec))]
 }
 
-// ----- angles (rays card) -----
+// ----- angles: see math/angles.rs -----
 
-pub(crate) const RAY_V: [&str; 6] = ["ray1", "ray2", "ray3", "ray4", "ray5", "ray6"];
-pub(crate) const RAY_STYLE: [&str; 6] = ["ray1_style", "ray2_style", "ray3_style", "ray4_style", "ray5_style", "ray6_style"];
-pub(crate) const RAY_LINE: [&str; 6] = ["ray1_line", "ray2_line", "ray3_line", "ray4_line", "ray5_line", "ray6_line"];
-
-pub(crate) fn angles_params() -> Vec<ParamDef> {
-    let mut v = vec![];
-    for (i, &k) in RAY_V.iter().enumerate().skip(1) {
-        v.push(ParamDef { key: k, label: ["", "Ray 2 direction", "Ray 3 direction", "Ray 4 direction", "Ray 5 direction", "Ray 6 direction"][i], hint: "", kind: Kind::Text, default: Value::S(if i == 1 { "60".into() } else { String::new() }) });
-    }
-    for i in 0..6 {
-        v.push(ParamDef::choice(RAY_STYLE[i], "Line", &STYLES, "Solid"));
-        v.push(ParamDef::choice(RAY_LINE[i], "Drawn as", &["Ray", "Line"], "Ray"));
-    }
-    v.extend([
-        ParamDef::bool("around", "Angle back around to the baseline", false)
-            .hint("Angles around a point."),
-        ParamDef::list("unknown", "Sector numbers shown as x (counterclockwise from baseline, e.g. 2)", ""),
-        ParamDef::list("hide", "Sector numbers left unlabelled", ""),
-        ParamDef::long("sector_text", "Text labels for sectors, e.g. 1 = 2x + 10; 3 = y", ""),
-        ParamDef::bool("right", "Right-angle squares", true),
-        ParamDef::bool("letters", "Point letters on the rays", true),
-        ParamDef::int("dec", "Round measures to", 0, 3, 1)
-            .hint("Decimal places."),
-        ParamDef::float("turn", "Turn the figure", -180.0, 180.0, 1.0, 0.0)
-            .hint("Degrees."),
-        ParamDef::choice("ray_ends", "Ray ends", &["Arrows", "Plain", "Points"], "Arrows"),
-        ParamDef::bool("shade", "Shade the angles", true),
-        ParamDef::choice("label_size", "Label size", &["Large", "Medium", "Small"], "Medium"),
-        // "Add ray" (chips card) counts the rays in use; an empty row within the count is drawn
-        // in the middle of the widest gap, as the reference places a new ray.
-        ParamDef::int("ray_count", "Rays in use, the baseline included", 2, 6, 2),
-    ]);
-    v
-}
-
-/// The middle of the widest gap between `dirs` (degrees), searched over 0-180° while every ray is
-/// in the upper half, else round the whole circle. Whole degrees, like the reference's new rays.
-pub(crate) fn widest_gap_mid(dirs: &[f64]) -> f64 {
-    let upper = if dirs.iter().all(|d| *d <= 180.0 + 1e-9) { 180.0 } else { 360.0 };
-    let mut pts: Vec<f64> = dirs.iter().copied().filter(|d| *d <= upper).collect();
-    pts.extend([0.0, upper]);
-    pts.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let mut best = (0.0, upper);
-    for w in pts.windows(2) {
-        if w[1] - w[0] > best.1 - best.0 + 1e-9 || best == (0.0, upper) { best = (w[0], w[1]); }
-    }
-    ((best.0 + best.1) / 2.0).round()
-}
-
-/// Ray directions with their source row: typed rows first, then each empty row within
-/// `ray_count` placed in the widest gap left by the rays before it (bool: placed automatically).
-pub(crate) fn ray_rows(p: &Params) -> Vec<(usize, f64, bool)> {
-    let cnt = p.i("ray_count").clamp(2, 6) as usize;
-    let mut out: Vec<(usize, f64, bool)> = vec![];
-    for i in 1..6 {
-        if let Ok(Some(t)) = parse_typed(p.s(RAY_V[i])) { out.push((i, t.v.rem_euclid(360.0), false)); }
-    }
-    for i in 1..cnt {
-        if !p.s(RAY_V[i]).trim().is_empty() { continue; }
-        let mut have: Vec<f64> = out.iter().map(|r| r.1).collect();
-        have.push(0.0);
-        out.push((i, widest_gap_mid(&have), true));
-    }
-    out
-}
-
-/// Ray directions in degrees ccw from the baseline, sorted: (direction, source row 0-5, is the
-/// back half of a ray drawn as a line), and whether the last sector wraps back to the baseline.
-pub(crate) fn angle_dirs(p: &Params) -> (Vec<(f64, usize, bool)>, bool) {
-    let mut d: Vec<(f64, usize, bool)> = vec![(0.0, 0, false)];
-    for (i, a, _) in ray_rows(p) { d.push((a, i, false)); }
-    let mut lines = false;
-    for k in 0..d.len() {
-        let (a, i, _) = d[k];
-        if p.s(RAY_LINE[i]) == "Line" { d.push(((a + 180.0).rem_euclid(360.0), i, true)); lines = true; }
-    }
-    d.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap_or(std::cmp::Ordering::Equal));
-    d.dedup_by(|x, y| (x.0 - y.0).abs() < 1e-6);
-    (d, lines || p.b("around"))
-}
-
-fn style_dash(s: &str) -> &'static str { match s { "Dashed" => "8 5", "Dotted" => "0.1 5", _ => "none" } }
-
-pub(crate) fn angles_render(p: &Params) -> String {
-    let (dirs, wrap) = angle_dirs(p);
-    if dirs.len() < 2 { return note_fig("Give ray 2 a direction in degrees."); }
-    let rays: Vec<f64> = dirs.iter().map(|d| d.0).collect();
-    let turn = p.f("turn");
-    let fs = fscale(p);
-    let (w, h) = (480.0, 360.0);
-    let c = (w / 2.0, h / 2.0);
-    let len = 140.0;
-    let unk: Vec<usize> = nums(p.s("unknown")).iter().map(|v| *v as usize).collect();
-    let hide: Vec<usize> = nums(p.s("hide")).iter().map(|v| *v as usize).collect();
-    let texts = num_text_map(p.s("sector_text"));
-    let mut d = new_doc(w, h);
-    let mut secs: Vec<(f64, f64)> = rays.windows(2).map(|w| (w[0], w[1])).collect();
-    if wrap { secs.push((*rays.last().unwrap(), rays[0] + 360.0)); }
-    if p.b("shade") {
-        for (a0, a1) in &secs {
-            let n = 24;
-            let mut pts = vec![c];
-            for i in 0..=n { let t = (turn + a0 + (a1 - a0) * i as f64 / n as f64).to_radians(); pts.push((c.0 + 42.0 * t.cos(), c.1 - 42.0 * t.sin())); }
-            d.poly(&pts, "#eef4fb", "none", 0.0);
-        }
-    }
-    for (i, (r, src, _)) in dirs.iter().enumerate() {
-        let t = (r + turn).to_radians();
-        let e = (c.0 + len * t.cos(), c.1 - len * t.sin());
-        let dash = style_dash(p.s(RAY_STYLE[*src]));
-        dline(&mut d, c, e, INK, 2.0, dash);
-        match p.s("ray_ends") {
-            "Plain" => {}
-            "Points" => { d.circle(e.0, e.1, 3.4, INK, INK, 1.0); }
-            _ => {
-                let u = unit_v(c, e);
-                let nn = (-u.1, u.0);
-                let back = (e.0 - u.0 * 12.0, e.1 - u.1 * 12.0);
-                d.poly(&[e, (back.0 + nn.0 * 5.0, back.1 + nn.1 * 5.0), (back.0 - nn.0 * 5.0, back.1 - nn.1 * 5.0)], INK, INK, 1.0);
-            }
-        }
-        if p.b("letters") {
-            let name = ((b'B' + i as u8) as char).to_string();
-            mlabel(&mut d, c.0 + (len + 16.0) * t.cos(), c.1 - (len + 16.0) * t.sin(), 17.0 * fs, &name, "");
-        }
-    }
-    d.circle(c.0, c.1, 3.0, INK, INK, 1.0);
-    if p.b("letters") && !wrap {
-        let back = ((rays[0] + rays[rays.len() - 1]) / 2.0 + 180.0 + turn).to_radians();
-        mlabel(&mut d, c.0 + 18.0 * back.cos(), c.1 - 18.0 * back.sin(), 17.0 * fs, "A", "");
-    }
-    for (i, (a0, a1)) in secs.iter().enumerate() {
-        let idx = i + 1;
-        let span = a1 - a0;
-        let txt = if hide.contains(&idx) { String::new() }
-            else if let Some((_, t)) = texts.iter().find(|(k, _)| *k == idx) { t.clone() }
-            else if unk.contains(&idx) { "x".into() } else { format!("{}\u{b0}", fmt(span, p.i("dec"))) };
-        let rad = if span < 28.0 { 48.0 + (i % 2) as f64 * 10.0 } else { 36.0 + (i % 2) as f64 * 6.0 };
-        sector(&mut d, c, turn + a0, turn + a1, rad, &txt, p.b("right"), 15.0 * fs);
-    }
-    d.finish()
-}
-
-pub(crate) fn angles_computed(p: &Params) -> Vec<(&'static str, String)> {
-    let mut out = vec![("ray1", "0".to_string())];
-    // a row added with "Add ray" and left empty shows where its ray is drawn
-    for (i, a, auto) in ray_rows(p) { if auto { out.push((RAY_V[i], fmt(a, 1))); } }
-    if angle_dirs(p).0.len() < 2 { out.push(("__msg", "Give ray 2 a direction in degrees.".to_string())); }
-    out
-}
+pub(crate) use super::angles::{angles_computed, angles_params, angles_render, MAX_RAYS, RAY_LINE, RAY_STYLE, RAY_V, ROW_NAME};
+#[cfg(test)]
+pub(crate) use super::angles::{angle_dirs, ray_rows, widest_gap_mid};
 
 // ----- parallel lines: see math/parallel.rs -----
 
@@ -1847,7 +1700,7 @@ pub(crate) fn card(id: &str) -> Option<MeasureCard> {
             let mut base = row("Baseline", "ray1", "\u{b0}", RAY_STYLE[0], "", Some(RAY_LINE[0]));
             base.equals = Some("0\u{b0}");
             let mut rows = vec![base];
-            for i in 1..6 { rows.push(row(["", "Ray 2", "Ray 3", "Ray 4", "Ray 5", "Ray 6"][i], RAY_V[i], "\u{b0}", RAY_STYLE[i], "", Some(RAY_LINE[i]))); }
+            for i in 1..MAX_RAYS { rows.push(row(ROW_NAME[i], RAY_V[i], "\u{b0}", RAY_STYLE[i], "", Some(RAY_LINE[i]))); }
             MeasureCard {
                 title: "Rays",
                 help: "Every ray starts at the vertex. The baseline points right, and each other ray's direction is its angle from the baseline, counterclockwise, as a protractor reads it: 90\u{b0} points straight up. Turn a ray into a line through the vertex with the button after it. Click any angle on the figure to label, mark or shade it, or click the vertex or near a ray's end to put a named point there.",
@@ -2300,10 +2153,11 @@ mod tests {
 }
 }
 
-pub(super) use flat::{flat_skin_summary, angle_dirs, quad_solve, quad_vals_of, regular_polygon_pts, tri_solve, write_givens, RAY_V, TRI_V, Q_V};
+pub(super) use flat::{flat_skin_summary, quad_solve, quad_vals_of, regular_polygon_pts, tri_solve, write_givens, TRI_V, Q_V};
 mod parallel;
 pub(crate) use parallel::handles as parallel_handles;
 mod angles;
+pub(crate) use angles::handles as angles_handles;
 use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
 
 // ───────────────────────── coordinate grid ─────────────────────────
@@ -6699,7 +6553,7 @@ pub fn card_visible(id: &str, group: &str, row: Option<&str>, p: &Params) -> boo
         // angles: Baseline and Ray 2, then one more row per "Add ray" (a typed row always shows)
         ("angles", _, Some(k)) if k != "ray1" => {
             let i = flat::RAY_V.iter().position(|r| *r == k).unwrap_or(0);
-            i < p.i("ray_count").clamp(2, 6) as usize || !p.s(k).trim().is_empty()
+            i < p.i("ray_count").clamp(2, flat::MAX_RAYS as i64) as usize || !p.s(k).trim().is_empty()
         }
         // parallel lines: the third line / second transversal rows once added
         ("parallel-lines", _, Some(k)) if parallel::row_visible(k, p).is_some() => parallel::row_visible(k, p).unwrap_or(true),
@@ -6735,7 +6589,7 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
     let s = |v: &str| Value::S(v.to_string());
     Some(match id {
         // a new ray row (cleared, so it is drawn in the widest gap until a direction is typed)
-        "angles" => ChipsCard { title: "Add a ray", count_key: "ray_count", max: 6, chips: vec![Chip { label: "Add ray", set: vec![("ray{n}", s(""))] }] },
+        "angles" => ChipsCard { title: "Add a ray", count_key: "ray_count", max: flat::MAX_RAYS as i64, chips: vec![Chip { label: "Add ray", set: vec![("ray{n}", s(""))] }] },
         "parallel-lines" => ChipsCard {
             title: "Add a line",
             count_key: "",
