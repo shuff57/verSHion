@@ -19,6 +19,7 @@ use std::f64::consts::PI;
 mod clicks;
 mod edit;
 mod pts;
+mod rename;
 mod style;
 #[cfg(test)]
 mod tests_b5;
@@ -951,6 +952,11 @@ fn clip_len(p: Pt, d: Pt, max: f64, b: &Rect) -> f64 {
 pub struct Report { pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
 
 fn render(p: &Params) -> String { build(p).0 }
+
+/// The panel changed `key` from `old`: a renamed point (the centre's, A's, B's, C's or M's letter box) takes its rows with it.
+pub fn panel_changed(key: &str, old: &Value, p: &mut Params) {
+    if matches!(key, "name_o" | "name_a" | "name_b" | "name_c" | "name_m") { rename::panel_changed(key, old, p); }
+}
 
 /// The shading colours (light, so black text with its white halo reads on them at well over 4.5:1); Blue is the one the figure
 /// always had. Print draws a grey hatch whatever is chosen.

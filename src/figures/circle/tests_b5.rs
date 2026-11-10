@@ -627,3 +627,122 @@ fn a_double_click_renames_a_point_or_marks_a_part() {
     (e.set)(&mut c, "arcs 2");
     assert_eq!(c.s("styles"), "angle AOB arcs 2");
 }
+
+// ------------------------------------------------------------------------------------------------ renaming a point
+
+/// The double-click edit of whatever the hit test gives at `q`, typed `t`.
+fn type_at(p: &Params, q: Pt, t: &str) -> Params {
+    let h = handle_at(p, q).expect("a handle");
+    let (_, f) = h.edit_at.clone().expect("a double-click edit");
+    let e = f(p, q).expect("something to type");
+    let mut r = p.clone();
+    (e.set)(&mut r, t);
+    r.normalize(&(def().params)(), false);
+    r
+}
+
+/// The panel's letter box `key` typed `t` (the panel then calls its follow-up, as the workspace does).
+fn type_box(p: &Params, key: &'static str, t: &str) -> Params {
+    let mut r = p.clone();
+    let old = r.0.get(key).cloned().unwrap();
+    r.set_s(key, t);
+    crate::figures::after_panel_change("circle", key, &old, &mut r);
+    r.normalize(&(def().params)(), false);
+    r
+}
+
+/// The checker's case: D on the circle with chord BD, its length label and the tangent at D. Renamed X on the figure, every row
+/// that named D names X, and the figure draws what the same rows typed with X draw.
+#[test]
+fn renaming_a_point_on_the_figure_carries_it_through_every_row() {
+    let p = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "D 300"), s("joins", "BD"), s("marks", "BD length, arc BD degrees, angle ADB"), s("tangents", "D"), s("styles", "BD ticks 2 past D arrow"), s("shade", "segment BD"), s("midpoints", "N BD"), s("crossings", "E BD OA")]);
+    let q = type_at(&p, at_dir(&p, 300.0, 1.0), "X");
+    assert_eq!(q.s("more_points"), "X 300");
+    assert_eq!(q.s("joins"), "BX");
+    assert_eq!(q.s("marks"), "BX length, arc BX degrees, angle AXB");
+    assert_eq!(q.s("tangents"), "X");
+    assert_eq!(q.s("styles"), "BX ticks 2 past X arrow");
+    assert_eq!(q.s("shade"), "segment BX");
+    assert_eq!(q.s("midpoints"), "N BX");
+    assert_eq!(q.s("crossings"), "E BX OA");
+    assert!(warnings(&q).is_empty(), "{:?}", warnings(&q));
+    let typed = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "X 300"), s("joins", "BX"), s("marks", "BX length, arc BX degrees, angle AXB"), s("tangents", "X"), s("styles", "BX ticks 2 past X arrow"), s("shade", "segment BX"), s("midpoints", "N BX"), s("crossings", "E BX OA")]);
+    assert_eq!((def().render)(&q), (def().render)(&typed));
+    let svg = (def().render)(&q);
+    assert!(svg.contains(">X</text>") && !svg.contains(">D</text>"));
+    assert_eq!(edit::joins(&q).len(), 1, "chord BX drawn");
+    assert_eq!(edit::tangent_points(&q).len(), 1, "the tangent at X drawn");
+    assert!(texts(&q).iter().any(|t| t.starts_with(&num(10.0 * 85f64.to_radians().sin(), 2))), "BX's length label drawn: {:?}", texts(&q));
+    // the drawing is the old one with the letter changed: the same lines, the same number of labels
+    let (rp, rq) = (build(&p).1, build(&q).1);
+    assert_eq!((rp.segs.len(), rp.placed.len(), rp.dots.len()), (rq.segs.len(), rq.placed.len(), rq.dots.len()));
+}
+
+/// Only whole letters change, read the way the rows are read: renaming A leaves the A of a point named AA alone, and a typed label
+/// that happens to be A is text, not a letter.
+#[test]
+fn a_rename_changes_whole_letters_only() {
+    let p = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "AA 200, D 300"), s("joins", "AB, AAD, B AA, AD"), s("marks", "AD A, AAB length"), s("tangents", "AA")]);
+    let q = type_at(&p, at_dir(&p, 20.0, 1.0), "P");
+    assert_eq!(q.s("name_a"), "P");
+    assert_eq!(q.s("joins"), "PB, AAD, B AA, PD");
+    assert_eq!(q.s("marks"), "PD A, AAB length");
+    assert_eq!(q.s("tangents"), "AA");
+    assert_eq!(q.s("more_points"), "AA 200, D 300");
+    let q = type_at(&p, at_dir(&p, 110.0, 1.0), "Q");
+    assert_eq!(q.s("joins"), "AQ, AAD, Q AA, AD");
+    assert_eq!(q.s("marks"), "AD A, AAQ length");
+    // renaming AA (a More point) leaves A alone
+    let q = type_at(&p, at_dir(&p, 200.0, 1.0), "K");
+    assert_eq!(q.s("joins"), "AB, KD, B K, AD");
+    assert_eq!(q.s("tangents"), "K");
+    assert_eq!(q.s("more_points"), "K 200, D 300");
+}
+
+/// A letter another point already has is refused, on the figure and in the panel's letter box (which goes back to the old letter).
+#[test]
+fn a_letter_already_in_use_is_refused() {
+    let p = with(&[b("show_b", true), f("a2", 110.0), s("more_points", "D 300"), s("joins", "AD")]);
+    for t in ["B", "D", "O", "M"] {
+        let q = type_at(&p, at_dir(&p, 20.0, 1.0), t);
+        assert_eq!((q.s("name_a"), q.s("joins")), ("A", "AD"), "{t}");
+        let q = type_box(&p, "name_a", t);
+        assert_eq!((q.s("name_a"), q.s("joins")), ("A", "AD"), "box {t}");
+    }
+    let q = type_at(&p, at_dir(&p, 300.0, 1.0), "A");
+    assert_eq!((q.s("more_points"), q.s("joins")), ("D 300", "AD"));
+    // the centre and a polygon's corner letter count too
+    let p2 = with(&[s("polygon", "4 sides"), s("joins", "OD")]);
+    let q = type_at(&p2, centre_of(&p2), "E");
+    assert_eq!(q.s("name_o"), "O", "E is a corner of the square");
+}
+
+/// The panel's letter boxes for the centre, A, B and C carry the rows too (before this batch they renamed the point and left its
+/// lines naming the old letter, so they were dropped), including while a letter is typed one character at a time.
+#[test]
+fn the_panel_letter_box_carries_the_rows() {
+    let p = with(&[b("show_b", true), b("show_c", true), f("a2", 110.0), s("more_points", "D 300"), s("joins", "AD, OC"), s("marks", "AD length, angle CAD"), s("styles", "AD dashed")]);
+    let q = type_box(&p, "name_a", "P");
+    assert_eq!((q.s("joins"), q.s("marks"), q.s("styles")), ("PD, OC", "PD length, angle CPD", "PD dashed"));
+    let q = type_box(&q, "name_a", "PQ");
+    assert_eq!((q.s("joins"), q.s("marks")), ("PQD, OC", "PQD length, angle CPQD"));
+    assert_eq!(edit::joins(&q).len(), 2);
+    assert!(edit::unknown_marks(&q).is_empty() && style::unknown(&q).is_empty());
+    let q = type_box(&p, "name_o", "Z");
+    assert_eq!(q.s("joins"), "AD, ZC");
+    let q = type_box(&p, "name_c", "K");
+    assert_eq!((q.s("joins"), q.s("marks")), ("AD, OK", "AD length, angle KAD"));
+    // an emptied box is the default letter again, and the rows follow it back
+    let q = type_box(&type_box(&p, "name_a", "P"), "name_a", "");
+    assert_eq!(q.s("joins"), "AD, OC");
+    // the drawing keeps its lines
+    let q = type_box(&p, "name_a", "P");
+    assert_eq!(build(&q).1.segs.len(), build(&p).1.segs.len());
+    // touch points and points off the circle are renamed through the tangents row
+    let t = with(&[s("more_points", "P 30 2r"), s("tangents", "P T U"), s("joins", "OT")]);
+    let mut r = t.clone();
+    assert!(super::rename::rename(&mut r, "T", "K"));
+    assert_eq!((r.s("tangents"), r.s("joins")), ("P K U", "OK"));
+    let r = type_at(&t, at_dir(&t, 30.0, 2.0), "Q");
+    assert_eq!((r.s("more_points"), r.s("tangents")), ("Q 30 2r", "Q T U"));
+}

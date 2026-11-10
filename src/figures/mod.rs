@@ -780,6 +780,10 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     if (id, key) == (stats::twoway::ID, "cells") {
         stats::twoway::pasted(old, p);
     }
+    // a point renamed in its letter box: the lines, tangents, labels and marks that named it follow the new letter
+    if id == "circle" {
+        circle::panel_changed(key, old, p);
+    }
     if let ("pulley", "setup", Value::S(old)) = (id, key, old) {
         physics::pulley_setup_changed(old, p);
     }

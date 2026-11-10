@@ -195,42 +195,15 @@ pub fn toggle_join(p: &mut Params, a: &str, b: &str) {
 
 // ------------------------------------------------------------------------------------------------ typing on the figure
 
-fn clean(s: &str) -> String { s.chars().filter(|c| !c.is_control() && !c.is_whitespace()).take(3).collect() }
+/// The in-place edit of point `nm`'s letter: the new letter is carried through every row that names the point, and a letter
+/// another point has is refused (see `rename`).
+fn letter_edit(nm: &str, hint: String) -> interact::EditAt {
+    let old = nm.to_string();
+    interact::EditAt { text: nm.to_string(), hint, set: std::sync::Arc::new(move |p: &mut Params, t: &str| { super::rename::rename(p, &old, t); }) }
+}
 
 /// The text a double-click on the knob of point `nm` edits: its letter.
-pub fn rename_point(p: &Params, nm: &str) -> Option<interact::EditAt> {
-    let n = names(p);
-    let key = if nm == n.a { "name_a" } else if nm == n.b { "name_b" } else if nm == n.c { "name_c" } else { "" };
-    let old = nm.to_string();
-    let set: interact::SetFn = if key.is_empty() {
-        std::sync::Arc::new(move |p: &mut Params, t: &str| rename_row(p, "more_points", &old, t))
-    } else {
-        std::sync::Arc::new(move |p: &mut Params, t: &str| { let t = clean(t); if !t.is_empty() { p.set_s(key, &t); } })
-    };
-    Some(interact::EditAt { text: nm.to_string(), hint: format!("A new letter for {nm}"), set })
-}
-
-/// Renames a point that a row of `key` begins with (More points, midpoints, crossings), and the rows that name it.
-fn rename_row(p: &mut Params, key: &str, old: &str, new: &str) {
-    let new = clean(new);
-    if new.is_empty() || new == old { return; }
-    if key == "more_points" {
-        // a More point with no letter of its own is named by its place in the rows
-        let ex = edit::extras_all(p);
-        let mut r = edit::rows(p.s("more_points"));
-        if let Some(i) = ex.iter().position(|e| e.0 == old) && let Some(row) = r.get_mut(i) {
-            let (_, d, dist) = (ex[i].0.clone(), ex[i].1, ex[i].2);
-            *row = if edit::on_rim(dist) { format!("{new} {}", edit::fmt_deg(d)) } else { format!("{new} {} {}", edit::fmt_deg(d), edit::fmt_dist(dist)) };
-            edit::set_rows(p, "more_points", &r);
-        }
-        return;
-    }
-    let r: Vec<String> = edit::rows(p.s(key)).into_iter().map(|x| {
-        let mut t = x.splitn(2, ' ');
-        match (t.next(), t.next()) { (Some(h), Some(rest)) if h == old => format!("{new} {rest}"), _ => x.clone() }
-    }).collect();
-    edit::set_rows(p, key, &r);
-}
+pub fn rename_point(_p: &Params, nm: &str) -> Option<interact::EditAt> { Some(letter_edit(nm, format!("A new letter for {nm} (not one another point has)"))) }
 
 /// What a double-click at `q` (SVG units, the circle's centre at `centre`) types in place: the centre's letter, M's, a named
 /// midpoint's or crossing's; or, on a line, an arc or an angle, its marks and style (`ticks 2 dashed`).
@@ -239,17 +212,16 @@ pub fn edit_at(p: &Params, centre: Pt, q: Pt) -> Option<interact::EditAt> {
     let scr = |u: V| (centre.0 + R * u.0, centre.1 - R * u.1);
     let d = |u: V| { let s = scr(u); (s.0 - q.0).abs().max((s.1 - q.1).abs()) };
     if p.b("show_centre") && d((0.0, 0.0)) <= 9.0 {
-        return Some(interact::EditAt { text: n.o.clone(), hint: "A new letter for the centre".into(), set: std::sync::Arc::new(|p: &mut Params, t: &str| { let t = clean(t); if !t.is_empty() { p.set_s("name_o", &t); } }) });
+        return Some(letter_edit(&n.o, "A new letter for the centre (not one another point has)".into()));
     }
     for key in ["midpoints", "crossings"] {
-        let named: Vec<String> = edit::rows(p.s(key)).iter().filter_map(|r| r.split_whitespace().next().map(clean)).collect();
+        let named: Vec<String> = edit::rows(p.s(key)).iter().filter_map(|r| r.split_whitespace().next().map(super::rename::clean)).collect();
         if let Some(f) = pts::free_points(p).into_iter().find(|f| named.contains(&f.0) && d(f.1) <= 9.0) {
-            let old = f.0.clone();
-            return Some(interact::EditAt { text: f.0.clone(), hint: format!("A new letter for {}", f.0), set: std::sync::Arc::new(move |p: &mut Params, t: &str| rename_row(p, key, &old, t)) });
+            return Some(letter_edit(&f.0, format!("A new letter for {} (not one another point has)", f.0)));
         }
     }
     if edit::m_ok(p) && d(edit::end_pos(p, End::M)) <= 9.0 {
-        return Some(interact::EditAt { text: n.m.clone(), hint: "A new letter for the midpoint".into(), set: std::sync::Arc::new(|p: &mut Params, t: &str| { let t = clean(t); if !t.is_empty() { p.set_s("name_m", &t); } }) });
+        return Some(letter_edit(&n.m, "A new letter for the midpoint (not one another point has)".into()));
     }
     let head = edit::Hit::new(p, centre).part_at(q)?;
     let words = style::words_for(p, &head);
