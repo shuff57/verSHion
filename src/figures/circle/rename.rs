@@ -32,9 +32,9 @@ fn keep_automatic_letters(p: &mut Params) {
     let mut more = edit::rows(p.s("more_points"));
     let mut changed = false;
     for (i, row) in more.iter_mut().enumerate().take(ex.len()) {
+        // the letter goes in front of the row as typed, so its numbers are kept exactly (33.33 stays 33.33)
         if edit::parse_point_full(row).0.is_empty() {
-            let (nm, d, dist) = (&ex[i].0, ex[i].1, ex[i].2);
-            *row = if edit::on_rim(dist) { format!("{nm} {}", edit::fmt_deg(d)) } else { format!("{nm} {} {}", edit::fmt_deg(d), edit::fmt_dist(dist)) };
+            *row = format!("{} {}", ex[i].0, row.trim());
             changed = true;
         }
     }
@@ -43,15 +43,77 @@ fn keep_automatic_letters(p: &mut Params) {
     if !corners.is_empty() { edit::set_rows(p, "poly_names", &corners); }
 }
 
-/// Renames point `old` to `new` everywhere. Returns false (and changes nothing) when `new` is another point's letter.
-///
-/// Every row is read with the figure's own reader (`find_named`, `pair_names`, the label and style parsers), so any form the figure
-/// draws (`bd`, `B to D`, `O - D`, `N B to D`, `segment bd`, a tangent row `d`) carries the new letter; a row that names the point is
-/// rewritten in a plain form (`BX`), the others are left exactly as typed.
+/// A More points row with its letter replaced by `new` and the rest as typed (`D 271.27` to `X 271.27`, `D 300 1.237r` to
+/// `X 300 1.237r`, `D270` to `X 270`): the words that make the letter are the ones `parse_point_full` takes as the letter.
+fn with_letter(row: &str, new: &str) -> String {
+    let toks: Vec<&str> = row.split(|c: char| c.is_whitespace() || c == '=' || c == ':').filter(|t| !t.is_empty()).collect();
+    let num = |s: &str| s.trim().trim_end_matches('\u{b0}').parse::<f64>().ok().filter(|x| x.is_finite()).is_some();
+    let k = toks.len();
+    // the distance, as typed (one word `1.8r` or two words `1.8 r`)
+    let (n, dist) = if k >= 3 && toks[k - 1].len() > 1 && toks[k - 1].ends_with(['r', 'R']) && num(toks[k - 2]) && num(&toks[k - 1][..toks[k - 1].len() - 1]) {
+        (k - 1, toks[k - 1].to_string())
+    } else if k >= 4 && toks[k - 1].eq_ignore_ascii_case("r") && num(toks[k - 3]) && num(toks[k - 2]) {
+        (k - 2, format!("{} {}", toks[k - 2], toks[k - 1]))
+    } else { (k, String::new()) };
+    // the direction, as typed: the last word when it is a number, or the number run onto the letter (D270)
+    let dir = match &toks[..n] {
+        [] => String::new(),
+        [one] if num(one) => one.to_string(),
+        [one] => one.find(|c: char| c.is_ascii_digit() || c == '-' || c == '.').map(|i| one[i..].to_string()).filter(|t| num(t)).unwrap_or_default(),
+        [.., last] if num(last) => last.to_string(),
+        _ => String::new(),
+    };
+    [new.to_string(), dir, dist].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+/// Each drawn point's letter by where it is, the renamed one left out.
+fn letters_but(p: &Params, skip: &str) -> Vec<(String, (i64, i64))> {
+    let key = |v: edit::V| ((v.0 * 1e6).round() as i64, (v.1 * 1e6).round() as i64);
+    let mut v: Vec<(String, (i64, i64))> = vec![(names(p).o, (0, 0))];
+    v.extend(edit::circle_points(p).into_iter().map(|(n, d)| (n, key((d.to_radians().cos(), d.to_radians().sin())))));
+    v.extend(pts::free_points(p).into_iter().map(|(n, q)| (n, key(q))));
+    v.retain(|x| x.0 != skip);
+    v.sort();
+    v
+}
+
+fn not_drawn(p: &Params) -> usize { warnings(p).iter().filter(|w| w.contains("not drawn")).count() }
+
+/// Renames point `old` to `new` everywhere. Returns false (and changes nothing) when `new` is another point's letter, or a letter
+/// the figure would not read back as that point (`to`, `-`, `x-1`): the renamed figure must read `new` as the same point, read a
+/// line from it to the centre written either way (`XO`, `X O`), draw every row it drew, and keep every other point on its letter.
 pub fn rename(p: &mut Params, old: &str, new: &str) -> bool {
     let new = clean(new);
     if new.is_empty() || new == old { return true; }
     if refusal(p, old, &new).is_some() { return false; }
+    let pts0 = edit::circle_points(p);
+    let free0 = pts::free_points(p);
+    let Some((_, e0)) = edit::find_named(p, &pts0, &free0, old) else { return false };
+    let at0 = edit::end_pos(p, e0);
+    let mut r = p.clone();
+    apply(&mut r, old, &new);
+    let pts = edit::circle_points(&r);
+    let free = pts::free_points(&r);
+    let known = edit::known_with(&r, &pts, &free);
+    let reads = edit::find_named(&r, &pts, &free, &new).is_some_and(|(nm, e)| { let q = edit::end_pos(&r, e); nm == new && (q.0 - at0.0).hypot(q.1 - at0.1) < 1e-9 });
+    let o = names(&r).o;
+    let other = if o == new { names(&r).a } else { o };
+    let pairs = [format!("{new}{other}"), format!("{new} {other}"), format!("{other}{new}"), format!("{other} {new}")].iter().enumerate()
+        .all(|(i, t)| edit::pair_names(t, &known) == Some(if i < 2 { (new.clone(), other.clone()) } else { (other.clone(), new.clone()) }));
+    let rows_kept = not_drawn(&r) <= not_drawn(p);
+    let others_kept = letters_but(&r, &new) == letters_but(p, old);
+    if !(reads && pairs && rows_kept && others_kept) { return false; }
+    *p = r;
+    true
+}
+
+/// The rename itself (see `rename`, which checks the result).
+///
+/// Every row is read with the figure's own reader (`find_named`, `pair_names`, the label and style parsers), so any form the figure
+/// draws (`bd`, `B to D`, `O - D`, `N B to D`, `segment bd`, a tangent row `d`) carries the new letter; a row that names the point is
+/// rewritten in a plain form (`BX`), the others are left exactly as typed.
+fn apply(p: &mut Params, old: &str, new: &str) {
+    let new = new.to_string();
     keep_automatic_letters(p);
     let q = p.clone();
     let pts = edit::circle_points(&q);
@@ -62,8 +124,12 @@ pub fn rename(p: &mut Params, old: &str, new: &str) -> bool {
     // the letter a written letter reads as (`b` is B), for the other letters of a row that is rewritten
     let canon = |x: &str| -> String { edit::find_named(&q, &pts, &free, x).map(|(nm, _)| nm).unwrap_or_else(|| x.to_string()) };
     let g = |x: &str| f(x).unwrap_or_else(|| canon(x));
-    let two = |a: &str, b: &str| { let (x, y) = (g(a), g(b)); if x.chars().count() > 1 || y.chars().count() > 1 { format!("{x} {y}") } else { format!("{x}{y}") } };
+    // the letters once renamed, to check that a pair written as one word reads back as the two letters
+    let after: Vec<String> = known.iter().map(|k| if k == old { new.clone() } else { k.clone() }).collect();
+    let two = |a: &str, b: &str| { let (x, y) = (g(a), g(b)); let w = format!("{x}{y}"); if edit::pair_names(&w, &after) == Some((x.clone(), y.clone())) { w } else { format!("{x} {y}") } };
     let pair = |t: &str| -> Option<String> { let (a, b) = edit::pair_names(t, &known)?; (f(&a).is_some() || f(&b).is_some()).then(|| two(&a, &b)) };
+    // a crossing row reads each line as one word (as the crossing click writes it)
+    let pair1 = |t: &str| -> Option<String> { let (a, b) = edit::pair_names(t, &known)?; (f(&a).is_some() || f(&b).is_some()).then(|| format!("{}{}", g(&a), g(&b))) };
     let words = |r: &str| -> Vec<String> { r.split_whitespace().map(str::to_string).collect() };
     // lines between points: the row is one pair, however it is written
     let joins: Vec<String> = edit::rows(q.s("joins")).iter().map(|r| pair(r).unwrap_or_else(|| r.clone())).collect();
@@ -89,8 +155,8 @@ pub fn rename(p: &mut Params, old: &str, new: &str) -> bool {
         let mut out = w.clone();
         let mut hit = false;
         if let Some(n) = w.first().and_then(|t| f(t)) { out[0] = n; hit = true; }
-        if let Some(n) = w.get(1).and_then(|t| pair(t)) { out[1] = n; hit = true; }
-        if let Some(t) = w.get(2) && !t.eq_ignore_ascii_case("circle") && let Some(n) = pair(t) { out[2] = n; hit = true; }
+        if let Some(n) = w.get(1).and_then(|t| pair1(t)) { out[1] = n; hit = true; }
+        if let Some(t) = w.get(2) && !t.eq_ignore_ascii_case("circle") && let Some(n) = pair1(t) { out[2] = n; hit = true; }
         if hit { out.join(" ") } else { r.clone() }
     }).collect();
     let marks: Vec<String> = edit::rows(q.s("marks")).iter().map(|r| edit::relabel_mark(r, &known, &f, &canon).unwrap_or_else(|| r.clone())).collect();
@@ -105,10 +171,7 @@ pub fn rename(p: &mut Params, old: &str, new: &str) -> bool {
     // the point's own letter: a More points row, the centre, A, B, C or M (midpoints and crossings were done above)
     let ex = edit::extras_all(&q);
     let mut more = edit::rows(q.s("more_points"));
-    if let Some(i) = ex.iter().position(|e| e.0 == old) && let Some(row) = more.get_mut(i) {
-        let (d, dist) = (ex[i].1, ex[i].2);
-        *row = if edit::on_rim(dist) { format!("{new} {}", edit::fmt_deg(d)) } else { format!("{new} {} {}", edit::fmt_deg(d), edit::fmt_dist(dist)) };
-    }
+    if let Some(i) = ex.iter().position(|e| e.0 == old) && let Some(row) = more.get_mut(i) { *row = with_letter(row, &new); }
     let kept: Vec<String> = edit::rows(q.s("poly_names")).into_iter().map(|x| if x == old { new.clone() } else { x }).collect();
     for (key, rows) in [("joins", joins), ("tangents", tangents), ("midpoints", mids), ("crossings", cross), ("marks", marks), ("styles", styles), ("shade", shade), ("more_points", more), ("poly_names", kept)] {
         // an untouched list is left exactly as it was typed
@@ -120,7 +183,6 @@ pub fn rename(p: &mut Params, old: &str, new: &str) -> bool {
     }
     // a point waiting for a second click keeps waiting under its new letter
     if p.s("join_from") == old { p.set_s("join_from", &new); }
-    true
 }
 
 /// The panel's letter box for the centre, A, B, C or M changed from `old`: the rows that named the point follow it; a letter that is

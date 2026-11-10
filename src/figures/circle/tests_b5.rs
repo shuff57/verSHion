@@ -690,7 +690,7 @@ fn a_rename_changes_whole_letters_only() {
     assert_eq!(q.s("tangents"), "AA");
     assert_eq!(q.s("more_points"), "AA 200, D 300");
     let q = type_at(&p, at_dir(&p, 110.0, 1.0), "Q");
-    assert_eq!(q.s("joins"), "AQ, AAD, Q AA, AD");
+    assert_eq!(q.s("joins"), "AQ, AAD, QAA, AD");
     assert_eq!(q.s("marks"), "AD A, AAQ length");
     // renaming AA (a More point) leaves A alone
     let q = type_at(&p, at_dir(&p, 200.0, 1.0), "K");
@@ -725,7 +725,7 @@ fn the_panel_letter_box_carries_the_rows() {
     let q = type_box(&p, "name_a", "P");
     assert_eq!((q.s("joins"), q.s("marks"), q.s("styles")), ("PD, OC", "PD length, angle CPD degrees", "PD dashed"));
     let q = type_box(&q, "name_a", "PQ");
-    assert_eq!((q.s("joins"), q.s("marks")), ("PQ D, OC", "PQD length, angle CPQD degrees"));
+    assert_eq!((q.s("joins"), q.s("marks")), ("PQD, OC", "PQD length, angle CPQD degrees"));
     assert_eq!(edit::joins(&q).len(), 2);
     assert!(edit::unknown_marks(&q).is_empty() && style::unknown(&q).is_empty());
     let q = type_box(&p, "name_o", "Z");
@@ -818,5 +818,63 @@ fn a_rename_keeps_every_automatic_letter() {
     };
     for nm in ["A", "B", "C", "D", "P", "N", "K"] {
         renamed_well(&busy, at_letter(&busy, nm), nm, "Z");
+    }
+}
+
+/// The figure for the multi-letter and typed-decimal renames: points typed with decimals (one off the circle, one without a
+/// letter), lines, labels, an angle, an arc, and crossings of two lines and of a line with the circle.
+fn decimals(d: &str, a: &str, e: &str) -> Vec<(&'static str, Value)> {
+    vec![b("show_b", true), b("show_c", true), f("a2", 110.0), f("c_angle", 230.0),
+        s("more_points", &format!("{d} 271.27, P 300 1.237r, {e}33.33")),
+        s("joins", &format!("{a}{d}, {a}P, B{d}, {a}C, BE")),
+        s("marks", &format!("{a}{d} length, {a}P length, angle {a}{d}B, arc BE degrees")),
+        s("crossings", &format!("K B{d} {a}C, L P{a} circle")),
+        s("styles", &format!("B{d} ticks 1 past {d} arrow"))]
+}
+
+/// A rename to a letter of more than one character, with every row kind naming the point, keeps the typed numbers exactly (the
+/// lengths drawn do not change), keeps the crossings readable (their lines are one word), and draws exactly what the same rows
+/// typed with the new letter draw; on the figure and in the panel's letter box.
+#[test]
+fn a_rename_to_a_longer_letter_keeps_every_row_and_number() {
+    let p = with(&decimals("D", "A", ""));
+    assert_eq!(not_drawn(&p), 0, "{:?}", warnings(&p));
+    assert_eq!(edit::extras(&p).into_iter().map(|e| e.0).collect::<Vec<_>>(), vec!["D", "E"]);
+    let sorted = |v: Vec<String>| { let mut v = v; v.sort(); v };
+    let values = |p: &Params| sorted(texts(p).into_iter().filter(|t| t.chars().next().is_some_and(|c| c.is_ascii_digit())).collect());
+    for new in ["D1", "Q\u{2032}", "XYZ"] {
+        let q = type_at(&p, at_dir(&p, 271.27, 1.0), new);
+        let typed = with(&decimals(new, "A", "E "));
+        assert!((def().render)(&q) == (def().render)(&typed), "D to {new}: {:?} / {:?} / {:?}", q.s("more_points"), q.s("joins"), q.s("crossings"));
+        assert!(q.s("more_points").starts_with(&format!("{new} 271.27, P 300 1.237r, E 33.33")), "{}", q.s("more_points"));
+        assert_eq!(not_drawn(&q), 0, "{:?}", warnings(&q));
+        assert_eq!(values(&q), values(&p), "D to {new}: every length and angle drawn is the same");
+        assert_eq!(pts::free_points(&q).into_iter().map(|x| x.0).collect::<Vec<_>>(), vec!["P", "K", "L"]);
+    }
+    // the point off the circle typed with three decimals
+    let q = type_at(&p, sp(&p, (1.237 * 300f64.to_radians().cos(), 1.237 * 300f64.to_radians().sin())), "P2");
+    assert!(q.s("more_points").contains("P2 300 1.237r"), "{}", q.s("more_points"));
+    assert_eq!(values(&q), values(&p));
+    assert_eq!(not_drawn(&q), 0, "{:?}", warnings(&q));
+    // the panel's letter box: A to PQ
+    let q = type_box(&p, "name_a", "PQ");
+    assert!((def().render)(&q) == (def().render)(&with(&{ let mut v = decimals("D", "PQ", "E "); v.push(s("name_a", "PQ")); v })), "A to PQ: {:?} | {:?} | {:?} | {:?} | {:?} || {:?}", q.s("crossings"), q.s("joins"), q.s("marks"), q.s("styles"), q.s("more_points"), texts(&q));
+    assert_eq!(not_drawn(&q), 0, "{:?}", warnings(&q));
+    // the unlettered point written with its letter keeps its number exactly
+    let q = type_at(&p, at_dir(&p, 110.0, 1.0), "B1");
+    assert!(q.s("more_points").ends_with("E 33.33"), "{}", q.s("more_points"));
+    assert_eq!(values(&q), values(&p));
+}
+
+/// A letter the figure would not read back as the point is refused: `to` (a word a line row skips), `-` and `x-1` (a line row splits
+/// on the dash), on the figure and in the panel's letter box.
+#[test]
+fn a_letter_the_figure_cannot_read_is_refused() {
+    let p = with(&decimals("D", "A", ""));
+    for bad in ["to", "-", "x-1", "TO"] {
+        let q = type_at(&p, at_dir(&p, 271.27, 1.0), bad);
+        assert_eq!((q.s("more_points"), q.s("joins")), (p.s("more_points"), p.s("joins")), "{bad}");
+        let q = type_box(&p, "name_a", bad);
+        assert_eq!((q.s("name_a"), q.s("joins")), ("A", p.s("joins")), "box {bad}");
     }
 }
