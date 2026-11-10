@@ -151,6 +151,14 @@ static FIG_14: [RefSection; 11] = [
     s("Magnifiers", &["mag_show", "mag_marks", "close_up"], ""),
 ];
 
+/// dot-and-cross: the reference's four sections, the typed formula first (a pick below it replaces the typing).
+static DOT_AND_CROSS: [RefSection; 4] = [
+    s("Molecule, compound or atom", &["formula", "kind", "molecule", "ionic", "element", "charge"], "Type a formula or name, or pick one below."),
+    s("Drawing", &["shells", "ion_layout", "swap", "style"], ""),
+    s("Question", &["blank", "charges", "edits"], "Click an electron, an element symbol or an ion\u{2019}s charge in the figure to change it, for a \u{201c}find the mistake\u{201d} question. The answer key still describes the correct diagram; a new formula, layout or shells clears the changes."),
+    s("Title and answer key", &["title", "show_answers"], ""),
+];
+
 static FIG_15: [RefSection; 6] = [
     s("Structure", &["formula", "preset"], "Built around O as the central atom."),
     s("Look", &["shape", "bond_style", "formal"], ""),
@@ -1228,6 +1236,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "kite" => &FIG_13,
         "length-reading" => &FIG_14,
         "lewis-structures" => &FIG_15,
+        "dot-and-cross" => &DOT_AND_CROSS,
         "line-spectrum" => &FIG_16,
         "mapping-diagram" => &FIG_17,
         "mass-reading" => &FIG_18,

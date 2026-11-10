@@ -82,8 +82,8 @@ discrete-distribution__defaults 767041fc6b5f1a4e
 discrete-distribution__start 767041fc6b5f1a4e
 dna-protein-synthesis__defaults 41bb336383f7343a
 dna-protein-synthesis__start 41bb336383f7343a
-dot-and-cross__defaults 7bdac9ed37d40a62
-dot-and-cross__start 7bdac9ed37d40a62
+dot-and-cross__defaults 2bb0a1734113e969
+dot-and-cross__start 2bb0a1734113e969
 dot-plot__defaults bf00470ec7dd43be
 dot-plot__start bf00470ec7dd43be
 earth-cycles__defaults c9f850b2236a77fd
