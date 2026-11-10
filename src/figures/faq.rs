@@ -829,7 +829,7 @@ const ORGANIC_STRUCTURE: &[Faq] = &[
     },
     Faq {
         q: "When should I use skeletal, condensed or full?",
-        a: "Full shows every carbon and hydrogen and suits a first lesson on bonding. Condensed writes the molecule as grouped formula text, such as CH₃CH₂OH. Skeletal is the quickest to read once students count hydrogens themselves.",
+        a: "Full shows every carbon and hydrogen and suits a first lesson on bonding. Groups writes each carbon's group where it sits (H₃C, CH₂, CH₃) and Carbons writes only a C at every corner. Condensed writes the molecule as one line of formula text, such as CH₃CH₂OH. Skeletal is the quickest to read once students count hydrogens themselves.",
     },
     Faq {
         q: "Why is the formula only in the answer key?",
@@ -871,7 +871,7 @@ const HALF_LIFE_GRAPH: &[Faq] = &[
 const DOT_AND_CROSS: &[Faq] = &[
     Faq {
         q: "Which electrons are dots and which are crosses?",
-        a: "One atom's electrons are drawn as dots and the other's as crosses, so a shared pair shows one of each. With lone pairs the shape of the mark only says which atom the electron came from.",
+        a: "One atom's electrons are drawn as dots and the other's as crosses, so a shared pair shows one of each; a third kind of atom, like methanol's O, gets open circles. In an ionic compound the electrons a non-metal gained are drawn in the metal's mark. “Swap dots and crosses” trades the two marks.",
     },
     Faq {
         q: "Why do the atoms' circles overlap?",
@@ -879,7 +879,7 @@ const DOT_AND_CROSS: &[Faq] = &[
     },
     Faq {
         q: "How are ionic compounds drawn?",
-        a: "Each ion is a full outer shell inside square brackets with its charge outside, for example [Na]⁺ and [Cl]⁻. When the formula needs more than one ion, a number in front of the bracket shows how many.",
+        a: "Each ion is a full outer shell inside square brackets with its charge outside, for example [Na]⁺ and [Cl]⁻. When the formula needs more than one ion, a number in front of the bracket shows how many, or choose Ions: Every ion to draw each one, as [Cl]⁻ [Mg]²⁺ [Cl]⁻. Type any metal (Li, Na, K, Rb, Mg, Ca, Sr, Al) with N, O, F, S, Cl, Br or I, like Mg3N2 or lithium nitride.",
     },
     Faq {
         q: "Why is a hydrogen circle smaller?",
@@ -887,7 +887,7 @@ const DOT_AND_CROSS: &[Faq] = &[
     },
     Faq {
         q: "How do I make a worksheet from this?",
-        a: "Turn on “Leave the electrons for students”: the shells, symbols, brackets and charges stay, and every electron is removed. The answer key then gives each atom's outer electrons and lone pairs.",
+        a: "Turn on “Leave the electrons for students”: the shells, symbols, brackets and charges stay, and every electron is removed. For a find-the-mistake question, click an electron (dot, cross, open circle, open square, none), a symbol or an ion's charge in the figure instead. The answer key always describes the correct diagram.",
     },
 ];
 

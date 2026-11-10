@@ -751,6 +751,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "length-reading" => chemistry::length_relevant(key, p) && cards::relevant(id, key, p),
         // the ions' layout only for an ionic compound, picked or typed
         "dot-and-cross" => chemistry::dotcross::relevant(key, p) && cards::relevant(id, key, p),
+        // the CH3-ends switch only where it draws: a skeletal chain
+        "organic-structure" => chemistry::organic::relevant(key, p) && cards::relevant(id, key, p),
         _ => cards::relevant(id, key, p),
     }
 }

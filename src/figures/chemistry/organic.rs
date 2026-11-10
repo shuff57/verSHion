@@ -18,7 +18,7 @@ const H: f64 = 320.0;
 const INK: &str = "#111827";
 const SKELETONS: [&str; 4] = ["Straight chain", "Benzene ring", "Cyclohexane ring", "Cyclopentane ring"];
 const GROUPS: [&str; 5] = ["None (alkane)", "\u{2013}OH (alcohol)", "\u{2013}COOH (carboxylic acid)", "C=C double bond (alkene)", "C\u{2261}C triple bond (alkyne)"];
-const MODES: [&str; 3] = ["Skeletal", "Condensed", "Full"];
+const MODES: [&str; 5] = ["Skeletal", "Carbons", "Groups", "Condensed", "Full"];
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -36,7 +36,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("skeleton", "Skeleton", &SKELETONS, "Straight chain"),
         ParamDef::int("carbons", "Carbon atoms in the chain", 1, 12, 4),
         ParamDef::choice("group", "Functional group", &GROUPS, "None (alkane)").hint("For a straight chain; rings keep their own formula"),
-        ParamDef::choice("mode", "Draw", &MODES, "Skeletal"),
+        ParamDef::choice("mode", "Draw", &MODES, "Skeletal").hint("Carbons writes C at every carbon with no H; Groups writes H\u{2083}C, CH\u{2082}, CH\u{2083} at each carbon on the drawing; Condensed prints the one-line formula; Full draws every H"),
         ParamDef::bool("ends", "Label the CH\u{2083} ends", true).hint("Skeletal mode only"),
         ParamDef::bool("numbers", "Number the carbons", false),
         ParamDef::text("caption", "Caption", ""),
@@ -281,6 +281,150 @@ fn draw_ring(p: &Params, d: &mut Doc, v: &[V], double_bonds: bool, full: bool) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Carbons and Groups: a letter or a condensed group written at every carbon of the skeleton
+// ---------------------------------------------------------------------------------------------
+
+/// The order of the bond between chain carbons `i` and `i + 1`: the chosen group changes the first bond.
+fn chain_order(p: &Params, n: usize, i: usize) -> usize {
+    if i == 0 && n >= 2 {
+        match p.s("group") { "C=C double bond (alkene)" => 2, "C\u{2261}C triple bond (alkyne)" => 3, _ => 1 }
+    } else { 1 }
+}
+
+/// Hydrogens on each chain carbon: 4 minus its bonds (to the carbons beside it, and the last carbon's -OH, or
+/// the =O and -OH of -COOH). Butane 3, 2, 2, 3; propene 2, 1, 3; ethanoic acid 3, 0.
+pub fn chain_hydrogens(p: &Params, n: usize) -> Vec<usize> {
+    (0..n).map(|i| {
+        let mut bonds = 0;
+        if i > 0 { bonds += chain_order(p, n, i - 1); }
+        if i + 1 < n { bonds += chain_order(p, n, i); }
+        if i + 1 == n {
+            bonds += match p.s("group") { "\u{2013}OH (alcohol)" => 1, "\u{2013}COOH (carboxylic acid)" => 3, _ => 0 };
+        }
+        4usize.saturating_sub(bonds)
+    }).collect()
+}
+
+/// A carbon's group as (text, is subscript) runs: CH₂ is C, H, 2 (lowered). `left` writes the hydrogens first
+/// (H₃C), as for the carbon at the left end of a chain whose bond leaves to the right.
+fn group_runs(h: usize, left: bool) -> Vec<(String, bool)> {
+    let mut hs: Vec<(String, bool)> = Vec::new();
+    if h >= 1 { hs.push(("H".into(), false)); }
+    if h >= 2 { hs.push((h.to_string(), true)); }
+    let c = ("C".to_string(), false);
+    if left { hs.push(c); hs } else { let mut v = vec![c]; v.extend(hs); v }
+}
+
+/// Width of a label of `runs` at `size` (letters about 0.62 em, subscripts at 70 %).
+fn runs_width(runs: &[(String, bool)], size: f64) -> f64 {
+    runs.iter().map(|(t, s)| t.chars().count() as f64 * size * 0.62 * if *s { 0.7 } else { 1.0 }).sum()
+}
+
+/// Writes `runs` centred on (x, y), its subscripts lowered as subscripts; returns the label's half width and height.
+fn group_label(d: &mut Doc, x: f64, y: f64, runs: &[(String, bool)], size: f64, f: f64) -> (f64, f64) {
+    // a subscript is smaller and lowered by a quarter em; the run after it goes back up (dy scales with the label size)
+    let mut body = String::new();
+    let drop = (size * 0.25 * 100.0).round() / 100.0;
+    let mut lowered = false;
+    for (t, sub) in runs {
+        if *sub {
+            body.push_str(&format!(r#"<tspan class="sub" dy="{drop}" font-size="{}">{}</tspan>"#, (size * 0.7 * 100.0).round() / 100.0, crate::figures::svg::esc(t)));
+            lowered = true;
+        } else if lowered {
+            body.push_str(&format!(r#"<tspan dy="-{drop}">{}</tspan>"#, crate::figures::svg::esc(t)));
+            lowered = false;
+        } else {
+            body.push_str(&crate::figures::svg::esc(t));
+        }
+    }
+    d.raw(&format!(r##"<text x="{x:.2}" y="{:.2}" font-size="{size}" text-anchor="middle" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{INK}" font-weight="bold">{body}</text>"##, y + size * 0.35));
+    (runs_width(runs, size) * f / 2.0 + 2.0, size * f * 0.5)
+}
+
+/// A bond from `a` to `b` that stops short of the labels at either end (half extents `ha`, `hb`; zero for a bare vertex).
+fn bond_between(d: &mut Doc, a: V, b: V, order: usize, ha: (f64, f64), hb: (f64, f64)) {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let len = (dx * dx + dy * dy).sqrt().max(1e-9);
+    let (ux, uy) = (dx / len, dy / len);
+    let cut = |h: (f64, f64)| if h.0 <= 0.0 { 0.0 } else { (h.0 / ux.abs().max(1e-9)).min(h.1 / uy.abs().max(1e-9)) + 3.0 };
+    let (ta, tb) = (cut(ha), cut(hb));
+    if ta + tb >= len - 2.0 { return; }
+    bond(d, V { x: a.x + ux * ta, y: a.y + uy * ta }, V { x: b.x - ux * tb, y: b.y - uy * tb }, order);
+}
+
+const GROUP_SIZE: f64 = 17.0;
+
+/// Carbons: the skeleton with C at every carbon and no hydrogens. Groups: the skeleton with each carbon's group
+/// written at its place (H₃C, CH₂, CH₂, CH₃ for butane), so every hydrogen is counted where it sits.
+fn draw_chain_labelled(p: &Params, d: &mut Doc, v: &[V], groups: bool) {
+    let n = v.len();
+    let f = crate::figures::svg::label_factor(p.s("label_size"));
+    let hs = chain_hydrogens(p, n);
+    let runs: Vec<Vec<(String, bool)>> = (0..n).map(|i| if groups { group_runs(hs[i], i == 0 && n > 1) } else { vec![("C".to_string(), false)] }).collect();
+    let half: Vec<(f64, f64)> = runs.iter().map(|r| (runs_width(r, GROUP_SIZE) * f / 2.0 + 2.0, GROUP_SIZE * f * 0.5)).collect();
+    for i in 0..n.saturating_sub(1) {
+        bond_between(d, v[i], v[i + 1], chain_order(p, n, i), half[i], half[i + 1]);
+    }
+    let last = v[n - 1];
+    let oh = |d: &mut Doc, at: V, txt: &str| {
+        let r = vec![(txt.to_string(), false)];
+        group_label(d, at.x, at.y, &r, 18.0, f)
+    };
+    match p.s("group") {
+        "\u{2013}OH (alcohol)" => {
+            let dir = if n >= 2 { dir_deg(last, v[n - 2]) + 120.0 } else { -60.0 };
+            let r = 52.0;
+            let o = V { x: last.x + r * dir.to_radians().cos(), y: last.y + r * dir.to_radians().sin() };
+            let h_o = (runs_width(&[("OH".into(), false)], 18.0) * f / 2.0 + 2.0, 18.0 * f * 0.5);
+            bond_between(d, last, o, 1, half[n - 1], h_o);
+            oh(d, o, "OH");
+        }
+        "\u{2013}COOH (carboxylic acid)" => {
+            let up = V { x: last.x, y: last.y - 56.0 };
+            // the -OH down to the right, 30 degrees below the line, so it stays on the page at the chain's right end
+            let right = V { x: last.x + 41.57, y: last.y + 24.0 };
+            let h1 = (runs_width(&[("O".into(), false)], 18.0) * f / 2.0 + 2.0, 18.0 * f * 0.5);
+            let h2 = (runs_width(&[("OH".into(), false)], 18.0) * f / 2.0 + 2.0, 18.0 * f * 0.5);
+            bond_between(d, last, up, 2, half[n - 1], h1);
+            bond_between(d, last, right, 1, half[n - 1], h2);
+            oh(d, up, "O");
+            oh(d, right, "OH");
+        }
+        _ => {}
+    }
+    for (i, a) in v.iter().enumerate() {
+        group_label(d, a.x, a.y, &runs[i], GROUP_SIZE, f);
+        if p.b("numbers") { label(d, a.x, a.y + 30.0, &(i + 1).to_string(), 12.0); }
+    }
+}
+
+fn draw_ring_labelled(p: &Params, d: &mut Doc, v: &[V], double_bonds: bool, groups: bool) {
+    let n = v.len();
+    let f = crate::figures::svg::label_factor(p.s("label_size"));
+    // each ring carbon has two ring bonds; benzene's alternate double bonds leave it one hydrogen, the others two
+    let h = if double_bonds { 1 } else { 2 };
+    let runs = if groups { group_runs(h, false) } else { vec![("C".to_string(), false)] };
+    let half = (runs_width(&runs, GROUP_SIZE) * f / 2.0 + 2.0, GROUP_SIZE * f * 0.5);
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let order = if double_bonds && i % 2 == 0 { 2 } else { 1 };
+        bond_between(d, v[i], v[j], order, half, half);
+    }
+    for (i, a) in v.iter().enumerate() {
+        group_label(d, a.x, a.y, &runs, GROUP_SIZE, f);
+        if p.b("numbers") { label(d, a.x, a.y + 30.0, &(i + 1).to_string(), 12.0); }
+    }
+}
+
+/// The Label-the-ends switch is for the skeletal drawing only.
+pub fn relevant(key: &str, p: &Params) -> bool {
+    match key {
+        "ends" => p.s("mode") == "Skeletal" && p.s("skeleton") == "Straight chain",
+        _ => true,
+    }
+}
+
 fn build(p: &Params) -> String {
     let mode = p.s("mode");
     let (c, h, o) = atom_count(p);
@@ -292,6 +436,14 @@ fn build(p: &Params) -> String {
         let text = condensed(p, c, h, o);
         label(&mut d, W / 2.0, H / 2.0 - 2.0, &text, 46.0);
         super::super::chart::text(&mut d, W / 2.0, H / 2.0 + 30.0, 14.0, "middle", "Condensed formula");
+    } else if mode == "Carbons" || mode == "Groups" {
+        let groups = mode == "Groups";
+        match p.s("skeleton") {
+            "Benzene ring" => draw_ring_labelled(p, &mut d, &ring_vertices(6), true, groups),
+            "Cyclohexane ring" => draw_ring_labelled(p, &mut d, &ring_vertices(6), false, groups),
+            "Cyclopentane ring" => draw_ring_labelled(p, &mut d, &ring_vertices(5), false, groups),
+            _ => draw_chain_labelled(p, &mut d, &chain_vertices(p.i("carbons").clamp(1, 12) as usize), groups),
+        }
     } else {
         let full = mode == "Full";
         match p.s("skeleton") {
