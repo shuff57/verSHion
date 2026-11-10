@@ -6088,6 +6088,197 @@ mod tests {
         assert_eq!(ws.params.s("spec"), "rect 0 0 4 3", "panning edits nothing");
     }
 
+    // ---------- composite-shape canvas: the reference's piece, side, angle and corner actions ----------
+
+    /// The widgets drawn inside the canvas' area `area` (its piece panel or a Label tool popover), as
+    /// a screen reader finds them: (role, label, centre), top to bottom then left to right.
+    fn comp_widgets(ctx: &egui::Context, ws: &mut Workspace, area: &str) -> Vec<(egui::accesskit::Role, String, egui::Pos2)> {
+        ctx.enable_accesskit();
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(1400.0, 900.0))), ..Default::default() };
+        let mut out = ctx.run_ui(raw, |ui| {
+            let _ = ws.show(ui);
+        });
+        out.textures_delta.clear();
+        let r = ctx.memory(|m| m.area_rect(egui::Id::new(area))).unwrap_or_else(|| panic!("{area} is open"));
+        let tree = out.platform_output.accesskit_update.expect("accesskit tree");
+        let mut v: Vec<(egui::accesskit::Role, String, egui::Pos2)> = tree
+            .nodes
+            .iter()
+            .filter_map(|(_, n)| {
+                let b = n.bounds()?;
+                let c = egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32);
+                r.contains(c).then(|| (n.role(), n.label().map(|l| l.to_string()).unwrap_or_default(), c))
+            })
+            .collect();
+        v.sort_by(|a, b| (a.2.y.round(), a.2.x).partial_cmp(&(b.2.y.round(), b.2.x)).unwrap());
+        v
+    }
+
+    /// Clicks the widget labelled `label` inside the canvas' area `area`.
+    fn comp_press(ctx: &egui::Context, ws: &mut Workspace, area: &str, label: &str) {
+        let p = comp_widgets(ctx, ws, area).into_iter().find(|w| w.1 == label).unwrap_or_else(|| panic!("no {label:?} in {area}")).2;
+        comp_px(ctx, ws, p);
+    }
+
+    fn comp_px(ctx: &egui::Context, ws: &mut Workspace, p: egui::Pos2) {
+        comp_frame(ctx, ws, vec![egui::Event::PointerMoved(p)]);
+        let mut ev = btn(p, true);
+        ev.extend(btn(p, false));
+        comp_frame(ctx, ws, ev);
+        comp_frame(ctx, ws, vec![]);
+    }
+
+    /// The `k`-th shading swatch (blue, red, green, yellow) of the canvas' area `area`: its colour
+    /// buttons are the ones with no text.
+    fn comp_swatch(ctx: &egui::Context, ws: &mut Workspace, area: &str, k: usize) -> egui::Pos2 {
+        let sw: Vec<egui::Pos2> = comp_widgets(ctx, ws, area).into_iter().filter(|w| w.0 == egui::accesskit::Role::Button && w.1.is_empty()).map(|w| w.2).collect();
+        assert_eq!(sw.len(), 4, "four shading swatches in {area}");
+        sw[k]
+    }
+
+    fn comp_key(key: egui::Key, modifiers: egui::Modifiers) -> Vec<egui::Event> {
+        vec![
+            egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers },
+            egui::Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers },
+        ]
+    }
+
+    /// Clicks the first text box of the canvas' area `area`, selects what is in it and types `s`.
+    fn comp_type(ctx: &egui::Context, ws: &mut Workspace, area: &str, s: &str) {
+        let p = comp_widgets(ctx, ws, area).into_iter().find(|w| w.0 == egui::accesskit::Role::TextInput).unwrap_or_else(|| panic!("a text box in {area}")).2;
+        comp_px(ctx, ws, p);
+        let all = egui::Modifiers { ctrl: true, command: true, ..Default::default() };
+        comp_frame(ctx, ws, comp_key(egui::Key::A, all));
+        comp_frame(ctx, ws, vec![egui::Event::Text(s.to_string())]);
+        comp_frame(ctx, ws, vec![]);
+    }
+
+    /// Select tool: clicking a piece opens its panel, and its Width and Height boxes take typed sizes.
+    #[test]
+    fn composite_canvas_types_a_pieces_exact_sizes() {
+        let (ctx, mut ws) = comp_ws("rect 0 0 4 3");
+        comp_click(&ctx, &mut ws, (2.0, 1.5));
+        assert_eq!(ws.comp.sel, Some(0), "the click selects the piece");
+        for (k, typed, want) in [(0, "6", "rect 0 0 6 3"), (1, "5", "rect 0 0 6 5")] {
+            let boxes: Vec<egui::Pos2> = comp_widgets(&ctx, &mut ws, "comp_props").into_iter().filter(|w| w.0 == egui::accesskit::Role::SpinButton).map(|w| w.2).collect();
+            assert!(boxes.len() >= 2, "Width and Height boxes: {boxes:?}");
+            comp_px(&ctx, &mut ws, boxes[k]);
+            comp_frame(&ctx, &mut ws, vec![egui::Event::Text(typed.to_string())]);
+            comp_frame(&ctx, &mut ws, comp_key(egui::Key::Enter, egui::Modifiers::NONE));
+            comp_frame(&ctx, &mut ws, vec![]);
+            assert_eq!(ws.params.s("spec"), want);
+        }
+    }
+
+    /// Select tool: a piece's panel has Delete, which takes the piece and the marks only it had.
+    #[test]
+    fn composite_canvas_deletes_a_piece_from_its_panel() {
+        let (ctx, mut ws) = comp_ws("rect 0 0 4 3; rect 4 0 2 2; dim 4 0 6 0");
+        comp_click(&ctx, &mut ws, (5.0, 1.0));
+        assert_eq!(ws.comp.sel, Some(1));
+        comp_press(&ctx, &mut ws, "comp_props", "Delete");
+        assert_eq!(ws.params.s("spec"), "rect 0 0 4 3");
+        assert_eq!(ws.comp.sel, None);
+    }
+
+    /// Select tool: a piece's panel shades it blue, red, green or yellow.
+    #[test]
+    fn composite_canvas_shades_a_piece_from_its_panel() {
+        let (ctx, mut ws) = comp_ws("rect 0 0 4 3; tri 0 3 4 3 2 5");
+        comp_click(&ctx, &mut ws, (2.0, 3.6));
+        assert_eq!(ws.comp.sel, Some(1), "the roof is selected");
+        let p = comp_swatch(&ctx, &mut ws, "comp_props", 3);
+        comp_px(&ctx, &mut ws, p);
+        assert_eq!(ws.params.s("spec"), "rect 0 0 4 3; tri 0 3 4 3 2 5 yellow");
+        let p = comp_swatch(&ctx, &mut ws, "comp_props", 0);
+        comp_px(&ctx, &mut ws, p);
+        assert_eq!(ws.params.s("spec"), "rect 0 0 4 3; tri 0 3 4 3 2 5 blue");
+        let out = ws.output().unwrap().svg.unwrap();
+        assert!(out.contains(figures::composite::shade_hex("blue").unwrap()), "the export is shaded");
+    }
+
+    /// Line tool: a drag from a corner draws a dashed line (the roof's height, down to its base), and
+    /// one from the middle of a side draws one from there.
+    #[test]
+    fn composite_canvas_draws_a_height_with_the_line_tool() {
+        let (ctx, mut ws) = comp_ws("tri 0 0 8 0 3 5");
+        ws.comp.tool = composite_canvas::Tool::Line;
+        comp_frame(&ctx, &mut ws, vec![]);
+        comp_drag(&ctx, &mut ws, (3.0, 5.0), (3.0, 0.0));
+        assert_eq!(ws.params.s("spec"), "tri 0 0 8 0 3 5; dash 3 5 3 0");
+        comp_drag(&ctx, &mut ws, (4.0, 0.0), (3.0, 5.0));
+        assert_eq!(ws.params.s("spec"), "tri 0 0 8 0 3 5; dash 3 5 3 0; dash 4 0 3 5");
+        assert!(ws.output().unwrap().svg.unwrap().contains("stroke-dasharray"), "drawn dashed");
+    }
+
+    /// Label tool: a side's popover labels it with its measured length, or with typed text.
+    #[test]
+    fn composite_canvas_labels_a_side_with_its_length_or_text() {
+        let (ctx, mut ws) = comp_ws("rect 0 0 6 4");
+        ws.comp.tool = composite_canvas::Tool::Label;
+        comp_click(&ctx, &mut ws, (3.0, 0.0));
+        assert!(ws.comp.side.is_some(), "the bottom side's popover");
+        comp_press(&ctx, &mut ws, "comp_side", "Measure");
+        let items = figures::composite::parse(ws.params.s("spec"));
+        assert_eq!(figures::composite::side_label(&items, (0.0, 0.0), (6.0, 0.0)).as_deref(), Some(""), "a dim with no text: its length");
+        assert!(ws.output().unwrap().svg.unwrap().contains(">6<"), "6 is written");
+        comp_press(&ctx, &mut ws, "comp_side", "Text");
+        comp_type(&ctx, &mut ws, "comp_side", "b");
+        let items = figures::composite::parse(ws.params.s("spec"));
+        assert_eq!(figures::composite::side_label(&items, (0.0, 0.0), (6.0, 0.0)).as_deref(), Some("b"), "{}", ws.params.s("spec"));
+    }
+
+    /// Label tool: a side's popover gives it congruence ticks, parallel arrows and a line style.
+    #[test]
+    fn composite_canvas_marks_a_sides_ticks_arrows_and_line() {
+        use figures::composite as cs;
+        let (ctx, mut ws) = comp_ws("rect 0 0 6 4");
+        ws.comp.tool = composite_canvas::Tool::Label;
+        comp_click(&ctx, &mut ws, (3.0, 0.0));
+        assert!(ws.comp.side.is_some());
+        comp_press(&ctx, &mut ws, "comp_side", "||");
+        comp_press(&ctx, &mut ws, "comp_side", "\u{203a}");
+        comp_press(&ctx, &mut ws, "comp_side", "Dotted");
+        let items = cs::parse(ws.params.s("spec"));
+        let (a, b) = ((0.0, 0.0), (6.0, 0.0));
+        assert_eq!((cs::side_marks(&items, a, b, false), cs::side_marks(&items, a, b, true)), (2, 1), "{}", ws.params.s("spec"));
+        assert_eq!(cs::side_style(&items, a, b), ("dotted".to_string(), "regular".to_string()));
+    }
+
+    /// Label tool: an angle's popover labels it (typed text), marks it right and shades it.
+    #[test]
+    fn composite_canvas_labels_marks_and_shades_an_angle() {
+        use figures::composite as cs;
+        let (ctx, mut ws) = comp_ws("rect 0 0 6 4");
+        ws.comp.tool = composite_canvas::Tool::Label;
+        comp_frame(&ctx, &mut ws, vec![]);
+        let p = ws.comp.to_screen((0.0, 0.0)) + Vec2::new(24.0, -24.0);
+        comp_px(&ctx, &mut ws, p);
+        assert_eq!(ws.comp.angle, Some(((0.0, 0.0), false)), "the angle inside the corner");
+        comp_press(&ctx, &mut ws, "comp_angle", "Text");
+        comp_type(&ctx, &mut ws, "comp_angle", "y");
+        comp_press(&ctx, &mut ws, "comp_angle", "\u{221f} Square");
+        let p = comp_swatch(&ctx, &mut ws, "comp_angle", 2);
+        comp_px(&ctx, &mut ws, p);
+        let items = cs::parse(ws.params.s("spec"));
+        let m = cs::angle_mark(&items, (0.0, 0.0), false);
+        assert_eq!((m.text.as_str(), m.shade.as_deref()), ("y", Some("green")), "{}", ws.params.s("spec"));
+        assert!(cs::has_right_mark(&items, (0.0, 0.0)), "{}", ws.params.s("spec"));
+    }
+
+    /// Label tool: a corner's popover shows a point there, named as typed.
+    #[test]
+    fn composite_canvas_shows_a_named_point_at_a_corner() {
+        let (ctx, mut ws) = comp_ws("rect 0 0 6 4");
+        ws.comp.tool = composite_canvas::Tool::Label;
+        comp_click(&ctx, &mut ws, (6.0, 4.0));
+        assert_eq!(ws.comp.corner, Some((6.0, 4.0)));
+        comp_press(&ctx, &mut ws, "comp_corner", "\u{25cf} Show");
+        comp_type(&ctx, &mut ws, "comp_corner", "P");
+        assert_eq!(ws.params.s("spec"), "rect 0 0 6 4; point 6 4 P");
+        assert!(ws.output().unwrap().svg.unwrap().contains(">P<"), "the name is written");
+    }
+
     /// Pedigree: clicking a person on the preview selects them; each panel edit is one undo
     /// step stored in the `family` param (so exports and share links carry it); old typed
     /// overrides fold into the family on the first edit; Remove clears the selection.
