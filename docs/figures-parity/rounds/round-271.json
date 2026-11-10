@@ -1,0 +1,29 @@
+{
+ "round": 271,
+ "figure": "angles",
+ "capability": "cap-i01",
+ "hypothesis": "Batch 6 angles: cap-i01; evidence handle:click:near the vertex to run it on through the vertex as a line",
+ "started_at": "2026-11-10T08:35:51",
+ "git": "25e283b",
+ "before": {
+  "figure": 87.3,
+  "pooled": 93.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:35:52",
+ "after": {
+  "figure": 90.1,
+  "pooled": 93.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: a ray runs through as a line; vertically opposite angles equal",
+ "result": "hit",
+ "evidence": "angles tests (labels read off the drawn rays across 9 layouts; sums round a point and on a line; every pixel through interact::pick; 91 old links and 4 saved specs frozen); census unchanged; task run reference 23 actions, ours 17",
+ "next": "angles cap-04b and cap-04g (one congruence arc invisible; back with the builder)"
+}

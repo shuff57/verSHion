@@ -42,8 +42,8 @@
    "id": "cap-01f",
    "text": "More than six rays from the vertex",
    "class": "core",
-   "evidence": "",
-   "note": "WIDE: ray_count is capped at 6; the reference adds rays with no stated limit."
+   "evidence": "changes:ray_count=8",
+   "note": "Built in batch 6, round 266 (2026-11-10). WIDE: ray_count is capped at 6; the reference adds rays with no stated limit."
   },
   {
    "id": "cap-02",
@@ -84,8 +84,8 @@
    "id": "cap-04c",
    "text": "Shade a chosen angle",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: shade is one switch for every angle (cap-04i passes that narrow form); no per-angle shading."
+   "evidence": "changes:shaded=1",
+   "note": "Built in batch 6, round 267 (2026-11-10). WIDE: shade is one switch for every angle (cap-04i passes that narrow form); no per-angle shading."
   },
   {
    "id": "cap-04d",
@@ -98,8 +98,8 @@
    "id": "cap-04e",
    "text": "Choose which points appear and type their names",
    "class": "control",
-   "evidence": "",
-   "note": "Letters are automatic (A, B, C…) and all or none; no per-point choice or name."
+   "evidence": "changes:{\"points\":\"A: vertex; B: ray 1; C: ray 2\"}",
+   "note": "Built in batch 6, round 268 (2026-11-10). Letters are automatic (A, B, C…) and all or none; no per-point choice or name."
   },
   {
    "id": "cap-04f",
@@ -119,8 +119,8 @@
    "id": "cap-04h",
    "text": "Click the vertex or near a ray's end to add a point",
    "class": "interaction",
-   "evidence": "",
-   "note": "No click handle adds a point."
+   "evidence": "handle:click:Click the vertex or a ray's end to put a named point there",
+   "note": "Built in batch 6, round 269 (2026-11-10). No click handle adds a point."
   },
   {
    "id": "cap-06a",
@@ -133,22 +133,22 @@
    "id": "cap-06b",
    "text": "Click a ray on the figure to style it",
    "class": "interaction",
-   "evidence": "",
-   "note": "Rays have a drag handle for direction only."
+   "evidence": "handle:click:along its middle to change its style",
+   "note": "Built in batch 6, round 270 (2026-11-10). Rays have a drag handle for direction only."
   },
   {
    "id": "cap-i01",
    "text": "Click a ray on the figure to run it through the vertex as a line",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the ray's pop-up has Through the vertex. Our ray handle only drags its direction."
+   "evidence": "handle:click:near the vertex to run it on through the vertex as a line",
+   "note": "Built in batch 6, round 271 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the ray's pop-up has Through the vertex. Our ray handle only drags its direction."
   },
   {
    "id": "cap-i02",
    "text": "Click a ray on the figure to delete it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the ray's pop-up has Delete this ray. No click handle on our rays."
+   "evidence": "handle:click:near its end to delete it",
+   "note": "Built in batch 6, round 272 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the ray's pop-up has Delete this ray. No click handle on our rays."
   }
  ]
 }

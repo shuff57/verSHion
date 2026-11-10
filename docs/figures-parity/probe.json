@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-10T08:27:31",
- "ours_built_at": "2026-11-10T16:27:03+00:00",
- "git": "2759993",
+ "checked_at": "2026-11-10T08:35:53",
+ "ours_built_at": "2026-11-10T16:35:42+00:00",
+ "git": "25e283b",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -1701,7 +1701,7 @@
       {
        "token": "changes:ray2=250",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/74e4b9cf3785b9c8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/0fb2fe114ab3c344.png"
       }
      ]
     },
@@ -1713,7 +1713,7 @@
       {
        "token": "changes:{\"ray_count\":3,\"ray3\":\"110\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/2c47cdf7add17d43.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/b8230f71b80fff54.png"
       }
      ]
     },
@@ -1725,7 +1725,7 @@
       {
        "token": "changes:ray1_line=Line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/d5e27f1e6bc13d22.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/391cc580ab2db0f3.png"
       }
      ]
     },
@@ -1737,7 +1737,7 @@
       {
        "token": "changes:{\"ray_count\":3,\"ray3\":\"200\",\"around\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/3d1ae4ca6e4ccff3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/42091e28726ea02f.png"
       }
      ]
     },
@@ -1749,15 +1749,21 @@
       {
        "token": "changes:{\"ray1_line\":\"Line\",\"ray2_line\":\"Line\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/bbcc37f949e7768b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/b3c850f0cd3290d0.png"
       }
      ]
     },
     "cap-01f": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:ray_count=8",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/849ad88a85b5ddf8.png"
+      }
+     ]
     },
     "cap-02": {
      "pass": true,
@@ -1767,7 +1773,7 @@
       {
        "token": "changes:ray2=90",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/659e51c1a0e02b7f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/1b6e7da637d18fab.png"
       }
      ]
     },
@@ -1779,7 +1785,7 @@
       {
        "token": "changes:ray2_line=Line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/d9772a3fc13d66f4.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/4f3e4f415822d96c.png"
       }
      ]
     },
@@ -1791,17 +1797,17 @@
       {
        "token": "changes:unknown=1",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/87464b349297928e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/794720eb06c25053.png"
       },
       {
        "token": "changes:hide=1",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/68cccaa51c359bb5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/70687dd2e4a5db4c.png"
       },
       {
        "token": "changes:sector_text=1 = 3y",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/c758e667e97bb3c3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/b3e154d100e242ab.png"
       }
      ]
     },
@@ -1819,15 +1825,21 @@
       {
        "token": "changes:shade=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/bd57ab3c977760c5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/a5abe4b80e89ce6d.png"
       }
      ]
     },
     "cap-04c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:shaded=1",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/f6f1afac6a462e64.png"
+      }
+     ]
     },
     "cap-04d": {
      "pass": true,
@@ -1837,15 +1849,21 @@
       {
        "token": "changes:letters=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/4f06e2a763c69ecb.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/751480707d3c68ba.png"
       }
      ]
     },
     "cap-04e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"points\":\"A: vertex; B: ray 1; C: ray 2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/a85d2bde71a64d86.png"
+      }
+     ]
     },
     "cap-04f": {
      "pass": true,
@@ -1860,8 +1878,8 @@
      "renders": []
     },
     "cap-04h": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
@@ -1873,25 +1891,25 @@
       {
        "token": "changes:ray2_style=Dashed",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/d1f1d487c8234a6e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/3ca809426a72c80b.png"
       }
      ]
     },
     "cap-06b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-i01": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-i02": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     }

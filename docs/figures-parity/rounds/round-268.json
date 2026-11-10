@@ -1,0 +1,35 @@
+{
+ "round": 268,
+ "figure": "angles",
+ "capability": "cap-04e",
+ "hypothesis": "Batch 6 angles: cap-04e; evidence changes:{\"points\":\"A: vertex; B: ray 1; C: ray 2\"}",
+ "started_at": "2026-11-10T08:35:47",
+ "git": "25e283b",
+ "before": {
+  "figure": 77.5,
+  "pooled": 93.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:35:49",
+ "after": {
+  "figure": 81.7,
+  "pooled": 93.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"points\":\"A: vertex; B: ray 1; C: ray 2\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/a85d2bde71a64d86.png"
+   }
+  ]
+ },
+ "checker": "pass: named points at the vertex and ray ends",
+ "result": "hit",
+ "evidence": "angles tests (labels read off the drawn rays across 9 layouts; sums round a point and on a line; every pixel through interact::pick; 91 old links and 4 saved specs frozen); census unchanged; task run reference 23 actions, ours 17",
+ "next": "angles cap-04b and cap-04g (one congruence arc invisible; back with the builder)"
+}

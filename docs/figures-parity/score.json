@@ -1,27 +1,20 @@
 {
- "generated_at": "2026-11-10T16:27:31+00:00",
- "probe_checked_at": "2026-11-10T08:27:31",
+ "generated_at": "2026-11-10T16:35:53+00:00",
+ "probe_checked_at": "2026-11-10T08:35:53",
  "comparable": true,
  "drift": [],
- "pooled": 93.3,
- "mean": 92.8,
+ "pooled": 93.6,
+ "mean": 93.2,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
  "figures": {
   "angles": {
-   "score": 66.2,
-   "got": 47.0,
+   "score": 93.0,
+   "got": 66.0,
    "total": 71.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-01f",
-     "class": "core",
-     "weight": 5.0,
-     "text": "More than six rays from the vertex",
-     "why": "no evidence"
-    },
     {
      "id": "cap-04b",
      "class": "control",
@@ -30,52 +23,10 @@
      "why": "no evidence"
     },
     {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Shade a chosen angle",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose which points appear and type their names",
-     "why": "no evidence"
-    },
-    {
      "id": "cap-04g",
      "class": "interaction",
      "weight": 2.0,
      "text": "Click an angle on the figure to mark or shade it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04h",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click the vertex or near a ray's end to add a point",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a ray on the figure to style it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i01",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a ray on the figure to run it through the vertex as a line",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i02",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a ray on the figure to delete it",
      "why": "no evidence"
     }
    ]

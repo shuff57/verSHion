@@ -1,0 +1,29 @@
+{
+ "round": 272,
+ "figure": "angles",
+ "capability": "cap-i02",
+ "hypothesis": "Batch 6 angles: cap-i02; evidence handle:click:near its end to delete it",
+ "started_at": "2026-11-10T08:35:52",
+ "git": "25e283b",
+ "before": {
+  "figure": 90.1,
+  "pooled": 93.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:35:53",
+ "after": {
+  "figure": 93.0,
+  "pooled": 93.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: a ray is deleted at its end once there are two or more rays (the opening state's one ray is restyled there); swept through interact::pick",
+ "result": "hit",
+ "evidence": "angles tests (labels read off the drawn rays across 9 layouts; sums round a point and on a line; every pixel through interact::pick; 91 old links and 4 saved specs frozen); census unchanged; task run reference 23 actions, ours 17",
+ "next": "angles cap-04b and cap-04g (one congruence arc invisible; back with the builder)"
+}

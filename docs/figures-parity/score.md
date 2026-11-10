@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-10T16:27:31+00:00 · probe: 2026-11-10T08:27:31
+Generated: 2026-11-10T16:35:53+00:00 · probe: 2026-11-10T08:35:53
 
-**Pooled 93.3** · mean 92.8 over 70 figures · built 71 of 71 reference figures
+**Pooled 93.6** · mean 93.2 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -13,13 +13,6 @@ Comparable with the frozen baseline: **yes**
   - cap-06a [version 3] Click an electron to cycle it through dot, cross, open circle, open square and nothing, for a find-the-mistake question — no evidence
   - cap-06b [version 3] Click an element symbol to blank or show it — no evidence
   - cap-06c [version 3] Click an ion's charge to show it, make it a blank box or leave it off, per ion — no evidence
-- `angles`: 66 (47/71)
-  - cap-01f [core 5] More than six rays from the vertex — no evidence
-  - cap-04b [control 3] Mark a chosen angle with congruence marks — no evidence
-  - cap-04c [control 3] Shade a chosen angle — no evidence
-  - cap-04e [control 3] Choose which points appear and type their names — no evidence
-  - cap-04g [interaction 2] Click an angle on the figure to mark or shade it — no evidence
-  - cap-04h [interaction 2] Click the vertex or near a ray's end to add a point — no evidence
 - `half-life-graph`: 71 (60/84)
   - cap-01e [control 3] Your own isotope's half-life in a unit you choose (not only years) — no evidence
   - cap-02e [control 3] Up the side: activity in counts per minute — no evidence
@@ -123,6 +116,9 @@ Comparable with the frozen baseline: **yes**
 - `kite`: 93 (77/83)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
+- `angles`: 93 (66/71)
+  - cap-04b [control 3] Mark a chosen angle with congruence marks — no evidence
+  - cap-04g [interaction 2] Click an angle on the figure to mark or shade it — no evidence
 - `rectangle`: 93 (80/86)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence

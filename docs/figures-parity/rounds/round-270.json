@@ -1,0 +1,29 @@
+{
+ "round": 270,
+ "figure": "angles",
+ "capability": "cap-06b",
+ "hypothesis": "Batch 6 angles: cap-06b; evidence handle:click:along its middle to change its style",
+ "started_at": "2026-11-10T08:35:50",
+ "git": "25e283b",
+ "before": {
+  "figure": 84.5,
+  "pooled": 93.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:35:51",
+ "after": {
+  "figure": 87.3,
+  "pooled": 93.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: click a ray to cycle solid, dashed, dotted",
+ "result": "hit",
+ "evidence": "angles tests (labels read off the drawn rays across 9 layouts; sums round a point and on a line; every pixel through interact::pick; 91 old links and 4 saved specs frozen); census unchanged; task run reference 23 actions, ours 17",
+ "next": "angles cap-04b and cap-04g (one congruence arc invisible; back with the builder)"
+}

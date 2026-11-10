@@ -1,0 +1,29 @@
+{
+ "round": 269,
+ "figure": "angles",
+ "capability": "cap-04h",
+ "hypothesis": "Batch 6 angles: cap-04h; evidence handle:click:Click the vertex or a ray's end to put a named point there",
+ "started_at": "2026-11-10T08:35:49",
+ "git": "25e283b",
+ "before": {
+  "figure": 81.7,
+  "pooled": 93.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T08:35:50",
+ "after": {
+  "figure": 84.5,
+  "pooled": 93.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: click the vertex or a ray's end for a named point",
+ "result": "hit",
+ "evidence": "angles tests (labels read off the drawn rays across 9 layouts; sums round a point and on a line; every pixel through interact::pick; 91 old links and 4 saved specs frozen); census unchanged; task run reference 23 actions, ours 17",
+ "next": "angles cap-04b and cap-04g (one congruence arc invisible; back with the builder)"
+}
