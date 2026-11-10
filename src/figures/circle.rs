@@ -17,6 +17,8 @@ use super::*;
 use std::f64::consts::PI;
 
 mod edit;
+#[cfg(test)]
+mod tests_b5;
 
 type Pt = (f64, f64);
 
