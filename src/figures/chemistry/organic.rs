@@ -413,7 +413,14 @@ fn draw_ring_labelled(p: &Params, d: &mut Doc, v: &[V], double_bonds: bool, grou
     }
     for (i, a) in v.iter().enumerate() {
         group_label(d, a.x, a.y, &runs, GROUP_SIZE, f);
-        if p.b("numbers") { label(d, a.x, a.y + 30.0, &(i + 1).to_string(), 12.0); }
+        // the number inside the ring, towards its centre, so it never sits on a bond or meets the caption above
+        if p.b("numbers") {
+            let (cx, cy) = (W / 2.0, H / 2.0 - 14.0);
+            let (dx, dy) = (a.x - cx, a.y - cy);
+            let l = (dx * dx + dy * dy).sqrt().max(1e-9);
+            let r = 22.0 * f + 6.0;
+            label(d, a.x - dx / l * r, a.y - dy / l * r + 4.0, &(i + 1).to_string(), 12.0);
+        }
     }
 }
 

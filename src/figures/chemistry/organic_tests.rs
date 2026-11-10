@@ -228,10 +228,10 @@ fn bonds_stop_short_of_the_labels() {
 #[test]
 fn labels_stay_on_the_page_and_apart() {
     for mode in ["Groups", "Carbons"] {
-        for g in [ALKANE, OH, COOH, ENE, YNE] {
+        for (sk, g) in [("Straight chain", ALKANE), ("Straight chain", OH), ("Straight chain", COOH), ("Straight chain", ENE), ("Straight chain", YNE), ("Benzene ring", ALKANE), ("Cyclohexane ring", ALKANE), ("Cyclopentane ring", ALKANE)] {
             for n in [1, 2, 3, 12] {
                 for size in ["Large", "Medium"] {
-                    let svg = def().svg(&with(&[s("mode", mode), s("group", g), i("carbons", n), s("label_size", size), b("numbers", true), s("caption", "Structure")]));
+                    let svg = def().svg(&with(&[s("mode", mode), s("skeleton", sk), s("group", g), i("carbons", n), s("label_size", size), b("numbers", true), s("caption", "Structure")]));
                     let (w, h) = crate::figures::svg_size(&svg);
                     let t = texts(&svg);
                     let bx: Vec<(f64, f64, f64, f64, String)> = t.iter().filter(|x| !x.3.starts_with("Molecular formula")).map(|(x, y, fs, s)| {
