@@ -1,0 +1,35 @@
+{
+ "round": 187,
+ "figure": "length-reading",
+ "capability": "cap-05",
+ "hypothesis": "Batch 5 length-reading: cap-05; evidence changes:{\"instrument\":\"Micrometer\",\"mic_read_to\":\"One estimated digit (0.001 mm)\",\"mic_reading\":6.847}",
+ "started_at": "2026-11-09T18:49:05",
+ "git": "da9c765",
+ "before": {
+  "figure": 71.8,
+  "pooled": 88.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T18:49:05",
+ "after": {
+  "figure": 75.6,
+  "pooled": 89.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:{\"instrument\":\"Micrometer\",\"mic_read_to\":\"One estimated digit (0.001 mm)\",\"mic_reading\":6.847}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/length-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/length-reading/6acf695091c8d1cb.png"
+   }
+  ]
+ },
+ "checker": "pass: an estimated digit on the micrometer",
+ "result": "hit",
+ "evidence": "length tests (88 old rulers frozen as saved specs and share links render byte-identically; readings read back from the drawn scales equal the key; handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker matched the teacher steps to the panel",
+ "next": "length-reading (remaining)"
+}

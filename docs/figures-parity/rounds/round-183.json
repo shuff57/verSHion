@@ -1,0 +1,37 @@
+{
+ "round": 183,
+ "figure": "length-reading",
+ "capability": "cap-01b",
+ "hypothesis": "Batch 5 length-reading: cap-01b; evidence changes:instrument=Caliper",
+ "started_at": "2026-11-09T18:49:02",
+ "git": "da9c765",
+ "before": {
+  "figure": 51.3,
+  "pooled": 88.6
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T18:49:03",
+ "after": {
+  "figure": 57.7,
+  "pooled": 88.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:instrument=Caliper",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/length-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/length-reading/11717c2123db2470.png"
+   }
+  ]
+ },
+ "checker": "pass: vernier caliper read off its drawn scales",
+ "result": "hit",
+ "evidence": "length tests (88 old rulers frozen as saved specs and share links render byte-identically; readings read back from the drawn scales equal the key; handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker matched the teacher steps to the panel",
+ "next": "length-reading (remaining)"
+}

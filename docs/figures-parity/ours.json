@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-10T01:58:20+00:00",
-  "src_mtime": 1794274266.219176,
-  "git": "1e922c9",
+  "built_at": "2026-11-10T02:49:02+00:00",
+  "src_mtime": 1794278409.8801355,
+  "git": "da9c765",
   "figures": 191
  },
  "figures": {
@@ -9644,6 +9644,17 @@
    "blurb": "A ruler, caliper or micrometer with an object to measure.",
    "params": [
     {
+     "key": "instrument",
+     "label": "Instrument",
+     "kind": "choice",
+     "options": [
+      "Ruler",
+      "Caliper",
+      "Micrometer"
+     ],
+     "default": "Ruler"
+    },
+    {
      "key": "units",
      "label": "Units",
      "kind": "choice",
@@ -9763,6 +9774,93 @@
       "None"
      ],
      "default": "Text"
+    },
+    {
+     "key": "least_count",
+     "label": "Least count",
+     "kind": "choice",
+     "options": [
+      "0.1 mm",
+      "0.05 mm",
+      "0.02 mm"
+     ],
+     "default": "0.05 mm"
+    },
+    {
+     "key": "lc_print",
+     "label": "Least count on the slider",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "mic_read_to",
+     "label": "Read to",
+     "kind": "choice",
+     "options": [
+      "Marks (0.01 mm)",
+      "One estimated digit (0.001 mm)"
+     ],
+     "default": "Marks (0.01 mm)"
+    },
+    {
+     "key": "cal_reading",
+     "label": "Reading",
+     "kind": "float",
+     "options": [],
+     "default": "23.45"
+    },
+    {
+     "key": "mic_reading",
+     "label": "Reading",
+     "kind": "float",
+     "options": [],
+     "default": "7.38"
+    },
+    {
+     "key": "zero_error",
+     "label": "Zero error",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "show_closed",
+     "label": "Also show it closed",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "held",
+     "label": "In the jaws",
+     "kind": "choice",
+     "options": [
+      "Nothing",
+      "Block",
+      "Cylinder",
+      "Ball",
+      "Wire"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "held_label",
+     "label": "Label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "close_up",
+     "label": "Show",
+     "kind": "choice",
+     "options": [
+      "Instrument and close-up",
+      "Close-up only",
+      "Instrument only"
+     ],
+     "default": "Instrument and close-up"
     }
    ],
    "handle_list": [

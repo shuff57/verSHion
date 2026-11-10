@@ -14,15 +14,15 @@
    "id": "cap-01b",
    "text": "Read a vernier caliper",
    "class": "core",
-   "evidence": "",
-   "note": "verSHion has only the ruler; no instrument choice."
+   "evidence": "changes:instrument=Caliper",
+   "note": "Built in batch 5, round 183 (2026-11-10). verSHion has only the ruler; no instrument choice."
   },
   {
    "id": "cap-01c",
    "text": "Read a micrometer",
    "class": "core",
-   "evidence": "",
-   "note": "verSHion has only the ruler; no instrument choice."
+   "evidence": "changes:instrument=Micrometer",
+   "note": "Built in batch 5, round 184 (2026-11-10). verSHion has only the ruler; no instrument choice."
   },
   {
    "id": "cap-02a",
@@ -91,57 +91,57 @@
    "id": "cap-04a",
    "text": "Set the caliper's least count: 0.1, 0.05 or 0.02 mm",
    "class": "control",
-   "evidence": "",
-   "note": "No caliper."
+   "evidence": "changes:{\"instrument\":\"Caliper\",\"least_count\":\"0.02 mm\"}",
+   "note": "Built in batch 5, round 185 (2026-11-10). No caliper."
   },
   {
    "id": "cap-04b",
    "text": "Print the least count on the slider or leave it off",
    "class": "control",
-   "evidence": "",
-   "note": "No caliper."
+   "evidence": "changes:{\"instrument\":\"Caliper\",\"lc_print\":false}",
+   "note": "Built in batch 5, round 186 (2026-11-10). No caliper."
   },
   {
    "id": "cap-05",
    "text": "Read the micrometer to its marks (0.01 mm) or to one estimated digit (0.001 mm)",
    "class": "version",
-   "evidence": "",
-   "note": "No micrometer."
+   "evidence": "changes:{\"instrument\":\"Micrometer\",\"mic_read_to\":\"One estimated digit (0.001 mm)\",\"mic_reading\":6.847}",
+   "note": "Built in batch 5, round 187 (2026-11-10). No micrometer."
   },
   {
    "id": "cap-06a",
    "text": "Type the caliper or micrometer reading, or pick one at random",
    "class": "core",
-   "evidence": "",
-   "note": "No caliper or micrometer."
+   "evidence": "changes:{\"instrument\":\"Caliper\",\"cal_reading\":41.2}",
+   "note": "Built in batch 5, round 188 (2026-11-10). No caliper or micrometer."
   },
   {
    "id": "cap-06b",
    "text": "Give the caliper or micrometer a zero error, and draw it closed too",
    "class": "core",
-   "evidence": "",
-   "note": "No caliper or micrometer."
+   "evidence": "changes:{\"instrument\":\"Caliper\",\"zero_error\":0.1,\"show_closed\":true}",
+   "note": "Built in batch 5, round 189 (2026-11-10). No caliper or micrometer."
   },
   {
    "id": "cap-07",
    "text": "Put nothing, a block, a cylinder, a ball or a wire in the jaws, drawn to size with a short label",
    "class": "control",
-   "evidence": "",
-   "note": "No caliper or micrometer."
+   "evidence": "changes:{\"instrument\":\"Caliper\",\"held\":\"Ball\"}",
+   "note": "Built in batch 5, round 190 (2026-11-10). No caliper or micrometer."
   },
   {
    "id": "cap-08a",
    "text": "Show the caliper or micrometer with its close-up, or the instrument alone",
    "class": "control",
-   "evidence": "",
-   "note": "No caliper or micrometer."
+   "evidence": "changes:{\"instrument\":\"Caliper\",\"close_up\":\"Instrument only\"}",
+   "note": "Built in batch 5, round 191 (2026-11-10). No caliper or micrometer."
   },
   {
    "id": "cap-08b",
    "text": "Show the close-up alone, without the instrument",
    "class": "control",
-   "evidence": "",
-   "note": "Our ruler options are ruler with magnifiers, ruler only, or ruler with one magnifier above; no close-up alone."
+   "evidence": "changes:{\"instrument\":\"Caliper\",\"close_up\":\"Close-up only\"}",
+   "note": "Built in batch 5, round 192 (2026-11-10). Our ruler options are ruler with magnifiers, ruler only, or ruler with one magnifier above; no close-up alone."
   },
   {
    "id": "cap-09a",

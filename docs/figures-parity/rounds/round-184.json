@@ -1,0 +1,35 @@
+{
+ "round": 184,
+ "figure": "length-reading",
+ "capability": "cap-01c",
+ "hypothesis": "Batch 5 length-reading: cap-01c; evidence changes:instrument=Micrometer",
+ "started_at": "2026-11-09T18:49:03",
+ "git": "da9c765",
+ "before": {
+  "figure": 57.7,
+  "pooled": 88.7
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T18:49:04",
+ "after": {
+  "figure": 64.1,
+  "pooled": 88.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:instrument=Micrometer",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/length-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/length-reading/4b2b2dfd197c90fb.png"
+   }
+  ]
+ },
+ "checker": "pass: micrometer, sleeve and thimble read off the drawing",
+ "result": "hit",
+ "evidence": "length tests (88 old rulers frozen as saved specs and share links render byte-identically; readings read back from the drawn scales equal the key; handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker matched the teacher steps to the panel",
+ "next": "length-reading (remaining)"
+}

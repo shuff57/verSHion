@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-10T01:58:34+00:00 · probe: 2026-11-09T17:58:34
+Generated: 2026-11-10T02:49:08+00:00 · probe: 2026-11-09T18:49:08
 
-**Pooled 88.6** · mean 88.9 over 70 figures · built 71 of 71 reference figures
+**Pooled 89.3** · mean 89.6 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -13,13 +13,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04d [interaction 2] Click a line on the figure to style it — no evidence
   - cap-05b [interaction 2] Click a crossing or a line's end on the figure to add a point — no evidence
   - cap-i01 [interaction 2] Click an angle on the figure to give it congruence arcs or shade it — no evidence
-- `length-reading`: 51 (40/78)
-  - cap-01b [core 5] Read a vernier caliper — no evidence
-  - cap-01c [core 5] Read a micrometer — no evidence
-  - cap-06a [core 5] Type the caliper or micrometer reading, or pick one at random — no evidence
-  - cap-06b [core 5] Give the caliper or micrometer a zero error, and draw it closed too — no evidence
-  - cap-04a [control 3] Set the caliper's least count: 0.1, 0.05 or 0.02 mm — no evidence
-  - cap-04b [control 3] Print the least count on the slider or leave it off — no evidence
 - `circle`: 52 (84/163)
   - cap-i02 [editor 4] Click a point on the figure to join it to another point — no evidence
   - cap-01c [control 3] Place a point off the circle by its distance in radii — no evidence
@@ -199,6 +192,7 @@ Comparable with the frozen baseline: **yes**
 - `enzyme-kinetics`: 100 (85/85)
 - `histogram`: 100 (90/90)
 - `inclined-plane`: 100 (91/91)
+- `length-reading`: 100 (78/78)
 - `lewis-structures`: 100 (51/51)
 - `line-spectrum`: 100 (54/54)
 - `mapping-diagram`: 100 (36/36)

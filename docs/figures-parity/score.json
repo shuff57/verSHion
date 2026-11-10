@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-10T01:58:34+00:00",
- "probe_checked_at": "2026-11-09T17:58:34",
+ "generated_at": "2026-11-10T02:49:08+00:00",
+ "probe_checked_at": "2026-11-09T18:49:08",
  "comparable": true,
  "drift": [],
- "pooled": 88.6,
- "mean": 88.9,
+ "pooled": 89.3,
+ "mean": 89.6,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -767,82 +767,11 @@
    ]
   },
   "length-reading": {
-   "score": 51.3,
-   "got": 40.0,
+   "score": 100.0,
+   "got": 78.0,
    "total": 78.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Read a vernier caliper",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Read a micrometer",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Type the caliper or micrometer reading, or pick one at random",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Give the caliper or micrometer a zero error, and draw it closed too",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set the caliper's least count: 0.1, 0.05 or 0.02 mm",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Print the least count on the slider or leave it off",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Read the micrometer to its marks (0.01 mm) or to one estimated digit (0.001 mm)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-07",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Put nothing, a block, a cylinder, a ball or a wire in the jaws, drawn to size with a short label",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Show the caliper or micrometer with its close-up, or the instrument alone",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-08b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Show the close-up alone, without the instrument",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "lewis-structures": {
    "score": 100.0,

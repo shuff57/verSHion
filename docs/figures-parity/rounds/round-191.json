@@ -1,0 +1,35 @@
+{
+ "round": 191,
+ "figure": "length-reading",
+ "capability": "cap-08a",
+ "hypothesis": "Batch 5 length-reading: cap-08a; evidence changes:{\"instrument\":\"Caliper\",\"close_up\":\"Instrument only\"}",
+ "started_at": "2026-11-09T18:49:07",
+ "git": "da9c765",
+ "before": {
+  "figure": 92.3,
+  "pooled": 89.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T18:49:08",
+ "after": {
+  "figure": 96.2,
+  "pooled": 89.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"instrument\":\"Caliper\",\"close_up\":\"Instrument only\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/length-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/length-reading/6d78b80512d343f7.png"
+   }
+  ]
+ },
+ "checker": "pass: instrument only",
+ "result": "hit",
+ "evidence": "length tests (88 old rulers frozen as saved specs and share links render byte-identically; readings read back from the drawn scales equal the key; handles swept through interact::pick); census unchanged; no task run (built on the NAS), the checker matched the teacher steps to the panel",
+ "next": "length-reading (remaining)"
+}

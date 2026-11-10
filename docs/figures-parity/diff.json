@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-10T01:58:34+00:00",
+ "generated_at": "2026-11-10T02:49:08+00:00",
  "spec_generated_at": "2026-11-08T05:54:07+00:00",
  "figures": [
   {
@@ -2779,6 +2779,7 @@
    },
    "text_sha256": "a666e101819ef953a61f47e592111af7656ea65f6b1b9b7919cf44adc4c69793",
    "params": [
+    "instrument",
     "units",
     "ruler",
     "marks",
@@ -2791,9 +2792,19 @@
     "read_to",
     "mag_show",
     "mag_marks",
-    "title_style"
+    "title_style",
+    "least_count",
+    "lc_print",
+    "mic_read_to",
+    "cal_reading",
+    "mic_reading",
+    "zero_error",
+    "show_closed",
+    "held",
+    "held_label",
+    "close_up"
    ],
-   "param_count": 13,
+   "param_count": 24,
    "handles": 3,
    "label_drag": false,
    "show_answers": false,
@@ -3936,6 +3947,7 @@
    },
    "text_sha256": "b087d1097c7a67b1506f5d09aebdfab5c0ddb3acf6747d5ac09316f2e613fcf2",
    "params": [
+    "instrument",
     "units",
     "ruler",
     "marks",
@@ -3948,9 +3960,19 @@
     "read_to",
     "mag_show",
     "mag_marks",
-    "title_style"
+    "title_style",
+    "least_count",
+    "lc_print",
+    "mic_read_to",
+    "cal_reading",
+    "mic_reading",
+    "zero_error",
+    "show_closed",
+    "held",
+    "held_label",
+    "close_up"
    ],
-   "param_count": 13,
+   "param_count": 24,
    "handles": 3,
    "label_drag": false,
    "show_answers": false,
