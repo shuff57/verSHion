@@ -392,8 +392,8 @@
    "id": "cap-i12",
    "text": "Click a point or the center on the figure to rename it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the center's and a point's pop-up has a Name box."
+   "evidence": "handle:any:double-click a point or the centre to rename it + ui-test:figures::circle::tests_b5::a_rename_reads_every_row_the_way_the_figure_does",
+   "note": "Built in batch 5, round 251 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the center's and a point's pop-up has a Name box."
   }
  ]
 }

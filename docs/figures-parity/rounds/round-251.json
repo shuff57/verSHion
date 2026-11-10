@@ -1,0 +1,31 @@
+{
+ "round": 251,
+ "figure": "circle",
+ "capability": "cap-i12",
+ "hypothesis": "Batch 5 circle: cap-i12; evidence handle:any:double-click a point or the centre to rename it + ui-test:figures::circle::tests_b5::a_rename_reads_every_row_the_way_the_figure_does",
+ "started_at": "2026-11-09T22:39:34",
+ "git": "7387e55",
+ "before": {
+  "figure": 95.1,
+  "pooled": 92.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T22:39:35",
+ "after": {
+  "figure": 96.3,
+  "pooled": 92.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass after six re-checks: a rename on the figure or in the panel carries the new letter through every row and changes nothing else (b2d5934, 6a10e90, 1ed828d, 80750ea, 6f8fede, 7387e55)",
+ "result": "hit",
+ "evidence": "rename tests in circle::tests_b5 (every row form read the way the figure reads it, multi-character letters, typed decimals kept, unrelated rows unchanged, letters the figure cannot read refused, panel boxes for drawn and undrawn points); 220 frozen old figures byte-identical; census unchanged",
+ "next": "circle cap-01f/01g (need handles at a non-opening state), cap-i10 (not built)"
+}

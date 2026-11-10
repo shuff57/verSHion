@@ -1,6 +1,6 @@
 # Figures parity score
 
-Generated: 2026-11-10T04:13:23+00:00 · probe: 2026-11-09T20:13:22
+Generated: 2026-11-10T06:39:35+00:00 · probe: 2026-11-09T22:39:35
 
 **Pooled 92.5** · mean 92.3 over 70 figures · built 71 of 71 reference figures
 
@@ -143,11 +143,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
 - `volume-by-displacement`: 95 (55/58)
   - cap-03b [control 3] Pick random before and after readings — no evidence
-- `circle`: 95 (155/163)
-  - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
-  - cap-01f [interaction 2] Drag a point off the circle and back on — no evidence
-  - cap-i10 [interaction 2] Drag a line's label across the line to put it on the other side — no evidence
-  - cap-i12 [interaction 2] Click a point or the center on the figure to rename it — no evidence
 - `ruler-reading`: 95 (59/62)
   - cap-04c [control 3] Pick the length and position at random — no evidence
 - `population-growth`: 95 (125/131)
@@ -155,6 +150,10 @@ Comparable with the frozen baseline: **yes**
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `projectile-motion`: 96 (71/74)
   - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
+- `circle`: 96 (157/163)
+  - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
+  - cap-01f [interaction 2] Drag a point off the circle and back on — no evidence
+  - cap-i10 [interaction 2] Drag a line's label across the line to put it on the other side — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
 - `predator-prey`: 97 (93/96)

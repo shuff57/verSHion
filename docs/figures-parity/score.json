@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-10T04:13:23+00:00",
- "probe_checked_at": "2026-11-09T20:13:22",
+ "generated_at": "2026-11-10T06:39:35+00:00",
+ "probe_checked_at": "2026-11-09T22:39:35",
  "comparable": true,
  "drift": [],
  "pooled": 92.5,
@@ -125,8 +125,8 @@
    ]
   },
   "circle": {
-   "score": 95.1,
-   "got": 155.0,
+   "score": 96.3,
+   "got": 157.0,
    "total": 163.0,
    "unclassified": 0,
    "gaps": [
@@ -149,13 +149,6 @@
      "class": "interaction",
      "weight": 2.0,
      "text": "Drag a line's label across the line to put it on the other side",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i12",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a point or the center on the figure to rename it",
      "why": "no evidence"
     }
    ]
