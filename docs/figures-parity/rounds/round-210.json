@@ -1,0 +1,31 @@
+{
+ "round": 210,
+ "figure": "composite-shape",
+ "capability": "cap-i02",
+ "hypothesis": "Batch 5 composite-shape: cap-i02; evidence ui-test:figuresui::tests::composite_canvas_types_a_pieces_exact_sizes",
+ "started_at": "2026-11-09T20:02:11",
+ "git": "0ca39e2",
+ "before": {
+  "figure": 56.0,
+  "pooled": 90.3
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-09T20:02:43",
+ "after": {
+  "figure": 64.0,
+  "pooled": 90.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "editor",
+  "renders": []
+ },
+ "checker": "pass: clicks the piece and types its width and height; spec and render right",
+ "result": "hit",
+ "evidence": "8 canvas tests drive the workspace's composite canvas with pointer, text and key events (the editor teachers use; no figure handles), each judged by a checker; owner chose to credit the canvas via the probe's ui-test: token (agent-evo b95cf80); task run reference 5, ours 5",
+ "next": "composite-shape cap-i07 (after its re-check)"
+}

@@ -12,7 +12,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | bar-graph | `bar-chart` | 35 | 0 | 7 | — | 100 |
 | box-plot | `box-plot` | 37 | 0 | 6 | reference has a student version; ours has no show_answers | 90 |
 | circle | `circle` | 76 | 2 | 7 | — | 52 |
-| composite-shape | `composite-shape` | 9 | 10 | 3 | — | 56 |
+| composite-shape | `composite-shape` | 9 | 10 | 3 | — | 96 |
 | cone | `cone` | 26 | 4 | 6 | — | 91 |
 | coordinate-grid | `coordinate-grid` | 41 | 2 | 7 | — | 83 |
 | cumulative-frequency | `ogive` | 45 | 0 | 7 | — | 100 |
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-10T03:40:13+00:00 · probe: 2026-11-09T19:40:13
+Generated: 2026-11-10T04:03:00+00:00 · probe: 2026-11-09T20:02:59
 
-**Pooled 90.3** · mean 90.3 over 70 figures · built 71 of 71 reference figures
+**Pooled 90.7** · mean 90.9 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -121,13 +121,6 @@ Comparable with the frozen baseline: **yes**
   - cap-03b [control 3] One or both tangents from a point outside the circle — no evidence
   - cap-04e [control 3] Label any angle the lines make, not only ∠AOB and ∠ACB — no evidence
   - cap-04b [control 3] Label an angle with typed text — no evidence
-- `composite-shape`: 56 (28/50)
-  - cap-i02 [editor 4] Click a piece on the figure to type its exact sizes — no evidence
-  - cap-i03 [editor 4] Click a piece on the figure to delete it — no evidence
-  - cap-i05 [editor 4] Drag from a corner or the middle of a side to draw a line, such as a height — no evidence
-  - cap-i04 [interaction 2] Click a piece on the figure to shade it — no evidence
-  - cap-i06 [interaction 2] Click a side on the figure to label it with its length or text — no evidence
-  - cap-i07 [interaction 2] Click a side on the figure to give it congruence ticks, parallel arrows or a line style — no evidence
 - `transformations`: 61 (74/122)
   - cap-02a [editor 4] Add transformations one after another, each acting on the last image — no evidence
   - cap-01d [control 3] A label for each preimage vertex — no evidence
@@ -272,6 +265,8 @@ Comparable with the frozen baseline: **yes**
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `projectile-motion`: 96 (71/74)
   - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
+- `composite-shape`: 96 (48/50)
+  - cap-i07 [interaction 2] Click a side on the figure to give it congruence ticks, parallel arrows or a line style — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
 - `predator-prey`: 97 (93/96)

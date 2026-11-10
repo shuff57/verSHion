@@ -56,36 +56,36 @@
    "id": "cap-i02",
    "text": "Click a piece on the figure to type its exact sizes",
    "class": "editor",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: a selected rectangle opens Width and Height boxes."
+   "evidence": "ui-test:figuresui::tests::composite_canvas_types_a_pieces_exact_sizes",
+   "note": "Built in batch 5, round 210 (2026-11-10). From the page controls, not the bullets. Seen on the live page: a selected rectangle opens Width and Height boxes."
   },
   {
    "id": "cap-i03",
    "text": "Click a piece on the figure to delete it",
    "class": "editor",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the piece's pop-up has Delete."
+   "evidence": "ui-test:figuresui::tests::composite_canvas_deletes_a_piece_from_its_panel",
+   "note": "Built in batch 5, round 211 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the piece's pop-up has Delete."
   },
   {
    "id": "cap-i04",
    "text": "Click a piece on the figure to shade it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the piece's pop-up has Shading."
+   "evidence": "ui-test:figuresui::tests::composite_canvas_shades_a_piece_from_its_panel",
+   "note": "Built in batch 5, round 212 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the piece's pop-up has Shading."
   },
   {
    "id": "cap-i05",
    "text": "Drag from a corner or the middle of a side to draw a line, such as a height",
    "class": "editor",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: the Lines mode, 'draw heights and other lines'."
+   "evidence": "ui-test:figuresui::tests::composite_canvas_draws_a_height_with_the_line_tool",
+   "note": "Built in batch 5, round 213 (2026-11-10). From the page controls, not the bullets. Seen on the live page: the Lines mode, 'draw heights and other lines'."
   },
   {
    "id": "cap-i06",
    "text": "Click a side on the figure to label it with its length or text",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: Label mode, a side's pop-up has Label None/Measure/Text."
+   "evidence": "ui-test:figuresui::tests::composite_canvas_labels_a_side_with_its_length_or_text",
+   "note": "Built in batch 5, round 214 (2026-11-10). From the page controls, not the bullets. Seen on the live page: Label mode, a side's pop-up has Label None/Measure/Text."
   },
   {
    "id": "cap-i07",
@@ -98,15 +98,15 @@
    "id": "cap-i08",
    "text": "Click an angle on the figure to label it, mark it right or shade it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: Label mode, an angle's pop-up has Label, Right-angle mark and Shading."
+   "evidence": "ui-test:figuresui::tests::composite_canvas_labels_marks_and_shades_an_angle",
+   "note": "Built in batch 5, round 215 (2026-11-10). From the page controls, not the bullets. Seen on the live page: Label mode, an angle's pop-up has Label, Right-angle mark and Shading."
   },
   {
    "id": "cap-i09",
    "text": "Click a corner on the figure to show a named point there",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. Seen on the live page: Label mode, a corner's pop-up has Point."
+   "evidence": "ui-test:figuresui::tests::composite_canvas_shows_a_named_point_at_a_corner",
+   "note": "Built in batch 5, round 216 (2026-11-10). From the page controls, not the bullets. Seen on the live page: Label mode, a corner's pop-up has Point."
   }
  ]
 }

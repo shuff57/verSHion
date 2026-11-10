@@ -1,0 +1,29 @@
+{
+ "round": 216,
+ "figure": "composite-shape",
+ "capability": "cap-i09",
+ "hypothesis": "Batch 5 composite-shape: cap-i09; evidence ui-test:figuresui::tests::composite_canvas_shows_a_named_point_at_a_corner",
+ "started_at": "2026-11-09T20:02:56",
+ "git": "0ca39e2",
+ "before": {
+  "figure": 92.0,
+  "pooled": 90.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:03:00",
+ "after": {
+  "figure": 96.0,
+  "pooled": 90.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: names a point at a corner",
+ "result": "hit",
+ "evidence": "8 canvas tests drive the workspace's composite canvas with pointer, text and key events (the editor teachers use; no figure handles), each judged by a checker; owner chose to credit the canvas via the probe's ui-test: token (agent-evo b95cf80); task run reference 5, ours 5",
+ "next": "composite-shape cap-i07 (after its re-check)"
+}

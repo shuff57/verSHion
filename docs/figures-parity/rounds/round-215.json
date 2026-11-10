@@ -1,0 +1,29 @@
+{
+ "round": 215,
+ "figure": "composite-shape",
+ "capability": "cap-i08",
+ "hypothesis": "Batch 5 composite-shape: cap-i08; evidence ui-test:figuresui::tests::composite_canvas_labels_marks_and_shades_an_angle",
+ "started_at": "2026-11-09T20:02:52",
+ "git": "0ca39e2",
+ "before": {
+  "figure": 88.0,
+  "pooled": 90.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:02:56",
+ "after": {
+  "figure": 92.0,
+  "pooled": 90.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: labels, marks right and shades an angle",
+ "result": "hit",
+ "evidence": "8 canvas tests drive the workspace's composite canvas with pointer, text and key events (the editor teachers use; no figure handles), each judged by a checker; owner chose to credit the canvas via the probe's ui-test: token (agent-evo b95cf80); task run reference 5, ours 5",
+ "next": "composite-shape cap-i07 (after its re-check)"
+}

@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-09T19:40:13",
- "ours_built_at": "2026-11-10T03:39:11+00:00",
- "git": "d85e18f",
+ "checked_at": "2026-11-09T20:02:59",
+ "ours_built_at": "2026-11-10T04:02:10+00:00",
+ "git": "0ca39e2",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -4021,12 +4021,12 @@
       {
        "token": "changes:preset=Rectangle",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/1e608ad0a5ed913f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/912194fc2a88fa8d.png"
       },
       {
        "token": "changes:preset=Triangle",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/bcf9231e688c6a09.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/404a7d8aacfe9cc4.png"
       }
      ]
     },
@@ -4038,12 +4038,12 @@
       {
        "token": "changes:preset=L-shape",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/f9c399dc9e78ed09.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/eae694312deecd2a.png"
       },
       {
        "token": "changes:preset=House",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/58d8be1acbbc81e0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/ff41da630e9e6bfc.png"
       }
      ]
     },
@@ -4061,7 +4061,7 @@
       {
        "token": "changes:spec=rect 0 0 6 4; tri 0 4 6 4 3 7",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/cdebd968ca912202.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/d930abe2e97e6f10.png"
       }
      ]
     },
@@ -4073,17 +4073,17 @@
       {
        "token": "changes:preset=Semicircle",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/ebbadba3441c9bb7.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/fa14d67d59a127a7.png"
       },
       {
        "token": "changes:preset=Circle",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/8a5eae0c7753bb32.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/889462bcbab03696.png"
       },
       {
        "token": "changes:spec=rect 0 0 6 4; tri 0 4 6 4 3 7",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/cdebd968ca912202.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/d930abe2e97e6f10.png"
       }
      ]
     },
@@ -4095,17 +4095,17 @@
       {
        "token": "changes:preset=L-shape",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/f9c399dc9e78ed09.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/eae694312deecd2a.png"
       },
       {
        "token": "changes:preset=House",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/58d8be1acbbc81e0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/ff41da630e9e6bfc.png"
       },
       {
        "token": "changes:preset=Arch",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/de5b56f48208699f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/composite-shape/3924e3b209a6f32a.png"
       }
      ]
     },
@@ -4116,32 +4116,32 @@
      "renders": []
     },
     "cap-i02": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "editor",
      "renders": []
     },
     "cap-i03": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "editor",
      "renders": []
     },
     "cap-i04": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-i05": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "editor",
      "renders": []
     },
     "cap-i06": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
@@ -4152,14 +4152,14 @@
      "renders": []
     },
     "cap-i08": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
     "cap-i09": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     }

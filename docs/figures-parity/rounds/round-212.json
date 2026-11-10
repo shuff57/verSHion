@@ -1,0 +1,29 @@
+{
+ "round": 212,
+ "figure": "composite-shape",
+ "capability": "cap-i04",
+ "hypothesis": "Batch 5 composite-shape: cap-i04; evidence ui-test:figuresui::tests::composite_canvas_shades_a_piece_from_its_panel",
+ "started_at": "2026-11-09T20:02:45",
+ "git": "0ca39e2",
+ "before": {
+  "figure": 72.0,
+  "pooled": 90.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:02:47",
+ "after": {
+  "figure": 76.0,
+  "pooled": 90.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: shades the piece; export shaded",
+ "result": "hit",
+ "evidence": "8 canvas tests drive the workspace's composite canvas with pointer, text and key events (the editor teachers use; no figure handles), each judged by a checker; owner chose to credit the canvas via the probe's ui-test: token (agent-evo b95cf80); task run reference 5, ours 5",
+ "next": "composite-shape cap-i07 (after its re-check)"
+}

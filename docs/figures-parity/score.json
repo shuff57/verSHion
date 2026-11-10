@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-10T03:40:13+00:00",
- "probe_checked_at": "2026-11-09T19:40:13",
+ "generated_at": "2026-11-10T04:03:00+00:00",
+ "probe_checked_at": "2026-11-09T20:02:59",
  "comparable": true,
  "drift": [],
- "pooled": 90.3,
- "mean": 90.3,
+ "pooled": 90.7,
+ "mean": 90.9,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -343,65 +343,16 @@
    "gaps": []
   },
   "composite-shape": {
-   "score": 56.0,
-   "got": 28.0,
+   "score": 96.0,
+   "got": 48.0,
    "total": 50.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-i02",
-     "class": "editor",
-     "weight": 4.0,
-     "text": "Click a piece on the figure to type its exact sizes",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i03",
-     "class": "editor",
-     "weight": 4.0,
-     "text": "Click a piece on the figure to delete it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i05",
-     "class": "editor",
-     "weight": 4.0,
-     "text": "Drag from a corner or the middle of a side to draw a line, such as a height",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i04",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a piece on the figure to shade it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i06",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a side on the figure to label it with its length or text",
-     "why": "no evidence"
-    },
     {
      "id": "cap-i07",
      "class": "interaction",
      "weight": 2.0,
      "text": "Click a side on the figure to give it congruence ticks, parallel arrows or a line style",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i08",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click an angle on the figure to label it, mark it right or shade it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i09",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a corner on the figure to show a named point there",
      "why": "no evidence"
     }
    ]

@@ -1,0 +1,29 @@
+{
+ "round": 213,
+ "figure": "composite-shape",
+ "capability": "cap-i05",
+ "hypothesis": "Batch 5 composite-shape: cap-i05; evidence ui-test:figuresui::tests::composite_canvas_draws_a_height_with_the_line_tool",
+ "started_at": "2026-11-09T20:02:47",
+ "git": "0ca39e2",
+ "before": {
+  "figure": 76.0,
+  "pooled": 90.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-09T20:02:49",
+ "after": {
+  "figure": 84.0,
+  "pooled": 90.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "editor",
+  "renders": []
+ },
+ "checker": "pass: drags a height from a corner and from a side's middle; export dashed",
+ "result": "hit",
+ "evidence": "8 canvas tests drive the workspace's composite canvas with pointer, text and key events (the editor teachers use; no figure handles), each judged by a checker; owner chose to credit the canvas via the probe's ui-test: token (agent-evo b95cf80); task run reference 5, ours 5",
+ "next": "composite-shape cap-i07 (after its re-check)"
+}
