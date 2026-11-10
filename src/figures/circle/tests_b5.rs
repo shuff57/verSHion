@@ -919,3 +919,23 @@ fn a_letter_with_a_space_inside_it_is_refused() {
     let q = type_at(&p, at_dir(&p, 300.0, 1.0), " X ");
     assert_eq!(q.s("more_points"), "X 300");
 }
+
+#[test]
+fn a_letter_box_for_a_point_not_drawn_keeps_what_is_typed() {
+    // the batch 5 re-check: with B, C and M switched off their boxes refused every new letter
+    for (key, new) in [("name_b", "B7"), ("name_c", "C3"), ("name_m", "M1")] {
+        let mut p = with(&[("more_points", Value::S("D 300".into())), ("joins", Value::S("AD".into())), ("marks", Value::S("AD length".into()))]);
+        let old = Value::S(p.s(key).to_string());
+        let before = (def().render)(&p);
+        p.set_s(key, new);
+        crate::figures::after_panel_change("circle", key, &old, &mut p);
+        p.normalize(&(def().params)(), false);
+        assert_eq!(p.s(key), new, "{key}: the box keeps the new letter");
+        assert_eq!((def().render)(&p), before, "{key}: nothing drawn changes");
+    }
+    // a letter already in use is still refused
+    let mut p = with(&[("more_points", Value::S("D 300".into()))]);
+    p.set_s("name_b", "D");
+    crate::figures::after_panel_change("circle", "name_b", &Value::S("B".into()), &mut p);
+    assert_eq!(p.s("name_b"), "B");
+}

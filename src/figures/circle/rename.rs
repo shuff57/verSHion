@@ -215,6 +215,13 @@ pub fn panel_changed(key: &str, old: &Value, p: &mut Params) {
     // the figure keeps the first three characters after trimming, so `PQ R` reads as `PQ ` with a space in it, which no
     // row can name: refuse it like any other letter the figure cannot read back (the batch 5 checker)
     if to.chars().any(char::is_whitespace) { p.set_s(key, old); return; }
+    // a point that is not drawn yet (B, C or M switched off) has nothing to carry: its box is a plain letter, as before rename
+    // existed, so a teacher can letter it before ticking it on; only a letter already in use is refused (the batch 5 re-check)
+    let (pts0, free0) = (edit::circle_points(&before), pts::free_points(&before));
+    if edit::find_named(&before, &pts0, &free0, &from).is_none() {
+        if refusal(&before, &from, &to).is_some() { p.set_s(key, old); }
+        return;
+    }
     let typed = p.s(key).to_string();
     if rename(&mut before, &from, &to) {
         // keep what was typed in the box (spaces and all); the rows carry the effective letter
