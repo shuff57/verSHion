@@ -22,6 +22,8 @@ mod examples;
 mod ray_diagram_frozen;
 #[cfg(test)]
 mod vector_b8_frozen;
+#[cfg(test)]
+mod pulley_b10_frozen;
 mod summary;
 
 /// The choices of a vector's "Measured from" and "Angle label" (the Vectors card draws them).
