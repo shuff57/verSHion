@@ -70,8 +70,8 @@
    "id": "cap-04c",
    "text": "Pick the length and position at random",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"length\":7.97,\"start\":6.59}",
+   "note": "Built in batch 9, round 345 (2026-11-11)."
   },
   {
    "id": "cap-04d",

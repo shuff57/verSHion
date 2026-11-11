@@ -21,8 +21,8 @@
    "id": "cap-02b",
    "text": "Pick the volume at random",
    "class": "control",
-   "evidence": "",
-   "note": "No random button or handle. Re-classed control: random/shuffle buttons are panel controls (owner decision 2026-11-08)."
+   "evidence": "changes:volume=12.2",
+   "note": "Built in batch 9, round 343 (2026-11-11). No random button or handle. Re-classed control: random/shuffle buttons are panel controls (owner decision 2026-11-08)."
   },
   {
    "id": "cap-03a",

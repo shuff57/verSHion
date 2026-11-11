@@ -1,0 +1,37 @@
+{
+ "round": 342,
+ "figure": "volume-by-displacement",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 9 volume-by-displacement: cap-03b; evidence changes:{\"before\":5.7,\"after\":6.87}",
+ "started_at": "2026-11-11T14:23:36",
+ "git": "b8df669",
+ "before": {
+  "figure": 94.8,
+  "pooled": 97.6
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T14:23:44",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"before\":5.7,\"after\":6.87}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/volume-by-displacement/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/volume-by-displacement/99485c9b438014f0.png"
+   }
+  ]
+ },
+ "checker": "pass: after above before, object 5 to 25% of the cylinder, about 48,000 picks clean",
+ "result": "hit",
+ "evidence": "readings_b9 and ruler_b9 tests (12: random picks on every instrument, size, unit and mode within the scale and the box's range, key matches the drawing, saved figures redraw; probe decimals; 600 mL beaker); readings_b9_frozen (1,605 old figures and links byte for byte); batch 7 fixtures unchanged; census unchanged; no task run (builder on the NAS): one click on Random",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); flat shapes (NAS); student versions (pc2)"
+}

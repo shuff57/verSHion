@@ -1,0 +1,37 @@
+{
+ "round": 343,
+ "figure": "micropipette-reading",
+ "capability": "cap-02b",
+ "hypothesis": "Batch 9 micropipette-reading: cap-02b; evidence changes:volume=12.2",
+ "started_at": "2026-11-11T14:23:55",
+ "git": "b8df669",
+ "before": {
+  "figure": 89.3,
+  "pooled": 97.6
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T14:24:02",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:volume=12.2",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/micropipette-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/micropipette-reading/db672e67af9a21f7.png"
+   }
+  ]
+ },
+ "checker": "pass: button existed since batch 2; every size within its range in its own steps",
+ "result": "hit",
+ "evidence": "readings_b9 and ruler_b9 tests (12: random picks on every instrument, size, unit and mode within the scale and the box's range, key matches the drawing, saved figures redraw; probe decimals; 600 mL beaker); readings_b9_frozen (1,605 old figures and links byte for byte); batch 7 fixtures unchanged; census unchanged; no task run (builder on the NAS): one click on Random",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); flat shapes (NAS); student versions (pc2)"
+}

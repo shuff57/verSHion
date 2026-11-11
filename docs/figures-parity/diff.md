@@ -19,7 +19,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | cylinder | `cylinder` | 31 | 4 | 6 | — | 100 |
 | histogram | `histogram` | 34 | 0 | 8 | — | 100 |
 | kite | `kite` | 57 | 10 | 5 | — | 93 |
-| length-reading | `ruler-reading` | 17 | 3 | 6 | — | 95 |
+| length-reading | `ruler-reading` | 17 | 3 | 6 | — | 100 |
 | mapping-diagram | `mapping-diagram` | 14 | 0 | 4 | reference mentions click/drag; ours has no handles; reference has a student version; ours has no show_answers | 100 |
 | number-line | `number-line` | 30 | 0 | 6 | — | 100 |
 | parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 100 |
@@ -50,7 +50,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | projectile-motion | `projectile-motion` | 31 | 4 | 7 | reference has black-and-white; ours has no style switch | 96 |
 | pulley | `pulley` | 38 | 6 | 7 | reference has black-and-white; ours has no style switch | 90 |
 | ray-diagram | `ray-diagram` | 52 | 2 | 8 | reference has black-and-white; ours has no style switch | 100 |
-| spring-scale | `spring-scale` | 15 | 4 | 7 | reference has black-and-white; ours has no style switch | 94 |
+| spring-scale | `spring-scale` | 15 | 4 | 7 | reference has black-and-white; ours has no style switch | 100 |
 | vector-diagram | `vector-diagram` | 56 | 5 | 5 | reference has black-and-white; ours has no style switch | 90 |
 | waves | `waves` | 37 | 7 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 97 |
 
@@ -60,7 +60,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 |---|---|---:|---:|---:|---|---:|
 | bohr-model | `bohr-model` | 21 | 2 | 6 | reference has a student version; ours has no show_answers | 92 |
 | dot-and-cross | `dot-and-cross` | 16 | 4 | 7 | — | 100 |
-| gas-syringe | `gas-syringe` | 9 | 1 | 5 | — | 91 |
+| gas-syringe | `gas-syringe` | 9 | 1 | 5 | — | 100 |
 | half-life-graph | `half-life-graph` | 36 | 1 | 6 | reference adds/removes rows; ours has no list/data/text-table control | 100 |
 | heating-cooling-curve | `heating-cooling-curve` | 55 | 8 | 6 | — | 100 |
 | length-reading | `length-reading` | 24 | 3 | 9 | — | 100 |
@@ -75,10 +75,10 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | photoelectron-spectrum | `photoelectron-spectrum` | 18 | 1 | 6 | reference has a student version; ours has no show_answers | 100 |
 | potential-energy-diagram | `reaction-energy-diagram` | 60 | 3 | 7 | — | 100 |
 | structure-editor | `organic-structure` | 9 | 0 | 4 | reference mentions click/drag; ours has no handles | 100 |
-| temperature-reading | `temperature-reading` | 10 | 1 | 5 | — | 88 |
+| temperature-reading | `temperature-reading` | 10 | 1 | 5 | — | 100 |
 | titration-curve | `titration-curve` | 46 | 2 | 5 | — | 100 |
-| volume-by-displacement | `volume-by-displacement` | 19 | 4 | 7 | — | 95 |
-| volume-reading | `volume-reading` | 13 | 1 | 7 | — | 90 |
+| volume-by-displacement | `volume-by-displacement` | 19 | 4 | 7 | — | 100 |
+| volume-reading | `volume-reading` | 13 | 1 | 7 | — | 100 |
 
 ## biology
 
@@ -87,7 +87,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | dna-protein-synthesis | `dna-protein-synthesis` | 32 | 0 | 8 | — | 100 |
 | enzyme-activity | `enzyme-kinetics` | 52 | 1 | 6 | — | 100 |
 | gel-electrophoresis | `gel-electrophoresis` | 18 | 17 | 8 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 97 |
-| micropipette-reading | `micropipette-reading` | 10 | 5 | 6 | reference has black-and-white; ours has no style switch | 89 |
+| micropipette-reading | `micropipette-reading` | 10 | 5 | 6 | reference has black-and-white; ours has no style switch | 100 |
 | osmosis | `osmosis` | 46 | 0 | 7 | — | 100 |
 | pedigree | `pedigree` | 17 | 1 | 8 | reference has a student version; ours has no show_answers | 95 |
 | photosynthesis-rate | `photosynthesis` | 51 | 0 | 8 | — | 100 |
@@ -101,21 +101,16 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-11T19:36:11+00:00 · probe: 2026-11-11T11:36:11
+Generated: 2026-11-11T22:24:26+00:00 · probe: 2026-11-11T14:24:26
 
-**Pooled 97.3** · mean 97.1 over 70 figures · built 71 of 71 reference figures
+**Pooled 97.8** · mean 98.0 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `temperature-reading`: 88 (42/48)
-  - cap-02c [control 3] The digital probe showing 2 decimal places — no evidence
-  - cap-03b [control 3] Pick a random temperature — no evidence
 - `regular-polygon`: 89 (70/79)
   - cap-02d [control 3] Type the size as a fraction — no evidence
   - cap-02e [control 3] Type the size as a square root — no evidence
   - cap-04h [control 3] Give the apothem, the radius and the radii each their own solid, dashed or dotted style — no evidence
-- `micropipette-reading`: 89 (25/28)
-  - cap-02b [control 3] Pick the volume at random — no evidence
 - `trapezoid`: 89 (76/85)
   - cap-04f [control 3] Give each height and diagonal its own solid, dashed or dotted style — no evidence
   - cap-05a [control 3] Name the point where a height lands — no evidence
@@ -126,9 +121,6 @@ Comparable with the frozen baseline: **yes**
 - `vector-diagram`: 90 (51/57)
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
-- `volume-reading`: 90 (53/59)
-  - cap-01d [control 3] A 600 mL beaker — no evidence
-  - cap-04b [control 3] Pick a random reading — no evidence
 - `pulley`: 90 (92/102)
   - cap-03c [core 5] On a table or ramp, set the second object touching the first instead — no evidence
   - cap-06e [core 5] The contact forces between objects touching — no evidence
@@ -136,8 +128,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04i [control 3] Give each height and diagonal its own solid, dashed or dotted style — no evidence
   - cap-05a [control 3] Name the point where a height lands — no evidence
   - cap-05b [control 3] Name the point where the diagonals cross — no evidence
-- `gas-syringe`: 91 (29/32)
-  - cap-03b [control 3] Pick a random volume (0 to full scale, one decimal place) — no evidence
 - `pyramid`: 92 (69/75)
   - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
@@ -155,18 +145,12 @@ Comparable with the frozen baseline: **yes**
 - `rectangle`: 93 (80/86)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
-- `spring-scale`: 94 (48/51)
-  - cap-03b [control 3] Pick the force at random — no evidence
 - `punnett-square`: 94 (85/90)
   - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
   - cap-05d [interaction 2] Click a cell to blank it — no evidence
 - `pedigree`: 95 (90/95)
   - cap-03 [control 3] Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness,  — no evidence
   - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
-- `volume-by-displacement`: 95 (55/58)
-  - cap-03b [control 3] Pick random before and after readings — no evidence
-- `ruler-reading`: 95 (59/62)
-  - cap-04c [control 3] Pick the length and position at random — no evidence
 - `population-growth`: 95 (125/131)
   - cap-03a [control 3] Load one of ten setups (yeast in a flask, bacteria doubling every hour, deer on an island, boom and crash...) — no evidence
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
@@ -194,6 +178,7 @@ Comparable with the frozen baseline: **yes**
 - `dna-protein-synthesis`: 100 (102/102)
 - `dot-and-cross`: 100 (56/56)
 - `enzyme-kinetics`: 100 (85/85)
+- `gas-syringe`: 100 (32/32)
 - `half-life-graph`: 100 (84/84)
 - `heating-cooling-curve`: 100 (96/96)
 - `histogram`: 100 (90/90)
@@ -204,6 +189,7 @@ Comparable with the frozen baseline: **yes**
 - `mapping-diagram`: 100 (36/36)
 - `mass-reading`: 100 (63/63)
 - `mass-spectrum`: 100 (49/49)
+- `micropipette-reading`: 100 (28/28)
 - `motion-graphs`: 100 (89/89)
 - `motion-map`: 100 (87/87)
 - `nuclide-notation`: 100 (78/78)
@@ -220,8 +206,13 @@ Comparable with the frozen baseline: **yes**
 - `prism`: 100 (94/94)
 - `ray-diagram`: 100 (115/115)
 - `reaction-energy-diagram`: 100 (101/101)
+- `ruler-reading`: 100 (62/62)
 - `sphere`: 100 (35/35)
+- `spring-scale`: 100 (51/51)
 - `stem-and-leaf`: 100 (67/67)
+- `temperature-reading`: 100 (48/48)
 - `titration-curve`: 100 (64/64)
 - `two-way-table`: 100 (68/68)
 - `venn-diagram`: 100 (53/53)
+- `volume-by-displacement`: 100 (58/58)
+- `volume-reading`: 100 (59/59)

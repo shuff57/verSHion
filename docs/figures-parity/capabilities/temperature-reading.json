@@ -49,8 +49,8 @@
    "id": "cap-02c",
    "text": "The digital probe showing 2 decimal places",
    "class": "control",
-   "evidence": "",
-   "note": "Wider form of cap-02b: ours offers 0 or 0.1 only."
+   "evidence": "changes:{\"thermometer\":\"Digital probe\",\"places\":\"0.01\"}",
+   "note": "Built in batch 9, round 337 (2026-11-11). Wider form of cap-02b: ours offers 0 or 0.1 only."
   },
   {
    "id": "cap-03a",
@@ -63,8 +63,8 @@
    "id": "cap-03b",
    "text": "Pick a random temperature",
    "class": "control",
-   "evidence": "",
-   "note": "No random control in ours."
+   "evidence": "changes:temperature=58",
+   "note": "Built in batch 9, round 338 (2026-11-11). No random control in ours."
   },
   {
    "id": "cap-04a",

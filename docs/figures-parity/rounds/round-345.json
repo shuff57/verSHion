@@ -1,0 +1,37 @@
+{
+ "round": 345,
+ "figure": "ruler-reading",
+ "capability": "cap-04c",
+ "hypothesis": "Batch 9 ruler-reading: cap-04c; evidence changes:{\"length\":7.97,\"start\":6.59}",
+ "started_at": "2026-11-11T14:24:23",
+ "git": "b8df669",
+ "before": {
+  "figure": 95.2,
+  "pooled": 97.7
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T14:24:26",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"length\":7.97,\"start\":6.59}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ruler-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ruler-reading/a7a2b5d4cbb53cfd.png"
+   }
+  ]
+ },
+ "checker": "pass: length and left end on the keyed precision, object on the ruler, saved figures redraw",
+ "result": "hit",
+ "evidence": "readings_b9 and ruler_b9 tests (12: random picks on every instrument, size, unit and mode within the scale and the box's range, key matches the drawing, saved figures redraw; probe decimals; 600 mL beaker); readings_b9_frozen (1,605 old figures and links byte for byte); batch 7 fixtures unchanged; census unchanged; no task run (builder on the NAS): one click on Random",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); flat shapes (NAS); student versions (pc2)"
+}

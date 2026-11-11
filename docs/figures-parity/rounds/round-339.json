@@ -1,0 +1,37 @@
+{
+ "round": 339,
+ "figure": "volume-reading",
+ "capability": "cap-01d",
+ "hypothesis": "Batch 9 volume-reading: cap-01d; evidence changes:{\"instrument\":\"Beaker\",\"size\":\"600 mL\"}",
+ "started_at": "2026-11-11T14:23:23",
+ "git": "b8df669",
+ "before": {
+  "figure": 89.8,
+  "pooled": 97.4
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T14:23:24",
+ "after": {
+  "figure": 94.9,
+  "pooled": 97.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"instrument\":\"Beaker\",\"size\":\"600 mL\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/volume-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/volume-reading/b6104e89b7526694.png"
+   }
+  ]
+ },
+ "checker": "pass: marks every 50 mL numbered every 100 to 500, meniscus measured on the 300 and 500 marks",
+ "result": "hit",
+ "evidence": "readings_b9 and ruler_b9 tests (12: random picks on every instrument, size, unit and mode within the scale and the box's range, key matches the drawing, saved figures redraw; probe decimals; 600 mL beaker); readings_b9_frozen (1,605 old figures and links byte for byte); batch 7 fixtures unchanged; census unchanged; no task run (builder on the NAS): one click on Random",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); flat shapes (NAS); student versions (pc2)"
+}

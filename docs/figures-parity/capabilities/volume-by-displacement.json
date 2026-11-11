@@ -49,8 +49,8 @@
    "id": "cap-03b",
    "text": "Pick random before and after readings",
    "class": "control",
-   "evidence": "",
-   "note": "No random control in ours."
+   "evidence": "changes:{\"before\":5.7,\"after\":6.87}",
+   "note": "Built in batch 9, round 342 (2026-11-11). No random control in ours."
   },
   {
    "id": "cap-03c",

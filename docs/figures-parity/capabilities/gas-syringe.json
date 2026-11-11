@@ -35,8 +35,8 @@
    "id": "cap-03b",
    "text": "Pick a random volume (0 to full scale, one decimal place)",
    "class": "control",
-   "evidence": "",
-   "note": "No random control in ours."
+   "evidence": "changes:volume=56.7",
+   "note": "Built in batch 9, round 341 (2026-11-11). No random control in ours."
   },
   {
    "id": "cap-04a",

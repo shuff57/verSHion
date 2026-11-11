@@ -1,0 +1,35 @@
+{
+ "round": 338,
+ "figure": "temperature-reading",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 9 temperature-reading: cap-03b; evidence changes:temperature=58",
+ "started_at": "2026-11-11T14:23:18",
+ "git": "b8df669",
+ "before": {
+  "figure": 93.8,
+  "pooled": 97.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T14:23:20",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:temperature=58",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/temperature-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/temperature-reading/941f1dea0f8f19e6.png"
+   }
+  ]
+ },
+ "checker": "pass after one fix: the °F probe's random range ran below the box's minimum (saved as -50); range now starts at -50, with a test; other units sampled clean",
+ "result": "hit",
+ "evidence": "readings_b9 and ruler_b9 tests (12: random picks on every instrument, size, unit and mode within the scale and the box's range, key matches the drawing, saved figures redraw; probe decimals; 600 mL beaker); readings_b9_frozen (1,605 old figures and links byte for byte); batch 7 fixtures unchanged; census unchanged; no task run (builder on the NAS): one click on Random",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); flat shapes (NAS); student versions (pc2)"
+}

@@ -28,8 +28,8 @@
    "id": "cap-01d",
    "text": "A 600 mL beaker",
    "class": "control",
-   "evidence": "",
-   "note": "Wider form of cap-01c: 600 mL is not in ours' size list."
+   "evidence": "changes:{\"instrument\":\"Beaker\",\"size\":\"600 mL\"}",
+   "note": "Built in batch 9, round 339 (2026-11-11). Wider form of cap-01c: 600 mL is not in ours' size list."
   },
   {
    "id": "cap-02a",
@@ -70,8 +70,8 @@
    "id": "cap-04b",
    "text": "Pick a random reading",
    "class": "control",
-   "evidence": "",
-   "note": "No random control in ours."
+   "evidence": "changes:reading=56.7",
+   "note": "Built in batch 9, round 340 (2026-11-11). No random control in ours."
   },
   {
    "id": "cap-04c",

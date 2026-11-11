@@ -1,0 +1,35 @@
+{
+ "round": 340,
+ "figure": "volume-reading",
+ "capability": "cap-04b",
+ "hypothesis": "Batch 9 volume-reading: cap-04b; evidence changes:reading=56.7",
+ "started_at": "2026-11-11T14:23:24",
+ "git": "b8df669",
+ "before": {
+  "figure": 94.9,
+  "pooled": 97.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T14:23:25",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:reading=56.7",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/volume-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/volume-reading/3bc93609fa0f9a18.png"
+   }
+  ]
+ },
+ "checker": "pass: 2,800 seeds within each scale at the figure's reading places; saved figures redraw",
+ "result": "hit",
+ "evidence": "readings_b9 and ruler_b9 tests (12: random picks on every instrument, size, unit and mode within the scale and the box's range, key matches the drawing, saved figures redraw; probe decimals; 600 mL beaker); readings_b9_frozen (1,605 old figures and links byte for byte); batch 7 fixtures unchanged; census unchanged; no task run (builder on the NAS): one click on Random",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); flat shapes (NAS); student versions (pc2)"
+}

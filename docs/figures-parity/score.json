@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T19:36:11+00:00",
- "probe_checked_at": "2026-11-11T11:36:11",
+ "generated_at": "2026-11-11T22:24:26+00:00",
+ "probe_checked_at": "2026-11-11T14:24:26",
  "comparable": true,
  "drift": [],
- "pooled": 97.3,
- "mean": 97.1,
+ "pooled": 97.8,
+ "mean": 98.0,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -147,19 +147,11 @@
    ]
   },
   "gas-syringe": {
-   "score": 90.6,
-   "got": 29.0,
+   "score": 100.0,
+   "got": 32.0,
    "total": 32.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Pick a random volume (0 to full scale, one decimal place)",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "gel-electrophoresis": {
    "score": 96.7,
@@ -269,19 +261,11 @@
    "gaps": []
   },
   "micropipette-reading": {
-   "score": 89.3,
-   "got": 25.0,
+   "score": 100.0,
+   "got": 28.0,
    "total": 28.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Pick the volume at random",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "motion-graphs": {
    "score": 100.0,
@@ -638,19 +622,11 @@
    ]
   },
   "ruler-reading": {
-   "score": 95.2,
-   "got": 59.0,
+   "score": 100.0,
+   "got": 62.0,
    "total": 62.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Pick the length and position at random",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "sphere": {
    "score": 100.0,
@@ -660,19 +636,11 @@
    "gaps": []
   },
   "spring-scale": {
-   "score": 94.1,
-   "got": 48.0,
+   "score": 100.0,
+   "got": 51.0,
    "total": 51.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Pick the force at random",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "stem-and-leaf": {
    "score": 100.0,
@@ -682,26 +650,11 @@
    "gaps": []
   },
   "temperature-reading": {
-   "score": 87.5,
-   "got": 42.0,
+   "score": 100.0,
+   "got": 48.0,
    "total": 48.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "The digital probe showing 2 decimal places",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Pick a random temperature",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "titration-curve": {
    "score": 100.0,
@@ -813,41 +766,18 @@
    "gaps": []
   },
   "volume-by-displacement": {
-   "score": 94.8,
-   "got": 55.0,
+   "score": 100.0,
+   "got": 58.0,
    "total": 58.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Pick random before and after readings",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "volume-reading": {
-   "score": 89.8,
-   "got": 53.0,
+   "score": 100.0,
+   "got": 59.0,
    "total": 59.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "A 600 mL beaker",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Pick a random reading",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "waves": {
    "score": 97.0,
