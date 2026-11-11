@@ -707,8 +707,32 @@ pub fn chips_for(id: &str) -> Option<ChipsCard> {
 pub fn card_keys(id: &str) -> &'static [&'static str] {
     match id {
         "pedigree" => &["inherit", "gens", "size", "seed", "changes", "family"],
+        // each equation's line, thickness and arrows live in its row's style menu (batch 7)
+        "coordinate-grid" => &math::GRID_ROW_STYLE_KEYS,
         _ => &[],
     }
+}
+
+/// A number typed into a figure's number box: a plain number for every figure, as always; the coordinate grid's
+/// ranges also take a fraction or mixed number (-7/2, 3 1/2), which numbers that axis in fractions.
+pub fn typed_float(fig: &str, key: &str, text: &str, p: &mut Params) -> Option<f64> {
+    match fig {
+        "coordinate-grid" => math::grid_typed_float(key, text, p),
+        _ => text.trim().parse::<f64>().ok(),
+    }
+}
+
+/// How a figure shows a number box's value when it has its own way (None: the usual decimal).
+pub fn float_text(fig: &str, key: &str, p: &Params) -> Option<String> {
+    match fig {
+        "coordinate-grid" => math::grid_float_text(key, p),
+        _ => None,
+    }
+}
+
+/// The style choices a row's colour menu also offers, by the row's colour key: (key, label, options).
+pub fn row_style_keys(colour_key: &str) -> Vec<(&'static str, &'static str, &'static [&'static str])> {
+    math::grid_row_style_keys(colour_key)
 }
 
 /// The Measures card of a figure, if it has one (math shapes and solids contribute).

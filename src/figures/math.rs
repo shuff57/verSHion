@@ -2159,6 +2159,8 @@ pub(crate) use parallel::handles as parallel_handles;
 mod angles;
 pub(crate) use angles::handles as angles_handles;
 mod grid_b7;
+pub(super) use grid_b7::{circle_room as grid_circle_room, label_ext as grid_label_ext};
+pub(super) use grid_b7::{float_text as grid_float_text, row_style_keys as grid_row_style_keys, typed_range as grid_typed_float, ROW_STYLE_KEYS as GRID_ROW_STYLE_KEYS};
 use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
 
 // ───────────────────────── coordinate grid ─────────────────────────
@@ -2249,7 +2251,10 @@ impl<'a> Ev<'a> {
                     let a = self.arg()?;
                     return Some(a.ln() / base.ln());
                 }
-                let known = ["sqrt", "abs", "sin", "cos", "tan", "sec", "csc", "cot", "arcsin", "arccos", "arctan", "asin", "acos", "atan", "ln", "log", "exp"];
+                // (batch 7) sin^-1(x), sin^(-1)(x) and sin⁻¹(x) are arcsin(x), and so for the other five: before, a power
+                // between a function's name and its bracket was never read, so these were all "Cannot read"
+                let name = grid_b7::inverse_spelling(self.s, &mut self.i, name);
+                let known = ["sqrt", "abs", "sin", "cos", "tan", "sec", "csc", "cot", "arcsin", "arccos", "arctan", "asin", "acos", "atan", "ln", "log", "exp", "arcsec", "arccsc", "arccot", "asec", "acsc", "acot"];
                 if !known.contains(&name.as_str()) {
                     // implicit product of a known prefix, e.g. "xsin(x)" is rare; give up cleanly
                     if name.starts_with('x') { self.i = st + 1; return Some(self.x); }
@@ -2265,6 +2270,7 @@ impl<'a> Ev<'a> {
                     "sin" => (a * to_r).sin(), "cos" => (a * to_r).cos(), "tan" => (a * to_r).tan(),
                     "sec" => 1.0 / (a * to_r).cos(), "csc" => 1.0 / (a * to_r).sin(), "cot" => 1.0 / (a * to_r).tan(),
                     "arcsin" | "asin" => a.asin() * from_r, "arccos" | "acos" => a.acos() * from_r, "arctan" | "atan" => a.atan() * from_r,
+                    "arcsec" | "asec" | "arccsc" | "acsc" | "arccot" | "acot" => grid_b7::arc_recip(&name, a) * from_r,
                     _ => return None,
                 })
             }
@@ -2839,7 +2845,7 @@ fn thin_polyline(p: &[Pt]) -> Vec<Pt> {
 const NUM_EVERY_LINE: [&str; 5] = ["Every line", "Every 2nd line", "Every 5th line", "Every 10th line", "No numbers"];
 
 fn coordinate_grid_params() -> Vec<ParamDef> {
-    vec![
+    let mut v = vec![
         ParamDef::float("xmin", "x-axis from", -1000.0, 1000.0, 1.0, 0.0),
         ParamDef::float("xmax", "x-axis to", -1000.0, 1000.0, 1.0, 15.0),
         ParamDef::float("xstep", "x-axis count by", 0.05, 180.0, 0.5, 1.0),
@@ -2890,7 +2896,10 @@ fn coordinate_grid_params() -> Vec<ParamDef> {
         super::answers_param(),
         ParamDef::bool("student_shading", "Keep the shading on the student copy (when the question asks students to identify the region)", false),
         ParamDef::bool("show_notes", "Write notes on the figure (a curve outside the window, rows that could not be drawn)", false),
-    ]
+    ];
+    // (batch 7: each row's line, thickness and arrows, each axis end, fraction numbering; every default draws as before)
+    v.extend(grid_b7::params());
+    v
 }
 
 /// The reference's three label sizes scale every label of the coordinate grid and the number
@@ -2917,8 +2926,8 @@ pub(super) fn grid_layout(p: &Params) -> GridL {
     let title = match p.s("title_mode") { "None" => false, "Blank line" => true, _ => !p.s("title").is_empty() };
     // the margins grow with the labels: 1.2 / 1.3 px for each px the tick numbers grow
     let dn = 14.0 * (lscale(p) - 1.0);
-    let ml = 38.8 + 1.2 * dn + if p.s("ytitle_mode") == "Text" || p.s("ytitle_mode") == "Blank line" { 26.0 } else { 0.0 };
-    GridL { x0, x1, y0, y1, xs, ys, ux, uy, ml, mt: (if title { 88.2 } else { 56.2 }) + 1.3 * dn, pw, ph }
+    let ml = 38.8 + 1.2 * dn + if p.s("ytitle_mode") == "Text" || p.s("ytitle_mode") == "Blank line" { 26.0 } else { 0.0 } + grid_b7::y_frac_room(p, y0, y1, ys, 38.8 + 1.2 * dn);
+    GridL { x0, x1, y0, y1, xs, ys, ux, uy, ml, mt: (if title { 88.2 } else { 56.2 }) + 1.3 * dn + grid_b7::circle_room(p).1, pw, ph }
 }
 
 /// "3π/4"-style label for v (in real units) when the axis counts in multiples of π.
@@ -3036,6 +3045,10 @@ fn coordinate_grid_render(p: &Params) -> String { coordinate_grid_build(p, &mut 
 pub fn grid_warnings(p: &Params) -> Vec<String> {
     let mut notes = vec![];
     let _ = coordinate_grid_build(p, &mut notes);
+    // (batch 7: a reversed or zero-width range is said in the editor only, so the figure draws as it always has)
+    let mut pn = p.clone();
+    pn.normalize(&coordinate_grid_params(), false);
+    notes.extend(grid_b7::range_notes(&pn));
     notes
 }
 
@@ -3065,7 +3078,7 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
     let xtitle = p.s("xtitle_mode") == "Text" || p.s("xtitle_mode") == "Blank line";
     let ls = lscale(p);
     let dn = 14.0 * (ls - 1.0);
-    let (mr, mb) = (52.5 + 0.75 * dn, 36.0 + dn + if xtitle { 26.0 } else { 0.0 });
+    let (mr, mb) = (52.5 + 0.75 * dn + grid_b7::circle_room(p).0, 36.0 + dn + if xtitle { 26.0 } else { 0.0 });
     let (w, h) = (pw + ml + mr, ph + mt + mb);
     let mut d = new_doc(w, h);
     let sx = |x: f64| ml + (x - x0) * ux;
@@ -3088,14 +3101,17 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
         for m in [2i64, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 1000000] { if (every * m) as f64 * unit_px - widest >= 6.0 { return every * m; } }
         every * 1000000
     };
-    let lab_of = |v: f64| if pi_mode { pi_label(v) } else if deg { format!("{}\u{b0}", fmt(v, 3)) } else { fmt(v, 3) };
+    let (xfrac, yfrac) = (p.b("x_fractions"), p.b("y_fractions"));
+    let lab_of = |v: f64| if pi_mode { pi_label(v) } else if deg { format!("{}\u{b0}", fmt(v, 3)) } else if xfrac { grid_b7::frac_text(v).unwrap_or_else(|| fmt(v, 3)) } else { fmt(v, 3) };
+    // (batch 7) the y numbers as fractions when asked; otherwise exactly as before
+    let lab_y = |v: f64| if yfrac { grid_b7::frac_text(v).unwrap_or_else(|| fmt(v, 3)) } else { fmt(v, 3) };
     let (xe_eff, ye_eff) = if !p.b("numbers") { (0, 0) } else {
     let (xe, ye) = (every_n(p.s("xnum")), every_n(p.s("ynum")));
     let xe = if xe > 0 {
         let ws: Vec<f64> = (0..MAX_LINES).map(|i| (x0 / xs - 1e-9).ceil() + i as f64).take_while(|k| k * xs <= x1 + 1e-9).filter(|k| (*k as i64).rem_euclid(xe) == 0).map(|k| cw(&lab_of(k * xs))).collect();
         // (widths of the numbers `xe` lines apart, so the gap is measured between numbers that are really drawn)
         // (numbers beside a conic or in Print keep 4 px between them, the plain figure 0.5 px)
-        thin(xe, xs * ux, &ws, if late { 1.0 } else { 0.5 })
+        thin(xe, xs * ux, &ws, if late { 1.0 } else if xfrac { 3.0 } else { 0.5 })
     } else { xe };
     // (a number is about 10 px tall: the rows keep 6 px between them, so a row at least 16 px from the next)
     let ye = thin(ye, ys * uy, &[15.5, 15.5], 0.5);
@@ -3109,7 +3125,7 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
         let ax = sx(if x0 <= 0.0 && x1 >= 0.0 { 0.0 } else { x0 });
         let xrow = if ay + 18.0 > mt + ph + 30.0 { ay - 9.0 } else { ay + 20.0 + dn };
         let bx = |x: f64, y: f64, an: &str, t: &str| -> [f64; 4] { let w = cw(t); let (a, b) = match an { "end" => (x - w, x), "start" => (x, x + w), _ => (x - 0.5 * w, x + 0.5 * w) }; [a, y - 10.0 * ls, b, y + 0.5 * ls] };
-        let ybs: Vec<[f64; 4]> = (0..MAX_LINES).map(|i| (y0 / ys - 1e-9).ceil() + i as f64).take_while(|k| k * ys <= y1 + 1e-9).filter(|k| (*k as i64).rem_euclid(ye_eff) == 0 && k.abs() > 1e-9 && (sy(k * ys) - ay).abs() < 90.0).map(|k| bx(ax - 6.0, sy(k * ys) + 4.1 + 0.35 * dn, "end", &fmt(k * ys, 3))).collect();
+        let ybs: Vec<[f64; 4]> = (0..MAX_LINES).map(|i| (y0 / ys - 1e-9).ceil() + i as f64).take_while(|k| k * ys <= y1 + 1e-9).filter(|k| (*k as i64).rem_euclid(ye_eff) == 0 && k.abs() > 1e-9 && (sy(k * ys) - ay).abs() < 90.0).map(|k| bx(ax - 6.0, sy(k * ys) + 4.1 + 0.35 * dn, "end", &lab_y(k * ys))).collect();
         let mut chosen = xe_eff;
         for m in [1i64, 2, 5, 10, 20, 50, 100, 1000] {
             let e = xe_eff * m;
@@ -3168,7 +3184,10 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
     let ax_x = if x0 <= 0.0 && x1 >= 0.0 { 0.0 } else { x0 };
     let ext = if p.b("arrows") { 20.0 } else { 0.0 };
     let (axy, axx) = (sy(ax_y), sx(ax_x));
-    if p.b("arrows") {
+    // (batch 7) an end set on its own draws every end through grid_b7; all four Automatic draw exactly as before
+    if let Some(ends) = grid_b7::axis_ends(p) {
+        grid_b7::draw_axes(&mut d, ends, (ml, mt, pw, ph), axx, axy, axw);
+    } else if p.b("arrows") {
         let head = |d: &mut Doc, x: f64, y: f64, dx: f64, dy: f64| {
             // marker: 13 px triangle, tip 2.6 px past the line end, base 10.4 px behind it
             let (tx, ty) = (x + dx * 2.6, y + dy * 2.6);
@@ -3209,7 +3228,7 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
             n += 1;
             let v = k * ys;
             let numbered = ye > 0 && (k as i64).rem_euclid(ye) == 0;
-            if numbered && !(v.abs() < 1e-9 && origin) { items.push((axx - 6.0, sy(v) + 4.1 + 0.35 * dn, "end", fmt(v, 3), 1)); }
+            if numbered && !(v.abs() < 1e-9 && origin) { items.push((axx - 6.0, sy(v) + 4.1 + 0.35 * dn, "end", lab_y(v), 1)); }
             k += 1.0;
         }
         // the box a number fills (about 10 px of digits above the baseline, a little below), a pixel wider each side
@@ -3221,7 +3240,7 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
         let on_curve = |r: &[f64; 4]| !obst.is_empty() && label_conflicts_bb(r, obst, &bbs, &[]) > 0;
         // an x number whose box meets a y number's (the corner of the x row and the y column) drops one digit height below its row,
         // still centred on its own tick; nothing is thinned for it
-        if late {
+        if late || xfrac || yfrac {
             // (the digit boxes here are the tight ones, 10 px tall: the digits are what must not touch)
             let tight = |x: f64, y: f64, an: &str, t: &str| { let b = box_of(x, y, an, t); [b[0] + 1.0, y - 10.0 * ls, b[2] - 1.0, y + 0.5 * ls] };
             let yb: Vec<[f64; 4]> = items.iter().filter(|it| it.4 == 1).map(|(x, y, an, t, _)| tight(*x, *y, an, t)).collect();
@@ -3229,15 +3248,19 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
                 if yb.iter().any(|o| rect_hit(&tight(it.0, it.1, it.2, &it.3), o)) {
                     let y0s = it.1;
                     for s in 13..=26 { if !yb.iter().any(|o| rect_hit(&tight(it.0, y0s + s as f64, it.2, &it.3), o)) { it.1 = y0s + s as f64; break; } }
+                    // (batch 7, numbers in fractions on a plain figure: an x number with no clear spot is left out, alone, rather than
+                    // thinning the whole axis or lying on a y number)
+                    if !late && it.1 == y0s { it.4 = 9; }
                 }
             }
+            items.retain(|it| it.4 != 9);
         }
         // the origin zero: below left of the origin, else below right, left out only when neither is clear of the other numbers
         if origin && xe > 0 {
             let boxes: Vec<[f64; 4]> = items.iter().map(|(x, y, an, t, _)| box_of(*x, *y, an, t)).collect();
             let clear = |x: f64, y: f64, an: &str| { let b = box_of(x, y, an, "0"); let b = [b[0] - 2.0, b[1], b[2] + 2.0, b[3]]; !boxes.iter().any(|o| rect_hit(&b, o)) };
             let row = axy + 20.0 + dn;
-            if !late || clear(axx - 8.0, row, "end") { items.push((axx - 8.0, row, "end", "0".into(), 2)); }
+            if !(late || xfrac || yfrac) || clear(axx - 8.0, row, "end") { items.push((axx - 8.0, row, "end", "0".into(), 2)); }
             else if clear(axx + 5.5, row, "start") { items.push((axx + 5.5, row, "start", "0".into(), 2)); }
         }
         // a number whose box touches a curve is drawn over it with a thin white halo (the curve is only interrupted by the halo)
@@ -3260,8 +3283,9 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
     let axis_label = |d: &mut Doc, x: f64, y: f64, anchor: &str, t: &str| {
         d.raw(&format!(r##"<text x="{x:.2}" y="{y:.2}" text-anchor="{anchor}" font-family="{SERIF}" font-weight="bold" font-size="{}" fill="#111827">{}</text>"##, 19.6 * ls, math_tspans(t)));
     };
-    if !p.s("xlabel").is_empty() { axis_label(&mut d, ml + pw + ext + 6.0, axy + 5.6 + 0.4 * dn, "start", p.s("xlabel")); }
-    if !p.s("ylabel").is_empty() { axis_label(&mut d, axx, mt - ext - 6.0, "middle", p.s("ylabel")); }
+    let (ext_r, ext_t) = grid_b7::label_ext(p);
+    if !p.s("xlabel").is_empty() { axis_label(&mut d, ml + pw + ext_r + 6.0, axy + 5.6 + 0.4 * dn, "start", p.s("xlabel")); }
+    if !p.s("ylabel").is_empty() { axis_label(&mut d, axx, mt - ext_t - 6.0, "middle", p.s("ylabel")); }
     match p.s("title_mode") {
         "None" => {}
         "Blank line" => { d.line(w / 2.0 - 90.0, 28.0, w / 2.0 + 90.0, 28.0, INK, 1.4); }
@@ -3438,15 +3462,26 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
         };
         let asym_row = lin.is_some_and(|l| word_asym || conic_cs.iter().any(|c| asymptote_of(c, l, deg)));
         if asym_row && user_dash.is_some_and(|d| d != "none") { notes.push(format!("Row {} is an asymptote, so it is drawn fine and dotted, not dashed: {}", ci + 1, main.trim())); }
+        // (batch 7) the row's own line, thickness and arrows from its style menu: Automatic and None draw as before
+        let rs = grid_b7::row_style(p, ci);
+        let is_band = matches!(row, Row::Band(_));
+        let is_ineq = is_band || matches!(row, Row::Ineq { .. } | Row::ImplicitIneq { .. });
+        notes.extend(grid_b7::refusals(ci, &rs, asym_row, is_ineq, is_band));
+        let user_dash = if asym_row || is_ineq { user_dash } else { rs.line.map(grid_b7::line_dash).or(user_dash) };
+        let arrows_on = rs.arrows != "None" && !is_band;
         // (in Print every row is at least 1.8 times as heavy as the gridlines, so a row never vanishes into a gridline it lies on)
-        let lw = if print { let w = print_w(ci); (if !conic_rows.contains(&ci) && conic_lw.is_finite() { w.min(conic_lw) } else { w }).max(1.8 * if gw > 0.0 { gw } else { 1.0 }) } else { lw };
+        let lw = if let (Some(wk), false) = (rs.weight, asym_row) { grid_b7::weight_px(wk, print, gw) } else if print { let w = print_w(ci); (if !conic_rows.contains(&ci) && conic_lw.is_finite() { w.min(conic_lw) } else { w }).max(1.8 * if gw > 0.0 { gw } else { 1.0 }) } else { lw };
         let lw = if asym_row { if print { 1.6 } else { 1.4 } } else { lw };
         let col_s = if asym_row { (if print { "#666666" } else { "#6b7280" }).to_string() } else if print { ["#000000", "#444444", "#1c1c1c", "#3a3a3a", "#2e2e2e"][ci % 5].to_string() } else if ci < 4 { colp(p, &format!("eq{}_color", ci + 1), PALETTE[ci]) } else { PALETTE[ci % PALETTE.len()].to_string() };
         let rdash = if asym_row { if print { "7 5" } else { "2 4" } } else { user_dash.map(|d| if d == "none" { "" } else { d }).unwrap_or("") };
         // SOLID is an included boundary and every plain curve, DASHED only an excluded (strict) one; a style word overrides
         let strict_pat = if asym_row { rdash } else { user_dash.map(|d| if d == "none" { "" } else { d }).unwrap_or("9 6") };
         let col = col_s.as_str();
-        let sline = |d: &mut Doc, pts: &[Pt], pat: &str| { if pat.is_empty() { d.polyline(pts, col, lw); } else { dpoly(d, pts, col, lw, pat); } };
+        let sline = |d: &mut Doc, pts: &[Pt], pat: &str| {
+            if arrows_on { d.raw(&grid_b7::mask_open(ci)); }
+            if pat.is_empty() { d.polyline(pts, col, lw); } else { dpoly(d, pts, col, lw, pat); }
+            if arrows_on { d.raw("</g>"); }
+        };
         let dom_iv: Vec<Interval> = dom.map(|s| parse_ineq(&s.to_lowercase().replace('y', "x"))).unwrap_or_default();
         let in_dom = |v: f64| dom_iv.is_empty() || dom_iv.iter().any(|iv| (v > iv.lo || (iv.lo_c && v >= iv.lo)) && (v < iv.hi || (iv.hi_c && v <= iv.hi)));
         let fill_id = format!("sh{ci}");
@@ -3574,7 +3609,9 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
         match &row {
             Row::Vert(v) => {
                 let (ya, yb) = if dom_iv.is_empty() { (y0 - span_y, y1 + span_y) } else { (dom_iv[0].lo.max(y0 - span_y), dom_iv[0].hi.min(y1 + span_y)) };
+                if arrows_on { d.raw(&grid_b7::mask_open(ci)); }
                 if rdash.is_empty() { d.line(sx(*v), sy(ya), sx(*v), sy(yb), col, lw); } else { dline(&mut d, (sx(*v), sy(ya)), (sx(*v), sy(yb)), col, lw, rdash); }
+                if arrows_on { d.raw("</g>"); }
                 obst.push(vec![(sx(*v), sy(ya)), (sx(*v), sy(yb))]);
                 label_at = Some((*v, y0 + span_y * 0.9));
                 if p.b("endpoints") {
@@ -3862,6 +3899,12 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
                 let xl = x0 + (x1 - x0) * (0.55 + 0.08 * (ci % 3) as f64);
                 if let Some(yv) = expr(xl).filter(|v| *v > y0 && *v < y1) { label_at = Some((xl, yv)); }
             }
+        }
+        if arrows_on {
+            let (svg, note, boxes) = grid_b7::row_arrows(&obst[row_start..], [ml, mt, ml + pw, mt + ph], rs.arrows, lw, col, ci, (w, h));
+            d.raw(&svg);
+            notes.extend(note);
+            placed.extend(boxes);
         }
         d.raw("</g>");
         if p.b("eq_labels") && answers {

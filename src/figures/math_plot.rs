@@ -140,12 +140,13 @@ fn grid(p: &Params) -> Vec<Handle> {
         }
     }
     // Text labels.
-    let (w, ext) = (g.pw + g.ml + 52.5, if p.b("arrows") { 20.0 } else { 0.0 });
+    // (the labels sit past each axis end as drawn: Automatic ends follow Arrowheads on axes, as before batch 7)
+    let (w, (ext_r, ext_t)) = (g.pw + g.ml + 52.5 + super::math::grid_circle_room(p).0, super::math::grid_label_ext(p));
     let ax_y = if g.y0 <= 0.0 && g.y1 >= 0.0 { 0.0 } else { g.y0 };
     let ax_x = if g.x0 <= 0.0 && g.x1 >= 0.0 { 0.0 } else { g.x0 };
     if !p.s("title").is_empty() && p.s("title_mode") != "None" && p.s("title_mode") != "Blank line" { hs.push(Handle::label((w / 2.0, 18.0), (180.0, 24.0), "title", "Double-click to edit the title")); }
-    if !p.s("xlabel").is_empty() { hs.push(Handle::label((g.ml + g.pw + ext + 14.0, g.sy(ax_y)), (28.0, 22.0), "xlabel", "Double-click to edit the x-axis label")); }
-    if !p.s("ylabel").is_empty() { hs.push(Handle::label((g.sx(ax_x), g.mt - ext - 13.0), (28.0, 22.0), "ylabel", "Double-click to edit the y-axis label")); }
+    if !p.s("xlabel").is_empty() { hs.push(Handle::label((g.ml + g.pw + ext_r + 14.0, g.sy(ax_y)), (28.0, 22.0), "xlabel", "Double-click to edit the x-axis label")); }
+    if !p.s("ylabel").is_empty() { hs.push(Handle::label((g.sx(ax_x), g.mt - ext_t - 13.0), (28.0, 22.0), "ylabel", "Double-click to edit the y-axis label")); }
     hs
 }
 

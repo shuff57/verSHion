@@ -3247,7 +3247,11 @@ impl Workspace {
             ui.painter().circle_filled(r.center(), 8.0, swatch(&cur));
             ui.painter().circle_stroke(r.center(), 9.5, Stroke::new(1.0, theme::border()));
         }
-        egui::Popup::menu(&resp).show(|ui| {
+        // (a menu that also holds the row's line, thickness and arrows stays open for several choices, until a click outside)
+        let styled = !figures::row_style_keys(key).is_empty();
+        let popup = egui::Popup::menu(&resp);
+        let popup = if styled { popup.close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside) } else { popup };
+        popup.show(|ui| {
             ui.horizontal_wrapped(|ui| {
                 for hex in pal {
                     let (r, rr) = ui.allocate_exact_size(Vec2::splat(22.0), Sense::click());
@@ -3260,6 +3264,19 @@ impl Workspace {
                     }
                 }
             });
+            // (a row that has more than a colour: the coordinate grid's line, thickness and arrows per equation)
+            for (k, label, options) in figures::row_style_keys(key) {
+                ui.add_space(4.0);
+                ui.label(theme::muted(label).size(12.0));
+                ui.horizontal_wrapped(|ui| {
+                    let cur = self.params.s(k).to_string();
+                    for o in options {
+                        if ui.selectable_label(cur == *o, *o).clicked() {
+                            self.params.0.insert(k.to_string(), Value::S((*o).to_string()));
+                        }
+                    }
+                });
+            }
         });
     }
 
@@ -4363,7 +4380,8 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             let id = ui.make_persistent_id(("chem_float", fig, pd.key));
             let ctx = ui.ctx().clone();
             let focused = ctx.memory(|m| m.has_focus(id));
-            let shown = fmt_measure(p.f(pd.key));
+            // (a figure may show a number its own way, such as the coordinate grid's ranges as fractions)
+            let shown = figures::float_text(fig, pd.key, p).unwrap_or_else(|| fmt_measure(p.f(pd.key)));
             let mut text = if focused { ctx.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| shown.clone()) } else { shown };
             // the reference's unit sits after the box for the lengths and forces it measures
             let unit = match (fig, pd.key) {
@@ -4385,7 +4403,8 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             }).inner;
             if r.changed() {
                 ctx.data_mut(|d| d.insert_temp(id, text.clone()));
-                if let Ok(v) = text.trim().parse::<f64>() {
+                // (every figure reads a plain number as before; the coordinate grid's ranges also take a fraction)
+                if let Some(v) = figures::typed_float(fig, pd.key, &text, p) {
                     p.0.insert(pd.key.to_string(), Value::F(v.clamp(*min, *max)));
                 }
             }
@@ -5059,6 +5078,9 @@ impl crate::App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // (batch 7: the coordinate grid's workspace tests, in their own file, src/figuresui/tests/grid_b7_ui_tests.rs)
+    mod grid_b7_ui_tests;
 
     fn demo() -> &'static FigureDef {
         find_def("demo-shapes").expect("demo registered under cfg(test)").1

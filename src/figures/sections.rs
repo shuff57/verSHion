@@ -64,8 +64,8 @@ static FIG_5: [RefSection; 5] = [
 
 static FIG_6: [RefSection; 4] = [
     s("Titles", &["title", "equations", "eq_labels", "title_mode", "xtitle_mode", "xtitle", "ytitle_mode", "ytitle"], ""),
-    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "arrows", "square", "xlabel", "xnum", "xunits"], ""),
-    s("y-axis", &["ymin", "ymax", "ystep", "ylabel", "ynum"], ""),
+    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "arrows", "square", "xlabel", "xnum", "xunits", "x_fractions", "x_left_end", "x_right_end"], ""),
+    s("y-axis", &["ymin", "ymax", "ystep", "ylabel", "ynum", "y_fractions", "y_bottom_end", "y_top_end"], ""),
     s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label"], ""),
 ];
 
