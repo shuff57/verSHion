@@ -102,6 +102,9 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("scale", "Scale factor", 0.5, 3.0, 0.5, 2.0),
         ParamDef::float("cx", "Turn or enlarge about x", -10.0, 10.0, 0.5, 0.0),
         ParamDef::float("cy", "Turn or enlarge about y", -10.0, 10.0, 0.5, 0.0),
+        // ---- batch 8: Off draws and acts as the figure always did (see `pick_b8`)
+        ParamDef::choice("pick", "Pick a line or centre on the grid", &pick_b8::PICKS, pick_b8::PICKS[0])
+            .hint("Choose which transformation, then click the grid: near the x-axis, the y-axis, y = x or y = \u{2212}x to reflect in that line, or at a grid point to turn or enlarge about it. The grid outlines what a click will choose; Pick goes back to Off after the click."),
         ParamDef::bool("show_pre", "Show the pre-image", true),
         ParamDef::int("x_from", "x-axis from", -30, 0, -10),
         ParamDef::int("x_to", "x-axis to", 0, 30, 10),
@@ -152,9 +155,6 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("ends", "Axis ends", &ENDS, ENDS[0]),
         ParamDef::choice("gridlines", "Gridlines", &GRIDLINES, GRIDLINES[0]).hint("Bold for photocopies."),
         ParamDef::choice("minor", "Minor gridlines", &MINOR, MINOR[0]),
-        // ---- batch 8: Off draws and acts as the figure always did (see `pick_b8`)
-        ParamDef::choice("pick", "Pick a line or centre on the grid", &pick_b8::PICKS, pick_b8::PICKS[0])
-            .hint("Choose which transformation, then click the grid: near the x-axis, the y-axis, y = x or y = \u{2212}x to reflect in that line, or at a grid point to turn or enlarge about it. The grid outlines what a click will choose; Pick goes back to Off after the click."),
     ]
 }
 
