@@ -193,7 +193,7 @@ fn regular_polygon(p: &Params) -> Option<Vec<Handle>> {
             let m = fm.mdl(s);
             let rr = len(m).max(1e-6);
             let val = match from.as_str() { "Radius" => rr, "Apothem" => rr * half.cos(), _ => 2.0 * rr * half.sin() };
-            p.set_f("value", val);
+            super::math::flat_b9::set_size(p, val);
             p.set_f("rotate", norm180(deg(m.1, m.0) - phi_s));
         }));
     }

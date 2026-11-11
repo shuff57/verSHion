@@ -233,6 +233,8 @@ struct PolySpec {
     bottom: Option<usize>,
     fill: String,
     fs: f64,
+    /// Points named by the teacher (a height's foot, the diagonals' crossing), placed last (`flat_b9::place`).
+    named: Vec<flat_b9::Named>,
 }
 
 thread_local! {
@@ -315,6 +317,7 @@ fn draw_poly_inner(s: PolySpec, dec: i64, unit: &str) -> String {
     // construction lines
     for e in &s.extras {
         let (a, b) = (m.p(rot(e.a)), m.p(rot(e.b)));
+        if e.dash == flat_b9::DOT { doc.raw(&flat_b9::dot_line(a, b)); continue; }
         dline(&mut doc, a, b, "#333", 1.6, if e.dash.is_empty() { "6 4" } else { e.dash });
     }
     if s.right_marks {
@@ -454,7 +457,9 @@ fn draw_poly_inner(s: PolySpec, dec: i64, unit: &str) -> String {
             mlabel_id(&mut doc, &format!("v{i}"), v.0 + b.0 * off, v.1 + b.1 * off, vsz, &s.names[i], "");
         }
     }
-    doc.finish()
+    if s.named.is_empty() { return doc.finish(); }
+    let named: Vec<(String, &'static str, Pt, Pt)> = s.named.iter().map(|q| (q.text.clone(), q.id, m.p(rot(q.at)), m.p(rot(q.from)))).collect();
+    flat_b9::place(doc.finish(), &named, &sp, 19.0 * fs)
 }
 
 fn seg_dist(p: Pt, a: Pt, b: Pt) -> f64 {
@@ -950,6 +955,7 @@ pub(crate) fn triangle_params() -> Vec<ParamDef> {
     ]);
     shared_tail(&mut v, true, true);
     v.extend(height_common());
+    v.extend(super::flat_b9::params("triangle"));
     v
 }
 
@@ -964,12 +970,15 @@ pub(crate) fn triangle_render(p: &Params) -> String {
     let (mut ex, mut mk) = (vec![], vec![]);
     let hs = p.s("height");
     let has = |v: &str| hs == "From all three" || hs.split(|ch: char| !ch.is_alphanumeric()).any(|t| t == v);
-    for (on, v, q1, q2) in [(has("A"), a, b, c), (has("B"), b, c, a), (has("C"), c, a, b)] {
+    let mut feet = Vec::new();
+    for (on, v, q1, q2, sk, fk) in [(has("A"), a, b, c, "ha_style", "ha_foot"), (has("B"), b, c, a, "hb_style", "hb_foot"), (has("C"), c, a, b, "hc_style", "hc_foot")] {
         if !on { continue; }
-        let (e, m, _) = height_from(v, q1, q2, height_label(p), dash_of(p));
+        let (e, m, _) = height_from(v, q1, q2, height_label(p), super::flat_b9::dash(p, sk));
+        feet.push((fk, m[0].0, v));
         ex.extend(e);
         mk.extend(m);
     }
+    let named = super::flat_b9::points("triangle", p, &feet, &[a, b, c], None);
     draw_poly(PolySpec {
         pts: vec![a, b, c],
         names: corner_names(p, 3),
@@ -981,7 +990,7 @@ pub(crate) fn triangle_render(p: &Params) -> String {
         right_marks: p.b("right"),
         vlabels: p.b("vertices"),
         extras: ex, marks: mk, dots: vec![], notes: vec![],
-        rot: p.f("rotate"), flip: p.b("flip"), bottom: bottom_side(p, 3), fill: fill_of(p), fs: fscale(p),
+        rot: p.f("rotate"), flip: p.b("flip"), bottom: bottom_side(p, 3), fill: fill_of(p), fs: fscale(p), named,
     }, dec, &unit)
 }
 
@@ -1305,9 +1314,9 @@ fn diagonals(p: &Params, pts: &[Pt], ex: &mut Vec<Extra>, mk: &mut Vec<Mark>) {
     let sel = p.s("diagonals");
     let (ac, bd) = match sel { "" | "None" => (false, false), "AC only" => (true, false), "BD only" => (false, true), _ => (true, true) };
     let forced = sel.contains("labelled");
-    let dash = dash_of(p);
     for (on, i, j, t, lab, txt) in [(ac, 0usize, 2usize, 0.3, "ac_lab", "ac_label"), (bd, 1, 3, 0.72, "bd_lab", "bd_label")] {
         if !on { continue; }
+        let dash = super::flat_b9::dash(p, if i == 0 { "ac_style" } else { "bd_style" });
         let label = if forced { Some("=".to_string()) } else {
             match p.s(lab) {
                 "Measure" => Some("=".to_string()),
@@ -1328,12 +1337,14 @@ fn diagonals(p: &Params, pts: &[Pt], ex: &mut Vec<Extra>, mk: &mut Vec<Mark>) {
     }
 }
 
-fn quad_draw(id: &str, p: &Params, s: &QSol, default_arrows: Vec<u8>, mut ex: Vec<Extra>, mut mk: Vec<Mark>) -> String {
+fn quad_draw(id: &str, p: &Params, s: &QSol, default_arrows: Vec<u8>, mut ex: Vec<Extra>, mut mk: Vec<Mark>, feet: Vec<(&'static str, Pt, Pt)>) -> String {
     let (dec, unit) = (p.i("dec"), p.s("unit").to_string());
     let linked = q_linked(id);
     let lab = |i: usize| lab_text(p, Q_LAB[i], Q_TXT[i], s.typed[i].as_ref(), s.vals[i], linked[i], i >= 4, dec, &unit);
     let pts = s.pts.to_vec();
     diagonals(p, &pts, &mut ex, &mut mk);
+    let cross = match super::flat_b9::diagonals_on(p) { (true, true) => super::flat_b9::crossing(&pts), _ => None };
+    let named = super::flat_b9::points(id, p, &feet, &pts, cross);
     let names = corner_names(p, 4);
     let arrows = quad_arrows(p, &default_arrows);
     draw_poly(PolySpec {
@@ -1347,7 +1358,7 @@ fn quad_draw(id: &str, p: &Params, s: &QSol, default_arrows: Vec<u8>, mut ex: Ve
         right_marks: p.b("right"),
         vlabels: p.b("vertices"),
         extras: ex, marks: mk, dots: vec![], notes: vec![],
-        rot: p.f("rotate"), flip: p.b("flip"), bottom: bottom_side(p, 4), fill: fill_of(p), fs: fscale(p),
+        rot: p.f("rotate"), flip: p.b("flip"), bottom: bottom_side(p, 4), fill: fill_of(p), fs: fscale(p), named,
     }, dec, &unit)
 }
 
@@ -1359,21 +1370,25 @@ pub(crate) fn rectangle_params() -> Vec<ParamDef> {
     v.extend(diag_params());
     v.push(ParamDef::choice("bottom", "Side at the bottom", &QUAD_BOTTOM2, "AB, as it stands"));
     shared_tail(&mut v, true, true);
+    v.extend(super::flat_b9::params("rectangle"));
     v
 }
 
 pub(crate) fn rectangle_render(p: &Params) -> String {
-    match rect_solve(p) { Ok(s) => quad_draw("rectangle", p, &s, vec![0; 4], vec![], vec![]), Err(e) => note_fig(&e) }
+    match rect_solve(p) { Ok(s) => quad_draw("rectangle", p, &s, vec![0; 4], vec![], vec![], vec![]), Err(e) => note_fig(&e) }
 }
 
-fn heights_of(p: &Params, list: Vec<(Pt, Pt, Pt)>) -> (Vec<Extra>, Vec<Mark>) {
-    let (mut ex, mut mk) = (vec![], vec![]);
-    for (v, q1, q2) in list {
-        let (e, m, _) = height_from(v, q1, q2, height_label(p), dash_of(p));
+/// Heights from (corner, onto p-q, style key, foot key): the lines, their right-angle marks and their feet.
+#[allow(clippy::type_complexity)]
+fn heights_of(p: &Params, list: Vec<(Pt, Pt, Pt, &'static str, &'static str)>) -> (Vec<Extra>, Vec<Mark>, Vec<(&'static str, Pt, Pt)>) {
+    let (mut ex, mut mk, mut feet) = (vec![], vec![], vec![]);
+    for (v, q1, q2, sk, fk) in list {
+        let (e, m, _) = height_from(v, q1, q2, height_label(p), super::flat_b9::dash(p, sk));
+        feet.push((fk, m[0].0, v));
         ex.extend(e);
         mk.extend(m);
     }
-    (ex, mk)
+    (ex, mk, feet)
 }
 
 pub(crate) fn parallelogram_params() -> Vec<ParamDef> {
@@ -1384,21 +1399,23 @@ pub(crate) fn parallelogram_params() -> Vec<ParamDef> {
     v.push(ParamDef::choice("bottom", "Side at the bottom", &QUAD_BOTTOM2, "AB, as it stands"));
     shared_tail(&mut v, true, true);
     v.extend(height_common());
+    v.extend(super::flat_b9::params("parallelogram"));
     v
 }
 
 pub(crate) fn parallelogram_render(p: &Params) -> String {
     let s = match para_solve(p) { Ok(s) => s, Err(e) => return note_fig(&e) };
     let [a, b, c, d] = s.pts;
-    let hs: Vec<(Pt, Pt, Pt)> = match p.s("height") {
-        "Onto AB (from D)" => vec![(d, a, b)],
-        "Onto AD (from B)" => vec![(b, a, d)],
-        "Onto AB (from C)" => vec![(c, a, b)],
-        "Onto AB (from D and C)" => vec![(d, a, b), (c, a, b)],
+    let (hd, hb, hc) = ((d, a, b, "hd_style", "hd_foot"), (b, a, d, "hb_style", "hb_foot"), (c, a, b, "hc_style", "hc_foot"));
+    let hs = match p.s("height") {
+        "Onto AB (from D)" => vec![hd],
+        "Onto AD (from B)" => vec![hb],
+        "Onto AB (from C)" => vec![hc],
+        "Onto AB (from D and C)" => vec![hd, hc],
         _ => vec![],
     };
-    let (ex, mk) = heights_of(p, hs);
-    quad_draw("parallelogram", p, &s, vec![1, 2, 1, 2], ex, mk)
+    let (ex, mk, feet) = heights_of(p, hs);
+    quad_draw("parallelogram", p, &s, vec![1, 2, 1, 2], ex, mk, feet)
 }
 
 pub(crate) fn trapezoid_params() -> Vec<ParamDef> {
@@ -1414,6 +1431,7 @@ pub(crate) fn trapezoid_params() -> Vec<ParamDef> {
     v.push(ParamDef::choice("bottom", "Side at the bottom", &QUAD_BOTTOM2, "AB, as it stands"));
     shared_tail(&mut v, true, true);
     v.extend(height_common());
+    v.extend(super::flat_b9::params("trapezoid"));
     v
 }
 
@@ -1423,26 +1441,30 @@ pub(crate) fn trapezoid_render(p: &Params) -> String {
     let h = s.h.unwrap_or(d.1);
     let ab = b.0;
     let off = d.0;
-    let (mut ex, mut mk) = (vec![], vec![]);
+    let (mut ex, mut mk, mut feet) = (vec![], vec![], vec![]);
     if p.b("show_height") {
         let hf = p.s("hfrom");
         let (from_d, from_c) = (hf != "C", hf == "C" || hf == "D and C");
-        let (lab, dash) = (height_label(p), dash_of(p));
+        let lab = height_label(p);
+        let (dash_d, dash_c) = (super::flat_b9::dash(p, "hd_style"), super::flat_b9::dash(p, "hc_style"));
         if from_d && off.abs() > 1e-9 {
-            let (e, m, _) = height_from(d, a, b, lab.clone(), dash);
+            let (e, m, _) = height_from(d, a, b, lab.clone(), dash_d);
+            feet.push(("hd_foot", m[0].0, d));
             ex.extend(e);
             mk.extend(m);
         } else if from_d {
-            ex.push(Extra { a: (ab / 2.0, 0.0), b: (ab / 2.0, h), label: lab.0.clone(), t: 0.5, dash, raw: lab.1, id: "h" });
+            ex.push(Extra { a: (ab / 2.0, 0.0), b: (ab / 2.0, h), label: lab.0.clone(), t: 0.5, dash: dash_d, raw: lab.1, id: "h" });
             mk.push(((ab / 2.0, 0.0), (ab / 2.0, h), (ab, 0.0)));
+            feet.push(("hd_foot", (ab / 2.0, 0.0), (ab / 2.0, h)));
         }
         if from_c && (c.0 - ab).abs() > 1e-9 {
-            let (e, m, _) = height_from(c, a, b, lab, dash);
+            let (e, m, _) = height_from(c, a, b, lab, dash_c);
+            feet.push(("hc_foot", m[0].0, c));
             ex.extend(e);
             mk.extend(m);
         }
     }
-    quad_draw("trapezoid", p, &s, vec![1, 0, 1, 0], ex, mk)
+    quad_draw("trapezoid", p, &s, vec![1, 0, 1, 0], ex, mk, feet)
 }
 
 pub(crate) fn kite_params() -> Vec<ParamDef> {
@@ -1452,15 +1474,17 @@ pub(crate) fn kite_params() -> Vec<ParamDef> {
     v.push(ParamDef::choice("bottom", "Side at the bottom", &["None (standing upright)", "AB", "BC", "CD", "DA"], "None (standing upright)"));
     shared_tail(&mut v, true, true);
     v.extend(height_common());
+    v.extend(super::flat_b9::params("kite"));
     v
 }
 
 pub(crate) fn kite_render(p: &Params) -> String {
     let s = match kite_solve(p) { Ok(s) => s, Err(e) => return note_fig(&e) };
     let [a, b, c, d] = s.pts;
-    let hs: Vec<(Pt, Pt, Pt)> = match p.s("height") { "From D to AB" => vec![(d, a, b)], "From C to AB" => vec![(c, a, b)], "From D and C to AB" => vec![(d, a, b), (c, a, b)], _ => vec![] };
-    let (ex, mk) = heights_of(p, hs);
-    quad_draw("kite", p, &s, vec![0; 4], ex, mk)
+    let (hd, hc) = ((d, a, b, "hd_style", "hd_foot"), (c, a, b, "hc_style", "hc_foot"));
+    let hs = match p.s("height") { "From D to AB" => vec![hd], "From C to AB" => vec![hc], "From D and C to AB" => vec![hd, hc], _ => vec![] };
+    let (ex, mk, feet) = heights_of(p, hs);
+    quad_draw("kite", p, &s, vec![0; 4], ex, mk, feet)
 }
 
 /// (value_key, text) for every row of a quadrilateral that is worked out or linked.
@@ -1499,7 +1523,7 @@ pub(crate) fn quad_vals_of(pts: &[Pt; 4]) -> [Option<f64>; 8] { quad_vals(pts) }
 // ----- regular polygon -----
 
 pub(crate) fn regular_polygon_params() -> Vec<ParamDef> {
-    vec![
+    let mut v = vec![
         ParamDef::int("n", "Sides", 3, 20, 6),
         ParamDef::choice("from", "Size from", &["Side", "Radius", "Apothem"], "Side"),
         ParamDef::float("value", "Size", 0.5, 100.0, 0.5, 8.0),
@@ -1540,13 +1564,15 @@ pub(crate) fn regular_polygon_params() -> Vec<ParamDef> {
         ParamDef::choice("label_size", "Label size", &["Large", "Medium", "Small"], "Medium"),
         ParamDef::choice("line_style", "Construction lines", &["Solid", "Dashed", "Dotted"], "Dashed")
             .hint("Radius, apothem."),
-    ]
+    ];
+    v.extend(super::flat_b9::params("regular-polygon"));
+    v
 }
 
 /// (side, radius, apothem, interior angle, central angle) of the regular polygon.
 pub(crate) fn rp_measures(p: &Params) -> (f64, f64, f64, f64, f64) {
     let n = p.i("n").clamp(3, 20) as f64;
-    let v = p.f("value");
+    let v = super::flat_b9::rp_size(p);
     let half = PI / n;
     let r = match p.s("from") { "Radius" => v, "Apothem" => v / half.cos(), _ => v / (2.0 * half.sin()) };
     (2.0 * r * half.sin(), r, r * half.cos(), (n - 2.0) * 180.0 / n, 360.0 / n)
@@ -1564,7 +1590,7 @@ pub(crate) fn regular_polygon_render(p: &Params) -> String {
     let pts = regular_polygon_pts(p);
     let n = pts.len();
     let o = (0.0, 0.0);
-    let dash = dash_of(p);
+    let (dash_ap, dash_r, dash_rr) = (super::flat_b9::dash(p, "apothem_style"), super::flat_b9::dash(p, "radius_style"), super::flat_b9::radii_dash(p));
     let (dec, unit) = (p.i("dec"), p.s("unit").to_string());
     let (side, _, _, ang, _) = rp_measures(p);
     let (mut ex, mut mk, mut dots, mut notes) = (vec![], vec![], vec![], vec![]);
@@ -1573,17 +1599,17 @@ pub(crate) fn regular_polygon_render(p: &Params) -> String {
     if p.b("all_radii") {
         for (k, q) in pts.iter().enumerate() {
             if k == rad_at && p.b("radius") { continue; }
-            ex.push(Extra { a: o, b: *q, t: 0.5, dash, ..Default::default() });
+            ex.push(Extra { a: o, b: *q, t: 0.5, dash: dash_rr, ..Default::default() });
         }
     }
     if p.b("radius") {
-        let (label, raw) = named_label(p.s("radius_label"), p.s("radius_text"), "r");
-        ex.push(Extra { a: o, b: pts[rad_at], label, t: 0.5, dash, raw, id: "r" });
+        let (label, raw) = super::flat_b9::exact_label(named_label(p.s("radius_label"), p.s("radius_text"), "r"), p, "Radius");
+        ex.push(Extra { a: o, b: pts[rad_at], label, t: 0.5, dash: dash_r, raw, id: "r" });
     }
     if p.b("apothem") {
         let mid = ((pts[0].0 + pts[1].0) / 2.0, (pts[0].1 + pts[1].1) / 2.0);
-        let (label, raw) = named_label(p.s("apothem_label"), p.s("apothem_text"), "a");
-        ex.push(Extra { a: o, b: mid, label, t: 0.5, dash, raw, id: "ap" });
+        let (label, raw) = super::flat_b9::exact_label(named_label(p.s("apothem_label"), p.s("apothem_text"), "a"), p, "Apothem");
+        ex.push(Extra { a: o, b: mid, label, t: 0.5, dash: dash_ap, raw, id: "ap" });
         mk.push((mid, o, pts[1]));
     }
     let cname = p.s("center_name").trim();
@@ -1597,7 +1623,7 @@ pub(crate) fn regular_polygon_render(p: &Params) -> String {
     let side_txt = match side_mode {
         "None" => None,
         "Text" => Some({ let t = p.s("side_label").trim(); if t.is_empty() { "s".to_string() } else { t.to_string() } }),
-        _ => Some(fmtu(side, dec, &unit)),
+        _ => Some(super::flat_b9::rp_exact(p, "Side").unwrap_or_else(|| fmtu(side, dec, &unit))),
     };
     let ang_txt = match if p.s("ang_lab").is_empty() { "None" } else { p.s("ang_lab") } {
         "None" => None,
@@ -1614,14 +1640,15 @@ pub(crate) fn regular_polygon_render(p: &Params) -> String {
         ticks: vec![st; n], arrows: vec![0; n], arcs: vec![sa; n],
         right_marks: p.b("right"), vlabels: p.b("vertices"),
         extras: ex, marks: mk, dots, notes,
-        rot: p.f("rotate"), flip: p.b("flip"), bottom: None, fill: fill_of(p), fs: fscale(p),
+        rot: p.f("rotate"), flip: p.b("flip"), bottom: None, fill: fill_of(p), fs: fscale(p), named: vec![],
     }, dec, &unit)
 }
 
 pub(crate) fn rp_computed(p: &Params) -> Vec<(&'static str, String)> {
     let dec = p.i("dec");
     let (side, r, a, ang, _) = rp_measures(p);
-    vec![("m_side", fmt(side, dec)), ("m_angle", format!("{}\u{b0}", fmt(ang, dec))), ("m_apothem", fmt(a, dec)), ("m_radius", fmt(r, dec))]
+    // the typed size box shows the slider's size faintly while it is empty
+    vec![("m_side", fmt(side, dec)), ("m_angle", format!("{}\u{b0}", fmt(ang, dec))), ("m_apothem", fmt(a, dec)), ("m_radius", fmt(r, dec)), ("value_t", fmt(p.f("value"), 3))]
 }
 
 // ----- angles: see math/angles.rs -----
@@ -1680,7 +1707,7 @@ pub(crate) fn card(id: &str) -> Option<MeasureCard> {
         "regular-polygon" => {
             let rows = vec![
                 row("Sides", "n", "", "", "", None),
-                row("Size", "value", "$unit", "", "", None),
+                row("Size", "value_t", "$unit", "", "", None),
             ];
             let mut side = row("Side", "m_side", "$unit", "side_lab", "side_label", Some("side_ticks"));
             side.equals = Some("worked out");
@@ -4031,6 +4058,9 @@ mod number_line_frozen;
 mod solids_b8_frozen;
 #[cfg(test)]
 mod flat_b9_frozen;
+pub(crate) mod flat_b9;
+#[cfg(test)]
+mod flat_b9_tests;
 pub(crate) mod solids_b8;
 #[cfg(test)]
 mod solids_b8_tests;

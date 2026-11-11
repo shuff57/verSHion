@@ -129,8 +129,8 @@ static FIG_12: [RefSection; 6] = [
 ];
 
 static FIG_13: [RefSection; 6] = [
-    s("Heights", &["height", "height_label"], ""),
-    s("Diagonals", &["diagonals"], ""),
+    s("Heights", &["height", "height_label", "hd_style", "hd_foot", "hc_style", "hc_foot"], ""),
+    s("Diagonals", &["diagonals", "ac_style", "bd_style", "cross_name"], ""),
     s("Labels", &["unit", "dec", "right", "ab_lab", "ab_label", "bc_lab", "bc_label", "cd_lab", "cd_label", "da_lab", "da_label", "a_lab", "a_label", "a_arcs", "b_lab", "b_label", "b_arcs", "c_lab", "c_label", "c_arcs", "d_lab", "d_label", "d_arcs", "ac_lab", "ac_label", "bd_lab", "bd_label", "arrow_marks", "label_offsets"], "Drag any label on the figure to move it."),
     s("Position", &["bottom", "flip", "rotate"], ""),
     s("More options", &["name_a", "name_b", "name_c", "name_d", "m_ab", "m_da", "m_a", "m_b", "m_d", "ab_ticks", "bc_ticks", "cd_ticks", "da_ticks", "vertices", "fill", "label_size", "line_style", "height_text"], ""),
@@ -245,8 +245,8 @@ static FIG_24: [RefSection; 2] = [
 ];
 
 static FIG_25: [RefSection; 6] = [
-    s("Heights", &["kind", "height", "height_label"], ""),
-    s("Diagonals", &["diagonals"], ""),
+    s("Heights", &["kind", "height", "height_label", "hd_style", "hd_foot", "hb_style", "hb_foot", "hc_style", "hc_foot"], ""),
+    s("Diagonals", &["diagonals", "ac_style", "bd_style", "cross_name"], ""),
     s("Labels", &["unit", "dec", "right", "ab_lab", "ab_label", "bc_lab", "bc_label", "cd_lab", "cd_label", "da_lab", "da_label", "a_lab", "a_label", "a_arcs", "b_lab", "b_label", "b_arcs", "c_lab", "c_label", "c_arcs", "d_lab", "d_label", "d_arcs", "ac_lab", "ac_label", "bd_lab", "bd_label", "arrow_marks", "label_offsets"], "Drag any label on the figure to move it."),
     s("Position", &["bottom", "flip", "rotate"], ""),
     s("More options", &["name_a", "name_b", "name_c", "name_d", "m_ab", "m_da", "m_a", "m_b", "ab_ticks", "bc_ticks", "cd_ticks", "da_ticks", "vertices", "fill", "label_size", "line_style", "height_text"], ""),
@@ -360,7 +360,7 @@ static FIG_36: [RefSection; 4] = [
 ];
 
 static FIG_37: [RefSection; 5] = [
-    s("Diagonals", &["diagonals"], ""),
+    s("Diagonals", &["diagonals", "ac_style", "bd_style", "cross_name"], ""),
     s("Labels", &["unit", "dec", "right", "ab_lab", "ab_label", "bc_lab", "bc_label", "cd_lab", "cd_label", "da_lab", "da_label", "a_lab", "a_label", "a_arcs", "b_lab", "b_label", "b_arcs", "c_lab", "c_label", "c_arcs", "d_lab", "d_label", "d_arcs", "ac_lab", "ac_label", "bd_lab", "bd_label", "arrow_marks", "label_offsets"], "Drag any label on the figure to move it."),
     s("Position", &["kind", "bottom", "flip", "rotate"], ""),
     s("More options", &["name_a", "name_b", "name_c", "name_d", "m_ab", "m_bc", "ab_ticks", "bc_ticks", "cd_ticks", "da_ticks", "vertices", "fill", "label_size", "line_style"], ""),
@@ -368,7 +368,7 @@ static FIG_37: [RefSection; 5] = [
 ];
 
 static FIG_38: [RefSection; 3] = [
-    s("Center and lines", &["n", "from", "value", "side_lab", "side_label", "side_ticks", "ang_lab", "ang_label", "ang_arcs", "center_dot", "center_name", "apothem", "apothem_label", "apothem_text", "radius", "radius_label", "radius_text", "all_radii", "dec"], ""),
+    s("Center and lines", &["n", "from", "value", "value_t", "side_lab", "side_label", "side_ticks", "ang_lab", "ang_label", "ang_arcs", "center_dot", "center_name", "apothem", "apothem_label", "apothem_text", "apothem_style", "radius", "radius_label", "radius_text", "radius_style", "all_radii", "radii_style", "dec"], ""),
     s("Labels", &["vertices", "vnames", "unit", "right", "label_offsets"], "Drag any label on the figure to move it."),
     s("Position", &["rotate", "fill", "flip", "label_size", "line_style"], ""),
 ];
@@ -416,8 +416,8 @@ static FIG_43: [RefSection; 8] = [
 ];
 
 static FIG_44: [RefSection; 6] = [
-    s("Heights", &["kind", "m_h", "show_height", "hfrom", "height_label"], ""),
-    s("Diagonals", &["diagonals"], ""),
+    s("Heights", &["kind", "m_h", "show_height", "hfrom", "height_label", "hd_style", "hd_foot", "hc_style", "hc_foot"], ""),
+    s("Diagonals", &["diagonals", "ac_style", "bd_style", "cross_name"], ""),
     s("Labels", &["unit", "dec", "right", "ab_lab", "ab_label", "bc_lab", "bc_label", "cd_lab", "cd_label", "da_lab", "da_label", "a_lab", "a_label", "a_arcs", "b_lab", "b_label", "b_arcs", "c_lab", "c_label", "c_arcs", "d_lab", "d_label", "d_arcs", "ac_lab", "ac_label", "bd_lab", "bd_label", "arrow_marks", "label_offsets"], "Drag any label on the figure to move it."),
     s("Position", &["bottom", "flip", "rotate"], ""),
     s("More options", &["name_a", "name_b", "name_c", "name_d", "m_ab", "m_bc", "m_cd", "m_da", "m_a", "m_b", "m_c", "m_d", "ab_ticks", "bc_ticks", "cd_ticks", "da_ticks", "vertices", "fill", "label_size", "line_style", "height_text"], ""),
@@ -425,7 +425,7 @@ static FIG_44: [RefSection; 6] = [
 ];
 
 static FIG_45: [RefSection; 4] = [
-    s("Heights", &["name_a", "name_b", "name_c", "m_a", "m_b", "m_c", "m_ab", "m_bc", "m_ca", "other", "height", "height_label"], ""),
+    s("Heights", &["name_a", "name_b", "name_c", "m_a", "m_b", "m_c", "m_ab", "m_bc", "m_ca", "other", "height", "height_label", "ha_style", "ha_foot", "hb_style", "hb_foot", "hc_style", "hc_foot"], ""),
     s("Labels", &["unit", "dec", "right", "a_lab", "a_label", "a_arcs", "b_lab", "b_label", "b_arcs", "c_lab", "c_label", "c_arcs", "ab_lab", "ab_label", "bc_lab", "bc_label", "ca_lab", "ca_label", "label_offsets"], "Drag any label on the figure to move it."),
     s("Position", &["bottom", "flip", "rotate"], ""),
     s("More options", &["ab_ticks", "bc_ticks", "ca_ticks", "vertices", "fill", "label_size", "line_style", "height_text"], ""),
