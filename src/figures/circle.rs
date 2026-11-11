@@ -29,6 +29,8 @@ mod tests_b5;
 mod frozen_b8;
 #[cfg(test)]
 mod drag_b8_tests;
+#[cfg(test)]
+mod drag_b8_r1_tests;
 
 type Pt = (f64, f64);
 
@@ -559,7 +561,7 @@ fn parts(p: &Params) -> Parts {
     let on = drag_b8::on(p);
     let ab = on[0] && on[1];
     let a = radius || diam || tan || two || pts::polygon_n(p) >= 3;
-    Parts { radius, diam: diam && on[0], chord, bis: bis && ab, tan: tan && on[0], sec, central, arc: if ab { arc } else { 0 }, sector: if ab { sector } else { 0 }, two, a, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc: insc && ab && on[2], insc_lines: insc && !(ab && on[2]), deg }
+    Parts { radius, diam: diam && on[0], chord, bis: bis && ab, tan: tan && on[0], sec: sec && (ab || drag_b8::secant_ok(p)), central, arc: if ab { arc } else { 0 }, sector: if ab { sector } else { 0 }, two, a, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc: insc && ab && on[2], insc_lines: insc && !(ab && on[2]), deg }
 }
 
 /// Editor-only notes about what the figure could not do as asked (never drawn into the SVG).
@@ -659,6 +661,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
         v.push(format!("The inscribed-angle row needs point {}: turn on Inscribed angle to draw it.", n.c));
     }
     v.extend(drag_b8::warnings(p));
+    v.extend(labels_b8::warnings(p));
     v
 }
 
@@ -682,11 +685,12 @@ fn kname(k: K, n: &Names) -> String {
 // ---------------------------------------------------------------------------------------------------------------- label placement
 
 /// `keep_out`: a circle (centre, radius) the label must stay outside of (an arc's label, which inside would read as an angle).
+#[derive(Clone)]
 struct Lab { keep_out: Option<(Pt, f64)>, kind: Option<K>, text: String, size: f64, bold: bool, prio: u8, anchor: Pt, cands: Vec<(Pt, bool)>, leader_from: Option<Pt>, id: usize, wide: Option<String>, force: bool, froms: Vec<Pt> }
 
 
 #[derive(Clone, Debug)]
-pub struct Placed { pub id: usize, kind: Option<K>, pub text: String, pub rect: Rect, pub clean: bool, pub leader: bool, pub plate: bool, pub anchor: Pt, line: Option<(Pt, Pt)>, size: f64, bold: bool, c: Pt }
+pub struct Placed { pub id: usize, kind: Option<K>, pub text: String, pub rect: Rect, pub clean: bool, pub leader: bool, pub plate: bool, pub anchor: Pt, pub line: Option<(Pt, Pt)>, size: f64, bold: bool, c: Pt }
 
 fn dirs8(out: Pt) -> Vec<Pt> {
     let l = (out.0 * out.0 + out.1 * out.1).sqrt();
@@ -847,11 +851,12 @@ const CIRCLE_SEGS: usize = 60;
 /// that overlap another label or leave `bounds` (the caller then makes room or moves them into the readout).
 /// `sides`: labels dragged to one side of their line (batch 8): (label id, the line's ends, 1 left or -1 right); only spots whose whole
 /// box is on that side are tried.
-fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Vec<Pt>], sides: &[(usize, Pt, Pt, f64)]) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>) {
+/// `pre`: labels already placed, which the others keep clear of (none for a figure with no side chosen).
+fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Vec<Pt>], sides: &[(usize, Pt, Pt, f64)], pre: Vec<Placed>) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>) {
     labs.sort_by_key(|l| l.prio);
-    let mut placed: Vec<Placed> = vec![];
-    let mut rects: Vec<Rect> = vec![];
-    let mut leaders: Vec<(Pt, Pt)> = vec![];
+    let mut rects: Vec<Rect> = pre.iter().map(|p| p.rect).collect();
+    let mut leaders: Vec<(Pt, Pt)> = pre.iter().filter_map(|p| p.line).collect();
+    let mut placed: Vec<Placed> = pre;
     let mut severe: Vec<(usize, String, Option<K>)> = vec![];
     for l in labs {
         let mt = l.wide.as_ref().unwrap_or(&l.text);
@@ -992,7 +997,7 @@ fn clip_len(p: Pt, d: Pt, max: f64, b: &Rect) -> f64 {
 #[derive(Clone, Debug)]
 /// `pad` is the room added round the figure for its labels; `ox`, `oy` how far the drawing is shifted right and down (the label
 /// room plus any room the tangents need on the left and the top).
-pub struct Report { pub line_labels: Vec<(labels_b8::LKey, Rect, Pt, Pt)>, pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
+pub struct Report { pub side_fell: Vec<labels_b8::LKey>, pub line_labels: Vec<(labels_b8::LKey, Rect, Pt, Pt)>, pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
 
 fn render(p: &Params) -> String { build(p).0 }
 
@@ -1199,9 +1204,11 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         let (dx, dy) = (pb.0 - pa.0, pb.1 - pa.1);
         let len = (dx * dx + dy * dy).sqrt().max(1e-9);
         let (ux, uy) = (dx / len, dy / len);
-        for (from, sign) in [(pb, 1.0), (pa, -1.0)] {
+        // (60 px past B and A, or on past where the line crosses the circle when A or B is off it)
+        let (fwd, back) = drag_b8::secant_runs(p, len);
+        for (from, sign, run) in [(pb, 1.0, fwd), (pa, -1.0, back)] {
             let d = (sign * ux, sign * uy);
-            let t = clip_len(from, d, 60.0, &area);
+            let t = clip_len(from, d, run, &area);
             let end = (from.0 + d.0 * t, from.1 + d.1 * t);
             if t > 3.0 { sc.dashed(from, end, aux, 1.6); sc.solid.push((from, end)); }
             sec_ends.push(end);
@@ -1300,13 +1307,15 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         if rr && lb > 1e-6 && lo > 1e-6 && lo > 14.0 { sc.right(mid, (to_b.0 / lb, to_b.1 / lb), (to_o.0 / lo, to_o.1 / lo), 10.0, col(1), 2.0, rm); }
         sc.dot(mid);
     }
+    // the central angle's arc: 30 px, or shorter than the shorter arm when A or B is near the centre (checker round 1)
+    let cen_r = { let ds = drag_b8::dists(p); 30.0f64.min(0.8 * R * ds[0].min(ds[1])) };
     if pt.central && !pt.deg {
-        sc.d.angle_mark(o, cen_s, cen_s + cen_d, 30.0, None, 0, col(3), aw);
-        sc.arc_pts(o, 30.0, cen_s, cen_s + cen_d);
+        sc.d.angle_mark(o, cen_s, cen_s + cen_d, cen_r, None, 0, col(3), aw);
+        sc.arc_pts(o, cen_r, cen_s, cen_s + cen_d);
         let up = |d: f64| (d.to_radians().cos(), d.to_radians().sin());
         if let Some(i) = style::angle_index(&angst, (0.0, 0.0), up(cen_s), up(cen_s + cen_d)) {
             ang_done[i] = true;
-            sc.more_arcs(o, unit(cen_s), unit(cen_s + cen_d), 30.0, angst[i].arcs.saturating_sub(1), col(3), aw);
+            sc.more_arcs(o, unit(cen_s), unit(cen_s + cen_d), cen_r, angst[i].arcs.saturating_sub(1), col(3), aw);
         }
     }
     let semi = (g.d - 180.0).abs() < 0.5;
@@ -1391,7 +1400,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         if let Some((t, wide)) = both(K::Central, &*named(K::Central, format!("\u{2220}{}{}{}", n.a, n.o, n.b))) {
             let size = sz(13.0);
             let (bw, bh) = box_of(&wide, size, true);
-            let from = (cx + uc.0 * 30.0, CY + uc.1 * 30.0);
+            let from = (cx + uc.0 * cen_r, CY + uc.1 * cen_r);
             let cands = if small { outside_cands(cx, cen_mid, bw, bh) } else {
                 let mut v = vec![];
                 for rr in [48.0, 64.0, 82.0, 104.0] {
@@ -1403,7 +1412,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             };
             // the leader starts on one of the two radii (the end of the angle's arc), so it leaves the wedge
             // without crossing a line; the label goes to whichever side it lands on
-            let froms: Vec<Pt> = [cen_s, cen_s + cen_d].iter().map(|a| (cx + 30.0 * a.to_radians().cos(), CY - 30.0 * a.to_radians().sin())).collect();
+            let froms: Vec<Pt> = [cen_s, cen_s + cen_d].iter().map(|a| (cx + cen_r * a.to_radians().cos(), CY - cen_r * a.to_radians().sin())).collect();
             labs.push(Lab { keep_out: None, kind: Some(K::Central), text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: false, froms });
         }
     }
@@ -1638,7 +1647,23 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     hatches.insert(0, hatch.clone());
     // the labels dragged to one side of their line
     let sides: Vec<(usize, Pt, Pt, f64)> = lines_l.iter().filter_map(|(i, k, a, b)| labels_b8::side(p, k).map(|l| (*i, *a, *b, if l { 1.0 } else { -1.0 }))).collect();
-    let (placed, severe) = place(labs, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &sides);
+    // (checker round 1) a label put on one side moves alone: the others are placed where they are with no side chosen, then the
+    // sided labels among them, only where nothing is touched and their leaders are clean; one that cannot be on its side goes on
+    // the other, on the figure, and the notes say so
+    let (placed, severe, side_fell) = if sides.is_empty() {
+        let (pl, sv) = place(labs, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &[], vec![]);
+        (pl, sv, vec![])
+    } else {
+        let sided = |id: usize| sides.iter().any(|x| x.0 == id);
+        let (p0, s0) = place(labs.clone(), &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &[], vec![]);
+        let pre: Vec<Placed> = p0.into_iter().filter(|x| !sided(x.id)).collect();
+        let mine: Vec<Lab> = labs.into_iter().filter(|l| sided(l.id)).collect();
+        let (pl, s1, fell) = labels_b8::place_sided(mine, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &sides, pre);
+        let mut sv: Vec<(usize, String, Option<K>)> = s0.into_iter().filter(|x| !sided(x.0)).collect();
+        sv.extend(s1);
+        (pl, sv, fell)
+    };
+    let side_fell: Vec<labels_b8::LKey> = lines_l.iter().filter(|x| side_fell.contains(&x.0)).map(|x| x.1.clone()).collect();
     let leader_col = if print { "#444444" } else { "#888888" };
     // plates first, then the leaders (so that a plate never hides a leader), then the texts
     for pl in &placed {
@@ -1680,6 +1705,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let line_labels: Vec<(LKey, Rect, Pt, Pt)> = lines_l.into_iter().filter_map(|(i, k, a, b)| placed.iter().find(|pl| pl.id == i).map(|pl| (k, shr(pl.rect), sh(a), sh(b)))).collect();
     let placed: Vec<Placed> = placed.into_iter().map(|mut pl| { pl.rect = shr(pl.rect); pl.anchor = sh(pl.anchor); pl.line = pl.line.map(|(a, b)| (sh(a), sh(b))); pl.c = sh(pl.c); pl }).collect();
     let report = Report {
+        side_fell,
         line_labels,
         placed,
         segs: sc.segs.iter().map(|(a, b)| (sh(*a), sh(*b))).collect(),

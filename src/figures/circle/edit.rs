@@ -862,9 +862,10 @@ fn drawn_secant_runs(p: &Params) -> Vec<(V, V)> {
     let len = dx.hypot(dy).max(1e-9);
     let (ux, uy) = (dx / len, dy / len);
     let mut v = vec![];
-    for (from, sign) in [(pb, 1.0), (pa, -1.0)] {
+    let (fwd, back) = super::drag_b8::secant_runs(p, len);
+    for (from, sign, run) in [(pb, 1.0, fwd), (pa, -1.0, back)] {
         let d = (sign * ux, sign * uy);
-        let t = clip_len(from, d, 60.0, &Rect { x0: 10.0, y0: 14.0, x1: 2.0 * cx - 10.0, y1: area.y1 });
+        let t = clip_len(from, d, run, &Rect { x0: 10.0, y0: 14.0, x1: 2.0 * cx - 10.0, y1: area.y1 });
         if t > 3.0 { v.push((to_unit(cx, from), to_unit(cx, (from.0 + d.0 * t, from.1 + d.1 * t)))); }
     }
     v

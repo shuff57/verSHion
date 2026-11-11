@@ -63,6 +63,45 @@ pub fn off_abc(p: &Params) -> Vec<(String, V)> {
     (0..3).filter(|&i| drawn[i] && !o[i]).map(|i| (l[i].clone(), u[i])).collect()
 }
 
+/// What line AB is against the circle when A or B is off it (checker round 1: a line that misses the circle is no secant).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LineAB {
+    /// it cuts the circle twice, at these distances along A to B (in lengths AB, 0 at A, 1 at B)
+    Cuts(f64, f64),
+    /// it touches the circle (within 0.002 radii): a tangent
+    Touches,
+    /// it misses the circle
+    Misses,
+}
+
+/// Line AB against the circle, from where A and B are (unit coordinates); None when A and B are in the same place.
+pub fn line_ab(p: &Params) -> Option<LineAB> {
+    let [a, b, _] = upos(p);
+    let d = (b.0 - a.0, b.1 - a.1);
+    let l2 = d.0 * d.0 + d.1 * d.1;
+    if l2 < 1e-12 { return None; }
+    // the line's distance from the centre, and the circle's crossings along it
+    let dist = (a.0 * d.1 - a.1 * d.0).abs() / l2.sqrt();
+    if (dist - 1.0).abs() < 0.002 { return Some(LineAB::Touches); }
+    if dist > 1.0 { return Some(LineAB::Misses); }
+    let (qb, qc) = (2.0 * (a.0 * d.0 + a.1 * d.1), a.0 * a.0 + a.1 * a.1 - 1.0);
+    let disc = (qb * qb - 4.0 * l2 * qc).max(0.0).sqrt();
+    Some(LineAB::Cuts((-qb - disc) / (2.0 * l2), (-qb + disc) / (2.0 * l2)))
+}
+
+/// Whether the secant through A and B is a secant: always with both on the circle (as before), else when line AB cuts it twice.
+pub fn secant_ok(p: &Params) -> bool { ab_on(p) || matches!(line_ab(p), Some(LineAB::Cuts(..))) }
+
+/// How far the secant's dashed runs go past B and back past A, in px (the segment AB being `len` px): 60 px each, as before, with
+/// A and B on the circle; with one off it, on to 60 px past where the line crosses the circle, so the drawn secant cuts it.
+pub fn secant_runs(p: &Params, len: f64) -> (f64, f64) {
+    if ab_on(p) { return (60.0, 60.0); }
+    match line_ab(p) {
+        Some(LineAB::Cuts(t1, t2)) => (((t2 - 1.0) * len).max(0.0) + 60.0, (-t1 * len).max(0.0) + 60.0),
+        _ => (60.0, 60.0),
+    }
+}
+
 /// A distance in radii as the drag leaves it: to 0.05, inside 0.1 to 3.
 fn snapd(r: f64) -> f64 { ((r * 20.0).round() / 20.0).clamp(0.1, pts::MAX_DIST) }
 
@@ -174,6 +213,10 @@ pub fn warnings(p: &Params) -> Vec<String> {
             .filter(|(k, _)| p.b(kinfo(*k).2) && mode(p, *k) != Md::Hidden).map(|x| x.1).collect();
         if !rows.is_empty() { left.push(format!("the {} {}", list(&rows.iter().map(|s| s.to_string()).collect::<Vec<_>>()), if rows.len() == 1 { "row" } else { "rows" })); }
         if !left.is_empty() { v.push(format!("{off} off the circle, so {a}{b} is not a chord: {} {} not drawn. Drag it back onto the circle to draw {}.", list(&left), if left.len() == 1 { "is" } else { "are" }, if left.len() == 1 { "it" } else { "them" })); }
+    }
+    if p.b("show_secant") && pt.b && !pt.deg && !secant_ok(p) {
+        let what = if line_ab(p) == Some(LineAB::Touches) { "touches the circle at one point (it is a tangent there)" } else { "misses the circle" };
+        v.push(format!("Line {a}{b} {what}, so it is not a secant: the secant is not drawn. Move {a} or {b} so that the line cuts the circle twice."));
     }
     if pt.insc_lines {
         let who: Vec<String> = [(0, a), (1, b), (2, c)].iter().filter(|(i, _)| !o[*i]).map(|(_, l)| l.to_string()).collect();

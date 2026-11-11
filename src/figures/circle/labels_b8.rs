@@ -120,3 +120,136 @@ pub fn knob(key: LKey, rect: Rect, a: Pt, b: Pt, centre: Pt, hit: std::sync::Arc
     h.label_drag = true;
     h
 }
+
+// ------------------------------------------------------------------------------------------------ placing a label on its side
+
+/// Whether the leader from `f` to `q` (on the edge of its own box `own`) is one a reader can follow: it does not run into its own
+/// text, nor through any other label, point or leader, nor along a drawn line (checker round 1). `segs` are the drawn lines.
+pub fn leader_ok(f: Pt, q: Pt, own: &Rect, rects: &[Rect], dots: &[Rect], leaders: &[(Pt, Pt)], segs: &[(Pt, Pt)]) -> bool {
+    let len = (q.0 - f.0).hypot(q.1 - f.1);
+    if len < 1e-6 { return true; }
+    // not into its own text: it ends on the edge of the box, coming from outside
+    if seg_hits(f, q, &own.grow(-1.0)) { return false; }
+    if rects.iter().any(|r| seg_hits(f, q, &r.grow(1.0))) { return false; }
+    // (a dot at the leader's own start is the mark it points from)
+    if dots.iter().any(|d| { let c = ((d.x0 + d.x1) / 2.0, (d.y0 + d.y1) / 2.0); (c.0 - f.0).hypot(c.1 - f.1) > 6.0 && seg_hits(f, q, &d.grow(1.0)) }) { return false; }
+    if leaders.iter().any(|l| super::leaders_clash((f, q), *l)) { return false; }
+    // along a drawn line: nearly parallel to it and close to it over some length
+    let u = ((q.0 - f.0) / len, (q.1 - f.1) / len);
+    for (a, b) in segs {
+        let sl = (b.0 - a.0).hypot(b.1 - a.1);
+        if sl < 1e-6 { continue; }
+        let w = ((b.0 - a.0) / sl, (b.1 - a.1) / sl);
+        if (u.0 * w.1 - u.1 * w.0).abs() > 0.14 { continue; }
+        let near = (1..=7).map(|k| k as f64 / 8.0).filter(|t| super::pt_seg_dist((f.0 + (q.0 - f.0) * t, f.1 + (q.1 - f.1) * t), *a, *b) < 3.0).count();
+        if near >= 2 { return false; }
+    }
+    true
+}
+
+/// The best leader for box `r` from the starts `froms`, by the rules of `leader_ok`: (start, end on the box, lines it crosses).
+fn route(froms: &[Pt], r: &Rect, rects: &[Rect], dots: &[Rect], leaders: &[(Pt, Pt)], segs: &[(Pt, Pt)]) -> Option<(Pt, Pt, u32)> {
+    let mut best: Option<(Pt, Pt, u32, f64)> = None;
+    let (mx, my) = ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0);
+    for f in froms {
+        let near = super::nearest_on_rect(r, *f);
+        for q in [near, (mx, r.y0), (mx, r.y1), (r.x0, my), (r.x1, my), (r.x0, r.y0), (r.x1, r.y0), (r.x0, r.y1), (r.x1, r.y1)] {
+            if !leader_ok(*f, q, r, rects, dots, leaders, segs) { continue; }
+            let len = (q.0 - f.0).hypot(q.1 - f.1);
+            let cross = segs.iter().skip(super::CIRCLE_SEGS).filter(|sg| super::seg_cross(*f, q, sg.0, sg.1).is_some_and(|t| t * len > 3.0 && (1.0 - t) * len > 0.5)).count() as u32;
+            if best.is_none_or(|b| (cross, len) < (b.2, b.3)) { best = Some((*f, q, cross, len)); }
+        }
+    }
+    best.map(|b| (b.0, b.1, b.2))
+}
+
+/// Places the labels a teacher put on one side of their line (`labs`), every other label already placed (`pre`, where the figure
+/// puts them with no side chosen, so choosing a side moves that one label only). A sided label goes only where its whole box is on
+/// its side and touches nothing (no text, point, line or edge of the page), its leader by `leader_ok`; when no such spot is on that
+/// side it goes on the other side by the same rules, and its id is returned in the third list (the notes say so); when neither side
+/// has one, it is placed as any label is (`super::place`).
+pub(super) fn place_sided(labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Vec<Pt>], sides: &[(usize, Pt, Pt, f64)], pre: Vec<Placed>) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>, Vec<usize>) {
+    let mut placed = pre;
+    let mut leaders: Vec<(Pt, Pt)> = placed.iter().filter_map(|p| p.line).collect();
+    let mut severe = vec![];
+    let mut fell = vec![];
+    let mut labs = labs;
+    labs.sort_by_key(|l| l.prio);
+    for l in labs {
+        let Some(&(_, a, b, sg)) = sides.iter().find(|x| x.0 == l.id) else { continue };
+        let mt = l.wide.as_ref().unwrap_or(&l.text);
+        let (w, h) = (tw(mt, l.size, l.bold) + 2.0, l.size * 1.15);
+        let from0 = l.leader_from.unwrap_or(l.anchor);
+        let froms: Vec<Pt> = if l.froms.is_empty() { vec![from0] } else { l.froms.clone() };
+        let mut cands = l.cands.clone();
+        let own = cands.len();
+        for extra in [12.0, 24.0, 44.0, 70.0, 98.0, 130.0, 170.0] {
+            for i in 0..24 {
+                let ang = i as f64 * PI / 12.0;
+                let d = (ang.cos(), ang.sin());
+                let sup = d.0.abs() * w / 2.0 + d.1.abs() * h / 2.0;
+                for f in &froms { cands.push(((f.0 + d.0 * (sup + extra), f.1 + d.1 * (sup + extra)), true)); }
+            }
+        }
+        let rects: Vec<Rect> = placed.iter().map(|p| p.rect).collect();
+        let try_side = |sign: f64| -> Option<(Rect, Option<(Pt, Pt)>, bool, Pt)> {
+            let mut best: Option<((u32, u32, u32, f64), Rect, Option<(Pt, Pt)>, bool, Pt)> = None;
+            for (i, (c, far)) in cands.iter().enumerate() {
+                let r = Rect::around(*c, w, h);
+                if !box_on_side(&r, a, b, sign) || super::conflicts(&r, &rects, segs, &leaders, dots, bounds) != 0 { continue; }
+                if let Some((o, rad)) = l.keep_out { let q = super::nearest_on_rect(&r, o); if (q.0 - o.0).hypot(q.1 - o.1) < rad + 2.0 { continue; } }
+                let f = super::pick_from(&l.froms, from0, *c);
+                let q = super::nearest_on_rect(&r, f);
+                let dist = (q.0 - f.0).hypot(q.1 - f.1);
+                let needs = l.force || (*far && dist > 6.0) || dist > 18.0;
+                let (line, cross, len) = if needs && dist > 2.0 {
+                    match route(&froms, &r, &rects, dots, &leaders, segs) { Some((f2, q2, x)) => (Some((f2, q2)), x, (q2.0 - f2.0).hypot(q2.1 - f2.1)), None => continue }
+                } else { (None, 0, 0.0) };
+                let on_hatch = hatch.iter().any(|hh| super::rect_hits_poly(&r.grow(-2.0), hh));
+                let key = (on_hatch as u32, cross, (i >= own) as u32, len);
+                if best.as_ref().is_none_or(|bk| key < bk.0) { best = Some((key, r, line, on_hatch, line.map(|x| x.0).unwrap_or(f))); }
+            }
+            best.map(|b| (b.1, b.2, b.3, b.4))
+        };
+        let got = try_side(sg).or_else(|| { let o = try_side(-sg); if o.is_some() { fell.push(l.id); } o });
+        match got {
+            Some((rect, line, on_hatch, anchor)) => {
+                if let Some(ld) = line { leaders.push(ld); }
+                let plate = on_hatch && !segs.iter().any(|s| seg_hits(s.0, s.1, &rect));
+                placed.push(Placed { id: l.id, kind: l.kind, text: l.text, rect, clean: true, leader: line.is_some(), plate, anchor, line, size: l.size, bold: l.bold, c: ((rect.x0 + rect.x1) / 2.0, (rect.y0 + rect.y1) / 2.0) });
+            }
+            None => {
+                // nowhere clean on either side: as any label is placed, among the others
+                let pre2 = std::mem::take(&mut placed);
+                let (mut out, sev) = super::place(vec![l], segs, solid, dots, bounds, hatch, &[], pre2);
+                severe.extend(sev);
+                leaders = out.iter().filter_map(|p| p.line).collect();
+                placed.append(&mut out);
+            }
+        }
+    }
+    (placed, severe, fell)
+}
+
+/// What a line is called in a note.
+fn line_name(p: &Params, key: &LKey) -> String {
+    let n = names(p);
+    match key {
+        LKey::Word("radius") => format!("radius {}{}", n.o, n.a),
+        LKey::Word("chord") => format!("chord {}{}", n.a, n.b),
+        LKey::Word("diameter") => format!("the diameter through {}", n.a),
+        LKey::Word("om") => format!("{}{}", n.o, n.m),
+        LKey::Word("am") => format!("{}{}", n.a, n.m),
+        LKey::Word("secant") => "the secant".into(),
+        LKey::Word(w) => w.to_string(),
+        LKey::Tan(d) => edit::circle_points(p).into_iter().find(|x| angdiff(x.1, *d) < 1e-6).map(|x| format!("the tangent at {}", x.0)).unwrap_or_else(|| "a tangent".into()),
+        LKey::Line(u, w) => match (letter_at(p, *u), letter_at(p, *w)) { (Some(a), Some(b)) => format!("line {a}{b}"), _ => "a line".into() },
+    }
+}
+
+/// Notes for labels that could not go on the side chosen for them.
+pub fn warnings(p: &Params) -> Vec<String> {
+    if edit::rows(p.s("label_sides")).is_empty() { return vec![]; }
+    build(p).1.side_fell.iter().map(|k| format!("The label on {} has no room on the side chosen without touching other text or lines, so it is on the other side.", line_name(p, k))).collect()
+}
+
