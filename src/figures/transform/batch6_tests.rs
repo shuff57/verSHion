@@ -537,3 +537,192 @@ fn a_later_centre_or_mirror_line_is_dragged_on_the_grid_and_written_back() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// fix round: vertex labels with their coordinates on crowded figures, checked with the renderer's own text boxes
+
+type Bx = (f64, f64, f64, f64);
+
+fn walk(g: &resvg::usvg::Group, out: &mut Vec<(String, Bx)>) {
+    for n in g.children() {
+        match n {
+            resvg::usvg::Node::Group(g) => walk(g, out),
+            resvg::usvg::Node::Text(t) => {
+                let r = t.flattened().abs_bounding_box();
+                let txt: String = t.chunks().iter().map(|c| c.text()).collect();
+                out.push((txt, (r.left() as f64, r.top() as f64, r.right() as f64, r.bottom() as f64)));
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Every text's ink box as resvg lays it out with the repo's fonts, in document order.
+fn ink_texts(svg: &str) -> Vec<(String, Bx)> {
+    let mut opt = resvg::usvg::Options::default();
+    opt.fontdb = crate::figures::fontdb();
+    let tree = resvg::usvg::Tree::from_str(&crate::figures::serif_stack(svg), &opt).expect("the SVG parses");
+    let mut v = Vec::new();
+    walk(tree.root(), &mut v);
+    v.retain(|(t, b)| !t.trim().is_empty() && b.2 > b.0);
+    v
+}
+
+fn attr(tag: &str, k: &str) -> f64 { tag.split(&format!(" {k}=\"")).nth(1).and_then(|t| t.split('"').next()).and_then(|v| v.parse().ok()).unwrap_or(f64::NAN) }
+
+/// The strokes a label may not sit on: every figure's sides, mirror lines and the axes (not gridlines or leaders).
+fn strokes(svg: &str) -> Vec<(Pt, Pt)> {
+    let mut v = Vec::new();
+    for pl in svg.split("<polyline points=\"").skip(1) {
+        let pts: Vec<Pt> = pl.split('"').next().unwrap().split(' ').filter_map(|q| q.split_once(',')).map(|(x, y)| (x.parse().unwrap(), y.parse().unwrap())).collect();
+        v.extend(pts.windows(2).map(|w| (w[0], w[1])));
+    }
+    for l in svg.split("<line ").skip(1) {
+        let tag = l.split("/>").next().unwrap();
+        let sw = attr(tag, "stroke-width");
+        if tag.contains("stroke-dasharray=\"7 5\"") || sw == 1.8 {
+            v.push(((attr(tag, "x1"), attr(tag, "y1")), (attr(tag, "x2"), attr(tag, "y2"))));
+        }
+    }
+    v
+}
+
+/// The thin leader lines from a point to a label standing off it.
+fn leaders(svg: &str) -> Vec<(Pt, Pt)> {
+    svg.split("<line ").skip(1).map(|l| format!(" {}", l.split("/>").next().unwrap())).filter(|t| attr(t, "stroke-width") == 0.9).map(|t| ((attr(&t, "x1"), attr(&t, "y1")), (attr(&t, "x2"), attr(&t, "y2")))).collect()
+}
+
+/// Every dot and ring: (centre, radius with its stroke).
+fn circles(svg: &str) -> Vec<(Pt, f64)> {
+    svg.split("<circle ").skip(1).map(|c| { let t = format!(" {}", c.split("/>").next().unwrap()); ((attr(&t, "cx"), attr(&t, "cy")), attr(&t, "r") + 0.9) }).collect()
+}
+
+fn overlap(a: &Bx, b: &Bx) -> bool { a.0 < b.2 - 0.5 && b.0 < a.2 - 0.5 && a.1 < b.3 - 0.5 && b.1 < a.3 - 0.5 }
+
+/// Checks every vertex label with coordinates on `svg`: on the page, off every other text, every side, mirror line
+/// and axis, every dot and ring.
+fn coordinate_labels_are_clear(svg: &str, what: &str) {
+    let (w, h) = svg_size(svg);
+    let texts = ink_texts(svg);
+    let sides = strokes(svg);
+    let rings = circles(svg);
+    let is_label = |t: &str| t.contains('(') && !t.starts_with("Rule") && !t.starts_with("Then") && !t.starts_with("Image") && !t.starts_with(' ');
+    let mut n = 0;
+    for (k, (t, b)) in texts.iter().enumerate() {
+        if !is_label(t) { continue; }
+        n += 1;
+        assert!(b.0 >= 0.0 && b.1 >= 0.0 && b.2 <= w && b.3 <= h, "{what}: {t} at {b:?} is off the {w} x {h} page");
+        for (j, (u, c)) in texts.iter().enumerate() {
+            if j != k && overlap(b, c) { panic!("{what}: {t} at {b:?} overlaps {u} at {c:?}"); }
+        }
+        let inner = (b.0 + 0.5, b.1 + 0.5, b.2 - 0.5, b.3 - 0.5);
+        for &(a, e) in &sides {
+            let steps = ((e.0 - a.0).hypot(e.1 - a.1) / 0.5).ceil().max(1.0) as usize;
+            for st in 0..=steps {
+                let q = (a.0 + (e.0 - a.0) * st as f64 / steps as f64, a.1 + (e.1 - a.1) * st as f64 / steps as f64);
+                assert!(!(q.0 > inner.0 && q.0 < inner.2 && q.1 > inner.1 && q.1 < inner.3), "{what}: {t} at {b:?} is struck by a line from {a:?} to {e:?}");
+            }
+        }
+        for &(c, r) in &rings {
+            let (qx, qy) = (c.0.clamp(b.0, b.2), c.1.clamp(b.1, b.3));
+            assert!((qx - c.0).hypot(qy - c.1) >= r - 0.5, "{what}: {t} at {b:?} covers a dot or ring at {c:?}");
+        }
+    }
+    assert!(n > 0, "{what}: no coordinate labels");
+    // a leader line (a label standing off its point) runs through no text, its own label's included
+    for (a, e) in leaders(svg) {
+        for (t, b) in &texts {
+            let inner = (b.0 + 0.5, b.1 + 0.5, b.2 - 0.5, b.3 - 0.5);
+            for st in 0..=40 {
+                let q = (a.0 + (e.0 - a.0) * st as f64 / 40.0, a.1 + (e.1 - a.1) * st as f64 / 40.0);
+                assert!(!(q.0 > inner.0 && q.0 < inner.2 && q.1 > inner.1 && q.1 < inner.3), "{what}: the leader from {a:?} to {e:?} runs through {t} at {b:?}");
+            }
+        }
+    }
+}
+
+fn crowded_cases() -> Vec<(String, Vec<(&'static str, Value)>)> {
+    vec![
+        // the checker's cases
+        ("kite in y = x, then up 1 right 1".into(), vec![s("pre", "1, 2\n4, 1\n2, 5\n0, 4"), s("op", "Reflect"), s("axis", AXES[2]), s("then", "translate 1, 1")]),
+        ("three steps on a small triangle".into(), vec![s("pre", "1, 1\n3, 1\n2, 3"), s("op", "Dilate"), f("scale", 1.5), f("cx", 1.0), f("cy", 1.0), s("then", "reflect in y = x\ntranslate 0, -1")]),
+        ("four steps".into(), vec![s("pre", "0, 0\n2, 0\n2, 2\n0, 2"), s("then", "rotate 90 about (1, 1)\nreflect in x = 2\ndilate 1/2 about (3, 0)")]),
+        ("four steps, turns about one point".into(), vec![s("op", "Rotate"), f("cx", 2.0), f("cy", 2.0), s("then", "rotate 90 about (2, 2)\nrotate 90 about (2, 2)\nreflect in y = 2")]),
+        ("ten vertices and a reflection".into(), vec![s("pre", "0, 0\n2, 0\n3, 2\n1, 3\n-1, 2\n-2, 0\n-3, -2\n0, -3\n2, -3\n4, -1"), s("op", "Reflect"), s("axis", AXES[0])]),
+        ("a point on its own image".into(), vec![s("pre", "0, 0\n3, 0\n0, 3"), s("op", "Reflect"), s("axis", AXES[2]), s("then", "rotate 180")]),
+        ("near the grid's corner".into(), vec![s("pre", "8, 8\n10, 8\n10, 10"), s("op", "Rotate"), s("angle", ANGLES[1]), f("cx", 9.0), f("cy", 9.0), s("then", "translate -1, 0")]),
+        ("a typed range of 30".into(), vec![("x_to", Value::I(30)), ("y_to", Value::I(30)), s("pre", "1, 1\n2, 1\n1, 2"), s("then", "reflect in y = x\nrotate 90 clockwise")]),
+        // each kind, triangle through hexagon, shapes overlapping or sharing points
+        ("a quadrilateral slid one unit twice".into(), vec![s("pre", "0, 0\n3, 0\n3, 2\n0, 2"), s("op", "Translate"), f("dx", 1.0), f("dy", 0.0), s("then", "translate 0, 1")]),
+        ("a pentagon in x = 2, then y = 1".into(), vec![s("pre", "0, 0\n2, 0\n3, 2\n1, 3\n-1, 2"), s("op", "Reflect"), s("axis", AXES[4]), f("line_a", 2.0), s("then", "reflect in y = 1")]),
+        ("a hexagon turned about its own vertex".into(), vec![s("pre", "0, 0\n2, 0\n3, 2\n2, 4\n0, 4\n-1, 2"), s("op", "Rotate"), s("angle", ANGLES[0]), f("cx", 2.0), f("cy", 0.0), s("then", "rotate 180 about (2, 0)")]),
+        ("a pentagon enlarged twice about one vertex".into(), vec![s("pre", "1, 1\n3, 1\n4, 2\n2, 3\n0, 2"), s("op", "Dilate"), f("scale", 1.5), f("cx", 1.0), f("cy", 1.0), s("then", "dilate 2 about (1, 1)")]),
+        ("a triangle turned, reflected, slid".into(), vec![s("pre", "1, 0\n3, 0\n1, 2"), s("op", "Rotate"), s("angle", ANGLES[1]), s("then", "reflect in y = -x\ntranslate 1, 1")]),
+    ]
+}
+
+#[test]
+fn coordinate_labels_never_overlap_text_lines_dots_or_rings() {
+    for (name, case) in crowded_cases() {
+        for size in ["Small", "Medium", "Large"] {
+            for extra in [vec![], vec![s("style", "Print"), b("show_arrows", true)], vec![s("names", "P1, Q2, R3, S4")], vec![s("title_mode", "Text"), s("title", "T"), s("x_label", "x"), s("y_label", "y"), s("ends", "Both ends")], vec![b("fit", true), b("show_guides", false), b("coord_list", true)]] {
+                let mut l = case.clone();
+                l.extend([s("pt_labels", "Letters and coordinates"), s("label_size", size)]);
+                l.extend(extra.clone());
+                let svg = render_of(&l);
+                // VERSHION_PNG_DIR=<dir> writes each figure out to look at
+                if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+                    let tag: String = format!("{name} {size} {}", extra.len()).chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+                    std::fs::write(format!("{dir}/tf-04h-{tag}.png"), crate::figures::to_png(&svg, 1.3).unwrap()).unwrap();
+                }
+                coordinate_labels_are_clear(&svg, &format!("{name} at {size} {extra:?}"));
+            }
+        }
+    }
+}
+
+/// A point two figures share is named once, with both letters: "C, B''(2, 5)".
+#[test]
+fn a_shared_point_is_named_once_with_every_letter() {
+    let svg = render_of(&[s("pre", "1, 2\n4, 1\n2, 5\n0, 4"), s("op", "Reflect"), s("axis", AXES[2]), s("then", "translate 1, 1"), s("pt_labels", "Letters and coordinates"), s("label_size", "Large")]);
+    // C(2, 5) -> C'(5, 2) -> C''(6, 3); B(4, 1) -> B'(1, 4) -> B''(2, 5): C and B'' share (2, 5)
+    let t: Vec<String> = ink_texts(&svg).into_iter().map(|(t, _)| t).collect();
+    assert!(t.iter().any(|x| x == "C, B\u{2033}(2, 5)"), "{t:?}");
+    assert!(!t.iter().any(|x| x == "C(2, 5)" || x == "B\u{2033}(2, 5)"), "drawn twice: {t:?}");
+    // letters alone (no coordinates) are not merged: each figure keeps its own letter, as before
+    let t = texts(&render_of(&[s("pre", "1, 2\n4, 1\n2, 5\n0, 4"), s("op", "Reflect"), s("axis", AXES[2]), s("then", "translate 1, 1")]));
+    assert!(t.lines().any(|x| x == "C") && t.lines().any(|x| x == "B\u{2033}"), "{t}");
+}
+
+/// A centre ring is drawn under the letters: any text it touches comes after it in the drawing.
+#[test]
+fn a_centre_ring_never_covers_a_letter() {
+    let mut cases: Vec<Vec<(&'static str, Value)>> = Vec::new();
+    for (cx, cy) in [(1.0, 1.0), (0.0, 1.0), (1.0, 2.0), (4.0, 0.0), (2.0, 1.5), (1.0, 3.5)] {
+        for op in ["Rotate", "Dilate"] {
+            // (a lone transformation with letters only is a figure batch 5 could save, drawn as it always was)
+            for extra in [vec![s("pt_labels", "Letters and coordinates")], vec![s("pt_labels", "Letters and coordinates"), s("label_size", "Large")], vec![s("then", "rotate 180 about (1, 1)")], vec![s("then", "rotate 180 about (1, 1)"), b(SHOW_ANSWERS, false), s("label_size", "Large")], vec![s("then", "dilate 2 about (0, 0)"), s("pt_labels", "Letters and coordinates"), s("label_size", "Large")]] {
+                let mut l = vec![s("op", op), f("cx", cx), f("cy", cy)];
+                l.extend(extra);
+                cases.push(l);
+            }
+        }
+    }
+    for l in cases {
+        let svg = render_of(&l);
+        let texts = ink_texts(&svg);
+        let starts: Vec<usize> = svg.match_indices("<text").map(|(i, _)| i).collect();
+        assert_eq!(starts.len(), texts.len(), "{l:?}: every text has an ink box");
+        for (ring, _) in svg.match_indices("fill=\"#ffffff\"") {
+            let tag_start = svg[..ring].rfind("<circle").unwrap();
+            let tag = &svg[tag_start..tag_start + svg[tag_start..].find("/>").unwrap()];
+            let (c, r) = ((attr(tag, "cx"), attr(tag, "cy")), attr(tag, "r") + 0.9);
+            for (k, (t, bx)) in texts.iter().enumerate() {
+                let (qx, qy) = (c.0.clamp(bx.0, bx.2), c.1.clamp(bx.1, bx.3));
+                if (qx - c.0).hypot(qy - c.1) < r {
+                    assert!(starts[k] > tag_start, "{l:?}: the ring at {c:?} is drawn over {t}");
+                }
+            }
+        }
+    }
+}

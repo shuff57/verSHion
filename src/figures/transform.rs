@@ -790,6 +790,7 @@ fn box_cost(r: &Rect, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt, f64)]) -> f
     let inside = |q: Pt| q.0 > r.x0 - 1.0 && q.0 < r.x1 + 1.0 && q.1 > r.y0 - 1.0 && q.1 < r.y1 + 1.0;
     let hit = |q: &Rect| r.x0 < q.x1 + 1.0 && q.x0 < r.x1 + 1.0 && r.y0 < q.y1 + 1.0 && q.y0 < r.y1 + 1.0;
     let crossed: f64 = sides.iter().map(|&(a, b, w)| {
+        if a.0.max(b.0) <= r.x0 - 1.0 || a.0.min(b.0) >= r.x1 + 1.0 || a.1.max(b.1) <= r.y0 - 1.0 || a.1.min(b.1) >= r.y1 + 1.0 { return 0.0; }
         let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
         let n = (len / 2.0).ceil().max(1.0) as usize;
         w * (0..=n).filter(|&k| inside((a.0 + (b.0 - a.0) * k as f64 / n as f64, a.1 + (b.1 - a.1) * k as f64 / n as f64))).count() as f64
@@ -838,6 +839,58 @@ fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[
         }
     }
     best.1
+}
+
+/// A vertex label's name without its coordinates: `C′` from `C′(5, 2)`.
+fn g_name(label: &str) -> String {
+    label.rsplit_once('(').map(|(a, _)| a.to_string()).unwrap_or_else(|| label.to_string())
+}
+
+/// Where a long label goes (a letter with its coordinates, typed letters, a point several figures share): like
+/// [`label_spot`], out from the shape's middle first, but it never settles for a spot on a side, a dot, a ring,
+/// other text or off the page while a clear one exists. It turns an eighth of 45 degrees at a time and stands further
+/// off, up to 230 px; a label standing more than 20 px off gets a thin leader line to its point (the end of that line
+/// is returned), which must not run through other text.
+#[allow(clippy::too_many_arguments)]
+fn long_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt, f64)], page: (f64, f64)) -> (f64, f64, &'static str, Option<Pt>, f64) {
+    let n = pts.len() as f64;
+    let c = (pts.iter().map(|q| q.0).sum::<f64>() / n, pts.iter().map(|q| q.1).sum::<f64>() / n);
+    let (vx, vy) = (fr.px(pts[i].0), fr.py(pts[i].1));
+    let (mut dx, mut dy) = (vx - fr.px(c.0), vy - fr.py(c.1));
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 1e-6 { (dx, dy) = (-0.7071, -0.7071); } else { dx /= len; dy /= len; }
+    let (hw, hh) = (tw(text, size, false) / 2.0, size * 0.62);
+    let at = |dx: f64, dy: f64, gap: f64| {
+        let edge = (hw / dx.abs().max(1e-6)).min(hh / dy.abs().max(1e-6));
+        (vx + dx * (edge + gap), vy + dy * (edge + gap) + size * 0.35)
+    };
+    let pad = 2.0;
+    let mut turns: Vec<f64> = vec![0.0];
+    for k in 1..32 { let t = k as f64 * 5.625; turns.push(t); turns.push(-t); }
+    turns.push(180.0);
+    let mut best: (f64, (f64, f64, &'static str, Option<Pt>)) = (f64::MAX, (0.0, 0.0, "middle", None));
+    for gap in [4.0, 7.0, 11.0, 16.0, 22.0, 30.0, 40.0, 52.0, 66.0, 82.0, 100.0, 125.0, 155.0, 190.0, 230.0] {
+        for &turn in &turns {
+            let (s, co) = f64::to_radians(turn).sin_cos();
+            let (x, y) = at(dx * co - dy * s, dx * s + dy * co, gap);
+            let r = text_rect(x, y, size, "middle", text);
+            let rp = Rect { x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad };
+            let mut k = box_cost(&rp, taken, dots, sides);
+            if r.x0 < 2.0 || r.y0 < 2.0 || r.x1 > page.0 - 2.0 || r.y1 > page.1 - 2.0 { k += 1000.0; }
+            // a leader, from the point to the nearest edge of the box: clear of every other text
+            let lead = (gap > 20.0).then(|| { let e = (vx.clamp(r.x0, r.x1), vy.clamp(r.y0, r.y1)); let l = ((e.0 - vx).hypot(e.1 - vy)).max(1.0); (e.0 - (e.0 - vx) / l * 2.0, e.1 - (e.1 - vy) / l * 2.0) });
+            // a nearer spot is better than a far one with the same cost
+            let mut k = k + gap * 0.001;
+            if k >= best.0 { continue; }
+            if let Some(e) = lead {
+                let seg = [((vx, vy), e, 1.0)];
+                k += 100.0 * taken.iter().filter(|q| box_cost(q, &[], &[], &seg) > 0.0).count() as f64;
+            }
+            if k < 1.0 { return (x, y, "middle", lead, k); }
+            if k < best.0 { best = (k, (x, y, "middle", lead)); }
+        }
+    }
+    (best.1.0, best.1.1, best.1.2, best.1.3, best.0)
 }
 
 /// The `stroke-dasharray` (and round caps for dots) a line style draws with at width `sw`; empty for a solid line.
@@ -1126,83 +1179,201 @@ pub fn build(p: &Params) -> (String, Report) {
     };
     let all_sides: Vec<(Pt, Pt, f64)> = fig_edges.iter().flat_map(|e| weigh(e, 1.0)).chain(weigh(&arrow_e, 1.0)).collect();
     let stroke_sides: Vec<(Pt, Pt, f64)> = all_sides.iter().copied().chain(weigh(&mirror_sides, 1.0)).collect();
+    // the centres of turns and enlargements: open rings (on the student copy too, they are part of the question)
+    let mut rings: Vec<Pt> = Vec::new();
+    for st in steps.iter().filter(|_| guides) {
+        if has_centre(&st.p) && !(old && centre(&st.p) == (0.0, 0.0)) && !rings.contains(&centre(&st.p)) {
+            rings.push(centre(&st.p));
+        }
+    }
+    let ring_px: Vec<Pt> = rings.iter().map(|&c| fr.to_svg(c)).collect();
+    let draw_rings = |d: &mut Doc| { for c in &ring_px { d.circle(c.0, c.1, 4.5, "#ffffff", ink, 1.8); } };
+    // a ring as points a label may not cover: its centre and eight points round its outer edge
+    let ring_dots: Vec<Pt> = ring_px.iter().flat_map(|c| std::iter::once(*c).chain((0..8).map(move |k| { let a = k as f64 * std::f64::consts::FRAC_PI_4; (c.0 + 6.0 * a.cos(), c.1 + 6.0 * a.sin()) }))).collect();
+
+    // the mirror line's name: near its upper end, on whichever side and as far along as keeps it off both axes, the
+    // figures, their letters and the line itself (an axis through "x = -1" strikes out the equals sign)
+    let line_names = |d: &mut Doc, labels: &mut Vec<Rect>, avoid: &[Pt]| {
+        for (top, other, name) in &line_labels {
+            let ls = 13.0 * f;
+            let len = ((other.0 - top.0).powi(2) + (other.1 - top.1).powi(2)).sqrt().max(1e-9);
+            let dir = ((other.0 - top.0) / len, (other.1 - top.1) / len);
+            let n = if dir.0.abs() < 1e-6 { (1.0, 0.0) } else if dir.0 < 0.0 { (-dir.1, dir.0) } else { (dir.1, -dir.0) };
+            let axes = [((ox, py(0.0)), (ox + gw, py(0.0)), 6.0), ((px(0.0), oy), (px(0.0), oy + gh), 6.0)];
+            let mut obstacles: Vec<(Pt, Pt, f64)> = all_sides.clone();
+            obstacles.extend(axes);
+            obstacles.extend(mirror_sides.iter().map(|&(a, b)| (a, b, 6.0)));
+            let mut all_dots = dots.clone();
+            all_dots.extend_from_slice(avoid);
+            let mut best: (f64, (f64, f64, &str)) = (f64::MAX, (0.0, 0.0, "start"));
+            'search: for along in [20.0, 45.0, 75.0, 110.0, 150.0, 200.0] {
+                if along > len - 10.0 { break; }
+                for side in [1.0, -1.0] {
+                    let nn = (n.0 * side, n.1 * side);
+                    let anchor = if nn.0 > 0.2 { "start" } else if nn.0 < -0.2 { "end" } else { "middle" };
+                    let spot = (top.0 + dir.0 * along + nn.0 * 10.0, top.1 + dir.1 * along + nn.1 * 10.0 + ls * 0.35, anchor);
+                    let r = text_rect(spot.0, spot.1, ls, anchor, name);
+                    // inside the grid: a name hanging off the edge reads as belonging to nothing
+                    let off = if r.x0 < ox - 2.0 || r.x1 > ox + gw + 2.0 || r.y0 < oy - 2.0 || r.y1 > oy + gh + 2.0 { 50.0 } else { 0.0 };
+                    let k = box_cost(&r, labels, &all_dots, &obstacles) + off;
+                    if k < best.0 { best = (k, spot); }
+                    if k == 0.0 { break 'search; }
+                }
+            }
+            if best.0 == f64::MAX { best.1 = (top.0 + n.0 * 10.0, top.1 + 20.0, if n.0 > 0.2 { "start" } else { "end" }); }
+            let (x, y, a) = best.1;
+            put(d, labels, x, y, a, name, if print { PRE_PRINT } else { PRE_COLOUR }, ls);
+        }
+    };
+    // the axis letters, at the right end of the x-axis (inside the grid's corner when the margin is too narrow) and
+    // the top end of the y-axis; before the numbers, so a number under one is left out
+    let past = if ends != "None" { 15.0 } else { 6.0 };
+    let axis_letters = |d: &mut Doc, labels: &mut Vec<Rect>| {
+        let xl = p.s("x_label").trim();
+        if !xl.is_empty() {
+            let fits = ox + gw + past + tw(xl, size, false) <= cw - 4.0;
+            let (x, y, a) = if fits { (ox + gw + past, py(0.0) + size * 0.35, "start") } else { (ox + gw - 4.0, py(0.0) - 6.0, "end") };
+            put(d, labels, x, y, a, xl, ink, size);
+        }
+        let yl = p.s("y_label").trim();
+        if !yl.is_empty() {
+            put(d, labels, px(0.0) + 8.0, oy - if ends != "None" { 3.0 } else { 4.0 }, "start", yl, ink, size);
+        }
+    };
+
     // an image past the largest grid is cut at its edge (its letters left off)
     if clipped {
         d.raw(&format!(r#"<clipPath id="tf-grid"><rect x="{ox:.2}" y="{oy:.2}" width="{gw:.2}" height="{gh:.2}"/></clipPath><g clip-path="url(#tf-grid)">"#));
     }
     for (s, e, col) in &arrows { d.arrow_with(s.0, s.1, e.0, e.1, col, 1.3, "", false); }
-    for (j, g) in figs.iter().enumerate() {
-        shape(&mut d, &g.pts, &g.col, g.sw, g.stroke);
-        if !pt_letters { continue; }
-        let sides = sides_for(j);
-        // a long label (typed letters, coordinates) is kept off the axes too; a plain letter is placed as it always was
-        let mut long_sides = sides.clone();
-        long_sides.extend([((ox, py(0.0)), (ox + gw, py(0.0)), 2.0), ((px(0.0), oy), (px(0.0), oy + gh), 2.0)]);
-        for i in 0..g.pts.len() {
-            if !fr.holds(g.pts[i]) { continue; }
-            let text = &g.letters[i];
-            let (x, y, a) = match (old, g.k) {
-                (true, 0) if !pt_coords => (px(g.pts[i].0) - 8.0, py(g.pts[i].1) - 6.0, "end"),
-                (true, _) if !pt_coords => (px(g.pts[i].0) + 8.0, py(g.pts[i].1) - 6.0, "start"),
-                _ => label_spot(&fr, &g.pts, i, size, text, &labels, &dots, if text.chars().count() > 2 { &long_sides } else { &sides }, page),
-            };
-            put(&mut d, &mut labels, x, y, a, text, &g.col, size);
+    // Long labels (letters with their coordinates, typed letters) are placed by `long_spot`, which never settles for a
+    // spot on a side, a dot, a ring, other text or off the page, and a point several figures share is named once
+    // ("C, B''(2, 5)"). Plain letters are placed exactly as they always were.
+    let long_mode = pt_letters && figs.iter().any(|g| g.letters.iter().any(|t| t.chars().count() > 2));
+    // the leader lines drawn, which no axis number may sit on
+    let mut leader_sides: Vec<(Pt, Pt, f64)> = Vec::new();
+    if !long_mode {
+        // one transformation: each figure's sides, then its letters, the mirror lines' names, then the rings, exactly
+        // as before (every figure saved before batch 6 is drawn this way, byte for byte). Several (only since batch
+        // 6, e.g. a chain whose images are hidden): every shape, then the rings, then the letters, kept off the rings.
+        let chain = n > 1;
+        let mut letter_dots = dots.clone();
+        if chain {
+            for g in &figs { shape(&mut d, &g.pts, &g.col, g.sw, g.stroke); }
+            draw_rings(&mut d);
+            letter_dots.extend_from_slice(&ring_dots);
         }
-    }
-    if clipped { d.raw("</g>"); }
-
-    // the mirror line's name: near its upper end, on whichever side and as far along as keeps it off both axes, the
-    // figures, their letters and the line itself (an axis through "x = -1" strikes out the equals sign)
-    for (top, other, name) in &line_labels {
-        let ls = 13.0 * f;
-        let len = ((other.0 - top.0).powi(2) + (other.1 - top.1).powi(2)).sqrt().max(1e-9);
-        let dir = ((other.0 - top.0) / len, (other.1 - top.1) / len);
-        let n = if dir.0.abs() < 1e-6 { (1.0, 0.0) } else if dir.0 < 0.0 { (-dir.1, dir.0) } else { (dir.1, -dir.0) };
-        let axes = [((ox, py(0.0)), (ox + gw, py(0.0)), 6.0), ((px(0.0), oy), (px(0.0), oy + gh), 6.0)];
-        let mut obstacles: Vec<(Pt, Pt, f64)> = all_sides.clone();
-        obstacles.extend(axes);
-        obstacles.extend(mirror_sides.iter().map(|&(a, b)| (a, b, 6.0)));
-        let mut best: (f64, (f64, f64, &str)) = (f64::MAX, (0.0, 0.0, "start"));
-        'search: for along in [20.0, 45.0, 75.0, 110.0, 150.0, 200.0] {
-            if along > len - 10.0 { break; }
-            for side in [1.0, -1.0] {
-                let nn = (n.0 * side, n.1 * side);
-                let anchor = if nn.0 > 0.2 { "start" } else if nn.0 < -0.2 { "end" } else { "middle" };
-                let spot = (top.0 + dir.0 * along + nn.0 * 10.0, top.1 + dir.1 * along + nn.1 * 10.0 + ls * 0.35, anchor);
-                let r = text_rect(spot.0, spot.1, ls, anchor, name);
-                // inside the grid: a name hanging off the edge reads as belonging to nothing
-                let off = if r.x0 < ox - 2.0 || r.x1 > ox + gw + 2.0 || r.y0 < oy - 2.0 || r.y1 > oy + gh + 2.0 { 50.0 } else { 0.0 };
-                let k = box_cost(&r, &labels, &dots, &obstacles) + off;
-                if k < best.0 { best = (k, spot); }
-                if k == 0.0 { break 'search; }
+        for (j, g) in figs.iter().enumerate() {
+            if !chain { shape(&mut d, &g.pts, &g.col, g.sw, g.stroke); }
+            if pt_letters {
+                let sides = sides_for(j);
+                for i in 0..g.pts.len() {
+                    if !fr.holds(g.pts[i]) { continue; }
+                    let text = &g.letters[i];
+                    let (x, y, a) = match (old, g.k) {
+                        (true, 0) => (px(g.pts[i].0) - 8.0, py(g.pts[i].1) - 6.0, "end"),
+                        (true, _) => (px(g.pts[i].0) + 8.0, py(g.pts[i].1) - 6.0, "start"),
+                        _ => label_spot(&fr, &g.pts, i, size, text, &labels, &letter_dots, &sides, page),
+                    };
+                    put(&mut d, &mut labels, x, y, a, text, &g.col, size);
+                }
             }
         }
-        if best.0 == f64::MAX { best.1 = (top.0 + n.0 * 10.0, top.1 + 20.0, if n.0 > 0.2 { "start" } else { "end" }); }
-        let (x, y, a) = best.1;
-        put(&mut d, &mut labels, x, y, a, name, if print { PRE_PRINT } else { PRE_COLOUR }, ls);
-    }
-    // the centre of a turn or an enlargement: an open ring (on the student copy too, it is part of the question)
-    let mut rings: Vec<Pt> = Vec::new();
-    for st in steps.iter().filter(|_| guides) {
-        if has_centre(&st.p) && !(old && centre(&st.p) == (0.0, 0.0)) && !rings.contains(&centre(&st.p)) {
-            rings.push(centre(&st.p));
-            let c = fr.to_svg(centre(&st.p));
-            d.circle(c.0, c.1, 4.5, "#ffffff", ink, 1.8);
+        if clipped { d.raw("</g>"); }
+        line_names(&mut d, &mut labels, if chain { &ring_dots } else { &[] });
+        if !chain { draw_rings(&mut d); }
+        axis_letters(&mut d, &mut labels);
+    } else {
+        for g in &figs { shape(&mut d, &g.pts, &g.col, g.sw, g.stroke); }
+        draw_rings(&mut d);
+        if clipped { d.raw("</g>"); }
+        // the fixed text first (the mirror lines' names, the axis letters), then the vertex labels round it
+        line_names(&mut d, &mut labels, &ring_dots);
+        axis_letters(&mut d, &mut labels);
+        // text the vertex labels must keep off besides: the rows under the grid and the titles
+        let mut reserved: Vec<Rect> = rows.iter().enumerate().map(|(i, r)| text_rect(L * 0.4, rows_y0 + i as f64 * ROW_H * f, fs, "start", r)).collect();
+        if title_room > 0.0 { reserved.push(Rect { x0: 0.0, y0: 0.0, x1: cw, y1: T + title_room - 2.0 }); }
+        if xtitle {
+            let y = oy + gh + if y0 >= 0.0 { 14.0 } else { 0.0 } + 22.0 * f;
+            let w = if p.s("xtitle_mode") == "Text" { tw(p.s("xtitle").trim(), 15.0 * f, false) } else { 180.0 * f };
+            reserved.push(Rect { x0: ox + gw / 2.0 - w / 2.0, y0: y - 15.0 * f, x1: ox + gw / 2.0 + w / 2.0, y1: y + 5.0 * f });
         }
-    }
-
-    // the axis letters, at the right end of the x-axis (inside the grid's corner when the margin is too narrow) and
-    // the top end of the y-axis; before the numbers, so a number under one is left out
-    let past = if ends != "None" { 15.0 } else { 6.0 };
-    let xl = p.s("x_label").trim();
-    if !xl.is_empty() {
-        let fits = ox + gw + past + tw(xl, size, false) <= cw - 4.0;
-        let (x, y, a) = if fits { (ox + gw + past, py(0.0) + size * 0.35, "start") } else { (ox + gw - 4.0, py(0.0) - 6.0, "end") };
-        put(&mut d, &mut labels, x, y, a, xl, ink, size);
-    }
-    let yl = p.s("y_label").trim();
-    if !yl.is_empty() {
-        put(&mut d, &mut labels, px(0.0) + 8.0, oy - if ends != "None" { 3.0 } else { 4.0 }, "start", yl, ink, size);
+        if shows_title(p, "ytitle_mode", "ytitle") { reserved.push(Rect { x0: 0.0, y0: oy, x1: 18.0 * f + 10.0 * f, y1: oy + gh }); }
+        // one label per point: the figures sharing a point are named together, in the colour of ink
+        struct Spot { members: Vec<(usize, usize)>, at: Pt }
+        let mut spots: Vec<Spot> = Vec::new();
+        for (j, g) in figs.iter().enumerate() {
+            for (i, q) in g.pts.iter().enumerate() {
+                if !fr.holds(*q) { continue; }
+                match spots.iter_mut().find(|s| pt_coords && (s.at.0 - q.0).abs() < 1e-9 && (s.at.1 - q.1).abs() < 1e-9) {
+                    Some(s) => s.members.push((j, i)),
+                    None => spots.push(Spot { members: vec![(j, i)], at: *q }),
+                }
+            }
+        }
+        // Each label is placed round the ones placed before it, so the order matters on a crowded figure: the labels
+        // are placed in several orders (the most crowded points first, top to bottom, left to right ...) and the
+        // arrangement with the least left in the way is drawn; the first clear one is taken as it is.
+        struct Placed { x: f64, y: f64, a: &'static str, lead: Option<Pt>, v: Pt, text: String, col: String }
+        let texts: Vec<(String, String)> = spots.iter().map(|s| {
+            let (j, i) = s.members[0];
+            if s.members.len() == 1 {
+                (figs[j].letters[i].clone(), figs[j].col.clone())
+            } else {
+                let nm: Vec<String> = s.members.iter().map(|&(j, i)| g_name(&figs[j].letters[i])).collect();
+                (format!("{}({}, {})", nm.join(", "), num(s.at.0, dec), num(s.at.1, dec)), ink.to_string())
+            }
+        }).collect();
+        let place = |order: &[usize]| -> (f64, Vec<Placed>) {
+            let mut taken = labels.clone();
+            taken.extend_from_slice(&reserved);
+            let mut leaders: Vec<(Pt, Pt)> = Vec::new();
+            let mut out = Vec::new();
+            let mut total = 0.0;
+            for &k in order {
+                let s = &spots[k];
+                let (j, i) = s.members[0];
+                let (text, col) = texts[k].clone();
+                let v = fr.to_svg(s.at);
+                let others: Vec<Pt> = dots.iter().filter(|d| (d.0 - v.0).abs() + (d.1 - v.1).abs() > 0.5).copied().chain(ring_dots.iter().copied()).collect();
+                let mut sides: Vec<(Pt, Pt, f64)> = all_sides.clone();
+                sides.extend(weigh(&mirror_sides, 1.0));
+                sides.extend(weigh(&leaders, 1.0));
+                sides.extend([((ox, py(0.0)), (ox + gw, py(0.0)), 1.0), ((px(0.0), oy), (px(0.0), oy + gh), 1.0)]);
+                let (x, y, a, lead, cost) = long_spot(&fr, &figs[j].pts, i, size, &text, &taken, &others, &sides, page);
+                total += cost.max(1.0) - 1.0;
+                if let Some(e) = lead { leaders.push((v, e)); }
+                taken.push(text_rect(x, y, size, a, &text));
+                out.push(Placed { x, y, a, lead, v, text, col });
+            }
+            (total, out)
+        };
+        let n_spots = spots.len();
+        let crowd = |k: usize| { let v = fr.to_svg(spots[k].at); spots.iter().filter(|o| { let w = fr.to_svg(o.at); (w.0 - v.0).hypot(w.1 - v.1) < 70.0 }).count() };
+        let key = |k: usize| fr.to_svg(spots[k].at);
+        let mut orders: Vec<Vec<usize>> = Vec::new();
+        let base: Vec<usize> = (0..n_spots).collect();
+        let mut o = base.clone(); o.sort_by_key(|&k| std::cmp::Reverse(crowd(k))); orders.push(o);
+        orders.push(base.clone());
+        let mut o = base.clone(); o.sort_by(|&a, &b| key(a).1.total_cmp(&key(b).1)); orders.push(o.clone()); o.reverse(); orders.push(o);
+        let mut o = base.clone(); o.sort_by(|&a, &b| key(a).0.total_cmp(&key(b).0)); orders.push(o.clone()); o.reverse(); orders.push(o);
+        let mut o = base.clone(); o.reverse(); orders.push(o);
+        let mut best: Option<(f64, Vec<Placed>)> = None;
+        for o in &orders {
+            let (cost, placed) = place(o);
+            let clear = cost < 1e-9;
+            if best.as_ref().is_none_or(|b| cost < b.0) { best = Some((cost, placed)); }
+            if clear { break; }
+        }
+        for pl in best.map(|b| b.1).unwrap_or_default() {
+            if let Some(e) = pl.lead {
+                let (v, l) = (pl.v, ((e.0 - pl.v.0).hypot(e.1 - pl.v.1)).max(1.0));
+                let s = (v.0 + (e.0 - v.0) * 4.0 / l, v.1 + (e.1 - v.1) * 4.0 / l);
+                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="0.9"/>"##, s.0, s.1, e.0, e.1, pl.col));
+                leader_sides.push((s, e, 1.0));
+            }
+            put(&mut d, &mut labels, pl.x, pl.y, pl.a, &pl.text, &pl.col, size);
+        }
     }
 
     // the axis numbers, drawn after the shapes so a side cannot swallow a digit (they carry a halo); every 2nd line,
@@ -1217,6 +1388,8 @@ pub fn build(p: &Params) -> (String, Report) {
         let hit = labels.iter().any(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1)
             // a side or the mirror line through the number: its white halo would cut a gap in the stroke
             || box_cost(&Rect { x0: r.x0 + 1.0, y0: r.y0 + 2.0, x1: r.x1 - 1.0, y1: r.y1 }, &[], &[], &stroke_sides) > 0.0
+            // (or a leader: the number would hide where the line starts)
+            || box_cost(&r, &[], &[], &leader_sides) > 0.0
             || (chosen && last.as_ref().is_some_and(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1));
         if k.abs() > 0.5 && !hit {
             d.raw(&text_el(x, y, 12.0, anchor, ink, &t));
@@ -1236,19 +1409,21 @@ pub fn build(p: &Params) -> (String, Report) {
         }
     };
     let (auto_x, auto_y) = (p.s("x_num") == "Automatic" && xs == 1.0, p.s("y_num") == "Automatic" && ys == 1.0);
+    // (with long labels on the old fitted grid, a number under one or on its leader is left out)
+    let on_label = |x: f64, y: f64, anchor: &str, k: f64| { let r = text_rect(x, y, 12.0, anchor, &format!("{}", k as i64)); labels.iter().any(|q| r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1) || box_cost(&r, &[], &[], &leader_sides) > 0.0 };
     if old {
         // the old numbering: every even line from -6 to 12, never left out
         if auto_x {
             let mut k = (x0.max(-6.0)).ceil();
             while k <= x1.min(12.0) {
-                if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(k), py(0.0) + 16.0, 12.0, "middle", ink, &format!("{}", k as i64))); }
+                if k.abs() > 0.5 && (k as i64) % 2 == 0 && !(long_mode && on_label(px(k), py(0.0) + 16.0, "middle", k)) { d.raw(&text_el(px(k), py(0.0) + 16.0, 12.0, "middle", ink, &format!("{}", k as i64))); }
                 k += 1.0;
             }
         }
         if auto_y {
             let mut k = (y0.max(-6.0)).ceil();
             while k <= y1.min(12.0) {
-                if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(0.0) - 6.0, py(k) + 4.0, 12.0, "end", ink, &format!("{}", k as i64))); }
+                if k.abs() > 0.5 && (k as i64) % 2 == 0 && !(long_mode && on_label(px(0.0) - 6.0, py(k) + 4.0, "end", k)) { d.raw(&text_el(px(0.0) - 6.0, py(k) + 4.0, 12.0, "end", ink, &format!("{}", k as i64))); }
                 k += 1.0;
             }
         }
