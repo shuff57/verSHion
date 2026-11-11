@@ -97,6 +97,8 @@ fn random_temperatures_are_on_the_thermometer() {
                     let dp = if probe { probe_dp(&p) } else { 1 };
                     let (lo, hi) = if probe { probe_range(&p) } else { temp_scale(&p) };
                     assert!(t >= lo - 1e-9 && t <= hi + 1e-9 && on_grid(t, dp), "{th} {unit} {places}: {t}");
+                    // every pick is a value the temperature box can store, so the saved figure redraws it
+                    assert!((-50.0..=400.0).contains(&t), "{th} {unit} {places}: {t} is outside the box's range");
                     seen.insert((t * 100.0).round() as i64);
                     let sym = temp_sym(&p);
                     let student = def(id).svg(&p);

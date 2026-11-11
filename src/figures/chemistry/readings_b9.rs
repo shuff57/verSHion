@@ -20,8 +20,10 @@ pub fn temp_sym(p: &Params) -> &'static str {
 /// A digital probe's working range, −50 to 150 °C, in the chosen unit (the reference's range;
 /// a typical lab probe such as Vernier's stainless steel temperature probe reads −40 to 135 °C),
 /// in kelvin up to the temperature box's 400 (126.85 °C), the most a figure can store.
+/// In °F the range starts at the box's minimum, −50 (not −58 = −50 °C): a pick below it was drawn and
+/// keyed but saved as −50.
 fn probe_range(p: &Params) -> (f64, f64) {
-    match temp_sym(p) { "K" => (223.15, 400.0), "°F" => (-58.0, 302.0), _ => (-50.0, 150.0) }
+    match temp_sym(p) { "K" => (223.15, 400.0), "°F" => (-50.0, 302.0), _ => (-50.0, 150.0) }
 }
 
 /// The 600 mL beaker's capacity (its rim) when that is the instrument, else None. Its scale stops
