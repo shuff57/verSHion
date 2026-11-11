@@ -124,8 +124,7 @@ fn predprey(p: &Params, size: Pt) -> Vec<Handle> {
         }
         return hs;
     }
-    let show_prey = p.s("show") != "Predators only";
-    let show_pred = p.s("show") != "Prey only";
+    let (show_prey, show_pred) = super::popdyn::pp_shown(p);
     // predators may have their own scale on the right (kind 11)
     let ap = axes.iter().find(|x| x.kind == 11).copied().unwrap_or(a);
     if show_prey && a.inside((0.0, prey0)) {

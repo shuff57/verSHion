@@ -718,7 +718,7 @@ pub fn pp_params() -> Vec<ParamDef> {
         ParamDef::float("tshow", "Time shown", 1.0, 1000.0, 1.0, 40.0),
         ParamDef::choice("unit", "Units", &["Years", "Months", "Weeks", "Days"], "Years"),
         ParamDef::choice("graph", "Show", &["Over time", "Predators against prey"], "Over time"),
-        ParamDef::choice("show", "Show", &["Both", "Prey only", "Predators only"], "Both"),
+        ParamDef::choice("show", "Show", &["Both", "Prey only", "Predators only", NEITHER], "Both"),
         ParamDef::choice("style", "Style", &["Color", "Black and white"], "Color"),
         ParamDef::choice("data", "Data", &["Smooth curves", "Points each time unit", "Census counts"], "Smooth curves"),
         ParamDef::choice("marks", "Marked", &["Nothing", "Peaks"], "Nothing"),
@@ -1031,6 +1031,20 @@ pub fn growth_fit_now(p: &Params) -> Params {
     q
 }
 
+/// The "Populations drawn" choice that draws neither: blank axes for students to plot both on (batch 9). The axes,
+/// numbers, titles, a right-hand predator axis and the legend's key stay as for both; no curve, count or mark is drawn.
+pub const NEITHER: &str = "Neither (blank axes)";
+
+/// (prey drawn, predators drawn) for the over-time graph.
+pub fn pp_shown(p: &Params) -> (bool, bool) {
+    match p.s("show") {
+        "Predators only" => (false, true),
+        "Prey only" => (true, false),
+        NEITHER => (false, false),
+        _ => (true, true),
+    }
+}
+
 pub fn pp_render(p: &Params) -> String {
     let PpSetup { prey, pred, unit, ytitle, auto_right, x0, y0, alpha, beta, gamma, delta, .. } = pp_setup(p);
     let pair = p.s("pair");
@@ -1038,12 +1052,14 @@ pub fn pp_render(p: &Params) -> String {
     let n = 800usize;
     let data = lv(alpha, beta, gamma, delta, x0, y0, tshow, n);
     let (cprey, cpred, dash_pred) = if p.s("style") == "Black and white" { (INK, INK, "9 6") } else { ("#2563eb", "#dc2626", "9 6") };
-    let show_prey = p.s("show") != "Predators only";
-    let show_pred = p.s("show") != "Prey only";
+    let (show_prey, show_pred) = pp_shown(p);
+    // blank axes are laid out as for both populations (their range, a right-hand axis), with nothing drawn on them
+    let blank = !show_prey && !show_pred;
+    let (fit_prey, fit_pred) = if blank { (true, true) } else { (show_prey, show_pred) };
     let phase = p.s("graph") == "Predators against prey";
     let title_style = p.s("title_style");
     let title = if title_style == "None" || title_style == "Blank line" { String::new() } else { p.s("title").trim().to_string() };
-    let right = !phase && show_prey && show_pred && match p.s("y_axis") { "Predators on the right" => true, "One for both" => false, _ => auto_right };
+    let right = !phase && fit_prey && fit_pred && match p.s("y_axis") { "Predators on the right" => true, "One for both" => false, _ => auto_right };
     let census = p.s("data") == "Census counts";
 
     // census counts: sampled every `census_every`, scattered by about census_noise %
@@ -1092,7 +1108,7 @@ pub fn pp_render(p: &Params) -> String {
     };
 
     // the reference's graph paper: 32 px squares, a 640 px plot, margins sized to the numbers
-    let vmax0 = if phase { maxpred } else { match (show_prey, show_pred) { (true, true) if !right => maxprey.max(maxpred), (true, _) => maxprey, _ => maxpred } };
+    let vmax0 = if phase { maxpred } else { match (fit_prey, fit_pred) { (true, true) if !right => maxprey.max(maxpred), (true, _) => maxprey, _ => maxpred } };
     let (yb0, yt0, ys0) = if phase { let ys = nice_step_with(maxpred * 1.05, 10.0, Rule::Nearest); (0.0, ((maxpred * 1.05) / ys).ceil() * ys, ys) } else { yrange(vmax0) };
     let ah = (((yt0 - yb0) / ys0).round().max(1.0) * 32.0).clamp(160.0, 480.0);
     let ychars = y_label_chars(yb0, yt0, ys0, numbers_every(p.s("y_numbers")));
@@ -1107,7 +1123,7 @@ pub fn pp_render(p: &Params) -> String {
     else if title_style == "Blank line" { d.line(ax_x + aw / 2.0 - 140.0, 36.0, ax_x + aw / 2.0 + 140.0, 36.0, INK, 1.3); }
 
     if !phase {
-        let vmax = match (show_prey, show_pred) { (true, true) if !right => maxprey.max(maxpred), (true, _) => maxprey, _ => maxpred };
+        let vmax = match (fit_prey, fit_pred) { (true, true) if !right => maxprey.max(maxpred), (true, _) => maxprey, _ => maxpred };
         let (yb, yt, ys) = yrange(vmax);
         let (xlo, x1, xs) = if p.b("x_fit") || !p.0.contains_key("x_fit") {
             let xs = nice_step_with(tshow, 20.0, Rule::Nearest);
@@ -1246,7 +1262,7 @@ pub fn pp_render(p: &Params) -> String {
                 if tq <= a.x1 { arrow(&mut d, *tp, tq, a.y + 36.0, "Lag", tq - tp); }
             }
         }
-        if p.b("mark_period") {
+        if p.b("mark_period") && !blank {
             let list = if show_prey { &pk_prey } else { &pk_pred };
             if list.len() >= 2 {
                 let i = if list.len() >= 3 { 1 } else { 0 };
@@ -1255,8 +1271,8 @@ pub fn pp_render(p: &Params) -> String {
             }
         }
         let mut items = Vec::new();
-        if show_prey { items.push((prey.clone(), cprey.to_string(), String::new())); }
-        if show_pred { items.push((pred.clone(), cpred.to_string(), dash_pred.to_string())); }
+        if fit_prey { items.push((prey.clone(), cprey.to_string(), String::new())); }
+        if fit_pred { items.push((pred.clone(), cpred.to_string(), dash_pred.to_string())); }
         if p.b("legend") { legend(&mut d, ax_x + aw / 2.0, top + ah + 70.0, &items); }
     } else {
         let xmax = maxprey;
@@ -1570,3 +1586,6 @@ mod tests {
         assert!(local_max_times(&sim, |t| t.1).len() >= 2);
     }
 }
+
+#[cfg(test)]
+mod popdyn_b9_tests;
