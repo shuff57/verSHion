@@ -697,6 +697,14 @@ fn coordinate_labels_are_clear(svg: &str, fr: &Frame, what: &str) {
             assert!(along <= 12, "{what}: the leader from {a:?} to {e:?} runs {along} px along the line from {p:?} to {q:?}");
         }
     }
+    // a leader ends at a label: within 10 px of one coordinate label, and no other text is nearer its end (a leader
+    // stopping short by the label box's spare width ended nearer a neighbouring label than its own)
+    for &(a, e) in &leads {
+        let mut gaps: Vec<f64> = texts.iter().filter(|(t, _)| is_label(t)).map(|(_, b)| rect_gap(b, e)).collect();
+        gaps.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        assert!(gaps[0] <= 10.0, "{what}: the leader from {a:?} stops {:.1} px short of any label, at {e:?}", gaps[0]);
+        assert!(gaps.len() < 2 || gaps[1] >= gaps[0] + 3.0, "{what}: the leader from {a:?} ends at {e:?} as near a second label ({:.1} px) as its own ({:.1} px)", gaps[1], gaps[0]);
+    }
     // a leader line (a label standing off its point) runs through no text, its own label's included
     for (a, e) in leads {
         for (t, b) in &texts {

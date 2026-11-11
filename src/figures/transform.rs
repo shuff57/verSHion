@@ -874,6 +874,21 @@ fn label_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[
     best.1
 }
 
+/// Half the width a coordinate label is drawn with, measured closer than [`tw`] (which is kept roomy for placing):
+/// used only for where a leader stops.
+fn ink_half_width(text: &str, size: f64) -> f64 {
+    let w: f64 = text.chars().map(|c| match c {
+        '\u{2032}' | '\u{2033}' | '\u{2034}' | '\u{2057}' | '\'' => 0.27,
+        ' ' => 0.28,
+        '.' | ',' => 0.3,
+        '(' | ')' => 0.36,
+        '0'..='9' | '\u{2212}' | '-' | '/' => 0.57,
+        'A'..='Z' => 0.66,
+        _ => 0.6,
+    }).sum();
+    w * size / 2.0 + 1.0
+}
+
 /// A vertex label's name without its coordinates: `C′` from `C′(5, 2)`.
 fn g_name(label: &str) -> String {
     label.rsplit_once('(').map(|(a, _)| a.to_string()).unwrap_or_else(|| label.to_string())
@@ -955,11 +970,17 @@ fn long_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, sc: &Scene
             if r.x0 < 2.0 || r.y0 < 2.0 || r.x1 > sc.page.0 - 2.0 || r.y1 > sc.page.1 - 2.0 { k += 1000.0; }
             k += 100.0 * sc.rings.iter().filter(|&&q| rect_dist(&r, q) < 6.5).count() as f64;
             // a leader, from the point to the nearest edge of the box
-            let lead = (gap > 20.0).then(|| { let e = (vx.clamp(r.x0, r.x1), vy.clamp(r.y0, r.y1)); let l = ((e.0 - vx).hypot(e.1 - vy)).max(1.0); (e.0 - (e.0 - vx) / l * 2.0, e.1 - (e.1 - vy) / l * 2.0) });
+            // the leader runs right up to the text: `tw` allows a third more width than these labels draw with
+            // (primes, brackets and commas are narrow), and a leader stopping that far short ends nearer a
+            // neighbouring label than its own (the batch 6 re-check)
+            let ink = ink_half_width(text, size);
+            let lead = (gap > 20.0).then(|| { let e = (vx.clamp(x - ink, x + ink), vy.clamp(y - size * 0.76, y + size * 0.2)); let l = ((e.0 - vx).hypot(e.1 - vy)).max(1.0); (e.0 - (e.0 - vx) / l * 2.0, e.1 - (e.1 - vy) / l * 2.0) });
             // the label reads as its own point's: no other dot nearer it
             // (measured from the box with its margin, against a text measured only roughly)
             let own = if lead.is_some() { 14.0 } else { (rect_dist(&r, (vx, vy)) + 1.0).min(14.0) };
             k += 100.0 * sc.dots.iter().filter(|&&q| rect_dist(&rp, q) < own).count() as f64;
+            // another label's leader must not end beside this one: it would read as this label's
+            k += 100.0 * sc.leads.iter().filter(|&&(_, b)| rect_dist(&r, b) < 12.0).count() as f64;
             // a nearer spot is better than a far one with the same cost
             let mut k = k + gap * 0.001;
             if k >= if count { 1.0 } else { best.0 } { continue; }
@@ -969,6 +990,7 @@ fn long_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, sc: &Scene
                 if l > LEAD_MAX + 5.0 { k += 100.0; }
                 let seg = [(s0, e, 1.0)];
                 k += 100.0 * sc.taken.iter().filter(|q| box_cost(q, &[], &[], &seg) > 0.0).count() as f64;
+                k += 100.0 * sc.taken.iter().filter(|q| rect_dist(q, e) < 12.0).count() as f64;
                 k += 100.0 * sc.dots.iter().filter(|&&q| seg_dist(q, s0, e) < 7.0).count() as f64;
                 k += 100.0 * sc.rings.iter().filter(|&&q| (q.0 - vx).hypot(q.1 - vy) > 1.0 && seg_dist(q, s0, e) < 9.5).count() as f64;
                 k += 100.0 * sc.leads.iter().filter(|&&(a, b)| segs_dist(s0, e, a, b) < 3.5).count() as f64;
