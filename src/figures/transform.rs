@@ -974,11 +974,16 @@ fn long_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, sc: &Scene
             // (primes, brackets and commas are narrow), and a leader stopping that far short ends nearer a
             // neighbouring label than its own (the batch 6 re-check)
             let ink = ink_half_width(text, size);
-            let lead = (gap > 20.0).then(|| { let e = (vx.clamp(x - ink, x + ink), vy.clamp(y - size * 0.76, y + size * 0.2)); let l = ((e.0 - vx).hypot(e.1 - vy)).max(1.0); (e.0 - (e.0 - vx) / l * 2.0, e.1 - (e.1 - vy) / l * 2.0) });
+            // the text as drawn, and how far it stands from its own point: past 20 px it gets a leader
+            let ri = Rect { x0: x - ink, y0: y - size * 0.76, x1: x + ink, y1: y + size * 0.2 };
+            let off = rect_dist(&ri, (vx, vy));
+            let lead = (gap > 20.0 || off > 20.0).then(|| { let e = (vx.clamp(x - ink, x + ink), vy.clamp(y - size * 0.76, y + size * 0.2)); let l = ((e.0 - vx).hypot(e.1 - vy)).max(1.0); (e.0 - (e.0 - vx) / l * 2.0, e.1 - (e.1 - vy) / l * 2.0) });
             // the label reads as its own point's: no other dot nearer it
             // (measured from the box with its margin, against a text measured only roughly)
             let own = if lead.is_some() { 14.0 } else { (rect_dist(&r, (vx, vy)) + 1.0).min(14.0) };
             k += 100.0 * sc.dots.iter().filter(|&&q| rect_dist(&rp, q) < own).count() as f64;
+            // and without a leader, measured on the text as drawn: every other dot at least 3 px further off than its own
+            if lead.is_none() { k += 100.0 * sc.dots.iter().filter(|&&q| rect_dist(&ri, q) < off + 3.0).count() as f64; }
             // another label's leader must not end beside this one: it would read as this label's
             k += 100.0 * sc.leads.iter().filter(|&&(_, b)| rect_dist(&r, b) < 12.0).count() as f64;
             // a nearer spot is better than a far one with the same cost

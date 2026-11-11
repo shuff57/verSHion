@@ -669,7 +669,7 @@ fn coordinate_labels_are_clear(svg: &str, fr: &Frame, what: &str) {
         // the handles' frame is the drawing's, a grid drawn larger included: the point's dot is where it says
         assert!(tagged.is_empty() || tagged.iter().any(|&(c, _, ring)| !ring && (c.0 - own.0).hypot(c.1 - own.1) < 0.02), "{what}: no dot for {t} at {own:?}");
         let on_leader = leads.iter().any(|&(a, _)| (a.0 - own.0).hypot(a.1 - own.1) < 5.0);
-        let lim = if on_leader { 10.0 } else { rect_gap(b, own).min(10.0) };
+        let lim = if on_leader { 10.0 } else { rect_gap(b, own) + 2.0 };
         for &(c, _, ring) in &tagged {
             if ring || (c.0 - own.0).hypot(c.1 - own.1) < 1.0 { continue; }
             assert!(rect_gap(b, c) >= lim - 2.0, "{what}: {t} at {b:?} sits nearer the dot at {c:?} ({:.1} px) than its own point at {own:?} ({:.1} px)", rect_gap(b, c), rect_gap(b, own));
