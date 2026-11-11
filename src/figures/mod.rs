@@ -796,6 +796,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "nuclide-notation" => chemistry::nuclide::relevant(key, p) && cards::relevant(id, key, p),
         // the computed lengths' mass, rate and own heats only in that mode, the typed minutes only in theirs
         "heating-cooling-curve" => chemistry::heatcurve_relevant(key, p) && cards::relevant(id, key, p),
+        // the decimal places are the digital probe's; the glass thermometer always reads to 0.1
+        "temperature-reading" if key == "places" => p.s("thermometer") == "Digital probe",
         _ => cards::relevant(id, key, p),
     }
 }
@@ -935,6 +937,12 @@ pub fn random_key(id: &str) -> Option<&'static str> {
         "volume-reading" => Some("reading"),
         "mass-reading" => Some("mass"),
         "ph-reading" => Some("ph"),
+        "temperature-reading" => Some("temperature"),
+        "gas-syringe" => Some("volume"),
+        // one button sets both readings; it sits by the after reading, the last of the pair
+        "volume-by-displacement" => Some("after"),
+        // one button sets the length and the left end; it sits by the length
+        "ruler-reading" => Some("length"),
         _ => None,
     }
 }

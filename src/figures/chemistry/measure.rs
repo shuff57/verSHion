@@ -3,7 +3,7 @@ use super::*;
 use super::magnify::{self, Focus};
 use crate::figures::{Params, ParamDef, Subject};
 
-const SIZES: [&str; 6] = ["10 mL", "25 mL", "50 mL", "100 mL", "250 mL", "1000 mL"];
+const SIZES: [&str; 7] = ["10 mL", "25 mL", "50 mL", "100 mL", "250 mL", "600 mL", "1000 mL"];
 const MAG3: [&str; 3] = ["Instrument and magnifier", "Magnifier only", "Instrument only"];
 const VOL_MARKS: [&str; 12] = ["Automatic", "0.1 mL", "0.2 mL", "0.5 mL", "1 mL", "2 mL", "5 mL", "10 mL", "20 mL", "25 mL", "50 mL", "100 mL"];
 const VOL_NUMS: [&str; 12] = ["Automatic", "1 mL", "2 mL", "5 mL", "10 mL", "20 mL", "25 mL", "50 mL", "100 mL", "200 mL", "0.5 mL", "No numbers"];
@@ -95,7 +95,7 @@ fn volume_params() -> Vec<ParamDef> {
     vec![
         ParamDef::choice("instrument", "Instrument", &["Graduated cylinder", "Buret", "Beaker"], "Graduated cylinder"),
         ParamDef::choice("size", "Size", &SIZES, "100 mL")
-            .hint("Cylinder or beaker size; the buret is 50 mL, or 25 mL for sizes up to 25."),
+            .hint("Cylinder or beaker size; the buret is 50 mL, or 25 mL for sizes up to 25. The 600 mL beaker is marked to 500 mL."),
         ParamDef::choice("color", "Liquid", &COLORS, "Gray"),
         ParamDef::float("reading", "Reading", 0.0, 1000.0, 0.05, 43.6),
         ParamDef::bool("dotted", "Dotted line at the meniscus", false)
@@ -118,7 +118,7 @@ pub fn skin_summary(id: &str, title: &str, p: &Params) -> Option<String> {
     let unit = if p.s("unit").is_empty() { "mL" } else { p.s("unit") };
     let (max, num, minor, numbers) = vol_scale(p);
     Some(match title {
-        "Instrument" => format!("{} {} {}", num_trim(max), unit, p.s("instrument").to_lowercase()),
+        "Instrument" => format!("{} {} {}", num_trim(super::readings_b9::beaker_capacity(p).unwrap_or(max)), unit, p.s("instrument").to_lowercase()),
         "Scale" => if numbers { format!("{} {unit} marks, numbered every {} {unit}", num_trim(minor), num_trim(num)) } else { format!("{} {unit} marks, no numbers", num_trim(minor)) },
         "Reading" => format!("{} {unit}", num_trim((p.f("reading") * 1000.0).round() / 1000.0)),
         _ => return None,
@@ -130,7 +130,7 @@ fn num_trim(v: f64) -> String { let s = format!("{v:.3}"); s.trim_end_matches('0
 /// Random reading on the volume instrument's scale, to its readable decimal places.
 pub fn random_reading(id: &str, p: &mut Params, seed: u64) -> bool {
     if id == "length-reading" { return super::length::random(p, seed); }
-    if super::readings_b7::random(id, p, seed) { return true; }
+    if super::readings_b7::random(id, p, seed) || super::readings_b9::random(id, p, seed) { return true; }
     if id != "volume-reading" { return false; }
     let (max, _, minor, _) = vol_scale(p);
     let dp = read_dp(minor) as i32;
@@ -178,8 +178,7 @@ pub fn range_note(id: &str, p: &Params) -> Option<String> {
         "temperature-reading" => {
             let sym = match p.s("unit") { "Kelvin (K)" => "K", "Fahrenheit (°F)" => "°F", _ => "°C" };
             if p.s("thermometer") == "Digital probe" {
-                let dp = if p.s("places") == "0" { 0 } else { 1 };
-                format!("From -50 to 400 {sym}, to {}.", places_text(dp))
+                format!("From -50 to 400 {sym}, to {}.", places_text(super::readings_b9::probe_dp(p)))
             } else {
                 let (lo, hi) = match sym { "K" => (260, 380), "°F" => (10, 230), _ => (-10, 110) };
                 format!("From {} to {hi} {sym}, to one decimal place.", lo)
@@ -190,23 +189,27 @@ pub fn range_note(id: &str, p: &Params) -> Option<String> {
     })
 }
 
-fn size_ml(s: &str) -> f64 { s.split_whitespace().next().and_then(|t| t.parse().ok()).unwrap_or(100.0) }
+pub(super) fn size_ml(s: &str) -> f64 { s.split_whitespace().next().and_then(|t| t.parse().ok()).unwrap_or(100.0) }
 fn ml_of(s: &str) -> Option<f64> { s.split_whitespace().next().and_then(|t| t.parse().ok()) }
 
 /// (numbered step, minor) graduation spacing for a cylinder of `max` mL (reference defaults).
-fn cyl_marks(max: f64) -> (f64, f64) {
+pub(super) fn cyl_marks(max: f64) -> (f64, f64) {
     match max as i64 { 10 => (1.0, 0.1), 25 => (5.0, 0.5), 50 => (10.0, 1.0), 100 => (10.0, 1.0), 250 => (20.0, 2.0), 600 => (50.0, 5.0), _ => (100.0, 10.0) }
 }
 
 /// Decimal places for a reading with one estimated digit past the smallest mark.
-fn read_dp(minor: f64) -> usize { ((-(minor.log10().floor())) + 1.0).max(0.0) as usize }
+pub(super) fn read_dp(minor: f64) -> usize { ((-(minor.log10().floor())) + 1.0).max(0.0) as usize }
 
 /// (max, numbered step, minor, numbers shown) of the volume instrument.
-fn vol_scale(p: &Params) -> (f64, f64, f64, bool) {
+pub(super) fn vol_scale(p: &Params) -> (f64, f64, f64, bool) {
     let kind = p.s("instrument");
     let size = size_ml(p.s("size"));
     let (max, (num0, minor0)) = match kind {
         "Buret" => { let m = if size <= 25.0 { 25.0 } else { 50.0 }; (m, (1.0, if m <= 25.0 { 0.1 } else { 0.1 })) }
+        // a 600 mL beaker is marked every 50 mL, numbered every 100 mL, from 100 to 500 mL (Corning's
+        // PYREX 1000-600 Griffin beaker: "graduated 100 to 500 mL in 50 mL increments"); it holds
+        // 600 mL to the rim with the top unmarked (`readings_b9::beaker_capacity`)
+        "Beaker" if size == 600.0 => (500.0, (100.0, 50.0)),
         "Beaker" => (size, (size / 5.0, size / 10.0)),
         _ => (size, cyl_marks(size)),
     };
@@ -215,7 +218,7 @@ fn vol_scale(p: &Params) -> (f64, f64, f64, bool) {
 }
 
 /// Applies the "Smallest marks" / "Numbered every" choices (Automatic = the given defaults).
-fn marks_from(p: &Params, max: f64, num0: f64, minor0: f64) -> (f64, f64, bool) {
+pub(super) fn marks_from(p: &Params, max: f64, num0: f64, minor0: f64) -> (f64, f64, bool) {
     let minor = ml_of(p.s("marks")).filter(|m| max / m <= 600.0).unwrap_or(minor0);
     let numbers = p.s("numbered") != "No numbers";
     let mut num = ml_of(p.s("numbered")).filter(|n| *n >= minor - 1e-9 && max / n <= 60.0).unwrap_or(num0);
@@ -315,11 +318,18 @@ fn volume_render(p: &Params) -> String {
     } else {
         let (w, ytop, ybot) = (170.0, 90.0, 470.0);
         let md = 3.0;
-        let v = Vessel { cx, w, ytop, ybot, max, major: num_step, minor, inverted: false, level: reading, color: fill, edge, mdepth: md };
+        // the 600 mL beaker's glass holds 600 mL (its height maps 0 to 600) while its marks stop at 500
+        let cap = super::readings_b9::beaker_capacity(p).unwrap_or(max);
+        let v = Vessel { cx, w, ytop, ybot, max: cap, major: num_step, minor, inverted: false, level: reading, color: fill, edge, mdepth: md };
         let (xl, xr) = (cx - w / 2.0, cx + w / 2.0);
         liquid_shape(&mut d, &v, ybot + 6.0);
         d.path(&format!("M{:.1},{:.1} L{xl:.1},{:.1} L{xl:.1},{:.1} L{xr:.1},{:.1} L{xr:.1},{:.1} L{:.1},{:.1}", xl - 8.0, ytop - 40.0, ytop - 30.0, ybot + 6.0, ybot + 6.0, ytop - 30.0, xr + 8.0, ytop - 40.0), "none", GLASS_EDGE, 1.8);
-        scale_ticks_n(&mut d, &v, xr, -1.0, xr + 12.0, "start", unit, num_step, numbers);
+        if cap > max {
+            let marked = Vessel { ytop: v.y(max), max, ..v };
+            scale_ticks_n(&mut d, &marked, xr, -1.0, xr + 12.0, "start", unit, num_step, numbers);
+        } else {
+            scale_ticks_n(&mut d, &v, xr, -1.0, xr + 12.0, "start", unit, num_step, numbers);
+        }
         if p.b("dotted") { dashed(&mut d, cx, v.y(reading), xr + 40.0, v.y(reading), "#555", 1.2); }
         focus = Focus { x: xr + 4.0, y: v.y(reading), label_px: (v.y(num_step) - v.y(0.0)).abs().max(80.0 / p.i("mag_marks").clamp(1, 6) as f64) };
     }
@@ -822,7 +832,7 @@ fn temp_params() -> Vec<ParamDef> {
         ParamDef::choice("unit", "Unit", &["Celsius (°C)", "Kelvin (K)", "Fahrenheit (°F)"], "Celsius (°C)"),
         ParamDef::choice("liquid", "Liquid color", &["Red", "Blue", "Gray"], "Red"),
         ParamDef::float("temperature", "Temperature", -50.0, 400.0, 0.1, 23.4),
-        ParamDef::choice("places", "Digital decimal places", &["0", "0.1"], "0.1"),
+        ParamDef::choice("places", "Digital decimal places", &super::readings_b9::PROBE_PLACES, "0.1"),
         ParamDef::text("title", "Chart title text", ""),
         magnify::show_param(&MAG3, "Instrument only"),
         magnify::marks_param(),
@@ -843,7 +853,7 @@ fn temp_render(p: &Params) -> String {
     let mut d = if probe { Doc::new(300.0, 640.0) } else { Doc::new(150.0, 704.0) };
     let focus;
     if p.s("thermometer") == "Digital probe" {
-        let dp = if p.s("places") == "0" { 0 } else { 1 };
+        let dp = super::readings_b9::probe_dp(p);
         d.rect(60.0, 60.0, 240.0, 120.0, "#e3e8ec", INK, 1.8);
         d.rect(80.0, 78.0, 200.0, 62.0, "#f9fbfa", INK, 1.5);
         tx(&mut d, 255.0, 124.0, 38.0, "end", INK, true, &num(t, dp));
@@ -885,7 +895,7 @@ fn temp_render(p: &Params) -> String {
         // the lens: 3 numbered marks wide, centred on the liquid's top
         focus = Focus { x: 76.0, y: y(t), label_px: lstep / (hi - lo) * (ybot - ytop) };
     }
-    let dp = if p.s("thermometer") == "Digital probe" { if p.s("places") == "0" { 0 } else { 1 } } else { 1 };
+    let dp = if p.s("thermometer") == "Digital probe" { super::readings_b9::probe_dp(p) } else { 1 };
     let foot = if p.b("answer") { vec![format!("Temperature: {} {sym}", num(t, dp))] } else { vec![] };
     // the digital probe keeps the old lens over its display; the glass thermometer gets the
     // reference-sized lens that keeps its numbers whole
@@ -1071,13 +1081,16 @@ fn vol_axis(p: &Params) -> (f64, f64, bool, f64) {
 fn vol_handles(p: &Params) -> Vec<Handle> {
     if magnify::magnifier_only(p) { return vec![]; }
     let max = vol_max(p);
+    // the glass's height maps 0 to its capacity (the 600 mL beaker's 600, past its last mark)
+    let cap = super::readings_b9::beaker_capacity(p).unwrap_or(max);
     let (ytop, ybot, inv, cx) = vol_axis(p);
     let r = p.f("reading").clamp(0.0, max);
-    let y = if inv { ytop + r / max * (ybot - ytop) } else { ybot - r / max * (ybot - ytop) };
+    let y = if inv { ytop + r / cap * (ybot - ytop) } else { ybot - r / cap * (ybot - ytop) };
     vec![Handle::bar((cx, y), true, "Drag the liquid level to set the reading", move |q, t| {
         let max = vol_max(q);
+        let cap = super::readings_b9::beaker_capacity(q).unwrap_or(max);
         let (ytop, ybot, inv, _) = vol_axis(q);
-        let v = if inv { (t.1 - ytop) / (ybot - ytop) * max } else { (ybot - t.1) / (ybot - ytop) * max };
+        let v = if inv { (t.1 - ytop) / (ybot - ytop) * cap } else { (ybot - t.1) / (ybot - ytop) * cap };
         set_eff(q, "reading", v, 0.0, max);
     })
     .with_scroll(|q, dy| {
@@ -1220,7 +1233,7 @@ fn mass_handles(p: &Params) -> Vec<Handle> {
 }
 
 /// (lo, hi) of the liquid-in-glass scale for the chosen unit.
-fn temp_scale(p: &Params) -> (f64, f64) {
+pub(super) fn temp_scale(p: &Params) -> (f64, f64) {
     match p.s("unit") { "Kelvin (K)" => (260.0, 380.0), "Fahrenheit (°F)" => (10.0, 230.0), _ => (-10.0, 110.0) }
 }
 

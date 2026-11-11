@@ -2650,7 +2650,7 @@ impl Workspace {
                                     }
                                     if figures::is_random_key(def.id, pdefs[i].key)
                                         && !skin
-                                        && ui.button(RichText::new("Random").size(12.0)).on_hover_text("Set a random reading").clicked()
+                                        && ui.button(RichText::new("Random").size(12.0)).on_hover_text(figures::chemistry::readings_b9::random_tip(def.id)).clicked()
                                     {
                                         figures::random_reading(def.id, &mut self.params, random_seed());
                                     }
@@ -4343,7 +4343,7 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             // the chemistry page's reading: a text box with its unit and an outlined Random button
             param_label(ui, label, pd.hint);
             ui.add_space(if fig == "micropipette-reading" { -2.0 } else { 1.0 });
-            let unit = if fig == "length-reading" { "mm".to_string() } else if fig == "spring-scale" { "N".to_string() } else if fig == "volume-reading" && !p.s("unit").is_empty() { p.s("unit").to_string() } else if fig == "micropipette-reading" { "µL".to_string() } else if fig == "mass-reading" { "g".to_string() } else if fig == "ph-reading" { "pH".to_string() } else { "mL".to_string() };
+            let unit = if let Some(u) = figures::chemistry::readings_b9::reading_unit(fig, p) { u } else if fig == "length-reading" { "mm".to_string() } else if fig == "spring-scale" { "N".to_string() } else if fig == "volume-reading" && !p.s("unit").is_empty() { p.s("unit").to_string() } else if fig == "micropipette-reading" { "µL".to_string() } else if fig == "mass-reading" { "g".to_string() } else if fig == "ph-reading" { "pH".to_string() } else { "mL".to_string() };
             let id = ui.make_persistent_id(("chem_reading", fig, pd.key));
             let ctx = ui.ctx().clone();
             let focused = ctx.memory(|m| m.has_focus(id));
@@ -4366,7 +4366,7 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 ui.painter().galley(ur.min - Vec2::new(0.0, 1.0), g, theme::muted_col());
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let btn = chem_shell::outline_chip_icon(ui, lucide::DICES, "Random");
-                    if btn.on_hover_text("Set a random reading").clicked() {
+                    if btn.on_hover_text(figures::chemistry::readings_b9::random_tip(fig)).clicked() {
                         figures::random_reading(fig, p, random_seed());
                         ctx.data_mut(|d| d.remove_temp::<String>(id));
                         ctx.memory_mut(|m| m.surrender_focus(id));

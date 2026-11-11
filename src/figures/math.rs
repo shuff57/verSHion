@@ -4035,6 +4035,8 @@ mod solids_b8_tests;
 /// A solid's measure as drawn: its typed box when that reads, else its slider (`solids_b8::val`).
 pub(super) fn sv(p: &Params, key: &str) -> f64 { solids_b8::val(p, key) }
 pub(crate) mod number_line_b7;
+/// The ruler reading's Random button (batch 9).
+pub(crate) mod ruler_b9;
 #[cfg(test)]
 mod number_line_b7_tests;
 

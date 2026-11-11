@@ -20,6 +20,7 @@ mod lewis;
 mod measure;
 mod length;
 mod readings_b7;
+pub mod readings_b9;
 #[cfg(test)]
 mod heatcurve_b8_frozen;
 #[cfg(test)]
