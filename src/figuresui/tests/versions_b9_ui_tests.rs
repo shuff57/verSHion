@@ -77,3 +77,32 @@ fn growth_classic_setups_load_from_the_dropdown_and_stay_editable() {
         assert_eq!(ws.params.0, start.0, "{} ({i}): one undo step", e.name);
     }
 }
+
+/// Gel electrophoresis: each sample lane's card offers "Leave blank for students" (a ladder's does not); ticking
+/// lane 3's keeps its bands on the key (outlined) and empties it on the student copy; it follows the lane when moved.
+#[test]
+fn gel_lane_cards_leave_a_sample_lane_blank_for_students() {
+    let (ctx, mut ws) = open_tall("gel-electrophoresis");
+    let def = &reg()[ws.sel.unwrap()];
+    let samples = figures::biology::gel::lane_cards(&ws.params).iter().filter(|l| matches!(l.kind, figures::biology::gel::LaneKind::Sample(_))).count();
+    assert_eq!(samples, 4);
+    assert_eq!(count_named(&ctx, &mut ws, "Leave blank for students"), samples, "one per sample lane, none for the ladder");
+    let key_before = (def.render)(&ws.params);
+    click_nth(&ctx, &mut ws, "Leave blank for students", 1); // the second sample lane: lane 3, Suspect 1
+    assert_eq!(ws.params.s("blank_lanes"), "3");
+    assert!(figures::biology::gel::lane_cards(&ws.params)[2].blank);
+    let key = (def.render)(&ws.params);
+    assert_ne!(key, key_before, "the key marks the lane");
+    let mut student = ws.params.clone();
+    student.set_b(figures::SHOW_ANSWERS, false);
+    assert_ne!((def.render)(&student), key, "the student copy empties it");
+    // the Show answers switch is in the panel (the student copy), as on the figures that hide answers
+    assert!(figures::hides_answers(&(def.params)()));
+    // moved left with its card's arrow, the flag goes with it
+    click_nth(&ctx, &mut ws, egui_phosphor::regular::ARROW_LEFT, 2); // lane 3's (lane 1's is there, greyed out)
+    assert_eq!(ws.params.s("blank_lanes"), "2");
+    assert_eq!(figures::biology::gel::lane_cards(&ws.params)[1].label, "Suspect 1");
+    // and unticked
+    click_nth(&ctx, &mut ws, "Leave blank for students", 0);
+    assert_eq!(ws.params.s("blank_lanes"), "");
+}

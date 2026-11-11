@@ -598,6 +598,14 @@ impl Workspace {
                         v[i].kind = gel::LaneKind::Sample(t);
                         edit = Some((v, false));
                     }
+                    // batch 9: the lane left empty on the student copy, its bands kept for the key
+                    ui.add_space(8.0);
+                    let mut bl = lane.blank;
+                    if ui.checkbox(&mut bl, RichText::new("Leave blank for students").size(14.7)).changed() {
+                        let mut v = lanes.clone();
+                        v[i].blank = bl;
+                        edit = Some((v, true));
+                    }
                 }
             }
             ui.add_space(13.0);
@@ -711,6 +719,13 @@ impl Workspace {
                             let mut v = lanes.clone();
                             v[i].kind = gel::LaneKind::Sample(t);
                             edit = Some((v, false));
+                        }
+                        // batch 9: the lane left empty on the student copy, its bands kept for the key
+                        let mut bl = lane.blank;
+                        if ui.checkbox(&mut bl, "Leave blank for students").changed() {
+                            let mut v = lanes.clone();
+                            v[i].blank = bl;
+                            edit = Some((v, true));
                         }
                     }
                 }

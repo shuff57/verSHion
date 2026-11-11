@@ -84,13 +84,16 @@ pub const MAX_LANES: usize = 16;
 #[derive(Clone, Debug, PartialEq)]
 pub enum LaneKind { Sample(String), Ladder(usize) }
 
+/// `blank`: a sample lane left blank for students (batch 9, `gel_b9`); a ladder never is.
 #[derive(Clone, Debug, PartialEq)]
-pub struct LaneCard { pub label: String, pub kind: LaneKind }
+pub struct LaneCard { pub label: String, pub kind: LaneKind, pub blank: bool }
 
 impl LaneCard {
-    pub fn sample() -> Self { LaneCard { label: String::new(), kind: LaneKind::Sample(String::new()) } }
-    pub fn ladder() -> Self { LaneCard { label: "Ladder".into(), kind: LaneKind::Ladder(1) } }
+    pub fn sample() -> Self { LaneCard { label: String::new(), kind: LaneKind::Sample(String::new()), blank: false } }
+    pub fn ladder() -> Self { LaneCard { label: "Ladder".into(), kind: LaneKind::Ladder(1), blank: false } }
 }
+
+pub(crate) mod gel_b9;
 
 fn ladder_index(rest: &str) -> usize {
     let (name, _) = ladder_bands(rest);
@@ -99,14 +102,17 @@ fn ladder_index(rest: &str) -> usize {
 
 /// The lanes as cards (from the classic setup when one is chosen, else the typed lanes text).
 pub fn lane_cards(p: &Params) -> Vec<LaneCard> {
+    let blank = gel_b9::blank_set(p);
     active_text(p)
         .split(['|', '\n'])
         .map(str::trim)
         .filter(|l| !l.is_empty())
-        .map(|l| {
+        .enumerate()
+        .map(|(i, l)| {
             let (label, rest) = l.split_once(':').map(|(a, b)| (a.trim(), b.trim())).unwrap_or((l, ""));
             let kind = if rest.to_lowercase().starts_with("ladder") { LaneKind::Ladder(ladder_index(rest)) } else { LaneKind::Sample(rest.to_string()) };
-            LaneCard { label: label.to_string(), kind }
+            let blank = gel_b9::is_blank(&blank, i, matches!(kind, LaneKind::Ladder(_)));
+            LaneCard { label: label.to_string(), kind, blank }
         })
         .collect()
 }
@@ -128,6 +134,9 @@ pub fn set_lane_cards(p: &mut Params, lanes: &[LaneCard]) {
         .join(" | ");
     p.set_s("lanes", &text);
     p.set_s("setup", SETUPS[0]);
+    // the blank flags follow their lanes (written only once a lane has one, so an old figure's cards edit as before)
+    let blank = gel_b9::blank_text(&lanes[..lanes.len().min(MAX_LANES)]);
+    if !blank.is_empty() || !p.s("blank_lanes").is_empty() { p.set_s("blank_lanes", &blank); }
 }
 
 /// The classic setups offered on the Lanes card (without the "use the lanes text" entry).
@@ -196,7 +205,7 @@ pub fn params() -> Vec<ParamDef> {
         ParamDef::choice("size_units", "Ladder size units", &["bp", "kb"], "bp"),
         ParamDef::choice("electrode_style", "Electrodes", &["Signs", "Named", "Blank", "None"], "Signs"),
         ParamDef::choice("answer_kind", "Answer key lists", &["Matching lanes", "Band sizes", "Both"], "Matching lanes"),
-    ]
+    ].into_iter().chain(gel_b9::params()).collect()
 }
 
 const CRIME: &str = "Ladder: ladder 1kb | Crime scene: 5200, 3100, 1800, 900 | Suspect 1: 6000, 3100, 1500, 700 | Suspect 2: 5200, 3100, 1800, 900 | Suspect 3: 4200, 2400, 1800, 1100";
@@ -348,6 +357,11 @@ pub fn render(p: &Params) -> String {
     // answer key
     let kind = p.s("answer_kind");
     let mut answer_lines: Vec<String> = Vec::new();
+    // sample lanes left blank for students: empty on the student copy, outlined on the key; the student copy keeps the
+    // key's page but prints no answer key (every old figure has Show answers on)
+    let blank_set = gel_b9::blank_set(p);
+    let key_copy = p.b(crate::figures::SHOW_ANSWERS);
+    let hidden = |i: usize, l: &Lane| !key_copy && gel_b9::is_blank(&blank_set, i, l.ladder.is_some());
     if p.b("answer") {
         if kind == "Band sizes" || kind == "Both" {
             for (i, l) in lanes.iter().enumerate() {
@@ -377,7 +391,7 @@ pub fn render(p: &Params) -> String {
     let h = gy + gel_h + 16.0 + if answer_lines.is_empty() { 0.0 } else { 14.0 + answer_lines.len() as f64 * 22.0 };
     LAST.with(|l| *l.borrow_mut() = Layout {
         w, gx, gy, well_y, run, lane_w, agar: agar.clone(),
-        lanes: lanes.iter().map(|l| LaneInfo { ladder: l.ladder.is_some(), bands: l.bands.clone() }).collect(),
+        lanes: lanes.iter().enumerate().map(|(i, l)| LaneInfo { ladder: l.ladder.is_some(), bands: if hidden(i, l) { vec![] } else { l.bands.clone() } }).collect(),
     });
     let mut d = Doc::new(w, h);
     if glow {
@@ -404,8 +418,13 @@ pub fn render(p: &Params) -> String {
             "Blank lines" => { d.line(cx - 24.0, lab_y - 6.0, cx + 24.0, lab_y - 6.0, INK, 1.4); }
             _ => {}
         }
-        // bands, merging those too close for the gel to separate into one thicker band
-        let mut bs: Vec<(f64, f64, f64)> = l.bands.iter().map(|(bp, amt)| {
+        if key_copy && gel_b9::is_blank(&blank_set, i, l.ladder.is_some()) {
+            // the key marks the students' lane: a dashed outline round its track
+            d.raw(&format!(r#"<rect x="{:.1}" y="{:.1}" width="44" height="{:.1}" rx="4" fill="none" stroke="{well_stroke}" stroke-width="1.3" stroke-dasharray="5 4" data-blank-lane="{}"/>"#, cx - 22.0, well_y + 9.0, run + 8.0, i + 1));
+        }
+        // bands, merging those too close for the gel to separate into one thicker band (none in a lane left blank)
+        let shown: &[(f64, f64)] = if hidden(i, l) { &[] } else { &l.bands };
+        let mut bs: Vec<(f64, f64, f64)> = shown.iter().map(|(bp, amt)| {
             let y = well_y + 8.0 + run_frac(*bp, &agar) * run;
             let th = (4.4 + 1.6 * amt.min(3.0)) * bh;
             (y - th / 2.0, y + th / 2.0, *amt)
@@ -519,6 +538,7 @@ pub fn render(p: &Params) -> String {
         txt(&mut d, rx + 17.0, well_y + nmm as f64 * mm + 30.0, 13.0, "middle", SANS, "", "cm");
     }
     for (i, l) in answer_lines.iter().enumerate() {
+        if !key_copy { break; }
         let y = gy + gel_h + 36.0 + i as f64 * 22.0;
         if i == 0 { bold(&mut d, w / 2.0, y - 8.0, 14.0, "middle", "Answer key"); }
         txt(&mut d, w / 2.0, y + 14.0, 15.0, "middle", SANS, "", l);
@@ -615,7 +635,7 @@ mod tests {
         assert_eq!(current_setup(&p), Some("Paternity test"));
         let mut c = lane_cards(&p);
         assert_eq!(c.len(), 5);
-        assert_eq!(c[0], LaneCard { label: "Ladder".into(), kind: LaneKind::Ladder(0) });
+        assert_eq!(c[0], LaneCard { label: "Ladder".into(), kind: LaneKind::Ladder(0), blank: false });
         assert_eq!(c[1].kind, LaneKind::Sample("800, 500, 300".into()));
         c.swap(1, 2); // Child before Mother
         c.remove(4); // drop Father B
@@ -631,8 +651,8 @@ mod tests {
         assert!(l.lanes[4].bands.is_empty());
         assert_eq!(lanes_summary(&p), "Ladder, Child, Mother, Father A, Sample, Ladder");
         // separators typed into a label or bands can't split a lane
-        set_lane_cards(&mut p, &[LaneCard { label: "a|b:c".into(), kind: LaneKind::Sample("500 | 300".into()) }]);
-        assert_eq!(lane_cards(&p), vec![LaneCard { label: "a b c".into(), kind: LaneKind::Sample("500   300".into()) }]);
+        set_lane_cards(&mut p, &[LaneCard { label: "a|b:c".into(), kind: LaneKind::Sample("500 | 300".into()), blank: false }]);
+        assert_eq!(lane_cards(&p), vec![LaneCard { label: "a b c".into(), kind: LaneKind::Sample("500   300".into()), blank: false }]);
         // never more lanes than the gel draws
         set_lane_cards(&mut p, &vec![LaneCard::ladder(); 20]);
         assert_eq!(lane_cards(&p).len(), MAX_LANES);

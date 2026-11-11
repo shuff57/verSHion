@@ -1,0 +1,2 @@
+# renewed hashes (row, saved spec, links v1 v4 v5 v6 v7) of the frozen rows holding "show_answers":false, a key the gel only gains in batch 9: they now draw the student copy, without the printed answer key
+272	8580f65869ff807a	8580f65869ff807a	8580f65869ff807a	8580f65869ff807a	8580f65869ff807a	8580f65869ff807a

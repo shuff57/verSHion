@@ -63,6 +63,8 @@ const FBD_MOTION: [&str; 6] = ["mdir", "adir", "mv_lab_mode", "mv_lab", "ma_lab_
 pub fn owner(fig: &str, key: &str) -> Option<Card> {
     let card = match fig {
         "gel-electrophoresis" if key == "setup" => Card::GelLanes,
+        // batch 9: the lanes left blank for students are ticked on their own lane cards
+        "gel-electrophoresis" if key == "blank_lanes" => Card::GelLanes,
         "free-body-diagram" if item_of(key).is_some_and(|(l, _)| l == "f") => Card::Forces,
         "free-body-diagram" if FBD_MOTION.contains(&key) => Card::Motion,
         "vector-diagram" if item_of(key).is_some_and(|(l, _)| l == "v") => Card::Vectors,
