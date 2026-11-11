@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-11T08:27:46+00:00 · probe: 2026-11-11T00:27:46
+Generated: 2026-11-11T08:41:43+00:00 · probe: 2026-11-11T00:41:43
 
-**Pooled 95.6** · mean 95.7 over 70 figures · built 71 of 71 reference figures
+**Pooled 96.1** · mean 95.9 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -13,13 +13,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [control 3] Choose how the point labels show — no evidence
   - cap-03d [control 3] Type the range in multiples of pi — no evidence
   - cap-05 [control 3] Choose which terms of a sequence are shown, n from one whole number to another — no evidence
-- `coordinate-grid`: 83 (127/153)
-  - cap-02f [core 5] Use the inverses of sec, csc and cot — no evidence
-  - cap-03b [control 3] Draw a row solid, dashed or dotted — no evidence
-  - cap-03d [control 3] Choose which ends of a row have arrows — no evidence
-  - cap-03i [control 3] Set these styles row by row rather than for the whole graph — no evidence
-  - cap-04c [control 3] Type the range as fractions — no evidence
-  - cap-06b [control 3] Finish an axis end with a line arrow — no evidence
 - `vector-diagram`: 84 (48/57)
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03c [control 3] Measure the angle mark from the vertical — no evidence
@@ -122,6 +115,7 @@ Comparable with the frozen baseline: **yes**
 - `bar-chart`: 100 (87/87)
 - `circuit-diagram`: 100 (61/61)
 - `composite-shape`: 100 (50/50)
+- `coordinate-grid`: 100 (153/153)
 - `dna-protein-synthesis`: 100 (102/102)
 - `dot-and-cross`: 100 (56/56)
 - `enzyme-kinetics`: 100 (85/85)

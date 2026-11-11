@@ -84,8 +84,8 @@
    "id": "cap-02f",
    "text": "Use the inverses of sec, csc and cot",
    "class": "core",
-   "evidence": "",
-   "note": "the evaluator knows arcsin/arccos/arctan only"
+   "evidence": "changes:equations=y = arcsec(x)",
+   "note": "Built in batch 7, round 307 (2026-11-10). the evaluator knows arcsin/arccos/arctan only"
   },
   {
    "id": "cap-02g",
@@ -119,8 +119,8 @@
    "id": "cap-03b",
    "text": "Draw a row solid, dashed or dotted",
    "class": "control",
-   "evidence": "",
-   "note": "Print style dashes rows automatically; no teacher choice"
+   "evidence": "changes:{\"equations\": \"y = x^2 - 4\", \"eq1_line\": \"Dashed\"}",
+   "note": "Built in batch 7, round 308 (2026-11-10). Print style dashes rows automatically; no teacher choice"
   },
   {
    "id": "cap-03c",
@@ -133,8 +133,8 @@
    "id": "cap-03d",
    "text": "Choose which ends of a row have arrows",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"equations\": \"y = x^2 - 4\", \"eq1_arrows\": \"Both ends\"}",
+   "note": "Built in batch 7, round 309 (2026-11-10)."
   },
   {
    "id": "cap-03e",
@@ -168,8 +168,8 @@
    "id": "cap-03i",
    "text": "Set these styles row by row rather than for the whole graph",
    "class": "control",
-   "evidence": "",
-   "note": "only colour is per row in verSHion"
+   "evidence": "changes:{\"equations\": \"y = 2x + 1; y = x^2 - 4\", \"eq1_line\": \"Dotted\", \"eq2_weight\": \"Thick\", \"eq2_arrows\": \"Right end\"}",
+   "note": "Built in batch 7, round 310 (2026-11-10). only colour is per row in verSHion"
   },
   {
    "id": "cap-04a",
@@ -189,8 +189,8 @@
    "id": "cap-04c",
    "text": "Type the range as fractions",
    "class": "control",
-   "evidence": "",
-   "note": "the range fields are plain numbers"
+   "evidence": "changes:{\"xmin\": -3.5, \"xmax\": 3.5, \"xstep\": 0.5, \"x_fractions\": true} + ui-test:figures::math::grid_b7::tests::range_boxes_read_fractions",
+   "note": "Built in batch 7, round 311 (2026-11-10). the range fields are plain numbers"
   },
   {
    "id": "cap-04d",
@@ -252,22 +252,22 @@
    "id": "cap-06b",
    "text": "Finish an axis end with a line arrow",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:x_right_end=Line arrow",
+   "note": "Built in batch 7, round 312 (2026-11-10)."
   },
   {
    "id": "cap-06c",
    "text": "Finish an axis end with a circle",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:x_right_end=Circle",
+   "note": "Built in batch 7, round 313 (2026-11-10)."
   },
   {
    "id": "cap-06d",
    "text": "Set each end of each axis separately",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"x_left_end\": \"Circle\", \"y_top_end\": \"Line arrow\"}",
+   "note": "Built in batch 7, round 314 (2026-11-10)."
   },
   {
    "id": "cap-07a",

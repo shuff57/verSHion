@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-11T08:27:46+00:00",
+ "generated_at": "2026-11-11T08:41:43+00:00",
  "spec_generated_at": "2026-11-08T05:54:07+00:00",
  "figures": [
   {
@@ -636,9 +636,27 @@
     "style",
     "show_answers",
     "student_shading",
-    "show_notes"
+    "show_notes",
+    "eq1_line",
+    "eq1_weight",
+    "eq1_arrows",
+    "eq2_line",
+    "eq2_weight",
+    "eq2_arrows",
+    "eq3_line",
+    "eq3_weight",
+    "eq3_arrows",
+    "eq4_line",
+    "eq4_weight",
+    "eq4_arrows",
+    "x_left_end",
+    "x_right_end",
+    "x_fractions",
+    "y_bottom_end",
+    "y_top_end",
+    "y_fractions"
    ],
-   "param_count": 41,
+   "param_count": 59,
    "handles": 2,
    "label_drag": false,
    "show_answers": true,

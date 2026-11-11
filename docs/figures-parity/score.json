@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T08:27:46+00:00",
- "probe_checked_at": "2026-11-11T00:27:46",
+ "generated_at": "2026-11-11T08:41:43+00:00",
+ "probe_checked_at": "2026-11-11T00:41:43",
  "comparable": true,
  "drift": [],
- "pooled": 95.6,
- "mean": 95.7,
+ "pooled": 96.1,
+ "mean": 95.9,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -126,68 +126,11 @@
    ]
   },
   "coordinate-grid": {
-   "score": 83.0,
-   "got": 127.0,
+   "score": 100.0,
+   "got": 153.0,
    "total": 153.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02f",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Use the inverses of sec, csc and cot",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw a row solid, dashed or dotted",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose which ends of a row have arrows",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03i",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set these styles row by row rather than for the whole graph",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type the range as fractions",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Finish an axis end with a line arrow",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Finish an axis end with a circle",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set each end of each axis separately",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "cylinder": {
    "score": 87.8,

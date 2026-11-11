@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-11T08:27:43+00:00",
-  "src_mtime": 1794385268.8750265,
-  "git": "4c07a7f",
+  "built_at": "2026-11-11T08:41:37+00:00",
+  "src_mtime": 1794385688.1482227,
+  "git": "b71938f",
   "figures": 191
  },
  "figures": {
@@ -18118,6 +18118,216 @@
     {
      "key": "show_notes",
      "label": "Write notes on the figure (a curve outside the window, rows that could not be drawn)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "eq1_line",
+     "label": "Equation 1 line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "eq1_weight",
+     "label": "Equation 1 thickness",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Thin",
+      "Medium",
+      "Thick"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "eq1_arrows",
+     "label": "Equation 1 arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Both ends",
+      "Left end",
+      "Right end"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "eq2_line",
+     "label": "Equation 2 line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "eq2_weight",
+     "label": "Equation 2 thickness",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Thin",
+      "Medium",
+      "Thick"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "eq2_arrows",
+     "label": "Equation 2 arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Both ends",
+      "Left end",
+      "Right end"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "eq3_line",
+     "label": "Equation 3 line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "eq3_weight",
+     "label": "Equation 3 thickness",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Thin",
+      "Medium",
+      "Thick"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "eq3_arrows",
+     "label": "Equation 3 arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Both ends",
+      "Left end",
+      "Right end"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "eq4_line",
+     "label": "Equation 4 line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "eq4_weight",
+     "label": "Equation 4 thickness",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Thin",
+      "Medium",
+      "Thick"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "eq4_arrows",
+     "label": "Equation 4 arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Both ends",
+      "Left end",
+      "Right end"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "x_left_end",
+     "label": "Left end",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle",
+      "None"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "x_right_end",
+     "label": "Right end",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle",
+      "None"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "x_fractions",
+     "label": "Number the x-axis in fractions",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "y_bottom_end",
+     "label": "Bottom end",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle",
+      "None"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "y_top_end",
+     "label": "Top end",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle",
+      "None"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "y_fractions",
+     "label": "Number the y-axis in fractions",
      "kind": "bool",
      "options": [],
      "default": "false"
