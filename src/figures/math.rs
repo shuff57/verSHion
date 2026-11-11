@@ -5572,8 +5572,9 @@ fn box_plot_params() -> Vec<ParamDef> {
         ParamDef::choice("axis_title_mode", "Axis title", &TITLE_MODES, "Text"),
         ParamDef::choice("numbers", "Numbers", &NUMBER_EVERY, "Every tick"),
         label_size_param(),
-    ]
+    ].into_iter().chain(box_ends_b9::params()).collect()
 }
+pub(crate) mod box_ends_b9;
 const NUMBER_EVERY: [&str; 6] = ["Every tick", "Every 2nd tick", "Every 4th tick", "Every 5th tick", "Every 10th tick", "No numbers"];
 /// Number every n-th tick (0 = no numbers).
 fn number_every(p: &Params) -> i64 {
@@ -5653,7 +5654,7 @@ fn box_plot_render(p: &Params) -> String {
         _ => if !p.s("title").is_empty() { math_text(&mut d, w / 2.0, 22.0, 18.0, "middle", p.s("title"), true); },
     }
     let ay = g.ay;
-    axis_heads(&mut d, x0, x1, ay);
+    box_ends_b9::draw(&mut d, p, x0, x1, ay);
     d.line(x0, ay, x1, ay, INK, 2.4);
     let every = number_every(p);
     let k0 = (amin / step).ceil() as i64;

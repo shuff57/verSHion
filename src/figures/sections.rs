@@ -35,7 +35,7 @@ static FIG_1: [RefSection; 7] = [
 static FIG_2: [RefSection; 4] = [
     s("Box plot", &["caps"], "Labels write the five-number summary on the figure. Leave them off for students to find."),
     s("Titles", &["title", "axis_title", "fill", "data3", "summary3", "name3", "data4", "summary4", "name4", "read5", "min_lab", "min_label", "med_lab", "med_label", "q1_lab", "q1_label", "q3_lab", "q3_label", "max_lab", "max_label", "title_mode", "axis_title_mode"], ""),
-    s("Number line", &["data", "summary", "name1", "data2", "summary2", "name2", "values", "outliers", "auto", "axis_min", "axis_max", "axis_step", "numbers"], "Leave these empty to fit the data."),
+    s("Number line", &["data", "summary", "name1", "data2", "summary2", "name2", "values", "outliers", "auto", "axis_min", "axis_max", "axis_step", "numbers", "left_end", "right_end"], "Leave these empty to fit the data."),
     s("More options", &["label_size"], ""),
 ];
 
