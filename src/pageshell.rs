@@ -379,8 +379,14 @@ pub fn unavailable_colors() -> (Color32, Color32, Color32) {
     if theme::is_dark() {
         (Color32::from_rgb(0x46, 0x42, 0x3e), Color32::from_rgb(0xb5, 0xb0, 0xaa), Color32::from_rgb(0x5c, 0x57, 0x52))
     } else {
-        (Color32::from_rgb(0xe6, 0xe4, 0xe1), Color32::from_rgb(0x6e, 0x6a, 0x66), Color32::from_rgb(0xc8, 0xc5, 0xc1))
+        unavailable_colors_light()
     }
+}
+
+/// [`unavailable_colors`] in the light palette whatever the theme, for controls drawn on the exam
+/// paper, which stays light in dark mode.
+pub fn unavailable_colors_light() -> (Color32, Color32, Color32) {
+    (Color32::from_rgb(0xe6, 0xe4, 0xe1), Color32::from_rgb(0x6e, 0x6a, 0x66), Color32::from_rgb(0xc8, 0xc5, 0xc1))
 }
 
 /// A button `h` tall that cannot be pressed yet: grey fill, mid-grey label, no hover, no click

@@ -117,7 +117,6 @@ fn save_settings(app: &App) {
     let _ = crate::store::save_json("settings.json", &app.settings);
 }
 
-const MAX_W: f32 = crate::pageshell::PAGE_W;
 /// The Banks screen's widest content: past this the tiles would be too wide to scan.
 const BANKS_MAX_W: f32 = 1600.0;
 /// The narrowest a Banks tile gets before the grid drops a column (inner 248: two lines of key
@@ -599,16 +598,28 @@ impl App {
             }
         }
         screens::desk_panel(ui, 20, |ui| {
-            egui::ScrollArea::vertical()
+            // Whether the page scrolled last frame: then its content keeps clear of the bar.
+            let scrolls_key = key.with("bank_page_scrolls");
+            let scrolls = ctx.data(|d| d.get_temp::<bool>(scrolls_key)).unwrap_or(false);
+            let out = egui::ScrollArea::vertical()
                 .id_salt("bank_scroll")
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.scope(|ui| {
-                        ui.set_max_width(ui.available_width().min(MAX_W));
+                        // The same width as the Banks grid and the other pages, so the header's
+                        // actions, the empty card and the list end on the page's right margin;
+                        // less a gutter for the scroll bar while the page scrolls.
+                        let w = bank_page_w(ui.available_width(), scrolls.then(|| scroll_bar_reach(ui)));
+                        ui.set_max_width(w);
                         self.bank_edit_body(ui, &ctx, key, &bank_id);
                         crate::pageshell::end_pad(ui);
                     });
                 });
+            let now = out.content_size.y > out.inner_rect.height() + 0.5;
+            if now != scrolls {
+                ctx.data_mut(|d| d.insert_temp(scrolls_key, now));
+                ctx.request_repaint();
+            }
         });
 
         // Insert-figure modal stacks on top of the open editor.
@@ -776,9 +787,14 @@ impl App {
                 }
                 // (Details has its own button beside this menu; the menu keeps what has none.)
                 Tool::More => {
-                    // Alone on an empty bank it is the whole group, rounded on every corner.
-                    let corners = if empty { CornerRadius::same(QUIET_R) } else { CornerRadius { nw: 0, sw: 0, ne: QUIET_R, se: QUIET_R } };
-                    let r = quiet_tool(ui, None, None, "More bank actions", corners);
+                    // Alone on an empty bank it is the whole group, rounded on every corner, and
+                    // says what it is ("Bank actions", the tile menu's name) with a caret like
+                    // Share's, since it is the header's only route to the bank's actions.
+                    let r = if empty {
+                        quiet_tool(ui, None, Some(&bank_actions_label()), "Bank actions", CornerRadius::same(QUIET_R)).on_hover_text("Details and copying questions from the pool")
+                    } else {
+                        quiet_tool(ui, None, None, "More bank actions", CornerRadius { nw: 0, sw: 0, ne: QUIET_R, se: QUIET_R })
+                    };
                     egui::Popup::menu(&r).show(|ui| {
                         ui.set_min_width(170.0);
                         if empty {
@@ -3290,6 +3306,29 @@ const QUIET_PAD: f32 = 12.0;
 /// Corner radius of the segmented Details / Preview / … group (Share's 12).
 const QUIET_R: u8 = 12;
 
+/// How far the page's scroll bar reaches in from the right at its widest, plus a visible gap.
+fn scroll_bar_reach(ui: &Ui) -> f32 {
+    let s = &ui.spacing().scroll;
+    s.bar_inner_margin + s.bar_width + s.bar_outer_margin + 8.0
+}
+
+/// The bank page's content width in `avail`: the Banks grid's cap, and while the page scrolls
+/// (`bar` the scroll bar's reach) short of the bar, so cards, the view toggle and the header's
+/// actions end on one edge clear of it. Never narrower than the reading width the page had
+/// before it widened (or `avail`), so a narrow window is unchanged.
+fn bank_page_w(avail: f32, bar: Option<f32>) -> f32 {
+    let w = avail.min(BANKS_MAX_W);
+    match bar {
+        Some(b) => w.min((avail - b).max(crate::pageshell::PAGE_W.min(avail))),
+        None => w,
+    }
+}
+
+/// The empty bank header's labelled menu button: "Bank actions" and a caret.
+fn bank_actions_label() -> String {
+    format!("Bank actions {}", egui_phosphor::regular::CARET_DOWN)
+}
+
 /// Width of a quiet toolbar button with a 16 pt icon and `label`.
 fn quiet_tool_w(ui: &Ui, label: &str) -> f32 {
     let text = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), egui::FontId::new(kit::ty::BUTTON, theme::semibold()), Color32::WHITE).size().x);
@@ -3305,7 +3344,8 @@ fn quiet_tool_w(ui: &Ui, label: &str) -> f32 {
 /// square. `name` is the accessible name (and, for the dots, the hover text).
 fn quiet_tool(ui: &mut Ui, icon: Option<&str>, label: Option<&str>, name: &str, r: CornerRadius) -> egui::Response {
     let w = match label {
-        Some(l) => quiet_tool_w(ui, l),
+        // Without an icon the label alone sits between the side pads.
+        Some(l) => quiet_tool_w(ui, l) - if icon.is_none() { 16.0 + 7.0 } else { 0.0 },
         None => MORE_W,
     };
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, TOOL_H), Sense::click());
@@ -4430,8 +4470,8 @@ mod tests {
         assert!(xs.windows(2).all(|w| w[0] < w[1]), "{how}: toolbar in the old order {FULL_TOOLBAR:?}, got x {xs:?}");
     }
 
-    /// An empty bank's header has only the "…" menu (no Share, Preview or Details button), and
-    /// "…" reaches Details… and From pool…; with a question the whole toolbar is there in the old
+    /// An empty bank's header has only its labelled "Bank actions" menu (no Share, Preview or
+    /// Details button), which reaches Details… and From pool…; with a question the whole toolbar is there in the old
     /// order and From pool… is in Share's menu; the first question brings the full toolbar back.
     #[test]
     fn an_empty_bank_header_is_the_more_menu_and_the_first_question_brings_the_toolbar_back() {
@@ -4440,12 +4480,12 @@ mod tests {
             let how = if ltr { "narrow" } else { "desktop" };
             let mut h = toolbar_harness(ltr);
             h.run();
-            // Empty: "…" alone.
-            assert!(h.query_by_label("More bank actions").is_some(), "{how}: empty bank keeps the … menu");
-            for gone in ["Share", "Preview", "Details", "Add question", "Import", "Export"] {
+            // Empty: the labelled "Bank actions" menu alone.
+            assert!(h.query_by_label("Bank actions").is_some(), "{how}: empty bank keeps its menu, named Bank actions");
+            for gone in ["Share", "Preview", "Details", "Add question", "Import", "Export", "More bank actions"] {
                 assert!(h.query_by_label_contains(gone).is_none(), "{how}: empty bank header shows no {gone}");
             }
-            h.get_by_label("More bank actions").click();
+            h.get_by_label("Bank actions").click();
             h.run();
             assert!(h.query_by_label("Details…").is_some(), "{how}: … reaches Details… on an empty bank");
             assert!(h.query_by_label("From pool…").is_some(), "{how}: … reaches From pool… on an empty bank");
@@ -4528,6 +4568,21 @@ mod tests {
         // No room for any form: the counts alone.
         assert_eq!(meta_fit(119.0, 70.0, ed, 119.0), (true, None));
         assert_eq!(meta_fit(119.0, 70.0, ed, 100.0), (false, None));
+    }
+
+    /// While the bank page scrolls its content ends clear of the scroll bar (desktop), the page
+    /// that does not scroll keeps the full width, and a narrow window is unchanged.
+    #[test]
+    fn the_bank_page_keeps_clear_of_its_scroll_bar() {
+        let bar = 22.0;
+        for avail in [1240.0_f32, 1500.0, 1700.0] {
+            let w = bank_page_w(avail, Some(bar));
+            assert!(w <= avail - bar, "{avail}: content right edge {w} reaches the bar at {}", avail - bar);
+            assert_eq!(bank_page_w(avail, None), avail.min(BANKS_MAX_W), "{avail}: no bar, full width");
+        }
+        for avail in [700.0_f32, 900.0] {
+            assert_eq!(bank_page_w(avail, Some(bar)), avail, "{avail}: narrow page unchanged");
+        }
     }
 
     /// A badge's room comes from dropping the topics, never from a taller row.

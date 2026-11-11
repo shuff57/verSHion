@@ -3018,6 +3018,38 @@ fn margin_button_side(ui: &mut egui::Ui, id: egui::Id, center: Pos2, kind: u8, s
     Some(resp.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand))
 }
 
+/// Whether the question at `i` of `n` can move by `d` (0: remove, always live).
+fn move_live(i: usize, n: usize, d: i32) -> bool {
+    match d {
+        -1 => i > 0,
+        1 => i + 1 < n,
+        _ => true,
+    }
+}
+
+/// A margin ↑ or ↓ that cannot act (the first question's ↑, the last one's ↓): a faint grey glyph
+/// with no well, no hover, not focusable, reported disabled, and `why` on hover. The paper is
+/// always light, so it takes the light palette's unavailable colours.
+fn margin_button_unavailable(ui: &mut egui::Ui, id: egui::Id, center: Pos2, kind: u8, show: bool, side: f32, why: &str) {
+    let rect = Rect::from_center_size(center, Vec2::splat(side));
+    let resp = ui.interact(rect, id, Sense::hover());
+    if !show {
+        return;
+    }
+    // No well (a filled square read as hover or selected): the glyph alone in the unavailable
+    // outline grey, lighter than the live handles' PAPER_SOFT.
+    let (_, _, faint) = crate::pageshell::unavailable_colors_light();
+    let p = ui.painter();
+    let s = Stroke::new(1.6, faint);
+    let c = rect.center();
+    let dy = if kind == 1 { 1.0 } else { -1.0 };
+    p.line_segment([c + Vec2::new(-4.0, 1.5 * dy), c + Vec2::new(0.0, -2.5 * dy)], s);
+    p.line_segment([c + Vec2::new(0.0, -2.5 * dy), c + Vec2::new(4.0, 1.5 * dy)], s);
+    let tip = margin_tip(kind);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, false, tip));
+    resp.on_hover_text(why);
+}
+
 /// Paints a margin button's glyph (see [`margin_button`] for the kinds).
 fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
     let p = ui.painter();
@@ -3389,6 +3421,13 @@ fn draw_item(
                 2 => ("it_dn", 1),
                 _ => continue,
             };
+            // The first question's ↑ and the last one's ↓ have nowhere to go: they look and are
+            // disabled (the menu's Move up / Move down say the same).
+            let live = move_live(i, n_items, d);
+            if !live {
+                margin_button_unavailable(ui, ui.id().with((salt, i)), at, kind, show, side, if d < 0 { "Already the first question" } else { "Already the last question" });
+                continue;
+            }
             if margin_button_side(ui, ui.id().with((salt, i)), at, kind, show, side).is_some_and(|r| r.clicked()) {
                 if d == 0 {
                     remove_item(app, exam_id, i);
@@ -4792,13 +4831,25 @@ fn draw_shelf_inner(
     // The list runs to the card's foot: the used count sits on the sort row above, and the
     // card's own + and grab cursor say how a question gets onto the page.
     let list_h = ui.available_height().max(60.0);
-    // More below: the list ends on a whole card, with "N more below" under it, and a thin scroll
-    // bar like the page's beside it (shown at rest, not only under the pointer). Card bottoms
-    // come from the last frame; no card's text or + is cut or greyed at rest.
-    let cards_id = egui::Id::new("bank_panel_cards");
-    let bottoms: Vec<f32> = ui.data(|d| d.get_temp(cards_id)).unwrap_or_default();
-    let overflow = bottoms.last().is_some_and(|&b| b > list_h + 0.5);
-    let view_h = if overflow { whole_cards_height(&bottoms, list_h - SHELF_CUE_H) } else { list_h };
+    let list_top = ui.cursor().top();
+    let list_w = ui.available_width();
+    // More below: the list ends on a whole card and "N more below" sits on the panel's foot, with
+    // a thin scroll bar like the page's beside the cards (shown at rest, not only under the
+    // pointer). A card shows up to five lines of its question, and where room is left under the
+    // last whole card the cards in view show more of theirs, so the list runs down to the cue
+    // instead of leaving a blank band. No card's text or + is cut or greyed at rest.
+    let (rows, overflow, planned) = {
+        let p = ui.painter().clone();
+        let stem_w = shelf_stem_width(list_w - SHELF_BAR_ROOM);
+        let stems: Vec<String> = qs.iter().take(SHELF_PLAN_CARDS).map(|(_, q)| crate::equation::stem_preview(&q.stem)).collect();
+        let full: Vec<usize> = stems.iter().map(|t| shelf_stem_galley(&p, t, stem_w, SHELF_ROWS_MAX).rows.len().max(1)).collect();
+        let row_h = shelf_stem_galley(&p, "A\nA", stem_w, 2).size().y - shelf_stem_galley(&p, "A", stem_w, 1).size().y;
+        let card_h = |j: usize, n: usize| shelf_stem_galley(&p, &stems[j], stem_w, n).size().y + SHELF_CARD_CHROME;
+        let (rows, overflow) = shelf_plan(&full, &card_h, row_h, list_h - SHELF_CUE_H, qs.len());
+        let bottoms = if overflow { shelf_bottoms(&rows, &card_h) } else { Vec::new() };
+        (rows, overflow, bottoms)
+    };
+    let view_h = if overflow { whole_cards_height(&planned, list_h - SHELF_CUE_H) } else { list_h };
     let saved_scroll = ui.spacing().scroll.clone();
     {
         let s = &mut ui.spacing_mut().scroll;
@@ -4823,32 +4874,124 @@ fn draw_shelf_inner(
             let top0 = ui.cursor().top();
             // 8 px between cards (the item spacing used to add 8 more), so four show beside the page
             ui.spacing_mut().item_spacing.y = 0.0;
-            for (_, q) in &qs {
+            for (k, (_, q)) in qs.iter().enumerate() {
                 let count = in_exam
                     .iter()
                     .filter(|it| it.bank_id == bank_id && it.question_id == q.id)
                     .count();
-                shelf_row(app, ui, st, ctx, &bank_id, exam_id, q, count);
+                shelf_row(app, ui, st, ctx, &bank_id, exam_id, q, count, rows.get(k).copied().unwrap_or(SHELF_ROWS));
                 ends.push(ui.cursor().top() - top0);
-                ui.add_space(8.0);
+                ui.add_space(SHELF_CARD_GAP);
             }
             ends
         });
     ui.spacing_mut().scroll = saved_scroll;
-    if out.inner != bottoms {
-        ui.data_mut(|d| d.insert_temp(cards_id, out.inner.clone()));
-        ctx.request_repaint();
-    }
     let view = out.inner_rect;
     let below = cards_below(&out.inner, out.state.offset.y + view.height());
     if overflow && below > 0 {
-        let bar = Rect::from_min_size(view.left_bottom(), Vec2::new(view.width(), SHELF_CUE_H));
+        // On the panel's foot, under the list's last whole card.
+        let bar = Rect::from_min_size(Pos2::new(view.left(), (list_top + list_h - SHELF_CUE_H).max(view.bottom())), Vec2::new(view.width(), SHELF_CUE_H));
         ui.allocate_rect(bar, Sense::hover());
         kit::more_below(ui, bar, &format!("{below} more below"));
     }
 }
 
-/// Height of the "N more below" cue under the bank panel's list.
+/// Lines of its question a bank card shows at most, unless the panel has room for more.
+const SHELF_ROWS: usize = 5;
+
+/// The fewest lines a card is cut to so that one more whole card fits in the panel.
+const SHELF_ROWS_MIN: usize = 3;
+
+/// The most lines a card in view grows to with the room left under the last whole card.
+const SHELF_ROWS_MAX: usize = 8;
+
+/// How many cards from the list's top the panel plans lines for (more never fit in view).
+const SHELF_PLAN_CARDS: usize = 16;
+
+/// A card's height besides its question: the type line above it and the padding.
+const SHELF_CARD_CHROME: f32 = 38.0;
+
+/// The gap between two bank cards.
+const SHELF_CARD_GAP: f32 = 8.0;
+
+/// The question's width in a bank card `w` wide (beside it: padding and the add column).
+fn shelf_stem_width(w: f32) -> f32 {
+    w - 12.0 - 10.0 - 30.0 - 10.0
+}
+
+/// A bank card's question, cut to `rows` lines with an ellipsis.
+fn shelf_stem_galley(p: &egui::Painter, text: &str, w: f32, rows: usize) -> std::sync::Arc<egui::Galley> {
+    clamped_galley(p, text, FontId::proportional(kit::ty::META), theme::ink(), w, rows)
+}
+
+/// Each card's bottom from the list's top for the cards planned in `rows`.
+fn shelf_bottoms(rows: &[usize], card_h: &dyn Fn(usize, usize) -> f32) -> Vec<f32> {
+    let mut y = 0.0;
+    rows.iter()
+        .enumerate()
+        .map(|(j, &n)| {
+            let b = y + card_h(j, n);
+            y = b + SHELF_CARD_GAP;
+            b
+        })
+        .collect()
+}
+
+/// The lines each of the first cards shows (`full.len()` of the list's `total`), and whether the
+/// list overflows `room`. Cards in view take [`shelf_stem_rows`]'s lines; cards out of view show
+/// up to [`SHELF_ROWS`], as do cards past the plan. When every card fits, the fitted lines are
+/// kept (they fit; five each might not).
+fn shelf_plan(full: &[usize], card_h: &dyn Fn(usize, usize) -> f32, row_h: f32, room: f32, total: usize) -> (Vec<usize>, bool) {
+    let (mut rows, k) = shelf_stem_rows(full, card_h, row_h, room);
+    for j in k..rows.len() {
+        rows[j] = full[j].clamp(1, SHELF_ROWS);
+    }
+    (rows, k < total)
+}
+
+/// How many lines each of the first cards shows, and how many cards fit whole in `room`. `full` is
+/// the lines each card's whole question takes (up to [`SHELF_ROWS_MAX`]); `card_h(card, lines)` a
+/// card's height. Each card shows up to [`SHELF_ROWS`] lines (down to [`SHELF_ROWS_MIN`] where that
+/// fits a further whole card in view: a longer question never costs a card), then the cards in view
+/// that are still cut take a line at a time, most hidden first, while the last stays whole in `room`, so the
+/// list ends within a line of `room`'s foot unless every card in view is shown whole.
+fn shelf_stem_rows(full: &[usize], card_h: &dyn Fn(usize, usize) -> f32, row_h: f32, room: f32) -> (Vec<usize>, usize) {
+    // `whole_cards_height` keeps 2 under the last whole card.
+    let room = room - 2.0;
+    let mut best: Option<(f32, Vec<usize>, usize)> = None;
+    for base in (SHELF_ROWS_MIN..=SHELF_ROWS).rev() {
+        let mut rows: Vec<usize> = full.iter().map(|&f| f.clamp(1, base)).collect();
+        let mut bottom = -SHELF_CARD_GAP;
+        let mut k = 0;
+        while k < rows.len() {
+            let b = bottom + SHELF_CARD_GAP + card_h(k, rows[k]);
+            if b > room {
+                break;
+            }
+            bottom = b;
+            k += 1;
+        }
+        // One line at a time to the card in view with the most of its question still hidden
+        // (the first of equals), while the last card stays whole.
+        loop {
+            let pick = (0..k)
+                .filter(|&j| rows[j] < full[j].min(SHELF_ROWS_MAX) && bottom + card_h(j, rows[j] + 1) - card_h(j, rows[j]) <= room)
+                .max_by_key(|&j| (full[j].min(SHELF_ROWS_MAX) - rows[j], std::cmp::Reverse(j)));
+            let Some(j) = pick else { break };
+            bottom += card_h(j, rows[j] + 1) - card_h(j, rows[j]);
+            rows[j] += 1;
+        }
+        let left = room - bottom.max(0.0);
+        // More whole cards in view first; then the plan that leaves the least room, by more than
+        // a line (so longer lines win a near tie).
+        if best.as_ref().is_none_or(|(l, _, bk)| k > *bk || (k == *bk && left < *l - row_h)) {
+            best = Some((left, rows, k));
+        }
+    }
+    best.map(|(_, rows, k)| (rows, k)).unwrap_or_default()
+}
+
+/// Height of the "N more below" cue on the bank panel's foot.
 const SHELF_CUE_H: f32 = 30.0;
 
 /// Room kept right of the bank panel's cards for its scroll bar while the list overflows.
@@ -4866,7 +5009,7 @@ fn cards_below(bottoms: &[f32], foot: f32) -> usize {
 }
 
 /// One shelf card (Test Parrot's layout): TYPE label with "In exam" / "Image" badges and quiet
-/// edit / copy icons, the stem on three lines, and the add button (or in-exam check) in a column
+/// edit / copy icons, the stem on up to five lines, and the add button (or in-exam check) in a column
 /// of its own on the right. The card drags onto the page.
 #[allow(clippy::too_many_arguments)]
 /// "Short answer" from a type's label, whatever its case.
@@ -4885,6 +5028,7 @@ fn shelf_row(
     exam_id: &Id,
     q: &model::Question,
     in_count: usize,
+    rows: usize,
 ) {
     let w = ui.available_width();
     // The add button is the card's one action and gets a column of its own on the right; edit and
@@ -4892,14 +5036,14 @@ fn shelf_row(
     // equal icons used to take a third of it).
     const ADD_SZ: f32 = 30.0;
     const ICON_SZ: f32 = 24.0;
-    let stem_w = w - 12.0 - 10.0 - ADD_SZ - 10.0;
+    let stem_w = shelf_stem_width(w);
     let already = in_count > 0;
     let p = ui.painter().clone();
     let stem_txt = crate::equation::stem_preview(&q.stem);
-    // Three lines of the stem at 13, so two questions that start alike still read apart; the
-    // card's tooltip has the whole stem.
-    let galley = clamped_galley(&p, &stem_txt, FontId::proportional(kit::ty::META), theme::ink(), stem_w, 3);
-    let h = galley.size().y + 28.0 + 10.0;
+    // Up to `rows` lines of the stem at 13 (five, more where the panel has room; see
+    // `shelf_stem_rows`), so a question reads as a sentence; the card's tooltip has the whole stem.
+    let galley = shelf_stem_galley(&p, &stem_txt, stem_w, rows);
+    let h = galley.size().y + SHELF_CARD_CHROME;
     // Alone in the narrow window the bank has no page beside it to drop on, so its cards do not
     // drag (no grab cursor, no ghost) and + is the way onto the page.
     let alone = st.shelf_alone;
@@ -8216,6 +8360,82 @@ mod system_pass_tests {
         assert_eq!(whole_cards_height(&bottoms, 100.0), 100.0);
         assert_eq!(cards_below(&bottoms, 422.0), 2);
         assert_eq!(cards_below(&bottoms, 700.0), 0);
+    }
+
+    /// The first question's ↑ and the last one's ↓ are disabled; a middle question keeps both.
+    #[test]
+    fn end_questions_disable_their_outward_arrow() {
+        assert!(!move_live(0, 1, -1) && !move_live(0, 1, 1) && move_live(0, 1, 0));
+        assert!(!move_live(0, 3, -1) && move_live(0, 3, 1));
+        assert!(move_live(1, 3, -1) && move_live(1, 3, 1));
+        assert!(move_live(2, 3, -1) && !move_live(2, 3, 1));
+    }
+
+    /// A disabled arrow is reported disabled under its name, takes no click and no focus.
+    #[test]
+    fn unavailable_arrow_is_disabled_for_accesskit() {
+        use egui_kittest::kittest::{NodeT, Queryable};
+        let mut h = egui_kittest::Harness::new_ui(|ui| {
+            margin_button_unavailable(ui, egui::Id::new("up0"), Pos2::new(40.0, 40.0), 1, true, 18.0, "Already the first question");
+            margin_button_unavailable(ui, egui::Id::new("dn0"), Pos2::new(40.0, 62.0), 2, true, 18.0, "Already the last question");
+        });
+        h.run();
+        for n in ["Move up", "Move down"] {
+            let node = h.get_by_label(n);
+            assert!(node.accesskit_node().is_disabled(), "{n}");
+            node.click();
+        }
+        h.run();
+        h.key_press(egui::Key::Tab);
+        h.run();
+        assert!(!h.get_by_label("Move up").is_focused() && !h.get_by_label("Move down").is_focused());
+    }
+
+    /// Bank cards: as many whole cards as fit at three lines, then the room left goes to more of
+    /// each question (up to five, more only where the panel still has room), so the list ends
+    /// within a line of the panel's foot; when every card fits, each shows up to five lines.
+    #[test]
+    fn bank_cards_show_more_lines_without_losing_a_card() {
+        // 13 a line, 38 of chrome: a card of n lines is 38 + 13n tall.
+        let card_h = |_: usize, n: usize| 38.0 + 13.0 * n as f32;
+        let full = [7, 6, 2, 6, 6];
+        // Three 3-line cards (77 each, gaps 8) end at 247: room 300 keeps three and grows them.
+        let (rows, k) = shelf_stem_rows(&full, &card_h, 13.0, 300.0);
+        assert_eq!(k, 3);
+        let end = shelf_bottoms(&rows[..k], &card_h)[k - 1];
+        assert!(end <= 298.0 && end > 298.0 - 13.0, "{end} {rows:?}");
+        assert!(rows[..k].iter().zip(&full).all(|(r, f)| *r >= 3.min(*f) && r <= f));
+        // Plenty of room for one card: it shows all seven lines (up to the most).
+        let (rows, k) = shelf_stem_rows(&[7], &card_h, 13.0, 400.0);
+        assert_eq!((rows[0], k), (7, 1));
+        // Every card in view gets lines most hidden first: 7 and 6 line questions in room for
+        // two more lines than two 3-line cards: both grow by one, not the first by two.
+        let room = 2.0 * 77.0 + 8.0 + 26.0;
+        let (rows, k) = shelf_stem_rows(&[7, 6], &card_h, 13.0, room + 2.0);
+        assert_eq!((rows, k), (vec![4, 4], 2));
+        // A short question is never padded past its own lines.
+        let (rows, _) = shelf_stem_rows(&[2, 6], &card_h, 13.0, 400.0);
+        assert_eq!(rows[0], 2);
+    }
+
+    /// Every card fits at three lines but not at five: the fitted lines are kept, so the list
+    /// does not overflow and no card is cut; a list that overflows gives cards out of view up to
+    /// five lines, the same as cards past the plan.
+    #[test]
+    fn bank_cards_that_fit_keep_their_fitted_lines() {
+        let card_h = |_: usize, n: usize| 38.0 + 13.0 * n as f32;
+        // Four six-line questions: 4 x 77 + 24 = 332 at three lines, 4 x 103 + 24 = 436 at five.
+        let full = [6, 6, 6, 6];
+        let (rows, overflow) = shelf_plan(&full, &card_h, 13.0, 400.0, 4);
+        assert!(!overflow);
+        let end = *shelf_bottoms(&rows, &card_h).last().unwrap();
+        assert!(end <= 400.0, "{end} {rows:?}");
+        assert!(rows.iter().all(|&r| (3..=6).contains(&r)), "{rows:?}");
+        // Seven of them in the same room: three in view, the rest at five.
+        let full = [6; 7];
+        let (rows, overflow) = shelf_plan(&full, &card_h, 13.0, 300.0, 20);
+        assert!(overflow);
+        assert_eq!(&rows[3..], &[5, 5, 5, 5]);
     }
 
     #[test]
