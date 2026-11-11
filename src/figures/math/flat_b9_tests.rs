@@ -360,7 +360,7 @@ fn a_misleading_name_is_refused_with_a_note_in_the_panel_only() {
         let p = with("triangle", &[s("height", h), s(k, "H")]);
         let t = svg("triangle", &p);
         assert!(drawn_points(&t).is_empty(), "{k}");
-        assert!(notes("triangle", &p).iter().any(|n| n.contains("lands on corner B")), "{:?}", notes("triangle", &p));
+        assert!(notes("triangle", &p).iter().any(|n| n.contains("lands is corner B") && !n.contains("lands lands")), "{:?}", notes("triangle", &p));
         assert!(!relevant("triangle", k, &with("triangle", &[s("height", h)])), "{k} offered where it cannot draw");
     }
     let cases: Vec<(&str, Vec<(&'static str, Value)>, &str)> = vec![

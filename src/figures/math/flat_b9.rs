@@ -164,7 +164,7 @@ pub(super) fn points(id: &str, p: &Params, feet: &[(&'static str, Pt, Pt)], corn
             continue;
         }
         if let Some(k) = corners.iter().position(|c| dist(*c, at) < 1e-6 * scale) {
-            note(format!("{} lands on corner {}, so that point is already named {}: the name \u{201c}{t}\u{201d} is not drawn.", cap(what), names[k], names[k]));
+            note(format!("{} is corner {}, so that point is already named {}: the name \u{201c}{t}\u{201d} is not drawn.", cap(what), names[k], names[k]));
             continue;
         }
         if names.iter().any(|n| n.eq_ignore_ascii_case(&t)) {
