@@ -866,26 +866,55 @@ impl App {
                 // The name field hugs its text so the rename pencil sits right after it.
                 let text_w = ui.fonts_mut(|f| f.layout_no_wrap(name_buf.clone(), name_font.clone(), theme::ink()).size().x);
                 let field_w = (text_w + 12.0).clamp(160.0, name_w);
+                let field_id = ui.id().with(("bank_name_field", bank_id.as_str()));
+                // A name too long for its line is shown on that one line ending in "…" (the whole
+                // name on hover and in the breadcrumb), the pencil clear after it; the field comes
+                // back while it is being renamed.
+                let editing_key = field_id.with("editing");
+                // 1: the pencil (or the name) was just pressed; 2: the field has had its focus.
+                let editing = ui.data(|d| d.get_temp::<u8>(editing_key).unwrap_or(0));
+                let editing = editing > 0 || ui.ctx().memory(|m| m.has_focus(field_id));
+                let wraps = text_w + 12.0 > name_w && !editing;
                 let row = ui
                     .horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
-                        let resp = ui.add(
-                            TextEdit::singleline(&mut name_buf)
-                                .id(ui.id().with(("bank_name_field", bank_id.as_str())))
-                                .font(name_font.clone())
-                                .text_color(theme::ink())
-                                .frame(Frame::new())
-                                .hint_text("Untitled bank")
-                                .desired_width(field_w),
-                        );
-                        if !resp.has_focus() && pencil_button(ui).on_hover_text("Rename this bank").clicked() {
-                            resp.request_focus();
+                        if wraps {
+                            let mut job = egui::text::LayoutJob::single_section(name_buf.clone(), egui::TextFormat::simple(name_font.clone(), theme::ink()));
+                            job.wrap = egui::text::TextWrapping { max_width: name_w, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+                            let galley = ui.fonts_mut(|f| f.layout_job(job));
+                            let label = ui.add(egui::Label::new(galley).sense(Sense::click())).on_hover_cursor(egui::CursorIcon::Text).on_hover_text(bank_name.as_str());
+                            let pencil = pencil_button(ui).on_hover_text("Rename this bank");
+                            if label.clicked() || pencil.clicked() {
+                                ui.data_mut(|d| d.insert_temp(editing_key, 1u8));
+                            }
+                            None
+                        } else {
+                            let resp = ui.add(
+                                TextEdit::singleline(&mut name_buf)
+                                    .id(field_id)
+                                    .font(name_font.clone())
+                                    .text_color(theme::ink())
+                                    .frame(Frame::new())
+                                    .hint_text("Untitled bank")
+                                    .desired_width(field_w),
+                            );
+                            match ui.data(|d| d.get_temp::<u8>(editing_key)) {
+                                Some(1) => {
+                                    resp.request_focus();
+                                    ui.data_mut(|d| d.insert_temp(editing_key, 2u8));
+                                }
+                                Some(_) if !resp.has_focus() => ui.data_mut(|d| d.remove::<u8>(editing_key)),
+                                _ => {}
+                            }
+                            if !resp.has_focus() && pencil_button(ui).on_hover_text("Rename this bank").clicked() {
+                                resp.request_focus();
+                            }
+                            Some(resp)
                         }
-                        resp
                     });
                 name_row = Some(row.response.rect);
-                let resp = row.inner;
-                if resp.changed() && !name_buf.trim().is_empty() && name_buf.trim() != bank_name {
+                if let Some(resp) = row.inner
+                    && resp.changed() && !name_buf.trim().is_empty() && name_buf.trim() != bank_name {
                     let t = now_secs();
                     if let Some(b) = self.store.bank_mut(bank_id) {
                         b.name = name_buf.trim().to_string();
@@ -3217,6 +3246,11 @@ fn truncate(s: &str, max_chars: usize) -> String {
 /// Small borderless pencil icon button (the rename affordance after the bank name).
 fn pencil_button(ui: &mut Ui) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
+    paint_pencil(ui, rect, resp)
+}
+
+fn paint_pencil(ui: &mut Ui, rect: Rect, resp: egui::Response) -> egui::Response {
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Rename this bank"));
     let col = if resp.hovered() { theme::accent_col() } else { theme::muted_col() };
     if resp.hovered() {
         ui.painter().rect_filled(rect, CornerRadius::same(6), theme::hover_bg());

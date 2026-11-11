@@ -80,9 +80,14 @@ pub fn footer(ui: &mut Ui, text: &str) {
 
 /// Room at the foot of a page that scrolls, so its last row can scroll clear of the floating
 /// "Report an issue" pill: the pill's height + 16, or 52 before the pill's first frame. Call it
-/// last in a page's scroll content (`footer` does when the page overflows).
+/// last in a page's scroll content (`footer` does when the page overflows). With the report in
+/// the narrow dock there is no pill to clear, only the 16 px edge gap.
 pub fn end_pad(ui: &mut Ui) {
-    let h = crate::alphanote::corner_rect(ui.ctx()).map_or(52.0, |r| r.height() + 16.0);
+    let h = if crate::alphanote::in_dock(ui.ctx()) {
+        16.0
+    } else {
+        crate::alphanote::corner_rect(ui.ctx()).map_or(52.0, |r| r.height() + 16.0)
+    };
     ui.add_space(h);
 }
 

@@ -857,12 +857,54 @@ impl crate::App {
 
                 // Floor of the dock: the light/dark button.
                 let btn_h = if narrow { 52.0 } else { 56.0 };
-                let floor = (ui.available_height() - btn_h - 4.0).max(0.0);
+                // Narrow, the floating "Report an issue" pill sat over page content (Home's last bank
+                // card), so it moves into the dock as an item over light/dark, when the dock has a
+                // free item's height to spare above the nav. Too short a window keeps the pill.
+                let ctx = ui.ctx().clone();
+                let report = narrow
+                    && crate::alphanote::wants_dock(&ctx)
+                    && ui.available_height() >= 2.0 * btn_h + 4.0 + DOCK_REPORT_CLEAR;
+                let reserve = if report { 2.0 * btn_h + 4.0 } else { btn_h };
+                let floor = (ui.available_height() - reserve - 4.0).max(0.0);
                 ui.allocate_at_least(Vec2::new(item_w, floor), egui::Sense::hover());
+                if report {
+                    crate::alphanote::dock_item(ui, item_w, btn_h, |ui, rect, resp| {
+                        dock_glyph_item(ui, rect, resp, egui_phosphor::regular::BUG, "Report", narrow)
+                    });
+                }
                 self.theme_button(ui, item_w, narrow);
             });
     }
+}
 
+/// Free height the narrow dock keeps between its last nav item and the Report item, so Report
+/// reads as a utility beside light/dark rather than a ninth page.
+const DOCK_REPORT_CLEAR: f32 = 24.0;
+
+/// A dock utility item (not a page): `glyph` over a small `label`, hover tint, drawn like
+/// the light/dark button.
+fn dock_glyph_item(ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, glyph: &str, label: &str, narrow: bool) {
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    // Keyboard focus: the app's ring (2 pt, 1 pt clear of the edge, corner + 1, as `pageshell` and
+    // `kit` draw it) in the dock's own ink. The accent green is about 1.6:1 on the light rail.
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect.expand(1.0), CornerRadius::same(14), Stroke::new(2.0, theme::dock_text()), StrokeKind::Outside);
+    }
+    let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
+    crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
+    ui.painter().text(
+        Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
+        theme::dock_text(),
+    );
+}
+
+impl crate::App {
     /// Light/dark: one button, not a switch. It shows the mode a click moves to (a moon while it is light, a
     /// sun while it is dark), drawn like a nav item: icon over a small label.
     fn theme_button(&mut self, ui: &mut egui::Ui, w: f32, narrow: bool) {

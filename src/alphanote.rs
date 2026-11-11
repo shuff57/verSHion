@@ -21,9 +21,18 @@ pub enum Outcome {
 
 /// Draws the popup while `popup` is true, else the corner button. A press of "Report an issue" in
 /// the popup also closes it, so the caller gets `Report` once and the popup does not come back.
+///
+/// When the narrow dock drew the report item this frame ([`dock_item`]), the corner button is not
+/// drawn: a press of the dock item comes back here as `Report`.
 pub fn show(ctx: &egui::Context, popup: bool) -> Outcome {
     if popup {
         popup_modal(ctx)
+    } else if in_dock(ctx) {
+        if ctx.data_mut(|d| d.remove_temp::<bool>(egui::Id::new(DOCK_PRESSED_ID))).unwrap_or(false) {
+            Outcome::Report
+        } else {
+            Outcome::Nothing
+        }
     } else if corner_button(ctx) {
         Outcome::Report
     } else {
@@ -59,9 +68,44 @@ fn popup_modal(ctx: &egui::Context) -> Outcome {
 }
 
 /// Where the corner button was drawn last frame, if it is on screen. A footer rule along the bottom of
-/// a page stops short of it instead of running underneath.
+/// a page stops short of it instead of running underneath. `None` while the report lives in the
+/// narrow dock instead (the dock is drawn before the page, so this frame's answer is known).
 pub fn corner_rect(ctx: &egui::Context) -> Option<egui::Rect> {
+    if in_dock(ctx) {
+        return None;
+    }
     ctx.memory(|m| m.area_rect(egui::Id::new(CORNER_ID)))
+}
+
+const DOCK_PASS_ID: &str = "alpha_report_in_dock";
+const DOCK_PRESSED_ID: &str = "alpha_report_dock_pressed";
+
+/// The report is a dock item this frame, so the corner pill is not drawn.
+pub fn in_dock(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<u64>(egui::Id::new(DOCK_PASS_ID))) == Some(ctx.cumulative_pass_nr())
+}
+
+/// Whether the dock should carry the report: the same moments the corner pill would show (after
+/// the first-open popup was closed).
+pub fn wants_dock(ctx: &egui::Context) -> bool {
+    seen(ctx)
+}
+
+/// The narrow window's dock item for the report, drawn by the dock above its light/dark button in
+/// place of the floating pill, which sat over page content at narrow widths. `w` x `h` is the dock's
+/// item size; `paint` draws the icon and the short visible label "Report" in the dock's own style.
+/// Its accessible name is the pill's, "Report an issue". A press is handed to [`show`] this frame.
+pub fn dock_item(ui: &mut Ui, w: f32, h: f32, paint: impl FnOnce(&Ui, egui::Rect, &egui::Response)) {
+    let ctx = ui.ctx().clone();
+    // The pass number is read before the data lock is taken: egui's context lock is not re-entrant.
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new(DOCK_PASS_ID), pass));
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Report an issue"));
+    paint(ui, rect, &resp);
+    if resp.on_hover_text("Report an issue: something broken or confusing? Tell us.").clicked() {
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new(DOCK_PRESSED_ID), true));
+    }
 }
 
 const CORNER_ID: &str = "alpha_report_button";
@@ -217,5 +261,42 @@ mod tests {
         h.get_by_label_contains("Report an issue").click();
         h.run();
         assert_eq!(h.state().last, Outcome::Report);
+    }
+
+    /// Narrow: the dock carries the report, the corner pill is not drawn, and the dock item (named
+    /// "Report an issue" though it reads "Report") reports through `show` the same way.
+    #[test]
+    fn in_the_narrow_dock_the_item_reports_and_the_pill_is_not_drawn() {
+        let mut first = true;
+        let mut h = Harness::builder().build_ui_state(
+            move |ui, s: &mut State| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                dock_item(ui, 48.0, 52.0, |_, _, _| {});
+                assert!(in_dock(ui.ctx()) && corner_rect(ui.ctx()).is_none());
+                let o = show(ui.ctx(), s.popup);
+                if o != Outcome::Nothing {
+                    s.last = o;
+                }
+            },
+            State { popup: false, last: Outcome::Nothing },
+        );
+        h.run();
+        assert_eq!(h.query_all_by_label_contains("Report an issue").count(), 1, "the dock item only, no pill");
+        h.get_by_label("Report an issue").click();
+        h.run();
+        assert_eq!(h.state().last, Outcome::Report);
+
+        // From the keyboard: Tab reaches it (the only focusable control here), Enter presses it.
+        h.state_mut().last = Outcome::Nothing;
+        h.key_press(egui::Key::Tab);
+        h.run();
+        assert!(h.get_by_label("Report an issue").is_focused(), "Tab focuses the dock item");
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert_eq!(h.state().last, Outcome::Report, "Enter on the focused item reports");
     }
 }
