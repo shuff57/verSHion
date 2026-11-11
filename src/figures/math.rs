@@ -4027,6 +4027,9 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
 
 #[cfg(test)]
 mod number_line_frozen;
+pub(crate) mod number_line_b7;
+#[cfg(test)]
+mod number_line_b7_tests;
 
 #[derive(Clone, Copy)]
 pub(super) struct Interval { pub lo: f64, pub lo_c: bool, pub hi: f64, pub hi_c: bool }
@@ -4071,7 +4074,7 @@ pub(super) fn parse_ineq(s: &str) -> Vec<Interval> {
 }
 
 fn number_line_params() -> Vec<ParamDef> {
-    vec![
+    let mut v = vec![
         ParamDef::float("min", "From", -1000.0, 1000.0, 1.0, -10.0),
         ParamDef::float("max", "To", -1000.0, 1000.0, 1.0, 10.0),
         ParamDef::float("step", "Count by", 0.05, 100.0, 0.5, 1.0),
@@ -4095,7 +4098,13 @@ fn number_line_params() -> Vec<ParamDef> {
         ParamDef::choice("label_size", "Label size", &["Large", "Medium", "Small"], "Medium"),
         ParamDef::color("ineq2_color", "Second graph colour", &SWATCHES, "#c0392b"),
         ParamDef::bool("pt_values", "Write the value above unlettered points that are off the numbered ticks", false),
-    ]
+    ];
+    v.extend(number_line_b7::params());
+    // the typed From / To and Count by as a fraction (also typed) sit with From, To and Count by
+    for k in ["frac_style", "step_text", "max_text", "min_text"] {
+        if let Some(i) = v.iter().position(|d| d.key == k) { let d = v.remove(i); v.insert(3, d); }
+    }
+    v
 }
 
 /// A typed number: 3, -2.5, 3/4, 1 1/4, pi/2.
@@ -4113,7 +4122,8 @@ pub(super) fn nl_num(s: &str) -> Option<f64> {
 pub(super) fn nl_step(p: &Params) -> (f64, Option<i64>) {
     let st = p.s("step_text").trim();
     if let Some(v) = nl_num(st).filter(|v| *v > 1e-9) {
-        let den = st.split('/').nth(1).and_then(|d| d.trim().parse::<i64>().ok()).filter(|d| *d > 1);
+        // pi/2 is not counted in halves of one: its ticks are numbered in π (`number_line_b7::pi_step`)
+        let den = if number_line_b7::has_pi(st) { None } else { st.split('/').nth(1).and_then(|d| d.trim().parse::<i64>().ok()).filter(|d| *d > 1) };
         return (v, den);
     }
     (p.f("step").max(1e-6), None)
@@ -4159,6 +4169,12 @@ fn nl_intervals(s: &str) -> Vec<Interval> {
 /// 22 in from each end; the axis sits 25 down on a 78 tall canvas and the canvas grows only when
 /// a second graph row or point names need room above it.
 pub(super) fn nl_geom(p: &Params) -> (f64, f64, f64, f64, f64) {
+    let (w, h, x0, x1, y) = nl_geom_old(p);
+    let (top, bottom) = number_line_b7::extra(p);
+    (w, h + top + bottom, x0, x1, y + top)
+}
+/// The canvas before batch 7's labels, sequences and notes (they only ever add room).
+fn nl_geom_old(p: &Params) -> (f64, f64, f64, f64, f64) {
     let (_, den) = nl_step(p);
     let above = if !p.s("inequality2").trim().is_empty() { 18.0 } else if !p.s("points").trim().is_empty() || !p.s("inequality").trim().is_empty() { 8.0 } else { 0.0 };
     let y = 25.0 + above;
@@ -4175,74 +4191,7 @@ fn axis_heads(d: &mut Doc, x0: f64, x1: f64, y: f64) {
     d.poly(&[(x1 + 24.6, y), (x1 + 11.6, y - 6.5), (x1 + 11.6, y + 6.5)], INK, INK, 1.0);
 }
 
-fn number_line_render(p: &Params) -> String {
-    let (lo, mut hi) = (p.f("min"), p.f("max"));
-    if hi <= lo { hi = lo + 1.0; }
-    let (step, den) = nl_step(p);
-    let mixed = p.s("frac_style").starts_with("Mixed");
-    let (w, h, x0, x1, y) = nl_geom(p);
-    let fs = 16.0 * lscale(p);
-    let sx = |v: f64| x0 + (v - lo) / (hi - lo) * (x1 - x0);
-    let mut d = new_doc(w, h);
-    if p.b("arrows") { axis_heads(&mut d, x0, x1, y); }
-    d.line(x0, y, x1, y, INK, 2.4);
-    let k0 = (lo / step - 1e-9).ceil() as i64;
-    let k1 = ((hi + 1e-9) / step).floor() as i64;
-    let every = p.i("label_every").max(1);
-    let minor = p.i("minor");
-    let mut numbered: Vec<f64> = vec![];
-    for k in k0..=k1 {
-        let v = k as f64 * step;
-        d.line(sx(v), y - 9.0, sx(v), y + 9.0, INK, 2.0);
-        if p.b("numbers") && (k - k0) % every == 0 {
-            numbered.push(v);
-            match den { Some(dd) => frac_label_w(&mut d, sx(v), y + 24.0, v, dd, mixed, fs, true), None => txtw(&mut d, sx(v), y + 23.0 + fs * 0.34, fs, "middle", &fmt(v, 3), true) }
-        }
-        if minor > 0 && k < k1 {
-            for m in 1..=minor { let mv = v + step * m as f64 / (minor + 1) as f64; d.line(sx(mv), y - 4.0, sx(mv), y + 4.0, INK, 1.0); }
-        }
-    }
-    if !p.s("label").is_empty() { math_text(&mut d, x1 + 26.0, y, 16.0, "start", p.s("label"), false); }
-    // graphs: row 1 on the line, row 2 (its own colour) drawn separately just above it
-    let rows = [(p.s("inequality").to_string(), colp(p, "ineq_color", BLUE), 0.0), (p.s("inequality2").to_string(), colp(p, "ineq2_color", "#c0392b"), -18.0)];
-    for (text, col, dy) in rows.iter() {
-        let col = col.as_str();
-        let yy = y + dy;
-        for iv in nl_intervals(text) {
-            let a = if iv.lo.is_finite() { iv.lo.max(lo) } else { lo };
-            let b = if iv.hi.is_finite() { iv.hi.min(hi) } else { hi };
-            if b >= a && iv.hi != iv.lo { d.line(sx(a), yy, sx(b), yy, col, 5.0); }
-            if !iv.lo.is_finite() && p.b("arrows") { d.arrow(sx(lo) + 4.0, yy, x0 - 24.0, yy, col, 3.5); }
-            if !iv.hi.is_finite() && p.b("arrows") { d.arrow(x1 - 4.0, yy, x1 + 24.0, yy, col, 3.5); }
-            for (v, closed) in [(iv.lo, iv.lo_c), (iv.hi, iv.hi_c)] {
-                if v.is_finite() && v >= lo - 1e-9 && v <= hi + 1e-9 {
-                    d.circle(sx(v), yy, 6.5, if closed { col } else { "#fff" }, col, 2.4);
-                }
-            }
-        }
-    }
-    let red_s = colp(p, "pt_color", "#c0392b");
-    let red = red_s.as_str();
-    for t in p.s("points").split(',') {
-        let t = t.trim();
-        if t.is_empty() { continue; }
-        let (t, open) = match t.strip_suffix('o') { Some(s) if !s.ends_with(|c: char| c.is_alphabetic()) => (s, true), _ => (t, false) };
-        // "P(3/4)": a letter names the point
-        let (name, num) = match (t.find('('), t.rfind(')')) {
-            (Some(a), Some(b)) if b > a && a > 0 => (t[..a].trim(), &t[a + 1..b]),
-            _ => ("", t),
-        };
-        let Some(v) = nl_num(num) else { continue };
-        if v < lo - 1e-9 || v > hi + 1e-9 { continue; }
-        d.circle(sx(v), y, 6.0, if open { "#fff" } else { red }, red, 2.2);
-        if !name.is_empty() {
-            d.raw(&format!(r##"<text x="{:.2}" y="{:.2}" font-size="17" text-anchor="middle" font-family="{SERIF}" font-style="italic" font-weight="bold" fill="#000">{}</text>"##, sx(v), y - 16.0, super::svg::esc(name)));
-        } else if p.b("pt_values") && !numbered.iter().any(|n| (n - v).abs() < 1e-9) {
-            match den { Some(dd) if ((v * dd as f64) - (v * dd as f64).round()).abs() < 1e-6 => frac_label(&mut d, sx(v), y - 26.0, v, dd, mixed, 13.0), _ => put(&mut d, sx(v), y - 18.0, &fmt(v, 3), 13.0) }
-        }
-    }
-    d.finish()
-}
+fn number_line_render(p: &Params) -> String { number_line_b7::render(p) }
 
 // ───────────────────────── angles & parallel lines ─────────────────────────
 
@@ -5431,7 +5380,8 @@ fn examples_b_plots(id: &str) -> Option<Vec<super::Example>> {
             ex("Compound inequality \u{2212}3 < x \u{2264} 4 on a number line", vec![("inequality", s("-3 < x <= 4"))]),
             ex("Graph of x < \u{2212}1 or x \u{2265} 3 on a number line", vec![("inequality", s("x < -1 or x >= 3"))]),
             ex("Fraction number line from 0 to 2 with lettered points", vec![("min", F(0.0)), ("max", F(2.0)), ("step_text", s("1/4")), ("label_every", I(4)), ("inequality", s("")), ("points", s("P(3/4), Q(3/2), R(7/4)"))]),
-            ex("The sequence a\u{2099} = 1/n on a number line", vec![("min", F(0.0)), ("max", F(1.0)), ("step", F(0.1)), ("inequality", s("")), ("points", s("1, 1/2, 1/3, 1/4, 1/5, 1/6"))]),
+            ex("The sequence a\u{2099} = 1/n on a number line", vec![("min", F(0.0)), ("max", F(1.0)), ("step", F(0.1)), ("inequality", s("a_n = 1/n")), ("n_from", I(1)), ("n_to", I(5)), ("ineq_values", s("Write"))]),
+            ex("A number line from \u{2212}2\u{3c0} to 2\u{3c0} counted by \u{3c0}/2", vec![("min_text", s("-2pi")), ("max_text", s("2pi")), ("step_text", s("pi/2")), ("inequality", s(""))]),
         ],
         "box-plot" => vec![
             ex("Box plot of test scores", vec![("data", s("62, 68, 70, 71, 74, 75, 78, 80, 82, 85, 88, 91, 95")), ("axis_title", s("Test score")), ("values", B(false))]),

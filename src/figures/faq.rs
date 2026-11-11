@@ -1363,6 +1363,10 @@ const NUMBER_LINE: &[Faq] = &[
         a: "Label each point with a letter only, like P or Q, and ask students for its value. Writing the value next to the dot would give the answer away.",
     },
     Faq {
+        q: "How is a sequence such as 1/n shown on a number line?",
+        a: "Type it as a graph row, like a_n = 1/n, and choose the first and last n. Each term is a point on the line; with Values above the line set to Write, the terms between the numbered ticks have their value written over them. Terms that bunch up, as 1/n does near 0, show the dots and leave off the values that would crowd.",
+    },
+    Faq {
         q: "How does a number line show negative numbers?",
         a: "Numbers to the left of 0 are negative and those to the right are positive. A number further left is always smaller, so −5 is less than −2.",
     },

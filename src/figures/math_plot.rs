@@ -154,8 +154,8 @@ fn grid(p: &Params) -> Vec<Handle> {
 
 struct Nl { lo: f64, hi: f64, x0: f64, x1: f64, y: f64, r: f64 }
 fn nl(p: &Params) -> Nl {
-    let (lo, mut hi) = (p.f("min"), p.f("max"));
-    if hi <= lo { hi = lo + 1.0; }
+    // a typed From / To (-2pi) wins over the sliders, as in the drawing
+    let (lo, hi) = super::math::number_line_b7::range(p);
     let (_, _, x0, x1, y) = super::math::nl_geom(p);
     Nl { lo, hi, x0, x1, y, r: super::math::nl_step(p).0 / (p.i("minor") + 1) as f64 }
 }

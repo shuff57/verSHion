@@ -114,7 +114,7 @@ fn number_line_frozen() {
         let link: serde_json::Map<String, serde_json::Value> = serde_json::from_str(link).unwrap();
         let saved = params_from_spec(&d, &crate::model::FigureSpec { id: d.id.into(), params: spec.clone().into_iter().collect() });
         let shared: Vec<Params> = [crate::figures::share::VERSION, 1].iter().map(|v| crate::figures::share::link_params(&d, link.clone(), *v)).collect();
-        if intended(&spec) {
+        if intended(&saved, &d.svg(&saved)) {
             for p in std::iter::once(&saved).chain(&shared) {
                 assert_ne!(format!("{:016x}", fnv64(&d.svg(p))), hash, "{spec:?}: meant to change but drawn as before");
             }
@@ -128,8 +128,18 @@ fn number_line_frozen() {
         n += 1;
     }
     assert_eq!(n, 320);
+    assert_eq!(changed, 31, "the old figures changed on purpose");
     eprintln!("number line frozen: {n} old figures, {changed} changed on purpose");
 }
 
-/// The old figures that change on purpose (filled in with the change that makes them; see the module doc).
-fn intended(_spec: &serde_json::Map<String, serde_json::Value>) -> bool { false }
+/// The old figures that change on purpose:
+/// - a graph row typed as a sequence (a_n = 1/n, aₙ = 1/n, x_n = n^2) drew nothing; its terms on the line are drawn now;
+/// - Count by typed in π (pi/2, pi, 2pi) numbered its ticks wrongly (pi/2 as halves of one: 3/2 at π/2, or
+///   3.142 at π); they are numbered in π now, wherever a tick other than 0 is numbered (the drawing shows a π).
+fn intended(p: &Params, svg: &str) -> bool {
+    use super::number_line_b7::{has_pi, plan, Row};
+    let pl = plan(p);
+    let seq = pl.rows.iter().any(|r| matches!(r, Row::Seq(s) if s.terms.iter().any(|(_, v)| *v >= pl.lo - 1e-9 && *v <= pl.hi + 1e-9)));
+    let pi = has_pi(p.s("step_text")) && svg.contains('\u{3c0}');
+    seq || pi
+}

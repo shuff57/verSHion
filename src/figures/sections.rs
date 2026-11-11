@@ -224,8 +224,10 @@ static FIG_21: [RefSection; 6] = [
     s("Figure", &["color"], ""),
 ];
 
-static FIG_22: [RefSection; 1] = [
-    s("Line", &["min", "max", "step", "label_every", "minor", "numbers", "arrows", "inequality", "points", "label", "ineq_color", "pt_color", "step_text", "frac_style", "inequality2", "pt_values"], ""),
+static FIG_22: [RefSection; 3] = [
+    s("Line", &["min", "max", "step", "min_text", "max_text", "step_text", "frac_style", "label_every", "minor", "numbers", "arrows", "label"], "Type From, To and Count by as numbers, fractions or multiples of pi (\u{2212}2pi, 2pi, pi/2): counted by a multiple of \u{3c0}, the ticks are numbered in \u{3c0}."),
+    s("Graphs", &["inequality", "ineq_color", "ineq_values", "ineq_mark", "n_from", "n_to", "inequality2", "ineq2_color", "ineq2_values", "ineq2_mark", "n2_from", "n2_to"], "A graph is an inequality (\u{2212}2 < x \u{2264} 5) or a sequence (a_n = 1/n), whose terms for n from the first to the last are drawn as points."),
+    s("Points", &["points", "pt_color", "pt_mark", "pt_labels", "pt_values"], ""),
 ];
 
 static FIG_23: [RefSection; 6] = [
