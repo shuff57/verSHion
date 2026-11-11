@@ -7,6 +7,9 @@ mod common;
 mod graphs;
 mod instr;
 mod mech;
+mod vector_b8;
+#[cfg(test)]
+mod vector_b8_tests;
 mod optics;
 mod motion_map;
 mod ray_diagram;
@@ -20,6 +23,16 @@ mod ray_diagram_frozen;
 #[cfg(test)]
 mod vector_b8_frozen;
 mod summary;
+
+/// The choices of a vector's "Measured from" and "Angle label" (the Vectors card draws them).
+pub const VECTOR_FROM: [&str; 2] = vector_b8::FROM;
+pub const VECTOR_ANGLE_MODES: [&str; 3] = vector_b8::AMODES;
+
+/// Editor notes for the vector diagram: labels left off for lack of room.
+pub fn vector_warnings(p: &Params) -> Vec<String> { vector_b8::warnings(p) }
+
+/// Whether the vector diagram's per-vector control `key` applies (see `vector_b8::relevant`).
+pub fn vector_relevant(key: &str, p: &Params) -> bool { vector_b8::relevant(key, p) }
 
 /// Editor notes for the instrument figures: what the circuit could not work out, and why.
 pub fn instr_warnings(p: &Params) -> Vec<String> { instr::circuit_warnings(p) }
@@ -117,7 +130,7 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
             max: 4,
             chips: vec![Chip {
                 label: "Vector",
-                set: vec![("v{n}_mag", Value::F(3.0)), ("v{n}_ang", Value::F(90.0)), ("v{n}_lab", Value::S("{L}".into())), ("v{n}_lab_mode", Value::S("Text".into()))],
+                set: vec![("v{n}_mag", Value::F(3.0)), ("v{n}_ang", Value::F(90.0)), ("v{n}_lab", Value::S("{L}".into())), ("v{n}_lab_mode", Value::S("Text".into())), ("v{n}_mark", Value::B(false)), ("v{n}_comps", Value::B(false))],
             }],
         }),
         "motion-graphs" | "motion-map" => {

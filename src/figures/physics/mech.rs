@@ -237,7 +237,7 @@ fn fbd_render(p: &Params) -> String {
 
 // ---------------------------------------------------------------- vector diagram
 
-const VK: [[&str; 8]; 4] = [
+pub(super) const VK: [[&str; 8]; 4] = [
     ["v1_mag", "Vector 1 magnitude", "v1_ang", "Vector 1 direction (deg)", "v1_lab", "Vector 1 label", "v1_style", "Vector 1 arrow"],
     ["v2_mag", "Vector 2 magnitude", "v2_ang", "Vector 2 direction (deg)", "v2_lab", "Vector 2 label", "v2_style", "Vector 2 arrow"],
     ["v3_mag", "Vector 3 magnitude", "v3_ang", "Vector 3 direction (deg)", "v3_lab", "Vector 3 label", "v3_style", "Vector 3 arrow"],
@@ -246,7 +246,7 @@ const VK: [[&str; 8]; 4] = [
 const VDEF: [(f64, f64, &str); 4] = [(4.0, 0.0, "A"), (3.0, 90.0, "B"), (2.0, 180.0, "C"), (2.0, 270.0, "D")];
 const ARROW_STYLES: [&str; 3] = ["Drawn", "Dashed", "Left off"];
 
-const VMODE: [[&str; 2]; 4] = [
+pub(super) const VMODE: [[&str; 2]; 4] = [
     ["v1_lab_mode", "Vector 1 label shows"], ["v2_lab_mode", "Vector 2 label shows"],
     ["v3_lab_mode", "Vector 3 label shows"], ["v4_lab_mode", "Vector 4 label shows"],
 ];
@@ -260,12 +260,20 @@ fn vector_params() -> Vec<ParamDef> {
         v.push(ParamDef::choice(VMODE[i][0], VMODE[i][1], &LMODES, "Text"));
         v.push(ParamDef::text(k[4], k[5], VDEF[i].2));
         v.push(ParamDef::choice(k[6], k[7], &ARROW_STYLES, "Drawn"));
+        // batch 8: the reference's per-vector angle mark (from the horizontal or the vertical) and components
+        let (x, xl) = (super::vector_b8::VX[i], super::vector_b8::VXL[i]);
+        v.push(ParamDef::bool(x[0], xl[0], false));
+        v.push(ParamDef::choice(x[1], xl[1], &super::vector_b8::FROM, "Horizontal"));
+        v.push(ParamDef::choice(x[2], xl[2], &super::vector_b8::AMODES, "Text"));
+        v.push(ParamDef::text(x[3], xl[3], super::vector_b8::ALAB[i]));
+        v.push(ParamDef::bool(x[4], xl[4], false));
     }
     v.push(ParamDef::bool("resultant", "Show resultant", true));
     v.push(ParamDef::choice("res_style", "Resultant arrow", &ARROW_STYLES, "Drawn"));
     v.push(ParamDef::choice("res_lab_mode", "Resultant label shows", &LMODES, "Text"));
     v.push(ParamDef::text("res_lab", "Resultant label", "R"));
     v.push(ParamDef::bool("mark_angle", "Mark its angle", false));
+    v.push(ParamDef::choice("ang_from", "Angle measured from", &super::vector_b8::FROM, "Horizontal"));
     v.push(ParamDef::choice("ang_lab_mode", "Angle label shows", &["Text", "Blank line", "Degrees"], "Text"));
     v.push(ParamDef::text("ang_lab", "Angle label", "theta"));
     v.push(ParamDef::bool("components", "Show its components", false));
@@ -358,6 +366,14 @@ fn vlabel_extents(p: &Params, pts: &[Pt]) -> Vec<(Pt, Pt)> {
 /// Label centres of the vectors and the resultant: each on the side of its arrow away from the
 /// middle of the figure (ties: right of travel, left for a lone vector / the resultant).
 pub(super) fn vlabel_pos(p: &Params, l: &VLay) -> (Vec<Pt>, Pt) {
+    if super::vector_b8::active(p) {
+        return super::vector_b8::label_pos(p);
+    }
+    vlabel_pos_b7(p, l)
+}
+
+/// The label centres as the figure placed them before batch 8 (the batch 8 drawing starts from them).
+pub(super) fn vlabel_pos_b7(p: &Params, l: &VLay) -> (Vec<Pt>, Pt) {
     let sc = vstyle(p, l.u).0 / 25.0;
     let pxy = |q: Pt| (l.ox + q.0 * l.u, l.oy - q.1 * l.u);
     let mut cen: Vec<Pt> = l.pts.iter().map(|&q| pxy(q)).collect();
@@ -381,6 +397,10 @@ pub(super) fn vlabel_pos(p: &Params, l: &VLay) -> (Vec<Pt>, Pt) {
 }
 
 fn vector_render(p: &Params) -> String {
+    // a vector's own angle mark or components, or a mark from the vertical: the batch 8 drawing
+    if super::vector_b8::active(p) {
+        return super::vector_b8::render(p);
+    }
     let (w, h) = (480.0, 360.0);
     let mut g = G::new(w, h, p.b("mirror"));
     g.halo = true;
@@ -428,7 +448,7 @@ fn vector_render(p: &Params) -> String {
         g.tex((c.0 + r.0) / 2.0 + 12.0 * sg, (c.1 + r.1) / 2.0 + 8.0, fs, if sg > 0.0 { "start" } else { "end" }, &format!("{base}_y"), ITALIC);
         g.tcol = tc;
     }
-    let (vlabs, rlab) = vlabel_pos(p, &vlayout(p, w, h));
+    let (vlabs, rlab) = vlabel_pos_b7(p, &vlayout(p, w, h));
     // the vectors
     for i in 0..n {
         let (a, b) = (pxy(pts[i]), pxy(pts[i + 1]));
