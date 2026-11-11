@@ -1,0 +1,192 @@
+//! Batch 8: dragging any point. A, B and C are dragged round the circle as before, and off it as the More points are: pulled well
+//! away (more than 0.2 radii, 30 px) a point leaves the circle and goes where it is dropped, at a distance in radii kept in its own
+//! param (`a_dist`, `b_dist`, `c_dist`, 1 on the circle, the default, so every old figure draws as it did); brought within 0.08
+//! radii (12 px) of the circle it goes back on. The polygon's own corners are dragged round the circle and turn the polygon.
+//!
+//! A point off the circle is a point like a More point off it: the lines through it (the radius switch's line OA, the chord's line
+//! AB, the inscribed angle's sides CA and CB, the Lines between points) follow it, and the tangents from it are drawn when it is
+//! outside. What only a point on the circle has is left off, with a note, never drawn wrong: the tangent at it, the diameter
+//! through A, the arc and sector AB, the perpendicular bisector of AB and M, the polygon with a corner at A, the radius's and
+//! chord's labels and the readout rows that would state a radius, chord, arc, sector or inscribed angle that is not drawn.
+use super::edit::{self, End, V};
+use super::*;
+
+/// The params of A's, B's and C's distance from the centre in radii.
+pub const DIST_KEYS: [&str; 3] = ["a_dist", "b_dist", "c_dist"];
+
+/// Off the circle when pulled this far from it (radii), back on when brought this near.
+pub const LEAVE: f64 = 0.2;
+pub const RETURN: f64 = 0.08;
+
+/// Whether B is placed by a chord length or an OM distance, which put it on the circle.
+pub fn b_fixed(p: &Params) -> bool { matches!(p.s("define"), "Chord length" | "OM distance") }
+
+/// A's, B's and C's distances from the centre in radii (1 on the circle). A figure saved before batch 8 has none: 1. B stays on
+/// the circle while a chord length or OM distance places it.
+pub fn dists(p: &Params) -> [f64; 3] {
+    let rd = |k: &str| match p.0.get(k) { Some(Value::F(d)) if d.is_finite() => d.clamp(0.1, pts::MAX_DIST), Some(Value::I(d)) => (*d as f64).clamp(0.1, pts::MAX_DIST), _ => 1.0 };
+    [rd("a_dist"), if b_fixed(p) { 1.0 } else { rd("b_dist") }, rd("c_dist")]
+}
+
+/// Whether A, B and C are on the circle.
+pub fn on(p: &Params) -> [bool; 3] { dists(p).map(edit::on_rim) }
+
+/// Whether A and B are both on the circle (the chord, arc, sector and bisector need both).
+pub fn ab_on(p: &Params) -> bool { let o = on(p); o[0] && o[1] }
+
+/// A's, B's and C's directions in degrees.
+fn dirs(p: &Params) -> [f64; 3] { let g = geom(p); [g.a, g.b, g.c] }
+
+/// Where A, B and C are, in unit coordinates.
+pub fn upos(p: &Params) -> [V; 3] {
+    let (d, r) = (dirs(p), dists(p));
+    [0, 1, 2].map(|i| { let (c, s) = (d[i].to_radians().cos(), d[i].to_radians().sin()); if edit::on_rim(r[i]) { (c, s) } else { (r[i] * c, r[i] * s) } })
+}
+
+/// A, B and C as line ends: on the circle by direction (as before), off it by place.
+pub fn ends(p: &Params) -> [End; 3] {
+    let (d, u, o) = (dirs(p), upos(p), on(p));
+    [0, 1, 2].map(|i| if o[i] { End::At(d[i]) } else { End::Q(u[i].0, u[i].1) })
+}
+
+/// Where A, B and C are drawn (SVG units, the centre at (cx, CY)): exactly where they were drawn before when on the circle.
+pub fn scr(p: &Params, cx: f64) -> [Pt; 3] {
+    let (d, u, o) = (dirs(p), upos(p), on(p));
+    [0, 1, 2].map(|i| if o[i] { on_circle(cx, d[i]) } else { (cx + R * u[i].0, CY - R * u[i].1) })
+}
+
+/// A, B and C (when drawn) off the circle: (letter, place).
+pub fn off_abc(p: &Params) -> Vec<(String, V)> {
+    let (pt, n, o, u) = (parts(p), names(p), on(p), upos(p));
+    let drawn = [pt.a, pt.b, pt.c];
+    let l = [n.a, n.b, n.c];
+    (0..3).filter(|&i| drawn[i] && !o[i]).map(|i| (l[i].clone(), u[i])).collect()
+}
+
+/// A distance in radii as the drag leaves it: to 0.05, inside 0.1 to 3.
+fn snapd(r: f64) -> f64 { ((r * 20.0).round() / 20.0).clamp(0.1, pts::MAX_DIST) }
+
+/// The distance a point dragged to `r` radii from the centre takes, from `cur`: on the circle it stays on until pulled more than
+/// 0.2 radii away; off it, it comes back on within 0.08 radii.
+pub fn drag_dist(cur: f64, r: f64) -> f64 {
+    if !r.is_finite() { return cur; }
+    if edit::on_rim(cur) { if (r - 1.0).abs() > LEAVE { snapd(r) } else { 1.0 } } else if (r - 1.0).abs() < RETURN { 1.0 } else { snapd(r) }
+}
+
+/// The tip of the knob of point `nm` (A, B or C) at distance `d`.
+/// `stays`: the point cannot leave the circle (B placed by a chord length or OM distance).
+pub fn tip(nm: &str, d: f64, b_snaps: bool, stays: bool) -> String {
+    let rest = "; click it for the tangent there, or click it and then another point to join them; double-click it to rename it";
+    let snaps = if b_snaps { " (the angle snaps to 30, 45, 60, 90, ...)" } else { "" };
+    if stays {
+        format!("Drag point {nm} round the circle{snaps}{rest}")
+    } else if edit::on_rim(d) {
+        format!("Drag point {nm} round the circle, or off it (pull it well away; bring it near to put it back on){snaps}{rest}")
+    } else if d > 1.0 {
+        format!("Drag point {nm} anywhere, or back onto the circle (bring it near); click it for the tangents from it, or click it and then another point to join them; double-click it to rename it")
+    } else {
+        format!("Drag point {nm} anywhere, or back onto the circle (bring it near); click it and then another point to join them; double-click it to rename it")
+    }
+}
+
+/// The knob of A (`i` 0), B (1) or C (2) at `at`, the centre at `centre`. Round the circle A and C take whole degrees and B the
+/// gap from A snapped as before; off it, the point also takes the distance it is dropped at.
+pub fn knob(p: &Params, i: usize, centre: Pt, at: Pt) -> Handle {
+    let n = names(p);
+    let nm = [n.a, n.b, n.c][i].clone();
+    let d = dists(p)[i];
+    let fixed = i == 1 && b_fixed(p);
+    Handle::knob(at, &tip(&nm, d, i == 1, fixed), move |p, t| {
+        if super::unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
+        let deg = interact::angle_deg(centre, t);
+        match i {
+            0 => p.set_f("a1", deg.round() % 360.0),
+            1 => super::set_gap(p, snap_angle((deg - wrap(p.f("a1"))).rem_euclid(360.0))),
+            _ => p.set_f("c_angle", deg.round() % 360.0),
+        }
+        if fixed { return; }
+        let r = interact::dist(centre, t) / R;
+        let nd = drag_dist(dists(p)[i], r);
+        // (a point that stays on the circle writes nothing new, so an old figure keeps exactly its params)
+        if !(edit::on_rim(nd) && edit::on_rim(dists(p)[i])) { p.set_f(DIST_KEYS[i], nd); }
+    })
+}
+
+/// Where a corner's knob waits while the corner is a point with a knob of its own: off the canvas, so it is neither drawn nor hit.
+pub const AWAY: Pt = (-1.0e5, -1.0e5);
+
+/// The knobs of the polygon's corners after A: dragging one round the circle turns the polygon, so that corner is where it is
+/// dropped (A, its first corner, turns with it). They come after the points' knobs and there is one per corner while the polygon is
+/// drawn, so that no knob changes its place in the hit order mid-drag (the workspace keeps a drag on the handle at the same place):
+/// a corner that is a point of its own (B, C or a More point) keeps its place, waiting off the canvas, and that point's own knob
+/// takes the press.
+pub fn corner_knobs(p: &Params, cx: f64, off: Pt) -> Vec<Handle> {
+    let vs = pts::polygon_vertices(p);
+    let k = vs.len();
+    if k < 3 { return vec![]; }
+    let centre = (cx + off.0, CY + off.1);
+    let own = pts::polygon_points(p);
+    let mut v = vec![];
+    for (j, (nm, d)) in vs.iter().enumerate().skip(1) {
+        let mine = own.iter().any(|o| &o.0 == nm && angdiff(o.1, *d) < 1e-9);
+        let q = on_circle(cx, *d);
+        let at = if mine { (q.0 + off.0, q.1 + off.1) } else { AWAY };
+        let step = 360.0 * j as f64 / k as f64;
+        let mut h = Handle::knob(at, &format!("Drag corner {nm} round the circle to turn the polygon; click it for the tangent there, or click it and then another point to join them; double-click it to rename it"), move |p, t| {
+            if super::unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
+            p.set_f("a1", (interact::angle_deg(centre, t) - step).rem_euclid(360.0).round() % 360.0);
+        });
+        if mine {
+            let (nm2, nm3) = (nm.clone(), nm.clone());
+            h = h.with_click(move |p| clicks::click_point(p, &nm2, true)).with_edit_at("poly_names", move |p, _| clicks::rename_point(p, &nm3));
+        }
+        v.push(h);
+    }
+    v
+}
+
+/// The notes for points off the circle: what is left off and why.
+pub fn warnings(p: &Params) -> Vec<String> {
+    let (o, n) = (on(p), names(p));
+    let mut v = vec![];
+    let raw = |k: &str| p.b(k);
+    let (a, b, c) = (&n.a, &n.b, &n.c);
+    let pt = parts(p);
+    if b_fixed(p) && pt.b && matches!(p.0.get("b_dist"), Some(Value::F(d)) if d.is_finite() && !edit::on_rim(*d)) {
+        v.push(format!("{b} is placed by the {}, so it stays on the circle: choose Points or Angle to take it off.", if p.s("define") == "Chord length" { "chord length" } else { "distance OM" }));
+    }
+    if !o[0] {
+        let mut left: Vec<String> = vec![];
+        if raw("show_tangent") { left.push(format!("the tangent at {a}")); }
+        if raw("show_diameter") { left.push(format!("the diameter through {a}")); }
+        if pts::polygon_n(p) >= 3 { left.push("the inscribed polygon".into()); }
+        if raw("show_radius") && p.s("r_label") != "None" { left.push(format!("the radius label on {}{a}", n.o)); }
+        if !left.is_empty() { v.push(format!("{a} is off the circle, so {} {} not drawn. Drag {a} back onto the circle to draw {}.", list(&left), if left.len() == 1 { "is" } else { "are" }, if left.len() == 1 { "it" } else { "them" })); }
+    }
+    if pt.b && !(o[0] && o[1]) {
+        let off = if !o[0] && !o[1] { format!("{a} and {b} are") } else if !o[0] { format!("{a} is") } else { format!("{b} is") };
+        let mut left: Vec<String> = vec![];
+        if p.s("arc") != "None" { left.push(format!("arc {a}{b}")); }
+        if p.s("sector") != "None" { left.push("the sector".into()); }
+        if raw("show_bisector") { left.push(format!("the perpendicular bisector of {a}{b}")); }
+        if raw("show_chord") && mode(p, K::Chord) != Md::Hidden { left.push(format!("the chord's length on {a}{b}")); }
+        let rows: Vec<&str> = [(K::Chord, "chord"), (K::Om, "distance to the chord"), (K::Am, "half chord"), (K::Arc, "arc length"), (K::Sector, "sector area")].iter()
+            .filter(|(k, _)| p.b(kinfo(*k).2) && mode(p, *k) != Md::Hidden).map(|x| x.1).collect();
+        if !rows.is_empty() { left.push(format!("the {} {}", list(&rows.iter().map(|s| s.to_string()).collect::<Vec<_>>()), if rows.len() == 1 { "row" } else { "rows" })); }
+        if !left.is_empty() { v.push(format!("{off} off the circle, so {a}{b} is not a chord: {} {} not drawn. Drag it back onto the circle to draw {}.", list(&left), if left.len() == 1 { "is" } else { "are" }, if left.len() == 1 { "it" } else { "them" })); }
+    }
+    if pt.insc_lines {
+        let who: Vec<String> = [(0, a), (1, b), (2, c)].iter().filter(|(i, _)| !o[*i]).map(|(_, l)| l.to_string()).collect();
+        v.push(format!("{} {} off the circle, so angle {a}{c}{b} is not an inscribed angle: its sides are drawn, its mark and value are not. Click inside it to label the angle as drawn.", list(&who), if who.len() == 1 { "is" } else { "are" }));
+    }
+    v
+}
+
+/// `x`, `x and y`, `x, y and z`.
+fn list(items: &[String]) -> String {
+    match items.len() {
+        0 => String::new(),
+        1 => items[0].clone(),
+        k => format!("{} and {}", items[..k - 1].join(", "), items[k - 1]),
+    }
+}

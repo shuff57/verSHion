@@ -96,17 +96,21 @@ pub fn extras_all(p: &Params) -> Vec<(String, f64, f64)> {
 pub fn extras(p: &Params) -> Vec<(String, f64)> { extras_all(p).into_iter().filter(|e| on_rim(e.2)).map(|e| (e.0, e.1)).collect() }
 
 /// The More points off the circle: (letter, place in unit coordinates).
+/// A, B or C dragged off the circle (batch 8) is one of them too, after the More points.
 pub fn off_points(p: &Params) -> Vec<(String, V)> {
-    extras_all(p).into_iter().filter(|e| !on_rim(e.2)).map(|(nm, d, r)| (nm, (r * d.to_radians().cos(), r * d.to_radians().sin()))).collect()
+    let mut v: Vec<(String, V)> = extras_all(p).into_iter().filter(|e| !on_rim(e.2)).map(|(nm, d, r)| (nm, (r * d.to_radians().cos(), r * d.to_radians().sin()))).collect();
+    v.extend(super::drag_b8::off_abc(p));
+    v
 }
 
 /// A, B and C (when drawn) and the More points on the circle.
 pub fn base_points(p: &Params) -> Vec<(String, f64)> {
     let (g, pt, n) = (geom(p), parts(p), names(p));
+    let on = super::drag_b8::on(p);
     let mut v = vec![];
-    if pt.a { v.push((n.a, g.a)); }
-    if pt.b { v.push((n.b, g.b)); }
-    if pt.c { v.push((n.c, g.c)); }
+    if pt.a && on[0] { v.push((n.a, g.a)); }
+    if pt.b && on[1] { v.push((n.b, g.b)); }
+    if pt.c && on[2] { v.push((n.c, g.c)); }
     v.extend(extras(p));
     v
 }
@@ -236,13 +240,19 @@ impl Hit {
     pub fn new(p: &Params, centre: Pt) -> Hit {
         let scr = |q: V| (centre.0 + R * q.0, centre.1 - R * q.1);
         let (g, pt, n) = (geom(p), parts(p), names(p));
-        let (ua, ub, uc, uo) = (upt(g.a), upt(g.b), upt(g.c), (0.0, 0.0));
+        // (A, B and C where they are drawn: on the circle, or off it, batch 8)
+        let [ua, ub, uc] = super::drag_b8::upos(p);
+        let uo = (0.0, 0.0);
+        let on = super::drag_b8::on(p);
         let mut lines: Vec<(Pt, Pt, Target, String)> = vec![];
-        // the circle's own lines step through the label they already have
-        if pt.radius { lines.push((scr(uo), scr(ua), Target::Cycle("r_label", &R_LABEL), format!("Click radius {}{} to label it: r = its value, the letter r, or none", n.o, n.a))); }
+        // the circle's own lines step through the label they already have (a line to a point off the circle takes a length label)
+        if pt.radius && !on[0] { lines.push((scr(uo), scr(ua), Target::Line(n.o.clone(), n.a.clone()), format!("Click to label line {}{} with its length (again to clear it)", n.o, n.a))); }
+        else if pt.radius { lines.push((scr(uo), scr(ua), Target::Cycle("r_label", &R_LABEL), format!("Click radius {}{} to label it: r = its value, the letter r, or none", n.o, n.a))); }
         // OA drawn for the central angle, a sector or a tangent while the radius switch is off: a length label
         else if pt.a && (pt.central || pt.sector != 0 || pt.tan) { lines.push((scr(uo), scr(ua), Target::Line(n.o.clone(), n.a.clone()), format!("Click to label line {}{} with its length (again to clear it)", n.o, n.a))); }
-        if pt.chord && !pt.deg { lines.push((scr(ua), scr(ub), Target::Cycle("g_chord", &STATES), format!("Click chord {}{} to label it: its length Given, Ask (a blank on the student copy) or Hidden", n.a, n.b))); }
+        let ab_on = on[0] && on[1];
+        if pt.chord && !pt.deg && !ab_on { lines.push((scr(ua), scr(ub), Target::Line(n.a.clone(), n.b.clone()), format!("Click to label line {}{} with its length (again to clear it)", n.a, n.b))); }
+        else if pt.chord && !pt.deg { lines.push((scr(ua), scr(ub), Target::Cycle("g_chord", &STATES), format!("Click chord {}{} to label it: its length Given, Ask (a blank on the student copy) or Hidden", n.a, n.b))); }
         if pt.diam { lines.push((scr(ua), scr(upt(g.a + 180.0)), Target::Cycle("g_diameter", &STATES), format!("Click the diameter through {} to label it: its length Given, Ask or Hidden", n.a))); }
         let um = end_pos(p, End::M);
         if pt.bis && !pt.deg && um.0.hypot(um.1) > 0.05 { lines.push((scr(uo), scr(um), Target::Cycle("g_om", &STATES), format!("Click {}{} to label it: its length Given, Ask or Hidden", n.o, n.m))); }
@@ -252,7 +262,7 @@ impl Hit {
             lines.push((scr(upt(md + 180.0)), scr(upt(md)), Target::Cycle("g_om", &STATES), format!("Click the perpendicular bisector to label {}{}: Given, Ask or Hidden", n.o, n.m)));
         }
         for (x, y) in drawn_secant_runs(p) {
-            let (t, tip) = if pt.chord { (Target::Cycle("g_chord", &STATES), format!("Click the secant to label chord {}{}: its length Given, Ask or Hidden", n.a, n.b)) } else { (Target::Line(n.a.clone(), n.b.clone()), format!("Click the secant to label line {}{} with its length (again to clear it)", n.a, n.b)) };
+            let (t, tip) = if pt.chord && ab_on { (Target::Cycle("g_chord", &STATES), format!("Click the secant to label chord {}{}: its length Given, Ask or Hidden", n.a, n.b)) } else { (Target::Line(n.a.clone(), n.b.clone()), format!("Click the secant to label line {}{} with its length (again to clear it)", n.a, n.b)) };
             lines.push((scr(x), scr(y), t, tip));
         }
         let pts_named = circle_points(p);
@@ -264,7 +274,7 @@ impl Hit {
         let mut plain: Vec<(String, String, V, V)> = vec![];
         if (pt.central || pt.sector != 0) && pt.b && !pt.deg { plain.push((n.o.clone(), n.b.clone(), uo, ub)); }
         if pt.sec && !pt.chord && !pt.deg { plain.push((n.a.clone(), n.b.clone(), ua, ub)); }
-        if pt.insc { plain.push((n.c.clone(), n.a.clone(), uc, ua)); plain.push((n.c.clone(), n.b.clone(), uc, ub)); }
+        if pt.insc || pt.insc_lines { plain.push((n.c.clone(), n.a.clone(), uc, ua)); plain.push((n.c.clone(), n.b.clone(), uc, ub)); }
         for ((a, b), x, y) in joins(p) { plain.push((a, b, end_pos(p, x), end_pos(p, y))); }
         for (a, b, u, w) in plain {
             let tip = format!("Click to label line {a}{b} with its length (again to clear it)");
@@ -390,7 +400,7 @@ impl Hit {
         }
     }
 
-    fn act(&self, p: &mut Params, q: Pt) {
+    pub(super) fn act(&self, p: &mut Params, q: Pt) {
         // a click anywhere but on a point ends the wait for a second point
         p.set_s("join_from", "");
         let Some((t, _)) = self.at(q) else { return };
@@ -481,7 +491,7 @@ pub fn end_pos(p: &Params, e: End) -> V {
 }
 
 /// Whether the midpoint M of chord AB can be a line's end: A and B are drawn and apart.
-pub(super) fn m_ok(p: &Params) -> bool { let pt = parts(p); pt.a && pt.b && !pt.deg }
+pub(super) fn m_ok(p: &Params) -> bool { let pt = parts(p); pt.a && pt.b && !pt.deg && super::drag_b8::ab_on(p) }
 
 /// The point named `nm` on the figure: the centre, a point drawn on the circle, or M (exact letter first, then ignoring case).
 pub(super) fn find(p: &Params, pts: &[(String, f64)], nm: &str) -> Option<End> { find_with(p, pts, &super::pts::free_points(p), nm) }
@@ -647,14 +657,16 @@ pub fn toggle_tangent(p: &mut Params, nm: &str) {
 /// Every drawn line between two named points: (letters, ends). The radius, chord, the inscribed angle's sides, OM and the lines
 /// between points; the diameter and tangents end at no named point and are left out (a tangent's angles come from `tangent_dirs`).
 pub(super) fn named_lines(p: &Params) -> Vec<(String, End, String, End)> {
-    let (g, pt, n) = (geom(p), parts(p), names(p));
+    let (pt, n) = (parts(p), names(p));
+    // (A, B and C on the circle by direction, or off it by place, batch 8)
+    let [ea, eb, ec] = super::drag_b8::ends(p);
     let mut v = vec![];
-    if pt.a && (pt.radius || pt.central || pt.sector != 0 || pt.tan) { v.push((n.o.clone(), End::O, n.a.clone(), End::At(g.a))); }
-    if pt.b && (pt.central || pt.sector != 0) && !pt.deg { v.push((n.o.clone(), End::O, n.b.clone(), End::At(g.b))); }
-    if pt.b && (pt.chord || pt.sec) && !pt.deg { v.push((n.a.clone(), End::At(g.a), n.b.clone(), End::At(g.b))); }
-    if pt.insc {
-        v.push((n.c.clone(), End::At(g.c), n.a.clone(), End::At(g.a)));
-        v.push((n.c.clone(), End::At(g.c), n.b.clone(), End::At(g.b)));
+    if pt.a && (pt.radius || pt.central || pt.sector != 0 || pt.tan) { v.push((n.o.clone(), End::O, n.a.clone(), ea)); }
+    if pt.b && (pt.central || pt.sector != 0) && !pt.deg { v.push((n.o.clone(), End::O, n.b.clone(), eb)); }
+    if pt.b && (pt.chord || pt.sec) && !pt.deg { v.push((n.a.clone(), ea, n.b.clone(), eb)); }
+    if pt.insc || pt.insc_lines {
+        v.push((n.c.clone(), ec, n.a.clone(), ea));
+        v.push((n.c.clone(), ec, n.b.clone(), eb));
     }
     if pt.bis && !pt.deg && mode(p, K::Om) != Md::Hidden && !same_place(p, End::O, End::M) { v.push((n.o.clone(), End::O, n.m.clone(), End::M)); }
     for ((a, b), x, y) in joins(p) { v.push((a, x, b, y)); }
@@ -796,16 +808,18 @@ fn arc_poly(a0: f64, span: f64) -> Vec<V> {
 pub fn edges(p: &Params) -> Vec<(V, V)> {
     let (g, pt) = (geom(p), parts(p));
     let c = |d: f64| upt(wrap(d));
+    // (A, B and C where they are, batch 8: on the circle exactly as before)
+    let [ua, ub, uc] = super::drag_b8::upos(p);
     let o = (0.0, 0.0);
     let mut v: Vec<(V, V)> = vec![];
-    if (pt.chord || pt.sec) && !pt.deg { v.push((c(g.a), c(g.b))); }
+    if (pt.chord || pt.sec) && !pt.deg { v.push((ua, ub)); }
     for (x, y) in drawn_secant_runs(p) { v.push((x, y)); }
-    if pt.insc { v.push((c(g.c), c(g.a))); v.push((c(g.c), c(g.b))); }
+    if pt.insc || pt.insc_lines { v.push((uc, ua)); v.push((uc, ub)); }
     if pt.diam { v.push((c(g.a), c(g.a + 180.0))); }
     if pt.bis && !pt.deg { let m = g.s + g.d / 2.0; v.push((c(m), c(m + 180.0))); }
     let both = pt.central || pt.sector != 0;
-    if pt.a && (pt.radius || both || pt.tan) { v.push((o, c(g.a))); }
-    if both && !pt.deg { v.push((o, c(g.b))); }
+    if pt.a && (pt.radius || both || pt.tan) { v.push((o, ua)); }
+    if both && !pt.deg { v.push((o, ub)); }
     for (_, x, y) in joins(p) { v.push((end_pos(p, x), end_pos(p, y))); }
     for (_, e0, e1) in drawn_tangents(p) { v.push((e0, e1)); }
     let vs = super::pts::polygon_vertices(p);
@@ -840,10 +854,10 @@ pub fn drawn_tangents(p: &Params) -> Vec<(f64, V, V)> {
 /// The secant's dashed runs past B and past A as drawn (60 px, clipped at the drawing area as the figure clips them), unit
 /// coordinates.
 fn drawn_secant_runs(p: &Params) -> Vec<(V, V)> {
-    let (g, pt) = (geom(p), parts(p));
+    let pt = parts(p);
     if !(pt.sec && !pt.deg) { return vec![]; }
     let (area, cx) = drawn_area(p);
-    let (pa, pb) = (on_circle(cx, g.a), on_circle(cx, g.b));
+    let [pa, pb, _] = super::drag_b8::scr(p, cx);
     let (dx, dy) = (pb.0 - pa.0, pb.1 - pa.1);
     let len = dx.hypot(dy).max(1e-9);
     let (ux, uy) = (dx / len, dy / len);
@@ -1483,6 +1497,11 @@ mod tests {
     fn under(hs: &[Handle], q: Pt) -> Option<(usize, String)> {
         let i = interact::pick(hs, q, 1.0)?;
         let h = &hs[i];
+        // a line's label (batch 8) is dragged across its line, and a click on it does what the click area does there
+        if h.label_drag {
+            let area = hs.iter().find(|a| a.hover_at.is_some())?;
+            return Some((i, area.hover_at.as_ref()?(q)?.tip));
+        }
         if h.drag.is_some() { return Some((i, h.tip.clone())); }
         let hv = h.hover_at.as_ref()?(q)?;
         Some((i, hv.tip))
@@ -1801,7 +1820,7 @@ mod tests {
     fn kind_at(hs: &[Handle], q: Pt) -> &'static str {
         match under(hs, q) {
             None => "none",
-            Some((i, _)) if hs[i].drag.is_some() => "point",
+            Some((i, _)) if hs[i].drag.is_some() && !hs[i].label_drag => "point",
             Some((_, t)) if t.starts_with("Click to put a point") || t.starts_with("A point is already") => "rim",
             Some((_, t)) if t.starts_with("Click to shade") => "shade",
             Some((_, t)) if t.starts_with("Click to label arc") => "arc",

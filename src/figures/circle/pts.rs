@@ -17,7 +17,8 @@ pub fn polygon_n(p: &Params) -> usize {
 /// already on the circle (B, C or a More point, within half a degree) is that point; the others take the next free letters.
 pub fn polygon_vertices(p: &Params) -> Vec<(String, f64)> {
     let n = polygon_n(p);
-    if n < 3 { return vec![]; }
+    // (a polygon has a corner at A: none while A is off the circle, batch 8)
+    if n < 3 || !super::drag_b8::on(p)[0] { return vec![]; }
     let a = geom(p).a;
     let on = edit::base_points(p);
     let mut used = edit::taken_letters(p, false);

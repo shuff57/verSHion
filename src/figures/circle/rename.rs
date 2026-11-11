@@ -185,12 +185,20 @@ fn apply(p: &mut Params, old: &str, new: &str) {
         let kind = w.get(k).filter(|t| t.eq_ignore_ascii_case("segment") || t.eq_ignore_ascii_case("sector"));
         match kind.and_then(|_| pair(&w[k + 1..].join(" "))) { Some(n) => format!("{} {n}", w[..=k].join(" ")), None => r.clone() }
     }).collect();
+    // the sides of line labels (batch 8): a word for the circle's own lines, `tangent X`, or a pair, then left or right
+    let sides: Vec<String> = edit::rows(q.s("label_sides")).iter().map(|r| {
+        let w = words(r);
+        let Some((side, rest)) = w.split_last() else { return r.clone() };
+        if let [one] = rest && super::labels_b8::WORDS.iter().any(|k| k.eq_ignore_ascii_case(one)) { return r.clone(); }
+        if let [t, x] = rest && t.eq_ignore_ascii_case("tangent") { return f(x).map(|n| format!("{t} {n} {side}")).unwrap_or_else(|| r.clone()); }
+        pair(&rest.join(" ")).map(|n| format!("{n} {side}")).unwrap_or_else(|| r.clone())
+    }).collect();
     // the point's own letter: a More points row, the centre, A, B, C or M (midpoints and crossings were done above)
     let ex = edit::extras_all(&q);
     let mut more = edit::rows(q.s("more_points"));
     if let Some(i) = ex.iter().position(|e| e.0 == old) && let Some(row) = more.get_mut(i) { *row = with_letter(row, &new); }
     let kept: Vec<String> = edit::rows(q.s("poly_names")).into_iter().map(|x| if x == old { new.clone() } else { x }).collect();
-    for (key, rows) in [("joins", joins), ("tangents", tangents), ("midpoints", mids), ("crossings", cross), ("marks", marks), ("styles", styles), ("shade", shade), ("more_points", more), ("poly_names", kept)] {
+    for (key, rows) in [("joins", joins), ("tangents", tangents), ("midpoints", mids), ("crossings", cross), ("marks", marks), ("styles", styles), ("shade", shade), ("more_points", more), ("poly_names", kept), ("label_sides", sides)] {
         // an untouched list is left exactly as it was typed
         if edit::rows(p.s(key)) != rows { edit::set_rows(p, key, &rows); }
     }

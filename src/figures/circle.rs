@@ -17,7 +17,9 @@ use super::*;
 use std::f64::consts::PI;
 
 mod clicks;
+mod drag_b8;
 mod edit;
+mod labels_b8;
 mod pts;
 mod rename;
 mod style;
@@ -25,6 +27,8 @@ mod style;
 mod tests_b5;
 #[cfg(test)]
 mod frozen_b8;
+#[cfg(test)]
+mod drag_b8_tests;
 
 type Pt = (f64, f64);
 
@@ -72,6 +76,9 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("a1", "Point A at (degrees)", 0.0, 360.0, 1.0, 20.0),
         ParamDef::float("a2", "Point B at (degrees)", 0.0, 360.0, 1.0, 110.0),
         ParamDef::float("c_angle", "Point C at (degrees)", 0.0, 360.0, 1.0, 250.0),
+        ParamDef::float("a_dist", "Point A from the centre (radii)", 0.1, 3.0, 0.05, 1.0).hint("1 is on the circle. Or drag A on the figure: pull it well away to take it off the circle, bring it near to put it back on"),
+        ParamDef::float("b_dist", "Point B from the centre (radii)", 0.1, 3.0, 0.05, 1.0).hint("1 is on the circle (B stays on it while a chord length or OM distance places it)"),
+        ParamDef::float("c_dist", "Point C from the centre (radii)", 0.1, 3.0, 0.05, 1.0).hint("1 is on the circle"),
         b("show_b", "Point B", false).hint("B on its own, without a chord; a chord, arc, sector or angle through B draws it anyway"),
         b("show_c", "Point C", false).hint("C on its own, without the inscribed angle"),
         ParamDef::list("more_points", "More points (letter and degrees)", "").hint("One point per row, such as D 270 (its letter, then its direction in degrees from the right, counterclockwise). Or click the circle on the figure to put a point there; a row without a letter gets the next free one"),
@@ -109,6 +116,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::text("name_m", "Midpoint letter", "M"),
         ParamDef::choice("r_label", "Radius label", &["Value", "Letter only", "None"], "Value"),
         ParamDef::list("marks", "Arc and line labels", "").hint("One per row: arc BC 70\u{b0}, arc BC degrees, arc BC length, major arc BC degrees, BD length or BD x. Or click beside an arc or on a line on the figure"),
+        ParamDef::list("label_sides", "Sides of line labels", "").hint("Set by dragging a line's label across its line: one row per label, such as chord left, radius right, BD left or tangent C right (left or right looking along the line from its first letter to its second)"),
         ParamDef::list("styles", "Marks and line styles", "").hint("One per row: BD ticks 2, BD arrows 1, BD dashed, BD dotted, BD past D arrow, BD past both dot, BD past B line arrow, arc BC ticks 1, angle BDC arcs 2. Or double-click a line, arc or angle on the figure"),
         ParamDef::choice("angle_unit", "Angles in", &["Degrees", "Radians"], "Degrees"),
         ParamDef::int("dec", "Decimal places", 0, 4, 2),
@@ -355,8 +363,10 @@ fn visible(p: &Params, k: K) -> bool {
     if mode(p, k) == Md::Hidden { return false; }
     let pt = parts(p);
     // (a row for the inscribed or tangent angle needs its part to be drawn)
+    let ab = drag_b8::ab_on(p);
+    if matches!(k, K::Chord | K::Om | K::Am | K::Arc | K::Sector) && !ab { return false; }
     (p.b(kinfo(k).2) && match k { K::Inscribed => pt.insc, K::TanAngle => pt.tan, _ => true }) || match k {
-        K::Radius => pt.radius && p.s("r_label") == "Value",
+        K::Radius => pt.radius && p.s("r_label") == "Value" && drag_b8::on(p)[0],
         K::Diameter => pt.diam,
         K::Chord => pt.chord && !pt.deg,
         K::Central => pt.central && !pt.deg,
@@ -411,6 +421,18 @@ fn rows(c: &Ctx) -> Vec<Row> {
         if k == K::Inscribed && !p.b("show_inscribed") { out.push(note(format!("{} is not shown", n.c))); continue; }
         if k == K::Inscribed && c.m.c_clash { out.push(note(format!("{} must differ from {} and {}", n.c, n.a, n.b))); continue; }
         if k == K::TanAngle && !p.b("show_tangent") { out.push(note("no tangent is shown".to_string())); continue; }
+        // (batch 8: a point off the circle has no chord, arc, sector, inscribed angle or tangent of its own)
+        {
+            let o = drag_b8::on(p);
+            let off = |ix: &[usize]| { let l = [&n.a, &n.b, &n.c]; let w: Vec<&str> = ix.iter().filter(|i| !o[**i]).map(|i| l[*i].as_str()).collect(); w.join(" and ") };
+            let say = |w: String| if w.contains(" and ") { format!("{w} are off the circle") } else { format!("{w} is off the circle") };
+            match k {
+                K::Arc | K::Sector | K::Chord | K::Om | K::Am if !(o[0] && o[1]) => { out.push(note(say(off(&[0, 1])))); continue; }
+                K::Inscribed if !(o[0] && o[1] && o[2]) => { out.push(note(say(off(&[0, 1, 2])))); continue; }
+                K::TanAngle if !o[0] => { out.push(note(say(off(&[0])))); continue; }
+                _ => {}
+            }
+        }
         // (the left-hand side is left off an angle row: its name already says which angle)
         let (lhs, formula) = match k {
             K::Radius => ("r".to_string(), String::new()),
@@ -439,7 +461,7 @@ fn rows(c: &Ctx) -> Vec<Row> {
         out.push(Row { name, sname, key: text(true), stu: text(false) });
     }
     // a worked check on the key only: the right triangle O, M, A. It prints no Hidden value: AM (or, when that is Hidden, half the chord) and OM and r must all be shown
-    if p.b("m_om") && mode(p, K::Om) != Md::Hidden && mode(p, K::Radius) != Md::Hidden && (mode(p, K::Am) != Md::Hidden || mode(p, K::Chord) != Md::Hidden) {
+    if p.b("m_om") && drag_b8::ab_on(p) && mode(p, K::Om) != Md::Hidden && mode(p, K::Radius) != Md::Hidden && (mode(p, K::Am) != Md::Hidden || mode(p, K::Chord) != Md::Hidden) {
         let (m, d) = (&c.m, c.dec);
         let sqn = |v: f64| num(v, d);
         let half = if mode(p, K::Am) != Md::Hidden { format!("{}\u{b2}", sqn(m.am)) } else { format!("({} / 2)\u{b2}", sqn(m.chord)) };
@@ -467,7 +489,7 @@ pub fn tw(s: &str, size: f64, bold: bool) -> f64 {
     w * size * if bold { 1.08 } else { 1.0 }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rect { pub x0: f64, pub y0: f64, pub x1: f64, pub y1: f64 }
 
 impl Rect {
@@ -520,7 +542,8 @@ fn layout_of(p: &Params) -> Lay {
 
 /// `b` and `c` are whether points B and C are drawn (for a part that needs them, or turned on as points of their own); `insc` is
 /// whether the inscribed angle at C is drawn.
-struct Parts { radius: bool, diam: bool, chord: bool, bis: bool, tan: bool, sec: bool, central: bool, arc: u8, sector: u8, two: bool, a: bool, b: bool, c: bool, insc: bool, deg: bool }
+/// `insc_lines`: the inscribed angle's sides are drawn without its mark (a point of it is off the circle).
+struct Parts { radius: bool, diam: bool, chord: bool, bis: bool, tan: bool, sec: bool, central: bool, arc: u8, sector: u8, two: bool, a: bool, b: bool, c: bool, insc: bool, insc_lines: bool, deg: bool }
 
 fn parts(p: &Params) -> Parts {
     let g = geom(p);
@@ -532,7 +555,11 @@ fn parts(p: &Params) -> Parts {
     let two = chord || bis || sec || central || insc || arc != 0 || sector != 0 || row_on(K::Chord) || row_on(K::Om) || row_on(K::Am) || row_on(K::Central) || row_on(K::Arc) || row_on(K::Sector);
     let deg = g.d < 0.5;
     let insc = insc && !m.c_clash && !deg;
-    Parts { radius, diam, chord, bis, tan, sec, central, arc, sector, two, a: radius || diam || tan || two || pts::polygon_n(p) >= 3, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc, deg }
+    // a point off the circle (batch 8) keeps the lines through it; what only a point on the circle has is left off (see drag_b8)
+    let on = drag_b8::on(p);
+    let ab = on[0] && on[1];
+    let a = radius || diam || tan || two || pts::polygon_n(p) >= 3;
+    Parts { radius, diam: diam && on[0], chord, bis: bis && ab, tan: tan && on[0], sec, central, arc: if ab { arc } else { 0 }, sector: if ab { sector } else { 0 }, two, a, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc: insc && ab && on[2], insc_lines: insc && !(ab && on[2]), deg }
 }
 
 /// Editor-only notes about what the figure could not do as asked (never drawn into the SVG).
@@ -631,6 +658,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
     if p.b("m_inscribed") && mode(p, K::Inscribed) != Md::Hidden && !p.b("show_inscribed") {
         v.push(format!("The inscribed-angle row needs point {}: turn on Inscribed angle to draw it.", n.c));
     }
+    v.extend(drag_b8::warnings(p));
     v
 }
 
@@ -658,7 +686,7 @@ struct Lab { keep_out: Option<(Pt, f64)>, kind: Option<K>, text: String, size: f
 
 
 #[derive(Clone, Debug)]
-pub struct Placed { kind: Option<K>, pub text: String, pub rect: Rect, pub clean: bool, pub leader: bool, pub plate: bool, pub anchor: Pt, line: Option<(Pt, Pt)>, size: f64, bold: bool, c: Pt }
+pub struct Placed { pub id: usize, kind: Option<K>, pub text: String, pub rect: Rect, pub clean: bool, pub leader: bool, pub plate: bool, pub anchor: Pt, line: Option<(Pt, Pt)>, size: f64, bold: bool, c: Pt }
 
 fn dirs8(out: Pt) -> Vec<Pt> {
     let l = (out.0 * out.0 + out.1 * out.1).sqrt();
@@ -817,7 +845,9 @@ const CIRCLE_SEGS: usize = 60;
 /// A leader is used only for a spot more than 18 px from what it names (or for a label that must always point, `force`). A label
 /// that can only go on the hatch gets a white plate when no drawn line runs under it. Returns the labels and the (id, text) of those
 /// that overlap another label or leave `bounds` (the caller then makes room or moves them into the readout).
-fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Vec<Pt>]) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>) {
+/// `sides`: labels dragged to one side of their line (batch 8): (label id, the line's ends, 1 left or -1 right); only spots whose whole
+/// box is on that side are tried.
+fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Vec<Pt>], sides: &[(usize, Pt, Pt, f64)]) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>) {
     labs.sort_by_key(|l| l.prio);
     let mut placed: Vec<Placed> = vec![];
     let mut rects: Vec<Rect> = vec![];
@@ -827,7 +857,7 @@ fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect
         let mt = l.wide.as_ref().unwrap_or(&l.text);
         let (w, h) = (tw(mt, l.size, l.bold) + 2.0, l.size * 1.15);
         let mut cands = l.cands.clone();
-        let own = cands.len();
+        let mut own = cands.len();
         let from0 = l.leader_from.unwrap_or(l.anchor);
         let from = from0;
         for extra in [44.0, 70.0, 98.0, 130.0, 170.0] {
@@ -836,6 +866,16 @@ fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect
                 let d = (a.cos(), a.sin());
                 let sup = d.0.abs() * w / 2.0 + d.1.abs() * h / 2.0;
                 cands.push(((from.0 + d.0 * (sup + extra), from.1 + d.1 * (sup + extra)), true));
+            }
+        }
+        // a label dragged to one side of its line is tried only there (when no spot is there at all, anywhere, as before)
+        if let Some(&(_, a, b, sg)) = sides.iter().find(|x| x.0 == l.id) {
+            let ok = |c: &Pt| labels_b8::box_on_side(&Rect::around(*c, w, h), a, b, sg);
+            let kept_own: Vec<(Pt, bool)> = cands[..own].iter().filter(|x| ok(&x.0)).cloned().collect();
+            let kept_far: Vec<(Pt, bool)> = cands[own..].iter().filter(|x| ok(&x.0)).cloned().collect();
+            if !(kept_own.is_empty() && kept_far.is_empty()) {
+                own = kept_own.len();
+                cands = kept_own.into_iter().chain(kept_far).collect();
             }
         }
         let mut best: Option<((u32, u32, u32, u32, u32), usize)> = None;
@@ -885,7 +925,7 @@ fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect
         // a plate only where no drawn line (curve, chord, dashed auxiliary) and no earlier leader runs under it (leaders are drawn over plates)
         let plate = key.1 > 0 && !segs.iter().any(|sg| seg_hits(sg.0, sg.1, &rect)) && !leaders.iter().take(leaders.len() - line.is_some() as usize).any(|ld| seg_hits(ld.0, ld.1, &rect));
         rects.push(rect);
-        placed.push(Placed { kind: l.kind, text: l.text, rect, clean: conflicts(&rect, &rects[..rects.len() - 1], segs, &leaders[..leaders.len() - line.is_some() as usize], dots, bounds) == 0, leader: line.is_some(), plate, anchor: from, line, size: l.size, bold: l.bold, c });
+        placed.push(Placed { id: l.id, kind: l.kind, text: l.text, rect, clean: conflicts(&rect, &rects[..rects.len() - 1], segs, &leaders[..leaders.len() - line.is_some() as usize], dots, bounds) == 0, leader: line.is_some(), plate, anchor: from, line, size: l.size, bold: l.bold, c });
     }
     (placed, severe)
 }
@@ -952,7 +992,7 @@ fn clip_len(p: Pt, d: Pt, max: f64, b: &Rect) -> f64 {
 #[derive(Clone, Debug)]
 /// `pad` is the room added round the figure for its labels; `ox`, `oy` how far the drawing is shifted right and down (the label
 /// room plus any room the tangents need on the left and the top).
-pub struct Report { pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
+pub struct Report { pub line_labels: Vec<(labels_b8::LKey, Rect, Pt, Pt)>, pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
 
 fn render(p: &Params) -> String { build(p).0 }
 
@@ -984,6 +1024,9 @@ pub fn control_label(key: &str, p: &Params) -> Option<String> {
         "a1" => format!("Point {} at (degrees)", n.a),
         "a2" => format!("Point {} at (degrees)", n.b),
         "c_angle" => format!("Point {} at (degrees)", n.c),
+        "a_dist" => format!("Point {} from the centre (radii)", n.a),
+        "b_dist" => format!("Point {} from the centre (radii)", n.b),
+        "c_dist" => format!("Point {} from the centre (radii)", n.c),
         "show_b" => format!("Point {}", n.b),
         "show_c" => format!("Point {}", n.c),
         _ => return None,
@@ -1090,7 +1133,9 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let mut sc = Sc { d: Doc::new(w + ox + rx, h + oy + gb), segs: vec![], solid: vec![], dots: vec![], marks: 0 };
     sc.d.describe("Circle", "A circle with chosen parts (radius, diameter, chord, tangent, secant, angles, arc, sector) and its measures");
 
-    let (pa, pb, pc) = (on_circle(cx, g.a), on_circle(cx, g.b), on_circle(cx, g.c));
+    // (A, B and C where they are: on the circle exactly as before, or off it, batch 8)
+    let [pa, pb, pc] = drag_b8::scr(p, cx);
+    let ab_on = drag_b8::ab_on(p);
     let pm_deg = g.s + g.d / 2.0;
     let um = unit(pm_deg);
     let mid = ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0);
@@ -1100,6 +1145,9 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let cen_mid = cen_s + cen_d / 2.0;
     let uc = unit(cen_mid);
     let mut labs: Vec<Lab> = vec![];
+    // the labels that belong to a line (batch 8: each can be dragged across it): (label index, the line, its ends)
+    let mut lines_l: Vec<(usize, labels_b8::LKey, Pt, Pt)> = vec![];
+    use labels_b8::LKey;
     let sz = |s: f64| s * f;
     let box_of = |text: &str, size: f64, bold: bool| (tw(text, size, bold) + 2.0, size * 1.15);
 
@@ -1262,6 +1310,10 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         }
     }
     let semi = (g.d - 180.0).abs() < 0.5;
+    if pt.insc_lines {
+        sc.ln(pc, pa, col(1), 2.0);
+        sc.ln(pc, pb, col(1), 2.0);
+    }
     if pt.insc {
         sc.ln(pc, pa, col(1), 2.0);
         sc.ln(pc, pb, col(1), 2.0);
@@ -1294,7 +1346,9 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     for (_, d) in &ex { sc.dot(on_circle(cx, *d)); }
     // the places off the circle: More points off it, midpoints and crossings (M once, when the figure draws it already)
     let m_drawn = (pt.bis && !pt.deg) || m_used;
-    let free: Vec<(String, edit::V)> = pts::free_points(p).into_iter().filter(|(nm, q)| !(m_drawn && *nm == n.m && { let e = edit::end_pos(p, edit::End::M); (e.0 - q.0).hypot(e.1 - q.1) < 1e-6 })).collect();
+    // (A, B or C off the circle is drawn as itself above, not again as a place off the circle)
+    let abc_off = drag_b8::off_abc(p);
+    let free: Vec<(String, edit::V)> = pts::free_points(p).into_iter().filter(|(nm, q)| !(m_drawn && *nm == n.m && { let e = edit::end_pos(p, edit::End::M); (e.0 - q.0).hypot(e.1 - q.1) < 1e-6 }) && !abc_off.iter().any(|(x, u)| x == nm && (u.0 - q.0).hypot(u.1 - q.1) < 1e-9)).collect();
     for (_, q) in &free { sc.dot(sp_u(*q)); }
     if p.b("show_centre") { sc.dot(o); }
     if m_used && (mid.0 - o.0).hypot(mid.1 - o.1) >= 4.0 { sc.dot(mid); }
@@ -1390,7 +1444,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             labs.push(Lab { keep_out: None, kind: Some(K::TanAngle), text: t, size, bold: true, prio: 1, anchor: from, cands: near_cands(from, dir, bw, bh, 4.0), leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms });
         }
     }
-    if pt.chord && !pt.deg {
+    if pt.chord && !pt.deg && ab_on {
         if let Some((t, wide)) = both(K::Chord, &|v| format!("{}{} = {v}", n.a, n.b)) {
             let size = sz(13.0);
             let (bw, bh) = box_of(&wide, size, true);
@@ -1398,6 +1452,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let at = (pa.0 + (pb.0 - pa.0) * 0.7, pa.1 + (pb.1 - pa.1) * 0.7);
             let cands = if small { outside_cands(cx, pm_deg, bw, bh) } else { near_cands(at, um, bw, bh, 5.0) };
             let froms: Vec<Pt> = [0.7, 0.5, 0.3].iter().map(|t| (pa.0 + (pb.0 - pa.0) * t, pa.1 + (pb.1 - pa.1) * t)).collect();
+            lines_l.push((labs.len(), LKey::Word("chord"), pa, pb));
             labs.push(Lab { keep_out: None, kind: Some(K::Chord), text: t, size, bold: true, prio: 2, anchor: at, cands, leader_from: Some(at), id: 0, wide: Some(wide), force: false, froms });
         }
     }
@@ -1408,16 +1463,18 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let q = ((o.0 + mid.0) / 2.0, (o.1 + mid.1) / 2.0);
             let tdir = (-um.1, um.0);
             let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (o.0 + (mid.0 - o.0) * t, o.1 + (mid.1 - o.1) * t)).collect();
+            lines_l.push((labs.len(), LKey::Word("om"), o, mid));
             labs.push(Lab { keep_out: None, kind: Some(K::Om), text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, tdir, bw, bh, 4.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
-    if (pt.bis || pt.chord) && !pt.deg {
+    if (pt.bis || pt.chord) && !pt.deg && ab_on {
         if let Some((t, wide)) = both(K::Am, &|v| format!("{}{} = {v}", n.a, n.m)) {
             let size = sz(13.0);
             let (bw, bh) = box_of(&wide, size, true);
             let q = ((pa.0 + mid.0) / 2.0, (pa.1 + mid.1) / 2.0);
             let cands = if small { outside_cands(cx, pm_deg, bw, bh) } else { near_cands(q, um, bw, bh, 5.0) };
             let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (pa.0 + (mid.0 - pa.0) * t, pa.1 + (mid.1 - pa.1) * t)).collect();
+            lines_l.push((labs.len(), LKey::Word("am"), pa, mid));
             labs.push(Lab { keep_out: None, kind: Some(K::Am), text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
@@ -1428,10 +1485,11 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let q = ((o.0 + opp.0) / 2.0, (o.1 + opp.1) / 2.0);
             let u = unit(g.a + 180.0);
             let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (o.0 + (opp.0 - o.0) * t, o.1 + (opp.1 - o.1) * t)).collect();
+            lines_l.push((labs.len(), LKey::Word("diameter"), pa, opp));
             labs.push(Lab { keep_out: None, kind: Some(K::Diameter), text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, (-u.1, u.0), bw, bh, 5.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
-    if pt.radius && p.s("r_label") != "None" {
+    if pt.radius && p.s("r_label") != "None" && drag_b8::on(p)[0] {
         // the letter alone is always shown; the value follows the radius's state
         let t = if p.s("r_label") == "Letter only" { Some(("r".to_string(), "r".to_string())) } else { both(K::Radius, &|v| format!("r = {v}")) };
         if let Some((t, wide)) = t {
@@ -1446,6 +1504,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                 cands.extend(near_cands(at, (sg * ua.1, -sg * ua.0), bw, bh, 5.0).into_iter().take(8));
             }
             let froms: Vec<Pt> = [0.5, 0.25, 0.78].iter().map(|fr| (cx + ua.0 * R * fr, CY + ua.1 * R * fr)).collect();
+            lines_l.push((labs.len(), LKey::Word("radius"), o, pa));
             labs.push(Lab { keep_out: None, kind: Some(K::Radius), text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
@@ -1458,17 +1517,29 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     };
     // the tangent at A says "tangent" unless a label row changes it; the other tangents say what their rows say
     let tan_words = edit::tangent_words(p);
+    // (a tangent's line runs counterclockwise round the circle from its point)
+    let tan_line = |d: f64| { let q = on_circle(cx, d); (q, (q.0 - 50.0 * d.to_radians().sin(), q.1 - 50.0 * d.to_radians().cos())) };
     if !tan_ends.is_empty() {
+        let k = labs.len();
         match tan_words.iter().find(|(d, _)| angdiff(*d, g.a) < 1e-6) {
             Some((_, t)) if t.is_empty() => {}
             Some((_, t)) => word(&mut labs, t, &tan_ends),
             None => word(&mut labs, "tangent", &tan_ends),
         }
+        if labs.len() > k { let (a, b) = tan_line(g.a); lines_l.push((k, LKey::Tan(g.a), a, b)); }
     }
     for (d, ends) in &list_tan_ends {
-        if let Some((_, t)) = tan_words.iter().find(|(e, _)| angdiff(*e, *d) < 1e-6) && !t.is_empty() { word(&mut labs, t, ends); }
+        if let Some((_, t)) = tan_words.iter().find(|(e, _)| angdiff(*e, *d) < 1e-6) && !t.is_empty() {
+            let k = labs.len();
+            word(&mut labs, t, ends);
+            if labs.len() > k { let (a, b) = tan_line(*d); lines_l.push((k, LKey::Tan(*d), a, b)); }
+        }
     }
-    if !sec_ends.is_empty() { word(&mut labs, "secant", &sec_ends); }
+    if !sec_ends.is_empty() {
+        let k = labs.len();
+        word(&mut labs, "secant", &sec_ends);
+        if labs.len() > k { lines_l.push((k, LKey::Word("secant"), pa, pb)); }
+    }
     // the labels a teacher put on arcs (outside the arc's middle) and on lines (beside the line's middle, away from the centre)
     let sp = |v: edit::V| (cx + R * v.0, CY - R * v.1);
     // angles labelled at one corner get arcs of different sizes (and clear of the central and inscribed angles' own arcs there)
@@ -1502,6 +1573,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                 let mut nrm = (-(w.1 - u.1) / l, (w.0 - u.0) / l);
                 if nrm.0 * (mid.0 - o.0) + nrm.1 * (mid.1 - o.1) < 0.0 { nrm = (-nrm.0, -nrm.1); }
                 let froms: Vec<Pt> = [0.5, 0.35, 0.65].iter().map(|t| (u.0 + (w.0 - u.0) * t, u.1 + (w.1 - u.1) * t)).collect();
+                lines_l.push((labs.len(), LKey::Line(a, b), u, w));
                 labs.push(Lab { keep_out: None, kind: None, text: t, size, bold: true, prio: 2, anchor: mid, cands: near_cands(mid, nrm, bw, bh, 5.0), leader_from: Some(mid), id: 0, wide: None, force: false, froms });
             }
             edit::Mark::Angle { v, a, b, say: s } => {
@@ -1564,7 +1636,9 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     // whether a label that stays on the figure lost its unit
     let unit_lost = opt.drop_unit && !c.unit.is_empty() && labs.iter().any(|l| l.kind.is_some_and(|k| !matches!(k, K::Central | K::Inscribed | K::TanAngle)) && !l.text.chars().all(|ch| ch == 'r'));
     hatches.insert(0, hatch.clone());
-    let (placed, severe) = place(labs, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches);
+    // the labels dragged to one side of their line
+    let sides: Vec<(usize, Pt, Pt, f64)> = lines_l.iter().filter_map(|(i, k, a, b)| labels_b8::side(p, k).map(|l| (*i, *a, *b, if l { 1.0 } else { -1.0 }))).collect();
+    let (placed, severe) = place(labs, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &sides);
     let leader_col = if print { "#444444" } else { "#888888" };
     // plates first, then the leaders (so that a plate never hides a leader), then the texts
     for pl in &placed {
@@ -1603,8 +1677,10 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     if ox > 0.0 || oy > 0.0 { sc.d.raw(&format!(r##"<g transform="translate({ox},{oy})">{all}</g>"##)); } else { sc.d.raw(&all); }
     let sh = |q: Pt| (q.0 + ox, q.1 + oy);
     let shr = |r: Rect| Rect { x0: r.x0 + ox, y0: r.y0 + oy, x1: r.x1 + ox, y1: r.y1 + oy };
+    let line_labels: Vec<(LKey, Rect, Pt, Pt)> = lines_l.into_iter().filter_map(|(i, k, a, b)| placed.iter().find(|pl| pl.id == i).map(|pl| (k, shr(pl.rect), sh(a), sh(b)))).collect();
     let placed: Vec<Placed> = placed.into_iter().map(|mut pl| { pl.rect = shr(pl.rect); pl.anchor = sh(pl.anchor); pl.line = pl.line.map(|(a, b)| (sh(a), sh(b))); pl.c = sh(pl.c); pl }).collect();
     let report = Report {
+        line_labels,
         placed,
         segs: sc.segs.iter().map(|(a, b)| (sh(*a), sh(*b))).collect(),
         dots: sc.dots.iter().map(|r| shr(*r)).collect(),
@@ -1652,19 +1728,6 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
 /// A handle that was grabbed but not moved (the pointer within a pixel of where the handle is drawn) changes nothing.
 fn unmoved(at: Pt, pt: Pt) -> bool { (pt.0 - at.0).hypot(pt.1 - at.1) <= 1.0 }
 
-fn angle_handle(key: &'static str, c: Pt, at: Pt, tip: &str) -> Handle {
-    Handle::knob(at, tip, move |p, pt| { if !unmoved(at, pt) { p.set_f(key, interact::angle_deg(c, pt).round() % 360.0) } })
-}
-/// The handle of point B: it moves the central angle (the gap from A), which snaps to the familiar angles within 3 degrees; with the
-/// chord or OM defined by length it sets that length from the shorter gap.
-fn gap_handle(c: Pt, at: Pt, tip: &str) -> Handle {
-    Handle::knob(at, tip, move |p, pt| {
-        if unmoved(at, pt) { return; }
-        let a = wrap(p.f("a1"));
-        set_gap(p, snap_angle((interact::angle_deg(c, pt) - a).rem_euclid(360.0)));
-    })
-}
-
 /// Puts point B `gap` degrees on from A: the central angle when it is typed, the chord or OM when the chord is defined by length
 /// (from the shorter gap), else B's own direction.
 fn set_gap(p: &mut Params, gap: f64) {
@@ -1684,24 +1747,30 @@ fn set_gap(p: &mut Params, gap: f64) {
 
 pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if id != "circle" { return None; }
-    let g = geom(p);
     let pt = parts(p);
     // the canvas may have grown to make room for the labels or the tangents: the drawing is shifted by (ox, oy)
     let rep = build(p).1;
     let off = (rep.ox, rep.oy);
     let cx = layout_of(p).cx;
     let centre = (cx + off.0, CY + off.1);
-    let at = |deg: f64| { let q = on_circle(cx, deg); (q.0 + off.0, q.1 + off.1) };
     let n = names(p);
+    let [qa, qb, qc] = drag_b8::scr(p, cx);
+    let sh = |q: Pt| (q.0 + off.0, q.1 + off.1);
     let mut v = vec![];
     let tan = |nm: &str| { let nm = nm.to_string(); move |p: &mut Params| clicks::click_point(p, &nm, true) };
     let ren = |nm: &str| { let nm = nm.to_string(); move |p: &Params, _: Pt| clicks::rename_point(p, &nm) };
     let key = |nm: &str| if nm == n.a { "name_a" } else if nm == n.b { "name_b" } else { "name_c" };
-    if pt.a { v.push(angle_handle("a1", centre, at(g.a), &format!("Drag point {} round the circle; click it for the tangent there, or click it and then another point to join them; double-click it to rename it", n.a)).with_click(tan(&n.a)).with_edit_at(key(&n.a), ren(&n.a))); }
-    if pt.b { v.push(gap_handle(centre, at(g.b), &format!("Drag point {} round the circle (the angle snaps to 30, 45, 60, 90, ...); click it for the tangent there, or click it and then another point to join them; double-click it to rename it", n.b)).with_click(tan(&n.b)).with_edit_at(key(&n.b), ren(&n.b))); }
-    if pt.c { v.push(angle_handle("c_angle", centre, at(g.c), &format!("Drag point {} round the circle; click it for the tangent there, or click it and then another point to join them; double-click it to rename it", n.c)).with_click(tan(&n.c)).with_edit_at(key(&n.c), ren(&n.c))); }
+    // A, B and C go round the circle and off it (batch 8); a click on one outside the circle draws the tangents from it
+    if pt.a { v.push(drag_b8::knob(p, 0, centre, sh(qa)).with_click(tan(&n.a)).with_edit_at(key(&n.a), ren(&n.a))); }
+    if pt.b { v.push(drag_b8::knob(p, 1, centre, sh(qb)).with_click(tan(&n.b)).with_edit_at(key(&n.b), ren(&n.b))); }
+    if pt.c { v.push(drag_b8::knob(p, 2, centre, sh(qc)).with_click(tan(&n.c)).with_edit_at(key(&n.c), ren(&n.c))); }
     // the More points' knobs, then the click area (the workspace puts every area under the knobs)
     v.extend(edit::handles(p, cx, off));
+    // the polygon's corners turn it (after the points' knobs, so their number never moves another knob's place)
+    v.extend(drag_b8::corner_knobs(p, cx, off));
+    // the lines' labels, on top of everything: dragged across their line (batch 8), clicked as the part under them
+    let hit = std::sync::Arc::new(edit::Hit::new(p, centre));
+    for (k, r, a, b) in rep.line_labels { v.push(labels_b8::knob(k, r, a, b, centre, hit.clone())); }
     Some(v)
 }
 
@@ -1709,8 +1778,8 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
 mod tests {
     use super::*;
 
-    /// The point knobs (the click areas left out).
-    fn knobs(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> { handles(id, p, size).map(|v| v.into_iter().filter(|h| h.drag.is_some()).collect()) }
+    /// The point knobs (the click areas and, since batch 8, the line labels' knobs left out).
+    fn knobs(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> { handles(id, p, size).map(|v| v.into_iter().filter(|h| h.drag.is_some() && !h.label_drag).collect()) }
     fn def() -> FigureDef { registry().into_iter().find(|d| d.id == "circle").unwrap() }
     fn with(list: &[(&'static str, Value)]) -> Params {
         let d = def();
