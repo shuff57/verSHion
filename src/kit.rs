@@ -553,8 +553,9 @@ pub fn secondary(ui: &mut Ui, label: &str, h: f32) -> egui::Response {
     tier_button(ui, None, label, h, Tier { fill: theme::card(), stroke: Stroke::new(1.0, theme::edge()), fg: theme::ink(), family: theme::bold_family() })
 }
 
-/// A card's main action (exams Open): card fill, 1.5 pt accent outline, accent bold label. Never
-/// filled; the page region's one filled primary stays `pageshell::primary`.
+/// A card's main action: card fill, 1.5 pt accent outline, accent bold label. Never filled; the
+/// page region's one filled primary stays `pageshell::primary`. (The Exams grid's Open is one step
+/// stronger, a tinted fill: `examui::exams_open_button`.)
 pub fn secondary_accent(ui: &mut Ui, label: &str, h: f32) -> egui::Response {
     tier_button(ui, None, label, h, Tier { fill: theme::card(), stroke: Stroke::new(1.5, theme::accent_col()), fg: theme::accent_col(), family: theme::bold_family() })
 }

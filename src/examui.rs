@@ -701,11 +701,12 @@ fn open_exam_screen(app: &mut crate::App, id: &Id) {
     app.exam = Some(id.clone());
 }
 
-/// The "…" menu on a card/row: a `side` square in the icon tier at `rect`'s centre.
-fn exam_menu(ui: &mut egui::Ui, rect: Rect, side: f32, row: &ExamRow, st: &mut ListUi) {
+/// The "…" menu on a card/row: a `side` square in the icon tier at `rect`'s centre (`quiet`: the
+/// card's quieter well beside its filled Open).
+fn exam_menu(ui: &mut egui::Ui, rect: Rect, side: f32, row: &ExamRow, st: &mut ListUi, quiet: bool) {
     let at = Rect::from_center_size(rect.center(), Vec2::splat(side));
     ui.scope_builder(UiBuilder::new().max_rect(at), |ui| {
-        let r = kit::more_dots(ui, side, "Exam actions");
+        let r = if quiet { quiet_dots(ui, side, "Exam actions") } else { kit::more_dots(ui, side, "Exam actions") };
         egui::Popup::menu(&r).show(|ui| {
             ui.set_min_width(140.0);
             if ui.button("Open").clicked() {
@@ -732,18 +733,65 @@ fn exam_menu(ui: &mut egui::Ui, rect: Rect, side: f32, row: &ExamRow, st: &mut L
     });
 }
 
-/// The Exams screen's page thumbnail (a mitigation: big enough to tell a page with a table from
-/// one of text; the name and the meta still say which exam it is).
+/// A quieter overflow "…" for a card whose Open is filled: no fill at rest, the 1 pt edge kept so
+/// it still reads as a button, and smaller dots in text colour (ink under the pointer or while its
+/// menu is open). Hover, pressed, focus ring, PointingHand and the accessible name as in the kit.
+fn quiet_dots(ui: &mut egui::Ui, side: f32, tip: &str) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(side), Sense::click());
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    let (fill, fg) = if resp.is_pointer_button_down_on() || open {
+        (theme::accent_faded(), theme::ink())
+    } else if resp.hovered() {
+        (theme::hover_bg(), theme::ink())
+    } else {
+        (Color32::TRANSPARENT, theme::text_col())
+    };
+    let p = ui.painter();
+    p.rect(rect, CornerRadius::same(12), fill, Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
+    for dx in [-5.0, 0.0, 5.0] {
+        p.circle_filled(rect.center() + Vec2::new(dx, 0.0), 1.75, fg);
+    }
+    if resp.has_focus() {
+        p.rect_stroke(rect.expand(1.0), CornerRadius::same(13), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip)
+}
+
+/// The Exams screen's page shape (width : height) and its tallest size, for a two-line name.
 const EXAMS_THUMB: Vec2 = Vec2::new(112.0, 145.0);
 /// The thumbnail in a narrow window, so three cards and their actions show above the fold.
 const EXAMS_THUMB_NARROW: Vec2 = Vec2::new(88.0, 114.0);
 /// A card's action height (Open and its "…").
 const EXAMS_ACT_H: f32 = 32.0;
+/// Air between the "From" line and the footer's hairline.
+const EXAMS_BREATH: f32 = 10.0;
+/// The hairline sits this far above the footer's actions.
+const EXAMS_RULE_GAP: f32 = 9.5;
 
-/// The exam cards: the first page on the left; on the right the name (two lines kept), its
+/// A card's height for a name of `lines` lines: the text column's own stack (name, counts, From,
+/// a breath, the hairline, the footer) inside the card's pads, so no band is left empty.
+fn exams_card_h(lines: usize) -> f32 {
+    let pad = kit::CARD_PAD;
+    (pad - 2.0) + lines as f32 * kit::ty::CARD_LINE + 4.0 + 18.0 + 4.0 + 18.0 + EXAMS_BREATH + EXAMS_RULE_GAP + EXAMS_ACT_H + pad
+}
+
+/// The card's main action: the house primary (filled accent, on-accent label) at card size, so it
+/// leads the quieter "…" beside it in both themes.
+fn exams_open_button(ui: &mut egui::Ui) -> egui::Response {
+    // One step below the page's filled "New exam": a tinted fill, a 1.5 pt accent outline and an
+    // accent label, so each card's main action stands apart from its quiet "…" without a row of
+    // filled primaries competing with the page's own.
+    let tint = theme::accent_faded();
+    let toward = theme::accent_col();
+    let text = egui::RichText::new("Open").family(theme::bold_family()).size(kit::ty::BUTTON_SM).color(theme::accent_col());
+    crate::pageshell::styled_button(ui, text, tint, tint.lerp_to_gamma(toward, 0.12), tint.lerp_to_gamma(toward, 0.22), Stroke::new(1.5, theme::accent_col()), EXAMS_ACT_H)
+}
+
+/// The exam cards: the first page on the left; on the right the name (one or two lines), its
 /// counts, "From <bank>", and a footer under a hairline, level with the page's foot (edited date;
-/// Open, then "…"). Every card is the page plus its 16 px pads tall. One 16 px gutter between
-/// cards and rows.
+/// Open, then "…"). A row is as tall as its tallest name needs and no taller; the whole page is
+/// scaled to that height. One 16 px gutter between cards and rows.
 fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st: &mut ListUi) {
     let gap = kit::GUTTER;
     let pad = kit::CARD_PAD;
@@ -752,10 +800,30 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
     // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
     let fit = rows.len().clamp(1, n);
     let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
-    let thumb = if avail < 760.0 { EXAMS_THUMB_NARROW } else { EXAMS_THUMB };
-    let card_h = thumb.y + pad * 2.0;
+    let narrow = avail < 760.0;
+    // (the narrow card is wide but short: one line, so the facts stay above the footer)
+    let max_lines = if narrow { 1 } else { 2 };
+    let name_job = |name: &str, tw: f32| {
+        let mut job = egui::text::LayoutJob::default();
+        job.append(name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
+        job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: max_lines, break_anywhere: false, overflow_character: Some('…') };
+        job
+    };
     ui.spacing_mut().item_spacing = Vec2::splat(gap);
     for chunk in rows.chunks(n) {
+    // The row's thumbnail: narrow keeps its fixed page; wide sizes the page to the row's text.
+    let thumb = if narrow {
+        EXAMS_THUMB_NARROW
+    } else {
+        let page = |lines: usize| {
+            let h = exams_card_h(lines) - pad * 2.0;
+            Vec2::new((h * EXAMS_THUMB.x / EXAMS_THUMB.y).round(), h)
+        };
+        // Count each name's lines in the text column beside the one-line page.
+        let tw1 = card_w - pad * 3.0 - page(1).x;
+        page(chunk.iter().map(|r| ui.painter().layout_job(name_job(&r.name, tw1)).rows.len().max(1)).max().unwrap_or(1))
+    };
+    let card_h = thumb.y + pad * 2.0;
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing = Vec2::splat(gap);
         for row in chunk {
@@ -784,14 +852,8 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
             let tx = thumb_area.right() + pad;
             let tw = rect.right() - pad - tx;
             let mut y = rect.top() + pad - 2.0;
-            // Name (two lines at most), then the facts right under it: the card's height is the
-            // page's, so the text flows from the top and only the footer is pinned.
-            let mut job = egui::text::LayoutJob::default();
-            job.append(&row.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
-            // (the narrow card is wide but short: one line, so the facts stay above the footer)
-            let rows = if thumb.y < EXAMS_THUMB.y { 1 } else { 2 };
-            job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: rows, break_anywhere: false, overflow_character: Some('…') };
-            let name = p.layout_job(job);
+            // Name, then the facts right under it; the footer is pinned to the page's foot.
+            let name = p.layout_job(name_job(&row.name, tw));
             let name_h = name.rows.len().max(1) as f32 * kit::ty::CARD_LINE;
             p.galley(Pos2::new(tx, y), name, theme::ink());
             y += name_h + 4.0;
@@ -814,11 +876,11 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
             p.galley(Pos2::new(tx + lw, y), gb, theme::text_col());
             // Footer, level with the foot of the page: when, then the card's actions.
             let foot = Rect::from_min_max(Pos2::new(tx, thumb_area.bottom() - EXAMS_ACT_H), Pos2::new(rect.right() - pad, thumb_area.bottom()));
-            p.hline(tx..=foot.right(), foot.top() - 9.5, Stroke::new(1.0, theme::border()));
+            p.hline(tx..=foot.right(), foot.top() - EXAMS_RULE_GAP, Stroke::new(1.0, theme::border()));
             let menu = Rect::from_min_size(Pos2::new(foot.right() - EXAMS_ACT_H, foot.top()), Vec2::splat(EXAMS_ACT_H));
             let mut open = false;
             let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 8.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
-            let ob = kit::secondary_accent(&mut btn, "Open", EXAMS_ACT_H);
+            let ob = exams_open_button(&mut btn);
             if ob.clicked() {
                 open = true;
             }
@@ -828,7 +890,7 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
             let wy = foot.center().y - gw.size().y / 2.0;
             p.galley(Pos2::new(tx, wy), gw, theme::muted_col());
             // (a child ui: the menu must not move this row's cursor, which set the gutter)
-            exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, EXAMS_ACT_H, row, st);
+            exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, EXAMS_ACT_H, row, st, true);
             if open || resp.clicked() {
                 open_exam_screen(app, &row.id);
             }
@@ -874,6 +936,7 @@ fn draw_exam_list(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st:
                 32.0,
                 row,
                 st,
+                false,
             );
         }
     });
