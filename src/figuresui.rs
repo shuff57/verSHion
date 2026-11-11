@@ -6681,6 +6681,53 @@ mod tests {
         assert_eq!((ws.params.i("n"), ws.params.s("v1_lab"), ws.params.s("v2_lab")), (2, "B", "C"));
     }
 
+    /// Vector diagram, batch 8: an open vector row offers "Mark its angle" (then "Measured from" and its label) and
+    /// "Show its components" when the vector is at an angle, not when it lies along the grid; ticking them changes the
+    /// figure.
+    #[test]
+    fn vector_rows_offer_their_own_angle_mark_and_components() {
+        let (ctx, mut ws) = open_tall("vector-diagram");
+        open_section(&ctx, &mut ws, "Vectors");
+        // open vector 2's row: a click on the row, left of its trash can
+        let open_row = |ctx: &egui::Context, ws: &mut Workspace, n: usize| {
+            let out = tall_frame(ctx, ws, vec![]);
+            let tree = out.platform_output.accesskit_update.expect("accesskit tree");
+            let mut hits: Vec<_> = tree.nodes.iter().filter(|(_, nd)| nd.label().is_some_and(|l| l == "Remove")).filter_map(|(_, nd)| nd.bounds()).filter(|b| b.x0 < 700.0).collect();
+            hits.sort_by(|a, b| a.y0.total_cmp(&b.y0));
+            let b = hits[n];
+            let p = egui::pos2((b.x0 - 120.0) as f32, ((b.y0 + b.y1) / 2.0) as f32);
+            tall_frame(ctx, ws, vec![egui::Event::PointerMoved(p)]);
+            let mut ev = btn(p, true);
+            ev.extend(btn(p, false));
+            tall_frame(ctx, ws, ev);
+            for _ in 0..3 {
+                tall_frame(ctx, ws, vec![]);
+            }
+        };
+        open_row(&ctx, &mut ws, 1);
+        let seen = |ctx: &egui::Context, ws: &mut Workspace, t: &str| count_named(ctx, ws, t) + count_text(ctx, ws, t);
+        // B points straight up (90 degrees): nothing of its own to mark
+        assert_eq!(seen(&ctx, &mut ws, "Mark its angle"), 0);
+        assert_eq!(seen(&ctx, &mut ws, "Show its components"), 0);
+        let mut p = ws.params.clone();
+        p.set_f("v2_ang", 60.0);
+        ws.set_params_with_history(p);
+        assert_eq!(seen(&ctx, &mut ws, "Mark its angle"), 1);
+        assert_eq!(seen(&ctx, &mut ws, "Show its components"), 1);
+        let def = &reg()[ws.sel.unwrap()];
+        let before = (def.render)(&ws.params);
+        click_nth(&ctx, &mut ws, "Mark its angle", 0);
+        assert!(ws.params.b("v2_mark") && !ws.params.b("v1_mark"));
+        assert_ne!((def.render)(&ws.params), before);
+        // its mark's own settings, then measured from the vertical
+        assert!(seen(&ctx, &mut ws, "Measured from") >= 1);
+        click_nth(&ctx, &mut ws, "Vertical", 0);
+        assert_eq!(ws.params.s("v2_from"), "Vertical");
+        click_nth(&ctx, &mut ws, "Show its components", 0);
+        assert!(ws.params.b("v2_comps"));
+        assert!(figures::physics::VECTOR_FROM.contains(&"Vertical"));
+    }
+
     /// Population growth: readouts under the Population card, "Fit now" catches the axes up and
     /// unticking "Fit the axes" keeps them where they are.
     #[test]

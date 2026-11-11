@@ -1089,6 +1089,7 @@ impl Workspace {
                 }
                 ui.add_space(13.6);
                 label_control(ui, &mut self.params, &k("lab_mode"), &k("lab"), "Label");
+                self.vector_extras(ui, i, true);
                 ui.add_space(12.0);
             }
             let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
@@ -1106,6 +1107,85 @@ impl Workspace {
         ui.add_space(7.4);
         self.add_chips(ui, "vector-diagram", pdefs);
         ui.add_space(-8.0);
+    }
+
+    /// Vector `i`'s angle mark (from the horizontal or the vertical, with its label) and components, as the
+    /// reference's vector rows offer them for an arrow at an angle; left out where they would draw nothing new
+    /// (along or across the grid), unless already on.
+    fn vector_extras(&mut self, ui: &mut Ui, i: usize, phys: bool) {
+        let k = |s: &str| format!("v{i}_{s}");
+        let fig = "vector-diagram";
+        let (mark_on, comps_on) = (figures::param_relevant(fig, &k("mark"), &self.params), figures::param_relevant(fig, &k("comps"), &self.params));
+        if !mark_on && !comps_on {
+            return;
+        }
+        let page = ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("phys_skin_page"))).unwrap_or(false);
+        let check = |ui: &mut Ui, on: &mut bool, text: &str| -> bool {
+            let r = if phys && page {
+                chem_shell::phys_checkbox(ui, on, text)
+            } else if phys {
+                chem_shell::bio_checkbox(ui, on, text)
+            } else {
+                shell_checkbox(ui, true, on, text)
+            };
+            // named for screen readers (and the panel tests), as a checkbox
+            let v = *on;
+            r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, v, text));
+            r.changed()
+        };
+        ui.add_space(if phys { 12.0 } else { 4.0 });
+        if mark_on {
+            let mut m = self.params.b(&k("mark"));
+            if check(ui, &mut m, "Mark its angle") {
+                self.params.set_b(&k("mark"), m);
+            }
+            if m {
+                if phys {
+                    ui.add_space(10.0);
+                    param_label(ui, "Measured from", "");
+                    ui.add_space(5.9);
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("seg_compact"), true));
+                } else {
+                    small(ui, "Measured from");
+                }
+                if let Some(v) = seg(ui, &figures::physics::VECTOR_FROM, self.params.s(&k("from"))) {
+                    self.params.set_s(&k("from"), &v);
+                }
+                if phys {
+                    ui.add_space(10.0);
+                    param_label(ui, "Angle label", "");
+                    ui.add_space(5.9);
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("seg_compact"), true));
+                } else {
+                    small(ui, "Angle label");
+                }
+                if let Some(v) = seg(ui, &figures::physics::VECTOR_ANGLE_MODES, self.params.s(&k("alab_mode"))) {
+                    self.params.set_s(&k("alab_mode"), &v);
+                }
+                if self.params.s(&k("alab_mode")) == "Text" {
+                    if phys {
+                        ui.add_space(8.6);
+                        if let Some(t) = phys_math_field(ui, ui.make_persistent_id(("vec_alab", i)), self.params.s(&k("alab"))) {
+                            self.params.set_s(&k("alab"), &t);
+                        }
+                    } else {
+                        let mut t = self.params.s(&k("alab")).to_string();
+                        if ui.add(TextEdit::singleline(&mut t).desired_width(160.0)).changed() {
+                            self.params.set_s(&k("alab"), &t);
+                        }
+                    }
+                }
+            }
+        }
+        if comps_on {
+            if phys {
+                ui.add_space(10.0);
+            }
+            let mut c = self.params.b(&k("comps"));
+            if check(ui, &mut c, "Show its components") {
+                self.params.set_b(&k("comps"), c);
+            }
+        }
     }
 
     fn vectors_card(&mut self, ui: &mut Ui, pdefs: &[ParamDef]) {
@@ -1155,6 +1235,7 @@ impl Workspace {
                             self.params.set_s(&k("style"), &v);
                         }
                         label_control(ui, &mut self.params, &k("lab_mode"), &k("lab"), "Label");
+                        self.vector_extras(ui, i, false);
                     });
             });
         }
