@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T02:06:06+00:00",
- "probe_checked_at": "2026-11-10T18:06:05",
+ "generated_at": "2026-11-11T03:54:59+00:00",
+ "probe_checked_at": "2026-11-10T19:54:59",
  "comparable": true,
  "drift": [],
- "pooled": 94.6,
- "mean": 94.5,
+ "pooled": 94.7,
+ "mean": 94.6,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -226,19 +226,11 @@
    "gaps": []
   },
   "dot-and-cross": {
-   "score": 91.1,
-   "got": 51.0,
+   "score": 100.0,
+   "got": 56.0,
    "total": 56.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01d",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "enzyme-kinetics": {
    "score": 100.0,

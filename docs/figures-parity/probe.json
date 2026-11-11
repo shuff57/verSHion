@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-10T18:06:05",
- "ours_built_at": "2026-11-11T02:06:04+00:00",
- "git": "fc9ff81",
+ "checked_at": "2026-11-10T19:54:59",
+ "ours_built_at": "2026-11-11T03:54:58+00:00",
+ "git": "0446228",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -15375,7 +15375,7 @@
       {
        "token": "changes:molecule=CH4",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/a636f4a49b16c05e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/961bf4de8694a3b8.png"
       }
      ]
     },
@@ -15387,7 +15387,7 @@
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/b652a66e5fcfb0f7.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/8c3dfa202da72bc9.png"
       }
      ]
     },
@@ -15399,15 +15399,21 @@
       {
        "token": "changes:{\"kind\":\"Atom or ion\",\"charge\":1}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/88f25e582932d615.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/80dab939dcc26c4a.png"
       }
      ]
     },
     "cap-01d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:formula=CCl4",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/869e2e5da71bf2b2.png"
+      }
+     ]
     },
     "cap-02": {
      "pass": true,
@@ -15417,7 +15423,7 @@
       {
        "token": "changes:shells=Every shell",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/9555818838e892e1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/70a8a216f5082c82.png"
       }
      ]
     },
@@ -15429,7 +15435,7 @@
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"ion_layout\":\"Every ion\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/5b214a1c52ccb3d1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/14a68d7092b3a345.png"
       }
      ]
     },
@@ -15441,7 +15447,7 @@
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/b652a66e5fcfb0f7.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/8c3dfa202da72bc9.png"
       }
      ]
     },
@@ -15453,7 +15459,7 @@
       {
        "token": "changes:swap=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/f25d6664db63364c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/b07d55411c24ca96.png"
       }
      ]
     },
@@ -15465,7 +15471,7 @@
       {
        "token": "changes:style=Print",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/3c15f277a8e250a1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/c8ce3c0d12d4391e.png"
       }
      ]
     },
@@ -15477,7 +15483,7 @@
       {
        "token": "changes:blank=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/6c87c54060bbc305.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/c4272cbb00a3ff04.png"
       }
      ]
     },
@@ -15489,12 +15495,12 @@
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"charges\":\"Blank\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/89d90e1da4ed225a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/77eb98f9abe7a412.png"
       },
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"charges\":\"Off\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/6f0246d9d4e9eddc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/de7c6d137c7e2d3f.png"
       }
      ]
     },
@@ -15518,7 +15524,7 @@
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"edits\":\"q1=1\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/a6e801a7d22000f7.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/434d675fc63786f6.png"
       }
      ]
     },
@@ -15530,7 +15536,7 @@
       {
        "token": "changes:title=Water",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/cb6fce378420e77a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/b618017506630fd1.png"
       }
      ]
     },
@@ -15542,7 +15548,7 @@
       {
        "token": "changes:show_answers=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/63de83e78ea69443.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/956512314e1515bc.png"
       }
      ]
     }

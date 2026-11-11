@@ -28,8 +28,8 @@
    "id": "cap-01d",
    "text": "Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picking",
    "class": "core",
-   "evidence": "",
-   "note": "Ours is pick-only from fixed lists."
+   "evidence": "changes:formula=CCl4",
+   "note": "Built in batch 6, round 290 (2026-11-10). Ours is pick-only from fixed lists."
   },
   {
    "id": "cap-02",

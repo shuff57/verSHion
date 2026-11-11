@@ -59,7 +59,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
 | bohr-model | `bohr-model` | 21 | 2 | 6 | reference has a student version; ours has no show_answers | 92 |
-| dot-and-cross | `dot-and-cross` | 16 | 4 | 7 | — | 91 |
+| dot-and-cross | `dot-and-cross` | 16 | 4 | 7 | — | 100 |
 | gas-syringe | `gas-syringe` | 9 | 1 | 5 | — | 91 |
 | half-life-graph | `half-life-graph` | 36 | 1 | 6 | reference adds/removes rows; ours has no list/data/text-table control | 100 |
 | heating-cooling-curve | `heating-cooling-curve` | 47 | 8 | 6 | — | 85 |
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-11T02:06:06+00:00 · probe: 2026-11-10T18:06:05
+Generated: 2026-11-11T03:54:59+00:00 · probe: 2026-11-10T19:54:59
 
-**Pooled 94.6** · mean 94.5 over 70 figures · built 71 of 71 reference figures
+**Pooled 94.7** · mean 94.6 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -186,8 +186,6 @@ Comparable with the frozen baseline: **yes**
 - `cone`: 91 (60/66)
   - cap-04f [control 3] Type any measure (radius, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (radius, height, lean) with √ — no evidence
-- `dot-and-cross`: 91 (51/56)
-  - cap-01d [core 5] Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki — no evidence
 - `pyramid`: 92 (69/75)
   - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
@@ -244,6 +242,7 @@ Comparable with the frozen baseline: **yes**
 - `circuit-diagram`: 100 (61/61)
 - `composite-shape`: 100 (50/50)
 - `dna-protein-synthesis`: 100 (102/102)
+- `dot-and-cross`: 100 (56/56)
 - `enzyme-kinetics`: 100 (85/85)
 - `half-life-graph`: 100 (84/84)
 - `histogram`: 100 (90/90)
