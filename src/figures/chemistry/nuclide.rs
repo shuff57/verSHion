@@ -259,6 +259,10 @@ fn hyphen_line(d: &mut Doc, p: &Params, segs: &[(String, bool)], cx: f64, base: 
 fn plural(n: i64) -> &'static str { if n == 1 { "" } else { "s" } }
 
 #[cfg(test)]
+#[path = "nuclide_b7.rs"]
+mod b7;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
