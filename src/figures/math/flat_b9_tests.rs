@@ -302,7 +302,9 @@ fn named_points_sit_clear_by_their_own_point_inside_the_page() {
             for (lid, dot) in &pts {
                 let (text, bx) = label_box(&t, lid).unwrap_or_else(|| panic!("{id}: point {lid} has no label {st:?}"));
                 assert!(bx.0 >= 1.0 && bx.1 >= 1.0 && bx.2 <= pw - 1.0 && bx.3 <= ph - 1.0, "{id}: {text} off the page {bx:?} {st:?}");
-                for (o, ob) in &boxes { if *ob != bx { assert!(!overlap(*ob, bx), "{id}: {text} on {o} {st:?}"); } }
+                // clear of every other text by a gap (it must not read as part of another label)
+                let grown = (bx.0 - 4.0, bx.1 - 4.0, bx.2 + 4.0, bx.3 + 4.0);
+                for (o, ob) in &boxes { if *ob != bx { assert!(!overlap(*ob, grown), "{id}: {text} on or against {o} {st:?}"); } }
                 for (a, c) in &strokes {
                     let n = (d2(*a, *c) / 1.0).ceil().max(1.0) as usize;
                     assert!((0..=n).all(|k| { let u = k as f64 / n as f64; pt_box((a.0 + (c.0 - a.0) * u, a.1 + (c.1 - a.1) * u), bx) > 0.5 }), "{id}: {text} on a line {a:?}-{c:?} {st:?}");
@@ -558,4 +560,44 @@ fn reference_names_the_new_rows_as_the_panel_does() {
             assert!(["Heights", "Diagonals", "Center and lines"].contains(&sec.title.as_str()) || k == "value_t", "{id} {k} in {}", sec.title);
         }
     }
+}
+
+/// The drawing without label `id` (its group taken out).
+fn without(svg: &str, id: &str) -> String {
+    let i = svg.find(&format!("<g data-lbl=\"{id}\"")).unwrap();
+    let end = svg[i..].find("</g>").unwrap() + i + 4;
+    format!("{}{}", &svg[..i], &svg[end..])
+}
+
+#[test]
+fn a_named_points_letter_touches_no_other_ink_as_rasterized() {
+    // measured from pixels, not boxes: the letter's own dark pixels (there with it, white without it) have no other ink within
+    // 2 px (the dot, lines, marks and every other label), at 2x
+    let mut letters = 0;
+    for id in IDS.iter().filter(|i| **i != "regular-polygon") {
+        for st in crowded(id).into_iter().step_by(5) {
+            let p = with(id, &st);
+            let t = svg(id, &p);
+            for (lid, _) in drawn_points(&t) {
+                let t0 = without(&t, &lid);
+                let (w, h, a) = crate::figures::to_rgba(&t, 2.0).unwrap();
+                let (_, _, z) = crate::figures::to_rgba(&t0, 2.0).unwrap();
+                let lum = |px: &[u8], x: i64, y: i64| -> u8 { if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 { 255 } else { let o = ((y as u32 * w + x as u32) * 4) as usize; px[o].min(px[o + 1]).min(px[o + 2]) } };
+                let mut ink = 0;
+                for y in 0..h as i64 {
+                    for x in 0..w as i64 {
+                        if lum(&a, x, y) < 110 && lum(&z, x, y) > 200 {
+                            ink += 1;
+                            for dy in -4..=4 { for dx in -4..=4 {
+                                assert!(lum(&z, x + dx, y + dy) > 170, "{id}: {lid}'s letter touches other ink at ({}, {}) {st:?}", (x + dx) as f64 / 2.0, (y + dy) as f64 / 2.0);
+                            } }
+                        }
+                    }
+                }
+                assert!(ink > 20, "{id}: {lid} draws no letter");
+                letters += 1;
+            }
+        }
+    }
+    assert!(letters > 200, "{letters}");
 }

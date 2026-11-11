@@ -260,6 +260,21 @@ fn arc_chords(d: &str) -> Vec<(Pt, Pt)> {
     let at = |k: usize| { let t = a0 + (a1 - a0) * k as f64 / n as f64; (c.0 + r * t.cos(), c.1 + r * t.sin()) };
     (0..n).map(|k| (at(k), at(k + 1))).collect()
 }
+/// Width of `text` as set in the labels' serif at `size`: the capitals at their own advance widths (Liberation Serif / Times:
+/// M and W 0.83 em, I 0.33, most 0.56 to 0.72), everything else as the solids measure it (`solids_b8::serif_w`), a little over.
+pub(super) fn glyph_w(text: &str, size: f64) -> f64 {
+    text.chars().map(|c| match c {
+        'M' | 'W' => 0.833 * 1.06 * size,
+        'I' => 0.333 * 1.06 * size,
+        'J' | 'S' => 0.5 * 1.06 * size,
+        'L' | 'T' | 'Y' | 'Z' => 0.556 * 1.06 * size,
+        'A' | 'B' | 'E' | 'F' | 'P' | 'R' | 'V' | 'X' => 0.611 * 1.06 * size,
+        'C' | 'K' | 'N' => 0.667 * 1.06 * size,
+        'D' | 'G' | 'H' | 'O' | 'Q' | 'U' => 0.722 * 1.06 * size,
+        c => solids_b8::serif_w(&c.to_string(), size),
+    }).sum()
+}
+
 /// Every drawn text's glyph box (as set: the serif's advance widths, cap height above the baseline, a descender below),
 /// moved by its label's drag offset.
 pub(super) fn text_boxes(svg: &str) -> Vec<(String, Bx)> {
@@ -285,7 +300,7 @@ pub(super) fn text_boxes(svg: &str) -> Vec<(String, Bx)> {
         let text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">");
         let (x, y, sz) = (num(head, "x"), num(head, "y"), num(head, "font-size"));
         if x.is_finite() && y.is_finite() && sz.is_finite() && !text.trim().is_empty() {
-            let w = solids_b8::serif_w(&text, sz);
+            let w = glyph_w(&text, sz);
             let x0 = match attr(head, "text-anchor") { "start" => x, "end" => x - w, _ => x - w / 2.0 };
             out.push((text, (x0 + ox, y - 0.72 * sz + oy, x0 + w + ox, y + 0.24 * sz + oy)));
         }
@@ -334,10 +349,11 @@ pub(super) fn place(svg: String, named: &[(String, &'static str, Pt, Pt)], corne
             note(format!("A label sits where the point \u{201c}{text}\u{201d} is, so the point is left off. Drag that label away to show it."));
             continue;
         }
-        let w = solids_b8::serif_w(text, size);
+        let w = glyph_w(text, size);
         let (hw, up, down) = (w / 2.0, 0.72 * size, 0.24 * size);
-        // the text is drawn centred on (x, y) with its baseline 0.34 em below y
-        let bx = |c: Pt| (c.0 - hw, c.1 + 0.34 * size - up, c.0 + hw, c.1 + 0.34 * size + down);
+        // the text is drawn centred on (x, y) with its baseline 0.34 em below y; the italic letter leans right, its top up to
+        // about 0.18 em past its advance width and its foot a little left of it
+        let bx = |c: Pt| (c.0 - hw - 0.05 * size, c.1 + 0.34 * size - up, c.0 + hw + 0.18 * size, c.1 + 0.34 * size + down);
         let mut pref = (at.0 - from.0, at.1 - from.1);
         let pl = (pref.0 * pref.0 + pref.1 * pref.1).sqrt();
         if pl < 1e-9 { pref = (0.0, 1.0); } else { pref = (pref.0 / pl, pref.1 / pl); }
@@ -358,8 +374,10 @@ pub(super) fn place(svg: String, named: &[(String, &'static str, Pt, Pt)], corne
                 let score = gap + 9.0 * dev;
                 if best.is_some_and(|(s, _)| s <= score) { continue; }
                 if b.0 < 2.0 || b.1 < 2.0 || b.2 > pw - 2.0 || b.3 > ph - 2.0 { continue; }
-                if lines.iter().any(|(p, q)| seg_box(*p, *q, b) < 1.5) { continue; }
-                if texts.iter().any(|o| overlap(*o, b, 1.5)) { continue; }
+                // clear of strokes by more than the letter's white halo (0.1 em)
+                if lines.iter().any(|(p, q)| seg_box(*p, *q, b) < 2.5) { continue; }
+                // a clear gap from other text, so it never reads as part of another label ("E12")
+                if texts.iter().any(|o| overlap(*o, b, 5.0)) { continue; }
                 if dts.iter().any(|(q, r)| pt_box(q.0, q.1, b) < r + 1.5) { continue; }
                 let mine = pt_box(at.0, at.1, b);
                 // plainly nearer its own dot than any corner or other point
