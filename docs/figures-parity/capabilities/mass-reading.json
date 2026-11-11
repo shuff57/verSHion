@@ -35,22 +35,22 @@
    "id": "cap-02d",
    "text": "An analytical balance showing 4 decimal places",
    "class": "control",
-   "evidence": "",
-   "note": "Ours stops at 3 places."
+   "evidence": "changes:{\"balance\":\"Digital balance\",\"places\":\"0.0001\"}",
+   "note": "Built in batch 7, round 299 (2026-11-10). Ours stops at 3 places."
   },
   {
    "id": "cap-03a",
    "text": "A weigh boat on the digital balance's pan",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"balance\":\"Digital balance\",\"pan\":\"Weigh boat\"}",
+   "note": "Built in batch 7, round 300 (2026-11-10)."
   },
   {
    "id": "cap-03b",
    "text": "A beaker on the digital balance's pan",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"balance\":\"Digital balance\",\"pan\":\"Beaker\"}",
+   "note": "Built in batch 7, round 301 (2026-11-10)."
   },
   {
    "id": "cap-03c",
@@ -63,8 +63,8 @@
    "id": "cap-03d",
    "text": "Choose 1 to 5 marbles",
    "class": "control",
-   "evidence": "",
-   "note": "Ours has no marble count."
+   "evidence": "changes:{\"pan\":\"Marbles\",\"marbles\":1}",
+   "note": "Built in batch 7, round 302 (2026-11-10). Ours has no marble count."
   },
   {
    "id": "cap-03e",
@@ -98,8 +98,8 @@
    "id": "cap-04b",
    "text": "Pick a random mass",
    "class": "control",
-   "evidence": "",
-   "note": "No random control in ours."
+   "evidence": "changes:mass=347.85 + ui-test:figures::chemistry::readings_b7::tests::random_readings_are_on_the_instrument_and_kept",
+   "note": "Built in batch 7, round 303 (2026-11-10). No random control in ours."
   },
   {
    "id": "cap-05a",

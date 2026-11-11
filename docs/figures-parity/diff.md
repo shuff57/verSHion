@@ -66,12 +66,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | length-reading | `length-reading` | 24 | 3 | 9 | — | 100 |
 | lewis-structures | `lewis-structures` | 15 | 6 | 6 | reference has a student version; ours has no show_answers | 100 |
 | line-spectrum | `line-spectrum` | 23 | 0 | 6 | reference has a student version; ours has no show_answers | 100 |
-| mass-reading | `mass-reading` | 9 | 3 | 6 | — | 76 |
+| mass-reading | `mass-reading` | 10 | 3 | 6 | — | 100 |
 | mass-spectrum | `mass-spectrum` | 35 | 3 | 6 | reference has a student version; ours has no show_answers | 100 |
 | nuclide-notation | `nuclide-notation` | 22 | 0 | 7 | — | 100 |
 | orbital-diagram | `orbital-diagram` | 19 | 6 | 6 | reference has a student version; ours has no show_answers | 100 |
 | particle-diagram | `particle-diagram` | 58 | 1 | 5 | — | 92 |
-| ph-reading | `ph-reading` | 7 | 1 | 5 | — | 76 |
+| ph-reading | `ph-reading` | 8 | 1 | 5 | — | 100 |
 | photoelectron-spectrum | `photoelectron-spectrum` | 18 | 1 | 6 | reference has a student version; ours has no show_answers | 100 |
 | potential-energy-diagram | `reaction-energy-diagram` | 60 | 3 | 7 | — | 100 |
 | structure-editor | `organic-structure` | 9 | 0 | 4 | reference mentions click/drag; ours has no handles | 100 |
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-11T07:54:49+00:00 · probe: 2026-11-10T23:54:49
+Generated: 2026-11-11T08:27:46+00:00 · probe: 2026-11-11T00:27:46
 
-**Pooled 95.1** · mean 95.0 over 70 figures · built 71 of 71 reference figures
+**Pooled 95.6** · mean 95.7 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -114,16 +114,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [control 3] Choose how the point labels show — no evidence
   - cap-03d [control 3] Type the range in multiples of pi — no evidence
   - cap-05 [control 3] Choose which terms of a sequence are shown, n from one whole number to another — no evidence
-- `mass-reading`: 76 (48/63)
-  - cap-02d [control 3] An analytical balance showing 4 decimal places — no evidence
-  - cap-03a [control 3] A weigh boat on the digital balance's pan — no evidence
-  - cap-03b [control 3] A beaker on the digital balance's pan — no evidence
-  - cap-03d [control 3] Choose 1 to 5 marbles — no evidence
-  - cap-04b [control 3] Pick a random mass — no evidence
-- `ph-reading`: 76 (29/38)
-  - cap-03b [control 3] Pick a random pH — no evidence
-  - cap-04a [control 3] A magnifier beside the analog meter's dial — no evidence
-  - cap-04b [control 3] The magnifier in place of the analog dial — no evidence
 - `coordinate-grid`: 83 (127/153)
   - cap-02f [core 5] Use the inverses of sec, csc and cot — no evidence
   - cap-03b [control 3] Draw a row solid, dashed or dotted — no evidence
@@ -243,6 +233,7 @@ Comparable with the frozen baseline: **yes**
 - `lewis-structures`: 100 (51/51)
 - `line-spectrum`: 100 (54/54)
 - `mapping-diagram`: 100 (36/36)
+- `mass-reading`: 100 (63/63)
 - `mass-spectrum`: 100 (49/49)
 - `motion-graphs`: 100 (89/89)
 - `motion-map`: 100 (87/87)
@@ -252,6 +243,7 @@ Comparable with the frozen baseline: **yes**
 - `organic-structure`: 100 (21/21)
 - `osmosis`: 100 (140/140)
 - `parallel-lines`: 100 (46/46)
+- `ph-reading`: 100 (38/38)
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)

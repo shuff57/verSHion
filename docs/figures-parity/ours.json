@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-11T07:54:41+00:00",
-  "src_mtime": 1794383088.253113,
-  "git": "d97d51d",
+  "built_at": "2026-11-11T08:27:43+00:00",
+  "src_mtime": 1794385268.8750265,
+  "git": "4c07a7f",
   "figures": 191
  },
  "figures": {
@@ -10238,12 +10238,21 @@
      "kind": "choice",
      "options": [
       "Nothing",
+      "Weigh boat",
+      "Beaker",
       "Marbles",
       "Rock",
       "Cube",
       "Metal cylinder"
      ],
      "default": "Nothing"
+    },
+    {
+     "key": "marbles",
+     "label": "Number of marbles",
+     "kind": "int",
+     "options": [],
+     "default": "3"
     },
     {
      "key": "mass",
@@ -10259,7 +10268,8 @@
      "options": [
       "0.1",
       "0.01",
-      "0.001"
+      "0.001",
+      "0.0001"
      ],
      "default": "0.01"
     },
@@ -10504,6 +10514,17 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "mag_show",
+     "label": "Magnifier",
+     "kind": "choice",
+     "options": [
+      "Meter only",
+      "Meter and magnifier",
+      "Magnifier only"
+     ],
+     "default": "Meter only"
     },
     {
      "key": "title_style",

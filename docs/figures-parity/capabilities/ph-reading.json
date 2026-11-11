@@ -42,22 +42,22 @@
    "id": "cap-03b",
    "text": "Pick a random pH",
    "class": "control",
-   "evidence": "",
-   "note": "No random control in ours."
+   "evidence": "changes:ph=9.21 + ui-test:figures::chemistry::readings_b7::tests::random_readings_are_on_the_instrument_and_kept",
+   "note": "Built in batch 7, round 304 (2026-11-10). No random control in ours."
   },
   {
    "id": "cap-04a",
    "text": "A magnifier beside the analog meter's dial",
    "class": "control",
-   "evidence": "",
-   "note": "No magnifier on this figure in ours."
+   "evidence": "changes:{\"instrument\":\"Analog meter\",\"mag_show\":\"Meter and magnifier\"}",
+   "note": "Built in batch 7, round 305 (2026-11-10). No magnifier on this figure in ours."
   },
   {
    "id": "cap-04b",
    "text": "The magnifier in place of the analog dial",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"instrument\":\"Analog meter\",\"mag_show\":\"Magnifier only\"}",
+   "note": "Built in batch 7, round 306 (2026-11-10)."
   },
   {
    "id": "cap-05a",

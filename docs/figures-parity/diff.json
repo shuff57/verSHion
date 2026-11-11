@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-11T07:54:49+00:00",
+ "generated_at": "2026-11-11T08:27:46+00:00",
  "spec_generated_at": "2026-11-08T05:54:07+00:00",
  "figures": [
   {
@@ -4308,6 +4308,7 @@
    "params": [
     "balance",
     "pan",
+    "marbles",
     "mass",
     "places",
     "title",
@@ -4316,7 +4317,7 @@
     "answer",
     "title_style"
    ],
-   "param_count": 9,
+   "param_count": 10,
    "handles": 3,
    "label_drag": false,
    "show_answers": false,
@@ -4718,9 +4719,10 @@
     "ph",
     "title",
     "answer",
+    "mag_show",
     "title_style"
    ],
-   "param_count": 7,
+   "param_count": 8,
    "handles": 1,
    "label_drag": false,
    "show_answers": false,
