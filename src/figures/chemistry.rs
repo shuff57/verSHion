@@ -20,6 +20,8 @@ mod lewis;
 mod measure;
 mod length;
 mod readings_b7;
+#[cfg(test)]
+mod heatcurve_b8_frozen;
 pub mod notes;
 pub mod reactionenergy;
 pub mod ratesgraph;
