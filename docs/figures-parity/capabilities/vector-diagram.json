@@ -77,8 +77,8 @@
    "id": "cap-03c",
    "text": "Measure the angle mark from the vertical",
    "class": "control",
-   "evidence": "",
-   "note": "Our mark is always from the horizontal (mech.rs draws the arc from 0°)."
+   "evidence": "changes:{\"mark_angle\":true,\"ang_from\":\"Vertical\"}",
+   "note": "Built in batch 8, round 336 (2026-11-11). Our mark is always from the horizontal (mech.rs draws the arc from 0°)."
   },
   {
    "id": "cap-03d",

@@ -1,15 +1,11 @@
 # Figures parity score
 
-Generated: 2026-11-11T18:58:03+00:00 · probe: 2026-11-11T10:58:03
+Generated: 2026-11-11T19:36:11+00:00 · probe: 2026-11-11T11:36:11
 
-**Pooled 97.2** · mean 97.0 over 70 figures · built 71 of 71 reference figures
+**Pooled 97.3** · mean 97.1 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `vector-diagram`: 84 (48/57)
-  - cap-03b [control 3] Mark the angle of any individual vector — no evidence
-  - cap-03c [control 3] Measure the angle mark from the vertical — no evidence
-  - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
 - `temperature-reading`: 88 (42/48)
   - cap-02c [control 3] The digital probe showing 2 decimal places — no evidence
   - cap-03b [control 3] Pick a random temperature — no evidence
@@ -26,6 +22,9 @@ Comparable with the frozen baseline: **yes**
 - `box-plot`: 90 (51/57)
   - cap-06a [control 3] Finish an end of the number line with an arrow — no evidence
   - cap-06b [control 3] Finish an end of the number line with a circle — no evidence
+- `vector-diagram`: 90 (51/57)
+  - cap-03b [control 3] Mark the angle of any individual vector — no evidence
+  - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
 - `volume-reading`: 90 (53/59)
   - cap-01d [control 3] A 600 mL beaker — no evidence
   - cap-04b [control 3] Pick a random reading — no evidence

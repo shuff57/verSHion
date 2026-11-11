@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T18:58:03+00:00",
- "probe_checked_at": "2026-11-11T10:58:03",
+ "generated_at": "2026-11-11T19:36:11+00:00",
+ "probe_checked_at": "2026-11-11T11:36:11",
  "comparable": true,
  "drift": [],
- "pooled": 97.2,
- "mean": 97.0,
+ "pooled": 97.3,
+ "mean": 97.1,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -784,8 +784,8 @@
    "gaps": []
   },
   "vector-diagram": {
-   "score": 84.2,
-   "got": 48.0,
+   "score": 89.5,
+   "got": 51.0,
    "total": 57.0,
    "unclassified": 0,
    "gaps": [
@@ -794,13 +794,6 @@
      "class": "control",
      "weight": 3.0,
      "text": "Mark the angle of any individual vector",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Measure the angle mark from the vertical",
      "why": "no evidence"
     },
     {

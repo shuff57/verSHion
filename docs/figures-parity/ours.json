@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-11T18:58:01+00:00",
-  "src_mtime": 1794421948.3909533,
-  "git": "c8420e0",
+  "built_at": "2026-11-11T19:36:09+00:00",
+  "src_mtime": 1794423555.8857877,
+  "git": "eb4c792",
   "figures": 191
  },
  "figures": {
@@ -812,6 +812,48 @@
      "default": "Drawn"
     },
     {
+     "key": "v1_mark",
+     "label": "Vector 1: mark its angle",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "v1_from",
+     "label": "Vector 1 angle measured from",
+     "kind": "choice",
+     "options": [
+      "Horizontal",
+      "Vertical"
+     ],
+     "default": "Horizontal"
+    },
+    {
+     "key": "v1_alab_mode",
+     "label": "Vector 1 angle label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "Degrees"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v1_alab",
+     "label": "Vector 1 angle label",
+     "kind": "text",
+     "options": [],
+     "default": "alpha"
+    },
+    {
+     "key": "v1_comps",
+     "label": "Vector 1: show its components",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
      "key": "v2_mag",
      "label": "Vector 2 magnitude",
      "kind": "float",
@@ -853,6 +895,48 @@
       "Left off"
      ],
      "default": "Drawn"
+    },
+    {
+     "key": "v2_mark",
+     "label": "Vector 2: mark its angle",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "v2_from",
+     "label": "Vector 2 angle measured from",
+     "kind": "choice",
+     "options": [
+      "Horizontal",
+      "Vertical"
+     ],
+     "default": "Horizontal"
+    },
+    {
+     "key": "v2_alab_mode",
+     "label": "Vector 2 angle label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "Degrees"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v2_alab",
+     "label": "Vector 2 angle label",
+     "kind": "text",
+     "options": [],
+     "default": "beta"
+    },
+    {
+     "key": "v2_comps",
+     "label": "Vector 2: show its components",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "v3_mag",
@@ -898,6 +982,48 @@
      "default": "Drawn"
     },
     {
+     "key": "v3_mark",
+     "label": "Vector 3: mark its angle",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "v3_from",
+     "label": "Vector 3 angle measured from",
+     "kind": "choice",
+     "options": [
+      "Horizontal",
+      "Vertical"
+     ],
+     "default": "Horizontal"
+    },
+    {
+     "key": "v3_alab_mode",
+     "label": "Vector 3 angle label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "Degrees"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v3_alab",
+     "label": "Vector 3 angle label",
+     "kind": "text",
+     "options": [],
+     "default": "gamma"
+    },
+    {
+     "key": "v3_comps",
+     "label": "Vector 3: show its components",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
      "key": "v4_mag",
      "label": "Vector 4 magnitude",
      "kind": "float",
@@ -941,6 +1067,48 @@
      "default": "Drawn"
     },
     {
+     "key": "v4_mark",
+     "label": "Vector 4: mark its angle",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "v4_from",
+     "label": "Vector 4 angle measured from",
+     "kind": "choice",
+     "options": [
+      "Horizontal",
+      "Vertical"
+     ],
+     "default": "Horizontal"
+    },
+    {
+     "key": "v4_alab_mode",
+     "label": "Vector 4 angle label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "Degrees"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v4_alab",
+     "label": "Vector 4 angle label",
+     "kind": "text",
+     "options": [],
+     "default": "phi"
+    },
+    {
+     "key": "v4_comps",
+     "label": "Vector 4: show its components",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
      "key": "resultant",
      "label": "Show resultant",
      "kind": "bool",
@@ -982,6 +1150,16 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "ang_from",
+     "label": "Angle measured from",
+     "kind": "choice",
+     "options": [
+      "Horizontal",
+      "Vertical"
+     ],
+     "default": "Horizontal"
     },
     {
      "key": "ang_lab_mode",
