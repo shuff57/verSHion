@@ -436,10 +436,14 @@ pub fn handles(p: &Params, cx: f64, off: Pt) -> Vec<Handle> {
         let k = Handle::knob(at, &tip, move |p, t| {
             if unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
             let r = interact::dist(centre, t) / R;
-            let deg = snap_angle(interact::angle_deg(centre, t)) % 360.0;
+            let raw = interact::angle_deg(centre, t);
             let cur = extras_all(p).get(i).map(|e| e.2).unwrap_or(1.0);
             let snapd = |r: f64| ((r * 20.0).round() / 20.0).clamp(0.1, super::pts::MAX_DIST);
             let dist = if on_rim(cur) { if (r - 1.0).abs() > 0.2 { snapd(r) } else { 1.0 } } else if (r - 1.0).abs() < 0.08 { 1.0 } else { snapd(r) };
+            // (checker round 2) a familiar angle, but never onto another point's ray at another distance
+            let snapped = snap_angle(raw) % 360.0;
+            let me = extras_all(p).get(i).map(|e| e.0.clone()).unwrap_or_default();
+            let deg = if snapped != raw.round() % 360.0 && super::drag_b8::on_another_ray(p, &me, snapped, dist) { raw.round() % 360.0 } else { snapped };
             move_extra_to(p, i, deg, dist);
         });
         let nm3 = nm.clone();

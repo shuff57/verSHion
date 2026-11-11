@@ -31,6 +31,8 @@ mod frozen_b8;
 mod drag_b8_tests;
 #[cfg(test)]
 mod drag_b8_r1_tests;
+#[cfg(test)]
+mod drag_b8_r2_tests;
 
 type Pt = (f64, f64);
 
@@ -185,7 +187,8 @@ pub fn meas(p: &Params) -> Meas {
     let (pa, pb, pc) = (pt(g.a), pt(g.b), pt(g.c));
     let (u, w) = ((pa.0 - pc.0, pa.1 - pc.1), (pb.0 - pc.0, pb.1 - pc.1));
     let (lu, lw) = ((u.0 * u.0 + u.1 * u.1).sqrt(), (w.0 * w.0 + w.1 * w.1).sqrt());
-    let c_clash = angdiff(g.c, g.a) < 0.5 || angdiff(g.c, g.b) < 0.5;
+    // (C on A or B: by direction on the circle, as before; by place when a point is off it, checker round 2)
+    let c_clash = if drag_b8::on(p).iter().all(|x| *x) { angdiff(g.c, g.a) < 0.5 || angdiff(g.c, g.b) < 0.5 } else { let [ua, ub, uc] = drag_b8::upos(p); drag_b8::same_place(uc, ua) || drag_b8::same_place(uc, ub) };
     let inscribed = if c_clash || lu < 1e-6 || lw < 1e-6 { f64::NAN } else { ((u.0 * w.0 + u.1 * w.1) / (lu * lw)).clamp(-1.0, 1.0).acos().to_degrees() };
     Meas {
         r,
@@ -426,8 +429,8 @@ fn rows(c: &Ctx) -> Vec<Row> {
         // (batch 8: a point off the circle has no chord, arc, sector, inscribed angle or tangent of its own)
         {
             let o = drag_b8::on(p);
-            let off = |ix: &[usize]| { let l = [&n.a, &n.b, &n.c]; let w: Vec<&str> = ix.iter().filter(|i| !o[**i]).map(|i| l[*i].as_str()).collect(); w.join(" and ") };
-            let say = |w: String| if w.contains(" and ") { format!("{w} are off the circle") } else { format!("{w} is off the circle") };
+            let off = |ix: &[usize]| { let l = [&n.a, &n.b, &n.c]; let w: Vec<String> = ix.iter().filter(|i| !o[**i]).map(|i| l[*i].clone()).collect(); (drag_b8::list(&w), w.len()) };
+            let say = |(w, k): (String, usize)| if k > 1 { format!("{w} are off the circle") } else { format!("{w} is off the circle") };
             match k {
                 K::Arc | K::Sector | K::Chord | K::Om | K::Am if !(o[0] && o[1]) => { out.push(note(say(off(&[0, 1])))); continue; }
                 K::Inscribed if !(o[0] && o[1] && o[2]) => { out.push(note(say(off(&[0, 1, 2])))); continue; }
@@ -555,13 +558,15 @@ fn parts(p: &Params) -> Parts {
     let (radius, diam, chord, bis, tan, sec, central, insc) = (p.b("show_radius"), p.b("show_diameter"), p.b("show_chord"), p.b("show_bisector"), p.b("show_tangent"), p.b("show_secant"), p.b("show_central"), p.b("show_inscribed"));
     let (arc, sector) = (lvl("arc"), lvl("sector"));
     let two = chord || bis || sec || central || insc || arc != 0 || sector != 0 || row_on(K::Chord) || row_on(K::Om) || row_on(K::Am) || row_on(K::Central) || row_on(K::Arc) || row_on(K::Sector);
-    let deg = g.d < 0.5;
+    // A and B in the same place: by direction on the circle, as before; by place when one is off it (checker round 2: B on A's ray
+    // nearer the centre is not on A)
+    let on = drag_b8::on(p);
+    let deg = if on[0] && on[1] { g.d < 0.5 } else { let [ua, ub, _] = drag_b8::upos(p); drag_b8::same_place(ua, ub) };
     let insc = insc && !m.c_clash && !deg;
     // a point off the circle (batch 8) keeps the lines through it; what only a point on the circle has is left off (see drag_b8)
-    let on = drag_b8::on(p);
     let ab = on[0] && on[1];
     let a = radius || diam || tan || two || pts::polygon_n(p) >= 3;
-    Parts { radius, diam: diam && on[0], chord, bis: bis && ab, tan: tan && on[0], sec: sec && (ab || drag_b8::secant_ok(p)), central, arc: if ab { arc } else { 0 }, sector: if ab { sector } else { 0 }, two, a, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc: insc && ab && on[2], insc_lines: insc && !(ab && on[2]), deg }
+    Parts { radius, diam: diam && on[0], chord, bis: bis && ab, tan: tan && on[0], sec: sec && (ab || drag_b8::secant_ok(p)), central: central && (ab || g.d >= 0.5), arc: if ab { arc } else { 0 }, sector: if ab { sector } else { 0 }, two, a, b: (two || p.b("show_b")) && !deg, c: insc || p.b("show_c"), insc: insc && ab && on[2], insc_lines: insc && !(ab && on[2]), deg }
 }
 
 /// Editor-only notes about what the figure could not do as asked (never drawn into the SVG).
@@ -997,7 +1002,7 @@ fn clip_len(p: Pt, d: Pt, max: f64, b: &Rect) -> f64 {
 #[derive(Clone, Debug)]
 /// `pad` is the room added round the figure for its labels; `ox`, `oy` how far the drawing is shifted right and down (the label
 /// room plus any room the tangents need on the left and the top).
-pub struct Report { pub side_fell: Vec<labels_b8::LKey>, pub line_labels: Vec<(labels_b8::LKey, Rect, Pt, Pt)>, pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
+pub struct Report { pub sided_ids: Vec<usize>, pub side_fell: Vec<labels_b8::LKey>, pub line_labels: Vec<(labels_b8::LKey, Rect, Pt, Pt)>, pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub ox: f64, pub oy: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
 
 fn render(p: &Params) -> String { build(p).0 }
 
@@ -1040,6 +1045,7 @@ pub fn control_label(key: &str, p: &Params) -> Option<String> {
 
 /// How hard a render tries to fit its labels: whether the figure labels drop the unit, how much room is added round the figure
 /// (left, right and top; the canvas grows and the drawing is shifted), and the labels that were moved into the readout.
+#[derive(Clone)]
 struct Opt { drop_unit: bool, pad: f64, grow: Grow, exclude: Vec<(usize, String, Option<K>)> }
 
 /// Room the drawing needs beyond the canvas on each side (left, right, top, bottom), for tangents drawn on to where they meet.
@@ -1049,6 +1055,19 @@ pub struct Grow { pub l: f64, pub r: f64, pub t: f64, pub b: f64 }
 /// The figure, with its labels fitted: as drawn, then without the unit on the figure labels (the readout keeps it), then with room
 /// added round the figure, and as a last resort with the labels that still do not fit moved into the readout. No label overlaps another or leaves the canvas.
 pub fn build(p: &Params) -> (String, Report) {
+    // (checker round 2) a figure with labels put on a side is fitted exactly as it is with no side chosen: the same level (units,
+    // room, labels in the readout), so a side moves only its own label; a label put on a side is never sent to the readout
+    if !edit::rows(p.s("label_sides")).is_empty() {
+        let mut q = p.clone();
+        q.set_s("label_sides", "");
+        let mut opt = fit(&q);
+        if !opt.exclude.is_empty() {
+            let sided = core(p, &Opt { exclude: vec![], ..opt.clone() }).1.sided_ids;
+            opt.exclude.retain(|e| !sided.contains(&e.0));
+        }
+        let (svg, rep, _) = core(p, &opt);
+        return (svg, rep);
+    }
     let grow = tangent_grow(p);
     let levels = [(false, 0.0), (true, 0.0), (true, 40.0), (true, 90.0), (true, 150.0)];
     for (d, pad) in levels {
@@ -1058,6 +1077,17 @@ pub fn build(p: &Params) -> (String, Report) {
     let (_, _, bad) = core(p, &Opt { drop_unit: true, pad: 150.0, grow, exclude: vec![] });
     let (svg, rep, _) = core(p, &Opt { drop_unit: true, pad: 150.0, grow, exclude: bad });
     (svg, rep)
+}
+
+/// How `build` fits a figure: the level of `build`'s search that has no label overlapping another or leaving the canvas.
+fn fit(p: &Params) -> Opt {
+    let grow = tangent_grow(p);
+    for (d, pad) in [(false, 0.0), (true, 0.0), (true, 40.0), (true, 90.0), (true, 150.0)] {
+        let o = Opt { drop_unit: d, pad, grow, exclude: vec![] };
+        if core(p, &o).2.is_empty() { return o; }
+    }
+    let (_, _, bad) = core(p, &Opt { drop_unit: true, pad: 150.0, grow, exclude: vec![] });
+    Opt { drop_unit: true, pad: 150.0, grow, exclude: bad }
 }
 
 /// The bottom of the drawing area (above the readout) before any growth.
@@ -1654,15 +1684,20 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         let (pl, sv) = place(labs, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &[], vec![]);
         (pl, sv, vec![])
     } else {
-        let sided = |id: usize| sides.iter().any(|x| x.0 == id);
         let (p0, s0) = place(labs.clone(), &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &[], vec![]);
+        // (checker round 2) a label already on the side asked for stays exactly where it is
+        let already = |id: usize| p0.iter().find(|x| x.id == id).is_some_and(|x| sides.iter().any(|s| s.0 == id && labels_b8::box_on_side(&x.rect, s.1, s.2, s.3)));
+        let moving: Vec<usize> = sides.iter().map(|s| s.0).filter(|id| !already(*id)).collect();
+        let sided = |id: usize| moving.contains(&id);
+        let ghosts: Vec<Placed> = p0.iter().filter(|x| sided(x.id)).cloned().collect();
         let pre: Vec<Placed> = p0.into_iter().filter(|x| !sided(x.id)).collect();
         let mine: Vec<Lab> = labs.into_iter().filter(|l| sided(l.id)).collect();
-        let (pl, s1, fell) = labels_b8::place_sided(mine, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &sides, pre);
+        let (pl, s1, fell) = labels_b8::place_sided(mine, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches, &sides, pre, &ghosts);
         let mut sv: Vec<(usize, String, Option<K>)> = s0.into_iter().filter(|x| !sided(x.0)).collect();
         sv.extend(s1);
         (pl, sv, fell)
     };
+    let sided_ids: Vec<usize> = sides.iter().map(|s| s.0).collect();
     let side_fell: Vec<labels_b8::LKey> = lines_l.iter().filter(|x| side_fell.contains(&x.0)).map(|x| x.1.clone()).collect();
     let leader_col = if print { "#444444" } else { "#888888" };
     // plates first, then the leaders (so that a plate never hides a leader), then the texts
@@ -1705,6 +1740,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let line_labels: Vec<(LKey, Rect, Pt, Pt)> = lines_l.into_iter().filter_map(|(i, k, a, b)| placed.iter().find(|pl| pl.id == i).map(|pl| (k, shr(pl.rect), sh(a), sh(b)))).collect();
     let placed: Vec<Placed> = placed.into_iter().map(|mut pl| { pl.rect = shr(pl.rect); pl.anchor = sh(pl.anchor); pl.line = pl.line.map(|(a, b)| (sh(a), sh(b))); pl.c = sh(pl.c); pl }).collect();
     let report = Report {
+        sided_ids,
         side_fell,
         line_labels,
         placed,

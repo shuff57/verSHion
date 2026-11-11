@@ -82,8 +82,10 @@ pub fn line_ab(p: &Params) -> Option<LineAB> {
     if l2 < 1e-12 { return None; }
     // the line's distance from the centre, and the circle's crossings along it
     let dist = (a.0 * d.1 - a.1 * d.0).abs() / l2.sqrt();
-    if (dist - 1.0).abs() < 0.002 { return Some(LineAB::Touches); }
-    if dist > 1.0 { return Some(LineAB::Misses); }
+    // (checker round 2) a tangent only when the two crossings would be drawn as one: less than 1 px apart (the chord between them
+    // is 2R sqrt(1 - d^2), R = 150 px; a dot is 7.6 px wide), or the line passes the circle by under 0.5 px
+    if dist > 1.0 { return Some(if (dist - 1.0) * R < 0.5 { LineAB::Touches } else { LineAB::Misses }); }
+    if 2.0 * R * (1.0 - dist * dist).max(0.0).sqrt() < 1.0 { return Some(LineAB::Touches); }
     let (qb, qc) = (2.0 * (a.0 * d.0 + a.1 * d.1), a.0 * a.0 + a.1 * a.1 - 1.0);
     let disc = (qb * qb - 4.0 * l2 * qc).max(0.0).sqrt();
     Some(LineAB::Cuts((-qb - disc) / (2.0 * l2), (-qb + disc) / (2.0 * l2)))
@@ -100,6 +102,19 @@ pub fn secant_runs(p: &Params, len: f64) -> (f64, f64) {
         Some(LineAB::Cuts(t1, t2)) => (((t2 - 1.0) * len).max(0.0) + 60.0, (-t1 * len).max(0.0) + 60.0),
         _ => (60.0, 60.0),
     }
+}
+
+/// Two places (unit coordinates) that are one point as drawn: under 0.001 radii apart.
+pub fn same_place(u: V, w: V) -> bool { (u.0 - w.0).hypot(u.1 - w.1) < 1e-3 }
+
+/// Whether direction `dir` at `dist` radii falls on the direction of another drawn point at another distance (A, B, C, the More
+/// points; `skip` is the dragged point's letter): a drag snapped there would put two points on one ray as if they were one.
+pub fn on_another_ray(p: &Params, skip: &str, dir: f64, dist: f64) -> bool {
+    let (n, pt, d, r) = (names(p), parts(p), dirs(p), dists(p));
+    let mut others: Vec<(f64, f64)> = vec![];
+    for (i, (l, drawn)) in [(n.a, pt.a), (n.b, pt.b), (n.c, pt.c)].into_iter().enumerate() { if drawn && l != skip { others.push((d[i], r[i])); } }
+    others.extend(edit::extras_all(p).into_iter().filter(|e| e.0 != skip).map(|e| (e.1, e.2)));
+    others.iter().any(|(e, s)| angdiff(*e, dir) < 0.5 && (s - dist).abs() > 1e-9)
 }
 
 /// A distance in radii as the drag leaves it: to 0.05, inside 0.1 to 3.
@@ -138,14 +153,22 @@ pub fn knob(p: &Params, i: usize, centre: Pt, at: Pt) -> Handle {
     Handle::knob(at, &tip(&nm, d, i == 1, fixed), move |p, t| {
         if super::unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
         let deg = interact::angle_deg(centre, t);
+        let r = interact::dist(centre, t) / R;
+        let nd = if fixed { 1.0 } else { drag_dist(dists(p)[i], r) };
         match i {
             0 => p.set_f("a1", deg.round() % 360.0),
-            1 => super::set_gap(p, snap_angle((deg - wrap(p.f("a1"))).rem_euclid(360.0))),
+            1 => {
+                // (checker round 2) the gap snaps to 30, 45, 60, 90 ... but never onto another point's ray at another distance
+                let a = wrap(p.f("a1"));
+                let raw = (deg - a).rem_euclid(360.0);
+                let snapped = snap_angle(raw);
+                let me = names(p).b;
+                let gap = if snapped != raw.round() % 360.0 && on_another_ray(p, &me, wrap(a + snapped), nd) { raw.round() % 360.0 } else { snapped };
+                super::set_gap(p, gap)
+            }
             _ => p.set_f("c_angle", deg.round() % 360.0),
         }
         if fixed { return; }
-        let r = interact::dist(centre, t) / R;
-        let nd = drag_dist(dists(p)[i], r);
         // (a point that stays on the circle writes nothing new, so an old figure keeps exactly its params)
         if !(edit::on_rim(nd) && edit::on_rim(dists(p)[i])) { p.set_f(DIST_KEYS[i], nd); }
     })
@@ -214,6 +237,9 @@ pub fn warnings(p: &Params) -> Vec<String> {
         if !rows.is_empty() { left.push(format!("the {} {}", list(&rows.iter().map(|s| s.to_string()).collect::<Vec<_>>()), if rows.len() == 1 { "row" } else { "rows" })); }
         if !left.is_empty() { v.push(format!("{off} off the circle, so {a}{b} is not a chord: {} {} not drawn. Drag it back onto the circle to draw {}.", list(&left), if left.len() == 1 { "is" } else { "are" }, if left.len() == 1 { "it" } else { "them" })); }
     }
+    if p.b("show_central") && pt.b && !pt.deg && !(o[0] && o[1]) && geom(p).d < 0.5 {
+        v.push(format!("{a} and {b} are on one line from {o_}, so angle {a}{o_}{b} is 0 and is not drawn.", o_ = n.o));
+    }
     if p.b("show_secant") && pt.b && !pt.deg && !secant_ok(p) {
         let what = if line_ab(p) == Some(LineAB::Touches) { "touches the circle at one point (it is a tangent there)" } else { "misses the circle" };
         v.push(format!("Line {a}{b} {what}, so it is not a secant: the secant is not drawn. Move {a} or {b} so that the line cuts the circle twice."));
@@ -226,7 +252,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
 }
 
 /// `x`, `x and y`, `x, y and z`.
-fn list(items: &[String]) -> String {
+pub fn list(items: &[String]) -> String {
     match items.len() {
         0 => String::new(),
         1 => items[0].clone(),

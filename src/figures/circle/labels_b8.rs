@@ -66,7 +66,7 @@ fn letter_at(p: &Params, u: V) -> Option<String> {
 }
 
 /// The row that puts the label of `key` on the left (or right) side.
-fn row_for(p: &Params, key: &LKey, left: bool) -> Option<String> {
+pub(super) fn row_for(p: &Params, key: &LKey, left: bool) -> Option<String> {
     let s = if left { "left" } else { "right" };
     match key {
         LKey::Word(w) => Some(format!("{w} {s}")),
@@ -168,9 +168,11 @@ fn route(froms: &[Pt], r: &Rect, rects: &[Rect], dots: &[Rect], leaders: &[(Pt, 
 /// its side and touches nothing (no text, point, line or edge of the page), its leader by `leader_ok`; when no such spot is on that
 /// side it goes on the other side by the same rules, and its id is returned in the third list (the notes say so); when neither side
 /// has one, it is placed as any label is (`super::place`).
-pub(super) fn place_sided(labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Vec<Pt>], sides: &[(usize, Pt, Pt, f64)], pre: Vec<Placed>) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>, Vec<usize>) {
+/// `ghosts`: where the labels being moved sit with no side chosen; each is kept clear of the ghosts of those placed after it, so
+/// putting one more label on a side does not move the ones put on a side before (checker round 2).
+pub(super) fn place_sided(labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Vec<Pt>], sides: &[(usize, Pt, Pt, f64)], pre: Vec<Placed>, ghosts: &[Placed]) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>, Vec<usize>) {
     let mut placed = pre;
-    let mut leaders: Vec<(Pt, Pt)> = placed.iter().filter_map(|p| p.line).collect();
+    let mut placed_leaders: Vec<(Pt, Pt)> = placed.iter().filter_map(|p| p.line).collect();
     let mut severe = vec![];
     let mut fell = vec![];
     let mut labs = labs;
@@ -191,7 +193,10 @@ pub(super) fn place_sided(labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)],
                 for f in &froms { cands.push(((f.0 + d.0 * (sup + extra), f.1 + d.1 * (sup + extra)), true)); }
             }
         }
-        let rects: Vec<Rect> = placed.iter().map(|p| p.rect).collect();
+        let later = |g: &&Placed| g.id != l.id && !placed.iter().any(|p| p.id == g.id);
+        let rects: Vec<Rect> = placed.iter().map(|p| p.rect).chain(ghosts.iter().filter(later).map(|g| g.rect)).collect();
+        let all_leaders: Vec<(Pt, Pt)> = placed_leaders.iter().copied().chain(ghosts.iter().filter(later).filter_map(|g| g.line)).collect();
+        let leaders = &all_leaders;
         let try_side = |sign: f64| -> Option<(Rect, Option<(Pt, Pt)>, bool, Pt)> {
             let mut best: Option<((u32, u32, u32, f64), Rect, Option<(Pt, Pt)>, bool, Pt)> = None;
             for (i, (c, far)) in cands.iter().enumerate() {
@@ -214,7 +219,7 @@ pub(super) fn place_sided(labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)],
         let got = try_side(sg).or_else(|| { let o = try_side(-sg); if o.is_some() { fell.push(l.id); } o });
         match got {
             Some((rect, line, on_hatch, anchor)) => {
-                if let Some(ld) = line { leaders.push(ld); }
+                if let Some(ld) = line { placed_leaders.push(ld); }
                 let plate = on_hatch && !segs.iter().any(|s| seg_hits(s.0, s.1, &rect));
                 placed.push(Placed { id: l.id, kind: l.kind, text: l.text, rect, clean: true, leader: line.is_some(), plate, anchor, line, size: l.size, bold: l.bold, c: ((rect.x0 + rect.x1) / 2.0, (rect.y0 + rect.y1) / 2.0) });
             }
@@ -223,7 +228,7 @@ pub(super) fn place_sided(labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)],
                 let pre2 = std::mem::take(&mut placed);
                 let (mut out, sev) = super::place(vec![l], segs, solid, dots, bounds, hatch, &[], pre2);
                 severe.extend(sev);
-                leaders = out.iter().filter_map(|p| p.line).collect();
+                placed_leaders = out.iter().filter_map(|p| p.line).collect();
                 placed.append(&mut out);
             }
         }
