@@ -587,6 +587,37 @@ fn strokes(svg: &str) -> Vec<(Pt, Pt)> {
     v
 }
 
+/// Every dot and ring: (centre, radius with its stroke, a ring).
+fn dots_and_rings(svg: &str) -> Vec<(Pt, f64, bool)> {
+    circles(svg).into_iter().zip(svg.split("<circle ").skip(1)).map(|((c, r), t)| (c, r, t.split("/>").next().unwrap_or("").contains("fill=\"#ffffff\""))).collect()
+}
+
+/// The point a label names: (5, 2) from "C′(5, 2)".
+fn label_point(t: &str) -> Option<Pt> {
+    let (_, xy) = t.rsplit_once('(')?;
+    let (x, y) = xy.trim_end_matches(')').split_once(", ")?;
+    let n = |v: &str| v.trim().replace('\u{2212}', "-").parse::<f64>().ok();
+    Some((n(x)?, n(y)?))
+}
+
+/// The distance from point q to segment a-b.
+fn pt_seg(q: Pt, a: Pt, b: Pt) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 < 1e-12 { 0.0 } else { (((q.0 - a.0) * dx + (q.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
+    (q.0 - a.0 - t * dx).hypot(q.1 - a.1 - t * dy)
+}
+
+/// The distance between segments p-q and a-b (0 when they cross).
+fn seg_seg(p: Pt, q: Pt, a: Pt, b: Pt) -> f64 {
+    let side = |o: Pt, s: Pt, t: Pt| (s.0 - o.0) * (t.1 - o.1) - (s.1 - o.1) * (t.0 - o.0);
+    if side(a, b, p) * side(a, b, q) < 0.0 && side(p, q, a) * side(p, q, b) < 0.0 { return 0.0; }
+    pt_seg(p, a, b).min(pt_seg(q, a, b)).min(pt_seg(a, p, q)).min(pt_seg(b, p, q))
+}
+
+/// The distance from a point to a box (0 inside it).
+fn rect_gap(b: &Bx, q: Pt) -> f64 { (b.0 - q.0).max(q.0 - b.2).max(0.0).hypot((b.1 - q.1).max(q.1 - b.3).max(0.0)) }
+
 /// The thin leader lines from a point to a label standing off it.
 fn leaders(svg: &str) -> Vec<(Pt, Pt)> {
     svg.split("<line ").skip(1).map(|l| format!(" {}", l.split("/>").next().unwrap())).filter(|t| attr(t, "stroke-width") == 0.9).map(|t| ((attr(&t, "x1"), attr(&t, "y1")), (attr(&t, "x2"), attr(&t, "y2")))).collect()
@@ -601,7 +632,7 @@ fn overlap(a: &Bx, b: &Bx) -> bool { a.0 < b.2 - 0.5 && b.0 < a.2 - 0.5 && a.1 <
 
 /// Checks every vertex label with coordinates on `svg`: on the page, off every other text, every side, mirror line
 /// and axis, every dot and ring.
-fn coordinate_labels_are_clear(svg: &str, what: &str) {
+fn coordinate_labels_are_clear(svg: &str, fr: &Frame, what: &str) {
     let (w, h) = svg_size(svg);
     let texts = ink_texts(svg);
     let sides = strokes(svg);
@@ -629,8 +660,45 @@ fn coordinate_labels_are_clear(svg: &str, what: &str) {
         }
     }
     assert!(n > 0, "{what}: no coordinate labels");
+    // a label reads as its own point's: no other point's dot is nearer it (than 10 px, for a label on a leader)
+    let leads = leaders(svg);
+    let tagged = dots_and_rings(svg);
+    for (t, b) in texts.iter().filter(|(t, _)| is_label(t)) {
+        let Some(at) = label_point(t) else { continue };
+        let own = fr.to_svg(at);
+        // the handles' frame is the drawing's, a grid drawn larger included: the point's dot is where it says
+        assert!(tagged.is_empty() || tagged.iter().any(|&(c, _, ring)| !ring && (c.0 - own.0).hypot(c.1 - own.1) < 0.02), "{what}: no dot for {t} at {own:?}");
+        let on_leader = leads.iter().any(|&(a, _)| (a.0 - own.0).hypot(a.1 - own.1) < 5.0);
+        let lim = if on_leader { 10.0 } else { rect_gap(b, own).min(10.0) };
+        for &(c, _, ring) in &tagged {
+            if ring || (c.0 - own.0).hypot(c.1 - own.1) < 1.0 { continue; }
+            assert!(rect_gap(b, c) >= lim - 2.0, "{what}: {t} at {b:?} sits nearer the dot at {c:?} ({:.1} px) than its own point at {own:?} ({:.1} px)", rect_gap(b, c), rect_gap(b, own));
+        }
+    }
+    // a leader: at most 165 px; not within 3 px of another point's dot or a ring, another leader, nor along a line
+    for (n, &(a, e)) in leads.iter().enumerate() {
+        let len = (e.0 - a.0).hypot(e.1 - a.1);
+        assert!(len <= 165.0, "{what}: the leader from {a:?} to {e:?} is {len:.0} px long");
+        // (not straight across or up: it would lie along a gridline, every figure here has them)
+        assert!((e.0 - a.0).abs() >= 0.07 * len && (e.1 - a.1).abs() >= 0.07 * len, "{what}: the leader from {a:?} to {e:?} lies along a gridline");
+        // (it is drawn from 4 px off its point)
+        let own = (a.0 - (e.0 - a.0) * 4.0 / len, a.1 - (e.1 - a.1) * 4.0 / len);
+        for &(c, r, _) in &tagged {
+            if (c.0 - own.0).hypot(c.1 - own.1) < 1.0 { continue; }
+            let gap = pt_seg(c, a, e) - r;
+            assert!(gap >= 3.0, "{what}: the leader from {a:?} to {e:?} passes {gap:.1} px from the dot or ring at {c:?}");
+        }
+        for (m, &(p, q)) in leads.iter().enumerate() {
+            if m != n { let g = seg_seg(a, e, p, q); assert!(g >= 3.0, "{what}: the leaders from {a:?} and {p:?} come {g:.1} px apart"); }
+        }
+        let k = len.ceil().max(1.0) as usize;
+        for &(p, q) in &sides {
+            let along = (0..=k).filter(|&t| pt_seg((a.0 + (e.0 - a.0) * t as f64 / k as f64, a.1 + (e.1 - a.1) * t as f64 / k as f64), p, q) < 2.5).count();
+            assert!(along <= 12, "{what}: the leader from {a:?} to {e:?} runs {along} px along the line from {p:?} to {q:?}");
+        }
+    }
     // a leader line (a label standing off its point) runs through no text, its own label's included
-    for (a, e) in leaders(svg) {
+    for (a, e) in leads {
         for (t, b) in &texts {
             let inner = (b.0 + 0.5, b.1 + 0.5, b.2 - 0.5, b.3 - 0.5);
             for st in 0..=40 {
@@ -675,7 +743,7 @@ fn coordinate_labels_never_overlap_text_lines_dots_or_rings() {
                     let tag: String = format!("{name} {size} {}", extra.len()).chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
                     std::fs::write(format!("{dir}/tf-04h-{tag}.png"), crate::figures::to_png(&svg, 1.3).unwrap()).unwrap();
                 }
-                coordinate_labels_are_clear(&svg, &format!("{name} at {size} {extra:?}"));
+                coordinate_labels_are_clear(&svg, &layout(&with(&l)).frame, &format!("{name} at {size} {extra:?}"));
             }
         }
     }

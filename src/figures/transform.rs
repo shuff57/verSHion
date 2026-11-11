@@ -719,9 +719,42 @@ pub struct Layout {
     pub frame: Frame,
     /// Some image runs past the largest grid and is cut off at its edge.
     pub clipped: bool,
+    /// How much larger than usual the grid is drawn: 1, or more when the labels with their coordinates need the room.
+    pub zoom: f64,
 }
 
-pub fn layout(p: &Params) -> Layout {
+pub fn layout(p: &Params) -> Layout { layout_at(p, zoom(p)) }
+
+/// The steps the grid is drawn larger by, when the vertex labels with their coordinates find no clear spots: each
+/// a little more room between the points for labels of the same size.
+const ZOOMS: [f64; 6] = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
+
+thread_local! {
+    /// The zoom found for the last few figures (keyed by their params), so the handles sit where the drawing put them
+    /// without placing every label again.
+    static ZOOM_SEEN: std::cell::RefCell<Vec<(String, f64)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The figure drawn at the first zoom whose labels are all clear (1 for a figure whose labels are plain letters), and
+/// that zoom.
+fn draw(p: &Params) -> (String, Report, f64) {
+    let key = format!("{:?}", p.0);
+    let mut out = None;
+    for (k, &z) in ZOOMS.iter().enumerate() {
+        let (svg, rep, clear) = build_at(p, z);
+        if clear || k + 1 == ZOOMS.len() { out = Some((svg, rep, z)); break; }
+    }
+    let out = out.unwrap();
+    ZOOM_SEEN.with(|c| { let mut c = c.borrow_mut(); c.retain(|e| e.0 != key); c.push((key, out.2)); if c.len() > 16 { c.remove(0); } });
+    out
+}
+
+fn zoom(p: &Params) -> f64 {
+    let key = format!("{:?}", p.0);
+    ZOOM_SEEN.with(|c| c.borrow().iter().find(|e| e.0 == key).map(|e| e.1)).unwrap_or_else(|| draw(p).2)
+}
+
+fn layout_at(p: &Params, zoom: f64) -> Layout {
     let pre = vertices(p);
     let steps = steps(p);
     let mut images: Vec<Vec<Pt>> = Vec::new();
@@ -765,13 +798,13 @@ pub fn layout(p: &Params) -> Layout {
     if x1 - x0 < 1.0 { x1 = x0 + 1.0; }
     if y1 - y0 < 1.0 { y1 = y0 + 1.0; }
     // a square grid in shape: equal pixels per unit on both axes, fitted into the plot area
-    let (plot, _) = plot_size(p);
+    let plot = plot_size(p).0 * zoom;
     let u = (plot / (x1 - x0)).min(plot / (y1 - y0));
     let (gw, gh) = ((x1 - x0) * u, (y1 - y0) * u);
     let (title, letter) = top_room(p);
     let frame = Frame { x0, x1, y0, y1, u, ox: L + (plot - gw) / 2.0, oy: T + title + letter + (plot - gh) / 2.0 };
     let clipped = pts.iter().any(|&q| !frame.holds(q));
-    Layout { pre, image, images, steps, frame, clipped }
+    Layout { pre, image, images, steps, frame, clipped, zoom }
 }
 
 pub struct Report {
@@ -846,13 +879,53 @@ fn g_name(label: &str) -> String {
     label.rsplit_once('(').map(|(a, _)| a.to_string()).unwrap_or_else(|| label.to_string())
 }
 
+/// What a long label and its leader must keep clear of: the text placed so far, the other points' dots, the centre
+/// rings, the strokes a box may not sit on (sides, mirror lines, axes, leaders drawn), the lines a leader may cross but
+/// not run along (sides, mirror lines, axes), the leaders drawn, and the page.
+struct Scene<'a> {
+    taken: &'a [Rect],
+    dots: &'a [Pt],
+    rings: &'a [Pt],
+    sides: &'a [(Pt, Pt, f64)],
+    lines: &'a [(Pt, Pt)],
+    leads: &'a [(Pt, Pt)],
+    page: (f64, f64),
+    /// Gridlines are drawn: a leader straight across or straight up would lie hidden along one.
+    grid: bool,
+}
+
+/// The distance from point q to segment a-b.
+fn seg_dist(q: Pt, a: Pt, b: Pt) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 < 1e-12 { 0.0 } else { (((q.0 - a.0) * dx + (q.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
+    (q.0 - a.0 - t * dx).hypot(q.1 - a.1 - t * dy)
+}
+
+/// The distance between segments p-q and a-b (0 when they cross).
+fn segs_dist(p: Pt, q: Pt, a: Pt, b: Pt) -> f64 {
+    let side = |o: Pt, s: Pt, t: Pt| (s.0 - o.0) * (t.1 - o.1) - (s.1 - o.1) * (t.0 - o.0);
+    if side(a, b, p) * side(a, b, q) < 0.0 && side(p, q, a) * side(p, q, b) < 0.0 { return 0.0; }
+    seg_dist(p, a, b).min(seg_dist(q, a, b)).min(seg_dist(a, p, q)).min(seg_dist(b, p, q))
+}
+
+/// The distance from point q to the box r (0 inside it).
+fn rect_dist(r: &Rect, q: Pt) -> f64 { (r.x0 - q.0).max(q.0 - r.x1).max(0.0).hypot((r.y0 - q.1).max(q.1 - r.y1).max(0.0)) }
+
+/// The longest a leader may be: further off, a label no longer reads as its point's.
+const LEAD_MAX: f64 = 160.0;
+
 /// Where a long label goes (a letter with its coordinates, typed letters, a point several figures share): like
-/// [`label_spot`], out from the shape's middle first, but it never settles for a spot on a side, a dot, a ring,
-/// other text or off the page while a clear one exists. It turns an eighth of 45 degrees at a time and stands further
-/// off, up to 230 px; a label standing more than 20 px off gets a thin leader line to its point (the end of that line
-/// is returned), which must not run through other text.
-#[allow(clippy::too_many_arguments)]
-fn long_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[Rect], dots: &[Pt], sides: &[(Pt, Pt, f64)], page: (f64, f64)) -> (f64, f64, &'static str, Option<Pt>, f64) {
+/// [`label_spot`], out from the shape's middle first, then turned an eighth of 45 degrees at a time, then a little
+/// further off, the nearest clear spot taken. Clear means: on the page, off every side, dot, ring and text, and no
+/// other point's dot nearer the label than its own (or, for a label standing off, within 14 px of it). A label more
+/// than 20 px off gets a thin leader to its point (the end of the line is returned), at most [`LEAD_MAX`] long, which
+/// runs through no text, passes no other dot or ring within 4 px, keeps 3 px off every other leader and does not lie
+/// along a side, axis, mirror line or gridline (crossing one is fine). The cost returned is 0 for a clear spot.
+///
+/// With `count` set it places nothing and returns, as the cost, how many clear spots there are: the labels with the
+/// fewest are placed first.
+fn long_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, sc: &Scene, count: bool) -> (f64, f64, &'static str, Option<Pt>, f64) {
     let n = pts.len() as f64;
     let c = (pts.iter().map(|q| q.0).sum::<f64>() / n, pts.iter().map(|q| q.1).sum::<f64>() / n);
     let (vx, vy) = (fr.px(pts[i].0), fr.py(pts[i].1));
@@ -869,27 +942,51 @@ fn long_spot(fr: &Frame, pts: &[Pt], i: usize, size: f64, text: &str, taken: &[R
     for k in 1..32 { let t = k as f64 * 5.625; turns.push(t); turns.push(-t); }
     turns.push(180.0);
     let mut best: (f64, (f64, f64, &'static str, Option<Pt>)) = (f64::MAX, (0.0, 0.0, "middle", None));
-    for gap in [4.0, 7.0, 11.0, 16.0, 22.0, 30.0, 40.0, 52.0, 66.0, 82.0, 100.0, 125.0, 155.0, 190.0, 230.0] {
+    let mut clear = 0;
+    for gap in [4.0, 6.0, 8.0, 11.0, 14.0, 17.0, 20.0, 24.0, 28.0, 33.0, 38.0, 44.0, 50.0, 57.0, 64.0, 72.0, 80.0, 90.0, 100.0, 110.0, 120.0, 132.0, 145.0, 160.0] {
+        // at one distance, of the clear spots with a leader, the one whose leader crosses fewest lines
+        let mut here: Option<(f64, (f64, f64, &'static str, Option<Pt>))> = None;
         for &turn in &turns {
             let (s, co) = f64::to_radians(turn).sin_cos();
             let (x, y) = at(dx * co - dy * s, dx * s + dy * co, gap);
             let r = text_rect(x, y, size, "middle", text);
             let rp = Rect { x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad };
-            let mut k = box_cost(&rp, taken, dots, sides);
-            if r.x0 < 2.0 || r.y0 < 2.0 || r.x1 > page.0 - 2.0 || r.y1 > page.1 - 2.0 { k += 1000.0; }
-            // a leader, from the point to the nearest edge of the box: clear of every other text
+            let mut k = box_cost(&rp, sc.taken, sc.dots, sc.sides);
+            if r.x0 < 2.0 || r.y0 < 2.0 || r.x1 > sc.page.0 - 2.0 || r.y1 > sc.page.1 - 2.0 { k += 1000.0; }
+            k += 100.0 * sc.rings.iter().filter(|&&q| rect_dist(&r, q) < 6.5).count() as f64;
+            // a leader, from the point to the nearest edge of the box
             let lead = (gap > 20.0).then(|| { let e = (vx.clamp(r.x0, r.x1), vy.clamp(r.y0, r.y1)); let l = ((e.0 - vx).hypot(e.1 - vy)).max(1.0); (e.0 - (e.0 - vx) / l * 2.0, e.1 - (e.1 - vy) / l * 2.0) });
+            // the label reads as its own point's: no other dot nearer it
+            // (measured from the box with its margin, against a text measured only roughly)
+            let own = if lead.is_some() { 14.0 } else { (rect_dist(&r, (vx, vy)) + 1.0).min(14.0) };
+            k += 100.0 * sc.dots.iter().filter(|&&q| rect_dist(&rp, q) < own).count() as f64;
             // a nearer spot is better than a far one with the same cost
             let mut k = k + gap * 0.001;
-            if k >= best.0 { continue; }
+            if k >= if count { 1.0 } else { best.0 } { continue; }
             if let Some(e) = lead {
-                let seg = [((vx, vy), e, 1.0)];
-                k += 100.0 * taken.iter().filter(|q| box_cost(q, &[], &[], &seg) > 0.0).count() as f64;
+                let l = (e.0 - vx).hypot(e.1 - vy).max(1.0);
+                let s0 = (vx + (e.0 - vx) * 4.0 / l, vy + (e.1 - vy) * 4.0 / l);
+                if l > LEAD_MAX + 5.0 { k += 100.0; }
+                let seg = [(s0, e, 1.0)];
+                k += 100.0 * sc.taken.iter().filter(|q| box_cost(q, &[], &[], &seg) > 0.0).count() as f64;
+                k += 100.0 * sc.dots.iter().filter(|&&q| seg_dist(q, s0, e) < 7.0).count() as f64;
+                k += 100.0 * sc.rings.iter().filter(|&&q| (q.0 - vx).hypot(q.1 - vy) > 1.0 && seg_dist(q, s0, e) < 9.5).count() as f64;
+                k += 100.0 * sc.leads.iter().filter(|&&(a, b)| segs_dist(s0, e, a, b) < 3.5).count() as f64;
+                // along a line: more than 9 px of the leader within 2.5 px of one line
+                let m = (l - 4.0).ceil().max(1.0) as usize;
+                let along = |a: Pt, b: Pt| (0..=m).filter(|&t| seg_dist((s0.0 + (e.0 - s0.0) * t as f64 / m as f64, s0.1 + (e.1 - s0.1) * t as f64 / m as f64), a, b) < 2.5).count() > 9;
+                k += 100.0 * sc.lines.iter().filter(|&&(a, b)| along(a, b)).count() as f64;
+                if sc.grid && ((e.0 - vx).abs() < 0.09 * l || (e.1 - vy).abs() < 0.09 * l) { k += 100.0; }
+                k += 0.05 * sc.lines.iter().filter(|&&(a, b)| segs_dist(s0, e, a, b) == 0.0).count() as f64;
             }
-            if k < 1.0 { return (x, y, "middle", lead, k); }
+            if count { if k < 1.0 { clear += 1; } continue; }
+            if k < 1.0 && lead.is_none() { return (x, y, "middle", lead, k); }
+            if k < 1.0 { if here.is_none_or(|h| k < h.0) { here = Some((k, (x, y, "middle", lead))); } continue; }
             if k < best.0 { best = (k, (x, y, "middle", lead)); }
         }
+        if let Some((k, (x, y, a, lead))) = here { return (x, y, a, lead, k); }
     }
+    if count { return (0.0, 0.0, "middle", None, clear as f64); }
     (best.1.0, best.1.1, best.1.2, best.1.3, best.0)
 }
 
@@ -919,14 +1016,17 @@ struct Drawn {
     letters: Vec<String>,
 }
 
-pub fn build(p: &Params) -> (String, Report) {
+pub fn build(p: &Params) -> (String, Report) { let (svg, rep, _) = draw(p); (svg, rep) }
+
+/// The figure drawn with its grid `zoom` times the usual size, and whether every long label found a clear spot.
+fn build_at(p: &Params, zoom: f64) -> (String, Report, bool) {
     let dec = p.i("dec").clamp(0, 2);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     // the question copy: both figures drawn, the transformation left to name
     let qv = !ans && p.b("question");
     let f = svg::label_factor(p.s("label_size"));
-    let Layout { pre, image, images, steps, frame: fr, clipped } = layout(p);
+    let Layout { pre, image, images, steps, frame: fr, clipped, .. } = layout_at(p, zoom);
     let n = steps.len();
     let show_pre = p.b("show_pre");
     let closed = p.b("closed");
@@ -948,6 +1048,7 @@ pub fn build(p: &Params) -> (String, Report) {
     // its canvas, its letters at fixed offsets, no vertex dots, its axis numbers and its one-line readout
     let old = p.b("fit");
     let (plot, wbase) = plot_size(p);
+    let (plot, wbase) = (plot * zoom, wbase + plot * (zoom - 1.0));
     // under the grid: the x-axis title (below the numbers when the x-axis is the grid's bottom edge), then the readout
     let xtitle = shows_title(p, "xtitle_mode", "xtitle");
     let xtitle_room = if xtitle { 26.0 * f + if y0 >= 0.0 { 14.0 } else { 0.0 } } else { 0.0 };
@@ -1250,6 +1351,7 @@ pub fn build(p: &Params) -> (String, Report) {
     // spot on a side, a dot, a ring, other text or off the page, and a point several figures share is named once
     // ("C, B''(2, 5)"). Plain letters are placed exactly as they always were.
     let long_mode = pt_letters && figs.iter().any(|g| g.letters.iter().any(|t| t.chars().count() > 2));
+    let mut all_clear = true;
     // the leader lines drawn, which no axis number may sit on
     let mut leader_sides: Vec<(Pt, Pt, f64)> = Vec::new();
     if !long_mode {
@@ -1324,47 +1426,79 @@ pub fn build(p: &Params) -> (String, Report) {
                 (format!("{}({}, {})", nm.join(", "), num(s.at.0, dec), num(s.at.1, dec)), ink.to_string())
             }
         }).collect();
-        let place = |order: &[usize]| -> (f64, Vec<Placed>) {
+        // the lines a label may not sit on and a leader may not run along: every side, arrow, mirror line and axis
+        let mut lines: Vec<(Pt, Pt)> = all_sides.iter().map(|&(a, b, _)| (a, b)).collect();
+        lines.extend(mirror_sides.iter().copied());
+        lines.extend([((ox, py(0.0)), (ox + gw, py(0.0))), ((px(0.0), oy), (px(0.0), oy + gh))]);
+        let place = |order: &[usize]| -> (f64, Vec<Placed>, Vec<usize>) {
             let mut taken = labels.clone();
             taken.extend_from_slice(&reserved);
             let mut leaders: Vec<(Pt, Pt)> = Vec::new();
             let mut out = Vec::new();
             let mut total = 0.0;
+            let mut failed = Vec::new();
             for &k in order {
                 let s = &spots[k];
                 let (j, i) = s.members[0];
                 let (text, col) = texts[k].clone();
                 let v = fr.to_svg(s.at);
-                let others: Vec<Pt> = dots.iter().filter(|d| (d.0 - v.0).abs() + (d.1 - v.1).abs() > 0.5).copied().chain(ring_dots.iter().copied()).collect();
-                let mut sides: Vec<(Pt, Pt, f64)> = all_sides.clone();
-                sides.extend(weigh(&mirror_sides, 1.0));
+                let near = |q: &&Pt| (q.0 - v.0).abs() + (q.1 - v.1).abs() > 0.5;
+                let others: Vec<Pt> = dots.iter().filter(near).copied().collect();
+                let mut sides: Vec<(Pt, Pt, f64)> = weigh(&lines, 1.0);
                 sides.extend(weigh(&leaders, 1.0));
-                sides.extend([((ox, py(0.0)), (ox + gw, py(0.0)), 1.0), ((px(0.0), oy), (px(0.0), oy + gh), 1.0)]);
-                let (x, y, a, lead, cost) = long_spot(&fr, &figs[j].pts, i, size, &text, &taken, &others, &sides, page);
+                let sc = Scene { taken: &taken, dots: &others, rings: &ring_px, sides: &sides, lines: &lines, leads: &leaders, page, grid: grid_w > 0.0 };
+                let (x, y, a, lead, cost) = long_spot(&fr, &figs[j].pts, i, size, &text, &sc, false);
                 total += cost.max(1.0) - 1.0;
-                if let Some(e) = lead { leaders.push((v, e)); }
+                if cost >= 1.0 { failed.push(k); }
+                if let Some(e) = lead { let l = (e.0 - v.0).hypot(e.1 - v.1).max(1.0); leaders.push(((v.0 + (e.0 - v.0) * 4.0 / l, v.1 + (e.1 - v.1) * 4.0 / l), e)); }
                 taken.push(text_rect(x, y, size, a, &text));
                 out.push(Placed { x, y, a, lead, v, text, col });
             }
-            (total, out)
+            (total, out, failed)
         };
         let n_spots = spots.len();
         let crowd = |k: usize| { let v = fr.to_svg(spots[k].at); spots.iter().filter(|o| { let w = fr.to_svg(o.at); (w.0 - v.0).hypot(w.1 - v.1) < 70.0 }).count() };
         let key = |k: usize| fr.to_svg(spots[k].at);
         let mut orders: Vec<Vec<usize>> = Vec::new();
         let base: Vec<usize> = (0..n_spots).collect();
+        // the labels with the fewest clear spots (on the figure without other labels) first
+        let room: Vec<usize> = (0..n_spots).map(|k| {
+            let s = &spots[k];
+            let (j, i) = s.members[0];
+            let v = fr.to_svg(s.at);
+            let others: Vec<Pt> = dots.iter().filter(|q| (q.0 - v.0).abs() + (q.1 - v.1).abs() > 0.5).copied().collect();
+            let sides = weigh(&lines, 1.0);
+            let mut taken = labels.clone();
+            taken.extend_from_slice(&reserved);
+            let sc = Scene { taken: &taken, dots: &others, rings: &ring_px, sides: &sides, lines: &lines, leads: &[], page, grid: grid_w > 0.0 };
+            long_spot(&fr, &figs[j].pts, i, size, &texts[k].0, &sc, true).4 as usize
+        }).collect();
+        let mut o = base.clone(); o.sort_by_key(|&k| room[k]); orders.push(o);
         let mut o = base.clone(); o.sort_by_key(|&k| std::cmp::Reverse(crowd(k))); orders.push(o);
         orders.push(base.clone());
         let mut o = base.clone(); o.sort_by(|&a, &b| key(a).1.total_cmp(&key(b).1)); orders.push(o.clone()); o.reverse(); orders.push(o);
         let mut o = base.clone(); o.sort_by(|&a, &b| key(a).0.total_cmp(&key(b).0)); orders.push(o.clone()); o.reverse(); orders.push(o);
         let mut o = base.clone(); o.reverse(); orders.push(o);
+        // the fewest-room order first; while some label finds no clear spot, it is moved to the front and the labels are
+        // placed again (a few times), then the other orders are tried
         let mut best: Option<(f64, Vec<Placed>)> = None;
-        for o in &orders {
-            let (cost, placed) = place(o);
-            let clear = cost < 1e-9;
+        let mut tried: Vec<Vec<usize>> = Vec::new();
+        let mut queue: std::collections::VecDeque<Vec<usize>> = orders.into_iter().collect();
+        let mut repairs = 0;
+        while let Some(o) = queue.pop_front() {
+            if tried.contains(&o) { continue; }
+            let (cost, placed, failed) = place(&o);
+            tried.push(o.clone());
             if best.as_ref().is_none_or(|b| cost < b.0) { best = Some((cost, placed)); }
-            if clear { break; }
+            if cost < 1e-9 { break; }
+            if repairs < 8 {
+                repairs += 1;
+                let mut r: Vec<usize> = failed.clone();
+                r.extend(o.iter().filter(|k| !failed.contains(k)));
+                queue.push_front(r);
+            }
         }
+        all_clear = best.as_ref().is_none_or(|b| b.0 < 1e-9);
         for pl in best.map(|b| b.1).unwrap_or_default() {
             if let Some(e) = pl.lead {
                 let (v, l) = (pl.v, ((e.0 - pl.v.0).hypot(e.1 - pl.v.1)).max(1.0));
@@ -1492,7 +1626,7 @@ pub fn build(p: &Params) -> (String, Report) {
         ));
     }
 
-    (d.finish(), Report { image, images, bounds: (x0, x1, y0, y1), labels })
+    (d.finish(), Report { image, images, bounds: (x0, x1, y0, y1), labels }, all_clear)
 }
 
 /// The mirror line across the grid, in units (the axes return `None`: they are drawn already).
