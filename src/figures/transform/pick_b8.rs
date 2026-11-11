@@ -44,6 +44,14 @@ pub(super) fn idle_note(p: &Params) -> Option<String> {
     }
 }
 
+/// After the panel changed `key`: a Pick left pointing at a transformation that can no longer be picked for (the
+/// teacher changed it to a translation, or deleted its Then line) is put back to Off, so it is not left armed behind
+/// a hidden switch to fire when the transformation is changed back. Choosing such an option in the Pick switch
+/// itself keeps it, with the note that says why nothing is picked.
+pub(crate) fn panel_changed(key: &str, p: &mut Params) {
+    if key != "pick" && idle_note(p).is_some() { p.set_s("pick", PICKS[0]); }
+}
+
 /// How far `q` (grid units) is from each line a click can pick, in [`PICK_LINES`]' order.
 fn line_dists(q: Pt) -> [f64; 4] {
     let r = std::f64::consts::FRAC_1_SQRT_2;

@@ -1895,6 +1895,8 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
 
 /// Batch 8: picking a mirror line or a centre with a click on the grid.
 mod pick_b8;
+/// After the panel changed `key` (see `pick_b8::panel_changed`).
+pub fn panel_changed(key: &str, p: &mut Params) { pick_b8::panel_changed(key, p); }
 
 /// The figure as it was before batch 2, kept as a fixture: saved figures from then must load and render unchanged.
 #[cfg(test)]

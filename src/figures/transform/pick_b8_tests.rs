@@ -394,3 +394,37 @@ fn wild_clicks_and_hovers_keep_the_figure_in_range() {
         }
     }
 }
+
+/// A Pick is not left armed behind a hidden switch: when the panel changes the transformation it points at into one
+/// with nothing to pick (a translation, or a Then line deleted), Pick goes back to Off and no note is left; changing
+/// back does not re-arm it. Choosing such an option in the Pick switch itself is kept, with its note.
+#[test]
+fn a_pick_that_can_no_longer_pick_is_switched_off_by_the_panel() {
+    let change = |p: &mut Params, key: &'static str, v: &str| {
+        let old = p.0.get(key).cloned().unwrap();
+        p.set_s(key, v);
+        crate::figures::after_panel_change(ID, key, &old, p);
+    };
+    let mut p = with(&[s("op", "Rotate"), s("pick", "First")]);
+    assert!(super::picking(&p, &steps(&p)).is_some());
+    change(&mut p, "op", "Translate");
+    assert_eq!(p.s("pick"), "Off");
+    assert!(warnings(&p).iter().all(|w| !w.contains("Pick on the grid")), "{:?}", warnings(&p));
+    change(&mut p, "op", "Reflect");
+    assert_eq!(p.s("pick"), "Off", "changing back does not re-arm the pick");
+    assert!(handles(&p).iter().any(|h| h.tip.starts_with("Drag vertex")), "the usual handles are there");
+    // a later transformation whose Then line is deleted
+    let mut p = with(&[s("then", "rotate 90 clockwise about (2, 1)"), s("pick", "Second")]);
+    assert!(super::picking(&p, &steps(&p)).is_some());
+    change(&mut p, "then", "");
+    assert_eq!(p.s("pick"), "Off");
+    // a change that leaves the pick possible keeps it
+    let mut p = with(&[s("op", "Rotate"), s("pick", "First")]);
+    change(&mut p, "op", "Dilate");
+    assert_eq!(p.s("pick"), "First");
+    // chosen in the switch itself, an option with nothing to pick stays, and says why
+    let mut p = with(&[]);
+    change(&mut p, "pick", "Second");
+    assert_eq!(p.s("pick"), "Second");
+    assert!(warnings(&p).iter().any(|w| w.contains("there is no second transformation")));
+}

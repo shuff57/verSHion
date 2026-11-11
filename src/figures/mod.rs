@@ -807,6 +807,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     if id == chemistry::halflife::ID {
         chemistry::halflife::panel_changed(key, old, p);
     }
+    if id == "transformations" {
+        transform::panel_changed(key, p);
+    }
     if id == "predator-prey" {
         biology::popdyn::pp_panel_changed(key, p);
     }
