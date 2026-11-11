@@ -850,7 +850,7 @@ impl crate::App {
                         (cur, t) => std::mem::discriminant(cur) == std::mem::discriminant(t),
                     };
                     let badge = if matches!(icon, NavIcon::Account) { who.as_ref() } else { None };
-                    if self.dock_item(ui, icon, label, active, item_w, narrow, badge) {
+                    if dock_item(ui, icon, label, active, item_w, narrow, badge) {
                         self.screen = target;
                     }
                 }
@@ -881,6 +881,15 @@ impl crate::App {
 /// reads as a utility beside light/dark rather than a ninth page.
 const DOCK_REPORT_CLEAR: f32 = 24.0;
 
+/// Keyboard focus on any dock item: the app's ring (2 pt, 1 pt clear of the edge, corner + 1, as
+/// `pageshell` and `kit` draw it) in the dock's own ink, drawn only while the item has focus. The
+/// accent green is about 1.6:1 on the light rail.
+fn dock_focus_ring(ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response) {
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect.expand(1.0), CornerRadius::same(14), Stroke::new(2.0, theme::dock_text()), StrokeKind::Outside);
+    }
+}
+
 /// A dock utility item (not a page): `glyph` over a small `label`, hover tint, drawn like
 /// the light/dark button.
 fn dock_glyph_item(ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, glyph: &str, label: &str, narrow: bool) {
@@ -888,11 +897,7 @@ fn dock_glyph_item(ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, glyph
         ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
-    // Keyboard focus: the app's ring (2 pt, 1 pt clear of the edge, corner + 1, as `pageshell` and
-    // `kit` draw it) in the dock's own ink. The accent green is about 1.6:1 on the light rail.
-    if resp.has_focus() {
-        ui.painter().rect_stroke(rect.expand(1.0), CornerRadius::same(14), Stroke::new(2.0, theme::dock_text()), StrokeKind::Outside);
-    }
+    dock_focus_ring(ui, rect, resp);
     let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
     crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
     ui.painter().text(
@@ -909,83 +914,97 @@ impl crate::App {
     /// sun while it is dark), drawn like a nav item: icon over a small label.
     fn theme_button(&mut self, ui: &mut egui::Ui, w: f32, narrow: bool) {
         let dark = theme::is_dark();
-        let h = if narrow { 52.0 } else { 56.0 };
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
-        if resp.hovered() {
-            ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-        }
-        let (glyph, label) = if dark { (crate::handicons::SUN, "Light") } else { (crate::handicons::MOON, "Dark") };
-        let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
-        crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
-        // Labelled at every width: bare outline glyphs on the narrow rail were "guesswork".
-        ui.painter().text(
-            Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
-            egui::Align2::CENTER_CENTER,
-            label,
-            egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
-            theme::dock_text(),
-        );
-        let hint = format!("Switch to {} mode", label.to_lowercase());
-        if resp.clone().on_hover_text(hint).clicked() {
+        if theme_toggle(ui, w, narrow, dark) {
             let ctx = ui.ctx().clone();
             self.set_dark_mode(!dark, &ctx);
         }
     }
+}
 
-    /// One dock nav item: icon over a small label; active = highlighter fill, dark ink.
-    fn dock_item(
-        &mut self,
-        ui: &mut egui::Ui,
-        icon: NavIcon,
-        label: &str,
-        active: bool,
-        w: f32,
-        narrow: bool,
-        badge: Option<&(String, String)>,
-    ) -> bool {
-        let h = if narrow { 52.0 } else { 56.0 };
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
-        if active {
-            ui.painter().rect_filled(rect, CornerRadius::same(13), theme::highlighter());
-        } else if resp.hovered() {
-            ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
-        }
-        let (icon_c, text_c) = if active {
-            (theme::on_highlighter(), theme::on_highlighter())
-        } else {
-            (theme::dock_text(), theme::dock_text())
-        };
-        let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
-        if let Some((initials, _)) = badge {
-            // Signed in: the person's initials in an accent disc stand in for the generic account icon.
-            let centre = Pos2::new(rect.center().x, cy);
-            ui.painter().circle_filled(centre, 12.5, theme::accent_col());
-            ui.painter().text(
-                centre,
-                egui::Align2::CENTER_CENTER,
-                initials,
-                egui::FontId::new(if initials.chars().count() > 1 { 11.0 } else { 13.0 }, theme::bold_family()),
-                theme::on_accent_col(),
-            );
-        } else {
-            draw_nav_icon_k(ui.painter(), icon, Pos2::new(rect.center().x, cy), icon_c, 21.0 / 16.0);
-        }
-        if let Some((_, email)) = badge {
-            resp.clone().on_hover_text(format!("Signed in as {email}"));
-        }
-        // Labelled at every width: on the narrow rail eight unlabelled outline glyphs (three of them
-        // alike) could only be told apart by hovering.
-        ui.painter().text(
-            Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
-            egui::Align2::CENTER_CENTER,
-            label,
-            egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
-            text_c,
-        );
-        resp.clicked()
+/// The light/dark button as drawn: `dark` is the current mode. True when it was pressed.
+fn theme_toggle(ui: &mut egui::Ui, w: f32, narrow: bool, dark: bool) -> bool {
+    let h = if narrow { 52.0 } else { 56.0 };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
+    dock_focus_ring(ui, rect, &resp);
+    let (glyph, label) = if dark { (crate::handicons::SUN, "Light") } else { (crate::handicons::MOON, "Dark") };
+    let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
+    crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
+    // Labelled at every width: bare outline glyphs on the narrow rail were "guesswork".
+    ui.painter().text(
+        Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
+        theme::dock_text(),
+    );
+    // Named for screen readers by what it does, matching the visible label ("Dark mode").
+    let name = format!("{label} mode");
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &name));
+    let hint = format!("Switch to {} mode", label.to_lowercase());
+    resp.on_hover_text(hint).clicked()
+}
 
+/// One dock nav item: icon over a small label; active = highlighter fill, dark ink.
+fn dock_item(
+    ui: &mut egui::Ui,
+    icon: NavIcon,
+    label: &str,
+    active: bool,
+    w: f32,
+    narrow: bool,
+    badge: Option<&(String, String)>,
+) -> bool {
+    let h = if narrow { 52.0 } else { 56.0 };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
+    // Named for screen readers by its visible label. The active page is not marked: egui's only
+    // flag for it (`WidgetInfo::selected`) makes every item a toggle button.
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
+    if active {
+        ui.painter().rect_filled(rect, CornerRadius::same(13), theme::highlighter());
+    } else if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
+    }
+    dock_focus_ring(ui, rect, &resp);
+    let (icon_c, text_c) = if active {
+        (theme::on_highlighter(), theme::on_highlighter())
+    } else {
+        (theme::dock_text(), theme::dock_text())
+    };
+    let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
+    if let Some((initials, _)) = badge {
+        // Signed in: the person's initials in an accent disc stand in for the generic account icon.
+        let centre = Pos2::new(rect.center().x, cy);
+        ui.painter().circle_filled(centre, 12.5, theme::accent_col());
+        ui.painter().text(
+            centre,
+            egui::Align2::CENTER_CENTER,
+            initials,
+            egui::FontId::new(if initials.chars().count() > 1 { 11.0 } else { 13.0 }, theme::bold_family()),
+            theme::on_accent_col(),
+        );
+    } else {
+        draw_nav_icon_k(ui.painter(), icon, Pos2::new(rect.center().x, cy), icon_c, 21.0 / 16.0);
+    }
+    if let Some((_, email)) = badge {
+        resp.clone().on_hover_text(format!("Signed in as {email}"));
+    }
+    // Labelled at every width: on the narrow rail eight unlabelled outline glyphs (three of them
+    // alike) could only be told apart by hovering.
+    ui.painter().text(
+        Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
+        text_c,
+    );
+    resp.clicked()
+}
+
+impl crate::App {
     // ---------- welcome ----------
 
     pub fn draw_welcome(&mut self, ctx: &egui::Context) {
@@ -3396,6 +3415,79 @@ mod tests {
         // A non-empty bank_id is never touched.
         assert_eq!(exams[0].items[1].bank_id, "other-bank");
         assert_eq!(exams[0].items[1].question_id, "q2"); // ids pass through verbatim
+    }
+
+    /// A dock nav item takes keyboard focus: Tab reaches it, it reports focus (the state its
+    /// ring is drawn from, and nothing else at rest), and Enter activates it as a click does.
+    #[test]
+    fn tab_reaches_a_dock_item_and_enter_opens_it() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        let mut first = true;
+        let mut h = Harness::builder().build_ui_state(
+            move |ui, opened: &mut bool| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                if dock_item(ui, NavIcon::Home, "Home", false, 48.0, true, None) {
+                    *opened = true;
+                }
+            },
+            false,
+        );
+        h.run();
+        assert!(!h.get_by_label("Home").is_focused() && !*h.state(), "at rest: no focus, nothing opened");
+        h.key_press(egui::Key::Tab);
+        h.run();
+        assert!(h.get_by_label("Home").is_focused(), "Tab focuses the dock item");
+        assert!(!*h.state());
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert!(*h.state(), "Enter on the focused item opens its page");
+    }
+
+    /// Tab walks a dock of the active item, an inactive one and the light/dark button in order;
+    /// each takes focus under its own name, and Enter presses the light/dark button.
+    #[test]
+    fn tab_walks_active_and_inactive_items_and_the_theme_button() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        let mut first = true;
+        let mut h = Harness::builder().build_ui_state(
+            move |ui, pressed: &mut Vec<&'static str>| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                if dock_item(ui, NavIcon::Home, "Home", true, 48.0, true, None) {
+                    pressed.push("Home");
+                }
+                if dock_item(ui, NavIcon::Banks, "Banks", false, 48.0, true, None) {
+                    pressed.push("Banks");
+                }
+                if theme_toggle(ui, 48.0, true, false) {
+                    pressed.push("Dark mode");
+                }
+            },
+            Vec::new(),
+        );
+        h.run();
+        let names = ["Home", "Banks", "Dark mode"];
+        for n in names {
+            assert!(!h.get_by_label(n).is_focused(), "{n} is not focused at rest");
+        }
+        for (i, n) in names.iter().enumerate() {
+            h.key_press(egui::Key::Tab);
+            h.run();
+            for (j, m) in names.iter().enumerate() {
+                assert_eq!(h.get_by_label(m).is_focused(), i == j, "after {} Tab(s), focus on {m}", i + 1);
+            }
+            assert!(h.state().is_empty(), "Tab to {n} presses nothing");
+        }
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert_eq!(h.state().as_slice(), ["Dark mode"], "Enter presses the focused light/dark button");
     }
 
     #[test]

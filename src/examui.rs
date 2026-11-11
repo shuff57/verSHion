@@ -1901,39 +1901,7 @@ fn format_control(ui: &mut egui::Ui, which: u8, f: &mut model::Exam, salt: &str,
             }
         }
         1 => {
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(STEPPER_W, STRIP_H), Sense::hover());
-            let minus = Rect::from_min_size(rect.min, Vec2::new(30.0, STRIP_H));
-            let plus = Rect::from_min_size(rect.right_top() - Vec2::new(30.0, 0.0), Vec2::new(30.0, STRIP_H));
-            let r_minus = ui.interact(minus, ui.id().with(("fmt_minus", salt)), Sense::click());
-            let r_plus = ui.interact(plus, ui.id().with(("fmt_plus", salt)), Sense::click());
-            let p = ui.painter();
-            p.rect(rect, CornerRadius::same(10), theme::card(), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
-            for (r, resp, is_plus) in [(minus, &r_minus, false), (plus, &r_plus, true)] {
-                if resp.hovered() {
-                    p.rect_filled(r.shrink(2.0), CornerRadius::same(12), theme::hover_bg());
-                }
-                let c = r.center();
-                let s = Stroke::new(1.8, theme::ink());
-                p.line_segment([c + Vec2::new(-4.0, 0.0), c + Vec2::new(4.0, 0.0)], s);
-                if is_plus {
-                    p.line_segment([c + Vec2::new(0.0, -4.0), c + Vec2::new(0.0, 4.0)], s);
-                }
-            }
-            p.text(
-                rect.center(),
-                Align2::CENTER_CENTER,
-                format!("{} pt", f.body_pt.round() as i32),
-                FontId::new(kit::ty::META, theme::bold_family()),
-                theme::ink(),
-            );
-            if r_minus.clicked() && f.body_pt > 9.0 {
-                f.body_pt = (f.body_pt.round() - 1.0).max(9.0);
-                changed = true;
-            }
-            if r_plus.clicked() && f.body_pt < 14.0 {
-                f.body_pt = (f.body_pt.round() + 1.0).min(14.0);
-                changed = true;
-            }
+            changed |= size_stepper(ui, f, salt, true);
         }
         2 => {
             let m = f.page_margins();
@@ -1980,6 +1948,55 @@ fn format_control(ui: &mut egui::Ui, which: u8, f: &mut model::Exam, salt: &str,
                 changed = true;
             }
         }
+    }
+    changed
+}
+
+/// The text-size stepper: −, the size in bold, +. `framed` gives it its own outline; inside the
+/// desktop strip's Page setup group it has none (the group draws one round all four).
+fn size_stepper(ui: &mut egui::Ui, f: &mut model::Exam, salt: &str, framed: bool) -> bool {
+    let mut changed = false;
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(STEPPER_W, STRIP_H), Sense::hover());
+    let minus = Rect::from_min_size(rect.min, Vec2::new(30.0, STRIP_H));
+    let plus = Rect::from_min_size(rect.right_top() - Vec2::new(30.0, 0.0), Vec2::new(30.0, STRIP_H));
+    let r_minus = ui.interact(minus, ui.id().with(("fmt_minus", salt)), Sense::click());
+    let r_plus = ui.interact(plus, ui.id().with(("fmt_plus", salt)), Sense::click());
+    let p = ui.painter();
+    if framed {
+        p.rect(rect, CornerRadius::same(10), theme::card(), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
+    } else {
+        p.rect_filled(rect, CornerRadius::ZERO, theme::card());
+    }
+    for (r, resp, is_plus) in [(minus, &r_minus, false), (plus, &r_plus, true)] {
+        if resp.hovered() {
+            p.rect_filled(r.shrink(2.0), CornerRadius::same(12), theme::hover_bg());
+        }
+        if resp.has_focus() {
+            p.rect_stroke(r.shrink(2.0), CornerRadius::same(8), Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
+        }
+        let c = r.center();
+        let s = Stroke::new(1.8, theme::ink());
+        p.line_segment([c + Vec2::new(-4.0, 0.0), c + Vec2::new(4.0, 0.0)], s);
+        if is_plus {
+            p.line_segment([c + Vec2::new(0.0, -4.0), c + Vec2::new(0.0, 4.0)], s);
+        }
+    }
+    p.text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        format!("{} pt", f.body_pt.round() as i32),
+        FontId::new(kit::ty::META, theme::bold_family()),
+        theme::ink(),
+    );
+    r_minus.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Smaller text"));
+    r_plus.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Larger text"));
+    if r_minus.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() && f.body_pt > 9.0 {
+        f.body_pt = (f.body_pt.round() - 1.0).max(9.0);
+        changed = true;
+    }
+    if r_plus.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() && f.body_pt < 14.0 {
+        f.body_pt = (f.body_pt.round() + 1.0).min(14.0);
+        changed = true;
     }
     changed
 }
@@ -2105,14 +2122,24 @@ fn strip_sep(ui: &mut egui::Ui) {
     ui.painter().vline(r.center().x, r.y_range(), Stroke::new(1.0, theme::border()));
 }
 
-/// The strip's widths: (the five controls with their gaps, the zoom well with its separator,
-/// the summary with its separator), for the words and summary given.
-fn strip_need(ui: &egui::Ui, labels: &[String; 5], zoom_label: Option<&str>, summary: Option<&str>) -> f32 {
-    let mut w = 0.0;
-    for (i, l) in labels.iter().enumerate() {
-        w += if i == 2 { STEPPER_W } else { strip_ctl_w(ui, l, i != 3) };
-    }
-    w += STRIP_GAP * 4.0;
+/// The name in front of the strip's Page setup group (as on the narrow top card's button).
+const STRIP_GROUP_NAME: &str = "Page setup";
+
+/// The group name's width: 13 semibold.
+fn strip_name_w(ui: &egui::Ui) -> f32 {
+    ui.painter().layout_no_wrap(STRIP_GROUP_NAME.to_string(), FontId::new(kit::ty::META, theme::semibold()), theme::text_col()).size().x.ceil()
+}
+
+/// The Page setup group's width: paper, heading, text size and margins, joined (no gaps).
+fn strip_group_w(ui: &egui::Ui, labels: &[String; 5]) -> f32 {
+    strip_ctl_w(ui, &labels[0], true) + strip_ctl_w(ui, &labels[1], true) + STEPPER_W + strip_ctl_w(ui, &labels[3], false)
+}
+
+/// The strip's widths: the "Page setup" name (when `name`) and its joined group, a separator and
+/// Blanks, then the zoom well and the summary each behind a separator, for the words and summary given.
+fn strip_need(ui: &egui::Ui, labels: &[String; 5], name: bool, zoom_label: Option<&str>, summary: Option<&str>) -> f32 {
+    let mut w = if name { strip_name_w(ui) + STRIP_GAP } else { 0.0 } + strip_group_w(ui, labels);
+    w += STRIP_GAP + SEP_W + STRIP_GAP + strip_ctl_w(ui, &labels[4], true);
     if let Some(z) = zoom_label {
         w += STRIP_GAP + SEP_W + STRIP_GAP + zoom_well_w(ui, z);
     }
@@ -2123,28 +2150,50 @@ fn strip_need(ui: &egui::Ui, labels: &[String; 5], zoom_label: Option<&str>, sum
     w
 }
 
-/// What the strip shows at a width: whether "paper"/"heading" stay in the controls, and the summary.
+/// What the strip shows at a width: whether the "Page setup" name shows, whether "paper"/"heading"
+/// stay in the controls, and the summary.
 #[derive(Clone, Debug, Default, PartialEq)]
 struct StripFit {
+    name: bool,
     words: bool,
     summary: Option<String>,
 }
 
-/// Fits the strip into `avail`, dropping in order: the "Page N of M ·" prefix, the whole summary
-/// (the page header prints the counts), then the words "paper"/"heading" (tooltips keep them).
-/// Never two rows.
+/// Fits the strip into `avail`, dropping in order: the "Page setup" name (the group's outline
+/// still groups it), the "Page N of M ·" prefix, the whole summary (the page header prints the
+/// counts), then the words "paper"/"heading" (tooltips keep them). Never two rows.
 fn strip_fit(ui: &egui::Ui, f: &model::Exam, avail: f32, zoom_label: Option<&str>, full: &str, short: &str) -> StripFit {
-    for (words, summary) in [(true, Some(full)), (true, Some(short)), (true, None), (false, None)] {
-        if strip_need(ui, &strip_labels(f, words), zoom_label, summary) <= avail {
-            return StripFit { words, summary: summary.map(str::to_string) };
+    let steps = [(true, true, Some(full)), (false, true, Some(full)), (false, true, Some(short)), (false, true, None), (false, false, None)];
+    for (name, words, summary) in steps {
+        if strip_need(ui, &strip_labels(f, words), name, zoom_label, summary) <= avail {
+            return StripFit { name, words, summary: summary.map(str::to_string) };
         }
     }
-    StripFit { words: false, summary: None }
+    StripFit { name: false, words: false, summary: None }
 }
 
-/// A strip control: card fill, 1 pt `edge`, the words at 13 in ink, a caret when it opens a menu;
-/// the accent wash while `on`.
-fn strip_button(ui: &mut egui::Ui, text: &str, caret: bool, on: bool) -> egui::Response {
+/// Where a strip control sits: alone (its own outline), or a segment of the joined Page setup
+/// group (no outline of its own; `first`/`last` round the group's ends).
+#[derive(Clone, Copy, PartialEq)]
+enum Seg {
+    Alone,
+    In { first: bool, last: bool },
+}
+
+/// A segment's corners: the group's outer corners only.
+fn seg_corners(seg: Seg) -> CornerRadius {
+    match seg {
+        Seg::Alone => CornerRadius::same(10),
+        Seg::In { first, last } => {
+            let (l, r) = (if first { 10 } else { 0 }, if last { 10 } else { 0 });
+            CornerRadius { nw: l, sw: l, ne: r, se: r }
+        }
+    }
+}
+
+/// A strip control: card fill, 1 pt `edge` (alone), the words at 13 in ink, a caret when it opens
+/// a menu; the accent wash while `on`.
+fn strip_button(ui: &mut egui::Ui, text: &str, caret: bool, on: bool, seg: Seg) -> egui::Response {
     let w = strip_ctl_w(ui, text, caret);
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, STRIP_H), Sense::click());
     let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
@@ -2156,9 +2205,23 @@ fn strip_button(ui: &mut egui::Ui, text: &str, caret: bool, on: bool) -> egui::R
         theme::card()
     };
     let p = ui.painter();
-    p.rect(rect, CornerRadius::same(10), fill, Stroke::new(1.0, if on { theme::accent_col() } else { theme::edge() }), StrokeKind::Inside);
-    if resp.has_focus() {
-        p.rect_stroke(rect.expand(1.0), CornerRadius::same(11), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+    let cr = seg_corners(seg);
+    match seg {
+        Seg::Alone => {
+            p.rect(rect, cr, fill, Stroke::new(1.0, if on { theme::accent_col() } else { theme::edge() }), StrokeKind::Inside);
+            if resp.has_focus() {
+                p.rect_stroke(rect.expand(1.0), CornerRadius::same(11), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+            }
+        }
+        Seg::In { .. } => {
+            p.rect_filled(rect, cr, fill);
+            if on {
+                p.rect_stroke(rect, cr, Stroke::new(1.0, theme::accent_col()), StrokeKind::Inside);
+            }
+            if resp.has_focus() {
+                p.rect_stroke(rect.shrink(1.0), cr, Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
+            }
+        }
     }
     p.text(Pos2::new(rect.left() + 12.0, rect.center().y), Align2::LEFT_CENTER, text, FontId::new(kit::ty::META, theme::sans_family()), theme::ink());
     if caret {
@@ -2169,50 +2232,71 @@ fn strip_button(ui: &mut egui::Ui, text: &str, caret: bool, on: bool) -> egui::R
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-/// The desktop strip's five controls with the words inside them; returns true when the format changed.
-fn strip_controls(ui: &mut egui::Ui, f: &mut model::Exam, words: bool, margins_open: &mut bool) -> bool {
+/// The desktop strip's controls with the words inside them: the "Page setup" name and one joined
+/// group (paper, heading, text size, margins), then a separator and Blanks on its own (it sets the
+/// questions' answer space, not the page). Returns true when the format changed.
+fn strip_controls(ui: &mut egui::Ui, f: &mut model::Exam, name: bool, words: bool, margins_open: &mut bool) -> bool {
     let labels = strip_labels(f, words);
     let mut changed = false;
     ui.spacing_mut().item_spacing.x = STRIP_GAP;
-    // Paper style.
-    let r = strip_button(ui, &labels[0], true, false).on_hover_text("Paper style");
-    let mut sel = f.paper_style;
-    egui::Popup::menu(&r).show(|ui| {
-        ui.set_min_width(170.0);
-        for ps in model::PaperStyle::ALL {
-            ui.selectable_value(&mut sel, ps, ps.label()).on_hover_text(ps.blurb());
+    if name {
+        ui.label(RichText::new(STRIP_GROUP_NAME).size(kit::ty::META).family(theme::semibold()).color(theme::text_col()));
+    }
+    let group = ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let mut cuts = Vec::new();
+        let mut span = Rect::NOTHING;
+        // Paper style.
+        let r = strip_button(ui, &labels[0], true, false, Seg::In { first: true, last: false }).on_hover_text("Paper style");
+        span = span.union(r.rect);
+        cuts.push(r.rect.right());
+        let mut sel = f.paper_style;
+        egui::Popup::menu(&r).show(|ui| {
+            ui.set_min_width(170.0);
+            for ps in model::PaperStyle::ALL {
+                ui.selectable_value(&mut sel, ps, ps.label()).on_hover_text(ps.blurb());
+            }
+        });
+        if sel != f.paper_style {
+            f.paper_style = sel;
+            changed = true;
         }
-    });
-    if sel != f.paper_style {
-        f.paper_style = sel;
-        changed = true;
-    }
-    // Heading size.
-    let r = strip_button(ui, &labels[1], true, false).on_hover_text("Heading size");
-    let cur = head_idx(f.heading_pt);
-    let mut sel = cur;
-    egui::Popup::menu(&r).show(|ui| {
-        ui.set_min_width(130.0);
-        for (i, l) in HEAD_LABELS.iter().enumerate() {
-            ui.selectable_value(&mut sel, i, *l);
+        // Heading size.
+        let r = strip_button(ui, &labels[1], true, false, Seg::In { first: false, last: false }).on_hover_text("Heading size");
+        cuts.push(r.rect.right());
+        let cur = head_idx(f.heading_pt);
+        let mut sel = cur;
+        egui::Popup::menu(&r).show(|ui| {
+            ui.set_min_width(130.0);
+            for (i, l) in HEAD_LABELS.iter().enumerate() {
+                ui.selectable_value(&mut sel, i, *l);
+            }
+        });
+        if sel != cur {
+            f.heading_pt = HEAD_PT[sel];
+            changed = true;
         }
+        // Text size: the stepper.
+        let r = ui.scope(|ui| changed |= size_stepper(ui, f, "bar", false)).response.on_hover_text("Text size");
+        cuts.push(r.rect.right());
+        // Margins: opens the margins dialog.
+        let r = strip_button(ui, &labels[3], false, *margins_open, Seg::In { first: false, last: true }).on_hover_text("Margins (all sides or each side)");
+        span = span.union(r.rect);
+        if r.clicked() {
+            *margins_open = !*margins_open;
+        }
+        (cuts, span)
     });
-    if sel != cur {
-        f.heading_pt = HEAD_PT[sel];
-        changed = true;
+    // One outline round the group (the controls' own height), a hairline between its parts.
+    let (cuts, rect) = group.inner;
+    let p = ui.painter();
+    for x in cuts {
+        p.vline(x, rect.y_range(), Stroke::new(1.0, theme::edge()));
     }
-    // Text size: the stepper.
-    ui.scope(|ui| {
-        changed |= format_control(ui, 1, f, "bar", margins_open);
-    })
-    .response
-    .on_hover_text("Text size");
-    // Margins: opens the margins dialog.
-    if strip_button(ui, &labels[3], false, *margins_open).on_hover_text("Margins (all sides or each side)").clicked() {
-        *margins_open = !*margins_open;
-    }
+    p.rect_stroke(rect, CornerRadius::same(10), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
+    strip_sep(ui);
     // Answer blanks.
-    let r = strip_button(ui, &labels[4], true, false).on_hover_text("Answer blanks under questions that take a written answer");
+    let r = strip_button(ui, &labels[4], true, false, Seg::Alone).on_hover_text("Answer blanks under questions that take a written answer");
     let cur = f.ruled_blanks.min(6) as usize;
     let mut sel = cur;
     egui::Popup::menu(&r).show(|ui| {
@@ -2260,7 +2344,7 @@ fn draw_format_bar(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &m
             let fit = strip_fit(ui, &f, ui.available_width(), Some(&zl), &full, &short);
             ui.horizontal(|ui| {
                 ui.set_min_height(ZOOM_H);
-                changed |= strip_controls(ui, &mut f, fit.words, &mut margins_open);
+                changed |= strip_controls(ui, &mut f, fit.name, fit.words, &mut margins_open);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = STRIP_GAP;
                     if let Some(s) = &fit.summary {
@@ -3010,8 +3094,9 @@ const HANDLE_PAD: f32 = 2.0;
 const REMOVE_GAP: f32 = 8.0;
 
 
-/// Where a placed question's handles go: the left gutter's (grip, pencil, "…") and the right
-/// gutter's (×, ↑, ↓), each a kind and a centre, `side` square.
+/// Where a placed question's handles go, each a kind and a centre, `side` square. Desktop: the
+/// left gutter's grip and "…", the right gutter's ×, ↑, ↓. Narrow: one column in the left gutter
+/// (`right` empty), or, in a gutter under 30, a strip above the question in two groups.
 #[derive(Debug)]
 struct MarginHandles {
     left: Vec<(u8, Pos2)>,
@@ -3019,10 +3104,13 @@ struct MarginHandles {
     side: f32,
     /// ↑/↓ beside the question (false: they are in its "…" menu).
     tall: bool,
-    /// Narrow only: one quiet frame per gutter group (left, then right), drawn at rest.
+    /// Narrow only: one quiet frame per group, drawn at rest.
     frames: Vec<Rect>,
-    /// Narrow only: the hairline between ↓ and remove inside the right frame.
+    /// Narrow only: the hairline before remove inside its frame.
     divider: Option<[Pos2; 2]>,
+    /// Narrow column only: the hairline from the column down the question's left side, tying the
+    /// controls to the question they act on.
+    spine: Option<[Pos2; 2]>,
 }
 
 /// The frame around a group of `side` square handles.
@@ -3034,43 +3122,71 @@ fn handle_frame(group: &[(u8, Pos2)], side: f32) -> Rect {
     r.expand(HANDLE_PAD)
 }
 
-/// Frames for the two groups, and the divider before remove when it follows ↓.
+/// The hairline across `frame` between the last two handles of `group` when the last is remove.
+fn remove_divider(group: &[(u8, Pos2)], frame: Rect) -> Option<[Pos2; 2]> {
+    let n = group.len();
+    if n < 2 || group[n - 1].0 != NARROW_REMOVE {
+        return None;
+    }
+    let (a, b) = (group[n - 2].1, group[n - 1].1);
+    let mid = Pos2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+    Some(if (a.y - b.y).abs() > (a.x - b.x).abs() {
+        [Pos2::new(frame.left() + 5.0, mid.y), Pos2::new(frame.right() - 5.0, mid.y)]
+    } else {
+        [Pos2::new(mid.x, frame.top() + 5.0), Pos2::new(mid.x, frame.bottom() - 5.0)]
+    })
+}
+
+/// Frames for the strip's two groups, and the divider before remove.
 fn with_frames(mut hs: MarginHandles) -> MarginHandles {
     hs.frames = vec![handle_frame(&hs.left, hs.side), handle_frame(&hs.right, hs.side)];
-    let n = hs.right.len();
-    if n >= 2 && hs.right[n - 1].0 == NARROW_REMOVE {
-        let (a, b) = (hs.right[n - 2].1, hs.right[n - 1].1);
-        let f = hs.frames[1];
-        let mid = Pos2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
-        hs.divider = Some(if (a.y - b.y).abs() > (a.x - b.x).abs() {
-            [Pos2::new(f.left() + 5.0, mid.y), Pos2::new(f.right() - 5.0, mid.y)]
-        } else {
-            [Pos2::new(mid.x, f.top() + 5.0), Pos2::new(mid.x, f.bottom() - 5.0)]
-        });
-    }
+    hs.divider = remove_divider(&hs.right, hs.frames[1]);
     hs
 }
 
+/// The narrow page's handles in one column: grip, pencil, ↑, ↓, "…", then remove.
+const NARROW_COLUMN: [u8; 6] = [GRIP, 7, 1, 2, 4, NARROW_REMOVE];
+
+/// The narrow block for a question too short for [`NARROW_COLUMN`]: two columns, row by row
+/// (grip and pencil, ↑ and ↓, "…" and remove), or on a question too short for that (r12's limit,
+/// where ↑/↓ and the pencil went in the menu) grip and "…" with remove under "…". `None` is an
+/// empty cell. Remove is always the bottom right, nearest the question.
+const NARROW_GRID_TALL: [[Option<u8>; 2]; 3] = [[Some(GRIP), Some(7)], [Some(1), Some(2)], [Some(4), Some(NARROW_REMOVE)]];
+const NARROW_GRID_SHORT: [[Option<u8>; 2]; 2] = [[Some(GRIP), Some(4)], [None, Some(NARROW_REMOVE)]];
+
 /// The handles of a question at `rect` with gutters `ml`/`mr` wide. Desktop: grip and "…" left,
-/// ×/↑/↓ right, 18 square, no frames. Narrow: 24 square, 26 apart, in one quiet frame per
-/// gutter: grip, pencil, "…" left; ↑, ↓ and then the trash-can remove (set apart by a hairline)
-/// right; on a question shorter than the right frame only grip and "…" left and remove right (↑/↓ go in the menu). A
-/// gutter under 30 wide puts both groups in a strip above the question, right-aligned.
+/// ×/↑/↓ right, 18 square, no frames. Narrow: 24 square, 26 apart, in one quiet column in the
+/// left gutter starting on the question's first line, close to its text, with a hairline down
+/// the question's side: grip, pencil, ↑, ↓, "…" and then the trash-can remove (set apart by a
+/// hairline) when that column ends inside the question; else the same controls (or, under r12's
+/// limit, grip, "…" and remove) in two short columns in one frame ([`NARROW_GRID_TALL`]); a
+/// gutter too narrow for two columns keeps r12's two groups, and one under 30 puts them in a
+/// strip above the question, right-aligned. A taller question never shows fewer handles, and no
+/// question shows fewer than r12 did.
 fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32, narrow: bool) -> MarginHandles {
     let side = if narrow { 24.0 } else { 18.0 };
     let step = if narrow { 26.0 } else { 20.0 };
-    // Narrow: ↑/↓ beside the question only when the whole right frame (from the first line's
-    // centre down past remove) ends inside the question.
-    let tall = !narrow || rect.height() >= bp * 0.75 + 2.0 * step + REMOVE_GAP + side / 2.0 + HANDLE_PAD;
-    let left_k: &[u8] = if narrow && tall { &[GRIP, 7, 4] } else { &[GRIP, 4] };
-    let right_k: &[u8] = match (narrow, tall) {
-        (false, _) => &[0, 1, 2],
-        (true, true) => &[1, 2, NARROW_REMOVE],
-        (true, false) => &[NARROW_REMOVE],
+    let y0 = rect.top() + bp * 0.75;
+    // The narrow column's centres from the first line down (remove sits apart from the one above).
+    let column = |kinds: &[u8]| {
+        let mut y = y0;
+        let mut ys = Vec::new();
+        for (k, &kind) in kinds.iter().enumerate() {
+            if k > 0 {
+                y += if kind == NARROW_REMOVE { step + REMOVE_GAP } else { step };
+            }
+            ys.push(y);
+        }
+        ys
     };
-    // The gap after the handle at `k` in the right group (remove sits apart from ↓).
-    let rgap = |k: usize| if narrow && right_k.get(k + 1) == Some(&NARROW_REMOVE) { step + REMOVE_GAP } else { step };
+    let fits = |kinds: &[u8]| column(kinds).last().copied().unwrap_or(y0) + side / 2.0 + HANDLE_PAD <= rect.bottom();
     if narrow && ml.min(mr) < 30.0 {
+        // The strip above the question: the column's handles left to right, in two groups
+        // (grip, pencil, "…" | ↑, ↓, remove), or grip, "…" | remove on a short question.
+        let tall = fits(&[1, 2, NARROW_REMOVE]);
+        let left_k: &[u8] = if tall { &[GRIP, 7, 4] } else { &[GRIP, 4] };
+        let right_k: &[u8] = if tall { &[1, 2, NARROW_REMOVE] } else { &[NARROW_REMOVE] };
+        let rgap = |k: usize| if right_k.get(k + 1) == Some(&NARROW_REMOVE) { step + REMOVE_GAP } else { step };
         let y = rect.top() - 13.0;
         let mut xs = Vec::new();
         let mut x = 0.0;
@@ -3091,28 +3207,68 @@ fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32, narrow: bool) -> Margin
             tall,
             frames: Vec::new(),
             divider: None,
+            spine: None,
         });
     }
-    let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
-    let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
-    // Narrow: both columns start on the question's first line.
-    let y0 = if narrow { gc.y } else { rect.top() + 9.0 };
-    let lstep = if narrow { step } else { 24.0 };
-    let mut right = Vec::new();
-    let mut y = y0;
-    for (k, &kind) in right_k.iter().enumerate() {
-        right.push((kind, Pos2::new(rx, y)));
-        y += rgap(k);
+    // r12's limit: ↑, ↓ and the pencil are beside a question at least this tall (they never drop
+    // sooner than they did); remove, grip and "…" always are.
+    let moves = fits(&[1, 2, NARROW_REMOVE]);
+    // Close to the question's text (up to 8 clear of it), never past the paper's edge.
+    let clear = |w: f32| (ml - w - 2.0).min(8.0);
+    if narrow && fits(&NARROW_COLUMN) {
+        // One column, everything beside the question.
+        let cx = rect.left() - (ml * 0.5).min(8.0 + HANDLE_PAD + side / 2.0);
+        let left: Vec<(u8, Pos2)> = NARROW_COLUMN.iter().zip(column(&NARROW_COLUMN)).map(|(&kind, y)| (kind, Pos2::new(cx, y))).collect();
+        let frame = handle_frame(&left, side);
+        let spine = (rect.bottom() - frame.bottom() > 12.0).then(|| [Pos2::new(cx, frame.bottom()), Pos2::new(cx, rect.bottom())]);
+        return MarginHandles { tall: true, divider: remove_divider(&left, frame), frames: vec![frame], left, right: Vec::new(), side, spine };
     }
-    let hs = MarginHandles {
-        left: left_k.iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * lstep))).collect(),
-        right,
+    let grid_w = step + side + 2.0 * HANDLE_PAD;
+    if narrow && clear(grid_w) >= 2.0 {
+        // Two short columns in one frame, the same controls a shorter block can hold.
+        let x1 = rect.left() - clear(grid_w) - HANDLE_PAD - side / 2.0;
+        let rows: &[[Option<u8>; 2]] = if moves { &NARROW_GRID_TALL } else { &NARROW_GRID_SHORT };
+        let mut left = Vec::new();
+        for (r, row) in rows.iter().enumerate() {
+            for (c, k) in row.iter().enumerate() {
+                if let Some(kind) = k {
+                    left.push((*kind, Pos2::new(x1 - (1 - c) as f32 * step, y0 + r as f32 * step)));
+                }
+            }
+        }
+        let frame = handle_frame(&left, side);
+        let spine = (rect.bottom() - frame.bottom() > 12.0).then(|| [Pos2::new(x1, frame.bottom()), Pos2::new(x1, rect.bottom())]);
+        return MarginHandles { tall: moves, divider: None, frames: vec![frame], left, right: Vec::new(), side, spine };
+    }
+    if narrow {
+        // A gutter too narrow for two columns: r12's two groups, grip, pencil and "…" left, ↑, ↓
+        // and remove right (grip, "…" | remove on a short question).
+        let left_k: &[u8] = if moves { &[GRIP, 7, 4] } else { &[GRIP, 4] };
+        let right_k: &[u8] = if moves { &[1, 2, NARROW_REMOVE] } else { &[NARROW_REMOVE] };
+        let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, y0);
+        let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
+        return with_frames(MarginHandles {
+            left: left_k.iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * step))).collect(),
+            right: right_k.iter().zip(column(right_k)).map(|(&kind, y)| (kind, Pos2::new(rx, y))).collect(),
+            side,
+            tall: moves,
+            frames: Vec::new(),
+            divider: None,
+            spine: None,
+        });
+    }
+    let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, y0);
+    let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
+    let y = rect.top() + 9.0;
+    MarginHandles {
+        left: [GRIP, 4].iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * 24.0))).collect(),
+        right: [0u8, 1, 2].iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y + k as f32 * step))).collect(),
         side,
-        tall,
+        tall: true,
         frames: Vec::new(),
         divider: None,
-    };
-    if narrow { with_frames(hs) } else { hs }
+        spine: None,
+    }
 }
 
 /// One question on the page, with its work space. Returns the item's screen rect (for drop
@@ -3178,8 +3334,15 @@ fn draw_item(
     if let Some(q) = q {
         let hs = margin_handles(rect, ml, mr, bp, narrow);
         let (tall, side) = (hs.tall, hs.side);
-        // Narrow: each gutter group in one quiet frame, so they read as this question's controls.
+        // Narrow: each group in one quiet frame, so they read as this question's controls, and
+        // a hairline from the column down the question's side.
         if show {
+            if let Some([top, foot]) = hs.spine {
+                // A bracket: down the question's side, a short foot in at its end.
+                let s = Stroke::new(1.0, theme::edge());
+                ui.painter().line_segment([top, foot], s);
+                ui.painter().line_segment([foot, foot + Vec2::new(6.0, 0.0)], s);
+            }
             for f in &hs.frames {
                 ui.painter().rect(*f, CornerRadius::same(8), theme::paper(), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
             }
@@ -3187,9 +3350,8 @@ fn draw_item(
                 ui.painter().line_segment(d, Stroke::new(1.0, theme::border()));
             }
         }
-        let left_pos: Vec<Pos2> = hs.left.iter().map(|h| h.1).collect();
-        let left_n = left_pos.len();
-        let gc = left_pos[0];
+        let at_kind = |k: u8| hs.left.iter().chain(&hs.right).find(|h| h.0 == k).map(|h| h.1);
+        let gc = at_kind(GRIP).unwrap_or(hs.left[0].1);
         let grect = Rect::from_center_size(gc, Vec2::new(if narrow { 24.0 } else { 18.0 }, 24.0));
         let gresp = ui.interact(grect, ui.id().with(("it_grip", i)), Sense::click_and_drag());
         if show {
@@ -3208,11 +3370,12 @@ fn draw_item(
                 label: kind_pill(q.kind.qkind()),
             });
         }
-        for &(kind, at) in &hs.right {
+        for &(kind, at) in hs.left.iter().chain(&hs.right) {
             let (salt, d) = match kind {
                 0 | NARROW_REMOVE => ("it_x", 0),
                 1 => ("it_up", -1),
-                _ => ("it_dn", 1),
+                2 => ("it_dn", 1),
+                _ => continue,
             };
             if margin_button_side(ui, ui.id().with((salt, i)), at, kind, show, side).is_some_and(|r| r.clicked()) {
                 if d == 0 {
@@ -3223,12 +3386,14 @@ fn draw_item(
             }
         }
         let mut act: Option<QAct> = None;
-        if left_n == 3 && margin_button_side(ui, ui.id().with(("it_edit", i)), left_pos[1], 7, show, side).is_some_and(|r| r.clicked()) {
-            act = Some(QAct::Edit);
+        if let Some(at) = at_kind(7) {
+            if margin_button_side(ui, ui.id().with(("it_edit", i)), at, 7, show, side).is_some_and(|r| r.clicked()) {
+                act = Some(QAct::Edit);
+            }
         }
-        // The per-question actions menu sits in the left gutter under the grip (and the pencil),
-        // inside even a one-line question's height.
-        let mrect = Rect::from_center_size(left_pos[left_n - 1], Vec2::splat(side));
+        // The per-question actions menu sits in the left gutter under the grip (and the pencil
+        // and ↑/↓), inside even a one-line question's height.
+        let mrect = Rect::from_center_size(at_kind(4).unwrap_or(gc), Vec2::splat(side));
         let mresp = ui.interact(mrect, menu_id, Sense::click());
         if show {
             paint_margin_glyph(ui, mrect, 4, mresp.hovered() || menu_open || mresp.has_focus());
@@ -7729,20 +7894,6 @@ mod system_pass_tests {
     /// The inner width of the desktop format bar at a 1280 window (spec section 6).
     const INNER_1280: f32 = 1082.0;
 
-    /// The worst case the strip can show: the widest paper and heading words, a two-digit size,
-    /// per-side margins, six ruled lines, a three-digit fit, and a long summary.
-    fn worst(ui: &egui::Ui) -> ([String; 5], String, String) {
-        let widest = |opts: Vec<String>| {
-            opts.into_iter()
-                .max_by(|a, b| strip_ctl_w(ui, a, true).total_cmp(&strip_ctl_w(ui, b, true)))
-                .unwrap()
-        };
-        let paper = widest(model::PaperStyle::ALL.iter().map(|p| format!("{} paper", p.label())).collect());
-        let head = widest(HEAD_LABELS.iter().map(|h| format!("{h} heading")).collect());
-        let labels = [paper, head, "14 pt".to_string(), "Each side margins".to_string(), "Blanks: 6 ruled lines".to_string()];
-        (labels, "Fit  200%".to_string(), "Page 12 of 12 · 99 questions · 999 pts".to_string())
-    }
-
     /// Runs `f` in a themed Ui (the theme's fonts load on the first frame) and returns its result.
     fn in_ui<T: Default + 'static>(f: impl Fn(&mut egui::Ui) -> T + 'static) -> T {
         let mut first = true;
@@ -7761,101 +7912,210 @@ mod system_pass_tests {
         std::mem::take(h.state_mut())
     }
 
-    /// The desktop strip's worst case fits one row at 1280 with everything shown, and laying the
-    /// real controls out takes the width the fit arithmetic says.
-    #[test]
-    fn the_worst_case_format_strip_fits_one_row_at_1280() {
-        let (need, laid, need_same) = in_ui(|ui| {
-            let (labels, zoom, summary) = worst(ui);
-            let need = strip_need(ui, &labels, Some(&zoom), Some(&summary));
-            // The real row: the same exam, laid out as the bar lays it out.
-            let mut f = model::Exam { paper_style: model::PaperStyle::Condensed, heading_pt: HEAD_PT[1], body_pt: 14.0, ruled_blanks: 6, ..Default::default() };
-            f.margins = Some(model::Margins { top: 25.4, right: 19.05, bottom: 25.4, left: 25.4 });
-            let real = strip_labels(&f, true);
-            let need_same = strip_need(ui, &real, Some(&zoom), None);
-            let mut open = false;
-            let row = ui
-                .horizontal(|ui| {
-                    strip_controls(ui, &mut f, true, &mut open);
-                    strip_sep(ui);
-                    let mut z = 2.0;
-                    zoom_well(ui, &mut z, 2.0);
-                })
-                .response
-                .rect;
-            (need, row.width(), need_same)
-        });
-        assert!(need > 600.0, "measured {need}");
-        assert!(need <= INNER_1280, "the worst-case strip needs {need} of {INNER_1280}");
-        assert!((laid - need_same).abs() <= 2.0, "laid out {laid}, arithmetic {need_same}");
+    /// The inner width of the desktop format bar at the narrowest desktop editor (the narrow
+    /// breakpoint, 860): the bar's 14 pt inner margins and its 1 pt stroke either side.
+    const INNER_860: f32 = 860.0 - 2.0 * 14.0 - 2.0;
+
+    /// The exam with the widest strip values: the widest paper and heading words, 14 pt, per-side
+    /// margins and six ruled lines.
+    fn worst_exam(ui: &egui::Ui) -> model::Exam {
+        let w = |f: &model::Exam| strip_need(ui, &strip_labels(f, true), true, None, None);
+        let mut best = model::Exam::default();
+        for ps in model::PaperStyle::ALL {
+            for hp in HEAD_PT {
+                let mut f = model::Exam { paper_style: ps, heading_pt: hp, body_pt: 14.0, ruled_blanks: 6, ..Default::default() };
+                f.margins = Some(model::Margins { top: 25.4, right: 19.05, bottom: 25.4, left: 25.4 });
+                if w(&f) > w(&best) {
+                    best = f;
+                }
+            }
+        }
+        best
     }
 
-    /// Short of room the strip drops the page prefix, then the summary, then the words, and never
-    /// needs more than it was given once the words are gone (or the smallest it can be).
+    /// The bar's row as `draw_format_bar` lays it out for `fit`; returns its width.
+    fn lay_row(ui: &mut egui::Ui, f: &model::Exam, fit: &StripFit) -> f32 {
+        let mut f = f.clone();
+        let mut open = false;
+        ui.horizontal(|ui| {
+            strip_controls(ui, &mut f, fit.name, fit.words, &mut open);
+            ui.spacing_mut().item_spacing.x = STRIP_GAP;
+            strip_sep(ui);
+            let mut z = 2.0;
+            zoom_well(ui, &mut z, 2.0);
+            if let Some(s) = &fit.summary {
+                strip_sep(ui);
+                ui.label(kit::meta(s.as_str()));
+            }
+        })
+        .response
+        .rect
+        .width()
+    }
+
+    /// At 1280 the strip is one row with its summary in full, "Page N of M ·" included, for any
+    /// format: a one-page exam on the default format also keeps the "Page setup" name, while the
+    /// widest values give up only that name. Laying the real controls out takes the width the
+    /// fit arithmetic says.
+    #[test]
+    fn the_worst_case_format_strip_fits_one_row_at_1280() {
+        let (worst_fit, worst_need, worst_laid, one_fit, one_laid) = in_ui(|ui| {
+            let (zoom, full) = ("Fit  200%", "Page 12 of 12 · 99 questions · 999 pts");
+            let short = full.split_once(" · ").unwrap().1;
+            let f = worst_exam(ui);
+            let fit = strip_fit(ui, &f, INNER_1280, Some(zoom), full, short);
+            let need = strip_need(ui, &strip_labels(&f, fit.words), fit.name, Some(zoom), fit.summary.as_deref());
+            let laid = lay_row(ui, &f, &fit);
+            let d = model::Exam::default();
+            let one = "Page 1 of 1 · 9 questions · 99 pts";
+            let one_fit = strip_fit(ui, &d, INNER_1280, Some(zoom), one, one.split_once(" · ").unwrap().1);
+            let one_laid = lay_row(ui, &d, &one_fit);
+            (Some(fit), need, laid, Some(one_fit), one_laid)
+        });
+        let (worst_fit, one_fit) = (worst_fit.unwrap(), one_fit.unwrap());
+        assert!(worst_need > 600.0 && worst_need <= INNER_1280, "the worst-case strip needs {worst_need} of {INNER_1280}");
+        assert_eq!((worst_fit.words, worst_fit.summary.as_deref()), (true, Some("Page 12 of 12 · 99 questions · 999 pts")));
+        assert_eq!(one_fit, StripFit { name: true, words: true, summary: Some("Page 1 of 1 · 9 questions · 99 pts".into()) });
+        assert!((worst_laid - worst_need).abs() <= 2.0, "laid out {worst_laid}, arithmetic {worst_need}");
+        assert!(one_laid <= INNER_1280 + 0.5, "laid out {one_laid}");
+    }
+
+    /// At the narrowest desktop editor (860) the widest values still lay out in one row inside
+    /// the bar: the strip drops what it must, the "Page setup" name first, and the real row is
+    /// never wider than the room it was given.
+    #[test]
+    fn the_worst_case_format_strip_fits_one_row_at_860() {
+        let (fit, laid, bare) = in_ui(|ui| {
+            let (zoom, full) = ("Fit  200%", "Page 12 of 12 · 99 questions · 999 pts");
+            let f = worst_exam(ui);
+            let fit = strip_fit(ui, &f, INNER_860, Some(zoom), full, full.split_once(" · ").unwrap().1);
+            let laid = lay_row(ui, &f, &fit);
+            let bare = strip_need(ui, &strip_labels(&f, false), false, Some(zoom), None);
+            (Some(fit), laid, bare)
+        });
+        let fit = fit.unwrap();
+        assert!(bare <= INNER_860, "the smallest strip needs {bare} of {INNER_860}");
+        assert!(!fit.name, "at 860 the widest values give up the name first: {fit:?}");
+        assert!(laid <= INNER_860 + 0.5, "laid out {laid} of {INNER_860} ({fit:?})");
+    }
+
+    /// Short of room the strip drops the "Page setup" name, then the page prefix, then the
+    /// summary, then the words, and never needs more than it was given once the words are gone
+    /// (or the smallest it can be).
     #[test]
     fn the_format_strip_drops_in_the_spec_order() {
         let fits = in_ui(|ui| {
             let f = model::Exam { ruled_blanks: 6, ..Default::default() };
             let (full, short) = ("Page 3 of 3 · 40 questions · 120 pts", "40 questions · 120 pts");
             let z = "Fit  147%";
-            let all = strip_need(ui, &strip_labels(&f, true), Some(z), Some(full));
-            let no_prefix = strip_need(ui, &strip_labels(&f, true), Some(z), Some(short));
-            let none = strip_need(ui, &strip_labels(&f, true), Some(z), None);
-            let bare = strip_need(ui, &strip_labels(&f, false), Some(z), None);
-            assert!(all > no_prefix && no_prefix > none && none > bare);
-            [all, no_prefix, none, bare, bare - 1.0].map(|w| strip_fit(ui, &f, w, Some(z), full, short))
+            let named = strip_need(ui, &strip_labels(&f, true), true, Some(z), Some(full));
+            let all = strip_need(ui, &strip_labels(&f, true), false, Some(z), Some(full));
+            let no_prefix = strip_need(ui, &strip_labels(&f, true), false, Some(z), Some(short));
+            let none = strip_need(ui, &strip_labels(&f, true), false, Some(z), None);
+            let bare = strip_need(ui, &strip_labels(&f, false), false, Some(z), None);
+            assert!(named > all && all > no_prefix && no_prefix > none && none > bare);
+            [named, all, no_prefix, none, bare, bare - 1.0].map(|w| strip_fit(ui, &f, w, Some(z), full, short))
         });
-        assert_eq!(fits[0], StripFit { words: true, summary: Some("Page 3 of 3 · 40 questions · 120 pts".into()) });
-        assert_eq!(fits[1], StripFit { words: true, summary: Some("40 questions · 120 pts".into()) });
-        assert_eq!(fits[2], StripFit { words: true, summary: None });
-        assert_eq!(fits[3], StripFit { words: false, summary: None });
-        assert_eq!(fits[4], StripFit { words: false, summary: None });
+        let fit = |name, words, s: Option<&str>| StripFit { name, words, summary: s.map(str::to_string) };
+        assert_eq!(fits[0], fit(true, true, Some("Page 3 of 3 · 40 questions · 120 pts")));
+        assert_eq!(fits[1], fit(false, true, Some("Page 3 of 3 · 40 questions · 120 pts")));
+        assert_eq!(fits[2], fit(false, true, Some("40 questions · 120 pts")));
+        assert_eq!(fits[3], fit(false, true, None));
+        assert_eq!(fits[4], fit(false, false, None));
+        assert_eq!(fits[5], fit(false, false, None));
     }
 
-    /// A narrow page shows a tall question's grip, pencil and "…" on the left and ×, ↑, ↓ on the
-    /// right, 24 square and 26 apart; a short one keeps grip and "…" and ×. Desktop is as before.
+    /// The narrow handles at a height, as sorted kinds (left and right together).
+    fn narrow_kinds(h: f32, ml: f32) -> Vec<u8> {
+        let hs = margin_handles(Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, h)), ml, 60.0, 14.0, true);
+        let mut k: Vec<u8> = hs.left.iter().chain(&hs.right).map(|p| p.0).collect();
+        k.sort();
+        k
+    }
+
+    /// What r12 (2cc46ba) showed beside a narrow question: grip, "…" and remove always; the
+    /// pencil, ↑ and ↓ from bp·0.75 + 74 tall.
+    fn r12_kinds(h: f32) -> Vec<u8> {
+        let mut k = if h >= 14.0 * 0.75 + 74.0 { vec![GRIP, 7, 4, 1, 2, NARROW_REMOVE] } else { vec![GRIP, 4, NARROW_REMOVE] };
+        k.sort();
+        k
+    }
+
+    /// A narrow page's handles: one column in the left gutter, on the question's first line, 24
+    /// square and 26 apart, tied to the question by a hairline down its side, when it fits
+    /// beside the question; else the same controls in two short columns in one frame; short of
+    /// r12's limit, grip, "…" and remove. Remove is always direct; at every height and gutter a
+    /// taller question shows every handle a shorter one does, and never fewer than r12 did.
+    /// Desktop is as before.
     #[test]
     fn narrow_question_handles_by_height() {
-        let tall = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 120.0));
-        let short = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 40.0));
+        let at = |h: f32| Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, h));
         let kinds = |v: &[(u8, Pos2)]| v.iter().map(|h| h.0).collect::<Vec<_>>();
-        let h = margin_handles(tall, 60.0, 60.0, 14.0, true);
-        assert_eq!((kinds(&h.left), kinds(&h.right), h.side, h.tall), (vec![GRIP, 7, 4], vec![1, 2, NARROW_REMOVE], 24.0, true));
-        let s = margin_handles(short, 60.0, 60.0, 14.0, true);
-        assert_eq!((kinds(&s.left), kinds(&s.right), s.tall), (vec![GRIP, 4], vec![NARROW_REMOVE], false));
-        for hs in [&h, &s] {
-            let all: Vec<Rect> = hs.left.iter().chain(&hs.right).map(|p| Rect::from_center_size(p.1, Vec2::splat(hs.side))).collect();
-            for (a, ra) in all.iter().enumerate() {
-                assert!(!ra.intersects(tall.shrink(1.0)) || ra.right() <= tall.left() || ra.left() >= tall.right(), "a handle sits on the question");
-                for rb in &all[a + 1..] {
-                    assert!(!ra.intersects(rb.shrink(0.5)), "handles overlap");
-                }
-            }
-            // The left column stays inside the question's height plus its gap.
-            assert!(hs.left.last().unwrap().1.y + hs.side / 2.0 <= tall.top() + 14.0 * 0.75 + 52.0 + 12.0 + 0.5);
-            // One frame per gutter group, clear of the question's text and of each other.
-            assert_eq!(hs.frames.len(), 2);
-            assert!(hs.frames[0].right() < tall.left() && hs.frames[1].left() > tall.right());
-            for (f, g) in hs.frames.iter().zip([&hs.left, &hs.right]) {
-                assert!(g.iter().all(|p| f.contains_rect(Rect::from_center_size(p.1, Vec2::splat(hs.side)))));
+        // Nesting and the r12 floor, for every height and the gutters each layout takes.
+        for ml in [24.0, 40.0, 60.0, 67.0, 90.0] {
+            let mut prev: Vec<u8> = Vec::new();
+            for h in (10..=260).map(|h| h as f32) {
+                let k = narrow_kinds(h, ml);
+                assert!(prev.iter().all(|p| k.contains(p)), "at {h} (gutter {ml}) {k:?} lost one of {prev:?}");
+                assert!(r12_kinds(h).iter().all(|p| k.contains(p)), "at {h} (gutter {ml}) {k:?} shows less than r12");
+                assert!(k.contains(&NARROW_REMOVE) && k.contains(&GRIP) && k.contains(&4));
+                // ↑/↓ in the menu exactly when they are not beside the question.
+                let hs = margin_handles(at(h), ml, 60.0, 14.0, true);
+                assert_eq!(hs.tall, k.contains(&1));
+                prev = k;
             }
         }
-        // Both columns start on the first line; ↑/↓ 26 apart, remove set apart behind a divider.
-        assert!((h.left[0].1.y - h.right[0].1.y).abs() < 0.01);
-        assert!((h.left[1].1.y - h.left[0].1.y - 26.0).abs() < 0.01 && (h.right[1].1.y - h.right[0].1.y - 26.0).abs() < 0.01);
-        assert!((h.right[2].1.y - h.right[1].1.y - 34.0).abs() < 0.01);
+        // A short question keeps its direct remove; from r12's limit the pencil and ↑/↓ too.
+        assert_eq!(narrow_kinds(30.0, 60.0), r12_kinds(30.0));
+        assert_eq!(narrow_kinds(90.0, 60.0), r12_kinds(90.0));
+        // The single column where it fits.
+        let tall = at(200.0);
+        let h = margin_handles(tall, 60.0, 60.0, 14.0, true);
+        assert_eq!((kinds(&h.left), h.right.len(), h.side, h.tall), (NARROW_COLUMN.to_vec(), 0, 24.0, true));
+        assert!((h.left[1].1.y - h.left[0].1.y - 26.0).abs() < 0.01);
+        assert!((h.left[5].1.y - h.left[4].1.y - 34.0).abs() < 0.01);
         let [a, b] = h.divider.expect("a divider before remove");
-        assert!(a.y > h.right[1].1.y + 12.0 && a.y < h.right[2].1.y - 12.0 && (a.y - b.y).abs() < 0.01);
-        assert!(s.divider.is_none());
-        // The right frame never runs past the question's foot: just short of it, the short layout.
-        assert!(h.frames[1].bottom() <= tall.bottom());
-        let foot = h.frames[1].bottom() - tall.top();
-        let edge = Rect::from_min_size(tall.min, Vec2::new(400.0, foot));
-        assert!(margin_handles(edge, 60.0, 60.0, 14.0, true).tall);
-        let under = Rect::from_min_size(tall.min, Vec2::new(400.0, foot - 1.0));
-        assert!(!margin_handles(under, 60.0, 60.0, 14.0, true).tall);
+        assert!(a.y > h.left[4].1.y + 12.0 && a.y < h.left[5].1.y - 12.0 && (a.y - b.y).abs() < 0.01);
+        // Column and two-column block: one frame, in the gutter, 8 clear of the text, inside the
+        // paper, starting on the first line, tied by a hairline to the question's foot.
+        for (ht, ml) in [(200.0, 60.0), (120.0, 60.0), (90.0, 60.0), (40.0, 60.0), (20.0, 67.0), (120.0, 58.0)] {
+            let q = at(ht);
+            let hs = margin_handles(q, ml, 60.0, 14.0, true);
+            assert_eq!((hs.frames.len(), hs.right.len()), (1, 0), "at {ht}");
+            let f = hs.frames[0];
+            assert!(f.right() < q.left() && q.left() - f.right() <= 8.0 + 0.01 && f.left() >= q.left() - ml, "frame {f:?} at {ht}");
+            let all: Vec<Rect> = hs.left.iter().map(|p| Rect::from_center_size(p.1, Vec2::splat(hs.side))).collect();
+            for (i, ra) in all.iter().enumerate() {
+                assert!(f.contains_rect(*ra));
+                for rb in &all[i + 1..] {
+                    assert!(!ra.intersects(rb.shrink(0.5)), "handles overlap at {ht}");
+                }
+            }
+            assert!((hs.left.iter().map(|p| p.1.y).fold(f32::MAX, f32::min) - (q.top() + 14.0 * 0.75)).abs() < 0.01);
+            // From r12's limit up the frame ends inside the question; under it, no lower than r12's
+            // left column did (grip and "…" 26 apart).
+            if hs.tall {
+                assert!(f.bottom() <= q.bottom() + 0.01, "at {ht}");
+            } else {
+                assert!(f.bottom() <= q.top() + 14.0 * 0.75 + 26.0 + 12.0 + HANDLE_PAD + 0.01, "at {ht}");
+            }
+            match hs.spine {
+                Some([a, b]) => assert!((a.x - b.x).abs() < 0.01 && (a.y - f.bottom()).abs() < 0.01 && (b.y - q.bottom()).abs() < 0.01),
+                None => assert!(q.bottom() - f.bottom() <= 12.0),
+            }
+            // Remove is the handle nearest the text's foot: bottom right.
+            let rm = hs.left.iter().find(|p| p.0 == NARROW_REMOVE).unwrap().1;
+            assert!(hs.left.iter().all(|p| p.1.x <= rm.x + 0.01 && p.1.y <= rm.y + 0.01));
+        }
+        // A gutter too narrow for two columns: r12's two framed groups.
+        let r = margin_handles(at(120.0), 40.0, 60.0, 14.0, true);
+        assert_eq!((kinds(&r.left), kinds(&r.right), r.frames.len()), (vec![GRIP, 7, 4], vec![1, 2, NARROW_REMOVE], 2));
+        let r = margin_handles(at(40.0), 40.0, 60.0, 14.0, true);
+        assert_eq!((kinds(&r.left), kinds(&r.right)), (vec![GRIP, 4], vec![NARROW_REMOVE]));
         // A gutter under 30: one strip above the question, right-aligned, two frames apart.
+        let tall = at(120.0);
         let n = margin_handles(tall, 24.0, 60.0, 14.0, true);
+        assert_eq!((kinds(&n.left), kinds(&n.right)), (vec![GRIP, 7, 4], vec![1, 2, NARROW_REMOVE]));
         assert!(n.left.iter().chain(&n.right).all(|p| (p.1.y - (tall.top() - 13.0)).abs() < 0.01));
         assert!((n.right.last().unwrap().1.x - (tall.right() - 14.0)).abs() < 0.01);
         assert!((n.frames[1].right() - tall.right()).abs() < 0.01);
@@ -7863,10 +8123,12 @@ mod system_pass_tests {
         let [a, b] = n.divider.expect("a divider before remove");
         assert!((a.x - b.x).abs() < 0.01 && a.x > n.right[1].1.x + 12.0 && a.x < n.right[2].1.x - 12.0);
         // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart, 18 square, no frames, as before.
+        let short = at(40.0);
         let d = margin_handles(short, 60.0, 60.0, 14.0, false);
         assert_eq!((kinds(&d.left), kinds(&d.right), d.side), (vec![GRIP, 4], vec![0, 1, 2], 18.0));
-        assert!(d.frames.is_empty() && d.divider.is_none());
+        assert!(d.frames.is_empty() && d.divider.is_none() && d.spine.is_none());
         assert!((d.right[0].1.y - (short.top() + 9.0)).abs() < 0.01 && (d.right[1].1.y - d.right[0].1.y - 20.0).abs() < 0.01);
+        assert!((d.left[1].1.y - d.left[0].1.y - 24.0).abs() < 0.01);
     }
 
     /// The pencil (kind 7) is named "Edit question", never the catch-all "Move down".
