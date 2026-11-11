@@ -17,6 +17,8 @@ pub(crate) use pulley::{pulley_relevant, pulley_setup_changed};
 mod examples;
 #[cfg(test)]
 mod ray_diagram_frozen;
+#[cfg(test)]
+mod vector_b8_frozen;
 mod summary;
 
 /// Editor notes for the instrument figures: what the circuit could not work out, and why.
