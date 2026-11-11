@@ -807,96 +807,184 @@ impl crate::App {
     }
 
     fn draw_sidebar_into(&mut self, root: &mut egui::Ui) {
-        // V4 dock: 88 px rounded rail inside a 10 px app gutter; below ~900 px it
-        // collapses to a 64 px icon rail (labels hidden).
-        let narrow = root.max_rect().width() < 900.0;
-        let dock_w = if narrow { 64.0 } else { 88.0 };
-        egui::Panel::left(egui::Id::new("sidebar"))
-            .exact_size(dock_w + 10.0 + DOCK_GAP)
-            .show_separator_line(false)
-            .frame(Frame::new().fill(theme::cream()).inner_margin(Margin {
-                left: 10,
-                right: DOCK_GAP as i8,
-                top: 10,
-                bottom: 10,
-            }))
-            .show(root, |ui| {
-                if !theme::chem_skin() { theme::paint_page_grid(ui.painter(), ui.max_rect()); }
-                let rect = ui.max_rect();
-                ui.painter().rect(
-                    rect,
-                    CornerRadius::same(18),
-                    theme::rail(),
-                    if theme::is_dark() { Stroke::new(1.0, theme::border()) } else { Stroke::NONE },
-                    StrokeKind::Inside,
-                );
-                let inner = rect.shrink2(Vec2::new((dock_w - if narrow { 48.0 } else { 70.0 }) / 2.0, 12.0));
-                let mut ui = ui.new_child(UiBuilder::new().max_rect(inner));
-                let ui = &mut ui;
-                ui.spacing_mut().item_spacing = Vec2::new(0.0, 4.0);
-                let item_w = inner.width();
-
-                ui.add_space(2.0);
-
-                // Who is signed in: a saved session is looked up once, quietly (no request at all without one), so the
-                // Account item can show it on every screen, not only after Account was opened.
-                let probed = egui::Id::new("account_probed");
-                if !ui.ctx().data(|d| d.get_temp::<bool>(probed)).unwrap_or(false) {
-                    ui.ctx().data_mut(|d| d.insert_temp(probed, true));
-                    self.account.open_quiet();
-                }
-                let who = self.account.model.me.as_ref().map(|m| (initials_of(&m.display_name, &m.email), m.email.clone()));
-
-                let nav = [
-                    (NavIcon::Home, "Home", crate::Screen::Home),
-                    (NavIcon::Banks, "Banks", crate::Screen::Banks),
-                    (NavIcon::Exams, "Exams", crate::Screen::Exams),
-                    (NavIcon::Grade, "Grade", crate::Screen::Grade),
-                    (NavIcon::Import, "Import", crate::Screen::Imports),
-                    (NavIcon::Figures, "Figures", crate::Screen::Figures),
-                    (NavIcon::Shared, "Shared", crate::Screen::Shared),
-                    // One item for the account and the settings: signed in, it wears the person's initials,
-                    // a filled disc as Google does; signed out, the plain person icon.
-                    (NavIcon::Account, "Account", crate::Screen::Settings),
-                ];
-                for (icon, label, target) in nav {
-                    let active = match (&self.screen, &target) {
-                        (crate::Screen::BankEdit(_), crate::Screen::Banks) => true,
-                        (crate::Screen::ExamEdit(_), crate::Screen::Exams) => true,
-                        (crate::Screen::Account, crate::Screen::Settings) => true,
-                        (cur, t) => std::mem::discriminant(cur) == std::mem::discriminant(t),
-                    };
-                    let badge = if matches!(icon, NavIcon::Account) { who.as_ref() } else { None };
-                    if dock_item(ui, icon, label, active, item_w, narrow, badge) {
-                        self.screen = target;
-                    }
-                }
-
-                // Floor of the dock: the light/dark button.
-                let btn_h = if narrow { 52.0 } else { 56.0 };
-                // Narrow, the floating "Report an issue" pill sat over page content (Home's last bank
-                // card), so it moves into the dock as an item over light/dark, when the dock has a
-                // free item's height to spare above the nav. Too short a window keeps the pill.
-                let ctx = ui.ctx().clone();
-                let report = narrow
-                    && crate::alphanote::wants_dock(&ctx)
-                    && ui.available_height() >= 2.0 * btn_h + 4.0 + DOCK_REPORT_CLEAR;
-                let reserve = if report { 2.0 * btn_h + 4.0 } else { btn_h };
-                let floor = (ui.available_height() - reserve - 4.0).max(0.0);
-                ui.allocate_at_least(Vec2::new(item_w, floor), egui::Sense::hover());
-                if report {
-                    crate::alphanote::dock_item(ui, item_w, btn_h, |ui, rect, resp| {
-                        dock_glyph_item(ui, rect, resp, egui_phosphor::regular::BUG, "Report", narrow)
-                    });
-                }
-                self.theme_button(ui, item_w, narrow);
-            });
+        // Who is signed in: a saved session is looked up once, quietly (no request at all without one), so the
+        // Account item can show it on every screen, not only after Account was opened.
+        let probed = egui::Id::new("account_probed");
+        if !root.ctx().data(|d| d.get_temp::<bool>(probed)).unwrap_or(false) {
+            root.ctx().data_mut(|d| d.insert_temp(probed, true));
+            self.account.open_quiet();
+        }
+        let who = self.account.model.me.as_ref().map(|m| (initials_of(&m.display_name, &m.email), m.email.clone()));
+        let screens = [
+            crate::Screen::Home,
+            crate::Screen::Banks,
+            crate::Screen::Exams,
+            crate::Screen::Grade,
+            crate::Screen::Imports,
+            crate::Screen::Figures,
+            crate::Screen::Shared,
+            crate::Screen::Settings,
+        ];
+        let active = screens.clone().map(|target| match (&self.screen, &target) {
+            (crate::Screen::BankEdit(_), crate::Screen::Banks) => true,
+            (crate::Screen::ExamEdit(_), crate::Screen::Exams) => true,
+            (crate::Screen::Account, crate::Screen::Settings) => true,
+            (cur, t) => std::mem::discriminant(cur) == std::mem::discriminant(t),
+        });
+        let wants_report = crate::alphanote::wants_dock(root.ctx());
+        let out = draw_dock(root, active, who.as_ref(), wants_report, theme::is_dark());
+        if let Some(i) = out.picked {
+            self.screen = screens[i].clone();
+        }
+        if out.theme_pressed {
+            let ctx = root.ctx().clone();
+            let dark = theme::is_dark();
+            self.set_dark_mode(!dark, &ctx);
+        }
     }
+}
+
+/// The dock's nav items, in order: icon and visible label (also the accessible name).
+const DOCK_NAV: [(NavIcon, &str); 8] = [
+    (NavIcon::Home, "Home"),
+    (NavIcon::Banks, "Banks"),
+    (NavIcon::Exams, "Exams"),
+    (NavIcon::Grade, "Grade"),
+    (NavIcon::Import, "Import"),
+    (NavIcon::Figures, "Figures"),
+    (NavIcon::Shared, "Shared"),
+    // One item for the account and the settings: signed in, it wears the person's initials,
+    // a filled disc as Google does; signed out, the plain person icon.
+    (NavIcon::Account, "Account"),
+];
+
+/// What the dock drew and what was pressed this frame.
+struct DockOut {
+    /// Index into [`DOCK_NAV`] of the item pressed.
+    picked: Option<usize>,
+    theme_pressed: bool,
+    /// The dark rail's rect.
+    #[cfg_attr(not(test), allow(dead_code))]
+    rail: egui::Rect,
+}
+
+/// The dock as a left panel of `root`: the [`DOCK_NAV`] items (`active` marks the current page),
+/// then at its floor the Report item (narrow, when `wants_report` and there is room) and the
+/// light/dark button (`dark` is the current mode).
+fn draw_dock(root: &mut egui::Ui, active: [bool; 8], who: Option<&(String, String)>, wants_report: bool, dark: bool) -> DockOut {
+    // V4 dock: an 88 pt rounded rail inside a 10 pt app gutter; below ~900 pt a 72 pt rail
+    // (still labelled, at a smaller size) whose gap to the page is 8 instead of 16, so the page
+    // keeps the x and width it had beside the old 64 pt rail.
+    let narrow = root.max_rect().width() < 900.0;
+    let dock_w = dock_width(narrow);
+    let gap = dock_gap(narrow);
+    let mut out = DockOut { picked: None, theme_pressed: false, rail: egui::Rect::NOTHING };
+    egui::Panel::left(egui::Id::new("sidebar"))
+        .exact_size(dock_w + 10.0 + gap)
+        .show_separator_line(false)
+        .frame(Frame::new().fill(theme::cream()).inner_margin(Margin {
+            left: 10,
+            right: gap as i8,
+            top: 10,
+            bottom: 10,
+        }))
+        .show(root, |ui| {
+            if !theme::chem_skin() { theme::paint_page_grid(ui.painter(), ui.max_rect()); }
+            let rect = ui.max_rect();
+            out.rail = rect;
+            ui.painter().rect(
+                rect,
+                CornerRadius::same(18),
+                theme::rail(),
+                if theme::is_dark() { Stroke::new(1.0, theme::border()) } else { Stroke::NONE },
+                StrokeKind::Inside,
+            );
+            let inner = rect.shrink2(Vec2::new((dock_w - dock_item_w(narrow)) / 2.0, 12.0));
+            let mut ui = ui.new_child(UiBuilder::new().max_rect(inner));
+            let ui = &mut ui;
+            ui.spacing_mut().item_spacing = Vec2::new(0.0, 4.0);
+            let item_w = inner.width();
+
+            ui.add_space(2.0);
+
+            for (i, (icon, label)) in DOCK_NAV.into_iter().enumerate() {
+                let badge = if matches!(icon, NavIcon::Account) { who } else { None };
+                if dock_item(ui, icon, label, active[i], item_w, narrow, badge) {
+                    out.picked = Some(i);
+                }
+            }
+
+            // Floor of the dock: the light/dark button.
+            let btn_h = dock_item_h(narrow);
+            // Narrow, the floating "Report an issue" pill sat over page content (Home's last bank
+            // card), so it moves into the dock as an item over light/dark, when the dock has a
+            // free item's height to spare above the nav. Too short a window keeps the pill.
+            let report = narrow && wants_report && ui.available_height() >= 2.0 * btn_h + 4.0 + DOCK_REPORT_CLEAR;
+            let reserve = if report { 2.0 * btn_h + 4.0 } else { btn_h };
+            let floor = (ui.available_height() - reserve - 4.0).max(0.0);
+            ui.allocate_at_least(Vec2::new(item_w, floor), egui::Sense::hover());
+            if report {
+                crate::alphanote::dock_item(ui, item_w, btn_h, |ui, rect, resp| {
+                    dock_glyph_item(ui, rect, resp, egui_phosphor::regular::BUG, "Report", narrow)
+                });
+            }
+            out.theme_pressed = theme_toggle(ui, item_w, narrow, dark);
+        });
+    out
 }
 
 /// Free height the narrow dock keeps between its last nav item and the Report item, so Report
 /// reads as a utility beside light/dark rather than a ninth page.
 const DOCK_REPORT_CLEAR: f32 = 24.0;
+
+/// The dock's outer width: 88 on a wide window, 72 on the narrow rail (64 before its labels
+/// grew to 12: "Account" needs a 56 pt item). Each keeps its old side margins round the item
+/// column ([`dock_item_w`]).
+fn dock_width(narrow: bool) -> f32 {
+    if narrow { 72.0 } else { SIDEBAR_WIDTH }
+}
+
+/// The cream gap between the dock and the page: [`DOCK_GAP`] on a wide window; on the narrow rail
+/// the 8 pt the rail grew by comes out of it, so the page's x and width stay as beside the old
+/// 64 pt rail (`dock_width + gap` is 80 either way there).
+fn dock_gap(narrow: bool) -> f32 {
+    if narrow { DOCK_GAP - (dock_width(true) - 64.0) } else { DOCK_GAP }
+}
+
+/// The width of one dock item (its hover tint and the selected pill): the widest label
+/// ("Account", 43 pt at 12 bold, 46.6 at 13; 49 / 53 under the chem skin's Noto) with room
+/// either side.
+fn dock_item_w(narrow: bool) -> f32 {
+    if narrow { 56.0 } else { 70.0 }
+}
+
+/// One dock item's height: the 21 pt icon over the label, with clear space under the label.
+fn dock_item_h(narrow: bool) -> f32 {
+    if narrow { 56.0 } else { 60.0 }
+}
+
+/// The dock's label size, on the `kit::ty` scale: META 13 on a wide window, LABEL 12 on the
+/// narrow rail (it was 10.5 / 9.5, read as "tiny" by the critics for four rounds).
+fn dock_label_size(narrow: bool) -> f32 {
+    if narrow { crate::kit::ty::LABEL } else { crate::kit::ty::META }
+}
+
+/// A dock item's label, centred under its icon near the item's foot. Painted: the item's
+/// response carries the same words as its accessible name.
+fn dock_label(ui: &egui::Ui, rect: egui::Rect, label: &str, narrow: bool, color: Color32) {
+    ui.painter().text(
+        Pos2::new(rect.center().x, rect.bottom() - if narrow { 12.0 } else { 13.0 }),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::new(dock_label_size(narrow), theme::bold_family()),
+        color,
+    );
+}
+
+/// Where a dock item's 21 pt icon is centred, from the item's top.
+fn dock_icon_y(rect: egui::Rect, narrow: bool) -> f32 {
+    rect.top() + if narrow { 19.0 } else { 21.0 }
+}
 
 /// Keyboard focus on any dock item: the app's ring (2 pt, 1 pt clear of the edge, corner + 1, as
 /// `pageshell` and `kit` draw it) in the dock's own ink, drawn only while the item has focus. The
@@ -915,32 +1003,16 @@ fn dock_glyph_item(ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, glyph
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     dock_focus_ring(ui, rect, resp);
-    let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
+    let cy = dock_icon_y(rect, narrow);
     crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
-    ui.painter().text(
-        Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
-        egui::Align2::CENTER_CENTER,
-        label,
-        egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
-        theme::dock_text(),
-    );
+    dock_label(ui, rect, label, narrow, theme::dock_text());
 }
 
-impl crate::App {
-    /// Light/dark: one button, not a switch. It shows the mode a click moves to (a moon while it is light, a
-    /// sun while it is dark), drawn like a nav item: icon over a small label.
-    fn theme_button(&mut self, ui: &mut egui::Ui, w: f32, narrow: bool) {
-        let dark = theme::is_dark();
-        if theme_toggle(ui, w, narrow, dark) {
-            let ctx = ui.ctx().clone();
-            self.set_dark_mode(!dark, &ctx);
-        }
-    }
-}
-
-/// The light/dark button as drawn: `dark` is the current mode. True when it was pressed.
+/// The light/dark button: one button, not a switch. It shows the mode a click moves to (a moon
+/// while it is light, a sun while it is dark), drawn like a nav item: icon over a small label.
+/// `dark` is the current mode. True when it was pressed.
 fn theme_toggle(ui: &mut egui::Ui, w: f32, narrow: bool, dark: bool) -> bool {
-    let h = if narrow { 52.0 } else { 56.0 };
+    let h = dock_item_h(narrow);
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     if resp.hovered() {
         ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
@@ -948,16 +1020,10 @@ fn theme_toggle(ui: &mut egui::Ui, w: f32, narrow: bool, dark: bool) -> bool {
     }
     dock_focus_ring(ui, rect, &resp);
     let (glyph, label) = if dark { (crate::handicons::SUN, "Light") } else { (crate::handicons::MOON, "Dark") };
-    let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
+    let cy = dock_icon_y(rect, narrow);
     crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
     // Labelled at every width: bare outline glyphs on the narrow rail were "guesswork".
-    ui.painter().text(
-        Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
-        egui::Align2::CENTER_CENTER,
-        label,
-        egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
-        theme::dock_text(),
-    );
+    dock_label(ui, rect, label, narrow, theme::dock_text());
     // Named for screen readers by what it does, matching the visible label ("Dark mode").
     let name = format!("{label} mode");
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &name));
@@ -975,7 +1041,7 @@ fn dock_item(
     narrow: bool,
     badge: Option<&(String, String)>,
 ) -> bool {
-    let h = if narrow { 52.0 } else { 56.0 };
+    let h = dock_item_h(narrow);
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     // Named for screen readers by its visible label. The active page is not marked: egui's only
     // flag for it (`WidgetInfo::selected`) makes every item a toggle button.
@@ -991,7 +1057,7 @@ fn dock_item(
     } else {
         (theme::dock_text(), theme::dock_text())
     };
-    let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
+    let cy = dock_icon_y(rect, narrow);
     if let Some((initials, _)) = badge {
         // Signed in: the person's initials in an accent disc stand in for the generic account icon.
         let centre = Pos2::new(rect.center().x, cy);
@@ -1011,13 +1077,7 @@ fn dock_item(
     }
     // Labelled at every width: on the narrow rail eight unlabelled outline glyphs (three of them
     // alike) could only be told apart by hovering.
-    ui.painter().text(
-        Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
-        egui::Align2::CENTER_CENTER,
-        label,
-        egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
-        text_c,
-    );
+    dock_label(ui, rect, label, narrow, text_c);
     resp.clicked()
 }
 
@@ -3497,6 +3557,69 @@ mod tests {
         h.key_press(egui::Key::Enter);
         h.run();
         assert!(*h.state(), "Enter on the focused item opens its page");
+    }
+
+    /// At 800 tall, on a wide window (1280) and at 760: every nav item, the light/dark button and
+    /// (at 760) Report lie inside the dark rail, top to bottom, without overlapping; and every
+    /// label fits its item, across and under its icon, in the default face and the chem skin's
+    /// Noto. The page beside the dock starts where it did beside the old 64 / 88 pt rails.
+    #[test]
+    fn every_dock_item_and_label_fits_at_800_tall_at_both_widths() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        for (w, narrow) in [(1280.0, false), (760.0, true)] {
+            let mut first = true;
+            let mut h = Harness::builder().with_size(egui::vec2(w, 800.0)).build_ui_state(
+                move |ui, rail: &mut (egui::Rect, bool, f32)| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    let mut root = root_ui(ui.ctx());
+                    let mut active = [false; 8];
+                    active[7] = true;
+                    let out = draw_dock(&mut root, active, None, true, false);
+                    let page_x = egui::CentralPanel::default().frame(Frame::NONE).show(&mut root, |ui| ui.max_rect().left()).inner;
+                    *rail = (out.rail, root.max_rect().width() < 900.0, page_x);
+                },
+                (egui::Rect::NOTHING, false, 0.0),
+            );
+            h.run();
+            let (rail, is_narrow, page_x) = *h.state();
+            assert_eq!(is_narrow, narrow, "{w} wide");
+            assert_eq!(page_x, 10.0 + if narrow { 64.0 } else { 88.0 } + DOCK_GAP, "{w}: the page keeps its x");
+            let mut names: Vec<&str> = DOCK_NAV.iter().map(|(_, l)| *l).collect();
+            if narrow {
+                names.push("Report an issue");
+            }
+            names.push("Dark mode");
+            let rects: Vec<egui::Rect> = names.iter().map(|n| h.get_by_label(n).rect()).collect();
+            for (n, r) in names.iter().zip(&rects) {
+                assert!(rail.contains_rect(*r), "{w}: {n} {r:?} leaves the dock {rail:?}");
+                assert_eq!(r.height(), dock_item_h(narrow), "{w}: {n} height");
+                assert_eq!(r.width(), dock_item_w(narrow), "{w}: {n} width");
+            }
+            for (i, pair) in rects.windows(2).enumerate() {
+                assert!(pair[0].bottom() <= pair[1].top(), "{w}: {} overlaps {}", names[i], names[i + 1]);
+            }
+
+            // Each label inside its item: across with 3 pt clear each side, and under the 21 pt
+            // icon with its whole line box above the item's foot.
+            let ctx = h.ctx.clone();
+            let item = egui::Rect::from_min_size(Pos2::ZERO, Vec2::new(dock_item_w(narrow), dock_item_h(narrow)));
+            let icon_bottom = dock_icon_y(item, narrow) + 10.5;
+            let label_y = item.bottom() - if narrow { 12.0 } else { 13.0 };
+            for family in ["vs-sans-bold", "vs-noto-bold"] {
+                let font = egui::FontId::new(dock_label_size(narrow), egui::FontFamily::Name(family.into()));
+                for label in ["Home", "Banks", "Exams", "Grade", "Import", "Figures", "Shared", "Account", "Report", "Dark", "Light"] {
+                    let g = ctx.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), Color32::WHITE));
+                    let s = g.size();
+                    assert!(s.x + 6.0 <= item.width(), "{w} {family}: {label} is {} wide in a {} item", s.x, item.width());
+                    assert!(label_y - s.y / 2.0 >= icon_bottom, "{w} {family}: {label} runs into its icon");
+                    assert!(label_y + s.y / 2.0 <= item.bottom(), "{w} {family}: {label} drops below its item");
+                }
+            }
+        }
     }
 
     /// Tab walks a dock of the active item, an inactive one and the light/dark button in order;

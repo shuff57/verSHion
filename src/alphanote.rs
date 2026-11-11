@@ -110,12 +110,18 @@ pub fn dock_item(ui: &mut Ui, w: f32, h: f32, paint: impl FnOnce(&Ui, egui::Rect
 
 const CORNER_ID: &str = "alpha_report_button";
 
+/// The corner button's inset from the window's bottom right corner: the page's own margins
+/// (`screens::desk_panel` keeps 20 at the foot and 20 + 14 scrollbar room at the right), so the
+/// button sits inside the page, its right edge on the content's right edge and its foot on the
+/// page's bottom margin, not across the margin band where the page grid stops.
+const CORNER_INSET: [f32; 2] = [-34.0, -20.0];
+
 /// The corner button; true when pressed.
 fn corner_button(ctx: &egui::Context) -> bool {
     let mut pressed = false;
     egui::Area::new(egui::Id::new(CORNER_ID))
         .order(egui::Order::Foreground)
-        .anchor(Align2::RIGHT_BOTTOM, [-16.0, -16.0])
+        .anchor(Align2::RIGHT_BOTTOM, CORNER_INSET)
         .show(ctx, |ui| {
             egui::Frame::new()
                 .corner_radius(CornerRadius::same(255))
@@ -126,18 +132,20 @@ fn corner_button(ctx: &egui::Context) -> bool {
 }
 
 fn pill(ui: &mut Ui) -> bool {
-    // It sits on every screen, so it is the quietest control on each: regular weight, muted, small.
-    // Bold ink at 13.5 px read as a second primary action beside the page's own.
+    // A real action on every screen, in the quiet outlined tier: card fill, the 1 pt control edge,
+    // ink icon and label at the compact button size, semibold (the tertiary tier's weight). Muted
+    // 12 pt text on a 1.45:1 hairline read as disabled; bold ink read as a second primary action.
     ui.add(
         egui::Button::new(
             RichText::new(format!("{}  Report an issue", egui_phosphor::regular::BUG))
-                .size(12.0)
-                .color(theme::muted_col()),
+                .size(kit::ty::BUTTON_SM)
+                .family(theme::semibold())
+                .color(theme::ink()),
         )
         .fill(theme::card())
-        .stroke(Stroke::new(1.0, theme::border()))
+        .stroke(Stroke::new(1.0, theme::edge()))
         .corner_radius(CornerRadius::same(255))
-        .min_size(Vec2::new(0.0, 30.0)),
+        .min_size(Vec2::new(0.0, 32.0)),
     )
     .on_hover_text("Something broken or confusing? Tell us.")
     .clicked()

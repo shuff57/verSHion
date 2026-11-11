@@ -1334,14 +1334,16 @@ impl App {
         if questions.is_empty() && !new_open {
             // (the filter rows above are hidden for an empty bank, so the gap is the header's)
             ui.add_space(4.0);
-            // The card's own buttons do what the toolbar's Add question and Import do.
-            let b = crate::pageshell::empty_state_buttons(
-                ui,
-                crate::handicons::EDIT,
-                "No questions yet",
-                "Write the first question yourself, or import a test you already have.",
-                &[("Add question", true), ("Import questions", false)],
-            );
+            // The card's own buttons do what the toolbar's Add question and Import do. On a wide
+            // page the card is one row across its width (the strip below is a full-width band too);
+            // narrower, the shared stacked, centred card.
+            let (title, body) = ("No questions yet", "Write the first question yourself, or import a test you already have.");
+            let actions = [("Add question", true), ("Import questions", false)];
+            let b = if ui.available_width() >= EMPTY_WIDE {
+                empty_bank_card_row(ui, crate::handicons::EDIT, title, body, &actions)
+            } else {
+                crate::pageshell::empty_state_buttons(ui, crate::handicons::EDIT, title, body, &actions)
+            };
             if let Some(add) = b.first() {
                 self.add_question_menu(add, bank_id);
             }
@@ -1995,6 +1997,59 @@ fn dashed_round_rect(p: &egui::Painter, r: Rect, rad: f32, stroke: Stroke) {
     p.extend(egui::Shape::dashed_line(&pts, stroke, 5.0, 4.0));
 }
 
+/// The width from which the empty bank's card is one row and its strip three columns.
+const EMPTY_WIDE: f32 = 820.0;
+
+/// The empty bank's card on a wide page: the shared empty card's parts (56 pt accent_faded disc,
+/// 22 pt serif title, the 15 pt sentence in `text`, 40 tall primary and outline buttons) in one
+/// row across the card's width, all vertically centred: disc and text left, the buttons ending on
+/// the card's right padding. Returns each button's response in `actions` order.
+fn empty_bank_card_row(ui: &mut Ui, icon: &str, title: &str, body: &str, actions: &[(&str, bool)]) -> Vec<egui::Response> {
+    const DISC: f32 = 56.0;
+    const GAP: f32 = 20.0;
+    const BTN_GAP: f32 = 10.0;
+    let mut pressed = Vec::new();
+    Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0, theme::border()))
+        .corner_radius(CornerRadius::same(kit::R_CARD))
+        .inner_margin(Margin::symmetric(28, 26))
+        .show(ui, |ui| {
+            let w = ui.available_width();
+            ui.set_width(w);
+            let btns: f32 = actions.iter().map(|(t, _)| crate::pageshell::button_width(ui, t)).sum::<f32>() + BTN_GAP * (actions.len() as f32 - 1.0);
+            let text_w = (w - DISC - GAP - GAP - btns).max(120.0);
+            let title = egui::WidgetText::from(theme::serif(title).size(22.0).color(theme::ink()));
+            let body = egui::WidgetText::from(RichText::new(body).size(15.0).color(theme::text_col()));
+            let th = title.clone().into_galley(ui, Some(egui::TextWrapMode::Wrap), text_w, egui::TextStyle::Body).size().y;
+            let bh = body.clone().into_galley(ui, Some(egui::TextWrapMode::Wrap), text_w, egui::TextStyle::Body).size().y;
+            const TGAP: f32 = 4.0;
+            const BTN_H: f32 = 40.0;
+            let h = DISC.max(th + TGAP + bh).max(BTN_H);
+            let (row, _) = ui.allocate_exact_size(Vec2::new(w, h), Sense::hover());
+            let disc = Rect::from_center_size(Pos2::new(row.left() + DISC / 2.0, row.center().y), Vec2::splat(DISC));
+            ui.painter().circle_filled(disc.center(), DISC / 2.0, theme::accent_faded());
+            crate::handicons::paint_glyph(ui.painter(), disc.center(), icon, 26.0, theme::accent_col());
+            // Each part in its own column of the row, its block centred on the row's middle.
+            let text_x = disc.right() + GAP;
+            let text_top = (row.center().y - (th + TGAP + bh) / 2.0).round();
+            let text = Rect::from_min_size(Pos2::new(text_x, text_top), Vec2::new(text_w, th + TGAP + bh));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(text).layout(Layout::top_down(Align::Min)), |ui| {
+                ui.spacing_mut().item_spacing.y = TGAP;
+                ui.add(egui::Label::new(title).wrap());
+                ui.add(egui::Label::new(body).wrap());
+            });
+            let btn_rect = Rect::from_min_size(Pos2::new(row.right() - btns, (row.center().y - BTN_H / 2.0).round()), Vec2::new(btns, BTN_H));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(btn_rect).layout(Layout::left_to_right(Align::Center)), |ui| {
+                ui.spacing_mut().item_spacing.x = BTN_GAP;
+                for (label, primary_btn) in actions {
+                    pressed.push(if *primary_btn { crate::pageshell::primary(ui, label) } else { crate::pageshell::outline(ui, label) });
+                }
+            });
+        });
+    pressed
+}
+
 /// The empty bank's three facts: (icon, title, body). The first part's body is the list of types.
 const EMPTY_STRIP: [(&str, &str, &str); 3] = [
     (egui_phosphor::regular::LIST_BULLETS, "Six question types", ""),
@@ -2008,7 +2063,7 @@ const EMPTY_STRIP: [(&str, &str, &str); 3] = [
 /// three rows, each title beside its text.
 fn empty_bank_strip(ui: &mut Ui) {
     let w = ui.available_width();
-    let wide = w >= 820.0;
+    let wide = w >= EMPTY_WIDE;
     let pad = if wide { Margin::symmetric(4, 18) } else { Margin::symmetric(20, 16) };
     Frame::new()
         .fill(theme::cream())
@@ -2089,22 +2144,31 @@ fn strip_body(ui: &mut Ui, i: usize) {
     }
     let mut kinds = crate::bankops::KINDS;
     kinds.sort_by_key(|k| mix_index(*k));
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::new(14.0, 0.0);
-        // Each item (swatch, gap, name) is one allocation, so the row wraps between items, never
-        // between a swatch and its name; the name is still its own label widget.
-        const SW: f32 = 9.0;
-        const SGAP: f32 = 6.0;
-        for k in kinds {
-            let text = RichText::new(k.label()).size(kit::ty::BODY).color(theme::text_col());
-            let g = egui::WidgetText::from(text.clone()).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Body);
-            let (r, _) = ui.allocate_exact_size(Vec2::new(SW + SGAP + g.size().x, 20.0), Sense::hover());
-            let sw = Rect::from_center_size(Pos2::new(r.left() + SW / 2.0, r.center().y), Vec2::splat(SW));
-            ui.painter().rect_filled(sw, CornerRadius::same(3), theme::type_hue(mix_index(k)));
-            let tr = Rect::from_min_max(Pos2::new(r.left() + SW + SGAP, r.top()), r.max);
-            ui.put(tr, egui::Label::new(text).extend());
-        }
-    });
+    // An aligned grid, two columns of three in the bar's order read across, every name starting on
+    // its column's x (one column if two will not fit); the same grid at every width.
+    const SW: f32 = 9.0;
+    const SGAP: f32 = 6.0;
+    const COL_GAP: f32 = 24.0;
+    const ROW_H: f32 = 20.0;
+    const ROW_GAP: f32 = 6.0;
+    let texts: Vec<RichText> = kinds.iter().map(|k| RichText::new(k.label()).size(kit::ty::BODY).color(theme::text_col())).collect();
+    let name_w: Vec<f32> = texts
+        .iter()
+        .map(|t| egui::WidgetText::from(t.clone()).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Body).size().x.ceil())
+        .collect();
+    let item_w = SW + SGAP + name_w.iter().copied().fold(0.0_f32, f32::max);
+    let cols = if 2.0 * item_w + COL_GAP <= ui.available_width() { 2 } else { 1 };
+    let rows = kinds.len().div_ceil(cols);
+    let (area, _) = ui.allocate_exact_size(Vec2::new(cols as f32 * item_w + (cols as f32 - 1.0) * COL_GAP, rows as f32 * ROW_H + (rows as f32 - 1.0) * ROW_GAP), Sense::hover());
+    for (n, (k, text)) in kinds.iter().zip(texts).enumerate() {
+        let (row, col) = (n / cols, n % cols);
+        let at = Pos2::new(area.left() + col as f32 * (item_w + COL_GAP), area.top() + row as f32 * (ROW_H + ROW_GAP));
+        let sw = Rect::from_center_size(Pos2::new(at.x + SW / 2.0, at.y + ROW_H / 2.0), Vec2::splat(SW));
+        ui.painter().rect_filled(sw, CornerRadius::same(3), theme::type_hue(mix_index(*k)));
+        // the label's own width, so it starts at its column's x (put centres a label in its rect)
+        let tr = Rect::from_min_size(Pos2::new(at.x + SW + SGAP, at.y), Vec2::new(name_w[n], ROW_H));
+        ui.put(tr, egui::Label::new(text).extend());
+    }
 }
 
 /// The usage link's words ("Used in 1 exam").
@@ -4978,6 +5042,103 @@ mod tests {
             h.run();
             for t in ["Six question types", "Topics and difficulty", "Use it in any exam"] {
                 assert!(h.query_by_label(t).is_none(), "{w}: {t} gone once the bank has a question");
+            }
+        }
+    }
+
+    const EMPTY_SENTENCE: &str = "Write the first question yourself, or import a test you already have.";
+
+    /// On a wide window the empty bank's card is one row: disc, "No questions yet" and its
+    /// sentence on the left, Add question then Import questions on the right ending inside the
+    /// card's right padding, all centred on one line and none overlapping; below EMPTY_WIDE the
+    /// shared stacked, centred card. Both buttons still act: Add question opens the add menu,
+    /// Import questions the import window.
+    #[test]
+    fn the_empty_bank_card_is_one_row_on_a_wide_window() {
+        use egui_kittest::kittest::Queryable;
+        let mut h = bank_page_harness(1110.0);
+        h.run();
+        let title = h.get_by_label("No questions yet").rect();
+        let body = h.get_by_label(EMPTY_SENTENCE).rect();
+        let add = h.get_by_label("Add question").rect();
+        let imp = h.get_by_label("Import questions").rect();
+        // The page's right edge is where the header's Bank actions ends; the card ends there too,
+        // its 28 pt padding inside.
+        let page_right = h.get_by_label("Bank actions").rect().right();
+        assert!(title.left() < add.left() && body.right() < add.left(), "text left of the buttons: {body:?} {add:?}");
+        assert!(add.right() < imp.left(), "Add question before Import questions, apart: {add:?} {imp:?}");
+        assert!(imp.right() <= page_right - 28.0 + 0.5 && imp.right() >= page_right - 28.0 - 2.0, "buttons end on the card's right padding: {imp:?} page right {page_right}");
+        assert!(title.bottom() <= body.top() + 0.5, "title above its sentence: {title:?} {body:?}");
+        // One row: the text block and the buttons share a vertical centre.
+        let text_mid = (title.top() + body.bottom()) / 2.0;
+        assert!((add.center().y - text_mid).abs() <= 2.0 && (imp.center().y - add.center().y).abs() <= 0.5, "centred on one row: text {text_mid}, {add:?} {imp:?}");
+        // The strip (and so the card's bottom) is close under the row, not under a stacked card.
+        let strip = h.get_by_label("Six question types").rect();
+        assert!(strip.top() > add.bottom() && strip.top() - add.bottom() < 120.0, "strip under a one-row card: {strip:?} {add:?}");
+
+        // Add question opens the menu of the six types.
+        assert!(h.query_by_label("1   Multiple choice").is_none());
+        h.get_by_label("Add question").click();
+        h.run();
+        assert!(h.query_by_label("1   Multiple choice").is_some(), "Add question opens its type menu");
+        h.key_press(egui::Key::Escape);
+        h.run();
+        // Import questions opens the import window.
+        assert!(!crate::importui::import_modal_open(&h.ctx));
+        h.get_by_label("Import questions").click();
+        h.run();
+        assert!(crate::importui::import_modal_open(&h.ctx), "Import questions opens the import window");
+
+        // Narrow: the stacked card, title, sentence and buttons centred one under another.
+        let mut h = bank_page_harness(615.0);
+        h.run();
+        let title = h.get_by_label("No questions yet").rect();
+        let body = h.get_by_label(EMPTY_SENTENCE).rect();
+        let add = h.get_by_label("Add question").rect();
+        let imp = h.get_by_label("Import questions").rect();
+        assert!(615.0 < EMPTY_WIDE);
+        assert!(title.bottom() <= body.top() + 0.5 && body.bottom() < add.top(), "stacked: {title:?} {body:?} {add:?}");
+        assert!((title.center().x - body.center().x).abs() <= 1.0, "title and sentence centred together");
+        let pair_mid = (add.left() + imp.right()) / 2.0;
+        assert!((pair_mid - body.center().x).abs() <= 2.0, "the buttons centred under the sentence: {pair_mid} vs {}", body.center().x);
+    }
+
+    /// "Six question types": the six names in two columns of three, in the bar's order read
+    /// across, the names of a column starting on one x and a row's names on one line, each name
+    /// its own label, all inside the first part of the strip (under its title, before the next
+    /// part), at both widths.
+    #[test]
+    fn the_six_types_form_an_aligned_grid() {
+        use egui_kittest::kittest::Queryable;
+        let mut kinds = crate::bankops::KINDS;
+        kinds.sort_by_key(|k| mix_index(*k));
+        for w in [1110.0, 615.0] {
+            let mut h = bank_page_harness(w);
+            h.run();
+            let rects: Vec<Rect> = kinds.iter().map(|k| h.get_by_label(k.label()).rect()).collect();
+            for row in 0..3 {
+                let (a, b) = (rects[row * 2], rects[row * 2 + 1]);
+                assert!((a.center().y - b.center().y).abs() <= 0.5, "{w}: row {row} on one line: {a:?} {b:?}");
+                assert!(a.right() < b.left(), "{w}: row {row} left then right, apart: {a:?} {b:?}");
+                if row > 0 {
+                    assert!(rects[row * 2 - 2].bottom() <= a.top() + 0.5, "{w}: row {row} under the row before");
+                }
+            }
+            for col in 0..2 {
+                let x = rects[col].left();
+                for row in 1..3 {
+                    assert!((rects[row * 2 + col].left() - x).abs() <= 0.5, "{w}: column {col} shares its x at row {row}: {:?} vs {x}", rects[row * 2 + col]);
+                }
+            }
+            let title = h.get_by_label("Six question types").rect();
+            let next = h.get_by_label("Topics and difficulty").rect();
+            for (k, r) in kinds.iter().zip(&rects) {
+                assert!(r.top() >= title.bottom() - 0.5 || r.left() >= title.right(), "{w}: {} under or beside its title", k.label());
+                if w >= EMPTY_WIDE {
+                    assert!(r.right() < next.left() && r.top() > title.bottom(), "{w}: {} inside the first column", k.label());
+                } else {
+                    assert!(r.bottom() < next.top() && r.right() <= w + 0.5, "{w}: {} inside the first row", k.label());
+                }
             }
         }
     }
