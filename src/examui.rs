@@ -210,6 +210,14 @@ struct ShelfCardSeen {
     points: Option<Rect>,
     icons_left: f32,
     badges_right: f32,
+    /// The top of the card's question text.
+    text_top: f32,
+    /// Where the last line of the question shown ends (past its ellipsis when cut).
+    text_end: f32,
+    /// The right edge of the question's column.
+    stem_right: f32,
+    /// The bottom of the last line of the question shown.
+    last_bottom: f32,
 }
 
 #[derive(Clone)]
@@ -1647,6 +1655,38 @@ fn draw_saved_indicator_at(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id
     ui.add_space(4.0);
 }
 
+/// A light top-bar button: 32 tall like the undo / redo circles, no fill, a 1 pt
+/// [`theme::edge`], a 16 pt ink `icon` and the compact label in regular-weight ink. Under the
+/// pointer hover_bg, accent_faded while pressed, the 2 pt accent focus ring, PointingHand, and
+/// `label` as its accessible name (the tertiary tier's states, a weight and a size lighter).
+fn light_icon_button(ui: &mut egui::Ui, icon: &str, label: &str) -> egui::Response {
+    const H: f32 = 32.0;
+    let galley = ui.painter().layout_no_wrap(label.to_owned(), FontId::proportional(kit::ty::BUTTON_SM), theme::ink());
+    let (pad, icon_w, gap) = (14.0, 16.0, 7.0);
+    // As wide as the outlined button it lightens (at least its own content), its content
+    // centred, so the buttons beside it keep their places to the pixel.
+    let content = icon_w + gap + galley.size().x;
+    let w = (pad * 2.0 + content).ceil().max(crate::pageshell::button_width(ui, label));
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, H), Sense::click());
+    let bg = if resp.is_pointer_button_down_on() {
+        theme::accent_faded()
+    } else if resp.hovered() {
+        theme::hover_bg()
+    } else {
+        Color32::TRANSPARENT
+    };
+    let p = ui.painter();
+    p.rect(rect, CornerRadius::same(12), bg, Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
+    let x = (rect.center().x - content / 2.0).round();
+    crate::handicons::paint_glyph(p, Pos2::new(x + icon_w / 2.0, rect.center().y), icon, 16.0, theme::ink());
+    p.galley(Pos2::new(x + icon_w + gap, rect.center().y - galley.size().y / 2.0), galley, theme::ink());
+    if resp.has_focus() {
+        p.rect_stroke(rect.expand(1.0), CornerRadius::same(13), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 /// Undo, redo, Save, Export — right aligned in whatever room is left.
 fn draw_actions(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, compact: bool) {
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1654,7 +1694,9 @@ fn draw_actions(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, compact: 
         if crate::pageshell::primary(ui, "Export").clicked() {
             app.export_open = true;
         }
-        if !compact && crate::pageshell::outline(ui, "Export history").clicked() {
+        // Export is the one filled primary; Export history a light step below it and below
+        // Save (32 tall, no fill, 1 pt edge, regular ink, an exported-file icon).
+        if !compact && light_icon_button(ui, egui_phosphor::regular::FILE_ARROW_DOWN, "Export history").on_hover_text("The files exported from this exam on this computer").clicked() {
             app.history_open = true;
         }
         let dirty = working_copy_dirty(app, ui.ctx(), exam_id);
@@ -3269,27 +3311,48 @@ const BAR_PAD: f32 = 2.0;
 const BAR_DIV_GAP: f32 = 9.0;
 
 /// How far the selected question's outline stands off its text (sideways, never past the paper's
-/// edge; and above and below).
+/// edge; above; and below, where it keeps the sides' room off the last answer line).
 const SEL_PAD_X: f32 = 10.0;
 const SEL_PAD_Y: f32 = 4.0;
+const SEL_PAD_BOTTOM: f32 = SEL_PAD_X;
 
 /// The narrow toolbar's labels, as drawn: "Edit", "More", "Remove".
 const BAR_LABELS: [&str; 3] = ["Edit", "More", "Remove"];
+
+/// The labels ↑ / ↓ carry where one row holds them: "Up", "Down".
+const ARROW_LABELS: [&str; 2] = ["Up", "Down"];
+
+/// The widths of [`BAR_LABELS`], and of [`ARROW_LABELS`] when ↑ / ↓ may be labelled (from bare
+/// widths, `[Edit, More, Remove]`, the arrows stay glyphs alone).
+#[derive(Clone, Copy, Debug)]
+struct BarLabelW {
+    text: [f32; 3],
+    arrows: Option<[f32; 2]>,
+}
+
+impl From<[f32; 3]> for BarLabelW {
+    fn from(text: [f32; 3]) -> Self {
+        BarLabelW { text, arrows: None }
+    }
+}
 
 /// The labels' font: compact button text.
 fn bar_font() -> FontId {
     FontId::new(kit::ty::BUTTON_SM, theme::semibold())
 }
 
-/// The width of one toolbar control, given the widths of [`BAR_LABELS`].
-fn bar_item_w(kind: u8, label_w: [f32; 3]) -> f32 {
+/// The width of one toolbar control, given the label widths; ↑ / ↓ are glyphs alone unless
+/// `arrows` holds their labels' widths (then "Up" / "Down" follow them).
+fn bar_item_w(kind: u8, label_w: [f32; 3], arrows: Option<[f32; 2]>) -> f32 {
     // A glyph, then its label, with room either side.
     let labelled = |w: f32| 8.0 + 14.0 + 5.0 + w + 9.0;
-    match kind {
-        GRIP => 24.0,
-        1 | 2 => 28.0,
-        7 => labelled(label_w[0]),
-        4 => labelled(label_w[1]),
+    match (kind, arrows) {
+        (GRIP, _) => 24.0,
+        (1, Some(a)) => labelled(a[0]),
+        (2, Some(a)) => labelled(a[1]),
+        (1 | 2, None) => 28.0,
+        (7, _) => labelled(label_w[0]),
+        (4, _) => labelled(label_w[1]),
         _ => labelled(label_w[2]),
     }
 }
@@ -3311,20 +3374,37 @@ struct NarrowBar {
     rows: usize,
 }
 
-/// The outline round a question at `q` with gutters `ml`/`mr`.
-fn narrow_outline(q: Rect, ml: f32, mr: f32) -> Rect {
+/// The outline round a question at `q` with gutters `ml`/`mr`, standing `below` under it.
+fn narrow_outline(q: Rect, ml: f32, mr: f32, below: f32) -> Rect {
     let lx = SEL_PAD_X.min((ml - 4.0).max(0.0));
     let rx = SEL_PAD_X.min((mr - 4.0).max(0.0));
-    Rect::from_min_max(Pos2::new(q.left() - lx, q.top() - SEL_PAD_Y), Pos2::new(q.right() + rx, q.bottom() + SEL_PAD_Y))
+    Rect::from_min_max(Pos2::new(q.left() - lx, q.top() - SEL_PAD_Y), Pos2::new(q.right() + rx, q.bottom() + below))
+}
+
+/// How far the drawn outline stands under a question ending at `bottom` on a page whose body
+/// ends at `foot`: the sides' room ([`SEL_PAD_BOTTOM`]) where the page has it, never into the
+/// page's foot (the margin, page number, "Turn over"), and at least [`SEL_PAD_Y`].
+fn outline_below(bottom: f32, foot: f32) -> f32 {
+    SEL_PAD_BOTTOM.min(foot - bottom).max(SEL_PAD_Y)
 }
 
 /// The narrow toolbar of a question at `q`: on its top edge, left-aligned with its outline, above
 /// the question's text (the page makes that room; see [`narrow_bar_need`]). Two rows where one is
-/// wider than the outline.
-fn narrow_bar(q: Rect, ml: f32, mr: f32, label_w: [f32; 3]) -> NarrowBar {
-    let outline = narrow_outline(q, ml, mr);
-    let ws: Vec<f32> = BAR_ORDER.iter().map(|&k| bar_item_w(k, label_w)).collect();
-    let one_row = ws.iter().sum::<f32>() + BAR_DIV_GAP + 2.0 * BAR_PAD;
+/// wider than the outline. ↑ / ↓ are labelled "Up" / "Down" (given their widths) where that
+/// still fits one row. The outline stands [`SEL_PAD_Y`] under the question (see [`narrow_bar_at`]).
+fn narrow_bar(q: Rect, ml: f32, mr: f32, label_w: impl Into<BarLabelW>) -> NarrowBar {
+    narrow_bar_at(q, ml, mr, label_w, SEL_PAD_Y)
+}
+
+/// [`narrow_bar`] with the outline `below` under the question (the page draws it
+/// [`outline_below`] its page's foot).
+fn narrow_bar_at(q: Rect, ml: f32, mr: f32, label_w: impl Into<BarLabelW>, below: f32) -> NarrowBar {
+    let BarLabelW { text: label_w, arrows: arrow_w } = label_w.into();
+    let outline = narrow_outline(q, ml, mr, below);
+    let row_w = |arrows: Option<[f32; 2]>| BAR_ORDER.iter().map(|&k| bar_item_w(k, label_w, arrows)).sum::<f32>() + BAR_DIV_GAP + 2.0 * BAR_PAD;
+    let arrows = arrow_w.filter(|_| row_w(arrow_w) <= outline.width());
+    let ws: Vec<f32> = BAR_ORDER.iter().map(|&k| bar_item_w(k, label_w, arrows)).collect();
+    let one_row = row_w(arrows);
     let rows = if one_row <= outline.width() { 1 } else { 2 };
     let first_row = if rows == 1 { BAR_ORDER.len() } else { 4 };
     let frame_h = rows as f32 * BAR_ITEM_H + 2.0 * BAR_PAD;
@@ -3353,9 +3433,10 @@ fn narrow_bar(q: Rect, ml: f32, mr: f32, label_w: [f32; 3]) -> NarrowBar {
     NarrowBar { items, frame, outline, divider, rows }
 }
 
-/// The widths of [`BAR_LABELS`] in [`bar_font`].
-fn bar_label_widths(ui: &egui::Ui) -> [f32; 3] {
-    BAR_LABELS.map(|t| ui.fonts_mut(|f| f.layout_no_wrap(t.to_string(), bar_font(), PAPER_INK).size().x))
+/// The widths of [`BAR_LABELS`] and [`ARROW_LABELS`] in [`bar_font`].
+fn bar_label_widths(ui: &egui::Ui) -> BarLabelW {
+    let w = |t: &str| ui.fonts_mut(|f| f.layout_no_wrap(t.to_string(), bar_font(), PAPER_INK).size().x);
+    BarLabelW { text: BAR_LABELS.map(w), arrows: Some(ARROW_LABELS.map(w)) }
 }
 
 /// The clear room the selected question needs above its text on a narrow page (column `cw` wide):
@@ -3363,7 +3444,7 @@ fn bar_label_widths(ui: &egui::Ui) -> [f32; 3] {
 fn narrow_bar_need(ui: &egui::Ui, cw: f32, ml: f32, mr: f32) -> f32 {
     let q = Rect::from_min_size(Pos2::ZERO, Vec2::new(cw, 40.0));
     // Clear of the previous question's outline too.
-    -narrow_bar(q, ml, mr, bar_label_widths(ui)).frame.top() + SEL_PAD_Y + 6.0
+    -narrow_bar(q, ml, mr, bar_label_widths(ui)).frame.top() + SEL_PAD_BOTTOM + 6.0
 }
 
 /// The narrow page's selected question: the one last tapped, else the first.
@@ -3388,12 +3469,9 @@ fn paint_bar_item(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
     }
     let glyph = if danger { PAPER_DANGER } else if hovered { PAPER_ACCENT } else { PAPER_SOFT };
     let c = rect.center();
-    let s = Stroke::new(1.6, glyph);
     let label = match kind {
         1 | 2 => {
-            let dy = if kind == 1 { 1.0 } else { -1.0 };
-            p.line_segment([c + Vec2::new(-4.0, 1.5 * dy), c + Vec2::new(0.0, -2.5 * dy)], s);
-            p.line_segment([c + Vec2::new(0.0, -2.5 * dy), c + Vec2::new(4.0, 1.5 * dy)], s);
+            paint_bar_arrow(p, rect, kind, glyph, if hovered { PAPER_ACCENT } else { PAPER_INK });
             return;
         }
         7 => BAR_LABELS[0],
@@ -3412,6 +3490,35 @@ fn paint_bar_item(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
     }
     let text = if danger { PAPER_DANGER } else if hovered { PAPER_ACCENT } else { PAPER_INK };
     p.text(Pos2::new(rect.left() + 8.0 + 14.0 + 5.0, c.y), Align2::LEFT_CENTER, label, bar_font(), text);
+}
+
+/// The narrow toolbar's ↑ / ↓ in `rect`: a chevron in `glyph`, followed by "Up" / "Down" in
+/// `text` where the rect is wide enough to hold the label (see [`bar_item_w`]); else centred.
+fn paint_bar_arrow(p: &egui::Painter, rect: Rect, kind: u8, glyph: Color32, text: Color32) {
+    let labelled = rect.width() > 28.5;
+    let c = if labelled { Pos2::new(rect.left() + 8.0 + 7.0, rect.center().y) } else { rect.center() };
+    let s = Stroke::new(1.6, glyph);
+    let dy = if kind == 1 { 1.0 } else { -1.0 };
+    p.line_segment([c + Vec2::new(-4.0, 1.5 * dy), c + Vec2::new(0.0, -2.5 * dy)], s);
+    p.line_segment([c + Vec2::new(0.0, -2.5 * dy), c + Vec2::new(4.0, 1.5 * dy)], s);
+    if labelled {
+        let label = if kind == 1 { ARROW_LABELS[0] } else { ARROW_LABELS[1] };
+        p.text(Pos2::new(rect.left() + 8.0 + 14.0 + 5.0, rect.center().y), Align2::LEFT_CENTER, label, bar_font(), text);
+    }
+}
+
+/// A narrow toolbar ↑ / ↓ with nowhere to go: hover only, not focusable, the chevron in the
+/// unavailable outline grey and its label in the unavailable text grey; `why` on hover.
+fn bar_button_unavailable(ui: &mut egui::Ui, id: egui::Id, rect: Rect, kind: u8, show: bool, why: &str) {
+    let resp = ui.interact(rect, id, Sense::hover());
+    if !show {
+        return;
+    }
+    let (_, text, faint) = crate::pageshell::unavailable_colors_light();
+    paint_bar_arrow(ui.painter(), rect, kind, faint, text);
+    let tip = margin_tip(kind);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, false, tip));
+    resp.on_hover_text(why);
 }
 
 /// One narrow toolbar control (see [`paint_bar_item`]), named by [`margin_tip`] (None while hidden).
@@ -3488,7 +3595,14 @@ fn draw_item(
     // Narrow: every question's controls at rest (no pointer reaches a touch screen's hover), in
     // one outlined toolbar joined to an outline round the question. Desktop: the gutters' handles
     // for the question under the pointer.
-    let bar = narrow.then(|| narrow_bar(rect, ml, mr, bar_label_widths(ui)));
+    let bar = narrow.then(|| {
+        // The outline keeps the sides' room under the last line, short of its page's foot.
+        let foot = ctx.data(|d| d.get_temp::<PageGeom>(geom_id())).map_or(f32::INFINITY, |g| {
+            let page = ((rect.top() - g.p0 - g.lift) / g.page_h + 0.0001).floor().max(0.0);
+            g.p0 + g.lift + (page + 1.0) * g.page_h - g.mb
+        });
+        narrow_bar_at(rect, ml, mr, bar_label_widths(ui), outline_below(rect.bottom(), foot))
+    });
     let hs = (!narrow).then(|| margin_handles(rect, ml, mr, bp));
     let hover = !any_drag
         && match (&bar, &hs) {
@@ -3570,7 +3684,12 @@ fn draw_item(
             // The first question's ↑ and the last one's ↓ have nowhere to go: they look and are
             // disabled (the menu's Move up / Move down say the same).
             if d != 9 && !move_live(i, n_items, d) {
-                margin_button_unavailable(ui, ui.id().with((salt, i)), r.center(), kind, show, r.height(), if d < 0 { "Already the first question" } else { "Already the last question" });
+                let why = if d < 0 { "Already the first question" } else { "Already the last question" };
+                if narrow {
+                    bar_button_unavailable(ui, ui.id().with((salt, i)), r, kind, show, why);
+                } else {
+                    margin_button_unavailable(ui, ui.id().with((salt, i)), r.center(), kind, show, r.height(), why);
+                }
                 continue;
             }
             let clicked = if narrow { bar_button(ui, ui.id().with((salt, i)), r, kind, show) } else { margin_button_side(ui, ui.id().with((salt, i)), r.center(), kind, show, r.height()) }
@@ -4981,7 +5100,10 @@ fn draw_shelf_inner(
         let row_h = shelf_stem_galley(&p, "A\nA", stem_w, 2).size().y - shelf_stem_galley(&p, "A", stem_w, 1).size().y;
         // An opened card is its whole question whatever the plan gives it.
         let card_h = |j: usize, n: usize| {
-            let n = if open[j] { whole[j] } else { n };
+            if open[j] {
+                let g = shelf_stem_galley(&p, &stems[j], stem_w, whole[j]);
+                return g.size().y + shelf_less_extra(&p, &g, stem_w) + SHELF_CARD_CHROME;
+            }
             shelf_stem_galley(&p, &stems[j], stem_w, n).size().y + SHELF_CARD_CHROME
         };
         let (mut rows, overflow) = shelf_plan(&full, &card_h, row_h, list_h - SHELF_CUE_H, qs.len());
@@ -5072,6 +5194,38 @@ fn shelf_stem_width(w: f32) -> f32 {
 /// A bank card's question, cut to `rows` lines with an ellipsis.
 fn shelf_stem_galley(p: &egui::Painter, text: &str, w: f32, rows: usize) -> std::sync::Arc<egui::Galley> {
     clamped_galley(p, text, FontId::proportional(kit::ty::META), theme::ink(), w, rows)
+}
+
+/// "Show all" / "Show less" on a bank card: accent semibold at the card text's size.
+fn shelf_toggle_galley(p: &egui::Painter, open: bool) -> std::sync::Arc<egui::Galley> {
+    p.layout_no_wrap(if open { "Show less" } else { "Show all" }.to_string(), FontId::new(kit::ty::META, theme::semibold()), theme::accent_col())
+}
+
+/// The width a card's "Show all" / "Show less" takes with its hover pad.
+fn shelf_toggle_w(g: &egui::Galley) -> f32 {
+    g.size().x + 8.0
+}
+
+/// The gap between a card's last line of text and its "Show all" / "Show less".
+const SHELF_TOGGLE_GAP: f32 = 8.0;
+
+/// The extra height an opened card's whole question `g` (laid out `stem_w` wide) needs for
+/// "Show less": none when it fits beside the last line, else one line under it.
+fn shelf_less_extra(p: &egui::Painter, g: &egui::Galley, stem_w: f32) -> f32 {
+    let last = g.rows.last().map_or(0.0, |r| r.rect().right());
+    let tw = shelf_toggle_w(&shelf_toggle_galley(p, true));
+    if last + SHELF_TOGGLE_GAP + tw <= stem_w { 0.0 } else { g.rows.last().map_or(0.0, |r| r.rect().height()) }
+}
+
+/// A cut card's question in two parts: its first `rows - 1` lines whole, and the text from line
+/// `rows` on cut to one line `tail_w` wide with an ellipsis (so the ellipsis ends before "Show
+/// all"). `whole` is the question laid out on every line.
+fn shelf_cut_galleys(p: &egui::Painter, text: &str, whole: &egui::Galley, stem_w: f32, rows: usize, tail_w: f32) -> (Option<std::sync::Arc<egui::Galley>>, std::sync::Arc<egui::Galley>) {
+    let n: usize = whole.rows.iter().take(rows.saturating_sub(1)).map(|r| r.char_count_including_newline().0).sum();
+    let head: String = text.chars().take(n).collect();
+    let tail: String = text.chars().skip(n).collect();
+    let head = (rows > 1).then(|| shelf_stem_galley(p, head.trim_end(), stem_w, SHELF_ROWS_ALL));
+    (head, shelf_stem_galley(p, tail.trim_start(), tail_w, 1))
 }
 
 /// Each card's bottom from the list's top for the cards planned in `rows`.
@@ -5191,14 +5345,19 @@ fn shelf_row(
     let p = ui.painter().clone();
     let stem_txt = crate::equation::stem_preview(&q.stem);
     // Up to `rows` lines of the stem at 13 (five, more where the panel has room; see
-    // `shelf_stem_rows`), so a question reads as a sentence; a cut card has "Show all" on its type
-    // line, which opens it in place to the whole question ("Show less" closes it).
+    // `shelf_stem_rows`), so a question reads as a sentence. A cut card ends its last line on
+    // "Show all", right-aligned after the text's ellipsis; it opens the card in place to the whole
+    // question, which ends on "Show less" (beside its last line, or under it where that is full).
     let open = st.shelf_open.contains(&q.id);
-    let whole = shelf_stem_galley(&p, &stem_txt, stem_w, SHELF_ROWS_ALL).rows.len().max(1);
+    let whole_g = shelf_stem_galley(&p, &stem_txt, stem_w, SHELF_ROWS_ALL);
+    let whole = whole_g.rows.len().max(1);
     let rows = if open { whole } else { rows.min(whole) };
     let toggle = open || rows < whole;
-    let galley = shelf_stem_galley(&p, &stem_txt, stem_w, rows);
-    let stem_h = galley.size().y;
+    let toggle_g = toggle.then(|| shelf_toggle_galley(&p, open));
+    let toggle_w = toggle_g.as_ref().map_or(0.0, |g| shelf_toggle_w(g));
+    let galley = if open { whole_g.clone() } else { shelf_stem_galley(&p, &stem_txt, stem_w, rows) };
+    let less_extra = if open { shelf_less_extra(&p, &whole_g, stem_w) } else { 0.0 };
+    let stem_h = galley.size().y + less_extra;
     let h = stem_h + SHELF_CARD_CHROME;
     // Alone in the narrow window the bank has no page beside it to drop on, so its cards do not
     // drag (no grab cursor, no ghost) and + is the way onto the page.
@@ -5221,17 +5380,11 @@ fn shelf_row(
     let copy_rect = Rect::from_center_size(Pos2::new(add_rect.left() - 6.0 - ICON_SZ / 2.0, icon_cy), Vec2::splat(ICON_SZ));
     let edit_rect = copy_rect.translate(Vec2::new(-ICON_SZ - 2.0, 0.0));
     let meta_end = edit_rect.left() - 6.0;
-    // The points at the type line's end, "Show all" / "Show less" before them; the badges give way
-    // to both.
+    // The points at the type line's end; the badges give way to them.
     let pts_g = q.points.map(|pts| p.layout_no_wrap(format!("{} pt", fmt_number(pts)), FontId::proportional(kit::ty::LABEL), theme::muted_col()));
     let pts_left = pts_g.as_ref().map_or(meta_end, |g| meta_end - g.size().x);
     let toggle_word = if open { "Show less" } else { "Show all" };
-    let toggle_g = toggle.then(|| p.layout_no_wrap(toggle_word.to_string(), FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()));
-    let toggle_rect = toggle_g.as_ref().map(|g| {
-        let w = g.size().x + 8.0;
-        Rect::from_min_size(Pos2::new(pts_left - if pts_g.is_some() { 8.0 } else { 0.0 } - w, rect.top() + 5.0), Vec2::new(w, 22.0))
-    });
-    let meta_right = toggle_rect.map_or(pts_left, |r| r.left()) - 4.0;
+    let meta_right = pts_left - 4.0;
     // Type label (+ part count) in sentence case and badges; a badge that would run under the
     // icons is left out.
     let mut x = rect.left() + 12.0;
@@ -5292,8 +5445,35 @@ fn shelf_row(
         }
     }
     let badges_right = x;
-    // Stem.
-    p.galley(Pos2::new(rect.left() + 12.0, rect.top() + 28.0), galley, theme::ink());
+    // Stem, and where "Show all" / "Show less" goes: right-aligned at the stem's right edge on
+    // the last line shown (under it for an opened card whose last line is full).
+    let stem_pos = Pos2::new(rect.left() + 12.0, rect.top() + 28.0);
+    let stem_right = stem_pos.x + stem_w;
+    let last_row = |g: &egui::Galley, k: usize| g.rows.get(k).map(|r| r.rect()).unwrap_or(Rect::from_min_size(Pos2::ZERO, Vec2::new(0.0, g.size().y)));
+    let last_bottom = stem_pos.y + if open || !toggle { galley.size().y } else { last_row(&whole_g, rows - 1).bottom() };
+    let (toggle_rect, text_end) = if !toggle {
+        (None, stem_pos.x + galley.rows.last().map_or(0.0, |r| r.rect().right()))
+    } else if open {
+        let last = last_row(&galley, galley.rows.len().saturating_sub(1));
+        let line = if less_extra > 0.0 { last.translate(Vec2::new(0.0, last.height())) } else { last };
+        let r = Rect::from_min_max(Pos2::new(stem_right - toggle_w, stem_pos.y + line.top() - 1.0), Pos2::new(stem_right, stem_pos.y + line.bottom() + 1.0));
+        p.galley(stem_pos, galley.clone(), theme::ink());
+        (Some(r), stem_pos.x + last.right())
+    } else {
+        let (head, tail) = shelf_cut_galleys(&p, &stem_txt, &whole_g, stem_w, rows, stem_w - toggle_w - SHELF_TOGGLE_GAP);
+        let line = last_row(&whole_g, rows - 1);
+        let tail_pos = stem_pos + Vec2::new(0.0, line.top());
+        let end = tail_pos.x + tail.size().x;
+        if let Some(head) = head {
+            p.galley(stem_pos, head, theme::ink());
+        }
+        p.galley(tail_pos, tail, theme::ink());
+        let r = Rect::from_min_max(Pos2::new(stem_right - toggle_w, tail_pos.y - 1.0), Pos2::new(stem_right, tail_pos.y + line.height() + 1.0));
+        (Some(r), end)
+    };
+    if !toggle {
+        p.galley(stem_pos, galley, theme::ink());
+    }
 
     // Buttons: edit and copy (quiet), add (the accent square) or the in-exam check.
     let hit = |br: Rect, id: &str, tip: &str| -> egui::Response {
@@ -5304,7 +5484,7 @@ fn shelf_row(
         r
     };
     let eresp = hit(edit_rect, "shelf_edit", "Edit question");
-    // "Show all" / "Show less": an accent text button on the type line.
+    // "Show all" / "Show less": an accent text button at the end of the card's text.
     let tresp = toggle_rect.zip(toggle_g).map(|(r, g)| {
         let word = toggle_word;
         let resp = ui.interact(r, ui.id().with(("shelf_toggle", &q.id)), Sense::click());
@@ -5315,7 +5495,7 @@ fn shelf_row(
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, word));
         resp.on_hover_text(if open { "Show the first lines only" } else { "Show the whole question" }).on_hover_cursor(egui::CursorIcon::PointingHand)
     });
-    st.shelf_seen.cards.push(ShelfCardSeen { id: q.id.clone(), rect, shown: rows, whole, toggle: toggle_rect, points: pts_rect, icons_left: edit_rect.left(), badges_right });
+    st.shelf_seen.cards.push(ShelfCardSeen { id: q.id.clone(), rect, shown: rows, whole, toggle: toggle_rect, points: pts_rect, icons_left: edit_rect.left(), badges_right, text_top: stem_pos.y, text_end, stem_right, last_bottom });
     if tresp.as_ref().is_some_and(|r| r.clicked()) {
         if open {
             st.shelf_open.retain(|id| *id != q.id);
@@ -8451,6 +8631,44 @@ mod system_pass_tests {
         assert!(thin.items.iter().all(|(_, r)| thin.frame.contains_rect(*r)) && thin.frame.right() <= thin.outline.right() + 0.01);
     }
 
+    /// Round 17: ↑ / ↓ read "Up" / "Down" where one row holds them, the glyphs alone where only
+    /// that fits one row, and two rows below that; every control stays inside the toolbar.
+    #[test]
+    fn narrow_arrows_are_labelled_where_one_row_holds_them() {
+        let lw = BarLabelW { text: LABEL_W, arrows: Some([16.0, 34.0]) };
+        let at = |w: f32| narrow_bar(Rect::from_min_size(Pos2::new(100.0, 300.0), Vec2::new(w, 40.0)), 60.0, 60.0, lw);
+        let labelled = |b: &NarrowBar| b.items.iter().filter(|(k, r)| matches!(k, 1 | 2) && r.width() > 28.5).count();
+        let wide = at(400.0);
+        assert_eq!((wide.rows, labelled(&wide)), (1, 2));
+        let glyphs = BAR_ORDER.iter().map(|&k| bar_item_w(k, LABEL_W, None)).sum::<f32>() + BAR_DIV_GAP + 2.0 * BAR_PAD;
+        let mid = at(glyphs - 20.0 + 2.0);
+        assert_eq!((mid.rows, labelled(&mid)), (1, 0), "glyphs alone where labels would wrap");
+        let thin = at(200.0);
+        assert_eq!((thin.rows, labelled(&thin)), (2, 0));
+        for b in [wide, mid, thin] {
+            assert!(b.items.iter().all(|(_, r)| b.frame.contains_rect(*r)) && b.frame.right() <= b.outline.right() + 0.01);
+            for (i, (_, ra)) in b.items.iter().enumerate() {
+                assert!(b.items[i + 1..].iter().all(|(_, rb)| !ra.intersects(rb.shrink(0.5))));
+            }
+        }
+    }
+
+    /// Round 17: the drawn outline stands as far under the question as beside it, unless the
+    /// page's foot is nearer (never into it), and never closer than before.
+    #[test]
+    fn narrow_outline_pads_the_bottom_like_the_sides() {
+        assert_eq!(outline_below(100.0, 300.0), SEL_PAD_X);
+        assert_eq!(outline_below(100.0, 107.0), 7.0);
+        assert_eq!(outline_below(100.0, 101.0), SEL_PAD_Y);
+        let q = Rect::from_min_size(Pos2::new(100.0, 300.0), Vec2::new(400.0, 40.0));
+        let b = narrow_bar_at(q, 60.0, 60.0, LABEL_W, outline_below(q.bottom(), 1000.0));
+        assert!((b.outline.bottom() - q.bottom() - (q.left() - b.outline.left())).abs() < 0.01, "bottom room equals side room");
+        // The room above the next question clears this outline's foot.
+        let need = in_ui(|ui| narrow_bar_need(ui, 400.0, 60.0, 60.0));
+        let top = in_ui(move |ui| narrow_bar(q, 60.0, 60.0, bar_label_widths(ui)).frame.top());
+        assert!(need >= q.top() - top + SEL_PAD_BOTTOM, "{need}");
+    }
+
     /// The room the page makes above a narrow question covers the toolbar and the gap to the
     /// previous question's outline.
     #[test]
@@ -8797,12 +9015,18 @@ mod review_tests {
                 assert!(c.rect.height() > view.height() - 2.0, "{how}: card {} cut by the list's foot", c.id);
             }
             assert_eq!(c.toggle.is_some(), c.shown < c.whole || c.shown > SHELF_ROWS_MAX, "{how}: card {} toggle", c.id);
+            // The toggle ends the card's text: right-aligned in the question's column, below the
+            // type line (clear of the badges, points and icons), after the last line's ellipsis,
+            // and inside the card.
             if let Some(t) = c.toggle {
-                assert!(t.left() >= c.badges_right - 0.01, "{how}: card {}'s toggle on its badges", c.id);
-                assert!(t.right() <= c.icons_left + 0.01, "{how}: card {}'s toggle on its icons", c.id);
+                assert!(t.top() >= c.text_top - 1.01, "{how}: card {}'s toggle on its type line", c.id);
                 if let Some(p) = c.points {
-                    assert!(!t.intersects(p) && t.right() <= p.left() + 0.01, "{how}: card {}'s toggle on its points", c.id);
+                    assert!(!t.intersects(p), "{how}: card {}'s toggle on its points", c.id);
                 }
+                assert!((t.right() - c.stem_right).abs() < 0.01, "{how}: card {}'s toggle not at the text's right edge", c.id);
+                assert!(t.bottom() <= c.rect.bottom() + 0.01, "{how}: card {}'s toggle past its card", c.id);
+                let own_line = t.top() >= c.last_bottom - 1.01;
+                assert!(own_line || c.text_end + SHELF_TOGGLE_GAP <= t.left() + 0.01, "{how}: card {}'s text runs under its toggle ({} > {})", c.id, c.text_end, t.left());
             }
         }
     }

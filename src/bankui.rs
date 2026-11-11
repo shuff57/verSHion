@@ -542,20 +542,24 @@ impl App {
             // Fewer banks than columns still fills the row: one bank is a wide card, not a
             // quarter-width tile with three quarters of empty page beside it.
             let fit = rows.len().clamp(1, cols);
-            let cw = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
+            // Each column on whole pixels, the last ending on the page's right edge (under the view
+            // toggle and New bank).
+            let ppp = ui.ctx().pixels_per_point();
+            let cols_x = grid_columns(ui.cursor().left(), avail, fit, gap, ppp);
             // Every tile has the same slots, so every tile is BANK_TILE_H and a row ends on one line.
             for chunk in rows.chunks(cols) {
-                ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = gap;
-                    for r in chunk {
-                        match bank_tile(ui, self, cw, r, TileVariant::Banks) {
-                            Some(TileAct::Menu(a)) => apply_bank_menu(self, ctx, key, r, Some(a)),
-                            Some(TileAct::Usage) => open_usage(ctx, r.name.clone(), r.used_in.clone()),
-                            Some(TileAct::Open | TileAct::AddQuestions) => self.open_bank(&r.id),
-                            None => {}
-                        }
+                let top = (ui.cursor().top() * ppp).round() / ppp;
+                for (r, &(l, rt)) in chunk.iter().zip(&cols_x) {
+                    let rect = Rect::from_min_max(Pos2::new(l, top), Pos2::new(rt, top + BANK_TILE_H));
+                    let mut cell = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt(("bank_tile_cell", &r.id)));
+                    match bank_tile(&mut cell, self, rect.width(), r, TileVariant::Banks) {
+                        Some(TileAct::Menu(a)) => apply_bank_menu(self, ctx, key, r, Some(a)),
+                        Some(TileAct::Usage) => open_usage(ctx, r.name.clone(), r.used_in.clone()),
+                        Some(TileAct::Open | TileAct::AddQuestions) => self.open_bank(&r.id),
+                        None => {}
                     }
-                });
+                }
+                ui.advance_cursor_after_rect(Rect::from_min_size(Pos2::new(ui.cursor().left(), top), Vec2::new(avail, BANK_TILE_H)));
                 ui.add_space(gap);
             }
         }
@@ -1608,6 +1612,29 @@ fn placed(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash + std::fmt::Debug) ->
     ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(salt).layout(Layout::left_to_right(Align::Center)))
 }
 
+/// The left and right edges of `n` grid columns `gap` apart across `avail` from `x0`, each on a
+/// whole device pixel (`ppp` pixels per point) so 1 pt borders stay sharp; the last column ends on
+/// `x0 + avail` (snapped), the page's right edge, absorbing the rounding.
+fn grid_columns(x0: f32, avail: f32, n: usize, gap: f32, ppp: f32) -> Vec<(f32, f32)> {
+    let snap = |v: f32| (v * ppp).round() / ppp;
+    let n = n.max(1);
+    let cw = (avail - gap * (n as f32 - 1.0)) / n as f32;
+    (0..n)
+        .map(|i| {
+            let l = x0 + i as f32 * (cw + gap);
+            let r = if i + 1 == n { x0 + avail } else { l + cw };
+            (snap(l), snap(r))
+        })
+        .collect()
+}
+
+/// `ui` with its widgets' minimum height set to `h`, so a button asked for `h` is drawn `h` tall
+/// (the theme's 34 would otherwise make it taller than the slot laid out for it).
+fn fixed_h(mut ui: Ui, h: f32) -> Ui {
+    ui.spacing_mut().interact_size.y = h;
+    ui
+}
+
 pub(crate) fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankTile, act: Option<BankAct>) {
     match act {
         Some(BankAct::Open) => app.open_bank(&r.id),
@@ -1638,7 +1665,8 @@ fn counts_line(r: &BankTile, topics: bool) -> String {
 /// Every bank tile is this tall on both screens: each slot is filled on every tile, so a row's
 /// tiles end on one line without being stretched. The slots, top down: pad, header (2 name
 /// lines), gap, meta, gap, key (2 lines), gap, bar, gap, hairline, gap, the footer's Open button
-/// (the usage link level with its middle), a slightly shorter foot pad.
+/// (the usage link level with its middle), then the side pad again under it, so Open sits as far
+/// from the tile's bottom edge as from its right.
 pub(crate) const BANK_TILE_H: f32 = T_PAD + T_HEAD + 6.0 + T_META + T_MK + T_KEY + 8.0 + T_BAR + T_BR + 1.0 + T_RA + T_ACT + T_PAD_FOOT;
 const T_PAD: f32 = 16.0;
 const T_HEAD: f32 = 44.0;
@@ -1648,12 +1676,14 @@ const T_MK: f32 = 8.0;
 const T_KEY: f32 = 40.0;
 const T_BAR: f32 = 6.0;
 /// Bar to hairline, hairline to the footer's button.
-const T_BR: f32 = 10.0;
+const T_BR: f32 = 8.0;
 const T_RA: f32 = 8.0;
-/// The footer: Open, a tinted accent button this tall; the usage link (18) sits level with it.
-const T_ACT: f32 = 28.0;
+/// The footer: Open, a tinted accent button this tall (drawn exactly this tall, the "…"'s
+/// size); the usage link (18) sits level with it.
+const T_ACT: f32 = 32.0;
 const T_FOOT: f32 = 18.0;
-const T_PAD_FOOT: f32 = 12.0;
+/// Under Open: the tile's side pad, so the button keeps the same margin below as on its right.
+const T_PAD_FOOT: f32 = T_PAD;
 /// The "…" on a Banks tile (and the list row): a 32 square in the icon tier.
 const MENU_SIDE: f32 = 32.0;
 /// The glyph beside the name on a Home tile.
@@ -1876,7 +1906,7 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
     }
     let open_w = kit::tinted_accent_w(ui, "Open");
     let open_r = Rect::from_min_size(Pos2::new(x0 + iw - open_w, act_y), Vec2::new(open_w, T_ACT));
-    if kit::tinted_accent(&mut placed(ui, open_r, ("tile_open", &t.id)), "Open", T_ACT).clicked() {
+    if kit::tinted_accent(&mut fixed_h(placed(ui, open_r, ("tile_open", &t.id)), T_ACT), "Open", T_ACT).clicked() {
         act = Some(TileAct::Open);
     }
     if !t.used_in.is_empty() {
@@ -4477,12 +4507,35 @@ mod tests {
         assert_eq!(points_label(Some(2.5)), Some("2.5 pt".to_string()));
     }
 
-    /// Every bank tile is the sum of its slots, 205, on Banks and on Home (spec section 3).
+    /// Banks grid columns sit on whole device pixels at 1.7, keep their gap within a pixel, and
+    /// the last one ends on the page's right edge.
     #[test]
-    fn a_bank_tile_is_205_tall() {
-        // pad, name, meta, key, bar, hairline, the footer's 28 tall Open, foot pad
-        assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 8.0 + 40.0 + 8.0 + 6.0 + 10.0 + 1.0 + 8.0 + 28.0 + 12.0);
-        assert_eq!(BANK_TILE_H, 205.0);
+    fn banks_grid_columns_land_on_whole_pixels() {
+        for (avail, n) in [(1066.3_f32, 3usize), (603.9, 2), (1000.0, 3), (777.7, 1)] {
+            let x0 = 187.4;
+            let c = grid_columns(x0, avail, n, 16.0, 1.7);
+            assert_eq!(c.len(), n);
+            for &(l, r) in &c {
+                for v in [l, r] {
+                    assert!(((v * 1.7) - (v * 1.7).round()).abs() < 1e-3, "{v} is not on a pixel");
+                }
+                assert!(r > l);
+            }
+            assert!((c[n - 1].1 - (x0 + avail)).abs() <= 0.5 / 1.7 + 1e-4, "ends on the right edge");
+            for w in c.windows(2) {
+                assert!((w[1].0 - w[0].1 - 16.0).abs() <= 1.0 / 1.7 + 1e-4, "gap kept: {w:?}");
+            }
+        }
+    }
+
+    /// Every bank tile is the sum of its slots, 211, on Banks and on Home (spec section 3).
+    #[test]
+    fn a_bank_tile_is_211_tall() {
+        // pad, name, meta, key, bar, hairline, the footer's 32 tall Open, foot pad
+        assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 8.0 + 40.0 + 8.0 + 6.0 + 8.0 + 1.0 + 8.0 + 32.0 + 16.0);
+        assert_eq!(BANK_TILE_H, 211.0);
+        // Open keeps the tile's side pad below it as on its right.
+        assert_eq!(T_PAD_FOOT, T_PAD);
     }
 
     /// The bank header's toolbar, drawn as the page draws it (`ltr` false: a right-to-left row

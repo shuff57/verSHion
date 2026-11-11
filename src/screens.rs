@@ -1568,7 +1568,10 @@ impl crate::App {
         if let Some(id) = open_ex {
             self.open_exam(&id);
         }
-        ui.add_space(22.0);
+        // The exam card grid already ends on its grid gap; the section gap gives back the room
+        // the cards' and tiles' padded Open took, so the bank row ends where it did.
+        let card_grid = !exams.is_empty() && !compact_exams && exam_mode == kit::ViewMode::Cards;
+        ui.add_space(if card_grid { HOME_SECTION_GAP_AFTER_CARDS } else { 22.0 });
 
         // ---- Your banks ----
         let mut banks: Vec<crate::bankui::BankTile> = self.store.banks.iter().map(|b| crate::bankui::BankTile::of(&self.store, b)).collect();
@@ -2929,16 +2932,29 @@ fn paint_preview_bg(p: &egui::Painter, r: Rect) {
 const HOME_THUMB: Vec2 = Vec2::new(88.0, 114.0);
 /// Every Home exam card is this tall. The text column flows from the top: pad 13, the name (one or
 /// two lines of 22), gap 4, meta 18, gap 2, "From <bank>" (one or two lines of 18, so a bank's
-/// name is read whole); the footer is pinned: gap 5, hairline 1, gap 5, Open (the bank tiles'
-/// 28 tall tinted button, the edited text level with its middle), pad 9. The longest case
-/// (44 + 36) ends 5 above the hairline.
-const HOME_EXAM_H: f32 = 164.0;
+/// name is read whole); the footer is pinned: gap 5, hairline 1, gap 6, Open (the bank tiles'
+/// 32 tall tinted button, the edited text level with its middle), pad 16 (the card's side pad,
+/// so Open is as far from the bottom edge as from the right). The longest case (44 + 36) ends 5
+/// above the hairline.
+const HOME_EXAM_H: f32 = 176.0;
 /// A Home exam card's top pad, its Open's height, the gap from the hairline to Open, and the pad
 /// under Open.
 const HOME_EXAM_TOP: f32 = 12.0;
-const HOME_EXAM_ACT: f32 = 28.0;
-const HOME_EXAM_RULE_GAP: f32 = 5.0;
-const HOME_EXAM_FOOT_PAD: f32 = 9.0;
+const HOME_EXAM_ACT: f32 = 32.0;
+const HOME_EXAM_RULE_GAP: f32 = 6.0;
+const HOME_EXAM_FOOT_PAD: f32 = 16.0;
+/// Between the Recent exams card grid (after its grid gap) and Your banks.
+const HOME_SECTION_GAP_AFTER_CARDS: f32 = 4.0;
+/// Open on a compact recent-exam row (Home at 760): the same tinted button, compact.
+const HOME_ROW_ACT: f32 = 28.0;
+
+/// A child Ui in `r` (it never moves `ui`'s cursor) whose widgets are at least `h` tall rather
+/// than the theme's 34, so a button asked for `h` is drawn exactly `h` tall.
+fn fixed_h_child(ui: &mut egui::Ui, r: Rect, salt: impl std::hash::Hash + std::fmt::Debug) -> egui::Ui {
+    let mut c = ui.new_child(UiBuilder::new().max_rect(r).id_salt(salt));
+    c.spacing_mut().interact_size.y = r.height();
+    c
+}
 
 /// Where a Home exam card's text starts (from the card's left edge) and how wide it may run.
 fn exam_card_text_x(w: f32) -> (f32, f32) {
@@ -2961,7 +2977,7 @@ fn edited_label(secs: i64) -> String {
 
 /// A Home exam card, `w` wide and [`HOME_EXAM_H`] tall: the first page on the left, beside it the
 /// name over two lines, "11 questions · 26 points", "From <bank>", a hairline, then when it was
-/// edited and an Open link. The whole card opens the exam; so does the link. Returns true on either.
+/// edited and Open (a tinted button). The whole card opens the exam; so does Open. Returns true on either.
 fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_right: bool) -> bool {
     use crate::kit;
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, HOME_EXAM_H), egui::Sense::click());
@@ -3020,7 +3036,7 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_
     let open_w = kit::tinted_accent_w(ui, "Open");
     let lr = Rect::from_min_size(Pos2::new(x + iw - open_w, act_y), Vec2::new(open_w, HOME_EXAM_ACT));
     // (a child Ui: the button never moves the row's cursor)
-    let open = kit::tinted_accent(&mut ui.new_child(UiBuilder::new().max_rect(lr).id_salt(("home_exam_open", &e.id))), "Open", HOME_EXAM_ACT).clicked();
+    let open = kit::tinted_accent(&mut fixed_h_child(ui, lr, ("home_exam_open", &e.id)), "Open", HOME_EXAM_ACT).clicked();
     resp.clicked() || open
 }
 
@@ -3049,8 +3065,8 @@ fn exam_rows_compact(ui: &mut egui::Ui, app: &mut crate::App, rows: &[&ExamRow])
     let w = ui.available_width();
     let (outer, _) = ui.allocate_exact_size(Vec2::new(w, HOME_ROW_H * rows.len() as f32 + 2.0), egui::Sense::hover());
     ui.painter().rect(outer, CornerRadius::same(16), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
-    let open_font = egui::FontId::new(kit::ty::META, theme::semibold());
-    let open_w = (ui.painter().layout_no_wrap("Open".to_string(), open_font, theme::accent_col()).size().x + 17.0).ceil();
+    // Open is the tinted button the bank cards below carry (compact), one style for one action.
+    let open_w = kit::tinted_accent_w(ui, "Open");
     let ctx = ui.ctx().clone();
     let mut hit = None;
     for (i, e) in rows.iter().enumerate() {
@@ -3092,8 +3108,8 @@ fn exam_rows_compact(ui: &mut egui::Ui, app: &mut crate::App, rows: &[&ExamRow])
         let g = p.layout_job(job);
         p.galley(Pos2::new(x, y + (18.0 - g.size().y) / 2.0), g, theme::text_col());
         // Open, right, level with the row's middle; a child Ui so it takes its own click.
-        let lr = Rect::from_min_size(Pos2::new(r.right() - 16.0 - open_w, r.center().y - 9.0), Vec2::new(open_w, 18.0));
-        let open = kit::link(&mut ui.new_child(UiBuilder::new().max_rect(lr).id_salt(("home_exam_row_open", &e.id))), "Open", true).clicked();
+        let lr = Rect::from_min_size(Pos2::new(r.right() - 16.0 - open_w, r.center().y - HOME_ROW_ACT / 2.0), Vec2::new(open_w, HOME_ROW_ACT));
+        let open = kit::tinted_accent(&mut fixed_h_child(ui, lr, ("home_exam_row_open", &e.id)), "Open", HOME_ROW_ACT).clicked();
         if resp.clicked() || open {
             hit = Some(e.id.clone());
         }
@@ -3361,10 +3377,11 @@ mod tests {
     fn a_home_exam_card_holds_two_name_and_two_bank_lines() {
         // The longest text (two name lines, two bank lines) still clears the pinned footer.
         let text = HOME_EXAM_TOP + 44.0 + 4.0 + 18.0 + 2.0 + 36.0;
-        // gap, hairline, gap, the 28 tall Open, foot pad
+        // gap, hairline, gap, the 32 tall Open, foot pad (the card's side pad)
         let footer = 5.0 + 1.0 + HOME_EXAM_RULE_GAP + HOME_EXAM_ACT + HOME_EXAM_FOOT_PAD;
         assert!(text + footer <= HOME_EXAM_H + 0.01);
-        assert_eq!(HOME_EXAM_H, 164.0);
+        assert_eq!(HOME_EXAM_FOOT_PAD, 16.0, "Open is as far from the bottom edge as from the right");
+        assert_eq!(HOME_EXAM_H, 176.0);
         // At 1280 the text column is 316 - 124 - 16 = 176 wide.
         assert_eq!(exam_card_text_x(316.0), (124.0, 176.0));
     }

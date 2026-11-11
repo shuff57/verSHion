@@ -630,8 +630,9 @@ pub fn tinted_accent_w(ui: &Ui, label: &str) -> f32 {
     (g.size().x + 36.0).ceil()
 }
 
-/// A quiet overflow "…" beside a card's stronger main action: no fill and no outline at rest
-/// (the dots in `text`), the same `side` square hit area; under the pointer it takes the
+/// A quiet overflow "…" beside a card's stronger main action: no fill and a 1 pt [`theme::edge`]
+/// outline at rest (the quiet outlined icon-button tier; the dots in `text`), the same `side`
+/// square hit area; under the pointer it takes the
 /// secondary look (hover_bg, 1 pt [`theme::edge`], ink dots), accent_faded while pressed or while
 /// its menu is open, the focus ring, PointingHand, and `tip` as hover text and accessible name.
 pub fn quiet_more_dots(ui: &mut Ui, side: f32, tip: &str) -> egui::Response {
@@ -645,7 +646,7 @@ pub fn quiet_more_dots(ui: &mut Ui, side: f32, tip: &str) -> egui::Response {
     } else if resp.hovered() {
         (theme::hover_bg(), theme::edge(), theme::ink())
     } else {
-        (Color32::TRANSPARENT, Color32::TRANSPARENT, theme::text_col())
+        (Color32::TRANSPARENT, theme::edge(), theme::text_col())
     };
     ui.painter().rect(rect, CornerRadius::same(12), fill, Stroke::new(1.0, edge), StrokeKind::Inside);
     let step = if side >= 36.0 { 6.5 } else { 5.5 };
