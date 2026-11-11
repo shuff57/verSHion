@@ -323,6 +323,11 @@ fn general_molecule(counts: &[(usize, usize)]) -> Result<(Vec<Atom>, Vec<Bond>),
         if v1 != v2 {
             return Err(format!("{text} needs a dative bond (both electrons of a pair from one atom), which isn't drawn yet."));
         }
+        // two atoms that each want four bonds (C2, Si2, SiC) would need a quadruple bond, which simple dot-and-cross
+        // molecules don't have (the batch 6 checker: it drew four shared pairs in the overlap)
+        if v1 > 3 {
+            return Err(format!("{text} would need a quadruple bond between its two atoms, so it isn't drawn as a simple molecule."));
+        }
         let d = radius(z1) + radius(z2) - overlap(v1);
         return Ok((vec![atom(z1, -d / 2.0, 0.0, Mark::Dot), atom(z2, d / 2.0, 0.0, Mark::Cross)], vec![Bond { a: 0, b: 1, order: v1 }]));
     }

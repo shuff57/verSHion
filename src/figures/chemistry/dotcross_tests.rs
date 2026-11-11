@@ -93,6 +93,7 @@ fn old_saved_figures_and_links_render_as_before() {
     let d = def();
     let text = std::fs::read_to_string(old_fixture()).expect("tests/fixtures/dot_and_cross_old.txt");
     let (mut same, mut fixed) = (0, Vec::new());
+    let mut now: Vec<String> = Vec::new();
     for line in text.lines().filter(|l| !l.is_empty()) {
         let mut it = line.split('\t');
         let (hash, saved, link) = (it.next().unwrap(), it.next().unwrap(), it.next().unwrap());
@@ -102,6 +103,7 @@ fn old_saved_figures_and_links_render_as_before() {
         assert_eq!(id, FIG);
         let q = share::link_params(&d, changed, share::version(link));
         assert_eq!(d.svg(&p), d.svg(&q), "a saved figure and its share link draw differently: {saved}");
+        now.push(fnv(&d.svg(&p)));
         if fnv(&d.svg(&p)) == hash { same += 1; } else {
             assert!(corrected(&p), "an old saved figure draws differently: {saved}");
             fixed.push(saved.to_string());
@@ -110,6 +112,20 @@ fn old_saved_figures_and_links_render_as_before() {
     println!("dot-and-cross old cases: {same} the same, {} corrected", fixed.len());
     for f in &fixed { println!("CORRECTED {f}"); }
     assert!(same >= 250, "only {same} old cases draw as before");
+    // the corrections are pinned too: every old case must draw exactly as it did once batch 6 was checked, so a later
+    // change to an ionic compound or a corrected molecule cannot pass under `corrected` unnoticed (the batch 6 checker).
+    // Re-pin deliberately with VERSHION_DOTCROSS_BLESS=1.
+    let pinned = old_fixture().with_file_name("dot_and_cross_b6.txt");
+    if std::env::var("VERSHION_DOTCROSS_BLESS").is_ok() {
+        std::fs::write(&pinned, now.join("\n") + "\n").unwrap();
+        return;
+    }
+    let want = std::fs::read_to_string(&pinned).expect("tests/fixtures/dot_and_cross_b6.txt");
+    let want: Vec<&str> = want.lines().collect();
+    assert_eq!(want.len(), now.len(), "pinned cases");
+    for (i, (w, n)) in want.iter().zip(&now).enumerate() {
+        assert_eq!(*w, n, "old case {} draws differently from how batch 6 left it: {}", i + 1, text.lines().filter(|l| !l.is_empty()).nth(i).unwrap());
+    }
 }
 
 /// The old drawings batch 6 corrects: CO2's second oxygen had carbon's dots as its lone pairs; an anion's gained
@@ -260,7 +276,7 @@ fn what_cannot_be_drawn_is_refused_with_a_note() {
         ("BF3", "B isn't drawn"), ("H2O2", "central atom"), ("hydrogen peroxide", "central atom"), ("NH4+", "more than one atom"), ("OH-", "more than one atom"),
         ("MgCl", "MgCl\u{2082}"), ("Na2Cl2", "NaCl"), ("Fe", "H to Ca"), ("Br-", "H to Ca"), ("bromine atom", "H to Ca"), ("Na 5+", "charge"),
         ("NaClO", "one metal"), ("C3H8", "central atom"), ("h2o", "capital"), ("Xx", "isn't an element"), ("rubidium ion", "H to Ca"),
-        ("Na2", "one metal"), ("C2H6O", "C2H5OH"),
+        ("Na2", "one metal"), ("C2H6O", "C2H5OH"), ("C2", "quadruple"), ("Si2", "quadruple"), ("SiC", "quadruple"),
     ] {
         let p = typed(t);
         let dr = draw(&p);
