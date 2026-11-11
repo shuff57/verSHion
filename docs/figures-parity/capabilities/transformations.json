@@ -99,7 +99,7 @@
    "text": "Place a transformation's line or center on the grid with a preview",
    "class": "interaction",
    "evidence": "",
-   "note": "No handles on this figure."
+   "note": "Left unscored after an independent check on 2026-11-11. Ours: A' (translation), the centre of a turn or an enlargement, and a numbered mirror line (x = a, y = a, y = x + a, y = -x + a) are dragged on the grid with the image following, also for later transformations (tests each_transformation_is_placed_on_the_grid_with_the_image_following, a_later_centre_or_mirror_line_is_dragged_on_the_grid_and_written_back). Not counted because (1) the centre and line handles appear only after Transformation is changed, which the probe cannot evidence, and (2) a real gap: the reference has a 'Pick the line on the grid' button that also chooses the x-axis, y-axis, y = x or y = -x by a click near it, and places a new centre by a click with a hover marker before committing; ours chooses those lines in the panel only."
   },
   {
    "id": "cap-03a",

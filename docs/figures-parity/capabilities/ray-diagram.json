@@ -78,7 +78,7 @@
    "text": "Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F",
    "class": "interaction",
    "evidence": "changes:place=At 2F",
-   "note": "Built in batch 5, round 196 (2026-11-10). No quick-place buttons or handle snaps; distance is typed or dragged."
+   "note": "Built in batch 5, round 196 (2026-11-10). Left unscored after an independent check on 2026-11-11: the five places work and match the reference button by button (checked at f = 10), set by the 'Place it' choice in the Object section (test a_quick_place_is_one_choice_in_the_panel_and_the_object_stands_there). On the reference these are five panel buttons too, not something done on the figure, so the entry looks misclassed as interaction; as a control it would pass on changes:place=At 2F. Re-classing needs the owner and a re-freeze. Ours is a dropdown (2 actions), the reference's buttons 1."
   },
   {
    "id": "cap-03",
