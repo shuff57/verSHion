@@ -370,6 +370,22 @@ const NARROW_PREVIEW_SIZE: Vec2 = Vec2::new(200.0, 259.0);
 /// The narrow window's column for the hero and the steps.
 const NARROW_STEPS_W: f32 = 640.0;
 
+/// The answer key behind the welcome sheet: its centre's offset from the page's (scaled with the
+/// page) and its turn in radians.
+fn preview_back(size: Vec2) -> (Vec2, f32) {
+    let k = size.x / 222.0;
+    (Vec2::new(14.0 * k, 8.0 * k), 0.06)
+}
+
+/// How far the answer key behind a `size` sheet (and its 1 pt shadow) reaches right of the sheet:
+/// the hero places the sheet so this reach ends on the steps panel's right edge, so hero and
+/// panel share one right margin.
+fn preview_reach(size: Vec2) -> f32 {
+    let (off, a) = preview_back(size);
+    let half = size / 2.0;
+    off.x + half.x * a.cos() + half.y * a.sin() - half.x + 1.0
+}
+
 fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
     use egui::{FontId, Shape};
@@ -385,8 +401,9 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     let b = |v: f32| v * bk;
     let shade = if theme::is_dark() { 90 } else { 30 };
     // The answer key behind, turned a little and peeking out at the lower right.
-    let back_c = page.center() + Vec2::new(g(14.0), g(8.0));
-    let turn = egui::emath::Rot2::from_angle(0.06);
+    let (back_off, back_turn) = preview_back(page.size());
+    let back_c = page.center() + back_off;
+    let turn = egui::emath::Rot2::from_angle(back_turn);
     let half = page.size() / 2.0;
     let back: Vec<Pos2> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
         .iter()
@@ -1127,10 +1144,11 @@ impl crate::App {
                         hero_head(ui, &mut text);
                         hero_text(ui, &mut text);
                     });
-                    // The page sits midway across the space right of the text, its top level with the
-                    // headline's top.
-                    let cx = (x0 + text_w + x0 + row_w) / 2.0;
-                    let page = Rect::from_min_size(Pos2::new(cx - PREVIEW_SIZE.x / 2.0, text.top()), PREVIEW_SIZE);
+                    // The page sits right of the text, its top level with the headline's top and the
+                    // answer key behind it ending on the steps panel's right edge (one right margin
+                    // for hero and panel).
+                    let right = x0 + row_w - preview_reach(PREVIEW_SIZE);
+                    let page = Rect::from_min_size(Pos2::new(right - PREVIEW_SIZE.x, text.top()), PREVIEW_SIZE);
                     paint_exam_preview(ui.painter(), page);
                     hero = text | page;
                     let below = page.bottom() + 8.0 - ui.cursor().top();
@@ -1152,11 +1170,11 @@ impl crate::App {
                     });
                     let body_top = head.bottom() + 12.0;
                     // The page's right edge sits in from the column's, leaving room for the answer
-                    // key that peeks out behind it. A column too narrow to hold the text beside it
-                    // goes without the page.
+                    // key that peeks out behind it, which ends on the steps panel's right edge. A
+                    // column too narrow to hold the text beside it goes without the page.
                     let with_page = row_w >= 520.0;
                     let page = Rect::from_min_size(
-                        Pos2::new(x0 + row_w - NARROW_PREVIEW_SIZE.x - 18.0, body_top + 4.0),
+                        Pos2::new(x0 + row_w - NARROW_PREVIEW_SIZE.x - preview_reach(NARROW_PREVIEW_SIZE), body_top + 4.0),
                         NARROW_PREVIEW_SIZE,
                     );
                     let text_w = if with_page { page.left() - 36.0 - x0 } else { row_w };

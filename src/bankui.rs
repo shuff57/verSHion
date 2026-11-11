@@ -666,11 +666,12 @@ impl App {
         // page's one primary; the toolbar's would only repeat it, so it is hidden until the first
         // question is in (judged on the whole bank, never on a filter).
         // Import likewise: the empty card offers Import questions beside its Add question.
-        let mut tools = if questions.is_empty() { vec![Tool::Share] } else { vec![Tool::Add, Tool::Import, Tool::Share] };
-        if !questions.is_empty() {
-            tools.push(Tool::Export);
-        }
-        tools.extend([Tool::Details, Tool::Popover, Tool::More]);
+        // An empty bank shows only what works on it: Share and Preview have nothing to act on
+        // yet, so the header keeps just the "…" menu (Details and From pool… inside it) and the
+        // empty card's Add question / Import questions lead. They appear with the first question.
+        let empty = questions.is_empty();
+        let mut tools = if empty { vec![] } else { vec![Tool::Add, Tool::Import, Tool::Share, Tool::Export, Tool::Details, Tool::Popover] };
+        tools.push(Tool::More);
         if !ltr {
             tools.reverse();
         }
@@ -775,11 +776,31 @@ impl App {
                 }
                 // (Details has its own button beside this menu; the menu keeps what has none.)
                 Tool::More => {
-                    let r = quiet_tool(ui, None, None, "More bank actions", CornerRadius { nw: 0, sw: 0, ne: QUIET_R, se: QUIET_R });
+                    // Alone on an empty bank it is the whole group, rounded on every corner.
+                    let corners = if empty { CornerRadius::same(QUIET_R) } else { CornerRadius { nw: 0, sw: 0, ne: QUIET_R, se: QUIET_R } };
+                    let r = quiet_tool(ui, None, None, "More bank actions", corners);
                     egui::Popup::menu(&r).show(|ui| {
                         ui.set_min_width(170.0);
+                        if empty {
+                            // What an empty bank can use: its details, and bringing in questions
+                            // other teachers shared (Share's menu holds these once it shows).
+                            if ui.button("Details…").on_hover_text("Description, author and license").clicked() {
+                                let d = self.store.bank(bank_id).map(|b| b.details.clone()).unwrap_or_default();
+                                with_state(ctx, key, |s: &mut BankEditState| s.details = Some(d));
+                                ui.close();
+                            }
+                            if ui.button("From pool…").on_hover_text("Find questions other teachers shared and copy them into this bank (needs a sharing account)").clicked() {
+                                self.browse.open_for_bank(bank_id);
+                                ui.close();
+                            }
+                            if update && ui.button("Update from pool…").on_hover_text("The pool has a newer version of something imported into this bank. Nothing changes until you choose.").clicked() {
+                                self.browse.open_update(bank_id);
+                                ui.close();
+                            }
+                            return;
+                        }
                         let tidy = ui
-                            .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
+                            .button("Tidy stems…")
                             .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
                         if tidy.clicked() {
                             open_tidy(self, ctx, key, bank_id);
@@ -4357,6 +4378,104 @@ mod tests {
     fn a_bank_tile_is_205_tall() {
         assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 10.0 + 40.0 + 8.0 + 6.0 + 12.0 + 1.0 + 10.0 + 18.0 + 16.0);
         assert_eq!(BANK_TILE_H, 205.0);
+    }
+
+    /// The bank header's toolbar, drawn as the page draws it (`ltr` false: a right-to-left row
+    /// beside the name; true: the narrow window's wrapping row), for a bank whose questions are
+    /// the harness state's. The store is a scratch one: nothing here saves.
+    fn toolbar_harness<'a>(ltr: bool) -> egui_kittest::Harness<'a, (App, Vec<Question>)> {
+        let tmp = std::env::temp_dir().join(format!("vs-toolbar-test-{}", std::process::id()));
+        crate::store::init(Box::new(crate::store::FsBackend::new(tmp)));
+        let mut app = App::new_from(&egui::Context::default());
+        app.store = Default::default();
+        app.store.banks.push(empty_bank());
+        let mut first = true;
+        egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 400.0)).build_ui_state(
+            move |ui, st: &mut (App, Vec<Question>)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let ctx = ui.ctx().clone();
+                let (app, qs) = st;
+                let id: Id = "b".into();
+                let key = UiId::new("toolbar_test");
+                if ltr {
+                    ui.horizontal_wrapped(|ui| {
+                        app.bank_toolbar(ui, &ctx, key, &id, qs, true);
+                    });
+                } else {
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        app.bank_toolbar(ui, &ctx, key, &id, qs, false);
+                    });
+                }
+            },
+            (app, Vec::new()),
+        )
+    }
+
+    /// The toolbar's buttons, by accessible name, left to right as drawn.
+    const FULL_TOOLBAR: [&str; 7] = ["Add question", "Import", "Share", "Export", "Details", "Preview", "More bank actions"];
+
+    fn assert_full_toolbar(h: &egui_kittest::Harness<'_, (App, Vec<Question>)>, how: &str) {
+        use egui_kittest::kittest::Queryable;
+        let xs: Vec<f32> = FULL_TOOLBAR
+            .iter()
+            .map(|n| {
+                let node = if *n == "Share" { h.get_by_label_contains("Share") } else { h.get_by_label(n) };
+                node.rect().left()
+            })
+            .collect();
+        assert!(xs.windows(2).all(|w| w[0] < w[1]), "{how}: toolbar in the old order {FULL_TOOLBAR:?}, got x {xs:?}");
+    }
+
+    /// An empty bank's header has only the "…" menu (no Share, Preview or Details button), and
+    /// "…" reaches Details… and From pool…; with a question the whole toolbar is there in the old
+    /// order and From pool… is in Share's menu; the first question brings the full toolbar back.
+    #[test]
+    fn an_empty_bank_header_is_the_more_menu_and_the_first_question_brings_the_toolbar_back() {
+        use egui_kittest::kittest::Queryable;
+        for ltr in [false, true] {
+            let how = if ltr { "narrow" } else { "desktop" };
+            let mut h = toolbar_harness(ltr);
+            h.run();
+            // Empty: "…" alone.
+            assert!(h.query_by_label("More bank actions").is_some(), "{how}: empty bank keeps the … menu");
+            for gone in ["Share", "Preview", "Details", "Add question", "Import", "Export"] {
+                assert!(h.query_by_label_contains(gone).is_none(), "{how}: empty bank header shows no {gone}");
+            }
+            h.get_by_label("More bank actions").click();
+            h.run();
+            assert!(h.query_by_label("Details…").is_some(), "{how}: … reaches Details… on an empty bank");
+            assert!(h.query_by_label("From pool…").is_some(), "{how}: … reaches From pool… on an empty bank");
+            assert!(h.query_by_label("Tidy stems…").is_none(), "{how}: no greyed Tidy stems on an empty bank");
+            // Details… opens the details dialog's draft.
+            h.get_by_label("Details…").click();
+            h.run();
+            let key = UiId::new("toolbar_test");
+            assert!(with_state(&h.ctx, key, |s: &mut BankEditState| s.details.is_some()), "{how}: Details… opens the bank details");
+            h.key_press(egui::Key::Escape);
+            h.run();
+
+            // The first question: the full toolbar is back, in the old order.
+            h.state_mut().1.push(q("What is 2 + 2?", mc(&["4", "5"]), 1));
+            h.run();
+            h.run();
+            assert_full_toolbar(&h, how);
+            assert!(h.query_by_label("Details…").is_none(), "{how}: Details is its own button again, not in …");
+            // From pool… is in Share's menu.
+            h.get_by_label_contains("Share").click();
+            h.run();
+            assert!(h.query_by_label("From pool…").is_some(), "{how}: From pool… is in Share's menu");
+            h.key_press(egui::Key::Escape);
+            h.run();
+            // "…" holds Tidy stems, not Details or From pool.
+            h.get_by_label("More bank actions").click();
+            h.run();
+            assert!(h.query_by_label("Tidy stems…").is_some(), "{how}: … holds Tidy stems on a bank with questions");
+            assert!(h.query_by_label("From pool…").is_none() && h.query_by_label("Details…").is_none(), "{how}: … holds neither Details… nor From pool… once Share and Details show");
+        }
     }
 
     /// The key keeps two lines: what a third would hold folds into "+N more" on line 2, dropping

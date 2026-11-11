@@ -3021,8 +3021,8 @@ fn margin_button_side(ui: &mut egui::Ui, id: egui::Id, center: Pos2, kind: u8, s
 /// Paints a margin button's glyph (see [`margin_button`] for the kinds).
 fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
     let p = ui.painter();
-    if kind == 8 {
-        // The narrow page's remove: a trash can, red at rest (the paper is always light, so the
+    if kind == 8 || kind == 0 {
+        // A question's remove (narrow and desktop): a trash can, red at rest (the paper is always light, so the
         // light palette's red), a red wash under the pointer.
         if hovered {
             p.rect_filled(rect, CornerRadius::same(5), PAPER_DANGER.gamma_multiply(0.12));
@@ -3030,8 +3030,8 @@ fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
         crate::handicons::paint_glyph(p, rect.center(), egui_phosphor::regular::TRASH, 15.0, PAPER_DANGER);
         return;
     }
-    // Remove and delete warn under the pointer: the red, not the accent the editing handles take.
-    let danger = matches!(kind, 0 | 6);
+    // Delete warns under the pointer: the red, not the accent the editing handles take.
+    let danger = kind == 6;
     if hovered {
         p.rect_filled(rect, CornerRadius::same(5), if danger { theme::bad().gamma_multiply(0.14) } else { theme::accent_faded() });
     }
@@ -3039,7 +3039,7 @@ fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
     let s = Stroke::new(1.6, col);
     let c = rect.center();
     match kind {
-        0 | 6 => {
+        6 => {
             p.line_segment([c + Vec2::new(-3.5, -3.5), c + Vec2::new(3.5, 3.5)], s);
             p.line_segment([c + Vec2::new(-3.5, 3.5), c + Vec2::new(3.5, -3.5)], s);
         }
@@ -3081,7 +3081,8 @@ fn paint_margin_glyph(ui: &egui::Ui, rect: Rect, kind: u8, hovered: bool) {
 /// The grip's slot in [`MarginHandles`] (the other kinds are [`margin_tip`]'s).
 const GRIP: u8 = 255;
 
-/// The narrow page's remove handle (a trash can; desktop keeps the × of kind 0).
+/// The narrow page's remove handle (a trash can, "Remove question"; desktop's kind 0 draws the
+/// same can and keeps its name "Remove from exam").
 const NARROW_REMOVE: u8 = 8;
 
 /// Red of the narrow remove handle: the light palette's red, as the paper is always light.
@@ -3093,9 +3094,12 @@ const HANDLE_PAD: f32 = 2.0;
 /// Extra room between ↓ and remove in the narrow right frame (a hairline divides them).
 const REMOVE_GAP: f32 = 8.0;
 
+/// The same room on desktop, where the handles are 18 square and 20 apart.
+const DESK_REMOVE_GAP: f32 = 6.0;
+
 
 /// Where a placed question's handles go, each a kind and a centre, `side` square. Desktop: the
-/// left gutter's grip and "…", the right gutter's ×, ↑, ↓. Narrow: one column in the left gutter
+/// left gutter's grip and "…", the right gutter's remove, ↑, ↓. Narrow: one column in the left gutter
 /// (`right` empty), or, in a gutter under 30, a strip above the question in two groups.
 #[derive(Debug)]
 struct MarginHandles {
@@ -3104,9 +3108,9 @@ struct MarginHandles {
     side: f32,
     /// ↑/↓ beside the question (false: they are in its "…" menu).
     tall: bool,
-    /// Narrow only: one quiet frame per group, drawn at rest.
+    /// One quiet frame per group (desktop: the right group only), drawn with the handles.
     frames: Vec<Rect>,
-    /// Narrow only: the hairline before remove inside its frame.
+    /// The hairline before remove inside its frame.
     divider: Option<[Pos2; 2]>,
     /// Narrow column only: the hairline from the column down the question's left side, tying the
     /// controls to the question they act on.
@@ -3122,10 +3126,11 @@ fn handle_frame(group: &[(u8, Pos2)], side: f32) -> Rect {
     r.expand(HANDLE_PAD)
 }
 
-/// The hairline across `frame` between the last two handles of `group` when the last is remove.
+/// The hairline across `frame` between the last two handles of `group` when the last is remove
+/// (the narrow trash or desktop's kind 0).
 fn remove_divider(group: &[(u8, Pos2)], frame: Rect) -> Option<[Pos2; 2]> {
     let n = group.len();
-    if n < 2 || group[n - 1].0 != NARROW_REMOVE {
+    if n < 2 || !matches!(group[n - 1].0, 0 | NARROW_REMOVE) {
         return None;
     }
     let (a, b) = (group[n - 2].1, group[n - 1].1);
@@ -3155,9 +3160,9 @@ const NARROW_GRID_TALL: [[Option<u8>; 2]; 3] = [[Some(GRIP), Some(7)], [Some(1),
 const NARROW_GRID_SHORT: [[Option<u8>; 2]; 2] = [[Some(GRIP), Some(4)], [None, Some(NARROW_REMOVE)]];
 
 /// The handles of a question at `rect` with gutters `ml`/`mr` wide. Desktop: grip and "…" left,
-/// ×/↑/↓ right, 18 square, no frames. Narrow: 24 square, 26 apart, in one quiet column in the
-/// left gutter starting on the question's first line, close to its text, with a hairline down
-/// the question's side: grip, pencil, ↑, ↓, "…" and then the trash-can remove (set apart by a
+/// ↑/↓ then remove right in one frame, remove after a hairline, 18 square. Narrow: 24 square, 26
+/// apart, in one quiet column in the left gutter starting on the question's first line, close to
+/// its text, with a hairline down the question's side: grip, pencil, ↑, ↓, "…" and then the trash-can remove (set apart by a
 /// hairline) when that column ends inside the question; else the same controls (or, under r12's
 /// limit, grip, "…" and remove) in two short columns in one frame ([`NARROW_GRID_TALL`]); a
 /// gutter too narrow for two columns keeps r12's two groups, and one under 30 puts them in a
@@ -3257,16 +3262,20 @@ fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32, narrow: bool) -> Margin
             spine: None,
         });
     }
+    // Desktop: ↑, ↓, then remove set apart by a hairline (destructive last, as on the narrow
+    // rail), in one frame drawn with the handles.
     let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, y0);
     let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
     let y = rect.top() + 9.0;
+    let right: Vec<(u8, Pos2)> = [1u8, 2, 0].iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y + k as f32 * step + if kind == 0 { DESK_REMOVE_GAP } else { 0.0 }))).collect();
+    let frame = handle_frame(&right, side);
     MarginHandles {
         left: [GRIP, 4].iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * 24.0))).collect(),
-        right: [0u8, 1, 2].iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y + k as f32 * step))).collect(),
+        divider: remove_divider(&right, frame),
+        right,
         side,
         tall: true,
-        frames: Vec::new(),
-        divider: None,
+        frames: vec![frame],
         spine: None,
     }
 }
@@ -3325,17 +3334,20 @@ fn draw_item(
     let any_drag = st.drag.is_some() || st.ws_drag.is_some() || st.pws_drag.is_some();
     let menu_id = ui.id().with(("it_menu", i));
     let menu_open = egui::Popup::is_id_open(ctx, menu_id.with("popup"));
-    let hover = !any_drag && ui.rect_contains_pointer(rect.expand2(Vec2::new(ml.max(mr) - 2.0, 4.0)));
+    let narrow = st.narrow;
+    let hs = margin_handles(rect, ml, mr, bp, narrow);
+    // Under the pointer: the question with its gutters, or its handle frames where they hang
+    // below a short question (so the last handle, remove, stays reachable).
+    let hover = !any_drag && (ui.rect_contains_pointer(rect.expand2(Vec2::new(ml.max(mr) - 2.0, 4.0))) || hs.frames.iter().any(|f| ui.rect_contains_pointer(*f)));
     // A narrow page shows its handles at rest: no pointer reaches a touch screen's hover, and a
     // still capture showed none of them. Desktop keeps them for the question under the pointer.
-    let narrow = st.narrow;
     let show = hover || dragging_this || menu_open || (narrow && !any_drag);
     let n_items = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
     if let Some(q) = q {
-        let hs = margin_handles(rect, ml, mr, bp, narrow);
         let (tall, side) = (hs.tall, hs.side);
-        // Narrow: each group in one quiet frame, so they read as this question's controls, and
-        // a hairline from the column down the question's side.
+        // Each group in one quiet frame, so they read as this question's controls (narrow: and
+        // a hairline from the column down the question's side; desktop: the right gutter's ↑, ↓
+        // and, after a hairline, remove).
         if show {
             if let Some([top, foot]) = hs.spine {
                 // A bracket: down the question's side, a short foot in at its end.
@@ -4780,15 +4792,35 @@ fn draw_shelf_inner(
     // The list runs to the card's foot: the used count sits on the sort row above, and the
     // card's own + and grab cursor say how a question gets onto the page.
     let list_h = ui.available_height().max(60.0);
+    // More below: the list ends on a whole card, with "N more below" under it, and a thin scroll
+    // bar like the page's beside it (shown at rest, not only under the pointer). Card bottoms
+    // come from the last frame; no card's text or + is cut or greyed at rest.
+    let cards_id = egui::Id::new("bank_panel_cards");
+    let bottoms: Vec<f32> = ui.data(|d| d.get_temp(cards_id)).unwrap_or_default();
+    let overflow = bottoms.last().is_some_and(|&b| b > list_h + 0.5);
+    let view_h = if overflow { whole_cards_height(&bottoms, list_h - SHELF_CUE_H) } else { list_h };
+    let saved_scroll = ui.spacing().scroll.clone();
+    {
+        let s = &mut ui.spacing_mut().scroll;
+        s.dormant_handle_opacity = s.active_handle_opacity;
+        s.dormant_background_opacity = s.active_background_opacity;
+    }
     let out = egui::ScrollArea::vertical()
         .id_salt("bank_panel_scroll")
-        .max_height(list_h)
+        .max_height(view_h)
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            ui.spacing_mut().scroll = saved_scroll.clone();
+            let mut ends = Vec::new();
             if qs.is_empty() {
                 ui.add(egui::Label::new(muted("No questions match.")));
-                return;
+                return ends;
             }
+            // Room for the bar so it never sits on a card's edge or its +.
+            if overflow {
+                ui.set_max_width(ui.available_width() - SHELF_BAR_ROOM);
+            }
+            let top0 = ui.cursor().top();
             // 8 px between cards (the item spacing used to add 8 more), so four show beside the page
             ui.spacing_mut().item_spacing.y = 0.0;
             for (_, q) in &qs {
@@ -4797,26 +4829,40 @@ fn draw_shelf_inner(
                     .filter(|it| it.bank_id == bank_id && it.question_id == q.id)
                     .count();
                 shelf_row(app, ui, st, ctx, &bank_id, exam_id, q, count);
+                ends.push(ui.cursor().top() - top0);
                 ui.add_space(8.0);
             }
+            ends
         });
-    // More below: the list fades into the card's fill over its last 36 px instead of slicing a
-    // card (and its +) at the edge; gone once the list is scrolled to its end.
-    let view = out.inner_rect;
-    let left = out.content_size.y - out.state.offset.y - view.height();
-    if left > 2.0 {
-        let a = (left / 36.0).clamp(0.0, 1.0);
-        let fade = Rect::from_min_max(Pos2::new(view.left(), view.bottom() - 36.0), view.right_bottom());
-        let fill = theme::card().gamma_multiply(a);
-        let mut mesh = Mesh::default();
-        mesh.colored_vertex(fade.left_top(), Color32::TRANSPARENT);
-        mesh.colored_vertex(fade.right_top(), Color32::TRANSPARENT);
-        mesh.colored_vertex(fade.right_bottom(), fill);
-        mesh.colored_vertex(fade.left_bottom(), fill);
-        mesh.add_triangle(0, 1, 2);
-        mesh.add_triangle(0, 2, 3);
-        ui.painter().with_clip_rect(view).add(Shape::mesh(mesh));
+    ui.spacing_mut().scroll = saved_scroll;
+    if out.inner != bottoms {
+        ui.data_mut(|d| d.insert_temp(cards_id, out.inner.clone()));
+        ctx.request_repaint();
     }
+    let view = out.inner_rect;
+    let below = cards_below(&out.inner, out.state.offset.y + view.height());
+    if overflow && below > 0 {
+        let bar = Rect::from_min_size(view.left_bottom(), Vec2::new(view.width(), SHELF_CUE_H));
+        ui.allocate_rect(bar, Sense::hover());
+        kit::more_below(ui, bar, &format!("{below} more below"));
+    }
+}
+
+/// Height of the "N more below" cue under the bank panel's list.
+const SHELF_CUE_H: f32 = 30.0;
+
+/// Room kept right of the bank panel's cards for its scroll bar while the list overflows.
+const SHELF_BAR_ROOM: f32 = 12.0;
+
+/// The list's height when it ends just past the last card that fits whole in `room`, given each
+/// card's bottom from the list's top (`room` itself when not even the first card fits).
+fn whole_cards_height(bottoms: &[f32], room: f32) -> f32 {
+    bottoms.iter().rev().find(|&&b| b + 2.0 <= room).map_or(room, |&b| b + 2.0)
+}
+
+/// How many cards do not end inside a viewport whose foot is `foot` from the list's top.
+fn cards_below(bottoms: &[f32], foot: f32) -> usize {
+    bottoms.iter().filter(|&&b| b > foot + 0.5).count()
 }
 
 /// One shelf card (Test Parrot's layout): TYPE label with "In exam" / "Image" badges and quiet
@@ -8046,7 +8092,7 @@ mod system_pass_tests {
     /// beside the question; else the same controls in two short columns in one frame; short of
     /// r12's limit, grip, "…" and remove. Remove is always direct; at every height and gutter a
     /// taller question shows every handle a shorter one does, and never fewer than r12 did.
-    /// Desktop is as before.
+    /// Desktop: one framed group, remove last.
     #[test]
     fn narrow_question_handles_by_height() {
         let at = |h: f32| Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, h));
@@ -8122,11 +8168,12 @@ mod system_pass_tests {
         assert!(n.frames[1].left() - n.frames[0].right() >= 12.0 - 0.01);
         let [a, b] = n.divider.expect("a divider before remove");
         assert!((a.x - b.x).abs() < 0.01 && a.x > n.right[1].1.x + 12.0 && a.x < n.right[2].1.x - 12.0);
-        // Desktop: grip and "…" 24 apart, ×/↑/↓ 20 apart, 18 square, no frames, as before.
+        // Desktop: grip and "…" 24 apart; ↑/↓ 20 apart then remove last, 18 square, one frame
+        // round the right group (r14: destructive last, as on the narrow rail).
         let short = at(40.0);
         let d = margin_handles(short, 60.0, 60.0, 14.0, false);
-        assert_eq!((kinds(&d.left), kinds(&d.right), d.side), (vec![GRIP, 4], vec![0, 1, 2], 18.0));
-        assert!(d.frames.is_empty() && d.divider.is_none() && d.spine.is_none());
+        assert_eq!((kinds(&d.left), kinds(&d.right), d.side), (vec![GRIP, 4], vec![1, 2, 0], 18.0));
+        assert!(d.frames.len() == 1 && d.divider.is_some() && d.spine.is_none());
         assert!((d.right[0].1.y - (short.top() + 9.0)).abs() < 0.01 && (d.right[1].1.y - d.right[0].1.y - 20.0).abs() < 0.01);
         assert!((d.left[1].1.y - d.left[0].1.y - 24.0).abs() < 0.01);
     }
@@ -8138,6 +8185,37 @@ mod system_pass_tests {
         assert_eq!(margin_tip(2), "Move down");
         assert_eq!(margin_tip(4), "Question actions");
         assert_eq!(margin_tip(NARROW_REMOVE), "Remove question");
+    }
+
+    /// Desktop's right gutter is one framed group: ↑, ↓, a hairline, then remove (still "Remove
+    /// from exam"), all inside the frame, the hairline clear of every handle.
+    #[test]
+    fn desktop_question_handles_are_one_group() {
+        let q = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 40.0));
+        let d = margin_handles(q, 60.0, 60.0, 14.0, false);
+        let frame = d.frames[0];
+        let [a, b] = d.divider.expect("a hairline before remove");
+        assert_eq!(margin_tip(0), "Remove from exam");
+        assert_eq!(d.right.last().unwrap().0, 0);
+        for h in &d.right {
+            let r = Rect::from_center_size(h.1, Vec2::splat(d.side));
+            assert!(frame.contains_rect(r));
+            assert!(!(r.top() < a.y && a.y < r.bottom()), "hairline crosses {h:?}");
+        }
+        assert!((a.y - b.y).abs() < 0.01 && a.y > d.right[1].1.y && a.y < d.right[2].1.y);
+        assert!(a.x > frame.left() && b.x < frame.right() && frame.left() > q.right());
+    }
+
+    /// The bank panel's list ends just past the last card that fits whole, and counts the cards
+    /// that do not; scrolled to its end, none is left below.
+    #[test]
+    fn bank_list_ends_on_a_whole_card() {
+        let bottoms = [150.0, 300.0, 420.0, 570.0, 700.0];
+        assert_eq!(whole_cards_height(&bottoms, 500.0), 422.0);
+        assert_eq!(whole_cards_height(&bottoms, 421.0), 302.0);
+        assert_eq!(whole_cards_height(&bottoms, 100.0), 100.0);
+        assert_eq!(cards_below(&bottoms, 422.0), 2);
+        assert_eq!(cards_below(&bottoms, 700.0), 0);
     }
 
     #[test]
