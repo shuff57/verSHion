@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-11T07:13:37",
- "ours_built_at": "2026-11-11T15:13:35+00:00",
- "git": "662f096",
+ "checked_at": "2026-11-11T10:20:31",
+ "ours_built_at": "2026-11-11T18:20:27+00:00",
+ "git": "53a95d4",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -11427,7 +11427,7 @@
       {
        "token": "changes:mode=Cooling",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/2181cebf937d325c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/debc1e0f88974ef2.png"
       }
      ]
     },
@@ -11439,12 +11439,12 @@
       {
        "token": "changes:start=-40",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/d94816aaad1d309c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/cae3d2d89a5eebc6.png"
       },
       {
        "token": "changes:end=150",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/16dbe9b75dd2a5cb.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/c109e865cf3fedb7.png"
       }
      ]
     },
@@ -11456,7 +11456,7 @@
       {
        "token": "changes:substance=Ethanol",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/9dd0664222fb6f9c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/c9f32e49d94bc40f.png"
       }
      ]
     },
@@ -11468,7 +11468,7 @@
       {
        "token": "changes:substance=Substance X",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/2ca46d86ac6665ff.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/e73e7cc07b3a2100.png"
       }
      ]
     },
@@ -11480,7 +11480,7 @@
       {
        "token": "changes:{\"substance\":\"Custom\",\"mp\":20,\"bp\":80}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/aeebae2577ef0ddc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/6daffa1e14c4b390.png"
       }
      ]
     },
@@ -11492,27 +11492,45 @@
       {
        "token": "changes:t_boil=4",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/e08604ab873230d3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/779ba95d1b8e5688.png"
       }
      ]
     },
     "cap-03b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:scale=Computed from the heats",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/62959968949a2ee4.png"
+      }
+     ]
     },
     "cap-03c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"scale\":\"Computed from the heats\",\"mass\":50}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/93baf06351f38295.png"
+      }
+     ]
     },
     "cap-03d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"scale\":\"Computed from the heats\",\"substance\":\"Custom\",\"dh_vap\":10}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/7ba1d878856c7c61.png"
+      }
+     ]
     },
     "cap-04a": {
      "pass": true,
@@ -11522,15 +11540,21 @@
       {
        "token": "changes:xaxis=Heat added",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/d41dd9a4af49b8a7.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/30bf1c413fa531d2.png"
       }
      ]
     },
     "cap-04b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"scale\":\"Computed from the heats\",\"rate\":5}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/456238d4dcb1a617.png"
+      }
+     ]
     },
     "cap-05a": {
      "pass": true,
@@ -11540,7 +11564,7 @@
       {
        "token": "changes:letters=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/54730807d2646bac.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/6d3b63d46646a0a5.png"
       }
      ]
     },
@@ -11552,7 +11576,7 @@
       {
        "token": "changes:seg_labels=Blank lines",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/7ee14184d203a0ae.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/f85b03a19955987e.png"
       }
      ]
     },
@@ -11564,7 +11588,7 @@
       {
        "token": "changes:seg_labels=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/23fe3fd881d9446b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/c9c6b7729ea80be7.png"
       }
      ]
     },
@@ -11576,7 +11600,7 @@
       {
        "token": "changes:plateau_labels=Both states (Solid + liquid)",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/adc4d9289c14cd25.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/c4a0fa4213e84225.png"
       }
      ]
     },
@@ -11588,7 +11612,7 @@
       {
        "token": "changes:plateau_dashes=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/448ef4000872922b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/6e088694e7feaffa.png"
       }
      ]
     },
@@ -11600,7 +11624,7 @@
       {
        "token": "changes:temp_labels=m.p. and b.p.",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/a837a66b91350ef0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/dbf3d4eda68ef392.png"
       }
      ]
     },
@@ -11612,7 +11636,7 @@
       {
        "token": "changes:temp_labels=Blank lines",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/eecc4aaad8144275.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/b5e804ff09e80ba9.png"
       }
      ]
     },
@@ -11624,7 +11648,7 @@
       {
        "token": "changes:temp_labels=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/700f5c8df5aa05e4.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/bca650b44ca972d0.png"
       }
      ]
     },
@@ -11636,7 +11660,7 @@
       {
        "token": "changes:{\"mode\":\"Cooling\",\"supercool\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/d8327a36fbccbe38.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/4417a176c5a38f57.png"
       }
      ]
     },
@@ -11648,7 +11672,7 @@
       {
        "token": "changes:curve_color=#2563eb",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/a62971380338043b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/91e5e942426f2450.png"
       }
      ]
     },
@@ -11660,7 +11684,7 @@
       {
        "token": "changes:title=Heating water",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/724f171334f9d67a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/ae4b12633147ea5c.png"
       }
      ]
     },
@@ -11672,12 +11696,12 @@
       {
        "token": "changes:xtitle=Time (s)",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/084af5b12987ad62.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/3398da28836224f4.png"
       },
       {
        "token": "changes:ylabel=Temp (K)",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/af0ef5090165f45c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/573fa642aa8be257.png"
       }
      ]
     },
@@ -11689,17 +11713,17 @@
       {
        "token": "changes:title_style=Blank line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/1246cd6d8a16732f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/2eefb9a3258105cc.png"
       },
       {
        "token": "changes:xtitle_style=Blank line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/9026b29fc327806f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/31c55b2287a98f6c.png"
       },
       {
        "token": "changes:ytitle_style=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/94ac7233a9853311.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/6d88514322782a36.png"
       }
      ]
     },
@@ -11711,12 +11735,12 @@
       {
        "token": "changes:{\"xaxis_fit\":false,\"xaxis_to\":30}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/62db066c0105c544.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/bb1a7a654b29bf98.png"
       },
       {
        "token": "changes:{\"xaxis_fit\":false,\"yaxis_from\":-40}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/d5c75f26d2bdfa82.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/d6a2a6258f90b9f7.png"
       }
      ]
     },
@@ -11728,12 +11752,12 @@
       {
        "token": "changes:xaxis_num=Every line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/f7cf6bc3f69de65d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/833080d83d733048.png"
       },
       {
        "token": "changes:yaxis_num=Every 5th line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/8616519da1f18c4b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/096cb32f5a0548c8.png"
       }
      ]
     },
@@ -11745,7 +11769,7 @@
       {
        "token": "changes:minor_grid=2 per block",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/a3d81c399b807b29.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/5cb333853289b182.png"
       }
      ]
     },
@@ -11757,7 +11781,7 @@
       {
        "token": "changes:label_size=Large",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/5923dd5ddafbd102.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/79294f5b8ffc383f.png"
       }
      ]
     }

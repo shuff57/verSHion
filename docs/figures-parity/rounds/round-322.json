@@ -1,0 +1,37 @@
+{
+ "round": 322,
+ "figure": "heating-cooling-curve",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 8 heating-cooling-curve: cap-03b; evidence changes:scale=Computed from the heats",
+ "started_at": "2026-11-11T10:20:27",
+ "git": "53a95d4",
+ "before": {
+  "figure": 85.4,
+  "pooled": 96.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 3 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T10:20:29",
+ "after": {
+  "figure": 90.6,
+  "pooled": 96.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:scale=Computed from the heats",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/62959968949a2ee4.png"
+   }
+  ]
+ },
+ "checker": "pass after one fix: independent checker measured water 100 g at 4.18, 33.4, 41.8, 226, 4.02 kJ off the drawing and four other substances against hand sums; its one failure (typed minutes hidden in Schematic) fixed with a test",
+ "result": "hit",
+ "evidence": "heatcurve_b8 tests (17: water's five heats by hand, drawn lengths in the ratio of the heats heating and cooling on both axes, every substance, refusals, 1540 crowded label cases, typed minutes shown where they act); heating_curve_b8_frozen (400 old figures and links byte for byte); census unchanged; no task run (builder on the NAS, no browser): ours 2 to 3 actions",
+ "next": "circle cap-01f, cap-i10 (third check pending); vector-diagram and solids (pc2)"
+}

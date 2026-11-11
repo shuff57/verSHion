@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T15:13:37+00:00",
- "probe_checked_at": "2026-11-11T07:13:37",
+ "generated_at": "2026-11-11T18:20:31+00:00",
+ "probe_checked_at": "2026-11-11T10:20:31",
  "comparable": true,
  "drift": [],
- "pooled": 96.5,
- "mean": 96.4,
+ "pooled": 96.7,
+ "mean": 96.6,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -235,40 +235,11 @@
    "gaps": []
   },
   "heating-cooling-curve": {
-   "score": 85.4,
-   "got": 82.0,
+   "score": 100.0,
+   "got": 96.0,
    "total": 96.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-03b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Segment lengths to scale, computed from the mass and the substance's specific heats and enthalpies (q = m c dT, q = n dH",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type the mass used for the to-scale curve",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type your own substance's specific heats and enthalpies of fusion and vaporization",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose the heating rate",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "histogram": {
    "score": 100.0,

@@ -11,7 +11,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | angles | `angles` | 52 | 3 | 6 | — | 100 |
 | bar-graph | `bar-chart` | 35 | 0 | 7 | — | 100 |
 | box-plot | `box-plot` | 37 | 0 | 6 | reference has a student version; ours has no show_answers | 90 |
-| circle | `circle` | 77 | 2 | 7 | — | 96 |
+| circle | `circle` | 81 | 3 | 7 | — | 96 |
 | composite-shape | `composite-shape` | 9 | 10 | 3 | — | 100 |
 | cone | `cone` | 26 | 4 | 6 | — | 91 |
 | coordinate-grid | `coordinate-grid` | 59 | 2 | 7 | — | 100 |
@@ -31,7 +31,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | regular-polygon | `regular-polygon` | 29 | 8 | 6 | — | 89 |
 | sphere | `sphere` | 17 | 2 | 6 | — | 100 |
 | stem-and-leaf | `stem-and-leaf` | 23 | 0 | 8 | — | 100 |
-| transformations | `transformations` | 51 | 5 | 5 | — | 98 |
+| transformations | `transformations` | 52 | 5 | 5 | — | 98 |
 | trapezoid | `trapezoid` | 63 | 11 | 7 | — | 89 |
 | triangle | `triangle` | 42 | 9 | 6 | — | 92 |
 | two-way-table | `two-way-table` | 21 | 12 | 6 | — | 100 |
@@ -62,7 +62,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | dot-and-cross | `dot-and-cross` | 16 | 4 | 7 | — | 100 |
 | gas-syringe | `gas-syringe` | 9 | 1 | 5 | — | 91 |
 | half-life-graph | `half-life-graph` | 36 | 1 | 6 | reference adds/removes rows; ours has no list/data/text-table control | 100 |
-| heating-cooling-curve | `heating-cooling-curve` | 47 | 8 | 6 | — | 85 |
+| heating-cooling-curve | `heating-cooling-curve` | 55 | 8 | 6 | — | 100 |
 | length-reading | `length-reading` | 24 | 3 | 9 | — | 100 |
 | lewis-structures | `lewis-structures` | 15 | 6 | 6 | reference has a student version; ours has no show_answers | 100 |
 | line-spectrum | `line-spectrum` | 23 | 0 | 6 | reference has a student version; ours has no show_answers | 100 |
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-11T15:13:37+00:00 · probe: 2026-11-11T07:13:37
+Generated: 2026-11-11T18:20:31+00:00 · probe: 2026-11-11T10:20:31
 
-**Pooled 96.5** · mean 96.4 over 70 figures · built 71 of 71 reference figures
+**Pooled 96.7** · mean 96.6 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -111,11 +111,6 @@ Comparable with the frozen baseline: **yes**
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03c [control 3] Measure the angle mark from the vertical — no evidence
   - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
-- `heating-cooling-curve`: 85 (82/96)
-  - cap-03b [core 5] Segment lengths to scale, computed from the mass and the substance's specific heats and enthalpies (q = m c dT, q = n dH — no evidence
-  - cap-03c [control 3] Type the mass used for the to-scale curve — no evidence
-  - cap-03d [control 3] Type your own substance's specific heats and enthalpies of fusion and vaporization — no evidence
-  - cap-04b [control 3] Choose the heating rate — no evidence
 - `temperature-reading`: 88 (42/48)
   - cap-02c [control 3] The digital probe showing 2 decimal places — no evidence
   - cap-03b [control 3] Pick a random temperature — no evidence
@@ -212,6 +207,7 @@ Comparable with the frozen baseline: **yes**
 - `dot-and-cross`: 100 (56/56)
 - `enzyme-kinetics`: 100 (85/85)
 - `half-life-graph`: 100 (84/84)
+- `heating-cooling-curve`: 100 (96/96)
 - `histogram`: 100 (90/90)
 - `inclined-plane`: 100 (91/91)
 - `length-reading`: 100 (78/78)

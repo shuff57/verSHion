@@ -1,0 +1,35 @@
+{
+ "round": 324,
+ "figure": "heating-cooling-curve",
+ "capability": "cap-03d",
+ "hypothesis": "Batch 8 heating-cooling-curve: cap-03d; evidence a custom enthalpy of vaporization",
+ "started_at": "2026-11-11T10:20:30",
+ "git": "53a95d4",
+ "before": {
+  "figure": 93.8,
+  "pooled": 96.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T10:20:30",
+ "after": {
+  "figure": 96.9,
+  "pooled": 96.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"scale\":\"Computed from the heats\",\"substance\":\"Custom\",\"dh_vap\":10}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/heating-cooling-curve/7ba1d878856c7c61.png"
+   }
+  ]
+ },
+ "checker": "pass after the same fix: each custom heat changes only its own part, in proportion",
+ "result": "hit",
+ "evidence": "heatcurve_b8 tests (17: water's five heats by hand, drawn lengths in the ratio of the heats heating and cooling on both axes, every substance, refusals, 1540 crowded label cases, typed minutes shown where they act); heating_curve_b8_frozen (400 old figures and links byte for byte); census unchanged; no task run (builder on the NAS, no browser): ours 2 to 3 actions",
+ "next": "circle cap-01f, cap-i10 (third check pending); vector-diagram and solids (pc2)"
+}

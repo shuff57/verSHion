@@ -49,22 +49,22 @@
    "id": "cap-03b",
    "text": "Segment lengths to scale, computed from the mass and the substance's specific heats and enthalpies (q = m c dT, q = n dH)",
    "class": "core",
-   "evidence": "",
-   "note": "Ours' 'To scale' only uses the typed times; nothing is computed from heats or enthalpies, and our 'Schematic' is fixed equal segments."
+   "evidence": "changes:scale=Computed from the heats",
+   "note": "Built in batch 8, round 322 (2026-11-11). Ours' 'To scale' only uses the typed times; nothing is computed from heats or enthalpies, and our 'Schematic' is fixed equal segments."
   },
   {
    "id": "cap-03c",
    "text": "Type the mass used for the to-scale curve",
    "class": "control",
-   "evidence": "",
-   "note": "No mass input."
+   "evidence": "changes:{\"scale\":\"Computed from the heats\",\"mass\":50}",
+   "note": "Built in batch 8, round 323 (2026-11-11). No mass input."
   },
   {
    "id": "cap-03d",
    "text": "Type your own substance's specific heats and enthalpies of fusion and vaporization",
    "class": "control",
-   "evidence": "",
-   "note": "No such inputs."
+   "evidence": "changes:{\"scale\":\"Computed from the heats\",\"substance\":\"Custom\",\"dh_vap\":10}",
+   "note": "Built in batch 8, round 324 (2026-11-11). No such inputs."
   },
   {
    "id": "cap-04a",
@@ -77,8 +77,8 @@
    "id": "cap-04b",
    "text": "Choose the heating rate",
    "class": "control",
-   "evidence": "",
-   "note": "No heating-rate input."
+   "evidence": "changes:{\"scale\":\"Computed from the heats\",\"rate\":5}",
+   "note": "Built in batch 8, round 325 (2026-11-11). No heating-rate input."
   },
   {
    "id": "cap-05a",

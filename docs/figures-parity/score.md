@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-11T15:13:37+00:00 · probe: 2026-11-11T07:13:37
+Generated: 2026-11-11T18:20:31+00:00 · probe: 2026-11-11T10:20:31
 
-**Pooled 96.5** · mean 96.4 over 70 figures · built 71 of 71 reference figures
+**Pooled 96.7** · mean 96.6 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -10,11 +10,6 @@ Comparable with the frozen baseline: **yes**
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03c [control 3] Measure the angle mark from the vertical — no evidence
   - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
-- `heating-cooling-curve`: 85 (82/96)
-  - cap-03b [core 5] Segment lengths to scale, computed from the mass and the substance's specific heats and enthalpies (q = m c dT, q = n dH — no evidence
-  - cap-03c [control 3] Type the mass used for the to-scale curve — no evidence
-  - cap-03d [control 3] Type your own substance's specific heats and enthalpies of fusion and vaporization — no evidence
-  - cap-04b [control 3] Choose the heating rate — no evidence
 - `temperature-reading`: 88 (42/48)
   - cap-02c [control 3] The digital probe showing 2 decimal places — no evidence
   - cap-03b [control 3] Pick a random temperature — no evidence
@@ -111,6 +106,7 @@ Comparable with the frozen baseline: **yes**
 - `dot-and-cross`: 100 (56/56)
 - `enzyme-kinetics`: 100 (85/85)
 - `half-life-graph`: 100 (84/84)
+- `heating-cooling-curve`: 100 (96/96)
 - `histogram`: 100 (90/90)
 - `inclined-plane`: 100 (91/91)
 - `length-reading`: 100 (78/78)

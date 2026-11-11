@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-11T15:13:37+00:00",
+ "generated_at": "2026-11-11T18:20:31+00:00",
  "spec_generated_at": "2026-11-08T05:54:07+00:00",
  "figures": [
   {
@@ -338,6 +338,9 @@
     "a1",
     "a2",
     "c_angle",
+    "a_dist",
+    "b_dist",
+    "c_dist",
     "show_b",
     "show_c",
     "more_points",
@@ -375,6 +378,7 @@
     "name_m",
     "r_label",
     "marks",
+    "label_sides",
     "styles",
     "angle_unit",
     "dec",
@@ -408,8 +412,8 @@
     "style",
     "label_size"
    ],
-   "param_count": 77,
-   "handles": 2,
+   "param_count": 81,
+   "handles": 3,
    "label_drag": false,
    "show_answers": true,
    "style": true,
@@ -2094,6 +2098,7 @@
     "scale",
     "cx",
     "cy",
+    "pick",
     "show_pre",
     "x_from",
     "x_to",
@@ -2134,7 +2139,7 @@
     "gridlines",
     "minor"
    ],
-   "param_count": 51,
+   "param_count": 52,
    "handles": 5,
    "label_drag": false,
    "show_answers": true,
@@ -4058,9 +4063,17 @@
     "yaxis_lo",
     "yaxis_hi",
     "label_size",
-    "minor_grid"
+    "minor_grid",
+    "mass",
+    "rate",
+    "molar_mass",
+    "c_solid",
+    "c_liquid",
+    "c_gas",
+    "dh_fus",
+    "dh_vap"
    ],
-   "param_count": 47,
+   "param_count": 55,
    "handles": 8,
    "label_drag": false,
    "show_answers": false,

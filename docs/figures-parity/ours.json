@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-11T15:13:35+00:00",
-  "src_mtime": 1794408013.0120008,
-  "git": "662f096",
+  "built_at": "2026-11-11T18:20:27+00:00",
+  "src_mtime": 1794421224.9265838,
+  "git": "53a95d4",
   "figures": 191
  },
  "figures": {
@@ -11075,7 +11075,8 @@
      "kind": "choice",
      "options": [
       "Schematic",
-      "To scale"
+      "To scale",
+      "Computed from the heats"
      ],
      "default": "Schematic"
     },
@@ -11429,6 +11430,62 @@
       "5 per block"
      ],
      "default": "None"
+    },
+    {
+     "key": "mass",
+     "label": "Mass (g)",
+     "kind": "float",
+     "options": [],
+     "default": "100.0"
+    },
+    {
+     "key": "rate",
+     "label": "Heating rate (kJ/min)",
+     "kind": "float",
+     "options": [],
+     "default": "20.0"
+    },
+    {
+     "key": "molar_mass",
+     "label": "Molar mass (g/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "18.02"
+    },
+    {
+     "key": "c_solid",
+     "label": "Specific heat, solid (J/g·K)",
+     "kind": "float",
+     "options": [],
+     "default": "2.09"
+    },
+    {
+     "key": "c_liquid",
+     "label": "Specific heat, liquid (J/g·K)",
+     "kind": "float",
+     "options": [],
+     "default": "4.18"
+    },
+    {
+     "key": "c_gas",
+     "label": "Specific heat, gas (J/g·K)",
+     "kind": "float",
+     "options": [],
+     "default": "2.01"
+    },
+    {
+     "key": "dh_fus",
+     "label": "Enthalpy of fusion (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "6.01"
+    },
+    {
+     "key": "dh_vap",
+     "label": "Enthalpy of vaporization (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "40.7"
     }
    ],
    "handle_list": [
@@ -25264,6 +25321,27 @@
      "default": "250.0"
     },
     {
+     "key": "a_dist",
+     "label": "Point A from the centre (radii)",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "b_dist",
+     "label": "Point B from the centre (radii)",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "c_dist",
+     "label": "Point C from the centre (radii)",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
      "key": "show_b",
      "label": "Point B",
      "kind": "bool",
@@ -25554,6 +25632,13 @@
     {
      "key": "marks",
      "label": "Arc and line labels",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "label_sides",
+     "label": "Sides of line labels",
      "kind": "list",
      "options": [],
      "default": ""
@@ -25852,7 +25937,7 @@
       "click"
      ],
      "edit": "name_a",
-     "tip": "Drag point A round the circle; click it for the tangent there, or click it and then another point to join them; double-click it to rename it"
+     "tip": "Drag point A round the circle, or off it (pull it well away; bring it near to put it back on); click it for the tangent there, or click it and then another point to join them; double-click it to rename it"
     },
     {
      "actions": [
@@ -25860,6 +25945,15 @@
      ],
      "edit": "styles",
      "tip": "Click the circle to put a point there, a line, angle or arc to label it, or an enclosed area to shade it; click the middle of a chord to name its midpoint or join it to the centre, or where lines cross or meet the circle to name a point there; double-click a point or the centre to rename it, or a line, angle or arc to mark or style it; click a point outside the circle for the tangents from it; drag any point, pulling it off the circle or back on"
+    },
+    {
+     "actions": [
+      "drag",
+      "click",
+      "label"
+     ],
+     "edit": "styles",
+     "tip": "Drag the label across its line to put it on the other side"
     }
    ],
    "handles": true,
@@ -26447,6 +26541,19 @@
      "kind": "float",
      "options": [],
      "default": "0.0"
+    },
+    {
+     "key": "pick",
+     "label": "Pick a line or centre on the grid",
+     "kind": "choice",
+     "options": [
+      "Off",
+      "First",
+      "Second",
+      "Third",
+      "Fourth"
+     ],
+     "default": "Off"
     },
     {
      "key": "show_pre",
