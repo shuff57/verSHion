@@ -5081,6 +5081,8 @@ mod tests {
 
     // (batch 7: the coordinate grid's workspace tests, in their own file, src/figuresui/tests/grid_b7_ui_tests.rs)
     mod grid_b7_ui_tests;
+    // (batch 9: student versions and axis ends in the workspace, src/figuresui/tests/versions_b9_ui_tests.rs)
+    mod versions_b9_ui_tests;
 
     fn demo() -> &'static FigureDef {
         find_def("demo-shapes").expect("demo registered under cfg(test)").1
