@@ -1,0 +1,35 @@
+{
+ "round": 316,
+ "figure": "number-line",
+ "capability": "cap-05",
+ "hypothesis": "Batch 7 number-line: cap-05; evidence changes:{\"inequality\": \"a_n = n\", \"n_to\": 8}",
+ "started_at": "2026-11-11T00:59:56",
+ "git": "65a97c7",
+ "before": {
+  "figure": 78.9,
+  "pooled": 96.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:59:56",
+ "after": {
+  "figure": 83.1,
+  "pooled": 96.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"inequality\": \"a_n = n\", \"n_to\": 8}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/97619b2101bdb168.png"
+   }
+  ]
+ },
+ "checker": "pass: n from one whole number to another, swapped, rounded and capped at 1000 terms",
+ "result": "hit",
+ "evidence": "number_line tests (18: 320 old specs and links pinned, 289 byte-identical and 31 changed on purpose: sequence rows that drew nothing and count-by typed in pi; old row forms read the same; 40 mistyped sequences noted; tick count capped); census unchanged; task run reference 6 actions, ours 9, before not possible",
+ "next": "batch 7 closed; leftovers and a fresh scrape"
+}

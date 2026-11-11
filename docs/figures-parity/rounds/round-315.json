@@ -1,0 +1,37 @@
+{
+ "round": 315,
+ "figure": "number-line",
+ "capability": "cap-01f",
+ "hypothesis": "Batch 7 number-line: cap-01f; evidence changes:inequality=a_n = 1/n",
+ "started_at": "2026-11-11T00:59:55",
+ "git": "65a97c7",
+ "before": {
+  "figure": 71.8,
+  "pooled": 96.1
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T00:59:56",
+ "after": {
+  "figure": 78.9,
+  "pooled": 96.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:inequality=a_n = 1/n",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/14f9b27953ec94de.png"
+   }
+  ]
+ },
+ "checker": "pass: terms of ten formulas worked by hand sit on the right tick values; undefined terms skipped; mistyped rows noted",
+ "result": "hit",
+ "evidence": "number_line tests (18: 320 old specs and links pinned, 289 byte-identical and 31 changed on purpose: sequence rows that drew nothing and count-by typed in pi; old row forms read the same; 40 mistyped sequences noted; tick count capped); census unchanged; task run reference 6 actions, ours 9, before not possible",
+ "next": "batch 7 closed; leftovers and a fresh scrape"
+}

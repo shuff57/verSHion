@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T08:59:58+00:00",
- "probe_checked_at": "2026-11-11T00:59:58",
+ "generated_at": "2026-11-11T15:13:37+00:00",
+ "probe_checked_at": "2026-11-11T07:13:37",
  "comparable": true,
  "drift": [],
- "pooled": 96.4,
- "mean": 96.3,
+ "pooled": 96.5,
+ "mean": 96.4,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -675,19 +675,11 @@
    ]
   },
   "ray-diagram": {
-   "score": 98.2,
-   "got": 112.0,
-   "total": 114.0,
+   "score": 100.0,
+   "got": 115.0,
+   "total": 115.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02d",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F",
-     "why": "weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:"
-    }
-   ]
+   "gaps": []
   },
   "reaction-energy-diagram": {
    "score": 100.0,

@@ -1,0 +1,35 @@
+{
+ "round": 320,
+ "figure": "number-line",
+ "capability": "cap-03d",
+ "hypothesis": "Batch 7 number-line: cap-03d; evidence changes:{\"min_text\": \"-2pi\", \"max_text\": \"2pi\", \"step_text\": \"pi/2\"}",
+ "started_at": "2026-11-11T00:59:58",
+ "git": "65a97c7",
+ "before": {
+  "figure": 95.8,
+  "pooled": 96.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:59:58",
+ "after": {
+  "figure": 100.0,
+  "pooled": 96.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"min_text\": \"-2pi\", \"max_text\": \"2pi\", \"step_text\": \"pi/2\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/d92b72a736ff0e9a.png"
+   }
+  ]
+ },
+ "checker": "pass: range typed in pi, ticks numbered in lowest-terms multiples of pi at the right places",
+ "result": "hit",
+ "evidence": "number_line tests (18: 320 old specs and links pinned, 289 byte-identical and 31 changed on purpose: sequence rows that drew nothing and count-by typed in pi; old row forms read the same; 40 mistyped sequences noted; tick count capped); census unchanged; task run reference 6 actions, ours 9, before not possible",
+ "next": "batch 7 closed; leftovers and a fresh scrape"
+}

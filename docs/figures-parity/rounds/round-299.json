@@ -1,0 +1,37 @@
+{
+ "round": 299,
+ "figure": "mass-reading",
+ "capability": "cap-02d",
+ "hypothesis": "Batch 7 mass-reading: cap-02d; evidence changes:{\"balance\":\"Digital balance\",\"places\":\"0.0001\"}",
+ "started_at": "2026-11-11T00:27:38",
+ "git": "4c07a7f",
+ "before": {
+  "figure": 76.2,
+  "pooled": 95.1
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T00:27:39",
+ "after": {
+  "figure": 81.0,
+  "pooled": 95.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"balance\":\"Digital balance\",\"places\":\"0.0001\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/mass-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/mass-reading/57e415fe0af060fa.png"
+   }
+  ]
+ },
+ "checker": "pass: 4 places on the display and key, longest reading fits",
+ "result": "hit",
+ "evidence": "readings_b7 tests (9: lens and dial read alike every 0.05 pH against the drawn marks, marbles counted and resting, riders read off the drawing up to 610 g, random picks on the instrument's places and kept in saved figures and links, 226 old cases pinned, 32 corrected: objects cut by the crop, a floating rock, riders over 600 g); census unchanged; task run reference 6 actions, ours 7",
+ "next": "mass-reading note: the digital balance's magnifier circle runs off the page and its join crosses the key (older)"
+}

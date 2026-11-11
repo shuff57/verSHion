@@ -1,5 +1,5 @@
 {
- "frozen_at": "2026-11-09T02:23:59+00:00",
+ "frozen_at": "2026-11-11T15:13:33+00:00",
  "map_sha256": "9a4c3be020f08b79676c68f613a36c37374576473ef3d81604ea49c480c01a89",
  "not_doing_sha256": "0d4d68bef94ec157aa39e4048a440fc3b2f491bb3ec66ce38d39b83dfef34a60",
  "missing_figures": [],
@@ -187,7 +187,7 @@
   "ray-diagram": {
    "page": "physics/ray-diagram",
    "text_sha256": "429e8cbab7afa50ac6831a6e238659b195b0ba365d83611650953110c179d117",
-   "shape": "c8177f16fecd42275d1fcbd377fda65331c224ce17f532c6c057b8bf705370a6"
+   "shape": "162295207fe55d47ad2f066cfbdc6d887ee51240e325b94c61ea3f85fbab2f4a"
   },
   "spring-scale": {
    "page": "physics/spring-scale",

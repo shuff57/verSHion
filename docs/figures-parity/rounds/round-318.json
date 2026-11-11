@@ -1,0 +1,35 @@
+{
+ "round": 318,
+ "figure": "number-line",
+ "capability": "cap-02d",
+ "hypothesis": "Batch 7 number-line: cap-02d; evidence changes:{\"points\": \"3, -4, 5\", \"pt_mark\": \"Cross\"}",
+ "started_at": "2026-11-11T00:59:57",
+ "git": "65a97c7",
+ "before": {
+  "figure": 87.3,
+  "pooled": 96.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:59:57",
+ "after": {
+  "figure": 91.5,
+  "pooled": 96.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"points\": \"3, -4, 5\", \"pt_mark\": \"Cross\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/b47afabfda9e4764.png"
+   }
+  ]
+ },
+ "checker": "pass: crosses centred on the values, an open point stays open",
+ "result": "hit",
+ "evidence": "number_line tests (18: 320 old specs and links pinned, 289 byte-identical and 31 changed on purpose: sequence rows that drew nothing and count-by typed in pi; old row forms read the same; 40 mistyped sequences noted; tick count capped); census unchanged; task run reference 6 actions, ours 9, before not possible",
+ "next": "batch 7 closed; leftovers and a fresh scrape"
+}

@@ -1,0 +1,37 @@
+{
+ "round": 321,
+ "figure": "ray-diagram",
+ "capability": "cap-02d",
+ "hypothesis": "Re-class ray-diagram cap-02d from interaction to control (owner agreed, re-frozen); evidence changes:place=At 2F",
+ "started_at": "2026-11-11T07:13:35",
+ "git": "662f096",
+ "before": {
+  "figure": 97.4,
+  "pooled": 96.4
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 3 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T07:13:37",
+ "after": {
+  "figure": 100.0,
+  "pooled": 96.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:place=At 2F",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ray-diagram/77f3362c4b17e067.png"
+   }
+  ]
+ },
+ "checker": "pass as a control (independent checker, 2026-11-11): the five places match the reference button by button at f = 10; a place past 31 cm stops at the edge with a note; failed as an interaction, so re-classed with the owner",
+ "result": "hit",
+ "evidence": "ray_diagram tests (25, incl. a_quick_place_is_one_choice_in_the_panel_and_the_object_stands_there: 4 kinds x 3 focal lengths x 5 places in settings, drawing and under the pointer); ray_diagram_frozen unchanged; no figure code changed",
+ "next": "circle cap-01g, cap-01f, cap-i10 (builder running); transformations pick-on-grid (unscorable, owner asked for it)"
+}

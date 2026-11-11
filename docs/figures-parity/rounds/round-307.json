@@ -1,0 +1,37 @@
+{
+ "round": 307,
+ "figure": "coordinate-grid",
+ "capability": "cap-02f",
+ "hypothesis": "Batch 7 coordinate-grid: cap-02f; evidence changes:equations=y = arcsec(x)",
+ "started_at": "2026-11-11T00:41:37",
+ "git": "b71938f",
+ "before": {
+  "figure": 83.0,
+  "pooled": 95.6
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T00:41:38",
+ "after": {
+  "figure": 86.3,
+  "pooled": 95.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:equations=y = arcsec(x)",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/coordinate-grid/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/coordinate-grid/11fc57a5c654cef7.png"
+   }
+  ]
+ },
+ "checker": "pass: arcsec, arccsc, arccot read off the curve at a dozen values; arccot on (0, pi); no join across |x| < 1",
+ "result": "hit",
+ "evidence": "grid_b7 tests (452 old specs and links each pinned to a hash and unchanged; 402 evaluator expressions with exact outputs; every style option differs from every other; arrowheads along the curve inside the grid; fraction ranges); 1874 math, panel and share tests pass on merged main; census unchanged; task run reference 6 actions, ours 6, before not possible",
+ "next": "batch 7: number-line"
+}

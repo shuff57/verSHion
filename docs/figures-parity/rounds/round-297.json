@@ -1,0 +1,35 @@
+{
+ "round": 297,
+ "figure": "nuclide-notation",
+ "capability": "cap-05c",
+ "hypothesis": "Batch 7 nuclide-notation: cap-05c; evidence changes:{\"notation\":\"Hyphen notation\",\"hyphen_form\":\"Symbol\"}",
+ "started_at": "2026-11-10T23:54:48",
+ "git": "d97d51d",
+ "before": {
+  "figure": 92.3,
+  "pooled": 95.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T23:54:49",
+ "after": {
+  "figure": 96.2,
+  "pooled": 95.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"notation\":\"Hyphen notation\",\"hyphen_form\":\"Symbol\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/17b8495cd2ce94f5.png"
+   }
+  ]
+ },
+ "checker": "pass: C-14 as well as carbon-14, ions too",
+ "result": "hit",
+ "evidence": "nuclide tests (17 with census: isotope lists by hand and abundances summing to 100, every option differs from every other, 500+ crowded cases read off the drawn text, 344 old specs and links each pinned to a hash; 137 changed, all corrections in four named groups: beta's -1, hyphen-only with the symbol off, blank spacing, a blank symbol's box); census unchanged; no task run (built on the NAS)",
+ "next": "batch 7: number-line, coordinate-grid, mass-reading, ph-reading"
+}

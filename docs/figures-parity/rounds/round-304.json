@@ -1,0 +1,37 @@
+{
+ "round": 304,
+ "figure": "ph-reading",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 7 ph-reading: cap-03b; evidence changes:ph=9.21 + ui-test:figures::chemistry::readings_b7::tests::random_readings_are_on_the_instrument_and_kept",
+ "started_at": "2026-11-11T00:27:43",
+ "git": "4c07a7f",
+ "before": {
+  "figure": 76.3,
+  "pooled": 95.4
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T00:27:44",
+ "after": {
+  "figure": 84.2,
+  "pooled": 95.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:ph=9.21",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ph-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ph-reading/b68ddcdeb7c86145.png"
+   }
+  ]
+ },
+ "checker": "pass: random pH on the meter's places, whole numbers on paper, kept",
+ "result": "hit",
+ "evidence": "readings_b7 tests (9: lens and dial read alike every 0.05 pH against the drawn marks, marbles counted and resting, riders read off the drawing up to 610 g, random picks on the instrument's places and kept in saved figures and links, 226 old cases pinned, 32 corrected: objects cut by the crop, a floating rock, riders over 600 g); census unchanged; task run reference 6 actions, ours 7",
+ "next": "batch 7: number-line, coordinate-grid"
+}

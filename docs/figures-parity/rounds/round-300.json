@@ -1,0 +1,35 @@
+{
+ "round": 300,
+ "figure": "mass-reading",
+ "capability": "cap-03a",
+ "hypothesis": "Batch 7 mass-reading: cap-03a; evidence changes:{\"balance\":\"Digital balance\",\"pan\":\"Weigh boat\"}",
+ "started_at": "2026-11-11T00:27:39",
+ "git": "4c07a7f",
+ "before": {
+  "figure": 81.0,
+  "pooled": 95.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:27:39",
+ "after": {
+  "figure": 85.7,
+  "pooled": 95.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"balance\":\"Digital balance\",\"pan\":\"Weigh boat\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/mass-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/mass-reading/ae539a06031b0f6f.png"
+   }
+  ]
+ },
+ "checker": "pass: a weigh boat resting on the pan",
+ "result": "hit",
+ "evidence": "readings_b7 tests (9: lens and dial read alike every 0.05 pH against the drawn marks, marbles counted and resting, riders read off the drawing up to 610 g, random picks on the instrument's places and kept in saved figures and links, 226 old cases pinned, 32 corrected: objects cut by the crop, a floating rock, riders over 600 g); census unchanged; task run reference 6 actions, ours 7",
+ "next": "mass-reading note: the digital balance's magnifier circle runs off the page and its join crosses the key (older)"
+}

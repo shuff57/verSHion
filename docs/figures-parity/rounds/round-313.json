@@ -1,0 +1,35 @@
+{
+ "round": 313,
+ "figure": "coordinate-grid",
+ "capability": "cap-06c",
+ "hypothesis": "Batch 7 coordinate-grid: cap-06c; evidence changes:x_right_end=Circle",
+ "started_at": "2026-11-11T00:41:41",
+ "git": "b71938f",
+ "before": {
+  "figure": 96.1,
+  "pooled": 95.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:41:42",
+ "after": {
+  "figure": 98.0,
+  "pooled": 96.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:x_right_end=Circle",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/coordinate-grid/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/coordinate-grid/73fc7931f0a500b8.png"
+   }
+  ]
+ },
+ "checker": "pass: a circle at the end, labels moved past it",
+ "result": "hit",
+ "evidence": "grid_b7 tests (452 old specs and links each pinned to a hash and unchanged; 402 evaluator expressions with exact outputs; every style option differs from every other; arrowheads along the curve inside the grid; fraction ranges); 1874 math, panel and share tests pass on merged main; census unchanged; task run reference 6 actions, ours 6, before not possible",
+ "next": "batch 7: number-line"
+}

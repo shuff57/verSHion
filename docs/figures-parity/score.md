@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-11T08:59:58+00:00 · probe: 2026-11-11T00:59:58
+Generated: 2026-11-11T15:13:37+00:00 · probe: 2026-11-11T07:13:37
 
-**Pooled 96.4** · mean 96.3 over 70 figures · built 71 of 71 reference figures
+**Pooled 96.5** · mean 96.4 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -100,8 +100,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
 - `waves`: 97 (97/100)
   - cap-07e [control 3] End caps on the axes — no evidence
-- `ray-diagram`: 98 (112/114)
-  - cap-02d [interaction 2] Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F — weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `angles`: 100 (71/71)
@@ -134,6 +132,7 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `ray-diagram`: 100 (115/115)
 - `reaction-energy-diagram`: 100 (101/101)
 - `sphere`: 100 (35/35)
 - `stem-and-leaf`: 100 (67/67)

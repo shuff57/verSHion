@@ -1,0 +1,35 @@
+{
+ "round": 308,
+ "figure": "coordinate-grid",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 7 coordinate-grid: cap-03b; evidence changes:{\"equations\": \"y = x^2 - 4\", \"eq1_line\": \"Dashed\"}",
+ "started_at": "2026-11-11T00:41:38",
+ "git": "b71938f",
+ "before": {
+  "figure": 86.3,
+  "pooled": 95.7
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:41:39",
+ "after": {
+  "figure": 88.2,
+  "pooled": 95.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"equations\": \"y = x^2 - 4\", \"eq1_line\": \"Dashed\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/coordinate-grid/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/coordinate-grid/797e667430cd3c15.png"
+   }
+  ]
+ },
+ "checker": "pass: solid, dashed, dotted tell apart at every weight, colour and Print",
+ "result": "hit",
+ "evidence": "grid_b7 tests (452 old specs and links each pinned to a hash and unchanged; 402 evaluator expressions with exact outputs; every style option differs from every other; arrowheads along the curve inside the grid; fraction ranges); 1874 math, panel and share tests pass on merged main; census unchanged; task run reference 6 actions, ours 6, before not possible",
+ "next": "batch 7: number-line"
+}

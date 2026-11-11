@@ -1,0 +1,37 @@
+{
+ "round": 292,
+ "figure": "nuclide-notation",
+ "capability": "cap-01c",
+ "hypothesis": "Batch 7 nuclide-notation: cap-01c; evidence changes:isotope=C-13",
+ "started_at": "2026-11-10T23:54:41",
+ "git": "d97d51d",
+ "before": {
+  "figure": 73.1,
+  "pooled": 94.7
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-10T23:54:43",
+ "after": {
+  "figure": 76.9,
+  "pooled": 94.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:isotope=C-13",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/e5d808e8deae6bfa.png"
+   }
+  ]
+ },
+ "checker": "pass: the element's natural isotopes with IUPAC abundances; picking one sets the mass number",
+ "result": "hit",
+ "evidence": "nuclide tests (17 with census: isotope lists by hand and abundances summing to 100, every option differs from every other, 500+ crowded cases read off the drawn text, 344 old specs and links each pinned to a hash; 137 changed, all corrections in four named groups: beta's -1, hyphen-only with the symbol off, blank spacing, a blank symbol's box); census unchanged; no task run (built on the NAS)",
+ "next": "batch 7: number-line, coordinate-grid, mass-reading, ph-reading"
+}

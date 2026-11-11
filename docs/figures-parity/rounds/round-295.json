@@ -1,0 +1,35 @@
+{
+ "round": 295,
+ "figure": "nuclide-notation",
+ "capability": "cap-03g",
+ "hypothesis": "Batch 7 nuclide-notation: cap-03g; evidence changes:{\"kind\":\"Alpha particle\",\"particle_form\":\"α, β, H\"}",
+ "started_at": "2026-11-10T23:54:46",
+ "git": "d97d51d",
+ "before": {
+  "figure": 84.6,
+  "pooled": 94.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T23:54:47",
+ "after": {
+  "figure": 88.5,
+  "pooled": 95.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"kind\":\"Alpha particle\",\"particle_form\":\"α, β, H\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/3c2c782eff5730c6.png"
+   }
+  ]
+ },
+ "checker": "pass: He or alpha, e or beta, p or H, numbers right in both forms",
+ "result": "hit",
+ "evidence": "nuclide tests (17 with census: isotope lists by hand and abundances summing to 100, every option differs from every other, 500+ crowded cases read off the drawn text, 344 old specs and links each pinned to a hash; 137 changed, all corrections in four named groups: beta's -1, hyphen-only with the symbol off, blank spacing, a blank symbol's box); census unchanged; no task run (built on the NAS)",
+ "next": "batch 7: number-line, coordinate-grid, mass-reading, ph-reading"
+}

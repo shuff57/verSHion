@@ -1,0 +1,35 @@
+{
+ "round": 319,
+ "figure": "number-line",
+ "capability": "cap-02e",
+ "hypothesis": "Batch 7 number-line: cap-02e; evidence changes:{\"points\": \"P(3/4), Q(-2)\", \"pt_labels\": \"Letter and value, like P(3/4)\"}",
+ "started_at": "2026-11-11T00:59:57",
+ "git": "65a97c7",
+ "before": {
+  "figure": 91.5,
+  "pooled": 96.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:59:58",
+ "after": {
+  "figure": 95.8,
+  "pooled": 96.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"points\": \"P(3/4), Q(-2)\", \"pt_labels\": \"Letter and value, like P(3/4)\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/ca223c5642e312bb.png"
+   }
+  ]
+ },
+ "checker": "pass: each label option draws what it says",
+ "result": "hit",
+ "evidence": "number_line tests (18: 320 old specs and links pinned, 289 byte-identical and 31 changed on purpose: sequence rows that drew nothing and count-by typed in pi; old row forms read the same; 40 mistyped sequences noted; tick count capped); census unchanged; task run reference 6 actions, ours 9, before not possible",
+ "next": "batch 7 closed; leftovers and a fresh scrape"
+}

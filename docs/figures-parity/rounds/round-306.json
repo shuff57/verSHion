@@ -1,0 +1,35 @@
+{
+ "round": 306,
+ "figure": "ph-reading",
+ "capability": "cap-04b",
+ "hypothesis": "Batch 7 ph-reading: cap-04b; evidence changes:{\"instrument\":\"Analog meter\",\"mag_show\":\"Magnifier only\"}",
+ "started_at": "2026-11-11T00:27:45",
+ "git": "4c07a7f",
+ "before": {
+  "figure": 92.1,
+  "pooled": 95.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:27:46",
+ "after": {
+  "figure": 100.0,
+  "pooled": 95.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"instrument\":\"Analog meter\",\"mag_show\":\"Magnifier only\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ph-reading/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/ph-reading/e9702de35eba6bba.png"
+   }
+  ]
+ },
+ "checker": "pass: lens in place of the dial, readings right",
+ "result": "hit",
+ "evidence": "readings_b7 tests (9: lens and dial read alike every 0.05 pH against the drawn marks, marbles counted and resting, riders read off the drawing up to 610 g, random picks on the instrument's places and kept in saved figures and links, 226 old cases pinned, 32 corrected: objects cut by the crop, a floating rock, riders over 600 g); census unchanged; task run reference 6 actions, ours 7",
+ "next": "batch 7: number-line, coordinate-grid"
+}

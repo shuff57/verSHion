@@ -1,0 +1,35 @@
+{
+ "round": 317,
+ "figure": "number-line",
+ "capability": "cap-02c",
+ "hypothesis": "Batch 7 number-line: cap-02c; evidence changes:{\"inequality\": \"-2.5 < x <= 5.3\", \"ineq_values\": \"Write\"}",
+ "started_at": "2026-11-11T00:59:56",
+ "git": "65a97c7",
+ "before": {
+  "figure": 83.1,
+  "pooled": 96.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T00:59:57",
+ "after": {
+  "figure": 87.3,
+  "pooled": 96.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"inequality\": \"-2.5 < x <= 5.3\", \"ineq_values\": \"Write\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/number-line/1f72f3aac71d9ddf.png"
+   }
+  ]
+ },
+ "checker": "pass: endpoint values over the right circles; None is byte-identical to the old drawing",
+ "result": "hit",
+ "evidence": "number_line tests (18: 320 old specs and links pinned, 289 byte-identical and 31 changed on purpose: sequence rows that drew nothing and count-by typed in pi; old row forms read the same; 40 mistyped sequences noted; tick count capped); census unchanged; task run reference 6 actions, ours 9, before not possible",
+ "next": "batch 7 closed; leftovers and a fresh scrape"
+}
