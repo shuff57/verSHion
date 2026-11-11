@@ -24,6 +24,7 @@ pub(super) fn fnv(s: &str) -> String {
     format!("{h:016x}")
 }
 
+fn corrected_fixture() -> std::path::PathBuf { std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/solids_b8_corrected.txt") }
 fn fixture() -> std::path::PathBuf { std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/solids_b8_frozen.txt") }
 
 /// What a teacher could have typed in the slanted edge / slant height boxes (good, odd and wrong).
@@ -203,6 +204,16 @@ fn solids_b8_frozen() {
     let text = std::fs::read_to_string(fixture()).expect("tests/fixtures/solids_b8_frozen.txt");
     let mut n = std::collections::BTreeMap::<String, usize>::new();
     let mut fixed = std::collections::BTreeMap::<String, usize>::new();
+    // the 29 corrected old figures' renewed hashes (spec, link), written once by the code at b527a27
+    let write_fix = std::env::var("VERSHION_SOLIDS_B8_CORRECT").is_ok_and(|v| v == "1");
+    let mut renewed_out = String::new();
+    let renewed: std::collections::HashMap<String, (String, String)> = if write_fix { Default::default() } else {
+        std::fs::read_to_string(corrected_fixture()).expect("tests/fixtures/solids_b8_corrected.txt").lines().filter(|l| !l.is_empty()).map(|l| {
+            let mut it = l.splitn(4, '\t');
+            let (_, h, lh, s) = (it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap());
+            (s.to_string(), (h.to_string(), lh.to_string()))
+        }).collect()
+    };
     for line in text.lines().filter(|l| !l.is_empty()) {
         let mut it = line.split('\t');
         let (id, hash, saved, link) = (it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap());
@@ -216,6 +227,13 @@ fn solids_b8_frozen() {
             let mut q = p.clone();
             q.set_s(k, &format!("{v}"));
             assert_eq!(shapes(&d.svg(&p)), shapes(&d.svg(&q)), "a corrected old {id} is not drawn as its value: {saved}");
+            // and pinned, spec and link, to the exact render of the correction (tests/fixtures/solids_b8_corrected.txt)
+            let lp = (link != "-").then(|| { let (_, changed) = share::decode(link).unwrap(); share::link_params(&d, changed, share::version(link)) });
+            let got = (fnv(&d.svg(&p)), lp.as_ref().map(|q| fnv(&d.svg(q))).unwrap_or_else(|| "-".into()));
+            if write_fix { renewed_out.push_str(&format!("{id}\t{}\t{}\t{saved}\n", got.0, got.1)); } else {
+                let want = renewed.get(saved).unwrap_or_else(|| panic!("a corrected old {id} is not pinned: {saved}"));
+                assert_eq!(&got, want, "a corrected old {id} draws differently from its pinned correction: {saved}");
+            }
             *fixed.entry(id.to_string()).or_default() += 1;
             *n.entry(id.to_string()).or_default() += 1;
             continue;
@@ -229,6 +247,8 @@ fn solids_b8_frozen() {
         }
         *n.entry(id.to_string()).or_default() += 1;
     }
+    if write_fix { std::fs::write(corrected_fixture(), renewed_out).unwrap(); }
+    if !write_fix { assert_eq!(std::fs::read_to_string(corrected_fixture()).unwrap().lines().filter(|l| !l.is_empty()).count(), 29, "every corrected figure pinned"); }
     for id in IDS { assert!(n.get(id).copied().unwrap_or(0) >= 200, "frozen {id}s: {n:?}"); }
     // the corrected ones, exactly: 3sqrt2 and 3\u{221a}2 in the slanted edge or slant height box (alone, over a busy figure, and on
     // a right cone or pyramid, and in the seeded mix), counted per figure
