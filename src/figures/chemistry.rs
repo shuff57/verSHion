@@ -19,6 +19,7 @@ pub mod data;
 mod lewis;
 mod measure;
 mod length;
+mod readings_b7;
 pub mod notes;
 pub mod reactionenergy;
 pub mod ratesgraph;
