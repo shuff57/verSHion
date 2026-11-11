@@ -4025,6 +4025,9 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
 
 // ───────────────────────── number line ─────────────────────────
 
+#[cfg(test)]
+mod number_line_frozen;
+
 #[derive(Clone, Copy)]
 pub(super) struct Interval { pub lo: f64, pub lo_c: bool, pub hi: f64, pub hi_c: bool }
 
