@@ -159,6 +159,14 @@ static DOT_AND_CROSS: [RefSection; 4] = [
     s("Title and answer key", &["title", "show_answers"], ""),
 ];
 
+/// nuclide-notation: the reference's four sections, the nuclide first (by its numbers, an isotope or its particles).
+static NUCLIDE: [RefSection; 4] = [
+    s("Nuclide", &["kind", "set_by", "element", "isotope", "mass", "charge", "protons", "neutrons", "electrons", "symbol", "particle_form"], "Mass number = protons + neutrons; charge = protons \u{2212} electrons. Pick a natural isotope, type the numbers, or set the particles instead."),
+    s("Positions", &["pos_mass", "pos_z", "pos_symbol", "pos_charge", "blanks"], ""),
+    s("Style", &["notation", "hyphen_form", "font", "label_size"], ""),
+    s("Title and answer key", &["title", "show_answers"], ""),
+];
+
 static FIG_15: [RefSection; 6] = [
     s("Structure", &["formula", "preset"], "Built around O as the central atom."),
     s("Look", &["shape", "bond_style", "formal"], ""),
@@ -1250,6 +1258,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "length-reading" => &FIG_14,
         "lewis-structures" => &FIG_15,
         "dot-and-cross" => &DOT_AND_CROSS,
+        "nuclide-notation" => &NUCLIDE,
         "line-spectrum" => &FIG_16,
         "mapping-diagram" => &FIG_17,
         "mass-reading" => &FIG_18,

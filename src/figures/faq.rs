@@ -898,7 +898,7 @@ const DOT_AND_CROSS: &[Faq] = &[
 const NUCLIDE_NOTATION: &[Faq] = &[
     Faq {
         q: "How do you write nuclide notation?",
-        a: "Put the mass number (protons plus neutrons) at the top left, the atomic number (protons) at the bottom left and the charge at the top right, so carbon-14 is ¹⁴₆C and a chloride ion is ³⁷₁₇Cl⁻.",
+        a: "Put the mass number (protons plus neutrons) at the top left, the atomic number (protons) at the bottom left and the charge at the top right, so carbon-14 is ¹⁴₆C and a chloride ion is ³⁷₁₇Cl⁻. Hyphen notation writes the name or symbol and the mass number, carbon-14 or C-14.",
     },
     Faq {
         q: "Why is the atomic number sometimes left off?",
@@ -914,7 +914,11 @@ const NUCLIDE_NOTATION: &[Faq] = &[
     },
     Faq {
         q: "Which particles can be written this way?",
-        a: "An alpha particle is ⁴₂He, a beta particle is ⁰₋₁e (or β), a neutron is ¹₀n, a proton is ¹₁p and a gamma ray has no mass or charge numbers at all.",
+        a: "An alpha particle is ⁴₂He (or α), a beta particle is ⁰₋₁e (or β), a positron is ⁰₊₁e (or β⁺), a neutron is ¹₀n, a proton is ¹₁p (or ¹₁H) and a gamma ray is ⁰₀γ, with no mass or charge. A particle's bottom number is its charge, as in decay equations.",
+    },
+    Faq {
+        q: "Can I set the protons, neutrons and electrons instead?",
+        a: "Yes. The protons give the element and its atomic number, protons plus neutrons the mass number, and protons minus electrons the charge, so 17 protons, 20 neutrons and 18 electrons draw ³⁷₁₇Cl⁻. A count that makes no element, such as 0 protons, is refused with a note.",
     },
 ];
 

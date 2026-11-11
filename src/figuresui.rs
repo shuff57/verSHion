@@ -4558,6 +4558,10 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 if fig == "titration-curve" && pd.key == "common" && o == "Custom" {
                     return "Choose one…".to_string();
                 }
+                // the nuclide's isotope list names each isotope with its natural abundance
+                if fig == figures::chemistry::nuclide::ID && pd.key == "isotope" {
+                    return figures::chemistry::nuclide::isotope_label(o);
+                }
                 // the chemistry page writes elements as "8 · O · Oxygen"
                 if fig == "mass-spectrum" && pd.key == "element" && theme::chem_skin() {
                     if let Some(e) = figures::chemistry::data::ISOTOPES.iter().find(|e| e.0 == o) {
@@ -4603,6 +4607,10 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                             for o in opts {
                                 // the reference's list stops at perchloric acid
                                 if fig == "lewis-structures" && pd.key == "preset" && o.starts_with("CH\u{2083}COCl") && cur != *o {
+                                    continue;
+                                }
+                                // the nuclide's isotope list offers the chosen element's own isotopes
+                                if fig == figures::chemistry::nuclide::ID && pd.key == "isotope" && !figures::chemistry::nuclide::isotope_offered(o, p) {
                                     continue;
                                 }
                                 ui.selectable_value(&mut cur, o.to_string(), shown(o));
