@@ -204,14 +204,17 @@ fn regular_polygon(p: &Params) -> Option<Vec<Handle>> {
 
 // ---------- 3D solids ----------
 
-use super::math::{cone_height, depth_sx, edge_height, fmt, oblp, prism_geom, pyramid_height, typed};
+use super::math::{cone_height, depth_sx, edge_height, fmt, oblp, prism_geom, pyramid_height, sv, typed};
+use super::math::solids_b8::set as setm;
+/// A dragged radius: the given row (radius or diameter) takes it and its typed box is emptied.
+fn set_r(p: &mut Params, r: f64) { if p.b("give_d") { setm(p, "diam", 2.0 * r) } else { setm(p, "radius", r) } }
 
 const KC: f64 = 0.5 * 0.766_044_443_118_978; // 0.5 cos 40
 const KS: f64 = 0.5 * 0.642_787_609_686_539_3; // 0.5 sin 40
 fn proj(q: (f64, f64, f64), sx: f64) -> Pt { oblp(q, sx) }
 
 fn base_of(p: &Params, kinds: &str) -> Vec<(f64, f64, f64)> {
-    poly_base(kinds, p.f("length"), p.f("width"), p.i("n").clamp(3, 12) as usize, p.f("side"))
+    poly_base(kinds, sv(p, "length"), sv(p, "width"), p.i("n").clamp(3, 12) as usize, sv(p, "side"))
 }
 
 /// Handles on the (standing) base shared by prism and pyramid.
@@ -224,21 +227,21 @@ fn base_handles(fm: Fm, p: &Params, kind: &str, out: &mut Vec<Handle>) {
         let pe_n = pe.0 * pe.0 + pe.1 * pe.1;
         out.push(Handle::knob(fm.scr(proj(b1, sx)), "Drag to change the side of the base", move |p, s| {
             let m = fm.mdl(s);
-            let o = proj(poly_base("Regular polygon", 0.0, 0.0, p.i("n").clamp(3, 12) as usize, p.f("side"))[0], sx);
+            let o = proj(poly_base("Regular polygon", 0.0, 0.0, p.i("n").clamp(3, 12) as usize, sv(p, "side"))[0], sx);
             let t = ((m.0 - o.0) * pe.0 + (m.1 - o.1) * pe.1) / pe_n.max(1e-9);
-            p.set_f("side", t * p.f("side"));
+            setm(p, "side", t * sv(p, "side"));
         }));
         return;
     }
-    out.push(Handle::knob(fm.scr(proj(b[1], sx)), "Drag to change the length", move |p, s| p.set_f("length", fm.mdl(s).0)));
+    out.push(Handle::knob(fm.scr(proj(b[1], sx)), "Drag to change the length", move |p, s| setm(p, "length", fm.mdl(s).0)));
     if b.len() >= 3 {
         let iso = kind == "Isosceles triangle";
         out.push(Handle::knob(fm.scr(proj(b[2], sx)), "Drag: width and length", move |p, s| {
             let m = fm.mdl(s);
             let w = m.1 / KS;
-            p.set_f("width", w);
+            setm(p, "width", w);
             let x = m.0 - sx * w * KC;
-            p.set_f("length", if iso { 2.0 * x } else { x });
+            setm(p, "length", if iso { 2.0 * x } else { x });
         }));
     }
 }
@@ -252,10 +255,10 @@ fn prism(p: &Params) -> Option<Vec<Handle>> {
     if lying {
         // front face is the base polygon (x, z); the depth is the prism's height
         if kind != "Regular polygon" {
-            out.push(Handle::knob(fm.scr(proj(v[1], sx)), "Drag to change the triangle's base", move |p, s| p.set_f("length", fm.mdl(s).0)));
-            out.push(Handle::knob(fm.scr(proj(v[2], sx)), "Drag to change the triangle's height", move |p, s| p.set_f("width", fm.mdl(s).1)));
+            out.push(Handle::knob(fm.scr(proj(v[1], sx)), "Drag to change the triangle's base", move |p, s| setm(p, "length", fm.mdl(s).0)));
+            out.push(Handle::knob(fm.scr(proj(v[2], sx)), "Drag to change the triangle's height", move |p, s| setm(p, "width", fm.mdl(s).1)));
         }
-        out.push(Handle::knob(fm.scr(proj(v[k + 1], sx)), "Drag to change the length (depth)", move |p, s| p.set_f("height", fm.mdl(s).1 / KS)));
+        out.push(Handle::knob(fm.scr(proj(v[k + 1], sx)), "Drag to change the length (depth)", move |p, s| setm(p, "height", fm.mdl(s).1 / KS)));
         return Some(out);
     }
     let b = base_of(p, &kind);
@@ -266,11 +269,11 @@ fn prism(p: &Params) -> Option<Vec<Handle>> {
         let m = fm.mdl(s);
         let h = m.1 - y0 * KS;
         let oblique = p.s("stands") == "Oblique";
-        if oblique { p.set_f("lean", m.0 - sx * y0 * KC - x0); }
+        if oblique { setm(p, "lean", m.0 - sx * y0 * KC - x0); }
         if oblique && typed(p, "edge").is_some() {
-            p.set_s("edge", &fmt((h * h + p.f("lean").powi(2)).sqrt(), 2));
+            p.set_s("edge", &fmt((h * h + sv(p, "lean").powi(2)).sqrt(), 2));
         } else {
-            p.set_f("height", h);
+            setm(p, "height", h);
         }
     }));
     Some(out)
@@ -283,13 +286,13 @@ fn pyramid(p: &Params) -> Option<Vec<Handle>> {
     let b = base_of(p, &kind);
     let k = b.len() as f64;
     let c = (b.iter().map(|q| q.0).sum::<f64>() / k, b.iter().map(|q| q.1).sum::<f64>() / k);
-    let lean = if p.s("stands") == "Oblique" { p.f("lean") } else { 0.0 };
+    let lean = if p.s("stands") == "Oblique" { sv(p, "lean") } else { 0.0 };
     let apex = (c.0 + lean, c.1, pyramid_height(p));
     let mut out = Vec::new();
     base_handles(fm, p, &kind, &mut out);
     out.push(Handle::knob(fm.scr(proj(apex, sx)), "Drag the apex: height and lean", move |p, s| {
         let m = fm.mdl(s);
-        let base = poly_base(p.s("base"), p.f("length"), p.f("width"), p.i("n").clamp(3, 12) as usize, p.f("side"));
+        let base = poly_base(p.s("base"), sv(p, "length"), sv(p, "width"), p.i("n").clamp(3, 12) as usize, sv(p, "side"));
         let k = base.len() as f64;
         let c = (base.iter().map(|q| q.0).sum::<f64>() / k, base.iter().map(|q| q.1).sum::<f64>() / k);
         let h = m.1 - c.1 * KS;
@@ -298,9 +301,9 @@ fn pyramid(p: &Params) -> Option<Vec<Handle>> {
             let a2 = (mid.0 - c.0).powi(2) + (mid.1 - c.1).powi(2);
             p.set_s("slant", &fmt((h.max(0.1).powi(2) + a2).sqrt(), 2));
         } else {
-            p.set_f("height", h);
+            setm(p, "height", h);
         }
-        if p.s("stands") == "Oblique" { p.set_f("lean", m.0 - sx * c.1 * KC - c.0); }
+        if p.s("stands") == "Oblique" { setm(p, "lean", m.0 - sx * c.1 * KC - c.0); }
     }));
     Some(out)
 }
@@ -309,23 +312,23 @@ fn round_solid(id: &str, p: &Params, _cyl: bool) -> Option<Vec<Handle>> {
     let fm = Fm::of(id, p)?;
     let r = super::math::solid_r(p);
     let h = if id == "cone" { cone_height(p) } else { edge_height(p, p.s("stands") == "Oblique") };
-    let lean = if p.s("stands") == "Oblique" { p.f("lean") } else { 0.0 };
+    let lean = if p.s("stands") == "Oblique" { sv(p, "lean") } else { 0.0 };
     let top = fm.scr((lean, h));
     let rad = fm.scr((r, 0.0));
     let cone = id == "cone";
     Some(vec![
-        Handle::knob(rad, "Drag to change the radius", move |p, s| super::math::set_solid_r(p, fm.mdl(s).0)).with_cursor(Cursor::ResizeH),
+        Handle::knob(rad, "Drag to change the radius", move |p, s| set_r(p, fm.mdl(s).0)).with_cursor(Cursor::ResizeH),
         Handle::knob(top, "Drag to change the height (and lean if oblique)", move |p, s| {
             let m = fm.mdl(s);
             let h = m.1;
             let oblique = p.s("stands") == "Oblique";
-            if oblique { p.set_f("lean", m.0); }
+            if oblique { setm(p, "lean", m.0); }
             if cone && !oblique && typed(p, "slant").is_some() {
                 p.set_s("slant", &fmt((h * h + super::math::solid_r(p).powi(2)).sqrt(), 2));
             } else if !cone && oblique && typed(p, "edge").is_some() {
-                p.set_s("edge", &fmt((h * h + p.f("lean").powi(2)).sqrt(), 2));
+                p.set_s("edge", &fmt((h * h + sv(p, "lean").powi(2)).sqrt(), 2));
             } else {
-                p.set_f("height", h);
+                setm(p, "height", h);
             }
         }),
     ])

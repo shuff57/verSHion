@@ -160,6 +160,19 @@ fn legacy(id: &str) -> Vec<Vec<(&'static str, serde_json::Value)>> {
     out
 }
 
+/// The typed box of an old figure whose meaning batch 8 corrected: a slanted edge or slant height the evaluator could not read
+/// (so the figure was drawn as if the box were empty) and the batch 8 reader reads.
+fn corrected(p: &Params) -> Option<&'static str> {
+    ["edge", "slant"].into_iter().find(|k| {
+        let t = p.s(k).trim();
+        !t.is_empty() && super::eval(&t.replace('\u{221a}', "sqrt").replace('\u{3c0}', "pi"), 0.0).is_none() && super::solids_b8::read(t).ok().flatten().is_some_and(|v| v > 0.0)
+    })
+}
+/// The drawing without its words: every shape element, in order.
+fn shapes(svg: &str) -> Vec<String> {
+    svg.split('<').filter(|e| ["polygon", "polyline", "line ", "path", "circle", "ellipse"].iter().any(|t| e.starts_with(t))).map(|e| e.to_string()).collect()
+}
+
 #[test]
 fn solids_b8_frozen() {
     let write = std::env::var("VERSHION_SOLIDS_B8_FREEZE").is_ok_and(|v| v == "1");
@@ -189,12 +202,24 @@ fn solids_b8_frozen() {
     }
     let text = std::fs::read_to_string(fixture()).expect("tests/fixtures/solids_b8_frozen.txt");
     let mut n = std::collections::BTreeMap::<String, usize>::new();
+    let mut fixed = std::collections::BTreeMap::<String, usize>::new();
     for line in text.lines().filter(|l| !l.is_empty()) {
         let mut it = line.split('\t');
         let (id, hash, saved, link) = (it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap());
         let d = def(id);
         let sp: crate::model::FigureSpec = serde_json::from_str(saved).unwrap();
         let p = params_from_spec(&d, &sp);
+        if let Some(k) = corrected(&p) {
+            // intended: a slanted edge or slant height typed as 4sqrt3 or 3\u{221a}2 was refused before (the box's own note
+            // suggests 3\u{221a}2); it is read now, so the figure is drawn as that number typed in decimals
+            let v = super::solids_b8::read(p.s(k)).unwrap().unwrap();
+            let mut q = p.clone();
+            q.set_s(k, &format!("{v}"));
+            assert_eq!(shapes(&d.svg(&p)), shapes(&d.svg(&q)), "a corrected old {id} is not drawn as its value: {saved}");
+            *fixed.entry(id.to_string()).or_default() += 1;
+            *n.entry(id.to_string()).or_default() += 1;
+            continue;
+        }
         assert_eq!(fnv(&d.svg(&p)), hash, "an old saved {id} draws differently: {saved}");
         if link != "-" {
             let (lid, changed) = share::decode(link).unwrap();
@@ -205,5 +230,8 @@ fn solids_b8_frozen() {
         *n.entry(id.to_string()).or_default() += 1;
     }
     for id in IDS { assert!(n.get(id).copied().unwrap_or(0) >= 200, "frozen {id}s: {n:?}"); }
+    // the corrected ones, exactly: 3sqrt2 and 3\u{221a}2 in the slanted edge or slant height box (alone, over a busy figure, and on
+    // a right cone or pyramid, and in the seeded mix), counted per figure
+    assert_eq!(fixed, [("cone", 10), ("cylinder", 7), ("prism", 4), ("pyramid", 8)].iter().map(|(k, v)| (k.to_string(), *v)).collect(), "the corrected old figures");
 }
 

@@ -80,7 +80,7 @@ static TRANSFORMATIONS: [RefSection; 7] = [
 ];
 
 static FIG_7: [RefSection; 5] = [
-    s("Lines", &["lean", "radius", "height", "show_height", "edge", "give_d"], ""),
+    s("Lines", &["lean", "radius", "height", "show_height", "obl_height", "edge", "give_d"], ""),
     s("Position", &["stands"], ""),
     s("More options", &["view", "hidden", "right", "unit", "dec", "label_size"], ""),
     s("More options", &["diam"], ""),
@@ -323,7 +323,7 @@ static FIG_31: [RefSection; 8] = [
 ];
 
 static FIG_32: [RefSection; 3] = [
-    s("Labels", &["base", "lean", "length", "width", "n", "side", "height", "names", "length_lab", "length_label", "width_lab", "width_label", "height_lab", "height_label", "side_lab", "side_label", "hyp_lab", "hyp_label", "apothem_lab", "apothem_label", "lean_lab", "lean_label", "edge", "edge_lab", "edge_label", "label_offsets"], "Drag any label on the figure to move it."),
+    s("Labels", &["base", "lean", "length", "width", "n", "side", "height", "show_height", "names", "length_lab", "length_label", "width_lab", "width_label", "height_lab", "height_label", "side_lab", "side_label", "hyp_lab", "hyp_label", "apothem_lab", "apothem_label", "lean_lab", "lean_label", "edge", "edge_lab", "edge_label", "label_offsets"], "Drag any label on the figure to move it."),
     s("Position", &["stands", "sits", "depth"], ""),
     s("More options", &["hidden", "right", "unit", "dec", "label_size"], ""),
 ];

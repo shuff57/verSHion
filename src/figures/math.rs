@@ -4029,6 +4029,11 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
 mod number_line_frozen;
 #[cfg(test)]
 mod solids_b8_frozen;
+pub(crate) mod solids_b8;
+#[cfg(test)]
+mod solids_b8_tests;
+/// A solid's measure as drawn: its typed box when that reads, else its slider (`solids_b8::val`).
+pub(super) fn sv(p: &Params, key: &str) -> f64 { solids_b8::val(p, key) }
 pub(crate) mod number_line_b7;
 #[cfg(test)]
 mod number_line_b7_tests;
@@ -4276,6 +4281,7 @@ fn sbeside_r(d: &mut Doc, id: &str, a: Pt, b: Pt, t: f64, center: Pt, text: &str
     let mut n = (-u.1, u.0);
     if n.0 * (m.0 - center.0) + n.1 * (m.1 - center.1) < 0.0 { n = (-n.0, -n.1); }
     let off = 0.5 * (stw(text, size) * n.0.abs() + size * 0.9 * n.1.abs()) + 5.4 * n.0.abs() + 5.8 * n.1.abs();
+    solids_b8::own_line(id, a, b);
     sput_k(d, id, m.0 + n.0 * off, m.1 + n.1 * off, text, size, 0.24);
 }
 /// Label for measure `key` of value `v`: `<key>_lab` picks Measure / Text / None (`def` when the
@@ -4289,6 +4295,12 @@ fn mtext(p: &Params, key: &str, def: &str, v: f64, hidden: bool) -> Option<Strin
         "None" => None,
         _ => Some(fmtu(v, p.i("dec"), p.s("unit"))),
     }
+}
+/// `mtext` that writes a typed measure exactly as typed (3/2 cm, 2\u{221a}3 cm) when its label shows the measure and the value
+/// drawn is the typed one (`solids_b8::exact`); a worked-out or slider value is rounded as before.
+fn xtext(p: &Params, key: &str, mkey: &str, def: &str, v: f64, hidden: bool) -> Option<String> {
+    if !hidden && match p.s(&format!("{key}_lab")) { "" => def, m => m } == "Measure" && let Some(t) = solids_b8::exact(p, mkey) { return Some(t); }
+    mtext(p, key, def, v, hidden)
 }
 const LAB_OPTS: [&str; 3] = ["Measure", "Text", "None"];
 fn hide_list(p: &Params) -> Vec<String> { tokens(p.s("hide")).iter().map(|s| s.to_lowercase()).collect() }
@@ -4392,7 +4404,9 @@ fn solid_common(unit: &str) -> Vec<ParamDef> {
 pub(super) fn typed(p: &Params, k: &str) -> Option<f64> {
     let t = p.s(k).trim();
     if t.is_empty() { return None; }
-    eval(&t.replace('\u{221a}', "sqrt").replace('\u{3c0}', "pi"), 0.0).filter(|v| v.is_finite() && *v > 0.0)
+    // batch 8: what the evaluator cannot read (4sqrt3, 3\u{221a}2, the forms this box's own note suggests) is read as the typed
+    // measures are (`solids_b8::read`); everything it read before is read as before
+    eval(&t.replace('\u{221a}', "sqrt").replace('\u{3c0}', "pi"), 0.0).or_else(|| solids_b8::read(t).ok().flatten()).filter(|v| v.is_finite() && *v > 0.0)
 }
 /// Label for a measure whose value box is text (`vk`): Measure prints what was typed ("as you
 /// typed it") or the worked-out value rounded; Text and None as usual.
@@ -4409,10 +4423,10 @@ fn tlabel(p: &Params, key: &str, vk: &str, def: &str, v: f64) -> Option<String> 
 /// lean (any two of height, lean and slanted edge, as the reference allows).
 pub(super) fn edge_height(p: &Params, oblique: bool) -> f64 {
     if oblique && let Some(e) = typed(p, "edge") {
-        let l = p.f("lean");
+        let l = sv(p, "lean");
         if e > l.abs() + 1e-6 { return (e * e - l * l).sqrt(); }
     }
-    p.f("height")
+    sv(p, "height")
 }
 /// Worked-out text of a measure (number rounded to the figure's decimals, no unit).
 fn ctext(p: &Params, v: f64) -> String { fmt(v, p.i("dec")) }
@@ -4432,40 +4446,45 @@ fn measures_solid(id: &str) -> Option<super::MeasureCard> {
     let link = |name, value_key, label_key, text_key, eq| MeasureRow { equals: Some(eq), ..row(name, value_key, label_key, text_key) };
     let g = |title, rows| MeasureGroup { title, rows };
     // the Diameter row (value "diam") replaces Radius with "Give the diameter instead" (card_visible)
-    let radius = || vec![row("Radius", "radius", "r_lab", "r_label"), row("Diameter", "diam", "r_lab", "d_label"), link("Diameter", "diameter", "d_lab", "d_label", "2 \u{d7} radius")];
+    // the cylinder's, cone's, prism's and pyramid's boxes are typed (`solids_b8`): a number, a fraction or a square root, the
+    // slider's value shown faintly while empty; the sphere keeps its number boxes
+    let typed = id != "sphere";
+    let (rk, dk, hk, lk) = if typed { ("radius_t", "diam_t", "height_t", "lean_t") } else { ("radius", "diam", "height", "lean") };
+    let (lnk, wk, sk) = if typed { ("length_t", "width_t", "side_t") } else { ("length", "width", "side") };
+    let radius = || vec![row("Radius", rk, "r_lab", "r_label"), row("Diameter", dk, "r_lab", "d_label"), link("Diameter", "diameter", "d_lab", "d_label", "2 \u{d7} radius")];
     let (help, groups) = match id {
         "sphere" => ("Give every measure. Worked-out measures are shown faintly. Type sqrt for \u{221a}, / for a fraction and pi for \u{3c0}.", vec![g("", radius())]),
         "cylinder" => (
             "Give every measure. Worked-out measures are shown faintly. Type sqrt for \u{221a}, / for a fraction and pi for \u{3c0}.",
-            vec![g("", { let mut r = radius(); r.push(row("Height", "height", "h_lab", "h_label")); r }), g("Oblique", vec![row("Lean", "lean", "lean_lab", "lean_label"), row("Slanted edge", "edge", "edge_lab", "edge_label")])],
+            vec![g("", { let mut r = radius(); r.push(row("Height", hk, "h_lab", "h_label")); r }), g("Oblique", vec![row("Lean", lk, "lean_lab", "lean_label"), row("Slanted edge", "edge", "edge_lab", "edge_label")])],
         ),
         "cone" => (
             "Give the height or the slant height, and the other is worked out. Worked-out measures are shown faintly. Type sqrt for \u{221a}, / for a fraction and pi for \u{3c0}.",
             vec![
-                g("", { let mut r = radius(); r.extend([row("Height", "height", "h_lab", "h_label"), row("Slant height", "slant", "l_lab", "l_label")]); r }),
-                g("Oblique", vec![row("Lean", "lean", "lean_lab", "lean_label")]),
+                g("", { let mut r = radius(); r.extend([row("Height", hk, "h_lab", "h_label"), row("Slant height", "slant", "l_lab", "l_label")]); r }),
+                g("Oblique", vec![row("Lean", lk, "lean_lab", "lean_label")]),
             ],
         ),
         "pyramid" => (
             "Give the height or the slant height, and the other is worked out. Worked-out measures are shown faintly. Type sqrt for \u{221a}, / for a fraction and pi for \u{3c0}.",
             vec![
-                g("Rectangle base", vec![row("Length", "length", "length_lab", "length_label"), row("Width", "width", "width_lab", "width_label")]),
-                g("Regular polygon base", vec![row("Side", "side", "side_lab", "side_label"), link("Apothem", "apothem", "apothem_lab", "apothem_label", "worked out")]),
-                g("", vec![row("Height", "height", "height_lab", "height_label"), row("Slant height", "slant", "slant_lab", "slant_label")]),
-                g("Oblique", vec![row("Lean", "lean", "lean_lab", "lean_label")]),
+                g("Rectangle base", vec![row("Length", lnk, "length_lab", "length_label"), row("Width", wk, "width_lab", "width_label")]),
+                g("Regular polygon base", vec![row("Side", sk, "side_lab", "side_label"), link("Apothem", "apothem", "apothem_lab", "apothem_label", "worked out")]),
+                g("", vec![row("Height", hk, "height_lab", "height_label"), row("Slant height", "slant", "slant_lab", "slant_label")]),
+                g("Oblique", vec![row("Lean", lk, "lean_lab", "lean_label")]),
             ],
         ),
         "prism" => (
             "Give every measure. Worked-out measures are shown faintly. Type sqrt for \u{221a}, / for a fraction and pi for \u{3c0}.",
             vec![
                 g("Rectangle or triangle base", vec![
-                    row("Length", "length", "length_lab", "length_label"),
-                    row("Width", "width", "width_lab", "width_label"),
+                    row("Length", lnk, "length_lab", "length_label"),
+                    row("Width", wk, "width_lab", "width_label"),
                     link("Slanted side", "hyp", "hyp_lab", "hyp_label", "worked out"),
                 ]),
-                g("Regular polygon base", vec![row("Side", "side", "side_lab", "side_label"), link("Apothem", "apothem", "apothem_lab", "apothem_label", "worked out")]),
-                g("", vec![row("Height", "height", "height_lab", "height_label")]),
-                g("Oblique", vec![row("Lean", "lean", "lean_lab", "lean_label"), row("Slanted edge", "edge", "edge_lab", "edge_label")]),
+                g("Regular polygon base", vec![row("Side", sk, "side_lab", "side_label"), link("Apothem", "apothem", "apothem_lab", "apothem_label", "worked out")]),
+                g("", vec![row("Height", hk, "height_lab", "height_label")]),
+                g("Oblique", vec![row("Lean", lk, "lean_lab", "lean_label"), row("Slanted edge", "edge", "edge_lab", "edge_label")]),
             ],
         ),
         _ => return None,
@@ -4482,31 +4501,36 @@ fn computed_solid(id: &str, p: &Params) -> Vec<(&'static str, String)> {
     match id {
         "cylinder" => {
             let h = edge_height(p, oblique);
-            if typed(p, "edge").is_none() { out.push(("edge", c((h * h + p.f("lean").powi(2)).sqrt()))); } else { out.push(("height", c(h))); }
+            if typed(p, "edge").is_none() { out.push(("edge", c((h * h + sv(p, "lean").powi(2)).sqrt()))); } else { out.push(("height", c(h))); }
         }
         "cone" => {
             let (r, h) = (solid_r(p), cone_height(p));
-            let lean = if oblique { p.f("lean") } else { 0.0 };
+            let lean = if oblique { sv(p, "lean") } else { 0.0 };
             if typed(p, "slant").is_none() { out.push(("slant", c(((r - lean).powi(2) + h * h).sqrt()))); } else { out.push(("height", c(h))); }
         }
         "pyramid" => {
             let a = pyramid_apothem(p);
             let h = pyramid_height(p);
-            let poly = poly_base(p.s("base"), p.f("length"), p.f("width"), p.i("n").clamp(3, 12) as usize, p.f("side"));
+            let poly = poly_base(p.s("base"), sv(p, "length"), sv(p, "width"), p.i("n").clamp(3, 12) as usize, sv(p, "side"));
             out.push(("apothem", c(dist3(mid3(poly[0], poly[1]), centroid3(&poly)))));
-            let lean = if oblique { p.f("lean") } else { 0.0 };
+            let lean = if oblique { sv(p, "lean") } else { 0.0 };
             if typed(p, "slant").is_none() { out.push(("slant", c((a * a + h * h + lean * lean).sqrt()))); } else { out.push(("height", c(h))); }
         }
         "prism" => {
-            let (l, w) = (p.f("length"), p.f("width"));
+            let (l, w) = (sv(p, "length"), sv(p, "width"));
             let hyp = if p.s("base") == "Isosceles triangle" { ((l / 2.0).powi(2) + w * w).sqrt() } else { (l * l + w * w).sqrt() };
             out.push(("hyp", c(hyp)));
-            let poly = poly_base("Regular polygon", l, w, p.i("n").clamp(3, 12) as usize, p.f("side"));
+            let poly = poly_base("Regular polygon", l, w, p.i("n").clamp(3, 12) as usize, sv(p, "side"));
             out.push(("apothem", c(dist3(mid3(poly[0], poly[1]), centroid3(&poly)))));
             let h = edge_height(p, oblique);
-            if typed(p, "edge").is_none() { out.push(("edge", c((h * h + p.f("lean").powi(2)).sqrt()))); } else { out.push(("height", c(h))); }
+            if typed(p, "edge").is_none() { out.push(("edge", c((h * h + sv(p, "lean").powi(2)).sqrt()))); } else { out.push(("height", c(h))); }
         }
         _ => {}
+    }
+    if id != "sphere" {
+        out.extend(solids_b8::hints(id, p));
+        // the worked-out height also shows in the typed height box
+        if let Some(h) = out.iter().find(|x| x.0 == "height").map(|x| x.1.clone()) { out.retain(|x| x.0 != "height_t"); out.push(("height_t", h)); }
     }
     if let Some(m) = solid_msg(id, p) { out.push(("__msg", m)); }
     out
@@ -4522,7 +4546,7 @@ pub(super) fn solid_msg(id: &str, p: &Params) -> Option<String> {
             if !oblique || lying { return None; }
             if bad("edge") { return Some("Type a number for the slanted edge, like 12, 2.5, 5/2 or 3\u{221a}2.".into()); }
             let e = typed(p, "edge")?;
-            (e <= p.f("lean").abs() + 1e-6).then(|| "The height, lean and slanted edge don\u{2019}t fit together: the slanted edge has to be longer than the lean. Clear one to have it worked out.".into())
+            (e <= sv(p, "lean").abs() + 1e-6).then(|| "The height, lean and slanted edge don\u{2019}t fit together: the slanted edge has to be longer than the lean. Clear one to have it worked out.".into())
         }
         "cone" | "pyramid" => {
             if bad("slant") { return Some("Type a number for the slant height, like 12, 2.5, 5/2 or 3\u{221a}2.".into()); }
@@ -4580,19 +4604,19 @@ fn migrate_solid(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
 /// Lying: the base polygon is the front face (x-z plane) and `height` is the depth.
 pub(super) fn prism_geom(p: &Params) -> (Vec<P3>, usize, bool, f64) {
     let kind = p.s("base");
-    let base = poly_base(kind, p.f("length"), p.f("width"), p.i("n").clamp(3, 12) as usize, p.f("side"));
+    let base = poly_base(kind, sv(p, "length"), sv(p, "width"), p.i("n").clamp(3, 12) as usize, sv(p, "side"));
     let k = base.len();
     let lying = kind != "Rectangle" && p.s("sits") == "Lying on its side";
     let oblique = !lying && p.s("stands") == "Oblique";
     let hh = edge_height(p, oblique);
-    let lean = if oblique { p.f("lean") } else { 0.0 };
+    let lean = if oblique { sv(p, "lean") } else { 0.0 };
     let mut v: Vec<P3>;
     if lying {
         let vmin = base.iter().map(|q| q.1).fold(f64::MAX, f64::min);
         // right triangle: put the right angle on the side away from the depth so the hypotenuse
         // face does not fold onto the back edges (b1 stays the right-angle corner)
         let flip = kind == "Right triangle" && depth_sx(p) > 0.0;
-        let fx = |x: f64| if flip { p.f("length") - x } else { x };
+        let fx = |x: f64| if flip { sv(p, "length") - x } else { x };
         v = base.iter().map(|q| (fx(q.0), 0.0, q.1 - vmin)).collect();
         v.extend(base.iter().map(|q| (fx(q.0), hh, q.1 - vmin)));
     } else {
@@ -4648,7 +4672,8 @@ fn prism_params() -> Vec<ParamDef> {
 }
 
 fn prism_render(p: &Params) -> String {
-    let (l, wd) = (p.f("length"), p.f("width"));
+    solids_b8::begin();
+    let (l, wd) = (sv(p, "length"), sv(p, "width"));
     let kind = p.s("base");
     let sx = depth_sx(p);
     let (v, k, lying, lean) = prism_geom(p);
@@ -4665,7 +4690,7 @@ fn prism_render(p: &Params) -> String {
     let e = if lean >= 0.0 { b[1] } else { b[0] };
     let foot = (e.0 + lean, e.1, 0.0);
     if lean.abs() > 1e-9 { all.push(proj(foot)); }
-    let m = Map::fit_at(&all, 420.0, 300.0, 70.0, 40.0);
+    let m = solids_b8::fit(&all, p);
     let mut d = new_doc(560.0, 380.0);
     draw_solid(&mut d, &m, &solid, &proj, oblv(sx), p.b("hidden"));
     let fs = lsz3(p);
@@ -4679,10 +4704,10 @@ fn prism_render(p: &Params) -> String {
     let right = p.b("right");
     let poly = kind == "Regular polygon";
     // base edge (front bottom) b0-b1
-    if poly { lab(&mut d, "side", b[0], b[1], mtext(p, "side", "Measure", p.f("side"), hid("side"))); }
-    else { lab(&mut d, "length", b[0], b[1], mtext(p, "length", "Measure", l, hid("length"))); }
+    if poly { lab(&mut d, "side", b[0], b[1], xtext(p, "side", "side", "Measure", sv(p, "side"), hid("side"))); }
+    else { lab(&mut d, "length", b[0], b[1], xtext(p, "length", "length", "Measure", l, hid("length"))); }
     // the base face's own measures: on the bottom face when standing, the front face when lying
-    let wtxt = mtext(p, "width", "Measure", wd, hid("width"));
+    let wtxt = xtext(p, "width", "width", "Measure", wd, hid("width"));
     match kind {
         "Rectangle" => lab(&mut d, "width", b[1], b[2], wtxt),
         "Right triangle" => {
@@ -4709,7 +4734,9 @@ fn prism_render(p: &Params) -> String {
             }
         }
     }
-    let htxt = mtext(p, "height", "Measure", hh, hid("height"));
+    // the height is written as typed unless an oblique prism's typed slanted edge works it out
+    let h_worked = !lying && p.s("stands") == "Oblique" && hh != sv(p, "height");
+    let htxt = if h_worked { mtext(p, "height", "Measure", hh, hid("height")) } else { xtext(p, "height", "height", "Measure", hh, hid("height")) };
     if lying {
         // prism length runs back along the depth from the front corner nearest the depth side
         let vi = (0..k).filter(|i| b[*i].2 < 1e-9).max_by(|x, y| (sx * b[*x].0).partial_cmp(&(sx * b[*y].0)).unwrap()).unwrap_or(1);
@@ -4720,15 +4747,18 @@ fn prism_render(p: &Params) -> String {
         let vi = (0..k).filter(|i| b[*i].1 < ymin + 1e-9).min_by(|x, y| (sx * b[*x].0).partial_cmp(&(sx * b[*y].0)).unwrap()).unwrap_or(0);
         lab(&mut d, "height", b[vi], t[vi], htxt);
     } else {
-        let top = (foot.0, foot.1, hh);
-        dline(&mut d, m.p(proj(top)), m.p(proj(foot)), INK, 1.6, "6 5");
-        let outside = (lean > 0.0 && foot.0 > e.0) || (lean < 0.0 && foot.0 < e.0);
-        if outside { dline(&mut d, m.p(proj(e)), m.p(proj(foot)), INK, 1.6, "6 5"); }
-        if htxt.is_some() || right {
-            if right { rmark3(&mut d, &m, &proj, foot, sub3(e, foot), (0.0, 0.0, 1.0)); }
+        // the height line (switched off: no line, square, height or lean label; the slanted edge stays)
+        if !solids_b8::height_off("prism", p) {
+            let top = (foot.0, foot.1, hh);
+            dline(&mut d, m.p(proj(top)), m.p(proj(foot)), INK, 1.6, "6 5");
+            let outside = (lean > 0.0 && foot.0 > e.0) || (lean < 0.0 && foot.0 < e.0);
+            if outside { dline(&mut d, m.p(proj(e)), m.p(proj(foot)), INK, 1.6, "6 5"); }
+            if htxt.is_some() || right {
+                if right { rmark3(&mut d, &m, &proj, foot, sub3(e, foot), (0.0, 0.0, 1.0)); }
+            }
+            if let Some(s) = htxt { sbeside_r(&mut d, "height", m.p(proj(foot)), m.p(proj(top)), 0.7, mc, &s, fs); }
+            lab(&mut d, "lean", e, foot, xtext(p, "lean", "lean", "None", lean.abs(), hid("lean")));
         }
-        if let Some(s) = htxt { sbeside_r(&mut d, "height", m.p(proj(foot)), m.p(proj(top)), 0.7, mc, &s, fs); }
-        lab(&mut d, "lean", e, foot, mtext(p, "lean", "None", lean.abs(), hid("lean")));
         let et = (e.0 + lean, e.1, hh);
         if let Some(s) = tlabel(p, "edge", "edge", "None", dist3(e, et)) { sbeside_r(&mut d, "edge", m.p(proj(e)), m.p(proj(et)), 0.3, mc, &s, fs); }
     }
@@ -4736,7 +4766,7 @@ fn prism_render(p: &Params) -> String {
         let fsn = fs * 0.95;
         for (i, q) in solid.v.iter().enumerate() { name_at(&mut d, &format!("v{i}"), m.p(proj(*q)), mc, &corner_name(i), fsn); }
     }
-    d.finish()
+    solids_b8::clear(d.finish(), p)
 }
 fn centroid3(v: &[P3]) -> P3 {
     let n = v.len().max(1) as f64;
@@ -4749,12 +4779,12 @@ pub(super) fn pyramid_height(p: &Params) -> f64 {
         let a = pyramid_apothem(p);
         if s > a + 1e-6 { return (s * s - a * a).sqrt(); }
     }
-    p.f("height")
+    sv(p, "height")
 }
 /// Distance from the base's centre to the middle of the front base edge (where the slant height
 /// meets the base): half the width for a rectangle, the apothem for a regular polygon.
 pub(super) fn pyramid_apothem(p: &Params) -> f64 {
-    let b = poly_base(p.s("base"), p.f("length"), p.f("width"), p.i("n").clamp(3, 12) as usize, p.f("side"));
+    let b = poly_base(p.s("base"), sv(p, "length"), sv(p, "width"), p.i("n").clamp(3, 12) as usize, sv(p, "side"));
     dist3(mid3(b[0], b[1]), centroid3(&b))
 }
 
@@ -4800,14 +4830,15 @@ fn pyramid_params() -> Vec<ParamDef> {
 }
 
 fn pyramid_render(p: &Params) -> String {
-    let (l, wd) = (p.f("length"), p.f("width"));
+    solids_b8::begin();
+    let (l, wd) = (sv(p, "length"), sv(p, "width"));
     let hh = pyramid_height(p);
     let kind = p.s("base");
     let sx = depth_sx(p);
-    let base = poly_base(kind, l, wd, p.i("n").clamp(3, 12) as usize, p.f("side"));
+    let base = poly_base(kind, l, wd, p.i("n").clamp(3, 12) as usize, sv(p, "side"));
     let k = base.len();
     let c3 = centroid3(&base);
-    let lean = if p.s("stands") == "Oblique" { p.f("lean") } else { 0.0 };
+    let lean = if p.s("stands") == "Oblique" { sv(p, "lean") } else { 0.0 };
     let apex = (c3.0 + lean, c3.1, hh);
     let mut v = base.clone();
     v.push(apex);
@@ -4817,7 +4848,7 @@ fn pyramid_render(p: &Params) -> String {
     let proj = |q: P3| oblp(q, sx);
     let all: Vec<Pt> = solid.v.iter().map(|q| proj(*q)).collect();
     let cenp = (all.iter().map(|q| q.0).sum::<f64>() / all.len() as f64, all.iter().map(|q| q.1).sum::<f64>() / all.len() as f64);
-    let m = Map::fit_at(&all, 420.0, 300.0, 70.0, 40.0);
+    let m = solids_b8::fit(&all, p);
     let mut d = new_doc(560.0, 380.0);
     draw_solid(&mut d, &m, &solid, &proj, oblv(sx), p.b("hidden"));
     let fs = lsz3(p);
@@ -4832,7 +4863,9 @@ fn pyramid_render(p: &Params) -> String {
         dline(&mut d, m.p(proj(apex)), m.p(proj(hfoot)), INK, 1.6, "6 5");
         if lean.abs() > 1e-9 { dline(&mut d, m.p(proj(foot)), m.p(proj(hfoot)), INK, 1.6, "6 5"); }
         // the reference sets the height beside its line on the side facing away from the depth
-        if let Some(s) = mtext(p, "height", "Measure", hh, hid("height")) {
+        // written as typed unless a typed slant height works the height out
+        let htxt = if hh != sv(p, "height") { mtext(p, "height", "Measure", hh, hid("height")) } else { xtext(p, "height", "height", "Measure", hh, hid("height")) };
+        if let Some(s) = htxt {
             let (pf, pa) = (m.p(proj(hfoot)), m.p(proj(apex)));
             sbeside_r(&mut d, "height", pf, pa, 0.5, (pf.0 + sx * 100.0, pf.1), &s, fs);
         }
@@ -4845,7 +4878,7 @@ fn pyramid_render(p: &Params) -> String {
         sbeside_r(&mut d, "slant", pm, pa, 0.3, mc, &s, fs);
         if right && lean.abs() < 1e-9 { rmark3(&mut d, &m, &proj, mid, sub3(base[1], mid), sub3(apex, mid)); }
     }
-    if lean.abs() > 1e-9 && let Some(s) = mtext(p, "lean", "Measure", lean.abs(), false) {
+    if lean.abs() > 1e-9 && let Some(s) = xtext(p, "lean", "lean", "Measure", lean.abs(), false) {
         // lean: from the base centre to the foot of the height, along the base
         lab(&mut d, "lean", foot, hfoot, Some(s));
     }
@@ -4855,16 +4888,16 @@ fn pyramid_render(p: &Params) -> String {
         if right { rmark3(&mut d, &m, &proj, mid, sub3(base[1], mid), sub3(foot, mid)); }
     }
     if kind == "Regular polygon" {
-        lab(&mut d, "side", base[0], base[1], mtext(p, "side", "Measure", p.f("side"), hid("side")));
+        lab(&mut d, "side", base[0], base[1], xtext(p, "side", "side", "Measure", sv(p, "side"), hid("side")));
     } else {
-        lab(&mut d, "length", base[0], base[1], mtext(p, "length", "Measure", l, hid("length")));
+        lab(&mut d, "length", base[0], base[1], xtext(p, "length", "length", "Measure", l, hid("length")));
         let (w0, w1) = if sx > 0.0 { (base[1], base[2]) } else { (base[0], base[3]) };
-        lab(&mut d, "width", w0, w1, mtext(p, "width", "Measure", wd, hid("width")));
+        lab(&mut d, "width", w0, w1, xtext(p, "width", "width", "Measure", wd, hid("width")));
     }
     if p.b("names") {
         for (i, q) in solid.v.iter().enumerate() { name_at(&mut d, &format!("v{i}"), m.p(proj(*q)), mc, &corner_name(i), fs * 0.95); }
     }
-    d.finish()
+    solids_b8::clear(d.finish(), p)
 }
 
 // ----- round solids (elevated orthographic view) -----
@@ -4893,7 +4926,7 @@ fn round_common() -> Vec<ParamDef> {
     ]
 }
 /// Radius of a round solid: the Radius row, or half the Diameter row with "Give the diameter instead".
-pub(super) fn solid_r(p: &Params) -> f64 { if p.b("give_d") { p.f("diam") / 2.0 } else { p.f("radius") } }
+pub(super) fn solid_r(p: &Params) -> f64 { if p.b("give_d") { sv(p, "diam") / 2.0 } else { sv(p, "radius") } }
 /// Writes a dragged radius into whichever row is given.
 pub(super) fn set_solid_r(p: &mut Params, r: f64) { if p.b("give_d") { p.set_f("diam", 2.0 * r) } else { p.set_f("radius", r) } }
 /// The diameter's label: with "Give the diameter instead" it takes the radius row's label mode
@@ -4903,7 +4936,7 @@ fn diam_text(p: &Params, v: f64) -> Option<String> {
     match match p.s("r_lab") { "" => "Measure", m => m } {
         "None" => None,
         "Text" => { let t = p.s("d_label").trim(); Some(if t.is_empty() { "d".to_string() } else { t.to_string() }) }
-        _ => Some(fmtu(v, p.i("dec"), p.s("unit"))),
+        _ => Some(solids_b8::exact(p, "diam").unwrap_or_else(|| fmtu(v, p.i("dec"), p.s("unit")))),
     }
 }
 fn round_label_params() -> [ParamDef; 5] {
@@ -4927,7 +4960,7 @@ fn base_measure(d: &mut Doc, m: &Map, o: Pt, r: f64, p: &Params, solid: bool, ab
     let fs = lsz3(p);
     let c = m.p(o);
     let dash = if solid { "none" } else { "6 5" };
-    let rt = if p.b("give_d") { None } else { mtext(p, "r", "Measure", r, false) };
+    let rt = if p.b("give_d") { None } else { xtext(p, "r", "radius", "Measure", r, false) };
     let dt = diam_text(p, 2.0 * r);
     // nothing is drawn across the circle when neither label prints (as the reference)
     if rt.is_none() && dt.is_none() { return; }
@@ -4937,8 +4970,31 @@ fn base_measure(d: &mut Doc, m: &Map, o: Pt, r: f64, p: &Params, solid: bool, ab
     dline(d, a, b, INK, 1.6, dash);
     let away = if above { 100.0 } else { -100.0 };
     let mid = ((a.0 + b.0) / 2.0, c.1);
-    if let Some(s) = dt { sbeside_r(d, "d", a, b, 0.5, (mid.0, mid.1 + away), &s, fs); }
-    if let Some(s) = rt {
+    // batch 8: a typed radius or diameter (17/3 cm, 5\u{221a}13 cm) too wide for its circle would sit on the outline; it goes just
+    // outside the circle instead, over its line (labels drawn from the sliders keep their place)
+    let typed_r = rt.is_some() && rt == solids_b8::exact(p, "radius");
+    let typed_d = dt.is_some() && dt == solids_b8::exact(p, "diam");
+    let sv_ = p.f("view").to_radians().sin();
+    let rim: Vec<Pt> = (0..720).map(|k| { let t = k as f64 * std::f64::consts::TAU / 720.0; m.p((o.0 + r * t.cos(), o.1 + r * sv_ * t.sin())) }).collect();
+    let (top, bot) = rim.iter().fold((f64::MAX, f64::MIN), |(lo, hi), q| (lo.min(q.1), hi.max(q.1)));
+    let place = |d: &mut Doc, id: &str, a: Pt, b: Pt, side: f64, s: &str| {
+        let (w, h) = (stw(s, fs), fs * 0.9);
+        // where `sbeside_r` puts it on a level line: over or under the line's middle
+        let y0 = c.1 - side.signum() * (h / 2.0 + 5.8);
+        let x0 = (a.0 + b.0) / 2.0;
+        let hits = |x: f64, y: f64| rim.iter().any(|q| (q.0 - x).abs() < w / 2.0 + 4.0 && (q.1 - y).abs() < h / 2.0 + 3.0);
+        if !hits(x0, y0) { sbeside_r(d, id, a, b, 0.5, (mid.0, mid.1 + side), s, fs); return; }
+        solids_b8::own_line(id, a, b);
+        let y = if side > 0.0 { top - 5.8 - h / 2.0 } else { bot + 5.8 + h / 2.0 };
+        sput_k(d, id, x0, y, s, fs, 0.24);
+    };
+    if let Some(s) = dt {
+        if typed_d { place(d, "d", a, b, away, &s); } else { sbeside_r(d, "d", a, b, 0.5, (mid.0, mid.1 + away), &s, fs); }
+    }
+    if let Some(s) = rt.clone().filter(|_| typed_r && !diam) {
+        place(d, "r", c, rb, away, &s);
+        d.circle(c.0, c.1, 3.0, INK, INK, 1.0);
+    } else if let Some(s) = rt {
         // with the diameter also labelled, the radius sits on the other side of the line
         let side = if diam { -away } else { away };
         sbeside_r(d, "r", c, rb, 0.5, (mid.0, mid.1 + side), &s, fs);
@@ -4977,14 +5033,15 @@ fn cylinder_params() -> Vec<ParamDef> {
 fn tangent_t(s: f64, lean: f64, h: f64) -> f64 { (-s * lean).atan2(h) }
 
 fn cylinder_render(p: &Params) -> String {
+    solids_b8::begin();
     let oblique = p.s("stands") == "Oblique";
     let (r, h) = (solid_r(p), edge_height(p, oblique));
     let s = p.f("view").to_radians().sin();
-    let lean = if oblique { p.f("lean") } else { 0.0 };
+    let lean = if oblique { sv(p, "lean") } else { 0.0 };
     let mut all = ell(0.0, 0.0, r, r * s, 0.0, 360.0);
     all.extend(ell(lean, h, r, r * s, 0.0, 360.0));
     // the reference draws a solid at a fixed 420 x 300 limit, no fill, 2.4 outline
-    let m = Map::fit_at(&all, 420.0, 300.0, 70.0, 40.0);
+    let m = solids_b8::fit(&all, p);
     let mut d = new_doc(560.0, 380.0);
     let fs = lsz3(p);
     let t0 = tangent_t(s, lean, h);
@@ -5004,8 +5061,11 @@ fn cylinder_render(p: &Params) -> String {
     let foot = m.p((lean, 0.0));
     let base_c = m.p((0.0, 0.0));
     let center = m.p((lean / 2.0, h / 2.0));
-    let draw_h = oblique || p.b("show_height");
-    let htxt = mtext(p, "h", "Measure", h, false);
+    // the oblique cylinder's height line has its own switch (`obl_height`); off, it takes the height and lean labels with it
+    let h_off = solids_b8::height_off("cylinder", p);
+    let draw_h = (oblique || p.b("show_height")) && !h_off;
+    // written as typed unless a typed slanted edge works the height out
+    let htxt = if h != sv(p, "height") { mtext(p, "h", "Measure", h, false) } else { xtext(p, "h", "height", "Measure", h, false) };
     if draw_h {
         dline(&mut d, tc, foot, INK, 1.6, "6 5");
         if lean.abs() > 1e-9 { dline(&mut d, base_c, foot, INK, 1.6, "6 5"); }
@@ -5020,15 +5080,15 @@ fn cylinder_render(p: &Params) -> String {
     d.line(r0.0, r0.1, r1.0, r1.1, INK, 2.4);
     d.polyline(&mpts(&m, &ell(0.0, 0.0, r, r * s, t0d + 180.0, t0d + 360.0)), INK, 2.4);
     base_measure(&mut d, &m, (lean, h), r, p, true, true, dir);
-    if !draw_h && let Some(txt) = &htxt { sbeside_r(&mut d, "h", r0, r1, 0.5, center, txt, fs); }
+    if !draw_h && !h_off && let Some(txt) = &htxt { sbeside_r(&mut d, "h", r0, r1, 0.5, center, txt, fs); }
     if lean.abs() > 1e-9 {
-        if let Some(txt) = mtext(p, "lean", "None", lean.abs(), false) {
+        if !h_off && let Some(txt) = xtext(p, "lean", "lean", "None", lean.abs(), false) {
             sbeside_r(&mut d, "lean", base_c, foot, 0.5, ((base_c.0 + foot.0) / 2.0, base_c.1 - 100.0), &txt, fs);
         }
         let side = if lean > 0.0 { (r0, r1) } else { (l0, l1) };
         if let Some(txt) = tlabel(p, "edge", "edge", "None", (h * h + lean * lean).sqrt()) { sbeside_r(&mut d, "edge", side.0, side.1, 0.5, center, &txt, fs); }
     }
-    d.finish()
+    solids_b8::clear(d.finish(), p)
 }
 
 /// Cone height actually drawn: typed, or worked out from a given slant height (right cones).
@@ -5037,7 +5097,7 @@ pub(super) fn cone_height(p: &Params) -> f64 {
         let r = solid_r(p);
         if s > r + 1e-6 { return (s * s - r * r).sqrt(); }
     }
-    p.f("height")
+    sv(p, "height")
 }
 
 fn cone_params() -> Vec<ParamDef> {
@@ -5066,10 +5126,11 @@ fn cone_params() -> Vec<ParamDef> {
 }
 
 fn cone_render(p: &Params) -> String {
+    solids_b8::begin();
     let r = solid_r(p);
     let h = cone_height(p);
     let s = p.f("view").to_radians().sin();
-    let lean = if p.s("stands") == "Oblique" { p.f("lean") } else { 0.0 };
+    let lean = if p.s("stands") == "Oblique" { sv(p, "lean") } else { 0.0 };
     let apex = (lean, h);
     // tangents from apex to base ellipse
     let pp = (apex.0, apex.1 / s);
@@ -5082,7 +5143,7 @@ fn cone_render(p: &Params) -> String {
     let (pl, pr) = (tp(tl), tp(tr));
     let mut all = ell(0.0, 0.0, r, r * s, 0.0, 360.0);
     all.push(apex);
-    let m = Map::fit_at(&all, 420.0, 300.0, 70.0, 40.0);
+    let m = solids_b8::fit(&all, p);
     let mut d = new_doc(560.0, 380.0);
     let fs = lsz3(p);
     let (a0, a1) = (tl.to_degrees().rem_euclid(360.0), tr.to_degrees().rem_euclid(360.0));
@@ -5106,8 +5167,10 @@ fn cone_render(p: &Params) -> String {
             let toward = if lean.abs() > 1e-9 { bc } else { (foot.0 + 10.0, foot.1) };
             square_mark(&mut d, foot, (foot.0, foot.1 - 10.0), toward, 12.0);
         }
-        if let Some(txt) = mtext(p, "h", "Measure", h, false) { sbeside_r(&mut d, "h", foot, ap, 0.5, (ap.0 - dir * 100.0, ap.1), &txt, fs); }
-        if lean.abs() > 1e-9 && let Some(txt) = mtext(p, "lean", "None", lean.abs(), false) {
+        // written as typed unless a typed slant height works the height out
+        let htxt = if h != sv(p, "height") { mtext(p, "h", "Measure", h, false) } else { xtext(p, "h", "height", "Measure", h, false) };
+        if let Some(txt) = htxt { sbeside_r(&mut d, "h", foot, ap, 0.5, (ap.0 - dir * 100.0, ap.1), &txt, fs); }
+        if lean.abs() > 1e-9 && let Some(txt) = xtext(p, "lean", "lean", "None", lean.abs(), false) {
             sbeside_r(&mut d, "lean", bc, foot, 0.5, ((bc.0 + foot.0) / 2.0, bc.1 - 100.0), &txt, fs);
         }
     }
@@ -5122,7 +5185,7 @@ fn cone_render(p: &Params) -> String {
         let (a, b) = (ap, m.p(pr));
         sbeside_r(&mut d, "l", a, b, 0.5, m.p((lean * 0.5, h * 0.4)), &txt, fs);
     }
-    d.finish()
+    solids_b8::clear(d.finish(), p)
 }
 fn sphere_params() -> Vec<ParamDef> {
     let mut v = vec![
@@ -6547,8 +6610,8 @@ pub fn card_visible(id: &str, group: &str, row: Option<&str>, p: &Params) -> boo
         ("prism", "Rectangle or triangle base", _) | ("pyramid", "Rectangle base", _) => p.s("base") != "Regular polygon",
         ("prism" | "pyramid", "Regular polygon base", _) => p.s("base") == "Regular polygon",
         // "Give the diameter instead" swaps the Radius row for a Diameter row
-        ("cylinder" | "cone" | "sphere", _, Some("radius" | "diameter")) => !p.b("give_d"),
-        ("cylinder" | "cone" | "sphere", _, Some("diam")) => p.b("give_d"),
+        ("cylinder" | "cone" | "sphere", _, Some("radius" | "radius_t" | "diameter")) => !p.b("give_d"),
+        ("cylinder" | "cone" | "sphere", _, Some("diam" | "diam_t")) => p.b("give_d"),
         // angles: Baseline and Ray 2, then one more row per "Add ray" (a typed row always shows)
         ("angles", _, Some(k)) if k != "ray1" => {
             let i = flat::RAY_V.iter().position(|r| *r == k).unwrap_or(0);
@@ -6637,6 +6700,8 @@ fn with_solid_fill(mut v: Vec<ParamDef>) -> Vec<ParamDef> {
 
 /// White shading: every light tint (the face and cap fills, all channels >= 0xc0) becomes white.
 /// Ink, dashed hidden edges, black text and white label halos are left as drawn.
+/// A solid's params with batch 8's appended (`solids_b8::params`: the typed boxes and height switches).
+fn b8_params(id: &str, mut v: Vec<ParamDef>) -> Vec<ParamDef> { v.extend(solids_b8::params(id)); v }
 fn solid_fill(svg: String, p: &Params) -> String {
     if p.s("fill") != "White" {
         return svg;
@@ -6673,10 +6738,10 @@ pub fn defs() -> Vec<FigureDef> {
         f("regular-polygon", "Regular Polygon", "Any regular polygon from 3 to 20 sides, sized by side, radius or apothem.", || super::labels::with_param(regular_polygon_params()), |p| super::labels::rendering(p, || regular_polygon_render(p))),
         f("angles", "Angles", "Single, adjacent, straight-line, around-a-point or vertical angles with measures.", angles_params, angles_render),
         f("parallel-lines", "Parallel Lines and Transversal", "Parallel lines cut by a transversal with chosen angles marked in degrees or by number.", parallel::params, parallel::render),
-        f("prism", "Prism", "A prism on a rectangle, triangle or regular-polygon base, right or oblique, with dashed hidden edges.", || super::labels::with_param(with_solid_fill(prism_params())), |p| super::labels::rendering(p, || solid_fill(prism_render(p), p))),
-        f("cylinder", "Cylinder", "A cylinder, right or oblique, with radius or diameter and height.", || super::labels::with_param(with_solid_fill(cylinder_params())), |p| super::labels::rendering(p, || solid_fill(cylinder_render(p), p))),
-        f("pyramid", "Pyramid", "A pyramid on a rectangle or regular-polygon base with optional height and slant height.", || super::labels::with_param(with_solid_fill(pyramid_params())), |p| super::labels::rendering(p, || solid_fill(pyramid_render(p), p))),
-        f("cone", "Cone", "A cone, right or oblique, with radius or diameter, height and slant height.", || super::labels::with_param(with_solid_fill(cone_params())), |p| super::labels::rendering(p, || solid_fill(cone_render(p), p))),
+        f("prism", "Prism", "A prism on a rectangle, triangle or regular-polygon base, right or oblique, with dashed hidden edges.", || super::labels::with_param(with_solid_fill(b8_params("prism", prism_params()))), |p| super::labels::rendering(p, || solid_fill(prism_render(p), p))),
+        f("cylinder", "Cylinder", "A cylinder, right or oblique, with radius or diameter and height.", || super::labels::with_param(with_solid_fill(b8_params("cylinder", cylinder_params()))), |p| super::labels::rendering(p, || solid_fill(cylinder_render(p), p))),
+        f("pyramid", "Pyramid", "A pyramid on a rectangle or regular-polygon base with optional height and slant height.", || super::labels::with_param(with_solid_fill(b8_params("pyramid", pyramid_params()))), |p| super::labels::rendering(p, || solid_fill(pyramid_render(p), p))),
+        f("cone", "Cone", "A cone, right or oblique, with radius or diameter, height and slant height.", || super::labels::with_param(with_solid_fill(b8_params("cone", cone_params()))), |p| super::labels::rendering(p, || solid_fill(cone_render(p), p))),
         f("sphere", "Sphere", "A sphere or hemisphere with its radius or diameter.", || super::labels::with_param(with_solid_fill(sphere_params())), |p| super::labels::rendering(p, || solid_fill(sphere_render(p), p))),
         f("box-plot", "Box Plot", "A box plot from a data list or five-number summary; compare two sets.", box_plot_params, box_plot_render),
         f("mapping-diagram", "Mapping Diagram", "Input and output sets joined by arrows, from ordered pairs.", mapping_diagram_params, mapping_diagram_render),
