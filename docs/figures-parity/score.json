@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-11T03:54:59+00:00",
- "probe_checked_at": "2026-11-10T19:54:59",
+ "generated_at": "2026-11-11T07:08:13+00:00",
+ "probe_checked_at": "2026-11-10T23:08:13",
  "comparable": true,
  "drift": [],
  "pooled": 94.7,
@@ -1029,18 +1029,11 @@
    "gaps": []
   },
   "transformations": {
-   "score": 95.9,
-   "got": 117.0,
+   "score": 98.4,
+   "got": 120.0,
    "total": 122.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-04h",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Show or hide point labels and coordinates",
-     "why": "no evidence"
-    },
     {
      "id": "cap-02j",
      "class": "interaction",

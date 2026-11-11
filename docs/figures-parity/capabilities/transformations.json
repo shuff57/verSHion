@@ -189,8 +189,8 @@
    "id": "cap-04h",
    "text": "Show or hide point labels and coordinates",
    "class": "control",
-   "evidence": "",
-   "note": "Labels and the coordinate list are always shown."
+   "evidence": "changes:pt_labels=Letters and coordinates",
+   "note": "Built in batch 6, round 291 (2026-11-10). Labels and the coordinate list are always shown."
   },
   {
    "id": "cap-05a",

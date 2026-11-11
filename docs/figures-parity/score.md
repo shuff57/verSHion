@@ -1,6 +1,6 @@
 # Figures parity score
 
-Generated: 2026-11-11T03:54:59+00:00 · probe: 2026-11-10T19:54:59
+Generated: 2026-11-11T07:08:13+00:00 · probe: 2026-11-10T23:08:13
 
 **Pooled 94.7** · mean 94.6 over 70 figures · built 71 of 71 reference figures
 
@@ -119,9 +119,6 @@ Comparable with the frozen baseline: **yes**
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `projectile-motion`: 96 (71/74)
   - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
-- `transformations`: 96 (117/122)
-  - cap-04h [control 3] Show or hide point labels and coordinates — no evidence
-  - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 96 (157/163)
   - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
   - cap-01f [interaction 2] Drag a point off the circle and back on — no evidence
@@ -136,6 +133,8 @@ Comparable with the frozen baseline: **yes**
   - cap-07e [control 3] End caps on the axes — no evidence
 - `ray-diagram`: 98 (112/114)
   - cap-02d [interaction 2] Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F — weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:
+- `transformations`: 98 (120/122)
+  - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `angles`: 100 (71/71)
 - `bar-chart`: 100 (87/87)
 - `circuit-diagram`: 100 (61/61)
