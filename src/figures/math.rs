@@ -4064,6 +4064,8 @@ mod flat_b9_tests;
 pub(crate) mod solids_b8;
 #[cfg(test)]
 mod solids_b8_tests;
+#[cfg(test)]
+mod solids_b8_r1_tests;
 /// A solid's measure as drawn: its typed box when that reads, else its slider (`solids_b8::val`).
 pub(super) fn sv(p: &Params, key: &str) -> f64 { solids_b8::val(p, key) }
 pub(crate) mod number_line_b7;
@@ -5033,6 +5035,12 @@ fn base_measure(d: &mut Doc, m: &Map, o: Pt, r: f64, p: &Params, solid: bool, ab
         let side = if diam { -away } else { away };
         sbeside_r(d, "r", c, rb, 0.5, (mid.0, mid.1 + side), &s, fs);
         d.circle(c.0, c.1, 3.0, INK, INK, 1.0);
+    }
+    // the circle itself is the radius's and diameter's too (a label too wide for it sits just outside it)
+    for k in (0..720).step_by(8) {
+        let (q0, q1) = (rim[k], rim[(k + 8) % 720]);
+        solids_b8::own_line("r", q0, q1);
+        solids_b8::own_line("d", q0, q1);
     }
 }
 

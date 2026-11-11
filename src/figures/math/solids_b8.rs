@@ -334,10 +334,10 @@ pub(crate) fn set(p: &mut Params, key: &str, v: f64) {
 pub(super) fn fit(all: &[Pt], p: &Params) -> Map {
     let m = Map::fit_at(all, 420.0, 300.0, 70.0, 40.0);
     let fs = lsz3(p);
-    let widest = ["radius", "diam", "height", "lean", "length", "width", "side"].iter().filter_map(|k| exact(p, k)).map(|t| serif_w(&t, fs)).fold(0.0, f64::max);
+    // as wide as `sbeside_r` sets it beside an edge (half an em a character), with its gap (5.4) and a little of its halo
+    let widest = ["radius", "diam", "height", "lean", "length", "width", "side"].iter().filter_map(|k| exact(p, k)).map(|t| stw(&t, fs).max(serif_w(&t, fs) / 1.04)).fold(0.0, f64::max);
     if widest == 0.0 { return m; }
-    // the label's gap from its edge (5.4) and a little of its white halo
-    let need = widest / 1.04 + 6.5;
+    let need = widest + 6.5;
     let (lo, hi) = all.iter().map(|q| m.p(*q).0).fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(x), b.max(x)));
     if lo >= need && 560.0 - hi >= need { return m; }
     Map::fit_at(all, 560.0 - 2.0 * need, 300.0, need, 40.0)
@@ -361,35 +361,26 @@ type Bx = (f64, f64, f64, f64);
 fn attr<'a>(head: &'a str, n: &str) -> &'a str { head.split(&format!(" {n}=\"")).nth(1).and_then(|r| r.split('"').next()).unwrap_or("") }
 fn num(head: &str, n: &str) -> f64 { attr(head, n).parse().unwrap_or(f64::NAN) }
 
+/// One drawn stroke as a segment: its ends, whether it is an outline (solid, 2 px or more) and whether it is a mark (under 1.5 px:
+/// right-angle squares, not lines a label could be read against).
+#[derive(Clone, Copy)]
+struct Seg { a: Pt, b: Pt, hard: bool, mark: bool }
+
 /// Every inked stroke of a drawn solid as segments (lines, and the edges of stroked polylines and polygons).
-fn strokes(svg: &str) -> Vec<(Pt, Pt)> {
-    let mut out = Vec::new();
-    for (i, _) in svg.match_indices("<line") {
-        let h = svg[i..].split('>').next().unwrap_or("");
-        out.push(((num(h, "x1"), num(h, "y1")), (num(h, "x2"), num(h, "y2"))));
-    }
-    for tag in ["<polyline", "<polygon"] {
-        for (i, _) in svg.match_indices(tag) {
-            let h = svg[i + tag.len()..].split('>').next().unwrap_or("");
-            if attr(h, "stroke") == "none" || attr(h, "stroke-width").parse::<f64>().unwrap_or(1.0) < 1.0 { continue; }
-            let pts: Vec<Pt> = attr(h, "points").split_whitespace().filter_map(|q| q.split_once(',')).filter_map(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))).collect();
-            for w in pts.windows(2) { out.push((w[0], w[1])); }
-            if tag == "<polygon" && pts.len() > 2 { out.push((pts[pts.len() - 1], pts[0])); }
-        }
-    }
-    out
-}
-/// The outlines only: solid strokes 2 px or more wide.
-fn strokes_hard(svg: &str) -> Vec<(Pt, Pt)> {
+fn strokes(svg: &str) -> Vec<Seg> {
     let mut out = Vec::new();
     for tag in ["<line", "<polyline", "<polygon"] {
         for (i, _) in svg.match_indices(tag) {
             let h = svg[i + tag.len()..].split('>').next().unwrap_or("");
-            if !matches!(attr(h, "stroke-dasharray"), "" | "none") || attr(h, "stroke") == "none" || attr(h, "stroke-width").parse::<f64>().unwrap_or(1.0) < 2.0 { continue; }
-            if tag == "<line" { out.push(((num(h, "x1"), num(h, "y1")), (num(h, "x2"), num(h, "y2")))); continue; }
+            if !h.starts_with(' ') || attr(h, "stroke") == "none" { continue; }
+            let w = attr(h, "stroke-width").parse::<f64>().unwrap_or(1.0);
+            if w <= 0.0 { continue; }
+            let dashed = !matches!(attr(h, "stroke-dasharray"), "" | "none");
+            let (hard, mark) = (!dashed && w >= 2.0, w < 1.5);
+            if tag == "<line" { out.push(Seg { a: (num(h, "x1"), num(h, "y1")), b: (num(h, "x2"), num(h, "y2")), hard, mark }); continue; }
             let pts: Vec<Pt> = attr(h, "points").split_whitespace().filter_map(|q| q.split_once(',')).filter_map(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))).collect();
-            for w in pts.windows(2) { out.push((w[0], w[1])); }
-            if tag == "<polygon" && pts.len() > 2 { out.push((pts[pts.len() - 1], pts[0])); }
+            for w in pts.windows(2) { out.push(Seg { a: w[0], b: w[1], hard, mark }); }
+            if tag == "<polygon" && pts.len() > 2 { out.push(Seg { a: pts[pts.len() - 1], b: pts[0], hard, mark }); }
         }
     }
     out
@@ -402,90 +393,248 @@ fn seg_hits(a: Pt, b: Pt, bx: Bx) -> bool {
         x > bx.0 && x < bx.2 && y > bx.1 && y < bx.3
     })
 }
-fn overlap(a: Bx, b: Bx) -> bool { !(a.2 <= b.0 || b.2 <= a.0 || a.3 <= b.1 || b.3 <= a.1) }
+/// Boxes closer than `gap` (or overlapping).
+fn near(a: Bx, b: Bx, gap: f64) -> bool { !(a.2 + gap <= b.0 || b.2 + gap <= a.0 || a.3 + gap <= b.1 || b.3 + gap <= a.1) }
+fn dist_pt_seg(p: Pt, a: Pt, b: Pt) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 < 1e-12 { 0.0 } else { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
+    ((p.0 - a.0 - t * dx).powi(2) + (p.1 - a.1 - t * dy).powi(2)).sqrt()
+}
+/// Whether stroke s lies along line a-b (collinear and overlapping it: a dashed line drawn on it, or the diameter through a radius).
+pub(super) fn along_line(s: (Pt, Pt), a: Pt, b: Pt) -> bool {
+    let line_d = |p: Pt| {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let l = (dx * dx + dy * dy).sqrt().max(1e-9);
+        ((p.0 - a.0) * dy - (p.1 - a.1) * dx).abs() / l
+    };
+    if line_d(s.0) > 1.5 || line_d(s.1) > 1.5 { return false; }
+    dist_pt_seg(s.0, a, b) < 1.5 || dist_pt_seg(s.1, a, b) < 1.5 || dist_pt_seg(a, s.0, s.1) < 1.5 || dist_pt_seg(b, s.0, s.1) < 1.5
+}
+/// Where segment p1-p2 meets segment q1-q2 (within a pixel of their ends), if it does.
+pub(super) fn cross_at(p1: Pt, p2: Pt, q1: Pt, q2: Pt) -> Option<Pt> {
+    let (r, s) = ((p2.0 - p1.0, p2.1 - p1.1), (q2.0 - q1.0, q2.1 - q1.1));
+    let den = r.0 * s.1 - r.1 * s.0;
+    if den.abs() < 1e-12 { return None; }
+    let t = ((q1.0 - p1.0) * s.1 - (q1.1 - p1.1) * s.0) / den;
+    let u = ((q1.0 - p1.0) * r.1 - (q1.1 - p1.1) * r.0) / den;
+    let (lr, ls) = ((r.0 * r.0 + r.1 * r.1).sqrt().max(1e-9), (s.0 * s.0 + s.1 * s.1).sqrt().max(1e-9));
+    let (et, eu) = (1.0 / lr, 1.0 / ls);
+    (t >= -et && t <= 1.0 + et && u >= -eu && u <= 1.0 + eu).then(|| (p1.0 + r.0 * t, p1.1 + r.1 * t))
+}
+fn segs_cross(p1: Pt, p2: Pt, q1: Pt, q2: Pt) -> bool {
+    let c = |a: Pt, b: Pt, c: Pt| (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
+    let (d1, d2, d3, d4) = (c(q1, q2, p1), c(q1, q2, p2), c(p1, p2, q1), c(p1, p2, q2));
+    d1 * d2 < -1e-9 && d3 * d4 < -1e-9
+}
+/// The glyph box of one `<text>` element drawn at (x, y), as resvg lays it out with the app's fonts (cached by element).
+fn ink_box(text_el: &str, x: f64, y: f64) -> Bx {
+    thread_local! { static CACHE: std::cell::RefCell<std::collections::HashMap<String, Bx>> = std::cell::RefCell::new(Default::default()); }
+    let key = text_el.replacen(&format!("x=\"{x:.2}\" y=\"{y:.2}\""), "x=\"1000\" y=\"1000\"", 1);
+    let rel = CACHE.with(|c| c.borrow().get(&key).copied()).unwrap_or_else(|| {
+        let svg = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" viewBox="0 0 2000 2000">{key}</svg>"#);
+        let mut opt = resvg::usvg::Options::default();
+        opt.fontdb = crate::figures::fontdb();
+        let mut b = (-10.0, -10.0, 10.0, 10.0);
+        if let Ok(tree) = resvg::usvg::Tree::from_str(&crate::figures::serif_stack(&svg), &opt) {
+            fn walk(g: &resvg::usvg::Group, out: &mut Option<Bx>) {
+                for n in g.children() {
+                    match n {
+                        resvg::usvg::Node::Group(g) => walk(g, out),
+                        resvg::usvg::Node::Text(t) => {
+                            let r = t.flattened().bounding_box().transform(t.abs_transform()).unwrap_or(t.flattened().abs_bounding_box());
+                            *out = Some((r.left() as f64, r.top() as f64, r.right() as f64, r.bottom() as f64));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            let mut o = None;
+            walk(tree.root(), &mut o);
+            if let Some(v) = o { b = (v.0 - 1000.0, v.1 - 1000.0, v.2 - 1000.0, v.3 - 1000.0); }
+        }
+        CACHE.with(|c| c.borrow_mut().insert(key, b));
+        b
+    });
+    (rel.0 + x, rel.1 + y, rel.2 + x, rel.3 + y)
+}
+/// The point of box `b` nearest `q`, pulled 1.5 px out from the box.
+fn box_point(b: Bx, q: Pt) -> Pt {
+    let x = q.0.clamp(b.0, b.2);
+    let y = q.1.clamp(b.1, b.3);
+    let (dx, dy) = (q.0 - x, q.1 - y);
+    let l = (dx * dx + dy * dy).sqrt();
+    if l < 1e-9 { (x, y) } else { (x + dx / l * 1.5, y + dy / l * 1.5) }
+}
 
-/// Moves each label of a figure with typed measures, in drawing order, to the nearest spot where it crosses no line, sits on no
-/// label already placed and stays on the page (a small spiral round where it was put, so it stays by its own line). A figure
-/// with no typed measure is returned unchanged.
+/// Moves each label of a figure with typed measures, in drawing order, so that it crosses no line, keeps a clear gap from every
+/// label already placed, stays on the page and is read as its own line's measure: nearer its own line than any other drawn line
+/// (outlines and dashed edges included) and close to it. It tries, in turn, where it was put; beside its own line, slid along it,
+/// on either side and a little further out; just past either end of that line; any nearby spot that still belongs to it; and
+/// last a spot further off with a thin leader drawn from its own line to the text, crossing nothing. It is never put where it
+/// would read as another line's measure: with no such spot it stays where it was drawn, by its own line. Corner letters (no line
+/// of their own) only keep clear. A figure with no typed measure is returned unchanged.
 pub(super) fn clear(svg: String, p: &Params) -> String {
     let own = OWN.with(|o| o.borrow_mut().take()).unwrap_or_default();
     #[cfg(test)]
     LAST_OWN.with(|l| *l.borrow_mut() = own.clone());
     if !any_typed(p) { return svg; }
-    let lines = strokes(&svg);
-    // the outlines (solid strokes of 2 px or more); the rest are dashed hidden edges and construction lines
-    let hard: Vec<(Pt, Pt)> = strokes_hard(&svg);
+    let mut lines = strokes(&svg);
     let (pw, ph) = crate::figures::svg_size(&svg);
     let mut placed: Vec<Bx> = Vec::new();
-    let mut out = String::with_capacity(svg.len());
+    // how far each placed label is from its own line
+    let mut placed_own: Vec<f64> = Vec::new();
+    let mut leaders: Vec<(Pt, Pt)> = Vec::new();
+    // the boxes of the labels not yet placed (where they were drawn), so a moved label does not land on one
+    let mut pending: Vec<(usize, Bx)> = Vec::new();
+    {
+        let mut rest = svg.as_str();
+        let mut off = 0;
+        while let Some(i) = rest.find("<g data-lbl=\"") {
+            let tail = &rest[i..];
+            let Some(end) = tail.find("</g>") else { break };
+            let grp = &tail[..end + 4];
+            if let Some(ti) = grp.find("<text") {
+                let th = grp[ti..].split('>').next().unwrap_or("");
+                let (x, y) = (num(th, "x"), num(th, "y"));
+                if x.is_finite() && y.is_finite() { pending.push((off + i, ink_box(&grp[ti..grp.rfind("</text>").map(|e| e + 7).unwrap_or(grp.len())], x, y))); }
+            }
+            off += i + end + 4;
+            rest = &tail[end + 4..];
+        }
+    }
+    let mut out = String::with_capacity(svg.len() + 512);
     let mut rest = svg.as_str();
+    let mut off = 0;
     while let Some(i) = rest.find("<g data-lbl=\"") {
         out.push_str(&rest[..i]);
+        let here = off + i;
         let tail = &rest[i..];
         let Some(end) = tail.find("</g>") else { break };
         let grp = &tail[..end + 4];
+        off += i + end + 4;
         rest = &tail[end + 4..];
         let ghead = grp.split('>').next().unwrap_or("");
         let Some(ti) = grp.find("<text") else { out.push_str(grp); continue };
         let thead = grp[ti..].split('>').next().unwrap_or("");
-        let text = grp[ti..].split('>').nth(1).and_then(|r| r.split('<').next()).unwrap_or("").replace("&amp;", "&");
         let (x, y, sz) = (num(thead, "x"), num(thead, "y"), num(thead, "font-size"));
+        let later: Vec<Bx> = pending.iter().filter(|(at, _)| *at > here).map(|(_, b)| *b).collect();
         // a dragged label stays where the teacher put it
         if ghead.contains("transform=") || !(x.is_finite() && y.is_finite() && sz.is_finite()) { out.push_str(grp); continue; }
-        let w = serif_w(&text, sz) / 2.0 + 1.5;
-        let bx = |dx: f64, dy: f64| (x + dx - w, y + dy - sz * 0.8, x + dx + w, y + dy + sz * 0.27);
-        let ok = |b: Bx| b.0 >= 1.0 && b.1 >= 1.0 && b.2 <= pw - 1.0 && b.3 <= ph - 1.0 && !lines.iter().any(|(a, c)| seg_hits(*a, *c, b)) && !placed.iter().any(|q| overlap(*q, b));
-        // a label beside a line stays by that line: nearer it than any other labelled line, and close to it
-        let id = attr(ghead, "data-lbl");
-        let mine = own.iter().find(|o| o.0 == id).map(|o| (o.1, o.2));
-        let others: Vec<(Pt, Pt)> = own.iter().filter(|o| o.0 != id).map(|o| (o.1, o.2)).collect();
-        let belongs = |b: Bx| mine.is_none_or(|(a, c)| { let d = seg_box(a, c, b); d <= 16.0 && others.iter().all(|(x, y)| seg_box(*x, *y, b) > d + 4.0) });
-        let mut best = (0.0, 0.0);
-        if !(ok(bx(0.0, 0.0)) && belongs(bx(0.0, 0.0))) {
-            // first beside its own line: slid along it from where it was put, on its side then the other, a little further out
-            let along = |strict: bool| mine.and_then(|(a, c)| {
-                let len = ((c.0 - a.0).powi(2) + (c.1 - a.1).powi(2)).sqrt().max(1e-9);
-                let (u, nrm) = (((c.0 - a.0) / len, (c.1 - a.1) / len), (-(c.1 - a.1) / len, (c.0 - a.0) / len));
-                let t0 = (((x - a.0) * u.0 + (y - sz * 0.27 - a.1) * u.1) / len).clamp(0.0, 1.0);
-                let side0 = if (x - a.0) * nrm.0 + (y - sz * 0.27 - a.1) * nrm.1 >= 0.0 { 1.0 } else { -1.0 };
-                // along the line; when nothing is clear there, also a little past either end
-                let mut ts: Vec<f64> = if strict { (0..=20).map(|k| k as f64 / 20.0).collect() } else { (-8..=28).map(|k| k as f64 / 20.0).collect() };
-                ts.sort_by(|p, q| ((p - t0).abs() + if (0.0..=1.0).contains(p) { 0.0 } else { 2.0 }).partial_cmp(&((q - t0).abs() + if (0.0..=1.0).contains(q) { 0.0 } else { 2.0 })).unwrap());
-                let (hw, hh) = (w, sz * 0.535);
-                // clear of every line; failing that, over a dashed hidden edge (its white halo keeps it readable) but never on an
-                // outline or its own line, and never moved off its own line to where it would read as another's
-                let soft_ok = |b: Bx| b.0 >= 1.0 && b.1 >= 1.0 && b.2 <= pw - 1.0 && b.3 <= ph - 1.0 && !hard.iter().any(|(p, q)| seg_hits(*p, *q, b)) && !seg_hits(a, c, b) && !placed.iter().any(|q| overlap(*q, b));
-                {
+        // the label's glyph box as drawn (resvg with the app's fonts), 1 px round for its halo
+        let ib = ink_box(&grp[ti..grp.rfind("</text>").map(|e| e + 7).unwrap_or(grp.len())], x, y);
+        let w = (ib.2 - ib.0) / 2.0;
+        let (cx0, cy0) = ((ib.0 + ib.2) / 2.0, (ib.1 + ib.3) / 2.0);
+        let hh = (ib.3 - ib.1) / 2.0;
+        let bx = |dx: f64, dy: f64| (cx0 + dx - w - 1.0, cy0 + dy - hh - 1.0, cx0 + dx + w + 1.0, cy0 + dy + hh + 1.0);
+        let id = attr(ghead, "data-lbl").to_string();
+        let mine: Vec<(Pt, Pt)> = own.iter().filter(|o| o.0 == id).map(|o| (o.1, o.2)).collect();
+        let on_page = |b: Bx| b.0 >= 1.0 && b.1 >= 1.0 && b.2 <= pw - 1.0 && b.3 <= ph - 1.0;
+        let free = |b: Bx, moved: bool| !placed.iter().any(|q| near(*q, b, 4.0)) && !(moved && later.iter().any(|q| near(*q, b, 4.0))) && !leaders.iter().any(|(a, c)| seg_hits(*a, *c, b));
+        let ok = |b: Bx, moved: bool| on_page(b) && free(b, moved) && !lines.iter().any(|s| !s.mark && seg_box(s.a, s.b, b) < 0.5);
+        // the strokes a label is read against: not marks, not on its own line
+        let others: Vec<Seg> = lines.iter().copied().filter(|s| !s.mark && !mine.iter().any(|(a, c)| along_line((s.a, s.b), *a, *c))).collect();
+        let d_own = |b: Bx| mine.iter().map(|(a, c)| seg_box(*a, *c, b)).fold(f64::MAX, f64::min);
+        let belongs = |b: Bx| { let d = d_own(b); d <= 16.0 && others.iter().all(|s| seg_box(s.a, s.b, b) >= d + 3.0) };
+        let good = |b: Bx, moved: bool| ok(b, moved) && (mine.is_empty() || belongs(b));
+        let mut best: Option<(f64, f64)> = None;
+        let mut leader: Option<(Pt, Pt)> = None;
+        if good(bx(0.0, 0.0), false) {
+            best = Some((0.0, 0.0));
+        } else if let Some(&(a, c)) = mine.first() {
+            let len = ((c.0 - a.0).powi(2) + (c.1 - a.1).powi(2)).sqrt().max(1e-9);
+            let (u, nrm) = (((c.0 - a.0) / len, (c.1 - a.1) / len), (-(c.1 - a.1) / len, (c.0 - a.0) / len));
+            let (mx, my) = (cx0, cy0);
+            let t0 = (((mx - a.0) * u.0 + (my - a.1) * u.1) / len).clamp(0.0, 1.0);
+            let side0 = if (mx - a.0) * nrm.0 + (my - a.1) * nrm.1 >= 0.0 { 1.0 } else { -1.0 };
+            let beside = |ts: &[f64]| {
+                for gap in [5.4, 8.0, 12.0] {
                     for side in [side0, -side0] {
-                        for gap in [5.4, 9.0, 14.0] {
-                            for &t in &ts {
-                                let n = (nrm.0 * side, nrm.1 * side);
-                                let off = hw * n.0.abs() + hh * n.1.abs() + gap;
-                                let (cx, cy) = (a.0 + (c.0 - a.0) * t + n.0 * off, a.1 + (c.1 - a.1) * t + n.1 * off);
-                                // the box's centre is 0.27 em under the baseline's centre line
-                                let (dx, dy) = (cx - x, cy + sz * 0.265 - y);
-                                let b = bx(dx, dy);
-                                if (if strict { ok(b) } else { soft_ok(b) }) && belongs(b) { return Some((dx, dy)); }
-                            }
+                        for &t in ts {
+                            let n = (nrm.0 * side, nrm.1 * side);
+                            let o = (w + 1.0) * n.0.abs() + (hh + 1.0) * n.1.abs() + gap;
+                            let (cx, cy) = (a.0 + (c.0 - a.0) * t + n.0 * o, a.1 + (c.1 - a.1) * t + n.1 * o);
+                            let (dx, dy) = (cx - mx, cy - my);
+                            if good(bx(dx, dy), true) { return Some((dx, dy)); }
                         }
                     }
                 }
                 None
-            });
-            let search = |strict: bool| {
-                for r in (1..=60).map(|k| k as f64 * 3.0) {
+            };
+            let by = |lo: i32, hi: i32| { let mut ts: Vec<f64> = (lo..=hi).map(|k| k as f64 / 20.0).collect(); ts.sort_by(|p, q| (p - t0).abs().partial_cmp(&(q - t0).abs()).unwrap()); ts };
+            // past either end: the label's half length beyond the line's end, along it
+            // (only past an end where no other line meets it: past a corner the label would read as the corner's other lines')
+            let free_end = |e: Pt| !others.iter().any(|s| dist_pt_seg(e, s.a, s.b) < 3.0);
+            let (end_a, end_c) = (free_end(a), free_end(c));
+            let past: Vec<f64> = { let e = (w + 8.0) / len; let mut v: Vec<f64> = (0..=8).flat_map(|k| { let d = e * (0.5 + k as f64 * 0.25); [-d, 1.0 + d] }).filter(|t| if *t < 0.0 { end_a } else { end_c }).collect(); v.sort_by(|p, q| (p - t0).abs().partial_cmp(&(q - t0).abs()).unwrap()); v };
+            best = beside(&by(0, 20)).or_else(|| beside(&past)).or_else(|| {
+                for r in (1..=14).map(|k| k as f64 * 3.0) {
                     for k in 0..48 {
-                        let t = k as f64 * std::f64::consts::TAU / 48.0;
-                        let (dx, dy) = (r * t.cos(), r * t.sin());
-                        let b = bx(dx, dy);
-                        if ok(b) && (!strict || belongs(b)) { return Some((dx, dy)); }
+                        let th = k as f64 * std::f64::consts::TAU / 48.0;
+                        if good(bx(r * th.cos(), r * th.sin()), true) { return Some((r * th.cos(), r * th.sin())); }
                     }
                 }
                 None
-            };
-            best = along(true).or_else(|| search(true)).or_else(|| along(false)).or_else(|| if ok(bx(0.0, 0.0)) { Some((0.0, 0.0)) } else { search(false) }).unwrap_or((0.0, 0.0));
+            });
+            if best.is_none() {
+                // a leader from its own line: the text further off, clear of every line by 6 px so the leader is the line nearest
+                // it, the leader crossing no line and no label
+                let foot = (a.0 + (c.0 - a.0) * t0, a.1 + (c.1 - a.1) * t0);
+                // crossing no outline if it can; failing that as few as it must (a line inside a crowded solid: the label is then
+                // out of the crowd, its leader still drawn from its own line)
+                // and clear of the labels not placed yet; only if nothing else is found, through one (it is moved off it later)
+                // (and last, passing a placed label a little closer, still further than that label is from its own line)
+                'lead: for (max_cross, spare_later, margin) in [0usize, 1, 2, 3].map(|m| (m, true, 3.0)).into_iter().chain([0usize, 1, 2, 3].map(|m| (m, false, 3.0))).chain([0usize, 1, 2, 3].map(|m| (m, false, 1.2))) {
+                    for r in (6..=60).map(|k| k as f64 * 3.0) {
+                        for k in 0..64 {
+                            let th = k as f64 * std::f64::consts::TAU / 64.0;
+                            let (cx, cy) = (foot.0 + r * th.cos(), foot.1 + r * th.sin());
+                            let (dx, dy) = (cx - mx, cy - my);
+                            let b = bx(dx, dy);
+                            if !ok(b, true) || lines.iter().any(|s| !s.mark && seg_box(s.a, s.b, b) < 5.0) { continue; }
+                            // from the nearest point of the inner part of its own line (not a corner, where other lines meet)
+                            let q = (6..=34).map(|j| { let t = j as f64 / 40.0; (a.0 + (c.0 - a.0) * t, a.1 + (c.1 - a.1) * t) })
+                                .min_by(|p, q| { let d = |z: Pt| seg_box(z, z, b); d(*p).partial_cmp(&d(*q)).unwrap() }).unwrap();
+                            let e = box_point(b, q);
+                            // it may cross a dashed hidden edge (as a drafting leader does)
+                            let outlines = lines.iter().filter(|s| s.hard && !mine.iter().any(|(a2, c2)| along_line((s.a, s.b), *a2, *c2)) && segs_cross(q, e, s.a, s.b)).count();
+                            // and keeps 6 px from every other label, so no label is read against it
+                            // (a placed label: further than it is from its own line, so it is not read against the leader instead)
+                            let crosses_label = placed.iter().zip(&placed_own).any(|(pb, d)| seg_box(q, e, *pb) < (d + margin).max(2.0 * margin))
+                                || (spare_later && later.iter().any(|pb| seg_box(q, e, *pb) < 4.0));
+                            let crosses_leader = leaders.iter().any(|(l1, l2)| segs_cross(q, e, *l1, *l2));
+                            // and does not run along an outline or another leader: 3 px clear of it beyond its first 6 px
+                            let ll = ((e.0 - q.0).powi(2) + (e.1 - q.1).powi(2)).sqrt().max(1e-9);
+                            let hugs = (0..=20).map(|j| { let t = 6.0 / ll + (1.0 - 6.0 / ll) * j as f64 / 20.0; (q.0 + (e.0 - q.0) * t, q.1 + (e.1 - q.1) * t) })
+                                .any(|z| others.iter().filter(|s| s.hard || leaders.iter().any(|l| (l.0, l.1) == (s.a, s.b))).any(|s| dist_pt_seg(z, s.a, s.b) < 3.0 && cross_at(q, e, s.a, s.b).is_none_or(|x| ((z.0 - x.0).powi(2) + (z.1 - x.1).powi(2)).sqrt() > 4.0)));
+                            let crosses_leader = crosses_leader || ll < 8.0 || hugs;
+                            if outlines <= max_cross && !crosses_label && !crosses_leader {
+                                best = Some((dx, dy));
+                                leader = Some((q, e));
+                                break 'lead;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // a corner letter: only kept clear
+            'spiral: for r in (1..=20).map(|k| k as f64 * 3.0) {
+                for k in 0..48 {
+                    let th = k as f64 * std::f64::consts::TAU / 48.0;
+                    if ok(bx(r * th.cos(), r * th.sin()), true) { best = Some((r * th.cos(), r * th.sin())); break 'spiral; }
+                }
+            }
         }
+        // no spot found: it stays where it was drawn, beside its own line
+        let best = best.unwrap_or((0.0, 0.0));
         placed.push(bx(best.0, best.1));
+        placed_own.push(if leader.is_some() { 1.5 } else if mine.is_empty() { 0.0 } else { d_own(bx(best.0, best.1)) });
+        if let Some((q, e)) = leader {
+            out.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#111827" stroke-width="1.6" data-leader="{id}"/>"##, q.0, q.1, e.0, e.1));
+            leaders.push((q, e));
+            lines.push(Seg { a: q, b: e, hard: false, mark: false });
+        }
         if best == (0.0, 0.0) { out.push_str(grp); continue; }
         let (cx, cy) = { let v: Vec<f64> = attr(ghead, "data-box").split_whitespace().filter_map(|v| v.parse().ok()).collect(); (v.first().copied().unwrap_or(x), v.get(1).copied().unwrap_or(y)) };
         let g2 = grp
