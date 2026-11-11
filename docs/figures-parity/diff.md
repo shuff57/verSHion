@@ -21,7 +21,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | kite | `kite` | 57 | 10 | 5 | — | 93 |
 | length-reading | `ruler-reading` | 17 | 3 | 6 | — | 95 |
 | mapping-diagram | `mapping-diagram` | 14 | 0 | 4 | reference mentions click/drag; ours has no handles; reference has a student version; ours has no show_answers | 100 |
-| number-line | `number-line` | 18 | 0 | 6 | — | 72 |
+| number-line | `number-line` | 30 | 0 | 6 | — | 100 |
 | parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 100 |
 | parallelogram | `parallelogram` | 57 | 9 | 6 | — | 90 |
 | pie-chart | `pie-chart` | 16 | 0 | 5 | — | 100 |
@@ -101,19 +101,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-11T08:41:43+00:00 · probe: 2026-11-11T00:41:43
+Generated: 2026-11-11T08:59:58+00:00 · probe: 2026-11-11T00:59:58
 
-**Pooled 96.1** · mean 95.9 over 70 figures · built 71 of 71 reference figures
+**Pooled 96.4** · mean 96.3 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `number-line`: 72 (51/71)
-  - cap-01f [core 5] Graph a sequence like a_n = 1/n — no evidence
-  - cap-02c [control 3] Write an inequality's endpoint values above the line, or leave them off — no evidence
-  - cap-02d [control 3] Draw points as a dot or a cross — no evidence
-  - cap-02e [control 3] Choose how the point labels show — no evidence
-  - cap-03d [control 3] Type the range in multiples of pi — no evidence
-  - cap-05 [control 3] Choose which terms of a sequence are shown, n from one whole number to another — no evidence
 - `vector-diagram`: 84 (48/57)
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03c [control 3] Measure the angle mark from the vertical — no evidence
@@ -232,6 +225,7 @@ Comparable with the frozen baseline: **yes**
 - `motion-graphs`: 100 (89/89)
 - `motion-map`: 100 (87/87)
 - `nuclide-notation`: 100 (78/78)
+- `number-line`: 100 (71/71)
 - `ogive`: 100 (75/75)
 - `orbital-diagram`: 100 (61/61)
 - `organic-structure`: 100 (21/21)

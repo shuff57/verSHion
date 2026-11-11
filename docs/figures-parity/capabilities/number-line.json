@@ -42,8 +42,8 @@
    "id": "cap-01f",
    "text": "Graph a sequence like a_n = 1/n",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:inequality=a_n = 1/n",
+   "note": "Built in batch 7, round 315 (2026-11-10)."
   },
   {
    "id": "cap-01g",
@@ -70,22 +70,22 @@
    "id": "cap-02c",
    "text": "Write an inequality's endpoint values above the line, or leave them off",
    "class": "control",
-   "evidence": "",
-   "note": "Settled on the live page: each row's Values above the line (Write/None, Write by default) puts an endpoint's value above its circle when it falls between numbered ticks (-2.5 < x <= 5.3 shows -2.5 and 5.3; at -2 and 5 nothing extra). verSHion writes no endpoint values for an inequality."
+   "evidence": "changes:{\"inequality\": \"-2.5 < x <= 5.3\", \"ineq_values\": \"Write\"}",
+   "note": "Built in batch 7, round 317 (2026-11-10). Settled on the live page: each row's Values above the line (Write/None, Write by default) puts an endpoint's value above its circle when it falls between numbered ticks (-2.5 < x <= 5.3 shows -2.5 and 5.3; at -2 and 5 nothing extra). verSHion writes no endpoint values for an inequality."
   },
   {
    "id": "cap-02d",
    "text": "Draw points as a dot or a cross",
    "class": "control",
-   "evidence": "",
-   "note": "dots only (open with an o suffix)"
+   "evidence": "changes:{\"points\": \"3, -4, 5\", \"pt_mark\": \"Cross\"}",
+   "note": "Built in batch 7, round 318 (2026-11-10). dots only (open with an o suffix)"
   },
   {
    "id": "cap-02e",
    "text": "Choose how the point labels show",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"points\": \"P(3/4), Q(-2)\", \"pt_labels\": \"Letter and value, like P(3/4)\"}",
+   "note": "Built in batch 7, round 319 (2026-11-10)."
   },
   {
    "id": "cap-03a",
@@ -112,8 +112,8 @@
    "id": "cap-03d",
    "text": "Type the range in multiples of pi",
    "class": "control",
-   "evidence": "",
-   "note": "pi evaluates to a number but the ticks are not labelled in pi"
+   "evidence": "changes:{\"min_text\": \"-2pi\", \"max_text\": \"2pi\", \"step_text\": \"pi/2\"}",
+   "note": "Built in batch 7, round 320 (2026-11-10). pi evaluates to a number but the ticks are not labelled in pi"
   },
   {
    "id": "cap-04",
@@ -126,8 +126,8 @@
    "id": "cap-05",
    "text": "Choose which terms of a sequence are shown, n from one whole number to another",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"inequality\": \"a_n = n\", \"n_to\": 8}",
+   "note": "Built in batch 7, round 316 (2026-11-10)."
   },
   {
    "id": "cap-06",

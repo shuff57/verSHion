@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-11T08:41:37+00:00",
-  "src_mtime": 1794385688.1482227,
-  "git": "b71938f",
+  "built_at": "2026-11-11T08:59:55+00:00",
+  "src_mtime": 1794386979.6387699,
+  "git": "65a97c7",
   "figures": 191
  },
  "figures": {
@@ -18548,6 +18548,37 @@
      "default": "1.0"
     },
     {
+     "key": "min_text",
+     "label": "From, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "max_text",
+     "label": "To, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "step_text",
+     "label": "Count by as a fraction",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "frac_style",
+     "label": "Fractions written as",
+     "kind": "choice",
+     "options": [
+      "Improper (5/4)",
+      "Mixed (1 1/4)"
+     ],
+     "default": "Improper (5/4)"
+    },
+    {
      "key": "label_every",
      "label": "Number every n-th tick",
      "kind": "int",
@@ -18629,23 +18660,6 @@
      "default": "#c0392b"
     },
     {
-     "key": "step_text",
-     "label": "Count by as a fraction",
-     "kind": "text",
-     "options": [],
-     "default": ""
-    },
-    {
-     "key": "frac_style",
-     "label": "Fractions written as",
-     "kind": "choice",
-     "options": [
-      "Improper (5/4)",
-      "Mixed (1 1/4)"
-     ],
-     "default": "Improper (5/4)"
-    },
-    {
      "key": "inequality2",
      "label": "Second graph",
      "kind": "text",
@@ -18685,6 +18699,94 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "ineq_values",
+     "label": "First graph: values above the line",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Write"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "ineq_mark",
+     "label": "First graph: a sequence's terms as",
+     "kind": "choice",
+     "options": [
+      "Dot",
+      "Cross"
+     ],
+     "default": "Dot"
+    },
+    {
+     "key": "n_from",
+     "label": "First graph: first n",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "n_to",
+     "label": "First graph: last n",
+     "kind": "int",
+     "options": [],
+     "default": "5"
+    },
+    {
+     "key": "ineq2_values",
+     "label": "Second graph: values above the line",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Write"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "ineq2_mark",
+     "label": "Second graph: a sequence's terms as",
+     "kind": "choice",
+     "options": [
+      "Dot",
+      "Cross"
+     ],
+     "default": "Dot"
+    },
+    {
+     "key": "n2_from",
+     "label": "Second graph: first n",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "n2_to",
+     "label": "Second graph: last n",
+     "kind": "int",
+     "options": [],
+     "default": "5"
+    },
+    {
+     "key": "pt_mark",
+     "label": "Points drawn as",
+     "kind": "choice",
+     "options": [
+      "Dot",
+      "Cross"
+     ],
+     "default": "Dot"
+    },
+    {
+     "key": "pt_labels",
+     "label": "Lettered points labelled",
+     "kind": "choice",
+     "options": [
+      "Letter, like P",
+      "Letter and value, like P(3/4)"
+     ],
+     "default": "Letter, like P"
     }
    ],
    "handle_list": [],
