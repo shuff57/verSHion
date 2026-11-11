@@ -11,12 +11,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | angles | `angles` | 52 | 3 | 6 | — | 100 |
 | bar-graph | `bar-chart` | 35 | 0 | 7 | — | 100 |
 | box-plot | `box-plot` | 37 | 0 | 6 | reference has a student version; ours has no show_answers | 90 |
-| circle | `circle` | 81 | 3 | 7 | — | 96 |
+| circle | `circle` | 81 | 3 | 7 | — | 99 |
 | composite-shape | `composite-shape` | 9 | 10 | 3 | — | 100 |
-| cone | `cone` | 26 | 4 | 6 | — | 91 |
+| cone | `cone` | 30 | 4 | 6 | — | 100 |
 | coordinate-grid | `coordinate-grid` | 59 | 2 | 7 | — | 100 |
 | cumulative-frequency | `ogive` | 45 | 0 | 7 | — | 100 |
-| cylinder | `cylinder` | 26 | 4 | 6 | — | 88 |
+| cylinder | `cylinder` | 31 | 4 | 6 | — | 100 |
 | histogram | `histogram` | 34 | 0 | 8 | — | 100 |
 | kite | `kite` | 57 | 10 | 5 | — | 93 |
 | length-reading | `ruler-reading` | 17 | 3 | 6 | — | 95 |
@@ -25,8 +25,8 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 100 |
 | parallelogram | `parallelogram` | 57 | 9 | 6 | — | 90 |
 | pie-chart | `pie-chart` | 16 | 0 | 5 | — | 100 |
-| prism | `prism` | 35 | 6 | 8 | — | 90 |
-| pyramid | `pyramid` | 33 | 6 | 7 | — | 92 |
+| prism | `prism` | 41 | 6 | 8 | — | 100 |
+| pyramid | `pyramid` | 38 | 6 | 7 | — | 92 |
 | rectangle | `rectangle` | 52 | 9 | 6 | — | 93 |
 | regular-polygon | `regular-polygon` | 29 | 8 | 6 | — | 89 |
 | sphere | `sphere` | 17 | 2 | 6 | — | 100 |
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-11T18:20:31+00:00 · probe: 2026-11-11T10:20:31
+Generated: 2026-11-11T18:58:03+00:00 · probe: 2026-11-11T10:58:03
 
-**Pooled 96.7** · mean 96.6 over 70 figures · built 71 of 71 reference figures
+**Pooled 97.2** · mean 97.0 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -114,10 +114,6 @@ Comparable with the frozen baseline: **yes**
 - `temperature-reading`: 88 (42/48)
   - cap-02c [control 3] The digital probe showing 2 decimal places — no evidence
   - cap-03b [control 3] Pick a random temperature — no evidence
-- `cylinder`: 88 (65/74)
-  - cap-04f [control 3] Type any measure (radius, height, lean) as a fraction — no evidence
-  - cap-04g [control 3] Type any measure (radius, height, lean) with √ — no evidence
-  - cap-05d [control 3] Switch the oblique cylinder's height on or off — no evidence
 - `regular-polygon`: 89 (70/79)
   - cap-02d [control 3] Type the size as a fraction — no evidence
   - cap-02e [control 3] Type the size as a square root — no evidence
@@ -141,15 +137,8 @@ Comparable with the frozen baseline: **yes**
   - cap-04i [control 3] Give each height and diagonal its own solid, dashed or dotted style — no evidence
   - cap-05a [control 3] Name the point where a height lands — no evidence
   - cap-05b [control 3] Name the point where the diagonals cross — no evidence
-- `prism`: 90 (85/94)
-  - cap-04f [control 3] Type any measure (length, width, height, lean) as a fraction — no evidence
-  - cap-04g [control 3] Type any measure (length, width, height, lean) with √ — no evidence
-  - cap-06d [control 3] Switch the height line on or off — no evidence
 - `gas-syringe`: 91 (29/32)
   - cap-03b [control 3] Pick a random volume (0 to full scale, one decimal place) — no evidence
-- `cone`: 91 (60/66)
-  - cap-04f [control 3] Type any measure (radius, height, lean) as a fraction — no evidence
-  - cap-04g [control 3] Type any measure (radius, height, lean) with √ — no evidence
 - `pyramid`: 92 (69/75)
   - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
@@ -184,10 +173,6 @@ Comparable with the frozen baseline: **yes**
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `projectile-motion`: 96 (71/74)
   - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
-- `circle`: 96 (157/163)
-  - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
-  - cap-01f [interaction 2] Drag a point off the circle and back on — no evidence
-  - cap-i10 [interaction 2] Drag a line's label across the line to put it on the other side — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
 - `predator-prey`: 97 (93/96)
@@ -198,11 +183,15 @@ Comparable with the frozen baseline: **yes**
   - cap-07e [control 3] End caps on the axes — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
+- `circle`: 99 (161/163)
+  - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
 - `angles`: 100 (71/71)
 - `bar-chart`: 100 (87/87)
 - `circuit-diagram`: 100 (61/61)
 - `composite-shape`: 100 (50/50)
+- `cone`: 100 (66/66)
 - `coordinate-grid`: 100 (153/153)
+- `cylinder`: 100 (74/74)
 - `dna-protein-synthesis`: 100 (102/102)
 - `dot-and-cross`: 100 (56/56)
 - `enzyme-kinetics`: 100 (85/85)
@@ -229,6 +218,7 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `prism`: 100 (94/94)
 - `ray-diagram`: 100 (115/115)
 - `reaction-energy-diagram`: 100 (101/101)
 - `sphere`: 100 (35/35)

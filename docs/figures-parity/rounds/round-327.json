@@ -1,0 +1,29 @@
+{
+ "round": 327,
+ "figure": "circle",
+ "capability": "cap-i10",
+ "hypothesis": "Batch 8 circle: cap-i10; evidence handle:drag:Drag the label across its line",
+ "started_at": "2026-11-11T10:57:46",
+ "git": "c8420e0",
+ "before": {
+  "figure": 97.5,
+  "pooled": 96.8
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T10:57:48",
+ "after": {
+  "figure": 98.8,
+  "pooled": 96.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass on the third independent check: 976 side-row renders differ from the no-side figure only in the sided label; never refused on ordinary figures (16 of 72 on the crowded Large one, each with a note)",
+ "result": "hit",
+ "evidence": "figures::circle tests (158, incl. drag_b8 r1 and r2 sweeps: 729 switch/position cases, every subset of side rows); circle_b8_frozen (420 old figures and links byte for byte); census unchanged; task run reference 6 actions, ours 3",
+ "next": "circle cap-01g (cannot be evidenced at the opening state); pyramid typed-label fix"
+}

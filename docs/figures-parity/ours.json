@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-11T18:20:27+00:00",
-  "src_mtime": 1794421224.9265838,
-  "git": "53a95d4",
+  "built_at": "2026-11-11T18:58:01+00:00",
+  "src_mtime": 1794421948.3909533,
+  "git": "c8420e0",
   "figures": 191
  },
  "figures": {
@@ -23514,6 +23514,48 @@
      "default": "e"
     },
     {
+     "key": "length_t",
+     "label": "Length, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "width_t",
+     "label": "Width, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "side_t",
+     "label": "Side, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "height_t",
+     "label": "Height, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lean_t",
+     "label": "Lean, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_height",
+     "label": "Height line",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
      "key": "fill",
      "label": "Shading",
      "kind": "choice",
@@ -23783,6 +23825,41 @@
      "kind": "text",
      "options": [],
      "default": "e"
+    },
+    {
+     "key": "radius_t",
+     "label": "Radius, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "diam_t",
+     "label": "Diameter, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "height_t",
+     "label": "Height, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lean_t",
+     "label": "Lean, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "obl_height",
+     "label": "Height dashed",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
     },
     {
      "key": "fill",
@@ -24104,6 +24181,41 @@
      "default": "d"
     },
     {
+     "key": "length_t",
+     "label": "Length, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "width_t",
+     "label": "Width, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "side_t",
+     "label": "Side, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "height_t",
+     "label": "Height, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lean_t",
+     "label": "Lean, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "fill",
      "label": "Shading",
      "kind": "choice",
@@ -24373,6 +24485,34 @@
      "kind": "text",
      "options": [],
      "default": "d"
+    },
+    {
+     "key": "radius_t",
+     "label": "Radius, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "diam_t",
+     "label": "Diameter, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "height_t",
+     "label": "Height, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lean_t",
+     "label": "Lean, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
     },
     {
      "key": "fill",

@@ -43,14 +43,14 @@
    "text": "Drag any point on the figure, not only A",
    "class": "interaction",
    "evidence": "",
-   "note": "WIDE: only A has a drag handle (cap-01e passes that narrow form)."
+   "note": "Unscored (handles are read at the opening state only, where A is the only point). Built in batch 8 (2026-11-11) and confirmed by independent checkers: A, B, C, typed More points and polygon corners all drag; the centre, midpoints, crossings and tangent touch points do not (the reference does not drag the centre or midpoints either)."
   },
   {
    "id": "cap-01f",
    "text": "Drag a point off the circle and back on",
    "class": "interaction",
-   "evidence": "",
-   "note": "The A handle stays on the circle."
+   "evidence": "handle:drag:round the circle, or off it",
+   "note": "Built in batch 8, round 326 (2026-11-11). The A handle stays on the circle."
   },
   {
    "id": "cap-02a",
@@ -378,8 +378,8 @@
    "id": "cap-i10",
    "text": "Drag a line's label across the line to put it on the other side",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: Drag a line's label across the line to put it on the other side. Our circle has no label handles."
+   "evidence": "handle:drag:Drag the label across its line",
+   "note": "Built in batch 8, round 327 (2026-11-11). From the page controls, not the bullets. The page says: Drag a line's label across the line to put it on the other side. Our circle has no label handles."
   },
   {
    "id": "cap-i11",

@@ -91,15 +91,15 @@
    "id": "cap-04f",
    "text": "Type any measure (radius, height, lean) as a fraction",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: those are sliders (float)."
+   "evidence": "changes:{\"radius_t\":\"3/2\"}",
+   "note": "Built in batch 8, round 328 (2026-11-11). WIDE: those are sliders (float)."
   },
   {
    "id": "cap-04g",
    "text": "Type any measure (radius, height, lean) with √",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: those are sliders (float)."
+   "evidence": "changes:{\"height_t\":\"2sqrt3\"}",
+   "note": "Built in batch 8, round 329 (2026-11-11). WIDE: those are sliders (float)."
   },
   {
    "id": "cap-05a",
@@ -126,8 +126,8 @@
    "id": "cap-05d",
    "text": "Switch the oblique cylinder's height on or off",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: checked by hand, show_height renders the oblique cylinder the same either way."
+   "evidence": "changes:{\"stands\":\"Oblique\",\"obl_height\":false}",
+   "note": "Built in batch 8, round 330 (2026-11-11). WIDE: checked by hand, show_height renders the oblique cylinder the same either way."
   },
   {
    "id": "cap-06a",

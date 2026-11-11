@@ -1,0 +1,35 @@
+{
+ "round": 330,
+ "figure": "cylinder",
+ "capability": "cap-05d",
+ "hypothesis": "Batch 8 cylinder: cap-05d; evidence changes:{\"stands\":\"Oblique\",\"obl_height\":false}",
+ "started_at": "2026-11-11T10:57:51",
+ "git": "c8420e0",
+ "before": {
+  "figure": 95.9,
+  "pooled": 96.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T10:57:52",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"stands\":\"Oblique\",\"obl_height\":false}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/cylinder/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/cylinder/1f2b43dae9faf6ca.png"
+   }
+  ]
+ },
+ "checker": "pass: dashed height, lean line, square and their labels go; nothing dangling",
+ "result": "hit",
+ "evidence": "solids_b8 tests (15: exact forms read and written, every typed box against the slider's drawing, worked-out measures by hand, forty refusals, both height switches, drags through interact::pick, label sweep) and solids_b8_frozen (882 old figures; 29 listed corrections where an old box refused 4sqrt3); census unchanged; no task run (builder on pc2, no browser)",
+ "next": "pyramid cap-04f, cap-04g (label misplaced at Large, back with the builder)"
+}

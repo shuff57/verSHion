@@ -1,0 +1,31 @@
+{
+ "round": 326,
+ "figure": "circle",
+ "capability": "cap-01f",
+ "hypothesis": "Batch 8 circle: cap-01f; evidence handle:drag:round the circle, or off it",
+ "started_at": "2026-11-11T10:57:44",
+ "git": "c8420e0",
+ "before": {
+  "figure": 96.3,
+  "pooled": 96.7
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T10:57:46",
+ "after": {
+  "figure": 97.5,
+  "pooled": 96.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass on the third independent check: four earlier failures fixed, 600-figure sweep clean, four values by hand, B or C never moves A",
+ "result": "hit",
+ "evidence": "figures::circle tests (158, incl. drag_b8 r1 and r2 sweeps: 729 switch/position cases, every subset of side rows); circle_b8_frozen (420 old figures and links byte for byte); census unchanged; task run reference 6 actions, ours 3",
+ "next": "circle cap-01g (cannot be evidenced at the opening state); pyramid typed-label fix"
+}

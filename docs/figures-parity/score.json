@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T18:20:31+00:00",
- "probe_checked_at": "2026-11-11T10:20:31",
+ "generated_at": "2026-11-11T18:58:03+00:00",
+ "probe_checked_at": "2026-11-11T10:58:03",
  "comparable": true,
  "drift": [],
- "pooled": 96.7,
- "mean": 96.6,
+ "pooled": 97.2,
+ "mean": 97.0,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -61,8 +61,8 @@
    ]
   },
   "circle": {
-   "score": 96.3,
-   "got": 157.0,
+   "score": 98.8,
+   "got": 161.0,
    "total": 163.0,
    "unclassified": 0,
    "gaps": [
@@ -71,20 +71,6 @@
      "class": "interaction",
      "weight": 2.0,
      "text": "Drag any point on the figure, not only A",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01f",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Drag a point off the circle and back on",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i10",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Drag a line's label across the line to put it on the other side",
      "why": "no evidence"
     }
    ]
@@ -104,26 +90,11 @@
    "gaps": []
   },
   "cone": {
-   "score": 90.9,
-   "got": 60.0,
+   "score": 100.0,
+   "got": 66.0,
    "total": 66.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type any measure (radius, height, lean) as a fraction",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type any measure (radius, height, lean) with √",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "coordinate-grid": {
    "score": 100.0,
@@ -133,33 +104,11 @@
    "gaps": []
   },
   "cylinder": {
-   "score": 87.8,
-   "got": 65.0,
+   "score": 100.0,
+   "got": 74.0,
    "total": 74.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type any measure (radius, height, lean) as a fraction",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type any measure (radius, height, lean) with √",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Switch the oblique cylinder's height on or off",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "dna-protein-synthesis": {
    "score": 100.0,
@@ -536,33 +485,11 @@
    ]
   },
   "prism": {
-   "score": 90.4,
-   "got": 85.0,
+   "score": 100.0,
+   "got": 94.0,
    "total": 94.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type any measure (length, width, height, lean) as a fraction",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type any measure (length, width, height, lean) with √",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Switch the height line on or off",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "projectile-motion": {
    "score": 95.9,

@@ -1,0 +1,37 @@
+{
+ "round": 331,
+ "figure": "prism",
+ "capability": "cap-04f",
+ "hypothesis": "Batch 8 prism: cap-04f; evidence changes:{\"length_t\":\"15/2\"}",
+ "started_at": "2026-11-11T10:57:55",
+ "git": "c8420e0",
+ "before": {
+  "figure": 90.4,
+  "pooled": 97.0
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T10:57:56",
+ "after": {
+  "figure": 93.6,
+  "pooled": 97.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"length_t\":\"15/2\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/prism/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/prism/cb8519f95b5cce0c.png"
+   }
+  ]
+ },
+ "checker": "pass: same shape as 7.5, labelled 15/2 cm",
+ "result": "hit",
+ "evidence": "solids_b8 tests (15: exact forms read and written, every typed box against the slider's drawing, worked-out measures by hand, forty refusals, both height switches, drags through interact::pick, label sweep) and solids_b8_frozen (882 old figures; 29 listed corrections where an old box refused 4sqrt3); census unchanged; no task run (builder on pc2, no browser)",
+ "next": "pyramid cap-04f, cap-04g"
+}

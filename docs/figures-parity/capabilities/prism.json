@@ -105,15 +105,15 @@
    "id": "cap-04f",
    "text": "Type any measure (length, width, height, lean) as a fraction",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: those are sliders (float)."
+   "evidence": "changes:{\"length_t\":\"15/2\"}",
+   "note": "Built in batch 8, round 331 (2026-11-11). WIDE: those are sliders (float)."
   },
   {
    "id": "cap-04g",
    "text": "Type any measure (length, width, height, lean) with √",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: those are sliders (float)."
+   "evidence": "changes:{\"height_t\":\"5√2\"}",
+   "note": "Built in batch 8, round 332 (2026-11-11). WIDE: those are sliders (float)."
   },
   {
    "id": "cap-05a",
@@ -147,8 +147,8 @@
    "id": "cap-06d",
    "text": "Switch the height line on or off",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: no show_height parameter on the prism."
+   "evidence": "changes:{\"stands\":\"Oblique\",\"show_height\":false}",
+   "note": "Built in batch 8, round 333 (2026-11-11). WIDE: no show_height parameter on the prism."
   },
   {
    "id": "cap-06c",

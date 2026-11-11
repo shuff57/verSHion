@@ -1,0 +1,35 @@
+{
+ "round": 333,
+ "figure": "prism",
+ "capability": "cap-06d",
+ "hypothesis": "Batch 8 prism: cap-06d; evidence changes:{\"stands\":\"Oblique\",\"show_height\":false}",
+ "started_at": "2026-11-11T10:57:58",
+ "git": "c8420e0",
+ "before": {
+  "figure": 96.8,
+  "pooled": 97.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T10:57:59",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"stands\":\"Oblique\",\"show_height\":false}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/prism/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/prism/c078d28dad695483.png"
+   }
+  ]
+ },
+ "checker": "pass: dashed height, foot line, square and labels go on the oblique prism",
+ "result": "hit",
+ "evidence": "solids_b8 tests (15: exact forms read and written, every typed box against the slider's drawing, worked-out measures by hand, forty refusals, both height switches, drags through interact::pick, label sweep) and solids_b8_frozen (882 old figures; 29 listed corrections where an old box refused 4sqrt3); census unchanged; no task run (builder on pc2, no browser)",
+ "next": "pyramid cap-04f, cap-04g"
+}
