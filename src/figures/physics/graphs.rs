@@ -349,8 +349,10 @@ fn wave_params() -> Vec<ParamDef> {
         ParamDef::choice("yaxis_num", "y-axis numbers", &NUMS, "Every line"),
         ParamDef::choice("yaxis_letter", "y-axis letter (no gridlines)", &["Text", "None"], "Text"),
         ParamDef::bool("color", "Color (for slides)", false),
-    ]
+    ].into_iter().chain(waves_ends_b9::params()).collect()
 }
+
+pub(crate) mod waves_ends_b9;
 
 /// Geometry of the wave figure, shared with the drag handles.
 pub(super) struct WLay {
@@ -363,6 +365,8 @@ pub(super) struct WLay {
     /// Longitudinal strip (top y, height) and its own x mapping.
     pub strip: Option<(f64, f64)>,
     pub sx: Axes,
+    /// Room the axis ends take (x left, x right, y bottom, y top); all 0 for plain ends (`waves_ends_b9::room`).
+    pub room: [f64; 4],
 }
 
 /// Snap a manual axis to something drawable.
@@ -388,8 +392,9 @@ pub(super) fn wave_layout(p: &Params) -> WLay {
     let cell = (560.0 / nx).min(32.0);
     let pw = nx * cell;
     let ph = (ny * cell).min(420.0);
-    let x0 = 67.6;
-    let w = x0 + pw + 18.2;
+    let room = waves_ends_b9::room(p);
+    let x0 = 67.6 + room[0];
+    let w = x0 + pw + 18.2 + room[1];
     let h = match kind { "Longitudinal" => 260.0, _ => 0.0 };
     let top = if has_title(p) { 44.0 } else { 14.0 };
     let mut y = top;
@@ -398,13 +403,13 @@ pub(super) fn wave_layout(p: &Params) -> WLay {
         y = s.0 + s.1 + 36.0;
         Some(s)
     } else { None };
-    let gy = if kind == "Transverse" { y } else { y + 6.0 };
-    let h = if h == 0.0 { gy + ph + 44.8 } else { h };
+    let gy = if kind == "Transverse" { y } else { y + 6.0 } + room[3];
+    let h = if h == 0.0 { gy + ph + 44.8 + room[2] } else { h };
     let panel = if kind != "Longitudinal" {
         Some(Axes { x0, y0: gy, w: pw, h: ph, xmin, xmax, ymin, ymax })
     } else { None };
     let sx = Axes { x0, y0: 0.0, w: pw, h: 1.0, xmin, xmax, ymin: 0.0, ymax: 1.0 };
-    WLay { w, h, panel, xstep, ystep, strip, sx }
+    WLay { w, h, panel, xstep, ystep, strip, sx, room }
 }
 
 fn every(s: &str) -> usize {
@@ -444,6 +449,12 @@ pub(super) fn wave_summary(title: &str, p: &Params) -> Option<String> {
         }
         v.join(" \u{b7} ")
     };
+    // an axis's end caps, when it has any ("circle at the left · triangle arrow at the right")
+    let end_summary = |i: usize, lo: &str, hi: &str| {
+        let k = waves_ends_b9::kinds(p);
+        let v: Vec<String> = [(k[i], lo), (k[i + 1], hi)].iter().filter(|(e, _)| *e != "None").map(|(e, at)| format!("{} at the {at}", e.to_lowercase())).collect();
+        if v.is_empty() { String::new() } else { format!(" \u{b7} {}", v.join(" \u{b7} ")) }
+    };
     let parts: Vec<String> = match title {
         "Wave" => vec![
             p.s("kind").to_string(),
@@ -472,10 +483,10 @@ pub(super) fn wave_summary(title: &str, p: &Params) -> Option<String> {
             v.push(q("yt_mode", if p.s("yt").trim().is_empty() { "Displacement (cm)" } else { p.s("yt") }));
             v
         }
-        "x-axis" => return Some(axis(l.sx.xmin, l.sx.xmax, l.xstep, p.b("xaxis_fit"), "xaxis_num", true)),
+        "x-axis" => return Some(axis(l.sx.xmin, l.sx.xmax, l.xstep, p.b("xaxis_fit"), "xaxis_num", true) + &end_summary(0, "left", "right")),
         "y-axis" => {
             let a = l.panel.as_ref()?;
-            return Some(axis(a.ymin, a.ymax, l.ystep, p.b("yaxis_fit"), "yaxis_num", true));
+            return Some(axis(a.ymin, a.ymax, l.ystep, p.b("yaxis_fit"), "yaxis_num", true) + &end_summary(2, "bottom", "top"));
         }
         "Grid" => vec![match p.s("minor") {
             "None" => "No minor gridlines".to_string(),
@@ -510,6 +521,9 @@ fn wave_render(p: &Params) -> String {
     };
     let xe = every(p.s("xaxis_num"));
     let ye = every(p.s("yaxis_num"));
+    let room = l.room;
+    let ends = waves_ends_b9::kinds(p);
+    let large = p.s("label_size") == "Large";
     let title_x = |g: &mut G, cx: f64, y: f64| {
         if let Some(t) = &xl {
             if t.is_empty() { g.line(cx - 60.0, y + 2.0, cx + 60.0, y + 2.0, INK, 1.5); } else { g.text(cx, y, 16.8, "middle", &supers(t), true); }
@@ -539,11 +553,13 @@ fn wave_render(p: &Params) -> String {
         if axes_drawn {
             g.line(lft, tp, lft, bt, INK, 2.4);
             g.line(lft, y0, rgt, y0, INK, 2.4);
+            if ends != ["None"; 4] { waves_ends_b9::draw(&mut g, ends, (lft, rgt, y0), (lft, bt, tp), 2.4); }
             if !grid {
                 for (_, xv) in ticks(ax.xmin, ax.xmax, l.xstep) { let x = ax.px(xv); g.line(x, y0 - 4.0, x, y0 + 4.0, INK, 1.3); }
                 for (_, yv) in ticks(ax.ymin, ax.ymax, l.ystep) { let y = ax.py(yv); g.line(lft - 4.0, y, lft + 4.0, y, INK, 1.3); }
-                if p.s("xaxis_letter") == "Text" { g.tex(rgt + 8.0, y0 + 6.0, 20.0, "start", "x", ITALIC); }
-                if p.s("yaxis_letter") == "Text" { g.tex(lft, tp - 8.0, 20.0, "middle", "y", ITALIC); }
+                // the axis letters sit past an end cap
+                if p.s("xaxis_letter") == "Text" { g.tex(rgt + 8.0 + room[1], y0 + 6.0, 20.0, "start", "x", ITALIC); }
+                if p.s("yaxis_letter") == "Text" { g.tex(lft, tp - 8.0 - room[3], 20.0, "middle", "y", ITALIC); }
             }
         } else {
             // no axes: just the rest line
@@ -555,30 +571,37 @@ fn wave_render(p: &Params) -> String {
                     if k.rem_euclid(xe as i64) != 0 || (xv.abs() < 1e-9 && zero_in) { continue; }
                     // the reference moves a label that sits on a zero crossing of the curve off it: left of the
                     // tick where the curve falls (and at the origin), right of it where the curve rises
+                    // at the large label size a number at an end tick with a cap past it drops 3 px, under the cap's
+                    // arrowhead or circle
+                    let drop = if large && (room[0] > 0.0 && (ax.px(xv) - lft).abs() < 1e-6 || room[1] > 0.0 && (ax.px(xv) - rgt).abs() < 1e-6) { 3.0 } else { 0.0 };
                     let half = xv / (wl / 2.0);
                     let node = zero_in && (half - half.round()).abs() < 1e-6 && xv >= -1e-9 && xv <= span + 1e-9;
                     if node {
                         let k = half.round() as i64;
-                        if k % 2 == 0 && k > 0 { g.text(ax.px(xv) - 0.55, y0 + 20.0, 14.0, "start", &fmt_num(xv).replace('-', "−"), true); }
-                        else { g.text(ax.px(xv) + 0.55, y0 + 20.0, 14.0, "end", &fmt_num(xv).replace('-', "−"), true); }
+                        if k % 2 == 0 && k > 0 { g.text(ax.px(xv) - 0.55, y0 + 20.0 + drop, 14.0, "start", &fmt_num(xv).replace('-', "−"), true); }
+                        else { g.text(ax.px(xv) + 0.55, y0 + 20.0 + drop, 14.0, "end", &fmt_num(xv).replace('-', "−"), true); }
+                    } else if room[2] > 0.0 && (y0 - bt).abs() < 1e-6 && (ax.px(xv) - lft).abs() < 1e-6 {
+                        // beside a bottom end cap on the y-axis, clear of it
+                        g.text(lft + 9.0, y0 + 20.0, 14.0, "start", &fmt_num(xv).replace('-', "−"), true);
                     } else {
-                        g.text(ax.px(xv), y0 + 20.0, 14.0, "middle", &fmt_num(xv).replace('-', "−"), true);
+                        g.text(ax.px(xv), y0 + 20.0 + drop, 14.0, "middle", &fmt_num(xv).replace('-', "−"), true);
                     }
                 }
             }
             if ye > 0 {
                 for (k, yv) in ticks(ax.ymin, ax.ymax, l.ystep) {
                     if k.rem_euclid(ye as i64) != 0 { continue; }
-                    let zero = yv.abs() < 1e-9 && zero_in && xe > 0;
-                    g.text(lft - if zero { 8.0 } else { 6.0 }, ax.py(yv) + if zero { 20.0 } else { 4.9 }, 14.0, "end", &fmt_num(yv).replace('-', "−"), true);
+                    // a number on the x-axis drops under it, as the zero does: past a left end cap always
+                    let zero = yv.abs() < 1e-9 && zero_in && xe > 0 || room[0] > 0.0 && (ax.py(yv) - y0).abs() < 1e-6;
+                    g.text(lft - room[0] - if zero { 8.0 } else { 6.0 }, ax.py(yv) + if zero { 20.0 } else { 4.9 }, 14.0, "end", &fmt_num(yv).replace('-', "−"), true);
                 }
             }
         }
         if let Some(t) = &yl {
-            let (cx, cy) = (lft - 35.8, (tp + bt) / 2.0);
+            let (cx, cy) = (lft - 35.8 - room[0], (tp + bt) / 2.0);
             if t.is_empty() { g.line(cx, cy - 50.0, cx, cy + 50.0, INK, 1.5); } else { g.vtext(cx, cy, 16.8, &supers(t), true); }
         }
-        title_x(&mut g, (lft + rgt) / 2.0, bt + 22.8);
+        title_x(&mut g, (lft + rgt) / 2.0, bt + 22.8 + room[2]);
         // the curve, clipped to the graph
         g.raw(&format!(r#"<clipPath id="wclip"><rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}"/></clipPath><g clip-path="url(#wclip)">"#, lft - 2.0, tp - 2.0, ax.w + 4.0, ax.h + 4.0));
         let (s0, s1) = (0f64.max(ax.xmin), span.min(ax.xmax));
@@ -646,10 +669,13 @@ fn wave_render(p: &Params) -> String {
             let ay = by + bh + 44.0;
             let (lft, rgt) = (ax.x0, ax.x0 + ax.w);
             g.line(lft, ay, rgt, ay, INK, 2.2);
+            if ends != ["None"; 4] { waves_ends_b9::draw(&mut g, ends, (lft, rgt, ay), (lft, ay, ay), 2.2); }
             for (kk, xv) in ticks(ax.xmin, ax.xmax, l.xstep) {
                 let px = ax.px(xv);
                 g.line(px, ay - 4.0, px, ay + 4.0, INK, 1.3);
-                if numbers && xe > 0 && kk.rem_euclid(xe as i64) == 0 { g.text(px, ay + 20.0, 13.0, "middle", &fmt_num(xv).replace('-', "−"), true); }
+                // (under an end cap's arrowhead or circle, as on the graph)
+                let drop = if large && (room[0] > 0.0 && (px - lft).abs() < 1e-6 || room[1] > 0.0 && (px - rgt).abs() < 1e-6) { 3.0 } else { 0.0 };
+                if numbers && xe > 0 && kk.rem_euclid(xe as i64) == 0 { g.text(px, ay + 20.0 + drop, 13.0, "middle", &fmt_num(xv).replace('-', "−"), true); }
             }
             title_x(&mut g, (lft + rgt) / 2.0, ay + 44.0);
             if p.b("mark_wl") {

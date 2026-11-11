@@ -463,8 +463,8 @@ static FIG_49: [RefSection; 7] = [
     s("Marks", &["mark_wl", "wl_lab_mode", "wl_lab", "mark_amp", "amp_lab_mode", "amp_lab", "mark_ct", "crest_mode", "trough_mode"], ""),
     s("Graph", &["numbers", "color"], ""),
     s("Titles", &["title_mode", "title", "xt_mode", "xt", "yt_mode", "yt", "label_size"], ""),
-    s("x-axis", &["xaxis_fit", "xmin", "xmax", "xstep", "xaxis_num", "xaxis_letter"], ""),
-    s("y-axis", &["yaxis_fit", "ymin", "ymax", "ystep", "yaxis_num", "yaxis_letter"], ""),
+    s("x-axis", &["xaxis_fit", "xmin", "xmax", "xstep", "xaxis_num", "xaxis_letter", "x_left_end", "x_right_end"], ""),
+    s("y-axis", &["yaxis_fit", "ymin", "ymax", "ystep", "yaxis_num", "yaxis_letter", "y_bottom_end", "y_top_end"], ""),
     s("Grid", &["grid", "minor"], ""),
 ];
 

@@ -11,6 +11,7 @@
 //! the new code: the check reads each saved spec and link back from the fixture, never from today's case list.
 use crate::figures::{classic_setups, examples_for, registry, share, spec, start_params, FigureDef, Kind, Params, Value, SHOW_ANSWERS};
 
+#[allow(dead_code)]
 pub const FIGS: [&str; 6] = ["box-plot", "waves", "predator-prey", "projectile-motion", "population-growth", "gel-electrophoresis"];
 
 fn def(id: &str) -> FigureDef { registry().into_iter().find(|d| d.id == id).unwrap() }
