@@ -1085,6 +1085,10 @@ const MASS_READING: &[Faq] = &[
         q: "Why should a balance read zero before you weigh something?",
         a: "Any reading with an empty pan adds to every measurement. Zero (tare) the balance first, or subtract the empty reading from the result.",
     },
+    Faq {
+        q: "Does the reading include the weigh boat or beaker?",
+        a: "Yes, unless the balance was tared with the empty container on it. To find the mass of a sample, weigh the container empty and then with the sample, and subtract. Or press TARE with the empty container on the pan, so the display reads only the sample.",
+    },
 ];
 
 const MASS_SPECTRUM: &[Faq] = &[
@@ -1172,6 +1176,9 @@ const PH_READING: &[Faq] = &[
     Faq {
         q: "What do pH values mean?",
         a: "Below 7 is acidic, 7 is neutral and above 7 is basic. Each step of 1 is a tenfold change in hydrogen ion concentration.",
+    },    Faq {
+        q: "Why show a magnifier on the analog meter?",
+        a: "The marks near the needle are small. The magnifier draws the same needle and marks larger, so students can read the estimated digit. It gives the same reading as the dial. It can also be shown on its own, without the meter.",
     },
 ];
 

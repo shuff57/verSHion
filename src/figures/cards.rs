@@ -139,6 +139,8 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         ("lewis-structures", "lone" | "expand" | "resonance" | "resonance_pick") => super::chemistry::lewis_relevant(key, p),
         ("circuit-diagram", "show_answers") => p.s("solve") != "Off",
         ("ph-reading", "places" | "meter") => p.s("instrument") == "Digital meter",
+        ("ph-reading", "mag_show") => p.s("instrument") == "Analog meter",
+        ("mass-reading", "marbles") => p.s("pan") == "Marbles",
         ("dna-protein-synthesis", _) => super::biology::dna::relevant(key, p),
         ("photosynthesis", _) => super::biology::photosynthesis::relevant(key, p),
         ("motion-map" | "ray-diagram", _) => super::physics::relevant(fig, key, p),

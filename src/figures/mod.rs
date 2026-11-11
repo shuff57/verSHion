@@ -891,6 +891,8 @@ pub fn random_key(id: &str) -> Option<&'static str> {
         "spring-scale" => Some("reading"),
         "micropipette-reading" => Some("volume"),
         "volume-reading" => Some("reading"),
+        "mass-reading" => Some("mass"),
+        "ph-reading" => Some("ph"),
         _ => None,
     }
 }

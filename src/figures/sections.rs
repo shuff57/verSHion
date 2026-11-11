@@ -192,7 +192,7 @@ static FIG_17: [RefSection; 3] = [
 ];
 
 static FIG_18: [RefSection; 5] = [
-    s("Balance", &["balance", "pan"], "Weighs up to 610 g, read to 0.01 g. The riders are placed for the mass you type."),
+    s("Balance", &["balance", "pan", "marbles"], "Weighs up to 610 g, read to 0.01 g. The riders are placed for the mass you type."),
     s("Mass", &["mass", "places"], "From 0 to 610 g, to 2 decimal places."),
     s("Title and answer key", &["title"], ""),
     s("More options", &["answer", "title_style"], ""),
@@ -266,9 +266,10 @@ static FIG_27: [RefSection; 3] = [
     s("Chart title", &["title", "answer"], ""),
 ];
 
-static FIG_28: [RefSection; 4] = [
+static FIG_28: [RefSection; 5] = [
     s("Instrument", &["instrument", "places", "meter"], ""),
     s("pH", &["ph"], "From 0 to 14, to 2 decimal places."),
+    s("Magnifier", &["mag_show"], ""),
     s("Title and answer key", &["title"], ""),
     s("More options", &["answer", "title_style"], ""),
 ];

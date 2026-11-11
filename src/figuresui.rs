@@ -3971,6 +3971,11 @@ fn section_summary(defs: &[ParamDef], p: &Params, items: &[usize]) -> String {
     parts.join(" · ")
 }
 
+fn fmt_measure4(v: f64) -> String {
+    let s = format!("{:.4}", v);
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
 fn fmt_measure(v: f64) -> String {
     let s = format!("{:.3}", v);
     s.trim_end_matches('0').trim_end_matches('.').to_string()
@@ -4321,11 +4326,12 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             // the chemistry page's reading: a text box with its unit and an outlined Random button
             param_label(ui, label, pd.hint);
             ui.add_space(if fig == "micropipette-reading" { -2.0 } else { 1.0 });
-            let unit = if fig == "length-reading" { "mm".to_string() } else if fig == "spring-scale" { "N".to_string() } else if fig == "volume-reading" && !p.s("unit").is_empty() { p.s("unit").to_string() } else if fig == "micropipette-reading" { "µL".to_string() } else { "mL".to_string() };
+            let unit = if fig == "length-reading" { "mm".to_string() } else if fig == "spring-scale" { "N".to_string() } else if fig == "volume-reading" && !p.s("unit").is_empty() { p.s("unit").to_string() } else if fig == "micropipette-reading" { "µL".to_string() } else if fig == "mass-reading" { "g".to_string() } else if fig == "ph-reading" { "pH".to_string() } else { "mL".to_string() };
             let id = ui.make_persistent_id(("chem_reading", fig, pd.key));
             let ctx = ui.ctx().clone();
             let focused = ctx.memory(|m| m.has_focus(id));
-            let shown = fmt_measure(p.f(pd.key));
+            // the analytical balance shows 4 places; every other reading keeps 3
+            let shown = if fig == "mass-reading" { fmt_measure4(p.f(pd.key)) } else { fmt_measure(p.f(pd.key)) };
             let mut text = if focused { ctx.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| shown.clone()) } else { shown };
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 12.0;

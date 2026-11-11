@@ -130,6 +130,7 @@ fn num_trim(v: f64) -> String { let s = format!("{v:.3}"); s.trim_end_matches('0
 /// Random reading on the volume instrument's scale, to its readable decimal places.
 pub fn random_reading(id: &str, p: &mut Params, seed: u64) -> bool {
     if id == "length-reading" { return super::length::random(p, seed); }
+    if super::readings_b7::random(id, p, seed) { return true; }
     if id != "volume-reading" { return false; }
     let (max, _, minor, _) = vol_scale(p);
     let dp = read_dp(minor) as i32;
@@ -172,8 +173,7 @@ pub fn range_note(id: &str, p: &Params) -> Option<String> {
             format!("From 0.05 to {} {unit}, to 2 decimal places.", num(total, 2))
         }
         "mass-reading" => {
-            let dp = if p.s("balance").starts_with("Triple") { 2 } else { match p.s("places") { "0.1" => 1, "0.001" => 3, _ => 2 } };
-            format!("From 0 to 610 g, to {}.", places_text(dp))
+            format!("From 0 to 610 g, to {}.", places_text(super::readings_b7::mass_dp(p)))
         }
         "temperature-reading" => {
             let sym = match p.s("unit") { "Kelvin (K)" => "K", "Fahrenheit (°F)" => "°F", _ => "°C" };
@@ -185,7 +185,7 @@ pub fn range_note(id: &str, p: &Params) -> Option<String> {
                 format!("From {} to {hi} {sym}, to one decimal place.", lo)
             }
         }
-        "ph-reading" => format!("From 0 to 14, to {}.", places_text(if p.s("places") == "0.0" { 1 } else { 2 })),
+        "ph-reading" => format!("From 0 to 14, to {}.", places_text(super::readings_b7::ph_dp(p))),
         _ => return None,
     })
 }
@@ -712,9 +712,10 @@ fn inch_fraction(v: f64) -> String {
 fn mass_params() -> Vec<ParamDef> {
     vec![
         ParamDef::choice("balance", "Balance", &["Triple beam balance", "Digital balance"], "Triple beam balance"),
-        ParamDef::choice("pan", "On the pan", &["Nothing", "Marbles", "Rock", "Cube", "Metal cylinder"], "Nothing"),
+        ParamDef::choice("pan", "On the pan", &super::readings_b7::PANS, "Nothing"),
+        super::readings_b7::marbles_param(),
         ParamDef::float("mass", "Mass (g)", 0.0, 610.0, 0.01, 24.73),
-        ParamDef::choice("places", "Digital decimal places", &["0.1", "0.01", "0.001"], "0.01"),
+        ParamDef::choice("places", "Digital decimal places", &super::readings_b7::MASS_PLACES, "0.01"),
         ParamDef::text("title", "Chart title text", ""),
         magnify::show_param(&["Instrument and magnifier", "Instrument only", "Beams only"], "Instrument only"),
         magnify::marks_param(),
@@ -733,6 +734,7 @@ fn mass_render(p: &Params) -> String {
     let pan = p.s("pan");
     let mut d = if triple { Doc::new(1080.0, 332.0) } else { Doc::new(700.0, 400.0) };
     let focus;
+    let mut crop = 120.0;
     if triple {
         // laid out like the reference: the balance in the left 700 px, the lens on the right
         let (ox, oy) = (MASS_OX, MASS_OY);
@@ -744,7 +746,9 @@ fn mass_render(p: &Params) -> String {
         d.raw(&format!(r##"<g stroke-linecap="round" stroke-linejoin="round" fill="#fff" stroke="{INK}" stroke-width="2"><rect x="{:.2}" y="{:.2}" width="676" height="34" rx="10"/><rect x="{:.2}" y="{:.2}" width="20" height="96"/><path d="M{:.2} {:.2} H{:.2} L{:.2} {:.2} Q{:.2} {:.2} {:.2} {:.2} Z"/><rect x="{:.2}" y="{:.2}" width="110" height="9"/><path d="M{:.2} {:.2} L{:.2} {:.2} H{:.2} Z"/><rect x="{:.2}" y="{:.2}" width="18" height="128"/></g>"##,
             ox + 8.0, oy + 254.0, ox + 88.0, oy + 158.0, ox + 18.0, oy + 142.0, ox + 178.0, ox + 168.0, oy + 154.0, ox + 98.0, oy + 162.0, ox + 28.0, oy + 154.0,
             ox + 108.0, oy + 164.0, ox + 227.0, oy + 246.0, ox + 237.0, oy + 254.0, ox + 217.0, ox + 218.0, oy + 118.0));
-        if pan != "Nothing" { object(&mut d, pan, ox + 98.0, oy + 140.0, 62.0, 3); }
+        let _ = pan;
+        let top = super::readings_b7::pan_draw(&mut d, p, ox + 98.0, oy + 140.0, 62.0, 3);
+        crop = super::readings_b7::triple_crop(top);
         // the three beams: (top y, range, notch step, label step, label y)
         for (yb, range, notch, lab_step, ly) in [(122.0f64, 100.0f64, 10.0f64, 10.0f64, 141.0f64), (170.0, 500.0, 100.0, 100.0, 189.0)] {
             let mut path = format!("M{:.2} {:.2}", ox + 236.0, oy + yb);
@@ -780,7 +784,7 @@ fn mass_render(p: &Params) -> String {
         rider(&mut d, x3, 213.0, 9.0, 6.0, 9.5);
         focus = Focus { x: x3, y: oy + 222.0, label_px: 33.6 };
     } else {
-        let places = match p.s("places") { "0.1" => 1, "0.001" => 3, _ => 2 };
+        let places = super::readings_b7::mass_dp(p);
         d.rect(100.0, 250.0, 420.0, 100.0, "#e7ebee", INK, 1.8);
         d.rect(120.0, 266.0, 230.0, 62.0, "#f9fbfa", INK, 1.5);
         tx(&mut d, 336.0, 312.0, 36.0, "end", INK, true, &format!("{}", num(mass, places)));
@@ -791,10 +795,10 @@ fn mass_render(p: &Params) -> String {
         }
         d.poly(&[(180.0, 250.0), (200.0, 232.0), (440.0, 232.0), (460.0, 250.0)], "#c9d1d6", INK, 1.5);
         d.rect(210.0, 218.0, 220.0, 14.0, "#dde3e7", INK, 1.5);
-        if pan != "Nothing" { object(&mut d, pan, 320.0, 218.0, 90.0, 5); }
+        super::readings_b7::pan_draw(&mut d, p, 320.0, 218.0, 90.0, 5);
         focus = Focus { x: 250.0, y: 297.0, label_px: 220.0 / p.i("mag_marks").clamp(1, 6) as f64 };
     }
-    let places = if triple { 2 } else { match p.s("places") { "0.1" => 1, "0.001" => 3, _ => 2 } };
+    let places = super::readings_b7::mass_dp(p);
     let foot = if p.b("answer") { vec![format!("Mass: {} g", num(mass, places))] } else { vec![] };
     if p.s("mag_show") == "Beams only" && triple {
         let (_, _, body) = magnify::inner(&d.finish());
@@ -802,7 +806,7 @@ fn mass_render(p: &Params) -> String {
         c.raw(&format!(r#"<g transform="translate(-232 -124)">{body}</g>"#));
         return wrap(p, c.finish(), &foot);
     }
-    let svg = if triple { magnify::compose_fixed(p, d.finish(), &focus, (1080.0, 332.0), (914.0, 166.0), 50.4, 120.0) } else { magnify::compose(p, d.finish(), &[focus], false) };
+    let svg = if triple { magnify::compose_fixed(p, d.finish(), &focus, (1080.0, 332.0), (914.0, 166.0), 50.4, crop) } else { magnify::compose(p, d.finish(), &[focus], false) };
     wrap(p, svg, &foot)
 }
 
@@ -959,6 +963,7 @@ fn ph_params() -> Vec<ParamDef> {
         ParamDef::float("ph", "pH", 0.0, 14.0, 0.01, 4.62),
         ParamDef::text("title", "Chart title text", ""),
         answer_param("Answer key (the pH under the figure)"),
+        super::readings_b7::ph_mag_param(),
         title_style(false),
     ]
 }
@@ -1024,9 +1029,9 @@ fn ph_render(p: &Params) -> String {
             d.rect(321.0, 372.0, 18.0, 56.0, "#b8c0c6", INK, 1.5);
         }
     }
-    let dp = match p.s("instrument") { "pH paper" => 0, "Analog meter" => 2, _ => if p.s("places") == "0.0" { 1 } else { 2 } };
+    let dp = super::readings_b7::ph_dp(p);
     let foot = if p.b("answer") { vec![format!("pH: {}", num(ph, dp))] } else { vec![] };
-    wrap(p, d.finish(), &foot)
+    wrap(p, super::readings_b7::ph_compose(p, d.finish(), ph), &foot)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1182,12 +1187,13 @@ fn mass_handles(p: &Params) -> Vec<Handle> {
     let tens = ((rest / 10.0).floor() * 10.0).min(90.0);
     let ones = (rest - tens).clamp(0.0, 10.0);
     let x0 = MASS_OX + 248.0;
+    let up = super::readings_b7::triple_handle_shift(p);
     let rx = move |val: f64, range: f64| x0 + val / range * 336.0;
     // (beam rider y, range, step, current)
     let beams: [(f64, f64, f64, f64, &str); 3] = [
-        (MASS_OY + 124.0, 100.0, 10.0, tens, "10 g rider: drag along its beam"),
-        (MASS_OY + 172.0, 500.0, 100.0, hundreds, "100 g rider: drag along its beam"),
-        (MASS_OY + 218.0, 10.0, 0.0, ones, "1 g rider: drag along its beam"),
+        (MASS_OY + 124.0 - up, 100.0, 10.0, tens, "10 g rider: drag along its beam"),
+        (MASS_OY + 172.0 - up, 500.0, 100.0, hundreds, "100 g rider: drag along its beam"),
+        (MASS_OY + 218.0 - up, 10.0, 0.0, ones, "1 g rider: drag along its beam"),
     ];
     beams
         .iter()
@@ -1239,6 +1245,8 @@ fn temp_handles(p: &Params) -> Vec<Handle> {
 
 fn ph_handles(p: &Params) -> Vec<Handle> {
     let ph = p.f("ph").clamp(0.0, 14.0);
+    let lens = super::readings_b7::ph_lens_handles(p);
+    if p.s("mag_show") == "Magnifier only" && let Some(h) = lens.clone() { return h; }
     match p.s("instrument") {
         "Analog meter" => {
             let (cx, cy, r) = (280.0, 270.0, 170.0);
@@ -1247,7 +1255,7 @@ fn ph_handles(p: &Params) -> Vec<Handle> {
                 let mut th = interact::angle_deg((cx, cy), t);
                 if th > 180.0 { th = if th < 270.0 { 180.0 } else { 0.0 }; }
                 set_eff(q, "ph", 14.0 * (1.0 - th / 180.0), 0.0, 14.0);
-            })]
+            })].into_iter().chain(lens.unwrap_or_default()).collect()
         }
         "pH paper" => (0..=14)
             .map(|i| {

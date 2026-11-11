@@ -86,7 +86,7 @@ fn damp_gaps(body: &str, k: f64) -> String {
 }
 
 /// Common tangent lines of two circles (the dashed joins), as ((x1,y1),(x2,y2)) for each side.
-fn tangents(c1: (f64, f64), r1: f64, c2: (f64, f64), r2: f64) -> [((f64, f64), (f64, f64)); 2] {
+pub(super) fn tangents(c1: (f64, f64), r1: f64, c2: (f64, f64), r2: f64) -> [((f64, f64), (f64, f64)); 2] {
     let (dx, dy) = (c2.0 - c1.0, c2.1 - c1.1);
     let d = (dx * dx + dy * dy).sqrt().max(1e-6);
     let (ux, uy) = (dx / d, dy / d);
@@ -98,7 +98,7 @@ fn tangents(c1: (f64, f64), r1: f64, c2: (f64, f64), r2: f64) -> [((f64, f64), (
     })
 }
 
-fn zoom_group(body: &str, f: &Focus, c: (f64, f64), r: f64, k: f64, id: usize) -> String {
+pub(super) fn zoom_group(body: &str, f: &Focus, c: (f64, f64), r: f64, k: f64, id: usize) -> String {
     let body = &damp_gaps(&damp(body, k), k);
     format!(
         r##"<defs><clipPath id="qsmag{id}"><circle cx="{:.2}" cy="{:.2}" r="{r:.2}"/></clipPath></defs><g clip-path="url(#qsmag{id})"><rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="#fff"/><g transform="translate({:.2} {:.2}) scale({k:.4}) translate({:.2} {:.2})">{body}</g></g><circle cx="{:.2}" cy="{:.2}" r="{r:.2}" fill="none" stroke="{INK}" stroke-width="3"/>"##,
