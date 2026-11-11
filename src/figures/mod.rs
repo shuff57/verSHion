@@ -20,6 +20,8 @@ pub mod biology;
 pub mod cards;
 #[cfg(test)]
 mod census;
+#[cfg(test)]
+mod versions_b9_frozen;
 pub mod axes;
 pub mod chart;
 pub mod chemistry;
