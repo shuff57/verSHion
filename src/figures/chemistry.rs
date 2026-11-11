@@ -22,6 +22,8 @@ mod length;
 mod readings_b7;
 #[cfg(test)]
 mod heatcurve_b8_frozen;
+#[cfg(test)]
+mod readings_b9_frozen;
 mod heatcurve_b8;
 pub mod notes;
 pub mod reactionenergy;
