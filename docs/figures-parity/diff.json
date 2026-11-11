@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-11T07:08:13+00:00",
+ "generated_at": "2026-11-11T07:54:49+00:00",
  "spec_generated_at": "2026-11-08T05:54:07+00:00",
  "figures": [
   {
@@ -4458,21 +4458,29 @@
    "text_sha256": "155b2f00a6395765dcca7633bcf71f48595154094cd892d0d38e0776dd585208",
    "params": [
     "kind",
+    "set_by",
     "element",
+    "isotope",
     "mass",
     "charge",
+    "protons",
+    "neutrons",
+    "electrons",
     "symbol",
+    "particle_form",
     "pos_mass",
     "pos_z",
     "pos_symbol",
     "pos_charge",
     "blanks",
     "notation",
+    "hyphen_form",
+    "font",
     "title",
     "show_answers",
     "label_size"
    ],
-   "param_count": 14,
+   "param_count": 22,
    "handles": 0,
    "label_drag": false,
    "show_answers": true,

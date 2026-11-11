@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-11T07:08:13+00:00 · probe: 2026-11-10T23:08:13
+Generated: 2026-11-11T07:54:49+00:00 · probe: 2026-11-10T23:54:49
 
-**Pooled 94.7** · mean 94.6 over 70 figures · built 71 of 71 reference figures
+**Pooled 95.1** · mean 95.0 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -13,13 +13,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [control 3] Choose how the point labels show — no evidence
   - cap-03d [control 3] Type the range in multiples of pi — no evidence
   - cap-05 [control 3] Choose which terms of a sequence are shown, n from one whole number to another — no evidence
-- `nuclide-notation`: 73 (57/78)
-  - cap-01c [control 3] Buttons for the element's natural isotopes (C-12, C-13) — no evidence
-  - cap-01d [control 3] Set the protons, neutrons and electrons instead of the numbers — no evidence
-  - cap-03c [control 3] A positron — no evidence
-  - cap-03g [control 3] Choose the particle's symbol form (He or α, e or β, p or H) — no evidence
-  - cap-05a [control 3] Hyphen notation alone (carbon-14) — no evidence
-  - cap-05c [control 3] Hyphen notation in the short form (C-14) as well as the long (carbon-14) — no evidence
 - `mass-reading`: 76 (48/63)
   - cap-02d [control 3] An analytical balance showing 4 decimal places — no evidence
   - cap-03a [control 3] A weigh boat on the digital balance's pan — no evidence
@@ -152,6 +145,7 @@ Comparable with the frozen baseline: **yes**
 - `mass-spectrum`: 100 (49/49)
 - `motion-graphs`: 100 (89/89)
 - `motion-map`: 100 (87/87)
+- `nuclide-notation`: 100 (78/78)
 - `ogive`: 100 (75/75)
 - `orbital-diagram`: 100 (61/61)
 - `organic-structure`: 100 (21/21)

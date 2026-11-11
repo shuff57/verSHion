@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-10T23:08:13",
- "ours_built_at": "2026-11-11T07:08:12+00:00",
- "git": "7d07129",
+ "checked_at": "2026-11-10T23:54:49",
+ "ours_built_at": "2026-11-11T07:54:41+00:00",
+ "git": "d97d51d",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -4614,12 +4614,12 @@
       {
        "token": "changes:element=8 O - Oxygen",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/20f6494d58fd1432.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/456bf84211b6ed6f.png"
       },
       {
        "token": "changes:mass=14",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/38c3ae0d330ec0d5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/a86812da2d03bb81.png"
       }
      ]
     },
@@ -4631,21 +4631,33 @@
       {
        "token": "changes:charge=2",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/8a787faa6d20f7d8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/39b0ee749cc45dd6.png"
       }
      ]
     },
     "cap-01c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:isotope=C-13",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/e5d808e8deae6bfa.png"
+      }
+     ]
     },
     "cap-01d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"set_by\":\"Particles\",\"protons\":8,\"neutrons\":10,\"electrons\":10}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/59c963732da49f6d.png"
+      }
+     ]
     },
     "cap-02": {
      "pass": true,
@@ -4655,7 +4667,7 @@
       {
        "token": "changes:{\"kind\":\"Custom symbol\",\"symbol\":\"Qz\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/47eea0cf5fa5bf8c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/97924c4e52d0519c.png"
       }
      ]
     },
@@ -4667,7 +4679,7 @@
       {
        "token": "changes:kind=Alpha particle",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/fc7ddcac038f4261.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/bde4f0acd16f22aa.png"
       }
      ]
     },
@@ -4679,15 +4691,21 @@
       {
        "token": "changes:kind=Beta particle",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/43dcb304770a553a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/5016d4c89163ebae.png"
       }
      ]
     },
     "cap-03c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:kind=Positron",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/931dc1af1509beaa.png"
+      }
+     ]
     },
     "cap-03d": {
      "pass": true,
@@ -4697,7 +4715,7 @@
       {
        "token": "changes:kind=Neutron",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/ff492bb63dd2a188.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/fde1e2f51334a898.png"
       }
      ]
     },
@@ -4709,7 +4727,7 @@
       {
        "token": "changes:kind=Proton",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/02d9bb5036850fc3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/0e5ccbd64dea0bb0.png"
       }
      ]
     },
@@ -4721,15 +4739,21 @@
       {
        "token": "changes:kind=Gamma ray",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/3a270530f48b47a4.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/173ef3e2cb6cd045.png"
       }
      ]
     },
     "cap-03g": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"kind\":\"Alpha particle\",\"particle_form\":\"α, β, H\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/3c2c782eff5730c6.png"
+      }
+     ]
     },
     "cap-04a": {
      "pass": true,
@@ -4739,12 +4763,12 @@
       {
        "token": "changes:pos_mass=Blank",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/bb4e1e5b9f9ac91b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/4d95b75f3e13044e.png"
       },
       {
        "token": "changes:pos_mass=Off",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/0741ec3490c7ffc4.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/b81e34321209fb0e.png"
       }
      ]
     },
@@ -4756,12 +4780,12 @@
       {
        "token": "changes:pos_z=Blank",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/f19acdbf39341d62.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/5eadca322f1c1199.png"
       },
       {
        "token": "changes:pos_z=Off",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/2d60003e54d96e84.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/3256f14afb0b1c66.png"
       }
      ]
     },
@@ -4773,12 +4797,12 @@
       {
        "token": "changes:pos_symbol=Blank",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/ddfd707727c1a435.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/d8d42e09cb379406.png"
       },
       {
        "token": "changes:pos_symbol=Off",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/3f9ecad4b776c788.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/4f1632bd82e62e84.png"
       }
      ]
     },
@@ -4790,12 +4814,12 @@
       {
        "token": "changes:pos_charge=Blank",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/2c69ac543b0f5e55.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/de675a36fb2fbc19.png"
       },
       {
        "token": "changes:{\"charge\":2,\"pos_charge\":\"Off\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/76c63c7a8372e304.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/7c8724eacce36a44.png"
       }
      ]
     },
@@ -4807,15 +4831,21 @@
       {
        "token": "changes:{\"pos_mass\":\"Blank\",\"blanks\":\"Line\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/1892c106f2daf1e5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/de45b3f4b3be0d2c.png"
       }
      ]
     },
     "cap-05a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"notation\":\"Hyphen notation\",\"pos_mass\":\"Blank\",\"charge\":2}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/f92895a30d065148.png"
+      }
+     ]
     },
     "cap-05b": {
      "pass": true,
@@ -4825,21 +4855,33 @@
       {
        "token": "changes:notation=Both",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/7f71d36270eb583e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/3a9dd9f52dfa68fb.png"
       }
      ]
     },
     "cap-05c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"notation\":\"Hyphen notation\",\"hyphen_form\":\"Symbol\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/17b8495cd2ce94f5.png"
+      }
+     ]
     },
     "cap-06a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:font=Serif",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/2d77f04f7617efd9.png"
+      }
+     ]
     },
     "cap-06b": {
      "pass": true,
@@ -4849,7 +4891,7 @@
       {
        "token": "changes:label_size=Large",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/416f89ac480e3703.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/5676fb2906deeb7f.png"
       }
      ]
     },
@@ -4861,7 +4903,7 @@
       {
        "token": "changes:title=Carbon-14",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/2a08f14e6d954920.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/acb817e1dbbac109.png"
       }
      ]
     },
@@ -4873,7 +4915,7 @@
       {
        "token": "changes:show_answers=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/2eaea2c31126d41d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/nuclide-notation/d61822d53e485339.png"
       }
      ]
     }

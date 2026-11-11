@@ -21,15 +21,15 @@
    "id": "cap-01c",
    "text": "Buttons for the element's natural isotopes (C-12, C-13)",
    "class": "control",
-   "evidence": "",
-   "note": "Ours has no isotope buttons; the mass number is typed (0 = the usual isotope)."
+   "evidence": "changes:isotope=C-13",
+   "note": "Built in batch 7, round 292 (2026-11-10). Ours has no isotope buttons; the mass number is typed (0 = the usual isotope)."
   },
   {
    "id": "cap-01d",
    "text": "Set the protons, neutrons and electrons instead of the numbers",
    "class": "control",
-   "evidence": "",
-   "note": "Ours has no particle-count inputs; the same result needs element, mass number and charge."
+   "evidence": "changes:{\"set_by\":\"Particles\",\"protons\":8,\"neutrons\":10,\"electrons\":10}",
+   "note": "Built in batch 7, round 293 (2026-11-10). Ours has no particle-count inputs; the same result needs element, mass number and charge."
   },
   {
    "id": "cap-02",
@@ -56,8 +56,8 @@
    "id": "cap-03c",
    "text": "A positron",
    "class": "control",
-   "evidence": "",
-   "note": "Not in ours' list."
+   "evidence": "changes:kind=Positron",
+   "note": "Built in batch 7, round 294 (2026-11-10). Not in ours' list."
   },
   {
    "id": "cap-03d",
@@ -84,8 +84,8 @@
    "id": "cap-03g",
    "text": "Choose the particle's symbol form (He or α, e or β, p or H)",
    "class": "control",
-   "evidence": "",
-   "note": "Ours draws one form per particle."
+   "evidence": "changes:{\"kind\":\"Alpha particle\",\"particle_form\":\"α, β, H\"}",
+   "note": "Built in batch 7, round 295 (2026-11-10). Ours draws one form per particle."
   },
   {
    "id": "cap-04a",
@@ -126,8 +126,8 @@
    "id": "cap-05a",
    "text": "Hyphen notation alone (carbon-14)",
    "class": "control",
-   "evidence": "",
-   "note": "Attempted in round 6 (2026-11-08). Attempted in round 1 (2026-11-08). Before: Ours' 'Hyphen notation' still draws the symbol: it renders byte-identical to 'Both' (nuclide.rs only adds the hyphen line, never hides the symbol). Evidence cleared: round 1 checker failed it: the hyphen form is spaced \"Carbon - 12\", Symbol Off leaves \"- 12\", Mass Off leaves \"Carbon -\", an ion loses its charge. Round 6 checker failed it too: SVG drops the space in \" ion, \" so a blank touches \"ion\", and blank gaps are uneven. Evidence cleared."
+   "evidence": "changes:{\"notation\":\"Hyphen notation\",\"pos_mass\":\"Blank\",\"charge\":2}",
+   "note": "Built in batch 7, round 296 (2026-11-10). Attempted in round 6 (2026-11-08). Attempted in round 1 (2026-11-08). Before: Ours' 'Hyphen notation' still draws the symbol: it renders byte-identical to 'Both' (nuclide.rs only adds the hyphen line, never hides the symbol). Evidence cleared: round 1 checker failed it: the hyphen form is spaced \"Carbon - 12\", Symbol Off leaves \"- 12\", Mass Off leaves \"Carbon -\", an ion loses its charge. Round 6 checker failed it too: SVG drops the space in \" ion, \" so a blank touches \"ion\", and blank gaps are uneven. Evidence cleared."
   },
   {
    "id": "cap-05b",
@@ -140,15 +140,15 @@
    "id": "cap-05c",
    "text": "Hyphen notation in the short form (C-14) as well as the long (carbon-14)",
    "class": "control",
-   "evidence": "",
-   "note": "Ours writes only the element name form."
+   "evidence": "changes:{\"notation\":\"Hyphen notation\",\"hyphen_form\":\"Symbol\"}",
+   "note": "Built in batch 7, round 297 (2026-11-10). Ours writes only the element name form."
   },
   {
    "id": "cap-06a",
    "text": "A serif (Times New Roman) font instead of sans serif",
    "class": "control",
-   "evidence": "",
-   "note": "No font choice in ours."
+   "evidence": "changes:font=Serif",
+   "note": "Built in batch 7, round 298 (2026-11-10). No font choice in ours."
   },
   {
    "id": "cap-06b",
