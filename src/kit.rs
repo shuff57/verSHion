@@ -614,6 +614,52 @@ pub fn more_dots(ui: &mut Ui, side: f32, tip: &str) -> egui::Response {
     resp
 }
 
+/// A card's main action one step stronger than [`secondary_accent`]: a tinted accent fill, a
+/// 1.5 pt accent outline and an accent bold label, `h` tall (the look the Exams grid's Open won
+/// with). For a card whose other actions are quiet; the page's one filled primary stays filled.
+pub fn tinted_accent(ui: &mut Ui, label: &str, h: f32) -> egui::Response {
+    let tint = theme::accent_faded();
+    let toward = theme::accent_col();
+    let text = RichText::new(label).family(theme::bold_family()).size(ty::BUTTON_SM).color(theme::accent_col());
+    crate::pageshell::styled_button(ui, text, tint, tint.lerp_to_gamma(toward, 0.12), tint.lerp_to_gamma(toward, 0.22), Stroke::new(1.5, theme::accent_col()), h)
+}
+
+/// The width [`tinted_accent`] takes for `label` (its 18 pt side pads and the 13.5 bold label).
+pub fn tinted_accent_w(ui: &Ui, label: &str) -> f32 {
+    let g = ui.painter().layout_no_wrap(label.to_owned(), FontId::new(ty::BUTTON_SM, theme::bold_family()), theme::accent_col());
+    (g.size().x + 36.0).ceil()
+}
+
+/// A quiet overflow "…" beside a card's stronger main action: no fill and no outline at rest
+/// (the dots in `text`), the same `side` square hit area; under the pointer it takes the
+/// secondary look (hover_bg, 1 pt [`theme::edge`], ink dots), accent_faded while pressed or while
+/// its menu is open, the focus ring, PointingHand, and `tip` as hover text and accessible name.
+pub fn quiet_more_dots(ui: &mut Ui, side: f32, tip: &str) -> egui::Response {
+    let enabled = ui.is_enabled();
+    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(side), sense);
+    let (fill, edge, fg) = if !enabled {
+        (Color32::TRANSPARENT, Color32::TRANSPARENT, theme::muted_col())
+    } else if resp.is_pointer_button_down_on() || popup_open(ui, &resp) {
+        (theme::accent_faded(), theme::edge(), theme::ink())
+    } else if resp.hovered() {
+        (theme::hover_bg(), theme::edge(), theme::ink())
+    } else {
+        (Color32::TRANSPARENT, Color32::TRANSPARENT, theme::text_col())
+    };
+    ui.painter().rect(rect, CornerRadius::same(12), fill, Stroke::new(1.0, edge), StrokeKind::Inside);
+    let step = if side >= 36.0 { 6.5 } else { 5.5 };
+    for dx in [-step, 0.0, step] {
+        ui.painter().circle_filled(rect.center() + Vec2::new(dx, 0.0), 2.0, fg);
+    }
+    if resp.has_focus() {
+        focus_ring(ui, rect, 12);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tip));
+    let resp = if enabled { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp };
+    resp.on_hover_text(tip)
+}
+
 /// A text link: 13 pt accent semibold, no underline at rest, underlined under the pointer and
 /// when focused (plus the ring); `arrow` adds a trailing →. At least 18 tall. Returns its own click.
 pub fn link(ui: &mut Ui, label: &str, arrow: bool) -> egui::Response {

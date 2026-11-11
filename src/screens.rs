@@ -1293,8 +1293,11 @@ impl crate::App {
         shell_frame(self, ctx, true, |app, ui| {
             // The bar floats and shows only under the pointer: always drawn, it read as a dark
             // rule down the page's right edge.
+            // The same content width as Banks (its wide cap), so the stat tiles, action cards,
+            // both grids and their view toggles end on the Banks grid's right edge. No gutter:
+            // this bar floats and is hidden at rest, so nothing is drawn over the content.
             crate::kit::quiet_scroll_area(ui, egui::ScrollArea::vertical().auto_shrink([false, false]), |ui| {
-                ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
+                ui.set_max_width(crate::bankui::banks_page_w(ui.available_width()));
                 app.draw_home_body(ui);
             });
         });
@@ -1596,10 +1599,15 @@ impl crate::App {
             }
         } else if bank_mode == kit::ViewMode::Cards {
             use crate::bankui::{bank_tile, TileAct, TileVariant};
-            let mut cols = grid_cols(ui.available_width(), 226.0, grid_gap, 4);
+            // The Banks grid's narrowest tile, so a tile has the room to name every question type
+            // in its key (two lines) instead of folding them into "+N more".
+            let mut cols = grid_cols(ui.available_width(), crate::bankui::BANK_TILE_MIN_W, grid_gap, 4);
+            // A wide window shows one row (the recent exams' three-up row above it; All banks
+            // lists the rest), a narrow one two rows of two, as before.
+            let rows = if cols >= 3 { 1 } else { 2 };
             cols = banks.len().clamp(1, cols);
             let cw = ((ui.available_width() - grid_gap * (cols as f32 - 1.0)) / cols as f32).floor();
-            for chunk in banks.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
+            for chunk in banks.iter().take(cols * rows).collect::<Vec<_>>().chunks(cols) {
                 // Every tile is BANK_TILE_H (the Banks screen's tile), so a row ends on one line.
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = grid_gap;
@@ -2921,9 +2929,16 @@ fn paint_preview_bg(p: &egui::Painter, r: Rect) {
 const HOME_THUMB: Vec2 = Vec2::new(88.0, 114.0);
 /// Every Home exam card is this tall. The text column flows from the top: pad 13, the name (one or
 /// two lines of 22), gap 4, meta 18, gap 2, "From <bank>" (one or two lines of 18, so a bank's
-/// name is read whole); the footer is pinned: gap 7, hairline 1, gap 7, footer 18, pad 13. The
-/// longest case (44 + 36) ends 7 above the hairline.
+/// name is read whole); the footer is pinned: gap 5, hairline 1, gap 5, Open (the bank tiles'
+/// 28 tall tinted button, the edited text level with its middle), pad 9. The longest case
+/// (44 + 36) ends 5 above the hairline.
 const HOME_EXAM_H: f32 = 164.0;
+/// A Home exam card's top pad, its Open's height, the gap from the hairline to Open, and the pad
+/// under Open.
+const HOME_EXAM_TOP: f32 = 12.0;
+const HOME_EXAM_ACT: f32 = 28.0;
+const HOME_EXAM_RULE_GAP: f32 = 5.0;
+const HOME_EXAM_FOOT_PAD: f32 = 9.0;
 
 /// Where a Home exam card's text starts (from the card's left edge) and how wide it may run.
 fn exam_card_text_x(w: f32) -> (f32, f32) {
@@ -2974,7 +2989,7 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_
     }
     let (dx, iw) = exam_card_text_x(w);
     let x = rect.min.x + dx;
-    let mut y = rect.min.y + 13.0;
+    let mut y = rect.min.y + HOME_EXAM_TOP;
     // Name: two lines at most, then the facts right under it.
     let mut job = egui::text::LayoutJob::default();
     job.append(&e.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
@@ -2996,15 +3011,16 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_
     job.append(&e.bank, 0.0, egui::TextFormat { font_id: egui::FontId::new(kit::ty::META, theme::semibold()), color: theme::text_col(), line_height: Some(18.0), ..Default::default() });
     job.wrap = egui::text::TextWrapping { max_width: iw, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
     p.galley(Pos2::new(x, y), p.layout_job(job), theme::text_col());
-    // The footer, pinned to the card's foot.
-    let y = rect.max.y - 13.0 - 18.0;
-    p.hline(x..=x + iw, y - 7.0 - 0.5, Stroke::new(1.0, theme::border()));
-    line(p, y, &edited_label(e.edited), sans(kit::ty::META), theme::muted_col());
-    // The Open link, at the footer's right, added after the card so it takes its own click.
-    let link_w = ui.painter().layout_no_wrap("Open".to_string(), egui::FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()).size().x + 17.0;
-    let lr = Rect::from_min_size(Pos2::new(x + iw - link_w.ceil(), y), Vec2::new(link_w.ceil(), 18.0));
-    // (a child Ui: the link never moves the row's cursor)
-    let open = kit::link(&mut ui.new_child(UiBuilder::new().max_rect(lr).id_salt(("home_exam_open", &e.id))), "Open", true).clicked();
+    // The footer, pinned to the card's foot: the edited text level with Open's middle.
+    let act_y = rect.max.y - HOME_EXAM_FOOT_PAD - HOME_EXAM_ACT;
+    p.hline(x..=x + iw, act_y - HOME_EXAM_RULE_GAP - 0.5, Stroke::new(1.0, theme::border()));
+    line(p, act_y + (HOME_EXAM_ACT - 18.0) / 2.0, &edited_label(e.edited), sans(kit::ty::META), theme::muted_col());
+    // Open, the bank tiles' tinted accent button at the footer's right, added after the card so
+    // it takes its own click.
+    let open_w = kit::tinted_accent_w(ui, "Open");
+    let lr = Rect::from_min_size(Pos2::new(x + iw - open_w, act_y), Vec2::new(open_w, HOME_EXAM_ACT));
+    // (a child Ui: the button never moves the row's cursor)
+    let open = kit::tinted_accent(&mut ui.new_child(UiBuilder::new().max_rect(lr).id_salt(("home_exam_open", &e.id))), "Open", HOME_EXAM_ACT).clicked();
     resp.clicked() || open
 }
 
@@ -3344,8 +3360,9 @@ mod tests {
     #[test]
     fn a_home_exam_card_holds_two_name_and_two_bank_lines() {
         // The longest text (two name lines, two bank lines) still clears the pinned footer.
-        let text = 13.0 + 44.0 + 4.0 + 18.0 + 2.0 + 36.0;
-        let footer = 7.0 + 1.0 + 7.0 + 18.0 + 13.0;
+        let text = HOME_EXAM_TOP + 44.0 + 4.0 + 18.0 + 2.0 + 36.0;
+        // gap, hairline, gap, the 28 tall Open, foot pad
+        let footer = 5.0 + 1.0 + HOME_EXAM_RULE_GAP + HOME_EXAM_ACT + HOME_EXAM_FOOT_PAD;
         assert!(text + footer <= HOME_EXAM_H + 0.01);
         assert_eq!(HOME_EXAM_H, 164.0);
         // At 1280 the text column is 316 - 124 - 16 = 176 wide.

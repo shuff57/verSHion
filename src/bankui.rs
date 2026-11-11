@@ -121,7 +121,7 @@ fn save_settings(app: &App) {
 const BANKS_MAX_W: f32 = 1600.0;
 /// The narrowest a Banks tile gets before the grid drops a column (inner 248: two lines of key
 /// for five types, the footer's long form).
-const BANK_TILE_MIN_W: f32 = 280.0;
+pub(crate) const BANK_TILE_MIN_W: f32 = 280.0;
 
 /// Columns of the Banks tile grid in `avail` points with `gap` between tiles: as many tiles of at
 /// least [`BANK_TILE_MIN_W`] as fit (at least one); the tiles then share the width equally.
@@ -889,13 +889,13 @@ impl App {
         let avail = ui.available_width();
         let beside = avail - tools_w - 24.0;
         // The whole name (and its rename pencil) must fit beside them, or it would be cut off.
-        let name_need = ui.fonts_mut(|f| f.layout_no_wrap(bank_name.clone(), egui::FontId::new(34.0, theme::serif_family()), theme::ink()).size().x) + 48.0;
+        let name_need = ui.fonts_mut(|f| f.layout_no_wrap(bank_name.clone(), egui::FontId::new(34.0, theme::serif_family()), theme::ink()).size().x) + 12.0 + PENCIL_ROOM + 8.0;
         let one_row = beside >= name_need.max(300.0);
         let mut drawn_w = None;
         let mut name_row: Option<egui::Rect> = None;
         ui.horizontal(|ui| {
             // On a row of its own the name may use the whole width, less its rename pencil.
-            let name_w = if one_row { beside.min(680.0) } else { avail - 30.0 }.max(160.0);
+            let name_w = if one_row { beside.min(680.0) } else { avail - PENCIL_ROOM - 4.0 }.max(160.0);
             ui.vertical(|ui| {
                 ui.set_max_width(if one_row { beside } else { avail });
                 let mut name_buf = bank_name.clone();
@@ -914,13 +914,13 @@ impl App {
                 let wraps = text_w + 12.0 > name_w && !editing;
                 let row = ui
                     .horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.spacing_mut().item_spacing.x = 10.0;
                         if wraps {
                             let mut job = egui::text::LayoutJob::single_section(name_buf.clone(), egui::TextFormat::simple(name_font.clone(), theme::ink()));
                             job.wrap = egui::text::TextWrapping { max_width: name_w, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
                             let galley = ui.fonts_mut(|f| f.layout_job(job));
                             let label = ui.add(egui::Label::new(galley).sense(Sense::click())).on_hover_cursor(egui::CursorIcon::Text).on_hover_text(bank_name.as_str());
-                            let pencil = pencil_button(ui).on_hover_text("Rename this bank");
+                            let pencil = pencil_button(ui);
                             if label.clicked() || pencil.clicked() {
                                 ui.data_mut(|d| d.insert_temp(editing_key, 1u8));
                             }
@@ -943,7 +943,7 @@ impl App {
                                 Some(_) if !resp.has_focus() => ui.data_mut(|d| d.remove::<u8>(editing_key)),
                                 _ => {}
                             }
-                            if !resp.has_focus() && pencil_button(ui).on_hover_text("Rename this bank").clicked() {
+                            if !resp.has_focus() && pencil_button(ui).clicked() {
                                 resp.request_focus();
                             }
                             Some(resp)
@@ -1592,9 +1592,14 @@ fn bank_menu_body(ui: &mut Ui, nq: usize, archived: bool) -> Option<BankAct> {
 
 /// The list row's "…" (32 square, the icon tier) at `rect`'s centre; returns the item clicked.
 fn bank_menu(ui: &mut Ui, rect: Rect, r: &BankTile) -> Option<BankAct> {
+    bank_menu_with(ui, rect, r, kit::more_dots)
+}
+
+/// [`bank_menu`] with its "…" drawn by `dots` (a tile's is the quiet one: its Open leads).
+fn bank_menu_with(ui: &mut Ui, rect: Rect, r: &BankTile, dots: fn(&mut Ui, f32, &str) -> egui::Response) -> Option<BankAct> {
     // (a child Ui: placing the button never moves the parent's cursor)
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt(("bank_menu", &r.id)));
-    let b = kit::more_dots(&mut child, MENU_SIDE, "Bank actions");
+    let b = dots(&mut child, MENU_SIDE, "Bank actions");
     egui::Popup::menu(&b).show(|ui| bank_menu_body(ui, r.questions, r.archived)).and_then(|p| p.inner)
 }
 
@@ -1632,14 +1637,23 @@ fn counts_line(r: &BankTile, topics: bool) -> String {
 
 /// Every bank tile is this tall on both screens: each slot is filled on every tile, so a row's
 /// tiles end on one line without being stretched. The slots, top down: pad, header (2 name
-/// lines), gap, meta, gap, key (2 lines), gap, bar, gap, hairline, gap, footer, pad.
-pub(crate) const BANK_TILE_H: f32 = T_PAD + T_HEAD + 6.0 + T_META + 10.0 + T_KEY + 8.0 + T_BAR + 12.0 + 1.0 + 10.0 + T_FOOT + T_PAD;
+/// lines), gap, meta, gap, key (2 lines), gap, bar, gap, hairline, gap, the footer's Open button
+/// (the usage link level with its middle), a slightly shorter foot pad.
+pub(crate) const BANK_TILE_H: f32 = T_PAD + T_HEAD + 6.0 + T_META + T_MK + T_KEY + 8.0 + T_BAR + T_BR + 1.0 + T_RA + T_ACT + T_PAD_FOOT;
 const T_PAD: f32 = 16.0;
 const T_HEAD: f32 = 44.0;
 const T_META: f32 = 18.0;
+/// Meta line to key.
+const T_MK: f32 = 8.0;
 const T_KEY: f32 = 40.0;
 const T_BAR: f32 = 6.0;
+/// Bar to hairline, hairline to the footer's button.
+const T_BR: f32 = 10.0;
+const T_RA: f32 = 8.0;
+/// The footer: Open, a tinted accent button this tall; the usage link (18) sits level with it.
+const T_ACT: f32 = 28.0;
 const T_FOOT: f32 = 18.0;
+const T_PAD_FOOT: f32 = 12.0;
 /// The "…" on a Banks tile (and the list row): a 32 square in the icon tier.
 const MENU_SIDE: f32 = 32.0;
 /// The glyph beside the name on a Home tile.
@@ -1671,6 +1685,8 @@ pub(crate) enum TileAct {
 struct TileKey {
     items: Vec<(usize, f32, usize)>,
     more: Option<(f32, Vec<usize>)>,
+    /// How much closer than usual each swatch sits to its words (0, or 1 on the tightest key).
+    snug: f32,
 }
 
 /// The "+N more" text.
@@ -1678,11 +1694,29 @@ fn more_label(n: usize) -> String {
     format!("+{n} more")
 }
 
-/// Lays out the type key in `w`: items in [`mix_index`] order, two lines at most. If a third
-/// line would be needed, line 2 drops items from its end until "+N more" fits 12 after the last.
+/// Lays out the type key in `w`: items in [`mix_index`] order, two lines at most, every type
+/// named. The items sit 12 apart; when that needs a third line they close up to 8 apart, then
+/// each swatch also sits 1 closer to its words; only when even that needs a third line does line 2
+/// drop items from its end until "+N more" fits 12 after the last (the last resort: a tile too
+/// narrow for all its types by name).
 /// `item_w(i)` is item i's width (swatch, gap and words); `more_w(n)` the width of "+n more".
 fn layout_tile_key(mix: &[usize; 6], w: f32, item_w: impl Fn(usize) -> f32, more_w: impl Fn(usize) -> f32) -> TileKey {
-    const IGAP: f32 = 12.0;
+    let usual = layout_tile_key_gap(mix, w, &item_w, &more_w, 12.0, 0.0);
+    if usual.more.is_none() {
+        return usual;
+    }
+    for (gap, snug) in [(8.0, 0.0), (8.0, 1.0)] {
+        let k = layout_tile_key_gap(mix, w, &item_w, &more_w, gap, snug);
+        if k.more.is_none() {
+            return k;
+        }
+    }
+    usual
+}
+
+/// [`layout_tile_key`] with its items `IGAP` apart.
+fn layout_tile_key_gap(mix: &[usize; 6], w: f32, item_w: &impl Fn(usize) -> f32, more_w: &impl Fn(usize) -> f32, igap: f32, snug: f32) -> TileKey {
+    let item_w = |i: usize| item_w(i) - snug;
     let shown: Vec<usize> = (0..6).filter(|&i| mix[i] > 0).collect();
     let mut items: Vec<(usize, f32, usize)> = Vec::new();
     let mut rest: Vec<usize> = Vec::new();
@@ -1698,17 +1732,17 @@ fn layout_tile_key(mix: &[usize; 6], w: f32, item_w: impl Fn(usize) -> f32, more
             continue;
         }
         items.push((i, x, line));
-        x += iw + IGAP;
+        x += iw + igap;
     }
     if rest.is_empty() {
-        return TileKey { items, more: None };
+        return TileKey { items, more: None, snug };
     }
     // Make room on line 2 for "+N more", dropping its last items as needed.
     loop {
         let end = items.iter().filter(|it| it.2 == 1).map(|&(i, x, _)| x + item_w(i)).fold(0.0, f32::max);
-        let at = if end > 0.0 { end + IGAP } else { 0.0 };
+        let at = if end > 0.0 { end + igap } else { 0.0 };
         if at + more_w(rest.len()) <= w || !items.iter().any(|it| it.2 == 1) {
-            return TileKey { items, more: Some((at, rest)) };
+            return TileKey { items, more: Some((at, rest)), snug };
         }
         let (i, _, _) = items.pop().expect("line 2 has an item");
         rest.insert(0, i);
@@ -1806,24 +1840,28 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
 
     // Key: the type key over the bar; an empty bank has no bar to show, so the key and bar slots
     // hold one dashed placeholder with its next step, Add questions, in the middle.
-    let key_y = meta_y + T_META + 10.0;
+    let key_y = meta_y + T_META + T_MK;
     let bar_y = key_y + T_KEY + 8.0;
     let mut add_btn: Option<Rect> = None;
+    let mut more_hit = false;
     if t.questions == 0 {
         let slot = Rect::from_min_max(Pos2::new(x0, key_y), Pos2::new(x0 + iw, bar_y + T_BAR));
         dashed_round_rect(ui.painter(), slot, 8.0, Stroke::new(1.0, theme::edge()));
         let btn_w = ui.painter().layout_no_wrap("Add questions".to_string(), egui::FontId::new(kit::ty::BUTTON_SM, theme::bold_family()), theme::ink()).size().x + 28.0;
         add_btn = Some(Rect::from_center_size(slot.center(), Vec2::new(btn_w.ceil(), 32.0)));
     } else {
-        let folded = paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix);
+        let (folded, more_pressed) = paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix, &t.id);
+        // "+N more" is a control of its own: pressing it never opens the bank.
+        more_hit = more_pressed;
         mix_bar_folded(ui.painter(), Rect::from_min_size(Pos2::new(x0, bar_y), Vec2::new(iw, T_BAR)), &t.mix, &folded);
     }
 
-    // Hairline, then the footer: where it is used (a link to those exams) left, Open right.
-    let rule_y = bar_y + T_BAR + 12.0;
+    // Hairline, then the footer: where it is used (a link to those exams) left, Open right, the
+    // tile's main action as a tinted accent button (the "…" beside the name stays quiet).
+    let rule_y = bar_y + T_BAR + T_BR;
     ui.painter().hline(x0..=x0 + iw, rule_y + 0.5, Stroke::new(1.0, theme::border()));
-    let foot_y = rule_y + 1.0 + 10.0;
-    let foot_c = foot_y + T_FOOT / 2.0;
+    let act_y = rule_y + 1.0 + T_RA;
+    let foot_c = act_y + T_ACT / 2.0;
     if t.used_in.is_empty() {
         let g = ui.painter().layout_no_wrap(usage_text(t), meta_font.clone(), theme::muted_col());
         ui.painter().galley(Pos2::new(x0, foot_c - g.size().y / 2.0), g, theme::muted_col());
@@ -1836,9 +1874,9 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
     {
         act = Some(TileAct::AddQuestions);
     }
-    let open_w = ui.painter().layout_no_wrap("Open".to_string(), egui::FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()).size().x + 17.0;
-    let open_r = Rect::from_min_size(Pos2::new(x0 + iw - open_w.ceil(), foot_c - T_FOOT / 2.0), Vec2::new(open_w.ceil(), T_FOOT));
-    if kit::link(&mut placed(ui, open_r, ("tile_open", &t.id)), "Open", true).clicked() {
+    let open_w = kit::tinted_accent_w(ui, "Open");
+    let open_r = Rect::from_min_size(Pos2::new(x0 + iw - open_w, act_y), Vec2::new(open_w, T_ACT));
+    if kit::tinted_accent(&mut placed(ui, open_r, ("tile_open", &t.id)), "Open", T_ACT).clicked() {
         act = Some(TileAct::Open);
     }
     if !t.used_in.is_empty() {
@@ -1858,12 +1896,12 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
     }
     if v == TileVariant::Banks {
         let r = Rect::from_min_size(Pos2::new(x0 + iw - MENU_SIDE, top - 4.0), Vec2::splat(MENU_SIDE));
-        if let Some(a) = bank_menu(ui, r, t) {
+        if let Some(a) = bank_menu_with(ui, r, t, kit::quiet_more_dots) {
             act = Some(TileAct::Menu(a));
         }
     }
     let card = if edited.is_none() { card.on_hover_text(forms[0].clone()) } else { card };
-    if act.is_none() && card.clicked() {
+    if act.is_none() && !more_hit && card.clicked() {
         act = Some(TileAct::Open);
     }
     act
@@ -1931,26 +1969,27 @@ fn usage_text(t: &BankTile) -> String {
 /// The tile's type key at `at`, `w` wide: two 13 pt lines, each item a swatch in its type's
 /// [`theme::type_hue`] (the bar segment's colour), the count in semibold ink and the type in
 /// `text`. Returns the types folded into "+N more" (the bar draws them as one hollow segment, the
-/// outline the "+N more" swatch has).
-fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6]) -> Vec<usize> {
+/// outline the "+N more" swatch has), and whether "+N more" was pressed this frame.
+fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6], salt: &str) -> (Vec<usize>, bool) {
     const SW: f32 = 9.0;
     const SGAP: f32 = 5.0;
     let p = ui.painter().clone();
     let galleys: Vec<_> = (0..6).map(|i| p.layout_job(key_item_job(mix[i], KEY_LABELS[i]))).collect();
-    // "+N more" is a link-style reveal: accent semibold, underlined under the pointer, its tooltip
-    // listing the types it stands for; its hollow swatch is the bar's last, hollow segment.
+    // "+N more" is a link-style reveal: accent semibold, underlined under the pointer or focus, a
+    // button that opens a list of the types it stands for; its hollow swatch is the bar's last,
+    // hollow segment.
     let more_font = egui::FontId::new(kit::ty::META, theme::semibold());
     let more_g = |n: usize| p.layout_no_wrap(more_label(n), more_font.clone(), theme::accent_col());
     let key = layout_tile_key(mix, w, |i| SW + SGAP + galleys[i].size().x, |n| SW + SGAP + more_g(n).size().x);
-    for (i, x, l) in key.items {
+    for &(i, x, l) in &key.items {
         let ly = at.y + l as f32 * (KEY_LINE + KEY_LGAP);
         let sr = Rect::from_center_size(Pos2::new(at.x + x + SW / 2.0, ly + KEY_LINE / 2.0), Vec2::splat(SW));
         p.rect_filled(sr, CornerRadius::same(3), theme::type_hue(i));
         let g = galleys[i].clone();
-        p.galley(Pos2::new(at.x + x + SW + SGAP, ly + (KEY_LINE - g.size().y) / 2.0), g, theme::text_col());
+        p.galley(Pos2::new(at.x + x + SW + SGAP - key.snug, ly + (KEY_LINE - g.size().y) / 2.0), g, theme::text_col());
     }
     let Some((x, rest)) = key.more else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     let g = more_g(rest.len());
     let ly = at.y + KEY_LINE + KEY_LGAP;
@@ -1958,14 +1997,39 @@ fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6]) -> Vec<usize>
     p.rect(sr, CornerRadius::same(3), theme::card(), Stroke::new(1.0, theme::muted_col()), egui::StrokeKind::Inside);
     let r = Rect::from_min_size(Pos2::new(at.x + x + SW + SGAP, ly + (KEY_LINE - g.size().y) / 2.0), g.size());
     p.galley(r.min, g, theme::accent_col());
-    let tip = rest.iter().map(|&i| format!("{} {}", mix[i], KEY_LABELS[i])).collect::<Vec<_>>().join("\n");
-    let h = ui.interact(r.expand(2.0), ui.id().with(("tile_more", at.x as i32, at.y as i32)), Sense::hover());
-    if h.hovered() {
+    let name = more_name(rest.len());
+    let h = ui.interact(r.expand(2.0), ui.id().with(("tile_more", salt)), Sense::click());
+    h.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&h));
+    if h.hovered() || h.has_focus() || open {
         p.hline(r.x_range(), (r.bottom() - 2.0).round() + 0.5, Stroke::new(1.0, theme::accent_col()));
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
     }
-    h.on_hover_text(format!("Also in this bank:\n{tip}"));
-    rest
+    if h.has_focus() {
+        p.rect_stroke(r.expand(3.0), CornerRadius::same(4), Stroke::new(2.0, theme::accent_col()), egui::StrokeKind::Outside);
+    }
+    let pressed = h.clicked();
+    let h = h.on_hover_cursor(egui::CursorIcon::PointingHand);
+    let h = if open { h } else { h.on_hover_text(name) };
+    // The folded types, each with its swatch and count, in a small list under "+N more"; Escape or
+    // a click anywhere closes it.
+    egui::Popup::menu(&h).show(|ui| {
+        ui.spacing_mut().item_spacing.y = 4.0;
+        ui.label(kit::meta_muted("Also in this bank"));
+        for &i in &rest {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = SGAP;
+                let (sr, _) = ui.allocate_exact_size(Vec2::new(SW, KEY_LINE), Sense::hover());
+                ui.painter().rect_filled(Rect::from_center_size(sr.center(), Vec2::splat(SW)), CornerRadius::same(3), theme::type_hue(i));
+                ui.label(key_item_job(mix[i], KEY_LABELS[i]));
+            });
+        }
+    });
+    (rest, pressed)
+}
+
+/// The accessible name (and hover text) of a tile key's "+N more".
+fn more_name(n: usize) -> String {
+    format!("Show the other {n} question type{}", if n == 1 { "" } else { "s" })
 }
 
 /// One key item's words: the count in semibold ink, then the type in `text`, both 13 pt.
@@ -3280,21 +3344,16 @@ fn truncate(s: &str, max_chars: usize) -> String {
 
 // ---------- bank details, rename pencil, Pop-over window ----------
 
-/// Small borderless pencil icon button (the rename affordance after the bank name).
+/// The rename affordance after the bank name: the kit's outlined icon button (the header's
+/// button family, a size down from its 40 tall actions), "Rename this bank" its tip and name.
 fn pencil_button(ui: &mut Ui) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
-    paint_pencil(ui, rect, resp)
+    kit::icon_button(ui, crate::handicons::EDIT, PENCIL_SIDE, "Rename this bank")
 }
 
-fn paint_pencil(ui: &mut Ui, rect: Rect, resp: egui::Response) -> egui::Response {
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Rename this bank"));
-    let col = if resp.hovered() { theme::accent_col() } else { theme::muted_col() };
-    if resp.hovered() {
-        ui.painter().rect_filled(rect, CornerRadius::same(6), theme::hover_bg());
-    }
-    crate::handicons::paint_glyph(ui.painter(), rect.center(), crate::handicons::EDIT, 15.0, col);
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-}
+/// The rename button's side.
+const PENCIL_SIDE: f32 = 32.0;
+/// Room after the name for the rename button: the gap before it and its side.
+const PENCIL_ROOM: f32 = 10.0 + PENCIL_SIDE;
 
 /// Width of the bank toolbar's overflow button.
 const MORE_W: f32 = 40.0;
@@ -3310,6 +3369,11 @@ const QUIET_R: u8 = 12;
 fn scroll_bar_reach(ui: &Ui) -> f32 {
     let s = &ui.spacing().scroll;
     s.bar_inner_margin + s.bar_width + s.bar_outer_margin + 8.0
+}
+
+/// The Banks grid's content width in `avail` (its wide cap), for a page that ends on its edge.
+pub(crate) fn banks_page_w(avail: f32) -> f32 {
+    avail.min(BANKS_MAX_W)
 }
 
 /// The bank page's content width in `avail`: the Banks grid's cap, and while the page scrolls
@@ -4416,7 +4480,8 @@ mod tests {
     /// Every bank tile is the sum of its slots, 205, on Banks and on Home (spec section 3).
     #[test]
     fn a_bank_tile_is_205_tall() {
-        assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 10.0 + 40.0 + 8.0 + 6.0 + 12.0 + 1.0 + 10.0 + 18.0 + 16.0);
+        // pad, name, meta, key, bar, hairline, the footer's 28 tall Open, foot pad
+        assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 8.0 + 40.0 + 8.0 + 6.0 + 10.0 + 1.0 + 8.0 + 28.0 + 12.0);
         assert_eq!(BANK_TILE_H, 205.0);
     }
 
@@ -4543,6 +4608,78 @@ mod tests {
         let mut order: Vec<usize> = k.items.iter().map(|i| i.0).collect();
         order.extend(rest);
         assert_eq!(order, vec![0, 1, 2, 3, 4, 5]);
+    }
+
+    /// Before anything folds the key closes up: items 8 apart instead of 12, then each swatch 1
+    /// closer to its words; it folds only when even the closest key needs a third line, and a key
+    /// that fits at 12 keeps 12.
+    #[test]
+    fn the_tile_key_closes_up_before_it_folds() {
+        // The measured key items (swatch 9, gap 5, "1 <type>" at 13 pt).
+        let widths = [106.9, 75.5, 74.5, 74.5, 103.5, 93.7];
+        let item_w = |i: usize| widths[i];
+        let more_w = |_n: usize| 50.0;
+        let science = [4, 1, 0, 1, 1, 1];
+        // Banks at 760 (inside 271): 12 apart folds, 8 apart and a snug swatch names all five.
+        let k = layout_tile_key(&science, 271.0, item_w, more_w);
+        assert_eq!(k.more, None, "every type named");
+        assert_eq!(k.snug, 1.0);
+        assert_eq!(k.items.iter().map(|i| (i.0, i.2)).collect::<Vec<_>>(), vec![(0, 0), (1, 0), (3, 0), (4, 1), (5, 1)]);
+        let end = k.items.iter().map(|&(i, x, _)| x + widths[i] - k.snug).fold(0.0, f32::max);
+        assert!(end <= 271.0, "the key ends inside the tile: {end}");
+        // Wide (inside 327): the usual 12 apart, nothing snug.
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 327.0, item_w, more_w);
+        assert_eq!((k.more, k.snug), (None, 0.0));
+        assert_eq!(k.items[1].1, widths[0] + 12.0);
+        // Six types in 266 cannot be named in two lines: the fold is the last resort.
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 266.0, item_w, more_w);
+        assert!(k.more.is_some());
+    }
+
+    /// A six-type tile at the narrow width folds into "+N more", and that is a real control: a
+    /// named button that, clicked or pressed with Enter, lists the folded types with their counts
+    /// (and never opens the bank); Escape closes the list.
+    #[test]
+    fn plus_more_reveals_the_folded_types_and_never_opens_the_bank() {
+        use egui_kittest::kittest::{NodeT, Queryable};
+        let tmp = std::env::temp_dir().join(format!("vs-more-test-{}", std::process::id()));
+        crate::store::init(Box::new(crate::store::FsBackend::new(tmp)));
+        let mut app = App::new_from(&egui::Context::default());
+        app.store = Default::default();
+        let tile = BankTile { id: "b".into(), name: "Six types".into(), questions: 11, topics: 4, mix: [5, 2, 1, 1, 1, 1], used_in: vec![], edited: 0, archived: false };
+        let mut first = true;
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 300.0)).build_ui_state(
+            move |ui, st: &mut (App, Vec<TileAct>)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                // The narrow Banks tile (inside 271): six types cannot be named in two lines.
+                if let Some(a) = bank_tile(ui, &mut st.0, 303.0, &tile, TileVariant::Banks) {
+                    st.1.push(a);
+                }
+            },
+            (app, Vec::new()),
+        );
+        h.run();
+        let folded_names = |h: &egui_kittest::Harness<'_, (App, Vec<TileAct>)>| h.query_all_by_label_contains("short answer").count();
+        assert_eq!(folded_names(&h), 0, "the folded names are not shown at rest");
+        h.get_by_label_contains("Show the other").click();
+        h.run();
+        assert!(folded_names(&h) > 0, "pressing +N more lists the folded types");
+        assert!(h.query_by_label_contains("Also in this bank").is_some());
+        assert!(h.state().1.is_empty(), "pressing +N more does not open the bank: {:?}", h.state().1);
+        h.key_press(egui::Key::Escape);
+        h.run();
+        assert_eq!(folded_names(&h), 0, "Escape closes the list");
+        // From the keyboard: focus it, Enter opens the list.
+        h.get_by_label_contains("Show the other").focus();
+        h.run();
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert!(folded_names(&h) > 0, "Enter on +N more lists the folded types");
+        assert!(h.state().1.is_empty(), "Enter on +N more does not open the bank");
     }
 
     /// The footer's edited text has a long, a month-day and a bare form.

@@ -873,64 +873,72 @@ fn intake(app: &mut crate::App, ctx: &egui::Context, st: &mut State) {
     }
 }
 
-/// Text size of the format names and of their row labels (one size, so a row reads on one baseline).
+/// Text size of the format names and of their group labels (one size, so a row reads on one baseline).
 const FORMAT_PT: f32 = 13.0;
-/// What goes between two format names.
-const FORMAT_SEP: &str = "  ·  ";
+/// The clear space between one format column and the next.
+const FORMAT_COL_GAP: f32 = 24.0;
+/// The least room between two side-by-side groups; a hairline runs down its middle.
+const FORMAT_BLOCK_GAP: f32 = 48.0;
+/// Space between two lines of names.
+const FORMAT_LINE_GAP: f32 = 3.0;
+/// Space between a group's heading and its first line of names.
+const FORMAT_HEAD_GAP: f32 = 6.0;
 
-/// Split a group's format names into lines that fit `width`, measuring each name and the
-/// middot between names, so a line breaks only between two names and never inside one
-/// ("Photos of a worksheet" stays whole).
-fn format_lines<'a>(ui: &egui::Ui, items: &[&'a str], width: f32) -> Vec<Vec<&'a str>> {
-    let font = FontId::proportional(FORMAT_PT);
-    let w_of = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), theme::text_col()).size().x;
-    break_between(items, width, w_of(FORMAT_SEP), w_of)
+/// What the importer reads, by group: the group's label, its format names, and how many columns
+/// its names take when the groups stand side by side (each a near-square block).
+const FORMAT_GROUPS: [(&str, &[&str], usize); 3] = [
+    ("Documents", &["PDF", "Word", "Photos of a worksheet", "Pasted text"], 2),
+    ("Spreadsheets", &["Excel", "CSV"], 1),
+    ("Quiz tools", &["Respondus", "Canvas QTI", "Blackboard", "Moodle XML", "GIFT", "Aiken", "Kahoot", "Quizlet", "Test Parrot .json"], 3),
+];
+
+/// How many format columns of `col_w` (the longest name) fit in `width` with a `gap` between two
+/// columns: at least one, so a name wider than the room still gets a line of its own.
+fn format_cols(width: f32, col_w: f32, gap: f32) -> usize {
+    (((width + gap) / (col_w + gap)).floor() as usize).max(1)
 }
 
-/// The line breaking behind [`format_lines`]: names go on a line while they fit with a
-/// separator `sep` wide between them; a name that does not fit starts the next line (alone if
-/// it is wider than the whole line), so a break always falls between two names. A line that
-/// continues ends with the separator (see [`format_line`]), so every name but the last keeps
-/// one `sep` of room after it.
-fn break_between<'a>(items: &[&'a str], width: f32, sep: f32, w_of: impl Fn(&str) -> f32) -> Vec<Vec<&'a str>> {
-    let mut rows: Vec<Vec<&str>> = vec![Vec::new()];
-    let mut used = 0.0_f32;
-    for (i, it) in items.iter().enumerate() {
-        let w = w_of(it);
-        let trail = if i + 1 < items.len() { sep } else { 0.0 };
-        if used > 0.0 && used + sep + w + trail > width {
-            rows.push(Vec::new());
-            used = 0.0;
-        }
-        used += if used > 0.0 { sep + w } else { w };
-        rows.last_mut().expect("one row to start with").push(*it);
+/// The x of each side-by-side group block in a panel `inner` wide, given each block's own width,
+/// and the x of the hairline between each pair; `None` when the blocks do not fit with
+/// [`FORMAT_BLOCK_GAP`] between them. Spare room is shared out after each block, so the blocks
+/// spread across the panel and each hairline sits midway in its gap.
+fn format_blocks(inner: f32, widths: &[f32]) -> Option<(Vec<f32>, Vec<f32>)> {
+    let n = widths.len() as f32;
+    let spare = inner - widths.iter().sum::<f32>() - FORMAT_BLOCK_GAP * (n - 1.0);
+    if spare < 0.0 {
+        return None;
     }
-    rows
+    let extra = spare / n;
+    let (mut xs, mut rules) = (Vec::new(), Vec::new());
+    let mut x = 0.0;
+    for (i, w) in widths.iter().enumerate() {
+        xs.push(x);
+        x += w + extra;
+        if i + 1 < widths.len() {
+            rules.push(x + FORMAT_BLOCK_GAP / 2.0);
+            x += FORMAT_BLOCK_GAP;
+        }
+    }
+    Some((xs, rules))
 }
 
-/// One line of format names: the names in body text, the middots between them muted. A line
-/// that `continues` ends with the muted separator, so the list reads on into the next line; a
-/// line never starts with one. Plain text on purpose: these are what the importer reads, not
-/// things to press, so the only button-shaped things on the page are Choose files, Paste text
-/// and Add photo.
-fn format_line(items: &[&str], continues: bool) -> egui::text::LayoutJob {
-    let mut job = egui::text::LayoutJob::default();
-    let name = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::text_col());
-    let sep = egui::TextFormat::simple(FontId::proportional(FORMAT_PT), theme::muted_col());
-    for (i, it) in items.iter().enumerate() {
-        if i > 0 {
-            job.append(FORMAT_SEP, 0.0, sep.clone());
-        }
-        job.append(it, 0.0, name.clone());
-    }
-    if continues {
-        job.append(FORMAT_SEP.trim_end(), 0.0, sep);
-    }
-    job
+/// One format name, plain text in its own cell (one AccessKit node a format).
+fn format_name(ui: &mut egui::Ui, cell: Rect, text: &str, muted: bool) {
+    ui.scope_builder(egui::UiBuilder::new().max_rect(cell).layout(Layout::left_to_right(Align::Min)), |ui| {
+        let t = if muted { theme::muted(text).size(FORMAT_PT) } else { egui::RichText::new(text).size(FORMAT_PT).color(theme::text_col()) };
+        ui.add(egui::Label::new(t).selectable(false).wrap_mode(egui::TextWrapMode::Extend));
+    });
 }
 
 /// What the importer can read, grouped so a teacher can scan for their tool instead of
-/// picking a format out of one long line.
+/// picking a format out of one long line. Where the panel is wide enough the three groups stand
+/// side by side, each its label over its own small grid of equal columns (Documents two by two,
+/// Spreadsheets one column, Quiz tools three by three), a hairline between groups and every line
+/// on one shared pitch. Narrower, the labels make a left column and every group's names share
+/// the same equal columns, as many as fit, so a name sits straight under the one above it, on
+/// wrapped lines too. Never a name cut or abbreviated. Plain text on purpose: these are what
+/// the importer reads, not things to press, so the only button-shaped things on the page are
+/// Choose files, Paste text and Add photo.
 fn formats_panel(ui: &mut egui::Ui) {
     kit::card().inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -940,20 +948,49 @@ fn formats_panel(ui: &mut egui::Ui) {
             ui.label(kit::meta("Detected from the file itself — nothing is converted until you press Convert."));
         });
         ui.add_space(8.0);
-        let groups: [(&str, &[&str]); 3] = [
-            ("Documents", &["PDF", "Word", "Photos of a worksheet", "Pasted text"]),
-            ("Spreadsheets", &["Excel", "CSV"]),
-            (
-                "Quiz tools",
-                &["Respondus", "Canvas QTI", "Blackboard", "Moodle XML", "GIFT", "Aiken", "Kahoot", "Quizlet", "Test Parrot .json"],
-            ),
-        ];
-        // A fixed label column: every list starts at the same x whatever its label's length.
-        // The lines are broken here, between names, so a long list wraps under its own column.
         let inner = ui.available_width();
+        let font = FontId::proportional(FORMAT_PT);
+        let name_w = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), theme::text_col()).size().x.ceil();
+        let line_h = ui.fonts_mut(|f| f.row_height(&font));
+        let pitch = line_h + FORMAT_LINE_GAP;
+
+        // Side by side: each block's column width from its own longest name.
+        let blocks: Vec<(f32, f32)> = FORMAT_GROUPS
+            .iter()
+            .map(|(group, items, cols)| {
+                let col_w = items.iter().map(|t| name_w(t)).fold(0.0_f32, f32::max);
+                let grid = *cols as f32 * col_w + (*cols as f32 - 1.0) * FORMAT_COL_GAP;
+                (col_w, grid.max(name_w(group)))
+            })
+            .collect();
+        let widths: Vec<f32> = blocks.iter().map(|b| b.1).collect();
+        if let Some((xs, rules)) = format_blocks(inner, &widths) {
+            let lines = FORMAT_GROUPS.iter().map(|(_, items, cols)| items.len().div_ceil(*cols)).max().unwrap_or(1);
+            let h = line_h + FORMAT_HEAD_GAP + lines as f32 * pitch - FORMAT_LINE_GAP;
+            let (area, _) = ui.allocate_exact_size(Vec2::new(inner, h), Sense::hover());
+            for x in rules {
+                let x = (area.left() + x).round() + 0.5;
+                ui.painter().vline(x, area.y_range(), Stroke::new(1.0, theme::border()));
+            }
+            for ((group, items, cols), (x, (col_w, bw))) in FORMAT_GROUPS.iter().zip(xs.into_iter().zip(blocks)) {
+                let left = area.left() + x;
+                format_name(ui, Rect::from_min_size(Pos2::new(left, area.top()), Vec2::new(bw, line_h)), group, true);
+                let top = area.top() + line_h + FORMAT_HEAD_GAP;
+                for (i, it) in items.iter().enumerate() {
+                    let (r, c) = (i / cols, i % cols);
+                    let at = Pos2::new(left + c as f32 * (col_w + FORMAT_COL_GAP), top + r as f32 * pitch);
+                    format_name(ui, Rect::from_min_size(at, Vec2::new(col_w, line_h)), it, false);
+                }
+            }
+            return;
+        }
+
+        // Narrow: a fixed label column, and every group's names in the same equal columns.
         let lab_w = 104.0_f32.min(inner * 0.3);
         let rest = (inner - lab_w).max(120.0);
-        for (gi, (group, items)) in groups.into_iter().enumerate() {
+        let col_w = FORMAT_GROUPS.iter().flat_map(|(_, items, _)| items.iter()).map(|t| name_w(t)).fold(0.0_f32, f32::max);
+        let cols = format_cols(rest, col_w, FORMAT_COL_GAP);
+        for (gi, (group, items, _)) in FORMAT_GROUPS.into_iter().enumerate() {
             if gi > 0 {
                 ui.add_space(5.0);
             }
@@ -964,11 +1001,15 @@ fn formats_panel(ui: &mut egui::Ui) {
                     ui.label(theme::muted(group).size(FORMAT_PT));
                 });
                 ui.allocate_ui_with_layout(Vec2::new(rest, 0.0), Layout::top_down(Align::Min), |ui| {
-                    ui.spacing_mut().item_spacing.y = 3.0;
-                    let lines = format_lines(ui, items, rest);
-                    let n = lines.len();
-                    for (li, line) in lines.into_iter().enumerate() {
-                        ui.add(egui::Label::new(format_line(&line, li + 1 < n)).selectable(false).wrap_mode(egui::TextWrapMode::Extend));
+                    ui.spacing_mut().item_spacing.y = FORMAT_LINE_GAP;
+                    for line in items.chunks(cols) {
+                        // Laid out at the text's own height: `horizontal` would pad each line to
+                        // the interact height.
+                        let (row, _) = ui.allocate_exact_size(Vec2::new(rest, line_h), Sense::hover());
+                        for (ci, it) in line.iter().enumerate() {
+                            let x = row.left() + ci as f32 * (col_w + FORMAT_COL_GAP);
+                            format_name(ui, Rect::from_min_size(Pos2::new(x, row.top()), Vec2::new(col_w, line_h)), it, false);
+                        }
                     }
                 });
             });
@@ -982,7 +1023,15 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
     // edge as a dark rule whenever the page was a few points taller than the window.
     kit::quiet_scroll_area(ui, egui::ScrollArea::vertical().auto_shrink([false, false]), |ui| {
         let full = ui.available_width();
-        let w = if st.sources.is_empty() { full.min(crate::pageshell::PAGE_W) } else { (full - 14.0).min(1500.0) };
+        // Nothing staged: the Banks grid's width and right margin, so the drop zone, the privacy
+        // line, What it reads and the history card end where the Banks grid ends. No gutter for
+        // the scroll bar: it floats, hidden at rest, in the last 14 pt, over the cards' own 16 pt
+        // padding and never over their text.
+        let w = if st.sources.is_empty() {
+            import_page_w(full)
+        } else {
+            (full - 14.0).min(1500.0)
+        };
         ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Min), |ui| {
             ui.set_max_width(w);
             kit::page_header(
@@ -1022,6 +1071,16 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
             );
         });
     });
+}
+
+/// The widest the empty Imports page grows: the Banks grid's cap (bankui's `BANKS_MAX_W`).
+const IMPORT_MAX_W: f32 = 1600.0;
+
+/// The empty Imports page's content width in `avail`: the Banks grid's width, to its cap, with
+/// no gutter for the floating scroll bar (as the Banks grid has none), so the page ends on the
+/// grid's right edge. A narrow window keeps its full width, as before.
+fn import_page_w(avail: f32) -> f32 {
+    avail.min(IMPORT_MAX_W)
 }
 
 /// Keeps the previewed item valid (first source when nothing / something removed).
@@ -3117,33 +3176,141 @@ mod tests {
     use std::io::Write;
 
     #[test]
-    fn format_lists_break_only_between_names() {
-        // One unit a character, a 5-unit "  ·  " between names.
-        let w = |t: &str| t.chars().count() as f32;
-        let items = ["PDF", "Word", "Photos of a worksheet", "Pasted text"];
-        // Everything fits on one line: 3 + 5 + 4 + 5 + 21 + 5 + 11 = 54.
-        assert_eq!(break_between(&items, 54.0, 5.0, w), vec![items.to_vec()]);
-        // One unit short: the last name moves down whole, never split at its space.
-        assert_eq!(break_between(&items, 53.0, 5.0, w), vec![vec!["PDF", "Word", "Photos of a worksheet"], vec!["Pasted text"]]);
-        // A line that continues ends with a separator, so a name that is not the last keeps room
-        // for one after it: "PDF  ·  Word  ·  Photos of a worksheet" (38) fills a 38 line, but then
-        // its trailing "·" would not fit, so Photos moves down with Pasted text.
-        assert_eq!(
-            break_between(&items, 38.0, 5.0, w),
-            vec![vec!["PDF", "Word"], vec!["Photos of a worksheet", "Pasted text"]]
-        );
-        // A continued line never starts with the separator; the line before ends with it.
-        let job = |items: &[&str], continues| format_line(items, continues).text;
-        assert_eq!(job(&["Kahoot", "Quizlet"], true), "Kahoot  ·  Quizlet  ·");
-        assert_eq!(job(&["Test Parrot .json"], false), "Test Parrot .json");
-        // A name wider than the line still gets a line of its own, unbroken.
-        let lines = break_between(&items, 10.0, 5.0, w);
-        assert_eq!(lines, vec![vec!["PDF"], vec!["Word"], vec!["Photos of a worksheet"], vec!["Pasted text"]]);
-        // Every name lands exactly once, in order, whatever the width.
-        for width in [1.0, 12.0, 30.0, 200.0] {
-            let flat: Vec<&str> = break_between(&items, width, 5.0, w).into_iter().flatten().collect();
-            assert_eq!(flat, items.to_vec(), "width {width}");
+    fn format_columns_fit_the_panel() {
+        // Columns of 10 with a gap of 2: n columns take 12n - 2.
+        assert_eq!(format_cols(58.0, 10.0, 2.0), 5);
+        assert_eq!(format_cols(57.9, 10.0, 2.0), 4);
+        assert_eq!(format_cols(10.0, 10.0, 2.0), 1);
+        // A name wider than the room still gets a column of its own.
+        assert_eq!(format_cols(4.0, 10.0, 2.0), 1);
+        assert_eq!(format_cols(0.0, 10.0, 2.0), 1);
+    }
+
+    /// The empty Imports page uses the Banks grid's width, to the same cap and with no extra
+    /// gutter, so it ends on the grid's right edge; a narrow window keeps its full width.
+    #[test]
+    fn import_page_widens_to_the_banks_width() {
+        for avail in [500.0_f32, 760.0, 980.0, 1100.0, 1280.0, 2000.0] {
+            assert_eq!(import_page_w(avail), avail.min(1600.0), "{avail}");
         }
+        assert!(import_page_w(1250.0) > crate::pageshell::PAGE_W, "wider than the old reading cap");
+    }
+
+    #[test]
+    fn format_blocks_spread_with_a_gap_or_do_not_fit() {
+        // Three blocks of 100, 50 and 150 in 400: 300 + 2 gaps of 48 leaves 4 spare, 4/3 a block.
+        let (xs, rules) = format_blocks(400.0, &[100.0, 50.0, 150.0]).expect("fits");
+        let e = 4.0 / 3.0;
+        assert!((xs[0] - 0.0).abs() < 1e-3 && (xs[1] - (100.0 + e + 48.0)).abs() < 1e-3, "{xs:?}");
+        assert!((xs[2] + 150.0 + e - 400.0).abs() < 1e-3, "the last block ends at the panel's edge: {xs:?}");
+        // Each hairline sits midway between a block's room and the next block.
+        assert!((rules[0] - (100.0 + e + 24.0)).abs() < 1e-3 && rules.len() == 2, "{rules:?}");
+        assert!(format_blocks(395.0, &[100.0, 50.0, 150.0]).is_none());
+    }
+
+    /// Renders the panel and returns each group label's and format name's rect, in order.
+    fn format_rects(width: f32) -> Vec<(String, Rect)> {
+        use egui_kittest::{kittest::Queryable, Harness};
+        let mut first = true;
+        let mut h = Harness::builder().with_size(egui::vec2(width, 400.0)).build_ui(move |ui| {
+            if std::mem::take(&mut first) {
+                theme::setup(ui.ctx());
+                ui.ctx().request_repaint();
+                return;
+            }
+            formats_panel(ui);
+        });
+        h.run();
+        assert!(h.query_by_label_contains("·").is_none(), "no separator text at {width}");
+        let mut out = Vec::new();
+        for (group, items, _) in FORMAT_GROUPS {
+            out.push((group.to_string(), h.get_by_label(group).rect()));
+            for n in items.iter() {
+                let r = h.get_by_label(n).rect();
+                assert!(r.right() <= width - 16.0, "{n} runs past the panel at {width}: {r:?}");
+                out.push((n.to_string(), Rect::from_min_max(Pos2::new(r.left() as f32, r.top() as f32), Pos2::new(r.right() as f32, r.bottom() as f32))));
+            }
+        }
+        out
+    }
+
+    /// Wide: the three groups stand side by side, each its label over its own grid, with no two
+    /// blocks overlapping, every block on one top line, columns lined up inside each block and
+    /// lines on one shared pitch.
+    #[test]
+    fn wide_format_groups_stand_side_by_side() {
+        let all = format_rects(1100.0);
+        let mut at = 0;
+        let mut spans: Vec<(f32, f32)> = Vec::new();
+        let mut heads: Vec<Rect> = Vec::new();
+        let mut line_tops: Vec<f32> = Vec::new();
+        for (_, items, cols) in FORMAT_GROUPS {
+            let head = all[at].1;
+            let names: Vec<Rect> = all[at + 1..at + 1 + items.len()].iter().map(|p| p.1).collect();
+            at += 1 + items.len();
+            for (i, r) in names.iter().enumerate() {
+                assert!(r.top() > head.bottom(), "names sit under their label");
+                // Same column: same left as the name `cols` before it; same line: same top as
+                // the line's first name.
+                if i >= cols {
+                    assert!((r.left() - names[i - cols].left()).abs() < 0.5, "columns line up: {names:?}");
+                }
+                assert!((r.top() - names[i - i % cols].top()).abs() < 0.5, "a line shares one top");
+                if i % cols > 0 {
+                    assert!(r.left() > names[i - 1].right(), "a column starts after the one before ends");
+                }
+                line_tops.push(r.top());
+            }
+            assert!((names[0].left() - head.left()).abs() < 0.5, "the grid starts under its label");
+            let right = names.iter().map(|r| r.right()).fold(head.right(), f32::max);
+            spans.push((head.left(), right));
+            heads.push(head);
+        }
+        for w in spans.windows(2) {
+            assert!(w[1].0 > w[0].1 + 24.0, "blocks keep clear of each other: {spans:?}");
+        }
+        for h in &heads {
+            assert!((h.top() - heads[0].top()).abs() < 0.5, "one top line for all labels");
+        }
+        // One shared pitch: every line's top is one of three, the same in all blocks.
+        let mut tops: Vec<f32> = Vec::new();
+        for t in line_tops {
+            if !tops.iter().any(|u| (u - t).abs() < 0.5) {
+                tops.push(t);
+            }
+        }
+        assert_eq!(tops.len(), 3, "{tops:?}");
+    }
+
+    /// Narrow: the labels make a left column and every group's names share the same equal
+    /// columns, every line starting in the first one, Quiz tools wrapping onto more lines.
+    #[test]
+    fn narrow_format_names_line_up_in_columns() {
+        let all = format_rects(620.0);
+        let groups: Vec<&str> = FORMAT_GROUPS.iter().map(|g| g.0).collect();
+        let names: Vec<Rect> = all.iter().filter(|(n, _)| !groups.contains(&n.as_str())).map(|p| p.1).collect();
+        let heads: Vec<Rect> = all.iter().filter(|(n, _)| groups.contains(&n.as_str())).map(|p| p.1).collect();
+        for h in &heads {
+            assert!((h.left() - heads[0].left()).abs() < 0.5, "one label column");
+        }
+        let mut cols: Vec<f32> = Vec::new();
+        for r in &names {
+            if !cols.iter().any(|c| (c - r.left()).abs() < 0.5) {
+                cols.push(r.left());
+            }
+        }
+        cols.sort_by(f32::total_cmp);
+        assert!(cols[0] > heads[0].right(), "names start right of the labels");
+        let step = cols[1] - cols[0];
+        for w in cols.windows(2) {
+            assert!(((w[1] - w[0]) - step).abs() < 0.5, "equal columns: {cols:?}");
+        }
+        for r in &names {
+            let first = names.iter().filter(|o| (o.top() - r.top()).abs() < 0.5).map(|o| o.left()).fold(f32::MAX, f32::min);
+            assert!((first - cols[0]).abs() < 0.5, "a line starts in the first column");
+        }
+        let quiz = &names[6..];
+        assert!(quiz.iter().any(|r| (r.top() - quiz[0].top()).abs() > 0.5), "Quiz tools wraps");
     }
 
     #[test]
