@@ -23,6 +23,8 @@ mod rename;
 mod style;
 #[cfg(test)]
 mod tests_b5;
+#[cfg(test)]
+mod frozen_b8;
 
 type Pt = (f64, f64);
 
