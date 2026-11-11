@@ -133,22 +133,22 @@
    "id": "cap-04i",
    "text": "Give each height and diagonal its own solid, dashed or dotted style",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
+   "evidence": "changes:{\"height\":\"Onto AB (from D)\",\"diagonals\":\"Drawn\",\"hd_style\":\"Dotted\",\"bd_style\":\"Solid\"}",
+   "note": "Built in batch 9, round 350 (2026-11-11). WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
   },
   {
    "id": "cap-05a",
    "text": "Name the point where a height lands",
    "class": "control",
-   "evidence": "",
-   "note": "height_text names the height itself (h), not its foot; no parameter names the foot."
+   "evidence": "changes:{\"height\":\"Onto AB (from D)\",\"hd_foot\":\"E\"}",
+   "note": "Built in batch 9, round 351 (2026-11-11). height_text names the height itself (h), not its foot; no parameter names the foot."
   },
   {
    "id": "cap-05b",
    "text": "Name the point where the diagonals cross",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter names the diagonals' crossing point."
+   "evidence": "changes:{\"diagonals\":\"Drawn\",\"cross_name\":\"M\"}",
+   "note": "Built in batch 9, round 352 (2026-11-11). No parameter names the diagonals' crossing point."
   },
   {
    "id": "cap-06a",

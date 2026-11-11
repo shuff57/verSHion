@@ -1,0 +1,35 @@
+{
+ "round": 359,
+ "figure": "regular-polygon",
+ "capability": "cap-02e",
+ "hypothesis": "Batch 9 regular-polygon: cap-02e; evidence changes:value_t=2sqrt3",
+ "started_at": "2026-11-11T14:45:37",
+ "git": "7d3a71d",
+ "before": {
+  "figure": 92.4,
+  "pooled": 98.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T14:45:37",
+ "after": {
+  "figure": 96.2,
+  "pooled": 98.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:value_t=2sqrt3",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/regular-polygon/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/regular-polygon/9010f7f4ed33b3ff.png"
+   }
+  ]
+ },
+ "checker": "pass: written 2√3; hexagon, pentagon and octagon measures match hand values",
+ "result": "hit",
+ "evidence": "flat_b9 tests (19: each style changes only its own line and the three are told apart from pixels at four sizes; 1,348 names over 540 crowded cases inside the page, clear of text and lines, nearest their own dot; typed size by hand, 70 odd inputs; panel shown == changes the drawing over 152 states); flat_b9_frozen (1,856 old figures and links byte for byte); census unchanged; no task run (builder on the NAS)",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); student versions (pc2)"
+}

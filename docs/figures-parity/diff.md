@@ -18,22 +18,22 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | cumulative-frequency | `ogive` | 45 | 0 | 7 | — | 100 |
 | cylinder | `cylinder` | 31 | 4 | 6 | — | 100 |
 | histogram | `histogram` | 34 | 0 | 8 | — | 100 |
-| kite | `kite` | 57 | 10 | 5 | — | 93 |
+| kite | `kite` | 64 | 10 | 5 | — | 100 |
 | length-reading | `ruler-reading` | 17 | 3 | 6 | — | 100 |
 | mapping-diagram | `mapping-diagram` | 14 | 0 | 4 | reference mentions click/drag; ours has no handles; reference has a student version; ours has no show_answers | 100 |
 | number-line | `number-line` | 30 | 0 | 6 | — | 100 |
 | parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 100 |
-| parallelogram | `parallelogram` | 57 | 9 | 6 | — | 90 |
+| parallelogram | `parallelogram` | 66 | 9 | 6 | — | 100 |
 | pie-chart | `pie-chart` | 16 | 0 | 5 | — | 100 |
 | prism | `prism` | 41 | 6 | 8 | — | 100 |
 | pyramid | `pyramid` | 38 | 6 | 7 | — | 92 |
-| rectangle | `rectangle` | 52 | 9 | 6 | — | 93 |
-| regular-polygon | `regular-polygon` | 29 | 8 | 6 | — | 89 |
+| rectangle | `rectangle` | 55 | 9 | 6 | — | 100 |
+| regular-polygon | `regular-polygon` | 33 | 8 | 6 | — | 100 |
 | sphere | `sphere` | 17 | 2 | 6 | — | 100 |
 | stem-and-leaf | `stem-and-leaf` | 23 | 0 | 8 | — | 100 |
 | transformations | `transformations` | 52 | 5 | 5 | — | 98 |
-| trapezoid | `trapezoid` | 63 | 11 | 7 | — | 89 |
-| triangle | `triangle` | 42 | 9 | 6 | — | 92 |
+| trapezoid | `trapezoid` | 70 | 11 | 7 | — | 100 |
+| triangle | `triangle` | 48 | 9 | 6 | — | 100 |
 | two-way-table | `two-way-table` | 21 | 12 | 6 | — | 100 |
 | venn-diagram | `venn-diagram` | 21 | 3 | 6 | — | 100 |
 
@@ -101,20 +101,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-11T22:24:26+00:00 · probe: 2026-11-11T14:24:26
+Generated: 2026-11-11T22:45:38+00:00 · probe: 2026-11-11T14:45:38
 
-**Pooled 97.8** · mean 98.0 over 70 figures · built 71 of 71 reference figures
+**Pooled 98.6** · mean 98.7 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `regular-polygon`: 89 (70/79)
-  - cap-02d [control 3] Type the size as a fraction — no evidence
-  - cap-02e [control 3] Type the size as a square root — no evidence
-  - cap-04h [control 3] Give the apothem, the radius and the radii each their own solid, dashed or dotted style — no evidence
-- `trapezoid`: 89 (76/85)
-  - cap-04f [control 3] Give each height and diagonal its own solid, dashed or dotted style — no evidence
-  - cap-05a [control 3] Name the point where a height lands — no evidence
-  - cap-05b [control 3] Name the point where the diagonals cross — no evidence
 - `box-plot`: 90 (51/57)
   - cap-06a [control 3] Finish an end of the number line with an arrow — no evidence
   - cap-06b [control 3] Finish an end of the number line with a circle — no evidence
@@ -124,10 +116,6 @@ Comparable with the frozen baseline: **yes**
 - `pulley`: 90 (92/102)
   - cap-03c [core 5] On a table or ramp, set the second object touching the first instead — no evidence
   - cap-06e [core 5] The contact forces between objects touching — no evidence
-- `parallelogram`: 90 (85/94)
-  - cap-04i [control 3] Give each height and diagonal its own solid, dashed or dotted style — no evidence
-  - cap-05a [control 3] Name the point where a height lands — no evidence
-  - cap-05b [control 3] Name the point where the diagonals cross — no evidence
 - `pyramid`: 92 (69/75)
   - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
@@ -136,15 +124,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04e [control 3] Lattice particles touching or spaced apart — no evidence
 - `bohr-model`: 92 (59/64)
   - cap-01c [core 5] Set the proton count by hand, independent of the element (0 to 200), so a wrong atom draws as set — no evidence
-- `triangle`: 92 (71/77)
-  - cap-04e [control 3] Give each height its own solid, dashed or dotted style — no evidence
-  - cap-04d [control 3] Name the point where the height lands — no evidence
-- `kite`: 93 (77/83)
-  - cap-04g [control 3] Name the point where the diagonals cross — no evidence
-  - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
-- `rectangle`: 93 (80/86)
-  - cap-04g [control 3] Name the point where the diagonals cross — no evidence
-  - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
 - `punnett-square`: 94 (85/90)
   - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
   - cap-05d [interaction 2] Click a cell to blank it — no evidence
@@ -183,6 +162,7 @@ Comparable with the frozen baseline: **yes**
 - `heating-cooling-curve`: 100 (96/96)
 - `histogram`: 100 (90/90)
 - `inclined-plane`: 100 (91/91)
+- `kite`: 100 (83/83)
 - `length-reading`: 100 (78/78)
 - `lewis-structures`: 100 (51/51)
 - `line-spectrum`: 100 (54/54)
@@ -199,6 +179,7 @@ Comparable with the frozen baseline: **yes**
 - `organic-structure`: 100 (21/21)
 - `osmosis`: 100 (140/140)
 - `parallel-lines`: 100 (46/46)
+- `parallelogram`: 100 (94/94)
 - `ph-reading`: 100 (38/38)
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
@@ -206,12 +187,16 @@ Comparable with the frozen baseline: **yes**
 - `prism`: 100 (94/94)
 - `ray-diagram`: 100 (115/115)
 - `reaction-energy-diagram`: 100 (101/101)
+- `rectangle`: 100 (86/86)
+- `regular-polygon`: 100 (79/79)
 - `ruler-reading`: 100 (62/62)
 - `sphere`: 100 (35/35)
 - `spring-scale`: 100 (51/51)
 - `stem-and-leaf`: 100 (67/67)
 - `temperature-reading`: 100 (48/48)
 - `titration-curve`: 100 (64/64)
+- `trapezoid`: 100 (85/85)
+- `triangle`: 100 (77/77)
 - `two-way-table`: 100 (68/68)
 - `venn-diagram`: 100 (53/53)
 - `volume-by-displacement`: 100 (58/58)

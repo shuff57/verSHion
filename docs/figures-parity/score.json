@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T22:24:26+00:00",
- "probe_checked_at": "2026-11-11T14:24:26",
+ "generated_at": "2026-11-11T22:45:38+00:00",
+ "probe_checked_at": "2026-11-11T14:45:38",
  "comparable": true,
  "drift": [],
- "pooled": 97.8,
- "mean": 98.0,
+ "pooled": 98.6,
+ "mean": 98.7,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -197,26 +197,11 @@
    "gaps": []
   },
   "kite": {
-   "score": 92.8,
-   "got": 77.0,
+   "score": 100.0,
+   "got": 83.0,
    "total": 83.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the point where the diagonals cross",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04h",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Give each diagonal its own solid, dashed or dotted style",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "length-reading": {
    "score": 100.0,
@@ -331,33 +316,11 @@
    "gaps": []
   },
   "parallelogram": {
-   "score": 90.4,
-   "got": 85.0,
+   "score": 100.0,
+   "got": 94.0,
    "total": 94.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04i",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Give each height and diagonal its own solid, dashed or dotted style",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the point where a height lands",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the point where the diagonals cross",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "particle-diagram": {
    "score": 92.1,
@@ -571,55 +534,18 @@
    "gaps": []
   },
   "rectangle": {
-   "score": 93.0,
-   "got": 80.0,
+   "score": 100.0,
+   "got": 86.0,
    "total": 86.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the point where the diagonals cross",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04h",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Give each diagonal its own solid, dashed or dotted style",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "regular-polygon": {
-   "score": 88.6,
-   "got": 70.0,
+   "score": 100.0,
+   "got": 79.0,
    "total": 79.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type the size as a fraction",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type the size as a square root",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04h",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Give the apothem, the radius and the radii each their own solid, dashed or dotted style",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "ruler-reading": {
    "score": 100.0,
@@ -679,55 +605,18 @@
    ]
   },
   "trapezoid": {
-   "score": 89.4,
-   "got": 76.0,
+   "score": 100.0,
+   "got": 85.0,
    "total": 85.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Give each height and diagonal its own solid, dashed or dotted style",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the point where a height lands",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the point where the diagonals cross",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "triangle": {
-   "score": 92.2,
-   "got": 71.0,
+   "score": 100.0,
+   "got": 77.0,
    "total": 77.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Give each height its own solid, dashed or dotted style",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Name the point where the height lands",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "two-way-table": {
    "score": 100.0,

@@ -1,0 +1,35 @@
+{
+ "round": 347,
+ "figure": "triangle",
+ "capability": "cap-04d",
+ "hypothesis": "Batch 9 triangle: cap-04d; evidence changes:{\"height\":\"From C\",\"m_b\":\"70\",\"hc_foot\":\"H\"}",
+ "started_at": "2026-11-11T14:45:14",
+ "git": "7d3a71d",
+ "before": {
+  "figure": 96.1,
+  "pooled": 97.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T14:45:14",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"height\":\"From C\",\"m_b\":\"70\",\"hc_foot\":\"H\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/triangle/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/triangle/b579fb6ac782b9dd.png"
+   }
+  ]
+ },
+ "checker": "pass: H at the true foot (10.33 from A by hand); extension drawn on an obtuse triangle; 4.5% of names left off with a note",
+ "result": "hit",
+ "evidence": "flat_b9 tests (19: each style changes only its own line and the three are told apart from pixels at four sizes; 1,348 names over 540 crowded cases inside the page, clear of text and lines, nearest their own dot; typed size by hand, 70 odd inputs; panel shown == changes the drawing over 152 states); flat_b9_frozen (1,856 old figures and links byte for byte); census unchanged; no task run (builder on the NAS)",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); student versions (pc2)"
+}

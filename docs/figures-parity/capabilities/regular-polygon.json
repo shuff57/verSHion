@@ -35,15 +35,15 @@
    "id": "cap-02d",
    "text": "Type the size as a fraction",
    "class": "control",
-   "evidence": "",
-   "note": "The size is a slider (float), not a typed measure; no fraction input."
+   "evidence": "changes:value_t=5/2",
+   "note": "Built in batch 9, round 358 (2026-11-11). The size is a slider (float), not a typed measure; no fraction input."
   },
   {
    "id": "cap-02e",
    "text": "Type the size as a square root",
    "class": "control",
-   "evidence": "",
-   "note": "The size is a slider (float); no square-root input."
+   "evidence": "changes:value_t=2sqrt3",
+   "note": "Built in batch 9, round 359 (2026-11-11). The size is a slider (float); no square-root input."
   },
   {
    "id": "cap-03a",
@@ -119,8 +119,8 @@
    "id": "cap-04h",
    "text": "Give the apothem, the radius and the radii each their own solid, dashed or dotted style",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
+   "evidence": "changes:{\"radius\":true,\"apothem_style\":\"Dotted\",\"radius_style\":\"Solid\"}",
+   "note": "Built in batch 9, round 360 (2026-11-11). WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
   },
   {
    "id": "cap-04g",

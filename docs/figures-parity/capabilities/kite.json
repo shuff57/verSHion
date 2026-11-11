@@ -119,15 +119,15 @@
    "id": "cap-04g",
    "text": "Name the point where the diagonals cross",
    "class": "control",
-   "evidence": "",
-   "note": "No parameter names the diagonals' crossing point."
+   "evidence": "changes:{\"diagonals\":\"Drawn\",\"cross_name\":\"M\"}",
+   "note": "Built in batch 9, round 356 (2026-11-11). No parameter names the diagonals' crossing point."
   },
   {
    "id": "cap-04h",
    "text": "Give each diagonal its own solid, dashed or dotted style",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
+   "evidence": "changes:{\"diagonals\":\"Drawn\",\"bd_style\":\"Dotted\"}",
+   "note": "Built in batch 9, round 357 (2026-11-11). WIDE: one line_style covers every construction line; the narrow form passes in the entry above."
   },
   {
    "id": "cap-05a",

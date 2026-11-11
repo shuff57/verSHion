@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-11T22:24:23+00:00",
-  "src_mtime": 1794435553.2064753,
-  "git": "b8df669",
+  "built_at": "2026-11-11T22:45:35+00:00",
+  "src_mtime": 1794436879.745954,
+  "git": "7d3a71d",
   "figures": 191
  },
  "figures": {
@@ -19413,6 +19413,63 @@
      "default": "h"
     },
     {
+     "key": "ha_style",
+     "label": "Height from A: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "ha_foot",
+     "label": "Height from A: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "hb_style",
+     "label": "Height from B: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hb_foot",
+     "label": "Height from B: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "hc_style",
+     "label": "Height from C: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hc_foot",
+     "label": "Height from C: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "label_offsets",
      "label": "Label positions",
      "kind": "text",
@@ -19993,6 +20050,37 @@
       "Dotted"
      ],
      "default": "Dashed"
+    },
+    {
+     "key": "ac_style",
+     "label": "Diagonal AC: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "bd_style",
+     "label": "Diagonal BD: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "cross_name",
+     "label": "Name where the diagonals cross",
+     "kind": "text",
+     "options": [],
+     "default": ""
     },
     {
      "key": "label_offsets",
@@ -20620,6 +20708,94 @@
      "kind": "text",
      "options": [],
      "default": "h"
+    },
+    {
+     "key": "hd_style",
+     "label": "Height from D: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hd_foot",
+     "label": "Height from D: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "hb_style",
+     "label": "Height from B: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hb_foot",
+     "label": "Height from B: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "hc_style",
+     "label": "Height from C: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hc_foot",
+     "label": "Height from C: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ac_style",
+     "label": "Diagonal AC: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "bd_style",
+     "label": "Diagonal BD: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "cross_name",
+     "label": "Name where the diagonals cross",
+     "kind": "text",
+     "options": [],
+     "default": ""
     },
     {
      "key": "label_offsets",
@@ -21291,6 +21467,75 @@
      "default": "h"
     },
     {
+     "key": "hd_style",
+     "label": "Height from D: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hd_foot",
+     "label": "Height from D: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "hc_style",
+     "label": "Height from C: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hc_foot",
+     "label": "Height from C: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ac_style",
+     "label": "Diagonal AC: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "bd_style",
+     "label": "Diagonal BD: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "cross_name",
+     "label": "Name where the diagonals cross",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "label_offsets",
      "label": "Label positions",
      "kind": "text",
@@ -21930,6 +22175,75 @@
      "default": "h"
     },
     {
+     "key": "hd_style",
+     "label": "Height from D: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hd_foot",
+     "label": "Height from D: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "hc_style",
+     "label": "Height from C: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "hc_foot",
+     "label": "Height from C: name where it lands",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ac_style",
+     "label": "Diagonal AC: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "bd_style",
+     "label": "Diagonal BD: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "cross_name",
+     "label": "Name where the diagonals cross",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "label_offsets",
      "label": "Label positions",
      "kind": "text",
@@ -22269,6 +22583,49 @@
       "Dotted"
      ],
      "default": "Dashed"
+    },
+    {
+     "key": "value_t",
+     "label": "Size, typed",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "apothem_style",
+     "label": "Apothem: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "radius_style",
+     "label": "Radius: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "radii_style",
+     "label": "All the radii: line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
     },
     {
      "key": "label_offsets",

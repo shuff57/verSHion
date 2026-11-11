@@ -1,0 +1,37 @@
+{
+ "round": 358,
+ "figure": "regular-polygon",
+ "capability": "cap-02d",
+ "hypothesis": "Batch 9 regular-polygon: cap-02d; evidence changes:value_t=5/2",
+ "started_at": "2026-11-11T14:45:35",
+ "git": "7d3a71d",
+ "before": {
+  "figure": 88.6,
+  "pooled": 98.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T14:45:36",
+ "after": {
+  "figure": 92.4,
+  "pooled": 98.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:value_t=5/2",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/regular-polygon/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/regular-polygon/a773d0ca9933f36e.png"
+   }
+  ]
+ },
+ "checker": "pass: same shape as the slider at 2.5, label 5/2; pentagon measures by hand",
+ "result": "hit",
+ "evidence": "flat_b9 tests (19: each style changes only its own line and the three are told apart from pixels at four sizes; 1,348 names over 540 crowded cases inside the page, clear of text and lines, nearest their own dot; typed size by hand, 70 odd inputs; panel shown == changes the drawing over 152 states); flat_b9_frozen (1,856 old figures and links byte for byte); census unchanged; no task run (builder on the NAS)",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); student versions (pc2)"
+}

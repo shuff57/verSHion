@@ -1,0 +1,35 @@
+{
+ "round": 351,
+ "figure": "parallelogram",
+ "capability": "cap-05a",
+ "hypothesis": "Batch 9 parallelogram: cap-05a; evidence changes:{\"height\":\"Onto AB (from D)\",\"hd_foot\":\"E\"}",
+ "started_at": "2026-11-11T14:45:22",
+ "git": "7d3a71d",
+ "before": {
+  "figure": 93.6,
+  "pooled": 98.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T14:45:22",
+ "after": {
+  "figure": 96.8,
+  "pooled": 98.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"height\":\"Onto AB (from D)\",\"hd_foot\":\"E\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallelogram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/parallelogram/2f47fd84e0d48212.png"
+   }
+  ]
+ },
+ "checker": "pass: E at the foot; two feet right when flipped and turned",
+ "result": "hit",
+ "evidence": "flat_b9 tests (19: each style changes only its own line and the three are told apart from pixels at four sizes; 1,348 names over 540 crowded cases inside the page, clear of text and lines, nearest their own dot; typed size by hand, 70 odd inputs; panel shown == changes the drawing over 152 states); flat_b9_frozen (1,856 old figures and links byte for byte); census unchanged; no task run (builder on the NAS)",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); student versions (pc2)"
+}

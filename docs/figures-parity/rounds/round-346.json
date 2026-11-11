@@ -1,0 +1,37 @@
+{
+ "round": 346,
+ "figure": "triangle",
+ "capability": "cap-04e",
+ "hypothesis": "Batch 9 triangle: cap-04e; evidence changes:{\"height\":\"From all three\",\"m_b\":\"70\",\"hc_style\":\"Dotted\"}",
+ "started_at": "2026-11-11T14:45:13",
+ "git": "7d3a71d",
+ "before": {
+  "figure": 92.2,
+  "pooled": 97.8
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T14:45:14",
+ "after": {
+  "figure": 96.1,
+  "pooled": 97.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"height\":\"From all three\",\"m_b\":\"70\",\"hc_style\":\"Dotted\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/triangle/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/triangle/e972026827ba90f0.png"
+   }
+  ]
+ },
+ "checker": "pass (checker on the NAS): hc_style changes only the height from C; ha/hb/hc each have a control",
+ "result": "hit",
+ "evidence": "flat_b9 tests (19: each style changes only its own line and the three are told apart from pixels at four sizes; 1,348 names over 540 crowded cases inside the page, clear of text and lines, nearest their own dot; typed size by hand, 70 odd inputs; panel shown == changes the drawing over 152 states); flat_b9_frozen (1,856 old figures and links byte for byte); census unchanged; no task run (builder on the NAS)",
+ "next": "vector-diagram cap-03b/03e and pyramid (fixes pending on pc2); student versions (pc2)"
+}
