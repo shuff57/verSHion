@@ -212,11 +212,13 @@ fn projectile(p: &Params, size: (f64, f64)) -> Vec<Handle> {
     let mut out = vec![];
     out.push(lab(m, polar((lx, ly), th / 2.0, br + 41.0), 36.0, "ang_lab").tap_pos(m, (6.0, 0.0)));
     out.push(lab(m, (tip.0 - 2.0, tip.1 - 20.0), 40.0, "v_lab"));
-    if p.b("mark_h") {
+    // a label handle only where the label's text is drawn
+    let typed = |mode: &str| !matches!(p.s(mode), "Blank line" | "None");
+    if p.b("mark_h") && typed("h_lab_mode") {
         let apex = pos(vy);
         out.push(lab(m, (apex.0 + 14.0, (apex.1 + ly) / 2.0), 30.0, "h_lab"));
     }
-    if p.b("mark_r") {
+    if p.b("mark_r") && typed("r_lab_mode") {
         let end = pos(t_land);
         out.push(lab(m, ((lx + end.0) / 2.0, ground + 38.0), 30.0, "r_lab"));
     }

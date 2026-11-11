@@ -76,6 +76,7 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         "motion-map" => motion_map::relevant(key, p),
         "ray-diagram" => ray_diagram::relevant(key, p),
         "waves" => graphs::waves_ends_b9::relevant(key, p),
+        "projectile-motion" => mech::proj_marks_b9::relevant(key, p),
         _ => true,
     }
 }

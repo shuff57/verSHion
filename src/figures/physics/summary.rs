@@ -128,9 +128,10 @@ pub(super) fn summary(id: &str, title: &str, p: &Params) -> Option<String> {
         }
         ("projectile-motion", "Marks") => {
             let mut v: Vec<String> = Vec::new();
-            for (on, name, key) in [("mark_h", "maximum height", "h_lab"), ("mark_r", "range", "r_lab"), ("mark_cliff", "cliff height", "cliff_lab")] {
+            for (on, name, key, mode) in [("mark_h", "maximum height", "h_lab", "h_lab_mode"), ("mark_r", "range", "r_lab", "r_lab_mode"), ("mark_cliff", "cliff height", "cliff_lab", "cliff_lab_mode")] {
                 if p.b(on) {
-                    v.push(format!("{name} \u{201c}{}\u{201d}", p.s(key).trim()));
+                    // a label left blank or off (batch 9); Text, the default, reads as before
+                    v.push(match quoted(p.s(mode), p.s(key)) { Some(q) => format!("{name} {q}"), None => name.to_string() });
                 }
             }
             or_none(v, DOT)

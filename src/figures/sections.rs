@@ -333,7 +333,7 @@ static FIG_33: [RefSection; 6] = [
     s("Object", &["object", "size", "ball_at"], ""),
     s("Path", &["path", "steps", "letters"], ""),
     s("Velocity and gravity", &["show_v", "v_lab_mode", "v_lab", "comps", "show_g", "g_lab_mode", "g_lab"], ""),
-    s("Marks", &["cliff", "mark_h", "h_lab", "mark_r", "r_lab", "mark_cliff", "cliff_lab"], ""),
+    s("Marks", &["cliff", "mark_h", "h_lab_mode", "h_lab", "mark_r", "r_lab_mode", "r_lab", "mark_cliff", "cliff_lab_mode", "cliff_lab"], "Blank line leaves a line for students to write the label on."),
     s("Figure", &["mirror", "color"], ""),
 ];
 

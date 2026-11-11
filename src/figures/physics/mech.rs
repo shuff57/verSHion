@@ -981,8 +981,10 @@ fn proj_params() -> Vec<ParamDef> {
         ParamDef::text("cliff_lab", "Cliff height label", "h"),
         ParamDef::bool("mirror", "Mirror (flip left to right)", false),
         ParamDef::bool("color", "Color (for slides)", false),
-    ]
+    ].into_iter().chain(proj_marks_b9::params()).collect()
 }
+
+pub(crate) mod proj_marks_b9;
 
 /// The reference draws the ground line 264.1 down its 640 x 400 canvas.
 pub(super) const PROJ_GROUND: f64 = 264.1;
@@ -1116,7 +1118,9 @@ fn proj_render(p: &Params) -> String {
         let apex = pos(vy);
         let top = apex.1 - br;
         g.dim_arrow(apex.0, top, apex.0, ly, INK, 1.2);
-        g.label_at(apex.0 + 14.0, (top + ly) / 2.0, 19.0, p.s("h_lab"), ITALIC);
+        let t = proj_marks_b9::label(p, "h_lab", "h_lab_mode");
+        // the Blank line mode's line starts 6 px clear of the height arrow (an empty typed label keeps its old place)
+        g.label_at(apex.0 + if p.s("h_lab_mode") == "Blank line" { 19.0 } else { 14.0 }, (top + ly) / 2.0, 19.0, &t, ITALIC);
     }
     if p.b("mark_r") {
         let (a, b) = (lx, end.0);
@@ -1124,14 +1128,17 @@ fn proj_render(p: &Params) -> String {
         g.line(a, ground + 2.0, a, y + 6.0, INK, 0.8);
         g.line(b, ground + 2.0, b, y + 6.0, INK, 0.8);
         g.dim_arrow(a, y, b, y, INK, 1.2);
-        g.label_at((a + b) / 2.0, y + 16.0, 19.0, p.s("r_lab"), ITALIC);
+        g.label_at((a + b) / 2.0, y + 16.0, 19.0, &proj_marks_b9::label(p, "r_lab", "r_lab_mode"), ITALIC);
     }
     if p.b("mark_cliff") && cliff {
         let x = 32.0;
         let top = ly + r;
         g.line(x - 4.0, top, 46.0, top, INK, 0.8);
         g.dim_arrow(x, top, x, ground, INK, 1.2);
-        g.label_at(x - 13.0, (top + ground) / 2.0, 19.0, p.s("cliff_lab"), ITALIC);
+        let t = proj_marks_b9::label(p, "cliff_lab", "cliff_lab_mode");
+        // the Blank line mode's line ends 4 px clear of the cliff's arrow, 2 px in from the page's edge (an empty
+        // typed label keeps its old place)
+        g.label_at(x - if p.s("cliff_lab_mode") == "Blank line" { 17.0 } else { 13.0 }, (top + ground) / 2.0, 19.0, &t, ITALIC);
     }
     g.finish()
 }
