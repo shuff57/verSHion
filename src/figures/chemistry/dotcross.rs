@@ -320,6 +320,9 @@ fn general_molecule(counts: &[(usize, usize)]) -> Result<(Vec<Atom>, Vec<Bond>),
     if total == 2 {
         let (z1, z2) = (list[0], list[1]);
         let (v1, v2) = (valence(z1).unwrap().0, valence(z2).unwrap().0);
+        if (valence(z1).unwrap().1 + valence(z2).unwrap().1) % 2 == 1 {
+            return Err(format!("{text} has an odd number of outer electrons, so one is left unpaired and it isn't drawn as a simple molecule."));
+        }
         if v1 != v2 {
             return Err(format!("{text} needs a dative bond (both electrons of a pair from one atom), which isn't drawn yet."));
         }
@@ -343,6 +346,11 @@ fn general_molecule(counts: &[(usize, usize)]) -> Result<(Vec<Atom>, Vec<Bond>),
     if bonds_needed != cv {
         let why = if bonds_needed > cv { "a dative bond or more than an octet on" } else { "an incomplete octet on" };
         return Err(format!("{text} needs {why} {}, which isn't drawn.", symbol(cz)));
+    }
+    // silicon forms no double or triple bonds in school chemistry: SiO2 is the giant covalent structure, not a small
+    // O=Si=O molecule like CO2 (the batch 6 re-check)
+    if cz == 14 && outer.iter().any(|&z| valence(z).unwrap().0 >= 2) {
+        return Err(format!("{text} is a giant covalent structure (silicon forms single bonds to four atoms), not a simple molecule, so it isn't drawn."));
     }
     if total > 5 {
         return Err(format!("{text}: only molecules with one central atom and up to four atoms round it are drawn, besides the listed ones like ethane and ethanol."));

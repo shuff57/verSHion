@@ -276,7 +276,7 @@ fn what_cannot_be_drawn_is_refused_with_a_note() {
         ("BF3", "B isn't drawn"), ("H2O2", "central atom"), ("hydrogen peroxide", "central atom"), ("NH4+", "more than one atom"), ("OH-", "more than one atom"),
         ("MgCl", "MgCl\u{2082}"), ("Na2Cl2", "NaCl"), ("Fe", "H to Ca"), ("Br-", "H to Ca"), ("bromine atom", "H to Ca"), ("Na 5+", "charge"),
         ("NaClO", "one metal"), ("C3H8", "central atom"), ("h2o", "capital"), ("Xx", "isn't an element"), ("rubidium ion", "H to Ca"),
-        ("Na2", "one metal"), ("C2H6O", "C2H5OH"), ("C2", "quadruple"), ("Si2", "quadruple"), ("SiC", "quadruple"),
+        ("Na2", "one metal"), ("C2H6O", "C2H5OH"), ("C2", "quadruple"), ("Si2", "quadruple"), ("SiC", "quadruple"), ("SiO2", "giant covalent"), ("SiS2", "giant covalent"), ("NO", "odd number"), ("CN", "odd number"),
     ] {
         let p = typed(t);
         let dr = draw(&p);
