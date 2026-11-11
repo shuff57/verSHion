@@ -755,6 +755,19 @@ pub fn card_visible(id: &str, group: &str, row: Option<&str>, p: &Params) -> boo
 /// label off as emptying a worked-out box does.
 pub fn typed_over_slider(key: &str) -> bool { ["cylinder", "cone", "prism", "pyramid"].iter().any(|id| math::solids_b8::is_typed_key(id, key)) }
 
+/// The label mode a Measures-card row takes after its box is edited (None: unchanged). Like the reference, typing a value into an
+/// empty box whose label is None shows it (Measure); emptying a box whose label is Measure hides it again, except a typed box over
+/// a slider (`typed_over_slider`), which then draws the slider's value and keeps its label.
+pub fn label_after_typing(value_key: &str, was_empty: bool, now: &str, mode: &str) -> Option<&'static str> {
+    if was_empty && !now.trim().is_empty() && mode == "None" {
+        Some("Measure")
+    } else if now.trim().is_empty() && mode == "Measure" && !typed_over_slider(value_key) {
+        Some("None")
+    } else {
+        None
+    }
+}
+
 /// Whether parameter `key` of figure `id` applies to the current params: the reference shows
 /// only the controls of the chosen setup (a pulley's Atwood setup has no ramp angle). Hidden
 /// params keep their values, so switching back restores them. Default: shown.

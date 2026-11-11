@@ -518,3 +518,32 @@ fn alt_text_leaks_nothing() {
         for leak in ["17/3", "13", "15/2", "5/2", "cm", "\u{221a}"] { assert!(!meta.contains(leak), "{id}: alt text says {leak}: {meta}"); }
     }
 }
+
+/// The Measures card's label switch when a box is typed in: typing into an empty box whose label is None shows it (the lean's
+/// label is None by default), for the typed boxes as for every other figure's; emptying hides it again everywhere except a typed
+/// box over a slider, which still draws a measure.
+#[test]
+fn typing_shows_the_label_emptying_keeps_it() {
+    use crate::figures::label_after_typing as after;
+    for id in IDS {
+        for (_, tk) in super::solids_b8::keys(id) {
+            assert_eq!(after(tk, true, "3/2", "None"), Some("Measure"), "{id} {tk}: typing must show the label");
+            assert_eq!(after(tk, false, "", "Measure"), None, "{id} {tk}: emptying keeps the label");
+            assert_eq!(after(tk, true, "3/2", "Text"), None);
+            assert_eq!(after(tk, false, "5/2", "None"), None, "{id} {tk}: an edit of a filled box leaves a None label alone");
+        }
+    }
+    // the worked-out boxes of the solids and every other figure's typed rows: both directions, as before
+    for key in ["edge", "slant", "m_ab", "m_a", "ray2", "inputs", "radius", "height"] {
+        assert_eq!(after(key, true, "5", "None"), Some("Measure"), "{key}");
+        assert_eq!(after(key, false, "", "Measure"), Some("None"), "{key}");
+        assert_eq!(after(key, false, " ", "Measure"), Some("None"), "{key}");
+        assert_eq!(after(key, false, "5", "Measure"), None, "{key}");
+    }
+    // driven as the panel does: an oblique cylinder's lean label set to None comes on when a lean is typed
+    let mut p = with("cylinder", &[s("stands", "Oblique"), s("lean_lab", "None")]);
+    assert!(!texts(&def("cylinder").svg(&p)).iter().any(|t| t.3 == "2 cm"));
+    p.set_s("lean_t", "3/2");
+    if let Some(m) = after("lean_t", true, "3/2", p.s("lean_lab")) { p.set_s("lean_lab", m); }
+    assert!(texts(&def("cylinder").svg(&p)).iter().any(|t| t.3 == "3/2 cm"), "the typed lean's label is drawn");
+}

@@ -3378,13 +3378,8 @@ impl Workspace {
                         if ui.add(te).changed() {
                             self.params.0.insert(r.value_key.to_string(), Value::S(v.clone()));
                             // Like the reference: typing a value shows its label, clearing it hides it.
-                            if !r.label_key.is_empty() && !figures::typed_over_slider(r.value_key) {
-                                let mode = self.params.s(r.label_key).to_string();
-                                if was_empty && !v.trim().is_empty() && mode == "None" {
-                                    self.params.0.insert(r.label_key.to_string(), Value::S("Measure".into()));
-                                } else if v.trim().is_empty() && mode == "Measure" {
-                                    self.params.0.insert(r.label_key.to_string(), Value::S("None".into()));
-                                }
+                            if !r.label_key.is_empty() && let Some(m) = figures::label_after_typing(r.value_key, was_empty, &v, self.params.s(r.label_key)) {
+                                self.params.0.insert(r.label_key.to_string(), Value::S(m.into()));
                             }
                         }
                         shown = if v.trim().is_empty() { hint } else { v };
