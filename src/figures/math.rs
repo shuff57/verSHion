@@ -2158,6 +2158,7 @@ mod parallel;
 pub(crate) use parallel::handles as parallel_handles;
 mod angles;
 pub(crate) use angles::handles as angles_handles;
+mod grid_b7;
 use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
 
 // ───────────────────────── coordinate grid ─────────────────────────
