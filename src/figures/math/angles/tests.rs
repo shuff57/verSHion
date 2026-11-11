@@ -446,40 +446,112 @@ fn every_click_on_an_angle_changes_the_drawing() {
     assert!(one.contains(r#"stroke-width="2.6""#) && !angles_render(&with(&[])).contains(r#"stroke-width="2.6""#));
 }
 
-/// On a crowded figure a label with no clear spot between its rays goes out past the rays' ends with a leader line from its mark,
-/// never across a ray (the batch 6 checker: 7 rays 15 degrees apart at Large with a point on ray 7, 12 rays 10 degrees apart).
-#[test]
-fn a_crowded_label_goes_out_past_the_rays_with_a_leader_never_across_a_ray() {
-    let fan = |n: usize, step: f64| -> Vec<(&'static str, Value)> { (1..n).map(|k| (RAY_V[k], s(&format!("{}", k as f64 * step)))).collect() };
-    let mut a = fan(7, 15.0);
-    a.extend([("label_size", s("Large")), ("points", s("P: ray 7"))]);
-    let mut c = fan(12, 10.0);
-    c.push(("label_size", s("Large")));
-    let mut e = fan(12, 10.0);
-    e.extend([("arcs2", s("3, 7")), ("letters", b(true)), ("turn", f(-40.0))]);
-    let mut leaders = 0;
-    for (ci, p) in [with(&a), with(&c), with(&e)].iter().enumerate() {
-        let svg = angles_render(p);
-        let l = layout(p);
-        let rays: Vec<(Pt, Pt)> = l.dirs.iter().map(|(a, _)| (C, interact::polar(C, a + l.turn, LEN))).collect();
-        for (t, bx) in ink_boxes(&svg) {
-            let cc = ((bx.0 + bx.2) / 2.0, (bx.1 + bx.3) / 2.0);
-            let hb = ((bx.2 - bx.0) / 2.0, (bx.3 - bx.1) / 2.0);
-            for (r0, r1) in &rays { assert!(!seg_hits_box(*r0, *r1, cc, hb, 0.5), "case {ci}: {t} lies across a ray"); }
-            assert!(bx.0 >= 0.0 && bx.1 >= 0.0 && bx.2 <= 480.0 && bx.3 <= 360.0, "case {ci}: {t} off the page");
+/// The crowded figures the label sweep draws: 7 to 12 rays, as an even fan (10 and 15 degrees apart), unevenly spaced (6 to 13
+/// degrees) and spread automatically, at every label size, turned, with letters and named points at the ends and the vertex; and
+/// the batch 6 checker's three figures.
+fn crowded_cases() -> Vec<(String, Params)> {
+    let typed = |dirs: &[f64]| -> Vec<(&'static str, Value)> { dirs.iter().enumerate().map(|(k, a)| (RAY_V[k + 1], s(&format!("{a}")))).collect() };
+    let uneven = [6.0, 8.0, 11.0, 8.0, 12.0, 7.0, 12.0, 7.0, 12.0, 8.0, 13.0];
+    let mut v: Vec<(String, Params)> = vec![];
+    let mut a = typed(&[15.0, 30.0, 45.0, 60.0, 75.0, 90.0]);
+    a.extend([("ray_count", i(7)), ("label_size", s("Large")), ("points", s("P: ray 7"))]);
+    v.push(("checker: 7 rays 15 apart, P on ray 7".into(), with(&a)));
+    let mut b12 = typed(&[6.0, 14.0, 25.0, 33.0, 45.0, 52.0, 64.0, 71.0, 83.0, 91.0, 104.0]);
+    b12.extend([("ray_count", i(12)), ("label_size", s("Large")), ("letters", b(true)), ("turn", f(-40.0))]);
+    v.push(("checker: 12 uneven rays, letters".into(), with(&b12)));
+    let mut c12 = typed(&(1..12).map(|k| k as f64 * 10.0).collect::<Vec<_>>());
+    c12.extend([("ray_count", i(12)), ("label_size", s("Large")), ("turn", f(-40.0)), ("arcs2", s("3, 7")), ("letters", b(true))]);
+    v.push(("checker: 12 rays 10 apart, arcs, letters".into(), with(&c12)));
+    for n in 7..=12usize {
+        for size in ["Small", "Medium", "Large"] {
+            let even10: Vec<f64> = (1..n).map(|k| k as f64 * 10.0).collect();
+            let mut e = typed(&even10);
+            e.extend([("ray_count", i(n as i64)), ("label_size", s(size)), ("letters", b(true)), ("turn", f(-40.0))]);
+            v.push((format!("{n} rays 10 apart, {size}, letters, turned -40"), with(&e)));
+            let even15: Vec<f64> = (1..n).map(|k| k as f64 * 15.0).collect();
+            let mut e = typed(&even15);
+            let pts = format!("P: ray {n}; Q: ray 2; V: vertex");
+            e.extend([("ray_count", i(n as i64)), ("label_size", s(size)), ("turn", f(35.0)), ("points", s(&pts))]);
+            v.push((format!("{n} rays 15 apart, {size}, named points, turned 35"), with(&e)));
+            let mut acc = 0.0;
+            let un: Vec<f64> = uneven.iter().take(n - 1).map(|d| { acc += d; acc }).collect();
+            let mut e = typed(&un);
+            e.extend([("ray_count", i(n as i64)), ("label_size", s(size)), ("letters", b(true)), ("turn", f(150.0)), ("points", s("R: ray 3"))]);
+            v.push((format!("{n} uneven rays, {size}, letters and R, turned 150"), with(&e)));
+            let e = with(&[("ray_count", i(n as i64)), ("label_size", s(size)), ("letters", b(true)), ("turn", f(-25.0))]);
+            v.push((format!("{n} rays spread automatically, {size}, letters"), e));
         }
-        // the leaders: from inside the label's own angle, straight out along its middle, then past the rays' ends to the label
-        for (_, pts) in polys(&svg, "polyline").into_iter().filter(|(t, _)| t.contains(r#"stroke-width="0.8""#)) {
-            leaders += 1;
-            assert_eq!(pts.len(), 3);
-            assert!((interact::dist(pts[1], C) - LEN - 6.0).abs() < 0.02, "case {ci}: the leader bends past the ends");
-            for (r0, r1) in &rays {
-                // the last leg runs past the rays' ends and crosses none
-                assert!(seg_dist_seg(pts[1], pts[2], *r0, *r1) > 0.5, "case {ci}: a leader crosses a ray");
+    }
+    v
+}
+
+/// On a crowded figure every label stays on the page, off the rays and off every other text, and one with no room between its
+/// rays goes out past the rays' ends with a leader line: a straight line from inside its own angle (whose measure the label
+/// states) out to it. No leader passes through any text (letters, named points, other labels) or crosses a ray, and no two
+/// leaders cross, touch or share a bend. Read off the drawing: resvg's own text boxes, the drawn rays and the drawn leaders.
+#[test]
+fn a_crowded_label_goes_out_past_the_rays_with_a_leader_never_across_text_a_ray_or_another_leader() {
+    let mut leaders_seen = 0;
+    for (name, p) in crowded_cases() {
+        let svg = angles_render(&p);
+        // the rays as drawn: from the vertex, stroke 2
+        let rays: Vec<(Pt, Pt)> = tags(&svg, "line").into_iter()
+            .filter(|t| attr(t, "stroke-width").as_deref() == Some("2") && (fa(t, "x1") - C.0).abs() < 0.01 && (fa(t, "y1") - C.1).abs() < 0.01)
+            .map(|t| (C, (fa(t, "x2"), fa(t, "y2")))).collect();
+        let len = interact::dist(rays[0].0, rays[0].1);
+        let dirs = drawn_rays(&svg);
+        // each leader as drawn (a polyline of stroke 0.8) and its legs
+        let leaders: Vec<Vec<Pt>> = polys(&svg, "polyline").into_iter().filter(|(t, _)| t.contains(r#"stroke-width="0.8""#)).map(|x| x.1).collect();
+        let legs = |pl: &Vec<Pt>| -> Vec<(Pt, Pt)> { pl.windows(2).map(|w| (w[0], w[1])).collect() };
+        leaders_seen += leaders.len();
+        let boxes = ink_boxes(&svg);
+        let as_bx = |bx: &Bx4| -> Bx { (((bx.0 + bx.2) / 2.0, (bx.1 + bx.3) / 2.0), ((bx.2 - bx.0) / 2.0, (bx.3 - bx.1) / 2.0)) };
+        // which label each leader ends at: the box its end is nearest
+        let owner: Vec<usize> = leaders.iter().map(|pl| {
+            let e = *pl.last().unwrap();
+            (0..boxes.len()).min_by(|x, y| box_pt_dist(as_bx(&boxes[*x].1), e).total_cmp(&box_pt_dist(as_bx(&boxes[*y].1), e))).unwrap()
+        }).collect();
+        for (k, (pl, o)) in leaders.iter().zip(&owner).enumerate() {
+            let (s0, e0) = (pl[0], *pl.last().unwrap());
+            let (t, ob) = &boxes[*o];
+            assert!(deg_value(t).is_some() && box_pt_dist(as_bx(ob), e0) <= 5.0, "{name}: leader {k} ends at {t}, {} away", box_pt_dist(as_bx(ob), e0));
+            for (a, b) in legs(pl) {
+                // through no text: every other text
+                for (j, (tt, bx)) in boxes.iter().enumerate() {
+                    if j == *o { continue; }
+                    assert!(!seg_meets_box(a, b, as_bx(bx), 1.0), "{name}: the leader to {t} runs through {tt}");
+                }
+                // across no ray
+                for (r0, r1) in &rays { assert!(seg_dist_seg(a, b, *r0, *r1) > 1.0, "{name}: the leader to {t} crosses a ray"); }
+                // no two leaders cross, touch or share a bend
+                for other in leaders.iter().skip(k + 1) {
+                    for (c, d) in legs(other) {
+                        assert!(seg_dist_seg(a, b, c, d) >= 3.0, "{name}: the leader to {t} comes within {:.2} of another", seg_dist_seg(a, b, c, d));
+                    }
+                }
+            }
+            // from inside its own angle, whose measure its label states
+            let phi = interact::angle_deg(C, s0);
+            let j = dirs.iter().position(|r| *r > phi).unwrap_or(0);
+            let (lo, hi) = (dirs[(j + dirs.len() - 1) % dirs.len()], dirs[j]);
+            let measured = (hi - lo).rem_euclid(360.0);
+            assert!(interact::dist(s0, C) < len && (deg_value(t).unwrap() - measured).abs() <= 0.5 + 1e-6, "{name}: the leader to {t} starts in an angle of {measured}");
+        }
+        for (a, (t, bx)) in boxes.iter().enumerate() {
+            assert!(bx.0 >= 0.0 && bx.1 >= 0.0 && bx.2 <= 480.0 && bx.3 <= 360.0, "{name}: {t} off the page {bx:?}");
+            for (r0, r1) in &rays { assert!(!seg_meets_box(*r0, *r1, as_bx(bx), 0.5), "{name}: {t} lies across a ray"); }
+            for (tb, bb) in boxes.iter().skip(a + 1) {
+                let ov = (bx.2.min(bb.2) - bx.0.max(bb.0)).max(0.0) * (bx.3.min(bb.3) - bx.1.max(bb.1)).max(0.0);
+                assert!(ov < 1.0, "{name}: {t} overlaps {tb}");
+            }
+            // an angle's label past the rays' ends is tied to its angle by a leader
+            if deg_value(t).is_some() {
+                let far = [(bx.0, bx.1), (bx.0, bx.3), (bx.2, bx.1), (bx.2, bx.3)].iter().map(|q| interact::dist(*q, C)).fold(0.0, f64::max);
+                if far > len + 0.5 { assert!(owner.contains(&a), "{name}: {t} is past the rays' ends with no leader"); }
             }
         }
     }
-    assert!(leaders > 0, "the crowded cases need leaders");
+    assert!(leaders_seen > 0, "the crowded cases need leaders");
 }
 
 fn seg_dist_seg(a: Pt, b: Pt, c: Pt, d: Pt) -> f64 {
@@ -609,7 +681,7 @@ fn text_is_readable_inside_the_page_and_clear_of_other_text_and_the_rays() {
         }
         for (_, _, size, _) in texts(&svg) { assert!(size >= 8.0); }
         let l = layout(p);
-        let rays: Vec<(Pt, Pt)> = l.dirs.iter().map(|(a, _)| (C, interact::polar(C, a + l.turn, LEN))).collect();
+        let rays: Vec<(Pt, Pt)> = l.dirs.iter().map(|(a, _)| (C, interact::polar(C, a + l.turn, l.len))).collect();
         for (t, bx) in &boxes {
             let c = ((bx.0 + bx.2) / 2.0, (bx.1 + bx.3) / 2.0);
             let hb = ((bx.2 - bx.0) / 2.0, (bx.3 - bx.1) / 2.0);
