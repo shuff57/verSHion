@@ -106,3 +106,53 @@ fn gel_lane_cards_leave_a_sample_lane_blank_for_students() {
     click_nth(&ctx, &mut ws, "Leave blank for students", 0);
     assert_eq!(ws.params.s("blank_lanes"), "");
 }
+
+/// Every batch 9 control is in its figure's panel, in the section the reference puts it, and the label modes and
+/// axis ends only where they draw something.
+#[test]
+fn batch9_controls_are_in_their_sections() {
+    let seen = |ctx: &egui::Context, ws: &mut Workspace, t: &str| count_named(ctx, ws, t) + count_text(ctx, ws, t);
+    // box plot: Left end and Right end under Number line
+    let (ctx, mut ws) = open_tall("box-plot");
+    open_section(&ctx, &mut ws, "Number line");
+    assert!(seen(&ctx, &mut ws, "Left end") >= 1 && seen(&ctx, &mut ws, "Right end") >= 1, "box plot ends");
+    // waves: the x-axis's and y-axis's ends, gone with the axes
+    let (ctx, mut ws) = open_tall("waves");
+    open_section(&ctx, &mut ws, "x-axis");
+    open_section(&ctx, &mut ws, "y-axis");
+    for t in ["Left end", "Right end", "Bottom end", "Top end"] { assert!(seen(&ctx, &mut ws, t) >= 1, "waves {t}"); }
+    let mut p = ws.params.clone();
+    p.set_s("kind", "Longitudinal");
+    ws.set_params_with_history(p);
+    assert!(seen(&ctx, &mut ws, "Right end") >= 1 && seen(&ctx, &mut ws, "Top end") == 0, "a longitudinal wave has no y-axis ends");
+    // projectile: each mark's label choice under Marks, once the mark is on
+    let (ctx, mut ws) = open_tall("projectile-motion");
+    open_section(&ctx, &mut ws, "Marks");
+    assert_eq!(seen(&ctx, &mut ws, "Height label shows"), 0, "not before the height is marked");
+    let mut p = ws.params.clone();
+    p.set_b("mark_h", true);
+    p.set_b("mark_r", true);
+    ws.set_params_with_history(p);
+    assert!(seen(&ctx, &mut ws, "Height label shows") >= 1 && seen(&ctx, &mut ws, "Range label shows") >= 1);
+    assert_eq!(seen(&ctx, &mut ws, "Cliff height label shows"), 0, "no cliff on level ground");
+    // population growth: the inflection point's and phases' label choices once they are marked
+    let (ctx, mut ws) = open_tall("population-growth");
+    assert_eq!(seen(&ctx, &mut ws, "Inflection point label"), 0);
+    let mut p = ws.params.clone();
+    p.set_b("mark_infl", true);
+    p.set_b("mark_phases", true);
+    ws.set_params_with_history(p);
+    open_section(&ctx, &mut ws, "Marked on the graph");
+    assert!(seen(&ctx, &mut ws, "Inflection point label") >= 1 && seen(&ctx, &mut ws, "Growth phase labels") >= 1);
+    // predator-prey: Neither among the populations drawn
+    let (ctx, mut ws) = open_tall("predator-prey");
+    open_section(&ctx, &mut ws, "Graph");
+    let defs = (reg()[ws.sel.unwrap()].params)();
+    let show = defs.iter().find(|d| d.key == "show").unwrap();
+    assert!(matches!(&show.kind, figures::Kind::Choice(o) if o.contains(&figures::biology::popdyn::NEITHER)));
+    assert!(seen(&ctx, &mut ws, "Show") >= 1);
+    // gel: Show answers under Chart title and answer key
+    let (ctx, mut ws) = open_tall("gel-electrophoresis");
+    open_section(&ctx, &mut ws, "Chart title and answer key");
+    assert!(seen(&ctx, &mut ws, "Show answers") >= 1, "gel Show answers");
+}
