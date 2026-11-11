@@ -164,9 +164,9 @@ fn the_old_modes_are_untouched_and_the_new_one_differs() {
         assert_eq!(render(&q), render(&m));
         for k in ["mass", "rate", "molar_mass", "c_solid", "c_liquid", "c_gas", "dh_fus", "dh_vap"] { assert!(!crate::figures::param_relevant(ID, k, &q), "{k} hidden outside the computed mode"); }
     }
-    // the typed minutes are shown only for "To scale"
+    // the typed minutes are shown where they act: "To scale" and "Schematic", not the computed mode
     assert!(crate::figures::param_relevant(ID, "t_boil", &open));
-    assert!(!crate::figures::param_relevant(ID, "t_boil", &c) && !crate::figures::param_relevant(ID, "t_boil", &sch));
+    assert!(!crate::figures::param_relevant(ID, "t_boil", &c) && crate::figures::param_relevant(ID, "t_boil", &sch));
     // the custom heats only for Custom
     assert!(!crate::figures::param_relevant(ID, "c_solid", &c) && crate::figures::param_relevant(ID, "mass", &c));
 }
@@ -454,5 +454,22 @@ fn print_and_large_draw() {
         let p = with(&[comp(), s("label_size", ls), s("curve_color", "#111111"), b("letters", true)]);
         let svg = render(&p);
         assert!(clean_numbers(&svg) && curve(&svg, &p).len() == 6);
+    }
+}
+
+/// A typed-minutes box is shown exactly when it changes the drawing: in "To scale" and in "Schematic" (whose time
+/// axis spans the typed minutes), not in the computed mode. (Batch 8 first hid them in Schematic, where they act.)
+#[test]
+fn the_typed_minutes_show_wherever_they_change_the_drawing() {
+    let scales: Vec<String> = (def().params)().into_iter().find(|d| d.key == "scale").map(|d| match d.kind { crate::figures::Kind::Choice(o) => o.iter().map(|o| o.to_string()).collect(), _ => vec![] }).unwrap();
+    assert_eq!(scales.len(), 3);
+    for scale in &scales {
+        for key in ["t_solid", "t_melt", "t_liquid", "t_boil", "t_gas"] {
+            let a = with(&[s("scale", scale), f(key, 4.0)]);
+            let c = with(&[s("scale", scale), f(key, 25.0)]);
+            let moves = render(&a) != render(&c);
+            assert_eq!(crate::figures::param_relevant(ID, key, &a), moves, "{key} in {scale}: shown must mean it changes the drawing");
+            assert_eq!(moves, scale != COMPUTED, "{key} in {scale}");
+        }
     }
 }

@@ -88,7 +88,7 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "mass" => comp,
         "rate" => comp && time_axis(p),
         "molar_mass" | "c_solid" | "c_liquid" | "c_gas" | "dh_fus" | "dh_vap" => comp && p.s("substance") == "Custom",
-        "t_solid" | "t_melt" | "t_liquid" | "t_boil" | "t_gas" => p.s("scale") == "To scale",
+        "t_solid" | "t_melt" | "t_liquid" | "t_boil" | "t_gas" => !comp, // Schematic reads them too (they set the minutes its time axis spans)
         _ => true,
     }
 }
