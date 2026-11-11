@@ -25,6 +25,8 @@ pub mod readings_b9;
 mod heatcurve_b8_frozen;
 #[cfg(test)]
 mod readings_b9_frozen;
+#[cfg(test)]
+mod atoms_b10_frozen;
 mod heatcurve_b8;
 pub mod notes;
 pub mod reactionenergy;
