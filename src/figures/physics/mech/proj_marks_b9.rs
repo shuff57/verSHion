@@ -167,11 +167,11 @@ mod tests {
                     if p.s(mode) == v { continue; }
                     let mut q = p.clone();
                     q.set_s(mode, v);
-                    assert_eq!(super::relevant(mode, &p), d.svg(&q) != a, "{mode} -> {v} in {c:?}");
+                    assert_eq!(crate::figures::param_relevant("projectile-motion", mode, &p), d.svg(&q) != a, "{mode} -> {v} in {c:?}");
                 }
                 let mut q = p.clone();
                 q.set_s(text, "Zz");
-                assert_eq!(super::relevant(text, &p), d.svg(&q) != a, "{text} in {c:?}");
+                assert_eq!(crate::figures::param_relevant("projectile-motion", text, &p), d.svg(&q) != a, "{text} in {c:?}");
             }
         }
     }

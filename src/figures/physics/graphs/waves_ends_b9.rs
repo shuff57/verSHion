@@ -159,7 +159,7 @@ mod tests {
                     let p = params(&[("kind", s(kind)), (k, s(e))]);
                     let svg = d.svg(&p);
                     let applies = if i < 2 { super::x_applies(&p) } else { super::y_applies(&p) };
-                    assert_eq!(super::relevant(k, &p), applies);
+                    assert_eq!(crate::figures::param_relevant("waves", k, &p), applies);
                     if !applies {
                         assert_eq!(svg, seen[0], "{kind}: {k} is offered nowhere it draws nothing");
                         continue;
@@ -198,7 +198,7 @@ mod tests {
                     let mut o = base.to_vec();
                     o.push((k, s("Circle")));
                     let p = params(&o);
-                    assert_eq!(super::relevant(k, &p), d.svg(&p) != a, "{kind} numbers {num} grid {grid}: {k}");
+                    assert_eq!(crate::figures::param_relevant("waves", k, &p), d.svg(&p) != a, "{kind} numbers {num} grid {grid}: {k}");
                 }
             }
         }

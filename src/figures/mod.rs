@@ -802,6 +802,10 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "temperature-reading" if key == "places" => p.s("thermometer") == "Digital probe",
         // a flat shape's per-line styles and point names only for lines drawn; the size slider while its typed box is not read
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon" => math::flat_b9::relevant(id, key, p) && cards::relevant(id, key, p),
+        // batch 9: the waves' axis ends and the projectile's mark label modes only where they draw
+        "waves" | "projectile-motion" => physics::relevant(id, key, p) && cards::relevant(id, key, p),
+        // batch 9: the inflection point's and the phases' label modes only where they draw
+        "population-growth" => biology::popdyn::growth_b9_relevant(key, p) && cards::relevant(id, key, p),
         _ => cards::relevant(id, key, p),
     }
 }

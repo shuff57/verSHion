@@ -146,8 +146,12 @@ pub fn growth_params() -> Vec<ParamDef> {
         ParamDef::choice("y_hi_end", "Top end", &["None", "Triangle arrow", "Line arrow", "Circle"], "None"),
         ParamDef::float("y2_max", "Second graph y-axis maximum (when not fitting, 0 = fit)", 0.0, 10_000_000.0, 0.1, 0.0),
         ParamDef::float("y2_step", "Second graph y-axis count by (0 = automatic)", 0.0, 10_000_000.0, 0.01, 0.0),
-    ]
+    ].into_iter().chain(growth_b9::params()).collect()
 }
+
+pub(crate) mod growth_b9;
+/// The panel's batch-9 controls of population growth (`growth_b9::relevant`).
+pub fn growth_b9_relevant(key: &str, p: &Params) -> bool { growth_b9::relevant(key, p) }
 
 struct Series {
     name: String,
@@ -477,7 +481,20 @@ pub fn growth_render(p: &Params) -> String {
         if p.b("mark_infl") && matches!(pk, Panel::TimeN) {
             if let Some(ti) = t_inf {
                 let (cx, cy) = a.pt((ti, k / 2.0));
-                bold(&mut d, (cx + 12.0).min(a.x + a.w - 170.0), cy + 18.0, 13.0, "start", "Inflection point (N = K/2)");
+                // what a blank line must keep clear of: the curves and counts as drawn, the phase boundaries, the K line
+                let curves: Vec<Vec<(f64, f64)>> = if draw_curve { series.iter().map(|s| ts.iter().zip(&s.ys).map(|(t, y)| a.pt((*t, *y))).collect()).collect() } else { vec![] };
+                let phase_x: Vec<f64> = if phases {
+                    let slope = r * k / 4.0;
+                    [(ti + (n0 - k / 2.0) / slope).max(0.0), ti + (k / 2.0) / slope].into_iter().filter(|t| *t > a.x0 && *t < a.x1).map(|t| a.px(t)).collect()
+                } else { vec![] };
+                let kd = has_k && p.b("mark_k");
+                let k_label = (kd && kstyle != "None").then(|| {
+                    let text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
+                    let (x, y) = (a.x + 8.0, a.py(k) + 21.7);
+                    (x - 2.0, y - 14.7 * 0.78 - 2.0, x + bold_width(text, 14.7).max(162.0) + 2.0, y + 4.0)
+                });
+                let room = growth_b9::InflRoom { a: &a, at: (cx, cy), curves, census: census.iter().map(|q| a.pt(*q)).collect(), phase_x, k_line: kd.then(|| a.py(k)), k_label, minor: minor_of(p.s("minor")) };
+                growth_b9::infl_label(&mut d, p, (cx + 12.0).min(a.x + a.w - 170.0), cy + 18.0, &room);
             }
         }
         if phases && matches!(pk, Panel::TimeN) {
@@ -490,7 +507,7 @@ pub fn growth_render(p: &Params) -> String {
                 let (xa, xb) = (a.px(lo) + 2.0, a.px(hi) - 2.0);
                 d.polyline(&[(xa, by + 6.0), (xa, by), (xb, by), (xb, by + 6.0)], INK, 1.2);
                 let fs = if (xb - xa) < 110.0 { 11.0 } else { 13.0 };
-                bold(&mut d, (xa + xb) / 2.0, by - 5.0, fs, "middle", name);
+                growth_b9::phase_label(&mut d, p, xa, xb, by, fs, name, (a.x, a.x + a.w));
             }
         }
     }

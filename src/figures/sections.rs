@@ -289,7 +289,7 @@ static FIG_30: [RefSection; 9] = [
     s("Graphs", &["graph"], "The growth rate dN/dt is individuals added per year; the per capita growth rate, (dN/dt)/N, is per individual."),
     s("Curve", &["curve_color", "draw_curve"], ""),
     s("Census data", &["census", "census_auto", "census_every", "census_scatter", "census_seed", "census_table"], ""),
-    s("Marked on the graph", &["mark_k", "mark_infl", "k_label", "tau", "k_label_style", "mark_phases"], ""),
+    s("Marked on the graph", &["mark_k", "mark_infl", "k_label", "tau", "k_label_style", "infl_label_style", "mark_phases", "phase_label_style"], ""),
     s("Titles", &["x_title", "y_title", "title", "curve_width", "title_style", "xtitle_style", "ytitle_style", "rate_title", "pc_title", "label_size"], ""),
     s("x-axis", &["x_max", "x_min", "x_step", "x_numbers", "x_end", "x_end_text", "x_lo_end", "x_hi_end", "y_step"], ""),
     s("y-axis", &["y_max", "blank", "y_min", "y_numbers", "y_end", "y_end_text", "y_lo_end", "y_hi_end", "y2_max", "y2_step"], ""),
