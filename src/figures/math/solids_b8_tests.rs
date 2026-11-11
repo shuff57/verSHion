@@ -126,10 +126,50 @@ fn reads_numbers_fractions_and_roots() {
     }
 }
 
+/// Signs: one leading sign is read (a plus is dropped from the label), a doubled one is refused; a trailing or leading point is
+/// written as the number it is.
+#[test]
+fn signs_and_points() {
+    for bad in ["--3", "-+3", "+-3", "++3", "2--3", "2+-3", "2 - -3", "\u{2212}\u{2212}3"] { assert!(read(bad).is_err(), "{bad} should be refused"); }
+    assert!(close(read("+3").unwrap().unwrap(), 3.0) && close(read("+3/2").unwrap().unwrap(), 1.5) && close(read("-3/2").unwrap().unwrap(), -1.5));
+    assert!(close(read("3.").unwrap().unwrap(), 3.0) && close(read(".5").unwrap().unwrap(), 0.5));
+    for (t, want) in [("+3", "3"), ("3.", "3"), (".5", "0.5"), ("+3/2", "3/2"), ("2.50", "2.50"), ("3.+1", "3 + 1")] { assert_eq!(pretty(t), want, "{t}"); }
+    // drawn: --3 is refused (the slider's 3 drawn, with a note), +3 and 3. are labelled 3 cm
+    let plain = svg("cylinder", &[]);
+    let p = with("cylinder", &[s("radius_t", "--3")]);
+    assert_eq!(def("cylinder").svg(&p), plain);
+    assert_eq!(warnings("cylinder", &p).len(), 1);
+    for t in ["+3", "3."] {
+        let st = svg("cylinder", &[s("radius_t", t)]);
+        assert!(texts(&st).iter().any(|x| x.3 == "3 cm"), "{t}: {:?}", texts(&st).iter().map(|x| &x.3).collect::<Vec<_>>());
+        assert!(!st.contains("\u{2212}\u{2212}") && !st.contains("3. cm") && !st.contains("+3"), "{t}");
+    }
+}
+
+/// A root followed by a division is written so it reads one way only: (√13)/2 and (2√3)/3 are a root then divided; √(13/2) is
+/// the root of the whole fraction, and the reader takes each as written.
+#[test]
+fn roots_over_a_number_read_one_way() {
+    for (t, want, v) in [
+        ("sqrt(13)/2", "(\u{221a}13)/2", 13f64.sqrt() / 2.0), ("\u{221a}13/2", "(\u{221a}13)/2", 13f64.sqrt() / 2.0),
+        ("2sqrt3/3", "(2\u{221a}3)/3", 2.0 * 3f64.sqrt() / 3.0), ("2\u{221a}3/3", "(2\u{221a}3)/3", 2.0 * 3f64.sqrt() / 3.0),
+        ("sqrt(13/2)", "\u{221a}(13/2)", 6.5f64.sqrt()), ("\u{221a}(13/2)", "\u{221a}(13/2)", 6.5f64.sqrt()),
+        ("3/sqrt2", "3/\u{221a}2", 3.0 / 2f64.sqrt()), ("(1+sqrt5)/2", "(1 + \u{221a}5)/2", (1.0 + 5f64.sqrt()) / 2.0),
+        ("-sqrt(13)/2", "\u{2212}(\u{221a}13)/2", -(13f64.sqrt()) / 2.0), ("sqrt(2+3)/2", "(\u{221a}(2 + 3))/2", 5f64.sqrt() / 2.0),
+    ] {
+        assert_eq!(pretty(t), want, "{t}");
+        assert!(close(read(t).unwrap().unwrap(), v), "{t}");
+        // what is written reads back as the same number
+        assert!(close(read(want).unwrap().unwrap(), v), "{want} reads differently");
+    }
+    let st = svg("cylinder", &[s("radius_t", "sqrt(13)/2")]);
+    assert!(texts(&st).iter().any(|x| x.3 == "(\u{221a}13)/2 cm"));
+}
+
 #[test]
 fn writes_the_exact_form() {
     for (t, want) in [
-        ("3/2", "3/2"), ("17/3", "17/3"), ("2sqrt3", "2\u{221a}3"), ("2*sqrt(3)", "2\u{221a}3"), ("2 sqrt 3", "2\u{221a}3"), ("sqrt(13)/2", "\u{221a}13/2"),
+        ("3/2", "3/2"), ("17/3", "17/3"), ("2sqrt3", "2\u{221a}3"), ("2*sqrt(3)", "2\u{221a}3"), ("2 sqrt 3", "2\u{221a}3"), ("sqrt(13)/2", "(\u{221a}13)/2"),
         ("5\u{221a}13", "5\u{221a}13"), ("2pi", "2\u{3c0}"), ("sqrt(2+3)", "\u{221a}(2 + 3)"), (" 2.50 ", "2.50"), ("-3/2", "\u{2212}3/2"), ("3*2", "3\u{d7}2"),
         ("(1+sqrt5)/2", "(1 + \u{221a}5)/2"), ("4 - sqrt2", "4 \u{2212} \u{221a}2"),
     ] {

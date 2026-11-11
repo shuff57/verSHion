@@ -87,7 +87,13 @@ impl Rd {
     fn peek(&self) -> Option<&Tok> { self.t.get(self.i) }
     fn expr(&mut self) -> Option<f64> {
         let mut v = self.term()?;
-        while let Some(Tok::Op(c @ ('+' | '-'))) = self.peek().cloned() { self.i += 1; let r = self.term()?; v = if c == '+' { v + r } else { v - r }; }
+        while let Some(Tok::Op(c @ ('+' | '-'))) = self.peek().cloned() {
+            self.i += 1;
+            // a doubled sign (2 - -3, 2 + -3) is refused: a slip, not a measure
+            if matches!(self.peek(), Some(Tok::Op('+' | '-'))) { return None; }
+            let r = self.term()?;
+            v = if c == '+' { v + r } else { v - r };
+        }
         Some(v)
     }
     fn term(&mut self) -> Option<f64> {
@@ -104,7 +110,13 @@ impl Rd {
         }
     }
     fn unary(&mut self) -> Option<f64> {
-        if let Some(Tok::Op('-')) = self.peek() { self.i += 1; return Some(-self.unary()?); }
+        // one leading sign: −3/2 (a lean to the left) or +3 (written 3); a doubled sign (--3, +-3) is refused
+        if let Some(Tok::Op(c @ ('-' | '+'))) = self.peek().cloned() {
+            self.i += 1;
+            if matches!(self.peek(), Some(Tok::Op('+' | '-'))) { return None; }
+            let v = self.power()?;
+            return Some(if c == '-' { -v } else { v });
+        }
         self.power()
     }
     fn power(&mut self) -> Option<f64> {
@@ -171,19 +183,26 @@ pub(crate) fn reads(p: &Params, key: &str) -> bool {
 
 // ───────────────────────── writing ─────────────────────────
 
-/// A typed measure as written on the figure: √ for sqrt, π for pi, a true minus, no spaces or stars except around + and −
-/// (3/2, 2√3, √13/2, 5π, √(2+3)).
+/// A typed measure as written on the figure: √ for sqrt, π for pi, a true minus, no spaces or stars except around + and −, no
+/// leading plus (3/2, 2√3, 5π, √(2+3)). A root divided by something is bracketed so the line reads one way only: √13/2 is
+/// written (√13)/2 and 2√3/3 as (2√3)/3, while a root of a whole fraction keeps its own brackets, √(13/2).
 pub(crate) fn pretty(text: &str) -> String {
     let Some(toks) = lex(text.trim()) else { return text.trim().to_string() };
     let mut out = String::new();
+    // per bracket depth: where the current product began in `out`, and whether it holds a root
+    let mut runs: Vec<(usize, bool)> = vec![(0, false)];
+    let unary = |i: usize| i == 0 || matches!(toks[i - 1], Tok::Open | Tok::Op(_));
     let mut i = 0;
     while i < toks.len() {
         match &toks[i] {
             Tok::Num(_) => {
-                // keep the digits as typed
-                out.push_str(&num_text(text, i));
+                // the digits as typed (2.50 stays 2.50), but 3. is 3 and .5 is 0.5
+                let n = num_text(text, i);
+                let n = n.strip_suffix('.').unwrap_or(&n).to_string();
+                out.push_str(&if n.starts_with('.') { format!("0{n}") } else { n });
             }
             Tok::Sqrt => {
+                if let Some(r) = runs.last_mut() { r.1 = true; }
                 out.push('\u{221a}');
                 // √(13) is written √13: brackets round a single number go
                 if let (Some(Tok::Open), Some(Tok::Num(_)), Some(Tok::Close)) = (toks.get(i + 1), toks.get(i + 2), toks.get(i + 3)) {
@@ -197,11 +216,22 @@ pub(crate) fn pretty(text: &str) -> String {
                 let next_implicit = matches!(toks.get(i + 1), Some(Tok::Sqrt | Tok::Pi | Tok::Open));
                 if !next_implicit { out.push('\u{d7}'); }
             }
-            Tok::Op('+') => out.push_str(" + "),
-            Tok::Op('-') => out.push_str(if i == 0 || matches!(toks[i - 1], Tok::Open | Tok::Op(_)) { "\u{2212}" } else { " \u{2212} " }),
+            Tok::Op(c @ ('+' | '-')) => {
+                let sign = if *c == '+' { "+" } else { "\u{2212}" };
+                if unary(i) { if *c == '-' { out.push_str(sign); } } else { out.push_str(&format!(" {sign} ")); }
+                if let Some(r) = runs.last_mut() { *r = (out.len(), false); }
+            }
+            Tok::Op('/') => {
+                if let Some(r) = runs.last_mut() && r.1 {
+                    out.insert(r.0, '(');
+                    out.push(')');
+                    r.1 = false;
+                }
+                out.push('/');
+            }
             Tok::Op(c) => out.push(*c),
-            Tok::Open => out.push('('),
-            Tok::Close => out.push(')'),
+            Tok::Open => { out.push('('); runs.push((out.len(), false)); }
+            Tok::Close => { if runs.len() > 1 { runs.pop(); } out.push(')'); }
         }
         i += 1;
     }
