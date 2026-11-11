@@ -152,6 +152,9 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("ends", "Axis ends", &ENDS, ENDS[0]),
         ParamDef::choice("gridlines", "Gridlines", &GRIDLINES, GRIDLINES[0]).hint("Bold for photocopies."),
         ParamDef::choice("minor", "Minor gridlines", &MINOR, MINOR[0]),
+        // ---- batch 8: Off draws and acts as the figure always did (see `pick_b8`)
+        ParamDef::choice("pick", "Pick a line or centre on the grid", &pick_b8::PICKS, pick_b8::PICKS[0])
+            .hint("Choose which transformation, then click the grid: near the x-axis, the y-axis, y = x or y = \u{2212}x to reflect in that line, or at a grid point to turn or enlarge about it. The grid outlines what a click will choose; Pick goes back to Off after the click."),
     ]
 }
 
@@ -586,6 +589,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
             }
         }
     }
+    if let Some(n) = pick_b8::idle_note(p) { w.push(n); }
     if layout(p).clipped {
         w.push("An image runs past the largest grid (120 each way) and is cut off at its edge.".to_string());
     }
@@ -685,7 +689,7 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         // the images' looks only while an image is drawn; arrows only on the key, for a translation
         "image_colour" | "image_line" | "image_weight" => p.b(SHOW_ANSWERS) || p.b("question"),
         "show_arrows" => p.b(SHOW_ANSWERS) && steps(p).iter().any(|st| st.p.s("op") == "Translate"),
-        "show_guides" => steps(p).iter().any(|st| st.p.s("op") != "Translate"),
+        "show_guides" | "pick" => steps(p).iter().any(|st| st.p.s("op") != "Translate"),
         _ => true,
     }
 }
@@ -1700,6 +1704,8 @@ fn mirror_drag(axis: &str, m: Pt, cur: f64) -> f64 {
 /// or line is written back into its own "Then" line.
 pub fn handles(p: &Params) -> Vec<Handle> {
     let lay = layout(p);
+    // picking a line or a centre on the grid: the grid is one click area, and nothing else takes the pointer
+    if let Some(hs) = pick_b8::handles(p, &lay) { return hs; }
     let fr = lay.frame;
     let mut hs = Vec::new();
     let (lx0, lx1, ly0, ly1) = if p.b("fit") { (fr.x0, fr.x1, fr.y0, fr.y1) } else { stated(p) };
@@ -1886,6 +1892,9 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Name the transformation (question)", params: vec![s("op", OPS[2]), s("angle", ANGLES[1]), (SHOW_ANSWERS, Value::B(false)), ("question", Value::B(true))] },
     ])
 }
+
+/// Batch 8: picking a mirror line or a centre with a click on the grid.
+mod pick_b8;
 
 /// The figure as it was before batch 2, kept as a fixture: saved figures from then must load and render unchanged.
 #[cfg(test)]

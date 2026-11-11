@@ -3856,7 +3856,7 @@ const TRANSFORMATIONS: &[Faq] = &[
     },
     Faq {
         q: "Can I move the centre or the mirror line?",
-        a: "Yes, on the figure: drag the ring that marks the centre of a turn or an enlargement, or the knob on a mirror line x = a, y = a, y = x + a or y = -x + a. Each snaps to the grid, and the image and the rule follow. Or type them: the centre's x and y, the line's number a. A translation is set the same way: on the answer key, drag A' to where it should go, or click that grid point, and the whole image follows.",
+        a: "Yes, on the figure: drag the ring that marks the centre of a turn or an enlargement, or the knob on a mirror line x = a, y = a, y = x + a or y = -x + a. Each snaps to the grid, and the image and the rule follow. Or pick them with a click: under Pick a line or centre on the grid choose the transformation (First, or Second to Fourth for the ones typed under Then), then click the grid, near the x-axis, the y-axis, y = x or y = -x to reflect in that line, or at a grid point to turn or enlarge about it. The grid outlines what the click will choose before you click, and Pick goes back to Off after it. Or type them: the centre's x and y, the line's number a. A translation is set the same way: on the answer key, drag A' to where it should go, or click that grid point, and the whole image follows.",
     },
     Faq {
         q: "How big is the grid?",
