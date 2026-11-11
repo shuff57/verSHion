@@ -1348,6 +1348,10 @@ impl App {
             if b.get(1).cloned().is_some_and(|r| r.on_hover_text("Import files or pasted questions into this bank").clicked()) {
                 crate::importui::open_import_modal(ctx, bank_id);
             }
+            // What a bank gives you, in a quieter band attached under the card (the welcome page's
+            // hero and "How it works" pairing); gone with the first question.
+            ui.add_space(kit::GUTTER);
+            empty_bank_strip(ui);
         } else if order.is_empty() {
             if crate::pageshell::empty_line(ui, crate::handicons::BANKS, "No questions match those filters.", Some("Clear filters")).is_some() {
                 with_state(ctx, key, |s: &mut BankEditState| {
@@ -1989,6 +1993,118 @@ fn dashed_round_rect(p: &egui::Painter, r: Rect, rad: f32, stroke: Stroke) {
     }
     pts.push(pts[0]);
     p.extend(egui::Shape::dashed_line(&pts, stroke, 5.0, 4.0));
+}
+
+/// The empty bank's three facts: (icon, title, body). The first part's body is the list of types.
+const EMPTY_STRIP: [(&str, &str, &str); 3] = [
+    (egui_phosphor::regular::LIST_BULLETS, "Six question types", ""),
+    (egui_phosphor::regular::TAG, "Topics and difficulty", "Tag each question with topics and Easy, Medium or Hard, then filter the bank by them."),
+    (crate::handicons::EXAMS, "Use it in any exam", "On an exam's page, open this bank in the Question bank panel and add its questions."),
+];
+
+/// The strip under an empty bank's card: what a bank gives you, in three parts. A quiet companion
+/// to the card above it: the page's own `cream` inside a hairline (the card is the brighter `card`),
+/// no buttons. Three columns split by hairlines while the strip is at least 820 wide; below that,
+/// three rows, each title beside its text.
+fn empty_bank_strip(ui: &mut Ui) {
+    let w = ui.available_width();
+    let wide = w >= 820.0;
+    let pad = if wide { Margin::symmetric(4, 18) } else { Margin::symmetric(20, 16) };
+    Frame::new()
+        .fill(theme::cream())
+        .stroke(Stroke::new(1.0, theme::border()))
+        .corner_radius(CornerRadius::same(kit::R_CARD))
+        .inner_margin(pad)
+        .show(ui, |ui| {
+            // The card's own width rule (the frame's margin and hairline come off the page's width),
+            // so both bands end on one edge.
+            ui.set_width(ui.available_width());
+            // Rows as tall as their text: the default 24 pt widget row sat the type names and titles
+            // lower than the bodies beside them.
+            ui.spacing_mut().interact_size.y = 20.0;
+            let rule = Stroke::new(1.0, theme::border());
+            if wide {
+                ui.columns(3, |cols| {
+                    for (i, col) in cols.iter_mut().enumerate() {
+                        Frame::new().inner_margin(Margin::symmetric(20, 0)).show(col, |ui| {
+                            ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                                strip_title(ui, i);
+                                ui.add_space(6.0);
+                                strip_body(ui, i);
+                            });
+                        });
+                    }
+                });
+                let r = ui.min_rect();
+                for k in 1..3 {
+                    let x = (r.left() + r.width() * k as f32 / 3.0).round() + 0.5;
+                    ui.painter().vline(x, r.top() + 2.0..=r.bottom() - 2.0, rule);
+                }
+            } else {
+                // Rows: the title in a fixed column, its text beside it, a hairline between rows.
+                let title_w = 210.0_f32.min(ui.available_width() * 0.4);
+                for i in 0..3 {
+                    if i > 0 {
+                        ui.add_space(12.0);
+                        let y = ui.cursor().top().round() + 0.5;
+                        ui.painter().hline(ui.max_rect().x_range(), y, rule);
+                        ui.add_space(13.0);
+                    }
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 12.0;
+                        ui.allocate_ui_with_layout(Vec2::new(title_w, 0.0), Layout::top_down(Align::Min), |ui| {
+                            ui.set_width(title_w);
+                            strip_title(ui, i);
+                        });
+                        let bw = ui.available_width();
+                        ui.allocate_ui_with_layout(Vec2::new(bw, 0.0), Layout::top_down(Align::Min), |ui| {
+                            ui.set_width(bw);
+                            // the body's first line on the title's (22 tall at 17, 20 at 14)
+                            ui.add_space(1.0);
+                            strip_body(ui, i);
+                        });
+                    });
+                }
+            }
+        });
+}
+
+/// A strip part's title: its accent glyph, then the serif card title in ink.
+fn strip_title(ui: &mut Ui, i: usize) {
+    let (icon, title, _) = EMPTY_STRIP[i];
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        let (r, _) = ui.allocate_exact_size(Vec2::new(20.0, kit::ty::CARD_LINE), Sense::hover());
+        crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 18.0, theme::accent_col());
+        ui.add(egui::Label::new(theme::serif(title).size(kit::ty::CARD).color(theme::ink())).wrap());
+    });
+}
+
+/// A strip part's text: BODY in `text`; the first part lists the six types, each with the swatch
+/// its tiles' key and bar use, in the bar's order.
+fn strip_body(ui: &mut Ui, i: usize) {
+    if i > 0 {
+        ui.add(egui::Label::new(RichText::new(EMPTY_STRIP[i].2).size(kit::ty::BODY).color(theme::text_col()).line_height(Some(20.0))).wrap());
+        return;
+    }
+    let mut kinds = crate::bankops::KINDS;
+    kinds.sort_by_key(|k| mix_index(*k));
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(14.0, 0.0);
+        // Each item (swatch, gap, name) is one allocation, so the row wraps between items, never
+        // between a swatch and its name; the name is still its own label widget.
+        const SW: f32 = 9.0;
+        const SGAP: f32 = 6.0;
+        for k in kinds {
+            let text = RichText::new(k.label()).size(kit::ty::BODY).color(theme::text_col());
+            let g = egui::WidgetText::from(text.clone()).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Body);
+            let (r, _) = ui.allocate_exact_size(Vec2::new(SW + SGAP + g.size().x, 20.0), Sense::hover());
+            let sw = Rect::from_center_size(Pos2::new(r.left() + SW / 2.0, r.center().y), Vec2::splat(SW));
+            ui.painter().rect_filled(sw, CornerRadius::same(3), theme::type_hue(mix_index(k)));
+            let tr = Rect::from_min_max(Pos2::new(r.left() + SW + SGAP, r.top()), r.max);
+            ui.put(tr, egui::Label::new(text).extend());
+        }
+    });
 }
 
 /// The usage link's words ("Used in 1 exam").
@@ -4809,6 +4925,61 @@ mod tests {
         // A sliver is at least 4 and the bar still fits.
         let s = bar_segments(&[100, 1, 0, 0, 0, 0], &[], 80.0);
         assert!(s[1].2 - s[1].1 >= 4.0 - 0.01 && s[1].2 <= 80.0 + 0.01);
+    }
+
+
+    /// The empty bank page as the app draws it, `w` wide, for a bank holding the harness's questions.
+    fn bank_page_harness<'a>(w: f32) -> egui_kittest::Harness<'a, App> {
+        let tmp = std::env::temp_dir().join(format!("vs-bank-page-test-{}", std::process::id()));
+        crate::store::init(Box::new(crate::store::FsBackend::new(tmp)));
+        let mut app = App::new_from(&egui::Context::default());
+        app.store = Default::default();
+        app.store.banks.push(empty_bank());
+        app.bank = Some("b".into());
+        app.screen = Screen::BankEdit("b".into());
+        let mut first = true;
+        egui_kittest::Harness::builder().with_size(egui::vec2(w, 800.0)).build_ui_state(
+            move |ui, app: &mut App| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                app.draw_bank_edit(ui);
+            },
+            app,
+        )
+    }
+
+    /// An empty bank shows the "what a bank gives you" strip under its card, inside the card's
+    /// width and above the window's bottom at 1280 and 760, its six types and three titles real
+    /// labels; the first question takes the strip away.
+    #[test]
+    fn the_empty_bank_strip_shows_until_the_first_question() {
+        use egui_kittest::kittest::Queryable;
+        for w in [1110.0, 615.0] {
+            let mut h = bank_page_harness(w);
+            h.run();
+            let card = h.get_by_label("Add question").rect();
+            for t in ["Six question types", "Topics and difficulty", "Use it in any exam"] {
+                let r = h.get_by_label(t).rect();
+                assert!(r.top() > card.bottom(), "{w}: {t} sits under the card");
+                assert!(r.right() <= w + 0.5 && r.bottom() <= 800.0, "{w}: {t} inside the window, got {r:?}");
+            }
+            for k in crate::bankops::KINDS {
+                let r = h.get_by_label(k.label()).rect();
+                assert!(r.right() <= w + 0.5, "{w}: {} inside the window, got {r:?}", k.label());
+            }
+            for body in [EMPTY_STRIP[1].2, EMPTY_STRIP[2].2] {
+                let r = h.get_by_label(body).rect();
+                assert!(r.right() <= w + 0.5 && r.bottom() <= 800.0, "{w}: body wraps inside the window, got {r:?}");
+            }
+            h.state_mut().store.banks[0].questions.push(q("2 + 2 = ?", mc(&["4", "5"]), 1));
+            h.run();
+            for t in ["Six question types", "Topics and difficulty", "Use it in any exam"] {
+                assert!(h.query_by_label(t).is_none(), "{w}: {t} gone once the bank has a question");
+            }
+        }
     }
 
 }

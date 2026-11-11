@@ -129,7 +129,7 @@ pub fn desk_panel<R>(
             right: if margin >= 16 { margin.saturating_add(14) } else { margin },
         }))
         .show(root, |ui| {
-            if !theme::chem_skin() { theme::paint_grid(ui.painter(), ui.max_rect()); }
+            if !theme::chem_skin() { theme::paint_page_grid(ui.painter(), ui.max_rect()); }
             f(ui)
         })
         .inner
@@ -821,7 +821,7 @@ impl crate::App {
                 bottom: 10,
             }))
             .show(root, |ui| {
-                if !theme::chem_skin() { theme::paint_grid(ui.painter(), ui.max_rect()); }
+                if !theme::chem_skin() { theme::paint_page_grid(ui.painter(), ui.max_rect()); }
                 let rect = ui.max_rect();
                 ui.painter().rect(
                     rect,
