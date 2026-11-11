@@ -146,6 +146,8 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         ("dna-protein-synthesis", _) => super::biology::dna::relevant(key, p),
         ("photosynthesis", _) => super::biology::photosynthesis::relevant(key, p),
         ("motion-map" | "ray-diagram", _) => super::physics::relevant(fig, key, p),
+        ("particle-diagram", "lat_rows" | "lat_cols" | "lat_spacing") => atoms::lattice_relevant(p),
+        ("bohr-model", "protons") => atoms::protons_relevant(p),
         _ => super::stats::relevant(fig, key, p) && super::computing::relevant(fig, key, p) && super::electric::relevant(fig, key, p) && super::accounting::relevant(fig, key, p) && super::economics::relevant(fig, key, p) && super::earth::relevant(fig, key, p) && super::geography::relevant(fig, key, p) && super::music::relevant(fig, key, p) && super::business::relevant(fig, key, p) && super::language::relevant(fig, key, p) && super::health::relevant(fig, key, p) && super::art::relevant(fig, key, p),
     }
 }

@@ -4,6 +4,13 @@ use super::*;
 use crate::figures::{ParamDef, Params, Subject};
 use std::f64::consts::PI;
 
+mod b10;
+#[cfg(test)]
+mod b10_tests;
+pub use b10::{lattice_note, lattice_relevant, protons_note, protons_relevant};
+#[cfg(test)]
+pub(crate) use b10::corrected as b10_corrected;
+
 pub fn defs() -> Vec<FigureDef> {
     vec![
         FigureDef { id: "particle-diagram", subject: Subject::Chemistry, title: "Particle Diagram",
@@ -62,19 +69,29 @@ fn bohr_params() -> Vec<ParamDef> {
         ParamDef::bool("brackets", "Brackets", false)
             .hint("Put an ion in square brackets with its charge at the top right."),
         title_style(false),
+        ParamDef::int("protons", "Protons", -1, 200, -1)
+            .hint("-1 takes the element’s atomic number."),
     ]
 }
 
 /// Geometry shared by the renderer and its handles.
-pub(super) struct Bohr { pub z: usize, pub shown: Vec<u32>, pub neutral: Vec<u32>, pub r0: f64, pub radii: Vec<f64>, pub cx: f64, pub cy: f64, pub w: f64, pub h: f64, pub neutrons: usize }
+pub(super) struct Bohr { pub z: usize, pub shown: Vec<u32>, pub neutral: Vec<u32>, pub r0: f64, pub radii: Vec<f64>, pub cx: f64, pub cy: f64, pub w: f64, pub h: f64, pub neutrons: usize,
+    /// Protons drawn: the element's, or the teacher's own count.
+    pub protons: usize,
+    /// The charge the brackets and caption state: the Charge control, or with protons set by hand,
+    /// protons minus the electrons on the shells.
+    pub charge: i64 }
 
 pub(super) fn bohr_geom(p: &Params) -> Bohr {
     let z = z_of(p.s("element"));
-    let charge = p.i("charge");
+    let shell_charge = p.i("charge");
     let custom: Vec<u32> = p.s("shells_custom").split(|c| c == ',' || c == ';' || c == ' ').filter_map(|t| t.trim().parse::<u32>().ok()).take(8).collect();
-    let mut shown = if custom.iter().any(|&c| c > 0) { custom } else { shells(z, charge) };
+    let mut shown = if custom.iter().any(|&c| c > 0) { custom } else { shells(z, shell_charge) };
     while shown.len() > 1 && shown.last() == Some(&0) { shown.pop(); }
     let neutral = shells(z, 0);
+    let hand = b10::protons(p);
+    let protons = hand.unwrap_or(z);
+    let charge = match hand { Some(pr) => pr as i64 - shown.iter().map(|&e| e as i64).sum::<i64>(), None => shell_charge };
     let neutrons = if p.i("neutrons") >= 0 { p.i("neutrons") as usize } else { mass_number(z).saturating_sub(z) };
     let nb = z + neutrons;
     let r0 = 36.0;
@@ -84,11 +101,15 @@ pub(super) fn bohr_geom(p: &Params) -> Bohr {
     let radii: Vec<f64> = (0..nrings).map(|i| 70.0 + 26.0 * i as f64).collect();
     let rmax = *radii.last().unwrap();
     let side = 2.0 * (rmax + 28.0);
-    let bw = if p.b("brackets") && charge != 0 { 40.0 } else { 0.0 };
+    let bw = if p.b("brackets") && charge != 0 {
+        // a charge counted from protons set by hand can run to three digits: room for it past the bracket
+        let chars = if charge.abs() > 1 { charge.abs().to_string().len() + 1 } else { 1 };
+        if hand.is_some() { 40.0 + (10.5 * chars as f64 - 12.0).max(0.0) } else { 40.0 }
+    } else { 0.0 };
     let key_w = if p.b("key") { 220.0 } else { 0.0 };
     let w = side + 2.0 * bw + key_w;
     let h = side + if p.b("caption") { 36.0 } else { 0.0 };
-    Bohr { z, shown, neutral, r0, radii, cx: bw + side / 2.0, cy: side / 2.0, w, h, neutrons }
+    Bohr { z, shown, neutral, r0, radii, cx: bw + side / 2.0, cy: side / 2.0, w, h, neutrons, protons, charge }
 }
 
 fn ball(d: &mut Doc, x: f64, y: f64, r: f64, fill: &str, sym: &str) {
@@ -118,7 +139,7 @@ fn electron_angles(n: usize, paired: bool, r: f64) -> Vec<f64> {
 fn bohr_render(p: &Params) -> String {
     let g = bohr_geom(p);
     let z = g.z;
-    let charge = p.i("charge");
+    let charge = g.charge;
     let (cx, cy) = (g.cx, g.cy);
     let mut d = Doc::new(g.w, g.h);
     let ecol = color9(p.s("electron_color"));
@@ -158,7 +179,7 @@ fn bohr_render(p: &Params) -> String {
     match p.s("nucleus") {
         "Blank" => { d.circle(cx, cy, r0, "#ececec", INK, 2.0); }
         "Balls" => {
-            let n = z + g.neutrons;
+            let n = g.protons + g.neutrons;
             let br = 7.0f64.min(60.0 / (1.05 * (n.max(1) as f64).sqrt()));
             // hex grid points nearest the centre
             let mut pts: Vec<(f64, f64)> = Vec::new();
@@ -175,7 +196,7 @@ fn bohr_render(p: &Params) -> String {
             keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
             let mut pts: Vec<(f64, f64)> = keyed.into_iter().map(|k| k.1).take(n).collect();
             pts.truncate(n);
-            let mut kinds: Vec<bool> = (0..n).map(|k| k < z).collect();
+            let mut kinds: Vec<bool> = (0..n).map(|k| k < g.protons).collect();
             for i in (1..kinds.len()).rev() { let j = (rg.next() * (i as f64 + 1.0)) as usize % (i + 1); kinds.swap(i, j); }
             // draw back to front (top rows first) so the cluster reads as a pile
             let mut order: Vec<usize> = (0..n).collect();
@@ -188,7 +209,7 @@ fn bohr_render(p: &Params) -> String {
         }
         "Protons and neutrons" => {
             d.circle(cx, cy, r0, "#ececec", INK, 2.0);
-            tx(&mut d, cx, cy - 3.0, 15.0, "middle", INK, true, &format!("{z} p⁺"));
+            tx(&mut d, cx, cy - 3.0, 15.0, "middle", INK, true, &format!("{} p⁺", g.protons));
             tx(&mut d, cx, cy + 16.0, 15.0, "middle", INK, true, &format!("{} n⁰", g.neutrons));
         }
         _ => {
@@ -507,6 +528,9 @@ fn particle_params() -> Vec<ParamDef> {
         ParamDef::text("note", "Key note", ""),
         ParamDef::choice("border", "Box border", &["Single", "Double", "None"], "Single"),
         title_style(false),
+        ParamDef::int("lat_rows", "Lattice rows", 0, 12, 0).hint("0 sets them from the counts."),
+        ParamDef::int("lat_cols", "Lattice columns", 0, 12, 0).hint("0 sets them from the counts."),
+        ParamDef::choice("lat_spacing", "Lattice particles", &["Touching", "Spaced apart"], "Touching"),
     ]);
     v
 }
@@ -697,7 +721,8 @@ fn spread_kinds(counts: &[usize], rows: usize, cols: usize) -> Option<Vec<usize>
     Some(kind.into_iter().map(|k| k.unwrap_or(major)).collect())
 }
 
-fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice: bool, gaps: bool, items: &[Species], seed: u64, border: &str) {
+#[allow(clippy::too_many_arguments)]
+fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice: bool, gaps: bool, items: &[Species], seed: u64, border: &str, lat: &b10::Lat) {
     match border {
         "None" => {}
         "Double" => { d.rect(bx, by, bs, bs, "none", INK, 1.6); d.rect(bx - 5.0, by - 5.0, bs + 10.0, bs + 10.0, "none", INK, 1.6); }
@@ -706,6 +731,12 @@ fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice:
     if items.is_empty() { return; }
     let mut rg = Rng(seed);
     let m = 8.0;
+    // a set size or spacing, or kinds of different sizes (which the lattice before batch 10 drew
+    // each shrunk into its own square, so the larger ones did not touch their neighbours)
+    if layout_lattice && (lat.custom() || b10::mixed_sizes(items)) {
+        b10::lattice(d, bx, by, bs, items, lat);
+        return;
+    }
     if layout_lattice {
         let n = items.len();
         let maxb = items.iter().map(bound).fold(0.0, f64::max);
@@ -862,13 +893,14 @@ fn particle_render(p: &Params) -> String {
     let h = bs + if two { 62.0 } else { 32.0 };
     let mut d = Doc::new(w, h);
     let seed = p.i("shuffle").max(0) as u64 * 7919;
+    let lat = b10::Lat::of(p);
     if show != "Key only" {
         let before = build(false);
-        fill_box(&mut d, 16.0, 16.0, bs, p.s("state"), lattice, gaps, &before, 11 + seed, p.s("border"));
+        fill_box(&mut d, 16.0, 16.0, bs, p.s("state"), lattice, gaps, &before, 11 + seed, p.s("border"), &lat);
         if two {
             let after = build(true);
             d.arrow(bs + 34.0, 16.0 + bs / 2.0, bs + 108.0, 16.0 + bs / 2.0, INK, 2.2);
-            fill_box(&mut d, bs + 126.0, 20.0, bs, p.s("state2"), lattice, gaps, &after, 23 + seed, p.s("border"));
+            fill_box(&mut d, bs + 126.0, 20.0, bs, p.s("state2"), lattice, gaps, &after, 23 + seed, p.s("border"), &lat);
             tx(&mut d, 16.0 + bs / 2.0, bs + 48.0, 15.0, "middle", INK, true, p.s("lab_before"));
             tx(&mut d, bs + 126.0 + bs / 2.0, bs + 48.0, 15.0, "middle", INK, true, p.s("lab_after"));
         }
@@ -899,8 +931,8 @@ pub(super) fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Han
             let (cx, cy) = (g.cx, g.cy);
             let rmax = *g.radii.last().unwrap();
             Some(vec![
-                Handle::zone((cx, cy), (g.r0 * 1.8, g.r0 * 1.8), "Click: next element. Scroll: change element", |q| step_element(q, 1, 118))
-                    .with_scroll(|q, dy| step_element(q, if dy > 0.0 { 1 } else { -1 }, 118)),
+                Handle::zone((cx, cy), (g.r0 * 1.8, g.r0 * 1.8), "Click: next element. Scroll: change element", |q| { step_element(q, 1, 118); q.set_i("protons", -1); })
+                    .with_scroll(|q, dy| { step_element(q, if dy > 0.0 { 1 } else { -1 }, 118); q.set_i("protons", -1); }),
                 Handle::zone((cx, cy - rmax), (60.0, 22.0), "Click: add an electron (charge). Scroll up adds, down removes", |q| {
                     let c = q.i("charge");
                     q.set_i("charge", if c <= -8 { 8 } else { c - 1 });

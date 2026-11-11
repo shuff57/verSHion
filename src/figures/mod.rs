@@ -856,6 +856,10 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     if id == chemistry::nuclide::ID {
         chemistry::nuclide::panel_changed(key, old, p);
     }
+    // picking an element sets its protons, as the reference does (a count typed by hand is dropped)
+    if (id, key) == ("bohr-model", "element") {
+        p.set_i("protons", -1);
+    }
     if let ("pulley", "setup", Value::S(old)) = (id, key, old) {
         physics::pulley_setup_changed(old, p);
     }

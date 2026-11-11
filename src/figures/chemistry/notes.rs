@@ -139,6 +139,13 @@ pub fn key_note(fig: &str, key: &str, p: &Params) -> Option<Note> {
             note("The same kinds of particle in both, each with a count before and after, for a reaction or a change of state.")
         }
         ("particle-diagram", "key_list") if p.s("key_list") == "Each atom" => note("Each different atom once, for students to write formulas from."),
+        ("particle-diagram", "lat_cols") => super::atoms::lattice_note(p).map(|(text, refused)| Note { text, warn: refused }),
+        ("particle-diagram", "lat_spacing") if super::atoms::lattice_relevant(p) => note(if p.s("lat_spacing") == "Spaced apart" {
+            "A gap between neighbours, for a lattice drawn as points in space."
+        } else {
+            "Neighbours touch, as the ions or atoms pack in a real solid."
+        }),
+        ("bohr-model", "protons") => super::atoms::protons_note(p).map(|text| Note { text, warn: false }),
         _ => None,
     }
 }

@@ -24,7 +24,7 @@ static FIG_0: [RefSection; 2] = [
 
 static FIG_1: [RefSection; 7] = [
     s("Atom or ion", &["charge", "gained_lost"], "Picking an element sets its protons, its neutrons from the mass number (C: 12 − 6 = 6) and, for a neutral atom, its shells."),
-    s("Protons, neutrons and electrons", &["empty", "caption", "neutrons", "shuffle", "shell_labels"], "Set any count by hand. Nothing is checked, so a wrong atom draws exactly as set."),
+    s("Protons, neutrons and electrons", &["empty", "caption", "protons", "neutrons", "shuffle", "shell_labels"], "Set any count by hand. Nothing is checked, so a wrong atom draws exactly as set."),
     s("Drawing", &["element", "nucleus", "placement"], ""),
     s("Colors and symbols", &["proton_color", "proton_symbol", "neutron_color", "neutron_symbol", "electron_color", "electron_symbol"], ""),
     s("Labels", &["shells_custom", "key", "brackets"], ""),
@@ -254,7 +254,7 @@ static FIG_25: [RefSection; 6] = [
 ];
 
 static FIG_26: [RefSection; 6] = [
-    s("Layout", &["layout", "boxes", "state", "state2", "gaps"], ""),
+    s("Layout", &["layout", "boxes", "state", "state2", "gaps", "lat_rows", "lat_cols", "lat_spacing"], ""),
     s("Particles", &["d_count", "d_shape", "d_size", "d_shade", "shuffle", "a2_count", "b2_count", "c2_count", "d2_count"], ""),
     s("Key", &["key_show", "key_list", "note"], ""),
     s("Box", &["border"], ""),
