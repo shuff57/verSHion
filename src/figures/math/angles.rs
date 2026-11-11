@@ -169,17 +169,17 @@ pub(crate) struct Half { pub src: usize, pub back: bool }
 #[derive(Clone, Debug)]
 pub(crate) struct Sec { pub a0: f64, pub a1: f64, pub from: Half, pub to: Half, pub rad: f64 }
 
-/// `len`: the rays' length as drawn: LEN, or shorter on a crowded figure whose labels would not otherwise fit on the page
-/// (`fit_crowded`); `out`: how much further than usual out past the end names a crowded figure's out-going labels start, to leave
-/// the names room between the leaders.
+/// `len`: the rays' length as drawn (LEN). `size`: the canvas, 480 x 360, or larger for a crowded figure whose labels and names
+/// reach past it (`fit_crowded`); `org`: how far the drawing is moved on the canvas from where it is laid out (every position here
+/// is laid out on the 480 x 360 page about C; the drawing, its handles and clicks are moved by `org`).
 #[derive(Clone, Debug)]
-pub(crate) struct Lay { pub dirs: Vec<(f64, Half)>, pub wrap: bool, pub secs: Vec<Sec>, pub turn: f64, pub crowded: bool, pub len: f64, pub out: f64 }
+pub(crate) struct Lay { pub dirs: Vec<(f64, Half)>, pub wrap: bool, pub secs: Vec<Sec>, pub turn: f64, pub crowded: bool, pub len: f64, pub org: Pt, pub size: Pt }
 
 impl Lay {
     pub(crate) fn dir_of(&self, h: Half) -> Option<f64> { self.dirs.iter().find(|x| x.1 == h).map(|x| x.0) }
     /// The end of a half, unturned.
     pub(crate) fn end(&self, h: Half) -> Option<Pt> { self.dir_of(h).map(|a| interact::polar(C, a, self.len)) }
-    /// A radius of the hit test's ray parts, shrunk with the rays.
+    /// A radius of the hit test's ray parts, in proportion to the rays' length.
     fn part_r(&self, r: f64) -> f64 { if self.len == LEN { r } else { r * self.len / LEN } }
     pub(crate) fn place_at(&self, pl: Place) -> Option<Pt> { match pl { Place::Vertex => Some(C), Place::End(h) => self.end(h) } }
     /// The sector containing direction `phi` (unturned), as its number.
@@ -202,26 +202,25 @@ pub(crate) fn layout(p: &Params) -> Lay {
         }
     }
     let crowded = ray_rows(p).iter().any(|r| r.0 >= OLD_RAYS);
-    let mut l = Lay { dirs, wrap, secs, turn: p.f("turn"), crowded, len: LEN, out: 0.0 };
-    if crowded && !l.secs.is_empty() { (l.len, l.out) = fit_crowded(p, &l); }
+    let mut l = Lay { dirs, wrap, secs, turn: p.f("turn"), crowded, len: LEN, org: (0.0, 0.0), size: (480.0, 360.0) };
+    if crowded && !l.secs.is_empty() { (l.org, l.size) = fit_crowded(p, &l); }
     l
 }
 
-/// The longest rays (LEN, then shorter by 10 down to 90), with the out-going labels as close in as will do, with which every
-/// label and every name at the rays' ends of a crowded figure finds a clear spot; if none does, the one that leaves the fewest
-/// without one.
-fn fit_crowded(p: &Params, l: &Lay) -> (f64, f64) {
-    let mut best = (usize::MAX, (LEN, 0.0));
-    for len in [LEN, 130.0, 120.0, 110.0, 100.0, 90.0] {
-        for out in [0.0, 8.0, 16.0, 24.0, 32.0] {
-            let mut t = l.clone();
-            (t.len, t.out) = (len, out);
-            let miss = place_crowded(p, &t).misses;
-            if miss == 0 { return (len, out); }
-            if miss < best.0 { best = (miss, (len, out)); }
-        }
+/// The canvas a crowded figure needs: 480 x 360 with the vertex at C, grown (and the drawing moved on it) just enough to hold
+/// every ray, label and name with 6 to spare, where its labels and names reach past the page (a tight fan pointing up or down
+/// at Large stacks them further out than the page has room for).
+fn fit_crowded(p: &Params, l: &Lay) -> (Pt, Pt) {
+    let pl = place_crowded(p, l);
+    let (mut x0, mut y0, mut x1, mut y1) = (0.0f64, 0.0f64, 480.0f64, 360.0f64);
+    let mut grow = |q: Pt, m: f64| { x0 = x0.min(q.0 - m); y0 = y0.min(q.1 - m); x1 = x1.max(q.0 + m); y1 = y1.max(q.1 + m); };
+    for (a, _) in &l.dirs { grow(interact::polar(C, a + l.turn, l.len), 12.0); }
+    for b in pl.scene.taken.iter() {
+        grow((b.0 .0 - b.1 .0, b.0 .1 - b.1 .1), 6.0);
+        grow((b.0 .0 + b.1 .0, b.0 .1 + b.1 .1), 6.0);
     }
-    best.1
+    let org = ((-x0).ceil(), (-y0).ceil());
+    (org, ((x1 - x0).ceil().max(480.0), (y1 - y0).ceil().max(360.0)))
 }
 
 // ------------------------------------------------------------------------------------------------ marks and lists
@@ -532,7 +531,8 @@ fn seg_meets_box(a: Pt, e: Pt, b: Bx, m: f64) -> bool {
 
 /// What a new text must keep clear of: the rays (as drawn, turned), their ends (arrowheads and dots), the texts placed so far and
 /// the leader lines drawn so far.
-/// (`exact`: on a crowded figure the rays are tested exactly, `seg_meets_box`; elsewhere by the sampled test the figure has used.)
+/// (`exact`: on a crowded figure the rays are tested exactly, `seg_meets_box`, and the page is no limit, its canvas grows;
+/// elsewhere by the sampled test the figure has used, on the page.)
 pub(crate) struct Scene { rays: Vec<(Pt, Pt)>, ends: Vec<Pt>, pub(crate) taken: Vec<Bx>, pub(crate) lines: Vec<(Pt, Pt)>, exact: bool }
 impl Scene {
     fn new(l: &Lay) -> Scene {
@@ -540,7 +540,7 @@ impl Scene {
         Scene { ends: rays.iter().map(|r| r.1).collect(), rays, taken: vec![], lines: vec![], exact: l.crowded }
     }
     fn clear(&self, b: Bx) -> bool {
-        b.0 .0 - b.1 .0 >= 2.0 && b.0 .1 - b.1 .1 >= 2.0 && b.0 .0 + b.1 .0 <= 478.0 && b.0 .1 + b.1 .1 <= 358.0
+        (self.exact || (b.0 .0 - b.1 .0 >= 2.0 && b.0 .1 - b.1 .1 >= 2.0 && b.0 .0 + b.1 .0 <= 478.0 && b.0 .1 + b.1 .1 <= 358.0))
             && box_pt_dist(b, C) > 4.0
             && self.rays.iter().all(|(a, e)| if self.exact { !seg_meets_box(*a, *e, b, 2.5) } else { !seg_hits_box(*a, *e, b.0, b.1, 2.5) })
             && self.ends.iter().all(|e| box_pt_dist(b, *e) > 8.0)
@@ -626,24 +626,22 @@ pub(crate) fn label_boxes(p: &Params, l: &Lay, scene: &mut Scene) -> Vec<Option<
 pub(crate) struct Spot { pub b: Bx, pub leader: Option<(Pt, Pt)> }
 
 /// What a crowded figure puts round its rays: each angle's label, the names at the rays' ends (name, box, whether a named point's),
-/// what is placed (for the vertex's name, placed last), and how many texts found no clear spot.
-pub(crate) struct Placed { pub labels: Vec<Option<Spot>>, pub ends: Vec<(String, Bx, bool)>, pub scene: Scene, pub misses: usize }
+/// and what is placed (for the vertex's name, placed last, and the canvas, `fit_crowded`).
+pub(crate) struct Placed { pub labels: Vec<Option<Spot>>, pub ends: Vec<(String, Bx, bool)>, pub scene: Scene }
 
 /// Places a crowded figure's labels and end names (rays 7-12 in use). A label goes on its angle's bisector, at the first distance
 /// out from its mark where its box stays inside the rays' ends clear of every ray, end and label. The others go out past the
-/// rays' ends, each with a leader line: a straight line from the vertex's direction, inside its own angle, from just past its mark
-/// out to the label, so no two leaders meet and each points into its own angle. The names at the rays' ends and the leaders'
-/// directions are laid out together (`ring_pack`) so every name keeps clear of the leaders beside it; a name the row cannot fit is
-/// nudged out or aside until it keeps clear of the rays, labels, leaders and the names before it. Then each out-going label goes
-/// on its leader's line past the names at its two rays' ends, at the first distance where it keeps clear of everything placed and
-/// of the other leaders' lines (so neighbours step out to a second ring) and its leader passes no text.
+/// rays' ends on their bisector, each with a leader line along the bisector from just past its mark (inside its own angle all the
+/// way, so no two leaders meet, none runs along a ray, and the narrowed arrowheads, `arrow_halves`, leave it room), stepping out
+/// until clear, so tight neighbours stagger. The names at the rays' ends go last, each on its own ray's line past its end,
+/// stepping out until clear of everything: a name sits further out where labels fill the space by the ends, never beside another
+/// ray. The page is no limit here: the canvas grows to hold what is placed (`fit_crowded`).
 pub(crate) fn place_crowded(p: &Params, l: &Lay) -> Placed {
     let fs = fscale(p);
     let (size, psz) = (15.0 * fs, 17.0 * fs);
     let texts = label_texts(p, l);
     let pts = points(p, l);
     let mut scene = Scene::new(l);
-    let mut misses = 0;
     let n = l.secs.len();
     let mut labels: Vec<Option<Spot>> = vec![None; n];
     let unit = |a: f64| interact::polar((0.0, 0.0), a, 1.0);
@@ -668,170 +666,80 @@ pub(crate) fn place_crowded(p: &Params, l: &Lay) -> Placed {
             None => out_idx.push(i),
         }
     }
-    // the names at the rays' ends and the leaders' directions, laid out together round the ends
-    let names: Vec<Option<(String, bool)>> = l.dirs.iter().enumerate().map(|(i, (_, h))| match pts.iter().find(|x| x.1 == Place::End(*h)) {
-        Some((n, _)) if n.is_empty() => None,
-        Some((n, _)) => Some((n.clone(), true)),
-        None if p.b("letters") => Some((((b'B' + i as u8) as char).to_string(), false)),
-        None => None,
-    }).collect();
-    let (name_at, dir_of) = ring_pack(l, &names, &out_idx, psz);
-    let corridors: Vec<(Pt, Pt)> = out_idx.iter().map(|&i| (interact::polar(C, dir_of[i], mark_r(i) + 2.0), interact::polar(C, dir_of[i], 700.0))).collect();
-    let mut ends = vec![];
-    // how far out each ray's end name reaches
-    let mut far = vec![0.0f64; l.dirs.len()];
-    for (k, nm) in names.iter().enumerate() {
-        let Some((name, named)) = nm else { continue };
-        let hb = ink_box(name, psz);
-        let ok = |b: Bx, scene: &Scene| scene.clear(b) && corridors.iter().all(|(a, e)| !seg_meets_box(*a, *e, b, 3.0));
-        let mut b = (name_at[k], hb);
-        if !ok(b, &scene) {
-            // its usual spot (a letter out along the ray, a name just clear of the end, turned round the end for a long one), then
-            // further out along the ray and a little to either side
-            let a = l.dirs[k].0;
-            let e = interact::polar(C, a + l.turn, l.len);
-            let mut cands: Vec<Pt> = vec![];
-            let turns: &[f64] = if *named { &[0.0, -45.0, 45.0, -90.0, 90.0, -135.0, 135.0] } else { &[0.0] };
-            let mut offs: Vec<(f64, f64)> = (-2..=20).flat_map(|dr| (-8..=8).map(move |dt| (dr as f64 * 2.0, dt as f64 * 1.5))).collect();
-            offs.sort_by(|x, y| (x.0.abs() + x.1.abs()).total_cmp(&(y.0.abs() + y.1.abs())));
-            for &tb in turns {
-                let w = unit(a + l.turn + tb);
-                let base = if *named { (9.0 + hb.0 * w.0.abs() + hb.1 * w.1.abs()).max(if tb == 0.0 { 16.0 } else { 9.0 }) } else { 16.0 };
-                let side = (-w.1, w.0);
-                for (dr, dt) in &offs { cands.push((e.0 + w.0 * (base + dr) + side.0 * dt, e.1 + w.1 * (base + dr) + side.1 * dt)); }
-            }
-            b = cands.iter().map(|c| (*c, hb)).find(|b| ok(*b, &scene)).unwrap_or_else(|| { misses += 1; b });
-        }
-        scene.taken.push(b);
-        far[k] = radial_range(b).1;
-        ends.push((name.clone(), b, *named));
-    }
-    // out past the names at its two rays' ends, each on its own line, with a leader
-    let starts: Vec<(usize, Pt)> = out_idx.iter().zip(&corridors).map(|(&i, c)| (i, c.0)).collect();
-    let bisectors: Vec<(usize, Pt, Pt)> = out_idx.iter().zip(&corridors).map(|(&i, c)| (i, c.0, c.1)).collect();
-    for &(i, from) in &starts {
+    // out past the rays' ends, each on its angle's bisector with a leader from its mark: at the first distance out where its box
+    // keeps clear of the rays, their ends, every label and leader placed and the bisectors of the out-going labels still to come,
+    // and its leader passes no label (so neighbours step out, one past the other)
+    let bis: Vec<(usize, Pt, Pt)> = out_idx.iter().map(|&i| (i, interact::polar(C, mid_of(i), mark_r(i) + 2.0), interact::polar(C, mid_of(i), 700.0))).collect();
+    let past = l.len + 8.0;
+    for (n_placed, &(i, from, _)) in bis.iter().enumerate() {
         let hb = half_box(&texts[i], size);
-        let m = unit(dir_of[i]);
+        let m = unit(mid_of(i));
         let at = |r: f64| ((C.0 + m.0 * r, C.1 + m.1 * r), hb);
-        let ring = (l.len + 8.0).max(far[i] + 3.0).max(far[(i + 1) % far.len()] + 3.0) + l.out;
-        let mut r = ring;
+        let mut r = past;
         let (mut found, mut first) = (None, None);
-        while r < 420.0 {
+        while r < 2000.0 {
             let b = at(r);
             r += 2.0;
-            if radial_range(b).0 < ring { continue; }
+            if radial_range(b).0 < past { continue; }
             if first.is_none() { first = Some(b); }
-            if b.0 .0 - b.1 .0 < 2.0 || b.0 .1 - b.1 .1 < 2.0 || b.0 .0 + b.1 .0 > 478.0 || b.0 .1 + b.1 .1 > 358.0 { break; }
             let to = box_edge(b, from);
             if scene.clear(b)
                 && scene.taken.iter().all(|t| !seg_meets_box(from, to, *t, 3.0))
-                && bisectors.iter().all(|(j, s, e)| *j == i || !seg_meets_box(*s, *e, b, 3.0))
+                && bis.iter().skip(n_placed + 1).all(|(_, s, e)| !seg_meets_box(*s, *e, b, 3.0))
             {
                 found = Some(b);
                 break;
             }
         }
-        let b = found.unwrap_or_else(|| { misses += 1; first.unwrap_or_else(|| at(ring)) });
+        let b = found.or(first).unwrap_or_else(|| at(past));
         let to = box_edge(b, from);
         scene.taken.push(b);
         scene.lines.push((from, to));
         labels[i] = Some(Spot { b, leader: Some((from, to)) });
     }
-    Placed { labels, ends, scene, misses }
+    // the names at the rays' ends: each on its own ray's line, past its end, at the first distance out where it keeps clear of the
+    // rays, their ends, the labels, the leaders and the names before it (so a name never stands beside another ray, and the names
+    // keep the rays' order round the vertex)
+    let mut ends = vec![];
+    for (k, (a, h)) in l.dirs.iter().enumerate() {
+        let name = match pts.iter().find(|x| x.1 == Place::End(*h)) {
+            Some((n, _)) if n.is_empty() => continue,
+            Some((n, _)) => n.clone(),
+            None if p.b("letters") => ((b'B' + k as u8) as char).to_string(),
+            None => continue,
+        };
+        let named = pts.iter().any(|x| x.1 == Place::End(*h));
+        let hb = ink_box(&name, psz);
+        let u = unit(a + l.turn);
+        let rad = hb.0 * u.0.abs() + hb.1 * u.1.abs();
+        let at = |r: f64| ((C.0 + u.0 * r, C.1 + u.1 * r), hb);
+        let mut r = l.len + if named { (9.0 + rad).max(16.0) } else { 16.0 };
+        let (mut found, first) = (None, at(r));
+        while r < 2000.0 {
+            let b = at(r);
+            if scene.clear(b) { found = Some(b); break; }
+            r += 2.0;
+        }
+        let b = found.unwrap_or(first);
+        scene.taken.push(b);
+        ends.push((name, b, named));
+    }
+    Placed { labels, ends, scene }
 }
 
-/// Lays the names at the rays' ends and the out-going labels' leader lines round the ends together, in their order round the
-/// vertex, as one row: each name at its usual distance out and as near its ray's direction as it can be (a name squeezed between
-/// two leaders steps further out, 4 px at a time, where the row has more room), each leader a straight line from the vertex's
-/// direction somewhere inside its angle (as near the bisector as it can be, and clear of the two rays' arrowheads), every name
-/// kept clear of the leaders either side of it and of the next name. Returns each name's centre (screen) and each angle's leader
-/// direction (turned degrees; the bisector for an angle with no leader).
-fn ring_pack(l: &Lay, names: &[Option<(String, bool)>], out_idx: &[usize], psz: f64) -> (Vec<Pt>, Vec<f64>) {
-    #[derive(Clone, Copy, PartialEq)]
-    enum Kind { Name(usize), Lead(usize) }
-    // an item: what it is, where it would go, its bounds (degrees, turned and unwrapped), its distance out and its half extent
-    // across the radius (names)
-    struct It { k: Kind, d: f64, lo: f64, hi: f64, r: f64, t: f64, tl: f64 }
+/// The half width of the arrowhead on each ray (by its place in `l.dirs`): 5, as the figure has always drawn it; on a crowded
+/// figure narrower beside a tight angle, so a leader line out along that angle's bisector passes between the two arrowheads at
+/// least 1.5 clear (never under 1.5 wide).
+fn arrow_halves(l: &Lay) -> Vec<f64> {
     let nd = l.dirs.len();
-    let mut dir_of: Vec<f64> = l.secs.iter().map(|s| (s.a0 + s.a1) / 2.0 + l.turn).collect();
-    let mut name_at: Vec<Pt> = vec![C; nd];
-    // the row starts after the widest angle (round a point) or at the first ray
-    let start = if l.wrap { l.secs.iter().enumerate().max_by(|a, b| (a.1.a1 - a.1.a0).total_cmp(&(b.1.a1 - b.1.a0))).map_or(0, |x| (x.0 + 1) % nd) } else { 0 };
-    // a leader keeps 1 px off the arrowheads (5 either side of the ray, 12 back from its end)
-    let arrow = ((5.0 + 1.0) / (l.len - 12.0)).asin().to_degrees();
-    let mut extra = vec![0.0; nd];
-    let mut best: Option<(f64, Vec<It>, Vec<f64>)> = None;
-    for _ in 0..60 {
-        let mut items: Vec<It> = vec![];
-        for j in 0..nd {
-            let k = (start + j) % nd;
-            let base = l.dirs[k].0 + l.turn + if k < start { 360.0 } else { 0.0 };
-            if let Some((name, named)) = &names[k] {
-                let hb = ink_box(name, psz);
-                let u = interact::polar((0.0, 0.0), base, 1.0);
-                // (half extents across the radius of the box grown by m on every side, as the checks grow it)
-                let across = |m: f64| (hb.0 + m) * u.1.abs() + (hb.1 + m) * u.0.abs();
-                let rad = hb.0 * u.0.abs() + hb.1 * u.1.abs();
-                let r = l.len + if *named { (9.0 + rad).max(16.0) } else { 16.0 } + extra[k];
-                let shift = ((across(0.0) + 3.0) / r).to_degrees();
-                items.push(It { k: Kind::Name(k), d: base, lo: base - shift, hi: base + shift, r, t: across(1.5), tl: across(3.5) });
-            }
-            if k < l.secs.len() && out_idx.contains(&k) {
-                let s = &l.secs[k];
-                let (a0, a1) = (base, base + (s.a1 - s.a0));
-                let (lo, hi) = if a1 - a0 > 2.0 * arrow { (a0 + arrow, a1 - arrow) } else { ((a0 + a1) / 2.0, (a0 + a1) / 2.0) };
-                items.push(It { k: Kind::Lead(k), d: (a0 + a1) / 2.0, lo, hi, r: 0.0, t: 0.0, tl: 0.0 });
-            }
-        }
-        // the least gap (degrees) between neighbours a and b in the row: a name's box keeps 3.5 off a leader line (the distance
-        // from a line through the vertex to the box is r sin(gap) less its half extent across), and 3 off the next name
-        let need = |a: &It, b: &It| -> f64 {
-            match (a.k, b.k) {
-                (Kind::Name(_), Kind::Name(_)) => ((a.t + b.t) / a.r.min(b.r)).to_degrees(),
-                (Kind::Name(_), Kind::Lead(_)) => (a.tl / a.r).min(1.0).asin().to_degrees(),
-                (Kind::Lead(_), Kind::Name(_)) => (b.tl / b.r).min(1.0).asin().to_degrees(),
-                _ => 0.0,
-            }
-        };
-        // the least and most each can be with every gap before (after) it kept; where the least passes the most, the run of items
-        // from the last one at its own least up to there does not fit
-        let n = items.len();
-        let gaps: Vec<f64> = items.windows(2).map(|w| need(&w[0], &w[1])).collect();
-        let mut lo = vec![0.0; n];
-        let mut run_from = vec![0usize; n];
-        for i in 0..n {
-            let pushed = if i > 0 { lo[i - 1] + gaps[i - 1] } else { f64::NEG_INFINITY };
-            if pushed > items[i].lo { lo[i] = pushed; run_from[i] = run_from[i - 1]; } else { lo[i] = items[i].lo; run_from[i] = i; }
-        }
-        let mut hi = vec![0.0; n];
-        for i in (0..n).rev() { hi[i] = if i + 1 < n { items[i].hi.min(hi[i + 1] - gaps[i]) } else { items[i].hi }; }
-        let worst = (0..n).filter(|i| lo[*i] > items[*i].hi + 1e-9).max_by(|a, b| (lo[*a] - items[*a].hi).total_cmp(&(lo[*b] - items[*b].hi)));
-        let short = (0..n).map(|i| (lo[i] - hi[i]).max(0.0)).fold(0.0, f64::max);
-        // each as near where it would go as the ones before it and the room after it allow
-        let mut x = vec![0.0; n];
-        for i in 0..n {
-            let after = if i > 0 { x[i - 1] + gaps[i - 1] } else { f64::NEG_INFINITY };
-            x[i] = items[i].d.max(after).min(hi[i]).max(lo[i].min(hi[i]));
-        }
-        let run: Vec<Kind> = worst.map(|w| items[run_from[w]..=w].iter().map(|it| it.k).collect()).unwrap_or_default();
-        if best.as_ref().map_or(true, |b| short < b.0 - 1e-9) { best = Some((short, items, x)); }
-        if worst.is_none() { break; }
-        // the names in the run that does not fit step out (as far as 40 past their usual spot), where the row is longer
-        let mut stepped = false;
-        for kd in run {
-            if let Kind::Name(k) = kd { if extra[k] < 40.0 { extra[k] += 4.0; stepped = true; } }
-        }
-        if !stepped { break; }
-    }
-    if let Some((_, items, x)) = best {
-        for (it, xi) in items.iter().zip(x) {
-            match it.k {
-                Kind::Name(k) => name_at[k] = interact::polar(C, xi, it.r),
-                Kind::Lead(i) => dir_of[i] = xi,
-            }
-        }
-    }
-    (name_at, dir_of)
+    (0..nd).map(|k| {
+        if !l.crowded { return 5.0; }
+        // the angles either side of ray k
+        let spans: Vec<f64> = l.secs.iter().enumerate().filter(|(i, _)| *i == k || (*i + 1) % nd == k).map(|(_, s)| s.a1 - s.a0).collect();
+        let tight = spans.iter().copied().fold(f64::INFINITY, f64::min);
+        if !tight.is_finite() { return 5.0; }
+        ((l.len - 12.0) * (tight / 2.0).to_radians().sin() - 1.5).clamp(1.5, 5.0)
+    }).collect()
 }
 
 /// Where a leader line from `from` meets the edge of box `b` (aimed at its centre; the box is a little wider than the text's ink).
@@ -880,12 +788,15 @@ pub(crate) fn angles_render(p: &Params) -> String {
     let rays: Vec<f64> = dirs.iter().map(|d| d.0).collect();
     let turn = p.f("turn");
     let fs = fscale(p);
-    let (w, h) = (480.0, 360.0);
-    let c = (w / 2.0, h / 2.0);
+    let c = C;
     let len = l.len;
+    let arrows = arrow_halves(&l);
     let pts = points(p, &l);
     let pt_at = |pl: Place| pts.iter().find(|x| x.1 == pl).map(|x| x.0.clone());
-    let mut d = new_doc(w, h);
+    let mut d = new_doc(l.size.0, l.size.1);
+    // (a crowded figure on a grown canvas: the drawing, laid out about C, moved onto it)
+    let moved = l.org != (0.0, 0.0);
+    if moved { d.raw(&format!(r#"<g transform="translate({} {})">"#, l.org.0, l.org.1)); }
     let secs: Vec<(f64, f64)> = l.secs.iter().map(|s| (s.a0, s.a1)).collect();
     if p.b("shade") {
         for (a0, a1) in &secs {
@@ -919,7 +830,8 @@ pub(crate) fn angles_render(p: &Params) -> String {
                 let u = unit_v(c, e);
                 let nn = (-u.1, u.0);
                 let back = (e.0 - u.0 * 12.0, e.1 - u.1 * 12.0);
-                d.poly(&[e, (back.0 + nn.0 * 5.0, back.1 + nn.1 * 5.0), (back.0 - nn.0 * 5.0, back.1 - nn.1 * 5.0)], INK, INK, 1.0);
+                let hw = arrows[i];
+                d.poly(&[e, (back.0 + nn.0 * hw, back.1 + nn.1 * hw), (back.0 - nn.0 * hw, back.1 - nn.1 * hw)], INK, INK, 1.0);
             }
         }
         // (a crowded figure's letters are placed with its labels, and drawn with the named points' names below)
@@ -973,6 +885,7 @@ pub(crate) fn angles_render(p: &Params) -> String {
         let q = vertex_name_at(p, &l, &name, 17.0 * fs, &scene);
         mlabel(&mut d, q.0, q.1, 17.0 * fs, &name, "");
     }
+    if moved { d.raw("</g>"); }
     d.finish()
 }
 
@@ -995,8 +908,9 @@ impl Hit {
         let pts = points(p, &l);
         Hit { deletable: ray_rows(p).len() >= 2, l, p: p.clone(), pts }
     }
-    fn unturn(&self, q: Pt) -> Pt { turn_scr(q, C, -self.l.turn) }
-    fn scr(&self, q: Pt) -> Pt { turn_scr(q, C, self.l.turn) }
+    /// A canvas point, laid out (moved back by `org`) and unturned; and the other way.
+    fn unturn(&self, q: Pt) -> Pt { turn_scr((q.0 - self.l.org.0, q.1 - self.l.org.1), C, -self.l.turn) }
+    fn scr(&self, q: Pt) -> Pt { let s = turn_scr(q, C, self.l.turn); (s.0 + self.l.org.0, s.1 + self.l.org.1) }
     fn is_line(&self, src: usize) -> bool { self.p.s(RAY_LINE[src]) == "Line" }
     fn ray_name(&self, src: usize) -> String {
         if src == 0 { return "the baseline".into(); }
@@ -1168,12 +1082,21 @@ pub(crate) fn handles(p: &Params) -> Vec<Handle> {
         out.push(Handle::zone(at, (34.0, 24.0), "Click: show degrees / x / blank", move |p| cycle_label(p, idx)));
     }
     let mut hs = turned(out, C, l.turn);
+    // (on a grown canvas, moved with the drawing; drags see laid-out points)
+    if l.org != (0.0, 0.0) {
+        let o = l.org;
+        for h in hs.iter_mut() {
+            h.pos = (h.pos.0 + o.0, h.pos.1 + o.1);
+            if let Some(f) = h.drag.take() { h.drag = Some(std::sync::Arc::new(move |p: &mut Params, s: Pt| f(p, (s.0 - o.0, s.1 - o.1)))); }
+        }
+    }
     // one area under everything: the vertex, the rays, their ends and the angles near their corner. It is only as big as those
     // parts: the workspace zooms to the drawing and does not clip a handle to the preview, so an area the size of the whole canvas
     // would sit over the settings panel and take its clicks (the opening state is drawn at about 4x).
     let hit = std::sync::Arc::new(Hit::new(p));
     let (h2, h3) = (hit.clone(), hit.clone());
     let (centre, size) = area_box(&l);
+    let centre = (centre.0 + l.org.0, centre.1 + l.org.1);
     let area = Handle::area(centre, size, SUMMARY, move |p, q| hit.act(p, q))
         .with_hover(move |q| h2.at(q).map(|x| x.1))
         .with_edit_at(POINTS, move |p, q| h3.edit(p, q));

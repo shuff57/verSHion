@@ -140,6 +140,12 @@ fn layouts() -> Vec<(&'static str, Params)> {
         ("a line, turned", with(&[("ray2", s("70")), ("ray3", s("150")), ("ray_count", i(3)), ("ray2_line", s("Line")), ("turn", f(30.0)), ("arcs1", s("2"))])),
         ("crowded large", with(&[("ray_count", i(9)), ("label_size", s("Large"))])),
         ("round a point", with(&[("ray2", s("100")), ("ray3", s("220")), ("ray_count", i(3)), ("around", b(true)), ("points", s("A: vertex; B: ray 2")), ("letters", b(true))])),
+        // a tight fan pointing up at Large: its labels and letters stack out past the page, so the canvas grows and the drawing,
+        // its handles and clicks are moved on it
+        ("crowded on a grown canvas", with(&[
+            ("ray2", s("5")), ("ray3", s("10")), ("ray4", s("15")), ("ray5", s("20")), ("ray6", s("25")), ("ray7", s("30")), ("ray8", s("35")),
+            ("ray_count", i(8)), ("label_size", s("Large")), ("letters", b(true)), ("turn", f(72.0)),
+        ])),
     ]
 }
 
@@ -190,7 +196,10 @@ fn every_pixel_does_what_is_under_it() {
         let size = crate::figures::svg_size(&(d.render)(&p));
         let hs = d.handles(&p, size);
         let turn = p.f("turn");
-        let un = |q: Pt| turn_scr(q, C, -turn);
+        // (a canvas point laid out about C: moved back by the drawing's place on a grown canvas, and unturned)
+        let org = l.org;
+        if name == "crowded on a grown canvas" { assert!(org.1 > 0.0 && size.1 > 360.0, "{name}: the canvas grows ({org:?}, {size:?})"); }
+        let un = |q: Pt| turn_scr((q.0 - org.0, q.1 - org.1), C, -turn);
         let seg = |h: Half| (C, l.end(h).unwrap());
         // within 5 of the ray, and between t0 and t1 out along it
         let near = |u: Pt, a: f64, t0: f64, t1: f64| {
@@ -269,6 +278,7 @@ fn every_pixel_does_what_is_under_it() {
         // a ray's end knob: a click puts the point there (picked there, not the area)
         for (_, h) in l.dirs.iter().filter(|x| x.1.src > 0) {
             let at = turn_scr(l.end(*h).unwrap(), C, turn);
+            let at = (at.0 + org.0, at.1 + org.1);
             let hi = interact::pick(&hs, at, 1.0).unwrap();
             assert!(hs[hi].tip.starts_with("Drag the ray to change its direction"), "{name}");
             let mut a = p.clone();
@@ -481,31 +491,78 @@ fn crowded_cases() -> Vec<(String, Params)> {
             let e = with(&[("ray_count", i(n as i64)), ("label_size", s(size)), ("letters", b(true)), ("turn", f(-25.0))]);
             v.push((format!("{n} rays spread automatically, {size}, letters"), e));
         }
+        // tight fans, 5 and 6 degrees apart, at Large with letters, pointing every way (the second checker's figures among them)
+        for step in [5.0, 6.0] {
+            for turn in [0.0, -90.0, 90.0, 180.0] {
+                let fan: Vec<f64> = (1..n).map(|k| k as f64 * step).collect();
+                let mut e = typed(&fan);
+                e.extend([("ray_count", i(n as i64)), ("label_size", s("Large")), ("letters", b(true)), ("turn", f(turn))]);
+                if turn == 90.0 { e.push(("points", s(&format!("V: vertex; Z: ray {n}")))); }
+                v.push((format!("{n} rays {step} apart, Large, letters, turned {turn}"), with(&e)));
+            }
+        }
+        // tight and wide angles mixed: pairs 5 apart, 40 between, round a point
+        let mut mixed = vec![];
+        let mut a = 0.0;
+        for k in 1..n { a += if k % 2 == 1 { 5.0 } else { 40.0 }; mixed.push(a); }
+        let mut e = typed(&mixed);
+        e.extend([("ray_count", i(n as i64)), ("label_size", s("Large")), ("letters", b(true)), ("turn", f(-90.0)), ("around", b(true))]);
+        v.push((format!("{n} rays, 5 and 40 apart in turn, round a point, Large, letters"), with(&e)));
     }
     v
 }
 
-/// On a crowded figure every label stays on the page, off the rays and off every other text, and one with no room between its
-/// rays goes out past the rays' ends with a leader line: a straight line from inside its own angle (whose measure the label
-/// states) out to it. No leader passes through any text (letters, named points, other labels) or crosses a ray, and no two
-/// leaders cross, touch or share a bend. Read off the drawing: resvg's own text boxes, the drawn rays and the drawn leaders.
+/// Where a drawing sits on its canvas: a crowded figure on a grown canvas is moved by a `translate` on its outer group (its own
+/// positions stay laid out about C; resvg's text boxes are on the canvas).
+fn org_of(svg: &str) -> Pt {
+    let Some(i) = svg.find(r#"<g transform="translate("#) else { return (0.0, 0.0) };
+    let rest = &svg[i + r#"<g transform="translate("#.len()..];
+    let mut it = rest[..rest.find(')').unwrap()].split_whitespace().map(|x| x.parse::<f64>().unwrap());
+    (it.next().unwrap(), it.next().unwrap())
+}
+
+/// Distance from `q` to the triangle a, b, c (0 inside it).
+fn tri_dist(q: Pt, t: &[Pt]) -> f64 {
+    let side = |a: Pt, b: Pt| (b.0 - a.0) * (q.1 - a.1) - (b.1 - a.1) * (q.0 - a.0);
+    let (d0, d1, d2) = (side(t[0], t[1]), side(t[1], t[2]), side(t[2], t[0]));
+    if (d0 >= 0.0 && d1 >= 0.0 && d2 >= 0.0) || (d0 <= 0.0 && d1 <= 0.0 && d2 <= 0.0) { return 0.0; }
+    seg_dist(q, t[0], t[1]).min(seg_dist(q, t[1], t[2])).min(seg_dist(q, t[2], t[0]))
+}
+
+/// On a crowded figure every label stays on the canvas, off the rays and off every other text, and one with no room between its
+/// rays goes out past the rays' ends with a leader line from inside its own angle (whose measure the label states) out to it.
+/// Each leader lies wholly inside its angle's wedge, so it never leaves the fan or runs along a ray; it passes no text (letters,
+/// named points, other labels) and no arrowhead, and no two leaders cross, touch or share a bend. Each name at a ray's end sits
+/// on that ray's own line past its end (nearer its own ray than any other, so the names keep the rays' order). Read off the
+/// drawing: resvg's own text boxes, the drawn rays, arrowheads and leaders.
 #[test]
 fn a_crowded_label_goes_out_past_the_rays_with_a_leader_never_across_text_a_ray_or_another_leader() {
     let mut leaders_seen = 0;
     for (name, p) in crowded_cases() {
         let svg = angles_render(&p);
+        // (everything is read laid out about C: resvg's text boxes are on the canvas, moved by `org`)
+        let org = org_of(&svg);
+        let (cw, ch) = crate::figures::svg_size(&svg);
         // the rays as drawn: from the vertex, stroke 2
         let rays: Vec<(Pt, Pt)> = tags(&svg, "line").into_iter()
             .filter(|t| attr(t, "stroke-width").as_deref() == Some("2") && (fa(t, "x1") - C.0).abs() < 0.01 && (fa(t, "y1") - C.1).abs() < 0.01)
             .map(|t| (C, (fa(t, "x2"), fa(t, "y2")))).collect();
         let len = interact::dist(rays[0].0, rays[0].1);
         let dirs = drawn_rays(&svg);
+        let arrowheads: Vec<Vec<Pt>> = polys(&svg, "polygon").into_iter().map(|x| x.1).filter(|pts| pts.len() == 3).collect();
         // each leader as drawn (a polyline of stroke 0.8) and its legs
         let leaders: Vec<Vec<Pt>> = polys(&svg, "polyline").into_iter().filter(|(t, _)| t.contains(r#"stroke-width="0.8""#)).map(|x| x.1).collect();
         let legs = |pl: &Vec<Pt>| -> Vec<(Pt, Pt)> { pl.windows(2).map(|w| (w[0], w[1])).collect() };
         leaders_seen += leaders.len();
-        let boxes = ink_boxes(&svg);
+        let boxes: Vec<(String, Bx4)> = ink_boxes(&svg).into_iter().map(|(t, b)| (t, (b.0 - org.0, b.1 - org.1, b.2 - org.0, b.3 - org.1))).collect();
         let as_bx = |bx: &Bx4| -> Bx { (((bx.0 + bx.2) / 2.0, (bx.1 + bx.3) / 2.0), ((bx.2 - bx.0) / 2.0, (bx.3 - bx.1) / 2.0)) };
+        // the angle (its first ray's direction and its span) a point lies in
+        let wedge = |q: Pt| -> (f64, f64) {
+            let phi = interact::angle_deg(C, q);
+            let j = dirs.iter().position(|r| *r > phi).unwrap_or(0);
+            let lo = dirs[(j + dirs.len() - 1) % dirs.len()];
+            (lo, (dirs[j] - lo).rem_euclid(360.0))
+        };
         // which label each leader ends at: the box its end is nearest
         let owner: Vec<usize> = leaders.iter().map(|pl| {
             let e = *pl.last().unwrap();
@@ -515,7 +572,19 @@ fn a_crowded_label_goes_out_past_the_rays_with_a_leader_never_across_text_a_ray_
             let (s0, e0) = (pl[0], *pl.last().unwrap());
             let (t, ob) = &boxes[*o];
             assert!(deg_value(t).is_some() && box_pt_dist(as_bx(ob), e0) <= 5.0, "{name}: leader {k} ends at {t}, {} away", box_pt_dist(as_bx(ob), e0));
+            // from inside its own angle, whose measure its label states
+            let (lo, span) = wedge(s0);
+            assert!(interact::dist(s0, C) < len && (deg_value(t).unwrap() - span).abs() <= 0.5 + 1e-6, "{name}: the leader to {t} starts in an angle of {span}");
             for (a, b) in legs(pl) {
+                // wholly inside that angle's wedge (out past the ends too, between the two rays' directions)
+                let n = (interact::dist(a, b) / 0.5).ceil() as usize;
+                for m in 0..=n {
+                    let q = (a.0 + (b.0 - a.0) * m as f64 / n as f64, a.1 + (b.1 - a.1) * m as f64 / n as f64);
+                    let off = (interact::angle_deg(C, q) - lo).rem_euclid(360.0);
+                    assert!(off > 0.0 && off < span, "{name}: the leader to {t} leaves its angle at {q:?}");
+                    // and through no arrowhead
+                    for tri in &arrowheads { assert!(tri_dist(q, tri) > 0.5, "{name}: the leader to {t} meets an arrowhead at {q:?}"); }
+                }
                 // through no text: every other text
                 for (j, (tt, bx)) in boxes.iter().enumerate() {
                     if j == *o { continue; }
@@ -530,15 +599,9 @@ fn a_crowded_label_goes_out_past_the_rays_with_a_leader_never_across_text_a_ray_
                     }
                 }
             }
-            // from inside its own angle, whose measure its label states
-            let phi = interact::angle_deg(C, s0);
-            let j = dirs.iter().position(|r| *r > phi).unwrap_or(0);
-            let (lo, hi) = (dirs[(j + dirs.len() - 1) % dirs.len()], dirs[j]);
-            let measured = (hi - lo).rem_euclid(360.0);
-            assert!(interact::dist(s0, C) < len && (deg_value(t).unwrap() - measured).abs() <= 0.5 + 1e-6, "{name}: the leader to {t} starts in an angle of {measured}");
         }
         for (a, (t, bx)) in boxes.iter().enumerate() {
-            assert!(bx.0 >= 0.0 && bx.1 >= 0.0 && bx.2 <= 480.0 && bx.3 <= 360.0, "{name}: {t} off the page {bx:?}");
+            assert!(bx.0 >= -org.0 && bx.1 >= -org.1 && bx.2 <= cw - org.0 && bx.3 <= ch - org.1, "{name}: {t} off the canvas {bx:?}");
             for (r0, r1) in &rays { assert!(!seg_meets_box(*r0, *r1, as_bx(bx), 0.5), "{name}: {t} lies across a ray"); }
             for (tb, bb) in boxes.iter().skip(a + 1) {
                 let ov = (bx.2.min(bb.2) - bx.0.max(bb.0)).max(0.0) * (bx.3.min(bb.3) - bx.1.max(bb.1)).max(0.0);
@@ -549,6 +612,27 @@ fn a_crowded_label_goes_out_past_the_rays_with_a_leader_never_across_text_a_ray_
                 let far = [(bx.0, bx.1), (bx.0, bx.3), (bx.2, bx.1), (bx.2, bx.3)].iter().map(|q| interact::dist(*q, C)).fold(0.0, f64::max);
                 if far > len + 0.5 { assert!(owner.contains(&a), "{name}: {t} is past the rays' ends with no leader"); }
             }
+        }
+        // each name at a ray's end: on that ray's own line (within 1.5 degrees), nearer it than any other ray, past its end
+        let l = layout(&p);
+        let pts = points(&p, &l);
+        for (k, (a, h)) in l.dirs.iter().enumerate() {
+            let want = match pts.iter().find(|x| x.1 == Place::End(*h)) {
+                Some((n, _)) => n.clone(),
+                None if p.b("letters") => ((b'B' + k as u8) as char).to_string(),
+                None => continue,
+            };
+            if want.is_empty() { continue; }
+            let (_, bx) = boxes.iter().find(|x| x.0 == want).unwrap_or_else(|| panic!("{name}: {want} is drawn"));
+            let c = as_bx(bx).0;
+            let phi = interact::angle_deg(C, c);
+            let gap = |d: f64| { let x = (phi - d).rem_euclid(360.0); x.min(360.0 - x) };
+            let own = gap((a + l.turn).rem_euclid(360.0));
+            assert!(own <= 1.5, "{name}: {want} is {own:.2} degrees off its ray");
+            for (b2, _) in l.dirs.iter().filter(|x| x.1 != *h) {
+                assert!(gap((b2 + l.turn).rem_euclid(360.0)) > own, "{name}: {want} is nearer another ray than its own");
+            }
+            assert!(interact::dist(c, C) > len, "{name}: {want} is not past its ray's end");
         }
     }
     assert!(leaders_seen > 0, "the crowded cases need leaders");
