@@ -4029,6 +4029,8 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
 mod number_line_frozen;
 #[cfg(test)]
 mod solids_b8_frozen;
+#[cfg(test)]
+mod flat_b9_frozen;
 pub(crate) mod solids_b8;
 #[cfg(test)]
 mod solids_b8_tests;
