@@ -802,3 +802,64 @@ fn a_centre_ring_never_covers_a_letter() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// placing the first transformation on the grid, through the workspace's hit test, with the image following
+
+/// Each kind of transformation is placed on the grid of the "transformations" figure: a press where its mark is
+/// drawn (found by `interact::pick`, as the workspace finds it) and a drag to another grid point moves the
+/// translation's image, the centre of a turn or an enlargement, or a numbered mirror line; and at every pointer
+/// position on the way the drawing already shows the image there (the preview), not only when the drag ends.
+#[test]
+fn each_transformation_is_placed_on_the_grid_with_the_image_following() {
+    // (settings, where the mark is in grid units, the tip, the pointer's path, what the settings then say)
+    type Said = fn(&Params) -> (f64, f64);
+    let shift: Said = |p| (p.f("dx"), p.f("dy"));
+    let mid: Said = |p| centre(p);
+    let line: Said = |p| (line_a(p), 0.0);
+    let cases: Vec<(Vec<(&'static str, Value)>, Pt, &str, [Pt; 3], [(f64, f64); 3], Said)> = vec![
+        // the opening figure: A(1, 1) translated by (3, -2); A' is dragged
+        (vec![], (4.0, -1.0), "Drag A\u{2032} to set the translation", [(3.1, 0.2), (0.9, 2.8), (-2.2, 5.3)], [(2.0, -1.0), (0.0, 2.0), (-3.0, 4.0)], shift),
+        (vec![s("op", "Rotate")], (0.0, 0.0), "Drag the centre of rotation", [(-0.9, 1.1), (-1.8, 2.2), (2.1, -2.9)], [(-1.0, 1.0), (-2.0, 2.0), (2.0, -3.0)], mid),
+        (vec![s("op", "Dilate")], (0.0, 0.0), "Drag the centre of enlargement", [(1.2, 0.1), (2.9, -1.2), (-1.0, -2.0)], [(1.0, 0.0), (3.0, -1.0), (-1.0, -2.0)], mid),
+        (vec![s("op", "Reflect"), s("axis", AXES[4]), f("line_a", 2.0)], (2.0, 0.0), "Drag the mirror line", [(2.9, 1.0), (4.2, 3.0), (-1.1, -2.0)], [(3.0, 0.0), (4.0, 0.0), (-1.0, 0.0)], line),
+        (vec![s("op", "Reflect"), s("axis", AXES[5]), f("line_a", -1.0)], (0.0, -1.0), "Drag the mirror line", [(1.0, -2.2), (3.0, -3.9), (-2.0, 2.1)], [(-2.0, 0.0), (-4.0, 0.0), (2.0, 0.0)], line),
+    ];
+    for (set, at, tip, path, want, said) in cases {
+        let mut p = with(&set);
+        let fr = layout(&p).frame;
+        let hs = handles(&p);
+        // the mark is where the figure draws it, and every press on it is its own
+        let h = hs.iter().find(|h| h.tip == tip).unwrap_or_else(|| panic!("no {tip:?} handle"));
+        assert_eq!(h.pos, fr.to_svg(at), "{tip}");
+        for (dx, dy) in [(0.0, 0.0), (3.0, 0.0), (-3.0, 0.0), (0.0, 3.0), (0.0, -3.0)] {
+            let i = interact::pick(&hs, (h.pos.0 + dx, h.pos.1 + dy), 1.0).unwrap();
+            assert_eq!(hs[i].tip, tip, "a press {dx}, {dy} from the mark");
+        }
+        let press = h.pos;
+        let mut last = (def().render)(&p);
+        let mut first_image = layout(&p).images[0].clone();
+        for (to, want) in path.iter().zip(want) {
+            // the workspace keeps the pressed handle for the whole drag and calls it at each pointer position
+            let hs = handles(&p);
+            let i = hs.iter().position(|h| h.tip == tip).unwrap();
+            if to == &path[0] { assert_eq!(interact::pick(&hs, press, 1.0), Some(i)); }
+            (hs[i].drag.as_ref().unwrap())(&mut p, fr.to_svg(*to));
+            assert_eq!(said(&p), want, "{tip} at {to:?}");
+            // the preview: the image is drawn at its new place at once
+            let now = (def().render)(&p);
+            assert_ne!(now, last, "{tip}: the drawing follows the pointer at {to:?}");
+            let image = layout(&p).images[0].clone();
+            assert_ne!(image, first_image, "{tip}: the image moves at {to:?}");
+            let a = vertices(&p)[0];
+            assert_eq!(image[0], map_point(&p, a), "{tip}: the image drawn is the image of A");
+            // and the mark has moved with it, so the next press finds it there
+            let moved = handles(&p).into_iter().find(|h| h.tip == tip).unwrap();
+            assert_ne!(moved.pos, press, "{tip}");
+            last = now;
+            first_image = image;
+        }
+        // the pre-image never moves while a transformation is placed
+        assert_eq!(vertices(&p), vertices(&with(&set)), "{tip}");
+    }
+}

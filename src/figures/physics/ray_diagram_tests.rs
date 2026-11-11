@@ -667,3 +667,66 @@ fn the_summaries_say_what_is_set() {
     assert_eq!(sm(&[b("key", true)], "Title and answer key"), "No title, answer key");
     assert_eq!(sm(&[b("color", true)], "Figure"), "color");
 }
+
+// ------------------------------------------------------------ leftovers: the quick places, as the panel sets them
+
+/// The "ray-diagram" figure's quick places, done the way a teacher does them: one choice of "Place it" in the Object
+/// section (the panel writes the choice and calls `after_panel_change`, nothing else), and the object then stands
+/// beyond 2F, at 2F, between F and 2F, at F or inside F for the focal length in use: in the settings, in the drawing
+/// and under the pointer (its drag knob is found there by the workspace's hit test).
+#[test]
+fn a_quick_place_is_one_choice_in_the_panel_and_the_object_stands_there() {
+    let d = def();
+    let pdefs = (d.params)();
+    // the control a teacher sees: a choice named "Place it" with the five places, in the Object section with the distance
+    let place = pdefs.iter().find(|q| q.key == "place").unwrap();
+    assert_eq!(place.label, "Place it");
+    let crate::figures::Kind::Choice(opts) = &place.kind else { panic!("Place it is a choice") };
+    assert_eq!(opts[1..], ["Beyond 2F", "At 2F", "Between F and 2F", "At F", "Inside F"]);
+    let secs = crate::figures::layout::sections(d.id, &pdefs, None);
+    let sec = secs.iter().find(|s| s.items.iter().any(|&i| pdefs[i].key == "place")).unwrap();
+    assert_eq!(sec.title, "Object");
+    assert!(sec.items.iter().any(|&i| pdefs[i].key == "dist"));
+    let choose = |p: &mut Params, key: &'static str, v: Value| {
+        let old = p.0.get(key).cloned().unwrap();
+        p.0.insert(key.to_string(), v);
+        crate::figures::after_panel_change("ray-diagram", key, &old, p);
+    };
+    for kind in KINDS4 {
+        for fc in [5.0, 8.0, 10.0] {
+            let mut seen: Vec<String> = Vec::new();
+            for (name, m) in [("Beyond 2F", 3.0), ("At 2F", 2.0), ("Between F and 2F", 1.5), ("At F", 1.0), ("Inside F", 0.5)] {
+                let what = format!("{name}, {kind}, f = {fc}");
+                // from a figure with the object somewhere else: one choice, nothing typed
+                let mut p = with(&[s("kind", kind), f("f", fc), f("dist", 23.0)]);
+                assert!(crate::figures::param_relevant("ray-diagram", "place", &p), "{what}");
+                choose(&mut p, "place", Value::S(name.into()));
+                assert_eq!(p.f("dist"), m * fc, "{what}: the distance box says where it stands");
+                // in the drawing: the object is m focal lengths from the lens or mirror, measured in the figure's own scale
+                let g = geo(&p);
+                assert!(((g.xl - g.xo) / g.fp.abs() - m).abs() < 1e-9, "{what}: drawn {} focal lengths away", (g.xl - g.xo) / g.fp.abs());
+                // under the pointer: a press on the object's tip there is the object's knob
+                let hs = handles(&p);
+                let tip_at = (16.0 + g.xo, 16.0 + g.top + g.yt);
+                let i = pick(&hs, tip_at, 1.0).unwrap_or_else(|| panic!("{what}: nothing under the object's tip"));
+                assert!(hs[i].tip.starts_with("Drag the object") || (m == 1.0 && hs[i].tip.starts_with("Drag")), "{what}: {}", hs[i].tip);
+                let svg = (d.render)(&p);
+                assert!(!seen.contains(&svg), "{what} draws the same as another place");
+                seen.push(svg);
+                // a new focal length keeps the object at its place; dragging it or typing a distance lets go of the place
+                choose(&mut p, "f", Value::F(fc + 2.0));
+                // (a place past the end of the drawing, 31 cm, stops there with the panel note the_quick_places test checks)
+                let stands = (m * (fc + 2.0)).min(MAX_DIST);
+                assert_eq!((p.s("place"), p.f("dist")), (name, stands), "{what}: it follows the focal length");
+                let g = geo(&p);
+                let hs = handles(&p);
+                let obj = hs.iter().find(|h| h.tip.starts_with("Drag the object")).unwrap();
+                (obj.drag.as_ref().unwrap())(&mut p, (obj.pos.0 + 2.0 * g.k, obj.pos.1));
+                assert_eq!(p.s("place"), "Typed distance", "{what}: dragged away it is at a typed distance again");
+                assert_eq!(p.f("dist"), ((stands - 2.0) * 2.0).round() / 2.0, "{what}: 2 cm nearer, where it was dropped");
+            }
+        }
+    }
+    // a plane mirror has no F: the choice is not offered
+    assert!(!crate::figures::param_relevant("ray-diagram", "place", &with(&[s("kind", "Plane mirror")])));
+}
