@@ -1,0 +1,35 @@
+{
+ "round": 287,
+ "figure": "organic-structure",
+ "capability": "cap-06c",
+ "hypothesis": "Batch 6 organic-structure: cap-06c; evidence changes:mode=Carbons",
+ "started_at": "2026-11-10T18:06:02",
+ "git": "fc9ff81",
+ "before": {
+  "figure": 85.7,
+  "pooled": 94.4
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T18:06:03",
+ "after": {
+  "figure": 100.0,
+  "pooled": 94.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:mode=Carbons",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/be8076401b6e539f.png"
+   }
+  ]
+ },
+ "checker": "pass: a C at every carbon, no hydrogens",
+ "result": "hit",
+ "evidence": "organic tests (each carbon's hydrogens by hand and against the molecular formula for 1 to 12 carbons and every group, bonds stop short of labels, labels on the page and apart, 456 old cases byte-identical); census unchanged",
+ "next": ""
+}

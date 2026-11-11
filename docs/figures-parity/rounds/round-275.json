@@ -1,0 +1,35 @@
+{
+ "round": 275,
+ "figure": "half-life-graph",
+ "capability": "cap-04c",
+ "hypothesis": "Batch 6 half-life-graph: cap-04c; evidence changes:guide_labels=Times",
+ "started_at": "2026-11-10T18:05:48",
+ "git": "fc9ff81",
+ "before": {
+  "figure": 78.6,
+  "pooled": 93.8
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T18:05:48",
+ "after": {
+  "figure": 82.1,
+  "pooled": 93.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:guide_labels=Times",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/f9026f51e81c092e.png"
+   }
+  ]
+ },
+ "checker": "pass: guides labelled with k half-lives in the axis unit, checked for five isotopes",
+ "result": "hit",
+ "evidence": "halflife tests (17: N = N0(1/2)^(t/T) read off the drawn axes in 19 hand-worked cases, guides at k half-lives, 245 extreme typed ranges bounded, 173 old figures pinned, 67 answer copies changed only in the key's half-life text); census unchanged; no task run (built on the NAS, no browser)",
+ "next": "half-life-graph notes: Large key line runs off the page for a custom half-life in thousand years; legend overlap at Large (older)"
+}

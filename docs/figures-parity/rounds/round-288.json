@@ -1,0 +1,37 @@
+{
+ "round": 288,
+ "figure": "angles",
+ "capability": "cap-04b",
+ "hypothesis": "Batch 6 angles: cap-04b; evidence changes:arcs1=1",
+ "started_at": "2026-11-10T18:06:05",
+ "git": "fc9ff81",
+ "before": {
+  "figure": 93.0,
+  "pooled": 94.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-10T18:06:05",
+ "after": {
+  "figure": 97.2,
+  "pooled": 94.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:arcs1=1",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/5af6cd1d05244a98.png"
+   }
+  ]
+ },
+ "checker": "pass: one, two, three arcs and shading each differ from each other and from a plain angle (one arc is marginal on a lone angle)",
+ "result": "hit",
+ "evidence": "angles tests (29: every click on an angle changes the drawing and cycles back, arcs at 36, 41, 46 drawn heavier, labels read off the drawn rays, old links and specs frozen); census unchanged; task run reference 23 actions, ours 17",
+ "next": "angles: leader lines on crowded Large figures run through end letters and meet (back with a builder)"
+}

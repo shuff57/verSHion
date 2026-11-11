@@ -42,8 +42,8 @@
    "id": "cap-03a",
    "text": "Draw an ionic compound with every ion drawn separately",
    "class": "control",
-   "evidence": "",
-   "note": "Ours always draws one of each ion with its number in front."
+   "evidence": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"ion_layout\":\"Every ion\"}",
+   "note": "Built in batch 6, round 281 (2026-11-10). Ours always draws one of each ion with its number in front."
   },
   {
    "id": "cap-03b",
@@ -56,8 +56,8 @@
    "id": "cap-04a",
    "text": "Swap dots and crosses between the atoms",
    "class": "control",
-   "evidence": "",
-   "note": "No swap control in ours."
+   "evidence": "changes:swap=true",
+   "note": "Built in batch 6, round 282 (2026-11-10). No swap control in ours."
   },
   {
    "id": "cap-04b",
@@ -84,22 +84,22 @@
    "id": "cap-06a",
    "text": "Click an electron to cycle it through dot, cross, open circle, open square and nothing, for a find-the-mistake question",
    "class": "version",
-   "evidence": "",
-   "note": "Ours has no handles on this figure."
+   "evidence": "handle:click:Click an electron to change it",
+   "note": "Built in batch 6, round 283 (2026-11-10). Ours has no handles on this figure."
   },
   {
    "id": "cap-06b",
    "text": "Click an element symbol to blank or show it",
    "class": "version",
-   "evidence": "",
-   "note": "Ours has no handles on this figure."
+   "evidence": "handle:click:Click the element symbol to blank it",
+   "note": "Built in batch 6, round 284 (2026-11-10). Ours has no handles on this figure."
   },
   {
    "id": "cap-06c",
    "text": "Click an ion's charge to show it, make it a blank box or leave it off, per ion",
    "class": "version",
-   "evidence": "",
-   "note": "Ours has no handles; cap-05b sets all charges at once only."
+   "evidence": "changes:{\"kind\":\"Ionic compound\",\"edits\":\"q1=1\"}",
+   "note": "Built in batch 6, round 285 (2026-11-10). Ours has no handles; cap-05b sets all charges at once only."
   },
   {
    "id": "cap-07a",

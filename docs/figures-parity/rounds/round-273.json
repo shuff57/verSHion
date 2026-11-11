@@ -1,0 +1,37 @@
+{
+ "round": 273,
+ "figure": "half-life-graph",
+ "capability": "cap-01e",
+ "hypothesis": "Batch 6 half-life-graph: cap-01e; evidence changes:{\"iso1\":\"Custom\",\"custom_half\":30,\"custom_unit\":\"Seconds\"}",
+ "started_at": "2026-11-10T18:05:46",
+ "git": "fc9ff81",
+ "before": {
+  "figure": 71.4,
+  "pooled": 93.6
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-10T18:05:47",
+ "after": {
+  "figure": 75.0,
+  "pooled": 93.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"iso1\":\"Custom\",\"custom_half\":30,\"custom_unit\":\"Seconds\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/29d46ece6a2de597.png"
+   }
+  ]
+ },
+ "checker": "pass: a custom half-life in seconds, hours, days, thousand and billion years; curve, guides and decay constant right by hand",
+ "result": "hit",
+ "evidence": "halflife tests (17: N = N0(1/2)^(t/T) read off the drawn axes in 19 hand-worked cases, guides at k half-lives, 245 extreme typed ranges bounded, 173 old figures pinned, 67 answer copies changed only in the key's half-life text); census unchanged; no task run (built on the NAS, no browser)",
+ "next": "half-life-graph notes: Large key line runs off the page for a custom half-life in thousand years; legend overlap at Large (older)"
+}

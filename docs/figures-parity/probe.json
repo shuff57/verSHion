@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-10T08:35:53",
- "ours_built_at": "2026-11-10T16:35:42+00:00",
- "git": "25e283b",
+ "checked_at": "2026-11-10T18:06:05",
+ "ours_built_at": "2026-11-11T02:06:04+00:00",
+ "git": "fc9ff81",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -1369,15 +1369,21 @@
       {
        "token": "changes:mode=Condensed",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/ae9a3225b637e414.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/51a446967d5079d4.png"
       }
      ]
     },
     "cap-06a2": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:mode=Groups",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/f15201ebf2ab3a07.png"
+      }
+     ]
     },
     "cap-06b": {
      "pass": true,
@@ -1387,15 +1393,21 @@
       {
        "token": "changes:mode=Full",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/e863aa115ae344a3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/01f808245b1d0542.png"
       }
      ]
     },
     "cap-06c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:mode=Carbons",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/be8076401b6e539f.png"
+      }
+     ]
     },
     "cap-07": {
      "pass": true,
@@ -1405,7 +1417,7 @@
       {
        "token": "changes:ends=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/f3bde95d97214986.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/d092470946337115.png"
       }
      ]
     },
@@ -1417,7 +1429,7 @@
       {
        "token": "changes:numbers=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/5fc11f8a1cdb7bc2.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/c6934209e5eed016.png"
       }
      ]
     },
@@ -1429,7 +1441,7 @@
       {
        "token": "changes:caption=Butane",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/c4a4b2e09a376578.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/organic-structure/2c4293a32a379430.png"
       }
      ]
     }
@@ -1701,7 +1713,7 @@
       {
        "token": "changes:ray2=250",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/0fb2fe114ab3c344.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/24e9465655110fac.png"
       }
      ]
     },
@@ -1713,7 +1725,7 @@
       {
        "token": "changes:{\"ray_count\":3,\"ray3\":\"110\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/b8230f71b80fff54.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/d0207129a596f543.png"
       }
      ]
     },
@@ -1725,7 +1737,7 @@
       {
        "token": "changes:ray1_line=Line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/391cc580ab2db0f3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/93780a01a6082f32.png"
       }
      ]
     },
@@ -1737,7 +1749,7 @@
       {
        "token": "changes:{\"ray_count\":3,\"ray3\":\"200\",\"around\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/42091e28726ea02f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/afafd2f8c421007f.png"
       }
      ]
     },
@@ -1749,7 +1761,7 @@
       {
        "token": "changes:{\"ray1_line\":\"Line\",\"ray2_line\":\"Line\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/b3c850f0cd3290d0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/5e395f8b0157e31e.png"
       }
      ]
     },
@@ -1761,7 +1773,7 @@
       {
        "token": "changes:ray_count=8",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/849ad88a85b5ddf8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/a1994d2ccd6886aa.png"
       }
      ]
     },
@@ -1773,7 +1785,7 @@
       {
        "token": "changes:ray2=90",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/1b6e7da637d18fab.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/626dde50d120277e.png"
       }
      ]
     },
@@ -1785,7 +1797,7 @@
       {
        "token": "changes:ray2_line=Line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/4f3e4f415822d96c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/28cad90da3d499ff.png"
       }
      ]
     },
@@ -1797,25 +1809,31 @@
       {
        "token": "changes:unknown=1",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/794720eb06c25053.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/007908689d1cc408.png"
       },
       {
        "token": "changes:hide=1",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/70687dd2e4a5db4c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/b9586eb78be6eb85.png"
       },
       {
        "token": "changes:sector_text=1 = 3y",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/b3e154d100e242ab.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/1b0dfd1ee4cedbf9.png"
       }
      ]
     },
     "cap-04b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:arcs1=1",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/5af6cd1d05244a98.png"
+      }
+     ]
     },
     "cap-04i": {
      "pass": true,
@@ -1825,7 +1843,7 @@
       {
        "token": "changes:shade=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/a5abe4b80e89ce6d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/aae417844b300509.png"
       }
      ]
     },
@@ -1837,7 +1855,7 @@
       {
        "token": "changes:shaded=1",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/f6f1afac6a462e64.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/d47e50d1ffe9e58f.png"
       }
      ]
     },
@@ -1849,7 +1867,7 @@
       {
        "token": "changes:letters=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/751480707d3c68ba.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/416202e808e5ca87.png"
       }
      ]
     },
@@ -1861,7 +1879,7 @@
       {
        "token": "changes:{\"points\":\"A: vertex; B: ray 1; C: ray 2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/a85d2bde71a64d86.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/2f9f01a4e4a99deb.png"
       }
      ]
     },
@@ -1872,8 +1890,8 @@
      "renders": []
     },
     "cap-04g": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
@@ -1891,7 +1909,7 @@
       {
        "token": "changes:ray2_style=Dashed",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/3ca809426a72c80b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/angles/b7267aa85b200fef.png"
       }
      ]
     },
@@ -5738,7 +5756,7 @@
       {
        "token": "changes:iso1=Iodine-131 (8.02 days)",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/f0d3236bcba19176.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/7dc509f41eec53ac.png"
       }
      ]
     },
@@ -5750,7 +5768,7 @@
       {
        "token": "changes:count=2",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/2a375cd1cd90fc69.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/5cfe17df2c88fcd4.png"
       }
      ]
     },
@@ -5762,7 +5780,7 @@
       {
        "token": "changes:iso1=Isotope X (10 years)",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/2772e1cff01bc466.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/0ded85ef5b6ca402.png"
       }
      ]
     },
@@ -5774,15 +5792,21 @@
       {
        "token": "changes:{\"iso1\":\"Custom\",\"custom_half\":3,\"custom_name\":\"Zed-1\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/97b6505da02e3d33.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/c122e47fa2fc82ff.png"
       }
      ]
     },
     "cap-01e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"iso1\":\"Custom\",\"custom_half\":30,\"custom_unit\":\"Seconds\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/29d46ece6a2de597.png"
+      }
+     ]
     },
     "cap-02a": {
      "pass": true,
@@ -5792,7 +5816,7 @@
       {
        "token": "changes:y=Fraction remaining",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/19573d8af2b72483.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/d1d104b6201435c8.png"
       }
      ]
     },
@@ -5804,7 +5828,7 @@
       {
        "token": "changes:y=Mass remaining",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/c679608926a8efcc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/3e8de4758408d9d0.png"
       }
      ]
     },
@@ -5816,7 +5840,7 @@
       {
        "token": "changes:y=Number of nuclei",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/1f26bcdc0c9f27f8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/09c142ac580770ab.png"
       }
      ]
     },
@@ -5828,15 +5852,21 @@
       {
        "token": "changes:y=Activity",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/4e8092e2fea65c7f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/6429c92c9a0d52ad.png"
       }
      ]
     },
     "cap-02e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"y\":\"Activity\",\"act_unit\":\"Counts per minute\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/0c61ff91146df12f.png"
+      }
+     ]
     },
     "cap-02f": {
      "pass": true,
@@ -5846,7 +5876,7 @@
       {
        "token": "changes:{\"y\":\"Mass remaining\",\"amount\":50}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/23fa6d23654359dc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/2694a3c6011095bd.png"
       }
      ]
     },
@@ -5858,7 +5888,7 @@
       {
        "token": "changes:unit=Days",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/1d3fcffdce44bba0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/5db9afa7b326da8f.png"
       }
      ]
     },
@@ -5870,26 +5900,38 @@
       {
        "token": "changes:guides=1",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/fcfc29ac8901ec7c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/81ff24114bd47dec.png"
       },
       {
        "token": "changes:guides=0",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/73e7f53938fc8aa6.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/ec3456125c82720a.png"
       }
      ]
     },
     "cap-04c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:guide_labels=Times",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/f9026f51e81c092e.png"
+      }
+     ]
     },
     "cap-04d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:guide_labels=Blank lines",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/81110603b16896ad.png"
+      }
+     ]
     },
     "cap-05a": {
      "pass": true,
@@ -5899,7 +5941,7 @@
       {
        "token": "changes:dots=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/e045d93aebced9bc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/25e384a0afd1d179.png"
       }
      ]
     },
@@ -5911,7 +5953,7 @@
       {
        "token": "changes:curves=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/5eaccb9003ac6891.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/7cc3c1921b7a9960.png"
       }
      ]
     },
@@ -5923,7 +5965,7 @@
       {
        "token": "changes:daughter=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/12ddeb5402d5facc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/8178ce73478c6e3e.png"
       }
      ]
     },
@@ -5935,7 +5977,7 @@
       {
        "token": "changes:hide_names=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/969af172c394a125.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/b51dc9a5ce9dc13f.png"
       }
      ]
     },
@@ -5947,7 +5989,7 @@
       {
        "token": "changes:style=Print",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/c99b914ba2e44328.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/619c095ee07bdac0.png"
       }
      ]
     },
@@ -5959,33 +6001,57 @@
       {
        "token": "changes:title=Decay of carbon-14",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/b57a99e8f50454c9.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/0c61df3f0253533d.png"
       }
      ]
     },
     "cap-06c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:xtitle_mode=Blank line",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/4a294e6b496f69c2.png"
+      }
+     ]
     },
     "cap-06d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"fit\":false,\"x_from\":0,\"x_to\":40000,\"x_by\":2000,\"y_by\":10}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/44c4527225e6b2cc.png"
+      }
+     ]
     },
     "cap-06e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:x_num=Every 2nd line",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/41e616a87eb0ced9.png"
+      }
+     ]
     },
     "cap-06f": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:minor_grid=5 per block",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/591fd51ead98babd.png"
+      }
+     ]
     },
     "cap-06g": {
      "pass": true,
@@ -5995,7 +6061,7 @@
       {
        "token": "changes:label_size=Large",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/4e6ed4518168479d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/42cb76a0cc63aa60.png"
       }
      ]
     }
@@ -15309,7 +15375,7 @@
       {
        "token": "changes:molecule=CH4",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/9beca8265a143b53.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/a636f4a49b16c05e.png"
       }
      ]
     },
@@ -15321,7 +15387,7 @@
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/8134f925d503db4a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/b652a66e5fcfb0f7.png"
       }
      ]
     },
@@ -15333,7 +15399,7 @@
       {
        "token": "changes:{\"kind\":\"Atom or ion\",\"charge\":1}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/8c3df005e425b44b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/88f25e582932d615.png"
       }
      ]
     },
@@ -15351,15 +15417,21 @@
       {
        "token": "changes:shells=Every shell",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/62040257a38b5c55.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/9555818838e892e1.png"
       }
      ]
     },
     "cap-03a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"ion_layout\":\"Every ion\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/5b214a1c52ccb3d1.png"
+      }
+     ]
     },
     "cap-03b": {
      "pass": true,
@@ -15369,15 +15441,21 @@
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/8134f925d503db4a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/b652a66e5fcfb0f7.png"
       }
      ]
     },
     "cap-04a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:swap=true",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/f25d6664db63364c.png"
+      }
+     ]
     },
     "cap-04b": {
      "pass": true,
@@ -15387,7 +15465,7 @@
       {
        "token": "changes:style=Print",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/92678fa3e9ac2c92.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/3c15f277a8e250a1.png"
       }
      ]
     },
@@ -15399,7 +15477,7 @@
       {
        "token": "changes:blank=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/59b237e7ff08ae6a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/6c87c54060bbc305.png"
       }
      ]
     },
@@ -15411,32 +15489,38 @@
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"charges\":\"Blank\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/5285bbdb6e5ed25e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/89d90e1da4ed225a.png"
       },
       {
        "token": "changes:{\"kind\":\"Ionic compound\",\"ionic\":\"MgCl2\",\"charges\":\"Off\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/6853792b1c9606ca.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/6f0246d9d4e9eddc.png"
       }
      ]
     },
     "cap-06a": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
      "renders": []
     },
     "cap-06b": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
      "renders": []
     },
     "cap-06c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"kind\":\"Ionic compound\",\"edits\":\"q1=1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/a6e801a7d22000f7.png"
+      }
+     ]
     },
     "cap-07a": {
      "pass": true,
@@ -15446,7 +15530,7 @@
       {
        "token": "changes:title=Water",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/2754425affaffc16.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/cb6fce378420e77a.png"
       }
      ]
     },
@@ -15458,7 +15542,7 @@
       {
        "token": "changes:show_answers=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/bdb014cf3483f309.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/63de83e78ea69443.png"
       }
      ]
     }

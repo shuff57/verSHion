@@ -1,0 +1,35 @@
+{
+ "round": 282,
+ "figure": "dot-and-cross",
+ "capability": "cap-04a",
+ "hypothesis": "Batch 6 dot-and-cross: cap-04a; evidence changes:swap=true",
+ "started_at": "2026-11-10T18:05:58",
+ "git": "fc9ff81",
+ "before": {
+  "figure": 69.6,
+  "pooled": 94.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T18:05:59",
+ "after": {
+  "figure": 75.0,
+  "pooled": 94.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:swap=true",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/dot-and-cross/f25d6664db63364c.png"
+   }
+  ]
+ },
+ "checker": "pass: dots and crosses trade places",
+ "result": "hit",
+ "evidence": "dot-and-cross tests (octets and each atom's own electrons for every molecule, ionic ratios and charges by hand, clicks through interact::pick over twelve layouts, refusals, 535 old cases each pinned to its render); 211 old figures judged chemistry fixes by the checker; census: defaults and start (water's lone pairs); task run reference 4 actions, ours 6",
+ "next": "dot-and-cross cap-01d (SiO2 refusal awaiting its re-check)"
+}

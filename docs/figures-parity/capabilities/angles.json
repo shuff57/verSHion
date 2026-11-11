@@ -70,8 +70,8 @@
    "id": "cap-04b",
    "text": "Mark a chosen angle with congruence marks",
    "class": "control",
-   "evidence": "",
-   "note": "No congruence-arc parameter on angles; only right-angle squares."
+   "evidence": "changes:arcs1=1",
+   "note": "Built in batch 6, round 288 (2026-11-10). No congruence-arc parameter on angles; only right-angle squares."
   },
   {
    "id": "cap-04i",
@@ -112,8 +112,8 @@
    "id": "cap-04g",
    "text": "Click an angle on the figure to mark or shade it",
    "class": "interaction",
-   "evidence": "",
-   "note": "The click handle only cycles the label."
+   "evidence": "handle:click:congruence arcs or shading",
+   "note": "Built in batch 6, round 289 (2026-11-10). The click handle only cycles the label."
   },
   {
    "id": "cap-04h",

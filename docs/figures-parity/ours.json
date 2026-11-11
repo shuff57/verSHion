@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-10T16:35:42+00:00",
-  "src_mtime": 1794327920.4689827,
-  "git": "25e283b",
+  "built_at": "2026-11-11T02:06:04+00:00",
+  "src_mtime": 1794362579.1683002,
+  "git": "fc9ff81",
   "figures": 191
  },
  "figures": {
@@ -13081,6 +13081,13 @@
    "blurb": "A molecule, ionic compound or atom with its shells as circles and its electrons as dots and crosses, or the electrons left for students.",
    "params": [
     {
+     "key": "formula",
+     "label": "Formula or name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "kind",
      "label": "Draw",
      "kind": "choice",
@@ -13106,7 +13113,9 @@
       "N2",
       "CO2",
       "C2H4",
-      "C2H6"
+      "C2H6",
+      "CH3OH",
+      "C2H5OH"
      ],
      "default": "H2O"
     },
@@ -13259,6 +13268,16 @@
      "default": "0"
     },
     {
+     "key": "ion_layout",
+     "label": "Ions",
+     "kind": "choice",
+     "options": [
+      "One of each, numbered",
+      "Every ion"
+     ],
+     "default": "One of each, numbered"
+    },
+    {
      "key": "shells",
      "label": "Show",
      "kind": "choice",
@@ -13267,6 +13286,13 @@
       "Every shell"
      ],
      "default": "Outer shell only"
+    },
+    {
+     "key": "swap",
+     "label": "Swap dots and crosses",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "blank",
@@ -13285,6 +13311,13 @@
       "Off"
      ],
      "default": "Shown"
+    },
+    {
+     "key": "edits",
+     "label": "Changes made on the figure",
+     "kind": "text",
+     "options": [],
+     "default": ""
     },
     {
      "key": "title",
@@ -13322,8 +13355,37 @@
      "default": "Medium"
     }
    ],
-   "handle_list": [],
-   "handles": false,
+   "handle_list": [
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click an electron to change it: dot, cross, open circle, open square, then none"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click the element symbol to blank it or show it again"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click the element symbol to blank it or show it again"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click the element symbol to blank it or show it again"
+    }
+   ],
+   "handles": true,
    "label_drag": false,
    "show_answers": true,
    "style": true,
@@ -13428,10 +13490,25 @@
     },
     {
      "key": "custom_half",
-     "label": "Custom half-life (years)",
+     "label": "Custom half-life",
      "kind": "float",
      "options": [],
      "default": "10.0"
+    },
+    {
+     "key": "custom_unit",
+     "label": "Custom half-life in",
+     "kind": "choice",
+     "options": [
+      "Seconds",
+      "Minutes",
+      "Hours",
+      "Days",
+      "Years",
+      "Thousand years",
+      "Billion years"
+     ],
+     "default": "Years"
     },
     {
      "key": "y",
@@ -13447,6 +13524,16 @@
      "default": "Percent remaining"
     },
     {
+     "key": "act_unit",
+     "label": "Activity in",
+     "kind": "choice",
+     "options": [
+      "Bq",
+      "Counts per minute"
+     ],
+     "default": "Bq"
+    },
+    {
      "key": "amount",
      "label": "Starting amount",
      "kind": "float",
@@ -13459,6 +13546,18 @@
      "kind": "int",
      "options": [],
      "default": "3"
+    },
+    {
+     "key": "guide_labels",
+     "label": "Guide labels",
+     "kind": "choice",
+     "options": [
+      "T½, 2T½ …",
+      "Times",
+      "Blank lines",
+      "None"
+     ],
+     "default": "T½, 2T½ …"
     },
     {
      "key": "span",
@@ -13482,6 +13581,13 @@
       "Billion years"
      ],
      "default": "Fitted"
+    },
+    {
+     "key": "fit",
+     "label": "Fit the axes to the curves",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
     },
     {
      "key": "curves",
@@ -13517,6 +13623,122 @@
      "kind": "text",
      "options": [],
      "default": ""
+    },
+    {
+     "key": "xtitle_mode",
+     "label": "x-axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "xtitle",
+     "label": "x-axis title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ytitle_mode",
+     "label": "y-axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "ytitle",
+     "label": "y-axis title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "x_from",
+     "label": "x-axis: from",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "x_to",
+     "label": "x-axis: to",
+     "kind": "float",
+     "options": [],
+     "default": "30000.0"
+    },
+    {
+     "key": "x_by",
+     "label": "x-axis: count by",
+     "kind": "float",
+     "options": [],
+     "default": "5000.0"
+    },
+    {
+     "key": "x_num",
+     "label": "x-axis: numbers",
+     "kind": "choice",
+     "options": [
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Every line"
+    },
+    {
+     "key": "y_from",
+     "label": "y-axis: from",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "y_to",
+     "label": "y-axis: to",
+     "kind": "float",
+     "options": [],
+     "default": "100.0"
+    },
+    {
+     "key": "y_by",
+     "label": "y-axis: count by",
+     "kind": "float",
+     "options": [],
+     "default": "20.0"
+    },
+    {
+     "key": "y_num",
+     "label": "y-axis: numbers",
+     "kind": "choice",
+     "options": [
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Every line"
+    },
+    {
+     "key": "minor_grid",
+     "label": "Minor gridlines",
+     "kind": "choice",
+     "options": [
+      "None",
+      "2 per block",
+      "4 per block",
+      "5 per block"
+     ],
+     "default": "None"
     },
     {
      "key": "show_answers",
@@ -13606,6 +13828,8 @@
      "kind": "choice",
      "options": [
       "Skeletal",
+      "Carbons",
+      "Groups",
       "Condensed",
       "Full"
      ],

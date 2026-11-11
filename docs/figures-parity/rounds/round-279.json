@@ -1,0 +1,35 @@
+{
+ "round": 279,
+ "figure": "half-life-graph",
+ "capability": "cap-06e",
+ "hypothesis": "Batch 6 half-life-graph: cap-06e; evidence changes:x_num=Every 2nd line",
+ "started_at": "2026-11-10T18:05:49",
+ "git": "fc9ff81",
+ "before": {
+  "figure": 92.9,
+  "pooled": 94.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T18:05:50",
+ "after": {
+  "figure": 96.4,
+  "pooled": 94.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:x_num=Every 2nd line",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/half-life-graph/41e616a87eb0ced9.png"
+   }
+  ]
+ },
+ "checker": "pass: numbering every 2nd line",
+ "result": "hit",
+ "evidence": "halflife tests (17: N = N0(1/2)^(t/T) read off the drawn axes in 19 hand-worked cases, guides at k half-lives, 245 extreme typed ranges bounded, 173 old figures pinned, 67 answer copies changed only in the key's half-life text); census unchanged; no task run (built on the NAS, no browser)",
+ "next": "half-life-graph notes: Large key line runs off the page for a custom half-life in thousand years; legend overlap at Large (older)"
+}

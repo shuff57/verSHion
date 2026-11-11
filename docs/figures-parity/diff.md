@@ -8,7 +8,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
-| angles | `angles` | 52 | 3 | 6 | — | 93 |
+| angles | `angles` | 52 | 3 | 6 | — | 100 |
 | bar-graph | `bar-chart` | 35 | 0 | 7 | — | 100 |
 | box-plot | `box-plot` | 37 | 0 | 6 | reference has a student version; ours has no show_answers | 90 |
 | circle | `circle` | 77 | 2 | 7 | — | 96 |
@@ -59,9 +59,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
 | bohr-model | `bohr-model` | 21 | 2 | 6 | reference has a student version; ours has no show_answers | 92 |
-| dot-and-cross | `dot-and-cross` | 12 | 0 | 7 | reference mentions click/drag; ours has no handles | 64 |
+| dot-and-cross | `dot-and-cross` | 16 | 4 | 7 | — | 91 |
 | gas-syringe | `gas-syringe` | 9 | 1 | 5 | — | 91 |
-| half-life-graph | `half-life-graph` | 19 | 1 | 6 | reference adds/removes rows; ours has no list/data/text-table control | 71 |
+| half-life-graph | `half-life-graph` | 36 | 1 | 6 | reference adds/removes rows; ours has no list/data/text-table control | 100 |
 | heating-cooling-curve | `heating-cooling-curve` | 47 | 8 | 6 | — | 85 |
 | length-reading | `length-reading` | 24 | 3 | 9 | — | 100 |
 | lewis-structures | `lewis-structures` | 15 | 6 | 6 | reference has a student version; ours has no show_answers | 100 |
@@ -74,7 +74,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | ph-reading | `ph-reading` | 7 | 1 | 5 | — | 76 |
 | photoelectron-spectrum | `photoelectron-spectrum` | 18 | 1 | 6 | reference has a student version; ours has no show_answers | 100 |
 | potential-energy-diagram | `reaction-energy-diagram` | 60 | 3 | 7 | — | 100 |
-| structure-editor | `organic-structure` | 9 | 0 | 4 | reference mentions click/drag; ours has no handles | 71 |
+| structure-editor | `organic-structure` | 9 | 0 | 4 | reference mentions click/drag; ours has no handles | 100 |
 | temperature-reading | `temperature-reading` | 10 | 1 | 5 | — | 88 |
 | titration-curve | `titration-curve` | 46 | 2 | 5 | — | 100 |
 | volume-by-displacement | `volume-by-displacement` | 19 | 4 | 7 | — | 95 |
@@ -101,29 +101,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-10T16:35:53+00:00 · probe: 2026-11-10T08:35:53
+Generated: 2026-11-11T02:06:06+00:00 · probe: 2026-11-10T18:06:05
 
-**Pooled 93.6** · mean 93.2 over 70 figures · built 71 of 71 reference figures
+**Pooled 94.6** · mean 94.5 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `dot-and-cross`: 64 (36/56)
-  - cap-01d [core 5] Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki — no evidence
-  - cap-03a [control 3] Draw an ionic compound with every ion drawn separately — no evidence
-  - cap-04a [control 3] Swap dots and crosses between the atoms — no evidence
-  - cap-06a [version 3] Click an electron to cycle it through dot, cross, open circle, open square and nothing, for a find-the-mistake question — no evidence
-  - cap-06b [version 3] Click an element symbol to blank or show it — no evidence
-  - cap-06c [version 3] Click an ion's charge to show it, make it a blank box or leave it off, per ion — no evidence
-- `half-life-graph`: 71 (60/84)
-  - cap-01e [control 3] Your own isotope's half-life in a unit you choose (not only years) — no evidence
-  - cap-02e [control 3] Up the side: activity in counts per minute — no evidence
-  - cap-04c [control 3] Guide lines labeled with their times — no evidence
-  - cap-04d [version 3] Guide labels as blank lines for students — no evidence
-  - cap-06c [control 3] Axis titles as text, a blank line, or none — no evidence
-  - cap-06d [control 3] Set the axis ranges (from, to, count by) — no evidence
-- `organic-structure`: 71 (15/21)
-  - cap-06a2 [control 3] Condensed view written on the drawing: H3C, CH2, CH3 at each carbon's place in the structure — no evidence
-  - cap-06c [control 3] 'Carbons' display: the skeletal zigzag with a C written at every carbon atom and no hydrogens — no evidence
 - `number-line`: 72 (51/71)
   - cap-01f [core 5] Graph a sequence like a_n = 1/n — no evidence
   - cap-02c [control 3] Write an inequality's endpoint values above the line, or leave them off — no evidence
@@ -203,6 +186,8 @@ Comparable with the frozen baseline: **yes**
 - `cone`: 91 (60/66)
   - cap-04f [control 3] Type any measure (radius, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (radius, height, lean) with √ — no evidence
+- `dot-and-cross`: 91 (51/56)
+  - cap-01d [core 5] Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki — no evidence
 - `pyramid`: 92 (69/75)
   - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
@@ -217,9 +202,6 @@ Comparable with the frozen baseline: **yes**
 - `kite`: 93 (77/83)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
-- `angles`: 93 (66/71)
-  - cap-04b [control 3] Mark a chosen angle with congruence marks — no evidence
-  - cap-04g [interaction 2] Click an angle on the figure to mark or shade it — no evidence
 - `rectangle`: 93 (80/86)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
@@ -257,11 +239,13 @@ Comparable with the frozen baseline: **yes**
   - cap-07e [control 3] End caps on the axes — no evidence
 - `ray-diagram`: 98 (112/114)
   - cap-02d [interaction 2] Place the object quickly beyond 2F, at 2F, between F and 2F, at F or inside F — weak evidence: an interaction needs handle:/handle-edit:/label-drag/ui-test:
+- `angles`: 100 (71/71)
 - `bar-chart`: 100 (87/87)
 - `circuit-diagram`: 100 (61/61)
 - `composite-shape`: 100 (50/50)
 - `dna-protein-synthesis`: 100 (102/102)
 - `enzyme-kinetics`: 100 (85/85)
+- `half-life-graph`: 100 (84/84)
 - `histogram`: 100 (90/90)
 - `inclined-plane`: 100 (91/91)
 - `length-reading`: 100 (78/78)
@@ -273,6 +257,7 @@ Comparable with the frozen baseline: **yes**
 - `motion-map`: 100 (87/87)
 - `ogive`: 100 (75/75)
 - `orbital-diagram`: 100 (61/61)
+- `organic-structure`: 100 (21/21)
 - `osmosis`: 100 (140/140)
 - `parallel-lines`: 100 (46/46)
 - `photoelectron-spectrum`: 100 (50/50)

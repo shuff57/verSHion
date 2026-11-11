@@ -1,0 +1,29 @@
+{
+ "round": 289,
+ "figure": "angles",
+ "capability": "cap-04g",
+ "hypothesis": "Batch 6 angles: cap-04g; evidence handle:click:congruence arcs or shading",
+ "started_at": "2026-11-10T18:06:05",
+ "git": "fc9ff81",
+ "before": {
+  "figure": 97.2,
+  "pooled": 94.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T18:06:06",
+ "after": {
+  "figure": 100.0,
+  "pooled": 94.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: a click near the corner steps 1, 2, 3 arcs, shaded, plain; only that angle changes",
+ "result": "hit",
+ "evidence": "angles tests (29: every click on an angle changes the drawing and cycles back, arcs at 36, 41, 46 drawn heavier, labels read off the drawn rays, old links and specs frozen); census unchanged; task run reference 23 actions, ours 17",
+ "next": "angles: leader lines on crowded Large figures run through end letters and meet (back with a builder)"
+}

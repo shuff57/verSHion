@@ -35,8 +35,8 @@
    "id": "cap-01e",
    "text": "Your own isotope's half-life in a unit you choose (not only years)",
    "class": "control",
-   "evidence": "",
-   "note": "Ours' custom half-life is in years only."
+   "evidence": "changes:{\"iso1\":\"Custom\",\"custom_half\":30,\"custom_unit\":\"Seconds\"}",
+   "note": "Built in batch 6, round 273 (2026-11-10). Ours' custom half-life is in years only."
   },
   {
    "id": "cap-02a",
@@ -70,8 +70,8 @@
    "id": "cap-02e",
    "text": "Up the side: activity in counts per minute",
    "class": "control",
-   "evidence": "",
-   "note": "Ours' activity axis is Bq only."
+   "evidence": "changes:{\"y\":\"Activity\",\"act_unit\":\"Counts per minute\"}",
+   "note": "Built in batch 6, round 274 (2026-11-10). Ours' activity axis is Bq only."
   },
   {
    "id": "cap-02f",
@@ -98,15 +98,15 @@
    "id": "cap-04c",
    "text": "Guide lines labeled with their times",
    "class": "control",
-   "evidence": "",
-   "note": "Ours labels only T½, 2T½..."
+   "evidence": "changes:guide_labels=Times",
+   "note": "Built in batch 6, round 275 (2026-11-10). Ours labels only T½, 2T½..."
   },
   {
    "id": "cap-04d",
    "text": "Guide labels as blank lines for students",
    "class": "version",
-   "evidence": "",
-   "note": "Ours has no blank guide labels."
+   "evidence": "changes:guide_labels=Blank lines",
+   "note": "Built in batch 6, round 276 (2026-11-10). Ours has no blank guide labels."
   },
   {
    "id": "cap-05a",
@@ -154,29 +154,29 @@
    "id": "cap-06c",
    "text": "Axis titles as text, a blank line, or none",
    "class": "control",
-   "evidence": "",
-   "note": "Ours' axis titles are fixed."
+   "evidence": "changes:xtitle_mode=Blank line",
+   "note": "Built in batch 6, round 277 (2026-11-10). Ours' axis titles are fixed."
   },
   {
    "id": "cap-06d",
    "text": "Set the axis ranges (from, to, count by)",
    "class": "control",
-   "evidence": "",
-   "note": "Ours has only the span in half-lives, not axis ranges."
+   "evidence": "changes:{\"fit\":false,\"x_from\":0,\"x_to\":40000,\"x_by\":2000,\"y_by\":10}",
+   "note": "Built in batch 6, round 278 (2026-11-10). Ours has only the span in half-lives, not axis ranges."
   },
   {
    "id": "cap-06e",
    "text": "Axis numbering every line, every 2nd, 5th, 10th or none",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:x_num=Every 2nd line",
+   "note": "Built in batch 6, round 279 (2026-11-10)."
   },
   {
    "id": "cap-06f",
    "text": "Minor gridlines (2, 4 or 5 per block)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:minor_grid=5 per block",
+   "note": "Built in batch 6, round 280 (2026-11-10)."
   },
   {
    "id": "cap-06g",

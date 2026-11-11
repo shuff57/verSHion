@@ -1,35 +1,20 @@
 {
- "generated_at": "2026-11-10T16:35:53+00:00",
- "probe_checked_at": "2026-11-10T08:35:53",
+ "generated_at": "2026-11-11T02:06:06+00:00",
+ "probe_checked_at": "2026-11-10T18:06:05",
  "comparable": true,
  "drift": [],
- "pooled": 93.6,
- "mean": 93.2,
+ "pooled": 94.6,
+ "mean": 94.5,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
  "figures": {
   "angles": {
-   "score": 93.0,
-   "got": 66.0,
+   "score": 100.0,
+   "got": 71.0,
    "total": 71.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Mark a chosen angle with congruence marks",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04g",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click an angle on the figure to mark or shade it",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "bar-chart": {
    "score": 100.0,
@@ -241,8 +226,8 @@
    "gaps": []
   },
   "dot-and-cross": {
-   "score": 64.3,
-   "got": 36.0,
+   "score": 91.1,
+   "got": 51.0,
    "total": 56.0,
    "unclassified": 0,
    "gaps": [
@@ -251,41 +236,6 @@
      "class": "core",
      "weight": 5.0,
      "text": "Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw an ionic compound with every ion drawn separately",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Swap dots and crosses between the atoms",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06a",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Click an electron to cycle it through dot, cross, open circle, open square and nothing, for a find-the-mistake question",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Click an element symbol to blank or show it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Click an ion's charge to show it, make it a blank box or leave it off, per ion",
      "why": "no evidence"
     }
    ]
@@ -343,68 +293,11 @@
    ]
   },
   "half-life-graph": {
-   "score": 71.4,
-   "got": 60.0,
+   "score": 100.0,
+   "got": 84.0,
    "total": 84.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Your own isotope's half-life in a unit you choose (not only years)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Up the side: activity in counts per minute",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Guide lines labeled with their times",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04d",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Guide labels as blank lines for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Axis titles as text, a blank line, or none",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set the axis ranges (from, to, count by)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Axis numbering every line, every 2nd, 5th, 10th or none",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Minor gridlines (2, 4 or 5 per block)",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "heating-cooling-curve": {
    "score": 85.4,
@@ -707,26 +600,11 @@
    "gaps": []
   },
   "organic-structure": {
-   "score": 71.4,
-   "got": 15.0,
+   "score": 100.0,
+   "got": 21.0,
    "total": 21.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-06a2",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Condensed view written on the drawing: H3C, CH2, CH3 at each carbon's place in the structure",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "'Carbons' display: the skeletal zigzag with a C written at every carbon atom and no hydrogens",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "osmosis": {
    "score": 100.0,

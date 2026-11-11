@@ -49,8 +49,8 @@
    "id": "cap-06a2",
    "text": "Condensed view written on the drawing: H3C, CH2, CH3 at each carbon's place in the structure",
    "class": "control",
-   "evidence": "",
-   "note": "Wide form of cap-06a (narrow/wide convention). Ours has no per-atom condensed labels."
+   "evidence": "changes:mode=Groups",
+   "note": "Built in batch 6, round 286 (2026-11-10). Wide form of cap-06a (narrow/wide convention). Ours has no per-atom condensed labels."
   },
   {
    "id": "cap-06b",
@@ -63,8 +63,8 @@
    "id": "cap-06c",
    "text": "'Carbons' display: the skeletal zigzag with a C written at every carbon atom and no hydrogens",
    "class": "control",
-   "evidence": "",
-   "note": "Checked live 2026-11-08 on a drawn butane: Carbons keeps the skeletal bonds and writes C at all four vertices, no H (Condensed writes H3C/CH2, Full draws every H). Ours has Skeletal, Condensed and Full only (MODES in organic.rs), so no evidence."
+   "evidence": "changes:mode=Carbons",
+   "note": "Built in batch 6, round 287 (2026-11-10). Checked live 2026-11-08 on a drawn butane: Carbons keeps the skeletal bonds and writes C at all four vertices, no H (Condensed writes H3C/CH2, Full draws every H). Ours has Skeletal, Condensed and Full only (MODES in organic.rs), so no evidence."
   },
   {
    "id": "cap-07",

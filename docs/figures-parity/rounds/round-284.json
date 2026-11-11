@@ -1,0 +1,29 @@
+{
+ "round": 284,
+ "figure": "dot-and-cross",
+ "capability": "cap-06b",
+ "hypothesis": "Batch 6 dot-and-cross: cap-06b; evidence handle:click:Click the element symbol to blank it",
+ "started_at": "2026-11-10T18:05:59",
+ "git": "fc9ff81",
+ "before": {
+  "figure": 80.4,
+  "pooled": 94.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-10T18:06:00",
+ "after": {
+  "figure": 85.7,
+  "pooled": 94.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": []
+ },
+ "checker": "pass: a symbol blanks and shows again",
+ "result": "hit",
+ "evidence": "dot-and-cross tests (octets and each atom's own electrons for every molecule, ionic ratios and charges by hand, clicks through interact::pick over twelve layouts, refusals, 535 old cases each pinned to its render); 211 old figures judged chemistry fixes by the checker; census: defaults and start (water's lone pairs); task run reference 4 actions, ours 6",
+ "next": "dot-and-cross cap-01d (SiO2 refusal awaiting its re-check)"
+}
