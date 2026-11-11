@@ -57,6 +57,11 @@ pub(crate) fn relevant(key: &str, p: &Params) -> bool {
         if key == r.4 || key == r.5 || key == r.6 { return matches!(read_row(p, i), Row::Seq(_) | Row::Bad(_)); }
     }
     match key {
+        // a slider whose typed box is being read would move nothing: it is shown again when the box
+        // is emptied or cannot be read (the slider's value is then the one drawn)
+        "min" => !typed_reads(p, "min_text"),
+        "max" => !typed_reads(p, "max_text"),
+        "step" => nl_num(p.s("step_text").trim()).filter(|v| *v > 1e-9).is_none(),
         "pt_mark" => !p.s("points").trim().is_empty(),
         "pt_labels" => points(p).iter().any(|q| !q.name.is_empty()),
         _ => true,
@@ -71,6 +76,8 @@ fn typed_end(p: &Params, text_key: &str, key: &str) -> f64 {
     if t.is_empty() { return p.f(key); }
     nl_num(t).filter(|v| v.is_finite()).map(|v| v.clamp(-1000.0, 1000.0)).unwrap_or_else(|| p.f(key))
 }
+/// Whether the typed From / To box `text_key` holds a number the figure draws from.
+fn typed_reads(p: &Params, text_key: &str) -> bool { nl_num(p.s(text_key).trim()).is_some_and(|v| v.is_finite()) }
 /// The range drawn: From and To, a typed From / To winning over the sliders.
 pub(crate) fn range(p: &Params) -> (f64, f64) {
     let (lo, mut hi) = (typed_end(p, "min_text", "min"), typed_end(p, "max_text", "max"));

@@ -507,3 +507,21 @@ fn number_line_new_controls_hide_where_they_do_nothing() {
     // other figures' controls are untouched by this hook
     assert!(crate::figures::param_relevant("coordinate-grid", "n_from", &with(&[])));
 }
+
+/// A From, To or Count by slider is shown exactly when moving it changes the drawing: with its typed
+/// box read it would move nothing, and with the box empty or unreadable it is the value drawn.
+#[test]
+fn number_line_sliders_hide_while_their_typed_box_is_read() {
+    let r = |key: &str, kv: &[(&str, Value)]| crate::figures::param_relevant("number-line", key, &with(kv));
+    let cases: [(&str, &str, [f64; 2]); 3] = [("min", "min_text", [-6.0, -3.0]), ("max", "max_text", [4.0, 8.0]), ("step", "step_text", [1.0, 2.0])];
+    for (key, text_key, vals) in cases {
+        for typed in ["", "abc", "2pi/", "-2pi", "3/2", "pi/2", "2", "1 1/2", "\u{2212}\u{3c0}", "0"] {
+            let base = |v: f64| { let mut kv = vec![(key, f(v)), (text_key, s(typed))]; if key != "min" { kv.push(("min", f(-9.0))); } kv };
+            let moves = svg(&with(&base(vals[0]))) != svg(&with(&base(vals[1])));
+            assert_eq!(r(key, &base(vals[0])), moves, "{key} with {text_key} = {typed:?}: shown must mean it moves the drawing");
+        }
+        assert!(r(key, &[]), "{key} is shown on a new figure");
+    }
+    // a typed To leaves the From slider alone, and the other way round
+    assert!(r("min", &[("max_text", s("2pi"))]) && r("max", &[("min_text", s("-2pi"))]) && r("step", &[("min_text", s("-2pi")), ("max_text", s("2pi"))]));
+}
