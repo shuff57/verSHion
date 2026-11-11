@@ -95,6 +95,7 @@ pub fn key_note(fig: &str, key: &str, p: &Params) -> Option<Note> {
             "All equal" => note("Every line drawn equally bright, so only where they are matters."),
             _ => note("Element lines as bright as NIST lists them against the element\u{2019}s strongest (roughly), faint ones never fainter than 30%. Your own lines are all full strength."),
         },
+        ("heating-cooling-curve", "scale") if super::heatcurve_b8::computed(p) => super::heatcurve_b8::scale_note(p).and_then(note),
         ("heating-cooling-curve", "scale") => note("How long each segment runs along the x-axis."),
 
         ("length-reading", "marks") if p.s("units").starts_with("Imperial") => note("Lengths land on a mark and are read as fractions of an inch."),

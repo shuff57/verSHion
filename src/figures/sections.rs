@@ -110,9 +110,9 @@ static FIG_10: [RefSection; 4] = [
 ];
 
 static FIG_11: [RefSection; 7] = [
-    s("Labels", &["scale", "t_solid", "t_melt", "t_liquid", "t_boil", "t_gas", "labels", "phase_names", "seg_labels", "plateau_labels", "letters", "plateau_dashes", "temp_labels"], ""),
+    s("Labels", &["scale", "mass", "rate", "t_solid", "t_melt", "t_liquid", "t_boil", "t_gas", "labels", "phase_names", "seg_labels", "plateau_labels", "letters", "plateau_dashes", "temp_labels"], ""),
     s("Curve", &["curve_color", "supercool"], ""),
-    s("Titles", &["mode", "substance", "mp", "bp", "start", "end", "title"], ""),
+    s("Titles", &["mode", "substance", "mp", "bp", "molar_mass", "c_solid", "c_liquid", "c_gas", "dh_fus", "dh_vap", "start", "end", "title"], ""),
     s("x-axis", &["xtitle_style", "xtitle", "xaxis_fit", "xaxis"], ""),
     s("y-axis", &["ylabel", "ytitle_style"], ""),
     s("More options", &["label_size", "title_style", "xaxis_from", "xaxis_to", "xaxis_by", "xaxis_num", "xaxis_lab", "xaxis_lab_text", "xaxis_lo", "xaxis_hi", "yaxis_from", "yaxis_to", "yaxis_by", "yaxis_num", "yaxis_lab", "yaxis_lab_text", "yaxis_lo", "yaxis_hi"], ""),

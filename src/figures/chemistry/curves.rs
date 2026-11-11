@@ -322,7 +322,7 @@ fn heat_params() -> Vec<ParamDef> {
         ParamDef::float("start", "Starting temperature (°C)", -273.0, 4000.0, 1.0, -20.0),
         ParamDef::float("end", "Ending temperature (°C)", -273.0, 4000.0, 1.0, 120.0),
         ParamDef::choice("xaxis", "Along the x-axis", &["Time", "Heat added"], "Time"),
-        ParamDef::choice("scale", "Segment lengths", &["Schematic", "To scale"], "Schematic"),
+        ParamDef::choice("scale", "Segment lengths", &["Schematic", "To scale", super::heatcurve_b8::COMPUTED], "Schematic"),
         ParamDef::float("t_solid", "Solid warms / cools (min)", 0.5, 30.0, 0.5, 2.0),
         ParamDef::float("t_melt", "Melting / freezing (min)", 0.5, 30.0, 0.5, 3.0),
         ParamDef::float("t_liquid", "Liquid warms / cools (min)", 0.5, 30.0, 0.5, 5.0),
@@ -353,12 +353,13 @@ fn heat_params() -> Vec<ParamDef> {
     v.extend(yaxis_params(AxisDefaults { from: -20.0, to: 120.0, by: 10.0, num: "Every 2nd line" }, 5000.0));
     v.push(crate::figures::svg::label_size_param());
     v.push(minor_param());
+    v.extend(super::heatcurve_b8::params());
     v
 }
 
 
 /// Stage list + axis frame shared by the heating-curve renderer and its handles.
-pub(super) struct HeatFrame { pub seq: Vec<(Ph, f64, f64, f64)>, pub mp: f64, pub bp: f64, pub lo: f64, pub hi: f64, pub total: f64, pub scaled: bool, pub cooling: bool, pub g: Graph, pub k: f64 }
+pub(super) struct HeatFrame { pub seq: Vec<(Ph, f64, f64, f64)>, pub mp: f64, pub bp: f64, pub lo: f64, pub hi: f64, pub total: f64, pub scaled: bool, pub cooling: bool, pub g: Graph, pub k: f64, pub note: Option<String> }
 
 impl HeatFrame {
     /// x of `u` along the curve (u in duration units).
@@ -378,6 +379,7 @@ pub(super) fn heat_points(p: &Params) -> (f64, f64) {
 }
 
 pub(super) fn heat_frame(p: &Params) -> HeatFrame {
+    if super::heatcurve_b8::computed(p) { return computed_frame(p); }
     let (mp, bp) = heat_points(p);
     let a = p.f("start");
     let b = p.f("end");
@@ -403,6 +405,35 @@ pub(super) fn heat_frame(p: &Params) -> HeatFrame {
     // schematic units are stretched to the real total so the time axis still reads in minutes
     let real: f64 = st.iter().map(|s| s.3).sum();
     let k = if scaled { 1.0 } else { real / total.max(1e-9) };
+    heat_axes(p, seq, mp, bp, lo, hi, hi, total, k, scaled, cooling, None, false)
+}
+
+/// Segment lengths computed from the heats (q = m·c·ΔT, q = n·ΔH), each part as long as its heat (kJ) or the time it
+/// takes at the rate (min). A curve that cannot be drawn keeps the axes and no parts, with the reason in `note`.
+fn computed_frame(p: &Params) -> HeatFrame {
+    let cooling = p.s("mode") == "Cooling";
+    let (mp0, bp0) = heat_points(p);
+    let (a, b) = (p.f("start"), p.f("end"));
+    let (lo, hi) = (a.min(b), a.max(b));
+    match super::heatcurve_b8::plan(p) {
+        Ok(segs) => {
+            let (mp, bp) = if p.s("substance") == "Custom" { (p.f("mp"), p.f("bp")) } else { (mp0, bp0) };
+            let rate = if p.s("xaxis") == "Heat added" { 1.0 } else { p.f("rate") };
+            let mut seq: Vec<(Ph, f64, f64, f64)> = segs.iter().map(|s| (s.ph, s.t0, s.t1, s.q / rate)).collect();
+            if cooling {
+                seq.reverse();
+                for s in seq.iter_mut() { std::mem::swap(&mut s.1, &mut s.2); }
+            }
+            let total: f64 = seq.iter().map(|s| s.3).sum();
+            // the parts keep their true temperatures; only the fitted temperature axis spans at least 10 degrees
+            heat_axes(p, seq, mp, bp, lo, hi, hi.max(lo + 10.0), total, 1.0, false, cooling, None, true)
+        }
+        Err(e) => heat_axes(p, Vec::new(), mp0, bp0, lo, hi, hi.max(lo + 10.0), 1.0, 1.0, false, cooling, Some(e), false),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn heat_axes(p: &Params, seq: Vec<(Ph, f64, f64, f64)>, mp: f64, bp: f64, lo: f64, hi: f64, hi_axis: f64, total: f64, k: f64, scaled: bool, cooling: bool, note: Option<String>, pad: bool) -> HeatFrame {
     let mut x = Axis::read(p, "xaxis");
     let mut y = Axis::read(p, "yaxis");
     if p.b("xaxis_fit") {
@@ -411,17 +442,22 @@ pub(super) fn heat_frame(p: &Params) -> HeatFrame {
         x.from = 0.0;
         x.to = (tx_ / (x.by * 2.0)).ceil() * x.by * 2.0;
         x.fix();
-        let by = crate::figures::axes::nice_step_with(hi - lo, 14.0, crate::figures::axes::Rule::QuarterTol);
+        let by = crate::figures::axes::nice_step_with(hi_axis - lo, 14.0, crate::figures::axes::Rule::QuarterTol);
         y.by = by;
         y.from = (lo / (2.0 * by)).floor() * 2.0 * by;
-        y.to = (hi / (2.0 * by)).ceil() * 2.0 * by;
+        y.to = (hi_axis / (2.0 * by)).ceil() * 2.0 * by;
+        // a computed curve's ends are kept off the frame (a letter or label at a corner needs room there)
+        if pad {
+            if lo - y.from < 0.5 * by { y.from -= 2.0 * by; }
+            if y.to - hi < 0.5 * by { y.to += 2.0 * by; }
+        }
         y.fix();
     }
     let xt = axis_title(p, "xtitle_style", "x").is_some();
     let yt = axis_title(p, "ytitle_style", p.s("ylabel")).is_some();
     let ((x0, x1, y0, y1), (w, h)) = plot_rect(&x, &y, xt, yt, 0.0, lf(p));
     let minor = match p.s("minor_grid") { "2 per block" => 2, "4 per block" => 4, "5 per block" => 5, _ => 0 };
-    HeatFrame { seq, mp, bp, lo, hi, total, scaled, cooling, g: Graph { x, y, minor, x0, x1, y0, y1, w, h, lf: lf(p) }, k }
+    HeatFrame { seq, mp, bp, lo, hi, total, scaled, cooling, g: Graph { x, y, minor, x0, x1, y0, y1, w, h, lf: lf(p) }, k, note }
 }
 
 /// The five phase labels (solid, melting, liquid, boiling, gas), defaults filling blanks.
@@ -435,7 +471,7 @@ fn phase_names(p: &Params) -> Vec<String> {
     }).collect()
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub(super) enum Ph { Solid, Melt, Liquid, Boil, Gas }
 
 fn halo(d: &mut Doc, x: f64, y: f64, size: f64, anchor: &str, t: &str) {
@@ -481,15 +517,32 @@ impl Placer {
     }
 }
 
-fn heat_render(p: &Params) -> String {
+fn heat_render(p: &Params) -> String { heat_draw(p).0 }
+
+/// What the computed curve left unlabelled for want of room: the parts, and the plateaus whose temperature label went.
+#[derive(Default)]
+pub(super) struct LeftOff { pub parts: Vec<Ph>, pub temps: Vec<Ph> }
+
+/// The heating curve's SVG, and the parts whose label was left off (a computed part too short to label clear of the
+/// curve and the other labels; the old modes never leave one off).
+pub(super) fn heat_draw(p: &Params) -> (String, LeftOff) {
+    let mut unlabelled: Vec<Ph> = Vec::new();
+    let mut untemp: Vec<Ph> = Vec::new();
     let hf = heat_frame(p);
     let g = &hf.g;
     let (mp, bp, lo, hi, cooling) = (hf.mp, hf.bp, hf.lo, hf.hi, hf.cooling);
     let seq = hf.seq.clone();
     let mut d = Doc::new(g.w, g.h);
-    let auto_x = if p.s("xaxis") == "Heat added" { if cooling { "Heat removed" } else { "Heat added" } } else { "Time (min)" };
+    let comp = super::heatcurve_b8::computed(p);
+    let auto_x = if p.s("xaxis") == "Heat added" {
+        match (cooling, comp) { (true, true) => "Heat removed (kJ)", (false, true) => "Heat added (kJ)", (true, false) => "Heat removed", (false, false) => "Heat added" }
+    } else { "Time (min)" };
     let xl = if p.s("xtitle").trim().is_empty() { auto_x.to_string() } else { p.s("xtitle").to_string() };
     draw_graph(&mut d, g, axis_title(p, "xtitle_style", &xl), axis_title(p, "ytitle_style", p.s("ylabel")));
+    if let Some(why) = &hf.note {
+        super::heatcurve_b8::draw_refusal(&mut d, g, why);
+        return (wrap_at(p, d.finish(), &[], Some((g.x0 + g.x1) / 2.0)), LeftOff::default());
+    }
     // curve (with the supercooling dip before freezing)
     let mut pts: Vec<(f64, f64)> = Vec::new();
     let mut corners: Vec<(f64, f64)> = Vec::new();
@@ -511,10 +564,14 @@ fn heat_render(p: &Params) -> String {
     d.polyline(&clip, cc, 3.0);
     let names = phase_names(p);
     let change = p.s("plateau_labels").starts_with("The change");
+    // the computed curve's corner letters are placed first, clear of the curve, the axis numbers and each other, and the
+    // labels then keep clear of them (its short parts crowd the corners); the old modes keep their fixed offsets
+    let mut letter_boxes: Vec<[f64; 4]> = Vec::new();
     if p.b("labels") {
         // Placement follows the reference generator: candidate boxes are tried in order and the
         // first one clear of the curve, guides and earlier labels wins.
-        let h = 15.4_f64;
+        // (the computed curve is laid out at the size it is drawn; the old modes keep their Medium layout, byte for byte)
+        let h = 15.4_f64 * if comp { lf(p) } else { 1.0 };
         let cw = h * 0.58;
         let mut corners_px: Vec<(f64, f64)> = Vec::new();
         {
@@ -538,6 +595,7 @@ fn heat_render(p: &Params) -> String {
         // temperature labels at the plateaus
         let mut point_out: Vec<(f64, f64, String)> = Vec::new();
         let mut point_blank: Vec<[f64; 4]> = Vec::new();
+        let mut temp_boxes: Vec<(Ph, [f64; 4])> = Vec::new();
         let tmode = p.s("temp_labels");
         if tmode != "None" {
             for s in &seq {
@@ -556,6 +614,7 @@ fn heat_render(p: &Params) -> String {
                 let c4: Vec<[f64; 4]> = c.iter().take(4).cloned().collect();
                 let l = c.iter().find(|b| pl.ok(b)).cloned().unwrap_or_else(|| pl.best(&c4));
                 pl.boxes.push(l);
+                temp_boxes.push((s.0, l));
                 if text.is_empty() { point_blank.push([l[0], l[3], l[2], l[3]]); } else { point_out.push((l[0], l[3] - h * 0.22, text)); }
             }
         }
@@ -595,11 +654,39 @@ fn heat_render(p: &Params) -> String {
                         for t in [0.5, 0.0, 1.0] { let q = lp(t); d2.push(ub(q.0 - c / 2.0, q.1 - e - h / 2.0)); d2.push(ub(q.0 - c / 2.0, q.1 + e + h / 2.0)); }
                     }
                 }
-                let f = d2.iter().find(|b| pl.ok(b)).cloned().unwrap_or_else(|| pl.best(&d2));
+                // a computed curve's label must sit by its own part, nearer it than any other part (its short parts crowd)
+                if comp {
+                    let parts: Vec<((f64, f64), (f64, f64))> = corners_px.windows(2).map(|q| (q[0], q[1])).collect();
+                    d2.retain(|b| owns_box(b, i, &parts, 6.0 + h));
+                }
+                let f = match d2.iter().find(|b| pl.ok(b)).cloned() {
+                    Some(f) => f,
+                    // a computed part with no clear place is left unlabelled (a panel note says so), never put on a line
+                    None if comp => { unlabelled.push(s.0); continue; }
+                    None => pl.best(&d2),
+                };
                 pl.boxes.push(f);
                 seg_out.push((i, f));
             }
             seg_out.sort_by_key(|q| q.0);
+        }
+        if comp && p.b("letters") {
+            // the letters go where they can; a segment label in the way of a letter with nowhere else is left off (noted)
+            // (a temperature label in the way goes too, as a last resort)
+            let mut soft: Vec<[f64; 4]> = seg_out.iter().map(|q| q.1).collect();
+            let ns = soft.len();
+            soft.extend(temp_boxes.iter().map(|q| q.1));
+            let (lb, dropped) = computed_letters(&corners, &clip, g, lf(p), &[], &soft, &pl.lines);
+            letter_boxes = lb;
+            let gone: Vec<usize> = dropped.iter().filter(|&&k| k < ns).map(|&k| seg_out[k].0).collect();
+            for &k in &gone { unlabelled.push(seq[k].0); }
+            seg_out.retain(|q| !gone.contains(&q.0));
+            for &k in dropped.iter().filter(|&&k| k >= ns) {
+                let (ph, l) = temp_boxes[k - ns];
+                untemp.push(ph);
+                point_out.retain(|q| !(q.0 == l[0] && q.1 == l[3] - h * 0.22));
+                point_blank.retain(|q| !(q[0] == l[0] && q[1] == l[3]));
+            }
         }
         for (i, f) in &seg_out {
             if seg_mode == "Blank lines" { d.line(f[0], f[3], f[2], f[3], INK, 1.5); }
@@ -621,7 +708,13 @@ fn heat_render(p: &Params) -> String {
             dashed(&mut d, g.x0, hf.py(tv), corners_px[i].0.min(corners_px[i + 1].0), hf.py(tv), INK, 1.3);
         }
     }
-    if p.b("letters") {
+    if comp && p.b("letters") {
+        if letter_boxes.is_empty() { letter_boxes = computed_letters(&corners, &clip, g, lf(p), &[], &[], &[]).0; }
+        for (i, b) in letter_boxes.iter().enumerate() {
+            let sz = 16.0 * lf(p);
+            halo(&mut d, (b[0] + b[2]) / 2.0, b[3] - sz * 0.2, 16.0, "middle", &((b'A' + i as u8) as char).to_string());
+        }
+    } else if p.b("letters") {
         for (i, &(x, y)) in corners.iter().enumerate() {
             let prev = if i > 0 { corners[i - 1] } else { (x - 1.0, y) };
             let next = corners.get(i + 1).cloned().unwrap_or((x + 1.0, y));
@@ -630,7 +723,101 @@ fn heat_render(p: &Params) -> String {
             halo(&mut d, x + ox, y + oy, 16.0, "middle", &((b'A' + i as u8) as char).to_string());
         }
     }
-    wrap_at(p, d.finish(), &[], Some((g.x0 + g.x1) / 2.0))
+    (wrap_at(p, d.finish(), &[], Some((g.x0 + g.x1) / 2.0)), LeftOff { parts: unlabelled, temps: untemp })
+}
+
+/// Distance from point `q` to the segment `s`.
+fn seg_dist(q: (f64, f64), s: ((f64, f64), (f64, f64))) -> f64 {
+    let (a, b) = s;
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    let u = if l2 > 0.0 { (((q.0 - a.0) * dx + (q.1 - a.1) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    ((q.0 - a.0 - u * dx).powi(2) + (q.1 - a.1 - u * dy).powi(2)).sqrt()
+}
+
+/// Distance from box `b` ([x0, y0, x1, y1]) to segment `s` (0 where they meet), sampled finely along the segment.
+fn box_seg_dist(b: &[f64; 4], s: ((f64, f64), (f64, f64))) -> f64 {
+    let n = 64;
+    let mut best = f64::MAX;
+    for k in 0..=n {
+        let u = k as f64 / n as f64;
+        let (x, y) = (s.0 .0 + (s.1 .0 - s.0 .0) * u, s.0 .1 + (s.1 .1 - s.0 .1) * u);
+        let dx = (b[0] - x).max(0.0).max(x - b[2]);
+        let dy = (b[1] - y).max(0.0).max(y - b[3]);
+        best = best.min((dx * dx + dy * dy).sqrt());
+    }
+    // the box's corners against the segment too (a long segment sampled coarsely)
+    for c in [(b[0], b[1]), (b[2], b[1]), (b[0], b[3]), (b[2], b[3])] { best = best.min(seg_dist(c, s)); }
+    best
+}
+
+/// Whether box `b` belongs to part `i` of `parts`: within `reach` of it and nearer it than any other part. A neighbour
+/// shares a corner with it, so the neighbour is measured from 12 px past that corner (a label by the corner is by both).
+fn owns_box(b: &[f64; 4], i: usize, parts: &[((f64, f64), (f64, f64))], reach: f64) -> bool {
+    let d = box_seg_dist(b, parts[i]);
+    if d > reach { return false; }
+    // straight over or under a plateau, between its ends, a label is its own (the parts either side rise or fall away)
+    let (a, o) = parts[i];
+    let cx = (b[0] + b[2]) / 2.0;
+    if (a.1 - o.1).abs() < 0.5 && cx > a.0.min(o.0) + 2.0 && cx < a.0.max(o.0) - 2.0 && (b[3] <= a.1 || b[1] >= a.1) { return true; }
+    parts.iter().enumerate().filter(|(j, _)| *j != i).all(|(j, q)| {
+        let len = (q.1 .0 - q.0 .0).hypot(q.1 .1 - q.0 .1);
+        let cut = if len > 0.0 { (12.0 / len).min(1.0) } else { 1.0 };
+        let lerp = |u: f64| (q.0 .0 + (q.1 .0 - q.0 .0) * u, q.0 .1 + (q.1 .1 - q.0 .1) * u);
+        // the neighbour's part away from the shared corner (none left if it is shorter than 12 px)
+        let rest = if j + 1 == i { if cut >= 1.0 { return true; } (q.0, lerp(1.0 - cut)) } else if j == i + 1 { if cut >= 1.0 { return true; } (lerp(cut), q.1) } else { *q };
+        box_seg_dist(b, rest) > d + 2.0
+    })
+}
+
+/// Boxes for the corner letters of a computed curve (drawn size, `lf` the label-size factor): for each corner the first
+/// spot round it clear of the curve, the earlier letters and the axis numbers outside the plot; the least crowded if none.
+/// `hard` boxes (the temperature labels) are never covered; a `soft` one (a segment label) is given up, its index returned,
+/// when a letter has no clear spot without its room.
+fn computed_letters(corners: &[(f64, f64)], clip: &[(f64, f64)], g: &Graph, lf: f64, hard: &[[f64; 4]], soft: &[[f64; 4]], lines: &[[f64; 4]]) -> (Vec<[f64; 4]>, Vec<usize>) {
+    let sz = 16.0 * lf;
+    let (w, h) = (sz * 0.72, sz);
+    let mut ls: Vec<[f64; 4]> = clip.windows(2).map(|q| [q[0].0, q[0].1, q[1].0, q[1].1]).collect();
+    ls.extend(lines.iter().cloned());
+    let inner = [g.x0 + 3.0, g.y0 + 3.0, g.x1 - 3.0, g.y1 - 3.0];
+    let mut pl = Placer { lines: ls.clone(), boxes: hard.iter().chain(soft.iter()).cloned().collect(), inner };
+    let mut bare = Placer { lines: ls, boxes: hard.to_vec(), inner };
+    let mut dropped: Vec<usize> = Vec::new();
+    let mut out = Vec::new();
+    for (i, &(x, y)) in corners.iter().enumerate() {
+        let prev = if i > 0 { corners[i - 1] } else { (x - 1.0, y) };
+        let next = corners.get(i + 1).cloned().unwrap_or((x + 1.0, y));
+        let cross = (x - prev.0) * (next.1 - y) - (y - prev.1) * (next.0 - x);
+        // the old offsets first (outside the bend), then round the corner
+        let first = if cross < 0.0 { (-6.0, -12.0) } else { (8.0, 22.0) };
+        let mut c = vec![first];
+        for r in [1.0, 1.6, 2.4] {
+            for (dx, dy) in [(-0.6, -0.9), (0.7, 1.3), (0.8, -0.9), (-0.7, 1.3), (1.0, 0.25), (-1.0, 0.25), (0.0, -1.1), (0.0, 1.5)] { c.push((dx * sz * r, dy * sz * r)); }
+        }
+        // then a ring of twenty-four directions, farther out
+        for r in [1.2, 2.0, 3.0, 4.0] {
+            for k in 0..24 { let a = k as f64 * std::f64::consts::PI / 12.0; c.push((a.cos() * sz * r, a.sin() * sz * r + 0.3 * sz)); }
+        }
+        let all: Vec<[f64; 4]> = c.iter().map(|&(ox, oy)| { let (cx, by) = (x + ox, y + oy + 0.2 * sz); [cx - w / 2.0, by - h, cx + w / 2.0, by] }).collect();
+        // a letter is nearer its own corner than any other corner
+        let near = |b: &[f64; 4]| { let m = ((b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0); let dd = |q: (f64, f64)| (q.0 - m.0).hypot(q.1 - m.1); corners.iter().enumerate().all(|(j, q)| j == i || dd(*q) > dd((x, y)) + 2.0) };
+        let mut bx: Vec<[f64; 4]> = all.iter().filter(|b| near(b)).cloned().collect();
+        if bx.is_empty() { bx = all; }
+        let b = match bx.iter().find(|b| pl.ok(b)).cloned() {
+            Some(b) => b,
+            None => {
+                let b = bx.iter().find(|b| bare.ok(b)).cloned().unwrap_or_else(|| bare.best(&bx));
+                for (k, s) in soft.iter().enumerate() {
+                    if !dropped.contains(&k) && Placer::overlap(&Placer::grow(s, 2.0), &b) { dropped.push(k); pl.boxes.retain(|q| q != s); }
+                }
+                b
+            }
+        };
+        pl.boxes.push(b);
+        bare.boxes.push(b);
+        out.push(b);
+    }
+    (out, dropped)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -693,6 +880,7 @@ fn tit_handles(p: &Params) -> Vec<Handle> {
 fn heat_handles(p: &Params) -> Vec<Handle> {
     let hf = heat_frame(p);
     let mut out = Vec::new();
+    if hf.note.is_some() { return out; }
     let n = hf.seq.len();
     let a = p.f("start");
     let b = p.f("end");
@@ -710,6 +898,8 @@ fn heat_handles(p: &Params) -> Vec<Handle> {
                     let now = if is_mp { fr.mp } else { fr.bp };
                     if (v - now).abs() < 0.5 { return; }
                     let (mp0, bp0) = heat_points(q);
+                    // a named substance's heats go with it, so a computed curve keeps its lengths
+                    super::heatcurve_b8::carry_heats(q);
                     q.set_s("substance", "Custom");
                     q.set_f("mp", if is_mp { v } else { mp0 });
                     q.set_f("bp", if is_mp { bp0 } else { v });
@@ -729,7 +919,7 @@ fn heat_handles(p: &Params) -> Vec<Handle> {
         let end_is_lo = hf.cooling;
         let end_key = key_for(end_is_lo);
         if last || hf.scaled {
-            let tip = if last { "End point: drag to change the ending temperature and last segment time" } else { "Drag sideways to change this segment's time" };
+            let tip = if last && super::heatcurve_b8::computed(p) { "End point: drag up or down to change the ending temperature" } else if last { "End point: drag to change the ending temperature and last segment time" } else { "Drag sideways to change this segment's time" };
             let idx = i;
             out.push(Handle::knob((xb, hf.py(s.2)), tip, move |q, t| {
                 let fr = heat_frame(q);

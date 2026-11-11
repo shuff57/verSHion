@@ -22,6 +22,7 @@ mod length;
 mod readings_b7;
 #[cfg(test)]
 mod heatcurve_b8_frozen;
+mod heatcurve_b8;
 pub mod notes;
 pub mod reactionenergy;
 pub mod ratesgraph;
@@ -309,6 +310,7 @@ pub fn random_reading(id: &str, p: &mut Params, seed: u64) -> bool {
 
 pub use lewis::{answer_available as lewis_answer_available, changes_count as lewis_changes_count, mistake_lines as lewis_mistakes, central_choices as lewis_central_choices, edit_rows as lewis_edit_rows, has_changes as lewis_has_changes, relevant as lewis_relevant, set_edit as lewis_set_edit};
 pub use curves::{tit_end_note, tit_readout, tit_relevant, tit_section_summary};
+pub use heatcurve_b8::{relevant as heatcurve_relevant, warnings as heatcurve_warnings};
 
 pub fn shade(name: &str) -> &'static str {
     match name {
