@@ -330,7 +330,10 @@ mod tests {
     /// rock (the crop now stops above what is on the pan); and a rock on either balance, which stood
     /// 2 to 4 px above the pan and now rests on it.
     fn corrected(id: &str, p: &Params) -> bool {
-        id == "mass-reading" && (p.s("pan") == "Rock" || (p.s("balance").starts_with("Triple") && p.s("pan") != "Nothing" && p.s("mag_show") == "Instrument only"))
+        // and a triple beam mass over 600 g, whose riders stopped at 600 under a key giving the mass (the middle
+        // rider now reaches the 100 its beam is marked to)
+        id == "mass-reading" && (p.s("pan") == "Rock" || (p.s("balance").starts_with("Triple") && p.s("pan") != "Nothing" && p.s("mag_show") == "Instrument only")
+            || (p.s("balance").starts_with("Triple") && p.f("mass") > 600.0))
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -560,6 +563,12 @@ mod tests {
             let m = p.f("mass");
             let svg = def("mass-reading").svg(&p);
             assert!((riders_read(&svg, &p) - m).abs() < 0.005, "riders read {} for {m}", riders_read(&svg, &p));
+        }
+        // and so is every typed mass up to the beams' 610 g (the middle rider reaches 100)
+        for m in [0.0, 9.99, 99.99, 100.0, 499.99, 599.99, 600.0, 600.01, 605.37, 609.99, 610.0] {
+            let p = with("mass-reading", &[s("mag_show", "Instrument only"), f("mass", m)]);
+            let svg = def("mass-reading").svg(&p);
+            assert!((riders_read(&svg, &p) - m).abs() < 0.005, "riders read {} for a typed {m}", riders_read(&svg, &p));
         }
         let mut q = with("ph-reading", &[]);
         assert!(!super::random("volume-reading", &mut q, 1));

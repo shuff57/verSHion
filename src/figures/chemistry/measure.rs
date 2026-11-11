@@ -740,7 +740,9 @@ fn mass_render(p: &Params) -> String {
         let (ox, oy) = (MASS_OX, MASS_OY);
         let hundreds = ((mass / 100.0).floor() * 100.0).min(500.0);
         let rest = mass - hundreds;
-        let tens = ((rest / 10.0).floor() * 10.0).min(90.0);
+        // the middle beam is drawn to 100 g: with the far rider at 500 it carries a mass up to 610 g (capped at 90, a
+        // mass over 600 g drew riders reading 600 under a key giving the mass; the batch 7 checker)
+        let tens = ((rest / 10.0).floor() * 10.0).min(100.0);
         let ones = (rest - tens).clamp(0.0, 10.0);
         let bx = |v: f64, range: f64| ox + 248.0 + v / range * 336.0;
         d.raw(&format!(r##"<g stroke-linecap="round" stroke-linejoin="round" fill="#fff" stroke="{INK}" stroke-width="2"><rect x="{:.2}" y="{:.2}" width="676" height="34" rx="10"/><rect x="{:.2}" y="{:.2}" width="20" height="96"/><path d="M{:.2} {:.2} H{:.2} L{:.2} {:.2} Q{:.2} {:.2} {:.2} {:.2} Z"/><rect x="{:.2}" y="{:.2}" width="110" height="9"/><path d="M{:.2} {:.2} L{:.2} {:.2} H{:.2} Z"/><rect x="{:.2}" y="{:.2}" width="18" height="128"/></g>"##,
@@ -1184,7 +1186,7 @@ fn mass_handles(p: &Params) -> Vec<Handle> {
     let mass = p.f("mass").clamp(0.0, 610.0);
     let hundreds = ((mass / 100.0).floor() * 100.0).min(500.0);
     let rest = mass - hundreds;
-    let tens = ((rest / 10.0).floor() * 10.0).min(90.0);
+    let tens = ((rest / 10.0).floor() * 10.0).min(100.0);
     let ones = (rest - tens).clamp(0.0, 10.0);
     let x0 = MASS_OX + 248.0;
     let up = super::readings_b7::triple_handle_shift(p);
@@ -1203,7 +1205,7 @@ fn mass_handles(p: &Params) -> Vec<Handle> {
                 let m = q.f("mass").clamp(0.0, 610.0);
                 let h = ((m / 100.0).floor() * 100.0).min(500.0);
                 let r = m - h;
-                let te = ((r / 10.0).floor() * 10.0).min(90.0);
+                let te = ((r / 10.0).floor() * 10.0).min(100.0);
                 let on = (r - te).clamp(0.0, 10.0);
                 let mut v = (t.0 - x0) / 336.0 * range;
                 if step > 0.0 { v = (v / step).round() * step; }
