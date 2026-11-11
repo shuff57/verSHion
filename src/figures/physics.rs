@@ -27,6 +27,10 @@ mod summary;
 /// The choices of a vector's "Measured from" and "Angle label" (the Vectors card draws them).
 pub const VECTOR_FROM: [&str; 2] = vector_b8::FROM;
 pub const VECTOR_ANGLE_MODES: [&str; 3] = vector_b8::AMODES;
+/// The choices of a vector's component labels (Text, Blank line, None).
+pub const VECTOR_COMP_MODES: [&str; 3] = vector_b8::CMODES;
+/// The name vector `i`'s (1-based) x or y component gets from the vector's own label (shown as the text box's hint).
+pub fn vector_comp_auto(p: &Params, i: usize, x: bool) -> String { vector_b8::comp_auto(p, i - 1, x) }
 
 /// Editor notes for the vector diagram: labels left off for lack of room.
 pub fn vector_warnings(p: &Params) -> Vec<String> { vector_b8::warnings(p) }

@@ -3,7 +3,7 @@
 //! those files expose (`vlayout`, `proj_geo`, `motion_axes`, ...) are reused where they exist and
 //! the remaining constants are copied next to a comment naming the renderer line they come from.
 use super::graphs::{build_segs, motion_axes, motion_layout, series, SK};
-use super::mech::{fbd_geo, proj_geo, ray_exit, vlabel_pos, vlayout, PG};
+use super::mech::{fbd_geo, proj_geo, ray_exit, vlabel_pos, PG};
 use crate::figures::interact::{angle_deg, cycle, dist, polar, Cursor, Handle, Pt};
 use crate::figures::Params;
 
@@ -97,7 +97,7 @@ const VLAB: [&str; 4] = ["v1_lab", "v2_lab", "v3_lab", "v4_lab"];
 
 fn vector(p: &Params, size: (f64, f64)) -> Vec<Handle> {
     let m = M::new(p, size);
-    let l = vlayout(p, 480.0, 360.0); // vector_render canvas
+    let l = super::mech::vlayout_drawn(p); // vector_render canvas (the batch 8 drawing may draw the squares bigger)
     let (ox, oy, u) = (l.ox, l.oy, l.u);
     let pxy = |q: Pt| (ox + q.0 * u, oy - q.1 * u);
     let mut out = vec![];

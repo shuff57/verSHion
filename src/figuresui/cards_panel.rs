@@ -1200,6 +1200,33 @@ impl Workspace {
             if check(ui, &mut c, "Show its components") {
                 self.params.set_b(&k("comps"), c);
             }
+            if c {
+                // each component's own label, as the reference's rows offer it: text (blank: from the vector's name),
+                // a blank line or none
+                for (axis, mode, text) in [("x", "cx_mode", "cx_lab"), ("y", "cy_mode", "cy_lab")] {
+                    let title = format!("{axis} component label");
+                    if phys {
+                        ui.add_space(10.0);
+                        param_label(ui, &title, "");
+                        ui.add_space(5.9);
+                        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("seg_compact"), true));
+                    } else {
+                        small(ui, &title);
+                    }
+                    if let Some(v) = seg(ui, &figures::physics::VECTOR_COMP_MODES, self.params.s(&k(mode))) {
+                        self.params.set_s(&k(mode), &v);
+                    }
+                    if self.params.s(&k(mode)) == "Text" {
+                        let hint = format!("{} (from its name)", figures::physics::vector_comp_auto(&self.params, i, axis == "x"));
+                        if phys {
+                            ui.add_space(8.6);
+                        }
+                        if let Some(t) = buffered_edit(ui, ui.make_persistent_id(("vec_clab", i, axis)), self.params.s(&k(text)), 160.0, &hint) {
+                            self.params.set_s(&k(text), &t);
+                        }
+                    }
+                }
+            }
         }
     }
 

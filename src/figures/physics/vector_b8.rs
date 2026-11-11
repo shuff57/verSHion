@@ -63,6 +63,13 @@ pub fn relevant(key: &str, p: &Params) -> bool {
     if key == x[1] || key == x[2] || key == x[3] {
         return p.b(x[0]) && (key != x[3] || p.s(x[2]) == "Text");
     }
+    let c = VC[i - 1];
+    if c.contains(&key) {
+        if i > count(p) || !p.b(x[4]) {
+            return false;
+        }
+        return (key != c[1] || p.s(c[0]) == "Text") && (key != c[3] || p.s(c[2]) == "Text");
+    }
     true
 }
 
@@ -78,8 +85,12 @@ pub fn sweep(ang: f64, from: &str) -> (f64, f64) {
     (refa, d)
 }
 
-/// The angle a mark's "Degrees" label states: the sweep as drawn, to a tenth of a degree.
-pub fn degrees(d: f64) -> String { format!("{:.1}\u{b0}", d.abs()) }
+/// The angle a mark's "Degrees" label states: the sweep as drawn, to a tenth of a degree, a whole number without
+/// its ".0" (60°, 36.9°).
+pub fn degrees(d: f64) -> String {
+    let t = format!("{:.1}", d.abs());
+    format!("{}\u{b0}", t.strip_suffix(".0").unwrap_or(&t))
+}
 
 /// Component names from an arrow's label: `A` -> `A_x`, `F_1` -> `F_{1x}`.
 pub fn comp_name(lab: &str, axis: &str) -> String {
@@ -162,6 +173,16 @@ pub fn inside_angle(m: &Mark, c: Pt) -> bool {
     side(arrow, c) * side(arrow, mid) > 0.0 && (m.d.abs() < SMALL || side(refa, c) * side(refa, mid) > 0.0)
 }
 
+/// Whether point `c` is on its arc's side of the line along mark `m`'s arrow (not across its own arrow).
+pub fn arrow_side(m: &Mark, c: Pt) -> bool {
+    let side = |deg: f64, q: Pt| {
+        let (ux, uy) = (deg.to_radians().cos(), -deg.to_radians().sin());
+        (q.0 - m.tail.0) * uy - (q.1 - m.tail.1) * ux
+    };
+    let mid = pol(m.tail.0, m.tail.1, m.r, m.refa + m.d / 2.0);
+    side(m.refa + m.d, c) * side(m.refa + m.d, mid) > 0.0
+}
+
 /// An angle under this many degrees is labelled beside its arc rather than inside it.
 pub const SMALL: f64 = 20.0;
 
@@ -219,7 +240,19 @@ impl Lab {
 }
 
 /// A label to place: what it reads, whose it is, how far from its own mark it may sit, and its spots in order.
-pub struct Spec { pub lab: Lab, pub own: Own, pub reach: f64, pub cands: Vec<Pt>, /** points on its own mark a leader may start from */ pub anchors: Vec<Pt> }
+pub struct Spec {
+    pub lab: Lab,
+    pub own: Own,
+    pub reach: f64,
+    pub cands: Vec<Pt>,
+    /// points on its own mark a leader may start from
+    pub anchors: Vec<Pt>,
+    /// an angle's second choice, tried only when nothing inside the angle is free: beside its arc just past its
+    /// reference line (never across its own arrow), nearest its own arc
+    pub beside: Vec<Pt>,
+    /// a label whose arrow is a point (a zero vector) or an axis letter: no line to be nearest
+    pub zero: bool,
+}
 
 /// Which side of line a-b point q is on (+1 left of travel in page pixels, -1 right).
 fn side_of(a: Pt, b: Pt, q: Pt) -> f64 {
@@ -240,7 +273,7 @@ fn beside(a: Pt, b: Pt, s: f64, lab: &Lab, hw: f64, ts: &[f64]) -> Vec<Pt> {
     for &t in ts {
         let m = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
         for side in [s, -s] {
-            for extra in [2.0, 6.0, 11.0, 17.0, 25.0] {
+            for extra in [2.0, 6.0, 11.0, 17.0, 25.0, 34.0] {
                 let o = ext + hw + extra;
                 out.push((m.0 - nx * side * o, m.1 - ny * side * o));
             }
@@ -251,10 +284,15 @@ fn beside(a: Pt, b: Pt, s: f64, lab: &Lab, hw: f64, ts: &[f64]) -> Vec<Pt> {
 
 /// An angle mark: the arc about `tail` from `refa` through `d` degrees, at radius `r`.
 #[derive(Clone, Copy, Debug)]
-pub struct Mark { pub arrow: usize, pub tail: Pt, pub refa: f64, pub d: f64, pub r: f64 }
+pub struct Mark { pub arrow: usize, pub tail: Pt, pub refa: f64, pub d: f64, pub r: f64, /** its arrow's length, px */ pub len: f64 }
 
-/// Everything the batch 8 drawing draws, in page pixels before mirroring.
+/// Everything the batch 8 drawing draws, in page pixels before mirroring. It is laid out once per figure as the key
+/// copy (`scene`); the student copy draws the same layout with the answer parts (the resultant's arrow, mark and
+/// components, and their labels) left out, so the given vectors sit exactly where they sit on the key.
 pub struct Scene {
+    /// the page (480 x 360, or larger when the labels needed room)
+    pub w: f64,
+    pub h: f64,
     pub lay: VLay,
     pub vsw: f64,
     pub segs: Vec<Seg>,
@@ -265,18 +303,41 @@ pub struct Scene {
     pub comps: Vec<(usize, bool, Pt, Pt)>,
     /// placed labels: (centre, label, owner)
     pub labels: Vec<(Pt, Lab, Own)>,
-    /// labels no free spot was found for (left at their first spot)
+    /// labels no free spot was found for (left off)
     pub misses: Vec<String>,
     /// whose labels those are
     pub missed: Vec<Own>,
-    /// components left off because they would lie along another arrow or component: (arrow, x?)
+    /// components not drawn because they would lie along another arrow or component: (arrow, x?)
     pub dropped: Vec<(usize, bool)>,
-    /// where the "labels left off" note goes (none when there is no room for it either)
-    pub note: Option<Pt>,
-    /// leader lines (from a point on the label's own mark to the edge of its text), for labels with no room beside it
-    pub leaders: Vec<(Pt, Pt)>,
+    /// the editor notes (panel only, never drawn)
+    pub notes: Vec<String>,
+    /// leader lines (from a point on the label's own mark to the edge of its text), and whose
+    pub leaders: Vec<(Pt, Pt, Own)>,
     /// fixed text: the axis letters (centre of their box, label)
     pub fixed: Vec<(Bx, &'static str, Pt, &'static str)>,
+    /// for each label left off, why its spots were refused (for the tests)
+    pub why: Vec<String>,
+    /// the settings this layout was built with: (wide angle inside, zoom, arc moves, page, components drawn y first)
+    cfg: (bool, f64, [f64; 5], f64, [bool; 5]),
+    /// candidate spots tried while placing the labels (bounded by `WORK_CAP`)
+    pub work: usize,
+    /// lines and arrowheads by 24 px cell, for the placer's look-ups
+    index: Vec<Vec<u32>>,
+    cols: usize,
+    rows: usize,
+}
+
+/// The most candidate spots the placer tries for one figure; past it, the labels not yet placed are left off (with a
+/// note), the same way every time.
+pub const WORK_CAP: usize = 40_000;
+/// The most candidate spots tried for one figure over all its retries (the figure keeps the best layout found by then).
+pub const TOTAL_CAP: usize = 160_000;
+const CELL: f64 = 24.0;
+
+/// Whether `own` is part of the answer (the resultant's arrow, mark, reference line or components; with one vector,
+/// the components and mark the resultant switches draw), hidden on the student copy.
+pub fn is_answer(own: Own, n: usize) -> bool {
+    matches!(own, Own::Arrow(i) | Own::Comp(i, _) | Own::Mark(i) | Own::Ref(i) if i == n)
 }
 
 fn head_tri(a: Pt, b: Pt, sw: f64, k: (f64, f64)) -> [Pt; 3] {
@@ -319,136 +380,188 @@ fn mode_text(p: &Params, text_key: &str, mode_key: &str) -> Option<String> {
     }
 }
 
+
+/// Per-vector component labels: x shows (Text, Blank line, None), x text (blank = the name from the vector's label),
+/// y shows, y text.
+pub(super) const VC: [[&str; 4]; 4] = [
+    ["v1_cx_mode", "v1_cx_lab", "v1_cy_mode", "v1_cy_lab"],
+    ["v2_cx_mode", "v2_cx_lab", "v2_cy_mode", "v2_cy_lab"],
+    ["v3_cx_mode", "v3_cx_lab", "v3_cy_mode", "v3_cy_lab"],
+    ["v4_cx_mode", "v4_cx_lab", "v4_cy_mode", "v4_cy_lab"],
+];
+pub(super) const VCL: [[&str; 4]; 4] = [
+    ["Vector 1 x component label shows", "Vector 1 x component label (blank: from its name)", "Vector 1 y component label shows", "Vector 1 y component label (blank: from its name)"],
+    ["Vector 2 x component label shows", "Vector 2 x component label (blank: from its name)", "Vector 2 y component label shows", "Vector 2 y component label (blank: from its name)"],
+    ["Vector 3 x component label shows", "Vector 3 x component label (blank: from its name)", "Vector 3 y component label shows", "Vector 3 y component label (blank: from its name)"],
+    ["Vector 4 x component label shows", "Vector 4 x component label (blank: from its name)", "Vector 4 y component label shows", "Vector 4 y component label (blank: from its name)"],
+];
+pub(super) const CMODES: [&str; 3] = ["Text", "Blank line", "None"];
+
 impl Scene {
+    /// How badly labels were left off: an angle value or component name ten, an arrow's name one.
+    pub fn score(&self) -> usize {
+        self.missed.iter().map(|o| if matches!(o, Own::Mark(_) | Own::Comp(..)) { 10 } else { 1 }).sum()
+    }
+
+    fn build_index(&mut self) {
+        let (cols, rows) = ((self.w / CELL) as usize + 1, (self.h / CELL) as usize + 1);
+        (self.cols, self.rows) = (cols, rows);
+        let mut idx = vec![Vec::new(); cols * rows];
+        let mut add = |k: u32, x0: f64, x1: f64, y0: f64, y1: f64| {
+            let (c0, c1) = (((x0 / CELL).floor().max(0.0)) as usize, ((x1 / CELL).floor().max(0.0) as usize).min(cols - 1));
+            let (r0, r1) = (((y0 / CELL).floor().max(0.0)) as usize, ((y1 / CELL).floor().max(0.0) as usize).min(rows - 1));
+            for r in r0.min(rows - 1)..=r1 {
+                for c in c0.min(cols - 1)..=c1 {
+                    idx[r * cols + c].push(k);
+                }
+            }
+        };
+        for (k, s) in self.segs.iter().enumerate().filter(|(_, s)| s.solid) {
+            let m = s.hw + 2.0;
+            add(k as u32, s.a.0.min(s.b.0) - m, s.a.0.max(s.b.0) + m, s.a.1.min(s.b.1) - m, s.a.1.max(s.b.1) + m);
+        }
+        let ns = self.segs.len();
+        for (k, t) in self.heads.iter().enumerate() {
+            let (x0, x1) = (t[0].0.min(t[1].0).min(t[2].0) - 2.0, t[0].0.max(t[1].0).max(t[2].0) + 2.0);
+            let (y0, y1) = (t[0].1.min(t[1].1).min(t[2].1) - 2.0, t[0].1.max(t[1].1).max(t[2].1) + 2.0);
+            add((ns + k) as u32, x0, x1, y0, y1);
+        }
+        self.index = idx;
+    }
+
     fn free(&self, bx: &Bx, placed: &[Bx]) -> bool {
-        if bx.c.0 - bx.hw < 2.0 || bx.c.0 + bx.hw > W - 2.0 || bx.c.1 - bx.hh < 2.0 || bx.c.1 + bx.hh > H - 2.0 {
+        if bx.c.0 - bx.hw < 2.0 || bx.c.0 + bx.hw > self.w - 2.0 || bx.c.1 - bx.hh < 2.0 || bx.c.1 + bx.hh > self.h - 2.0 {
             return false;
         }
         if placed.iter().any(|o| o.hits(bx, 1.0)) || self.fixed.iter().any(|f| f.0.hits(bx, 1.0)) {
             return false;
         }
-        if self.segs.iter().filter(|s| s.solid).any(|s| seg_hits_box(s.a, s.b, bx, s.hw + 1.0)) {
-            return false;
-        }
         if self.leaders.iter().any(|l| seg_hits_box(l.0, l.1, bx, 1.5)) {
             return false;
         }
-        !self.heads.iter().any(|t| tri_hits_box(t, bx, 1.0))
-    }
-
-    /// Nearest owner (among `kind`) of point q, and its distance.
-    fn nearest(&self, q: Pt, kind: fn(Own) -> bool) -> Option<(Own, f64)> {
-        self.segs.iter().filter(|s| kind(s.own)).map(|s| (s.own, seg_dist(q, s.a, s.b))).min_by(|a, b| a.1.total_cmp(&b.1))
-    }
-
-    /// Places every label: those in `first` before the rest, then the one with the fewest free spots each time.
-    /// Returns the centres, the leader lines and the labels that found no room.
-    fn arrange(&mut self, specs: &[Spec], first: &[usize]) -> (Vec<Pt>, Vec<(Pt, Pt)>, Vec<usize>) {
-        self.leaders.clear();
-        let mut placed: Vec<Option<Pt>> = vec![None; specs.len()];
-        let mut boxes: Vec<Bx> = vec![];
-        let mut missed = vec![];
-        loop {
-            let todo: Vec<usize> = (0..specs.len()).filter(|&k| placed[k].is_none()).collect();
-            if todo.is_empty() {
-                break;
-            }
-            let k = match todo.iter().copied().find(|k| first.contains(k)) {
-                Some(k) => k,
-                None => {
-                    let counts: Vec<usize> = todo.iter().map(|&k| specs[k].cands.iter().filter(|&&c| self.valid(&specs[k], c, &boxes)).count()).collect();
-                    todo[(0..todo.len()).min_by_key(|&j| counts[j]).unwrap()]
+        let ns = self.segs.len();
+        let (cols, rows) = (self.cols, self.rows);
+        let (c0, c1) = ((((bx.c.0 - bx.hw - 4.0) / CELL).floor().max(0.0)) as usize, ((((bx.c.0 + bx.hw + 4.0) / CELL).floor().max(0.0)) as usize).min(cols - 1));
+        let (r0, r1) = ((((bx.c.1 - bx.hh - 4.0) / CELL).floor().max(0.0)) as usize, ((((bx.c.1 + bx.hh + 4.0) / CELL).floor().max(0.0)) as usize).min(rows - 1));
+        for r in r0.min(rows - 1)..=r1 {
+            for c in c0.min(cols - 1)..=c1 {
+                for &k in &self.index[r * cols + c] {
+                    let k = k as usize;
+                    let hit = if k < ns { let s = &self.segs[k]; seg_hits_box(s.a, s.b, bx, s.hw + 1.0) } else { tri_hits_box(&self.heads[k - ns], bx, 1.0) };
+                    if hit {
+                        return false;
+                    }
                 }
-            };
-            let sp = &specs[k];
-            let c = match sp.cands.iter().copied().find(|&c| self.valid(sp, c, &boxes)).or_else(|| self.search(sp, &boxes)) {
-                Some(c) => c,
-                None => match self.lead(sp, &boxes) {
-                    Some((c, a, e)) => {
-                        self.leaders.push((a, e));
-                        c
-                    }
-                    None => {
-                        // left off: it takes no room
-                        missed.push(k);
-                        placed[k] = Some(sp.cands[0]);
-                        continue;
-                    }
-                },
-            };
-            let (hw, hh) = sp.lab.half();
-            boxes.push(Bx { c, hw, hh });
-            placed[k] = Some(c);
+            }
         }
-        (placed.into_iter().map(|c| c.unwrap()).collect(), std::mem::take(&mut self.leaders), missed)
+        true
     }
 
-    /// Whether the label of `sp` can sit centred on `c`: free of everything, and nearest its own arrow, component
-    /// or arc (of that kind), within reach.
-    fn valid(&self, sp: &Spec, c: Pt, placed: &[Bx]) -> bool {
-        let (hw, hh) = sp.lab.half();
-        let bx = Bx { c, hw, hh };
-        if !self.free(&bx, placed) {
+    /// Whether `own` is (one of) the nearest of its kind to q, within `reach` (ties within half a pixel count: an
+    /// arrow lying along another is as near).
+    fn owns(&self, q: Pt, own: Own, reach: f64) -> bool {
+        let kind = |o: Own| match (o, own) {
+            (Own::Arrow(_), Own::Arrow(_)) | (Own::Comp(..), Own::Comp(..)) | (Own::Mark(_), Own::Mark(_)) => true,
+            (a, b) => a == b,
+        };
+        let (mut mine, mut other) = (f64::MAX, f64::MAX);
+        for s in self.segs.iter().filter(|s| kind(s.own)) {
+            let d = seg_dist(q, s.a, s.b);
+            if s.own == own { mine = mine.min(d); } else { other = other.min(d); }
+        }
+        // arrows lying along one another tie; an angle's or a component's label must be plainly nearer its own
+        let margin = if matches!(own, Own::Mark(_) | Own::Comp(..)) { -1.5 } else { 0.5 };
+        mine <= reach && mine <= other + margin
+    }
+
+    /// Whether the label of `sp` can sit centred on `c`: free of everything, nearest its own arrow, component or arc
+    /// within reach, and an angle's label inside its angle.
+    fn valid(&mut self, sp: &Spec, c: Pt, placed: &[Bx]) -> bool { self.valid_as(sp, c, placed, true) }
+
+    /// `valid`, with `inside` false for an angle's second choice: then on its arc's side of its own arrow only, and
+    /// close to its arc (within the label's own size and 10 px).
+    fn valid_as(&mut self, sp: &Spec, c: Pt, placed: &[Bx], inside: bool) -> bool {
+        self.work += 1;
+        if self.work > WORK_CAP {
             return false;
         }
-        let own = sp.own;
-        let kind: fn(Own) -> bool = match own {
-            Own::Arrow(_) => |o| matches!(o, Own::Arrow(_)),
-            Own::Comp(..) => |o| matches!(o, Own::Comp(..)),
-            Own::Mark(_) => |o| matches!(o, Own::Mark(_)),
-            Own::Ref(_) => |o| matches!(o, Own::Ref(_)),
-            Own::Axis => |o| o == Own::Axis,
-        };
-        let reach = sp.reach + hw.max(hh);
-        // an angle's label inside its angle: on the arc's side of its arrow and of its reference line
-        if let Own::Mark(m) = own {
+        let (hw, hh) = sp.lab.half();
+        if !self.free(&Bx { c, hw, hh }, placed) {
+            return false;
+        }
+        let mut reach = sp.reach + hw.max(hh);
+        if let Own::Mark(m) = sp.own {
             if let Some(mk) = self.marks.iter().find(|k| k.arrow == m) {
-                if !inside_angle(mk, c) {
-                    return false;
+                if inside {
+                    // inside its angle, and no further out than its own arrow reaches (beyond, it reads as another's)
+                    if !inside_angle(mk, c) || (c.0 - mk.tail.0).hypot(c.1 - mk.tail.1) > mk.len.max(mk.r + 60.0) {
+                        return false;
+                    }
+                    // with a narrower angle nested inside it, in its own slice (in the shared part it reads as the
+                    // narrower one's)
+                    let inner = nested(mk, &self.marks);
+                    if inner > 0.0 {
+                        let a = (mk.tail.1 - c.1).atan2(c.0 - mk.tail.0).to_degrees();
+                        let mut t = (a - mk.refa).rem_euclid(360.0);
+                        if mk.d < 0.0 { t = (360.0 - t).rem_euclid(360.0); }
+                        if t <= inner {
+                            return false;
+                        }
+                    }
+                } else {
+                    if mk.d.abs() >= SMALL && !arrow_side(mk, c) {
+                        return false;
+                    }
+                    reach = hw.max(hh) + 10.0;
                 }
             }
         }
-        match (self.nearest(c, kind), own) {
-            // a component's name may sit nearer the other component of its own arrow (its subscript says which)
-            (Some((Own::Comp(a, _), _)), Own::Comp(b, _)) => a == b && self.segs.iter().any(|s| s.own == own && seg_dist(c, s.a, s.b) <= reach),
-            (Some((o, d)), _) => o == own && d <= reach,
-            (None, _) => true,
-        }
+        sp.zero || self.owns(c, sp.own, reach)
     }
 
-    /// No room beside its own mark: a free spot further out, joined to a point on its own mark by a leader line that
-    /// crosses no other arrow, arc, axis, leader, label or arrowhead (it may cross a dashed construction line). Returns (label centre, leader start, leader end).
-    fn lead(&self, sp: &Spec, placed: &[Bx]) -> Option<(Pt, Pt, Pt)> {
+    /// The last resort: a short slanted leader (18 to 42 px, never level or upright, where it could pass for a
+    /// component) from a clear point on the label's own mark to a free spot, the label still nearest its own mark
+    /// (an angle's inside its angle), the leader crossing no arrow, arc, axis, arrowhead, label or other leader.
+    fn lead(&mut self, sp: &Spec, placed: &[Bx], inside: bool) -> Option<(Pt, Pt, Pt)> {
         let (hw, hh) = sp.lab.half();
-        for ring in 0..34 {
-            let r = 16.0 + ring as f64 * 6.0;
-            for &a in &sp.anchors {
-                // a leader starts where nothing else of its kind passes, so it plainly starts on its own mark
-                let mine = |o: Own| match sp.own { Own::Mark(m) => o == Own::Arrow(m) || o == Own::Ref(m), _ => false };
-                if self.segs.iter().any(|s| s.own != sp.own && s.own != Own::Axis && !mine(s.own) && seg_dist(a, s.a, s.b) < 6.0) {
-                    continue;
-                }
-                for j in 0..36 {
-                    let ang = j as f64 / 36.0 * std::f64::consts::TAU;
-                    let c = (a.0 + r * ang.cos(), a.1 + r * ang.sin());
-                    let bx = Bx { c, hw, hh };
-                    if !self.free(&bx, placed) {
-                        continue;
-                    }
-                    // the leader stops 3 px short of the text's box
-                    let (dx, dy) = (a.0 - c.0, a.1 - c.1);
-                    let t = ((hw + 3.0) / dx.abs().max(1e-9)).min((hh + 3.0) / dy.abs().max(1e-9));
-                    if t >= 1.0 {
-                        continue;
-                    }
-                    let e = (c.0 + dx * t, c.1 + dy * t);
-                    if self.leader_clear(sp.own, a, e, placed) {
+        for &a in &sp.anchors {
+            let mine = |o: Own| match sp.own { Own::Mark(m) => o == Own::Arrow(m) || o == Own::Ref(m), _ => false };
+            if self.segs.iter().any(|s| s.own != sp.own && s.own != Own::Axis && !mine(s.own) && seg_dist(a, s.a, s.b) < 6.0) {
+                continue;
+            }
+            let lens: &[f64] = if inside { &[18.0, 26.0, 34.0, 42.0] } else { &[18.0, 26.0, 34.0, 42.0, 54.0, 66.0, 80.0] };
+            for &len in lens {
+                for q in 0..4 {
+                    for off in [45.0, 30.0, 60.0, 22.0, 68.0] {
+                        let ang = (q as f64 * 90.0 + off).to_radians();
+                        let (ux, uy) = (ang.cos(), ang.sin());
+                        // from the box's centre to its edge along the leader
+                        let ext = (hw / ux.abs().max(1e-9)).min(hh / uy.abs().max(1e-9));
+                        let e = (a.0 + ux * len, a.1 + uy * len);
+                        let c = (a.0 + ux * (len + 3.0 + ext), a.1 + uy * (len + 3.0 + ext));
+                        let ok = if inside { self.valid(sp, c, placed) } else { self.valid_as(sp, c, placed, false) || self.owns_near(sp, c, placed) };
+                        if !ok || !self.leader_clear(sp.own, a, e, placed) {
+                            continue;
+                        }
                         return Some((c, a, e));
                     }
                 }
             }
         }
         None
+    }
+
+    /// A leader's label in the last resort: free, not across its own arrow, and nearer its own arc than any other.
+    fn owns_near(&mut self, sp: &Spec, c: Pt, placed: &[Bx]) -> bool {
+        let (hw, hh) = sp.lab.half();
+        if !self.free(&Bx { c, hw, hh }, placed) {
+            return false;
+        }
+        match sp.own {
+            Own::Mark(m) => self.marks.iter().find(|k| k.arrow == m).is_some_and(|mk| arrow_side(mk, c)) && self.owns(c, sp.own, 110.0),
+            Own::Comp(..) => self.owns(c, sp.own, 110.0),
+            _ => false,
+        }
     }
 
     fn leader_clear(&self, own: Own, a: Pt, e: Pt, placed: &[Bx]) -> bool {
@@ -461,62 +574,270 @@ impl Scene {
         if self.heads.iter().any(|t| (0..3).any(|k| cross(a, e, t[k], t[(k + 1) % 3], 1.0)) || in_tri(e, t)) {
             return false;
         }
-        // no arrow, arc or axis, its own only where it starts (it may cross a dashed component or reference line, as
-        // a pointer does)
         let near_start = |s: &Seg| seg_dist(a, s.a, s.b) < 2.0;
         !self.segs.iter().filter(|s| s.solid && matches!(s.own, Own::Arrow(_) | Own::Mark(_) | Own::Axis)).filter(|s| !(near_start(s) && s.own == own)).any(|s| cross(a, e, s.a, s.b, s.hw + 1.0))
     }
 
-    /// The last resort: rings 3 px apart round the first spot, out to 150 px.
-    fn search(&self, sp: &Spec, placed: &[Bx]) -> Option<Pt> {
-        let pref = sp.cands[0];
-        for ring in 1..=50 {
-            let r = ring as f64 * 3.0;
-            let k = (8 + ring * 2).min(48);
-            for j in 0..k {
-                let a = j as f64 / k as f64 * std::f64::consts::TAU;
-                let c = (pref.0 + r * a.cos(), pref.1 + r * a.sin());
-                if self.valid(sp, c, placed) {
-                    return Some(c);
+    /// Places the labels in `order`, each at its first free spot, else by a leader, else left off. Returns the
+    /// centres (None: left off).
+    fn arrange(&mut self, specs: &[Spec], order: &[usize]) -> Vec<Option<Pt>> {
+        self.leaders.clear();
+        let mut at: Vec<Option<Pt>> = vec![None; specs.len()];
+        let mut boxes: Vec<Bx> = vec![];
+        let (mut names, mut why): (Vec<String>, Vec<String>) = (vec![], vec![]);
+        for &k in order {
+            let sp = &specs[k];
+            let mut found = None;
+            for &c in &sp.cands {
+                if self.valid(sp, c, &boxes) {
+                    found = Some(c);
+                    break;
+                }
+            }
+            if found.is_none() {
+                for &c in &sp.beside {
+                    if self.valid_as(sp, c, &boxes, false) {
+                        found = Some(c);
+                        break;
+                    }
+                }
+            }
+            for inside in [true, false] {
+                if found.is_none() && !sp.anchors.is_empty() && (inside || matches!(sp.own, Own::Mark(_) | Own::Comp(..))) {
+                    if let Some((c, a, e)) = self.lead(sp, &boxes, inside) {
+                        self.leaders.push((a, e, sp.own));
+                        found = Some(c);
+                    }
+                }
+            }
+            if let Some(c) = found {
+                let (hw, hh) = sp.lab.half();
+                boxes.push(Bx { c, hw, hh });
+                names.push(sp.lab.text.clone());
+                at[k] = Some(c);
+            } else {
+                // why its spots were refused, as things stood (for the tests)
+                let mut tally: std::collections::BTreeMap<String, usize> = Default::default();
+                for &c in &sp.cands {
+                    let (hw, hh) = sp.lab.half();
+                    let bx = Bx { c, hw, hh };
+                    let r = if bx.c.0 - bx.hw < 2.0 || bx.c.0 + bx.hw > self.w - 2.0 || bx.c.1 - bx.hh < 2.0 || bx.c.1 + bx.hh > self.h - 2.0 { "page".to_string() }
+                        else if let Some(o) = boxes.iter().position(|o| o.hits(&bx, 1.0)) { format!("label {}", names[o]) }
+                        else if let Some(s) = self.segs.iter().filter(|s| s.solid).find(|s| seg_hits_box(s.a, s.b, &bx, s.hw + 1.0)) { format!("line {:?}", s.own) }
+                        else if self.heads.iter().any(|t| tri_hits_box(t, &bx, 1.0)) { "head".into() }
+                        else if self.leaders.iter().any(|l| seg_hits_box(l.0, l.1, &bx, 1.5)) { "leader".into() }
+                        else if matches!(sp.own, Own::Mark(m) if self.marks.iter().any(|k| k.arrow == m && !inside_angle(k, c))) { "outside".into() }
+                        else { "owner".into() };
+                    *tally.entry(r).or_default() += 1;
+                }
+                why.push(format!("{}: {:?}", sp.lab.text, tally));
+            }
+        }
+        self.why = why;
+        at
+    }
+
+    /// Places every label: the most hemmed-in first (fewest free spots on the bare figure); if some find no room,
+    /// once more with those first. Keeps the better.
+    fn place(&mut self, specs: Vec<Spec>) {
+        let mut counts = vec![0usize; specs.len()];
+        for (k, sp) in specs.iter().enumerate() {
+            // count up to 12 free spots: enough to tell the hemmed-in from the rest
+            for &c in &sp.cands {
+                if self.valid(sp, c, &[]) {
+                    counts[k] += 1;
+                    if counts[k] >= 12 {
+                        break;
+                    }
                 }
             }
         }
-        None
-    }
-}
-
-/// The batch 8 drawing's layout: geometry first, then the labels placed in order (the vectors', the resultant's,
-/// the angle marks', the components').
-pub fn scene(p: &Params) -> Scene {
-    // an angle mark whose label finds no room is drawn a little further out, up to three times
-    let mut bump = [0.0f64; 5];
-    let mut best = scene_with(p, &bump);
-    for _ in 0..3 {
-        if best.missed.iter().all(|o| !matches!(o, Own::Mark(_))) {
-            break;
-        }
-        for o in &best.missed {
-            if let Own::Mark(i) = o {
-                bump[*i] += 14.0;
+        // angles first (they must sit inside their angle), then component names (beside their own leg), then the
+        // arrows' names (which have room all along their arrow); within each, the most hemmed-in first
+        let rank = |o: Own| match o { Own::Axis => 0, Own::Mark(_) => 1, Own::Comp(..) => 2, _ => 3 };
+        let mut order: Vec<usize> = (0..specs.len()).collect();
+        order.sort_by_key(|&k| (rank(specs[k].own), counts[k]));
+        let mut at = self.arrange(&specs, &order);
+        let mut leaders = std::mem::take(&mut self.leaders);
+        let mut why = std::mem::take(&mut self.why);
+        // an angle value or a component name left off weighs ten arrow names
+        let left = |at: &[Option<Pt>]| at.iter().zip(&specs).filter(|(c, _)| c.is_none()).map(|(_, sp)| if matches!(sp.own, Own::Mark(_) | Own::Comp(..)) { 10 } else { 1 }).sum::<usize>();
+        // a label that needed a leader counts as half a miss: try again with those placed first
+        let led = |leaders: &[(Pt, Pt, Own)]| leaders.iter().map(|l| l.2).collect::<Vec<_>>();
+        let first_led = led(&leaders);
+        if (left(&at) > 0 || !first_led.is_empty()) && self.work < WORK_CAP {
+            let hard = |k: usize| at[k].is_none() || first_led.contains(&specs[k].own);
+            let mut again: Vec<usize> = order.iter().copied().filter(|&k| hard(k)).collect();
+            again.extend(order.iter().copied().filter(|&k| !hard(k)));
+            let at2 = self.arrange(&specs, &again);
+            if (left(&at2), self.leaders.len()) < (left(&at), leaders.len()) {
+                at = at2;
+                leaders = std::mem::take(&mut self.leaders);
+                why = std::mem::take(&mut self.why);
             }
         }
-        let next = scene_with(p, &bump);
-        if next.misses.len() < best.misses.len() {
-            best = next;
+        self.leaders = leaders;
+        self.why = why;
+        for (k, sp) in specs.into_iter().enumerate() {
+            match at[k] {
+                Some(c) => self.labels.push((c, sp.lab, sp.own)),
+                None => {
+                    self.misses.push(sp.lab.text.clone());
+                    self.missed.push(sp.own);
+                }
+            }
         }
     }
-    best
 }
 
-fn scene_with(p: &Params, bump: &[f64; 5]) -> Scene {
-    let lay = vlayout(p, W, H);
+thread_local! {
+    /// The layouts of the last few figures (keyed by their params, the answers switch aside: both copies share one),
+    /// so the drawing, the editor notes and the label handles place the labels once.
+    static SEEN: std::cell::RefCell<Vec<(String, std::rc::Rc<Scene>)>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// How many layouts this thread has worked out (for the tests).
+    static BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many layouts this thread has worked out so far (the tests check the drawing, notes and handles share one).
+pub fn layouts_built() -> usize { BUILT.with(|b| b.get()) }
+
+/// The batch 8 drawing's layout, worked out once per figure (both copies, the notes and the handles share it).
+pub fn scene(p: &Params) -> std::rc::Rc<Scene> {
+    let mut q = p.clone();
+    q.0.remove(SHOW_ANSWERS);
+    let key = format!("{:?}", q.0);
+    if let Some(s) = SEEN.with(|c| c.borrow().iter().find(|e| e.0 == key).map(|e| e.1.clone())) {
+        return s;
+    }
+    let mut key_copy = p.clone();
+    key_copy.set_b(SHOW_ANSWERS, true);
+    let mut sc = build(&key_copy, &[0.0; 5], false, 1.0, 1.0, [false; 5]);
+    // labels with no room: the arcs at a shared tail the other way round, the squares drawn bigger (a small
+    // figure on a roomy page), then a missing angle's arc further out; the first that leaves nothing off, else the
+    // one that leaves least
+    let mut work = sc.work;
+    // (the other nesting; every arc nearer its tail; bigger squares; both; a missing angle's arc further out)
+    // and then a bigger page (the squares grow with it, the text does not)
+    // (at most 1.75 times: shown at the usual width, the smallest text still reads above 8 px)
+    const TRIES: [(bool, f64, i8, f64); 13] = [(true, 1.0, 0, 1.0), (false, 1.0, -1, 1.0), (false, 1.5, 0, 1.0), (false, 1.5, -1, 1.0), (false, 1.0, 1, 1.0), (false, 1.0, 0, 1.25), (false, 1.0, -1, 1.25), (false, 1.0, 0, 1.5), (false, 1.0, -1, 1.5), (true, 1.0, -1, 1.5), (false, 1.0, 0, 1.75), (false, 1.0, -1, 1.75), (true, 1.0, 0, 1.75)];
+    for &(wide, zoom, arcs, page) in &TRIES {
+        if sc.misses.is_empty() || work + WORK_CAP > TOTAL_CAP {
+            break;
+        }
+        let mut bump = [0.0f64; 5];
+        if arcs < 0 {
+            bump = [-14.0; 5];
+        } else if arcs > 0 {
+            for o in &sc.missed {
+                if let Own::Mark(i) = o {
+                    bump[(*i).min(4)] = 22.0;
+                }
+            }
+        }
+        let next = build(&key_copy, &bump, wide, zoom, page, [false; 5]);
+        work += next.work;
+        if next.score() < sc.score() {
+            sc = next;
+        }
+    }
+    // a component's name with no room: that arrow's components drawn the other way round (y first)
+    if sc.missed.iter().any(|o| matches!(o, Own::Comp(..))) && work + WORK_CAP <= TOTAL_CAP {
+        let (wide, zoom, bump, page, mut flip) = sc.cfg;
+        for o in &sc.missed {
+            if let Own::Comp(i, _) = o {
+                flip[(*i).min(4)] = !flip[(*i).min(4)];
+            }
+        }
+        let next = build(&key_copy, &bump, wide, zoom, page, flip);
+        work += next.work;
+        if next.score() < sc.score() {
+            sc = next;
+        }
+    }
+    sc.work = work;
+    BUILT.with(|b| b.set(b.get() + 1));
+    let sc = std::rc::Rc::new(sc);
+    SEEN.with(|c| {
+        let mut c = c.borrow_mut();
+        c.push((key, sc.clone()));
+        if c.len() > 16 {
+            c.remove(0);
+        }
+    });
+    sc
+}
+
+/// The layout with its squares drawn `zoom` times bigger, as far as the page holds the grid (a small figure's
+/// labels get room).
+fn zoomed(l: VLay, zoom: f64, w: f64, h: f64) -> VLay {
+    if zoom <= 1.0 {
+        return l;
+    }
+    let fit = ((w - 60.0) / (l.gx1 - l.gx0)).min((h - 50.0) / (l.gy1 - l.gy0));
+    let u = (l.u * zoom).min(fit).max(l.u);
+    let (ox, oy) = ((w - u * (l.gx1 - l.gx0)) / 2.0 - l.gx0 * u, (h + u * (l.gy1 - l.gy0)) / 2.0 + l.gy0 * u);
+    VLay { u, ox, oy, ..l }
+}
+
+/// The label of mark `m` of arrow `arrow` (the resultant's when `arrow == n`), as it is drawn; None when left off.
+fn mark_label(p: &Params, arrow: usize, n: usize, d: f64) -> Option<Lab> {
+    let (mode, text) = if arrow == n { (p.s("ang_lab_mode"), p.s("ang_lab")) } else { (p.s(VX[arrow][2]), p.s(VX[arrow][3])) };
+    let lab = match mode {
+        "Degrees" => Lab { text: degrees(d), fs: 17.0, st: UPRIGHT, col: "#111" },
+        "Blank line" => Lab { text: String::new(), fs: 20.0, st: ITALIC, col: "#111" },
+        _ => Lab { text: text.trim().to_string(), fs: 20.0, st: ITALIC, col: "#111" },
+    };
+    if lab.text.eq_ignore_ascii_case("none") { None } else { Some(lab) }
+}
+
+/// How far out from the tail the label of a mark must sit to fit inside its angle, and its extent along the bisector.
+fn mark_room(m: &Mark, lab: &Lab, inner: f64) -> (f64, f64) {
+    // `inner`: a narrower angle nested in this one from the same line; the label goes in the slice beyond it
+    let (hw, hh) = lab.half();
+    let slice = m.d.abs() - inner;
+    let bis = (m.refa + m.d.signum() * (inner + slice / 2.0)).to_radians();
+    let ext = hw * bis.cos().abs() + hh * bis.sin().abs();
+    let perp = hw * bis.sin().abs() + hh * bis.cos().abs();
+    let half = (slice / 2.0).to_radians();
+    // clear of both arrows' shafts (up to 6 px wide) by a few pixels
+    let need = if slice >= SMALL { (perp + 7.0) / half.sin() } else { 0.0 };
+    ((m.r + ext + 3.0).max(need), ext)
+}
+
+/// The widest narrower angle nested in mark `m` at its tail from the same line (0 if none).
+fn nested(m: &Mark, marks: &[Mark]) -> f64 {
+    marks.iter().filter(|o| o.arrow != m.arrow && (o.tail.0 - m.tail.0).abs() < 0.5 && (o.tail.1 - m.tail.1).abs() < 0.5 && (o.refa - m.refa).abs() < 0.5 && o.d.signum() == m.d.signum() && o.d.abs() < m.d.abs()).map(|o| o.d.abs()).fold(0.0f64, f64::max)
+}
+
+/// Whether two marks' angles overlap (sampled).
+fn overlap(a: &Mark, b: &Mark) -> bool {
+    let within = |m: &Mark, ang: f64| {
+        let mut t = (ang - m.refa).rem_euclid(360.0);
+        if m.d < 0.0 { t = (360.0 - t).rem_euclid(360.0); }
+        t <= m.d.abs() + 1e-6
+    };
+    (0..=8).any(|k| within(b, a.refa + a.d * k as f64 / 8.0) || within(a, b.refa + b.d * k as f64 / 8.0))
+}
+
+/// What a teacher calls arrow `i` in a note: its label, or "Vector 2", or "The resultant".
+fn arrow_name(p: &Params, i: usize, n: usize) -> String {
+    let (t, m) = if i == n { ("res_lab", "res_lab_mode") } else { (VK[i][4], VMODE[i][0]) };
+    match mode_text(p, t, m) {
+        Some(t) if !t.is_empty() => shown(&t),
+        _ if i == n => "The resultant".into(),
+        _ => format!("Vector {}", i + 1),
+    }
+}
+
+fn build(p: &Params, bump: &[f64; 5], wide_inside: bool, zoom: f64, page: f64, flip: [bool; 5]) -> Scene {
+    let (w, h) = (W * page, H * page);
+    let lay = zoomed(vlayout(p, w, h), zoom * page, w, h);
     let (n, u) = (lay.n, lay.u);
     let pxy = |q: Pt| (lay.ox + q.0 * u, lay.oy - q.1 * u);
     let (fs, vsw) = vstyle(p, u);
     let hk = if p.b("bold") { (0.87, 0.94) } else { (1.0, 1.0) };
-    let answers = p.b(SHOW_ANSWERS);
     let col = p.b("color");
-    let mut sc = Scene { lay: vlayout(p, W, H), vsw, segs: vec![], heads: vec![], marks: vec![], comps: vec![], labels: vec![], misses: vec![], missed: vec![], note: None, dropped: vec![], leaders: vec![], fixed: vec![] };
+    let mut sc = Scene { cfg: (wide_inside, zoom, *bump, page, flip), w, h, cols: 1, rows: 1, lay: lay.clone(), vsw, segs: vec![], heads: vec![], marks: vec![], comps: vec![], labels: vec![], misses: vec![], missed: vec![], dropped: vec![], notes: vec![], leaders: vec![], fixed: vec![], work: 0, why: vec![], index: vec![] };
     let (gx0, gx1, gy0, gy1) = (lay.gx0, lay.gx1, lay.gy0, lay.gy1);
     if p.s("grid") == "Axes only" || p.b("axes") {
         let (a, b) = (pxy((gx0 + 0.25, 0.0)), pxy((gx1 - 0.25, 0.0)));
@@ -533,15 +854,15 @@ fn scene_with(p: &Params, bump: &[f64; 5]) -> Scene {
         sc.fixed.push((xb, "x", (b.0 + 10.0, b.1 + 8.0), "start"));
         sc.fixed.push((yb, "y", (d.0, d.1 - 10.0), "middle"));
     }
-    let pts = &lay.pts;
+    let pts = lay.pts.clone();
     let res = lay.res;
-    // the arrows (the resultant is arrow n)
-    // a resultant of zero length has no arrow, direction or components to draw
-    let res_zero = res.0.hypot(res.1) < 0.01;
-    let res_on = answers && p.b("resultant") && n >= 2 && !res_zero;
+    let tiny = |a: Pt, b: Pt| (b.0 - a.0).hypot(b.1 - a.1) < 0.01;
+    let zero: Vec<bool> = (0..n).map(|i| tiny(pts[i], pts[i + 1])).collect();
+    let res_zero = tiny((0.0, 0.0), res);
+    let res_on = p.b("resultant") && n >= 2 && !res_zero;
     for i in 0..=n {
         let (a, b, style) = if i < n { (pxy(pts[i]), pxy(pts[i + 1]), p.s(VK[i][6])) } else if res_on { (pxy((0.0, 0.0)), pxy(res), p.s("res_style")) } else { continue };
-        if style == "Left off" {
+        if style == "Left off" || (i < n && zero[i]) {
             continue;
         }
         let hl = hl_of(a, b, vsw, hk.0);
@@ -550,43 +871,51 @@ fn scene_with(p: &Params, bump: &[f64; 5]) -> Scene {
         sc.segs.push(Seg { a, b: sb, hw: vsw / 2.0, own: Own::Arrow(i), solid: true });
         sc.heads.push(head_tri(a, b, vsw, hk));
     }
-    // components: the resultant's (vector 1's when it is alone) as before, and each vector's own
-    // x along the bottom then y up to the tip; the other way round (y first) where that would lie on another arrow
-    // or component (vector 1 shares its tail with the resultant, and a vector turning back runs over the one before)
+    for i in 0..n {
+        if zero[i] && (p.b(VX[i][0]) || p.b(VX[i][4])) {
+            sc.notes.push(format!("{} has zero length, so it has no direction to mark and no components.", arrow_name(p, i, n)));
+        }
+    }
+    // components: the resultant's (vector 1's when it is alone), then each vector's own; x along the bottom then y up
+    // to the tip, or y first where that would lie along another arrow or component. An arrow along the grid has no
+    // separate components (the one it has is the arrow itself); one that still lies along another arrow or
+    // component is not drawn again.
     let comp_of = |sc: &mut Scene, arrow: usize, t: Pt, tip: Pt| {
+        let (dx, dy) = ((tip.0 - t.0).abs() > 0.01, (tip.1 - t.1).abs() > 0.01);
+        if !(dx && dy) {
+            if dx || dy {
+                sc.notes.push(format!("{} lies along the {} direction, so it has no separate components.", arrow_name(p, arrow, n), if dx { "x" } else { "y" }));
+            }
+            return;
+        }
         let route = |y_first: bool| -> Vec<(usize, bool, Pt, Pt)> {
             let c = if y_first { (t.0, tip.1) } else { (tip.0, t.1) };
-            let mut v = vec![];
-            let (x, y) = ((tip.0 - t.0).abs() > 0.01, (tip.1 - t.1).abs() > 0.01);
-            if y_first {
-                if y { v.push((arrow, false, pxy(t), pxy(c))); }
-                if x { v.push((arrow, true, pxy(c), pxy(tip))); }
-            } else {
-                if x { v.push((arrow, true, pxy(t), pxy(c))); }
-                if y { v.push((arrow, false, pxy(c), pxy(tip))); }
-            }
-            v
+            if y_first { vec![(arrow, false, pxy(t), pxy(c)), (arrow, true, pxy(c), pxy(tip))] } else { vec![(arrow, true, pxy(t), pxy(c)), (arrow, false, pxy(c), pxy(tip))] }
         };
-        let clash = |v: &[(usize, bool, Pt, Pt)]| v.iter().any(|&(_, _, a, b)| sc.segs.iter().filter(|s| s.solid && s.own != Own::Axis).map(|s| (s.a, s.b)).chain(sc.comps.iter().map(|c| (c.2, c.3))).any(|(c, d)| along(a, b, c, d)));
-        let first = route(false);
-        let v = if clash(&first) { let second = route(true); if clash(&second) { first } else { second } } else { first };
-        // a component that would still lie along another arrow or component is left off (with a note): drawn, it
-        // would belong to neither
-        let lies: Vec<bool> = v.iter().map(|c| clash(&[*c])).collect();
-        for (c, lies) in v.into_iter().zip(lies) {
-            if lies {
-                sc.dropped.push((c.0, c.1));
-            } else {
-                sc.comps.push(c);
+        let lies_on = |c: &(usize, bool, Pt, Pt)| -> Option<Own> {
+            sc.segs.iter().filter(|s| s.solid && s.own != Own::Axis).map(|s| (s.a, s.b, s.own)).chain(sc.comps.iter().map(|k| (k.2, k.3, Own::Comp(k.0, k.1)))).find(|&(a, b, _)| along(c.2, c.3, a, b)).map(|x| x.2)
+        };
+        let first = route(flip[arrow.min(4)]);
+        let v = if first.iter().any(|c| lies_on(c).is_some()) { let second = route(!flip[arrow.min(4)]); if second.iter().any(|c| lies_on(c).is_some()) { first } else { second } } else { first };
+        let on: Vec<Option<Own>> = v.iter().map(|c| lies_on(c)).collect();
+        for (c, on) in v.into_iter().zip(on) {
+            match on {
+                Some(o) => {
+                    sc.dropped.push((c.0, c.1));
+                    let other = match o { Own::Arrow(j) | Own::Comp(j, _) => arrow_name(p, j, n), _ => "another line".into() };
+                    let whose = if let Own::Comp(..) = o { format!("{other}'s components") } else { other };
+                    sc.notes.push(format!("{}'s {} component lies along {}, so it is not drawn again.", arrow_name(p, arrow, n), if c.1 { "x" } else { "y" }, whose));
+                }
+                None => sc.comps.push(c),
             }
         }
     };
     let lone = n == 1;
-    if answers && p.b("components") && !(lone && p.b(VX[0][4])) && !res_zero {
+    if p.b("components") && !(lone && p.b(VX[0][4])) && !res_zero {
         comp_of(&mut sc, n, (0.0, 0.0), res);
     }
     for i in 0..n {
-        if p.b(VX[i][4]) {
+        if p.b(VX[i][4]) && !zero[i] {
             comp_of(&mut sc, i, pts[i], pts[i + 1]);
         }
     }
@@ -598,40 +927,49 @@ fn scene_with(p: &Params, bump: &[f64; 5]) -> Scene {
         sc.segs.push(Seg { a, b: sb, hw: 1.1, own: Own::Comp(arrow, x), solid: true });
         sc.heads.push(head_tri(a, b, 2.2, hk));
     }
-    // angle marks: the resultant's (vector 1's when it is alone), then each vector's
+    // angle marks: the resultant's (vector 1's when it is alone) and each vector's; at a shared tail the next arc far
+    // enough out that the inner label fits between them
     let r0 = (u * 1.1).clamp(22.0, 40.0);
-    let mut marks: Vec<Mark> = vec![];
-    if answers && p.b("mark_angle") && !(lone && p.b(VX[0][0])) && !res_zero {
+    let mut want: Vec<(usize, Pt, f64, f64, f64)> = vec![]; // (arrow, tail, refa, d, length px)
+    if p.b("mark_angle") && !(lone && p.b(VX[0][0])) && !res_zero {
         let ang = res.1.atan2(res.0).to_degrees().rem_euclid(360.0);
-        // the short way from the reference line chosen, as every mark in this drawing (the old drawing swept
-        // anticlockwise from +x, up to 360 degrees; old figures keep it)
         let (refa, d) = sweep(ang, p.s("ang_from"));
-        marks.push(Mark { arrow: n, tail: pxy((0.0, 0.0)), refa, d, r: r0 + bump[n.min(4)] });
+        if d.abs() >= 0.05 {
+            want.push((n, pxy((0.0, 0.0)), refa, d, (res.0.hypot(res.1)) * u));
+        }
     }
     for i in 0..n {
-        if !p.b(VX[i][0]) {
+        if !p.b(VX[i][0]) || zero[i] {
             continue;
         }
         let (refa, d) = sweep(p.f(VK[i][2]), p.s(VX[i][1]));
         if d.abs() < 0.05 {
+            sc.notes.push(format!("{} lies along the {}, so it has no angle to mark from it.", arrow_name(p, i, n), p.s(VX[i][1]).to_lowercase()));
             continue;
         }
         let (t, tip) = (pxy(pts[i]), pxy(pts[i + 1]));
-        let len = ((tip.0 - t.0).powi(2) + (tip.1 - t.1).powi(2)).sqrt();
-        // clear of the head of the arrow arriving at this tail
+        want.push((i, t, refa, d, (tip.0 - t.0).hypot(tip.1 - t.1)));
+    }
+    // at a shared tail the narrower angle inside (its arrow runs through the wider angle, whose label goes in the
+    // slice between the two arrows, past the outer arc)
+    want.sort_by(|a, b| if wide_inside { b.3.abs().total_cmp(&a.3.abs()) } else { a.3.abs().total_cmp(&b.3.abs()) });
+    let mut marks: Vec<Mark> = vec![];
+    for (arrow, t, refa, d, len) in want {
         let mut r = r0;
-        if i > 0 && p.s(VK[i - 1][6]) != "Left off" {
-            r = r.max(hl_of(pxy(pts[i - 1]), t, vsw, hk.0) + 8.0);
+        if arrow < n && arrow > 0 && p.s(VK[arrow - 1][6]) != "Left off" {
+            r = r.max(hl_of(pxy(pts[arrow - 1]), t, vsw, hk.0) + 8.0);
         }
-        // nested outside another mark at the same tail
-        for m in &marks {
-            if (m.tail.0 - t.0).abs() < 0.5 && (m.tail.1 - t.1).abs() < 0.5 && (m.r - r).abs() < 18.0 {
-                r = m.r + 18.0;
+        let mut m = Mark { arrow, tail: t, refa, d, r, len };
+        for o in &marks {
+            if (o.tail.0 - t.0).abs() < 0.5 && (o.tail.1 - t.1).abs() < 0.5 && overlap(o, &m) {
+                // room for the inner label: in its whole angle, or (when this narrower one is nested in it) the slice
+                let inner = if o.refa == m.refa && o.d.signum() == m.d.signum() && m.d.abs() < o.d.abs() { m.d.abs() } else { 0.0 };
+                let gap = mark_label(p, o.arrow, n, o.d).map(|l| { let (need, ext) = mark_room(o, &l, inner); need + ext + 6.0 - o.r }).unwrap_or(18.0).clamp(18.0, 120.0);
+                m.r = m.r.max(o.r + gap);
             }
         }
-        // the arc reaches its own arrow
-        let r = (r + bump[i]).min(len.max(12.0));
-        marks.push(Mark { arrow: i, tail: t, refa, d, r });
+        m.r = (m.r + bump[arrow.min(4)]).max(18.0).min(len.max(12.0));
+        marks.push(m);
     }
     for m in &marks {
         let e = pol(m.tail.0, m.tail.1, m.r + 12.0, m.refa);
@@ -642,11 +980,9 @@ fn scene_with(p: &Params, bump: &[f64; 5]) -> Scene {
         }
     }
     sc.marks = marks;
-    // labels: each with spots along its own arrow, component or arc, the most hemmed-in placed first
-    let tcol: &'static str = if col { "#7c3aed" } else { "#111" };
     // ownership of arrow labels needs every labelled arrow's line, drawn or left off
     for i in 0..=n {
-        if i == n && !res_on {
+        if (i == n && !res_on) || (i < n && zero[i]) {
             continue;
         }
         let (a, b) = if i < n { (pxy(pts[i]), pxy(pts[i + 1])) } else { (pxy((0.0, 0.0)), pxy(res)) };
@@ -655,9 +991,11 @@ fn scene_with(p: &Params, bump: &[f64; 5]) -> Scene {
             sc.segs.push(Seg { a, b, hw: 0.0, own: Own::Arrow(i), solid: false });
         }
     }
+    sc.build_index();
+    // the labels: each with spots along its own arrow, component or arc
+    let tcol: &'static str = if col { "#7c3aed" } else { "#111" };
     let mut specs: Vec<Spec> = vec![];
     for (bx, t, _, _) in std::mem::take(&mut sc.fixed) {
-        // the axis letters: where they were, else beside their axis's end
         let lab = Lab { text: t.to_string(), fs: 24.0, st: ITALIC, col: "#111" };
         let mut cands = vec![bx.c];
         for dx in [0.0, -8.0, 8.0, -16.0, 16.0, -24.0, 24.0] {
@@ -665,115 +1003,129 @@ fn scene_with(p: &Params, bump: &[f64; 5]) -> Scene {
                 cands.push((bx.c.0 + dx, bx.c.1 + dy));
             }
         }
-        specs.push(Spec { lab, own: Own::Axis, reach: 40.0, cands, anchors: vec![] });
+        specs.push(Spec { lab, own: Own::Axis, reach: 1e9, cands, anchors: vec![], beside: vec![], zero: true });
     }
-    // the old spots first (they stay where nothing new is in the way)
     let (vl, rl) = vlabel_pos_b7(p, &lay);
     for i in 0..=n {
         let (text, pref) = if i < n { (mode_text(p, VK[i][4], VMODE[i][0]), vl[i]) } else if res_on { (mode_text(p, "res_lab", "res_lab_mode"), rl) } else { continue };
         let Some(text) = text else { continue };
         let lab = Lab { text, fs, st: ITALIC, col: tcol };
         let (a, b) = if i < n { (pxy(pts[i]), pxy(pts[i + 1])) } else { (pxy((0.0, 0.0)), pxy(res)) };
-        let mut cands = vec![pref];
-        cands.extend(beside(a, b, side_of(a, b, pref), &lab, vsw / 2.0, &[0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]));
-        let anchors = [0.5, 0.35, 0.65].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)).collect();
-        specs.push(Spec { lab, own: Own::Arrow(i), reach: 0.7 * fs, cands, anchors });
-    }
-    for m in sc.marks.clone() {
-        let (mode, text) = if m.arrow == n { (p.s("ang_lab_mode"), p.s("ang_lab")) } else { (p.s(VX[m.arrow][2]), p.s(VX[m.arrow][3])) };
-        let lab = match mode {
-            "Degrees" => Lab { text: degrees(m.d), fs: 17.0, st: UPRIGHT, col: "#111" },
-            "Blank line" => Lab { text: String::new(), fs: 20.0, st: ITALIC, col: "#111" },
-            _ => Lab { text: text.trim().to_string(), fs: 20.0, st: ITALIC, col: "#111" },
-        };
-        if lab.text.eq_ignore_ascii_case("none") {
+        if i < n && zero[i] {
+            // a zero vector is a point: its name beside it
+            let (hw, hh) = lab.half();
+            let cands = (0..8).flat_map(|k| [8.0, 16.0].map(move |r: f64| { let t = (k as f64 * 45.0 + 45.0).to_radians(); (a.0 + t.cos() * (hw + r), a.1 + t.sin() * (hh + r)) })).collect();
+            specs.push(Spec { lab, own: Own::Arrow(i), reach: 0.0, cands, anchors: vec![], beside: vec![], zero: true });
             continue;
         }
+        let mut cands = vec![pref];
+        cands.extend(beside(a, b, side_of(a, b, pref), &lab, vsw / 2.0, &[0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.12, 0.88]));
+        let anchors = [0.5, 0.35, 0.65].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)).collect();
+        specs.push(Spec { lab, own: Own::Arrow(i), reach: 0.7 * fs, cands, anchors, beside: vec![], zero: false });
+    }
+    for m in sc.marks.clone() {
+        let Some(lab) = mark_label(p, m.arrow, n, m.d) else { continue };
         let (hw, hh) = lab.half();
         let mut cands = vec![];
-        for f in [0.5, 0.35, 0.65, 0.2, 0.8, 0.05, 0.95, 1.25, -0.25] {
+        // inside the angle, out along the bisector and its neighbours; a small angle also just past its reference line
+        let (need, _) = mark_room(&m, &lab, 0.0);
+        // a narrower angle nested inside this one at the same tail, from the same line: first the slice between the
+        // two arrows
+        let inner = nested(&m, &sc.marks);
+        if inner > 0.0 {
+            let slice = m.d.abs() - inner;
+            let a = m.refa + m.d.signum() * (inner + slice / 2.0);
+            let ext = hw * a.to_radians().cos().abs() + hh * a.to_radians().sin().abs();
+            let perp = hw * a.to_radians().sin().abs() + hh * a.to_radians().cos().abs();
+            let start = (m.r + ext + 3.0).max((perp + 7.0) / (slice / 2.0).to_radians().sin().max(0.05));
+            for g in [0.5, 0.35, 0.65] {
+                let a = m.refa + m.d.signum() * (inner + slice * g);
+                for k in 0..16 {
+                    cands.push(pol(m.tail.0, m.tail.1, start + 6.0 * k as f64, a));
+                }
+            }
+        }
+        if m.d.abs() < SMALL {
+            // a small angle: just past its reference line, turned far enough round to clear both lines
+            for k in 0..14 {
+                let d0 = m.r + 3.0 + 6.0 * k as f64;
+                let perp = hw.max(hh) + 7.0;
+                let delta = (perp / (d0 + hw.max(hh))).min(1.0).asin().to_degrees();
+                cands.push(pol(m.tail.0, m.tail.1, d0 + hw.max(hh), m.refa - m.d.signum() * delta));
+            }
+        }
+        let fr: &[f64] = if m.d.abs() < SMALL { &[0.5, 0.25, 0.75, -0.6, -1.2, 1.6] } else { &[0.5, 0.35, 0.65, 0.2, 0.8] };
+        for &f in fr {
             let a = m.refa + m.d * f;
             let ext = hw * a.to_radians().cos().abs() + hh * a.to_radians().sin().abs();
-            for dr in [3.0, 7.0, 12.0, 18.0, 26.0] {
-                cands.push(pol(m.tail.0, m.tail.1, m.r + ext + dr, a));
+            let start = (m.r + ext + 3.0).max(if f == 0.5 { need } else { 0.0 });
+            for k in 0..20 {
+                cands.push(pol(m.tail.0, m.tail.1, start + 6.0 * k as f64, a));
             }
-            if m.r - ext - 4.0 > 4.0 && f > 0.0 && f < 1.0 {
+            if f > 0.0 && f < 1.0 && m.r - ext - 4.0 > 4.0 {
                 cands.push(pol(m.tail.0, m.tail.1, m.r - ext - 4.0, a));
             }
         }
         let anchors = [0.5, 0.3, 0.7].iter().map(|f| pol(m.tail.0, m.tail.1, m.r, m.refa + m.d * f)).collect();
-        specs.push(Spec { lab, own: Own::Mark(m.arrow), reach: 16.0, cands, anchors });
+        // second choice, when nothing inside the angle is free: just past its reference line, close to the arc
+        let mut beside = vec![];
+        {
+            for k in 0..7 {
+                let d0 = m.r + 3.0 + 5.0 * k as f64;
+                for deg in [8.0, 14.0, 20.0, 28.0, 36.0, 46.0, 58.0] {
+                    // past the reference line; a small angle also past its arrow
+                    let ends: &[f64] = if m.d.abs() < SMALL { &[m.refa - m.d.signum() * deg, m.refa + m.d + m.d.signum() * deg] } else { &[m.refa - m.d.signum() * deg] };
+                    for &a in ends {
+                        let ext = hw * a.to_radians().cos().abs() + hh * a.to_radians().sin().abs();
+                        beside.push(pol(m.tail.0, m.tail.1, d0 + ext, a));
+                    }
+                }
+            }
+        }
+        specs.push(Spec { lab, own: Own::Mark(m.arrow), reach: 130.0, cands, anchors, beside, zero: false });
     }
     let ccol: &'static str = if col { "#7c3aed" } else { GREY };
-    let cfs = (fs * 0.65).max(16.0);
+    let cfs = (fs * 0.5).clamp(16.0, 20.0);
     for (arrow, x, a, b) in sc.comps.clone() {
-        let text = if arrow == n {
-            // the resultant's (or a lone vector's) components keep their old names
-            let base = if n >= 2 && p.b("resultant") { p.s("res_lab").to_string() } else { p.s(VK[0][4]).to_string() };
-            let b = base.trim();
-            let b = if b.is_empty() || b.eq_ignore_ascii_case("none") { "R".to_string() } else { b.split('_').next().unwrap_or("R").to_string() };
-            Some(format!("{b}_{}", if x { "x" } else { "y" }))
-        } else {
-            // a vector's components are named from its label as shown: a blank line or nothing hides the name
-            mode_text(p, VK[arrow][4], VMODE[arrow][0]).map(|t| if t.is_empty() { t } else { comp_name(&t, if x { "x" } else { "y" }) })
-        };
-        let Some(text) = text else { continue };
+        let Some(text) = comp_text(p, arrow, n, x) else { continue };
         let lab = Lab { text, fs: cfs, st: ITALIC, col: ccol };
         let (tail, tip) = if arrow == n { ((0.0, 0.0), res) } else { (pts[arrow], pts[arrow + 1]) };
-        // first on the side away from its arrow
         let am = pxy(((tail.0 + tip.0) / 2.0, (tail.1 + tip.1) / 2.0));
-        let cands = beside(a, b, side_of(a, b, (2.0 * ((a.0 + b.0) / 2.0) - am.0, 2.0 * ((a.1 + b.1) / 2.0) - am.1)), &lab, 1.1, &[0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9]);
+        let cands = beside(a, b, side_of(a, b, (2.0 * ((a.0 + b.0) / 2.0) - am.0, 2.0 * ((a.1 + b.1) / 2.0) - am.1)), &lab, 1.1, &[0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9, 0.0, 1.0]);
         let anchors = [0.5, 0.3, 0.7].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)).collect();
-        specs.push(Spec { lab, own: Own::Comp(arrow, x), reach: 14.0, cands, anchors });
+        specs.push(Spec { lab, own: Own::Comp(arrow, x), reach: 18.0, cands, anchors, beside: vec![], zero: false });
     }
-    // the most hemmed-in first; then again with the labels that found no room placed before all others
-    let mut best: Option<(Vec<Pt>, Vec<(Pt, Pt)>, Vec<usize>)> = None;
-    let mut first: Vec<usize> = vec![];
-    for _ in 0..4 {
-        let (at, leaders, missed) = sc.arrange(&specs, &first);
-        let better = best.as_ref().is_none_or(|b| missed.len() < b.2.len());
-        let done = missed.is_empty();
-        for &k in &missed {
-            if !first.contains(&k) {
-                first.push(k);
-            }
-        }
-        if better {
-            best = Some((at, leaders, missed));
-        }
-        if done {
-            break;
-        }
-    }
-    let (at, leaders, missed) = best.unwrap();
-    sc.leaders = leaders;
-    sc.misses = missed.iter().map(|&k| specs[k].lab.text.clone()).collect();
-    sc.missed = missed.iter().map(|&k| specs[k].own).collect();
-    // a label with no room clear of everything is left off (never drawn over another mark), and the figure says so
-    let mut boxes: Vec<Bx> = vec![];
-    for (k, sp) in specs.into_iter().enumerate() {
-        if !missed.contains(&k) {
-            let (hw, hh) = sp.lab.half();
-            boxes.push(Bx { c: at[k], hw, hh });
-            sc.labels.push((at[k], sp.lab, sp.own));
-        }
-    }
-    if !missed.is_empty() || !sc.dropped.is_empty() {
-        let text = NOTE.to_string();
-        let (hw, hh) = (text.chars().count() as f64 * 11.0 * 0.55 / 2.0 + 2.0, 8.0);
-        let mut cands = vec![];
-        for y in [H - 11.0, 11.0, H - 24.0, 24.0] {
-            for k in 0..=8 {
-                cands.push((hw + 4.0 + (W - 2.0 * hw - 8.0) * k as f64 / 8.0, y));
-            }
-        }
-        sc.note = cands.into_iter().find(|&c| sc.free(&Bx { c, hw, hh }, &boxes));
+    sc.place(specs);
+    if !sc.misses.is_empty() {
+        let names: Vec<String> = sc.misses.iter().map(|t| shown(t)).collect();
+        sc.notes.push(format!("No room to place {} clear of the other arrows, marks and labels, so {} left off. Longer vectors, fewer angle marks or components, or the other measuring line make room.", names.join(", "), if names.len() == 1 { "it is" } else { "they are" }));
     }
     sc
 }
 
-/// The figure's note when labels were left off for lack of room (the panel's note names them).
-pub const NOTE: &str = "Some labels or components left off: no room (see the editor note)";
+/// What a component's label reads: the resultant's keep their old names; a vector's follow its own choice (Text,
+/// Blank line, None), its typed text or else the name from the vector's label (a blank or hidden name stays hidden).
+fn comp_text(p: &Params, arrow: usize, n: usize, x: bool) -> Option<String> {
+    if arrow == n {
+        let base = if n >= 2 && p.b("resultant") { p.s("res_lab").to_string() } else { p.s(VK[0][4]).to_string() };
+        let b = base.trim();
+        let b = if b.is_empty() || b.eq_ignore_ascii_case("none") { "R".to_string() } else { b.split('_').next().unwrap_or("R").to_string() };
+        return Some(format!("{b}_{}", if x { "x" } else { "y" }));
+    }
+    let c = VC[arrow];
+    let (mode, text) = if x { (p.s(c[0]), p.s(c[1])) } else { (p.s(c[2]), p.s(c[3])) };
+    match mode {
+        "None" => None,
+        "Blank line" => Some(String::new()),
+        _ if !text.trim().is_empty() => Some(text.trim().to_string()),
+        _ => mode_text(p, VK[arrow][4], VMODE[arrow][0]).map(|t| if t.is_empty() { t } else { comp_name(&t, if x { "x" } else { "y" }) }),
+    }
+}
+
+/// The name vector `i`'s (0-based) component takes from the vector's label, as a teacher reads it (Ax).
+pub fn comp_auto(p: &Params, i: usize, x: bool) -> String {
+    mode_text(p, VK[i][4], VMODE[i][0]).filter(|t| !t.is_empty()).map(|t| shown(&comp_name(&t, if x { "x" } else { "y" }))).unwrap_or_default()
+}
 
 /// Names of labels as a teacher reads them: `B_x` as Bx, `theta` as θ.
 fn shown(t: &str) -> String {
@@ -781,24 +1133,17 @@ fn shown(t: &str) -> String {
     parse_tex(t, ITALIC).0.into_iter().map(|r| r.0).collect()
 }
 
-/// The editor notes: labels left off because no spot clear of the other marks was found.
+/// The editor notes (shown in the panel, never drawn): why a component or mark is not drawn, and any label left off
+/// for want of room.
 pub fn warnings(p: &Params) -> Vec<String> {
     if !active(p) {
         return vec![];
     }
     let sc = scene(p);
     let n = sc.lay.n;
-    let mut out = vec![];
-    for &(arrow, x) in &sc.dropped {
-        let whose = if arrow == n { "The resultant's".to_string() } else { format!("Vector {}'s", arrow + 1) };
-        out.push(format!("{whose} {} component would lie along another arrow or component, so it is left off.", if x { "x" } else { "y" }));
-    }
-    if sc.misses.is_empty() {
-        return out;
-    }
-    let names: Vec<String> = sc.misses.iter().map(|t| shown(t)).collect();
-    out.push(format!("No room to place {} clear of the other arrows, marks and labels, so {} left off. Longer vectors, fewer angle marks or components, or the other measuring line make room.", names.join(", "), if names.len() == 1 { "it is" } else { "they are" }));
-    out
+    // the student copy draws no answer parts, so notes about them are for the key alone (they still apply)
+    let _ = n;
+    sc.notes.clone()
 }
 
 /// Label centres of the vectors and the resultant in the batch 8 drawing (for the label handles).
@@ -826,7 +1171,10 @@ fn styled(g: &mut G, style: &str, a: Pt, b: Pt, c: &str, sw: f64) {
 
 pub fn render(p: &Params) -> String {
     let sc = scene(p);
-    let mut g = G::new(W, H, p.b("mirror"));
+    let answers = p.b(SHOW_ANSWERS);
+    let n = sc.lay.n;
+    let shown = |o: Own| answers || !is_answer(o, n);
+    let mut g = G::new(sc.w, sc.h, p.b("mirror"));
     g.halo = true;
     if p.b("bold") {
         g.head_k = (0.87, 0.94);
@@ -852,36 +1200,36 @@ pub fn render(p: &Params) -> String {
     for s in sc.segs.iter().filter(|s| s.own == Own::Axis) {
         g.dim_arrow(s.a.0, s.a.1, s.b.0, s.b.1, INK, 1.8);
     }
-    for (_, t, at, anchor) in &sc.fixed {
-        g.tcol = "#111";
-        g.tex(at.0, at.1, 24.0, anchor, t, ITALIC);
+    for &(arrow, x, a, b) in &sc.comps {
+        if shown(Own::Comp(arrow, x)) {
+            g.dash_arrow(a.0, a.1, b.0, b.1, ccol, 2.2);
+        }
     }
-    // components under the arrows
-    for &(_, _, a, b) in &sc.comps {
-        g.dash_arrow(a.0, a.1, b.0, b.1, ccol, 2.2);
-    }
-    // angle marks: a dashed reference line and the arc
-    for m in &sc.marks {
+    for m in sc.marks.iter().filter(|m| shown(Own::Mark(m.arrow))) {
         let s0 = m.tail;
         let e = pol(s0.0, s0.1, m.r + 12.0, m.refa);
         g.dash(s0.0, s0.1, e.0, e.1, INK, 1.3);
         g.polyline(&arc_pts(s0.0, s0.1, m.r, m.refa, m.refa + m.d), INK, 1.6);
     }
-    let n = l.n;
     for i in 0..n {
+        if (l.pts[i + 1].0 - l.pts[i].0).hypot(l.pts[i + 1].1 - l.pts[i].1) < 0.01 {
+            continue;
+        }
         let c = if col { vcol } else { INK };
         styled(&mut g, p.s(VK[i][6]), pxy(l.pts[i]), pxy(l.pts[i + 1]), c, sc.vsw);
     }
-    if p.b(SHOW_ANSWERS) && p.b("resultant") && n >= 2 && l.res.0.hypot(l.res.1) >= 0.01 {
+    if answers && p.b("resultant") && n >= 2 && l.res.0.hypot(l.res.1) >= 0.01 {
         styled(&mut g, p.s("res_style"), pxy((0.0, 0.0)), pxy(l.res), vcol, sc.vsw);
     }
-    if let Some(c) = sc.note {
-        g.text(c.0, c.1 + 4.0, 11.0, "middle", NOTE, false);
+    for &(a, e, own) in &sc.leaders {
+        if shown(own) {
+            g.line(a.0, a.1, e.0, e.1, GREY, 0.9);
+        }
     }
-    for &(a, e) in &sc.leaders {
-        g.line(a.0, a.1, e.0, e.1, GREY, 0.9);
-    }
-    for (c, lab, _) in &sc.labels {
+    for (c, lab, own) in &sc.labels {
+        if !shown(*own) {
+            continue;
+        }
         if lab.text.is_empty() {
             g.line(c.0 - 13.0, c.1, c.0 + 13.0, c.1, INK, 1.5);
             continue;

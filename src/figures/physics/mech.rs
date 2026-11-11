@@ -267,6 +267,13 @@ fn vector_params() -> Vec<ParamDef> {
         v.push(ParamDef::choice(x[2], xl[2], &super::vector_b8::AMODES, "Text"));
         v.push(ParamDef::text(x[3], xl[3], super::vector_b8::ALAB[i]));
         v.push(ParamDef::bool(x[4], xl[4], false));
+        // batch 8 round 2: each component's own label (as the reference's rows offer it); Text with a blank box keeps
+        // the name from the vector's label
+        let (c, cl) = (super::vector_b8::VC[i], super::vector_b8::VCL[i]);
+        v.push(ParamDef::choice(c[0], cl[0], &super::vector_b8::CMODES, "Text"));
+        v.push(ParamDef::text(c[1], cl[1], ""));
+        v.push(ParamDef::choice(c[2], cl[2], &super::vector_b8::CMODES, "Text"));
+        v.push(ParamDef::text(c[3], cl[3], ""));
     }
     v.push(ParamDef::bool("resultant", "Show resultant", true));
     v.push(ParamDef::choice("res_style", "Resultant arrow", &ARROW_STYLES, "Drawn"));
@@ -295,6 +302,7 @@ fn styled_arrow(g: &mut G, style: &str, a: Pt, b: Pt, c: &str, sw: f64) {
     }
 }
 
+#[derive(Clone)]
 pub(super) struct VLay { pub n: usize, pub pts: Vec<Pt>, pub res: Pt, pub u: f64, pub ox: f64, pub oy: f64, pub gx0: f64, pub gx1: f64, pub gy0: f64, pub gy1: f64 }
 
 /// Grid layout of the vector diagram: head-to-tail points (grid units, y up) and pixel mapping.
@@ -326,6 +334,12 @@ pub(super) fn vlayout(p: &Params, w: f64, h: f64) -> VLay {
     let u = ((w - 60.0) / (gx1 - gx0)).min((h - 50.0) / (gy1 - gy0)).min(64.0);
     let (ox, oy) = ((w - u * (gx1 - gx0)) / 2.0 - gx0 * u, (h + u * (gy1 - gy0)) / 2.0 + gy0 * u);
     VLay { n, pts, res, u, ox, oy, gx0, gx1, gy0, gy1 }
+}
+
+/// The layout the vector diagram is drawn on: the batch 8 drawing may draw a small figure's squares bigger to make
+/// room for its labels (the tip handles follow it).
+pub(super) fn vlayout_drawn(p: &Params) -> VLay {
+    if super::vector_b8::active(p) { super::vector_b8::scene(p).lay.clone() } else { vlayout(p, 480.0, 360.0) }
 }
 
 /// Label size and arrow width: the classic 25 pt / 3.5 px, or with "bold" in proportion to the
