@@ -160,6 +160,17 @@ fn pedigree_classic_family_loads_and_stays_editable() {
     // click Victoria's son Edward (generation II, first) and make him affected
     let (_, _, whos) = ped::people_of(&ws.params);
     let edward = whos.iter().position(|w| w.gi == 1 && w.num == 1).unwrap();
+    // the preview of the family just loaded takes a frame or more to be laid out (it failed about one run in three
+    // without this): draw frames until its place on the screen has stopped moving
+    let mut same = 0;
+    let mut last = ws.preview_map;
+    for _ in 0..40 {
+        tall_frame(&ctx, &mut ws, vec![]);
+        if ws.preview_map == last && last.is_some() { same += 1 } else { same = 0 }
+        last = ws.preview_map;
+        if same >= 4 { break }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     let (o, k) = ws.preview_map.expect("preview");
     press_at(&ctx, &mut ws, egui::pos2(o.x + (whos[edward].x * k) as f32, o.y + (whos[edward].y * k) as f32));
     assert_eq!(ws.ped_sel, Some(edward));
