@@ -147,8 +147,8 @@
    "id": "cap-06e",
    "text": "The contact forces between objects touching",
    "class": "core",
-   "evidence": "",
-   "note": "No touching objects, so no contact forces."
+   "evidence": "changes:{\"setup\":\"Table\",\"second\":true,\"joined\":\"Touching\",\"contact\":true}",
+   "note": "Built in batch 10, round 379 (2026-11-12). No touching objects, so no contact forces."
   },
   {
    "id": "cap-06f",

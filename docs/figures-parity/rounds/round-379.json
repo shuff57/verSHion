@@ -1,0 +1,37 @@
+{
+ "round": 379,
+ "figure": "pulley",
+ "capability": "cap-06e",
+ "hypothesis": "Batch 10 pulley: cap-06e; evidence contact forces between touching objects on a table",
+ "started_at": "2026-11-12T15:47:56",
+ "git": "d965bb5",
+ "before": {
+  "figure": 95.1,
+  "pooled": 99.7
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-12T15:48:05",
+ "after": {
+  "figure": 100.0,
+  "pooled": 99.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"setup\":\"Table\",\"second\":true,\"joined\":\"Touching\",\"contact\":true}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pulley/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pulley/843d35da4ac8dc46.png"
+   }
+  ]
+ },
+ "checker": "pass on the second check (NAS): the switch adds exactly the equal and opposite pair and one 22 px label; 0 of 4,128 swept labels or leaders touch any stroke or text (191 before the fix); left off only with the note; contact off byte for byte",
+ "result": "hit",
+ "evidence": "pulley, incline and census tests: 27 passed, 0 failed on the NAS at 88a5f93; pulley_b10_frozen unchanged; full suite at 12b1f0b 5,230 passed with one unreliable workspace test since fixed",
+ "next": "vector-diagram cap-03b, cap-03e and population-growth cap-05e (check running on the NAS); cylinder typed height label (failed its check: back with the builder)"
+}
