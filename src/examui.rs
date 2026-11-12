@@ -5081,9 +5081,63 @@ fn filter_text(label: &str, active: usize) -> String {
     if active > 0 { format!("{label} · {active}") } else { label.to_string() }
 }
 
-/// A filter button's width: its words at 12 and [`SHELF_BUTTON_PAD_X`] each side.
-fn filter_w(ui: &egui::Ui, label: &str, active: usize) -> f32 {
-    (ui.fonts_mut(|f| f.layout_no_wrap(filter_text(label, active), FontId::proportional(12.0), theme::ink()).size().x) + 2.0 * SHELF_BUTTON_PAD_X).ceil()
+/// The bank panel's filters carry the compact dropdown caret of the narrow top card's menus
+/// (round 30). Set false to put them back as plain words.
+const FILTER_CARETS: bool = true;
+
+/// Air inside the joined filters' two outer ends while they carry carets (round 30): from the
+/// group's left edge to the ink of its first word, and from the ink of the last caret to its
+/// right edge, as much as "Newest" and "+ Add all (N)" beside them have.
+const FILTER_OUTER_AIR: f32 = 8.0;
+/// Side padding at the hairlines between joined filters: before the words and after the caret
+/// (whose glyph has about 1.5 of its own air each side, so the visible air is near even).
+const FILTER_INNER_PAD_L: f32 = 4.0;
+const FILTER_INNER_PAD_R: f32 = 2.0;
+
+/// The left and right ends of `galley`'s ink (its glyphs as drawn), from its left edge.
+fn ink_x(galley: &egui::Galley) -> (f32, f32) {
+    let mut lo = f32::INFINITY;
+    let mut hi = f32::NEG_INFINITY;
+    for row in &galley.rows {
+        for g in &row.glyphs {
+            if g.uv_rect.size.x > 0.0 {
+                let x = row.pos.x + g.pos.x + g.uv_rect.offset.x;
+                lo = lo.min(x);
+                hi = hi.max(x + g.uv_rect.size.x);
+            }
+        }
+    }
+    if lo.is_finite() { (lo, hi) } else { (0.0, galley.size().x) }
+}
+
+/// The filters' caret: the compact menu caret, `icon_font(MENU_COMPACT_CARET)`.
+fn filter_caret_galley(ui: &egui::Ui) -> std::sync::Arc<egui::Galley> {
+    ui.fonts_mut(|f| f.layout_no_wrap(egui_phosphor::regular::CARET_DOWN.into(), theme::icon_font(MENU_COMPACT_CARET), theme::text_col()))
+}
+
+/// A filter's side padding (left, right) as a segment `seg`: [`FILTER_OUTER_AIR`] at the group's
+/// outer ends (on the right less the caret glyph's own air, so the ink is that far in), the inner
+/// paddings at the hairlines; alone, the outer air both sides.
+fn filter_pads(ui: &egui::Ui, seg: Seg) -> (f32, f32) {
+    let c = filter_caret_galley(ui);
+    let outer_r = (FILTER_OUTER_AIR - (c.size().x - ink_x(&c).1)).max(0.0);
+    match seg {
+        Seg::Alone => (FILTER_OUTER_AIR, outer_r),
+        Seg::In { first, last } => (if first { FILTER_OUTER_AIR } else { FILTER_INNER_PAD_L }, if last { outer_r } else { FILTER_INNER_PAD_R }),
+    }
+}
+
+/// A filter button's width as segment `seg`: its words at 12, the caret [`MENU_COMPACT_CARET_GAP`]
+/// after them and [`filter_pads`] (while [`FILTER_CARETS`]; else the words and
+/// [`SHELF_BUTTON_PAD_X`] each side).
+fn filter_w(ui: &egui::Ui, label: &str, active: usize, seg: Seg) -> f32 {
+    let t = ui.fonts_mut(|f| f.layout_no_wrap(filter_text(label, active), FontId::proportional(12.0), theme::ink()).size().x);
+    if FILTER_CARETS {
+        let (l, r) = filter_pads(ui, seg);
+        (l + t + MENU_COMPACT_CARET_GAP + filter_caret_galley(ui).size().x + r).ceil()
+    } else {
+        (t + 2.0 * SHELF_BUTTON_PAD_X).ceil()
+    }
 }
 
 /// The corners of a bank panel control at its 12 radius: all four alone, the group's outer
@@ -5104,7 +5158,7 @@ fn shelf_corners(seg: Seg) -> CornerRadius {
 /// of the joined filter group (the group draws the outline and the hairlines between).
 fn filter_button(ui: &mut egui::Ui, label: &str, active: usize, seg: Seg) -> egui::Response {
     let text = filter_text(label, active);
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(filter_w(ui, label, active), SHELF_CONTROL_H), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(filter_w(ui, label, active, seg), SHELF_CONTROL_H), Sense::click());
     let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
     let on = active > 0;
     let fill = if on || open || resp.is_pointer_button_down_on() {
@@ -5130,7 +5184,18 @@ fn filter_button(ui: &mut egui::Ui, label: &str, active: usize, seg: Seg) -> egu
     if resp.has_focus() {
         p.rect_stroke(rect.shrink(1.0), cr, Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
     }
-    p.text(rect.center(), Align2::CENTER_CENTER, &text, FontId::proportional(12.0), theme::ink());
+    if FILTER_CARETS {
+        // the words, then the caret, centred together between the paddings (the caret's glyph
+        // only, never its name)
+        let g = p.layout_no_wrap(text.clone(), FontId::proportional(12.0), theme::ink());
+        let cw = filter_caret_galley(ui).size().x;
+        let (pl, pr) = filter_pads(ui, seg);
+        let x0 = rect.left() + pl + (rect.width() - pl - pr - (g.size().x + MENU_COMPACT_CARET_GAP + cw)) / 2.0;
+        p.galley(Pos2::new(x0, rect.center().y - g.size().y / 2.0), g.clone(), theme::ink());
+        p.text(Pos2::new(x0 + g.size().x + MENU_COMPACT_CARET_GAP, rect.center().y), Align2::LEFT_CENTER, egui_phosphor::regular::CARET_DOWN, theme::icon_font(MENU_COMPACT_CARET), theme::text_col());
+    } else {
+        p.text(rect.center(), Align2::CENTER_CENTER, &text, FontId::proportional(12.0), theme::ink());
+    }
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, &text));
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
@@ -5139,10 +5204,11 @@ fn filter_button(ui: &mut egui::Ui, label: &str, active: usize, seg: Seg) -> egu
 /// line, else each its own outlined button, wrapping like words. In order: Question Type,
 /// Difficulty, Topic.
 fn filter_group(ui: &mut egui::Ui, filters: [(&str, usize); 3]) -> [egui::Response; 3] {
-    let group_w: f32 = filters.iter().map(|(l, n)| filter_w(ui, l, *n)).sum();
+    let last = filters.len() - 1;
+    let group_w: f32 = filters.iter().enumerate().map(|(k, (l, n))| filter_w(ui, l, *n, Seg::In { first: k == 0, last: k == last })).sum();
     if group_w > ui.available_size_before_wrap().x + 0.5 {
         return filters.map(|(l, n)| {
-            if filter_w(ui, l, n) > ui.available_size_before_wrap().x + 0.5 && ui.cursor().min.x > ui.max_rect().left() + 1.0 {
+            if filter_w(ui, l, n, Seg::Alone) > ui.available_size_before_wrap().x + 0.5 && ui.cursor().min.x > ui.max_rect().left() + 1.0 {
                 ui.end_row();
             }
             filter_button(ui, l, n, Seg::Alone)
@@ -5151,7 +5217,6 @@ fn filter_group(ui: &mut egui::Ui, filters: [(&str, usize); 3]) -> [egui::Respon
     let rs = ui
         .scope(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
-            let last = filters.len() - 1;
             let mut k = 0;
             filters.map(|(l, n)| {
                 let r = filter_button(ui, l, n, Seg::In { first: k == 0, last: k == last });
@@ -5237,6 +5302,16 @@ fn sort_w(ui: &egui::Ui, text: &str) -> f32 {
     let t = ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, theme::ink()).size().x);
     (t + s.icon_spacing + s.icon_width + 2.0 * s.button_padding.x).ceil()
 }
+
+/// The sort menu's caret (round 30): the thin dropdown caret the filters under it, the top-bar
+/// menus and the Page setup selects carry (Phosphor CARET_DOWN, `icon_font(SORT_CARET)` in
+/// `text_col`), in place of egui's filled triangle, centred where the triangle was.
+fn sort_caret(ui: &egui::Ui, rect: Rect, _visuals: &egui::style::WidgetVisuals, _open: bool) {
+    ui.painter().text(rect.center(), Align2::CENTER_CENTER, egui_phosphor::regular::CARET_DOWN, theme::icon_font(SORT_CARET), theme::text_col());
+}
+
+/// The sort menu caret's size: the standard 12 of the Page setup selects and desktop menus.
+const SORT_CARET: f32 = 12.0;
 
 /// Side padding of the bank panel's filter buttons and "Add all", so the three filters and
 /// "Add all" share a row beside the page.
@@ -5450,6 +5525,7 @@ fn draw_shelf_inner(
             let sort = egui::ComboBox::from_id_salt("shelf_sort")
                 .selected_text(sort_text)
                 .width(sort_width)
+                .icon(sort_caret)
                 .show_ui(ui, |ui| {
                     // every order on one line, though the menu's button is sized to the one chosen
                     ui.set_min_width(SORTS.iter().map(|l| sort_w(ui, l)).fold(0.0, f32::max));
@@ -5551,10 +5627,12 @@ fn draw_shelf_inner(
                 st.topics.clear();
             }
         });
-        // "Add all" at the row's right, or at the right of a line of its own.
+        // "Add all" at the row's right, at least SHELF_ADD_GAP from the group as seen (the row's
+        // item spacing, already taken after the group, counts toward it), or at the right of a
+        // line of its own.
         let add_text = RichText::new(format!("+ Add all ({})", not_in.len())).family(theme::bold_family()).size(12.5);
         let add_w = ui.fonts_mut(|f| f.layout_no_wrap(add_text.text().to_string(), FontId::new(12.5, theme::bold_family()), theme::ink()).size().x) + 2.0 * SHELF_BUTTON_PAD_X;
-        if add_w + SHELF_ADD_GAP > ui.available_size_before_wrap().x + 0.5 {
+        if add_w + (SHELF_ADD_GAP - ui.spacing().item_spacing.x).max(0.0) > ui.available_size_before_wrap().x + 0.5 {
             ui.end_row();
         }
         ui.add_space((ui.available_size_before_wrap().x - add_w).max(0.0));
@@ -10719,6 +10797,117 @@ mod review_tests {
             h.query_all(by().label("Add to exam")).find(|n| (n.rect().center() - plain.center()).length() < 0.6).expect("the plain card's +").click();
             h.run_steps(4);
             assert_eq!(h.state().0.store.exam(&"e".into()).unwrap().items.len(), before + 1, "alone {alone}: the + adds the question");
+        }
+    }
+
+    /// Round 30: the bank panel's Question Type, Difficulty and Topic each carry the compact
+    /// dropdown caret (each is as wide as its full words, the caret, its gap and the padding), keep
+    /// their full names (with " · N" while on), stay one joined group with "+ Add all (N)" beside
+    /// it at the right edge, at least [`SHELF_ADD_GAP`] apart, beside the page (340) and alone in
+    /// the narrowest window (614), with no filter on; the list's top (the first card's) is where
+    /// it was with plain words; and each opens its own menu by a click and, focused, by Enter.
+    #[test]
+    fn bank_panel_filters_carry_a_caret_and_open_by_click_and_by_keyboard() {
+        use egui::accesskit::Role;
+        let qs: Vec<Question> = (0..10)
+            .map(|k| {
+                let mut q = short(&format!("q{k}"), "Define a catalyst.");
+                q.difficulty = Some(model::Difficulty::Medium);
+                q.topics = vec!["Moles".into()];
+                q
+            })
+            .collect();
+        let bank = QuestionBank { id: "b".into(), name: "Ch4 Quiz 5A and 5B (answer key)".into(), questions: qs, created: 0, modified: 0, details: Default::default() };
+        // the list's top with plain words (round 29): beside the page 173, or 204 with all three
+        // on (then "Add all" already took a line of its own); alone 131 either way
+        let list_top = |alone: bool, filtered: bool| match (alone, filtered) {
+            (true, _) => 131.0,
+            (false, false) => 173.0,
+            (false, true) => 204.0,
+        };
+        for (w, alone) in [(SHELF_W, false), (614.0, true)] {
+            for filtered in [false, true] {
+                let how = format!("{w} wide, alone {alone}, filtered {filtered}");
+                let mut h = panel_harness(vec![bank.clone()], w, alone);
+                if filtered {
+                    let st = &mut h.state_mut().1;
+                    st.kinds = vec![QKind::Short, QKind::Mc];
+                    st.diff = 2;
+                    st.topics = vec!["Moles".into()];
+                }
+                h.run_steps(6);
+                let names = if filtered { ["Question Type · 2", "Difficulty · 1", "Topic · 1"] } else { ["Question Type", "Difficulty", "Topic"] };
+                let caret = h.ctx.fonts_mut(|f| f.layout_no_wrap(egui_phosphor::regular::CARET_DOWN.into(), theme::icon_font(MENU_COMPACT_CARET), Color32::WHITE).size().x);
+                let rects: Vec<Rect> = names
+                    .iter()
+                    .map(|l| {
+                        let n: Vec<_> = h.query_all(by().label(*l).role(Role::Button)).collect();
+                        assert_eq!(n.len(), 1, "{how}: one {l}, named in full");
+                        let word = h.ctx.fonts_mut(|f| f.layout_no_wrap(l.to_string(), FontId::proportional(12.0), Color32::WHITE).size().x);
+                        let r = n[0].rect();
+                        assert!(r.width() >= word + MENU_COMPACT_CARET_GAP + caret + FILTER_INNER_PAD_L + FILTER_INNER_PAD_R - 0.5, "{how}: {l} {r:?} has no room for its words and caret");
+                        r
+                    })
+                    .collect();
+                for p in rects.windows(2) {
+                    assert!((p[0].right() - p[1].left()).abs() < 0.6 && (p[0].center().y - p[1].center().y).abs() < 0.6, "{how}: the filters are not one joined group: {rects:?}");
+                }
+                let add = h.get_by_label("+ Add all (9)").rect();
+                let view = h.state().1.shelf_seen.view.expect("the list's view");
+                // As drawn: every text shape's ink, in screen points.
+                let texts: Vec<(String, f32, f32, f32, Rect)> = h
+                    .output()
+                    .shapes
+                    .iter()
+                    .filter_map(|cs| match &cs.shape {
+                        egui::Shape::Text(t) => {
+                            let (lo, hi) = ink_x(&t.galley);
+                            let size = t.galley.job.sections.first().map_or(0.0, |s| s.format.font_id.size);
+                            Some((t.galley.text().to_string(), t.pos.x + lo, t.pos.x + hi, size, t.visual_bounding_rect()))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let ink = |text: &str, within: Rect| texts.iter().find(|(t, _, _, _, r)| t == text && within.contains(r.center())).unwrap_or_else(|| panic!("{how}: no {text:?} drawn in {within:?}")).clone();
+                // Air inside the group's outer ends: to the first word's ink, from the last caret's.
+                let left_air = ink(names[0], rects[0]).1 - rects[0].left();
+                let right_air = rects[2].right() - ink(egui_phosphor::regular::CARET_DOWN, rects[2]).2;
+                assert!(left_air >= FILTER_OUTER_AIR - 0.05 && right_air >= FILTER_OUTER_AIR - 0.05, "{how}: the group's outer ends have {left_air} and {right_air} of air");
+                for (k, r) in rects.iter().enumerate() {
+                    let c = ink(egui_phosphor::regular::CARET_DOWN, *r);
+                    assert!((c.3 - MENU_COMPACT_CARET).abs() < 0.01, "{how}: {}'s caret is {}", names[k], c.3);
+                }
+                // The sort menu shows the same thin caret (the standard 12), not egui's filled
+                // triangle: a caret glyph inside it and no filled path.
+                let sort = h.query_all(by().label("Sort questions")).next().expect("the sort menu").rect();
+                let c = ink(egui_phosphor::regular::CARET_DOWN, sort);
+                assert!((c.3 - SORT_CARET).abs() < 0.01, "{how}: the sort menu's caret is {}", c.3);
+                let filled = h.output().shapes.iter().any(|cs| matches!(&cs.shape, egui::Shape::Path(pth) if pth.closed && pth.fill != Color32::TRANSPARENT && pth.points.len() == 3 && pth.points.iter().all(|q| sort.contains(*q))));
+                assert!(!filled, "{how}: the sort menu still draws the filled triangle");
+                if !filtered {
+                    assert!((add.center().y - rects[2].center().y).abs() < 0.6 && add.left() - rects[2].right() >= SHELF_ADD_GAP - 0.5, "{how}: Add all not beside the group: {rects:?} {add:?}");
+                }
+                assert!((view.top() - list_top(alone, filtered)).abs() < 0.01, "{how}: the list moved: {} (was {})", view.top(), list_top(alone, filtered));
+            }
+        }
+        // Each opens its own menu, by a click and by Enter.
+        let mut h = panel_harness(vec![bank], SHELF_W, false);
+        h.run_steps(6);
+        for (f, item) in [("Question Type", "Short answer  (10)"), ("Difficulty", "Any difficulty"), ("Topic", "Moles")] {
+            assert!(h.query_by_label(item).is_none(), "{f}'s menu open before it is asked");
+            h.get_by_label(f).click();
+            h.run_steps(3);
+            assert!(h.query_by_label(item).is_some(), "a click on {f} opens its menu");
+            h.key_press(egui::Key::Escape);
+            h.run_steps(3);
+            assert!(h.query_by_label(item).is_none(), "Escape closes {f}'s menu");
+            h.get_by_label(f).focus();
+            h.run_steps(2);
+            h.key_press(egui::Key::Enter);
+            h.run_steps(3);
+            assert!(h.query_by_label(item).is_some(), "Enter on {f} opens its menu");
+            h.key_press(egui::Key::Escape);
+            h.run_steps(3);
         }
     }
 

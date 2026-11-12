@@ -599,11 +599,21 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     );
 }
 
+/// Round 30, C1: the step bodies one step up the kit's type scale, from BODY 14 to the next size
+/// it has (15, the narrow welcome lead's), at both widths. The judges read the 14 pt bodies as
+/// undersized beside their titles. False puts them back at BODY.
+const STEP_BODY_RAISED: bool = true;
+
+/// The step bodies' size (see [`STEP_BODY_RAISED`]).
+fn step_body_size() -> f32 {
+    if STEP_BODY_RAISED { crate::kit::ty::HERO_LEAD_NARROW } else { crate::kit::ty::BODY }
+}
+
 /// The step number's filled accent disc: a 28 pt slot, the numeral in it a real label.
 const STEP_DISC: f32 = 28.0;
 
 /// One step: the numbered disc, then the title in the ink serif (PANEL, CARD as a row), then the
-/// body at BODY in `text`.
+/// body at [`step_body_size`] in `text`.
 /// Stacked (`row` false) the disc sits over the title; as a row the disc sits left of the title
 /// and body. Returns the disc's rect, for the connector between steps.
 pub fn step_cell(ui: &mut egui::Ui, i: usize, row: bool) -> Rect {
@@ -612,10 +622,10 @@ pub fn step_cell(ui: &mut egui::Ui, i: usize, row: bool) -> Rect {
         // The page's serif voice, as the hero heading and "How it works" (sans semibold broke it).
         ui.add(egui::Label::new(theme::serif(*title).size(if row { crate::kit::ty::CARD } else { crate::kit::ty::PANEL })).wrap());
     };
-    // Body at 14 in `text` on loose lines, so the two-line bodies keep up with their headings
-    // instead of reading as small, tight print under them.
+    // Body in `text` on 20 pt lines, so the bodies keep up with their headings instead of reading
+    // as small, tight print under them (one step up the scale from round 30, see STEP_BODY_RAISED).
     let body_text = |ui: &mut egui::Ui| {
-        ui.add(egui::Label::new(step_body(body, crate::kit::ty::BODY).line_height(Some(20.0))).wrap());
+        ui.add(egui::Label::new(step_body(body, step_body_size()).line_height(Some(20.0))).wrap());
     };
     // Left-aligned rows (a `columns` cell is justified, which stretched the copy).
     Frame::new()
@@ -3763,7 +3773,10 @@ mod tests {
     /// "How it works" at desktop (a 1000 strip, four columns) and at 760 (a 640 strip, one column):
     /// each step's numeral, title and body are labels (AccessKit nodes), in reading order: number
     /// before title before body, and step k before step k + 1 (left to right on one row at desktop,
-    /// top to bottom at 760). The panel draws no taller at desktop than round 26's (its cells rebuilt here).
+    /// top to bottom at 760). The panel draws no taller at desktop than round 26's (its cells rebuilt
+    /// here): round 30 raised the bodies one step on the scale and the card's geometry did not change.
+    /// The bodies are at [`step_body_size`] at both widths, at most two lines at desktop and one line
+    /// at 760.
     #[test]
     fn how_it_works_steps_are_labels_in_reading_order_at_both_widths() {
         use egui_kittest::{kittest::Queryable, Harness};
@@ -3787,6 +3800,23 @@ mod tests {
                 let n = h.get_by_label(&format!("{}", i + 1)).rect();
                 let t = h.get_by_label(title).rect();
                 let b = h.get_by_label(&no_widow(body)).rect();
+                // One 20 pt line per row: one line at 760, at most two at desktop.
+                let lines = (b.height() / 20.0).round();
+                // The body is set at the raised size: laid out at that size in its own width it
+                // breaks into the same lines and its longest line spans the label's width.
+                assert_eq!(step_body_size(), crate::kit::ty::HERO_LEAD_NARROW, "the bodies sit one step above BODY");
+                let g = h.ctx.fonts_mut(|f| {
+                    let mut job = egui::text::LayoutJob::simple(no_widow(body), egui::FontId::proportional(step_body_size()), Color32::WHITE, b.width() + 0.5);
+                    job.wrap.max_width = b.width() + 0.5;
+                    f.layout_job(job)
+                });
+                assert_eq!(g.rows.len() as f32, lines, "{w}: step {} body breaks as at the raised size", i + 1);
+                assert!((g.size().x - b.width()).abs() < 1.0, "{w}: step {} body {} wide, {} at the raised size", i + 1, b.width(), g.size().x);
+                if wide {
+                    assert!(lines <= 2.0, "{w}: step {} body is {lines} lines", i + 1);
+                } else {
+                    assert_eq!(lines, 1.0, "{w}: step {} body is one line at 760", i + 1);
+                }
                 if wide {
                     assert!(n.bottom() <= t.top() && t.bottom() <= b.top(), "{w}: step {} reads number, title, body down", i + 1);
                 } else {
