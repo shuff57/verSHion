@@ -189,8 +189,10 @@ pub(crate) fn reads(p: &Params, key: &str) -> bool {
 pub(crate) fn pretty(text: &str) -> String {
     let Some(toks) = lex(text.trim()) else { return text.trim().to_string() };
     let mut out = String::new();
-    // per bracket depth: where the current product began in `out`, and whether it holds a root
-    let mut runs: Vec<(usize, bool)> = vec![(0, false)];
+    // per bracket depth: where the current product began in `out`, whether it holds a root, and whether it holds a division
+    let mut runs: Vec<(usize, bool, bool)> = vec![(0, false, false)];
+    // the last thing written was a root's bare radicand (√2): a π or root after it is written with a dot, √2·π
+    let mut radicand = false;
     let unary = |i: usize| i == 0 || matches!(toks[i - 1], Tok::Open | Tok::Op(_));
     let mut i = 0;
     while i < toks.len() {
@@ -200,18 +202,33 @@ pub(crate) fn pretty(text: &str) -> String {
                 let n = num_text(text, i);
                 let n = n.strip_suffix('.').unwrap_or(&n).to_string();
                 out.push_str(&if n.starts_with('.') { format!("0{n}") } else { n });
+                radicand = i > 0 && toks[i - 1] == Tok::Sqrt;
+                i += 1;
+                continue;
             }
-            Tok::Sqrt => {
+            Tok::Sqrt | Tok::Pi => {
+                // a fraction times a root or π is bracketed, (3/2)√2 and (1/2)π; a root's radicand then π or a root takes a dot
+                let times = i > 0 && (matches!(toks[i - 1], Tok::Num(_) | Tok::Close | Tok::Pi) || toks[i - 1] == Tok::Op('*'));
+                if times && let Some(r) = runs.last_mut() && r.2 {
+                    out.insert(r.0, '(');
+                    out.push(')');
+                    r.2 = false;
+                }
+                if radicand { out.push('\u{b7}'); }
+                radicand = false;
+                if toks[i] == Tok::Pi { out.push('\u{3c0}'); i += 1; continue; }
                 if let Some(r) = runs.last_mut() { r.1 = true; }
                 out.push('\u{221a}');
                 // √(13) is written √13: brackets round a single number go
                 if let (Some(Tok::Open), Some(Tok::Num(_)), Some(Tok::Close)) = (toks.get(i + 1), toks.get(i + 2), toks.get(i + 3)) {
                     out.push_str(&num_text(text, i + 2));
+                    radicand = true;
                     i += 4;
                     continue;
                 }
+                i += 1;
+                continue;
             }
-            Tok::Pi => out.push('\u{3c0}'),
             Tok::Op('*') => {
                 let next_implicit = matches!(toks.get(i + 1), Some(Tok::Sqrt | Tok::Pi | Tok::Open));
                 if !next_implicit { out.push('\u{d7}'); }
@@ -219,7 +236,7 @@ pub(crate) fn pretty(text: &str) -> String {
             Tok::Op(c @ ('+' | '-')) => {
                 let sign = if *c == '+' { "+" } else { "\u{2212}" };
                 if unary(i) { if *c == '-' { out.push_str(sign); } } else { out.push_str(&format!(" {sign} ")); }
-                if let Some(r) = runs.last_mut() { *r = (out.len(), false); }
+                if let Some(r) = runs.last_mut() { *r = (out.len(), false, false); }
             }
             Tok::Op('/') => {
                 if let Some(r) = runs.last_mut() && r.1 {
@@ -227,12 +244,14 @@ pub(crate) fn pretty(text: &str) -> String {
                     out.push(')');
                     r.1 = false;
                 }
+                if let Some(r) = runs.last_mut() { r.2 = true; }
                 out.push('/');
             }
             Tok::Op(c) => out.push(*c),
-            Tok::Open => { out.push('('); runs.push((out.len(), false)); }
+            Tok::Open => { out.push('('); runs.push((out.len(), false, false)); }
             Tok::Close => { if runs.len() > 1 { runs.pop(); } out.push(')'); }
         }
+        radicand = false;
         i += 1;
     }
     out

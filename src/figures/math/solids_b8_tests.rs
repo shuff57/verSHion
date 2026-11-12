@@ -72,6 +72,29 @@ fn signs_and_points() {
 
 /// A root followed by a division is written so it reads one way only: (√13)/2 and (2√3)/3 are a root then divided; √(13/2) is
 /// the root of the whole fraction, and the reader takes each as written.
+/// A fraction times a root or π, and a root times π, are written so they read one way: (3/2)√2, (3/2)π, (1/2)√3, √2·π. Each
+/// written form reads back as the value drawn, and the drawn label is that form.
+#[test]
+fn products_with_a_fraction_read_one_way() {
+    for (t, want, v) in [
+        ("3/2√2", "(3/2)\u{221a}2", 1.5 * 2f64.sqrt()), ("3/2sqrt2", "(3/2)\u{221a}2", 1.5 * 2f64.sqrt()), ("3/2*sqrt(2)", "(3/2)\u{221a}2", 1.5 * 2f64.sqrt()),
+        ("3/2\u{3c0}", "(3/2)\u{3c0}", 1.5 * std::f64::consts::PI), ("3/2pi", "(3/2)\u{3c0}", 1.5 * std::f64::consts::PI),
+        ("1/2√3", "(1/2)\u{221a}3", 3f64.sqrt() / 2.0), ("√2\u{3c0}", "\u{221a}2\u{b7}\u{3c0}", 2f64.sqrt() * std::f64::consts::PI),
+        ("sqrt(2)pi", "\u{221a}2\u{b7}\u{3c0}", 2f64.sqrt() * std::f64::consts::PI), ("√2√3", "\u{221a}2\u{b7}\u{221a}3", 6f64.sqrt()),
+        // unchanged: no fraction before the root, or the root first
+        ("2√3", "2\u{221a}3", 2.0 * 3f64.sqrt()), ("2pi", "2\u{3c0}", 2.0 * std::f64::consts::PI), ("3/2", "3/2", 1.5), ("√3/2", "(\u{221a}3)/2", 3f64.sqrt() / 2.0),
+        ("(1+√5)/2", "(1 + \u{221a}5)/2", (1.0 + 5f64.sqrt()) / 2.0), ("2\u{3c0}/3", "2\u{3c0}/3", 2.0 * std::f64::consts::PI / 3.0),
+    ] {
+        assert_eq!(pretty(t), want, "{t}");
+        assert!(close(read(t).unwrap().unwrap(), v), "{t}");
+        assert!(close(read(want).unwrap().unwrap(), v), "{want} reads differently");
+    }
+    // drawn: the cylinder's radius 3/2√2 is drawn at 2.12 and labelled (3/2)√2 cm
+    let p = with("cylinder", &[s("radius_t", "3/2√2")]);
+    assert!(close(super::solid_r(&p), 1.5 * 2f64.sqrt()));
+    assert!(texts(&def("cylinder").svg(&p)).iter().any(|t| t.3 == "(3/2)\u{221a}2 cm"));
+}
+
 #[test]
 fn roots_over_a_number_read_one_way() {
     for (t, want, v) in [
