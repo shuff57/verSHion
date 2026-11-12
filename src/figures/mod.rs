@@ -22,6 +22,8 @@ pub mod cards;
 mod census;
 #[cfg(test)]
 mod versions_b9_frozen;
+#[cfg(test)]
+mod last_b11_frozen;
 pub mod axes;
 pub mod chart;
 pub mod chemistry;
