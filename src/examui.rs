@@ -194,6 +194,10 @@ struct ShelfSeen {
     cards: Vec<ShelfCardSeen>,
     view: Option<Rect>,
     below: usize,
+    /// Where the room for whole cards ends (the cue's top while the list overflows).
+    foot: f32,
+    /// One line of a card's question.
+    row_h: f32,
 }
 
 /// One bank card as drawn: its rect, the lines shown of the lines its question takes, and where
@@ -218,6 +222,8 @@ struct ShelfCardSeen {
     stem_right: f32,
     /// The bottom of the last line of the question shown.
     last_bottom: f32,
+    /// Opened with "Show all".
+    open: bool,
 }
 
 #[derive(Clone)]
@@ -5379,17 +5385,18 @@ fn draw_shelf_inner(
     let list_w = ui.available_width();
     // More below: the list ends on a whole card and "N more below" sits on the panel's foot, with
     // a thin scroll bar like the page's beside the cards (shown at rest, not only under the
-    // pointer). A card shows up to five lines of its question, and where room is left under the
-    // last whole card the cards in view show more of theirs, so the list runs down to the cue
-    // instead of leaving a blank band. No card's text or + is cut or greyed at rest.
-    let (rows, overflow, planned) = {
+    // pointer). A card shows up to five lines of its question, and every line of room left under
+    // the last whole card goes to the cards in view that are still cut, so the list runs down to
+    // the cue instead of leaving a blank band while a question is cut. A list's items (a
+    // multipart question's tasks) each start their own line (`shelf_card_text`). No card's text or + is cut or greyed at rest.
+    let (rows, overflow, planned, row_h) = {
         let p = ui.painter().clone();
         let stem_w = shelf_stem_width(list_w - SHELF_BAR_ROOM);
-        let stems: Vec<String> = qs.iter().take(SHELF_PLAN_CARDS).map(|(_, q)| crate::equation::stem_preview(&q.stem)).collect();
+        let stems: Vec<String> = qs.iter().take(SHELF_PLAN_CARDS).map(|(_, q)| shelf_card_text(&p, &q.stem, stem_w)).collect();
         // Every line of each question, and whether its card was opened with "Show all".
         let whole: Vec<usize> = stems.iter().map(|t| shelf_stem_galley(&p, t, stem_w, SHELF_ROWS_ALL).rows.len().max(1)).collect();
         let open: Vec<bool> = qs.iter().take(SHELF_PLAN_CARDS).map(|(_, q)| st.shelf_open.contains(&q.id)).collect();
-        let full: Vec<usize> = whole.iter().map(|&w| w.min(SHELF_ROWS_MAX)).collect();
+        let full = whole.clone();
         let row_h = shelf_stem_galley(&p, "A\nA", stem_w, 2).size().y - shelf_stem_galley(&p, "A", stem_w, 1).size().y;
         // An opened card is its whole question whatever the plan gives it.
         let card_h = |j: usize, n: usize| {
@@ -5406,7 +5413,7 @@ fn draw_shelf_inner(
             }
         }
         let bottoms = if overflow { shelf_bottoms(&rows, &card_h) } else { Vec::new() };
-        (rows, overflow, bottoms)
+        (rows, overflow, bottoms, row_h)
     };
     let view_h = if overflow { whole_cards_height(&planned, list_h - SHELF_CUE_H) } else { list_h };
     let saved_scroll = ui.spacing().scroll.clone();
@@ -5450,6 +5457,8 @@ fn draw_shelf_inner(
     let below = cards_below(&out.inner, out.state.offset.y + view.height());
     st.shelf_seen.view = Some(view);
     st.shelf_seen.below = if overflow { below } else { 0 };
+    st.shelf_seen.foot = list_top + list_h - if overflow { SHELF_CUE_H } else { 0.0 };
+    st.shelf_seen.row_h = row_h;
     if overflow && below > 0 {
         // On the panel's foot, under the list's last whole card.
         let bar = Rect::from_min_size(Pos2::new(view.left(), (list_top + list_h - SHELF_CUE_H).max(view.bottom())), Vec2::new(view.width(), SHELF_CUE_H));
@@ -5463,9 +5472,6 @@ const SHELF_ROWS: usize = 5;
 
 /// The fewest lines a card is cut to so that one more whole card fits in the panel.
 const SHELF_ROWS_MIN: usize = 3;
-
-/// The most lines a card in view grows to with the room left under the last whole card.
-const SHELF_ROWS_MAX: usize = 8;
 
 /// Every line of a question (a card opened with "Show all").
 const SHELF_ROWS_ALL: usize = 400;
@@ -5484,9 +5490,204 @@ fn shelf_stem_width(w: f32) -> f32 {
     w - 12.0 - 10.0 - 30.0 - 10.0
 }
 
-/// A bank card's question, cut to `rows` lines with an ellipsis.
+/// A bank card's question, cut to `rows` lines with an ellipsis. A question with a list (see
+/// [`shelf_card_text`]) has each item on its own lines under a hanging marker.
 fn shelf_stem_galley(p: &egui::Painter, text: &str, w: f32, rows: usize) -> std::sync::Arc<egui::Galley> {
-    clamped_galley(p, text, FontId::proportional(kit::ty::META), theme::ink(), w, rows)
+    if !text.contains(SHELF_HANG) {
+        return clamped_galley(p, text, FontId::proportional(kit::ty::META), theme::ink(), w, rows);
+    }
+    shelf_hang_galley(p, text, w, rows, shelf_hang_unit(p, text))
+}
+
+/// Lays out a list in a bank card's text (see [`shelf_card_text`]). An item's first line is
+/// `depth` of these, its marker, one more, then its text; each further line of the item is
+/// `depth + 1` of them, then its text. Laid out, each stands for a step of indent. It never
+/// occurs in the rest of the text (every run of spaces, this one included, is one space there).
+const SHELF_HANG: char = '\u{a0}';
+
+/// One line of a card text: plain text, an item's first line, or a further line of an item.
+#[derive(Debug, PartialEq)]
+enum ShelfLine<'a> {
+    Plain(&'a str),
+    Item { depth: usize, mark: &'a str, text: &'a str },
+    More { depth: usize, text: &'a str },
+}
+
+fn shelf_line(line: &str) -> ShelfLine<'_> {
+    let rest = line.trim_start_matches(SHELF_HANG);
+    let n = (line.len() - rest.len()) / SHELF_HANG.len_utf8();
+    match rest.split_once(SHELF_HANG) {
+        Some((mark, text)) => ShelfLine::Item { depth: n, mark, text },
+        None if n > 0 => ShelfLine::More { depth: n - 1, text: rest },
+        None => ShelfLine::Plain(line),
+    }
+}
+
+/// A part of a card text: a run of the question's other blocks flattened as `stem_preview`
+/// flattens them, or a list item with its nesting depth and its marker.
+enum ShelfPiece {
+    Text(String),
+    Item { depth: u8, mark: String, text: String },
+}
+
+/// Text flattened for a card: one space for every run of spaces, `_{..}` / `^{..}` that have no
+/// Unicode form bare, and equations as their Unicode approximation (as `stem_preview`).
+fn shelf_flat(t: &str) -> String {
+    let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+    let ch: Vec<char> = t.chars().collect();
+    let mut out = String::new();
+    let (mut i, mut math) = (0, false);
+    while i < ch.len() {
+        if ch[i] == '$' {
+            math = !math;
+        }
+        if !math && matches!(ch[i], '_' | '^') && ch.get(i + 1) == Some(&'{') && let Some(end) = (i + 2..ch.len()).find(|&j| ch[j] == '}') {
+            out.push(ch[i]);
+            out.extend(&ch[i + 2..end]);
+            i = end + 1;
+            continue;
+        }
+        out.push(ch[i]);
+        i += 1;
+    }
+    crate::equation::stem_to_plain(&out)
+}
+
+/// The question's parts in reading order, from the parsed structure: layout (centring, side by
+/// side) is never text, lists keep their order and nesting, numbered items take the labels the
+/// paper prints (`richtext::number_label`), bullets the paper's glyph for their level, and a
+/// task item its box.
+fn shelf_pieces(nodes: &[crate::richtext::Node], out: &mut Vec<ShelfPiece>) {
+    use crate::richtext::{self as rt, Block, Node};
+    for n in nodes {
+        let (block, depths) = match n {
+            Node::Side(panels) => {
+                panels.iter().for_each(|p| shelf_pieces(p, out));
+                continue;
+            }
+            Node::Block { block, depths, .. } => (block, depths),
+        };
+        let text = match block {
+            Block::Bullets(ls) | Block::Numbered(ls) => {
+                let depth = |k: usize| depths.get(k).copied().unwrap_or(0);
+                let ords = rt::item_ordinals(&(0..ls.len()).map(depth).collect::<Vec<_>>());
+                for (k, l) in ls.iter().enumerate() {
+                    let d = depth(k);
+                    let t = shelf_flat(&rt::line_text(l));
+                    let (mark, text) = match block {
+                        Block::Numbered(_) => (rt::number_label(d, ords[k]), t),
+                        _ if rt::task_item(l).is_some() => {
+                            let mut c = t.chars();
+                            (c.next().map(String::from).unwrap_or_default(), c.as_str().trim_start().to_string())
+                        }
+                        _ => (rt::bullet_glyph(d).to_string(), t),
+                    };
+                    out.push(ShelfPiece::Item { depth: d, mark, text });
+                }
+                continue;
+            }
+            Block::Heading(_, l) => rt::line_text(l),
+            Block::Para(ls) | Block::Quote(ls) => ls.iter().map(rt::line_text).collect::<Vec<_>>().join(" "),
+            Block::Table { rows, .. } => rows.iter().map(|r| r.iter().map(rt::line_text).collect::<Vec<_>>().join(" | ")).collect::<Vec<_>>().join(" · "),
+            Block::Divider => continue,
+            Block::Side(_) => continue,
+        };
+        let t = shelf_flat(&text);
+        if t.is_empty() {
+            continue;
+        }
+        match out.last_mut() {
+            Some(ShelfPiece::Text(prev)) => {
+                prev.push(' ');
+                prev.push_str(&t);
+            }
+            _ => out.push(ShelfPiece::Text(t)),
+        }
+    }
+}
+
+/// A bank card's question as plain text (`stem_preview`), except that each item of a list (a
+/// multipart question's tasks, say) starts a line of its own, wrapped `w` wide under a hanging
+/// marker indented a step per nesting level, instead of running on in the paragraph. The text
+/// between lists runs on as one paragraph, as before. A question without a list is its
+/// `stem_preview` unchanged.
+fn shelf_card_text(p: &egui::Painter, stem: &str, w: f32) -> String {
+    let mut pieces = Vec::new();
+    shelf_pieces(&crate::richtext::parse_tree(stem), &mut pieces);
+    if !pieces.iter().any(|x| matches!(x, ShelfPiece::Item { .. })) {
+        return crate::equation::stem_preview(stem);
+    }
+    let unit = pieces.iter().filter_map(|x| if let ShelfPiece::Item { mark, .. } = x { Some(shelf_mark_w(p, mark)) } else { None }).fold(0.0, f32::max);
+    let hang = |n: usize| SHELF_HANG.to_string().repeat(n);
+    let mut lines: Vec<String> = Vec::new();
+    for x in pieces {
+        let ShelfPiece::Item { depth, mark, text } = x else {
+            if let ShelfPiece::Text(t) = x {
+                lines.push(t);
+            }
+            continue;
+        };
+        let d = depth as usize;
+        // 1 px short of the room, so the line never wraps again where it is laid out.
+        let g = clamped_galley(p, &text, FontId::proportional(kit::ty::META), theme::ink(), w - (d + 1) as f32 * unit - 1.0, SHELF_ROWS_ALL);
+        let rows: Vec<String> = g.rows.iter().map(|r| r.glyphs.iter().map(|gl| gl.chr).collect::<String>().trim_end().to_string()).collect();
+        for (k, s) in rows.iter().enumerate() {
+            lines.push(if k == 0 { format!("{}{mark}{SHELF_HANG}{s}", hang(d)) } else { format!("{}{s}", hang(d + 1)) });
+        }
+        if rows.is_empty() {
+            lines.push(format!("{}{mark}{SHELF_HANG}", hang(d)));
+        }
+    }
+    lines.join("\n")
+}
+
+/// A list marker's width with the space after it.
+fn shelf_mark_w(p: &egui::Painter, mark: &str) -> f32 {
+    p.layout_no_wrap(format!("{mark} "), FontId::proportional(kit::ty::META), theme::ink()).size().x
+}
+
+/// The step of indent in a card text from [`shelf_card_text`]: its widest marker's, with its space.
+fn shelf_hang_unit(p: &egui::Painter, text: &str) -> f32 {
+    text.split('\n')
+        .filter_map(|l| if let ShelfLine::Item { mark, .. } = shelf_line(l) { Some(shelf_mark_w(p, mark)) } else { None })
+        .fold(0.0, f32::max)
+}
+
+/// A card text with its list laid out a step of `unit` per level: an item's marker at its
+/// level's step, its text one step in, and its further lines there too.
+fn shelf_hang_galley(p: &egui::Painter, text: &str, w: f32, rows: usize, unit: f32) -> std::sync::Arc<egui::Galley> {
+    let font = FontId::proportional(kit::ty::META);
+    let plain = egui::TextFormat::simple(font.clone(), theme::ink());
+    let hang_w = p.layout_no_wrap(SHELF_HANG.to_string(), font.clone(), theme::ink()).size().x;
+    let mark_w = |m: &str| p.layout_no_wrap(m.to_string(), font.clone(), theme::ink()).size().x;
+    let mut job = LayoutJob::default();
+    let mut put = |t: &str, lead: f32| {
+        if !t.is_empty() {
+            job.append(t, lead.max(0.0), plain.clone());
+        }
+    };
+    for line in text.split_inclusive('\n') {
+        match shelf_line(line) {
+            ShelfLine::Plain(t) => put(t, 0.0),
+            ShelfLine::Item { depth, mark, text } => {
+                let d = depth as f32;
+                put(&SHELF_HANG.to_string().repeat(depth), 0.0);
+                // The marker at its level's step, the text a step in.
+                put(mark, d * (unit - hang_w));
+                put(&SHELF_HANG.to_string(), unit - mark_w(mark) - hang_w);
+                put(text, 0.0);
+            }
+            ShelfLine::More { depth, text } => {
+                put(&SHELF_HANG.to_string().repeat(depth + 1), 0.0);
+                put(text, (depth + 1) as f32 * (unit - hang_w));
+            }
+        }
+    }
+    job.wrap.max_width = w.max(10.0);
+    job.wrap.max_rows = rows;
+    job.wrap.break_anywhere = false;
+    job.wrap.overflow_character = Some('…');
+    p.layout_job(job)
 }
 
 /// "Show all" / "Show less" on a bank card: accent semibold at the card text's size.
@@ -5517,8 +5718,12 @@ fn shelf_cut_galleys(p: &egui::Painter, text: &str, whole: &egui::Galley, stem_w
     let n: usize = whole.rows.iter().take(rows.saturating_sub(1)).map(|r| r.char_count_including_newline().0).sum();
     let head: String = text.chars().take(n).collect();
     let tail: String = text.chars().skip(n).collect();
-    let head = (rows > 1).then(|| shelf_stem_galley(p, head.trim_end(), stem_w, SHELF_ROWS_ALL));
-    (head, shelf_stem_galley(p, tail.trim_start(), tail_w, 1))
+    // A list's lines keep the whole question's hanging indent, and the mark that starts a
+    // further line of an item stays (it is that line's indent).
+    let unit = shelf_hang_unit(p, text);
+    let galley = |t: &str, w: f32, rows: usize| if text.contains(SHELF_HANG) { shelf_hang_galley(p, t, w, rows, unit) } else { shelf_stem_galley(p, t, w, rows) };
+    let head = (rows > 1).then(|| galley(head.trim_end(), stem_w, SHELF_ROWS_ALL));
+    (head, galley(tail.trim_start_matches([' ', '\n']), tail_w, 1))
 }
 
 /// Each card's bottom from the list's top for the cards planned in `rows`.
@@ -5547,11 +5752,11 @@ fn shelf_plan(full: &[usize], card_h: &dyn Fn(usize, usize) -> f32, row_h: f32, 
 }
 
 /// How many lines each of the first cards shows, and how many cards fit whole in `room`. `full` is
-/// the lines each card's whole question takes (up to [`SHELF_ROWS_MAX`]); `card_h(card, lines)` a
-/// card's height. Each card shows up to [`SHELF_ROWS`] lines (down to [`SHELF_ROWS_MIN`] where that
-/// fits a further whole card in view: a longer question never costs a card), then the cards in view
-/// that are still cut take a line at a time, most hidden first, while the last stays whole in `room`, so the
-/// list ends within a line of `room`'s foot unless every card in view is shown whole.
+/// the lines each card's whole question takes; `card_h(card, lines)` a card's height. Each card
+/// shows up to [`SHELF_ROWS`] lines (down to [`SHELF_ROWS_MIN`] where that fits a further whole
+/// card in view: a longer question never costs a card), then the cards in view that are still cut
+/// take a line at a time, most hidden first and with no cap, while the last stays whole in `room`:
+/// the list ends within a line of `room`'s foot unless every card in view is shown whole.
 fn shelf_stem_rows(full: &[usize], card_h: &dyn Fn(usize, usize) -> f32, row_h: f32, room: f32) -> (Vec<usize>, usize) {
     // `whole_cards_height` keeps 2 under the last whole card.
     let room = room - 2.0;
@@ -5572,8 +5777,8 @@ fn shelf_stem_rows(full: &[usize], card_h: &dyn Fn(usize, usize) -> f32, row_h: 
         // (the first of equals), while the last card stays whole.
         loop {
             let pick = (0..k)
-                .filter(|&j| rows[j] < full[j].min(SHELF_ROWS_MAX) && bottom + card_h(j, rows[j] + 1) - card_h(j, rows[j]) <= room)
-                .max_by_key(|&j| (full[j].min(SHELF_ROWS_MAX) - rows[j], std::cmp::Reverse(j)));
+                .filter(|&j| rows[j] < full[j] && bottom + card_h(j, rows[j] + 1) - card_h(j, rows[j]) <= room)
+                .max_by_key(|&j| (full[j] - rows[j], std::cmp::Reverse(j)));
             let Some(j) = pick else { break };
             bottom += card_h(j, rows[j] + 1) - card_h(j, rows[j]);
             rows[j] += 1;
@@ -5636,7 +5841,7 @@ fn shelf_row(
     let stem_w = shelf_stem_width(w);
     let already = in_count > 0;
     let p = ui.painter().clone();
-    let stem_txt = crate::equation::stem_preview(&q.stem);
+    let stem_txt = shelf_card_text(&p, &q.stem, stem_w);
     // Up to `rows` lines of the stem at 13 (five, more where the panel has room; see
     // `shelf_stem_rows`), so a question reads as a sentence. A cut card ends its last line on
     // "Show all", right-aligned after the text's ellipsis; it opens the card in place to the whole
@@ -5788,7 +5993,7 @@ fn shelf_row(
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, word));
         resp.on_hover_text(if open { "Show the first lines only" } else { "Show the whole question" }).on_hover_cursor(egui::CursorIcon::PointingHand)
     });
-    st.shelf_seen.cards.push(ShelfCardSeen { id: q.id.clone(), rect, shown: rows, whole, toggle: toggle_rect, points: pts_rect, icons_left: edit_rect.left(), badges_right, text_top: stem_pos.y, text_end, stem_right, last_bottom });
+    st.shelf_seen.cards.push(ShelfCardSeen { id: q.id.clone(), rect, shown: rows, whole, toggle: toggle_rect, points: pts_rect, icons_left: edit_rect.left(), badges_right, text_top: stem_pos.y, text_end, stem_right, last_bottom, open });
     if tresp.as_ref().is_some_and(|r| r.clicked()) {
         if open {
             st.shelf_open.retain(|id| *id != q.id);
@@ -5886,7 +6091,7 @@ fn shelf_row(
                 ui.add(egui::Label::new(RichText::new(format!("{label}: {why}")).size(12.0).color(col)).wrap());
                 ui.add_space(4.0);
             }
-            ui.add(egui::Label::new(RichText::new(&stem_txt).size(kit::ty::META).color(theme::ink())).wrap());
+            ui.add(egui::Label::new(RichText::new(crate::equation::stem_preview(&q.stem)).size(kit::ty::META).color(theme::ink())).wrap());
             ui.add_space(4.0);
             ui.label(muted(RichText::new(how).size(kit::ty::LABEL)));
         };
@@ -9562,7 +9767,7 @@ mod review_tests {
             if c.rect.top() < view.bottom() - 0.5 && c.rect.bottom() > view.bottom() + 0.5 {
                 assert!(c.rect.height() > view.height() - 2.0, "{how}: card {} cut by the list's foot", c.id);
             }
-            assert_eq!(c.toggle.is_some(), c.shown < c.whole || c.shown > SHELF_ROWS_MAX, "{how}: card {} toggle", c.id);
+            assert_eq!(c.toggle.is_some(), c.shown < c.whole || c.open, "{how}: card {} toggle", c.id);
             // The toggle ends the card's text: right-aligned in the question's column, below the
             // type line (clear of the badges, points and icons), after the last line's ellipsis,
             // and inside the card.
@@ -9824,5 +10029,193 @@ mod review_tests {
         h.run_steps(4);
         let n = h.state().0.store.exam(&"e".into()).map(|e| e.items.len());
         assert_eq!(n, Some(10), "Enter on Add all");
+    }
+
+    /// The multipart question of the design store: a lead-in and four tasks as a list.
+    const TASKS: &str = "For the following compounds, do all to receive full credit:\n• Draw a valid Lewis structure.\n• Count the number of electron clouds.\n• Name the shape of the molecule.\n• Determine whether the molecule is polar or nonpolar.";
+
+    fn tasks_q(id: &str) -> Question {
+        let part = |s: &str| model::Part { stem: s.into(), kind: PartKind::Short { sample: "x".into() } };
+        question(id, TASKS, Kind::Multipart { parts: vec![part("a. NH₃"), part("b. CO₂")] }, Some(1.0), 0)
+    }
+
+    /// Round 23: no line of height is left free under the list while a card in view is still cut.
+    /// Beside the page (at 340 and at the wide window's width) and over a mix of question lengths
+    /// (one line to a long paragraph, a multipart list among them), the list either shows every
+    /// card in view whole or ends less than a line above the "N more below" cue; it still ends on
+    /// a whole card with an exact count (`check_panel`). A card of more than eight lines is shown
+    /// whole when the room is there (the old cap stopped at eight).
+    #[test]
+    fn no_free_line_while_a_visible_card_is_cut() {
+        let sentence = "A sample of gas occupies 2.4 L at 300 K and 1 atm; find its volume at 450 K and 2 atm. ";
+        let mixes: Vec<Vec<usize>> = vec![vec![9, 1, 4, 2, 6, 1, 3], vec![4, 4, 4, 4, 4, 4], vec![1, 7, 1, 7, 1, 7, 1], vec![2, 2, 9, 2, 2, 2], vec![12, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]];
+        for w in [SHELF_W] {
+            for (m, mix) in mixes.iter().enumerate() {
+                for with_tasks in [false, true] {
+                    let mut qs: Vec<Question> = mix.iter().enumerate().map(|(k, &n)| question(&format!("q{k}"), &sentence.repeat(n), Kind::Short { sample: "x".into() }, Some(1.0), 100 - k as i64)).collect();
+                    if with_tasks {
+                        qs.insert(1, question("tasks", TASKS, tasks_q("tasks").kind, Some(1.0), 99));
+                    }
+                    let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: qs, created: 0, modified: 0, details: Default::default() };
+                    let mut h = panel_harness(vec![bank], w, false);
+                    h.run_steps(6);
+                    let seen = h.state().1.shelf_seen.clone();
+                    let how = format!("{w} wide, mix {m}, tasks {with_tasks}");
+                    check_panel(&seen, &how);
+                    let view = seen.view.unwrap();
+                    let in_view: Vec<&ShelfCardSeen> = seen.cards.iter().filter(|c| c.rect.bottom() <= view.bottom() + 0.5).collect();
+                    assert!(!in_view.is_empty(), "{how}: no card in view");
+                    let cut = in_view.iter().filter(|c| c.shown < c.whole).count();
+                    let free = seen.foot - in_view.last().unwrap().rect.bottom();
+                    assert!(cut == 0 || free < seen.row_h + 2.0, "{how}: {free} px free under the list while {cut} card(s) in view are cut");
+                }
+            }
+        }
+        // A twelve-line question alone in the panel shows every line, no "Show all".
+        let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![question("q0", &sentence.repeat(6), Kind::Short { sample: "x".into() }, Some(1.0), 0)], created: 0, modified: 0, details: Default::default() };
+        let mut h = panel_harness(vec![bank], SHELF_W, false);
+        h.run_steps(6);
+        let c = h.state().1.shelf_seen.cards[0].clone();
+        assert!(c.whole > 8 && c.shown == c.whole && c.toggle.is_none(), "{c:?}");
+    }
+
+    /// Each line of `text` laid out by the card (`shelf_stem_galley` at `w`), with the x of its
+    /// first two visible glyphs, read from the galley: only lines that do not wrap there.
+    fn card_rows(p: &egui::Painter, text: &str, w: f32) -> Vec<(String, f32, f32)> {
+        let g = shelf_stem_galley(p, text, w, SHELF_ROWS_ALL);
+        g.rows
+            .iter()
+            .map(|r| {
+                let vis: Vec<_> = r.glyphs.iter().filter(|gl| !gl.chr.is_whitespace()).collect();
+                (r.glyphs.iter().map(|gl| gl.chr).collect::<String>(), vis.first().map_or(f32::NAN, |g| g.pos.x), vis.get(1).map_or(f32::NAN, |g| g.pos.x))
+            })
+            .collect()
+    }
+
+    /// The card text's items: (depth, marker, text) of each item's first line.
+    fn card_items(text: &str) -> Vec<(usize, String, String)> {
+        text.split('\n')
+            .filter_map(|l| if let ShelfLine::Item { depth, mark, text } = shelf_line(l) { Some((depth, mark.to_string(), text.to_string())) } else { None })
+            .collect()
+    }
+
+    /// Runs `f` with a painter on a set-up context (textures handled).
+    fn with_painter(f: impl FnOnce(&egui::Painter)) {
+        let ctx = egui::Context::default();
+        theme::setup(&ctx);
+        ctx.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
+        let mut f = Some(f);
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            if let Some(f) = f.take() {
+                f(&ui.painter().clone());
+            }
+        });
+        out.textures_delta.clear();
+    }
+
+    /// Round 23: a question's list (a multipart question's tasks) has each item on its own line
+    /// under a hanging bullet: the item starts a new line with "•", its text starts one step in,
+    /// and a wrapped item's further lines start there too, never under the bullet. The galley's
+    /// rows are the lead-in's own rows and then one per item line (the planner counts them
+    /// honestly), and a cut card's tail keeps the indent.
+    #[test]
+    fn multipart_parts_are_on_their_own_lines() {
+        with_painter(|p| {
+            for w in [150.0, 226.0, 266.0, 400.0] {
+                let text = shelf_card_text(p, TASKS, w);
+                let lines: Vec<&str> = text.split('\n').collect();
+                assert!(lines[0].starts_with("For the following compounds"), "{w}: {lines:?}");
+                let items = card_items(&text);
+                assert_eq!(items.iter().map(|i| i.1.as_str()).collect::<Vec<_>>(), vec!["•"; 4], "{w}: four tasks, each on its own line: {lines:?}");
+                assert!(items.iter().all(|i| i.0 == 0));
+                assert!(!text.contains(" • "), "{w}: a task run on in the paragraph");
+                let g = shelf_stem_galley(p, &text, w, SHELF_ROWS_ALL);
+                let lead = shelf_stem_galley(p, lines[0], w, SHELF_ROWS_ALL).rows.len();
+                assert_eq!(g.rows.len(), lead + lines.len() - 1, "{w}: rows are the card text's lines");
+                assert!(g.size().x <= w + 0.5, "{w}: wider than its column");
+                let unit = shelf_hang_unit(p, &text);
+                assert!(unit > 4.0 && unit < 20.0, "{unit}");
+                let rows = card_rows(p, &text, w);
+                let mut wrapped = false;
+                for (k, line) in lines.iter().enumerate().skip(1) {
+                    let (_, x0, x1) = &rows[lead + k - 1];
+                    match shelf_line(line) {
+                        ShelfLine::Item { .. } => {
+                            assert!(*x0 < 1.0, "{w}: bullet at {x0}");
+                            assert!((x1 - unit).abs() < 1.0, "{w}: item text at {x1}, not a step in ({unit})");
+                        }
+                        ShelfLine::More { depth: 0, .. } => {
+                            wrapped = true;
+                            assert!((x0 - unit).abs() < 1.0, "{w}: a wrapped item's line at {x0}, not a step in ({unit})");
+                        }
+                        other => panic!("{w}: {other:?}"),
+                    }
+                }
+                if w < 200.0 {
+                    assert!(wrapped, "{w}: no item wrapped: the narrow width tests nothing");
+                }
+                // Cut on the line after the first task: the tail keeps its step of indent.
+                let (_, tail) = shelf_cut_galleys(p, &text, &g, w, lead + 2, w - 60.0);
+                let first = tail.rows[0].glyphs.iter().filter(|gl| !gl.chr.is_whitespace()).nth(if matches!(shelf_line(lines[2]), ShelfLine::Item { .. }) { 1 } else { 0 }).unwrap();
+                assert!((first.pos.x - unit).abs() < 1.0, "{w}: the cut line lost its indent ({})", first.pos.x);
+            }
+        });
+        // In the panel: the multipart card's lines are counted and the list still checks out.
+        let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![tasks_q("q0"), short("q1", "Define a catalyst.")], created: 0, modified: 0, details: Default::default() };
+        let mut h = panel_harness(vec![bank], SHELF_W, false);
+        h.run_steps(6);
+        let c = h.state().1.shelf_seen.cards.iter().find(|c| c.id == "q0").unwrap().clone();
+        check_panel(&h.state().1.shelf_seen, "tasks");
+        assert!(c.whole >= 6, "lead-in and four tasks: {c:?}");
+    }
+
+    /// Round 23 council: the card text comes from the parsed question, so layout fences never
+    /// show as text and lists read as the paper prints them.
+    #[test]
+    fn card_text_follows_the_parsed_question() {
+        with_painter(|p| {
+            let fence = |t: &str| t.contains(":::") || t.contains("center") || t.contains("side") || t.contains("next");
+            // A centred list: its items, no fence.
+            let t = shelf_card_text(p, "::: center\n• One\n• Two\n:::", 260.0);
+            assert!(!fence(&t), "{t:?}");
+            assert_eq!(card_items(&t), vec![(0, "•".into(), "One".into()), (0, "•".into(), "Two".into())]);
+            assert_eq!(t.split('\n').count(), 2, "{t:?}");
+            // Side by side with a list in the left panel: the panels in reading order, no fence.
+            let t = shelf_card_text(p, "::: side\nLeft words\n• A\n• B\n::: next\nRight words\n:::", 260.0);
+            assert!(!fence(&t), "{t:?}");
+            let lines: Vec<&str> = t.split('\n').collect();
+            assert_eq!(lines, vec!["Left words", &format!("•{SHELF_HANG}A"), &format!("•{SHELF_HANG}B"), "Right words"], "{t:?}");
+            // A nested list: order and depth kept, the paper's glyph per level, a step per level.
+            let t = shelf_card_text(p, "Name them:\n• Metals\n  • Iron\n  • Copper\n• Gases", 260.0);
+            assert_eq!(
+                card_items(&t),
+                vec![(0, "•".into(), "Metals".into()), (1, "◦".into(), "Iron".into()), (1, "◦".into(), "Copper".into()), (0, "•".into(), "Gases".into())],
+                "{t:?}"
+            );
+            let unit = shelf_hang_unit(p, &t);
+            let rows = card_rows(p, &t, 260.0);
+            assert!((rows[2].1 - unit).abs() < 1.0 && (rows[2].2 - 2.0 * unit).abs() < 1.0, "nested item: {:?} (step {unit})", rows[2]);
+            assert!(rows[4].1 < 1.0 && (rows[4].2 - unit).abs() < 1.0, "back out: {:?}", rows[4]);
+            // A numbered list (nested): the labels the paper prints, from the same parse.
+            let stem = "Steps:\n\n1. Weigh\n  1. Tare\n  2. Read\n2. Record\n3. Repeat";
+            let t = shelf_card_text(p, stem, 260.0);
+            let marks: Vec<String> = card_items(&t).into_iter().map(|i| i.1).collect();
+            assert_eq!(marks, vec!["1.", "a.", "b.", "2.", "3."]);
+            let mut paper = Vec::new();
+            for n in crate::richtext::parse_tree(stem) {
+                if let crate::richtext::Node::Block { block: crate::richtext::Block::Numbered(_), depths, .. } = n {
+                    let ords = crate::richtext::item_ordinals(&depths);
+                    paper.extend(depths.iter().zip(&ords).map(|(&d, &o)| crate::richtext::number_label(d, o)));
+                }
+            }
+            assert_eq!(marks, paper, "the paper's labels");
+            // Inside a paragraph "1. " is text, as on the paper.
+            let para = "Do these:\n1. One.\n2. Two.";
+            assert_eq!(shelf_card_text(p, para, 260.0), crate::equation::stem_preview(para));
+            // No list: the old one-paragraph text, unchanged, fences and all handled by the parse.
+            for stem in ["Which element is the least electronegative? Explain.", "**Find** $x^2$ and H_{2}O", "::: center\nA centred line\n:::", "Name:\nA | B\nKI | ___"] {
+                assert_eq!(shelf_card_text(p, stem, 260.0), crate::equation::stem_preview(stem), "{stem:?}");
+            }
+        });
     }
 }
