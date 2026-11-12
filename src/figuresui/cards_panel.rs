@@ -516,6 +516,8 @@ impl Workspace {
         if let Some(s) = pick {
             let mut q = self.params.clone();
             q.set_s("setup", s);
+            // a new setup's lanes start filled in: lanes left blank were the old lanes'
+            q.set_s("blank_lanes", "");
             self.card_commit(q, true);
         }
         let lanes = gel::lane_cards(&self.params);
@@ -665,6 +667,8 @@ impl Workspace {
         if let Some(s) = pick {
             let mut q = self.params.clone();
             q.set_s("setup", s);
+            // a new setup's lanes start filled in: lanes left blank were the old lanes'
+            q.set_s("blank_lanes", "");
             self.card_commit(q, true);
         }
         let lanes = gel::lane_cards(&self.params);

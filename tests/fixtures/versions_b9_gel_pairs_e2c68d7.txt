@@ -1,0 +1,40 @@
+opening	false	Matching lanes	d24ecec6d998439a	c7490c9c2efea424
+opening	true	Matching lanes	d24ecec6d998439a	c7490c9c2efea424
+opening	true	Band sizes	d24ecec6d998439a	0b82c44ae58bc88d
+opening	true	Both	d24ecec6d998439a	040cf7710e4e5163
+example: DNA fingerprinting gel: crime scene and three suspects	false	Matching lanes	be2ad3f0dcf1e4a2	40ae1266ea3fa35c
+example: DNA fingerprinting gel: crime scene and three suspects	true	Matching lanes	be2ad3f0dcf1e4a2	40ae1266ea3fa35c
+example: DNA fingerprinting gel: crime scene and three suspects	true	Band sizes	be2ad3f0dcf1e4a2	7156569168ca5f65
+example: DNA fingerprinting gel: crime scene and three suspects	true	Both	be2ad3f0dcf1e4a2	dfaa2d995a90bbab
+example: Paternity test gel: mother, child and two possible fathers	false	Matching lanes	ebe00ba94443a051	7333c07dc7321b14
+example: Paternity test gel: mother, child and two possible fathers	true	Matching lanes	ebe00ba94443a051	7333c07dc7321b14
+example: Paternity test gel: mother, child and two possible fathers	true	Band sizes	ebe00ba94443a051	7333c07dc7321b14
+example: Paternity test gel: mother, child and two possible fathers	true	Both	ebe00ba94443a051	7333c07dc7321b14
+example: PTC taster gene PCR and HaeIII digest gel with a 100 bp ladder	false	Matching lanes	4e221218a607a92c	58fe985c880c4fb4
+example: PTC taster gene PCR and HaeIII digest gel with a 100 bp ladder	true	Matching lanes	4e221218a607a92c	58fe985c880c4fb4
+example: PTC taster gene PCR and HaeIII digest gel with a 100 bp ladder	true	Band sizes	4e221218a607a92c	c518f78efa586df2
+example: PTC taster gene PCR and HaeIII digest gel with a 100 bp ladder	true	Both	4e221218a607a92c	7192ef3408a5c70c
+example: Lambda DNA restriction digest gel with a ruler for a standard curve	false	Matching lanes	34f6f89907f583c2	9760bd548bfcf06f
+example: Lambda DNA restriction digest gel with a ruler for a standard curve	true	Matching lanes	34f6f89907f583c2	9760bd548bfcf06f
+example: Lambda DNA restriction digest gel with a ruler for a standard curve	true	Band sizes	34f6f89907f583c2	5418b010b7c27bcc
+example: Lambda DNA restriction digest gel with a ruler for a standard curve	true	Both	34f6f89907f583c2	cab05e041c9c7969
+example: Plasmid restriction digest gel worksheet: draw the double digest	false	Matching lanes	fe2bd46e65b02c9c	8585a58b77a64223
+example: Plasmid restriction digest gel worksheet: draw the double digest	true	Matching lanes	fe2bd46e65b02c9c	8585a58b77a64223
+example: Plasmid restriction digest gel worksheet: draw the double digest	true	Band sizes	fe2bd46e65b02c9c	8585a58b77a64223
+example: Plasmid restriction digest gel worksheet: draw the double digest	true	Both	fe2bd46e65b02c9c	8585a58b77a64223
+setup: Crime scene	false	Matching lanes	d24ecec6d998439a	c7490c9c2efea424
+setup: Crime scene	true	Matching lanes	d24ecec6d998439a	c7490c9c2efea424
+setup: Crime scene	true	Band sizes	d24ecec6d998439a	0b82c44ae58bc88d
+setup: Crime scene	true	Both	d24ecec6d998439a	040cf7710e4e5163
+setup: Paternity test	false	Matching lanes	bfbf05beb785706e	021169b480ceb36b
+setup: Paternity test	true	Matching lanes	bfbf05beb785706e	021169b480ceb36b
+setup: Paternity test	true	Band sizes	bfbf05beb785706e	a2b36a4c9d06cf28
+setup: Paternity test	true	Both	bfbf05beb785706e	cd7403ed4910efd0
+setup: Restriction digest	false	Matching lanes	74efbdce640023c4	f61c97963a9e5a1a
+setup: Restriction digest	true	Matching lanes	74efbdce640023c4	f61c97963a9e5a1a
+setup: Restriction digest	true	Band sizes	74efbdce640023c4	691244bd106bc39b
+setup: Restriction digest	true	Both	74efbdce640023c4	a60a7133988a9436
+setup: PCR products	false	Matching lanes	f6ae2b7da8c1a30e	5d7167ad5559d2ce
+setup: PCR products	true	Matching lanes	f6ae2b7da8c1a30e	5d7167ad5559d2ce
+setup: PCR products	true	Band sizes	f6ae2b7da8c1a30e	6f6ec89eac1ee107
+setup: PCR products	true	Both	f6ae2b7da8c1a30e	e6b27a249cd79fe7

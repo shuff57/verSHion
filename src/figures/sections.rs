@@ -106,7 +106,7 @@ static FIG_10: [RefSection; 4] = [
     s("Lanes", &["lanes"], ""),
     s("Gel", &["setup", "agarose", "look", "ruler"], ""),
     s("Labels", &["lane_names", "lane_labels", "lane_numbers", "sizes", "ladder_sizes", "size_units", "electrodes", "electrode_style"], ""),
-    s("Chart title and answer key", &["title", "answer", "answer_kind", "show_answers", "band_height", "run_length"], "Turn off Show answers for the student copy: a lane left blank is empty and the answer key is left off."),
+    s("Chart title and answer key", &["title", "answer", "answer_kind", "band_height", "run_length"], "A lane left blank for students is empty until the answer key is on, which shows its bands; Student + key exports both."),
 ];
 
 static FIG_11: [RefSection; 7] = [

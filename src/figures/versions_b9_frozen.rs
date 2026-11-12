@@ -215,12 +215,9 @@ fn corrections(id: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/versions_b9_{}_corrected.txt", id.replace('-', "_")))
 }
 
-/// The only old rows allowed a renewed hash. The gel had no Show answers switch before batch 9, yet the freeze's
-/// generator wrote `"show_answers":false` into some of its specs and links (a case no saved gel or link made by the
-/// app can hold: the gel's params never had the key, and a link lists only the gel's own changed keys). Batch 9 gives
-/// the gel that switch, so those rows now draw the student copy: the printed answer key is left off (nothing else
-/// changes, as no old figure has a lane left blank).
-fn correctable(id: &str, saved: &str) -> bool { id == "gel-electrophoresis" && saved.contains("\"show_answers\":false") }
+/// The old rows allowed a renewed hash: none. (Batch 9 first gave the gel a Show answers switch and renewed one row;
+/// round 1 took the switch out again, so every frozen row draws exactly as at batch9-base.)
+fn correctable(_id: &str, _saved: &str) -> bool { false }
 
 fn correction_reason(id: &str) -> &'static str {
     match id {

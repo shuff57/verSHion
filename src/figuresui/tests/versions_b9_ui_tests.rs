@@ -93,11 +93,10 @@ fn gel_lane_cards_leave_a_sample_lane_blank_for_students() {
     assert!(figures::biology::gel::lane_cards(&ws.params)[2].blank);
     let key = (def.render)(&ws.params);
     assert_ne!(key, key_before, "the key marks the lane");
-    let mut student = ws.params.clone();
-    student.set_b(figures::SHOW_ANSWERS, false);
-    assert_ne!((def.render)(&student), key, "the student copy empties it");
-    // the Show answers switch is in the panel (the student copy), as on the figures that hide answers
-    assert!(figures::hides_answers(&(def.params)()));
+    // Student + key: the student copy empties it, the key keeps it
+    let (student, key_copy) = figures::answer_pair(def, &ws.params).unwrap();
+    assert_ne!(student, key_copy);
+    assert!(key_copy.contains("data-blank-lane") && !student.contains("data-blank-lane"));
     // moved left with its card's arrow, the flag goes with it
     click_nth(&ctx, &mut ws, egui_phosphor::regular::ARROW_LEFT, 2); // lane 3's (lane 1's is there, greyed out)
     assert_eq!(ws.params.s("blank_lanes"), "2");
@@ -151,8 +150,41 @@ fn batch9_controls_are_in_their_sections() {
     let show = defs.iter().find(|d| d.key == "show").unwrap();
     assert!(matches!(&show.kind, figures::Kind::Choice(o) if o.contains(&figures::biology::popdyn::NEITHER)));
     assert!(seen(&ctx, &mut ws, "Show") >= 1);
-    // gel: Show answers under Chart title and answer key
+    // gel: no Show answers switch (Student + key goes through its answer rule)
     let (ctx, mut ws) = open_tall("gel-electrophoresis");
     open_section(&ctx, &mut ws, "Chart title and answer key");
-    assert!(seen(&ctx, &mut ws, "Show answers") >= 1, "gel Show answers");
+    assert_eq!(seen(&ctx, &mut ws, "Show answers"), 0, "gel Show answers");
+}
+
+/// Gel: loading another classic setup from the lane card's dropdown, or an example, clears the lanes left blank
+/// (they were the old lanes'), so the new setup draws every band on the student copy.
+#[test]
+fn gel_loading_a_setup_clears_the_blank_lanes() {
+    let (ctx, mut ws) = open_tall("gel-electrophoresis");
+    let def = &reg()[ws.sel.unwrap()];
+    click_nth(&ctx, &mut ws, "Leave blank for students", 1);
+    assert_eq!(ws.params.s("blank_lanes"), "3");
+    // the setup dropdown at the top of the Lanes card: its lanes still match the Crime scene setup, so it names it (the
+    // lane's label box below holds the same words)
+    let combo = named_or_valued(&ctx, &mut ws, "Crime scene");
+    assert!(!combo.is_empty(), "the setup dropdown");
+    let before = named_or_valued(&ctx, &mut ws, "Paternity test");
+    click_at(&ctx, &mut ws, combo[0]);
+    let item: Vec<_> = named_or_valued(&ctx, &mut ws, "Paternity test").into_iter().filter(|b: &egui::accesskit::Rect| !before.contains(b)).collect();
+    click_at(&ctx, &mut ws, *item.last().expect("Paternity test listed"));
+    assert_eq!(ws.params.s("setup"), "Paternity test");
+    assert_eq!(ws.params.s("blank_lanes"), "", "the new setup has no blank lane");
+    let (student, key) = figures::answer_pair(def, &ws.params).unwrap();
+    assert!(!student.contains("data-blank-lane") && !key.contains("data-blank-lane"));
+    // the drawn student copy has every sample lane's bands
+    let mut st = ws.params.clone();
+    st.set_b("answer", false);
+    assert!(figures::biology::gel::layout_of(&st).lanes.iter().all(|l| !l.bands.is_empty()));
+    // an example, likewise
+    let mut p = ws.params.clone();
+    p.set_s("blank_lanes", "2");
+    ws.set_params_with_history(p);
+    let ex = &figures::examples_for("gel-electrophoresis")[1];
+    ws.set_params_with_history(example_params(def, ex));
+    assert_eq!(ws.params.s("blank_lanes"), "");
 }

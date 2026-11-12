@@ -357,10 +357,10 @@ pub fn render(p: &Params) -> String {
     // answer key
     let kind = p.s("answer_kind");
     let mut answer_lines: Vec<String> = Vec::new();
-    // sample lanes left blank for students: empty on the student copy, outlined on the key; the student copy keeps the
-    // key's page but prints no answer key (every old figure has Show answers on)
+    // sample lanes left blank for students follow the Answer key switch, which Student + key turns off for the student
+    // copy and on for the key (`answer_rule`): empty without it, their bands outlined with it
     let blank_set = gel_b9::blank_set(p);
-    let key_copy = p.b(crate::figures::SHOW_ANSWERS);
+    let key_copy = p.b("answer");
     let hidden = |i: usize, l: &Lane| !key_copy && gel_b9::is_blank(&blank_set, i, l.ladder.is_some());
     if p.b("answer") {
         if kind == "Band sizes" || kind == "Both" {
@@ -538,7 +538,6 @@ pub fn render(p: &Params) -> String {
         txt(&mut d, rx + 17.0, well_y + nmm as f64 * mm + 30.0, 13.0, "middle", SANS, "", "cm");
     }
     for (i, l) in answer_lines.iter().enumerate() {
-        if !key_copy { break; }
         let y = gy + gel_h + 36.0 + i as f64 * 22.0;
         if i == 0 { bold(&mut d, w / 2.0, y - 8.0, 14.0, "middle", "Answer key"); }
         txt(&mut d, w / 2.0, y + 14.0, 15.0, "middle", SANS, "", l);
