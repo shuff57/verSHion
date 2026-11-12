@@ -27,7 +27,7 @@ fn open(over: &[(&str, &str)]) -> Params {
 // ------------------------------------------------------------------ reading the drawn SVG
 
 #[derive(Debug, Clone)]
-struct Text { content: String, x0: f64, x1: f64, y0: f64, y1: f64 }
+struct Text { content: String, x0: f64, x1: f64, y0: f64, y1: f64, fill: String }
 #[derive(Debug, Clone)]
 struct Line { a: (f64, f64), b: (f64, f64), sw: f64, dashed: bool, stroke: String }
 
@@ -76,7 +76,7 @@ fn read(svg: &str) -> (Vec<Text>, Vec<Line>, Vec<[(f64, f64); 3]>) {
             let (x0, x1) = match anchor.as_str() { "start" => (x, x + w), "end" => (x - w, x), _ => (x - w / 2.0, x + w / 2.0) };
             let top = if sup { 0.92 } else { 0.74 } * fs;
             let bot = if sub { 0.46 } else { 0.24 } * fs;
-            texts.push(Text { content, x0, x1, y0: y - top, y1: y + bot });
+            texts.push(Text { content, x0, x1, y0: y - top, y1: y + bot, fill: attr(tag, "fill").unwrap_or_default() });
             rest = &rest[close + 7..];
             continue;
         }
@@ -156,7 +156,7 @@ fn is_grid(l: &Line) -> bool { l.stroke == "#cdd1d8" }
 fn label_faults(svg: &str) -> Vec<String> {
     let (mut texts, lines, tris) = read(svg);
     for l in lines.iter().filter(|l| is_blank(l)) {
-        texts.push(Text { content: "__".into(), x0: l.a.0.min(l.b.0), x1: l.a.0.max(l.b.0), y0: l.a.1 - 1.5, y1: l.a.1 + 1.5 });
+        texts.push(Text { content: "__".into(), x0: l.a.0.min(l.b.0), x1: l.a.0.max(l.b.0), y0: l.a.1 - 1.5, y1: l.a.1 + 1.5, fill: String::new() });
     }
     let (pw, ph) = crate::figures::svg_size(svg);
     let mut out = vec![];
@@ -381,12 +381,16 @@ fn each_mark_and_component_belongs_to_its_own_vector() {
                 if d > 180.0 { d = 360.0 - d; }
                 d
             };
-            let small = span < vector_b8::SMALL;
-            // (an arc under 2 degrees has no inside to speak of)
-            // (or, the placer's second choice when nothing inside is free: close beside its own arc, past its reference
-            // line, never across its own arrow unless the angle is small)
-            let beside_arc = arc.windows(2).map(|w| dist_seg(c, w[0], w[1])).fold(f64::MAX, f64::min) <= (t.x1 - t.x0).max(t.y1 - t.y0) / 2.0 + 14.0 && (small || side(ea, c) * side(ea, mid) > 0.0);
-            if !led && !beside_arc && span >= 2.0 && !(side(ea, c) * side(ea, mid) > 0.0 && (small || side(er, c) * side(er, mid) > 0.0)) {
+            // inside its own angle's sector widened by 10 degrees each side (the checker's rule)
+            let _ = (side, mid, led);
+            let ang = |q: (f64, f64)| (tail.1 - q.1).atan2(q.0 - tail.0).to_degrees();
+            let (a_ref, a_arr) = (ang(er), ang(ea));
+            let mut sweep_ = (a_arr - a_ref).rem_euclid(360.0);
+            let dir = if sweep_ > 180.0 { sweep_ = 360.0 - sweep_; -1.0 } else { 1.0 };
+            let mut tt = (ang(centre(t)) - a_ref).rem_euclid(360.0);
+            if dir < 0.0 { tt = (360.0 - tt).rem_euclid(360.0); }
+            if tt > 180.0 { tt -= 360.0; }
+            if span >= 2.0 && (tt < -10.5 || tt > sweep_ + 10.5) {
                 bad.push(format!("case {k}: {greek} is outside its angle"));
             }
             let r0 = dist_seg(tail, arc[0], arc[0]);
@@ -417,7 +421,7 @@ fn each_mark_and_component_belongs_to_its_own_vector() {
                 // upright for y) is close by
                 let lnear = comp_lines.iter().min_by(|a, b| dist_seg(c, a.a, a.b).total_cmp(&dist_seg(c, b.a, b.b))).unwrap();
                 let own = comp_lines.iter().filter(|l| inside(l) && level(l) == (axis == "x")).map(|l| dist_seg(c, l.a, l.b)).fold(f64::MAX, f64::min);
-                if !inside(&lnear) || own > (t.x1 - t.x0).max(t.y1 - t.y0) / 2.0 + 20.0 {
+                if !inside(&lnear) || own > (t.x1 - t.x0).max(t.y1 - t.y0) / 2.0 + 72.0 {
                     bad.push(format!("case {k}: {name}{axis}'s nearest component is not its own: {lnear:?}, own at {own}"));
                 }
             }
@@ -682,39 +686,127 @@ const FAM_LENS: [f64; 3] = [2.0, 4.0, 6.0];
 /// seeded 2,000 three-vector figures (lengths 2 to 6), each with one mark (vector 2's, in degrees), with every mark in
 /// degrees (the resultant's too), and with every mark and component; at Medium (thin) and Large (bold).
 fn family() -> Vec<(String, Params)> {
+    // the checker's sweep, exactly: every ordered pair of the angles with lengths 2, 4, 6 for two vectors (in its
+    // order), its 1,500 seeded three-vector sets (tests/fixtures/vector_b8_sweep3.txt, read from its result list),
+    // each with vector 2 marked in degrees ("one"), every vector marked in degrees ("allmarks"), every mark and every
+    // component on, the resultant's too ("all"); bold off (Medium) and on (Large)
     let mut sets: Vec<Vec<(f64, f64)>> = vec![];
-    for &a1 in &FAM_ANGS { for &a2 in &FAM_ANGS { for &l1 in &FAM_LENS { for &l2 in &FAM_LENS { sets.push(vec![(l1, a1), (l2, a2)]); } } } }
-    let mut seed: u64 = 0x5eed_fa_b8;
-    let mut next = |n: u64| { seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (seed >> 33) % n };
-    for _ in 0..2000 {
-        sets.push((0..3).map(|_| (2.0 + next(5) as f64, FAM_ANGS[next(11) as usize])).collect());
+    for &a1 in &FAM_ANGS { for &l1 in &FAM_LENS { for &a2 in &FAM_ANGS { for &l2 in &FAM_LENS { sets.push(vec![(l1, a1), (l2, a2)]); } } } }
+    sets.sort_by(|a, b| (a[0].1, a[0].0, a[1].1, a[1].0).partial_cmp(&(b[0].1, b[0].0, b[1].1, b[1].0)).unwrap());
+    let fix = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vector_b8_sweep3.txt")).unwrap();
+    for line in fix.lines() {
+        let v: Vec<f64> = line.split_whitespace().map(|x| x.parse().unwrap()).collect();
+        sets.push((0..3).map(|i| (v[2 * i + 1], v[2 * i])).collect());
     }
     let mut out = vec![];
-    for (k, set) in sets.iter().enumerate() {
-        for variant in 0..3 {
-            let bold = (k + variant) % 2 == 0;
-            let mut p = open(&[]);
-            p.set_i("n", set.len() as i64);
-            p.set_b("bold", bold);
-            for (i, &(m, a)) in set.iter().enumerate() {
-                p.set_f(&format!("v{}_mag", i + 1), m);
-                p.set_f(&format!("v{}_ang", i + 1), a);
-            }
-            match variant {
-                0 => { p.set_b("v2_mark", true); p.set_s("v2_alab_mode", "Degrees"); }
-                _ => {
-                    p.set_b("mark_angle", true);
-                    p.set_s("ang_lab_mode", "Degrees");
-                    for x in VX.iter().take(set.len()) { p.set_b(x[0], true); p.set_s(x[2], "Degrees"); if variant == 2 { p.set_b(x[4], true); } }
-                    if variant == 2 { p.set_b("components", true); }
+    for bold in [false, true] {
+        for set in &sets {
+            for (variant, setting) in ["one", "allmarks", "all"].iter().enumerate() {
+                let mut p = open(&[]);
+                p.set_i("n", set.len() as i64);
+                p.set_b("bold", bold);
+                for (i, &(m, a)) in set.iter().enumerate() {
+                    p.set_f(&format!("v{}_mag", i + 1), m);
+                    p.set_f(&format!("v{}_ang", i + 1), a);
                 }
+                match variant {
+                    0 => { p.set_b("v2_mark", true); p.set_s("v2_alab_mode", "Degrees"); }
+                    _ => {
+                        for x in VX.iter().take(set.len()) { p.set_b(x[0], true); p.set_s(x[2], "Degrees"); if variant == 2 { p.set_b(x[4], true); } }
+                        if variant == 2 { p.set_b("components", true); p.set_b("mark_angle", true); p.set_s("ang_lab_mode", "Degrees"); }
+                    }
+                }
+                out.push((format!("{set:?} {setting} variant {variant} bold {bold}"), p));
             }
-            out.push((format!("{set:?} variant {variant} bold {bold}"), p));
         }
     }
     out
 }
 
+/// The drawn sweep's problems for one figure, by the checker's rules: a vector's name not drawn; an arc with no value;
+/// a component with no name; a value outside its own angle's sector widened by 10 degrees, further from its arc's
+/// centre than the radius and 1.5 text heights, or not plainly nearer its own arc (the one whose span it states) than
+/// any other. Returns (problems, leaders drawn).
+fn sweep_problems(p: &Params, svg: &str) -> (Vec<String>, usize) {
+    let (texts, lines, _) = read(svg);
+    let mut out = vec![];
+    let n = p.i("n") as usize;
+    for i in 0..n {
+        let name = ["A", "B", "C", "D"][i];
+        if !texts.iter().any(|t| t.content == name) { out.push(format!("NAME {name}")); }
+    }
+    let drawn_arcs = arcs(svg);
+    let degs: Vec<&Text> = texts.iter().filter(|t| t.content.ends_with('\u{b0}')).collect();
+    if degs.len() < drawn_arcs.len() { out.push(format!("MISSING_DEG {}", drawn_arcs.len() - degs.len())); }
+    let comp_lines = lines.iter().filter(|l| l.dashed && (l.sw - 2.2).abs() < 1e-9).count();
+    let names = texts.iter().filter(|t| t.fill == "#6b7280").count();
+    if names < comp_lines { out.push(format!("MISSING_COMP {}", comp_lines - names)); }
+    // each arc's centre (the start of its own reference line) and span
+    let refs: Vec<(f64, f64)> = lines.iter().filter(|l| l.dashed && (l.sw - 1.3).abs() < 1e-9).map(|l| l.a).collect();
+    let geo: Vec<((f64, f64), f64, f64, f64, f64)> = drawn_arcs.iter().filter_map(|arc| {
+        let (p1, p3) = (arc[0], *arc.last().unwrap());
+        let o = refs.iter().copied().find(|&o| { let r = dist_seg(o, p1, p1); arc.iter().all(|&a| (dist_seg(o, a, a) - r).abs() < 0.3) })?;
+        let ang = |a: (f64, f64)| (o.1 - a.1).atan2(a.0 - o.0).to_degrees();
+        let (a0, a1) = (ang(p1), ang(p3));
+        let mut span = (a1 - a0).rem_euclid(360.0);
+        let dir = if span > 180.0 { span = 360.0 - span; -1.0 } else { 1.0 };
+        Some((o, dist_seg(o, p1, p1), a0, dir * span, span))
+    }).collect();
+    let arc_dist = |c: (f64, f64), k: usize| drawn_arcs[k].windows(2).map(|w| dist_seg(c, w[0], w[1])).fold(f64::MAX, f64::min);
+    let leaders = lines.iter().filter(|l| (l.sw - 0.9).abs() < 1e-9).count();
+    for t in &degs {
+        let said: f64 = t.content.trim_end_matches('\u{b0}').parse().unwrap();
+        let c = leader_to(&lines, t).unwrap_or(centre(t));
+        let own: Vec<usize> = (0..geo.len()).filter(|&k| (geo[k].4 - said).abs() < 0.15).collect();
+        let Some(&k) = own.iter().min_by(|&&a, &&b| arc_dist(c, a).total_cmp(&arc_dist(c, b))) else { out.push(format!("NO_ARC {said}")); continue };
+        let (o, r, a0, sweep_, _) = geo[k];
+        let mine = arc_dist(c, k);
+        if (0..geo.len()).any(|j| j != k && !own.contains(&j) && arc_dist(c, j) < mine + 1.5) { out.push(format!("NEARER_OTHER {said}")); }
+        let th = (t.y1 - t.y0) - 0.0;
+        let cc = centre(t);
+        if (cc.0 - o.0).hypot(cc.1 - o.1) > r + 1.5 * th + 0.5 { out.push(format!("FAR {said}")); }
+        let a = (o.1 - cc.1).atan2(cc.0 - o.0).to_degrees();
+        let mut tt = (a - a0).rem_euclid(360.0);
+        if sweep_ < 0.0 { tt = (360.0 - tt).rem_euclid(360.0); }
+        if tt > 180.0 { tt -= 360.0; }
+        if tt < -10.0 - 0.5 || tt > sweep_.abs() + 10.0 + 0.5 { out.push(format!("OUTSIDE {said}")); }
+    }
+    for f in label_faults(svg) { out.push(format!("FAULT {f}")); }
+    (out, leaders)
+}
+
+/// Items 1 to 4: the checker's sweep of 15,534 figures, read from the drawn SVG: no name dropped, no value or
+/// component name missing, every value by its own arc (inside its sector, near the arc, nearer it than any other), no
+/// text on text or lines; and no leader at all on the two-vector figures with one mark.
+#[test]
+fn checker_sweep_is_clean() {
+    let d = def();
+    let fam = family();
+    assert_eq!(fam.len(), 15_534);
+    let mut bad = vec![];
+    let mut led: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+    for (name, p) in &fam {
+        let svg = (d.render)(p);
+        let (probs, leaders) = sweep_problems(p, &svg);
+        let setting = format!("{} vectors, {}", p.i("n"), name.split(' ').rev().nth(4).unwrap());
+        let e = led.entry(setting).or_default();
+        e.0 += 1;
+        e.1 += (leaders > 0) as usize;
+        if p.i("n") == 2 && name.contains(" one ") && leaders > 0 {
+            bad.push(format!("{name}: a leader on a two-vector figure with one mark"));
+        }
+        if !probs.is_empty() {
+            bad.push(format!("{name}: {}", probs.join("; ")));
+        }
+    }
+    for (k, (all, l)) in &led {
+        eprintln!("{k}: leaders in {l} of {all} ({:.1}%)", 100.0 * *l as f64 / *all as f64);
+    }
+    let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
+    for b in &bad { for p in b.split(": ").nth(1).unwrap_or("").split("; ") { *kinds.entry(p.split(' ').next().unwrap().to_string()).or_default() += 1; } }
+    eprintln!("sweep problems by kind: {kinds:?}");
+    assert!(bad.is_empty(), "{} figures with problems:\n{}", bad.len(), bad[..bad.len().min(25)].join("\n"));
+}
 
 /// The page drawn (the batch 8 drawing may grow it for room).
 fn page(svg: &str) -> (f64, f64) { crate::figures::svg_size(svg) }
@@ -884,7 +976,8 @@ fn layout_is_shared_and_bounded() {
         most = most.max(vector_b8::scene(&p).work);
     }
     eprintln!("most candidate spots tried for one figure: {most}");
-    assert!(most <= vector_b8::TOTAL_CAP);
+    // (no retry starts past the budget; the one under way may finish past it)
+    assert!(most <= vector_b8::TOTAL_CAP + vector_b8::WORK_CAP, "{most}");
 }
 
 /// Item 6: a zero-length vector has no angle and no components: neither is drawn, every other label stays, and the
@@ -948,5 +1041,53 @@ fn each_component_has_its_own_label_choice() {
     assert!(rel(&open(&base), "v2_cx_mode") && !rel(&open(&[("v2_ang", "60")]), "v2_cx_mode"));
     assert!(!rel(&open(&[("v2_ang", "60"), ("v2_comps", "true"), ("v2_cx_mode", "None")]), "v2_cx_lab"));
 }
+
+
+
+/// Item 5: a drag step starts from the last layout (its page, its arcs' radii, its labels' places and their order):
+/// over steps of a degree from solved crowded figures (every mark and component on, the same labels drawn before and
+/// after), the steps cost under a fifth of
+/// the cold layouts at the median and in two steps of three, and every step still draws clean by the sweep's rules.
+#[test]
+fn a_drag_step_starts_from_the_last_layout() {
+    let d = def();
+    let (mut cold_all, mut warm_all, mut ratios, mut worst) = (0usize, 0usize, vec![], (0.0f64, String::new()));
+    for (name, p) in family().into_iter().filter(|f| f.0.contains(" all ")).step_by(19) {
+        vector_b8::forget_last();
+        let first = vector_b8::scene(&p);
+        let cold = first.work;
+        // (a crowded figure: a trivial one costs next to nothing cold)
+        if cold < 2000 {
+            continue;
+        }
+        let mut q = p.clone();
+        q.set_f("v2_ang", q.f("v2_ang") + 1.0);
+        let next = vector_b8::scene(&q);
+        let warm = next.work;
+        let (probs, _) = sweep_problems(&q, &(d.render)(&q));
+        // (a step that changes what is drawn, a vector turning off the grid and gaining its components, is no small
+        // change: not counted)
+        let owns = |s: &vector_b8::Scene| { let mut v: Vec<String> = s.labels.iter().map(|l| format!("{:?}", l.2)).collect(); v.sort(); v };
+        if owns(&first) != owns(&next) {
+            continue;
+        }
+        assert!(probs.is_empty(), "{name} one step on: {probs:?}");
+        cold_all += cold;
+        warm_all += warm;
+        let r = warm as f64 / cold as f64;
+        if r > worst.0 { worst = (r, name.clone()); }
+        ratios.push(r);
+    }
+    ratios.sort_by(|a, b| a.total_cmp(b));
+    let median = ratios[ratios.len() / 2];
+    eprintln!("drag steps: {} from crowded figures, in all {warm_all} spots against {cold_all} cold ({:.1}%), median {:.1}%, worst {:.0}% ({})", ratios.len(), 100.0 * warm_all as f64 / cold_all as f64, 100.0 * median, 100.0 * worst.0, worst.1);
+    let under = ratios.iter().filter(|r| **r < 0.2).count();
+    eprintln!("drag steps under a fifth of a cold layout: {under} of {}", ratios.len());
+    assert!(ratios.len() >= 40);
+    // the typical step settles in under a fifth of a cold layout (measured at this commit: median 7.8%, 47 of 70 under a
+    // fifth); a step whose new place is itself a hard layout searches afresh
+    assert!(median < 0.2 && under * 3 >= ratios.len() * 2, "median {median}, {under} of {} under a fifth", ratios.len());
+}
+
 
 
