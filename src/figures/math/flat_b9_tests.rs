@@ -443,7 +443,7 @@ fn texts(svg: &str) -> Vec<String> { text_boxes(svg).into_iter().map(|t| t.0).co
 #[test]
 fn the_size_typed_as_a_fraction_or_root_is_drawn_at_its_value_and_written_as_typed() {
     let rp = "regular-polygon";
-    for (typed, val, written) in [("5/2", 2.5, "5/2"), ("2sqrt3", 12f64.sqrt(), "2\u{221a}3"), ("2\u{221a}3", 12f64.sqrt(), "2\u{221a}3"), ("sqrt(13)", 13f64.sqrt(), "\u{221a}13"), ("sqrt13/2", 13f64.sqrt() / 2.0, "\u{221a}13/2"), ("7", 7.0, "7"), ("2.50", 2.5, "2.50")] {
+    for (typed, val, written) in [("5/2", 2.5, "5/2"), ("2sqrt3", 12f64.sqrt(), "2\u{221a}3"), ("2\u{221a}3", 12f64.sqrt(), "2\u{221a}3"), ("sqrt(13)", 13f64.sqrt(), "\u{221a}13"), ("sqrt13/2", 13f64.sqrt() / 2.0, "(\u{221a}13)/2"), ("7", 7.0, "7"), ("2.50", 2.5, "2.50")] {
         for from in ["Side", "Radius", "Apothem"] {
             let lab: Vec<(&'static str, Value)> = vec![s("from", from), s("unit", "cm"), b("radius", true), s("radius_label", "Measure"), s("apothem_label", "Measure")];
             let mut a = lab.clone();
