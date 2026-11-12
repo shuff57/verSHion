@@ -813,6 +813,9 @@ impl Workspace {
         if let Some(ci) = pick {
             let mut q = self.params.clone();
             apply_chip(&mut q, pdefs, &card, &card.chips[ci]);
+            if q.i(card.count_key) > n {
+                figures::physics::chip_added(fig, card.chips[ci].label, q.i(card.count_key) as usize, &mut q, pdefs);
+            }
             self.card_commit(q, true);
         }
     }

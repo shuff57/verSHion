@@ -30,6 +30,15 @@ mod vector_b8_frozen;
 #[cfg(test)]
 mod pulley_b10_frozen;
 mod summary;
+mod fbd_b11;
+
+/// After the Forces card's add button `chip` filled force `n` of the free-body diagram: it points the usual way for the
+/// figure as it is, in a fresh slot (see `fbd_b11`). Other figures: nothing.
+pub fn chip_added(id: &str, chip: &str, n: usize, p: &mut Params, defs: &[ParamDef]) {
+    if id == "free-body-diagram" {
+        fbd_b11::added(chip, n, p, defs);
+    }
+}
 
 /// The choices of a vector's "Measured from" and "Angle label" (the Vectors card draws them).
 pub const VECTOR_FROM: [&str; 2] = vector_b8::FROM;
