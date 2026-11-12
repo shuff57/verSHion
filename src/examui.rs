@@ -463,30 +463,6 @@ fn paint_tilted_card(
     painter.add(TextShape::new(pos, g, theme::ink()).with_angle(angle));
 }
 
-/// Tiny tilted page thumbnail for exam cards.
-fn paint_thumb(painter: &egui::Painter, c: Pos2, angle: f32, lines: usize) {
-    let (w, h) = (62.0_f32, 82.0_f32);
-    let corners = [
-        Vec2::new(-w / 2.0, -h / 2.0),
-        Vec2::new(w / 2.0, -h / 2.0),
-        Vec2::new(w / 2.0, h / 2.0),
-        Vec2::new(-w / 2.0, h / 2.0),
-    ];
-    let shadow: Vec<Pos2> = corners.iter().map(|d| c + rot(angle, *d) + Vec2::new(1.0, 5.0)).collect();
-    painter.add(Shape::convex_polygon(shadow, Color32::from_black_alpha(34), Stroke::NONE));
-    let pts: Vec<Pos2> = corners.iter().map(|d| c + rot(angle, *d)).collect();
-    painter.add(Shape::convex_polygon(pts, theme::paper(), Stroke::new(1.0, theme::paper_edge())));
-    let seg = |a: Vec2, b: Vec2, s: Stroke| {
-        painter.line_segment([c + rot(angle, a), c + rot(angle, b)], s);
-    };
-    seg(Vec2::new(-14.0, -h / 2.0 + 12.0), Vec2::new(14.0, -h / 2.0 + 12.0), Stroke::new(2.0, PAPER_SOFT));
-    for i in 0..lines.clamp(2, 7) {
-        let y = -h / 2.0 + 24.0 + i as f32 * 8.0;
-        let len = if i % 3 == 2 { 16.0 } else { 23.0 };
-        seg(Vec2::new(-23.0, y), Vec2::new(-23.0 + len * 2.0 - 8.0, y), Stroke::new(1.4, PAPER_RULE.gamma_multiply(0.6)));
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Exam list screen
 // ---------------------------------------------------------------------------
@@ -807,28 +783,47 @@ fn quiet_dots(ui: &mut egui::Ui, side: f32, tip: &str) -> egui::Response {
     resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip)
 }
 
-/// The Exams screen's page shape (width : height) and its tallest size, for a two-line name.
-const EXAMS_THUMB: Vec2 = Vec2::new(112.0, 145.0);
-/// The thumbnail in a narrow window, so three cards and their actions show above the fold.
-const EXAMS_THUMB_NARROW: Vec2 = Vec2::new(88.0, 114.0);
 /// A card's action height (Open and its "…").
 const EXAMS_ACT_H: f32 = 32.0;
 /// Air between the "From" line and the footer's hairline.
 const EXAMS_BREATH: f32 = 10.0;
 /// The hairline sits this far above the footer's actions.
 const EXAMS_RULE_GAP: f32 = 9.5;
+/// A line of the card's small text (counts, "From <bank>", the date).
+const EXAMS_META_LINE: f32 = 18.0;
+/// "From <bank>" wraps to this many lines before a bank's name is cut with "…".
+const EXAMS_FROM_LINES: usize = 2;
 
-/// A card's height for a name of `lines` lines: the text column's own stack (name, counts, From,
-/// a breath, the hairline, the footer) inside the card's pads, so no band is left empty.
-fn exams_card_h(lines: usize) -> f32 {
+/// A card's height for a name of `lines` lines and a "From" line of `from_lines`: the text stack
+/// (name, counts, From, a breath, the hairline, the footer) inside the card's pads, so no band is
+/// left empty. (Round 24: the cards have no page thumbnail, so the stack alone sets the height.)
+fn exams_card_h(lines: usize, from_lines: usize) -> f32 {
     let pad = kit::CARD_PAD;
-    (pad - 2.0) + lines as f32 * kit::ty::CARD_LINE + 4.0 + 18.0 + 4.0 + 18.0 + EXAMS_BREATH + EXAMS_RULE_GAP + EXAMS_ACT_H + pad
+    (pad - 2.0)
+        + lines as f32 * kit::ty::CARD_LINE
+        + 4.0
+        + EXAMS_META_LINE
+        + 4.0
+        + from_lines as f32 * EXAMS_META_LINE
+        + EXAMS_BREATH
+        + EXAMS_RULE_GAP
+        + EXAMS_ACT_H
+        + pad
 }
 
-/// The narrowest exam card: the page, then a text column with room for "Edited <date>", Open
-/// and "…" on one line. Two per row on a 1280 window, three from about 1460 wide (the page's
-/// content is the window less about 167 of dock and margins, capped at the Banks width).
-const EXAMS_CARD_MIN_W: f32 = 420.0;
+/// The compact row of a one-column grid (a narrow window): the name (one line), counts and From
+/// on the left; the date over Open and "…" on the right, past a vertical hairline. As tall as the
+/// text on the left.
+fn exams_compact_h(from_lines: usize) -> f32 {
+    let pad = kit::CARD_PAD;
+    (pad - 2.0) + kit::ty::CARD_LINE + 4.0 + EXAMS_META_LINE + 4.0 + from_lines as f32 * EXAMS_META_LINE + pad
+}
+
+/// The narrowest exam card (round 24, without the page thumbnail; it was 420 with it): its
+/// widest fixed line, the footer of an archived exam ("Archived · Edited Sep 30, 2026", Open and
+/// "…") inside the pads, measured at about 313 (tested). Three per row on a 1280
+/// window (about 1113 of content: three of about 360), one at 760 (about 616).
+const EXAMS_CARD_MIN_W: f32 = 320.0;
 
 /// How many exam cards share a row in `avail` (with `gap` between them).
 fn exams_columns(avail: f32, gap: f32) -> usize {
@@ -850,6 +845,28 @@ fn exams_grid_columns(x0: f32, avail: f32, n: usize, gap: f32, ppp: f32) -> Vec<
         .collect()
 }
 
+/// "From <bank>": "From" muted, the bank's name semibold, wrapped at `width` to
+/// `EXAMS_FROM_LINES` lines ("…" past that).
+fn exams_from_job(bank: &str, width: f32) -> LayoutJob {
+    let line = Some(EXAMS_META_LINE);
+    let mut job = LayoutJob::default();
+    job.append("From ", 0.0, egui::TextFormat { font_id: FontId::new(kit::ty::META, theme::sans_family()), color: theme::muted_col(), line_height: line, ..Default::default() });
+    job.append(bank, 0.0, egui::TextFormat { font_id: FontId::new(kit::ty::META, theme::semibold()), color: theme::text_col(), line_height: line, ..Default::default() });
+    job.wrap = egui::text::TextWrapping { max_width: width.max(10.0), max_rows: EXAMS_FROM_LINES, break_anywhere: false, overflow_character: Some('…') };
+    job
+}
+
+/// Open and "…" side by side, 8 apart: Open's label plus `styled_button`'s 18 pt side padding.
+fn exams_actions_w(ui: &egui::Ui) -> f32 {
+    let g = ui.painter().layout_no_wrap("Open".into(), FontId::new(kit::ty::BUTTON_SM, theme::bold_family()), theme::accent_col());
+    g.size().x + 2.0 * 18.0 + 8.0 + EXAMS_ACT_H
+}
+
+/// A card's footer date: "Edited <date>", "Archived · " first for an archived exam.
+fn exams_when(row: &ExamRow) -> String {
+    format!("{}Edited {}", if row.archived { "Archived · " } else { "" }, bankui::fmt_date(row.modified))
+}
+
 /// The card's main action: the house primary (filled accent, on-accent label) at card size, so it
 /// leads the quieter "…" beside it in both themes.
 fn exams_open_button(ui: &mut egui::Ui) -> egui::Response {
@@ -862,11 +879,11 @@ fn exams_open_button(ui: &mut egui::Ui) -> egui::Response {
     crate::pageshell::styled_button(ui, text, tint, tint.lerp_to_gamma(toward, 0.12), tint.lerp_to_gamma(toward, 0.22), Stroke::new(1.5, theme::accent_col()), EXAMS_ACT_H)
 }
 
-/// The exam cards: the first page on the left; on the right the name (one or two lines), its
-/// counts, "From <bank>", and a footer under a hairline, level with the page's foot (edited date;
-/// Open, then "…"). A row is as tall as its tallest name needs and no taller; the whole page is
-/// scaled to that height. The columns follow the Banks grid (whole-pixel edges, the last ending
-/// on the page's right edge); one 16 px gutter between cards and rows.
+/// The exam cards (round 24: no page thumbnail): the name (one or two lines), its counts,
+/// "From <bank>", and a footer under a hairline at the card's foot (edited date; Open, then "…").
+/// A row is as tall as its tallest card's text needs and no taller. The columns follow the Banks
+/// grid (whole-pixel edges, the last ending on the page's right edge); one 16 px gutter between
+/// cards and rows. A one-column grid (a narrow window) draws each card as a compact row instead.
 fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st: &mut ListUi) {
     let gap = kit::GUTTER;
     let pad = kit::CARD_PAD;
@@ -876,33 +893,36 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
     let fit = rows.len().clamp(1, n);
     let ppp = ui.ctx().pixels_per_point();
     let cols = exams_grid_columns(ui.cursor().left(), avail, fit, gap, ppp);
-    // (the narrowest column, for counting a name's lines)
+    // (the narrowest column, for counting a card's lines)
     let card_w = cols.iter().map(|c| c.1 - c.0).fold(f32::MAX, f32::min);
-    let narrow = avail < 760.0;
-    // (the narrow card is wide but short: one line, so the facts stay above the footer)
-    let max_lines = if narrow { 1 } else { 2 };
+    let compact = n == 1;
+    // (the compact row keeps its name to one line, so the facts stay beside the actions)
+    let max_lines = if compact { 1 } else { 2 };
     let name_job = |name: &str, tw: f32| {
         let mut job = egui::text::LayoutJob::default();
         job.append(name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
         job.wrap = egui::text::TextWrapping { max_width: tw, max_rows: max_lines, break_anywhere: false, overflow_character: Some('…') };
         job
     };
+    let meta = FontId::new(kit::ty::META, theme::sans_family());
+    // The compact row's right block: the widest date over Open and "…", past a hairline.
+    let side_w = if compact {
+        let dates = rows.iter().map(|r| ui.painter().layout_no_wrap(exams_when(r), meta.clone(), theme::muted_col()).size().x).fold(0.0, f32::max);
+        dates.max(exams_actions_w(ui)).ceil()
+    } else {
+        0.0
+    };
+    // The text column's width in a card `w` wide.
+    let text_w = |w: f32| if compact { w - pad * 2.0 - side_w - pad * 2.0 - 1.0 } else { w - pad * 2.0 };
     ui.spacing_mut().item_spacing = Vec2::splat(gap);
     for chunk in rows.chunks(n) {
-    // The row's thumbnail: narrow keeps its fixed page; wide sizes the page to the row's text.
-    let thumb = if narrow {
-        EXAMS_THUMB_NARROW
-    } else {
-        let page = |lines: usize| {
-            let h = exams_card_h(lines) - pad * 2.0;
-            Vec2::new((h * EXAMS_THUMB.x / EXAMS_THUMB.y).round(), h)
-        };
-        // Count each name's lines in the text column beside the one-line page.
-        let tw1 = card_w - pad * 3.0 - page(1).x;
-        page(chunk.iter().map(|r| ui.painter().layout_job(name_job(&r.name, tw1)).rows.len().max(1)).max().unwrap_or(1))
-    };
-    let card_h = thumb.y + pad * 2.0;
-    {
+        let tw0 = text_w(card_w);
+        let lines = |r: &ExamRow| ui.painter().layout_job(name_job(&r.name, tw0)).rows.len().max(1);
+        let from_lines = |r: &ExamRow| ui.painter().layout_job(exams_from_job(&r.bank, tw0)).rows.len().clamp(1, EXAMS_FROM_LINES);
+        let card_h = chunk
+            .iter()
+            .map(|r| if compact { exams_compact_h(from_lines(r)) } else { exams_card_h(lines(r), from_lines(r)) })
+            .fold(0.0, f32::max);
         let top = (ui.cursor().top() * ppp).round() / ppp;
         let row_rect = Rect::from_min_max(Pos2::new(cols[0].0, top), Pos2::new(cols[fit - 1].1, top + card_h));
         ui.advance_cursor_after_rect(row_rect);
@@ -925,15 +945,10 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
             if resp.has_focus() {
                 p.rect_stroke(rect.expand(1.0), CornerRadius::same(kit::R_CARD + 1), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
             }
-            let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::splat(pad), thumb);
-            let ctx = ui.ctx().clone();
-            if paint_exam_thumb(app, &ctx, &p, thumb_area, &row.id).is_none() {
-                paint_thumb(&p, thumb_area.center(), -0.05, row.q.max(2));
-            }
-            let tx = thumb_area.right() + pad;
-            let tw = rect.right() - pad - tx;
+            let tx = rect.left() + pad;
+            let tw = text_w(rect.width());
             let mut y = rect.top() + pad - 2.0;
-            // Name, then the facts right under it; the footer is pinned to the page's foot.
+            // Name, then the facts right under it; the footer is pinned to the card's foot.
             let name = p.layout_job(name_job(&row.name, tw));
             let name_h = name.rows.len().max(1) as f32 * kit::ty::CARD_LINE;
             p.galley(Pos2::new(tx, y), name, theme::ink());
@@ -946,37 +961,45 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
                 fmt_number(row.pts),
                 if (row.pts - 1.0).abs() < 1e-9 { "" } else { "s" },
             );
-            let meta = FontId::new(kit::ty::META, theme::sans_family());
             let gc = clamped_galley(&p, &counts, meta.clone(), theme::text_col(), tw, 1);
             p.galley(Pos2::new(tx, y), gc, theme::text_col());
-            y += 18.0 + 4.0;
-            let from = p.layout_no_wrap("From ".to_string(), meta.clone(), theme::muted_col());
-            let lw = from.size().x;
-            p.galley(Pos2::new(tx, y), from, theme::muted_col());
-            let gb = clamped_galley(&p, &row.bank, FontId::new(kit::ty::META, theme::semibold()), theme::text_col(), tw - lw, 1);
-            p.galley(Pos2::new(tx + lw, y), gb, theme::text_col());
-            // Footer, level with the foot of the page: when, then the card's actions.
-            let foot = Rect::from_min_max(Pos2::new(tx, thumb_area.bottom() - EXAMS_ACT_H), Pos2::new(rect.right() - pad, thumb_area.bottom()));
-            p.hline(tx..=foot.right(), foot.top() - EXAMS_RULE_GAP, Stroke::new(1.0, theme::border()));
-            let menu = Rect::from_min_size(Pos2::new(foot.right() - EXAMS_ACT_H, foot.top()), Vec2::splat(EXAMS_ACT_H));
-            let mut open = false;
-            let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 8.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
-            let ob = exams_open_button(&mut btn);
-            if ob.clicked() {
-                open = true;
+            y += EXAMS_META_LINE + 4.0;
+            p.galley(Pos2::new(tx, y), p.layout_job(exams_from_job(&row.bank, tw)), theme::text_col());
+            let when = exams_when(row);
+            let open;
+            if compact {
+                // Right block: the date level with the name, Open and "…" level with the foot of
+                // the text, a hairline between the block and the text.
+                let side = Rect::from_min_max(Pos2::new(rect.right() - pad - side_w, rect.top() + pad), Pos2::new(rect.right() - pad, rect.bottom() - pad));
+                let foot = Rect::from_min_max(Pos2::new(side.left(), side.bottom() - EXAMS_ACT_H), side.right_bottom());
+                let menu = Rect::from_min_size(Pos2::new(foot.right() - EXAMS_ACT_H, foot.top()), Vec2::splat(EXAMS_ACT_H));
+                let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 8.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
+                open = exams_open_button(&mut btn).clicked();
+                let gw = clamped_galley(&p, &when, meta.clone(), theme::muted_col(), side_w, 1);
+                let name_mid = rect.top() + pad - 2.0 + kit::ty::CARD_LINE / 2.0;
+                p.galley(Pos2::new(side.right() - gw.size().x, name_mid - gw.size().y / 2.0), gw, theme::muted_col());
+                let hx = side.left() - pad - 0.5;
+                p.vline(hx, side.top()..=side.bottom(), Stroke::new(1.0, theme::border()));
+                exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, EXAMS_ACT_H, row, st, true);
+            } else {
+                // Footer at the card's foot: when, then the card's actions.
+                let foot = Rect::from_min_max(Pos2::new(tx, rect.bottom() - pad - EXAMS_ACT_H), Pos2::new(rect.right() - pad, rect.bottom() - pad));
+                p.hline(tx..=foot.right(), foot.top() - EXAMS_RULE_GAP, Stroke::new(1.0, theme::border()));
+                let menu = Rect::from_min_size(Pos2::new(foot.right() - EXAMS_ACT_H, foot.top()), Vec2::splat(EXAMS_ACT_H));
+                let mut btn = ui.new_child(UiBuilder::new().max_rect(Rect::from_min_max(foot.min, Pos2::new(menu.left() - 8.0, foot.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
+                let ob = exams_open_button(&mut btn);
+                open = ob.clicked();
+                let when_w = (ob.rect.left() - 12.0 - tx).max(20.0);
+                let gw = clamped_galley(&p, &when, meta.clone(), theme::muted_col(), when_w, 1);
+                let wy = foot.center().y - gw.size().y / 2.0;
+                p.galley(Pos2::new(tx, wy), gw, theme::muted_col());
+                // (a child ui: the menu must not move this row's cursor, which set the gutter)
+                exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, EXAMS_ACT_H, row, st, true);
             }
-            let when_w = (ob.rect.left() - 12.0 - tx).max(20.0);
-            let when = format!("{}Edited {}", if row.archived { "Archived · " } else { "" }, bankui::fmt_date(row.modified));
-            let gw = clamped_galley(&p, &when, meta, theme::muted_col(), when_w, 1);
-            let wy = foot.center().y - gw.size().y / 2.0;
-            p.galley(Pos2::new(tx, wy), gw, theme::muted_col());
-            // (a child ui: the menu must not move this row's cursor, which set the gutter)
-            exam_menu(&mut ui.new_child(UiBuilder::new().max_rect(menu)), menu, EXAMS_ACT_H, row, st, true);
             if open || resp.clicked() {
                 open_exam_screen(app, &row.id);
             }
         }
-    }
     }
 }
 
@@ -1351,8 +1374,10 @@ fn narrow_switch_labels(on_page: usize, to_add: Option<usize>) -> [(bool, &'stat
 
 /// The narrow window's two-way switch: the exam page or the question bank, one at a time. A
 /// segmented track like the Cards/List toggle, the chosen half in the accent wash. Each half
-/// is a selectable tab: Tab reaches it, Enter or Space picks it, the arrow keys move between
-/// the two, and a focused half wears the accent ring.
+/// is a tab (AccessKit `Tab`, selected or not, round 24): Tab reaches it, Enter or Space picks
+/// it, the arrow keys move between the two, and a focused half wears the accent ring. (Round 24
+/// tried an outlined control with the other half on a white fill: it lost, as the unchosen half
+/// read as the chosen one; the look is as before, only the tab semantics stayed.)
 fn narrow_switch(ui: &mut egui::Ui, rect: Rect, bank_tab: &mut bool, on_page: usize, to_add: Option<usize>) {
     let p = ui.painter();
     p.rect(rect, CornerRadius::same((rect.height() / 2.0) as u8), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
@@ -1363,6 +1388,12 @@ fn narrow_switch(ui: &mut egui::Ui, rect: Rect, bank_tab: &mut bool, on_page: us
         let resp = ui.interact(seg, ids[i], Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
         let on = *bank_tab == is_bank;
         resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, format!("{title}, {note}")));
+        // A tab, not a toggle button: screen readers announce "tab, selected" / "tab".
+        ui.ctx().accesskit_node_builder(ids[i], |n| {
+            n.set_role(egui::accesskit::Role::Tab);
+            n.clear_toggled();
+            n.set_selected(on);
+        });
         let r = CornerRadius::same((seg.height() / 2.0) as u8);
         if on {
             ui.painter().rect_filled(seg, r, theme::accent_faded());
@@ -8911,6 +8942,44 @@ mod examed_tests {
         assert!(narrow_work(759.0) && !narrow_work(860.0));
     }
 
+    /// Round 24: both halves of the narrow switch are there and named, each a tab (AccessKit
+    /// `Tab`), the chosen one selected and the other not, pressable by its Click action; pressing
+    /// the Question bank tab chooses it.
+    #[test]
+    fn narrow_switch_halves_are_named_pressable_tabs() {
+        use egui::accesskit::{Action, Role};
+        use egui_kittest::kittest::{NodeT, Queryable};
+        let bank_tab = std::rc::Rc::new(std::cell::Cell::new(false));
+        let state = bank_tab.clone();
+        let mut first = true;
+        let mut h = egui_kittest::Harness::new_ui(move |ui| {
+            if std::mem::take(&mut first) {
+                theme::setup(ui.ctx());
+                ui.ctx().request_repaint();
+                return;
+            }
+            let mut b = state.get();
+            narrow_switch(ui, Rect::from_min_size(Pos2::new(10.0, 10.0), Vec2::new(600.0, NARROW_SWITCH_H)), &mut b, 1, Some(9));
+            state.set(b);
+        });
+        h.run();
+        let check = |h: &egui_kittest::Harness<'_>, page_on: bool| {
+            for (name, on) in [("Exam page, 1 question", page_on), ("Question bank, 9 to add", !page_on)] {
+                let node = h.get_by_label(name);
+                let n = node.accesskit_node();
+                assert_eq!(n.role(), Role::Tab, "{name}");
+                assert_eq!(n.is_selected(), Some(on), "{name}");
+                assert!(n.data().supports_action(Action::Click), "{name}: pressable");
+                assert!(!n.is_disabled(), "{name}");
+            }
+        };
+        check(&h, true);
+        h.get_by_label("Question bank, 9 to add").click();
+        h.run();
+        assert!(bank_tab.get(), "pressing the inactive tab chooses it");
+        check(&h, false);
+    }
+
     #[test]
     fn growing_past_the_breakpoint_drops_the_bank_tab() {
         // Narrow with the bank showing: it stays showing.
@@ -9229,9 +9298,9 @@ mod system_pass_tests {
     }
 
     /// Round 20, the Exams grid: each card's edges on whole physical pixels at every scale, the
-    /// last card of a full row ending on the page's right edge, one exam filling the row, and the
-    /// column count at 760, 1280, 1460 and 1760 wide (content width = window less about 167, the
-    /// Banks cap) with the cards' minimum width unchanged.
+    /// last card of a full row ending on the page's right edge, one exam filling the row, no card
+    /// under the minimum width, and the column count at 760, 1280 and past the Banks cap (content
+    /// width = window less about 167). The minimum is 320 since round 24 (420 with the thumbnail).
     #[test]
     fn exams_grid_columns_land_on_whole_pixels_and_the_page_edge() {
         let gap = kit::GUTTER;
@@ -9262,12 +9331,31 @@ mod system_pass_tests {
         }
         let one = exams_grid_columns(134.7, 1113.0, 1, gap, 1.7);
         assert!(one.len() == 1 && (one[0].1 - one[0].0 - 1113.0).abs() <= 1.0, "one exam fills the row");
-        // one per row at 760, two at 1280, three from about 1460 (the Banks cap holds it at 1600)
+        // Round 24 (no thumbnail, minimum 320): one per row at 760, two from 656 of content,
+        // three at 1280 (1113: three of about 360), four at the Banks cap.
         assert_eq!(exams_columns(616.0, gap), 1);
-        assert_eq!(exams_columns(1113.0, gap), 2);
-        assert_eq!(exams_columns(1291.0, gap), 2);
-        assert_eq!(exams_columns(1292.0, gap), 3);
-        assert_eq!(exams_columns(crate::bankui::banks_page_w(1800.0), gap), 3);
+        assert_eq!(exams_columns(655.0, gap), 1);
+        assert_eq!(exams_columns(656.0, gap), 2);
+        assert_eq!(exams_columns(991.0, gap), 2);
+        assert_eq!(exams_columns(992.0, gap), 3);
+        assert_eq!(exams_columns(1113.0, gap), 3);
+        assert_eq!(exams_columns(crate::bankui::banks_page_w(1800.0), gap), 4);
+    }
+
+    /// Round 24: the card's minimum width holds its widest fixed line, an archived exam's footer
+    /// ("Archived · Edited Sep 30, 2026", 12, Open, 8, "…") inside the pads, so no date is cut;
+    /// and a two-line name and a two-line From make the card exactly that much taller.
+    #[test]
+    fn exams_card_minimum_holds_the_widest_footer() {
+        let need = in_ui(|ui| {
+            let meta = FontId::new(kit::ty::META, theme::sans_family());
+            let date = ui.painter().layout_no_wrap("Archived · Edited Sep 30, 2026".into(), meta, theme::muted_col()).size().x;
+            kit::CARD_PAD * 2.0 + date + 12.0 + exams_actions_w(ui)
+        });
+        assert!(need > 200.0 && need <= EXAMS_CARD_MIN_W, "footer needs {need}");
+        assert_eq!(exams_card_h(2, 1) - exams_card_h(1, 1), kit::ty::CARD_LINE);
+        assert_eq!(exams_card_h(1, 2) - exams_card_h(1, 1), EXAMS_META_LINE);
+        assert!(exams_compact_h(1) < exams_card_h(1, 1) - EXAMS_ACT_H, "the compact row is short");
     }
 
     /// Round 20: with one question nothing can be reordered, so the desktop group is remove alone

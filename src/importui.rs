@@ -1122,9 +1122,11 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
             if empty && !st.in_modal {
                 // The privacy facts sit under the drop zone, left-aligned, so the zone holds only
                 // its title and the actions.
-                // Close under the zone (the 8 pt item gap alone, about 10 pt to the disc with the
-                // zone's dashed edge), so it reads as the zone's caption, and well clear of What
-                // it reads (14 + 8: about 24 pt).
+                // Its own line, not the zone's caption: 16 pt under the zone (8 + the 8 pt item
+                // gap; round 24: it sat on the item gap alone, about 10 pt from the dashed edge,
+                // and read as part of the drop area), and well clear of What it reads (14 + 8:
+                // about 24 pt).
+                ui.add_space(PRIVACY_GAP_ABOVE - ui.spacing().item_spacing.y);
                 privacy_below(app, ui);
                 ui.add_space(14.0);
             } else {
@@ -1146,6 +1148,10 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
         });
     });
 }
+
+/// The gap from the drop zone's edge to the privacy line on the empty Imports page: the page's
+/// 16 pt section gap (round 24; before it the line sat on the 8 pt item gap alone).
+const PRIVACY_GAP_ABOVE: f32 = 16.0;
 
 /// The widest the empty Imports page grows: the Banks grid's cap (bankui's `BANKS_MAX_W`).
 const IMPORT_MAX_W: f32 = 1600.0;

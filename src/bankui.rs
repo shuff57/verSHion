@@ -2198,8 +2198,7 @@ fn empty_bank_strip(ui: &mut Ui) {
                         let bw = ui.available_width();
                         ui.allocate_ui_with_layout(Vec2::new(bw, 0.0), Layout::top_down(Align::Min), |ui| {
                             ui.set_width(bw);
-                            // the body's first line on the title's (22 tall at 17, 20 at 14)
-                            ui.add_space(1.0);
+                            // the body's first line on the title's (both 20 tall since round 24)
                             strip_body(ui, i);
                         });
                     });
@@ -2208,14 +2207,16 @@ fn empty_bank_strip(ui: &mut Ui) {
         });
 }
 
-/// A strip part's title: its accent glyph, then the serif card title in ink.
+/// A strip part's title in the small label tier (round 24: the 17 pt serif card title made the
+/// strip read as a second card beside "No questions yet"): a muted glyph at the body size, then
+/// the title in semibold sans at BODY in ink, on the body's 20 pt line.
 fn strip_title(ui: &mut Ui, i: usize) {
     let (icon, title, _) = EMPTY_STRIP[i];
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        let (r, _) = ui.allocate_exact_size(Vec2::new(20.0, kit::ty::CARD_LINE), Sense::hover());
-        crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 18.0, theme::accent_col());
-        ui.add(egui::Label::new(theme::serif(title).size(kit::ty::CARD).color(theme::ink())).wrap());
+        ui.spacing_mut().item_spacing.x = 6.0;
+        let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, 20.0), Sense::hover());
+        crate::handicons::paint_glyph(ui.painter(), r.center(), icon, kit::ty::BODY, theme::muted_col());
+        ui.add(egui::Label::new(RichText::new(title).font(egui::FontId::new(kit::ty::BODY, theme::semibold())).color(theme::ink()).line_height(Some(20.0))).wrap());
     });
 }
 
@@ -5214,6 +5215,8 @@ mod tests {
                 let r = h.get_by_label(t).rect();
                 assert!(r.top() > card.bottom(), "{w}: {t} sits under the card");
                 assert!(r.right() <= w + 0.5 && r.bottom() <= 800.0, "{w}: {t} inside the window, got {r:?}");
+                // The small label tier on the body's 20 line (round 24), not the 17 pt serif's 22.
+                assert!(r.height() <= 20.5, "{w}: {t} in the label tier, got {r:?}");
             }
             for k in crate::bankops::KINDS {
                 let r = h.get_by_label(k.label()).rect();
