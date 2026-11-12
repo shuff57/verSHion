@@ -560,7 +560,8 @@ impl crate::App {
             let rows = app.exam_rows(&st.search, st.show_archived);
             let archived_n = app.store.exams.iter().filter(|e| app.store.is_archived(&e.id)).count();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
+                // The Banks page's content width, so the cards end on the same right edge.
+                ui.set_max_width(crate::bankui::banks_page_w(ui.available_width()));
                 let sub = format!(
                     "{total} exam{} · {total_q} question{} placed",
                     if total == 1 { "" } else { "s" },
@@ -818,6 +819,31 @@ fn exams_card_h(lines: usize) -> f32 {
     (pad - 2.0) + lines as f32 * kit::ty::CARD_LINE + 4.0 + 18.0 + 4.0 + 18.0 + EXAMS_BREATH + EXAMS_RULE_GAP + EXAMS_ACT_H + pad
 }
 
+/// The narrowest exam card: the page, then a text column with room for "Edited <date>", Open
+/// and "…" on one line. Two per row on a 1280 window, three from about 1460 wide (the page's
+/// content is the window less about 167 of dock and margins, capped at the Banks width).
+const EXAMS_CARD_MIN_W: f32 = 420.0;
+
+/// How many exam cards share a row in `avail` (with `gap` between them).
+fn exams_columns(avail: f32, gap: f32) -> usize {
+    (((avail + gap) / (EXAMS_CARD_MIN_W + gap)).floor() as usize).max(1)
+}
+
+/// `n` columns across `avail` from `x0` with `gap` between, each edge on a whole pixel at `ppp`
+/// and the last ending on `x0 + avail` (the Banks grid's rule, so both pages end on one edge).
+fn exams_grid_columns(x0: f32, avail: f32, n: usize, gap: f32, ppp: f32) -> Vec<(f32, f32)> {
+    let snap = |v: f32| (v * ppp).round() / ppp;
+    let n = n.max(1);
+    let cw = (avail - gap * (n as f32 - 1.0)) / n as f32;
+    (0..n)
+        .map(|i| {
+            let l = x0 + i as f32 * (cw + gap);
+            let r = if i + 1 == n { x0 + avail } else { l + cw };
+            (snap(l), snap(r))
+        })
+        .collect()
+}
+
 /// The card's main action: the house primary (filled accent, on-accent label) at card size, so it
 /// leads the quieter "…" beside it in both themes.
 fn exams_open_button(ui: &mut egui::Ui) -> egui::Response {
@@ -833,15 +859,19 @@ fn exams_open_button(ui: &mut egui::Ui) -> egui::Response {
 /// The exam cards: the first page on the left; on the right the name (one or two lines), its
 /// counts, "From <bank>", and a footer under a hairline, level with the page's foot (edited date;
 /// Open, then "…"). A row is as tall as its tallest name needs and no taller; the whole page is
-/// scaled to that height. One 16 px gutter between cards and rows.
+/// scaled to that height. The columns follow the Banks grid (whole-pixel edges, the last ending
+/// on the page's right edge); one 16 px gutter between cards and rows.
 fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st: &mut ListUi) {
     let gap = kit::GUTTER;
     let pad = kit::CARD_PAD;
     let avail = ui.available_width();
-    let n = (((avail + gap) / (420.0 + gap)).floor() as usize).max(1);
-    // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
+    let n = exams_columns(avail, gap);
+    // One exam fills the row instead of leaving columns of empty page.
     let fit = rows.len().clamp(1, n);
-    let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
+    let ppp = ui.ctx().pixels_per_point();
+    let cols = exams_grid_columns(ui.cursor().left(), avail, fit, gap, ppp);
+    // (the narrowest column, for counting a name's lines)
+    let card_w = cols.iter().map(|c| c.1 - c.0).fold(f32::MAX, f32::min);
     let narrow = avail < 760.0;
     // (the narrow card is wide but short: one line, so the facts stay above the footer)
     let max_lines = if narrow { 1 } else { 2 };
@@ -866,10 +896,13 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
         page(chunk.iter().map(|r| ui.painter().layout_job(name_job(&r.name, tw1)).rows.len().max(1)).max().unwrap_or(1))
     };
     let card_h = thumb.y + pad * 2.0;
-    ui.horizontal_top(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::splat(gap);
-        for row in chunk {
-            let (rect, resp) = ui.allocate_exact_size(Vec2::new(card_w, card_h), Sense::click());
+    {
+        let top = (ui.cursor().top() * ppp).round() / ppp;
+        let row_rect = Rect::from_min_max(Pos2::new(cols[0].0, top), Pos2::new(cols[fit - 1].1, top + card_h));
+        ui.advance_cursor_after_rect(row_rect);
+        for (row, &(l, r)) in chunk.iter().zip(&cols) {
+            let rect = Rect::from_min_max(Pos2::new(l, top), Pos2::new(r, top + card_h));
+            let resp = ui.interact(rect, ui.id().with(("exam_card", &row.id)), Sense::click());
             resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &row.name));
             if resp.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -937,7 +970,7 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
                 open_exam_screen(app, &row.id);
             }
         }
-    });
+    }
     }
 }
 
@@ -3244,8 +3277,8 @@ const HANDLE_PAD: f32 = 2.0;
 const DESK_REMOVE_GAP: f32 = 6.0;
 
 /// Where a placed question's desktop handles go, each a kind and a centre, `side` square: the left
-/// gutter's grip and "…", the right gutter's ↑, ↓ and remove in one frame. (The narrow page uses
-/// [`NarrowBar`].)
+/// gutter's grip and "…", the right gutter's ↑, ↓ and remove in one frame (remove alone where the
+/// exam has one question). (The narrow page uses [`NarrowBar`].)
 #[derive(Debug)]
 struct MarginHandles {
     left: Vec<(u8, Pos2)>,
@@ -3282,13 +3315,16 @@ fn remove_divider(group: &[(u8, Pos2)], frame: Rect) -> Option<[Pos2; 2]> {
 }
 
 /// Desktop handles of a question at `rect` with gutters `ml`/`mr` wide: grip and "…" left, ↑/↓
-/// then remove right in one frame, remove after a hairline, 18 square.
-fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32) -> MarginHandles {
+/// then remove right in one frame, remove after a hairline, 18 square. `movable`: the exam has
+/// another question to trade places with; with one question there is nothing to reorder, so the
+/// frame holds remove alone, where ↑ would start (no ↑ / ↓, no hairline).
+fn margin_handles(rect: Rect, ml: f32, mr: f32, bp: f32, movable: bool) -> MarginHandles {
     let (side, step) = (18.0, 20.0);
     let gc = Pos2::new(rect.left() - (ml * 0.5).min(24.0) - 2.0, rect.top() + bp * 0.75);
     let rx = rect.right() + (mr * 0.5).min(24.0) + 2.0;
     let y = rect.top() + 9.0;
-    let right: Vec<(u8, Pos2)> = [1u8, 2, 0].iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y + k as f32 * step + if kind == 0 { DESK_REMOVE_GAP } else { 0.0 }))).collect();
+    let kinds: &[u8] = if movable { &[1, 2, 0] } else { &[0] };
+    let right: Vec<(u8, Pos2)> = kinds.iter().enumerate().map(|(k, &kind)| (kind, Pos2::new(rx, y + k as f32 * step + if kind == 0 && movable { DESK_REMOVE_GAP } else { 0.0 }))).collect();
     let frame = handle_frame(&right, side);
     MarginHandles {
         left: [GRIP, 4].iter().enumerate().map(|(k, &kind)| (kind, gc + Vec2::new(0.0, k as f32 * 24.0))).collect(),
@@ -3393,27 +3429,41 @@ fn outline_below(bottom: f32, foot: f32) -> f32 {
 /// wider than the outline. ↑ / ↓ are labelled "Up" / "Down" (given their widths) where that
 /// still fits one row. The outline stands [`SEL_PAD_Y`] under the question (see [`narrow_bar_at`]).
 fn narrow_bar(q: Rect, ml: f32, mr: f32, label_w: impl Into<BarLabelW>) -> NarrowBar {
-    narrow_bar_at(q, ml, mr, label_w, SEL_PAD_Y)
+    narrow_bar_at(q, ml, mr, label_w, SEL_PAD_Y, true)
+}
+
+/// The narrow toolbar's controls for an exam that can (`movable`) or cannot be reordered: with
+/// one question ↑ / ↓ could never act, so the toolbar is grip, Edit, More, Remove.
+fn bar_order(movable: bool) -> &'static [u8] {
+    if movable {
+        &BAR_ORDER
+    } else {
+        &[GRIP, 7, 4, NARROW_REMOVE]
+    }
 }
 
 /// [`narrow_bar`] with the outline `below` under the question (the page draws it
-/// [`outline_below`] its page's foot).
-fn narrow_bar_at(q: Rect, ml: f32, mr: f32, label_w: impl Into<BarLabelW>, below: f32) -> NarrowBar {
+/// [`outline_below`] its page's foot); `movable` as [`bar_order`]. (The room the page makes
+/// above a question, [`narrow_bar_need`], is the full toolbar's, so the page's layout does not
+/// depend on how many questions it has.)
+fn narrow_bar_at(q: Rect, ml: f32, mr: f32, label_w: impl Into<BarLabelW>, below: f32, movable: bool) -> NarrowBar {
     let BarLabelW { text: label_w, arrows: arrow_w } = label_w.into();
+    let order = bar_order(movable);
     let outline = narrow_outline(q, ml, mr, below);
-    let row_w = |arrows: Option<[f32; 2]>| BAR_ORDER.iter().map(|&k| bar_item_w(k, label_w, arrows)).sum::<f32>() + BAR_DIV_GAP + 2.0 * BAR_PAD;
+    let row_w = |arrows: Option<[f32; 2]>| order.iter().map(|&k| bar_item_w(k, label_w, arrows)).sum::<f32>() + BAR_DIV_GAP + 2.0 * BAR_PAD;
     let arrows = arrow_w.filter(|_| row_w(arrow_w) <= outline.width());
-    let ws: Vec<f32> = BAR_ORDER.iter().map(|&k| bar_item_w(k, label_w, arrows)).collect();
+    let ws: Vec<f32> = order.iter().map(|&k| bar_item_w(k, label_w, arrows)).collect();
     let one_row = row_w(arrows);
     let rows = if one_row <= outline.width() { 1 } else { 2 };
-    let first_row = if rows == 1 { BAR_ORDER.len() } else { 4 };
+    // (two rows: More and Remove go under the rest)
+    let first_row = if rows == 1 { order.len() } else { order.len() - 2 };
     let frame_h = rows as f32 * BAR_ITEM_H + 2.0 * BAR_PAD;
     let top = outline.top() - frame_h;
     let mut items = Vec::new();
     let mut divider = [Pos2::ZERO; 2];
     let mut right: f32 = outline.left();
     let mut x = outline.left() + BAR_PAD;
-    for (k, (&kind, &w)) in BAR_ORDER.iter().zip(&ws).enumerate() {
+    for (k, (&kind, &w)) in order.iter().zip(&ws).enumerate() {
         let row = if k < first_row { 0 } else { 1 };
         if k == first_row {
             x = outline.left() + BAR_PAD;
@@ -3592,6 +3642,8 @@ fn draw_item(
     let menu_open = egui::Popup::is_id_open(ctx, menu_id.with("popup"));
     let narrow = st.narrow;
     let n_items = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
+    // With one question there is nothing to reorder: no ↑ / ↓ at all (not two disabled ones).
+    let movable = n_items > 1;
     // Narrow: every question's controls at rest (no pointer reaches a touch screen's hover), in
     // one outlined toolbar joined to an outline round the question. Desktop: the gutters' handles
     // for the question under the pointer.
@@ -3601,9 +3653,9 @@ fn draw_item(
             let page = ((rect.top() - g.p0 - g.lift) / g.page_h + 0.0001).floor().max(0.0);
             g.p0 + g.lift + (page + 1.0) * g.page_h - g.mb
         });
-        narrow_bar_at(rect, ml, mr, bar_label_widths(ui), outline_below(rect.bottom(), foot))
+        narrow_bar_at(rect, ml, mr, bar_label_widths(ui), outline_below(rect.bottom(), foot), movable)
     });
-    let hs = (!narrow).then(|| margin_handles(rect, ml, mr, bp));
+    let hs = (!narrow).then(|| margin_handles(rect, ml, mr, bp, movable));
     let hover = !any_drag
         && match (&bar, &hs) {
             (Some(b), _) => ui.rect_contains_pointer(b.outline) || ui.rect_contains_pointer(b.frame),
@@ -3724,6 +3776,18 @@ fn draw_item(
             if ui.button("Duplicate").clicked() {
                 act = Some(QAct::Duplicate);
             }
+            // Reordering by keyboard (the margin arrows show on pointer hover only): both entries
+            // wherever the exam has another question, the first's Move up and the last's Move
+            // down disabled; none on a one-question exam.
+            if movable {
+                ui.separator();
+                if ui.add_enabled(move_live(i, n_items, -1), egui::Button::new("Move up")).on_disabled_hover_text("Already the first question").clicked() {
+                    act = Some(QAct::Move(-1));
+                }
+                if ui.add_enabled(move_live(i, n_items, 1), egui::Button::new("Move down")).on_disabled_hover_text("Already the last question").clicked() {
+                    act = Some(QAct::Move(1));
+                }
+            }
             ui.separator();
             let can_section = i + 1 < n_items && !next_starts;
             if ui
@@ -3814,11 +3878,14 @@ enum QAct {
     ShuffleA,
     /// Multiple choice: answer columns (1 / 2 / 4).
     Columns(u8),
+    /// Move the question up (-1) or down (1) one place.
+    Move(i32),
     Remove,
 }
 
 fn question_action(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, st: &mut EditUi, i: usize, q: &model::Question, a: QAct) {
     match a {
+        QAct::Move(d) => shift_item(app, exam_id, i, d),
         QAct::Edit => {
             let Some(it) = app.store.exam(exam_id).and_then(|e| e.items.get(i)).cloned() else { return };
             let Some(bq) = app.store.question(&it.bank_id, &it.question_id).cloned() else { return };
@@ -8661,7 +8728,7 @@ mod system_pass_tests {
         assert_eq!(outline_below(100.0, 107.0), 7.0);
         assert_eq!(outline_below(100.0, 101.0), SEL_PAD_Y);
         let q = Rect::from_min_size(Pos2::new(100.0, 300.0), Vec2::new(400.0, 40.0));
-        let b = narrow_bar_at(q, 60.0, 60.0, LABEL_W, outline_below(q.bottom(), 1000.0));
+        let b = narrow_bar_at(q, 60.0, 60.0, LABEL_W, outline_below(q.bottom(), 1000.0), true);
         assert!((b.outline.bottom() - q.bottom() - (q.left() - b.outline.left())).abs() < 0.01, "bottom room equals side room");
         // The room above the next question clears this outline's foot.
         let need = in_ui(|ui| narrow_bar_need(ui, 400.0, 60.0, 60.0));
@@ -8713,7 +8780,7 @@ mod system_pass_tests {
     #[test]
     fn desktop_question_handles_are_one_group() {
         let q = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 40.0));
-        let d = margin_handles(q, 60.0, 60.0, 14.0);
+        let d = margin_handles(q, 60.0, 60.0, 14.0, true);
         let kinds = |v: &[(u8, Pos2)]| v.iter().map(|h| h.0).collect::<Vec<_>>();
         assert_eq!((kinds(&d.left), kinds(&d.right), d.side), (vec![GRIP, 4], vec![1, 2, 0], 18.0));
         assert!((d.right[0].1.y - (q.top() + 9.0)).abs() < 0.01 && (d.right[1].1.y - d.right[0].1.y - 20.0).abs() < 0.01);
@@ -8728,6 +8795,101 @@ mod system_pass_tests {
         }
         assert!((a.y - b.y).abs() < 0.01 && a.y > d.right[1].1.y && a.y < d.right[2].1.y);
         assert!(a.x > frame.left() && b.x < frame.right() && frame.left() > q.right());
+    }
+
+    /// Round 20, the Exams grid: each card's edges on whole physical pixels at every scale, the
+    /// last card of a full row ending on the page's right edge, one exam filling the row, and the
+    /// column count at 760, 1280, 1460 and 1760 wide (content width = window less about 167, the
+    /// Banks cap) with the cards' minimum width unchanged.
+    #[test]
+    fn exams_grid_columns_land_on_whole_pixels_and_the_page_edge() {
+        let gap = kit::GUTTER;
+        let whole = |v: f32, ppp: f32| ((v * ppp) - (v * ppp).round()).abs() < 1e-3;
+        for ppp in [1.0, 1.25, 1.5, 1.7] {
+            for (x0, avail) in [(134.7, 1113.0), (118.8, 616.0), (134.7, 1433.0), (100.0, 1600.0), (97.3, 999.9)] {
+                let snap = |v: f32| (v * ppp).round() / ppp;
+                for n in 1..=exams_columns(avail, gap) {
+                    let cols = exams_grid_columns(x0, avail, n, gap, ppp);
+                    assert_eq!(cols.len(), n);
+                    for &(l, r) in &cols {
+                        assert!(whole(l, ppp) && whole(r, ppp), "{ppp} {avail} {n}: {l}..{r}");
+                        assert!(r > l);
+                    }
+                    assert_eq!(cols[0].0, snap(x0), "starts on the page's left edge");
+                    assert_eq!(cols[n - 1].1, snap(x0 + avail), "ends on the page's right edge: {ppp} {avail} {n}");
+                    for w in cols.windows(2) {
+                        assert!((w[1].0 - w[0].1 - gap).abs() <= 1.0 / ppp + 1e-3, "one gutter between cards: {w:?}");
+                    }
+                    let ws: Vec<f32> = cols.iter().map(|c| c.1 - c.0).collect();
+                    let (lo, hi) = ws.iter().fold((f32::MAX, 0.0f32), |a, &w| (a.0.min(w), a.1.max(w)));
+                    assert!(hi - lo <= 1.0 / ppp + 1e-3, "equal cards within a pixel: {ws:?}");
+                    if n == exams_columns(avail, gap) {
+                        assert!(lo >= EXAMS_CARD_MIN_W - 1.0, "{avail}: no card under the minimum ({lo})");
+                    }
+                }
+            }
+        }
+        let one = exams_grid_columns(134.7, 1113.0, 1, gap, 1.7);
+        assert!(one.len() == 1 && (one[0].1 - one[0].0 - 1113.0).abs() <= 1.0, "one exam fills the row");
+        // one per row at 760, two at 1280, three from about 1460 (the Banks cap holds it at 1600)
+        assert_eq!(exams_columns(616.0, gap), 1);
+        assert_eq!(exams_columns(1113.0, gap), 2);
+        assert_eq!(exams_columns(1291.0, gap), 2);
+        assert_eq!(exams_columns(1292.0, gap), 3);
+        assert_eq!(exams_columns(crate::bankui::banks_page_w(1800.0), gap), 3);
+    }
+
+    /// Round 20: with one question nothing can be reordered, so the desktop group is remove alone
+    /// in the same quiet frame (no ↑ / ↓, no hairline), 18 square, where ↑ would start (the
+    /// frame's top and left as the full group's); the left gutter is unchanged.
+    #[test]
+    fn desktop_one_question_group_is_remove_alone() {
+        let q = Rect::from_min_size(Pos2::new(100.0, 100.0), Vec2::new(400.0, 40.0));
+        for mr in [60.0, 36.0, 24.0] {
+            let one = margin_handles(q, 60.0, mr, 14.0, false);
+            let full = margin_handles(q, 60.0, mr, 14.0, true);
+            assert_eq!(one.right.iter().map(|h| h.0).collect::<Vec<_>>(), vec![0], "gutter {mr}");
+            assert!(one.divider.is_none());
+            assert_eq!(one.side, 18.0);
+            assert_eq!(one.left.iter().map(|h| (h.0, h.1)).collect::<Vec<_>>(), full.left.iter().map(|h| (h.0, h.1)).collect::<Vec<_>>());
+            let frame = one.frames[0];
+            let r = Rect::from_center_size(one.right[0].1, Vec2::splat(one.side));
+            assert!(frame.contains_rect(r) && (frame.height() - one.side - 2.0 * HANDLE_PAD).abs() < 0.01);
+            assert!((frame.top() - full.frames[0].top()).abs() < 0.01 && (frame.left() - full.frames[0].left()).abs() < 0.01);
+            assert!((frame.width() - full.frames[0].width()).abs() < 0.01 && frame.left() > q.right());
+        }
+    }
+
+    /// Round 20: the narrow toolbar of a one-question exam is grip, Edit, More, a hairline, then
+    /// Remove (↑ / ↓ could never act); at every height and gutter it still shows every control
+    /// r12 showed that could act, inside the toolbar, none overlapping, never taller than the
+    /// full toolbar (so the room the page makes, sized for the full one, still covers it).
+    #[test]
+    fn narrow_one_question_toolbar_has_no_arrows() {
+        let lw = BarLabelW { text: LABEL_W, arrows: Some([16.0, 34.0]) };
+        for ml in [24.0, 40.0, 60.0, 67.0, 90.0] {
+            for w in [200.0, 300.0, 400.0] {
+                for h in (10..=260).step_by(10).map(|h| h as f32) {
+                    let q = Rect::from_min_size(Pos2::new(100.0, 300.0), Vec2::new(w, h));
+                    let b = narrow_bar_at(q, ml, 60.0, lw, SEL_PAD_Y, false);
+                    let full = narrow_bar_at(q, ml, 60.0, lw, SEL_PAD_Y, true);
+                    let k: Vec<u8> = b.items.iter().map(|p| p.0).collect();
+                    assert_eq!(k, vec![GRIP, 7, 4, NARROW_REMOVE], "at {w} x {h} (gutter {ml})");
+                    let can_act: Vec<u8> = r12_kinds(h).into_iter().filter(|k| !matches!(k, 1 | 2)).collect();
+                    assert!(can_act.iter().all(|p| k.contains(p)), "at {h}: fewer than r12's live controls");
+                    assert!(b.frame.top() >= full.frame.top() - 0.01 && b.frame.bottom() <= q.top() + 0.01);
+                    assert!(b.frame.right() <= b.outline.right() + 0.01);
+                    for (i, (_, ra)) in b.items.iter().enumerate() {
+                        assert!(b.frame.contains_rect(*ra));
+                        assert!(b.items[i + 1..].iter().all(|(_, rb)| !ra.intersects(rb.shrink(0.5))));
+                    }
+                    if b.rows == 1 {
+                        let (more, rm) = (b.items[2].1, b.items[3].1);
+                        assert!(b.divider[0].x > more.right() && b.divider[0].x < rm.left());
+                    }
+                }
+            }
+        }
     }
 
     /// The bank panel's list ends just past the last card that fits whole, and counts the cards
@@ -8831,7 +8993,7 @@ mod system_pass_tests {
 mod review_tests {
     use super::*;
     use crate::model::{Answer, Exam, ExamItem, Margins, Question, QuestionBank};
-    use egui_kittest::{kittest::Queryable, Harness};
+    use egui_kittest::{kittest::{NodeT, Queryable}, Harness};
 
     /// An app on a scratch store holding `bank` and `exam` (nothing here is read back).
     fn scratch_app(bank: QuestionBank, exam: Exam) -> crate::App {
@@ -8915,6 +9077,166 @@ mod review_tests {
     /// Where a question drawn at screen `y` (from the paper's top) is on the printed page.
     fn on_print(lifts: &[(f32, f32)], y: f32) -> f32 {
         y - lifts.iter().take_while(|l| l.0 + l.1 <= y + 0.01).last().map_or(0.0, |l| l.1)
+    }
+
+    /// The exam page with `n` questions (q0, q1, …) at 100% in a 700 x 900 window, narrow or not,
+    /// drawn until it settles; no pointer anywhere.
+    fn page_harness<'a>(n: usize, narrow: bool) -> Harness<'a, (crate::App, EditUi)> {
+        let qs: Vec<Question> = (0..3).map(|k| short(&format!("q{k}"), "Define a catalyst.")).collect();
+        let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: qs, created: 0, modified: 0, details: Default::default() };
+        let items: Vec<ExamItem> = (0..n).map(|k| ExamItem::new("b", format!("q{k}"))).collect();
+        let app = scratch_app(bank, exam_of(items, 0));
+        let mut first = true;
+        let mut h = Harness::builder().with_size(Vec2::new(700.0, 900.0)).build_ui_state(
+            move |ui, s: &mut (crate::App, EditUi)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let ctx = ui.ctx().clone();
+                let (app, st) = s;
+                st.narrow = narrow;
+                st.zoom = 1.0;
+                draw_page(app, ui, &ctx, &"e".into(), st);
+            },
+            (app, EditUi::default()),
+        );
+        h.run_steps(8);
+        h
+    }
+
+    /// Tab (no pointer) until the first question's "Question actions" has focus, then Enter
+    /// opens its menu.
+    fn open_first_menu_by_keyboard(h: &mut Harness<'_, (crate::App, EditUi)>) {
+        let top = h.state().1.rows.iter().find(|r| r.0 == 0).expect("first question").1.top();
+        let is_first = |h: &Harness<'_, (crate::App, EditUi)>| {
+            let nodes: Vec<_> = h.query_all_by_label("Question actions").collect();
+            let first = nodes.iter().min_by(|a, b| (a.rect().center().y - top).abs().total_cmp(&(b.rect().center().y - top).abs()));
+            first.is_some_and(|n| n.is_focused())
+        };
+        let mut tabs = 0;
+        while !is_first(h) {
+            assert!(tabs < 300, "Tab never reached the first question's actions");
+            h.key_press(egui::Key::Tab);
+            h.run_steps(2);
+            tabs += 1;
+        }
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+    }
+
+    /// The open menu's entry `label` (the widest node so named: the menu is at least 220 wide, the
+    /// arrows far narrower).
+    fn menu_entry<'t, 'n>(h: &'t Harness<'n, (crate::App, EditUi)>, label: &'t str) -> Option<egui_kittest::Node<'t>> {
+        h.query_all_by_label(label).max_by(|a, b| a.rect().width().total_cmp(&b.rect().width())).filter(|n| n.rect().width() > 150.0)
+    }
+
+    /// Round 20 (council): a keyboard user can reorder. With no pointer hover, Tab reaches the
+    /// first question's More ("Question actions"), Enter opens it, its Move up is there and
+    /// disabled, and Move down moves the question down one place (desktop and narrow). On a
+    /// one-question exam the menu has neither entry; adding a second question makes the entries
+    /// and the arrows appear without moving the first question's text.
+    #[test]
+    fn keyboard_reorders_from_the_question_menu() {
+        let order = |h: &Harness<'_, (crate::App, EditUi)>| h.state().0.store.exam(&"e".into()).unwrap().items.iter().map(|it| it.question_id.clone()).collect::<Vec<_>>();
+        for narrow in [false, true] {
+            let mut h = page_harness(3, narrow);
+            open_first_menu_by_keyboard(&mut h);
+            let up = menu_entry(&h, "Move up").expect("Move up in the menu");
+            assert!(up.accesskit_node().is_disabled(), "narrow {narrow}: the first question's Move up is disabled");
+            let down = menu_entry(&h, "Move down").expect("Move down in the menu");
+            assert!(!down.accesskit_node().is_disabled());
+            down.click_accesskit();
+            h.run_steps(4);
+            assert_eq!(order(&h), ["q1", "q0", "q2"], "narrow {narrow}: Move down moved the first question");
+
+            // One question: no entries, no arrows; a second one brings them, the text unmoved.
+            let mut h = page_harness(1, narrow);
+            let before = h.state().1.rows[0].1;
+            open_first_menu_by_keyboard(&mut h);
+            assert!(menu_entry(&h, "Move up").is_none() && menu_entry(&h, "Move down").is_none(), "narrow {narrow}: one question");
+            assert_eq!(h.query_all_by_label("Move up").count() + h.query_all_by_label("Move down").count(), 0, "narrow {narrow}: no arrows");
+            h.key_press(egui::Key::Escape);
+            h.run_steps(3);
+            h.state_mut().0.store.exams[0].items.push(ExamItem::new("b", "q1"));
+            h.run_steps(8);
+            let after = h.state().1.rows.iter().find(|r| r.0 == 0).expect("first question").1;
+            assert!((after.top() - before.top()).abs() < 0.01 && (after.left() - before.left()).abs() < 0.01, "narrow {narrow}: {before:?} -> {after:?}");
+            open_first_menu_by_keyboard(&mut h);
+            assert!(menu_entry(&h, "Move up").is_some_and(|n| n.accesskit_node().is_disabled()), "narrow {narrow}: Move up appears, disabled");
+            assert!(menu_entry(&h, "Move down").is_some_and(|n| !n.accesskit_node().is_disabled()), "narrow {narrow}: Move down appears");
+            // the first question's arrows: its ↑ disabled, its ↓ live (shown with its menu open)
+            let arrows = |l: &str| h.query_all_by_label(l).filter(|n| n.rect().width() < 150.0).map(|n| n.accesskit_node().is_disabled()).collect::<Vec<_>>();
+            assert!(arrows("Move up").contains(&true) && arrows("Move down").contains(&false), "narrow {narrow}: arrows appear");
+        }
+    }
+
+    /// Round 20, on the real page with 1, 2 and 3 questions, narrow (every toolbar at rest) and
+    /// desktop (the group of the question under the pointer): one question shows no Move up or
+    /// Move down at all, and still its Edit (narrow), actions and remove; with two or more every
+    /// question has both, the first one's Move up and the last one's Move down disabled and the
+    /// rest live, as before.
+    #[test]
+    fn reorder_controls_only_where_the_exam_can_be_reordered() {
+        let qs: Vec<Question> = (0..3).map(|k| short(&format!("q{k}"), "Define a catalyst.")).collect();
+        let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: qs, created: 0, modified: 0, details: Default::default() };
+        // (enabled, disabled) counts of the nodes labelled `l`
+        let count = |h: &Harness<'_, (crate::App, EditUi)>, l: &str| {
+            let v: Vec<bool> = h.query_all_by_label(l).map(|n| n.accesskit_node().is_disabled()).collect();
+            (v.iter().filter(|d| !**d).count(), v.iter().filter(|d| **d).count())
+        };
+        for narrow in [true, false] {
+            for n in 1..=3usize {
+                let items: Vec<ExamItem> = (0..n).map(|k| ExamItem::new("b", format!("q{k}"))).collect();
+                let app = scratch_app(bank.clone(), exam_of(items, 0));
+                let mut first = true;
+                let mut h = Harness::builder().with_size(Vec2::new(700.0, 900.0)).build_ui_state(
+                    move |ui, s: &mut (crate::App, EditUi)| {
+                        if std::mem::take(&mut first) {
+                            theme::setup(ui.ctx());
+                            ui.ctx().request_repaint();
+                            return;
+                        }
+                        let ctx = ui.ctx().clone();
+                        let (app, st) = s;
+                        st.narrow = narrow;
+                        st.zoom = 1.0;
+                        draw_page(app, ui, &ctx, &"e".into(), st);
+                    },
+                    (app, EditUi::default()),
+                );
+                h.run_steps(8);
+                let rows = h.state().1.rows.clone();
+                assert_eq!(rows.len(), n);
+                // Each question in turn (narrow shows them all at once: check once).
+                let targets: Vec<usize> = if narrow { vec![usize::MAX] } else { (0..n).collect() };
+                for t in targets {
+                    if t != usize::MAX {
+                        let r = rows.iter().find(|r| r.0 == t).expect("row").1;
+                        h.hover_at(r.center());
+                        h.run_steps(3);
+                    }
+                    let shown = if narrow { n } else { 1 };
+                    let (up, dn) = (count(&h, "Move up"), count(&h, "Move down"));
+                    if n == 1 {
+                        assert_eq!((up, dn), ((0, 0), (0, 0)), "narrow {narrow}: one question, no arrows");
+                    } else if narrow {
+                        assert_eq!((up, dn), ((n - 1, 1), (n - 1, 1)), "narrow, {n} questions");
+                    } else {
+                        let (u, d) = (if t == 0 { (0, 1) } else { (1, 0) }, if t + 1 == n { (0, 1) } else { (1, 0) });
+                        assert_eq!((up, dn), (u, d), "desktop, {n} questions, question {t}");
+                    }
+                    let rm = if narrow { "Remove question" } else { "Remove from exam" };
+                    assert_eq!(count(&h, rm), (shown, 0), "narrow {narrow}, {n}: remove");
+                    // (the actions menu is named for every question, shown or not)
+                    assert_eq!(count(&h, "Question actions").0, n, "narrow {narrow}, {n}: actions");
+                    if narrow {
+                        assert_eq!(count(&h, "Edit question").0, n, "{n}: Edit");
+                    }
+                }
+            }
+        }
     }
 
     /// Many questions over two or more pages with a repeated header and 10 mm margins, the

@@ -1670,20 +1670,25 @@ fn counts_line(r: &BankTile, topics: bool) -> String {
 
 /// Every bank tile is this tall on both screens: each slot is filled on every tile, so a row's
 /// tiles end on one line without being stretched. The slots, top down: pad, header (2 name
-/// lines), gap, meta, gap, key (2 lines), gap, bar, gap, hairline, gap, the footer's Open button
-/// (the usage link level with its middle), then the side pad again under it, so Open sits as far
-/// from the tile's bottom edge as from its right.
-pub(crate) const BANK_TILE_H: f32 = T_PAD + T_HEAD + 6.0 + T_META + T_MK + T_KEY + 8.0 + T_BAR + T_BR + 1.0 + T_RA + T_ACT + T_PAD_FOOT;
+/// lines), gap, meta, gap, key (2 lines), gap, hairline, gap, the footer's Open button (the usage
+/// link level with its middle), then the side pad again under it, so Open sits as far from the
+/// tile's bottom edge as from its right. No type-mix bar: the key (count and name per swatch)
+/// already says what the bar said (round 20).
+pub(crate) const BANK_TILE_H: f32 = T_PAD + T_HEAD + 6.0 + T_META + T_MK + T_KEY + T_BR + 1.0 + T_RA + T_ACT + T_PAD_FOOT;
 const T_PAD: f32 = 16.0;
 const T_HEAD: f32 = 44.0;
 const T_META: f32 = 18.0;
 /// Meta line to key.
 const T_MK: f32 = 8.0;
 const T_KEY: f32 = 40.0;
-const T_BAR: f32 = 6.0;
-/// Bar to hairline, hairline to the footer's button.
-const T_BR: f32 = 8.0;
+/// Key to hairline.
+const T_BR: f32 = 12.0;
+/// Hairline to the footer's button.
 const T_RA: f32 = 8.0;
+/// An empty bank's Add questions: the compact button height (the Exams cards' Open), with this
+/// clear space above and below it inside its dashed box, and between the box and the hairline.
+const ADD_H: f32 = 28.0;
+const ADD_PAD: f32 = 8.0;
 /// The footer: Open, a tinted accent button this tall (drawn exactly this tall, the "…"'s
 /// size); the usage link (18) sits level with it.
 const T_ACT: f32 = 32.0;
@@ -1800,7 +1805,7 @@ fn edited_forms(edited: i64) -> [String; 3] {
 
 /// One bank tile, `w` wide and [`BANK_TILE_H`] tall, the same on Banks and Home: the serif name
 /// (two lines kept), the counts and when it was edited (or the circle badge on Banks), the type
-/// key over the type-mix bar (or, for an empty bank, a dashed placeholder holding Add questions),
+/// key (or, for an empty bank, a dashed placeholder holding Add questions),
 /// a hairline, then where it is used (an underlined link) and "Open →". One card interact: a
 /// click on the usage link, Add questions or the "…" menu returns that act and never `Open`.
 pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: TileVariant) -> Option<TileAct> {
@@ -1874,27 +1879,26 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
         ui.painter().galley(Pos2::new(x0 + iw - g.size().x, meta_c - g.size().y / 2.0), g, theme::muted_col());
     }
 
-    // Key: the type key over the bar; an empty bank has no bar to show, so the key and bar slots
-    // hold one dashed placeholder with its next step, Add questions, in the middle.
+    // Key: the type key, each type's count and name; an empty bank has no types to show, so the
+    // key slot holds one dashed placeholder with its next step, Add questions, in the middle: the
+    // compact button with ADD_PAD clear above and below it, the box ending ADD_PAD over the hairline.
     let key_y = meta_y + T_META + T_MK;
-    let bar_y = key_y + T_KEY + 8.0;
     let mut add_btn: Option<Rect> = None;
     let mut more_hit = false;
     if t.questions == 0 {
-        let slot = Rect::from_min_max(Pos2::new(x0, key_y), Pos2::new(x0 + iw, bar_y + T_BAR));
+        let slot = Rect::from_min_size(Pos2::new(x0, key_y), Vec2::new(iw, ADD_H + 2.0 * ADD_PAD));
         dashed_round_rect(ui.painter(), slot, 8.0, Stroke::new(1.0, theme::edge()));
         let btn_w = ui.painter().layout_no_wrap("Add questions".to_string(), egui::FontId::new(kit::ty::BUTTON_SM, theme::bold_family()), theme::ink()).size().x + 28.0;
-        add_btn = Some(Rect::from_center_size(slot.center(), Vec2::new(btn_w.ceil(), 32.0)));
+        add_btn = Some(Rect::from_center_size(slot.center(), Vec2::new(btn_w.ceil(), ADD_H)));
     } else {
-        let (folded, more_pressed) = paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix, &t.id);
+        let (_, more_pressed) = paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix, &t.id);
         // "+N more" is a control of its own: pressing it never opens the bank.
         more_hit = more_pressed;
-        mix_bar_folded(ui.painter(), Rect::from_min_size(Pos2::new(x0, bar_y), Vec2::new(iw, T_BAR)), &t.mix, &folded);
     }
 
     // Hairline, then the footer: where it is used (a link to those exams) left, Open right, the
     // tile's main action as a tinted accent button (the "…" beside the name stays quiet).
-    let rule_y = bar_y + T_BAR + T_BR;
+    let rule_y = key_y + T_KEY + T_BR;
     ui.painter().hline(x0..=x0 + iw, rule_y + 0.5, Stroke::new(1.0, theme::border()));
     let act_y = rule_y + 1.0 + T_RA;
     let foot_c = act_y + T_ACT / 2.0;
@@ -1906,7 +1910,7 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
     // The tile's own controls, added after its interact so each takes its own clicks.
     if t.questions == 0
         && let Some(r) = add_btn
-        && kit::secondary(&mut placed(ui, r, ("tile_add", &t.id)), "Add questions", 32.0).clicked()
+        && kit::secondary(&mut placed(ui, r, ("tile_add", &t.id)), "Add questions", ADD_H).clicked()
     {
         act = Some(TileAct::AddQuestions);
     }
@@ -2178,8 +2182,8 @@ fn usage_text(t: &BankTile) -> String {
 
 /// The tile's type key at `at`, `w` wide: two 13 pt lines, each item a swatch in its type's
 /// [`theme::type_hue`] (the bar segment's colour), the count in semibold ink and the type in
-/// `text`. Returns the types folded into "+N more" (the bar draws them as one hollow segment, the
-/// outline the "+N more" swatch has), and whether "+N more" was pressed this frame.
+/// `text`. Returns the types folded into "+N more" (its swatch is hollow), and whether "+N more"
+/// was pressed this frame.
 fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6], salt: &str) -> (Vec<usize>, bool) {
     const SW: f32 = 9.0;
     const SGAP: f32 = 5.0;
@@ -4708,12 +4712,16 @@ mod tests {
         }
     }
 
-    /// Every bank tile is the sum of its slots, 211, on Banks and on Home (spec section 3).
+    /// Every bank tile is the sum of its slots, 201, on Banks and on Home (spec section 3; 211
+    /// until round 20 dropped the type-mix bar and its 8 + 6, the key's gap to the hairline 8 -> 12).
     #[test]
-    fn a_bank_tile_is_211_tall() {
-        // pad, name, meta, key, bar, hairline, the footer's 32 tall Open, foot pad
-        assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 8.0 + 40.0 + 8.0 + 6.0 + 8.0 + 1.0 + 8.0 + 32.0 + 16.0);
-        assert_eq!(BANK_TILE_H, 211.0);
+    fn a_bank_tile_is_201_tall() {
+        // pad, name, meta, key, hairline, the footer's 32 tall Open, foot pad
+        assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 8.0 + 40.0 + 12.0 + 1.0 + 8.0 + 32.0 + 16.0);
+        assert_eq!(BANK_TILE_H, 201.0);
+        // An empty bank's dashed box: its button ADD_PAD clear above and below, the box ending
+        // ADD_PAD over the hairline (it takes 4 of the key's 12 to the hairline).
+        assert_eq!(ADD_H + 2.0 * ADD_PAD + ADD_PAD, T_KEY + T_BR);
         // Open keeps the tile's side pad below it as on its right.
         assert_eq!(T_PAD_FOOT, T_PAD);
     }
