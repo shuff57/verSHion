@@ -137,6 +137,8 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         ("titration-curve", _) => super::chemistry::tit_relevant(key, p),
         ("predator-prey", "prey_avg" | "pred_avg" | "cycle") => !p.s("source").starts_with("Model rates"),
         ("predator-prey", "alpha" | "beta" | "gamma" | "delta") => p.s("source").starts_with("Model rates"),
+        // the populations drawn are the graph over time's: the phase plane draws its loop whatever Show says
+        ("predator-prey", "show") => p.s("graph") != "Predators against prey",
         ("particle-diagram", "state2" | "lab_before" | "lab_after") => p.s("boxes") == "Before and after",
         ("lewis-structures", "lone" | "expand" | "resonance" | "resonance_pick") => super::chemistry::lewis_relevant(key, p),
         ("circuit-diagram", "show_answers") => p.s("solve") != "Off",

@@ -53,38 +53,47 @@ pub(super) struct InflRoom<'a> {
 }
 
 /// The inflection point's label: the words with their left end at `x` and baseline `y` (where they always went), or
-/// for a blank line the first clear stretch of up to 120 px on a row 12 to 32 px under the point: right of its guide
-/// if there is room, else left of it; never along a gridline, across a curve, a census point, a phase boundary, the
-/// K line or its label.
+/// a blank line of 40 to 120 px (`infl_blank_spot`) on a white backing, so gridlines never run along it.
 pub(super) fn infl_label(d: &mut Doc, p: &Params, x: f64, y: f64, room: &InflRoom) {
     match p.s("infl_label_style") {
         "None" => {}
         "Blank line" => {
-            if let Some((x0, x1, yy)) = infl_blank_spot(room) {
-                d.line(x0, yy, x1, yy, INK, 1.3);
+            let b = infl_blank_spot(room);
+            blank_line(d, b.x0, b.x1, b.y, "infl");
+            if let Some((f, t)) = b.leader {
+                d.raw(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{INK}" stroke-width="1" stroke-linecap="round" data-leader="infl"/>"#, f.0, f.1, t.0, t.1));
             }
         }
         _ => bold(d, x, y, 13.0, "start", "Inflection point (N = K/2)"),
     }
 }
 
-/// Where the inflection point's blank line goes: (left x, right x, y), None when the graph has no clear stretch.
-pub(super) fn infl_blank_spot(r: &InflRoom) -> Option<(f64, f64, f64)> {
+/// A blank line to write on, tagged with what it labels, on a white backing 3 px round it.
+fn blank_line(d: &mut Doc, x0: f64, x1: f64, y: f64, what: &str) {
+    d.raw(&format!(r##"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="6" fill="#fff" data-backing="{what}"/>"##, x0 - 3.0, y - 3.0, x1 - x0 + 6.0));
+    d.raw(&format!(r#"<line x1="{x0:.2}" y1="{y:.2}" x2="{x1:.2}" y2="{y:.2}" stroke="{INK}" stroke-width="1.3" stroke-linecap="round" data-blank="{what}"/>"#));
+}
+
+/// Where the inflection point's blank line goes, and its leader from the point when it is not right beside it.
+pub(super) struct InflSpot { pub x0: f64, pub x1: f64, pub y: f64, pub leader: Option<((f64, f64), (f64, f64))> }
+
+/// The shortest blank line, and the longest.
+pub(crate) const MIN_BLANK: f64 = 40.0;
+const MAX_BLANK: f64 = 120.0;
+
+/// The inflection point's blank line: first a clear stretch on a row 12 to 32 px under the point (or 16 to 28 px over
+/// it), right of its guide if there is room, else left; failing that, the clear stretch nearest the point on any row of
+/// the graph, with a leader from the point whose path crosses no curve, count or phase boundary; failing even that, the
+/// stretch beside the point's guide, under it. Clear means away from the curves, census counts, phase boundaries, the
+/// point's guide, the K line and its label (gridlines run under the line's white backing).
+pub(super) fn infl_blank_spot(r: &InflRoom) -> InflSpot {
     let a = r.a;
-    let (cx, cy) = r.at;
+    // a point off the graph (its time past the span shown) is placed against the nearest edge
+    let (cx, cy) = (r.at.0.clamp(a.x + 8.0, a.x + a.w - 8.0), r.at.1.clamp(a.y + 8.0, a.y + a.h - 8.0));
     let (lo, hi) = (a.x + 6.0, a.x + a.w - 6.0);
-    // horizontal gridlines (major and minor) the line must not run along
-    let step = a.ys / r.minor.max(1) as f64;
-    let grid: Vec<f64> = if step > 0.0 && ((a.y1 - a.y0) / step) < 2000.0 {
-        let n = ((a.y1 - a.y0) / step).round() as i64;
-        (0..=n).map(|i| a.py(a.y0 + i as f64 * step)).collect()
-    } else { vec![] };
-    for dy in [20.0, 24.0, 16.0, 28.0, 12.0, 32.0] {
-        let y = cy + dy;
-        if y < a.y + 6.0 || y > a.y + a.h - 6.0 { continue; }
-        if grid.iter().any(|g| (g - y).abs() < 3.0) { continue; }
-        if r.k_line.is_some_and(|k| (k - y).abs() < 6.0) { continue; }
-        // x ranges this row may not use
+    let free_on = |y: f64| -> Vec<(f64, f64)> {
+        if y < a.y + 6.0 || y > a.y + a.h - 6.0 { return vec![]; }
+        if r.k_line.is_some_and(|k| (k - y).abs() < 6.0) { return vec![]; }
         let mut blocked: Vec<(f64, f64)> = vec![(cx - 6.0, cx + 6.0)];
         for px in &r.phase_x { blocked.push((px - 6.0, px + 6.0)); }
         for c in &r.curves {
@@ -96,7 +105,6 @@ pub(super) fn infl_blank_spot(r: &InflRoom) -> Option<(f64, f64, f64)> {
         for (px, py) in &r.census { if (py - y).abs() < 9.0 { blocked.push((px - 9.0, px + 9.0)); } }
         if let Some((x0, y0, x1, y1)) = r.k_label { if y >= y0 - 4.0 && y <= y1 + 4.0 { blocked.push((x0 - 4.0, x1 + 4.0)); } }
         blocked.sort_by(|p, q| p.0.partial_cmp(&q.0).unwrap());
-        // the free stretches between them
         let mut free = vec![];
         let mut at = lo;
         for (b0, b1) in &blocked {
@@ -105,28 +113,100 @@ pub(super) fn infl_blank_spot(r: &InflRoom) -> Option<(f64, f64, f64)> {
             if at >= hi { break; }
         }
         if at < hi { free.push((at, hi)); }
-        free.retain(|(f0, f1)| f1 - f0 >= 50.0);
-        // right of the point first, starting as near it as it can; else left of it, ending as near it as it can
-        if let Some((f0, f1)) = free.iter().find(|(f0, _)| *f0 >= cx) { return Some((*f0, f1.min(f0 + 120.0), y)); }
-        if let Some((f0, f1)) = free.iter().rev().find(|(_, f1)| *f1 <= cx) { return Some((f0.max(f1 - 120.0), *f1, y)); }
+        free.retain(|(f0, f1)| f1 - f0 >= MIN_BLANK);
+        free
+    };
+    for dy in [20.0, 24.0, 16.0, 28.0, 12.0, 32.0, -16.0, -22.0, -28.0] {
+        let y = cy + dy;
+        let free = free_on(y);
+        if let Some((f0, f1)) = free.iter().find(|(f0, _)| *f0 >= cx) { return InflSpot { x0: *f0, x1: f1.min(f0 + MAX_BLANK), y, leader: None }; }
+        if let Some((f0, f1)) = free.iter().rev().find(|(_, f1)| *f1 <= cx) { return InflSpot { x0: f0.max(f1 - MAX_BLANK), x1: *f1, y, leader: None }; }
     }
-    None
+    // farther away, with a leader from the point to the line's near end: the nearest such spot whose leader is clear
+    let clear = |f: (f64, f64), t: (f64, f64)| {
+        (0..=40).all(|i| {
+            let u = i as f64 / 40.0;
+            let q = (f.0 + (t.0 - f.0) * u, f.1 + (t.1 - f.1) * u);
+            r.curves.iter().all(|c| c.windows(2).all(|w| seg_d(q, w[0], w[1]) >= 4.0))
+                && r.census.iter().all(|c| ((c.0 - q.0).powi(2) + (c.1 - q.1).powi(2)).sqrt() >= 7.0)
+                && r.phase_x.iter().all(|x| (x - q.0).abs() >= 3.0)
+        })
+    };
+    let mut best: Option<(f64, InflSpot)> = None;
+    let mut y = a.y + 8.0;
+    while y <= a.y + a.h - 8.0 {
+        for (f0, f1) in free_on(y) {
+            // the stretch's part nearest the point, up to 120 px long
+            let (x0, x1) = if cx <= f0 { (f0, f1.min(f0 + MAX_BLANK)) } else if cx >= f1 { (f1 - MAX_BLANK.min(f1 - f0), f1) } else {
+                let x0 = (cx - MAX_BLANK / 2.0).clamp(f0, f1 - MAX_BLANK.min(f1 - f0));
+                (x0, x0 + MAX_BLANK.min(f1 - f0))
+            };
+            let near = (cx.clamp(x0, x1), y);
+            let dist = ((near.0 - cx).powi(2) + (near.1 - cy).powi(2)).sqrt();
+            if dist < 9.0 { continue; }
+            let from = (cx + (near.0 - cx) / dist * 8.0, cy + (near.1 - cy) / dist * 8.0);
+            let to = (near.0, near.1 + if near.1 > cy { -3.0 } else { 3.0 });
+            if !clear(from, to) { continue; }
+            if best.as_ref().is_none_or(|(bd, _)| dist < *bd) { best = Some((dist, InflSpot { x0, x1, y, leader: Some((from, to)) })); }
+        }
+        y += 3.0;
+    }
+    if let Some((_, b)) = best { return b; }
+    // nowhere clear at all (a graph filled with counts): beside the point, under it
+    let x0 = (cx + 10.0).min(a.x + a.w - 6.0 - MIN_BLANK);
+    InflSpot { x0, x1: x0 + MIN_BLANK, y: (cy + 20.0).min(a.y + a.h - 6.0), leader: None }
 }
 
-/// A growth phase's label over its bracket from `xa` to `xb` (bracket line at `by`), in `fs` px; the plot spans `plot`
-/// across the page.
-pub(super) fn phase_label(d: &mut Doc, p: &Params, xa: f64, xb: f64, by: f64, fs: f64, name: &str, plot: (f64, f64)) {
+fn seg_d(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = (dx * dx + dy * dy).max(1e-12);
+    let u = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0);
+    ((p.0 - a.0 - dx * u).powi(2) + (p.1 - a.1 - dy * u).powi(2)).sqrt()
+}
+
+/// A growth phase's label over its bracket from `xa` to `xb` (bracket line at `by`), in `fs` px (Text and None; the
+/// blank lines are laid out together, `phase_blanks`).
+pub(super) fn phase_label(d: &mut Doc, p: &Params, xa: f64, xb: f64, by: f64, fs: f64, name: &str) {
     match p.s("phase_label_style") {
-        "None" => {}
-        // a line over the middle of the bracket's part inside the plot (a phase can run on past the time shown), 10 px
-        // above it, never wider than that part less 6 px each side; none over a sliver under 20 px
-        "Blank line" => {
-            let (va, vb) = (xa.max(plot.0), xb.min(plot.1));
-            if vb - va < 20.0 { return; }
-            let half = (((vb - va) - 12.0) / 2.0).clamp(4.0, 40.0);
-            let cx = (va + vb) / 2.0;
-            d.line(cx - half, by - 10.0, cx + half, by - 10.0, INK, 1.3);
-        }
+        "None" | "Blank line" => {}
         _ => bold(d, (xa + xb) / 2.0, by - 5.0, fs, "middle", name),
+    }
+}
+
+/// The phases' blank lines, each at least 40 px: over the middle of its bracket's part inside the plot (`plot`), 10 px
+/// above the bracket, where that part is wide enough (up to 80 px); a phase too narrow for that gets its line a row
+/// higher, laid out with the other narrow ones in phase order, each line still over its own bracket's middle where it
+/// can be, with a leader straight down to its bracket. `brackets` are (phase index, xa, xb); `page` the page's width.
+pub(super) fn phase_blanks(d: &mut Doc, brackets: &[(usize, f64, f64)], by: f64, plot: (f64, f64), page: f64) {
+    let (row, high) = (by - 10.0, by - 21.0);
+    let mut raised: Vec<(usize, f64, f64)> = vec![]; // (phase, middle, line left end)
+    for &(i, xa, xb) in brackets {
+        let (va, vb) = (xa.max(plot.0), xb.min(plot.1));
+        if vb <= va { continue; }
+        let mid = (va + vb) / 2.0;
+        if vb - va - 12.0 >= MIN_BLANK {
+            let half = ((vb - va - 12.0) / 2.0).min(40.0);
+            blank_line(d, mid - half, mid + half, row, &format!("phase-{i}"));
+        } else {
+            raised.push((i, mid, mid - MIN_BLANK / 2.0));
+        }
+    }
+    // the raised lines: each covers its own middle (2 px in from its ends) where it can, 8 px apart, inside the page
+    let n = raised.len();
+    for _ in 0..20 {
+        for k in 0..n {
+            let (lo_cover, hi_cover) = (raised[k].1 - MIN_BLANK + 2.0, raised[k].1 - 2.0);
+            let mut x = raised[k].2.clamp(lo_cover, hi_cover).clamp(4.0, page - 4.0 - MIN_BLANK);
+            if k > 0 { x = x.max(raised[k - 1].2 + MIN_BLANK + 8.0); }
+            raised[k].2 = x;
+        }
+        for k in (0..n.saturating_sub(1)).rev() {
+            raised[k].2 = raised[k].2.min(raised[k + 1].2 - MIN_BLANK - 8.0).max(4.0);
+        }
+    }
+    for (i, mid, x0) in raised {
+        blank_line(d, x0, x0 + MIN_BLANK, high, &format!("phase-{i}"));
+        let lx = mid.clamp(x0 + 2.0, x0 + MIN_BLANK - 2.0);
+        d.raw(&format!(r#"<line x1="{mid:.2}" y1="{:.2}" x2="{lx:.2}" y2="{:.2}" stroke="{INK}" stroke-width="1" stroke-linecap="round" data-leader="phase-{i}"/>"#, by - 2.0, high + 3.0));
     }
 }

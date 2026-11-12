@@ -502,13 +502,16 @@ pub fn growth_render(p: &Params) -> String {
             let slope = r * k / 4.0;
             let (t1, t2) = ((ti + (n0 - k / 2.0) / slope).max(a.x0), (ti + (k / 2.0) / slope).min(a.x1));
             let by = a.y - 10.0 - if has_ends { 16.0 } else { 0.0 };
-            for (lo, hi, name) in [(a.x0, t1, "Lag phase"), (t1, t2, "Exponential phase"), (t2, a.x1, "Stationary phase")] {
+            let mut brackets = vec![];
+            for (i, (lo, hi, name)) in [(a.x0, t1, "Lag phase"), (t1, t2, "Exponential phase"), (t2, a.x1, "Stationary phase")].into_iter().enumerate() {
                 if hi - lo <= 1e-9 { continue; }
                 let (xa, xb) = (a.px(lo) + 2.0, a.px(hi) - 2.0);
                 d.polyline(&[(xa, by + 6.0), (xa, by), (xb, by), (xb, by + 6.0)], INK, 1.2);
                 let fs = if (xb - xa) < 110.0 { 11.0 } else { 13.0 };
-                growth_b9::phase_label(&mut d, p, xa, xb, by, fs, name, (a.x, a.x + a.w));
+                growth_b9::phase_label(&mut d, p, xa, xb, by, fs, name);
+                brackets.push((i, xa, xb));
             }
+            if p.s("phase_label_style") == "Blank line" { growth_b9::phase_blanks(&mut d, &brackets, by, (a.x, a.x + a.w), w); }
         }
     }
     // census table(s)

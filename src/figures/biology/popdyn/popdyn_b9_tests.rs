@@ -156,11 +156,17 @@ pub(super) fn dark_segments(svg: &str) -> Vec<((f64, f64), (f64, f64), String)> 
             match clip {
                 None => out.push((w[0], w[1], el.to_string())),
                 Some((x0, y0, x1, y1)) => {
-                    // keep the shown pieces, cut finely
-                    let n = (((w[1].0 - w[0].0).abs() + (w[1].1 - w[0].1).abs()) / 2.0).ceil().max(1.0) as usize;
-                    let at = |i: usize| { let t = i as f64 / n as f64; (w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t) };
-                    let inside = |q: (f64, f64)| q.0 >= x0 && q.0 <= x1 && q.1 >= y0 && q.1 <= y1;
-                    for i in 0..n { let (a, b) = (at(i), at(i + 1)); if inside(a) && inside(b) { out.push((a, b, el.to_string())); } }
+                    // the part the clip shows (Liang-Barsky; a curve can run to huge coordinates far off the plot)
+                    let (p0, d) = (w[0], (w[1].0 - w[0].0, w[1].1 - w[0].1));
+                    if !(p0.0.is_finite() && p0.1.is_finite() && d.0.is_finite() && d.1.is_finite()) { continue; }
+                    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+                    let mut ok = true;
+                    for (pp, q) in [(-d.0, p0.0 - x0), (d.0, x1 - p0.0), (-d.1, p0.1 - y0), (d.1, y1 - p0.1)] {
+                        if pp.abs() < 1e-12 { if q < 0.0 { ok = false; } continue; }
+                        let r = q / pp;
+                        if pp < 0.0 { t0 = t0.max(r); } else { t1 = t1.min(r); }
+                    }
+                    if ok && t0 < t1 { out.push(((p0.0 + d.0 * t0, p0.1 + d.1 * t0), (p0.0 + d.0 * t1, p0.1 + d.1 * t1), el.to_string())); }
                 }
             }
         }
@@ -243,13 +249,11 @@ fn growth_inflection_and_phase_labels_blank_or_none_leave_nothing_of_the_words()
                 // nowhere in the SVG, its title and description included
                 for w in &words { assert!(!svg.contains(w), "{key}: {w} left in {c:?}"); }
             }
-            // the blank lines: one for the point, one per phase drawn; None draws none
-            let lines = |svg: &str| svg.matches("<line").count();
-            // (a phase's line only over a part of its bracket at least 20 px wide inside the plot)
-            let want = if key == "infl_label_style" { 1 } else { drawn_phases.len() };
-            if key == "infl_label_style" { assert_eq!(lines(&bs), lines(&full) + want, "{key}: blank lines in {c:?}"); }
-            else { assert!(lines(&bs) > lines(&full) && lines(&bs) <= lines(&full) + want, "{key}: blank lines in {c:?}"); }
-            assert_eq!(lines(&ns), lines(&full), "{key}: None draws no line in {c:?}");
+            // the blank lines: one for the point, one per phase bracket shown; None draws none
+            let tag = if key == "infl_label_style" { "data-blank=\"infl\"" } else { "data-blank=\"phase-" };
+            let want = if key == "infl_label_style" { 1 } else { phase_brackets(&bs, &p).len() };
+            assert_eq!(bs.matches(tag).count(), want, "{key}: blank lines in {c:?}");
+            assert_eq!(ns.matches("data-blank").count(), 0, "{key}: None draws no line in {c:?}");
             // the other mark's label is untouched
             let other: Vec<&str> = if key == "infl_label_style" { drawn_phases.clone() } else { vec![INFL] };
             for w in other { assert!(bs.contains(w) && ns.contains(w)); }
@@ -259,48 +263,149 @@ fn growth_inflection_and_phase_labels_blank_or_none_leave_nothing_of_the_words()
     assert!(n >= 60, "{n} setups drew both marks");
 }
 
-/// Every blank line is clear of every dark stroke (the curve, the guides, the point, the brackets, the K line, the
-/// axes) by 3 px, of every word and number as drawn, of each other, and inside the page; each phase's line is over its
-/// own bracket and the point's line nearer the point than any other blank.
+/// The phase brackets as drawn on the population graph (four-point polylines: two 6 px feet and a top), with the part
+/// of each inside the plot: (left, right, top y, visible left, visible right), left to right.
+fn phase_brackets(svg: &str, p: &Params) -> Vec<(f64, f64, f64, f64, f64)> {
+    let ax = super::axes_of(p, false).into_iter().find(|a| a.kind == 0).expect("the population graph");
+    let mut out = vec![];
+    for el in svg.split("<polyline").skip(1) {
+        let el = el.split('>').next().unwrap();
+        let pts: Vec<(f64, f64)> = attr(el, "points").unwrap().split_whitespace().map(|q| { let (a, b) = q.split_once(',').unwrap(); (a.parse().unwrap(), b.parse().unwrap()) }).collect();
+        if pts.len() == 4 && pts[0].0 == pts[1].0 && pts[2].0 == pts[3].0 && pts[1].1 == pts[2].1 && (pts[0].1 - pts[1].1 - 6.0).abs() < 1e-6 && pts[0].1 < ax.y {
+            let (va, vb) = (pts[1].0.max(ax.x), pts[2].0.min(ax.x + ax.w));
+            if vb > va { out.push((pts[1].0, pts[2].0, pts[1].1, va, vb)); }
+        }
+    }
+    out.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    out
+}
+
+/// The tagged blank lines and leaders: (tag, (x1, y1), (x2, y2)).
+fn tagged(svg: &str, what: &str) -> Vec<(String, (f64, f64), (f64, f64))> {
+    svg.split("<line").skip(1).filter_map(|el| {
+        let el = el.split('>').next().unwrap();
+        let t = attr(el, what)?.to_string();
+        let f = |k| attr(el, k).unwrap().parse::<f64>().unwrap();
+        Some((t, (f("x1"), f("y1")), (f("x2"), f("y2"))))
+    }).collect()
+}
+
+fn pt_seg(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 { seg_dist(p, p, a, b) }
+
+const VIEWS: [&str; 9] = ["Population size over time", "Growth rate over time", "Per capita growth rate over time", "Population size and growth rate",
+    "Population size and per capita rate", "Growth rate and per capita rate", "Growth rate against population size", "Per capita rate against population size", "Both rates against population size"];
+
+/// The checker's sweep: every graph view, every minor gridline setting, every label size, the ten setups, and a seeded
+/// mix of the controls, with both marks and both blank lines on. Wherever a mark is drawn, its Blank line is drawn, at
+/// least 40 px long, inside the page, clear of the curves (3 px, as clipped) and of every word and number as drawn,
+/// not on another blank line, and its own: the point's line nearer the point than any phase bracket or the K line, or
+/// tied to it by a leader starting at the point; each phase's line over its own bracket and nearer it than any other,
+/// or tied to it by a leader standing on its own bracket.
 #[test]
-fn growth_blank_lines_clear_of_strokes_and_text() {
+fn growth_blank_lines_always_drawn_long_clear_and_own() {
     let d = def(PG);
-    let mut n = 0;
-    for c in growth_cases() {
-        let mut x = c.clone();
-        x.extend([("infl_label_style", s("Blank line")), ("phase_label_style", s("Blank line"))]);
-        let p = params(PG, &x);
-        if !super::growth_b9::infl_labelled(&p) { continue; }
-        let svg = d.svg(&p);
-        let none = { let mut y = c.clone(); y.extend([("infl_label_style", s("None")), ("phase_label_style", s("None"))]); d.svg(&params(PG, &y)) };
-        let before = dark_segments(&none);
-        let blanks: Vec<((f64, f64), (f64, f64))> = dark_segments(&svg).into_iter().filter(|q| !before.iter().any(|b| b.2 == q.2)).map(|q| (q.0, q.1)).collect();
-        assert!(!blanks.is_empty());
-        let vb: Vec<f64> = attr(&svg, "viewBox").unwrap().split_whitespace().map(|v| v.parse().unwrap()).collect();
-        let texts = ink_texts(&svg);
-        for (i, bl) in blanks.iter().enumerate() {
-            assert!(bl.0 .0 >= 0.0 && bl.1 .0 <= vb[2] && bl.0 .1 >= 0.0 && bl.0 .1 <= vb[3], "blank {bl:?} off the page in {c:?}");
-            for o in &before {
-                // a gridline (1 px or 0.5 px, upright or level) may cross a blank line at right angles, as it crosses
-                // every word on the graph paper, but never run along it; every other stroke stays 3 px away
-                let w = attr(&o.2, "stroke-width").unwrap_or("1");
-                let upright = (o.0 .0 - o.1 .0).abs() < 1e-6;
-                let grid = matches!(w, "1" | "0.5") && (upright || (o.0 .1 - o.1 .1).abs() < 1e-6);
-                if grid && upright { continue; }
-                let dist = seg_dist(bl.0, bl.1, o.0, o.1);
-                assert!(dist >= 3.0, "blank {bl:?} {dist:.1} px from a stroke {:?}-{:?} (width {w}) in {c:?}", o.0, o.1);
-            }
-            for (j, other) in blanks.iter().enumerate() {
-                if i != j { assert!(seg_dist(bl.0, bl.1, other.0, other.1) >= 3.0, "two blank lines touch in {c:?}"); }
-            }
-            let bb = (bl.0 .0.min(bl.1 .0), bl.0 .1 - 1.0, bl.0 .0.max(bl.1 .0), bl.0 .1 + 1.0);
-            for (t, tb) in &texts {
-                assert!(!(bb.0 < tb.2 && tb.0 < bb.2 && bb.1 < tb.3 && tb.1 < bb.3), "blank {bl:?} on {t:?} {tb:?} in {c:?}");
+    let mut cases: Vec<Vec<(&'static str, Value)>> = vec![];
+    let setups = crate::figures::classic_setups(PG);
+    for view in VIEWS {
+        for minor in ["None", "2 per block", "4 per block", "5 per block"] {
+            for ls in ["Small", "Medium", "Large"] {
+                for e in &setups {
+                    let mut c = e.params.clone();
+                    c.extend([("graph", s(view)), ("minor", s(minor)), ("label_size", s(ls))]);
+                    cases.push(c);
+                }
             }
         }
-        n += 1;
     }
-    assert!(n >= 60, "{n}");
+    let mut seed: u64 = 0xb9_51;
+    let mut next = |n: u64| { seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (seed >> 33) % n };
+    for _ in 0..240 {
+        let pick = |n: &mut dyn FnMut(u64) -> u64, v: &[&'static str]| v[n(v.len() as u64) as usize];
+        cases.push(vec![
+            ("graph", s(pick(&mut next, &VIEWS))),
+            ("minor", s(pick(&mut next, &["None", "2 per block", "4 per block", "5 per block"]))),
+            ("label_size", s(pick(&mut next, &["Small", "Medium", "Large"]))),
+            ("growth", s(pick(&mut next, &["Logistic (S-curve)", "Exponential and logistic"]))),
+            ("r", Value::F([0.05, 0.2, 0.5, 1.0, 2.5, 5.0][next(6) as usize])),
+            ("n0", Value::F([1.0, 2.0, 10.0, 50.0, 300.0][next(5) as usize])),
+            ("k", Value::F([50.0, 665.0, 1000.0, 6000.0][next(4) as usize])),
+            ("tspan", Value::F([5.0, 18.0, 40.0, 100.0][next(4) as usize])),
+            ("census_auto", b(next(2) == 0)),
+            ("census_scatter", s(pick(&mut next, &["None, on the curve", "About 10%", "About 20%"]))),
+            ("mark_k", b(next(4) != 0)),
+            ("title", s(pick(&mut next, &["", "Yeast in a flask"]))),
+            ("y_end", s(pick(&mut next, &["None", "Text"]))),
+        ]);
+    }
+    cases.push(vec![("r", Value::F(0.2)), ("n0", Value::F(2.0)), ("k", Value::F(50.0)), ("tspan", Value::F(100.0))]);
+    cases.push(vec![("graph", s("Population size and per capita rate")), ("minor", s("4 per block"))]);
+    let (mut n_infl, mut n_phase, mut n_lead) = (0, 0, 0);
+    for c in cases {
+        let mut x = c.clone();
+        x.extend([("mark_infl", b(true)), ("mark_phases", b(true)), ("infl_label_style", s("Blank line")), ("phase_label_style", s("Blank line"))]);
+        let p = params(PG, &x);
+        let svg = d.svg(&p);
+        let blanks = tagged(&svg, "data-blank");
+        let leaders = tagged(&svg, "data-leader");
+        let vb: Vec<f64> = attr(&svg, "viewBox").unwrap().split_whitespace().map(|v| v.parse().unwrap()).collect();
+        let texts = ink_texts(&svg);
+        let curves: Vec<_> = dark_segments(&svg).into_iter().filter(|q| attr(&q.2, "points").is_some_and(|ps| ps.split_whitespace().count() > 50)).collect();
+        let brackets = if super::growth_b9::phases_drawn(&p) { phase_brackets(&svg, &p) } else { vec![] };
+        let ax = super::axes_of(&p, false).into_iter().find(|a| a.kind == 0);
+        // every mark drawn has its line
+        let want_infl = super::growth_b9::infl_labelled(&p) as usize;
+        assert_eq!(blanks.iter().filter(|q| q.0 == "infl").count(), want_infl, "the point's blank line in {c:?}");
+        assert_eq!(blanks.iter().filter(|q| q.0.starts_with("phase")).count(), brackets.len(), "the phases' blank lines in {c:?}");
+        for (k, (tag, a, bb)) in blanks.iter().enumerate() {
+            let len = (bb.0 - a.0).abs();
+            assert!(len >= 40.0 - 1e-6, "{tag}: {len:.1} px long in {c:?}");
+            assert!(a.0.min(bb.0) >= 0.0 && a.0.max(bb.0) <= vb[2] && a.1 >= 0.0 && a.1 <= vb[3], "{tag} off the page in {c:?}");
+            for cv in &curves { assert!(seg_dist(*a, *bb, cv.0, cv.1) >= 3.0, "{tag} on a curve in {c:?}"); }
+            let bx = (a.0.min(bb.0), a.1 - 1.0, a.0.max(bb.0), a.1 + 1.0);
+            for (t, tb) in &texts { assert!(!(bx.0 < tb.2 && tb.0 < bx.2 && bx.1 < tb.3 && tb.1 < bx.3), "{tag} on {t:?} in {c:?}"); }
+            for (j, o) in blanks.iter().enumerate() { if j != k { assert!(seg_dist(*a, *bb, o.1, o.2) >= 3.0, "{tag} on {} in {c:?}", o.0); } }
+            let lead = leaders.iter().find(|l| l.0 == *tag);
+            if let Some(l) = lead {
+                // a leader: one end on the line, the other on its own mark
+                assert!(pt_seg(l.2, *a, *bb) <= 4.0, "{tag}: the leader reaches its line in {c:?}");
+                for cv in &curves { assert!(seg_dist(l.1, l.2, cv.0, cv.1) >= 2.0, "{tag}: the leader crosses a curve in {c:?}"); }
+                n_lead += 1;
+            }
+            if tag == "infl" {
+                n_infl += 1;
+                let ax = ax.as_ref().unwrap();
+                let ti = super::growth_b9::t_inf(&p).unwrap();
+                let pt = (ax.px(ti), ax.py(p.f("k").max(1.0) / 2.0));
+                if !ax.inside((ti, p.f("k").max(1.0) / 2.0)) { continue; }
+                if let Some(l) = lead {
+                    assert!(((l.1 .0 - pt.0).powi(2) + (l.1 .1 - pt.1).powi(2)).sqrt() <= 9.0, "the point's leader starts at the point in {c:?}");
+                } else {
+                    let own = pt_seg(pt, *a, *bb);
+                    for (ba, bbx, by, _, _) in &brackets { assert!(own < seg_dist(*a, *bb, (*ba, *by), (*bbx, *by)), "the point's line nearer a phase bracket in {c:?}"); }
+                    if p.b("mark_k") && p.s("growth") != "Exponential (J-curve)" {
+                        let ky = ax.py(p.f("k").max(1.0));
+                        if ky >= ax.y && ky <= ax.y + ax.h { assert!(own < seg_dist(*a, *bb, (ax.x, ky), (ax.x + ax.w, ky)), "the point's line nearer the K line in {c:?}"); }
+                    }
+                }
+            } else {
+                n_phase += 1;
+                let i: usize = tag.trim_start_matches("phase-").parse().unwrap();
+                // the brackets drawn are the phases in order; this line's is the one with its index among those present
+                let present: Vec<usize> = blanks.iter().filter_map(|q| q.0.strip_prefix("phase-").map(|v| v.parse().unwrap())).collect::<std::collections::BTreeSet<usize>>().into_iter().collect();
+                let own = brackets[present.iter().position(|v| *v == i).unwrap()];
+                if let Some(l) = lead {
+                    assert!((l.1 .1 - own.2).abs() <= 3.0 && l.1 .0 >= own.3 - 0.5 && l.1 .0 <= own.4 + 0.5, "{tag}: the leader stands on its own bracket in {c:?}");
+                } else {
+                    let mid = (a.0 + bb.0) / 2.0;
+                    assert!(mid >= own.3 && mid <= own.4, "{tag}: over its own bracket in {c:?}");
+                    let dist = |q: &(f64, f64, f64, f64, f64)| seg_dist(*a, *bb, (q.3, q.2), (q.4, q.2));
+                    for o in &brackets { if o.0 != own.0 { assert!(dist(&own) < dist(o), "{tag}: nearer another bracket in {c:?}"); } }
+                }
+            }
+        }
+    }
+    assert!(n_infl >= 330 && n_phase >= 800, "{n_infl} point lines, {n_phase} phase lines ({n_lead} with leaders)");
+    eprintln!("{n_infl} point lines, {n_phase} phase lines, {n_lead} leaders");
 }
 
 #[test]
@@ -326,6 +431,24 @@ fn growth_label_modes_offered_where_they_draw() {
                 let mut q = p.clone();
                 q.set_s(key, v);
                 assert_eq!(crate::figures::param_relevant(PG, key, &p), d.svg(&q) != a, "{key} -> {v} in {c:?}");
+            }
+        }
+    }
+}
+
+/// Predator-prey's Show is offered exactly where it changes the drawing: over time (each choice its own drawing), not
+/// on the phase plane (every choice draws the same loop).
+#[test]
+fn predator_prey_show_offered_exactly_where_it_draws() {
+    let d = def(PP);
+    for graph in ["Over time", "Predators against prey"] {
+        for pair in ["Snowshoe hare and Canada lynx", "Your own pair"] {
+            for data in ["Smooth curves", "Census counts"] {
+                let p = params(PP, &[("graph", s(graph)), ("pair", s(pair)), ("data", s(data))]);
+                let shown = crate::figures::param_relevant(PP, "show", &p);
+                let drawings: std::collections::BTreeSet<String> = ["Both", "Prey only", "Predators only", super::NEITHER].iter().map(|v| { let mut q = p.clone(); q.set_s("show", v); d.svg(&q) }).collect();
+                assert_eq!(shown, drawings.len() > 1, "{graph} {pair} {data}: shown == changes the drawing");
+                assert_eq!(shown, graph == "Over time");
             }
         }
     }
