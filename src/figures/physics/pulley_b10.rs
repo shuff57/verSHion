@@ -214,11 +214,15 @@ fn nearest_on(r: (f64, f64, f64, f64), q: (f64, f64)) -> (f64, f64) { (q.0.clamp
 /// everything. None: nothing near fits.
 pub(super) fn place_label(base: &str, lab: &str, fs: f64, anchor: (f64, f64), own: &[Seg], page: (f64, f64)) -> Option<LabSpot> {
     let (segs, boxes) = drawn(base);
-    let near = |r: (f64, f64, f64, f64)| (r.0 - anchor.0).abs() < 220.0 && (r.1 - anchor.1).abs() < 220.0;
-    let segs: Vec<Seg> = segs.into_iter().filter(|s| near((s.a.0.min(s.b.0), s.a.1.min(s.b.1), s.a.0.max(s.b.0), s.a.1.max(s.b.1)))).collect();
-    let boxes: Vec<(f64, f64, f64, f64)> = boxes.into_iter().filter(|b| near(*b)).collect();
     let (_, _, down) = tex_box(lab, fs);
     let ideal = (anchor.0, anchor.1 - down - 3.5);
+    // only what can matter is kept: every stroke and text box within 20 px of the area any candidate label (and its
+    // leader from the anchor) can cover, measured by distance to that area, not by a stroke's corner (a long string
+    // to a high wheel has both ends far off and still runs through the middle)
+    let (lo, hi) = (lab_rect(lab, fs, (ideal.0 - 100.0, ideal.1 - 120.0)), lab_rect(lab, fs, (ideal.0 + 100.0, ideal.1 + 60.0)));
+    let area = (lo.0.min(anchor.0) - 20.0, lo.1.min(anchor.1) - 20.0, hi.2.max(anchor.0) + 20.0, hi.3.max(anchor.1) + 20.0);
+    let segs: Vec<Seg> = segs.into_iter().filter(|s| box_seg(area, s) <= 0.0).collect();
+    let boxes: Vec<(f64, f64, f64, f64)> = boxes.into_iter().filter(|b| box_box(area, *b) <= 0.0).collect();
     let mut cands: Vec<(f64, f64)> = vec![];
     for dy in -60..=30 { for dx in -50..=50 { cands.push((ideal.0 + dx as f64 * 2.0, ideal.1 + dy as f64 * 2.0)); } }
     cands.sort_by(|a, b| { let d = |q: &(f64, f64)| (q.0 - ideal.0).hypot((q.1 - ideal.1) * 1.3); d(a).total_cmp(&d(b)) });

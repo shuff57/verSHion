@@ -376,6 +376,15 @@ fn text_body(e: &str) -> String {
     e[i..].to_string()
 }
 
+/// The drawing without the contact pair's leader, if it has one (the line from the pair to the label `contact_label`
+/// placed, matched by its ends as drawn).
+fn without_leader(p: &crate::figures::Params, t: &str) -> String {
+    let Some((a, b)) = super::pulley::contact_label(p).flatten().and_then(|sp| sp.leader) else { return t.to_string() };
+    let hit = tags(t, "line").into_iter().find(|h| (num(h, "x1") - a.0).abs() < 0.01 && (num(h, "y1") - a.1).abs() < 0.01 && (num(h, "x2") - b.0).abs() < 0.01 && (num(h, "y2") - b.1).abs() < 0.01);
+    let hit = hit.expect("the leader is drawn");
+    t.replacen(hit, "", 1)
+}
+
 #[test]
 fn every_label_touches_no_other_ink_as_rasterized() {
     // measured from pixels, not boxes: each text's own dark pixels (there with it, white without it) have no other
@@ -397,7 +406,10 @@ fn every_label_touches_no_other_ink_as_rasterized() {
         for (i0, i1) in texts(&t) {
             let e = &t[i0..i1];
             labels += 1;
-            let Some(why) = label_trouble(&t, i0, i1) else { continue };
+            // the pair's label is checked without its own leader, which runs right up to it
+            let lt = without_leader(&p, &t);
+            let k = texts(&lt).into_iter().find(|&(a, b)| text_body(&lt[a..b]) == text_body(e) && num(&lt[a..b], "x") == num(e, "x") && num(&lt[a..b], "y") == num(e, "y")).unwrap();
+            let Some(why) = label_trouble(&lt, k.0, k.1) else { continue };
             // the same label in the old figure: moved only with the ramp, or (the hanging mass's, which hangs from the
             // wheel the touching string raises) the same text with the same trouble there
             let (x, y) = (ux(num(e, "x"), gn.w), num(e, "y"));
@@ -556,7 +568,9 @@ fn a_typed_contact_label_is_drawn_or_the_panel_says_it_was_left_off() {
         }
     }
     eprintln!("contact label drawn {drawn}, left off with a note {off}");
-    assert!(drawn > 1000 && off * 50 < drawn, "{drawn} {off}");
+    // (round 2: a label the placer once drew across the string to a high wheel, on ramps of 50 and 60 degrees, now
+    // stands clear by a leader or, where nothing near is clear, is left off with the note: more are left off there)
+    assert!(drawn > 1000 && off * 25 < drawn, "{drawn} {off}");
 }
 
 #[test]
@@ -737,5 +751,164 @@ fn the_angle_mark_is_the_old_one() {
             assert!((a.0 - b.0 - dx).abs() < 0.02 && (a.1 - b.1 - dy).abs() < 0.02, "{angle} {size}: {a:?} vs {b:?} + ({dx}, {dy})");
         }
     }
+}
+
+
+/// Every stroke in `t` (lines, outlines, polylines, circles) and whether it is the contact pair's (its arrows and
+/// leader, drawn in the pair's colour), and every text element with its drawn box.
+fn ink(t: &str) -> (Vec<(super::pulley_b10::Seg, bool)>, Vec<(String, (f64, f64, f64, f64))>) {
+    use super::pulley_b10::drawn;
+    let mut segs = vec![];
+    for name in ["line", "polygon", "polyline", "circle"] {
+        for h in tags(t, name) {
+            let own = h.contains(&format!("\"{TEAL}\""));
+            for sg in drawn(h).0 { segs.push((sg, own)); }
+        }
+    }
+    let boxes = texts(t).into_iter().map(|(a, b)| (plain(&t[a..b]), drawn(&t[a..b]).1[0])).collect();
+    (segs, boxes)
+}
+
+#[test]
+fn the_contact_label_is_clear_of_every_stroke_however_long() {
+    // checker round 2: on 50 and 60 degree ramps the string from the post up to the wheel ran through the pair's
+    // label, because the placer kept only strokes whose bounding box's top-left corner was within 220 px of the pair
+    // (that string's top end is far above it). Swept over the table and ramps of 15 to 60 degrees, every force switch
+    // together, sizes 50, 100 and 200, labels from P to F_{1 on 2} as text, a blank line and none, mirrored or not,
+    // read from the drawn SVG: the pair's label (or blank line) touches no stroke, object edge or other text, is on
+    // the page and is nearer the pair (its arrows, or the leader to it) than any other stroke; a leader runs clear of
+    // everything; left off only with the panel's note and nothing of it drawn; never left off on the table or on a
+    // ramp of 20 to 45 degrees at the opening size. Every 23rd drawn label, and every one whose measured box comes within 2 px of its own arrows, is also
+    // rasterized against all other ink but its own leader.
+    use super::pulley_b10::{box_seg, Seg};
+    let labels = ["P", "F_{c}", "F_{31}", "F_{contact}", "F_{1 on 2}"];
+    let modes: Vec<(&str, &str)> = labels.iter().map(|l| ("Text", *l)).chain([("Blank line", "P"), ("None", "P")]).collect();
+    let setups: Vec<(&str, f64)> = std::iter::once(("Table", 30.0)).chain([15.0, 20.0, 30.0, 40.0, 50.0, 60.0].into_iter().map(|a| ("Ramp", a))).collect();
+    let (mut n_text, mut n_lead, mut n_lead_blank, mut n_blank, mut n_off, mut n_none, mut n_ras) = (0, 0, 0, 0, 0, 0, 0);
+    let mut fails: Vec<String> = vec![];
+    for &(setup, angle) in &setups {
+        for size in [50, 100, 200] {
+            for m in 0..8 { for fr in ["None", "Toward the pulley", "Away from it"] { for ac in ["None", "Right falls", "Left falls"] {
+                for &(mode, lab) in &modes { for mirror in [false, true] {
+                    let mut l = touching(setup);
+                    l.extend([f("angle", angle), i("l_size", size), b("contact", true), b("color", true), b("mirror", mirror), s("cont_lab_mode", mode), s("cont_lab", lab)]);
+                    l.extend([b("tension", m & 1 != 0), b("gravity", m & 2 != 0), b("normal", m & 4 != 0), s("friction", fr), s("accel", ac)]);
+                    let p = with(&l);
+                    if super::pulley::touch(&p).is_none() { continue; }
+                    let case = format!("{setup} {angle} size {size} tension {} gravity {} normal {} friction {fr} accel {ac} {mode} {lab} mirror {mirror}", m & 1 != 0, m & 2 != 0, m & 4 != 0);
+                    let t = svg(&p);
+                    let (pw, ph) = (num(tags(&t, "svg")[0], "width"), num(tags(&t, "svg")[0], "height"));
+                    let (segs, boxes) = ink(&t);
+                    let notes = notes_for("pulley", &p);
+                    let noted = notes.iter().any(|x| x.contains("left off"));
+                    let want: String = lab.chars().filter(|c| c.is_alphanumeric()).collect();
+                    let leaders: Vec<Seg> = tags(&t, "line").into_iter().filter(|h| h.contains(&format!("\"{TEAL}\"")) && h.contains("stroke-width=\"1.2\"")).flat_map(|h| super::pulley_b10::drawn(h).0).collect();
+                    // the label's box as drawn, and which strokes and texts are its own
+                    let (r, skip_seg): ((f64, f64, f64, f64), Option<usize>) = match mode {
+                        "None" => {
+                            if noted || boxes.iter().any(|(x, _)| x == "P") || !leaders.is_empty() { fails.push(format!("None draws or notes a label: {case}")); }
+                            n_none += 1;
+                            continue;
+                        }
+                        "Blank line" => {
+                            let k = segs.iter().position(|(sg, own)| !own && ((sg.b.0 - sg.a.0).abs() - 26.0).abs() < 0.1 && (sg.b.1 - sg.a.1).abs() < 0.01 && (sg.hw - 0.75).abs() < 0.01);
+                            match k {
+                                None => {
+                                    if !noted { fails.push(format!("blank line neither drawn nor noted: {case}")); }
+                                    n_off += 1;
+                                    continue;
+                                }
+                                Some(k) => {
+                                    if noted { fails.push(format!("blank drawn and noted: {case}")); }
+                                    let sg = segs[k].0;
+                                    n_blank += 1;
+                                    ((sg.a.0.min(sg.b.0) - 1.0, sg.a.1 - 1.75, sg.a.0.max(sg.b.0) + 1.0, sg.a.1 + 1.75), Some(k))
+                                }
+                            }
+                        }
+                        _ => {
+                            let mine: Vec<&(String, (f64, f64, f64, f64))> = boxes.iter().filter(|(x, _)| *x == want).collect();
+                            if mine.len() > 1 { fails.push(format!("drawn {} times: {case}", mine.len())); continue; }
+                            if mine.is_empty() {
+                                if !noted || !leaders.is_empty() { fails.push(format!("left off without a note, or its leader left behind: {case}")); }
+                                n_off += 1;
+                                continue;
+                            }
+                            if noted { fails.push(format!("drawn and noted: {case}")); }
+                            n_text += 1;
+                            (mine[0].1, None)
+                        }
+                    };
+                    if !leaders.is_empty() { if mode == "Text" { n_lead += 1 } else { n_lead_blank += 1 } }
+                    // on the page
+                    if r.0 < 1.0 || r.1 < 1.0 || r.2 > pw - 1.0 || r.3 > ph - 1.0 { fails.push(format!("off the page {r:?}: {case}")); }
+                    // clear of every other stroke and text, and nearer its own pair than any other stroke
+                    let mut d_own = f64::INFINITY;
+                    let mut d_other = (f64::INFINITY, None);
+                    for (k, (sg, own)) in segs.iter().enumerate() {
+                        if Some(k) == skip_seg { continue; }
+                        let d = box_seg(r, sg);
+                        if *own { d_own = d_own.min(d); if d < 0.5 && leaders.is_empty() { fails.push(format!("on its own arrow ({d:.1}): {case}")); } }
+                        else if d < d_other.0 { d_other = (d, Some(*sg)); }
+                    }
+                    if d_other.0 < 1.5 { fails.push(format!("touches a stroke {:?} ({:.1}): {case}", d_other.1.map(|s| (s.a, s.b)), d_other.0)); }
+                    if !(d_own + 1.0 < d_other.0) { fails.push(format!("as near another stroke ({:.1}) as its own pair ({d_own:.1}): {case}", d_other.0)); }
+                    let me = if mode == "Text" { Some(want.clone()) } else { None };
+                    for (x, b2) in &boxes {
+                        if Some(x) == me.as_ref() { continue; }
+                        let dx = (b2.0 - r.2).max(r.0 - b2.2).max(0.0);
+                        let dy = (b2.1 - r.3).max(r.1 - b2.3).max(0.0);
+                        if dx.hypot(dy) < 1.5 { fails.push(format!("touches the text {x}: {case}")); }
+                    }
+                    // a leader runs clear of everything but the pair it starts on and the label it ends at
+                    for ld in &leaders {
+                        let len = (ld.b.0 - ld.a.0).hypot(ld.b.1 - ld.a.1);
+                        let (ux, uy) = ((ld.b.0 - ld.a.0) / len, (ld.b.1 - ld.a.1) / len);
+                        let mid = Seg { a: (ld.a.0 + ux * 4.0, ld.a.1 + uy * 4.0), b: (ld.b.0 - ux * 1.5, ld.b.1 - uy * 1.5), hw: ld.hw };
+                        for (sg, own) in &segs {
+                            if *own { continue; }
+                            let near = (0..=20).map(|k| { let q = k as f64 / 20.0; let q = (mid.a.0 + (mid.b.0 - mid.a.0) * q, mid.a.1 + (mid.b.1 - mid.a.1) * q); box_seg((q.0, q.1, q.0, q.1), sg) }).fold(f64::INFINITY, f64::min);
+                            if near < 1.5 { fails.push(format!("the leader runs into a stroke: {case}")); }
+                        }
+                        for (x, b2) in &boxes { if Some(x) != me.as_ref() && box_seg(*b2, &mid) < 1.0 { fails.push(format!("the leader runs into {x}: {case}")); } }
+                    }
+                    // and, for a sample, as rasterized
+                    if mode == "Text" && (n_text % 23 == 0 || (d_own < 2.0 && leaders.is_empty())) {
+                        // the label's own leader runs right up to it: taken out of both drawings
+                        let mut t = t.clone();
+                        for h in tags(&t.clone(), "line") { if h.contains(&format!("\"{TEAL}\"")) && h.contains("stroke-width=\"1.2\"") { t = t.replacen(h, "", 1); } }
+                        let (i0, i1) = texts(&t).into_iter().find(|&(a, b)| plain(&t[a..b]) == want).unwrap();
+                        if let Some(e) = label_trouble(&t, i0, i1) { fails.push(format!("rasterized: {e}: {case}")); }
+                        n_ras += 1;
+                    }
+                } }
+            } } }
+        }
+    }
+    // never left off on ordinary figures
+    for &(setup, angle) in &setups {
+        let sizes: &[i64] = if setup == "Table" { &[50, 100, 200] } else if (20.0..=45.0).contains(&angle) { &[100] } else { &[] };
+        for &size in sizes { for m in 0..8 { for fr in ["None", "Away from it"] { for ac in ["None", "Right falls", "Left falls"] { for lab in labels { for mode in ["Text", "Blank line"] {
+            let mut l = touching(setup);
+            l.extend([f("angle", angle), i("l_size", size), b("contact", true), s("cont_lab_mode", mode), s("cont_lab", lab)]);
+            l.extend([b("tension", m & 1 != 0), b("gravity", m & 2 != 0), b("normal", m & 4 != 0), s("friction", fr), s("accel", ac)]);
+            let p = with(&l);
+            if super::pulley::touch(&p).is_none() { continue; }
+            if notes_for("pulley", &p).iter().any(|x| x.contains("left off")) { fails.push(format!("left off on an ordinary figure: {setup} {angle} size {size} {mode} {lab} m {m} {fr} {ac}")); }
+        } } } } } }
+    }
+    eprintln!("contact label: text drawn {n_text} ({n_lead} by a leader), blank line {n_blank} ({n_lead_blank} by a leader), left off with a note {n_off}, none {n_none}; rasterized {n_ras}");
+    let n = fails.len();
+    fails.sort();
+    fails.dedup();
+    let mut kinds: std::collections::BTreeMap<String, (usize, String)> = Default::default();
+    for x in &fails {
+        let k: String = x.split(|c: char| c == '(' || c == ':').next().unwrap().to_string();
+        let e = kinds.entry(k).or_insert((0, x.clone()));
+        e.0 += 1;
+    }
+    for (k, (c, ex)) in &kinds { eprintln!("{c:5} {k} e.g. {ex}"); }
+    assert!(fails.is_empty(), "{n} failures, first: {:#?}", &fails[..fails.len().min(25)]);
+    assert!(n_text > 3000 && n_blank > 600, "{n_text} {n_blank}");
 }
 
