@@ -1,0 +1,37 @@
+{
+ "round": 371,
+ "figure": "pyramid",
+ "capability": "cap-04f",
+ "hypothesis": "Batch 8 pyramid: cap-04f; evidence length typed 13/2",
+ "started_at": "2026-11-11T18:14:48",
+ "git": "69e8df6",
+ "before": {
+  "figure": 92.0,
+  "pooled": 99.3
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T18:14:49",
+ "after": {
+  "figure": 96.0,
+  "pooled": 99.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"length_t\":\"13/2\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/4800be59cafe0a60.png"
+   }
+  ]
+ },
+ "checker": "pass on the second check (NAS): draws as the slider at 6.5 within 0.01 px, labelled 13/2 cm under its own edge; sweep of 3,246 typed solids found every label by its own line or on a leader from it",
+ "result": "hit",
+ "evidence": "solids_b8 tests and solids_b8_frozen (882 old figures: 853 byte for byte, 29 listed corrections pinned by spec and link); flat_b9 with it: 37 passed; no task run (builder on pc2)",
+ "next": "cylinder: a typed height label on an oblique cylinder can be covered by the top face (regression, back with the builder); vector-diagram third pass; pulley cap-06e; gel and population-growth fixes"
+}

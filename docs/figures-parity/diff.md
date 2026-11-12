@@ -26,7 +26,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | parallelogram | `parallelogram` | 66 | 9 | 6 | — | 100 |
 | pie-chart | `pie-chart` | 16 | 0 | 5 | — | 100 |
 | prism | `prism` | 41 | 6 | 8 | — | 100 |
-| pyramid | `pyramid` | 38 | 6 | 7 | — | 92 |
+| pyramid | `pyramid` | 38 | 6 | 7 | — | 100 |
 | rectangle | `rectangle` | 55 | 9 | 6 | — | 100 |
 | regular-polygon | `regular-polygon` | 33 | 8 | 6 | — | 100 |
 | sphere | `sphere` | 17 | 2 | 6 | — | 100 |
@@ -101,18 +101,15 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-12T01:57:21+00:00 · probe: 2026-11-11T17:57:21
+Generated: 2026-11-12T02:14:49+00:00 · probe: 2026-11-11T18:14:49
 
-**Pooled 99.3** · mean 99.3 over 70 figures · built 71 of 71 reference figures
+**Pooled 99.4** · mean 99.5 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
 - `vector-diagram`: 90 (51/57)
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
-- `pyramid`: 92 (69/75)
-  - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
-  - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
 - `punnett-square`: 94 (85/90)
   - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
   - cap-05d [interaction 2] Click a cell to blank it — no evidence
@@ -174,6 +171,7 @@ Comparable with the frozen baseline: **yes**
 - `predator-prey`: 100 (96/96)
 - `prism`: 100 (94/94)
 - `projectile-motion`: 100 (74/74)
+- `pyramid`: 100 (75/75)
 - `ray-diagram`: 100 (115/115)
 - `reaction-energy-diagram`: 100 (101/101)
 - `rectangle`: 100 (86/86)

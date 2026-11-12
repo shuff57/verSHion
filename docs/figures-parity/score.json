@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-12T01:57:21+00:00",
- "probe_checked_at": "2026-11-11T17:57:21",
+ "generated_at": "2026-11-12T02:14:49+00:00",
+ "probe_checked_at": "2026-11-11T18:14:49",
  "comparable": true,
  "drift": [],
- "pooled": 99.3,
- "mean": 99.3,
+ "pooled": 99.4,
+ "mean": 99.5,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -430,26 +430,11 @@
    ]
   },
   "pyramid": {
-   "score": 92.0,
-   "got": 69.0,
+   "score": 100.0,
+   "got": 75.0,
    "total": 75.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type any measure (length, width, side, height, lean) as a fraction",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04g",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Type any measure (length, width, side, height, lean) with √",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "ray-diagram": {
    "score": 100.0,

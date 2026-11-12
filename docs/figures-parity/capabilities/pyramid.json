@@ -84,15 +84,15 @@
    "id": "cap-04f",
    "text": "Type any measure (length, width, side, height, lean) as a fraction",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: those are sliders (float)."
+   "evidence": "changes:{\"length_t\":\"13/2\"}",
+   "note": "Built in batch 10, round 371 (2026-11-11). WIDE: those are sliders (float)."
   },
   {
    "id": "cap-04g",
    "text": "Type any measure (length, width, side, height, lean) with √",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: those are sliders (float)."
+   "evidence": "changes:{\"height_t\":\"sqrt(13)\"}",
+   "note": "Built in batch 10, round 372 (2026-11-11). WIDE: those are sliders (float)."
   },
   {
    "id": "cap-05",

@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-11T17:57:21",
- "ours_built_at": "2026-11-12T01:57:17+00:00",
- "git": "6b926b9",
+ "checked_at": "2026-11-11T18:14:49",
+ "ours_built_at": "2026-11-12T02:14:48+00:00",
+ "git": "69e8df6",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -10461,7 +10461,7 @@
       {
        "token": "changes:length=8",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/d266fba0ffff6a0c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/4ca956677311fd3e.png"
       }
      ]
     },
@@ -10473,12 +10473,12 @@
       {
        "token": "changes:base=Regular polygon",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/882162c7c0912f75.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/61b2d6a7da02d66e.png"
       },
       {
        "token": "changes:{\"base\":\"Regular polygon\",\"n\":8}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/71ab66ccfda8a66b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/8dfbca410266caa4.png"
       }
      ]
     },
@@ -10490,12 +10490,12 @@
       {
        "token": "changes:height=6",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/bbaddc62f759613c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/caa2a39fddbd02d5.png"
       },
       {
        "token": "changes:slant_lab=Measure",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/48da66c9c188dbd5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/2489b84aa9c52a20.png"
       }
      ]
     },
@@ -10507,7 +10507,7 @@
       {
        "token": "changes:{\"slant\":\"6\",\"slant_lab\":\"Measure\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/21bc709681cb1cb3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/66a06b0a97d06c42.png"
       }
      ]
     },
@@ -10519,12 +10519,12 @@
       {
        "token": "changes:stands=Oblique",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/8f83a510048628dd.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/92dc2e0a38a8123d.png"
       },
       {
        "token": "changes:{\"stands\":\"Oblique\",\"lean\":3.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/893afd7a396432c5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/a570597a56f93103.png"
       }
      ]
     },
@@ -10536,7 +10536,7 @@
       {
        "token": "changes:{\"stands\":\"Oblique\",\"lean\":-2.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/8b50cabb3dc05e9d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/2eb799777c4e5243.png"
       }
      ]
     },
@@ -10548,7 +10548,7 @@
       {
        "token": "changes:{\"slant\":\"11/2\",\"slant_lab\":\"Measure\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/6dc057337d4c560e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/7a1b77bbb9b25695.png"
       }
      ]
     },
@@ -10560,7 +10560,7 @@
       {
        "token": "changes:{\"slant\":\"sqrt(29)\",\"slant_lab\":\"Measure\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/f748e4bb489516bb.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/1010ded9e4dd45f5.png"
       }
      ]
     },
@@ -10572,7 +10572,7 @@
       {
        "token": "changes:slant_lab=Measure",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/48da66c9c188dbd5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/2489b84aa9c52a20.png"
       }
      ]
     },
@@ -10584,7 +10584,7 @@
       {
        "token": "changes:height_lab=Text",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/883964ceb8eef609.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/f5e5f0e1866373ca.png"
       }
      ]
     },
@@ -10596,21 +10596,33 @@
       {
        "token": "changes:length_lab=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/a89583b2cbf36042.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/c60f38b3b7bb1cae.png"
       }
      ]
     },
     "cap-04f": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"length_t\":\"13/2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/4800be59cafe0a60.png"
+      }
+     ]
     },
     "cap-04g": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"height_t\":\"sqrt(13)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/522ed18c8c564565.png"
+      }
+     ]
     },
     "cap-05": {
      "pass": true,
@@ -10620,7 +10632,7 @@
       {
        "token": "changes:{\"base\":\"Regular polygon\",\"apothem_lab\":\"Measure\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/3e58fb955d111730.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/d8af121f4891f995.png"
       }
      ]
     },
@@ -10632,7 +10644,7 @@
       {
        "token": "changes:hidden=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/25f874afb0705ef9.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/8ab831db9091a402.png"
       }
      ]
     },
@@ -10644,7 +10656,7 @@
       {
        "token": "changes:show_height=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/6830882434007217.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/593fa1f3886ce9a5.png"
       }
      ]
     },
@@ -10656,7 +10668,7 @@
       {
        "token": "changes:right=false",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/8e033bfcd3e5db6b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/394838b925b4b51c.png"
       }
      ]
     },
@@ -10668,7 +10680,7 @@
       {
        "token": "changes:unit=m",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/7dfd01504d128302.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/d40fa3f1c6ebe7d7.png"
       }
      ]
     },
@@ -10680,7 +10692,7 @@
       {
        "token": "changes:{\"slant\":\"6\",\"dec\":0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/a3f26233b78ba670.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/7245c839a7800a9c.png"
       }
      ]
     },
@@ -10692,7 +10704,7 @@
       {
        "token": "changes:names=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/f71f56102c38f7ee.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/108f2b0ff0804f05.png"
       }
      ]
     },
@@ -10704,7 +10716,7 @@
       {
        "token": "changes:depth=Left",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/3dff5fb4492f9bd5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/c9c245d94a9a0ea9.png"
       }
      ]
     },

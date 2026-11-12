@@ -1,0 +1,35 @@
+{
+ "round": 372,
+ "figure": "pyramid",
+ "capability": "cap-04g",
+ "hypothesis": "Batch 8 pyramid: cap-04g; evidence height typed sqrt(13)",
+ "started_at": "2026-11-11T18:14:49",
+ "git": "69e8df6",
+ "before": {
+  "figure": 96.0,
+  "pooled": 99.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T18:14:49",
+ "after": {
+  "figure": 100.0,
+  "pooled": 99.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"height_t\":\"sqrt(13)\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pyramid/522ed18c8c564565.png"
+   }
+  ]
+ },
+ "checker": "pass on the second check: draws as the slider at 3.606, labelled √13 cm beside its dashed height; the earlier misplaced oblique height label is fixed",
+ "result": "hit",
+ "evidence": "solids_b8 tests and solids_b8_frozen (882 old figures: 853 byte for byte, 29 listed corrections pinned by spec and link); flat_b9 with it: 37 passed; no task run (builder on pc2)",
+ "next": "cylinder: a typed height label on an oblique cylinder can be covered by the top face (regression, back with the builder); vector-diagram third pass; pulley cap-06e; gel and population-growth fixes"
+}
