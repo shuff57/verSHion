@@ -213,6 +213,11 @@ struct ShelfCardSeen {
     toggle: Option<Rect>,
     points: Option<Rect>,
     icons_left: f32,
+    /// The header row's "+" ("Add to exam"), copy and edit icons (round 26: all on the header row).
+    add: Rect,
+    copy: Rect,
+    edit: Rect,
+    /// Where the type label and badges end (past the last one's 6 of gap).
     badges_right: f32,
     /// The top of the card's question text.
     text_top: f32,
@@ -5604,15 +5609,52 @@ const SHELF_ROWS_ALL: usize = 400;
 /// How many cards from the list's top the panel plans lines for (more never fit in view).
 const SHELF_PLAN_CARDS: usize = 16;
 
-/// A card's height besides its question: the type line above it and the padding.
-const SHELF_CARD_CHROME: f32 = 38.0;
+/// A card's height besides its question: the header row above it (type, badges, points, edit,
+/// copy and the "+") and the padding. Round 26 moved the "+" from a column down the card's right
+/// side into the header row, which grew from 28 to [`SHELF_TEXT_TOP`] to hold it (was 38).
+const SHELF_CARD_CHROME: f32 = SHELF_TEXT_TOP + SHELF_CARD_PAD_B;
+
+/// The card's side padding: the header row and the question run from here to the card's width
+/// less this (round 26: the question uses the card's whole inner width).
+const SHELF_CARD_PAD_X: f32 = 12.0;
+
+/// From a card's top to its "+" (the header row's tallest control).
+const SHELF_HEAD_PAD_T: f32 = 5.0;
+
+/// The card's "+" ("Add to exam"), square, at the bank panel's compact control height.
+const SHELF_ADD_SZ: f32 = 26.0;
+
+/// The air between the header row and the question.
+const SHELF_HEAD_GAP: f32 = 3.0;
+
+/// From a card's top to its question's first line.
+const SHELF_TEXT_TOP: f32 = SHELF_HEAD_PAD_T + SHELF_ADD_SZ + SHELF_HEAD_GAP;
+
+/// Under the question's last line.
+const SHELF_CARD_PAD_B: f32 = 10.0;
+
+/// The edit and copy icons' square hit areas on the header row.
+const SHELF_ICON_SZ: f32 = 24.0;
 
 /// The gap between two bank cards.
 const SHELF_CARD_GAP: f32 = 8.0;
 
-/// The question's width in a bank card `w` wide (beside it: padding and the add column).
+/// The question's width in a bank card `w` wide: the card's whole inner width (until round 26 the
+/// "+" took a column of 50 down its right side).
 fn shelf_stem_width(w: f32) -> f32 {
-    w - 12.0 - 10.0 - 30.0 - 10.0
+    w - 2.0 * SHELF_CARD_PAD_X
+}
+
+/// Where a bank card's header row puts its controls, right to left from the card's inner right
+/// edge: the "+" ([`SHELF_ADD_SZ`] square, its top [`SHELF_HEAD_PAD_T`] in), copy and edit
+/// ([`SHELF_ICON_SZ`], centred on the "+"), and the right end left for the points and badges.
+/// Returns (add, copy, edit, the row's middle).
+fn shelf_head_rects(card: Rect) -> (Rect, Rect, Rect, f32) {
+    let cy = card.top() + SHELF_HEAD_PAD_T + SHELF_ADD_SZ / 2.0;
+    let add = Rect::from_min_size(Pos2::new(card.right() - SHELF_CARD_PAD_X - SHELF_ADD_SZ, card.top() + SHELF_HEAD_PAD_T), Vec2::splat(SHELF_ADD_SZ));
+    let copy = Rect::from_center_size(Pos2::new(add.left() - 6.0 - SHELF_ICON_SZ / 2.0, cy), Vec2::splat(SHELF_ICON_SZ));
+    let edit = copy.translate(Vec2::new(-SHELF_ICON_SZ - 2.0, 0.0));
+    (add, copy, edit, cy)
 }
 
 /// A bank card's question, cut to `rows` lines with an ellipsis. A question with a list (see
@@ -5936,8 +5978,8 @@ fn cards_below(bottoms: &[f32], foot: f32) -> usize {
 }
 
 /// One shelf card (Test Parrot's layout): TYPE label with "In exam" / "Image" badges and quiet
-/// edit / copy icons, the stem on up to five lines, and the add button (or in-exam check) in a column
-/// of its own on the right. The card drags onto the page.
+/// edit / copy icons and the add button (or in-exam check) on one header row, then the stem on up to
+/// five lines across the card's inner width. The card drags onto the page.
 #[allow(clippy::too_many_arguments)]
 /// "Short answer" from a type's label, whatever its case.
 fn sentence_case(s: &str) -> String {
@@ -5958,11 +6000,9 @@ fn shelf_row(
     rows: usize,
 ) {
     let w = ui.available_width();
-    // The add button is the card's one action and gets a column of its own on the right; edit and
-    // copy are quiet icons on the type line, so the stem keeps most of the card's width (three
-    // equal icons used to take a third of it).
-    const ADD_SZ: f32 = 30.0;
-    const ICON_SZ: f32 = 24.0;
+    // The add button is the card's one action, the filled accent square at the header row's right
+    // end; edit and copy are quiet icons before it, so the question has the card's whole inner
+    // width (round 26: until then the "+" had a column of its own down the card's right side).
     let stem_w = shelf_stem_width(w);
     let already = in_count > 0;
     let p = ui.painter().clone();
@@ -5996,12 +6036,9 @@ fn shelf_row(
         Stroke::new(1.0, if resp.hovered() && !alone { theme::accent_col() } else { theme::border() }),
         StrokeKind::Inside,
     );
-    let add_rect = Rect::from_center_size(Pos2::new(rect.right() - 10.0 - ADD_SZ / 2.0, rect.center().y), Vec2::splat(ADD_SZ));
-    let ty_y = rect.top() + 8.0;
-    // Edit and copy sit at the right end of the type line, left of the add column.
-    let icon_cy = ty_y + 8.0;
-    let copy_rect = Rect::from_center_size(Pos2::new(add_rect.left() - 6.0 - ICON_SZ / 2.0, icon_cy), Vec2::splat(ICON_SZ));
-    let edit_rect = copy_rect.translate(Vec2::new(-ICON_SZ - 2.0, 0.0));
+    // The header row: type, badges and points on the left, then edit, copy and the "+" at its right
+    // end, all on one middle line.
+    let (add_rect, copy_rect, edit_rect, head_cy) = shelf_head_rects(rect);
     let meta_end = edit_rect.left() - 6.0;
     // The points at the type line's end; the badges give way to them.
     let pts_g = q.points.map(|pts| p.layout_no_wrap(format!("{} pt", fmt_number(pts)), FontId::proportional(kit::ty::LABEL), theme::muted_col()));
@@ -6010,7 +6047,7 @@ fn shelf_row(
     let meta_right = pts_left - 4.0;
     // Type label (+ part count) in sentence case and badges; a badge that would run under the
     // icons is left out.
-    let mut x = rect.left() + 12.0;
+    let mut x = rect.left() + SHELF_CARD_PAD_X;
     let ty = match &q.kind {
         Kind::Multipart { parts } => format!("{} · {} parts", sentence_case(q.kind.qkind().label()), parts.len()),
         _ => sentence_case(q.kind.qkind().label()),
@@ -6018,6 +6055,8 @@ fn shelf_row(
     let tg = p.layout_no_wrap(ty, FontId::new(kit::ty::LABEL, theme::semibold()), theme::muted_col());
     let tw = tg.size().x;
     let line_h = tg.size().y;
+    // The type line's text sits on the header row's middle, level with the "+" and the icons.
+    let ty_y = (head_cy - line_h / 2.0).round();
     p.galley(Pos2::new(x, ty_y), tg, theme::muted_col());
     x += tw + 8.0;
     let badge_g = |label: &str, fg: Color32| p.layout_no_wrap(label.to_string(), FontId::new(kit::ty::LABEL, theme::bold_family()), fg);
@@ -6070,7 +6109,7 @@ fn shelf_row(
     let badges_right = x;
     // Stem, and where "Show all" / "Show less" goes: right-aligned at the stem's right edge on
     // the last line shown (under it for an opened card whose last line is full).
-    let stem_pos = Pos2::new(rect.left() + 12.0, rect.top() + 28.0);
+    let stem_pos = Pos2::new(rect.left() + SHELF_CARD_PAD_X, rect.top() + SHELF_TEXT_TOP);
     let stem_right = stem_pos.x + stem_w;
     let last_row = |g: &egui::Galley, k: usize| g.rows.get(k).map(|r| r.rect()).unwrap_or(Rect::from_min_size(Pos2::ZERO, Vec2::new(0.0, g.size().y)));
     let last_bottom = stem_pos.y + if open || !toggle { galley.size().y } else { last_row(&whole_g, rows - 1).bottom() };
@@ -6118,7 +6157,7 @@ fn shelf_row(
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, word));
         resp.on_hover_text(if open { "Show the first lines only" } else { "Show the whole question" }).on_hover_cursor(egui::CursorIcon::PointingHand)
     });
-    st.shelf_seen.cards.push(ShelfCardSeen { id: q.id.clone(), rect, shown: rows, whole, toggle: toggle_rect, points: pts_rect, icons_left: edit_rect.left(), badges_right, text_top: stem_pos.y, text_end, stem_right, last_bottom, open });
+    st.shelf_seen.cards.push(ShelfCardSeen { id: q.id.clone(), rect, shown: rows, whole, toggle: toggle_rect, points: pts_rect, icons_left: edit_rect.left(), add: add_rect, copy: copy_rect, edit: edit_rect, badges_right, text_top: stem_pos.y, text_end, stem_right, last_bottom, open });
     if tresp.as_ref().is_some_and(|r| r.clicked()) {
         if open {
             st.shelf_open.retain(|id| *id != q.id);
@@ -6137,6 +6176,12 @@ fn shelf_row(
     let bresp = ui
         .interact(add_rect, ui.id().with(("shelf_add", &q.id)), if already && !alone { Sense::hover() } else { Sense::click() })
         .on_hover_text(add_tip);
+    if !(already && !alone) {
+        bresp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Add to exam"));
+        if bresp.has_focus() {
+            p.rect_stroke(add_rect.expand(1.0), CornerRadius::same(9), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+        }
+    }
     {
         let quiet = theme::muted_col();
         // Edit: the hand-drawn pencil-and-square.
@@ -10504,5 +10549,79 @@ mod review_tests {
                 assert_eq!(shelf_card_text(p, stem, 260.0), crate::equation::stem_preview(stem), "{stem:?}");
             }
         });
+    }
+
+    /// Round 26: a bank card's "+" ("Add to exam") sits at the right end of its header row, inside
+    /// the card, after the points and the edit and copy icons, level with them, and above the
+    /// question, which now runs the card's whole inner width (the "Show all" and the "+" end on
+    /// one right edge). With the longest header (a draft warning, "In exam ×2+", "Image" and a
+    /// two-digit point value on a long type label) nothing in the row overlaps: the badges give way
+    /// (the warning to its mark), never the "+". Beside the page and alone in the bank tab, at the
+    /// panel's 340, the "+" is a named button 26 square at least and a click on it adds the question.
+    #[test]
+    fn the_add_button_sits_in_the_header_row_and_overlaps_nothing() {
+        let img = || Some(crate::model::ImageRef { file: "media/x.png".into(), width: 10, height: 10 });
+        let keyless = |id: &str, stem: &str| question(id, stem, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false }] }, Some(12.5), 100);
+        let part = |s: &str| model::Part { stem: s.into(), kind: PartKind::Short { sample: "x".into() } };
+        let mut a = keyless("long", &"A milliliter of cow's milk contains 0.026 g of casein protein. ".repeat(4));
+        a.image = img();
+        let mut b = question("parts", TASKS, Kind::Multipart { parts: (0..12).map(|k| part(&format!("{k}. Part"))).collect() }, Some(10.0), 99);
+        b.image = img();
+        let mut c = short("plain", "Which of the following elements is the least electronegative?");
+        c.points = Some(1.0);
+        let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![a, b, c], created: 0, modified: 0, details: Default::default() };
+        for alone in [false, true] {
+            let app = scratch_app(bank.clone(), exam_of(vec![ExamItem::new("b", "long"), ExamItem::new("b", "long"), ExamItem::new("b", "parts")], 0));
+            let mut first = true;
+            let mut h = Harness::builder().with_size(Vec2::new(SHELF_W + 40.0, 800.0)).build_ui_state(
+                move |ui, s: &mut (crate::App, EditUi)| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    let ctx = ui.ctx().clone();
+                    let (app, st) = s;
+                    st.shelf_alone = alone;
+                    draw_shelf(app, ui, &ctx, &"e".into(), st, Rect::from_min_size(Pos2::ZERO, Vec2::new(SHELF_W, 760.0)));
+                },
+                (app, EditUi::default()),
+            );
+            h.run_steps(6);
+            let seen = h.state().1.shelf_seen.clone();
+            assert_eq!(seen.cards.len(), 3, "alone {alone}");
+            let adds: Vec<Rect> = h.query_all(by().label("Add to exam")).map(|n| n.rect()).collect();
+            for card in &seen.cards {
+                let how = format!("alone {alone}, card {}", card.id);
+                let (r, add) = (card.rect, card.add);
+                assert!(r.contains_rect(add), "{how}: the + leaves its card: {add:?} {r:?}");
+                assert!(add.bottom() <= card.text_top + 0.01, "{how}: the + runs into the question");
+                assert!(add.width() >= 26.0 - 0.01 && (add.width() - add.height()).abs() < 0.01, "{how}: the + is {add:?}");
+                assert!((add.right() - card.stem_right).abs() < 0.01, "{how}: the + and the text's right edge differ");
+                assert!((r.right() - card.stem_right - SHELF_CARD_PAD_X).abs() < 0.01, "{how}: the question is not the card's inner width");
+                // Right to left on one middle line: +, copy, edit, points, badges.
+                for (name, x) in [("copy", card.copy), ("edit", card.edit)] {
+                    assert!((x.center().y - add.center().y).abs() < 0.01, "{how}: {name} off the +'s line");
+                }
+                assert!(card.copy.right() <= add.left() && card.edit.right() <= card.copy.left(), "{how}: icons on the +");
+                if let Some(p) = card.points {
+                    assert!((p.center().y - add.center().y).abs() < 1.5, "{how}: points off the line");
+                    assert!(p.right() <= card.edit.left() && p.left() >= card.badges_right - 0.01, "{how}: points on the icons or badges");
+                }
+                assert!(card.badges_right - 6.0 <= card.edit.left() - 6.0 + 0.01, "{how}: badges under the icons ({} vs {})", card.badges_right, card.edit.left());
+                if let Some(t) = card.toggle {
+                    assert!(!t.intersects(add), "{how}: Show all on the +");
+                }
+                // A named button where it can act (beside the page an added question shows a check).
+                let can_add = alone || card.id == "plain";
+                assert_eq!(adds.iter().any(|a| (a.min - add.min).length() < 0.6 && (a.max - add.max).length() < 0.6), can_add, "{how}: the + named Add to exam");
+            }
+            // A click on the plain card's + adds it.
+            let before = h.state().0.store.exam(&"e".into()).unwrap().items.len();
+            let plain = seen.cards.iter().find(|c| c.id == "plain").unwrap().add;
+            h.query_all(by().label("Add to exam")).find(|n| (n.rect().center() - plain.center()).length() < 0.6).expect("the plain card's +").click();
+            h.run_steps(4);
+            assert_eq!(h.state().0.store.exam(&"e".into()).unwrap().items.len(), before + 1, "alone {alone}: the + adds the question");
+        }
     }
 }
