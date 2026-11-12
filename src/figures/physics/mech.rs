@@ -1133,8 +1133,19 @@ fn proj_render(p: &Params) -> String {
         let top = apex.1 - br;
         g.dim_arrow(apex.0, top, apex.0, ly, INK, 1.2);
         let t = proj_marks_b9::label(p, "h_lab", "h_lab_mode");
-        // the Blank line mode's line starts 6 px clear of the height arrow (an empty typed label keeps its old place)
-        g.label_at(apex.0 + if p.s("h_lab_mode") == "Blank line" { 19.0 } else { 14.0 }, (top + ly) / 2.0, 19.0, &t, ITALIC);
+        if p.s("h_lab_mode") == "Blank line" {
+            // the Blank line mode's line beside the height arrow, clear of the path, the balls and the launch arrow
+            let mut strokes: Vec<Vec<Pt>> = vec![];
+            if p.s("path") != "None" { strokes.push(pts.clone()); }
+            if p.b("show_v") { strokes.push(vec![(lx, ly), tip]); }
+            let mut balls = vec![((lx, ly), br)];
+            for i in 1..=steps.max(0) { balls.push((pos(t_land * i as f64 / steps as f64), br)); }
+            let (bx, by) = proj_marks_b9::height_blank_spot((apex.0, top, ly), &strokes, &balls, w);
+            g.label_at(bx, by, 19.0, &t, ITALIC);
+        } else {
+            // (an empty typed label keeps its old place)
+            g.label_at(apex.0 + 14.0, (top + ly) / 2.0, 19.0, &t, ITALIC);
+        }
     }
     if p.b("mark_r") {
         let (a, b) = (lx, end.0);

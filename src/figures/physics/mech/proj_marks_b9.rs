@@ -41,6 +41,46 @@ pub(crate) fn relevant(key: &str, p: &Params) -> bool {
     true
 }
 
+/// Where the height mark's blank line goes, as the centre `label_at` takes (the line is 26 px long, 6.65 px under it):
+/// 6 px right of the height arrow at its middle, as before, when that is clear of every stroke and ball by 4 px; else
+/// the nearest clear spot beside the arrow, right or left, up and down its length; else just outside the arch on the
+/// right (a steep launch's path hugs the arrow on both sides). `arrow` is (x, top, bottom).
+pub(crate) fn height_blank_spot(arrow: (f64, f64, f64), strokes: &[Vec<Pt>], balls: &[(Pt, f64)], w: f64) -> (f64, f64) {
+    let (ax, top, bot) = arrow;
+    let drop = 19.0 * 0.35;
+    let seg_d = |q: Pt, a: Pt, b: Pt| {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let l2 = (dx * dx + dy * dy).max(1e-12);
+        let u = (((q.0 - a.0) * dx + (q.1 - a.1) * dy) / l2).clamp(0.0, 1.0);
+        ((q.0 - a.0 - dx * u).powi(2) + (q.1 - a.1 - dy * u).powi(2)).sqrt()
+    };
+    let clear = |cx: f64, cy: f64| {
+        let y = cy + drop;
+        if cx - 13.0 < 2.0 || cx + 13.0 > w - 2.0 { return false; }
+        (0..=26).all(|i| {
+            let q = (cx - 13.0 + i as f64, y);
+            strokes.iter().all(|s| s.windows(2).all(|v| seg_d(q, v[0], v[1]) >= 4.0)) && balls.iter().all(|(c, r)| ((q.0 - c.0).powi(2) + (q.1 - c.1).powi(2)).sqrt() >= r + 4.0)
+        })
+    };
+    let mid = (top + bot) / 2.0;
+    if clear(ax + 19.0, mid) { return (ax + 19.0, mid); }
+    let half = ((bot - top) / 2.0 - 12.0).max(0.0);
+    let mut k = 0.0;
+    while k <= half {
+        for cy in [mid + k, mid - k] {
+            for cx in [ax + 19.0, ax - 19.0] { if clear(cx, cy) { return (cx, cy); } }
+        }
+        k += 3.0;
+    }
+    // outside the arch: right of everything drawn across the middle row
+    let y = mid + drop;
+    let mut x = ax + 19.0;
+    while x + 13.0 < w - 2.0 && !clear(x, mid) { x += 2.0; }
+    if clear(x, mid) { return (x, mid); }
+    let _ = y;
+    (ax + 19.0, mid)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::figures::{registry, start_params, FigureDef, Params, Value};
@@ -183,5 +223,50 @@ mod tests {
         let p = params(&o);
         let t = crate::figures::physics::skin_summary("projectile-motion", "Marks", &p).unwrap();
         assert_eq!(t, "maximum height blank line \u{b7} range \u{b7} cliff height \u{201c}Kc\u{201d}");
+    }
+
+    /// The height mark's blank line keeps clear of the dashed path, the balls and the launch arrow (4 px, read from the
+    /// drawn SVG) at steep launches (75 to 89 degrees) and shallow ones (5 to 15) at every ball size, from the ground and
+    /// off a cliff, mirrored or not; it stays beside its own arrow, nearer it than the range mark.
+    #[test]
+    fn projectile_height_blank_line_clear_of_the_path() {
+        let d = def();
+        let mut n = 0;
+        for from in ["Level ground", "A cliff"] {
+            for size in [30, 60, 100, 150] {
+                for angle in (75..=89).chain(5..=15) {
+                    for (steps, mirror) in [(0, false), (5, false), (0, true)] {
+                        let mut o = vec![("from", s(from)), ("angle", Value::F(angle as f64)), ("size", Value::I(size)), ("mark_h", b(true)), ("mark_r", b(true)),
+                            ("h_lab_mode", s("Blank line")), ("r_lab_mode", s("Blank line")), ("steps", Value::I(steps)), ("mirror", b(mirror))];
+                        let svg = d.svg(&params(&o));
+                        o.retain(|x| x.0 != "h_lab_mode");
+                        o.push(("h_lab_mode", s("None")));
+                        let none = d.svg(&params(&o));
+                        let before = blanks(&none);
+                        let new: Vec<_> = blanks(&svg).into_iter().filter(|q| !before.contains(q)).collect();
+                        assert_eq!(new.len(), 1, "{from} {angle} {size}: one height blank line");
+                        let (bx, by) = new[0];
+                        // the dashed path (the long polyline) and the balls, as drawn
+                        let path: Vec<(f64, f64)> = svg.split("<polyline").skip(1).filter_map(|el| {
+                            let el = el.split('>').next().unwrap();
+                            let ps: Vec<(f64, f64)> = el.split("points=\"").nth(1)?.split('"').next()?.split_whitespace().map(|q| { let (a, c) = q.split_once(',').unwrap(); (a.parse().unwrap(), c.parse().unwrap()) }).collect();
+                            el.contains("stroke-dasharray=\"7 6\"").then_some(ps)
+                        }).flatten().collect();
+                        assert!(!path.is_empty(), "{from} {angle} {size} {steps}: the dashed path");
+                        let dist = |q: (f64, f64)| ((q.0 - bx).abs().max(13.0) - 13.0).hypot(q.1 - by);
+                        let dmin = path.windows(2).flat_map(|w| (0..=10).map(move |i| { let t = i as f64 / 10.0; (w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t) })).map(dist).fold(f64::MAX, f64::min);
+                        assert!(dmin >= 3.0, "{from} {angle} deg size {size} steps {steps} mirror {mirror}: the height blank line is {dmin:.1} px from the path");
+                        for el in svg.split("<circle").skip(1) {
+                            let f = |k: &str| -> f64 { el.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+                            let c = (f("cx"), f("cy"));
+                            assert!(dist(c) >= f("r") + 3.0, "{from} {angle} size {size}: on a ball");
+                        }
+                        assert!(bx - 13.0 >= 0.0 && bx + 13.0 <= 640.0);
+                        n += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(n, 2 * 4 * 26 * 3);
     }
 }
