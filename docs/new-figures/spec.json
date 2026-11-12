@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-12T16:41:32+00:00",
+ "generated_at": "2026-11-12T16:56:39+00:00",
  "note": "Written by hand (round 0, classifier) for figures no reference site has; not scraped.",
  "sites": {
   "new": {
@@ -13,7 +13,8 @@
     "sequences-series",
     "complex-plane",
     "polar-parametric",
-    "slope-fields"
+    "slope-fields",
+    "coordinate-grid-limits"
    ],
    "pages": {
     "conic-sections": {
@@ -109,7 +110,7 @@
       "Circle from its general form",
       "Parabola from focus and directrix"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     },
     "tangent-secant-lines": {
      "site": "new",
@@ -195,14 +196,14 @@
       "Position against time: average and instantaneous velocity",
       "Normal line to a parabola"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     },
     "riemann-sums": {
      "site": "new",
      "slug": "riemann-sums",
      "url": "new:riemann-sums",
      "title": "Riemann sums and area",
-     "text_sha256": "664928b09cc837e07c596674dc7c6e522f42bc01ad05302daae1a8606fe80042",
+     "text_sha256": "b7e1473890eb32b0fc3b7a3bae5a3763a5def2a70a6727ad0b3a2d01712e7c47",
      "can_set": [
       "Type the function f(x)",
       "Set the bounds a and b, typed exactly (fractions, π)",
@@ -211,8 +212,8 @@
       "Draw a right Riemann sum",
       "Draw a midpoint Riemann sum",
       "Draw a trapezoid sum",
-      "Draw an upper sum (each strip's greatest height)",
-      "Draw a lower sum (each strip's least height)",
+      "Draw an upper sum: each strip as tall as the function's greatest value anywhere on that strip, not just the higher endpoint",
+      "Draw a lower sum: each strip as tall as the function's least value anywhere on that strip, not just the lower endpoint",
       "Make the strips from a typed table of x and f(x) values, widths unequal (AP style)",
       "Shade the exact area under the curve from a to b, with no strips",
       "Shade the area between two curves f and g from a to b",
@@ -289,7 +290,7 @@
       "Signed area of sin x on [0, 2π]",
       "Upper and lower sums"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     },
     "derivative-graphs": {
      "site": "new",
@@ -372,7 +373,7 @@
       "sin x and cos x",
       "AP-style graph of f' made of segments and a semicircle"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     },
     "limits-discontinuities": {
      "site": "new",
@@ -454,7 +455,7 @@
       "Horizontal asymptote at infinity",
       "AP-style graph with every kind of discontinuity"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     },
     "sequences-series": {
      "site": "new",
@@ -539,7 +540,7 @@
       "1/n converging to 0",
       "Partial sums of a geometric series approaching a/(1 - r)"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     },
     "complex-plane": {
      "site": "new",
@@ -625,7 +626,7 @@
       "Cube roots of 8",
       "Fifth roots of unity"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     },
     "polar-parametric": {
      "site": "new",
@@ -709,7 +710,7 @@
       "Parametric circle",
       "Projectile path x = 20t, y = 20t - 4.9t^2"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     },
     "slope-fields": {
      "site": "new",
@@ -790,7 +791,64 @@
       "Logistic dy/dt = 0.5y(1 - y/10)",
       "Euler's method with h = 0.5"
      ],
-     "fetched_at": "2026-11-12T16:41:32+00:00"
+     "fetched_at": "2026-11-12T16:56:39+00:00"
+    },
+    "coordinate-grid-limits": {
+     "site": "new",
+     "slug": "coordinate-grid-limits",
+     "url": "new:coordinate-grid-limits",
+     "title": "Coordinate grid: limit questions",
+     "text_sha256": "9ec6784e2120f6e9fd13419acc77ae75e629f5da4a26564a01851c867c6d44e7",
+     "can_set": [
+      "Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a on a graphed row, the answers in the key",
+      "Ask for the limits as x → ∞ and x → -∞ of a graphed row",
+      "Ask the questions at several values of a at once",
+      "Write answers as numbers, ∞, -∞ or 'does not exist'",
+      "Draw a row's horizontal asymptote, found from its end behaviour, dashed and labelled with its equation",
+      "Label each discontinuity's kind (removable, jump, infinite) on the graph",
+      "Ask where a row is not continuous, the key listing each x and its kind",
+      "Load a limits example (a moved hole, a jump, a vertical asymptote, a limit at infinity)",
+      "A student copy with blank lines for each limit asked",
+      "A student copy without the discontinuity-kind labels"
+     ],
+     "prose": [
+      "Limit questions and their key, discontinuity labels and limit examples added to the coordinate grid's own graphs."
+     ],
+     "controls_text": "Additions to the existing coordinate-grid figure for limits work. Only what the grid does not do today: it already graphs pieces with domains, open and closed endpoints, holes, vertical asymptotes, dashed rows and points. Every new control is off by default, so every existing grid drawing (the opening state included) stays as it is. The opening state is an empty grid, so the click handles a teacher would use (switch an endpoint open or closed, click a curve to ask the limit there) cannot be scored and are not entries.",
+     "flags": {
+      "click": true,
+      "drag": false,
+      "type": false,
+      "paste": false,
+      "add": false,
+      "remove": false,
+      "rows": false,
+      "student": true,
+      "question": true,
+      "answer_key": false,
+      "color": false,
+      "black_and_white": false,
+      "unit": false,
+      "round": false,
+      "axis": false,
+      "grid": false,
+      "title": false,
+      "key": true,
+      "shading": false,
+      "preset": false,
+      "example": true,
+      "print": false,
+      "share": false,
+      "download": false,
+      "direct_manipulation": true
+     },
+     "examples": [
+      "Hole with the point moved",
+      "Jump with one-sided limits",
+      "Vertical asymptote with limits of ±∞",
+      "Limit at infinity with a horizontal asymptote"
+     ],
+     "fetched_at": "2026-11-12T16:56:39+00:00"
     }
    }
   }

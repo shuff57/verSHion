@@ -1,14 +1,12 @@
 {
- "generated_at": "2026-11-12T16:43:57+00:00",
- "probe_checked_at": "2026-11-12T08:43:57",
- "comparable": false,
- "drift": [
-  "not frozen: run diff.py --freeze after round 0; until then the figure set can move"
- ],
+ "generated_at": "2026-11-12T18:21:03+00:00",
+ "probe_checked_at": "2026-11-12T10:21:03",
+ "comparable": true,
+ "drift": [],
  "pooled": 0.0,
  "mean": 0.0,
- "figures_scored": 9,
- "figures_built": 0,
+ "figures_scored": 10,
+ "figures_built": 1,
  "figures_missing": [
   "new/conic-sections",
   "new/tangent-secant-lines",
@@ -615,6 +613,84 @@
      "weight": 2.0,
      "text": "Drag a label on the figure to move it",
      "why": "not built"
+    }
+   ]
+  },
+  "coordinate-grid": {
+   "score": 0.0,
+   "got": 0.0,
+   "total": 34.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a on a graphed row, the answers in the key",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Ask for the limits as x → ∞ and x → -∞ of a graphed row",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Ask the questions at several values of a at once",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write answers as numbers, ∞, -∞ or 'does not exist'",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a row's horizontal asymptote, found from its end behaviour, dashed and labelled with its equation",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label each discontinuity's kind (removable, jump, infinite) on the graph",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Ask where a row is not continuous, the key listing each x and its kind",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load a limits example (a moved hole, a jump, a vertical asymptote, a limit at infinity)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-09",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with blank lines for each limit asked",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-10",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy without the discontinuity-kind labels",
+     "why": "no evidence"
     }
    ]
   },
@@ -1415,14 +1491,14 @@
      "id": "cap-08",
      "class": "core",
      "weight": 5.0,
-     "text": "Draw an upper sum (each strip's greatest height)",
+     "text": "Draw an upper sum: each strip as tall as the function's greatest value anywhere on that strip, not just the higher endpo",
      "why": "not built"
     },
     {
      "id": "cap-09",
      "class": "core",
      "weight": 5.0,
-     "text": "Draw a lower sum (each strip's least height)",
+     "text": "Draw a lower sum: each strip as tall as the function's least value anywhere on that strip, not just the lower endpoint",
      "why": "not built"
     },
     {

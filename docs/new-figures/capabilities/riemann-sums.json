@@ -54,17 +54,17 @@
   },
   {
    "id": "cap-08",
-   "text": "Draw an upper sum (each strip's greatest height)",
+   "text": "Draw an upper sum: each strip as tall as the function's greatest value anywhere on that strip, not just the higher endpoint",
    "class": "core",
    "evidence": "",
-   "note": ""
+   "note": "owner decision 2026-11-12: the true greatest value on the strip"
   },
   {
    "id": "cap-09",
-   "text": "Draw a lower sum (each strip's least height)",
+   "text": "Draw a lower sum: each strip as tall as the function's least value anywhere on that strip, not just the lower endpoint",
    "class": "core",
    "evidence": "",
-   "note": ""
+   "note": "owner decision 2026-11-12: the true least value on the strip"
   },
   {
    "id": "cap-10",

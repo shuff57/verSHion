@@ -1,6 +1,6 @@
 # Figures parity diff
 
-Reference scraped 2026-11-12T16:41:32+00:00 · local `docs/new-figures/ours.json`
+Reference scraped 2026-11-12T16:56:39+00:00 · local `docs/new-figures/ours.json`
 
 The click/drag column is a keyword hint. The ledger and the round's task run are the authority.
 
@@ -10,6 +10,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 |---|---|---:|---:|---:|---|---:|
 | complex-plane | **missing** | | | 37 | | |
 | conic-sections | **missing** | | | 46 | | |
+| coordinate-grid-limits | `coordinate-grid` | 59 | 2 | 10 | — | 0 |
 | derivative-graphs | **missing** | | | 35 | | |
 | limits-discontinuities | **missing** | | | 34 | | |
 | polar-parametric | **missing** | | | 33 | | |
@@ -22,15 +23,13 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 `new/conic-sections`, `new/tangent-secant-lines`, `new/riemann-sums`, `new/derivative-graphs`, `new/limits-discontinuities`, `new/sequences-series`, `new/complex-plane`, `new/polar-parametric`, `new/slope-fields`
 
-Our figures with no reference page: 191
+Our figures with no reference page: 190
 
-Generated: 2026-11-12T16:43:57+00:00 · probe: 2026-11-12T08:43:57
+Generated: 2026-11-12T18:21:03+00:00 · probe: 2026-11-12T10:21:03
 
-**Pooled 0.0** · mean 0.0 over 9 figures · built 0 of 9 reference figures (missing: new/conic-sections, new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/limits-discontinuities, new/sequences-series, new/complex-plane, new/polar-parametric, new/slope-fields)
+**Pooled 0.0** · mean 0.0 over 10 figures · built 1 of 10 reference figures (missing: new/conic-sections, new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/limits-discontinuities, new/sequences-series, new/complex-plane, new/polar-parametric, new/slope-fields)
 
-Comparable with the frozen baseline: **no**
-
-- not frozen: run diff.py --freeze after round 0; until then the figure set can move
+Comparable with the frozen baseline: **yes**
 
 - `complex-plane`: 0 (0/130)
   - cap-01 [core 5] Plot z = a + bi typed exactly (fractions, roots) — not built
@@ -46,6 +45,13 @@ Comparable with the frozen baseline: **no**
   - cap-04 [core 5] Set an ellipse's or hyperbola's a and b — not built
   - cap-05 [core 5] Set a parabola's focal distance p (vertex to focus) — not built
   - cap-06 [core 5] Open a parabola up, down, left or right — not built
+- `coordinate-grid`: 0 (0/34)
+  - cap-01 [core 5] Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a on a graphed row, the answers in the key — no evidence
+  - cap-02 [core 5] Ask for the limits as x → ∞ and x → -∞ of a graphed row — no evidence
+  - cap-03 [control 3] Ask the questions at several values of a at once — no evidence
+  - cap-04 [control 3] Write answers as numbers, ∞, -∞ or 'does not exist' — no evidence
+  - cap-05 [control 3] Draw a row's horizontal asymptote, found from its end behaviour, dashed and labelled with its equation — no evidence
+  - cap-06 [control 3] Label each discontinuity's kind (removable, jump, infinite) on the graph — no evidence
 - `derivative-graphs`: 0 (0/116)
   - cap-01 [core 5] Type the function f(x) — not built
   - cap-02 [core 5] Type a piecewise f, with corners where f' is undefined — not built
