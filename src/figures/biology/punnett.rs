@@ -41,7 +41,55 @@ pub fn cycle_gene(p: &mut Params, parent: usize, gene: usize) {
     let (Ok(mut pa), Ok(mut pb)) = (parse_parent_dom(&a, cross, &dom), parse_parent_dom(&b, cross, &dom)) else { return };
     let tgt = if parent == 0 { &mut pa } else { &mut pb };
     let Some(g) = tgt.get_mut(gene) else { return };
-    if g.iter().any(|c| is_sup(*c)) { return; }
+    if multi_allele(*g) {
+        // multiple alleles (I^A, I^B, i; C^R, C^W): step through every genotype they make, in the order the
+        // alleles are listed (I^A I^A, I^A I^B, I^A i, I^B I^B, I^B i, i i)
+        let base = allele(g[0]).0.to_ascii_lowercase();
+        // the gene's alleles: those in either parent, those the phenotype names list (so an allele a click took
+        // out of both parents comes back), and for blood groups all three of I^A, I^B and i
+        let mut plain = pa_pb_plain(&a, &b, cross, &dom, gene, base);
+        let names = p.s("phenotypes").to_string();
+        for piece in names.split([';', ',', '\n']) {
+            if let Some((k, _)) = piece.split_once(':') {
+                for c in tokens(k, false) { if !is_sup(c) && c.to_ascii_lowercase() == base && !plain.contains(&c) { plain.push(c); } }
+            }
+        }
+        if is_abo(*g) {
+            intern('I', "A");
+            intern('I', "B");
+            if !plain.contains(&'i') { plain.push('i'); }
+        }
+        let mut sups: Vec<char> = REG.with(|r| r.borrow().iter().enumerate().filter(|(_, (b, _))| b.to_ascii_lowercase() == base).map(|(i, _)| char::from_u32(PUA + i as u32).unwrap()).collect());
+        sups.sort_by_key(|c| (!allele(*c).0.is_uppercase(), allele(*c).1));
+        plain.sort_by_key(|c| !c.is_uppercase());
+        let al: Vec<char> = sups.into_iter().chain(plain).collect();
+        let rank = |c: char| al.iter().position(|x| *x == c).unwrap_or(al.len());
+        let mut pairs: Vec<Pair> = Vec::new();
+        for i in 0..al.len() { for j in i..al.len() { pairs.push([al[i], al[j]]); } }
+        let cur = if rank(g[0]) <= rank(g[1]) { *g } else { [g[1], g[0]] };
+        let k = pairs.iter().position(|q| *q == cur).map(|k| (k + 1) % pairs.len()).unwrap_or(0);
+        *g = pairs[k];
+    } else {
+        cycle_plain(g, cross);
+    }
+    write_parents(p, &pa, &pb, cross);
+}
+
+/// The plain (unsuperscripted) alleles of gene `gene` with base letter `base` in either parent (the `i` of I^A i).
+fn pa_pb_plain(a: &str, b: &str, cross: Cross, dom: &str, gene: usize, base: char) -> Vec<char> {
+    let mut v = Vec::new();
+    for s in [a, b] {
+        if let Ok(par) = parse_parent_dom(s, cross, dom) {
+            for c in par.get(gene).into_iter().flatten() {
+                if !is_sup(*c) && c.to_ascii_lowercase() == base && !v.contains(c) { v.push(*c); }
+            }
+        }
+    }
+    v
+}
+
+/// One click on a plain gene: AA -> Aa -> aa -> AA (X-linked: the one X of a male flips).
+fn cycle_plain(g: &mut Pair, cross: Cross) {
     let flip = |c: char| if c.is_uppercase() { c.to_lowercase().next().unwrap() } else { c.to_uppercase().next().unwrap() };
     if cross == Cross::XLinked && g[1] == 'Y' {
         g[0] = flip(g[0]);
@@ -55,6 +103,9 @@ pub fn cycle_gene(p: &mut Params, parent: usize, gene: usize) {
         // keep the dominant allele first for readability
         if g[1].is_uppercase() && !g[0].is_uppercase() { g.swap(0, 1); }
     }
+}
+
+fn write_parents(p: &mut Params, pa: &[Pair], pb: &[Pair], cross: Cross) {
     let fmt = |v: &[Pair]| -> String {
         if cross == Cross::XLinked {
             let g = v[0];
@@ -63,7 +114,7 @@ pub fn cycle_gene(p: &mut Params, parent: usize, gene: usize) {
             v.iter().map(|g| format!("{}{}", allele_text(g[0]), allele_text(g[1]))).collect::<Vec<_>>().join("")
         }
     };
-    let s = format!("{} × {}", fmt(&pa), fmt(&pb));
+    let s = format!("{} × {}", fmt(pa), fmt(pb));
     p.set_s("parents", &s);
 }
 
@@ -105,6 +156,33 @@ pub fn toggle_blank_cell(p: &mut Params, idx: usize) {
     p.set_s("cells", "Some blank");
 }
 
+/// Whether offspring cell `idx` (0-based, row by row) is drawn blank.
+pub fn cell_blank(p: &Params, idx: usize) -> bool {
+    if !p.b("filled") { return true; }
+    match p.s("cells") {
+        "Blank" => true,
+        "Some blank" => p.s("blank_cells").split([',', ';', ' ']).filter_map(|t| t.trim().parse::<usize>().ok()).any(|n| n == idx + 1),
+        _ => false,
+    }
+}
+
+/// A click on offspring cell `idx` of a square with `cells` cells: a filled one is blanked for students, a blank one
+/// filled back in, every other cell kept as it was drawn (Some blank lists the blank ones).
+pub fn click_cell(p: &mut Params, idx: usize, cells: usize) {
+    let all_blank = !p.b("filled") || p.s("cells") == "Blank";
+    if all_blank {
+        let v: Vec<String> = (1..=cells).filter(|n| *n != idx + 1).map(|n| n.to_string()).collect();
+        p.set_b("filled", true);
+        p.set_s("cells", "Some blank");
+        p.set_s("blank_cells", &v.join(", "));
+    } else if p.s("cells") == "Some blank" {
+        toggle_blank_cell(p, idx);
+    } else {
+        p.set_s("cells", "Some blank");
+        p.set_s("blank_cells", &(idx + 1).to_string());
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Cross { Mono, Di, XLinked }
 
@@ -119,6 +197,21 @@ thread_local! {
     static REG: std::cell::RefCell<Vec<(char, String)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 const PUA: u32 = 0xE000;
+
+thread_local! {
+    /// Draw as before batch 11 (test only: shows which old figures the phenotype corrections change).
+    static LEGACY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Renders the figure as it drew before batch 11's phenotype corrections (a phenotype listed twice, ABO under
+/// Complete dominance named by the first allele), for the frozen-figures test.
+#[cfg(test)]
+pub(crate) fn render_legacy(p: &Params) -> String {
+    LEGACY.with(|l| l.set(true));
+    let s = render(p);
+    LEGACY.with(|l| l.set(false));
+    s
+}
 
 thread_local! {
     /// True while working on an X-linked cross, where `Y` is the Y chromosome (not a gene letter).
@@ -370,7 +463,9 @@ fn map_name(map: &[(String, String)], g: Pair, dom: &str, xlinked: bool) -> Opti
     let txt = |c: char| -> String { if xlinked { format!("X{}", allele_text(c)) } else { allele_text(c) } };
     let (doms, rec) = expressed(&alleles);
     if alleles.iter().any(|c| is_sup(*c)) || xlinked {
-        if dom == "Complete" || xlinked {
+        // the ABO alleles I^A and I^B are codominant whatever the switch says (as the plain names already are)
+        let abo = !xlinked && is_abo(g) && !LEGACY.with(|l| l.get());
+        if (dom == "Complete" && !abo) || xlinked {
             if let Some(d) = doms.first() { cands.push(txt(*d)); } else if let Some(r) = rec { cands.push(txt(r)); }
         } else if doms.is_empty() {
             if let Some(r) = rec { cands.push(txt(r)); }
@@ -554,6 +649,17 @@ pub fn render(p: &Params) -> String {
             *ph_count.entry((idx, c.male && !sex_split, nm)).or_insert(0) += 1;
         }
     }
+    // a phenotype is what it is named: rows of one name (a C^R C^W under complete dominance, an X^B X^b named by
+    // its allele under codominance) are one phenotype, counted together where it first comes
+    let ph_rows: Vec<((Vec<usize>, bool, String), i64)> = if LEGACY.with(|l| l.get()) {
+        ph_count.iter().map(|(k, n)| (k.clone(), *n)).collect()
+    } else {
+        let mut v: Vec<((Vec<usize>, bool, String), i64)> = Vec::new();
+        for (k, n) in &ph_count {
+            if let Some(e) = v.iter_mut().find(|e| e.0 .1 == k.1 && e.0 .2 == k.2) { e.1 += n; } else { v.push((k.clone(), *n)); }
+        }
+        v
+    };
     // shading classes: unique phenotype names in sorted order
     let mut classes: Vec<String> = Vec::new();
     for k in ph_count.keys() { if !classes.contains(&k.2) { classes.push(k.2.clone()); } }
@@ -586,7 +692,7 @@ pub fn render(p: &Params) -> String {
     let form = p.s("ratio_form");
     let total: i64 = geno_count.values().map(|v| v.0).sum();
     let gdiv = geno_count.values().map(|v| v.0).fold(0, gcd);
-    let pdiv = ph_count.values().copied().fold(0, gcd);
+    let pdiv = ph_rows.iter().map(|e| e.1).fold(0, gcd);
     let (sep, glab, plab) = match form {
         "Percent" | "Fraction" => (", ", "Genotypes: ", "Phenotypes: "),
         _ => (" : ", "Genotype ratio: ", "Phenotype ratio: "),
@@ -619,7 +725,7 @@ pub fn render(p: &Params) -> String {
                 if tot > 0 { blocks.push((lab.to_string(), segs, pstyle == "Blank line")); }
             }
         } else {
-            let segs: Vec<Vec<Part>> = ph_count.iter().map(|(k, n)| vec![Part::plain(&format!("{} {}", amount(*n, total, pdiv), k.2))]).collect();
+            let segs: Vec<Vec<Part>> = ph_rows.iter().map(|(k, n)| vec![Part::plain(&format!("{} {}", amount(*n, total, pdiv), k.2))]).collect();
             blocks.push((plab.to_string(), segs, pstyle == "Blank line"));
         }
     }
@@ -846,6 +952,10 @@ pub fn examples() -> Vec<Example> {
         Example { name: "Test cross: Tt x tt", params: vec![("parents", st("Tt x tt")), ("ratio_form", st("Fraction"))] },
     ]
 }
+
+#[cfg(test)]
+#[path = "punnett/punnett_b11_tests.rs"]
+mod punnett_b11_tests;
 
 #[cfg(test)]
 mod tests {

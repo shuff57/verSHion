@@ -1,0 +1,9 @@
+# renewed hashes (row, saved spec, links v1 v4 v7) of the frozen Punnett squares whose phenotype ratio listed one phenotype twice (two genotypes named alike, e.g. C^R C^R and C^R C^W both red under complete dominance, X^B X^B and X^B X^b both normal vision under codominance: now counted together) or named an I^A I^B child type A under complete dominance with ABO names (the ABO alleles I^A and I^B are codominant: now type AB); each one is checked to draw exactly its old hash under the old rule
+244	5125248c3c34a0d5	5125248c3c34a0d5	5125248c3c34a0d5	5125248c3c34a0d5
+527	c7f901896dd67521	c7f901896dd67521	c7f901896dd67521	c7f901896dd67521
+528	c7f901896dd67521	c7f901896dd67521	c7f901896dd67521	c7f901896dd67521
+573	47085281514a64de	47085281514a64de	47085281514a64de	47085281514a64de
+620	0d71293c3d808aae	0d71293c3d808aae	0d71293c3d808aae	0d71293c3d808aae
+813	20709c7330ec94f2	20709c7330ec94f2	20709c7330ec94f2	20709c7330ec94f2
+841	e3dd59bdb9f18340	e3dd59bdb9f18340	e3dd59bdb9f18340	e3dd59bdb9f18340
+954	95bc840158c18321	95bc840158c18321	95bc840158c18321	95bc840158c18321

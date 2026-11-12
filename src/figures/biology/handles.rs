@@ -181,13 +181,14 @@ fn punnett_h(p: &Params, size: Pt) -> Vec<Handle> {
             }));
         }
     }
-    if p.s("cells") == "Some blank" && p.b("filled") {
-        for j in 0..l.nr {
-            for i in 0..l.nc {
-                let c = (l.gx + l.cell * (i as f64 + 0.5), l.gy + l.cell * (j as f64 + 0.5));
-                let idx = j * l.nc + i;
-                hs.push(Handle::zone(c, (l.cell - 8.0, l.cell - 8.0), "Click to blank or fill this cell", move |q| punnett::toggle_blank_cell(q, idx)));
-            }
+    // every offspring cell: a click blanks a filled one for students (the key still fills it) or fills a blank one back
+    let cells = l.nc * l.nr;
+    for j in 0..l.nr {
+        for i in 0..l.nc {
+            let c = (l.gx + l.cell * (i as f64 + 0.5), l.gy + l.cell * (j as f64 + 0.5));
+            let idx = j * l.nc + i;
+            let tip = if punnett::cell_blank(p, idx) { "Click to fill this cell back in" } else { "Click a cell to blank it for students" };
+            hs.push(Handle::zone(c, (l.cell - 8.0, l.cell - 8.0), tip, move |q| punnett::click_cell(q, idx, cells)));
         }
     }
     hs

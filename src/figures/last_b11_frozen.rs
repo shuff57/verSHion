@@ -279,22 +279,72 @@ fn check(id: &str) {
         return;
     }
     let text = std::fs::read_to_string(fixture(id)).unwrap_or_else(|_| panic!("{}", fixture(id).display()));
+    // listed corrections: row number -> renewed hashes (saved spec, then each link version)
+    let write = std::env::var("VERSHION_LAST_B11_CORRECT").is_ok_and(|v| v == "1");
+    let mut renewed: std::collections::BTreeMap<usize, Vec<String>> = Default::default();
+    if !write {
+        if let Ok(t) = std::fs::read_to_string(corrections(id)) {
+            for l in t.lines().filter(|l| !l.is_empty() && !l.starts_with('#')) {
+                let c: Vec<&str> = l.split('\t').collect();
+                renewed.insert(c[0].parse().unwrap(), c[1..].iter().map(|x| x.to_string()).collect());
+            }
+        }
+    }
+    let mut out = String::new();
     let mut n = 0;
-    for line in text.lines().filter(|l| !l.is_empty()) {
+    for (row, line) in text.lines().filter(|l| !l.is_empty()).enumerate() {
         let cols: Vec<&str> = line.split('\t').collect();
-        let (hash, saved, link) = (cols[0], cols[1], cols[2]);
+        let (saved, link) = (cols[1], cols[2]);
         let sp: crate::model::FigureSpec = serde_json::from_str(saved).unwrap();
         let p = spec::params_from_spec(&d, &sp);
-        assert_eq!(fnv(&d.svg(&p)), hash, "{id}: an old saved figure draws differently: {saved}");
         let (lid, changed) = share::decode(link).unwrap();
         assert_eq!(lid, id);
-        for (k, v) in LINK_VERSIONS.into_iter().enumerate() {
-            assert_eq!(fnv(&d.svg(&share::link_params(&d, changed.clone(), v))), cols[3 + k], "{id}: an old share link (v{v}) draws differently: {link}");
+        let all: Vec<Params> = std::iter::once(p).chain(LINK_VERSIONS.into_iter().map(|v| share::link_params(&d, changed.clone(), v))).collect();
+        let now: Vec<String> = all.iter().map(|q| fnv(&d.svg(q))).collect();
+        let was: Vec<&str> = cols[0..1].iter().chain(cols[3..].iter()).copied().collect();
+        let differs = now.iter().zip(&was).any(|(a, b)| a != b);
+        if differs || renewed.contains_key(&row) {
+            // a correction is allowed only where the old drawing is exactly what the old rule draws: the row is
+            // drawn again with the old rule and must give every old hash
+            let old: Vec<String> = all.iter().map(|q| fnv(&legacy_svg(&d, q))).collect();
+            assert!(old.iter().zip(&was).all(|(a, b)| a == b), "{id}: row {row} draws differently and is not a listed correction: {saved}");
+        }
+        if write {
+            if differs { out.push_str(&format!("{row}\t{}\n", now.join("\t"))); }
+        } else if let Some(r) = renewed.get(&row) {
+            assert_eq!(&now, r, "{id}: a corrected row draws differently from its renewed hashes: {saved}");
+        } else {
+            assert_eq!(now[0], was[0], "{id}: an old saved figure draws differently: {saved}");
+            for (k, v) in LINK_VERSIONS.into_iter().enumerate() {
+                assert_eq!(now[1 + k], was[1 + k], "{id}: an old share link (v{v}) draws differently: {link}");
+            }
         }
         n += 1;
     }
+    if write {
+        if out.is_empty() { let _ = std::fs::remove_file(corrections(id)); } else { std::fs::write(corrections(id), format!("# {}\n{out}", correction_reason(id))).unwrap(); }
+    }
     assert!(n >= 600, "{id}: the frozen figures ({n})");
-    eprintln!("{id}: {n} frozen figures draw as before");
+    eprintln!("{id}: {n} frozen figures draw as before ({} listed corrections)", renewed.len());
+}
+
+fn corrections(id: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/last_b11_{}_corrected.txt", id.replace('-', "_")))
+}
+
+/// What the figure drew before batch 11's corrections (only the Punnett square has any).
+fn legacy_svg(d: &FigureDef, p: &Params) -> String {
+    match d.id {
+        "punnett-square" => crate::figures::svg::annotate(&crate::figures::svg::with_label_size(crate::figures::biology::punnett::render_legacy(p), p), d.title, d.blurb),
+        _ => d.svg(p),
+    }
+}
+
+fn correction_reason(id: &str) -> &'static str {
+    match id {
+        "punnett-square" => "renewed hashes (row, saved spec, links v1 v4 v7) of the frozen Punnett squares whose phenotype ratio listed one phenotype twice (two genotypes named alike, e.g. C^R C^R and C^R C^W both red under complete dominance, X^B X^B and X^B X^b both normal vision under codominance: now counted together) or named an I^A I^B child type A under complete dominance with ABO names (the ABO alleles I^A and I^B are codominant: now type AB); each one is checked to draw exactly its old hash under the old rule",
+        _ => "",
+    }
 }
 
 #[test]
