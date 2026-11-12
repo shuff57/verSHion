@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-11T17:55:31",
- "ours_built_at": "2026-11-12T01:55:27+00:00",
- "git": "e229165",
+ "checked_at": "2026-11-11T17:57:21",
+ "ours_built_at": "2026-11-12T01:57:17+00:00",
+ "git": "6b926b9",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -12147,12 +12147,12 @@
       {
        "token": "changes:state=Liquid",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/1898fc8c4c6b1fa4.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/633311165c7d0896.png"
       },
       {
        "token": "changes:state=Solid",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/8264ec1beb46342d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/1ef0c96e8dba885e.png"
       }
      ]
     },
@@ -12164,7 +12164,7 @@
       {
        "token": "changes:boxes=Before and after",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/072b426f6f2a687b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/e505ad114f0ae63b.png"
       }
      ]
     },
@@ -12176,15 +12176,21 @@
       {
        "token": "changes:layout=Lattice",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/121402f1a72df03b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/c2497f76d6ef62e4.png"
       }
      ]
     },
     "cap-01d": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"layout\":\"Lattice\",\"lat_rows\":6,\"lat_cols\":6}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/2afdb6ca07054b53.png"
+      }
+     ]
     },
     "cap-02a": {
      "pass": true,
@@ -12194,7 +12200,7 @@
       {
        "token": "changes:{\"c_count\":3,\"d_count\":2}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/d9a131a4d701ef4d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/aef2a72790de457c.png"
       }
      ]
     },
@@ -12206,7 +12212,7 @@
       {
        "token": "changes:a_count=60",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/376d29e02354493f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/f84175e820a4b21a.png"
       }
      ]
     },
@@ -12218,27 +12224,27 @@
       {
        "token": "changes:a_shape=Pair",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/4932e76a4a3adde6.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/601e1aa0aadd1884.png"
       },
       {
        "token": "changes:a_shape=Bent",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/f7ecd1d780f69ad2.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/89ad8a5f96418172.png"
       },
       {
        "token": "changes:a_shape=In a line",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/31a26d472220213f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/8882eb0df008eef5.png"
       },
       {
        "token": "changes:a_shape=Three around",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/8e05396922d51241.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/8ba285d3c7c0b064.png"
       },
       {
        "token": "changes:a_shape=Four around",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/8305f2cadd33b070.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/c996347095154f04.png"
       }
      ]
     },
@@ -12250,7 +12256,7 @@
       {
        "token": "changes:shuffle=3",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/8e76b83ab7577aec.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/79ba228d6030d1d8.png"
       }
      ]
     },
@@ -12262,12 +12268,12 @@
       {
        "token": "changes:a_size=XL",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/97cb29770d482a20.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/92bbf5111895cf3b.png"
       },
       {
        "token": "changes:{\"a_shape\":\"Pair\",\"a_osize\":\"XL\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/80396ea5f02007c2.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/52d1c1d5c007104e.png"
       }
      ]
     },
@@ -12279,7 +12285,7 @@
       {
        "token": "changes:a_shade=Black",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/f3f408c09a8b8dd5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/222acd65f1f8a70a.png"
       }
      ]
     },
@@ -12291,7 +12297,7 @@
       {
        "token": "changes:a_charge=2+",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/75a8e2223a6103a8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/35e540ceaa15c473.png"
       }
      ]
     },
@@ -12303,7 +12309,7 @@
       {
        "token": "changes:{\"layout\":\"Lattice\",\"b_count\":0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/0858f52b2c09823d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/36f9bf9153357cec.png"
       }
      ]
     },
@@ -12315,7 +12321,7 @@
       {
        "token": "changes:layout=Lattice",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/121402f1a72df03b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/c2497f76d6ef62e4.png"
       }
      ]
     },
@@ -12327,7 +12333,7 @@
       {
        "token": "changes:{\"layout\":\"Lattice\",\"state\":\"Solid\",\"a_count\":14,\"b_count\":2}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/92692bdb92d6d138.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/6d0fcd636f3b948b.png"
       }
      ]
     },
@@ -12339,15 +12345,21 @@
       {
        "token": "changes:{\"state\":\"Solid\",\"gaps\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/48753a1d13a5f766.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/5e6b22a4c2f46a3b.png"
       }
      ]
     },
     "cap-04e": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "control",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"layout\":\"Lattice\",\"lat_spacing\":\"Spaced apart\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/dd6f25ef28189f0a.png"
+      }
+     ]
     },
     "cap-05a": {
      "pass": true,
@@ -12357,7 +12369,7 @@
       {
        "token": "changes:{\"key_show\":\"Box and key\",\"a_name\":\"Cl-\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/2b2ea3459ae18964.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/dbc30dc281ac4840.png"
       }
      ]
     },
@@ -12369,7 +12381,7 @@
       {
        "token": "changes:{\"key_show\":\"Box and key\",\"note\":\"Salt solution\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/580000f430907908.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/8dcb8b3bfe2aad0d.png"
       }
      ]
     },
@@ -12381,7 +12393,7 @@
       {
        "token": "changes:{\"key_show\":\"Box and key\",\"a_shape\":\"Pair\",\"key_list\":\"Each atom\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/e8fc71b94dc09198.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/974777e8d156366b.png"
       }
      ]
     },
@@ -12393,7 +12405,7 @@
       {
        "token": "changes:key_show=Key only",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/e5957c43f9c25430.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/b252ced37684c724.png"
       }
      ]
     },
@@ -12405,12 +12417,12 @@
       {
        "token": "changes:border=Double",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/796449a5d032ca7a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/e5ea9930203d92b0.png"
       },
       {
        "token": "changes:border=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/5c0978769060b09f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/a201baf5c6d6faba.png"
       }
      ]
     },
@@ -12422,7 +12434,7 @@
       {
        "token": "changes:title=Salt solution",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/c2854d953c647145.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/00dbd638ccbea4fe.png"
       }
      ]
     }

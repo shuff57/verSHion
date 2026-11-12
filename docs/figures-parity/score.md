@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-12T01:55:31+00:00 · probe: 2026-11-11T17:55:31
+Generated: 2026-11-12T01:57:21+00:00 · probe: 2026-11-11T17:57:21
 
-**Pooled 99.2** · mean 99.2 over 70 figures · built 71 of 71 reference figures
+**Pooled 99.3** · mean 99.3 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -12,9 +12,6 @@ Comparable with the frozen baseline: **yes**
 - `pyramid`: 92 (69/75)
   - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
-- `particle-diagram`: 92 (70/76)
-  - cap-01d [control 3] Set the lattice's rows and columns (up to 12 by 12) — no evidence
-  - cap-04e [control 3] Lattice particles touching or spaced apart — no evidence
 - `punnett-square`: 94 (85/90)
   - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
   - cap-05d [interaction 2] Click a cell to blank it — no evidence
@@ -68,6 +65,7 @@ Comparable with the frozen baseline: **yes**
 - `osmosis`: 100 (140/140)
 - `parallel-lines`: 100 (46/46)
 - `parallelogram`: 100 (94/94)
+- `particle-diagram`: 100 (76/76)
 - `ph-reading`: 100 (38/38)
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)

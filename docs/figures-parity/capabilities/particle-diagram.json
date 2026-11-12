@@ -28,8 +28,8 @@
    "id": "cap-01d",
    "text": "Set the lattice's rows and columns (up to 12 by 12)",
    "class": "control",
-   "evidence": "",
-   "note": "Ours sizes the lattice from the particle counts; no rows/columns inputs."
+   "evidence": "changes:{\"layout\":\"Lattice\",\"lat_rows\":6,\"lat_cols\":6}",
+   "note": "Built in batch 10, round 369 (2026-11-11). Ours sizes the lattice from the particle counts; no rows/columns inputs."
   },
   {
    "id": "cap-02a",
@@ -112,8 +112,8 @@
    "id": "cap-04e",
    "text": "Lattice particles touching or spaced apart",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"layout\":\"Lattice\",\"lat_spacing\":\"Spaced apart\"}",
+   "note": "Built in batch 10, round 370 (2026-11-11)."
   },
   {
    "id": "cap-05a",

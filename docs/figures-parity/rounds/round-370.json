@@ -1,0 +1,35 @@
+{
+ "round": 370,
+ "figure": "particle-diagram",
+ "capability": "cap-04e",
+ "hypothesis": "Batch 10 particle-diagram: cap-04e; evidence Spaced apart",
+ "started_at": "2026-11-11T17:57:20",
+ "git": "6b926b9",
+ "before": {
+  "figure": 96.1,
+  "pooled": 99.2
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T17:57:21",
+ "after": {
+  "figure": 100.0,
+  "pooled": 99.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"layout\":\"Lattice\",\"lat_spacing\":\"Spaced apart\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/particle-diagram/dd6f25ef28189f0a.png"
+   }
+  ]
+ },
+ "checker": "pass on the second check: Spaced apart opens an even gap (3 px or more); Touching brings the largest neighbouring pair within 1 px; no frozen figure overlaps",
+ "result": "hit",
+ "evidence": "atoms b10 and b10r1 tests (45 with census) and atoms_b10_frozen (767 particle diagrams: 373 corrected pins for redrawn mixed-size lattices, accepted by the owner; the rest byte for byte); no task run (builder on the NAS)",
+ "next": "pyramid and vector-diagram checks; pulley cap-06e; gel and population-growth fixes; then punnett-square, pedigree, free-body-diagram"
+}
