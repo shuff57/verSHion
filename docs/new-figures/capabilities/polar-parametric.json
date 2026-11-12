@@ -1,0 +1,238 @@
+{
+ "figure": "polar-parametric",
+ "site": "new",
+ "slug": "polar-parametric",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Type a polar curve r = f(θ)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Set the θ range, such as 0 to 2π",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Draw several polar curves on one grid",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Plot polar points (r, θ), negative r included",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Type a parametric curve x(t), y(t) with its t range",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "Draw a polar grid of circles and rays",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Draw rays every 15°, 30° or 45° (π/12, π/6, π/4)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Label the rays in degrees or radians",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "Set the largest circle and how far apart the circles are",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-10",
+   "text": "Put a rectangular grid behind the curve instead of a polar one",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-11",
+   "text": "Shade a polar region between two angles, or inside one curve and outside another",
+   "class": "control",
+   "evidence": "",
+   "note": "AP Calculus BC area"
+  },
+  {
+   "id": "cap-12",
+   "text": "Mark the curve's direction with arrows",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-13",
+   "text": "Mark and label points at chosen t values",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-14",
+   "text": "Mark points on a polar curve at chosen θ values",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-15",
+   "text": "Label points with (r, θ), (x, y) or a letter only",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-16",
+   "text": "Draw the ray from the pole to a point on the curve, showing r",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-17",
+   "text": "Draw the tangent line at a chosen t, with its slope dy/dx",
+   "class": "control",
+   "evidence": "",
+   "note": "AP Calculus BC"
+  },
+  {
+   "id": "cap-18",
+   "text": "Write each curve's equation on the figure",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-19",
+   "text": "Draw each curve solid, dashed or dotted",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-20",
+   "text": "Give values exactly (π/3, √3) or rounded",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-21",
+   "text": "Load a classic example (rose, cardioid, limaçon with a loop, spiral, circle r = 4 cos θ, area in one petal, a parametric circle, a projectile path)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-22",
+   "text": "Set the rectangular axes' From, To and Count by for a parametric curve",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-23",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-24",
+   "text": "Write a title",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-25",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-26",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-27",
+   "text": "Draw it in black and white for photocopying (Print)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-28",
+   "text": "A student copy with the points only on a blank polar grid, for students to sketch the curve",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-29",
+   "text": "A student copy with a blank line for the equation, to name the curve",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-30",
+   "text": "A student copy with the points' coordinates left blank",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-31",
+   "text": "An answer key line giving the equations, the points and any area",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-32",
+   "text": "Drag P on the polar grid on the figure to set its r and θ",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: P is a handle"
+  },
+  {
+   "id": "cap-33",
+   "text": "Drag a tracer along the curve on the figure, its θ, ray and r following",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: the tracer is a handle"
+  }
+ ]
+}

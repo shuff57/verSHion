@@ -1,0 +1,266 @@
+{
+ "figure": "complex-plane",
+ "site": "new",
+ "slug": "complex-plane",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Plot z = a + bi typed exactly (fractions, roots)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Plot several numbers, each named",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Type a number in polar form, r(cos θ + i sin θ) or re^(iθ), in degrees or radians",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Draw and write the modulus |z|",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Mark the argument with an arc and write it (principal value)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "Draw the conjugate, reflected in the real axis",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Draw the sum z + w by the parallelogram or head to tail",
+   "class": "core",
+   "evidence": "",
+   "note": "vector-diagram adds vectors head to tail, with no complex numbers"
+  },
+  {
+   "id": "cap-08",
+   "text": "Draw the difference z - w",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "Draw the product zw as a rotation and a stretch: moduli multiply, arguments add",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-10",
+   "text": "Draw the quotient z/w",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-11",
+   "text": "Draw the nth roots of a number on a circle as a regular polygon",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-12",
+   "text": "Draw powers z^n (De Moivre), each power marked",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-13",
+   "text": "Draw each number as a point or as a vector from 0",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-14",
+   "text": "Label each number with a + bi, its polar form, or a letter only",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-15",
+   "text": "Write the polar form r cis θ beside the figure",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-16",
+   "text": "Draw the circle |z| = r",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-17",
+   "text": "Draw dashed lines to the axes showing the real and imaginary parts",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-18",
+   "text": "Join the roots into a polygon",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-19",
+   "text": "Give angles in degrees or radians, exactly (π/3) or rounded",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-20",
+   "text": "Give moduli exactly (√13) or rounded to chosen decimals",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-21",
+   "text": "Shade a region such as |z - 2i| ≤ 3 or an argument between two angles",
+   "class": "control",
+   "evidence": "",
+   "note": "IB AA/AI HL and further maths; not in most US courses"
+  },
+  {
+   "id": "cap-22",
+   "text": "Label the axes Re and Im, or typed names",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-23",
+   "text": "Load a classic example (conjugate, sum by the parallelogram, multiplying by i, a product, the cube roots of 8, the fifth roots of unity)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-24",
+   "text": "Set each axis's From, To and Count by",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-25",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-26",
+   "text": "Number the axes, or leave the numbers off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-27",
+   "text": "Write a title",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-28",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-29",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-30",
+   "text": "Draw it in black and white for photocopying (Print)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-31",
+   "text": "A student copy with the points unlabelled, for students to write each as a + bi",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-32",
+   "text": "A student copy with blank lines for the modulus and argument",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-33",
+   "text": "A student copy with the given numbers only, the sum, product or roots left for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-34",
+   "text": "An answer key line giving each number in both forms and the result",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-35",
+   "text": "Drag z on the figure to move it, its modulus, argument and results following",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: z is a handle"
+  },
+  {
+   "id": "cap-36",
+   "text": "Drag w on the figure to move it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: w is a handle"
+  },
+  {
+   "id": "cap-37",
+   "text": "Drag a label on the figure to move it",
+   "class": "interaction",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

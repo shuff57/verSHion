@@ -1,0 +1,32 @@
+{
+ "note": "new/<slug> -> our figure id. null = not built yet; the figure's ledger id is the slug. Set ours to the slug when built.",
+ "figures": {
+  "new/conic-sections": {
+   "ours": null
+  },
+  "new/tangent-secant-lines": {
+   "ours": null
+  },
+  "new/riemann-sums": {
+   "ours": null
+  },
+  "new/derivative-graphs": {
+   "ours": null
+  },
+  "new/limits-discontinuities": {
+   "ours": null
+  },
+  "new/sequences-series": {
+   "ours": null
+  },
+  "new/complex-plane": {
+   "ours": null
+  },
+  "new/polar-parametric": {
+   "ours": null
+  },
+  "new/slope-fields": {
+   "ours": null
+  }
+ }
+}

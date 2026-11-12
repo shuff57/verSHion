@@ -1,0 +1,252 @@
+{
+ "figure": "derivative-graphs",
+ "site": "new",
+ "slug": "derivative-graphs",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Type the function f(x)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Type a piecewise f, with corners where f' is undefined",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Draw f' under f on aligned axes, the x scales lined up",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Draw f'' as a third aligned graph",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Draw f, f' and f'' on one grid in different line styles",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "Give the graph of f' as the given one (AP 'graph of f'' questions), with f drawn in the key through a chosen point",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Mark the critical points on f and the zeros of f', joined by dashed vertical guides",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Label the local maxima and minima",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "Mark the inflection points on f with the matching extrema of f' and zeros of f''",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-10",
+   "text": "Mark the intervals where f increases and decreases",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-11",
+   "text": "Mark the intervals where f is concave up and concave down",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-12",
+   "text": "Draw a sign chart for f' under the graphs",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-13",
+   "text": "Draw a sign chart for f''",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-14",
+   "text": "Mark the absolute maximum and minimum on a closed interval, endpoints included",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-15",
+   "text": "Give coordinates exactly or rounded to chosen decimals",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-16",
+   "text": "Label each graph y = f(x), y = f'(x), or with typed names such as g and g'",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-17",
+   "text": "Draw each graph solid, dashed or dotted",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-18",
+   "text": "Give each aligned graph its own y range",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-19",
+   "text": "Load a classic example (a cubic, a quartic, x e^(-x), sin x, an AP-style f' made of segments and a semicircle)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-20",
+   "text": "Set each axis's From, To and Count by",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-21",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-22",
+   "text": "Add minor gridlines between the numbered lines",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-23",
+   "text": "Number the axes, or leave the numbers off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-24",
+   "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-25",
+   "text": "Number the x-axis in multiples of π",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-26",
+   "text": "Write a title",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-27",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-28",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-29",
+   "text": "Draw it in black and white for photocopying (Print)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-30",
+   "text": "A 'sketch f' from f' student copy: f drawn, blank aligned axes for f'",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-31",
+   "text": "A 'sketch f from f'' student copy: f' drawn, blank aligned axes for f",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-32",
+   "text": "A student copy with the graphs and none of the marks (critical points, intervals)",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-33",
+   "text": "A blank sign chart for students to fill in",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-34",
+   "text": "An answer key listing the critical points, extrema, inflection points and intervals",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-35",
+   "text": "Drag a tracer across the graphs on the figure to read f, f' and f'' at the same x, the tangent on f following it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: the tracer is a handle"
+  }
+ ]
+}

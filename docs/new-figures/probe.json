@@ -1,0 +1,2059 @@
+{
+ "checked_at": "2026-11-12T08:43:57",
+ "ours_built_at": "2026-11-12T16:43:51+00:00",
+ "git": "12b1f0b",
+ "figures": {
+  "limits-discontinuities": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "sequences-series": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-35": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-36": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "polar-parametric": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "riemann-sums": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-35": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-36": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-37": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-38": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-39": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-40": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-41": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-42": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-43": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-44": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-45": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "derivative-graphs": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-35": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "complex-plane": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-35": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-36": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-37": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "slope-fields": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "tangent-secant-lines": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-35": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-36": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-37": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-38": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "conic-sections": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-35": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-36": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-37": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-38": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-39": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-40": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-41": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-42": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-43": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-44": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-45": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-46": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  }
+ }
+}

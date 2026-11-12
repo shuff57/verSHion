@@ -1,0 +1,12 @@
+# New-figures climb
+
+This climb uses the parity-climb method (`~/figures-climb-skill`) to build figures that no reference site has. Its checklist is `spec.json`, written by hand at round 0 (site `new`, url `new:<slug>`, hashed as scrape.py hashes pages): one teacher action per bullet. The ledgers in `capabilities/` give each bullet a class, and the probe scores them against the built app.
+How it differs from the parity climb: there is no page to scrape, so there is no scrape/`--compare` step, and any edit to `spec.json` is a moved reference that needs a new baseline. It keeps its own `map.json` and `not-doing.md`. An unbuilt figure (`ours: null`) is still ledgered, frozen and scored, at 0, under its slug. `docs/figures-parity/` is never touched.
+`scripts/` holds copies of diff.py and probe.py (lib.py unchanged). diff.py reads this folder's map.json and not-doing.md, seeds and freezes `ours: null` pages under their slug, and ignores `ours` changing from null to the slug in the frozen map hash. probe.py reports an unbuilt figure as "not built" rather than as a FAIL. ledger.py runs from the skill unchanged.
+Wait until `pgrep -x cargo` prints nothing before any command that builds (refresh, probe). Set `S=docs/new-figures/scripts O=docs/new-figures` and run from the repo root:
+- refresh: `python3 $S/diff.py --spec $O/spec.json --map $O/map.json --repo . --out $O --refresh`
+- probe: `python3 $S/probe.py --repo . --out $O --renders .figures-parity/new-figures-renders --strict`
+- diff/score: `python3 $S/diff.py --spec $O/spec.json --map $O/map.json --repo . --out $O` (writes score.json, score.md, diff.md)
+- freeze (after the owner approves the scope): the same command with `--freeze`
+- `python3 ~/figures-climb-skill/scripts/ledger.py start --dir $O --round <n> --figure <id> --capability <cap> --hypothesis "…"` and later `… close --dir $O --round <n> --checker "…" --evidence "…" --next "…"`
+When a figure is built, set its `ours` in map.json to the slug (the figure id), then refresh, probe and diff. Interaction entries assume the opening state named in each page's `controls_text`, since the probe reads handles only there.

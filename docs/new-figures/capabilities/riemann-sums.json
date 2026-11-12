@@ -1,0 +1,322 @@
+{
+ "figure": "riemann-sums",
+ "site": "new",
+ "slug": "riemann-sums",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Type the function f(x)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Set the bounds a and b, typed exactly (fractions, π)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Set the number of strips n",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Draw a left Riemann sum",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Draw a right Riemann sum",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "Draw a midpoint Riemann sum",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Draw a trapezoid sum",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Draw an upper sum (each strip's greatest height)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "Draw a lower sum (each strip's least height)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-10",
+   "text": "Make the strips from a typed table of x and f(x) values, widths unequal (AP style)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-11",
+   "text": "Shade the exact area under the curve from a to b, with no strips",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-12",
+   "text": "Shade the area between two curves f and g from a to b",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-13",
+   "text": "Shade the area between two curves bounded by where they cross, the crossings found",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-14",
+   "text": "Show signed area: regions below the axis shaded differently and counted negative",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-15",
+   "text": "Write the sum's value, worked as Δx times the sum of the heights",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-16",
+   "text": "Write the exact value of the integral, exactly where it can be",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-17",
+   "text": "Write Δx = (b - a)/n",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-18",
+   "text": "Mark the sample point on each strip",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-19",
+   "text": "Label each strip with its height f(x_i) or its area",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-20",
+   "text": "Mark x_0, x_1, …, x_n on the x-axis",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-21",
+   "text": "Mark the bounds a and b with vertical lines and labels",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-22",
+   "text": "Write the integral ∫ from a to b of f(x) dx on the figure",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-23",
+   "text": "Write the error, the sum minus the exact value",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-24",
+   "text": "Slice the area between curves with horizontal strips, integrating in y",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-25",
+   "text": "Shade with a tint or hatching",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-26",
+   "text": "Draw the curve over the strips, or the strips alone",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-27",
+   "text": "Give values as fractions or rounded to chosen decimals",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-28",
+   "text": "Load a classic example (left and right sums of x^2, a midpoint sum, trapezoids from a table, area between y = x and y = x^2, signed area of sin x)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-29",
+   "text": "Set each axis's From, To and Count by",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-30",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-31",
+   "text": "Add minor gridlines between the numbered lines",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-32",
+   "text": "Number the axes, or leave the numbers off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-33",
+   "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-34",
+   "text": "Number the x-axis in multiples of π",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-35",
+   "text": "Write a title",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-36",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-37",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-38",
+   "text": "Draw it in black and white for photocopying (Print)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-39",
+   "text": "A student copy with blank lines for the sum and the integral",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-40",
+   "text": "A student copy with the curve and the bounds only, for students to draw the strips",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-41",
+   "text": "A student copy with the strip heights left blank",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-42",
+   "text": "An answer key line giving the sum, the exact integral and the error",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-43",
+   "text": "Drag a along the x-axis on the figure",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: a is a handle"
+  },
+  {
+   "id": "cap-44",
+   "text": "Drag b along the x-axis on the figure",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: b is a handle"
+  },
+  {
+   "id": "cap-45",
+   "text": "Scroll over the strips on the figure to add or take away strips",
+   "class": "interaction",
+   "evidence": "",
+   "note": "a scroll handle on the strips at the opening state"
+  }
+ ]
+}
