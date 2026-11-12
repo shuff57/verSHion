@@ -410,6 +410,16 @@ const PREVIEW_SIZE: Vec2 = Vec2::new(272.0, 352.0);
 /// The same page in a narrow window, beside the hero's text: the critics read the narrow page's
 /// steps as a text-only explanation with no example of the printed exam it describes.
 const NARROW_PREVIEW_SIZE: Vec2 = Vec2::new(200.0, 259.0);
+/// Round 29 (b): the size the page is drawn at 760. It grows left into the gap beside the hero's
+/// text and down by as little as it can; the text column keeps the width `NARROW_PREVIEW_SIZE`
+/// leaves it, so nothing in it moves or re-wraps. Revert: `NARROW_PREVIEW_SIZE`.
+const NARROW_PREVIEW_DRAWN: Vec2 = Vec2::new(208.0, 269.4);
+/// Round 29 (a): the page's fine print (the graph's "p" and "q", the "Version A" tag and the
+/// "Page 1 of 2" folio) is set no smaller than its answer labels (the body); the critics read it as
+/// too small to judge the print by. Revert: `false`.
+const PREVIEW_FINE_PRINT_FLOOR: bool = true;
+/// The least room between the sheet's title and its "Version A" pill (round 29).
+const PREVIEW_TAG_GAP: f32 = 10.0;
 /// The narrow window's column for the hero and the steps.
 const NARROW_STEPS_W: f32 = 640.0;
 
@@ -429,6 +439,15 @@ fn preview_reach(size: Vec2) -> f32 {
     off.x + half.x * a.cos() + half.y * a.sin() - half.x + 1.0
 }
 
+/// The narrow hero's page and the width of the text column beside it. The column is sized from
+/// `NARROW_PREVIEW_SIZE` (36 pt short of where that page starts); the page is drawn at
+/// `NARROW_PREVIEW_DRAWN`, its answer key still ending on the steps panel's right edge.
+fn narrow_hero_geometry(x0: f32, row_w: f32, body_top: f32) -> (Rect, f32) {
+    let left_of = |size: Vec2| x0 + row_w - size.x - preview_reach(size);
+    let page = Rect::from_min_size(Pos2::new(left_of(NARROW_PREVIEW_DRAWN), body_top + 4.0), NARROW_PREVIEW_DRAWN);
+    (page, left_of(NARROW_PREVIEW_SIZE) - 36.0 - x0)
+}
+
 fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
     use egui::{FontId, Shape};
@@ -442,6 +461,8 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     let g = |v: f32| v * k;
     let t = |v: f32| v * tk;
     let b = |v: f32| v * bk;
+    // The fine print's floor: the answer labels' size.
+    let fine = |v: f32| if PREVIEW_FINE_PRINT_FLOOR { v.max(b(7.6)) } else { v };
     let shade = if theme::is_dark() { 90 } else { 30 };
     // The answer key behind, turned a little and peeking out at the lower right.
     let (back_off, back_turn) = preview_back(page.size());
@@ -471,11 +492,22 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     let ring = Stroke::new(0.9, PAPER_SOFT);
     let text = |pos: Pos2, s: &str, f: &FontId, c: Color32| painter.text(pos, Align2::LEFT_TOP, s, f.clone(), c).width();
     let mut y = page.top() + g(14.0);
-    text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(t(11.5), theme::serif_family()), PAPER_INK);
+    let title_w = text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(t(11.5), theme::serif_family()), PAPER_INK);
     // The one touch of accent: the version tag, as a small filled pill (accent text alone faded on
     // white paper in dark mode).
-    let tag = painter.layout_no_wrap("Version A".into(), FontId::new(t(6.4), theme::bold_family()), theme::on_accent_col());
-    let pad = Vec2::new(g(4.0), g(1.5));
+    // With the floor the pill is held at least `PREVIEW_TAG_GAP` clear of the title: its side
+    // padding is tightened, and where that is not enough (the narrow sheet) its text is set at the
+    // largest size that keeps the gap, never under the old size. The title keeps its size.
+    let pad = Vec2::new(if PREVIEW_FINE_PRINT_FLOOR { g(2.5) } else { g(4.0) }, g(1.5));
+    let tag_at = |sz: f32| painter.layout_no_wrap("Version A".into(), FontId::new(sz, theme::bold_family()), theme::on_accent_col());
+    let mut tag = tag_at(fine(t(6.4)));
+    if PREVIEW_FINE_PRINT_FLOOR {
+        let mut sz = fine(t(6.4));
+        while sz > t(6.4) && r - tag.size().x - 2.0 * pad.x < l + title_w + PREVIEW_TAG_GAP + 0.5 {
+            sz = (sz - 0.25).max(t(6.4));
+            tag = tag_at(sz);
+        }
+    }
     let pill = Rect::from_min_size(Pos2::new(r - tag.size().x - 2.0 * pad.x, y + t(2.0)), tag.size() + 2.0 * pad);
     painter.rect_filled(pill, CornerRadius::same(6), theme::accent_col());
     painter.galley(pill.min + pad, tag, theme::on_accent_col());
@@ -526,8 +558,11 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     let at = |dx: f32, dy: f32| fig.min + Vec2::new(g(dx), g(dy));
     painter.line_segment([at(10.0, 42.0), at(30.0, 3.5)], Stroke::new(1.3, PAPER_INK));
     painter.line_segment([at(2.0, 26.0), at(62.0, 12.0)], Stroke::new(1.3, PAPER_SOFT));
-    painter.text(at(32.0, 2.0), Align2::LEFT_TOP, "p", FontId::proportional(t(6.5)), PAPER_INK);
-    painter.text(at(55.0, 3.0), Align2::LEFT_TOP, "q", FontId::proportional(t(6.5)), PAPER_SOFT);
+    painter.text(at(32.0, 2.0), Align2::LEFT_TOP, "p", FontId::proportional(fine(t(6.5))), PAPER_INK);
+    // At the floor's size "q" hangs under its line's right end, clear of the figure's top edge
+    // (above the line it touched the border, hung from the top it ran into the line).
+    let (q_at, q_align) = if PREVIEW_FINE_PRINT_FLOOR { (at(53.0, 14.5), Align2::LEFT_TOP) } else { (at(55.0, 3.0), Align2::LEFT_TOP) };
+    painter.text(q_at, q_align, "q", FontId::proportional(fine(t(6.5))), PAPER_SOFT);
     let ax = fig.right() + g(14.0);
     for (i, s) in ["line p", "line q"].iter().enumerate() {
         let yy = fig.top() + g(8.0) + i as f32 * b(16.0);
@@ -559,7 +594,7 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
         Pos2::new(page.center().x, page.bottom() - g(12.0)),
         Align2::CENTER_CENTER,
         "Page 1 of 2",
-        FontId::proportional(t(6.4)),
+        FontId::proportional(fine(t(6.4))),
         PAPER_SOFT,
     );
 }
@@ -1336,11 +1371,8 @@ impl crate::App {
                     // key that peeks out behind it, which ends on the steps panel's right edge. A
                     // column too narrow to hold the text beside it goes without the page.
                     let with_page = row_w >= 520.0;
-                    let page = Rect::from_min_size(
-                        Pos2::new(x0 + row_w - NARROW_PREVIEW_SIZE.x - preview_reach(NARROW_PREVIEW_SIZE), body_top + 4.0),
-                        NARROW_PREVIEW_SIZE,
-                    );
-                    let text_w = if with_page { page.left() - 36.0 - x0 } else { row_w };
+                    let (page, beside) = narrow_hero_geometry(x0, row_w, body_top);
+                    let text_w = if with_page { beside } else { row_w };
                     let body = Rect::from_min_size(Pos2::new(x0, body_top), Vec2::new(text_w, ui.available_height().max(0.0)));
                     let mut text = Rect::NOTHING;
                     ui.scope_builder(UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
@@ -3912,5 +3944,137 @@ mod initials_tests {
     fn punctuation_only_words_are_skipped() {
         assert_eq!(initials_of("- Ana -", "a@b.c"), "A");
         assert_eq!(initials_of("Ana - Ruiz", "a@b.c"), "AR");
+    }
+}
+
+#[cfg(test)]
+mod welcome_sheet_tests {
+    use super::*;
+
+    /// Everything the sheet paints at `size`: each text (string, smallest font size, galley rect,
+    /// ink rect), the filled "Version A" pill, the graph's frame and its two plotted lines.
+    struct Sheet {
+        page: Rect,
+        texts: Vec<(String, f32, Rect, Rect)>,
+        pill: Rect,
+        fig: Rect,
+        lines: Vec<[Pos2; 2]>,
+    }
+
+    fn paint_sheet(size: Vec2) -> Sheet {
+        fn walk(shape: &egui::Shape, out: &mut Sheet) {
+            match shape {
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                egui::Shape::Text(t) => {
+                    let size = t.galley.job.sections.iter().map(|s| s.format.font_id.size).fold(f32::INFINITY, f32::min);
+                    let mut ink = Rect::NOTHING;
+                    for row in &t.galley.rows {
+                        for g in &row.glyphs {
+                            if g.uv_rect.size.x > 0.0 {
+                                let min = t.pos + row.pos.to_vec2() + g.pos.to_vec2() + g.uv_rect.offset;
+                                ink |= Rect::from_min_size(min, g.uv_rect.size);
+                            }
+                        }
+                    }
+                    out.texts.push((t.galley.text().to_owned(), size, shape.visual_bounding_rect(), ink));
+                }
+                egui::Shape::Rect(r) if r.fill == theme::accent_col() => out.pill = r.rect,
+                egui::Shape::Rect(r) if (r.stroke.width - 0.9).abs() < 0.01 => out.fig = r.rect,
+                egui::Shape::LineSegment { points, stroke } if (stroke.width - 1.3).abs() < 0.01 => out.lines.push(*points),
+                _ => {}
+            }
+        }
+        let page = Rect::from_min_size(Pos2::new(20.0, 20.0), size);
+        let mut first = true;
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 400.0)).build_ui(move |ui| {
+            if std::mem::take(&mut first) {
+                theme::setup(ui.ctx());
+                ui.ctx().request_repaint();
+                return;
+            }
+            paint_exam_preview(ui.painter(), page);
+        });
+        h.run();
+        let mut out = Sheet { page, texts: Vec::new(), pill: Rect::NOTHING, fig: Rect::NOTHING, lines: Vec::new() };
+        for c in &h.output().shapes {
+            walk(&c.shape, &mut out);
+        }
+        out
+    }
+
+    /// Round 29, B1: in the welcome sheet, at desktop and at 760, no text is set smaller than its
+    /// answer labels (the "3", "5", "line p" beside the bubbles), the graph's "p" and "q" and the
+    /// "Page 1 of 2" folio included, and every text lies on the page. Two named exceptions: the
+    /// letters inside the answer bubbles (part of the bubble mark, they keep their size) and, on the
+    /// narrow sheet only, the "Version A" tag, which is set at the largest size that keeps it 10 pt
+    /// clear of the title (never under its round 28 size). The graph's "p" and "q" lie inside the
+    /// figure, at least 2 pt in from its frame, and touch neither plotted line.
+    #[test]
+    fn the_welcome_sheet_has_no_text_smaller_than_its_answer_labels() {
+        for size in [PREVIEW_SIZE, NARROW_PREVIEW_DRAWN] {
+            let sheet = paint_sheet(size);
+            let all = &sheet.texts;
+            let answer = all.iter().find(|t| t.0 == "line p").map(|t| t.1).expect("the answer label");
+            for want in ["p", "q", "Version A", "Page 1 of 2", "3", "25"] {
+                assert!(all.iter().any(|t| t.0 == want), "{size:?}: {want:?} is drawn");
+            }
+            let narrow = size == NARROW_PREVIEW_DRAWN;
+            for (s, sz, r, _) in all {
+                assert!(sheet.page.contains_rect(*r), "{size:?}: {s:?} lies on the page");
+                if ["A", "B", "C", "D"].contains(&s.as_str()) {
+                    continue;
+                }
+                if narrow && s == "Version A" {
+                    let old = size.x / 222.0 * 1.12 * 6.4;
+                    assert!(*sz + 0.01 >= old, "{size:?}: the tag is {sz} pt, under its round 28 size {old}");
+                    continue;
+                }
+                assert!(*sz + 0.01 >= answer, "{size:?}: {s:?} is {sz} pt, under the answer labels' {answer}");
+            }
+            assert!(sheet.fig.is_positive() && sheet.lines.len() == 2, "{size:?}: the figure and its two lines");
+            let inner = sheet.fig.shrink(0.9 + 2.0);
+            for label in ["p", "q"] {
+                let ink = all.iter().find(|t| t.0 == label).map(|t| t.3).expect("the label");
+                assert!(inner.contains_rect(ink), "{size:?}: {label:?} ink {ink:?} lies inside the figure {inner:?}");
+                let clear = ink.expand(0.65);
+                for [a, b] in &sheet.lines {
+                    let hit = (0..=200).any(|i| clear.contains(a.lerp(*b, i as f32 / 200.0)));
+                    assert!(!hit, "{size:?}: {label:?} ink {ink:?} touches the line {a:?}-{b:?}");
+                }
+            }
+        }
+    }
+
+    /// Round 29, B1 (council fix): at desktop and at 760 the "Version A" pill's left edge is at
+    /// least 10 pt right of the title's galley, and the title keeps its size on one line.
+    #[test]
+    fn the_version_pill_clears_the_sheet_title() {
+        for size in [PREVIEW_SIZE, NARROW_PREVIEW_DRAWN] {
+            let sheet = paint_sheet(size);
+            let title = sheet.texts.iter().find(|t| t.0 == "Linear Equations Quiz").expect("the title");
+            assert!((title.1 - size.x / 222.0 * 1.12 * 11.5).abs() < 0.01, "{size:?}: the title keeps its size");
+            assert!(sheet.pill.is_positive(), "{size:?}: the pill is drawn");
+            let gap = sheet.pill.left() - title.2.right();
+            assert!(gap >= PREVIEW_TAG_GAP - 0.01, "{size:?}: the pill is {gap} pt from the title");
+            let tag = sheet.texts.iter().find(|t| t.0 == "Version A").expect("the tag");
+            assert!(sheet.pill.contains_rect(tag.2), "{size:?}: the tag sits in its pill");
+            eprintln!("{size:?}: tag {} pt, gap {gap} pt", tag.1);
+        }
+    }
+
+    /// Round 29, B1: at 760 (a 640 column) the sheet is drawn wider than round 28's, its answer key
+    /// still ends on the column's right edge, and it stays clear of the text column, which keeps
+    /// round 28's width.
+    #[test]
+    fn the_narrow_welcome_sheet_is_larger_and_clear_of_the_text() {
+        let (x0, row_w, top) = (60.0, NARROW_STEPS_W, 100.0);
+        let (page, text_w) = narrow_hero_geometry(x0, row_w, top);
+        let old_left = x0 + row_w - NARROW_PREVIEW_SIZE.x - preview_reach(NARROW_PREVIEW_SIZE);
+        assert!(page.width() > NARROW_PREVIEW_SIZE.x && page.height() > NARROW_PREVIEW_SIZE.y);
+        assert!((page.width() / page.height() - NARROW_PREVIEW_SIZE.x / NARROW_PREVIEW_SIZE.y).abs() < 0.005, "same proportions");
+        assert_eq!(text_w, old_left - 36.0 - x0, "the text column keeps its width");
+        assert!(page.left() >= x0 + text_w + 12.0, "the sheet starts {} right of the text column", page.left() - x0 - text_w);
+        assert!((page.right() + preview_reach(page.size()) - (x0 + row_w)).abs() < 0.01, "the answer key ends on the column's edge");
+        assert_eq!(page.top(), top + 4.0);
     }
 }
