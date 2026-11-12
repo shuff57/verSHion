@@ -1,0 +1,37 @@
+{
+ "round": 367,
+ "figure": "bohr-model",
+ "capability": "cap-01c",
+ "hypothesis": "Batch 10 bohr-model: cap-01c; evidence changes:protons=7",
+ "started_at": "2026-11-11T16:40:28",
+ "git": "0625b1a",
+ "before": {
+  "figure": 92.2,
+  "pooled": 99.0
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T16:40:43",
+ "after": {
+  "figure": 100.0,
+  "pooled": 99.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:protons=7",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/26336bd8d5337df7.png"
+   }
+  ]
+ },
+ "checker": "pass (checker on the NAS): 7 protons on carbon draws 7 proton balls with carbon's symbol and shells, charge 1+, panel note names nitrogen; 0 and 200 handled; picking an element resets it",
+ "result": "hit",
+ "evidence": "atoms b10 tests (21) and atoms_b10_frozen (1,527 old figures; 359 mixed-size lattices re-pinned with the owner's agreement); census unchanged; no task run (builder on the NAS): one entry in Protons",
+ "next": "particle-diagram cap-01d, cap-04e (unequal two-size lattices overlap: back with the builder); gel and population-growth fixes; vector-diagram, pyramid; pulley"
+}

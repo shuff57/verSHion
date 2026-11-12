@@ -58,7 +58,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
-| bohr-model | `bohr-model` | 22 | 2 | 6 | reference has a student version; ours has no show_answers | 92 |
+| bohr-model | `bohr-model` | 22 | 2 | 6 | reference has a student version; ours has no show_answers | 100 |
 | dot-and-cross | `dot-and-cross` | 16 | 4 | 7 | — | 100 |
 | gas-syringe | `gas-syringe` | 9 | 1 | 5 | — | 100 |
 | half-life-graph | `half-life-graph` | 36 | 1 | 6 | reference adds/removes rows; ours has no list/data/text-table control | 100 |
@@ -101,9 +101,9 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-12T00:26:16+00:00 · probe: 2026-11-11T16:26:16
+Generated: 2026-11-12T00:40:43+00:00 · probe: 2026-11-11T16:40:40
 
-**Pooled 99.0** · mean 99.1 over 70 figures · built 71 of 71 reference figures
+**Pooled 99.1** · mean 99.2 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -119,8 +119,6 @@ Comparable with the frozen baseline: **yes**
 - `particle-diagram`: 92 (70/76)
   - cap-01d [control 3] Set the lattice's rows and columns (up to 12 by 12) — no evidence
   - cap-04e [control 3] Lattice particles touching or spaced apart — no evidence
-- `bohr-model`: 92 (59/64)
-  - cap-01c [core 5] Set the proton count by hand, independent of the element (0 to 200), so a wrong atom draws as set — no evidence
 - `punnett-square`: 94 (85/90)
   - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
   - cap-05d [interaction 2] Click a cell to blank it — no evidence
@@ -139,6 +137,7 @@ Comparable with the frozen baseline: **yes**
   - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
 - `angles`: 100 (71/71)
 - `bar-chart`: 100 (87/87)
+- `bohr-model`: 100 (64/64)
 - `box-plot`: 100 (57/57)
 - `circuit-diagram`: 100 (61/61)
 - `composite-shape`: 100 (50/50)

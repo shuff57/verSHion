@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-11T16:26:16",
- "ours_built_at": "2026-11-12T00:26:14+00:00",
- "git": "992084b",
+ "checked_at": "2026-11-11T16:40:40",
+ "ours_built_at": "2026-11-12T00:40:26+00:00",
+ "git": "0625b1a",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -6244,7 +6244,7 @@
       {
        "token": "changes:element=11 Na - Sodium",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/b5622537c46c1133.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/e5c1b4f8b55bcb96.png"
       }
      ]
     },
@@ -6256,15 +6256,21 @@
       {
        "token": "changes:charge=2",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/463e78024aefff59.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/8e50f22c66fb57ac.png"
       }
      ]
     },
     "cap-01c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:protons=7",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/26336bd8d5337df7.png"
+      }
+     ]
     },
     "cap-01d": {
      "pass": true,
@@ -6274,7 +6280,7 @@
       {
        "token": "changes:neutrons=8",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/6e02cd1c71e4582e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/85d46a30697328ce.png"
       }
      ]
     },
@@ -6286,7 +6292,7 @@
       {
        "token": "changes:shells_custom=2,8,3",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/76b96bfe27d6a3be.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/83521eafb41fea49.png"
       }
      ]
     },
@@ -6298,7 +6304,7 @@
       {
        "token": "changes:element=26 Fe - Iron",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/bbd145f64fe74ef8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/54c91b726897298c.png"
       }
      ]
     },
@@ -6310,7 +6316,7 @@
       {
        "token": "changes:nucleus=Protons and neutrons",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/e628859cc94eeed5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/b8b98393d025c376.png"
       }
      ]
     },
@@ -6322,7 +6328,7 @@
       {
        "token": "changes:nucleus=Blank",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/b9180a32afd1235c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/bb224ccc598a23c2.png"
       }
      ]
     },
@@ -6334,7 +6340,7 @@
       {
        "token": "changes:shuffle=3",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/f9cb611d497c4a8f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/0b09e6039e63ce4f.png"
       }
      ]
     },
@@ -6346,7 +6352,7 @@
       {
        "token": "changes:placement=Paired",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/f36ec0e879fd197e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/46750dadce98e419.png"
       }
      ]
     },
@@ -6358,7 +6364,7 @@
       {
        "token": "changes:empty=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/0ed6caaeb063cf8f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/a302b7a097e6b074.png"
       }
      ]
     },
@@ -6370,7 +6376,7 @@
       {
        "token": "changes:{\"charge\":-2,\"gained_lost\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/d7d0acd368157557.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/3249c9c1eeaaeda5.png"
       }
      ]
     },
@@ -6382,17 +6388,17 @@
       {
        "token": "changes:proton_color=Green",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/f3d0d4b6a208a975.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/7b1c0059aa185ef3.png"
       },
       {
        "token": "changes:neutron_color=Red",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/f311495f5099b103.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/ecdbb6a98260d48b.png"
       },
       {
        "token": "changes:electron_color=Red",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/586d27a0bc268690.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/efcce6dc9ca6fcf7.png"
       }
      ]
     },
@@ -6404,17 +6410,17 @@
       {
        "token": "changes:proton_symbol=p",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/50e23072011cef3b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/7d2934c2c191177f.png"
       },
       {
        "token": "changes:neutron_symbol=n",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/289823f54286088f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/ec0136c7dc8be38f.png"
       },
       {
        "token": "changes:electron_symbol=e",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/3b5fa49fae65bf4c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/18022cfe7b7ac8a3.png"
       }
      ]
     },
@@ -6426,7 +6432,7 @@
       {
        "token": "changes:key=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/ee8bf699a9f849c2.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/3e92a61d20ed11bb.png"
       }
      ]
     },
@@ -6438,7 +6444,7 @@
       {
        "token": "changes:shell_labels=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/a23cc31c00596cd6.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/3fae51c1f819316d.png"
       }
      ]
     },
@@ -6450,7 +6456,7 @@
       {
        "token": "changes:{\"charge\":1,\"brackets\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/836be87cbf7d79f1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/3487034e2aa85367.png"
       }
      ]
     },
@@ -6462,7 +6468,7 @@
       {
        "token": "changes:title=Carbon atom",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/7f6b158b845c8d01.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/bohr-model/db8a3edc9a6097d0.png"
       }
      ]
     }

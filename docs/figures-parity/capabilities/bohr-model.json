@@ -21,8 +21,8 @@
    "id": "cap-01c",
    "text": "Set the proton count by hand, independent of the element (0 to 200), so a wrong atom draws as set",
    "class": "core",
-   "evidence": "",
-   "note": "Ours has no proton count; protons come only from the element list (1 to 118)."
+   "evidence": "changes:protons=7",
+   "note": "Built in batch 10, round 367 (2026-11-11). Ours has no proton count; protons come only from the element list (1 to 118)."
   },
   {
    "id": "cap-01d",
