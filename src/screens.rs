@@ -521,23 +521,98 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     );
 }
 
-pub fn step_cell(ui: &mut egui::Ui, i: usize, big: bool) {
-    let Some((title, body)) = STEPS.get(i) else { return };
+/// The step number's filled accent disc: a 28 pt slot, the numeral in it a real label.
+const STEP_DISC: f32 = 28.0;
+
+/// One step: the numbered disc, then the title in the ink serif (PANEL, CARD as a row), then the
+/// body at BODY in `text`.
+/// Stacked (`row` false) the disc sits over the title; as a row the disc sits left of the title
+/// and body. Returns the disc's rect, for the connector between steps.
+pub fn step_cell(ui: &mut egui::Ui, i: usize, row: bool) -> Rect {
+    let Some((title, body)) = STEPS.get(i) else { return Rect::NOTHING };
+    let title_text = |ui: &mut egui::Ui| {
+        // The page's serif voice, as the hero heading and "How it works" (sans semibold broke it).
+        ui.add(egui::Label::new(theme::serif(*title).size(if row { crate::kit::ty::CARD } else { crate::kit::ty::PANEL })).wrap());
+    };
+    // Body at 14 in `text` on loose lines, so the two-line bodies keep up with their headings
+    // instead of reading as small, tight print under them.
+    let body_text = |ui: &mut egui::Ui| {
+        ui.add(egui::Label::new(step_body(body, crate::kit::ty::BODY).line_height(Some(20.0))).wrap());
+    };
     // Left-aligned rows (a `columns` cell is justified, which stretched the copy).
-    Frame::new().inner_margin(Margin::symmetric(if big { 18 } else { 22 }, 0)).show(ui, |ui| {
-        ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-            // The number just above its title. Beside it, the titles wrapped to two lines in a column
-            // this narrow; 10 px above it, the number read as detached from its heading.
-            step_badge(ui, i);
-            ui.add_space(2.0);
-            ui.add(egui::Label::new(theme::serif(*title).size(if big { crate::kit::ty::PANEL } else { crate::kit::ty::CARD })).wrap());
-            ui.add_space(6.0);
-            // Body at 14 in `text` on loose lines, so the two-line bodies keep up with their headings
-            // instead of reading as small, tight print under them.
-            let text = step_body(body, crate::kit::ty::BODY).line_height(Some(20.0));
-            ui.add(egui::Label::new(text).wrap());
-        });
-    });
+    Frame::new()
+        .inner_margin(Margin::symmetric(if row { 22 } else { 18 }, 0))
+        .show(ui, |ui| {
+            if row {
+                ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = 14.0;
+                    let disc = step_badge(ui, i);
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        // The title's first line centred on the disc.
+                        ui.add_space(3.0);
+                        title_text(ui);
+                        ui.add_space(2.0);
+                        body_text(ui);
+                    });
+                    disc
+                })
+                .inner
+            } else {
+                ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                    let disc = step_badge(ui, i);
+                    ui.add_space(4.0);
+                    title_text(ui);
+                    ui.add_space(4.0);
+                    body_text(ui);
+                    disc
+                })
+                .inner
+            }
+        })
+        .inner
+}
+
+/// The welcome page's "How it works" panel: one card holding the four steps as a numbered
+/// sequence (changed in round 27): a filled accent disc per step joined to the next by a thin
+/// rule, and no dividers. Split by full-height hairlines (and a cross at 760) the steps read as a
+/// table (the critics' words); four bordered, filled cards read as four buttons beside the one
+/// real action. `wide`: four columns, the rule running across between the discs; else one column
+/// of rows, top to bottom, the rule running down between them. Tried in round 27 and not kept:
+/// the discs with spacing alone (at desktop they floated over four columns and read as a table
+/// again). Returns the card's rect.
+fn steps_panel(ui: &mut egui::Ui, wide: bool) -> Rect {
+    let w = ui.available_width();
+    let pad = if wide { Margin::symmetric(4, 18) } else { Margin::symmetric(4, 20) };
+    crate::kit::card().inner_margin(pad).show(ui, |ui| {
+        ui.set_width(w - 10.0);
+        let rule = Stroke::new(1.0, theme::border());
+        let mut discs = [Rect::NOTHING; 4];
+        if wide {
+            ui.columns(4, |cols| {
+                for (i, col) in cols.iter_mut().enumerate() {
+                    discs[i] = step_cell(col, i, false);
+                }
+            });
+            for k in 0..3 {
+                let (a, b) = (discs[k], discs[k + 1]);
+                ui.painter().hline(a.right() + 10.0..=b.left() - 10.0, a.center().y.round() + 0.5, rule);
+            }
+        } else {
+            for (i, disc) in discs.iter_mut().enumerate() {
+                if i > 0 {
+                    ui.add_space(12.0);
+                }
+                *disc = step_cell(ui, i, true);
+            }
+            for k in 0..3 {
+                let (a, b) = (discs[k], discs[k + 1]);
+                ui.painter().vline(a.center().x.round() + 0.5, a.bottom() + 6.0..=b.top() - 6.0, rule);
+            }
+        }
+    })
+    .response
+    .rect
 }
 
 /// A step's body copy: BODY in `text`, never the pale brown `muted`, which the critics read as four
@@ -555,22 +630,17 @@ fn no_widow(body: &str) -> String {
     }
 }
 
-/// The step number that heads a step: a plain accent numeral, set flush with its title.
-fn step_badge(ui: &mut egui::Ui, i: usize) {
-    // No ring or disc: an outlined circle read as a step control or workflow button, as if a step
-    // could be clicked. The same 28 px slot keeps the titles and bodies where they were.
-    let (r, _) = ui.allocate_exact_size(Vec2::splat(28.0), egui::Sense::hover());
-    ui.painter().text(
-        r.left_center(),
-        Align2::LEFT_CENTER,
-        format!("{}", i + 1),
-        egui::FontId::new(crate::kit::ty::SECTION, theme::bold_family()),
-        theme::accent_col(),
-    );
+/// The step number that heads a step: its numeral in `on_accent` on a filled accent disc, a
+/// real label so a screen reader reads 1 to 4 before each title. Only the numeral is filled: the
+/// steps themselves stay plain text, so nothing reads as a button.
+fn step_badge(ui: &mut egui::Ui, i: usize) -> Rect {
+    let (r, _) = ui.allocate_exact_size(Vec2::splat(STEP_DISC), egui::Sense::hover());
+    ui.painter().circle_filled(r.center(), STEP_DISC / 2.0, theme::accent_col());
+    let n = RichText::new(format!("{}", i + 1)).size(crate::kit::ty::BODY).family(theme::bold_family()).color(theme::on_accent_col());
+    ui.put(r, egui::Label::new(n).selectable(false));
+    r
 }
 
-/// A step as a wide row: the disc and title on one line, the body beneath. Used when the
-/// steps stack, where a full-width card would otherwise be mostly empty height.
 /// Free-function toast used by other screen modules: `screens::toast(app, msg, err?)`.
 pub fn toast(app: &mut crate::App, text: impl Into<String>, is_error: bool) {
     if is_error {
@@ -1281,62 +1351,9 @@ impl crate::App {
                         ui.label(theme::serif("How it works").size(crate::kit::ty::SECTION));
                     });
                     ui.add_space(10.0);
-                    // One panel holding the four steps, split by hairlines. Four bordered, filled cards
-                    // read as four buttons beside the one real action (the critics' words), and their
-                    // uneven text left each card a different empty floor.
-                    let w = ui.available_width();
-                    // Four columns while the strip itself is at least 1000 wide, else two rows of two:
-                    // decided on the strip's width, never on a measured text column.
-                    let wide = col_w >= STEPS_W;
-                    // Narrow: a little less above the first numerals, whose 28 px slot already
-                    // holds space over the figure, so the panel's top and bottom read even.
-                    let pad = if wide { Margin::symmetric(4, 18) } else { Margin { left: 4, right: 4, top: 10, bottom: 16 } };
-                    crate::kit::card().inner_margin(pad).show(ui, |ui| {
-                        ui.set_width(w - 10.0);
-                        if wide {
-                            ui.columns(4, |cols| {
-                                for (i, col) in cols.iter_mut().enumerate() {
-                                    step_cell(col, i, true);
-                                }
-                            });
-                            let r = ui.min_rect();
-                            for k in 1..4 {
-                                let x = r.left() + r.width() * k as f32 / 4.0;
-                                ui.painter().vline(x, r.top() + 4.0..=r.bottom() - 4.0, Stroke::new(1.0, theme::border()));
-                            }
-                        } else {
-                            // Narrow: two rows of two, each cell its own column with real side
-                            // padding, split by one divider down the panel and one hairline across
-                            // it that meet in a clean cross.
-                            let top = ui.cursor().top();
-                            let full = ui.available_width();
-                            let cell_w = ((full - 1.0) / 2.0).floor();
-                            let mut mid = 0.0;
-                            for row in 0..2 {
-                                if row > 0 {
-                                    // Rows read 1, 2 then 3, 4: a full-width hairline between them
-                                    // that crosses the divider cleanly, with room above and below.
-                                    ui.add_space(16.0);
-                                    mid = ui.cursor().top().round() + 0.5;
-                                    ui.add_space(17.0);
-                                }
-                                ui.horizontal_top(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 1.0;
-                                    for k in 0..2 {
-                                        ui.allocate_ui_with_layout(Vec2::new(cell_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                                            ui.set_width(cell_w);
-                                            step_cell(ui, row * 2 + k, false);
-                                        });
-                                    }
-                                });
-                            }
-                            let x = ui.min_rect().left() + cell_w + 0.5;
-                            let rule = Stroke::new(1.0, theme::border());
-                            ui.painter().vline(x, top + 6.0..=ui.cursor().top() - 4.0, rule);
-                            let r = ui.min_rect();
-                            ui.painter().hline(r.left() + 16.0..=r.right() - 16.0, mid, rule);
-                        }
-                    });
+                    // Four columns while the strip itself is at least 1000 wide, else one column of
+                    // rows: decided on the strip's width, never on a measured text column.
+                    let _ = steps_panel(ui, col_w >= STEPS_W);
                 });
                 let measured = ui.cursor().top() - block_top - extra;
                 if block_h.is_none_or(|h| (h - measured).abs() > 0.5) {
@@ -3683,6 +3700,87 @@ mod tests {
         h.key_press(egui::Key::Enter);
         h.run();
         assert_eq!(h.state().as_slice(), ["Dark mode"], "Enter presses the focused light/dark button");
+    }
+
+    /// "How it works" at desktop (a 1000 strip, four columns) and at 760 (a 640 strip, one column):
+    /// each step's numeral, title and body are labels (AccessKit nodes), in reading order: number
+    /// before title before body, and step k before step k + 1 (left to right on one row at desktop,
+    /// top to bottom at 760). The panel draws no taller at desktop than round 26's (its cells rebuilt here).
+    #[test]
+    fn how_it_works_steps_are_labels_in_reading_order_at_both_widths() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        for (w, wide) in [(STEPS_W, true), (NARROW_STEPS_W, false)] {
+            let mut first = true;
+            let mut h = Harness::builder().with_size(egui::vec2(w + 40.0, 800.0)).build_ui_state(
+                move |ui, panel: &mut Rect| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    ui.set_width(w);
+                    *panel = steps_panel(ui, wide);
+                },
+                Rect::NOTHING,
+            );
+            h.run();
+            let mut prev: Option<(Rect, Rect)> = None;
+            for (i, (title, body)) in STEPS.iter().enumerate() {
+                let n = h.get_by_label(&format!("{}", i + 1)).rect();
+                let t = h.get_by_label(title).rect();
+                let b = h.get_by_label(&no_widow(body)).rect();
+                if wide {
+                    assert!(n.bottom() <= t.top() && t.bottom() <= b.top(), "{w}: step {} reads number, title, body down", i + 1);
+                } else {
+                    assert!(n.right() <= t.left() && t.bottom() <= b.top() && n.top() < t.bottom(), "{w}: step {} reads number then title, body under", i + 1);
+                }
+                if let Some((pn, pb)) = prev {
+                    if wide {
+                        assert!((pn.top() - n.top()).abs() < 0.5 && pn.right() < n.left(), "{w}: step {} sits right of step {} on one row", i + 1, i);
+                    } else {
+                        assert!(pb.bottom() <= n.top() && (pn.left() - n.left()).abs() < 0.5, "{w}: step {} sits under step {}", i + 1, i);
+                    }
+                }
+                prev = Some((n, b));
+            }
+            let panel = *h.state();
+            if wide {
+                // Round 26's desktop card, in a harness of its own (its labels would double these).
+                let mut first = true;
+                let mut o = Harness::builder().with_size(egui::vec2(w + 40.0, 800.0)).build_ui_state(
+                    move |ui, out: &mut f32| {
+                        if std::mem::take(&mut first) {
+                            theme::setup(ui.ctx());
+                            ui.ctx().request_repaint();
+                            return;
+                        }
+                        ui.set_width(w);
+                        // Round 26's desktop card, rebuilt with its own sizes for comparison: the 28 pt
+                        // numeral slot, 2, the serif PANEL title, 6, the two-line body, in the same pad.
+                        let old = crate::kit::card().inner_margin(Margin::symmetric(4, 18)).show(ui, |ui| {
+                            ui.set_width(w - 10.0);
+                            ui.columns(4, |cols| {
+                                for (i, col) in cols.iter_mut().enumerate() {
+                                    let (title, body) = STEPS[i];
+                                    Frame::new().inner_margin(Margin::symmetric(18, 0)).show(col, |ui| {
+                                        ui.allocate_exact_size(Vec2::splat(28.0), egui::Sense::hover());
+                                        ui.add_space(2.0);
+                                        ui.add(egui::Label::new(theme::serif(title).size(crate::kit::ty::PANEL)).wrap());
+                                        ui.add_space(6.0);
+                                        ui.add(egui::Label::new(step_body(body, crate::kit::ty::BODY).line_height(Some(20.0))).wrap());
+                                    });
+                                }
+                            });
+                        });
+                        *out = old.response.rect.height();
+                    },
+                    0.0,
+                );
+                o.run();
+                let old_h = *o.state();
+                assert!(panel.height() <= old_h + 0.5, "desktop panel {} tall, round 26's {old_h}", panel.height());
+            }
+        }
     }
 
     #[test]

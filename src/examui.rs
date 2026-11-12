@@ -1534,7 +1534,7 @@ fn draw_top_card(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut
                 if !compact {
                     draw_saved_indicator(app, ui, exam_id, false);
                     ui.add_space(4.0);
-                    draw_menus(app, ui, exam_id, st);
+                    draw_menus(app, ui, exam_id, st, MenuCaret::Full);
                     draw_actions(app, ui, exam_id, false);
                 } else {
                     draw_saved_indicator(app, ui, exam_id, true);
@@ -1545,7 +1545,7 @@ fn draw_top_card(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 10.0;
-                    draw_menus(app, ui, exam_id, st);
+                    draw_menus(app, ui, exam_id, st, MenuCaret::Full);
                     draw_actions(app, ui, exam_id, true);
                 });
             }
@@ -1569,8 +1569,20 @@ fn draw_top_card_narrow(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, s
     ui.add_space(6.0);
     let exam = app.store.exam(exam_id).cloned();
     ui.horizontal(|ui| {
-        ui.scope(|ui| draw_menus(app, ui, exam_id, st));
-        bar_sep(ui);
+        if NARROW_MENU_CARETS {
+            // The menus with their compact carets, then the Page setup button exactly where it
+            // stood behind the plain words and the separator: the carets take the separator's room
+            // (the plain words' right end, then the separator's 13 and the spacing either side),
+            // so the button, its room and the zoom never move.
+            let x0 = ui.cursor().left();
+            let plain_right = x0 + narrow_menus_plain_w(ui);
+            ui.scope(|ui| draw_menus(app, ui, exam_id, st, MenuCaret::Compact));
+            let place = plain_right + 2.0 * ui.spacing().item_spacing.x + NARROW_SEP_RUN;
+            ui.add_space((place - ui.cursor().left()).max(0.0));
+        } else {
+            ui.scope(|ui| draw_menus(app, ui, exam_id, st, MenuCaret::None));
+            bar_sep(ui);
+        }
         // The button's room: up to the zoom well, with a clear gap before it.
         let zoom_w = if st.shelf_alone { 0.0 } else { zoom_well_w(ui, &zoom_label(st.zoom, st.zoom_eff)) };
         let room = ui.available_width() - zoom_w - PAGE_SETUP_ZOOM_GAP;
@@ -1595,6 +1607,19 @@ fn draw_top_card_narrow(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, s
         draw_page_setup(app, ui, exam_id, st);
         ui.add_space(2.0);
     }
+}
+
+/// The width `bar_sep` adds between the narrow menus and Page setup besides the row's spacing on
+/// either side (6, the 1 pt line, 6).
+const NARROW_SEP_RUN: f32 = 13.0;
+
+/// File, Edit and Format as plain words (no caret, the theme's padding, 2 apart): the narrow row's
+/// menus before round 27, whose right end keeps the Page setup button's place.
+fn narrow_menus_plain_w(ui: &egui::Ui) -> f32 {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let pad = ui.spacing().button_padding.x;
+    let words: f32 = ["File", "Edit", "Format"].iter().map(|w| ui.painter().layout_no_wrap(w.to_string(), font.clone(), theme::ink()).size().x + 2.0 * pad).sum();
+    words + 2.0 * 2.0
 }
 
 /// The least gap between the narrow Page setup button and the zoom well.
@@ -1882,9 +1907,16 @@ fn draw_actions(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, compact: 
 }
 
 
-fn draw_menus(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut EditUi) {
+/// File, Edit and Format: three separate outlined menu buttons (the theme's button look). With a
+/// `caret` each carries the small dropdown caret the app's other menu buttons have, so they read
+/// as menus, not as more action buttons (round 27): [`MenuCaret::Full`] on the desktop bar,
+/// [`MenuCaret::Compact`] in the narrow top card (see [`NARROW_MENU_CARETS`]).
+fn draw_menus(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut EditUi, caret: MenuCaret) {
+    if caret == MenuCaret::Compact {
+        ui.spacing_mut().button_padding.x = MENU_COMPACT_PAD_X;
+    }
     ui.spacing_mut().item_spacing.x = 2.0;
-    ui.menu_button("File", |ui| {
+    menu_button(ui, "File", caret, |ui| {
         if ui.button("Open exam").clicked() {
             app.screen = crate::Screen::Exams;
         }
@@ -1919,7 +1951,7 @@ fn draw_menus(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut Ed
             st.confirm_delete = true;
         }
     });
-    ui.menu_button("Edit", |ui| {
+    menu_button(ui, "Edit", caret, |ui| {
         if ui
             .add_enabled(!app.undo.is_empty(), egui::Button::new("Undo"))
             .clicked()
@@ -1948,7 +1980,7 @@ fn draw_menus(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut Ed
             });
         }
     });
-    ui.menu_button("Format", |ui| {
+    menu_button(ui, "Format", caret, |ui| {
         ui.set_min_width(300.0);
         kit::small_caps(ui, "Page format");
         ui.add_space(6.0);
@@ -1991,6 +2023,47 @@ fn draw_menus(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut Ed
             }
         }
     });
+}
+
+/// Air between a top-bar menu's word and its caret.
+const MENU_CARET_GAP: f32 = 6.0;
+
+/// Whether the top bar's menus carry a caret, and in which size.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum MenuCaret {
+    /// No caret (the plain word).
+    None,
+    /// The desktop bar's: the Page setup selects' 12 pt caret, [`MENU_CARET_GAP`] after the word.
+    Full,
+    /// The narrow top card's: the same glyph at 10, [`MENU_COMPACT_CARET_GAP`] after the word, the
+    /// buttons' side padding [`MENU_COMPACT_PAD_X`] (the theme's 12 less 3), so the three grow by
+    /// 21 in all and the row's separator gives that room back (see `draw_top_card_narrow`).
+    Compact,
+}
+
+/// The narrow top card's menus carry the compact caret (round 27). Set false to put the narrow
+/// row back as it was before (plain words, the separator before Page setup).
+const NARROW_MENU_CARETS: bool = true;
+/// The compact caret's size and its air after the word.
+const MENU_COMPACT_CARET: f32 = 10.0;
+const MENU_COMPACT_CARET_GAP: f32 = 3.0;
+/// The compact menus' side padding (the theme's `button_padding.x` is 12).
+const MENU_COMPACT_PAD_X: f32 = 9.0;
+
+/// One of the top bar's menus: egui's menu button with `label` and, unless `caret` is
+/// [`MenuCaret::None`], the dropdown caret after it. Its accessible name is the bare word ("File"),
+/// never the caret's glyph.
+fn menu_button(ui: &mut egui::Ui, label: &str, caret: MenuCaret, add: impl FnOnce(&mut egui::Ui)) -> egui::Response {
+    let resp = if caret != MenuCaret::None {
+        let (size, gap) = if caret == MenuCaret::Full { (12.0, MENU_CARET_GAP) } else { (MENU_COMPACT_CARET, MENU_COMPACT_CARET_GAP) };
+        let c = RichText::new(egui_phosphor::regular::CARET_DOWN).font(theme::icon_font(size)).color(theme::text_col());
+        egui::containers::menu::MenuButton::from_button(egui::Button::new((label, c)).gap(gap)).ui(ui, add).0
+    } else {
+        ui.menu_button(label, add).response
+    };
+    let name = label.to_string();
+    resp.widget_info(move || egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+    resp
 }
 
 // ----- format bar -----------------------------------------------------------
@@ -5635,6 +5708,11 @@ const SHELF_CARD_PAD_B: f32 = 10.0;
 
 /// The edit and copy icons' square hit areas on the header row.
 const SHELF_ICON_SZ: f32 = 24.0;
+/// Air between edit and copy and between copy and the "+" (round 27: edit and copy were 2 apart,
+/// bare glyphs that read as one cluster).
+const SHELF_ICON_GAP: f32 = 6.0;
+/// The glyph in edit and copy: the size `kit::icon_button` gives a 24 square.
+const SHELF_ICON_GLYPH: f32 = 14.0;
 
 /// The gap between two bank cards.
 const SHELF_CARD_GAP: f32 = 8.0;
@@ -5647,13 +5725,13 @@ fn shelf_stem_width(w: f32) -> f32 {
 
 /// Where a bank card's header row puts its controls, right to left from the card's inner right
 /// edge: the "+" ([`SHELF_ADD_SZ`] square, its top [`SHELF_HEAD_PAD_T`] in), copy and edit
-/// ([`SHELF_ICON_SZ`], centred on the "+"), and the right end left for the points and badges.
-/// Returns (add, copy, edit, the row's middle).
+/// ([`SHELF_ICON_SZ`] squares, centred on the "+", [`SHELF_ICON_GAP`] apart and before the "+"),
+/// and the right end left for the points and badges. Returns (add, copy, edit, the row's middle).
 fn shelf_head_rects(card: Rect) -> (Rect, Rect, Rect, f32) {
     let cy = card.top() + SHELF_HEAD_PAD_T + SHELF_ADD_SZ / 2.0;
     let add = Rect::from_min_size(Pos2::new(card.right() - SHELF_CARD_PAD_X - SHELF_ADD_SZ, card.top() + SHELF_HEAD_PAD_T), Vec2::splat(SHELF_ADD_SZ));
-    let copy = Rect::from_center_size(Pos2::new(add.left() - 6.0 - SHELF_ICON_SZ / 2.0, cy), Vec2::splat(SHELF_ICON_SZ));
-    let edit = copy.translate(Vec2::new(-SHELF_ICON_SZ - 2.0, 0.0));
+    let copy = Rect::from_center_size(Pos2::new(add.left() - SHELF_ICON_GAP - SHELF_ICON_SZ / 2.0, cy), Vec2::splat(SHELF_ICON_SZ));
+    let edit = copy.translate(Vec2::new(-SHELF_ICON_SZ - SHELF_ICON_GAP, 0.0));
     (add, copy, edit, cy)
 }
 
@@ -6137,15 +6215,30 @@ fn shelf_row(
         p.galley(stem_pos, galley, theme::ink());
     }
 
-    // Buttons: edit and copy (quiet), add (the accent square) or the in-exam check.
-    let hit = |br: Rect, id: &str, tip: &str| -> egui::Response {
+    // Buttons: edit and copy in the quiet outlined icon tier (no fill and a 1 pt `edge` at rest,
+    // the look of `kit::quiet_more_dots`; hover_bg under the pointer, accent_faded pressed, the
+    // focus ring), each a named 24 square with its glyph; then add (the accent square) or the
+    // in-exam check.
+    let hit = |br: Rect, id: &str, tip: &str, glyph: &str| -> egui::Response {
         let r = ui.interact(br, ui.id().with((id, &q.id)), Sense::click()).on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand);
-        if r.hovered() {
-            ui.painter().rect_filled(br, CornerRadius::same(6), theme::field());
+        let (fill, fg) = if r.is_pointer_button_down_on() {
+            (theme::accent_faded(), theme::ink())
+        } else if r.hovered() {
+            (theme::hover_bg(), theme::ink())
+        } else {
+            (Color32::TRANSPARENT, theme::text_col())
+        };
+        let painter = ui.painter();
+        painter.rect(br, CornerRadius::same(8), fill, Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
+        crate::handicons::paint_glyph(painter, br.center(), glyph, SHELF_ICON_GLYPH, fg);
+        if r.has_focus() {
+            painter.rect_stroke(br.expand(1.0), CornerRadius::same(9), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
         }
+        let name = tip.to_string();
+        r.widget_info(move || egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
         r
     };
-    let eresp = hit(edit_rect, "shelf_edit", "Edit question");
+    let eresp = hit(edit_rect, "shelf_edit", "Edit question", crate::handicons::EDIT);
     // "Show all" / "Show less": an accent text button at the end of the card's text.
     let tresp = toggle_rect.zip(toggle_g).map(|(r, g)| {
         let word = toggle_word;
@@ -6165,7 +6258,7 @@ fn shelf_row(
             st.shelf_open.push(q.id.clone());
         }
     }
-    let cresp = hit(copy_rect, "shelf_copy", "Copy: duplicate this question in the bank");
+    let cresp = hit(copy_rect, "shelf_copy", "Copy: duplicate this question in the bank", egui_phosphor::regular::COPY);
     // Beside the page an added question is done (drag the card for a second copy); alone in the
     // narrow window there is no page to drag to, so its button stays a + that adds it again.
     let add_tip = match (already, alone) {
@@ -6183,16 +6276,6 @@ fn shelf_row(
         }
     }
     {
-        let quiet = theme::muted_col();
-        // Edit: the hand-drawn pencil-and-square.
-        crate::handicons::paint_glyph(&p, edit_rect.center(), crate::handicons::EDIT, 13.5, quiet);
-        // Copy: two sheets.
-        let ink = Stroke::new(1.3, quiet);
-        let c = copy_rect.center();
-        let back = if cresp.hovered() { theme::field() } else if (resp.hovered() && !alone) || drag_this { theme::accent_faded() } else { fill };
-        p.rect_stroke(Rect::from_center_size(c + Vec2::new(-1.5, -1.5), Vec2::new(7.0, 8.0)), CornerRadius::same(1), ink, StrokeKind::Middle);
-        p.rect_filled(Rect::from_center_size(c + Vec2::new(1.6, 1.6), Vec2::new(7.0, 8.0)), CornerRadius::same(1), back);
-        p.rect_stroke(Rect::from_center_size(c + Vec2::new(1.6, 1.6), Vec2::new(7.0, 8.0)), CornerRadius::same(1), ink, StrokeKind::Middle);
         let c = add_rect.center();
         if already && !alone {
             // Done: a check on a pale square, not a button.
@@ -10616,12 +10699,141 @@ mod review_tests {
                 let can_add = alone || card.id == "plain";
                 assert_eq!(adds.iter().any(|a| (a.min - add.min).length() < 0.6 && (a.max - add.max).length() < 0.6), can_add, "{how}: the + named Add to exam");
             }
+            // Round 27: edit and copy are named buttons, 24 squares at least, the gap apart from
+            // each other and from the "+", and Tab reaches them.
+            for card in &seen.cards {
+                let how = format!("alone {alone}, card {}", card.id);
+                for (name, r) in [("Edit question", card.edit), ("Copy: duplicate this question in the bank", card.copy)] {
+                    assert!(r.width() >= 24.0 - 0.01 && r.height() >= 24.0 - 0.01, "{how}: {name} is {r:?}");
+                    let node = h.query_all(by().label(name)).find(|n| (n.rect().center() - r.center()).length() < 0.6);
+                    let node = node.unwrap_or_else(|| panic!("{how}: no button named {name} on its square"));
+                    assert_eq!(node.accesskit_node().role(), egui::accesskit::Role::Button, "{how}: {name}");
+                }
+                assert!(card.copy.left() - card.edit.right() >= SHELF_ICON_GAP - 0.01, "{how}: edit against copy");
+                assert!(card.add.left() - card.copy.right() >= SHELF_ICON_GAP - 0.01, "{how}: copy against the +");
+                assert!(!card.edit.intersects(card.copy) && !card.copy.intersects(card.add) && !card.edit.intersects(card.add), "{how}: icons overlap");
+            }
             // A click on the plain card's + adds it.
             let before = h.state().0.store.exam(&"e".into()).unwrap().items.len();
             let plain = seen.cards.iter().find(|c| c.id == "plain").unwrap().add;
             h.query_all(by().label("Add to exam")).find(|n| (n.rect().center() - plain.center()).length() < 0.6).expect("the plain card's +").click();
             h.run_steps(4);
             assert_eq!(h.state().0.store.exam(&"e".into()).unwrap().items.len(), before + 1, "alone {alone}: the + adds the question");
+        }
+    }
+
+    /// Round 27: the desktop top bar's File, Edit and Format each carry a dropdown caret (each is
+    /// wider than its word and the theme's padding by the caret and its gap), are named by the bare
+    /// word, stay three separate buttons on one line, and each opens its own menu by a click and,
+    /// focused, by Enter.
+    #[test]
+    fn the_top_bar_menus_carry_a_caret_and_open_by_click_and_by_keyboard() {
+        let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![short("q0", "Define a catalyst.")], created: 0, modified: 0, details: Default::default() };
+        let mut exam = exam_of(vec![ExamItem::new("b", "q0".to_string())], 0);
+        exam.name = "Untitled Exam".into();
+        let app = scratch_app(bank, exam);
+        let mut first = true;
+        let mut h = Harness::builder().with_size(Vec2::new(1280.0, 500.0)).build_ui_state(
+            move |ui, s: &mut (crate::App, EditUi)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let (app, st) = s;
+                st.narrow = false;
+                draw_top_card(app, ui, &"e".into(), st);
+            },
+            (app, EditUi::default()),
+        );
+        h.run_steps(4);
+        let menus = [("File", "Open exam"), ("Edit", "Shuffle question order"), ("Format", "Margins…")];
+        let rects: Vec<Rect> = menus.iter().map(|(m, _)| h.get_by_label(m).rect()).collect();
+        let caret = h.ctx.fonts_mut(|f| f.layout_no_wrap(egui_phosphor::regular::CARET_DOWN.into(), theme::icon_font(12.0), Color32::WHITE).size().x);
+        let (font, pad) = { let s = h.ctx.global_style(); (s.text_styles[&egui::TextStyle::Button].clone(), s.spacing.button_padding.x) };
+        for ((m, _), r) in menus.iter().zip(&rects) {
+            let word = h.ctx.fonts_mut(|f| f.layout_no_wrap(m.to_string(), font.clone(), Color32::WHITE).size().x);
+            assert!(r.width() >= 2.0 * pad + word + MENU_CARET_GAP + caret - 0.5, "{m}: {r:?} has no room for its caret");
+            assert_eq!(h.get_by_label(m).accesskit_node().role(), egui::accesskit::Role::Button, "{m}");
+        }
+        for w in rects.windows(2) {
+            assert!(w[1].left() >= w[0].right() + 1.0 && (w[0].center().y - w[1].center().y).abs() < 0.5, "menus touch or leave the line: {rects:?}");
+        }
+        for (m, item) in menus {
+            assert!(h.query_by_label(item).is_none(), "{m}'s menu open before it is asked");
+            h.get_by_label(m).click();
+            h.run_steps(3);
+            assert!(h.query_by_label(item).is_some(), "a click on {m} opens its menu");
+            h.key_press(egui::Key::Escape);
+            h.run_steps(3);
+            assert!(h.query_by_label(item).is_none(), "Escape closes {m}'s menu");
+            h.get_by_label(m).focus();
+            h.run_steps(2);
+            h.key_press(egui::Key::Enter);
+            h.run_steps(3);
+            assert!(h.query_by_label(item).is_some(), "Enter on {m} opens its menu");
+            h.key_press(egui::Key::Escape);
+            h.run_steps(3);
+        }
+
+        // At 760 (the narrow top card, 616 wide) in every paper style and both margin wordings:
+        // the compact caret fits each word whole, the three keep the plain buttons' 35 height, and
+        // the Page setup button keeps the place, size and wording it had with plain words and the
+        // separator (r26: left 212.2, 223.3 x 34 with "1 in margins", the zoom at 471).
+        for style in crate::model::PaperStyle::ALL {
+            for even in [true, false] {
+                let margins = if even { Margins::all(25.4) } else { Margins { top: 25.4, right: 19.05, bottom: 25.4, left: 19.05 } };
+                let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![short("q0", "Define a catalyst.")], created: 0, modified: 0, details: Default::default() };
+                let mut exam = exam_of(vec![ExamItem::new("b", "q0".to_string())], 0);
+                exam.name = "Untitled Exam".into();
+                exam.paper_style = style;
+                exam.margins = Some(margins);
+                let mut first = true;
+                let mut h = Harness::builder().with_size(Vec2::new(700.0, 300.0)).build_ui_state(
+                    move |ui, s: &mut (crate::App, EditUi)| {
+                        if std::mem::take(&mut first) {
+                            theme::setup(ui.ctx());
+                            ui.ctx().request_repaint();
+                            return;
+                        }
+                        let (app, st) = s;
+                        st.narrow = true;
+                        st.zoom = 0.0;
+                        st.zoom_eff = 1.21;
+                        ui.allocate_ui(Vec2::new(616.0, 200.0), |ui| {
+                            ui.set_max_width(616.0);
+                            draw_top_card(app, ui, &"e".into(), st);
+                        });
+                    },
+                    (scratch_app(bank, exam), EditUi::default()),
+                );
+                h.run_steps(4);
+                let how = format!("760, {} {}", style.label(), if even { "even" } else { "each side" });
+                let ps = h.query_all(by().predicate(|n| n.label().is_some_and(|l| l.starts_with("Page setup:")))).next().expect("the Page setup button").rect();
+                let rects: Vec<Rect> = menus.iter().map(|(m, _)| h.get_by_label(m).rect()).collect();
+                for ((m, _), r) in menus.iter().zip(&rects) {
+                    let word = h.ctx.fonts_mut(|f| f.layout_no_wrap(m.to_string(), font.clone(), Color32::WHITE).size().x);
+                    let caret = h.ctx.fonts_mut(|f| f.layout_no_wrap(egui_phosphor::regular::CARET_DOWN.into(), theme::icon_font(MENU_COMPACT_CARET), Color32::WHITE).size().x);
+                    assert!(r.width() >= 2.0 * MENU_COMPACT_PAD_X + word + MENU_COMPACT_CARET_GAP + caret - 0.5, "{how}: {m} {r:?} has no room for its word and caret");
+                    assert!((r.height() - 35.0).abs() < 0.5, "{how}: {m} is {} tall (was 35)", r.height());
+                }
+                for w in rects.windows(2) {
+                    assert!(w[1].left() >= w[0].right() + 1.0, "{how}: menus touch: {rects:?}");
+                }
+                assert!(ps.left() >= rects[2].right() + 10.0, "{how}: Format {:?} against Page setup {ps:?}", rects[2]);
+                assert!((ps.left() - 212.2).abs() < 0.3 && (ps.height() - PAGE_SETUP_H).abs() < 0.5, "{how}: Page setup moved: {ps:?}");
+                if even {
+                    assert!((ps.width() - 223.3).abs() < 0.3 || style != crate::model::PaperStyle::ALL[0], "{how}: Page setup resized: {ps:?}");
+                }
+                assert!((h.get_by_label("Smaller page").rect().left() - 2.0 - 471.0).abs() < 0.3, "{how}: the zoom moved");
+                for (m, item) in menus {
+                    h.get_by_label(m).click();
+                    h.run_steps(3);
+                    assert!(h.query_by_label(item).is_some(), "{how}: a click on {m} opens its menu");
+                    h.key_press(egui::Key::Escape);
+                    h.run_steps(3);
+                }
+            }
         }
     }
 }
