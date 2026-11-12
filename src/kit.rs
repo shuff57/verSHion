@@ -222,6 +222,9 @@ pub fn search_field_with(ui: &mut Ui, text: &mut String, w: f32, hint: &str, id:
             // The row takes its height from the theme's 34 px control size, which would make the
             // box 54 px tall; the frame's padding supplies the height instead.
             ui.spacing_mut().interact_size.y = 20.0;
+            // The placeholder in the muted tone, as the magnifier (5.5:1 on the light card, 5.2:1
+            // on the dark), not egui's 60% text (3.0:1 and 4.1:1); typed text stays ink.
+            ui.visuals_mut().weak_text_color = Some(theme::muted_col());
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(Vec2::splat(15.0), Sense::hover());
                 let s = Stroke::new(1.6, theme::muted_col());

@@ -1377,10 +1377,13 @@ fn narrow_switch_labels(on_page: usize, to_add: Option<usize>) -> [(bool, &'stat
 /// is a tab (AccessKit `Tab`, selected or not, round 24): Tab reaches it, Enter or Space picks
 /// it, the arrow keys move between the two, and a focused half wears the accent ring. (Round 24
 /// tried an outlined control with the other half on a white fill: it lost, as the unchosen half
-/// read as the chosen one; the look is as before, only the tab semantics stayed.)
+/// read as the chosen one; only the tab semantics stayed.) Round 25: the track wears the 1 pt
+/// control edge (`theme::edge`, was `border`), so both halves sit inside one visible control, and
+/// the other half's title is ink at regular weight on the bare track (was `text` medium); the
+/// chosen half (accent wash, bold accent title) is as before and stays the stronger.
 fn narrow_switch(ui: &mut egui::Ui, rect: Rect, bank_tab: &mut bool, on_page: usize, to_add: Option<usize>) {
     let p = ui.painter();
-    p.rect(rect, CornerRadius::same((rect.height() / 2.0) as u8), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
+    p.rect(rect, CornerRadius::same((rect.height() / 2.0) as u8), theme::card(), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
     let half = rect.width() / 2.0;
     let ids = [ui.id().with(("exam_narrow_switch", 0)), ui.id().with(("exam_narrow_switch", 1))];
     for (i, (is_bank, title, note)) in narrow_switch_labels(on_page, to_add).into_iter().enumerate() {
@@ -1404,7 +1407,7 @@ fn narrow_switch(ui: &mut egui::Ui, rect: Rect, bank_tab: &mut bool, on_page: us
             ui.painter().rect_stroke(seg, r, Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
         }
         let mut job = egui::text::LayoutJob::default();
-        let (fg, fam) = if on { (theme::accent_col(), theme::bold_family()) } else { (theme::text_col(), theme::medium_family()) };
+        let (fg, fam) = if on { (theme::accent_col(), theme::bold_family()) } else { (theme::ink(), theme::sans_family()) };
         job.append(title, 0.0, egui::TextFormat::simple(FontId::new(13.5, fam), fg));
         job.append(&format!("  ·  {note}"), 0.0, egui::TextFormat::simple(FontId::proportional(12.0), theme::muted_col()));
         let g = ui.painter().layout_job(job);
@@ -1559,11 +1562,15 @@ fn draw_top_card_narrow(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, s
         draw_actions(app, ui, exam_id, true);
     });
     ui.add_space(6.0);
-    let summary = app.store.exam(exam_id).map(page_setup_summary).unwrap_or_default();
+    let exam = app.store.exam(exam_id).cloned();
     ui.horizontal(|ui| {
         ui.scope(|ui| draw_menus(app, ui, exam_id, st));
         bar_sep(ui);
-        let r = page_setup_button(ui, &summary, st.page_setup_open).on_hover_text("Paper style, heading, text size, margins and answer blanks");
+        // The button's room: up to the zoom well, with a clear gap before it.
+        let zoom_w = if st.shelf_alone { 0.0 } else { zoom_well_w(ui, &zoom_label(st.zoom, st.zoom_eff)) };
+        let room = ui.available_width() - zoom_w - PAGE_SETUP_ZOOM_GAP;
+        let values = exam.as_ref().map(|e| page_setup_fit(ui, e, room)).unwrap_or_default();
+        let r = page_setup_button(ui, &values, st.page_setup_open).on_hover_text("Paper style, heading, text size, margins and answer blanks");
         if r.clicked() {
             st.page_setup_open = !st.page_setup_open;
         }
@@ -1585,35 +1592,114 @@ fn draw_top_card_narrow(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, s
     }
 }
 
-/// The paper in a few words for the Page setup button: "Standard · 12 pt · 1 in".
-fn page_setup_summary(e: &model::Exam) -> String {
+/// The least gap between the narrow Page setup button and the zoom well.
+const PAGE_SETUP_ZOOM_GAP: f32 = 10.0;
+/// The Page setup button's height (as before round 25: the row does not grow).
+const PAGE_SETUP_H: f32 = 34.0;
+/// The Page setup button's side padding.
+const PAGE_SETUP_PAD_X: f32 = 12.0;
+/// Air between two of the button's values, a thin divider at its middle.
+const PAGE_SETUP_VALUE_GAP: f32 = 10.0;
+/// Air before the caret.
+const PAGE_SETUP_CARET_GAP: f32 = 8.0;
+
+/// The paper in brief for the Page setup button: the paper style, the text size and the margins.
+/// With `words` the margins say what they are ("1 in margins", "Each side margins"), else
+/// "1 in" / "Each side".
+fn page_setup_values(e: &model::Exam, words: bool) -> [String; 3] {
     let m = e.page_margins();
-    let margins = if m.uniform() { format!("{} in", fmt_inches(m.top)) } else { "each side".to_string() };
-    format!("{} · {} pt · {margins}", e.paper_style.label(), e.body_pt.round() as i32)
+    let margins = match (m.uniform(), words) {
+        (true, true) => format!("{} in margins", fmt_inches(m.top)),
+        (true, false) => format!("{} in", fmt_inches(m.top)),
+        (false, true) => "Each side margins".to_string(),
+        (false, false) => "Each side".to_string(),
+    };
+    [e.paper_style.label().to_string(), format!("{} pt", e.body_pt.round() as i32), margins]
 }
 
-/// The narrow top card's Page setup button: its name, the current paper in brief and a caret;
-/// in the accent wash while its controls are open.
-fn page_setup_button(ui: &mut egui::Ui, summary: &str, open: bool) -> egui::Response {
+/// The Page setup button's values for `room`: the margins say what they are ("1 in margins")
+/// when the button fits so in every paper style, else "1 in" in every style alike, so picking a
+/// style in the button's own controls never changes the wording.
+fn page_setup_fit(ui: &egui::Ui, e: &model::Exam, room: f32) -> [String; 3] {
+    let words = model::PaperStyle::ALL.iter().all(|&paper_style| {
+        let any = model::Exam { paper_style, ..e.clone() };
+        page_setup_button_w(ui, &page_setup_values(&any, true)) <= room
+    });
+    page_setup_values(e, words)
+}
+
+/// The button's top line: "Page setup" in the small label tier (`kit::label_text`).
+fn page_setup_name_galley(ui: &egui::Ui) -> std::sync::Arc<egui::Galley> {
+    egui::WidgetText::from(kit::label_text("Page setup")).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::FontSelection::Default)
+}
+
+/// The values (ink, semibold, 14), `PAGE_SETUP_VALUE_GAP` apart; the gaps hold the dividers.
+fn page_setup_values_job(values: &[String]) -> LayoutJob {
     let mut job = LayoutJob::default();
-    job.append("Page setup", 0.0, egui::TextFormat::simple(FontId::new(14.0, theme::bold_family()), theme::ink()));
-    job.append(&format!("   {summary}  "), 0.0, egui::TextFormat::simple(FontId::new(14.0, theme::medium_family()), theme::text_col()));
-    let caret = if open { egui_phosphor::regular::CARET_UP } else { egui_phosphor::regular::CARET_DOWN };
-    job.append(caret, 0.0, egui::TextFormat::simple(theme::icon_font(13.0), theme::text_col()));
-    let (rest, stroke) = if open { (theme::accent_faded(), Stroke::new(1.0, theme::accent_col())) } else { (theme::card(), Stroke::new(1.0, theme::rule())) };
-    ui.scope(|ui| {
-        ui.spacing_mut().button_padding = Vec2::new(14.0, 4.0);
-        let w = &mut ui.visuals_mut().widgets;
-        for (state, fill) in [(&mut w.inactive, rest), (&mut w.hovered, if open { rest } else { theme::hover_bg() }), (&mut w.active, theme::accent_faded())] {
-            state.weak_bg_fill = fill;
-            state.bg_fill = fill;
-            state.bg_stroke = stroke;
-            state.expansion = 0.0;
-            state.corner_radius = CornerRadius::same(12);
-        }
-        ui.add(egui::Button::new(job).min_size(Vec2::new(0.0, 34.0))).on_hover_cursor(egui::CursorIcon::PointingHand)
-    })
-    .inner
+    for (i, v) in values.iter().enumerate() {
+        let gap = if i == 0 { 0.0 } else { PAGE_SETUP_VALUE_GAP };
+        job.append(v, gap, egui::TextFormat::simple(FontId::new(14.0, theme::semibold()), theme::ink()));
+    }
+    job
+}
+
+fn page_setup_caret(open: bool) -> &'static str {
+    if open { egui_phosphor::regular::CARET_UP } else { egui_phosphor::regular::CARET_DOWN }
+}
+
+/// The Page setup button's width for `values`.
+fn page_setup_button_w(ui: &egui::Ui, values: &[String; 3]) -> f32 {
+    let p = ui.painter();
+    let text = page_setup_name_galley(ui).size().x.max(p.layout_job(page_setup_values_job(values)).size().x);
+    let caret = p.layout_no_wrap(page_setup_caret(false).into(), theme::icon_font(13.0), theme::text_col()).size().x;
+    PAGE_SETUP_PAD_X + text + PAGE_SETUP_CARET_GAP + caret + PAGE_SETUP_PAD_X
+}
+
+/// The narrow top card's Page setup button (round 25), 34 tall as before: two lines, "Page setup"
+/// in the small label tier on top and the paper style, text size and margins under it in ink
+/// semibold with a thin divider between each (until round 25 one line: a bold name and a middot
+/// run of values), then the caret, centred. Card fill and `rule` outline at rest, the hover wash,
+/// the accent wash and outline while its controls are open, the accent ring on keyboard focus.
+/// Screen readers hear "Page setup: Condensed, 12 pt, 1 in margins".
+fn page_setup_button(ui: &mut egui::Ui, values: &[String; 3], open: bool) -> egui::Response {
+    let w = page_setup_button_w(ui, values);
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, PAGE_SETUP_H), Sense::click());
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    let name = format!("Page setup: {}", values.join(", "));
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+    let r = CornerRadius::same(12);
+    let fill = if open || resp.is_pointer_button_down_on() {
+        theme::accent_faded()
+    } else if resp.hovered() {
+        theme::hover_bg()
+    } else {
+        theme::card()
+    };
+    let stroke = if open { Stroke::new(1.0, theme::accent_col()) } else { Stroke::new(1.0, theme::rule()) };
+    let p = ui.painter();
+    p.rect(rect, r, fill, stroke, StrokeKind::Inside);
+    if resp.has_focus() {
+        p.rect_stroke(rect.expand(1.0), CornerRadius::same(13), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+    }
+    let x0 = rect.left() + PAGE_SETUP_PAD_X;
+    // The two lines share the button's height: the name's line from the top, the values' line
+    // from the bottom, each 2 in.
+    let name_g = page_setup_name_galley(ui);
+    let vals = p.layout_job(page_setup_values_job(values));
+    p.galley(Pos2::new(x0, rect.top() + 2.0), name_g, theme::muted_col());
+    let vy = rect.bottom() - 2.0 - vals.size().y;
+    let (vh, vw) = (vals.size().y, vals.size().x);
+    p.galley(Pos2::new(x0, vy), vals.clone(), theme::ink());
+    let text_w = vw.max(page_setup_name_galley(ui).size().x);
+    for k in 1..values.len() {
+        // (the values up to value k, laid out alone, give the gap's left edge)
+        let wk = p.layout_job(page_setup_values_job(&values[..k])).size().x;
+        let x = (x0 + wk + PAGE_SETUP_VALUE_GAP / 2.0).round() + 0.5;
+        let cy = vy + vh / 2.0;
+        p.vline(x, (cy - 6.0)..=(cy + 6.0), Stroke::new(1.0, theme::border()));
+    }
+    p.text(Pos2::new(x0 + text_w + PAGE_SETUP_CARET_GAP, rect.center().y), Align2::LEFT_CENTER, page_setup_caret(open), theme::icon_font(13.0), theme::text_col());
+    resp
 }
 
 /// The Page setup controls, opened in place under the narrow top card's rows: every format
@@ -5258,14 +5344,22 @@ fn draw_shelf_inner(
         let sort_text = SORTS[st.sort.min(SORTS.len() as u8 - 1) as usize];
         let sort_width = sort_w(ui, sort_text);
         let search_w = (ui.available_width() - sort_width - 6.0).max(80.0);
-        let search = ui.add(
-            egui::TextEdit::singleline(&mut st.search)
-                .hint_text(format!("{}  Search questions", egui_phosphor::regular::MAGNIFYING_GLASS))
-                .margin(Margin::symmetric(10, 5))
-                .min_size(Vec2::new(0.0, SHELF_CONTROL_H))
-                .vertical_align(egui::Align::Center)
-                .desired_width(search_w),
-        );
+        let search = ui
+            .scope(|ui| {
+                // The placeholder and its magnifier in the muted tone (round 25, as
+                // `kit::search_field_with`): 5.5:1 light, 5.2:1 dark, where egui's weak text was
+                // about 2.8:1 on the light field. Typed text stays ink.
+                ui.visuals_mut().weak_text_color = Some(theme::muted_col());
+                ui.add(
+                    egui::TextEdit::singleline(&mut st.search)
+                        .hint_text(format!("{}  Search questions", egui_phosphor::regular::MAGNIFYING_GLASS))
+                        .margin(Margin::symmetric(10, 5))
+                        .min_size(Vec2::new(0.0, SHELF_CONTROL_H))
+                        .vertical_align(egui::Align::Center)
+                        .desired_width(search_w),
+                )
+            })
+            .inner;
         // named, not only a placeholder that goes once something is typed
         ui.ctx().accesskit_node_builder(search.id, |n| n.set_label("Search questions"));
         // at the row's right edge, as tall as the search
@@ -9123,6 +9217,42 @@ mod system_pass_tests {
         assert!(laid <= INNER_860 + 0.5, "laid out {laid} of {INNER_860} ({fit:?})");
     }
 
+    /// The narrow Page setup button (round 25) always shows its "Page setup" name over its values,
+    /// and the margins read "1 in margins" in every paper style or "1 in" in every one: the word
+    /// stays wherever the widest style's button fits the room, and the wording never differs
+    /// between styles at one room.
+    #[test]
+    fn the_narrow_page_setup_face_keeps_one_margin_wording_across_paper_styles() {
+        let rows = in_ui(|ui| {
+            let e = |paper_style| model::Exam { paper_style, body_pt: 12.0, margins: Some(model::Margins::all(25.4)), ..Default::default() };
+            let name_w = page_setup_name_galley(ui).size().x;
+            let widest = model::PaperStyle::ALL.iter().map(|&ps| page_setup_button_w(ui, &page_setup_values(&e(ps), true))).fold(0.0, f32::max);
+            let mut out = vec![];
+            for room in [600.0, widest, widest - 0.5, 200.0] {
+                let fits: Vec<_> = model::PaperStyle::ALL.iter().map(|&ps| {
+                    let v = page_setup_fit(ui, &e(ps), room);
+                    let w = page_setup_button_w(ui, &v);
+                    (v, w)
+                }).collect();
+                out.push((room, fits));
+            }
+            Some((name_w, widest, out))
+        })
+        .unwrap();
+        let (name_w, widest, rows) = rows;
+        for (room, fits) in &rows {
+            let words: Vec<bool> = fits.iter().map(|(v, _)| v[2].ends_with("margins")).collect();
+            assert!(words.iter().all(|&w| w == words[0]), "one wording at {room}: {fits:?}");
+            assert_eq!(words[0], *room >= widest, "the word stays exactly while the widest style fits {room}: {fits:?}");
+            for (v, w) in fits {
+                assert!(*w >= name_w + 2.0 * PAGE_SETUP_PAD_X, "{v:?}: the name has its room");
+                if words[0] {
+                    assert!(*w <= *room, "{v:?} needs {w} of {room}");
+                }
+            }
+        }
+    }
+
     /// Short of room the strip drops the "Page setup" name, then the page prefix, then the
     /// summary, then the words, and never needs more than it was given once the words are gone
     /// (or the smallest it can be).
@@ -9596,6 +9726,75 @@ mod review_tests {
     /// Where a question drawn at screen `y` (from the paper's top) is on the printed page.
     fn on_print(lifts: &[(f32, f32)], y: f32) -> f32 {
         y - lifts.iter().take_while(|l| l.0 + l.1 <= y + 0.01).last().map_or(0.0, |l| l.1)
+    }
+
+    /// The narrow top card as a 760 window draws it (616 wide), on an exam in `style` with 12 pt
+    /// text and `margins`: the Page setup button's AccessKit name and rect, and the zoom well's
+    /// left edge (its − button less the well's 2 pt inset), File's middle, and the width of the
+    /// button's "Page setup" line.
+    fn narrow_top_card(style: crate::model::PaperStyle, margins: Margins) -> (String, Rect, f32, f32, f32) {
+        let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![short("q0", "Define a catalyst.")], created: 0, modified: 0, details: Default::default() };
+        let mut exam = exam_of(vec![ExamItem::new("b", "q0".to_string())], 0);
+        exam.name = "Untitled Exam".into();
+        exam.paper_style = style;
+        exam.margins = Some(margins);
+        let app = scratch_app(bank, exam);
+        let mut first = true;
+        let mut h = Harness::builder().with_size(Vec2::new(700.0, 300.0)).build_ui_state(
+            move |ui, s: &mut (crate::App, EditUi)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let (app, st) = s;
+                st.narrow = true;
+                st.zoom = 0.0;
+                st.zoom_eff = 1.21;
+                ui.allocate_ui(Vec2::new(616.0, 200.0), |ui| {
+                    ui.set_max_width(616.0);
+                    draw_top_card(app, ui, &"e".into(), st);
+                });
+            },
+            (app, EditUi::default()),
+        );
+        h.run_steps(4);
+        let btn = h.query_all(by().predicate(|n| n.label().is_some_and(|l| l.starts_with("Page setup:")))).next().expect("the Page setup button");
+        let (name, rect) = (btn.accesskit_node().label().unwrap_or_default(), btn.rect());
+        let zoom_left = h.get_by_label("Smaller page").rect().left() - 2.0;
+        let file_y = h.get_by_label("File").rect().center().y;
+        let name_w = page_setup_name_galley(&egui::Ui::new(h.ctx.clone(), egui::Id::new("m"), egui::UiBuilder::new())).size().x;
+        (name, rect, zoom_left, file_y, name_w)
+    }
+
+    /// At 760 the Page setup button (round 25) shows its "Page setup" name over its values and
+    /// "1 in margins" in every paper style with equal margins, stays 34 tall on File / Edit /
+    /// Format's row, and ends at least `PAGE_SETUP_ZOOM_GAP` short of the zoom well, which keeps
+    /// its place. With unequal margins the wording is one for every style.
+    #[test]
+    fn the_narrow_page_setup_button_fits_beside_the_zoom_in_every_paper_style() {
+        use crate::model::PaperStyle;
+        let mut zoom_lefts = vec![];
+        let mut each_side = vec![];
+        for style in PaperStyle::ALL {
+            for even in [true, false] {
+                let margins = if even { Margins::all(25.4) } else { Margins { top: 25.4, right: 19.05, bottom: 25.4, left: 19.05 } };
+                let (name, rect, zoom_left, file_y, name_w) = narrow_top_card(style, margins);
+                if even {
+                    assert_eq!(name, format!("Page setup: {}, 12 pt, 1 in margins", style.label()));
+                } else {
+                    assert!(name.starts_with(&format!("Page setup: {}, 12 pt, Each side", style.label())), "{name}");
+                    each_side.push(name.ends_with("margins"));
+                }
+                // The visible name: drawn on the top line, with its room inside the button.
+                assert!(rect.width() >= name_w + 2.0 * PAGE_SETUP_PAD_X, "{name}: {} wide, the name needs {name_w}", rect.width());
+                assert!((rect.height() - PAGE_SETUP_H).abs() < 0.5 && (rect.center().y - file_y).abs() < 1.0, "{name}: {rect:?}, File at {file_y}");
+                assert!(rect.right() + PAGE_SETUP_ZOOM_GAP <= zoom_left + 0.5, "{name}: ends at {} with the zoom at {zoom_left}", rect.right());
+                zoom_lefts.push(zoom_left);
+            }
+        }
+        assert!(each_side.iter().all(|&w| w == each_side[0]), "one wording for unequal margins: {each_side:?}");
+        assert!(zoom_lefts.windows(2).all(|w| (w[0] - w[1]).abs() < 0.5), "the zoom well keeps its place: {zoom_lefts:?}");
     }
 
     /// The exam page with `n` questions (q0, q1, …) at 100% in a 700 x 900 window, narrow or not,
