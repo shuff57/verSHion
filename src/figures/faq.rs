@@ -302,6 +302,10 @@ const PULLEY: &[Faq] = &[
         a: "Opposite to the way the block moves or would move. If a hanging mass drags the block toward the pulley, friction on the block points away from the pulley.",
     },
     Faq {
+        q: "Why does the touching object sit between the tied one and the pulley?",
+        a: "A string can only pull, toward its pulley. An object resting against the back of the tied one is left behind and feels no contact force. In front, the tied object pushes it along, with a contact force m₃m₂g / (m₁ + m₂ + m₃) on a smooth table. The string passes over it on a short post.",
+    },
+    Faq {
         q: "How do I show only the forces on one of the masses?",
         a: "Use a free body diagram for that single object, drawing only the forces acting on it, such as the tension pulling up and its weight pulling down on a hanging mass.",
     },

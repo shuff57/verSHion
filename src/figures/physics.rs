@@ -17,6 +17,11 @@ mod ray_diagram;
 mod ray_diagram_tests;
 mod pulley;
 pub(crate) use pulley::{pulley_relevant, pulley_setup_changed};
+mod pulley_b10;
+#[cfg(test)]
+mod pulley_b10_tests;
+/// Editor-only notes for the pulley (what could not be drawn as asked).
+pub fn pulley_warnings(p: &Params) -> Vec<String> { pulley_b10::warnings(p) }
 mod examples;
 #[cfg(test)]
 mod ray_diagram_frozen;

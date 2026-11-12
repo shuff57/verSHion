@@ -93,6 +93,7 @@ pub(super) fn summary(id: &str, title: &str, p: &Params) -> Option<String> {
             if p.b("gravity") { v.push("gravity".into()); }
             if p.b("normal") { v.push("normal force".into()); }
             if p.s("friction") != "None" { v.push("friction".into()); }
+            if p.b("contact") && super::pulley::pulley_relevant("contact", p) { v.push("contact forces".into()); }
             if p.s("accel") != "None" { v.push("acceleration".into()); }
             or_none(v, ", ")
         }

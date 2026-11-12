@@ -339,8 +339,8 @@ static FIG_33: [RefSection; 6] = [
 
 static FIG_34: [RefSection; 4] = [
     s("Setup", &["setup", "l_kind"], ""),
-    s("Objects", &["l_lab_mode", "l_lab", "l_size", "r_lab_mode", "r_lab", "r_size", "lower", "third", "third_side", "t_lab_mode", "t_lab", "t_size", "second", "s_lab", "strands", "angle", "ang_lab_mode", "ang_lab", "surface"], ""),
-    s("Forces and motion", &["tension", "tens_lab_mode", "tens_lab", "gravity", "grav_lab_mode", "grav_lab", "normal", "norm_lab_mode", "norm_lab", "friction", "fric_lab_mode", "fric_lab", "accel", "acc_lab_mode", "acc_lab"], ""),
+    s("Objects", &["l_lab_mode", "l_lab", "l_size", "r_lab_mode", "r_lab", "r_size", "lower", "third", "third_side", "t_lab_mode", "t_lab", "t_size", "second", "s_lab", "joined", "strands", "angle", "ang_lab_mode", "ang_lab", "surface"], ""),
+    s("Forces and motion", &["tension", "tens_lab_mode", "tens_lab", "gravity", "grav_lab_mode", "grav_lab", "normal", "norm_lab_mode", "norm_lab", "friction", "fric_lab_mode", "fric_lab", "contact", "cont_lab_mode", "cont_lab", "accel", "acc_lab_mode", "acc_lab"], ""),
     s("Figure", &["mirror", "color"], ""),
 ];
 
