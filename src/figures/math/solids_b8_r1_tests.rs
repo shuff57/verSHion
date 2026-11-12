@@ -44,6 +44,7 @@ fn labels(svg: &str) -> Vec<(String, String, Bx)> {
 struct Stroke { a: Pt, b: Pt, w: f64, dashed: bool, }
 /// Every drawn stroke as segments, with its width and dash, and the label a leader belongs to.
 fn strokes(svg: &str) -> Vec<(Stroke, String)> {
+    let fills = opaque(svg);
     let mut out = Vec::new();
     for tag in ["<line", "<polyline", "<polygon"] {
         for (i, _) in svg.match_indices(tag) {
@@ -56,12 +57,52 @@ fn strokes(svg: &str) -> Vec<(Stroke, String)> {
             let dashed = !matches!(at("stroke-dasharray").as_str(), "" | "none");
             let leader = at("data-leader");
             let f = |n: &str| at(n).parse::<f64>().unwrap_or(f64::NAN);
-            if tag == "<line" { out.push((Stroke { a: (f("x1"), f("y1")), b: (f("x2"), f("y2")), w, dashed }, leader)); continue; }
-            let pts: Vec<Pt> = at("points").split_whitespace().filter_map(|q| q.split_once(',')).filter_map(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))).collect();
-            for k in 1..pts.len() { out.push((Stroke { a: pts[k - 1], b: pts[k], w, dashed }, leader.clone())); }
-            if tag == "<polygon" && pts.len() > 2 { out.push((Stroke { a: pts[pts.len() - 1], b: pts[0], w, dashed }, leader.clone())); }
+            let mut segs = Vec::new();
+            if tag == "<line" { segs.push(((f("x1"), f("y1")), (f("x2"), f("y2")))); } else {
+                let pts: Vec<Pt> = at("points").split_whitespace().filter_map(|q| q.split_once(',')).filter_map(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))).collect();
+                for k in 1..pts.len() { segs.push((pts[k - 1], pts[k])); }
+                if tag == "<polygon" && pts.len() > 2 { segs.push((pts[pts.len() - 1], pts[0])); }
+            }
+            // only what shows: the parts no opaque face drawn later paints over
+            for (a, b) in segs { for (a, b) in shown(&fills, i, a, b) { out.push((Stroke { a, b, w, dashed }, leader.clone())); } }
         }
     }
+    out
+}
+/// The opaque faces, in drawing order.
+fn opaque(svg: &str) -> Vec<(usize, Vec<Pt>)> {
+    svg.match_indices("<polygon").filter_map(|(i, _)| {
+        let h = svg[i + 8..].split('>').next().unwrap_or("");
+        let at = |n: &str| h.split(&format!(" {n}=\"")).nth(1).and_then(|r| r.split('"').next()).unwrap_or("").to_string();
+        if matches!(at("fill").as_str(), "" | "none") { return None; }
+        let pts: Vec<Pt> = at("points").split_whitespace().filter_map(|q| q.split_once(',')).filter_map(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))).collect();
+        (pts.len() > 2).then_some((i, pts))
+    }).collect()
+}
+fn in_poly(q: Pt, poly: &[Pt]) -> bool {
+    let mut c = false;
+    for k in 0..poly.len() {
+        let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
+        if (a.1 > q.1) != (b.1 > q.1) && q.0 < a.0 + (q.1 - a.1) * (b.0 - a.0) / (b.1 - a.1) { c = !c; }
+    }
+    c
+}
+/// The parts of a-b (drawn at `at`) that show: sampled every pixel, a point is hidden inside a later face, away from its edge.
+fn shown(fills: &[(usize, Vec<Pt>)], at: usize, a: Pt, b: Pt) -> Vec<(Pt, Pt)> {
+    let later: Vec<&Vec<Pt>> = fills.iter().filter(|(i, _)| *i > at).map(|(_, p)| p).collect();
+    if later.is_empty() { return vec![(a, b)]; }
+    let n = (((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt()).ceil().max(1.0) as usize;
+    let pt = |k: usize| { let t = k as f64 / n as f64; (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t) };
+    let hid = |q: Pt| later.iter().any(|poly| in_poly(q, poly) && (0..poly.len()).all(|k| dist_pt_seg(q, poly[k], poly[(k + 1) % poly.len()]) > 1.0));
+    let (mut out, mut start) = (Vec::new(), None);
+    for k in 0..=n {
+        match (!hid(pt(k)), start) {
+            (true, None) => start = Some(k),
+            (false, Some(s)) => { if k - 1 > s { out.push((pt(s), pt(k - 1))); } start = None; }
+            _ => {}
+        }
+    }
+    if let Some(s) = start && n > s { out.push((pt(s), pt(n))); }
     out
 }
 fn dist_pt_seg(p: Pt, a: Pt, b: Pt) -> f64 {
@@ -77,7 +118,10 @@ fn crosses(a: Pt, b: Pt, bx: Bx, inset: f64) -> bool {
 }
 
 /// Every problem with the labels of one drawn figure.
-pub(super) fn problems(id: &str, p: &Params) -> Vec<String> {
+pub(super) fn problems(id: &str, p: &Params) -> Vec<String> { problems_with(id, p, 42.0) }
+/// `problems` with leaders allowed up to `cap` px (a figure with every label switched on at once may need a longer one to reach
+/// open space; the plain figures and the checker's keep to about 40 px).
+pub(super) fn problems_with(id: &str, p: &Params, cap: f64) -> Vec<String> {
     let st = def(id).svg(p);
     let own = super::solids_b8::last_own();
     let labs = labels(&st);
@@ -96,7 +140,9 @@ pub(super) fn problems(id: &str, p: &Params) -> Vec<String> {
         if mine.is_empty() { continue; }
         // its own line: what it was drawn beside, the leader drawn from it, and the strokes lying on that line
         let on_own = |sk: &Stroke| mine.iter().any(|(a, c)| super::solids_b8::along_line((sk.a, sk.b), *a, *c));
-        let mut d_own = mine.iter().map(|(a, c)| seg_box(*a, *c, *b)).fold(f64::MAX, f64::min);
+        // measured to the part of its own line that shows (the drawn strokes lying along it), or the whole if none shows
+        let seen: Vec<&Stroke> = all.iter().filter(|(sk, l)| l.is_empty() && on_own(sk)).map(|(sk, _)| sk).collect();
+        let mut d_own = if seen.is_empty() { mine.iter().map(|(a, c)| seg_box(*a, *c, *b)).fold(f64::MAX, f64::min) } else { seen.iter().map(|sk| seg_box(sk.a, sk.b, *b)).fold(f64::MAX, f64::min) };
         for (sk, lead) in &all { if lead == lid { d_own = d_own.min(seg_box(sk.a, sk.b, *b)); } }
         for (sk, lead) in &all {
             // right-angle squares and the like (under 1.5 px) are marks, not lines
@@ -134,7 +180,63 @@ pub(super) fn problems(id: &str, p: &Params) -> Vec<String> {
             if near { bad.push(format!("the {lead} leader runs along a line {:?}-{:?}", o.a, o.b)); break; }
         }
     }
+    // right-angle squares (and any other mark) are not written over
+    for (_, t, b) in &labs {
+        for (sk, _) in &all { if sk.w < 1.5 && crosses(sk.a, sk.b, *b, 0.5) { bad.push(format!("a right-angle mark runs under {t}")); break; } }
+    }
+    // a leader is short: about 40 px at most
+    for (sk, lead) in all.iter().filter(|(_, l)| !l.is_empty()) {
+        let l = ((sk.b.0 - sk.a.0).powi(2) + (sk.b.1 - sk.a.1).powi(2)).sqrt();
+        if l > cap { bad.push(format!("the {lead} leader is {l:.0} px long")); }
+    }
+    // every label shows: nothing drawn after it covers it
+    bad.extend(hidden(&st));
     bad
+}
+
+/// The labels a later drawing covers, read off the rendered pixels: each label's glyph box drawn with and without its text must
+/// differ in at least half the pixels the text alone inks.
+pub(super) fn hidden(svg: &str) -> Vec<String> {
+    let render = |s: &str| {
+        let mut opt = resvg::usvg::Options::default();
+        opt.fontdb = crate::figures::fontdb();
+        let tree = resvg::usvg::Tree::from_str(&crate::figures::serif_stack(s), &opt).expect("the SVG parses");
+        let sz = tree.size();
+        let mut pm = resvg::tiny_skia::Pixmap::new(sz.width().ceil() as u32, sz.height().ceil() as u32).unwrap();
+        pm.fill(resvg::tiny_skia::Color::WHITE);
+        resvg::render(&tree, resvg::tiny_skia::Transform::identity(), &mut pm.as_mut());
+        pm
+    };
+    let full = render(svg);
+    let (w, h) = (full.width() as i64, full.height() as i64);
+    let labs = labels(svg);
+    let mut out = Vec::new();
+    // the drawing with every label taken out, and the labels alone (labels never touch, so each box holds one)
+    let mut without = String::with_capacity(svg.len());
+    let mut alone = String::new();
+    let mut rest = svg;
+    while let Some(st) = rest.find("<text") {
+        without.push_str(&rest[..st]);
+        let e = rest[st..].find("</text>").map(|e| st + e + 7).unwrap_or(rest.len());
+        alone.push_str(&rest[st..e]);
+        rest = &rest[e..];
+    }
+    without.push_str(rest);
+    let head_end = svg.find('>').unwrap() + 1;
+    let (wo, al) = (render(&without), render(&format!("{}{alone}</svg>", &svg[..head_end])));
+    for (_, t, b) in &labs {
+        let (mut ink, mut shows) = (0, 0);
+        for y in (b.1.floor() as i64).max(0)..(b.3.ceil() as i64).min(h) {
+            for x in (b.0.floor() as i64).max(0)..(b.2.ceil() as i64).min(w) {
+                let i = (y * w + x) as usize;
+                let (a, f, o) = (al.pixels()[i], full.pixels()[i], wo.pixels()[i]);
+                if a.red() < 160 { ink += 1; }
+                if (f.red() as i32 - o.red() as i32).abs() > 60 || (f.green() as i32 - o.green() as i32).abs() > 60 { shows += 1; }
+            }
+        }
+        if ink > 0 && shows * 2 < ink { out.push(format!("{t} is covered ({shows} of {ink} pixels show)")); }
+    }
+    out
 }
 fn segs_cross(p1: Pt, p2: Pt, q1: Pt, q2: Pt) -> bool {
     let c = |a: Pt, b: Pt, c: Pt| (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
@@ -171,6 +273,19 @@ fn cases() -> Vec<(&'static str, Vec<(&'static str, Value)>)> {
             }
         }
     }
+    // one typed measure on the opening state, every stands and size: the plain figures a teacher starts from
+    for id in IDS {
+        for stands in ["Right", "Oblique"] {
+            for size in ["Small", "Medium", "Large"] {
+                for f in ["5/2", "\u{221a}5", "3/2", "17/3", "100/7", "5\u{221a}13", "\u{221a}13/2"] {
+                    for key in ["height_t", "radius_t", "length_t", "width_t"] {
+                        if matches!(id, "cylinder" | "cone") == matches!(key, "length_t" | "width_t") { continue; }
+                        out.push((id, vec![s("stands", stands), s("label_size", size), s(key, f)]));
+                    }
+                }
+            }
+        }
+    }
     // the checker's figures
     let ck: [(&str, &str); 7] = [
         ("pyramid", r#"{"stands":"Oblique","height_t":"17/3","slant_lab":"Measure","label_size":"Large"}"#),
@@ -200,7 +315,8 @@ fn every_label_sits_by_its_own_line() {
     for (id, l) in &cs {
         let p = with(id, l);
         assert!(super::solids_b8::any_typed(&p), "{id}: a swept figure without a typed measure");
-        for e in problems(id, &p) { bad.push(format!("{id} {}: {e}", l.iter().filter(|x| matches!(x.0, "stands" | "base" | "sits" | "label_size") || x.0 == "height_t").map(|x| format!("{:?}", x.1)).collect::<Vec<_>>().join(" "))); }
+        let crowded = l.iter().filter(|x| x.0.ends_with("_lab")).count() > 3;
+        for e in problems_with(id, &p, if crowded { 70.0 } else { 42.0 }) { bad.push(format!("{id} {}: {e}", l.iter().filter(|x| matches!(x.0, "stands" | "base" | "sits" | "label_size") || x.0 == "height_t").map(|x| format!("{:?}", x.1)).collect::<Vec<_>>().join(" "))); }
     }
     assert!(cs.len() > 600, "{} figures swept", cs.len());
     assert!(bad.is_empty(), "{} label problems in {} figures:\n{}", bad.len(), cs.len(), bad.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));
@@ -222,4 +338,55 @@ fn the_checkers_figures() {
         let bad = problems(id, &p);
         assert!(bad.is_empty(), "{id} {j}:\n{}", bad.join("\n"));
     }
+}
+
+/// The checker's round 2 figures: a typed height on the oblique cylinder shows (it was under the top face), a right cylinder's
+/// height shows, the height label keeps off the right-angle square, the radius label stays by its radius line, and the busy
+/// pyramid's leaders are short.
+#[test]
+fn the_checkers_round2_figures() {
+    for (id, j) in [
+        ("cylinder", r#"{"stands":"Oblique","height_t":"5/2"}"#),
+        ("cylinder", r#"{"stands":"Oblique","height_t":"√5","label_size":"Small"}"#),
+        ("cylinder", r#"{"stands":"Oblique","height_t":"√5","label_size":"Large"}"#),
+        ("cylinder", r#"{"stands":"Oblique","height_t":"3/2"}"#),
+        ("cylinder", r#"{"show_height":true,"label_size":"Large","r_lab":"Measure","h_lab":"Measure","lean_lab":"Measure","edge_lab":"Measure","radius_t":"5√13","height_t":"100/7"}"#),
+        ("pyramid", r#"{"label_size":"Large","length_t":"5√13"}"#),
+        ("pyramid", r#"{"label_size":"Small","height_t":"√13/2"}"#),
+        ("cylinder", r#"{"stands":"Oblique","label_size":"Medium","radius_t":"100/7"}"#),
+        ("pyramid", r#"{"stands":"Oblique","length_t":"15/2","width_t":"√13/2","height_t":"17/3","lean_t":"5/2","slant_lab":"Measure","apothem_lab":"Measure","label_size":"Large"}"#),
+    ] {
+        let p = with(id, &json_list(j));
+        let bad = problems(id, &p);
+        assert!(bad.is_empty(), "{id} {j}:\n{}", bad.join("\n"));
+    }
+}
+
+/// For the owner: how many cylinders with NO typed measure (drawn as before, frozen) still hide their height label under the
+/// top face. Run with `--ignored --nocapture`; it changes nothing.
+#[test]
+#[ignore]
+fn count_hidden_height_labels_without_typed_measures() {
+    let (mut n, mut hid) = (std::collections::BTreeMap::<&str, usize>::new(), std::collections::BTreeMap::<&str, usize>::new());
+    for stands in ["Oblique", "Right"] {
+        for size in ["Small", "Medium", "Large"] {
+            for h in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 6.0, 10.0] {
+                for r in [1.0, 3.0, 6.0] {
+                    for lean in [-4.0, 2.0] {
+                        for show in [false, true] {
+                            if stands == "Right" && (lean != 2.0) { continue; }
+                            let l = vec![s("stands", stands), s("label_size", size), ("height", Value::F(h)), ("radius", Value::F(r)), ("lean", Value::F(lean)), ("show_height", Value::B(show))];
+                            let p = with("cylinder", &l);
+                            assert!(!super::solids_b8::any_typed(&p));
+                            *n.entry(stands).or_default() += 1;
+                            let st = def("cylinder").svg(&p);
+                            let h_txt = labels(&st).into_iter().find(|x| x.0 == "h").map(|x| x.1);
+                            if let Some(t) = h_txt && hidden(&st).iter().any(|e| e.starts_with(&t)) { *hid.entry(stands).or_default() += 1; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (k, v) in &n { eprintln!("HIDDEN {k}: {} of {v} slider-only cylinders hide the height label", hid.get(k).copied().unwrap_or(0)); }
 }

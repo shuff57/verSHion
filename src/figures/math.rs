@@ -4707,7 +4707,9 @@ fn prism_params() -> Vec<ParamDef> {
     v
 }
 
-fn prism_render(p: &Params) -> String {
+/// The prism drawn on its page, grown when a typed measure's labels need room (`solids_b8::roomy`).
+fn prism_render(p: &Params) -> String { solids_b8::roomy(p, prism_render_k) }
+fn prism_render_k(p: &Params) -> String {
     solids_b8::begin();
     let (l, wd) = (sv(p, "length"), sv(p, "width"));
     let kind = p.s("base");
@@ -4727,7 +4729,8 @@ fn prism_render(p: &Params) -> String {
     let foot = (e.0 + lean, e.1, 0.0);
     if lean.abs() > 1e-9 { all.push(proj(foot)); }
     let m = solids_b8::fit(&all, p);
-    let mut d = new_doc(560.0, 380.0);
+    let (pw, ph) = solids_b8::page();
+    let mut d = new_doc(pw, ph);
     draw_solid(&mut d, &m, &solid, &proj, oblv(sx), p.b("hidden"));
     let fs = lsz3(p);
     let hide = hide_list(p);
@@ -4865,7 +4868,9 @@ fn pyramid_params() -> Vec<ParamDef> {
     v
 }
 
-fn pyramid_render(p: &Params) -> String {
+/// The pyramid drawn on its page, grown when a typed measure's labels need room (`solids_b8::roomy`).
+fn pyramid_render(p: &Params) -> String { solids_b8::roomy(p, pyramid_render_k) }
+fn pyramid_render_k(p: &Params) -> String {
     solids_b8::begin();
     let (l, wd) = (sv(p, "length"), sv(p, "width"));
     let hh = pyramid_height(p);
@@ -4885,7 +4890,8 @@ fn pyramid_render(p: &Params) -> String {
     let all: Vec<Pt> = solid.v.iter().map(|q| proj(*q)).collect();
     let cenp = (all.iter().map(|q| q.0).sum::<f64>() / all.len() as f64, all.iter().map(|q| q.1).sum::<f64>() / all.len() as f64);
     let m = solids_b8::fit(&all, p);
-    let mut d = new_doc(560.0, 380.0);
+    let (pw, ph) = solids_b8::page();
+    let mut d = new_doc(pw, ph);
     draw_solid(&mut d, &m, &solid, &proj, oblv(sx), p.b("hidden"));
     let fs = lsz3(p);
     let hide = hide_list(p);
@@ -5036,12 +5042,6 @@ fn base_measure(d: &mut Doc, m: &Map, o: Pt, r: f64, p: &Params, solid: bool, ab
         sbeside_r(d, "r", c, rb, 0.5, (mid.0, mid.1 + side), &s, fs);
         d.circle(c.0, c.1, 3.0, INK, INK, 1.0);
     }
-    // the circle itself is the radius's and diameter's too (a label too wide for it sits just outside it)
-    for k in (0..720).step_by(8) {
-        let (q0, q1) = (rim[k], rim[(k + 8) % 720]);
-        solids_b8::own_line("r", q0, q1);
-        solids_b8::own_line("d", q0, q1);
-    }
 }
 
 fn cylinder_params() -> Vec<ParamDef> {
@@ -5074,7 +5074,9 @@ fn cylinder_params() -> Vec<ParamDef> {
 /// tangent runs along the base-to-top translation `(lean, h)`; the other tangent is `+ PI`.
 fn tangent_t(s: f64, lean: f64, h: f64) -> f64 { (-s * lean).atan2(h) }
 
-fn cylinder_render(p: &Params) -> String {
+/// The cylinder drawn on its page, grown when a typed measure's labels need room (`solids_b8::roomy`).
+fn cylinder_render(p: &Params) -> String { solids_b8::roomy(p, cylinder_render_k) }
+fn cylinder_render_k(p: &Params) -> String {
     solids_b8::begin();
     let oblique = p.s("stands") == "Oblique";
     let (r, h) = (solid_r(p), edge_height(p, oblique));
@@ -5084,7 +5086,8 @@ fn cylinder_render(p: &Params) -> String {
     all.extend(ell(lean, h, r, r * s, 0.0, 360.0));
     // the reference draws a solid at a fixed 420 x 300 limit, no fill, 2.4 outline
     let m = solids_b8::fit(&all, p);
-    let mut d = new_doc(560.0, 380.0);
+    let (pw, ph) = solids_b8::page();
+    let mut d = new_doc(pw, ph);
     let fs = lsz3(p);
     let t0 = tangent_t(s, lean, h);
     let t0d = t0.to_degrees();
@@ -5167,7 +5170,9 @@ fn cone_params() -> Vec<ParamDef> {
     v
 }
 
-fn cone_render(p: &Params) -> String {
+/// The cone drawn on its page, grown when a typed measure's labels need room (`solids_b8::roomy`).
+fn cone_render(p: &Params) -> String { solids_b8::roomy(p, cone_render_k) }
+fn cone_render_k(p: &Params) -> String {
     solids_b8::begin();
     let r = solid_r(p);
     let h = cone_height(p);
@@ -5186,7 +5191,8 @@ fn cone_render(p: &Params) -> String {
     let mut all = ell(0.0, 0.0, r, r * s, 0.0, 360.0);
     all.push(apex);
     let m = solids_b8::fit(&all, p);
-    let mut d = new_doc(560.0, 380.0);
+    let (pw, ph) = solids_b8::page();
+    let mut d = new_doc(pw, ph);
     let fs = lsz3(p);
     let (a0, a1) = (tl.to_degrees().rem_euclid(360.0), tr.to_degrees().rem_euclid(360.0));
     let (front0, front1) = (a0, if a1 < a0 { a1 + 360.0 } else { a1 });

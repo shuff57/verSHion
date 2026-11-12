@@ -332,15 +332,16 @@ pub(crate) fn set(p: &mut Params, key: &str, v: f64) {
 /// wider than the room left beside the solid (a 5\u{221a}13 cm beside a wide, flat solid at Large), so a label beside an outer edge
 /// stays on the page. A figure with no typed measure, or with room for it, is fitted exactly as before.
 pub(super) fn fit(all: &[Pt], p: &Params) -> Map {
-    let m = Map::fit_at(all, 420.0, 300.0, 70.0, 40.0);
+    let k = PAGE.with(|c| c.get());
+    let m = Map::fit_at(all, 420.0 * k, 300.0 * k, 70.0 * k, 40.0 * k);
     let fs = lsz3(p);
     // as wide as `sbeside_r` sets it beside an edge (half an em a character), with its gap (5.4) and a little of its halo
     let widest = ["radius", "diam", "height", "lean", "length", "width", "side"].iter().filter_map(|k| exact(p, k)).map(|t| stw(&t, fs).max(serif_w(&t, fs) / 1.04)).fold(0.0, f64::max);
     if widest == 0.0 { return m; }
     let need = widest + 6.5;
     let (lo, hi) = all.iter().map(|q| m.p(*q).0).fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(x), b.max(x)));
-    if lo >= need && 560.0 - hi >= need { return m; }
-    Map::fit_at(all, 560.0 - 2.0 * need, 300.0, need, 40.0)
+    if lo >= need && 560.0 * k - hi >= need { return m; }
+    Map::fit_at(all, 560.0 * k - 2.0 * need, 300.0 * k, need, 40.0 * k)
 }
 
 /// Width of `text` set in the solids' serif at `size`: Liberation Serif / Times advance widths (digits 0.5 em, the slash and
@@ -368,6 +369,7 @@ struct Seg { a: Pt, b: Pt, hard: bool, mark: bool }
 
 /// Every inked stroke of a drawn solid as segments (lines, and the edges of stroked polylines and polygons).
 fn strokes(svg: &str) -> Vec<Seg> {
+    let faces = faces(svg);
     let mut out = Vec::new();
     for tag in ["<line", "<polyline", "<polygon"] {
         for (i, _) in svg.match_indices(tag) {
@@ -377,12 +379,55 @@ fn strokes(svg: &str) -> Vec<Seg> {
             if w <= 0.0 { continue; }
             let dashed = !matches!(attr(h, "stroke-dasharray"), "" | "none");
             let (hard, mark) = (!dashed && w >= 2.0, w < 1.5);
-            if tag == "<line" { out.push(Seg { a: (num(h, "x1"), num(h, "y1")), b: (num(h, "x2"), num(h, "y2")), hard, mark }); continue; }
-            let pts: Vec<Pt> = attr(h, "points").split_whitespace().filter_map(|q| q.split_once(',')).filter_map(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))).collect();
-            for w in pts.windows(2) { out.push(Seg { a: w[0], b: w[1], hard, mark }); }
-            if tag == "<polygon" && pts.len() > 2 { out.push(Seg { a: pts[pts.len() - 1], b: pts[0], hard, mark }); }
+            let mut segs: Vec<(Pt, Pt)> = Vec::new();
+            if tag == "<line" { segs.push(((num(h, "x1"), num(h, "y1")), (num(h, "x2"), num(h, "y2")))); } else {
+                let pts: Vec<Pt> = attr(h, "points").split_whitespace().filter_map(|q| q.split_once(',')).filter_map(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))).collect();
+                for w in pts.windows(2) { segs.push((w[0], w[1])); }
+                if tag == "<polygon" && pts.len() > 2 { segs.push((pts[pts.len() - 1], pts[0])); }
+            }
+            for (a, b) in segs { for (a, b) in visible(&faces, i, a, b) { out.push(Seg { a, b, hard, mark }); } }
         }
     }
+    out
+}
+/// The opaque faces of a drawing, in drawing order: (position in the SVG, outline). A stroke drawn before one is painted over
+/// where it runs inside it.
+fn faces(svg: &str) -> Vec<(usize, Vec<Pt>)> {
+    svg.match_indices("<polygon").filter_map(|(i, _)| {
+        let h = svg[i + 8..].split('>').next().unwrap_or("");
+        if matches!(attr(h, "fill"), "" | "none") || attr(h, "fill-opacity").parse::<f64>().is_ok_and(|o| o < 1.0) { return None; }
+        let pts: Vec<Pt> = attr(h, "points").split_whitespace().filter_map(|q| q.split_once(',')).filter_map(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))).collect();
+        (pts.len() > 2).then_some((i, pts))
+    }).collect()
+}
+fn inside(q: Pt, poly: &[Pt]) -> bool {
+    let mut c = false;
+    for k in 0..poly.len() {
+        let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
+        if (a.1 > q.1) != (b.1 > q.1) && q.0 < a.0 + (q.1 - a.1) * (b.0 - a.0) / (b.1 - a.1) { c = !c; }
+    }
+    c
+}
+/// Whether point q, drawn at position `at`, is painted over by a face drawn after it (a point on the face's own edge is not).
+fn covered(faces: &[(usize, Vec<Pt>)], at: usize, q: Pt) -> bool {
+    faces.iter().any(|(i, poly)| *i > at && inside(q, poly) && (0..poly.len()).all(|k| dist_pt_seg(q, poly[k], poly[(k + 1) % poly.len()]) > 1.0))
+}
+/// The parts of segment a-b, drawn at position `at`, that no later face paints over.
+fn visible(faces: &[(usize, Vec<Pt>)], at: usize, a: Pt, b: Pt) -> Vec<(Pt, Pt)> {
+    if !faces.iter().any(|(i, _)| *i > at) { return vec![(a, b)]; }
+    let n = (((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt()).ceil().max(1.0) as usize;
+    let pt = |k: usize| { let t = k as f64 / n as f64; (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t) };
+    let mut out = Vec::new();
+    let mut start: Option<usize> = None;
+    for k in 0..=n {
+        let seen = !covered(faces, at, pt(k));
+        match (seen, start) {
+            (true, None) => start = Some(k),
+            (false, Some(s)) => { if k - 1 > s { out.push((pt(s), pt(k - 1))); } start = None; }
+            _ => {}
+        }
+    }
+    if let Some(s) = start && n > s { out.push((pt(s), pt(n))); }
     out
 }
 fn seg_hits(a: Pt, b: Pt, bx: Bx) -> bool {
@@ -480,7 +525,11 @@ pub(super) fn clear(svg: String, p: &Params) -> String {
     LAST_OWN.with(|l| *l.borrow_mut() = own.clone());
     if !any_typed(p) { return svg; }
     let mut lines = strokes(&svg);
+    let face_list = faces(&svg);
     let (pw, ph) = crate::figures::svg_size(&svg);
+    // the labels (and their leaders) are drawn last, over every face, so nothing drawn after them covers one
+    let mut on_top = String::new();
+    let mut strain = 0.0;
     let mut placed: Vec<Bx> = Vec::new();
     // how far each placed label is from its own line
     let mut placed_own: Vec<f64> = Vec::new();
@@ -515,12 +564,12 @@ pub(super) fn clear(svg: String, p: &Params) -> String {
         off += i + end + 4;
         rest = &tail[end + 4..];
         let ghead = grp.split('>').next().unwrap_or("");
-        let Some(ti) = grp.find("<text") else { out.push_str(grp); continue };
+        let Some(ti) = grp.find("<text") else { on_top.push_str(grp); continue };
         let thead = grp[ti..].split('>').next().unwrap_or("");
         let (x, y, sz) = (num(thead, "x"), num(thead, "y"), num(thead, "font-size"));
         let later: Vec<Bx> = pending.iter().filter(|(at, _)| *at > here).map(|(_, b)| *b).collect();
         // a dragged label stays where the teacher put it
-        if ghead.contains("transform=") || !(x.is_finite() && y.is_finite() && sz.is_finite()) { out.push_str(grp); continue; }
+        if ghead.contains("transform=") || !(x.is_finite() && y.is_finite() && sz.is_finite()) { on_top.push_str(grp); continue; }
         // the label's glyph box as drawn (resvg with the app's fonts), 1 px round for its halo
         let ib = ink_box(&grp[ti..grp.rfind("</text>").map(|e| e + 7).unwrap_or(grp.len())], x, y);
         let w = (ib.2 - ib.0) / 2.0;
@@ -528,10 +577,14 @@ pub(super) fn clear(svg: String, p: &Params) -> String {
         let hh = (ib.3 - ib.1) / 2.0;
         let bx = |dx: f64, dy: f64| (cx0 + dx - w - 1.0, cy0 + dy - hh - 1.0, cx0 + dx + w + 1.0, cy0 + dy + hh + 1.0);
         let id = attr(ghead, "data-lbl").to_string();
-        let mine: Vec<(Pt, Pt)> = own.iter().filter(|o| o.0 == id).map(|o| (o.1, o.2)).collect();
+        // its own line where it shows (a face drawn after it may paint part of it over: the top of an oblique cylinder's height)
+        let mine_all: Vec<(Pt, Pt)> = own.iter().filter(|o| o.0 == id).map(|o| (o.1, o.2)).collect();
+        let mine_seen: Vec<(Pt, Pt)> = mine_all.iter().flat_map(|(a, c)| visible(&face_list, here, *a, *c)).filter(|(a, c)| (c.0 - a.0).abs() + (c.1 - a.1).abs() > 4.0).collect();
+        let mine: Vec<(Pt, Pt)> = if mine_seen.is_empty() { mine_all } else { mine_seen };
         let on_page = |b: Bx| b.0 >= 1.0 && b.1 >= 1.0 && b.2 <= pw - 1.0 && b.3 <= ph - 1.0;
         let free = |b: Bx, moved: bool| !placed.iter().any(|q| near(*q, b, 4.0)) && !(moved && later.iter().any(|q| near(*q, b, 4.0))) && !leaders.iter().any(|(a, c)| seg_hits(*a, *c, b));
-        let ok = |b: Bx, moved: bool| on_page(b) && free(b, moved) && !lines.iter().any(|s| !s.mark && seg_box(s.a, s.b, b) < 0.5);
+        // clear of every line and of the right-angle squares
+        let ok = |b: Bx, moved: bool| on_page(b) && free(b, moved) && !lines.iter().any(|s| seg_box(s.a, s.b, b) < if s.mark { 1.5 } else { 0.5 });
         // the strokes a label is read against: not marks, not on its own line
         let others: Vec<Seg> = lines.iter().copied().filter(|s| !s.mark && !mine.iter().any(|(a, c)| along_line((s.a, s.b), *a, *c))).collect();
         let d_own = |b: Bx| mine.iter().map(|(a, c)| seg_box(*a, *c, b)).fold(f64::MAX, f64::min);
@@ -584,7 +637,9 @@ pub(super) fn clear(svg: String, p: &Params) -> String {
                 // out of the crowd, its leader still drawn from its own line)
                 // and clear of the labels not placed yet; only if nothing else is found, through one (it is moved off it later)
                 // (and last, passing a placed label a little closer, still further than that label is from its own line)
-                'lead: for (max_cross, spare_later, margin) in [0usize, 1, 2, 3].map(|m| (m, true, 3.0)).into_iter().chain([0usize, 1, 2, 3].map(|m| (m, false, 3.0))).chain([0usize, 1, 2, 3].map(|m| (m, false, 1.2))) {
+                // a short leader (40 px at most) wherever one is found, before any longer one
+                let tiers: Vec<(usize, bool, f64, f64)> = [40.0, 1e9].iter().flat_map(|&cap| [0usize, 1, 2, 3].map(|m| (m, true, 3.0, cap)).into_iter().chain([0usize, 1, 2, 3].map(|m| (m, false, 3.0, cap))).chain([0usize, 1, 2, 3].map(|m| (m, false, 1.2, cap)))).collect();
+                'lead: for (max_cross, spare_later, margin, cap) in tiers {
                     for r in (6..=60).map(|k| k as f64 * 3.0) {
                         for k in 0..64 {
                             let th = k as f64 * std::f64::consts::TAU / 64.0;
@@ -607,8 +662,9 @@ pub(super) fn clear(svg: String, p: &Params) -> String {
                             let ll = ((e.0 - q.0).powi(2) + (e.1 - q.1).powi(2)).sqrt().max(1e-9);
                             let hugs = (0..=20).map(|j| { let t = 6.0 / ll + (1.0 - 6.0 / ll) * j as f64 / 20.0; (q.0 + (e.0 - q.0) * t, q.1 + (e.1 - q.1) * t) })
                                 .any(|z| others.iter().filter(|s| s.hard || leaders.iter().any(|l| (l.0, l.1) == (s.a, s.b))).any(|s| dist_pt_seg(z, s.a, s.b) < 3.0 && cross_at(q, e, s.a, s.b).is_none_or(|x| ((z.0 - x.0).powi(2) + (z.1 - x.1).powi(2)).sqrt() > 4.0)));
-                            let crosses_leader = crosses_leader || ll < 8.0 || hugs;
+                            let crosses_leader = crosses_leader || ll < 8.0 || ll > cap || hugs;
                             if outlines <= max_cross && !crosses_label && !crosses_leader {
+                                strain += (ll - 40.0).max(0.0) + 100.0 * outlines as f64;
                                 best = Some((dx, dy));
                                 leader = Some((q, e));
                                 break 'lead;
@@ -627,23 +683,61 @@ pub(super) fn clear(svg: String, p: &Params) -> String {
             }
         }
         // no spot found: it stays where it was drawn, beside its own line
+        if best.is_none() { strain += 1000.0; }
         let best = best.unwrap_or((0.0, 0.0));
         placed.push(bx(best.0, best.1));
         placed_own.push(if leader.is_some() { 1.5 } else if mine.is_empty() { 0.0 } else { d_own(bx(best.0, best.1)) });
         if let Some((q, e)) = leader {
-            out.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#111827" stroke-width="1.6" data-leader="{id}"/>"##, q.0, q.1, e.0, e.1));
+            on_top.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#111827" stroke-width="1.6" data-leader="{id}"/>"##, q.0, q.1, e.0, e.1));
             leaders.push((q, e));
             lines.push(Seg { a: q, b: e, hard: false, mark: false });
         }
-        if best == (0.0, 0.0) { out.push_str(grp); continue; }
+        if best == (0.0, 0.0) { on_top.push_str(grp); continue; }
         let (cx, cy) = { let v: Vec<f64> = attr(ghead, "data-box").split_whitespace().filter_map(|v| v.parse().ok()).collect(); (v.first().copied().unwrap_or(x), v.get(1).copied().unwrap_or(y)) };
         let g2 = grp
             .replacen(&format!("data-box=\"{cx:.2} {cy:.2}"), &format!("data-box=\"{:.2} {:.2}", cx + best.0, cy + best.1), 1)
             .replacen(&format!("<text x=\"{x:.2}\" y=\"{y:.2}\""), &format!("<text x=\"{:.2}\" y=\"{:.2}\"", x + best.0, y + best.1), 1);
-        out.push_str(&g2);
+        on_top.push_str(&g2);
     }
-    out.push_str(rest);
+    // the rest of the drawing, then the labels on top, before the document's end
+    match rest.rfind("</svg>") {
+        Some(e) => { out.push_str(&rest[..e]); out.push_str(&on_top); out.push_str(&rest[e..]); }
+        None => { out.push_str(rest); out.push_str(&on_top); }
+    }
+    STRAIN.with(|s| s.set(strain));
     out
+}
+
+thread_local! {
+    /// How hard the last typed solid's labels were to place: leader length over 40 px, outlines its leaders cross (100 each),
+    /// labels left where drawn (1000 each). `roomy` draws a figure larger when this is not 0.
+    static STRAIN: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    /// The page scale of the solid being drawn (1: the 560 by 380 page; more when its labels need room).
+    static PAGE: std::cell::Cell<f64> = const { std::cell::Cell::new(1.0) };
+}
+/// The page of the solid being drawn (560 by 380, grown by `roomy`).
+pub(super) fn page() -> (f64, f64) { let k = PAGE.with(|c| c.get()); (560.0 * k, 380.0 * k) }
+/// Draws a solid; a figure with a typed measure whose labels needed long leaders, leaders across outlines, or could not be
+/// placed is drawn again on a larger page (1.25 to 2 times), where its lines are longer and its labels relatively smaller,
+/// and the drawing with the least of that is kept (the smaller page on a tie). A figure with no typed measure is drawn once, on
+/// its usual page, exactly as before.
+pub(super) fn roomy(p: &Params, f: fn(&Params) -> String) -> String {
+    PAGE.with(|c| c.set(1.0));
+    let first = f(p);
+    let s0 = STRAIN.with(|s| s.get());
+    if !any_typed(p) || s0 == 0.0 { return first; }
+    let (mut best, mut best_k, mut best_s) = (first, 1.0, s0);
+    for k in [1.25, 1.5, 1.75, 2.0] {
+        PAGE.with(|c| c.set(k));
+        let svg = f(p);
+        let s = STRAIN.with(|s| s.get());
+        if s < best_s - 1e-9 { best = svg; best_k = k; best_s = s; }
+        if best_s == 0.0 { break; }
+    }
+    // the kept drawing's map is the last one made (handles read it)
+    if PAGE.with(|c| c.get()) != best_k { PAGE.with(|c| c.set(best_k)); best = f(p); }
+    PAGE.with(|c| c.set(1.0));
+    best
 }
 
 thread_local! {
