@@ -1,9 +1,9 @@
 {
- "generated_at": "2026-11-12T00:40:43+00:00",
- "probe_checked_at": "2026-11-11T16:40:40",
+ "generated_at": "2026-11-12T01:55:31+00:00",
+ "probe_checked_at": "2026-11-11T17:55:31",
  "comparable": true,
  "drift": [],
- "pooled": 99.1,
+ "pooled": 99.2,
  "mean": 99.2,
  "figures_scored": 70,
  "figures_built": 71,
@@ -408,18 +408,11 @@
    "gaps": []
   },
   "pulley": {
-   "score": 90.2,
-   "got": 92.0,
+   "score": 95.1,
+   "got": 97.0,
    "total": 102.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-03c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "On a table or ramp, set the second object touching the first instead",
-     "why": "no evidence"
-    },
     {
      "id": "cap-06e",
      "class": "core",

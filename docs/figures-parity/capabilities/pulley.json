@@ -84,8 +84,8 @@
    "id": "cap-03c",
    "text": "On a table or ramp, set the second object touching the first instead",
    "class": "core",
-   "evidence": "",
-   "note": "Our second object is always tied by a string (no touching option in pulley.rs)."
+   "evidence": "changes:{\"setup\":\"Table\",\"second\":true,\"joined\":\"Touching\"}",
+   "note": "Built in batch 10, round 368 (2026-11-11). Our second object is always tied by a string (no touching option in pulley.rs)."
   },
   {
    "id": "cap-04a",

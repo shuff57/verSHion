@@ -1,0 +1,37 @@
+{
+ "round": 368,
+ "figure": "pulley",
+ "capability": "cap-03c",
+ "hypothesis": "Batch 10 pulley: cap-03c; evidence the second object touching on a table",
+ "started_at": "2026-11-11T17:55:27",
+ "git": "e229165",
+ "before": {
+  "figure": 90.2,
+  "pooled": 99.1
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T17:55:32",
+ "after": {
+  "figure": 95.1,
+  "pooled": 99.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"setup\":\"Table\",\"second\":true,\"joined\":\"Touching\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pulley/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pulley/a382b2d1cd1f5a7f.png"
+   }
+  ]
+ },
+ "checker": "pass (checker on the NAS): the second object sits flush in front of the first on the table and on ramps at 15 to 60 degrees, string tied to the first by a post; hidden where it cannot act; contact force formula checked by hand for three cases",
+ "result": "hit",
+ "evidence": "pulley tests (22) and pulley_b10_frozen (1,500 old figures and links byte for byte); 221 physics and panel tests incl. inclined-plane; census unchanged; no task run (builder on the NAS)",
+ "next": "pulley cap-06e (contact labels dropped or shrunk: back with the builder); pyramid, vector-diagram, particle-diagram checks; gel and population-growth fixes"
+}

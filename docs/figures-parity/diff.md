@@ -48,10 +48,10 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | motion-graphs | `motion-graphs` | 58 | 8 | 8 | reference has black-and-white; ours has no style switch | 100 |
 | motion-map | `motion-map` | 43 | 0 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 100 |
 | projectile-motion | `projectile-motion` | 34 | 4 | 7 | reference has black-and-white; ours has no style switch | 100 |
-| pulley | `pulley` | 38 | 6 | 7 | reference has black-and-white; ours has no style switch | 90 |
+| pulley | `pulley` | 42 | 6 | 7 | reference has black-and-white; ours has no style switch | 95 |
 | ray-diagram | `ray-diagram` | 52 | 2 | 8 | reference has black-and-white; ours has no style switch | 100 |
 | spring-scale | `spring-scale` | 15 | 4 | 7 | reference has black-and-white; ours has no style switch | 100 |
-| vector-diagram | `vector-diagram` | 56 | 5 | 5 | reference has black-and-white; ours has no style switch | 90 |
+| vector-diagram | `vector-diagram` | 72 | 5 | 5 | reference has black-and-white; ours has no style switch | 90 |
 | waves | `waves` | 41 | 7 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 100 |
 
 ## chemistry
@@ -101,18 +101,15 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-12T00:40:43+00:00 · probe: 2026-11-11T16:40:40
+Generated: 2026-11-12T01:55:31+00:00 · probe: 2026-11-11T17:55:31
 
-**Pooled 99.1** · mean 99.2 over 70 figures · built 71 of 71 reference figures
+**Pooled 99.2** · mean 99.2 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
 - `vector-diagram`: 90 (51/57)
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
-- `pulley`: 90 (92/102)
-  - cap-03c [core 5] On a table or ramp, set the second object touching the first instead — no evidence
-  - cap-06e [core 5] The contact forces between objects touching — no evidence
 - `pyramid`: 92 (69/75)
   - cap-04f [control 3] Type any measure (length, width, side, height, lean) as a fraction — no evidence
   - cap-04g [control 3] Type any measure (length, width, side, height, lean) with √ — no evidence
@@ -125,6 +122,8 @@ Comparable with the frozen baseline: **yes**
 - `pedigree`: 95 (90/95)
   - cap-03 [control 3] Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness,  — no evidence
   - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
+- `pulley`: 95 (97/102)
+  - cap-06e [core 5] The contact forces between objects touching — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
 - `free-body-diagram`: 97 (65/67)

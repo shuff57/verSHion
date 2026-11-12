@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-12T00:40:26+00:00",
-  "src_mtime": 1794443033.530739,
-  "git": "0625b1a",
+  "built_at": "2026-11-12T01:55:27+00:00",
+  "src_mtime": 1794447808.3339984,
+  "git": "e229165",
   "figures": 191
  },
  "figures": {
@@ -854,6 +854,42 @@
      "default": "false"
     },
     {
+     "key": "v1_cx_mode",
+     "label": "Vector 1 x component label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v1_cx_lab",
+     "label": "Vector 1 x component label (blank: from its name)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "v1_cy_mode",
+     "label": "Vector 1 y component label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v1_cy_lab",
+     "label": "Vector 1 y component label (blank: from its name)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "v2_mag",
      "label": "Vector 2 magnitude",
      "kind": "float",
@@ -937,6 +973,42 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "v2_cx_mode",
+     "label": "Vector 2 x component label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v2_cx_lab",
+     "label": "Vector 2 x component label (blank: from its name)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "v2_cy_mode",
+     "label": "Vector 2 y component label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v2_cy_lab",
+     "label": "Vector 2 y component label (blank: from its name)",
+     "kind": "text",
+     "options": [],
+     "default": ""
     },
     {
      "key": "v3_mag",
@@ -1024,6 +1096,42 @@
      "default": "false"
     },
     {
+     "key": "v3_cx_mode",
+     "label": "Vector 3 x component label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v3_cx_lab",
+     "label": "Vector 3 x component label (blank: from its name)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "v3_cy_mode",
+     "label": "Vector 3 y component label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v3_cy_lab",
+     "label": "Vector 3 y component label (blank: from its name)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "v4_mag",
      "label": "Vector 4 magnitude",
      "kind": "float",
@@ -1107,6 +1215,42 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "v4_cx_mode",
+     "label": "Vector 4 x component label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v4_cx_lab",
+     "label": "Vector 4 x component label (blank: from its name)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "v4_cy_mode",
+     "label": "Vector 4 y component label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "v4_cy_lab",
+     "label": "Vector 4 y component label (blank: from its name)",
+     "kind": "text",
+     "options": [],
+     "default": ""
     },
     {
      "key": "resultant",
@@ -1899,6 +2043,16 @@
      "default": "m_3"
     },
     {
+     "key": "joined",
+     "label": "Joined to the first",
+     "kind": "choice",
+     "options": [
+      "By a string",
+      "Touching"
+     ],
+     "default": "By a string"
+    },
+    {
      "key": "strands",
      "label": "Block & tackle: strands holding up the load",
      "kind": "int",
@@ -2043,6 +2197,31 @@
      "kind": "text",
      "options": [],
      "default": "F_f"
+    },
+    {
+     "key": "contact",
+     "label": "Contact forces, where the objects touch",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "cont_lab_mode",
+     "label": "Contact force labels show",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "cont_lab",
+     "label": "Contact force label",
+     "kind": "text",
+     "options": [],
+     "default": "P"
     },
     {
      "key": "accel",
