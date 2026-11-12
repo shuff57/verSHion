@@ -546,20 +546,24 @@ impl App {
             // toggle and New bank).
             let ppp = ui.ctx().pixels_per_point();
             let cols_x = grid_columns(ui.cursor().left(), avail, fit, gap, ppp);
-            // Every tile has the same slots, so every tile is BANK_TILE_H and a row ends on one line.
+            // Every tile has the same slots; a row's key slot holds the lines its fullest key needs
+            // (two, or three when a bank's types need it, round 22), so a row ends on one line and a
+            // row of two-line keys stays at the two-line height.
             for chunk in rows.chunks(cols) {
+                let lines = tile_key_lines(ui, chunk.iter().zip(&cols_x).map(|(r, &(l, rt))| (r, rt - l)));
+                let tile_h = bank_tile_h(lines);
                 let top = (ui.cursor().top() * ppp).round() / ppp;
                 for (r, &(l, rt)) in chunk.iter().zip(&cols_x) {
-                    let rect = Rect::from_min_max(Pos2::new(l, top), Pos2::new(rt, top + BANK_TILE_H));
+                    let rect = Rect::from_min_max(Pos2::new(l, top), Pos2::new(rt, top + tile_h));
                     let mut cell = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt(("bank_tile_cell", &r.id)));
-                    match bank_tile(&mut cell, self, rect.width(), r, TileVariant::Banks) {
+                    match bank_tile(&mut cell, self, rect.width(), lines, r, TileVariant::Banks) {
                         Some(TileAct::Menu(a)) => apply_bank_menu(self, ctx, key, r, Some(a)),
                         Some(TileAct::Usage) => open_usage(ctx, r.name.clone(), r.used_in.clone()),
                         Some(TileAct::Open | TileAct::AddQuestions) => self.open_bank(&r.id),
                         None => {}
                     }
                 }
-                ui.advance_cursor_after_rect(Rect::from_min_size(Pos2::new(ui.cursor().left(), top), Vec2::new(avail, BANK_TILE_H)));
+                ui.advance_cursor_after_rect(Rect::from_min_size(Pos2::new(ui.cursor().left(), top), Vec2::new(avail, tile_h)));
                 ui.add_space(gap);
             }
         }
@@ -1699,9 +1703,59 @@ const T_PAD_FOOT: f32 = T_PAD;
 const MENU_SIDE: f32 = 32.0;
 /// The glyph beside the name on a Home tile.
 const T_GLYPH: f32 = 34.0;
-/// The type key's two lines, 18 each with 4 between.
+/// The type key's lines, 18 each with 4 between: two in [`T_KEY`], a third when a bank in the
+/// tile's row needs it (round 21; per row since round 22).
 const KEY_LINE: f32 = 18.0;
 const KEY_LGAP: f32 = 4.0;
+const KEY_MIN_LINES: usize = 2;
+const KEY_MAX_LINES: usize = 3;
+
+/// A tile whose key slot holds `lines` lines (2 or 3): [`BANK_TILE_H`] for two, 22 more for a
+/// third. Every tile in one row is drawn this tall for the row's [`tile_key_lines`], so the
+/// row's hairlines and Open buttons stay in line, and a row of two-line keys stays 201 (round 22;
+/// round 21 set one height for the whole grid, which left two-line tiles with an empty band).
+pub(crate) fn bank_tile_h(lines: usize) -> f32 {
+    BANK_TILE_H + (lines.clamp(KEY_MIN_LINES, KEY_MAX_LINES) - KEY_MIN_LINES) as f32 * (KEY_LINE + KEY_LGAP)
+}
+
+/// The key lines one row of tiles needs: the most any of its banks needs at its tile width
+/// (`(tile, w)`), two when every bank names its types in two, three at most (a key that would
+/// need more folds its last line into "+N more"). Banks and Home call it once per row.
+pub(crate) fn tile_key_lines<'a>(ui: &Ui, tiles: impl IntoIterator<Item = (&'a BankTile, f32)>) -> usize {
+    tiles
+        .into_iter()
+        .filter(|(t, _)| t.questions > 0)
+        .map(|(t, w)| {
+            let (item_w, more_w) = key_widths(ui, &t.mix);
+            key_lines_needed(&t.mix, w - 2.0 * T_PAD, |i| item_w[i], &more_w)
+        })
+        .max()
+        .unwrap_or(KEY_MIN_LINES)
+}
+
+/// Line `l`'s top in a key of `used` lines drawn in a row whose key slot holds `slot` lines. A key
+/// that fills its slot (every row of two-line keys) keeps its lines 22 apart from the top. A shorter
+/// key in a three-line row (a two-line key beside one that needs three, round 22) is centred in the
+/// slot as one block, half a line's room above it and half below, so no empty band is left
+/// between it and the hairline. (Spreading its two lines over the neighbour's three was tried: the
+/// line-high gap between them read as a missing line.)
+fn key_line_y(l: usize, used: usize, slot: usize) -> f32 {
+    let step = KEY_LINE + KEY_LGAP;
+    let slot = slot.clamp(KEY_MIN_LINES, KEY_MAX_LINES);
+    l as f32 * step + slot.saturating_sub(used) as f32 * step / 2.0
+}
+
+/// The key's swatch and its gap to the words.
+const KEY_SW: f32 = 9.0;
+const KEY_SGAP: f32 = 5.0;
+
+/// Each key item's width (swatch, gap and words) for `mix`, and the width of "+n more".
+fn key_widths(ui: &Ui, mix: &[usize; 6]) -> ([f32; 6], impl Fn(usize) -> f32) {
+    let p = ui.painter().clone();
+    let item_w = std::array::from_fn(|i| KEY_SW + KEY_SGAP + p.layout_job(key_item_job(mix[i], KEY_LABELS[i])).size().x);
+    let more_w = move |n: usize| KEY_SW + KEY_SGAP + p.layout_no_wrap(more_label(n), egui::FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()).size().x;
+    (item_w, more_w)
+}
 const KEY_LABELS: [&str; 6] = ["multiple choice", "true/false", "multipart", "matching", "fill in the blank", "short answer"];
 
 /// Where a tile is drawn: Home has a glyph and no menu; Banks has the "…" menu and the circle badge.
@@ -1735,19 +1789,20 @@ fn more_label(n: usize) -> String {
     format!("+{n} more")
 }
 
-/// Lays out the type key in `w`: items in [`mix_index`] order, two lines at most, every type
-/// named. The items sit 12 apart; when that needs a third line they close up to 8 apart, then
-/// each swatch also sits 1 closer to its words; only when even that needs a third line does line 2
-/// drop items from its end until "+N more" fits 12 after the last (the last resort: a tile too
-/// narrow for all its types by name).
+/// Lays out the type key in `w`: items in [`mix_index`] order, `lines` lines at most (the key
+/// slot the tile's row gives it, see [`tile_key_lines`]), every type named. The items sit 12
+/// apart; when that needs one line more than `lines` they close up to 8 apart, then each swatch
+/// also sits 1 closer to its words; only when even that does not fit does the last line drop
+/// items from its end until "+N more" fits 12 after the last (the last resort: a key that would
+/// need more than [`KEY_MAX_LINES`] lines).
 /// `item_w(i)` is item i's width (swatch, gap and words); `more_w(n)` the width of "+n more".
-fn layout_tile_key(mix: &[usize; 6], w: f32, item_w: impl Fn(usize) -> f32, more_w: impl Fn(usize) -> f32) -> TileKey {
-    let usual = layout_tile_key_gap(mix, w, &item_w, &more_w, 12.0, 0.0);
+fn layout_tile_key(mix: &[usize; 6], w: f32, lines: usize, item_w: impl Fn(usize) -> f32, more_w: impl Fn(usize) -> f32) -> TileKey {
+    let usual = layout_tile_key_gap(mix, w, lines, &item_w, &more_w, 12.0, 0.0);
     if usual.more.is_none() {
         return usual;
     }
     for (gap, snug) in [(8.0, 0.0), (8.0, 1.0)] {
-        let k = layout_tile_key_gap(mix, w, &item_w, &more_w, gap, snug);
+        let k = layout_tile_key_gap(mix, w, lines, &item_w, &more_w, gap, snug);
         if k.more.is_none() {
             return k;
         }
@@ -1755,8 +1810,23 @@ fn layout_tile_key(mix: &[usize; 6], w: f32, item_w: impl Fn(usize) -> f32, more
     usual
 }
 
+/// How many key lines a key needs in `w`: two when it names every type in two (closed up if it
+/// must), else three when three hold them, else three with the fold (round 21: a third line
+/// before any "+N more").
+fn key_lines_needed(mix: &[usize; 6], w: f32, item_w: impl Fn(usize) -> f32, more_w: impl Fn(usize) -> f32) -> usize {
+    (KEY_MIN_LINES..=KEY_MAX_LINES).find(|&l| layout_tile_key(mix, w, l, &item_w, &more_w).more.is_none()).unwrap_or(KEY_MAX_LINES)
+}
+
+/// The lines one tile's key uses in a row whose tiles hold `grid` lines: the fewest its own
+/// types need (a key that closes up into two keeps two), never more than the row has. A two-line
+/// key in a three-line row is centred in the slot ([`key_line_y`]).
+fn tile_own_lines(mix: &[usize; 6], w: f32, grid: usize, item_w: impl Fn(usize) -> f32, more_w: impl Fn(usize) -> f32) -> usize {
+    key_lines_needed(mix, w, item_w, more_w).min(grid.clamp(KEY_MIN_LINES, KEY_MAX_LINES))
+}
+
 /// [`layout_tile_key`] with its items `IGAP` apart.
-fn layout_tile_key_gap(mix: &[usize; 6], w: f32, item_w: &impl Fn(usize) -> f32, more_w: &impl Fn(usize) -> f32, igap: f32, snug: f32) -> TileKey {
+fn layout_tile_key_gap(mix: &[usize; 6], w: f32, lines: usize, item_w: &impl Fn(usize) -> f32, more_w: &impl Fn(usize) -> f32, igap: f32, snug: f32) -> TileKey {
+    let last = lines.max(1) - 1;
     let item_w = |i: usize| item_w(i) - snug;
     let shown: Vec<usize> = (0..6).filter(|&i| mix[i] > 0).collect();
     let mut items: Vec<(usize, f32, usize)> = Vec::new();
@@ -1768,7 +1838,7 @@ fn layout_tile_key_gap(mix: &[usize; 6], w: f32, item_w: &impl Fn(usize) -> f32,
             x = 0.0;
             line += 1;
         }
-        if line > 1 {
+        if line > last {
             rest.push(i);
             continue;
         }
@@ -1778,14 +1848,14 @@ fn layout_tile_key_gap(mix: &[usize; 6], w: f32, item_w: &impl Fn(usize) -> f32,
     if rest.is_empty() {
         return TileKey { items, more: None, snug };
     }
-    // Make room on line 2 for "+N more", dropping its last items as needed.
+    // Make room on the last line for "+N more", dropping its last items as needed.
     loop {
-        let end = items.iter().filter(|it| it.2 == 1).map(|&(i, x, _)| x + item_w(i)).fold(0.0, f32::max);
+        let end = items.iter().filter(|it| it.2 == last).map(|&(i, x, _)| x + item_w(i)).fold(0.0, f32::max);
         let at = if end > 0.0 { end + igap } else { 0.0 };
-        if at + more_w(rest.len()) <= w || !items.iter().any(|it| it.2 == 1) {
+        if at + more_w(rest.len()) <= w || !items.iter().any(|it| it.2 == last) {
             return TileKey { items, more: Some((at, rest)), snug };
         }
-        let (i, _, _) = items.pop().expect("line 2 has an item");
+        let (i, _, _) = items.pop().expect("the last line has an item");
         rest.insert(0, i);
     }
 }
@@ -1803,13 +1873,17 @@ fn edited_forms(edited: i64) -> [String; 3] {
     [format!("Edited {}", rel_time(edited)), format!("Edited {md}"), md]
 }
 
-/// One bank tile, `w` wide and [`BANK_TILE_H`] tall, the same on Banks and Home: the serif name
+/// One bank tile, `w` wide and [`bank_tile_h`]`(lines)` tall (its row's [`tile_key_lines`]),
+/// the same on Banks and Home: the serif name
 /// (two lines kept), the counts and when it was edited (or the circle badge on Banks), the type
 /// key (or, for an empty bank, a dashed placeholder holding Add questions),
 /// a hairline, then where it is used (an underlined link) and "Open →". One card interact: a
 /// click on the usage link, Add questions or the "…" menu returns that act and never `Open`.
-pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: TileVariant) -> Option<TileAct> {
-    let (rect, card) = ui.allocate_exact_size(Vec2::new(w, BANK_TILE_H), Sense::click());
+pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, lines: usize, t: &BankTile, v: TileVariant) -> Option<TileAct> {
+    let lines = lines.clamp(KEY_MIN_LINES, KEY_MAX_LINES);
+    // The key slot: T_KEY for two lines, one line and its gap more for each further line.
+    let key_h = T_KEY + (bank_tile_h(lines) - BANK_TILE_H);
+    let (rect, card) = ui.allocate_exact_size(Vec2::new(w, bank_tile_h(lines)), Sense::click());
     card.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &t.name));
     let mut act = None;
     let hot = card.hovered() || card.has_focus();
@@ -1881,24 +1955,30 @@ pub(crate) fn bank_tile(ui: &mut Ui, app: &mut App, w: f32, t: &BankTile, v: Til
 
     // Key: the type key, each type's count and name; an empty bank has no types to show, so the
     // key slot holds one dashed placeholder with its next step, Add questions, in the middle: the
-    // compact button with ADD_PAD clear above and below it, the box ending ADD_PAD over the hairline.
+    // compact button with ADD_PAD clear above and below it, the box ending ADD_PAD over the hairline
+    // (in a three-line row the box is as tall as the key slot, so it still ends there).
     let key_y = meta_y + T_META + T_MK;
     let mut add_btn: Option<Rect> = None;
     let mut more_hit = false;
     if t.questions == 0 {
-        let slot = Rect::from_min_size(Pos2::new(x0, key_y), Vec2::new(iw, ADD_H + 2.0 * ADD_PAD));
+        let slot = Rect::from_min_size(Pos2::new(x0, key_y), Vec2::new(iw, ADD_H + 2.0 * ADD_PAD + (key_h - T_KEY)));
         dashed_round_rect(ui.painter(), slot, 8.0, Stroke::new(1.0, theme::edge()));
         let btn_w = ui.painter().layout_no_wrap("Add questions".to_string(), egui::FontId::new(kit::ty::BUTTON_SM, theme::bold_family()), theme::ink()).size().x + 28.0;
         add_btn = Some(Rect::from_center_size(slot.center(), Vec2::new(btn_w.ceil(), ADD_H)));
     } else {
-        let (_, more_pressed) = paint_tile_key(ui, Pos2::new(x0, key_y), iw, &t.mix, &t.id);
+        // The tile's own lines: only a bank that needs the row's third line uses it.
+        let own = {
+            let (item_w, more_w) = key_widths(ui, &t.mix);
+            tile_own_lines(&t.mix, iw, lines, |i| item_w[i], &more_w)
+        };
+        let (_, more_pressed) = paint_tile_key(ui, Pos2::new(x0, key_y), iw, own, lines, &t.mix, &t.id);
         // "+N more" is a control of its own: pressing it never opens the bank.
         more_hit = more_pressed;
     }
 
     // Hairline, then the footer: where it is used (a link to those exams) left, Open right, the
     // tile's main action as a tinted accent button (the "…" beside the name stays quiet).
-    let rule_y = key_y + T_KEY + T_BR;
+    let rule_y = key_y + key_h + T_BR;
     ui.painter().hline(x0..=x0 + iw, rule_y + 0.5, Stroke::new(1.0, theme::border()));
     let act_y = rule_y + 1.0 + T_RA;
     let foot_c = act_y + T_ACT / 2.0;
@@ -2180,13 +2260,14 @@ fn usage_text(t: &BankTile) -> String {
     crate::bankops::usage_label(t.used_in.len())
 }
 
-/// The tile's type key at `at`, `w` wide: two 13 pt lines, each item a swatch in its type's
+/// The tile's type key at `at`, `w` wide: `lines` 13 pt lines in a key slot of `slot` lines
+/// (a shorter key centred in it, [`key_line_y`]), each item a swatch in its type's
 /// [`theme::type_hue`] (the bar segment's colour), the count in semibold ink and the type in
 /// `text`. Returns the types folded into "+N more" (its swatch is hollow), and whether "+N more"
 /// was pressed this frame.
-fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6], salt: &str) -> (Vec<usize>, bool) {
-    const SW: f32 = 9.0;
-    const SGAP: f32 = 5.0;
+fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, lines: usize, slot: usize, mix: &[usize; 6], salt: &str) -> (Vec<usize>, bool) {
+    const SW: f32 = KEY_SW;
+    const SGAP: f32 = KEY_SGAP;
     let p = ui.painter().clone();
     let galleys: Vec<_> = (0..6).map(|i| p.layout_job(key_item_job(mix[i], KEY_LABELS[i]))).collect();
     // "+N more" is a link-style reveal: accent semibold, underlined under the pointer or focus, a
@@ -2194,9 +2275,10 @@ fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6], salt: &str) -
     // hollow segment.
     let more_font = egui::FontId::new(kit::ty::META, theme::semibold());
     let more_g = |n: usize| p.layout_no_wrap(more_label(n), more_font.clone(), theme::accent_col());
-    let key = layout_tile_key(mix, w, |i| SW + SGAP + galleys[i].size().x, |n| SW + SGAP + more_g(n).size().x);
+    let key = layout_tile_key(mix, w, lines, |i| SW + SGAP + galleys[i].size().x, |n| SW + SGAP + more_g(n).size().x);
+    let used = key.items.iter().map(|it| it.2 + 1).max().unwrap_or(1).max(if key.more.is_some() { lines } else { 1 });
     for &(i, x, l) in &key.items {
-        let ly = at.y + l as f32 * (KEY_LINE + KEY_LGAP);
+        let ly = at.y + key_line_y(l, used, slot);
         let sr = Rect::from_center_size(Pos2::new(at.x + x + SW / 2.0, ly + KEY_LINE / 2.0), Vec2::splat(SW));
         p.rect_filled(sr, CornerRadius::same(3), theme::type_hue(i));
         let g = galleys[i].clone();
@@ -2206,7 +2288,7 @@ fn paint_tile_key(ui: &mut Ui, at: Pos2, w: f32, mix: &[usize; 6], salt: &str) -
         return (Vec::new(), false);
     };
     let g = more_g(rest.len());
-    let ly = at.y + KEY_LINE + KEY_LGAP;
+    let ly = at.y + key_line_y(lines - 1, used, slot);
     let sr = Rect::from_center_size(Pos2::new(at.x + x + SW / 2.0, ly + KEY_LINE / 2.0), Vec2::splat(SW));
     p.rect(sr, CornerRadius::same(3), theme::card(), Stroke::new(1.0, theme::muted_col()), egui::StrokeKind::Inside);
     let r = Rect::from_min_size(Pos2::new(at.x + x + SW + SGAP, ly + (KEY_LINE - g.size().y) / 2.0), g.size());
@@ -4713,12 +4795,18 @@ mod tests {
     }
 
     /// Every bank tile is the sum of its slots, 201, on Banks and on Home (spec section 3; 211
-    /// until round 20 dropped the type-mix bar and its 8 + 6, the key's gap to the hairline 8 -> 12).
+    /// until round 20 dropped the type-mix bar and its 8 + 6, the key's gap to the hairline 8 -> 12);
+    /// a grid whose fullest key needs a third line is 223, one key line and its gap more (round 21).
     #[test]
     fn a_bank_tile_is_201_tall() {
         // pad, name, meta, key, hairline, the footer's 32 tall Open, foot pad
         assert_eq!(BANK_TILE_H, 16.0 + 44.0 + 6.0 + 18.0 + 8.0 + 40.0 + 12.0 + 1.0 + 8.0 + 32.0 + 16.0);
         assert_eq!(BANK_TILE_H, 201.0);
+        assert_eq!(bank_tile_h(2), 201.0);
+        assert_eq!(bank_tile_h(3), 201.0 + 18.0 + 4.0);
+        // Never shorter than two lines nor taller than three.
+        assert_eq!(bank_tile_h(1), 201.0);
+        assert_eq!(bank_tile_h(4), 223.0);
         // An empty bank's dashed box: its button ADD_PAD clear above and below, the box ending
         // ADD_PAD over the hairline (it takes 4 of the key's 12 to the hairline).
         assert_eq!(ADD_H + 2.0 * ADD_PAD + ADD_PAD, T_KEY + T_BR);
@@ -4824,23 +4912,25 @@ mod tests {
         }
     }
 
-    /// The key keeps two lines: what a third would hold folds into "+N more" on line 2, dropping
-    /// line 2's last items until it fits 12 after them.
+    /// The key keeps the lines its slot has: what one more line would hold folds into "+N more" on
+    /// the last line, dropping that line's last items until it fits 12 after them. In a two-line
+    /// slot that is line 2; in a three-line slot six types that fit in three lines are all named,
+    /// and only a key needing a fourth line folds, on line 3.
     #[test]
     fn the_tile_key_folds_a_third_line_into_more() {
         let widths = [110.0, 80.0, 80.0, 80.0, 115.0, 100.0];
         let item_w = |i: usize| widths[i];
         let more_w = |_n: usize| 44.0;
         // Everything in two lines: no "+N more".
-        let k = layout_tile_key(&[1, 1, 0, 0, 0, 0], 284.0, item_w, more_w);
+        let k = layout_tile_key(&[1, 1, 0, 0, 0, 0], 284.0, 2, item_w, more_w);
         assert_eq!(k.items, vec![(0, 0.0, 0), (1, 122.0, 0)]);
         assert_eq!(k.more, None);
         // A third line's items become "+2 more" after line 2's last item.
-        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 284.0, item_w, more_w);
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 284.0, 2, item_w, more_w);
         assert_eq!(k.items.iter().map(|i| (i.0, i.2)).collect::<Vec<_>>(), vec![(0, 0), (1, 0), (2, 1), (3, 1)]);
         assert_eq!(k.more, Some((184.0, vec![4, 5])));
         // No room after line 2's items: its last item gives way, and is counted in "+N more".
-        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 250.0, item_w, more_w);
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 250.0, 2, item_w, more_w);
         let (x, rest) = k.more.clone().unwrap();
         assert!(x + 44.0 <= 250.0, "+N more ends inside the key");
         assert_eq!(rest.len() + k.items.len(), 6, "every type is shown or counted");
@@ -4849,6 +4939,21 @@ mod tests {
         let mut order: Vec<usize> = k.items.iter().map(|i| i.0).collect();
         order.extend(rest);
         assert_eq!(order, vec![0, 1, 2, 3, 4, 5]);
+        // Three lines: the same six types are all named, line 3 holding what folded.
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 284.0, 3, item_w, more_w);
+        assert_eq!(k.more, None);
+        assert_eq!(k.items.iter().map(|i| (i.0, i.2)).collect::<Vec<_>>(), vec![(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2)]);
+        // A key that would need a fourth line (one or two items a line in 200) folds on line 3,
+        // never past it, every type shown or counted, in mix order.
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 200.0, 3, item_w, more_w);
+        let (x, rest) = k.more.clone().expect("a fourth line folds");
+        assert!(x + 44.0 <= 200.0, "+N more ends inside the key");
+        assert!(k.items.iter().all(|it| it.2 <= 2), "three lines at most");
+        assert!(k.items.iter().any(|it| it.2 == 2), "line 3 is used before the fold");
+        let mut order: Vec<usize> = k.items.iter().map(|i| i.0).collect();
+        order.extend(rest);
+        assert_eq!(order, vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(key_lines_needed(&[5, 2, 1, 1, 1, 1], 200.0, item_w, more_w), 3, "the fold keeps three lines");
     }
 
     /// Before anything folds the key closes up: items 8 apart instead of 12, then each swatch 1
@@ -4862,22 +4967,75 @@ mod tests {
         let more_w = |_n: usize| 50.0;
         let science = [4, 1, 0, 1, 1, 1];
         // Banks at 760 (inside 271): 12 apart folds, 8 apart and a snug swatch names all five.
-        let k = layout_tile_key(&science, 271.0, item_w, more_w);
+        let k = layout_tile_key(&science, 271.0, 2, item_w, more_w);
         assert_eq!(k.more, None, "every type named");
         assert_eq!(k.snug, 1.0);
         assert_eq!(k.items.iter().map(|i| (i.0, i.2)).collect::<Vec<_>>(), vec![(0, 0), (1, 0), (3, 0), (4, 1), (5, 1)]);
         let end = k.items.iter().map(|&(i, x, _)| x + widths[i] - k.snug).fold(0.0, f32::max);
         assert!(end <= 271.0, "the key ends inside the tile: {end}");
         // Wide (inside 327): the usual 12 apart, nothing snug.
-        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 327.0, item_w, more_w);
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 327.0, 2, item_w, more_w);
         assert_eq!((k.more, k.snug), (None, 0.0));
         assert_eq!(k.items[1].1, widths[0] + 12.0);
-        // Six types in 266 cannot be named in two lines: the fold is the last resort.
-        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 266.0, item_w, more_w);
+        // Six types in 266 cannot be named in two lines: in a two-line slot the fold is the last
+        // resort ...
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 266.0, 2, item_w, more_w);
         assert!(k.more.is_some());
+        // ... so such a key asks its row for a third line (round 21), where it names them all
+        // at the usual 12 apart.
+        assert_eq!(key_lines_needed(&[5, 2, 1, 1, 1, 1], 266.0, item_w, more_w), 3);
+        let k = layout_tile_key(&[5, 2, 1, 1, 1, 1], 266.0, 3, item_w, more_w);
+        assert_eq!((k.more, k.snug), (None, 0.0));
+        assert_eq!(k.items[1].1, widths[0] + 12.0);
+        // A key that closes up into two lines keeps two (a wide row stays 201).
+        assert_eq!(key_lines_needed(&science, 271.0, item_w, more_w), 2);
+        assert_eq!(key_lines_needed(&[5, 2, 1, 1, 1, 1], 327.0, item_w, more_w), 2);
+        // A row is as tall as its neediest bank (round 22: per row, not per grid), at the 760
+        // Banks width (inside 271): science beside six types needs three lines; science beside a
+        // four-type key stays at two.
+        let row_lines = |row: &[[usize; 6]]| row.iter().map(|m| key_lines_needed(m, 271.0, item_w, more_w)).max().unwrap();
+        assert_eq!(row_lines(&[science, [5, 2, 1, 1, 1, 1]]), 3);
+        assert_eq!(row_lines(&[science, [2, 0, 2, 0, 4, 2]]), 2);
+        assert_eq!(bank_tile_h(row_lines(&[science, [2, 0, 2, 0, 4, 2]])), BANK_TILE_H);
+        // In that three-line row each tile still uses the fewest lines its own types need: the
+        // science key keeps its closed-up two lines (centred in the slot, see
+        // a_short_key_is_centred_in_a_taller_row), the six-type key takes the third.
+        assert_eq!(tile_own_lines(&science, 271.0, 3, item_w, more_w), 2);
+        let k = layout_tile_key(&science, 271.0, tile_own_lines(&science, 271.0, 3, item_w, more_w), item_w, more_w);
+        assert_eq!((k.more.is_none(), k.snug), (true, 1.0));
+        assert!(k.items.iter().all(|it| it.2 <= 1), "two lines in a three-line row");
+        assert_eq!(tile_own_lines(&[5, 2, 1, 1, 1, 1], 266.0, 3, item_w, more_w), 3);
+        // In a two-line row nothing takes a third line: the fold stays the fallback.
+        assert_eq!(tile_own_lines(&[5, 2, 1, 1, 1, 1], 266.0, 2, item_w, more_w), 2);
     }
 
-    /// A six-type tile at the narrow width folds into "+N more", and that is a real control: a
+    /// A two-line key beside a three-line one (round 22) is centred in the taller slot as one
+    /// block: equal room above its first line and below its last, its lines 22 apart as always, so
+    /// no empty band is left above the hairline. A key that fills its slot is drawn from the top,
+    /// exactly as before (every two-line row, and the three-line key itself).
+    #[test]
+    fn a_short_key_is_centred_in_a_taller_row() {
+        let step = KEY_LINE + KEY_LGAP;
+        // Filling the slot: from the top, unchanged.
+        for slot in [2, 3] {
+            for l in 0..slot {
+                assert_eq!(key_line_y(l, slot, slot), l as f32 * step);
+            }
+        }
+        // Two lines in three: half a line's room (11) above and below, lines still 22 apart.
+        let (a, b) = (key_line_y(0, 2, 3), key_line_y(1, 2, 3));
+        assert_eq!(b - a, step);
+        let slot_h = 3.0 * KEY_LINE + 2.0 * KEY_LGAP;
+        let (above, below) = (a, slot_h - (b + KEY_LINE));
+        assert_eq!(above, below, "the block sits in the middle of the slot");
+        assert_eq!(above, step / 2.0);
+        // The block's middle is the neighbour's middle line's middle.
+        assert_eq!((a + b + KEY_LINE) / 2.0, key_line_y(1, 3, 3) + KEY_LINE / 2.0);
+    }
+
+    /// At the 760 Banks width (303) a six-type tile asks its row for a third key line and names
+    /// every type, with no "+N more". A tile too narrow for even three lines (200: one or two
+    /// types a line would need a fourth) folds into "+N more", and that is a real control: a
     /// named button that, clicked or pressed with Enter, lists the folded types with their counts
     /// (and never opens the bank); Escape closes the list.
     #[test]
@@ -4885,26 +5043,45 @@ mod tests {
         use egui_kittest::kittest::{NodeT, Queryable};
         let tmp = std::env::temp_dir().join(format!("vs-more-test-{}", std::process::id()));
         crate::store::init(Box::new(crate::store::FsBackend::new(tmp)));
-        let mut app = App::new_from(&egui::Context::default());
-        app.store = Default::default();
-        let tile = BankTile { id: "b".into(), name: "Six types".into(), questions: 11, topics: 4, mix: [5, 2, 1, 1, 1, 1], used_in: vec![], edited: 0, archived: false };
-        let mut first = true;
-        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 300.0)).build_ui_state(
-            move |ui, st: &mut (App, Vec<TileAct>)| {
-                if std::mem::take(&mut first) {
-                    theme::setup(ui.ctx());
-                    ui.ctx().request_repaint();
-                    return;
-                }
-                // The narrow Banks tile (inside 271): six types cannot be named in two lines.
-                if let Some(a) = bank_tile(ui, &mut st.0, 303.0, &tile, TileVariant::Banks) {
-                    st.1.push(a);
-                }
-            },
-            (app, Vec::new()),
-        );
+        let new_app = || {
+            let mut app = App::new_from(&egui::Context::default());
+            app.store = Default::default();
+            app
+        };
+        let six = || BankTile { id: "b".into(), name: "Six types".into(), questions: 11, topics: 4, mix: [5, 2, 1, 1, 1, 1], used_in: vec![], edited: 0, archived: false };
+        let harness = |w: f32, app: App| {
+            let tile = six();
+            let mut first = true;
+            egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 300.0)).build_ui_state(
+                move |ui, st: &mut (App, Vec<TileAct>, usize)| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    // The tile in a row of its own: the key lines it asks for.
+                    let lines = tile_key_lines(ui, [(&tile, w)]);
+                    st.2 = lines;
+                    if let Some(a) = bank_tile(ui, &mut st.0, w, lines, &tile, TileVariant::Banks) {
+                        st.1.push(a);
+                    }
+                },
+                (app, Vec::new(), 0),
+            )
+        };
+        // The narrow Banks tile (inside 271): three lines, every type named, no fold.
+        let mut h = harness(303.0, new_app());
         h.run();
-        let folded_names = |h: &egui_kittest::Harness<'_, (App, Vec<TileAct>)>| h.query_all_by_label_contains("short answer").count();
+        h.run();
+        assert_eq!(h.state().2, 3, "six types at 303 take a third key line");
+        assert!(h.query_by_label_contains("Show the other").is_none(), "no +N more where three lines name every type");
+        drop(h);
+        // Too narrow for three lines: the fold is the fallback.
+        let mut h = harness(200.0, new_app());
+        h.run();
+        h.run();
+        assert_eq!(h.state().2, 3, "a key past three lines keeps three and folds");
+        let folded_names = |h: &egui_kittest::Harness<'_, (App, Vec<TileAct>, usize)>| h.query_all_by_label_contains("short answer").count();
         assert_eq!(folded_names(&h), 0, "the folded names are not shown at rest");
         h.get_by_label_contains("Show the other").click();
         h.run();

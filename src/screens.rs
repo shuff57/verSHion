@@ -1464,7 +1464,11 @@ impl crate::App {
             Some(2) => self.screen = crate::Screen::Imports,
             _ => {}
         }
-        ui.add_space(18.0);
+        // The narrow page gives a little of this gap to the bank row so its tiles (taller since
+        // round 21, when a key needs a third line) end on the first screen (with recent exams
+        // above it; a page without them is left as it was).
+        let narrow_with_exams = ui.available_width() < HOME_COMPACT_W && !self.store.exams.is_empty();
+        ui.add_space(if narrow_with_exams { HOME_ACTIONS_GAP_NARROW } else { 18.0 });
 
         if fresh {
             // First run: teach the shape of the app instead of one long line on a wide card.
@@ -1631,7 +1635,15 @@ impl crate::App {
         // The exam card grid already ends on its grid gap; the section gap gives back the room
         // the cards' and tiles' padded Open took, so the bank row ends where it did.
         let card_grid = !exams.is_empty() && !compact_exams && exam_mode == kit::ViewMode::Cards;
-        ui.add_space(if card_grid { HOME_SECTION_GAP_AFTER_CARDS } else { 22.0 });
+        // Narrow: the compact rows' list card already closes the section, so a smaller gap still
+        // parts it from Your banks and leaves the bank row on the first screen (round 21).
+        ui.add_space(if card_grid {
+            HOME_SECTION_GAP_AFTER_CARDS
+        } else if compact_exams && !exams.is_empty() {
+            HOME_SECTION_GAP_NARROW
+        } else {
+            22.0
+        });
 
         // ---- Your banks ----
         let mut banks: Vec<crate::bankui::BankTile> = self.store.banks.iter().map(|b| crate::bankui::BankTile::of(&self.store, b)).collect();
@@ -1670,12 +1682,15 @@ impl crate::App {
             let rows = if cols >= 3 { 1 } else { 2 };
             cols = banks.len().clamp(1, cols);
             let cw = ((ui.available_width() - grid_gap * (cols as f32 - 1.0)) / cols as f32).floor();
-            for chunk in banks.iter().take(cols * rows).collect::<Vec<_>>().chunks(cols) {
-                // Every tile is BANK_TILE_H (the Banks screen's tile), so a row ends on one line.
+            let shown: Vec<_> = banks.iter().take(cols * rows).collect();
+            for chunk in shown.chunks(cols) {
+                // A row's tiles are one height, the key lines its fullest key needs (the Banks
+                // screen's rule, round 22), so a row ends on one line.
+                let lines = crate::bankui::tile_key_lines(ui, chunk.iter().map(|b| (*b, cw)));
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = grid_gap;
                     for b in chunk {
-                        match bank_tile(ui, self, cw, b, TileVariant::Home) {
+                        match bank_tile(ui, self, cw, lines, b, TileVariant::Home) {
                             Some(TileAct::Usage) => crate::bankui::open_usage(ui.ctx(), b.name.clone(), b.used_in.clone()),
                             Some(_) => open_bk = Some(b.id.clone()),
                             None => {}
@@ -3005,6 +3020,11 @@ const HOME_EXAM_RULE_GAP: f32 = 6.0;
 const HOME_EXAM_FOOT_PAD: f32 = 16.0;
 /// Between the Recent exams card grid (after its grid gap) and Your banks.
 const HOME_SECTION_GAP_AFTER_CARDS: f32 = 4.0;
+/// Narrow Home (below [`HOME_COMPACT_W`]): the gap after the action cards (18 wide) and after the
+/// compact recent-exam rows (22 wide), smaller so the bank row ends on the first screen at 760x800
+/// now that a three-line tile key makes its tiles 223 tall (round 21).
+const HOME_ACTIONS_GAP_NARROW: f32 = 12.0;
+const HOME_SECTION_GAP_NARROW: f32 = 6.0;
 /// Open on a compact recent-exam row (Home at 760): the same tinted button, compact.
 const HOME_ROW_ACT: f32 = 28.0;
 

@@ -4875,13 +4875,119 @@ fn open_bank_button(ui: &mut egui::Ui) -> egui::Response {
     .inner
 }
 
-/// A shelf filter button that opens a popup (highlighted while a filter is active).
-fn filter_button(ui: &mut egui::Ui, label: &str, active: usize) -> egui::Response {
-    let text = if active > 0 { format!("{label} · {active}") } else { label.to_string() };
+/// A filter's words: its name, and " · N" while N of its choices are on.
+fn filter_text(label: &str, active: usize) -> String {
+    if active > 0 { format!("{label} · {active}") } else { label.to_string() }
+}
+
+/// A filter button's width: its words at 12 and [`SHELF_BUTTON_PAD_X`] each side.
+fn filter_w(ui: &egui::Ui, label: &str, active: usize) -> f32 {
+    (ui.fonts_mut(|f| f.layout_no_wrap(filter_text(label, active), FontId::proportional(12.0), theme::ink()).size().x) + 2.0 * SHELF_BUTTON_PAD_X).ceil()
+}
+
+/// The corners of a bank panel control at its 12 radius: all four alone, the group's outer
+/// corners only as a segment of the joined filters (the Page setup group's [`Seg`] rule).
+fn shelf_corners(seg: Seg) -> CornerRadius {
+    let r = SHELF_RADIUS;
+    match seg {
+        Seg::Alone => CornerRadius::same(r),
+        Seg::In { first, last } => {
+            let (l, r) = (if first { r } else { 0 }, if last { r } else { 0 });
+            CornerRadius { nw: l, sw: l, ne: r, se: r }
+        }
+    }
+}
+
+/// A shelf filter that opens a popup: its own button (hover, pressed and open washes, the accent
+/// outline and " · N" while a filter is on), alone with the control edge round it, or a segment
+/// of the joined filter group (the group draws the outline and the hairlines between).
+fn filter_button(ui: &mut egui::Ui, label: &str, active: usize, seg: Seg) -> egui::Response {
+    let text = filter_text(label, active);
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(filter_w(ui, label, active), SHELF_CONTROL_H), Sense::click());
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    let on = active > 0;
+    let fill = if on || open || resp.is_pointer_button_down_on() {
+        theme::accent_faded()
+    } else if resp.hovered() {
+        theme::hover_bg()
+    } else {
+        theme::card()
+    };
+    let cr = shelf_corners(seg);
+    let p = ui.painter();
+    match seg {
+        Seg::Alone => {
+            p.rect(rect, cr, fill, Stroke::new(1.0, if on { theme::accent_col() } else { theme::edge() }), StrokeKind::Inside);
+        }
+        Seg::In { .. } => {
+            p.rect_filled(rect, cr, fill);
+            if on {
+                p.rect_stroke(rect, cr, Stroke::new(1.0, theme::accent_col()), StrokeKind::Inside);
+            }
+        }
+    }
+    if resp.has_focus() {
+        p.rect_stroke(rect.shrink(1.0), cr, Stroke::new(2.0, theme::accent_col()), StrokeKind::Inside);
+    }
+    p.text(rect.center(), Align2::CENTER_CENTER, &text, FontId::proportional(12.0), theme::ink());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, &text));
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// The three filters: one joined group (one outline, a hairline between them) when it fits the
+/// line, else each its own outlined button, wrapping like words. In order: Question Type,
+/// Difficulty, Topic.
+fn filter_group(ui: &mut egui::Ui, filters: [(&str, usize); 3]) -> [egui::Response; 3] {
+    let group_w: f32 = filters.iter().map(|(l, n)| filter_w(ui, l, *n)).sum();
+    if group_w > ui.available_size_before_wrap().x + 0.5 {
+        return filters.map(|(l, n)| {
+            if filter_w(ui, l, n) > ui.available_size_before_wrap().x + 0.5 && ui.cursor().min.x > ui.max_rect().left() + 1.0 {
+                ui.end_row();
+            }
+            filter_button(ui, l, n, Seg::Alone)
+        });
+    }
+    let rs = ui
+        .scope(|ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            let last = filters.len() - 1;
+            let mut k = 0;
+            filters.map(|(l, n)| {
+                let r = filter_button(ui, l, n, Seg::In { first: k == 0, last: k == last });
+                k += 1;
+                r
+            })
+        })
+        .inner;
+    let span = rs[0].rect.union(rs[2].rect);
+    let p = ui.painter();
+    for r in &rs[..2] {
+        // inside the outline, so a hairline never shows past its top or bottom edge
+        p.vline(r.rect.right(), span.shrink2(Vec2::new(0.0, 1.0)).y_range(), Stroke::new(1.0, theme::edge()));
+    }
+    p.rect_stroke(span, CornerRadius::same(SHELF_RADIUS), Stroke::new(1.0, theme::edge()), StrokeKind::Inside);
+    rs
+}
+
+/// "+ Add all (N)": the panel's action on its filter row, in the outlined button tier (card fill,
+/// the control edge, bold ink words, a focus ring), so it reads as a button apart from the filters.
+fn add_all_button(ui: &mut egui::Ui, text: RichText, enabled: bool) -> egui::Response {
     ui.scope(|ui| {
         ui.spacing_mut().button_padding = egui::vec2(SHELF_BUTTON_PAD_X, SHELF_BUTTON_PAD_Y);
         ui.spacing_mut().interact_size.y = SHELF_CONTROL_H;
-        ui.add(egui::Button::new(RichText::new(text).size(12.0)).selected(active > 0))
+        let w = &mut ui.visuals_mut().widgets;
+        for (state, fill) in [(&mut w.inactive, theme::card()), (&mut w.hovered, theme::hover_bg()), (&mut w.active, theme::accent_faded())] {
+            state.weak_bg_fill = fill;
+            state.bg_fill = fill;
+            state.bg_stroke = Stroke::new(1.0, theme::edge());
+            state.expansion = 0.0;
+            state.corner_radius = CornerRadius::same(SHELF_RADIUS);
+        }
+        let r = ui.add_enabled(enabled, egui::Button::new(text));
+        if r.has_focus() {
+            ui.painter().rect_stroke(r.rect.expand(1.0), CornerRadius::same(SHELF_RADIUS + 1), Stroke::new(2.0, theme::accent_col()), StrokeKind::Outside);
+        }
+        r
     })
     .inner
 }
@@ -4908,8 +5014,28 @@ const SHELF_ROW_GAP: f32 = 8.0;
 /// The height of the bank panel's search, sort, filters and "Add all" (that of "Open bank").
 const SHELF_CONTROL_H: f32 = 28.0;
 
-/// The bank panel's sort menu's width, beside the search.
-const SHELF_SORT_W: f32 = 112.0;
+/// The gap between the panel's control rows and its list: a little more than between the rows,
+/// so the controls read as one block above the questions (round 22; was 10).
+const SHELF_LIST_GAP: f32 = 11.0;
+
+/// The gap between the find row (search, sort) and the narrow-down row (filters, Add all): one
+/// less than [`SHELF_ROW_GAP`], paying for the wider gap under them, so the list keeps its place.
+const SHELF_FIND_GAP: f32 = 7.0;
+
+/// The corner radius of the panel's search, filters and "Add all" (the theme's control radius).
+const SHELF_RADIUS: u8 = 12;
+
+/// The gap between the joined filters and "Add all" at the least, so the action stands apart.
+const SHELF_ADD_GAP: f32 = 12.0;
+
+/// The sort menu's width: as wide as the order chosen needs (its words, the caret and the
+/// padding), so the search beside it is the row's wide field.
+fn sort_w(ui: &egui::Ui, text: &str) -> f32 {
+    let s = ui.spacing();
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let t = ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, theme::ink()).size().x);
+    (t + s.icon_spacing + s.icon_width + 2.0 * s.button_padding.x).ceil()
+}
 
 /// Side padding of the bank panel's filter buttons and "Add all", so the three filters and
 /// "Add all" share a row beside the page.
@@ -5088,13 +5214,16 @@ fn draw_shelf_inner(
     ui.add_space(SHELF_ROW_GAP - item_y);
     ui.spacing_mut().interact_size.y = SHELF_CONTROL_H;
 
-    // ---- search, with the sort menu at its right ----
+    // ---- find: search, the wide field, with the compact sort menu at the row's right edge ----
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        let search_w = (ui.available_width() - SHELF_SORT_W - 6.0).max(80.0);
+        ui.spacing_mut().button_padding.y = SHELF_BUTTON_PAD_Y;
+        let sort_text = SORTS[st.sort.min(SORTS.len() as u8 - 1) as usize];
+        let sort_width = sort_w(ui, sort_text);
+        let search_w = (ui.available_width() - sort_width - 6.0).max(80.0);
         let search = ui.add(
             egui::TextEdit::singleline(&mut st.search)
-                .hint_text("Search questions")
+                .hint_text(format!("{}  Search questions", egui_phosphor::regular::MAGNIFYING_GLASS))
                 .margin(Margin::symmetric(10, 5))
                 .min_size(Vec2::new(0.0, SHELF_CONTROL_H))
                 .vertical_align(egui::Align::Center)
@@ -5104,11 +5233,17 @@ fn draw_shelf_inner(
         ui.ctx().accesskit_node_builder(search.id, |n| n.set_label("Search questions"));
         // at the row's right edge, as tall as the search
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.spacing_mut().button_padding.y = SHELF_BUTTON_PAD_Y;
+            // the control edge, as on the filters and Add all under it
+            let w = &mut ui.visuals_mut().widgets;
+            for state in [&mut w.inactive, &mut w.hovered, &mut w.open] {
+                state.bg_stroke = Stroke::new(1.0, theme::edge());
+            }
             let sort = egui::ComboBox::from_id_salt("shelf_sort")
-                .selected_text(SORTS[st.sort.min(SORTS.len() as u8 - 1) as usize])
-                .width(SHELF_SORT_W)
+                .selected_text(sort_text)
+                .width(sort_width)
                 .show_ui(ui, |ui| {
+                    // every order on one line, though the menu's button is sized to the one chosen
+                    ui.set_min_width(SORTS.iter().map(|l| sort_w(ui, l)).fold(0.0, f32::max));
                     for (k, l) in SORTS.iter().enumerate() {
                         ui.selectable_value(&mut st.sort, k as u8, *l);
                     }
@@ -5117,7 +5252,7 @@ fn draw_shelf_inner(
             ui.ctx().accesskit_node_builder(sort.response.id, |n| n.set_label("Sort questions"));
         });
     });
-    ui.add_space(SHELF_ROW_GAP - item_y);
+    ui.add_space(SHELF_FIND_GAP - item_y);
 
     // ---- filters: Question Type / Difficulty / Topic, and "Add all" at the right ----
     let mut topics: Vec<String> = bank
@@ -5160,10 +5295,12 @@ fn draw_shelf_inner(
         .map(|(_, q)| q.id.clone())
         .collect();
 
+    // ---- narrow down: the three filters as one joined group, "Add all" apart at the right ----
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(5.0, 6.0);
         let close_outside = egui::PopupCloseBehavior::CloseOnClickOutside;
-        let r = filter_button(ui, "Question Type", st.kinds.len());
+        let [r_kind, r_diff, r_topic] = filter_group(ui, [("Question Type", st.kinds.len()), ("Difficulty", usize::from(st.diff != 0)), ("Topic", st.topics.len())]);
+        let r = r_kind;
         egui::Popup::menu(&r).close_behavior(close_outside).show(|ui| {
             for k in [QKind::Mc, QKind::Tf, QKind::Matching, QKind::Blank, QKind::Short, QKind::Multipart] {
                 let n = bank.questions.iter().filter(|q| q.kind.qkind() == k).count();
@@ -5180,13 +5317,13 @@ fn draw_shelf_inner(
                 st.kinds.clear();
             }
         });
-        let r = filter_button(ui, "Difficulty", usize::from(st.diff != 0));
+        let r = r_diff;
         egui::Popup::menu(&r).close_behavior(close_outside).show(|ui| {
             for (di, label) in [(0u8, "Any difficulty"), (1, "Easy"), (2, "Medium"), (3, "Hard")] {
                 ui.radio_value(&mut st.diff, di, label);
             }
         });
-        let r = filter_button(ui, "Topic", st.topics.len());
+        let r = r_topic;
         egui::Popup::menu(&r).close_behavior(close_outside).show(|ui| {
             if topics.is_empty() {
                 ui.label(muted("No topics in this bank yet."));
@@ -5208,18 +5345,11 @@ fn draw_shelf_inner(
         // "Add all" at the row's right, or at the right of a line of its own.
         let add_text = RichText::new(format!("+ Add all ({})", not_in.len())).family(theme::bold_family()).size(12.5);
         let add_w = ui.fonts_mut(|f| f.layout_no_wrap(add_text.text().to_string(), FontId::new(12.5, theme::bold_family()), theme::ink()).size().x) + 2.0 * SHELF_BUTTON_PAD_X;
-        let gap = 12.0;
-        if add_w + gap > ui.available_size_before_wrap().x + 0.5 {
+        if add_w + SHELF_ADD_GAP > ui.available_size_before_wrap().x + 0.5 {
             ui.end_row();
         }
         ui.add_space((ui.available_size_before_wrap().x - add_w).max(0.0));
-        let add_all = ui
-            .scope(|ui| {
-                ui.spacing_mut().button_padding = egui::vec2(SHELF_BUTTON_PAD_X, SHELF_BUTTON_PAD_Y);
-                ui.spacing_mut().interact_size.y = SHELF_CONTROL_H;
-                ui.add_enabled(!not_in.is_empty(), egui::Button::new(add_text))
-            })
-            .inner
+        let add_all = add_all_button(ui, add_text, !not_in.is_empty())
             .on_hover_text("Adds every question shown here that is not on the exam yet");
         if add_all.clicked() {
             let len = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
@@ -5240,7 +5370,7 @@ fn draw_shelf_inner(
         }
     });
     ui.spacing_mut().interact_size.y = interact_y;
-    ui.add_space(SHELF_ROW_GAP + 2.0 - item_y);
+    ui.add_space(SHELF_LIST_GAP - item_y);
 
     // The list runs to the card's foot: the used count sits on the tabs' row above, and the
     // card's own + and grab cursor say how a question gets onto the page.
@@ -9592,6 +9722,72 @@ mod review_tests {
                 if banks.len() == 1 && (!alone || w >= 600.0) {
                     let rows = if alone { 3 } else { 4 };
                     assert!(mids.len() <= rows, "{how}: {} rows: {mids:?}", mids.len());
+                }
+            }
+        }
+    }
+
+    /// The panel's two control rows read as two groups (round 22): find = the search, the wide
+    /// field, and the sort menu sized to its order at the panel's right edge; narrow down = the
+    /// three filters joined edge to edge (each still its own named button) and "Add all" apart at
+    /// the right edge. Nothing wraps beside the page or in the 760 tab with no filter on; with all
+    /// three on (" · N" in each, each reported as pressed) the group still holds together, and "Add all"
+    /// goes to the right of a line of its own where it no longer fits beside it.
+    #[test]
+    fn bank_panel_filters_are_one_group_apart_from_add_all() {
+        use egui::accesskit::Role;
+        let qs: Vec<Question> = (0..10)
+            .map(|k| {
+                let mut q = short(&format!("q{k}"), "Define a catalyst.");
+                q.difficulty = Some(model::Difficulty::Medium);
+                q.topics = vec!["Moles".into()];
+                q
+            })
+            .collect();
+        let bank = QuestionBank { id: "b".into(), name: "Ch4 Quiz 5A and 5B (answer key)".into(), questions: qs, created: 0, modified: 0, details: Default::default() };
+        for (w, alone) in [(SHELF_W, false), (614.0, true)] {
+            for filtered in [false, true] {
+                let how = format!("{w} wide, alone {alone}, filtered {filtered}");
+                let mut h = panel_harness(vec![bank.clone()], w, alone);
+                if filtered {
+                    let st = &mut h.state_mut().1;
+                    st.kinds = vec![QKind::Short, QKind::Mc];
+                    st.diff = 2;
+                    st.topics = vec!["Moles".into()];
+                }
+                h.run_steps(6);
+                let names = if filtered { ["Question Type · 2", "Difficulty · 1", "Topic · 1"] } else { ["Question Type", "Difficulty", "Topic"] };
+                let node = |l: &str, role: Role| {
+                    let n: Vec<_> = h.query_all(by().label(l).role(role)).collect();
+                    assert_eq!(n.len(), 1, "{how}: one {l}");
+                    (n[0].rect(), n[0].accesskit_node().toggled().map(|t| t == egui::accesskit::Toggled::True))
+                };
+                let view = h.state().1.shelf_seen.view.expect("the list's view");
+                let (search, _) = node("Search questions", Role::TextInput);
+                let (sort, _) = node("Sort questions", Role::ComboBox);
+                assert!((sort.right() - view.right()).abs() < 0.6, "{how}: the sort menu at the right edge: {sort:?} {view:?}");
+                assert!(search.width() > 2.0 * sort.width(), "{how}: the search is the wide field: {search:?} {sort:?}");
+                let f: Vec<(Rect, Option<bool>)> = names.iter().map(|l| node(l, Role::Button)).collect();
+                for (k, (r, sel)) in f.iter().enumerate() {
+                    assert_eq!(sel.unwrap_or(false), filtered,"{how}: {} pressed while on", names[k]);
+                    assert!((r.height() - SHELF_CONTROL_H).abs() < 0.6, "{how}: {} is {} tall", names[k], r.height());
+                    assert!(r.left() >= view.left() - 0.5 && r.right() <= view.right() + 0.5, "{how}: {} leaves the panel", names[k]);
+                }
+                for p in f.windows(2) {
+                    assert!((p[0].0.right() - p[1].0.left()).abs() < 0.6 && (p[0].0.center().y - p[1].0.center().y).abs() < 0.6, "{how}: the filters are not joined: {:?} {:?}", p[0].0, p[1].0);
+                }
+                // (every question matches the filters on, so nine are still off the exam)
+                let (add, _) = node("+ Add all (9)", Role::Button);
+                assert!((add.right() - view.right()).abs() < 0.6, "{how}: Add all at the right edge: {add:?}");
+                let beside = (add.center().y - f[2].0.center().y).abs() < 0.6;
+                if beside {
+                    assert!(add.left() - f[2].0.right() >= SHELF_ADD_GAP - 0.5, "{how}: Add all not apart from the filters");
+                } else {
+                    assert!(add.top() >= f[2].0.bottom(), "{how}: Add all on a line of its own under the filters");
+                }
+                assert!(add.bottom() <= view.top() + 0.5 && search.bottom() <= f[0].0.top(), "{how}: the rows in order");
+                if !filtered {
+                    assert!(beside, "{how}: Add all wraps with no filter on");
                 }
             }
         }
