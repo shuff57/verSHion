@@ -912,7 +912,7 @@ impl Board {
         let g = grow(b, 3.0);
         if self.strokes.iter().any(|(a, c, _)| seg_hits_box(*a, *c, g)) { return false; }
         if self.dots.iter().any(|d| box_pt(b, *d) < 6.5) { return false; }
-        if self.boxes.iter().any(|o| boxes_hit(grow(b, 1.5), *o)) { return false; }
+        if self.boxes.iter().any(|o| boxes_hit(grow(b, 4.0), *o)) { return false; }
         if !over_nums && self.nums.iter().any(|(i, o)| !self.hidden.contains(i) && boxes_hit(grow(b, 1.5), *o)) { return false; }
         true
     }
@@ -1038,8 +1038,10 @@ impl Board {
 fn label_svg(id: &str, c: Pt, size: f64, text: &str) -> String {
     let w = mw(text, size);
     let (x, y) = (c.0 - w / 2.0 + 0.5, c.1 + 0.3 * size);
-    let body = math_tspans(text);
-    let inner = format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" font-family="{SERIF}" fill="#fff" stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">{body}</text><text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" font-family="{SERIF}" fill="#111111">{body}</text>"##);
+    let body = math_tspans(&minus(text));
+    let b = Board::bx(c, w, size);
+    let plate = format!(r##"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" rx="2" fill="#fff"/>"##, b[0] + 0.5, b[1] + 1.0, b[2] - b[0] - 1.0, b[3] - b[1] - 2.0);
+    let inner = format!(r##"{plate}<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" font-family="{SERIF}" fill="#fff" stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">{body}</text><text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" font-family="{SERIF}" fill="#111111">{body}</text>"##);
     labels::wrap(id, (c.0, c.1 + 0.06 * size), (w / 2.0 + 1.0, 0.56 * size), &inner)
 }
 /// Width of a row drawn by `row_at`.
@@ -1057,7 +1059,10 @@ fn row_at(x: f64, y: f64, size: f64, s: &str) -> String {
     }
     out
 }
+/// A hyphen typed in math is the minus sign (the typesetter keeps a hyphen after a long word such as "Ellipse:").
+fn minus(s: &str) -> String { s.replace('-', "\u{2212}") }
 fn text_at(x: f64, y: f64, size: f64, anchor: &str, s: &str, bold: bool) -> String {
+    let s = &if bold { s.to_string() } else { minus(s) };
     let (fam, wt) = if bold { ("DejaVu Sans, Arial, Liberation Sans, Helvetica, sans-serif", r#" font-weight="bold""#) } else { (SERIF, "") };
     format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" text-anchor="{anchor}" font-family="{fam}"{wt} fill="#111111">{}</text>"##, math_tspans(s))
 }
@@ -1095,12 +1100,18 @@ fn grid_texts(body: &str, dy: f64) -> (String, Vec<(String, [f64; 4], bool)>) {
 /// Which of the grid's texts are drawn: every axis label; a number unless a marked point is on it or it meets a number
 /// already kept.
 fn keep_texts(t: &[(String, [f64; 4], bool)], dots: &[Pt]) -> Vec<usize> {
+    // (in Print the grid draws each number twice, a white halo plate and the digits over it: the plate follows its digits)
+    let halo = |i: usize| t[i].0.contains(r##"fill="#fff""##);
     let mut kept: Vec<usize> = vec![];
     for (i, (_, b, number)) in t.iter().enumerate() {
+        if halo(i) { continue; }
         if *number && (dots.iter().any(|d| box_pt(*b, *d) < 6.0) || kept.iter().any(|&j| t[j].2 && boxes_hit(*b, t[j].1))) { continue; }
         kept.push(i);
     }
-    kept
+    let same = |a: [f64; 4], b: [f64; 4]| (0..4).all(|k| (a[k] - b[k]).abs() < 0.5);
+    let mut out: Vec<usize> = (0..t.len()).filter(|&i| if halo(i) { kept.iter().any(|&j| same(t[j].1, t[i].1)) } else { kept.contains(&i) }).collect();
+    out.sort();
+    out
 }
 
 // ───────────────────────── render ─────────────────────────

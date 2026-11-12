@@ -725,6 +725,7 @@ fn dump_svgs() {
     let dir = std::path::Path::new("/tmp/conics-dump");
     std::fs::create_dir_all(dir).unwrap();
     std::fs::write(dir.join("open.svg"), svg(&start_params(&def()))).unwrap();
+    std::fs::write(dir.join("print.svg"), svg(&with(json!({"style": "Print"})))).unwrap();
     let s = svg(&with(json!({"coords":"Decimals","key_line":true,"label_size":"Small","p_at":200.0,"pt_labels":"Coordinates only"})));
     let mut mm = Meter::new();
     for (id, el, tr) in texts(&s) { if id == "cl-pf1" { println!("PF1 ink {:?} tr {tr:?} {el}", mm.ink(&el)); } }
