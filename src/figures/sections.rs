@@ -69,6 +69,15 @@ static FIG_6: [RefSection; 4] = [
     s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label"], ""),
 ];
 
+static CONIC_SECTIONS: [RefSection; 6] = [
+    s("Conic", &["conic", "equation", "h", "k", "r", "a", "b", "pf", "axis", "opens"], "Set the conic by its values or type its equation; drag the centre, a vertex, a co-vertex, the focus or P on the figure."),
+    s("Parts", &["show_name", "show_centre", "show_vertices", "show_covertices", "show_foci", "show_directrix", "show_directrices", "show_axes", "show_sym", "show_asymptotes", "show_rect", "show_latus", "show_p", "p_at", "show_ecc", "show_work"], ""),
+    s("Labels", &["pt_labels", "coords", "dec", "eq_form", "title_mode", "title", "label_size", "label_offsets"], "Drag any label on the figure to move it."),
+    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "xlabel"], ""),
+    s("y-axis", &["ymin", "ymax", "ystep", "ylabel"], ""),
+    s("Grid and copies", &["minor", "grid", "style", "show_answers", "blank_labels", "blank_curve", "blank_equation", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
 static TRANSFORMATIONS: [RefSection; 7] = [
     s("Show", &["show_answers", "question", "show_pre", "show_between", "show_guides", "show_arrows", "pt_labels", "coord_list", "style", "label_size"], "Show answers off is the student copy, where the images are left to draw; with Question on as well, the images are drawn and the transformations left to name."),
     s("Pre-image", &["pre", "closed", "adding", "names", "pre_colour", "pre_line", "pre_weight"], "Click grid points on the figure to add vertices, or type them, one x, y pair per line. Drag a vertex to move it."),
@@ -1250,6 +1259,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "composite-shape" => &FIG_4,
         "cone" => &FIG_5,
         "coordinate-grid" => &FIG_6,
+        "conic-sections" => &CONIC_SECTIONS,
         "transformations" => &TRANSFORMATIONS,
         "cylinder" => &FIG_7,
         "free-body-diagram" => &FIG_8,

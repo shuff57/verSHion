@@ -205,9 +205,33 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "scatterplot" => SCATTERPLOT,
         "mapping-diagram" => MAPPING_DIAGRAM,
         "ruler-reading" => RULER_READING,
+        "conic-sections" => CONIC_SECTIONS,
         _ => &[],
     }
 }
+
+const CONIC_SECTIONS: &[Faq] = &[
+    Faq {
+        q: "Can I type the equation instead of the values?",
+        a: "Yes. Type it in standard form, such as (x - 2)^2/9 + (y + 1)^2/4 = 1, or in general form, such as 4x^2 + 9y^2 - 16x + 18y - 11 = 0. The figure completes the square, names the conic, draws it with its parts and fills in the value boxes. Changing a value or dragging the figure rewrites the typed equation in the form it was typed in.",
+    },
+    Faq {
+        q: "How are the foci and vertices worked out?",
+        a: "From c: for an ellipse c^2 = a^2 - b^2, for a hyperbola c^2 = a^2 + b^2, and a parabola's focus is p from its vertex. Fractions and square roots stay exact, so a = 3, b = 2 centred at (2, -1) gives foci (2 - √5, -1) and (2 + √5, -1). Choose Decimals to round them instead. List a, b, c shows the working beside the figure.",
+    },
+    Faq {
+        q: "Why does it refuse my equation?",
+        a: "Some equations are not a conic this figure can draw: an xy term turns the conic off the grid's axes, a negative right-hand side after completing the square has no points, a zero one is a single point or two crossing lines, and a missing square is a line. The panel says which, and nothing is drawn until it is fixed. An ellipse with a = b is drawn as the circle it is.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers, or export Student + key. The student copy leaves the parts unlabelled and puts a blank line where the equation was; it can also leave the curve off so students sketch it from the marked points. The key line under the figure gives the equation, centre, vertices, foci and eccentricity.",
+    },
+    Faq {
+        q: "What can I drag on the figure?",
+        a: "The centre (or a parabola's vertex) moves the conic, a vertex changes a, a co-vertex changes b, a parabola's focus changes p, and P slides along the curve with its focal radii and their lengths following it. Points snap to the grid. Any label can be dragged to a clearer spot.",
+    },
+];
 
 // ----- physics -----
 
