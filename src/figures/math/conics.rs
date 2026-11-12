@@ -743,7 +743,12 @@ pub fn panel_changed(key: &str, p: &mut Params) {
 
 /// Controls shown only where they act on the conic drawn.
 pub fn relevant(key: &str, p: &Params) -> bool {
-    let kind = match model(p).0 { Ok(c) => c.kind, Err(_) => match p.s("conic") { "Circle" => K::Circle, "Parabola" => K::Parabola, "Hyperbola" => K::Hyperbola, _ => K::Ellipse } };
+    let m = model(p).0;
+    if key == "coords" {
+        // exact and decimal coordinates differ only where a value is not whole
+        return match &m { Ok(c) => [&c.h, &c.k, &c.a, &c.b, &c.c].iter().any(|n| (n.v - n.v.round()).abs() > 1e-9 || n.ex.is_none()), Err(_) => false };
+    }
+    let kind = match m { Ok(c) => c.kind, Err(_) => match p.s("conic") { "Circle" => K::Circle, "Parabola" => K::Parabola, "Hyperbola" => K::Hyperbola, _ => K::Ellipse } };
     let chosen = p.s("conic");
     match key {
         "r" => chosen == "Circle",

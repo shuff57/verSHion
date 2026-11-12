@@ -357,6 +357,17 @@ fn every_switch_is_shown_exactly_where_it_draws() {
         }
     }
     assert!(n > 200);
+    // exact or decimal coordinates: hidden while every value is whole (they draw the same), shown and acting once one is not
+    let p = start_params(&def());
+    assert!(!crate::figures::param_relevant(ID, "coords", &p));
+    let mut q = p.clone();
+    q.set_s("coords", "Decimals");
+    assert_eq!(svg(&q), svg(&p));
+    let p = with(json!({"b": "\u{221a}5"}));
+    assert!(crate::figures::param_relevant(ID, "coords", &p));
+    let mut q = p.clone();
+    q.set_s("coords", "Decimals");
+    assert_ne!(svg(&q), svg(&p));
 }
 
 #[test]
@@ -761,4 +772,18 @@ fn measure_advances() {
         out.push('\n');
     }
     println!("ADV {out}");
+}
+
+#[test]
+#[ignore]
+fn dump_example_pngs() {
+    let dir = std::path::PathBuf::from(std::env::var("HOME").unwrap()).join("newfig-out/conics");
+    std::fs::create_dir_all(&dir).unwrap();
+    let d = def();
+    for (i, e) in crate::figures::examples_for(ID).iter().enumerate() {
+        let mut p = Params::defaults(&(d.params)());
+        for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); }
+        std::fs::write(dir.join(format!("ex{i}.png")), crate::figures::to_png(&d.svg(&p), 1.0).unwrap()).unwrap();
+        println!("EX {i} {} {:?}", e.name, warnings(&p));
+    }
 }
