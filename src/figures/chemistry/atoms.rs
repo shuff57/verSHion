@@ -7,9 +7,15 @@ use std::f64::consts::PI;
 mod b10;
 #[cfg(test)]
 mod b10_tests;
+#[cfg(test)]
+pub(crate) mod b10_check;
+#[cfg(test)]
+mod b10r1_tests;
 pub use b10::{lattice_note, lattice_relevant, protons_note, protons_relevant};
 #[cfg(test)]
 pub(crate) use b10::corrected as b10_corrected;
+#[cfg(test)]
+pub(crate) use b10::in_box_corrected as b10_in_box_corrected;
 
 pub fn defs() -> Vec<FigureDef> {
     vec![
@@ -721,6 +727,29 @@ fn spread_kinds(counts: &[usize], rows: usize, cols: usize) -> Option<Vec<usize>
     Some(kind.into_iter().map(|k| k.unwrap_or(major)).collect())
 }
 
+/// Whether the in-box solid of `items` is one batch 10 redraws: rows that rose past the top of the
+/// box (now shrunk to fit), or a small atom put in a dip a shorter top row sits over (now skipped).
+#[cfg(test)]
+pub(super) fn solid_redrawn(items: &[Species], gaps: bool) -> bool {
+    if items.is_empty() { return false; }
+    let (bs, m) = (300.0, 8.0);
+    let maxb = items.iter().map(bound).fold(0.0, f64::max);
+    let (big, small): (Vec<usize>, Vec<usize>) = if gaps { (0..items.len()).partition(|&i| bound(&items[i]) > 0.5 * maxb) } else { ((0..items.len()).collect(), Vec::new()) };
+    let minb = small.iter().map(|&i| bound(&items[i])).fold(0.0, f64::max);
+    let step = if small.is_empty() { maxb * 2.0 * 1.02 } else { (maxb * 2.0).max((maxb + minb) * std::f64::consts::SQRT_2) * 1.02 };
+    let per_row = (((bs - 2.0 * m) / step).floor() as usize).max(1);
+    if m + step / 2.0 + (big.len().div_ceil(per_row) as f64 - 1.0) * step + maxb > bs - m + 1e-9 { return true; }
+    if small.is_empty() { return false; }
+    let sites: Vec<(f64, f64)> = (0..big.len()).map(|k| {
+        let (r, c) = (k / per_row, k % per_row);
+        let in_row = per_row.min(big.len() - r * per_row);
+        (bs / 2.0 + (c as f64 - (in_row as f64 - 1.0) / 2.0) * step, bs - m - step / 2.0 - r as f64 * step)
+    }).collect();
+    let has = |x: f64, y: f64| sites.iter().any(|&(sx, sy)| (sx - x).abs() < 1e-6 && (sy - y).abs() < 1e-6);
+    sites.iter().any(|&(x, y)| has(x + step, y) && !(has(x, y - step) && has(x + step, y - step)) && y - step / 2.0 - minb > m
+        && sites.iter().any(|&(sx, sy)| (sx - x - step / 2.0).hypot(sy - y + step / 2.0) < maxb + minb))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice: bool, gaps: bool, items: &[Species], seed: u64, border: &str, lat: &b10::Lat) {
     match border {
@@ -775,8 +804,22 @@ fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice:
         // interstitial alloy: kinds under half the largest's size sit in the gaps of the lattice
         let (big, small): (Vec<usize>, Vec<usize>) = if gaps { (0..items.len()).partition(|&i| bound(&items[i]) > 0.5 * maxb) } else { ((0..items.len()).collect(), Vec::new()) };
         let minb = small.iter().map(|&i| bound(&items[i])).fold(0.0, f64::max);
-        let step = if small.is_empty() { maxb * 2.0 * 1.02 } else { (maxb * 2.0).max((maxb + minb) * std::f64::consts::SQRT_2) * 1.02 };
-        let per_row = (((bs - 2.0 * m) / step).floor() as usize).max(1);
+        let mut step = if small.is_empty() { maxb * 2.0 * 1.02 } else { (maxb * 2.0).max((maxb + minb) * std::f64::consts::SQRT_2) * 1.02 };
+        let mut per_row = (((bs - 2.0 * m) / step).floor() as usize).max(1);
+        // batch 10: rows that would rise past the top of the box shrink every particle alike until
+        // they fit (before, the top rows ran out of the box and off the page)
+        let mut shrink = 1.0;
+        let fits = |st: f64, kk: f64, pr: usize| m + st / 2.0 + (big.len().div_ceil(pr) as f64 - 1.0) * st + maxb * kk <= bs - m + 1e-9;
+        if !fits(step, shrink, per_row) {
+            let base = step;
+            while shrink > 0.05 {
+                shrink -= 0.01;
+                step = base * shrink;
+                per_row = (((bs - 2.0 * m) / step).floor() as usize).max(1);
+                if fits(step, shrink, per_row) { break; }
+            }
+        }
+        let scaled = |sp: &Species| -> Species { let mut s2 = sp.clone(); s2.r *= shrink; s2.ro *= shrink; s2 };
         let mut idx: Vec<usize> = big;
         for i in (1..idx.len()).rev() { let j = (rg.next() * (i as f64 + 1.0)) as usize % (i + 1); idx.swap(i, j); }
         let mut sites: Vec<(f64, f64)> = Vec::new();
@@ -785,7 +828,7 @@ fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice:
             let in_row = per_row.min(idx.len() - r * per_row);
             let x = bx + bs / 2.0 + (c as f64 - (in_row as f64 - 1.0) / 2.0) * step;
             let y = by + bs - m - step / 2.0 - r as f64 * step;
-            draw_mol(d, &items[ii], x, y, 0.0);
+            if shrink == 1.0 { draw_mol(d, &items[ii], x, y, 0.0); } else { draw_mol(d, &scaled(&items[ii]), x, y, 0.0); }
             sites.push((x, y));
         }
         if !small.is_empty() {
@@ -793,15 +836,32 @@ fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice:
             let has = |x: f64, y: f64| sites.iter().any(|&(sx, sy)| (sx - x).abs() < 1e-6 && (sy - y).abs() < 1e-6);
             let mut holes: Vec<(f64, f64)> = Vec::new();
             let mut top: Vec<(f64, f64)> = Vec::new();
+            let mut skipped = 0usize;
             for &(x, y) in &sites {
                 if !has(x + step, y) { continue; }
                 if has(x, y - step) && has(x + step, y - step) { holes.push((x + step / 2.0, y - step / 2.0)); }
-                else if y - step / 2.0 - minb > by + m { top.push((x + step / 2.0, y - step / 2.0)); }
+                // batch 10: a dip a shorter top row sits over is not free
+                else if y - step / 2.0 - minb * shrink > by + m {
+                    if sites.iter().all(|&(sx, sy)| (sx - x - step / 2.0).hypot(sy - y + step / 2.0) >= (maxb + minb) * shrink) { top.push((x + step / 2.0, y - step / 2.0)); } else { skipped += 1; }
+                }
             }
             for i in (1..holes.len()).rev() { let j = (rg.next() * (i as f64 + 1.0)) as usize % (i + 1); holes.swap(i, j); }
             holes.extend(top);
+            if skipped > 0 && holes.len() < small.len() {
+                // batch 10: for each dip left out above, a free corner beside an atom
+                let want = holes.len() + skipped;
+                let gap = (maxb + minb) * shrink;
+                for &(x, y) in &sites {
+                    for (dx, dy) in [(-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)] {
+                        let (hx, hy) = (x + dx * step, y + dy * step);
+                        let inside = hx - minb * shrink >= bx + m && hx + minb * shrink <= bx + bs - m && hy - minb * shrink >= by + m && hy + minb * shrink <= by + bs - m;
+                        if inside && sites.iter().all(|&(sx, sy)| (sx - hx).hypot(sy - hy) >= gap)
+                            && holes.len() < want && holes.iter().all(|&(qx, qy)| (qx - hx).hypot(qy - hy) >= 2.0 * minb * shrink) { holes.push((hx, hy)); }
+                    }
+                }
+            }
             for (&ii, &(x, y)) in small.iter().zip(holes.iter()) {
-                draw_mol(d, &items[ii], x, y, 0.0);
+                if shrink == 1.0 { draw_mol(d, &items[ii], x, y, 0.0); } else { draw_mol(d, &scaled(&items[ii]), x, y, 0.0); }
             }
         }
         return;

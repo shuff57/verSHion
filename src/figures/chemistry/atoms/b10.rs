@@ -128,6 +128,30 @@ pub fn lattice_note(p: &Params) -> Option<(String, bool)> {
     if parts.is_empty() { None } else { Some((parts.join(" "), refused)) }
 }
 
+/// Counts as near the given ones' ratio as whole particles allow that a lattice of `places` holds:
+/// adding up to the places themselves where every count stays within 1 to 24, else to the largest
+/// whole share of them that does.
+pub fn fit_counts(counts: &[usize], places: usize) -> Option<Vec<usize>> {
+    let n: usize = counts.iter().sum();
+    if n == 0 || counts.is_empty() { return None; }
+    let share = |m: usize| -> Option<Vec<usize>> {
+        let exact: Vec<f64> = counts.iter().map(|&c| c as f64 * m as f64 / n as f64).collect();
+        let mut v: Vec<usize> = exact.iter().map(|x| x.floor() as usize).collect();
+        let mut left = m - v.iter().sum::<usize>();
+        let mut by: Vec<usize> = (0..v.len()).collect();
+        by.sort_by(|&a, &b| (exact[b] - exact[b].floor()).total_cmp(&(exact[a] - exact[a].floor())).then(a.cmp(&b)));
+        for &k in by.iter().cycle() { if left == 0 { break; } v[k] += 1; left -= 1; }
+        while let Some(z) = v.iter().position(|&x| x == 0) {
+            let big = (0..v.len()).max_by_key(|&k| (v[k], std::cmp::Reverse(k)))?;
+            if v[big] <= 1 { return None; }
+            v[big] -= 1;
+            v[z] += 1;
+        }
+        (v.iter().all(|&x| (1..=24).contains(&x)) && v != counts).then_some(v)
+    };
+    (1..=places).rev().filter(|m| places % m == 0 && *m >= counts.len()).find_map(share)
+}
+
 fn list(v: &[String]) -> String {
     match v.len() {
         0 => String::new(),
@@ -138,10 +162,17 @@ fn list(v: &[String]) -> String {
 
 fn refusal(no: &No, runs: &[(usize, Species, usize)]) -> String {
     match no {
-        No::Ratio { rows, cols, unit } => format!(
-            "Nothing is drawn: {rows} by {cols} is {} places, which can\u{2019}t hold the kinds in the counts\u{2019} {} ratio. Pick rows and columns that multiply to a multiple of {unit}.",
-            rows * cols, ratio(runs)
-        ),
+        No::Ratio { rows, cols, unit } => {
+            let counts: Vec<usize> = runs.iter().map(|r| r.2).collect();
+            let or = match fit_counts(&counts, rows * cols) {
+                Some(f) => format!(", or set the counts to {}", list(&f.iter().map(|k| k.to_string()).collect::<Vec<_>>())),
+                None => String::new(),
+            };
+            format!(
+                "Nothing is drawn: {rows} by {cols} is {} places, which can\u{2019}t hold the kinds in the counts\u{2019} {} ratio. Pick rows and columns that multiply to a multiple of {unit}{or}.",
+                rows * cols, ratio(runs)
+            )
+        }
         No::TooLong { set_rows, side, need, unit } => {
             let (have, other) = if *set_rows { ("rows", "columns") } else { ("columns", "rows") };
             if *need == usize::MAX {
@@ -174,7 +205,9 @@ pub fn mixed_sizes(items: &[Species]) -> bool {
     b.iter().any(|&x| (x - b[0]).abs() > 1e-9)
 }
 
-/// The old figures batch 10 redraws: a lattice with a box of particles of different sizes.
+/// The old figures batch 10 redraws: a lattice with a box of particles of different sizes (the
+/// lattice before batch 10 shrank each into its own square, the larger more, and put the first kind
+/// on the larger checkerboard class whatever its count, so neighbours never touched and could overlap).
 #[cfg(test)]
 pub(crate) fn corrected(p: &Params) -> bool {
     let build = |after: bool| -> Vec<Species> {
@@ -185,29 +218,117 @@ pub(crate) fn corrected(p: &Params) -> bool {
         }
         v
     };
-    // a box whose particles are of different sizes, where the old lattice shrank its largest into
-    // a square smaller than they are, or spaced a pattern other than two alternating kinds by the
-    // two sizes together (so two of the largest could overlap side by side)
-    let redrawn = |items: &[Species]| -> bool {
-        if !mixed_sizes(items) { return false; }
-        let n = items.len();
-        let maxb = items.iter().map(bound).fold(0.0, f64::max);
-        let minb = items.iter().map(bound).fold(f64::MAX, f64::min);
-        let cols = ((n as f64).sqrt().ceil() as usize).max(1);
-        let rows = n.div_ceil(cols);
-        let old_tight = (maxb + minb).max(1.42 * maxb);
-        let old_step = (old_tight * 1.02).min((300.0 - 16.0) / cols.max(rows) as f64);
-        let mut runs: Vec<usize> = Vec::new();
-        for (i, it) in items.iter().enumerate() { if i == 0 || items[i - 1] != *it { runs.push(0); } *runs.last_mut().unwrap() += 1; }
-        let alternating = spread_kinds(&runs, rows, cols).is_none() && runs.len() == 2;
-        old_step / 2.0 < maxb - 1e-9 || !alternating
-    };
     p.s("layout") == "Lattice" && p.s("key_show") != "Key only"
-        && (redrawn(&build(false)) || (p.s("boxes") == "Before and after" && redrawn(&build(true))))
+        && (mixed_sizes(&build(false)) || (p.s("boxes") == "Before and after" && mixed_sizes(&build(true))))
+}
+
+/// The in-box solids batch 10 redraws (round 1 of the check, so that no particle overlaps another
+/// or leaves its box): rows that rose past the top of the box, now shrunk alike to fit; a small atom
+/// of an interstitial alloy put in a dip a shorter top row sits over, now left out of that dip.
+#[cfg(test)]
+pub(crate) fn in_box_corrected(p: &Params) -> bool {
+    let build = |after: bool| -> Vec<Species> {
+        let mut v = Vec::new();
+        for k in KINDS {
+            let n = p.i(&format!("{k}{}_count", if after { "2" } else { "" })).clamp(0, 24);
+            for _ in 0..n { v.push(species(p, k)); }
+        }
+        v
+    };
+    p.s("layout") == "In a box" && p.s("key_show") != "Key only"
+        && ((p.s("state") == "Solid" && solid_redrawn(&build(false), p.b("gaps")))
+            || (p.s("boxes") == "Before and after" && p.s("state2") == "Solid" && solid_redrawn(&build(true), p.b("gaps"))))
 }
 
 /// One drawn lattice particle: centre, the particle as scaled, and its kind (index into the runs).
 pub struct Placed { pub x: f64, pub y: f64, pub sp: Species, pub kind: usize }
+
+/// Which kind sits in each of the first `n` cells of a `rows` x `cols` lattice (read row by row),
+/// as (row, column, kind) in the order they are drawn.
+///
+/// Two kinds whose counts are the two checkerboard classes alternate, the larger count on the
+/// larger class (equal counts: the first kind on the class of the top left cell, as before batch
+/// 10). Otherwise the most numerous kind fills the lattice and the others are spread through it:
+/// each next one on the free cell farthest from those already placed, measured with the lattice
+/// wrapped round (a torus) so the edges draw no more and no fewer than their share, and only on one
+/// checkerboard class while it has room, so no two of them are side by side along a row or column.
+pub fn arrange(counts: &[usize], rows: usize, cols: usize, n: usize) -> Vec<(usize, usize, usize)> {
+    let cells: Vec<(usize, usize)> = (0..rows).flat_map(|r| (0..cols).map(move |c| (r, c))).take(n).collect();
+    if counts.len() <= 1 { return cells.into_iter().map(|(r, c)| (r, c, 0)).collect(); }
+    let even = cells.iter().filter(|q| (q.0 + q.1) % 2 == 0).count();
+    let odd = cells.len() - even;
+    if counts.len() == 2 && counts[0] + counts[1] == cells.len() && (counts[0] == even || counts[0] == odd) {
+        let first_even = counts[0] == even;
+        let mut v: Vec<(usize, usize, usize)> = cells.iter().map(|&(r, c)| {
+            let e = (r + c) % 2 == 0;
+            (r, c, if e == first_even { 0 } else { 1 })
+        }).collect();
+        v.sort_by_key(|&(r, c, _)| ((r + c) % 2, r, c));
+        return v;
+    }
+    let major = (0..counts.len()).rev().max_by_key(|&k| counts[k]).unwrap_or(0);
+    let mut kind: Vec<Option<usize>> = vec![None; cells.len()];
+    let mut placed: Vec<usize> = Vec::new();
+    let mut order: Vec<usize> = (0..counts.len()).filter(|&k| k != major).collect();
+    order.sort_by_key(|&k| (counts[k], k));
+    let minority: usize = order.iter().map(|&k| counts[k]).sum();
+    // the class the minority sit on: the larger one (the top left cell's on a tie)
+    let class = if odd > even { 1 } else { 0 };
+    let class_room = if class == 1 { odd } else { even };
+    let td = |a: usize, b: usize| -> i64 {
+        let (p, q) = (cells[a], cells[b]);
+        let dr = p.0.abs_diff(q.0).min(rows - p.0.abs_diff(q.0)) as i64;
+        let dc = p.1.abs_diff(q.1).min(cols - p.1.abs_diff(q.1)) as i64;
+        dr * dr + dc * dc
+    };
+    // for each cell: its nearest placed one (squared, wrapped) and how many placed lie at that distance
+    let mut near: Vec<(i64, usize)> = vec![(i64::MAX, 0); cells.len()];
+    for k in order {
+        for _ in 0..counts[k] {
+            let on_class = placed.len() < class_room.min(minority);
+            let free = (0..cells.len()).filter(|&i| kind[i].is_none() && (!on_class || (cells[i].0 + cells[i].1) % 2 == class));
+            let pick = if placed.is_empty() {
+                // the first one a third of the way in; on a torus where it starts does not matter
+                let (tr, tc) = ((rows as f64 - 1.0) / 3.0, (cols as f64 - 1.0) / 3.0);
+                free.min_by(|&a, &b| {
+                    let da = (cells[a].0 as f64 - tr).powi(2) + (cells[a].1 as f64 - tc).powi(2);
+                    let db = (cells[b].0 as f64 - tr).powi(2) + (cells[b].1 as f64 - tc).powi(2);
+                    da.total_cmp(&db).then(a.cmp(&b))
+                })
+            } else {
+                // farthest from the placed ones; then the fewest placed at that distance; then reading order
+                free.max_by_key(|&i| (near[i].0, std::cmp::Reverse(near[i].1), std::cmp::Reverse(i)))
+            };
+            let Some(i) = pick else { break };
+            kind[i] = Some(k);
+            placed.push(i);
+            for (j, nj) in near.iter_mut().enumerate() {
+                let dd = td(i, j);
+                if dd < nj.0 { *nj = (dd, 1); } else if dd == nj.0 { nj.1 += 1; }
+            }
+        }
+    }
+    cells.iter().zip(kind).map(|(&(r, c), k)| (r, c, k.unwrap_or(major))).collect()
+}
+
+/// The pitch that makes the largest pair of neighbours that occurs touch: side by side the two
+/// sizes together, corner to corner the two over root 2. Also gives that pair's two sizes together.
+pub fn pitch_for(cells: &[(usize, usize, usize)], sizes: &[f64]) -> (f64, f64) {
+    let mut at = std::collections::HashMap::new();
+    for &(r, c, k) in cells { at.insert((r as i64, c as i64), sizes[k]); }
+    let (mut req, mut sum): (f64, f64) = (0.0, 0.0);
+    let mut keys: Vec<(i64, i64)> = at.keys().copied().collect();
+    keys.sort();
+    for (r, c) in keys {
+        let a = at[&(r, c)];
+        for (dr, dc, f) in [(0, 1, 1.0), (1, 0, 1.0), (1, 1, std::f64::consts::SQRT_2), (1, -1, std::f64::consts::SQRT_2)] {
+            if let Some(&b) = at.get(&(r + dr, c + dc)) {
+                if (a + b) / f > req { req = (a + b) / f; sum = a + b; }
+            }
+        }
+    }
+    if req == 0.0 { let m = sizes.iter().cloned().fold(0.0, f64::max); (2.0 * m, 2.0 * m) } else { (req, sum) }
+}
 
 /// The lattice of `items` (the box's particles, kinds in runs) in the box at (bx, by), or None
 /// when its size is refused.
@@ -221,16 +342,14 @@ pub fn layout(bx: f64, by: f64, bs: f64, items: &[Species], lat: &Lat) -> Option
     let (rows, cols) = (pl.rows, pl.cols);
     let n: usize = pl.counts.iter().sum();
     let m = 8.0;
-    let maxb = items.iter().map(bound).fold(0.0, f64::max);
-    let minb = items.iter().map(bound).fold(f64::MAX, f64::min);
-    let mut cells: Vec<(usize, usize)> = (0..rows).flat_map(|r| (0..cols).map(move |c| (r, c))).take(n).collect();
-    let spread = spread_kinds(&pl.counts, rows, cols);
-    // two kinds alternating: each neighbour is the other kind and diagonal neighbours share one, so
-    // the pitch is the two sizes together (as the lattice before batch 10); any other pattern can
-    // put two of the largest side by side, so the pitch is the largest's size
-    let tight = if spread.is_none() && runs.len() == 2 && (maxb - minb).abs() > 1e-9 { (maxb + minb).max(1.42 * maxb) } else { 2.0 * maxb };
-    let gap = if lat.spaced { SPACED } else { 1.0 };
-    let natural = tight * 1.02 * gap;
+    let sizes: Vec<f64> = runs.iter().map(|r| bound(&items[r.0])).collect();
+    let maxb = sizes.iter().cloned().fold(0.0, f64::max);
+    let cells = arrange(&pl.counts, rows, cols, n);
+    // touching: the largest neighbouring pair meets (a 2 % gap, as before batch 10, at most 0.95 px
+    // between the two, whether side by side or corner to corner)
+    let (req, sum) = pitch_for(&cells, &sizes);
+    let touch = if 0.02 * sum <= 0.95 { req * 1.02 } else { req + 0.95 * req / sum };
+    let natural = if lat.spaced { req * 1.02 * SPACED } else { touch };
     // the grid's extent is its pitches plus the largest particle at each end (a large ion between
     // small ones reaches past its own square), kept inside the box's margin
     let side = cols.max(rows) as f64;
@@ -239,11 +358,7 @@ pub fn layout(bx: f64, by: f64, bs: f64, items: &[Species], lat: &Lat) -> Option
     let scale = step / natural;
     let gx = bx + (bs - step * cols as f64) / 2.0 + step / 2.0;
     let gy = by + (bs - step * rows as f64) / 2.0 + step / 2.0;
-    if spread.is_none() { cells.sort_by_key(|&(r, c)| ((r + c) % 2, r, c)); }
-    // the kind of the k-th cell in the checkerboard order: the kinds' runs one after another
-    let run_of = |k: usize| { let mut acc = 0; for (j, &c) in pl.counts.iter().enumerate() { acc += c; if k < acc { return j; } } pl.counts.len() - 1 };
-    Some(cells.iter().enumerate().map(|(k, &(r, c))| {
-        let kind = match &spread { Some(kinds) => kinds[k], None => run_of(k) };
+    Some(cells.into_iter().map(|(r, c, kind)| {
         let mut s2 = items[runs[kind].0].clone();
         s2.r *= scale;
         s2.ro *= scale;
