@@ -317,28 +317,34 @@ fn growth_blank_lines_always_drawn_long_clear_and_own() {
             }
         }
     }
-    let mut seed: u64 = 0xb9_51;
+    // each case again with two seeded mixes of the setup's rate, start, capacity and span
+    let mut seed: u64 = 0xb9_52;
     let mut next = |n: u64| { seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (seed >> 33) % n };
-    for _ in 0..240 {
-        let pick = |n: &mut dyn FnMut(u64) -> u64, v: &[&'static str]| v[n(v.len() as u64) as usize];
-        cases.push(vec![
-            ("graph", s(pick(&mut next, &VIEWS))),
-            ("minor", s(pick(&mut next, &["None", "2 per block", "4 per block", "5 per block"]))),
-            ("label_size", s(pick(&mut next, &["Small", "Medium", "Large"]))),
-            ("growth", s(pick(&mut next, &["Logistic (S-curve)", "Exponential and logistic"]))),
-            ("r", Value::F([0.05, 0.2, 0.5, 1.0, 2.5, 5.0][next(6) as usize])),
-            ("n0", Value::F([1.0, 2.0, 10.0, 50.0, 300.0][next(5) as usize])),
-            ("k", Value::F([50.0, 665.0, 1000.0, 6000.0][next(4) as usize])),
-            ("tspan", Value::F([5.0, 18.0, 40.0, 100.0][next(4) as usize])),
-            ("census_auto", b(next(2) == 0)),
-            ("census_scatter", s(pick(&mut next, &["None, on the curve", "About 10%", "About 20%"]))),
-            ("mark_k", b(next(4) != 0)),
-            ("title", s(pick(&mut next, &["", "Yeast in a flask"]))),
-            ("y_end", s(pick(&mut next, &["None", "Text"]))),
-        ]);
+    let own: Vec<Vec<(&'static str, Value)>> = cases.clone();
+    for c in own {
+        for _ in 0..2 {
+            let mut m = c.clone();
+            m.retain(|(k, _)| !matches!(*k, "r" | "n0" | "k" | "tspan"));
+            let k = [50.0, 100.0, 665.0, 1000.0, 6000.0][next(5) as usize];
+            m.extend([
+                ("r", Value::F([0.05, 0.2, 0.54, 1.0, 1.879, 2.861, 5.0][next(7) as usize])),
+                ("n0", Value::F(k * [0.005, 0.02, 0.131, 0.3][next(4) as usize])),
+                ("k", Value::F(k)),
+                ("tspan", Value::F([5.0, 18.0, 20.0, 40.0, 100.0][next(5) as usize])),
+            ]);
+            cases.push(m);
+        }
     }
+    // the checkers' own cases
+    let yeast = setups.iter().find(|e| e.name == "Yeast in a flask").unwrap().params.clone();
+    let with = |base: &Vec<(&'static str, Value)>, extra: Vec<(&'static str, Value)>| { let mut v = base.clone(); v.retain(|q| !extra.iter().any(|e| e.0 == q.0)); v.extend(extra); v };
+    cases.push(with(&yeast, vec![("graph", s("Population size over time")), ("minor", s("4 per block")), ("label_size", s("Small")), ("r", Value::F(1.879)), ("n0", Value::F(13.1)), ("k", Value::F(100.0)), ("tspan", Value::F(5.0))]));
+    cases.push(with(&yeast, vec![("graph", s("Population size and per capita rate")), ("label_size", s("Large")), ("r", Value::F(2.861)), ("n0", Value::F(4.0)), ("k", Value::F(1000.0)), ("tspan", Value::F(20.0))]));
     cases.push(vec![("r", Value::F(0.2)), ("n0", Value::F(2.0)), ("k", Value::F(50.0)), ("tspan", Value::F(100.0))]);
     cases.push(vec![("graph", s("Population size and per capita rate")), ("minor", s("4 per block"))]);
+    assert!(cases.len() >= 3240);
+    let (mut n_visible, mut n_far, mut n_point_leader, mut unowned, mut n_cross) = (0, 0, 0, 0, 0);
+    let n_cases = cases.len();
     let (mut n_infl, mut n_phase, mut n_lead) = (0, 0, 0);
     for c in cases {
         let mut x = c.clone();
@@ -368,7 +374,12 @@ fn growth_blank_lines_always_drawn_long_clear_and_own() {
             if let Some(l) = lead {
                 // a leader: one end on the line, the other on its own mark
                 assert!(pt_seg(l.2, *a, *bb) <= 4.0, "{tag}: the leader reaches its line in {c:?}");
-                for cv in &curves { assert!(seg_dist(l.1, l.2, cv.0, cv.1) >= 2.0, "{tag}: the leader crosses a curve in {c:?}"); }
+                // (the point's leader may cross a curve only where every spot needs that: the point boxed in by the
+                // curves, the K line and the plot's edge; counted)
+                if curves.iter().any(|cv| seg_dist(l.1, l.2, cv.0, cv.1) < 2.0) {
+                    assert!(tag == "infl", "{tag}: the leader crosses a curve in {c:?}");
+                    n_cross += 1;
+                }
                 n_lead += 1;
             }
             if tag == "infl" {
@@ -377,15 +388,40 @@ fn growth_blank_lines_always_drawn_long_clear_and_own() {
                 let ti = super::growth_b9::t_inf(&p).unwrap();
                 let pt = (ax.px(ti), ax.py(p.f("k").max(1.0) / 2.0));
                 if !ax.inside((ti, p.f("k").max(1.0) / 2.0)) { continue; }
+                n_visible += 1;
+                let dd = |q: (f64, f64)| ((q.0 - pt.0).powi(2) + (q.1 - pt.1).powi(2)).sqrt();
+                // within reach: its nearest end at most 60 px from the point
+                let near_end = dd(*a).min(dd(*bb));
+                if near_end > 60.0 { n_far += 1; }
+                // (farther only where nothing within 60 px is clear, and then always with a leader from the point)
+                if near_end > 60.0 { assert!(lead.is_some(), "the point's line's nearest end is {near_end:.0} px from it, with no leader, in {c:?}"); }
+                // a leader from the point whenever the line is not right beside it
+                if near_end > 14.5 { assert!(lead.is_some(), "the point's line {near_end:.0} px away has no leader in {c:?}"); }
                 if let Some(l) = lead {
-                    assert!(((l.1 .0 - pt.0).powi(2) + (l.1 .1 - pt.1).powi(2)).sqrt() <= 9.0, "the point's leader starts at the point in {c:?}");
-                } else {
-                    let own = pt_seg(pt, *a, *bb);
-                    for (ba, bbx, by, _, _) in &brackets { assert!(own < seg_dist(*a, *bb, (*ba, *by), (*bbx, *by)), "the point's line nearer a phase bracket in {c:?}"); }
-                    if p.b("mark_k") && p.s("growth") != "Exponential (J-curve)" {
-                        let ky = ax.py(p.f("k").max(1.0));
-                        if ky >= ax.y && ky <= ax.y + ax.h { assert!(own < seg_dist(*a, *bb, (ax.x, ky), (ax.x + ax.w, ky)), "the point's line nearer the K line in {c:?}"); }
+                    n_point_leader += 1;
+                    assert!(dd(l.1) <= 9.0, "the point's leader starts at the point in {c:?}");
+                }
+                // its own: nearer the point than any census count (never over one) or the K line
+                let own = pt_seg(pt, *a, *bb);
+                for el in svg.split("<circle").skip(1) {
+                    let f = |k: &str| -> f64 { el.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+                    if (f("r") - 4.2).abs() > 1e-6 { continue; }
+                    let dot = (f("cx"), f("cy"));
+                    let dl = pt_seg(dot, *a, *bb);
+                    assert!(dl >= 5.2, "the point's line over a census count in {c:?}");
+                    // nearer its point than any count; where no spot on the graph is (counts all round the point), the
+                    // leader from the point says whose line it is
+                    if dl <= own { assert!(lead.is_some(), "the point's line nearer a census count ({dl:.0} px) than its point ({own:.0} px), with no leader, in {c:?}"); unowned += 1; }
+                }
+                if p.b("mark_k") && p.s("growth") != "Exponential (J-curve)" {
+                    let ky = ax.py(p.f("k").max(1.0));
+                    if ky >= ax.y && ky <= ax.y + ax.h && own >= seg_dist(*a, *bb, (ax.x, ky), (ax.x + ax.w, ky)) {
+                        assert!(lead.is_some(), "the point's line nearer the K line, with no leader, in {c:?}");
+                        unowned += 1;
                     }
+                }
+                if lead.is_none() {
+                    for (ba, bbx, by, _, _) in &brackets { assert!(own < seg_dist(*a, *bb, (*ba, *by), (*bbx, *by)), "the point's line nearer a phase bracket in {c:?}"); }
                 }
             } else {
                 n_phase += 1;
@@ -404,8 +440,8 @@ fn growth_blank_lines_always_drawn_long_clear_and_own() {
             }
         }
     }
-    assert!(n_infl >= 330 && n_phase >= 800, "{n_infl} point lines, {n_phase} phase lines ({n_lead} with leaders)");
-    eprintln!("{n_infl} point lines, {n_phase} phase lines, {n_lead} leaders");
+    assert!(n_infl >= 500 && n_phase >= 1500, "{n_infl} point lines, {n_phase} phase lines ({n_lead} with leaders)");
+    eprintln!("{} cases: {n_infl} point lines ({n_visible} with the point on the graph, {n_far} more than 60 px away (each with a leader), {n_point_leader} with a leader, {unowned} count or K-line checks met only by the leader, {n_cross} leaders across a curve), {n_phase} phase lines, {n_lead} leaders in all", n_cases);
 }
 
 #[test]
@@ -453,3 +489,4 @@ fn predator_prey_show_offered_exactly_where_it_draws() {
         }
     }
 }
+

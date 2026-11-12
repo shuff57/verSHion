@@ -490,8 +490,8 @@ pub fn growth_render(p: &Params) -> String {
                 let kd = has_k && p.b("mark_k");
                 let k_label = (kd && kstyle != "None").then(|| {
                     let text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
-                    let (x, y) = (a.x + 8.0, a.py(k) + 21.7);
-                    (x - 2.0, y - 14.7 * 0.78 - 2.0, x + bold_width(text, 14.7).max(162.0) + 2.0, y + 4.0)
+                    let (x, y, size) = (a.x + 8.0, a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
+                    (x - 2.0, y - size * 0.95 - 2.0, x + (bold_width(text, size) * 1.25).max(162.0) + 2.0, y + size * 0.3 + 2.0)
                 });
                 let room = growth_b9::InflRoom { a: &a, at: (cx, cy), curves, census: census.iter().map(|q| a.pt(*q)).collect(), phase_x, k_line: kd.then(|| a.py(k)), k_label, minor: minor_of(p.s("minor")) };
                 growth_b9::infl_label(&mut d, p, (cx + 12.0).min(a.x + a.w - 170.0), cy + 18.0, &room);
@@ -511,7 +511,23 @@ pub fn growth_render(p: &Params) -> String {
                 growth_b9::phase_label(&mut d, p, xa, xb, by, fs, name);
                 brackets.push((i, xa, xb));
             }
-            if p.s("phase_label_style") == "Blank line" { growth_b9::phase_blanks(&mut d, &brackets, by, (a.x, a.x + a.w), w); }
+            if p.s("phase_label_style") == "Blank line" {
+                // the K line's label (or its blank line) as drawn on this graph: a fixed axis can put it up among the brackets
+                let mut avoid = vec![];
+                if has_k && p.b("mark_k") {
+                    match kstyle {
+                        "None" => {}
+                        "Blank line" => avoid.push((a.x + 8.0, a.py(k) + 18.0, a.x + 170.0, a.py(k) + 22.0)),
+                        _ => {
+                            let text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
+                            let (x, y, size) = (a.x + 8.0, a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
+                            // (Arial's widths; the bold face drawn runs up to a fifth wider)
+                            avoid.push((x - 2.0, y - size * 0.95, x + bold_width(text, size) * 1.25 + 2.0, y + size * 0.3));
+                        }
+                    }
+                }
+                growth_b9::phase_blanks(&mut d, &brackets, by, (a.x, a.x + a.w), w, &avoid);
+            }
         }
     }
     // census table(s)

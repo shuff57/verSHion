@@ -1140,7 +1140,25 @@ fn proj_render(p: &Params) -> String {
             if p.b("show_v") { strokes.push(vec![(lx, ly), tip]); }
             let mut balls = vec![((lx, ly), br)];
             for i in 1..=steps.max(0) { balls.push((pos(t_land * i as f64 / steps as f64), br)); }
-            let (bx, by) = proj_marks_b9::height_blank_spot((apex.0, top, ly), &strokes, &balls, w);
+            // the angle's arc and label, and the velocity's label, as drawn above
+            let mut boxes = vec![];
+            let lab_box = |t: &str, cx: f64, cy: f64, size: f64| {
+                let n = t.chars().filter(|c| !matches!(c, '_' | '{' | '}' | '^')).count().max(1) as f64;
+                let hw = if t.trim().is_empty() { 13.0 } else { (n * size * 0.32).max(size * 0.3) } + 1.0;
+                let base = cy + size * 0.35;
+                (cx - hw, base - size * 0.8, cx + hw, base + size * 0.3)
+            };
+            if p.b("show_angle") && th > 0.5 {
+                let ar = br + 26.0;
+                strokes.push(arc_pts(lx, ly, ar, 0.0, th));
+                let at = lab_mode(p, "ang_lab", "ang_lab_mode");
+                if !at.trim().eq_ignore_ascii_case("none") { let m = pol(lx, ly, ar + 15.0, th / 2.0); boxes.push(lab_box(&at, m.0 + 4.6, m.1 - 1.9, 22.0)); }
+            }
+            if p.b("show_v") {
+                let vt = lab_mode(p, "v_lab", "v_lab_mode");
+                if !vt.trim().eq_ignore_ascii_case("none") { boxes.push(lab_box(&vt, tip.0 - 14.3, tip.1 - 15.1 - 7.7, 22.0)); }
+            }
+            let (bx, by) = proj_marks_b9::height_blank_spot((apex.0, top, ly), &strokes, &balls, &boxes, w);
             g.label_at(bx, by, 19.0, &t, ITALIC);
         } else {
             // (an empty typed label keeps its old place)

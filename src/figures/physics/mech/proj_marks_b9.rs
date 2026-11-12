@@ -45,7 +45,10 @@ pub(crate) fn relevant(key: &str, p: &Params) -> bool {
 /// 6 px right of the height arrow at its middle, as before, when that is clear of every stroke and ball by 4 px; else
 /// the nearest clear spot beside the arrow, right or left, up and down its length; else just outside the arch on the
 /// right (a steep launch's path hugs the arrow on both sides). `arrow` is (x, top, bottom).
-pub(crate) fn height_blank_spot(arrow: (f64, f64, f64), strokes: &[Vec<Pt>], balls: &[(Pt, f64)], w: f64) -> (f64, f64) {
+///
+/// `boxes` are the words and numbers drawn near it (the angle's label, the velocity's): the line keeps 8 px from them
+/// and is at most half as far from its own arrow as from any of them, so it never reads as the angle's blank.
+pub(crate) fn height_blank_spot(arrow: (f64, f64, f64), strokes: &[Vec<Pt>], balls: &[(Pt, f64)], boxes: &[(f64, f64, f64, f64)], w: f64) -> (f64, f64) {
     let (ax, top, bot) = arrow;
     let drop = 19.0 * 0.35;
     let seg_d = |q: Pt, a: Pt, b: Pt| {
@@ -54,30 +57,47 @@ pub(crate) fn height_blank_spot(arrow: (f64, f64, f64), strokes: &[Vec<Pt>], bal
         let u = (((q.0 - a.0) * dx + (q.1 - a.1) * dy) / l2).clamp(0.0, 1.0);
         ((q.0 - a.0 - dx * u).powi(2) + (q.1 - a.1 - dy * u).powi(2)).sqrt()
     };
-    let clear = |cx: f64, cy: f64| {
+    // `gap`: px clear of every label; `ratio`: how many times nearer its own arrow than any label it must be
+    let clear_at = |cx: f64, cy: f64, gap: f64, ratio: f64| {
         let y = cy + drop;
         if cx - 13.0 < 2.0 || cx + 13.0 > w - 2.0 { return false; }
+        let to_arrow = if (cx - 13.0..=cx + 13.0).contains(&ax) { 0.0 } else { (cx - ax).abs() - 13.0 };
+        let to_box = |b: &(f64, f64, f64, f64)| { let dx = (b.0 - (cx + 13.0)).max((cx - 13.0) - b.2).max(0.0); let dy = (b.1 - y).max(y - b.3).max(0.0); dx.hypot(dy) };
+        if boxes.iter().any(|b| { let d = to_box(b); d < gap || d <= ratio * to_arrow }) { return false; }
         (0..=26).all(|i| {
             let q = (cx - 13.0 + i as f64, y);
             strokes.iter().all(|s| s.windows(2).all(|v| seg_d(q, v[0], v[1]) >= 4.0)) && balls.iter().all(|(c, r)| ((q.0 - c.0).powi(2) + (q.1 - c.1).powi(2)).sqrt() >= r + 4.0)
         })
     };
     let mid = (top + bot) / 2.0;
-    if clear(ax + 19.0, mid) { return (ax + 19.0, mid); }
     let half = ((bot - top) / 2.0 - 12.0).max(0.0);
-    let mut k = 0.0;
-    while k <= half {
-        for cy in [mid + k, mid - k] {
-            for cx in [ax + 19.0, ax - 19.0] { if clear(cx, cy) { return (cx, cy); } }
+    // well clear of the labels first (8 px, at most half as far from its arrow as from any label), then less strictly
+    // where the arrow stands right by the angle's label (a shallow launch off a cliff)
+    for (gap, ratio) in [(8.0, 2.0), (8.0, 1.0), (6.0, 1.0)] {
+        let clear = |cx: f64, cy: f64| clear_at(cx, cy, gap, ratio);
+        if clear(ax + 19.0, mid) { return (ax + 19.0, mid); }
+        let mut k = 0.0;
+        while k <= half {
+            for cy in [mid + k, mid - k] {
+                for cx in [ax + 19.0, ax - 19.0] { if clear(cx, cy) { return (cx, cy); } }
+            }
+            k += 3.0;
         }
-        k += 3.0;
+        // farther out: the nearest clear spot round the arrow's middle, above the ground (a short, shallow flight leaves
+        // no room beside its arrow)
+        let mut best: Option<(f64, (f64, f64))> = None;
+        let mut cy = top - 60.0;
+        while cy + drop <= bot - 6.0 {
+            let mut cx = ax - 120.0;
+            while cx <= ax + 120.0 {
+                let d = (cx - (ax + 19.0)).hypot(cy - mid);
+                if best.is_none_or(|(bd, _)| d < bd) && cy + drop > 4.0 && clear(cx, cy) { best = Some((d, (cx, cy))); }
+                cx += 2.0;
+            }
+            cy += 2.0;
+        }
+        if let Some((_, q)) = best { return q; }
     }
-    // outside the arch: right of everything drawn across the middle row
-    let y = mid + drop;
-    let mut x = ax + 19.0;
-    while x + 13.0 < w - 2.0 && !clear(x, mid) { x += 2.0; }
-    if clear(x, mid) { return (x, mid); }
-    let _ = y;
     (ax + 19.0, mid)
 }
 
@@ -233,9 +253,9 @@ mod tests {
         let d = def();
         let mut n = 0;
         for from in ["Level ground", "A cliff"] {
-            for size in [30, 60, 100, 150] {
+            for size in [30, 60, 90, 100, 150] {
                 for angle in (75..=89).chain(5..=15) {
-                    for (steps, mirror) in [(0, false), (5, false), (0, true)] {
+                    for (steps, mirror) in [(0, false), (5, false), (12, false), (0, true), (5, true), (12, true)] {
                         let mut o = vec![("from", s(from)), ("angle", Value::F(angle as f64)), ("size", Value::I(size)), ("mark_h", b(true)), ("mark_r", b(true)),
                             ("h_lab_mode", s("Blank line")), ("r_lab_mode", s("Blank line")), ("steps", Value::I(steps)), ("mirror", b(mirror))];
                         let svg = d.svg(&params(&o));
@@ -262,11 +282,57 @@ mod tests {
                             assert!(dist(c) >= f("r") + 3.0, "{from} {angle} size {size}: on a ball");
                         }
                         assert!(bx - 13.0 >= 0.0 && bx + 13.0 <= 640.0);
+                        // clear of the angle's arc (the plain 1.5 px polyline) by 3 px
+                        for el in svg.split("<polyline").skip(1) {
+                            let el = el.split('>').next().unwrap();
+                            if el.contains("stroke-dasharray") || !el.contains("stroke-width=\"1.5\"") { continue; }
+                            let ps: Vec<(f64, f64)> = el.split("points=\"").nth(1).unwrap().split('"').next().unwrap().split_whitespace().map(|q| { let (a, c) = q.split_once(',').unwrap(); (a.parse().unwrap(), c.parse().unwrap()) }).collect();
+                            let da = ps.windows(2).flat_map(|w| (0..=10).map(move |i| { let t = i as f64 / 10.0; (w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t) })).map(dist).fold(f64::MAX, f64::min);
+                            assert!(da >= 3.0, "{from} {angle} size {size} steps {steps} mirror {mirror}: {da:.1} px from the angle's arc");
+                        }
+                        // clear of every word as drawn (theta, v0) by 3 px, and nearer its own height arrow than to theta
+                        // the height arrow stands at the apex (mirrored with the figure)
+                        let pg = super::super::proj_geo(&params(&o), 640.0);
+                        let apex_x = pg.lx + pg.s * pg.vx * pg.vy;
+                        let arrow_x = if mirror { 640.0 - apex_x } else { apex_x };
+                        let to_arrow = ((bx - arrow_x).abs() - 13.0).max(0.0);
+                        for (t, tb) in ink_texts(&svg) {
+                            let dx = (tb.0 - (bx + 13.0)).max((bx - 13.0) - tb.2).max(0.0);
+                            let dy = (tb.1 - by).max(by - tb.3).max(0.0);
+                            let dt = dx.hypot(dy);
+                            assert!(dt >= 6.0, "{from} {angle} size {size} steps {steps} mirror {mirror}: the height blank line is {dt:.1} px from {t:?}");
+                            if t.contains('\u{3b8}') { assert!(to_arrow < dt, "{from} {angle} size {size}: nearer theta than its arrow"); }
+                        }
                         n += 1;
                     }
                 }
             }
         }
-        assert_eq!(n, 2 * 4 * 26 * 3);
+        assert_eq!(n, 2 * 5 * 26 * 6);
+    }
+
+    type Bx = (f64, f64, f64, f64);
+    fn walk(g: &resvg::usvg::Group, out: &mut Vec<(String, Bx)>) {
+        for n in g.children() {
+            match n {
+                resvg::usvg::Node::Group(g) => walk(g, out),
+                resvg::usvg::Node::Text(t) => {
+                    let r = t.flattened().bounding_box().transform(t.abs_transform()).unwrap_or(t.flattened().abs_bounding_box());
+                    let txt: String = t.chunks().iter().map(|c| c.text()).collect();
+                    out.push((txt, (r.left() as f64, r.top() as f64, r.right() as f64, r.bottom() as f64)));
+                }
+                _ => {}
+            }
+        }
+    }
+    /// Text ink boxes from the real renderer.
+    fn ink_texts(svg: &str) -> Vec<(String, Bx)> {
+        let mut opt = resvg::usvg::Options::default();
+        opt.fontdb = crate::figures::fontdb();
+        let tree = resvg::usvg::Tree::from_str(&crate::figures::serif_stack(svg), &opt).expect("the SVG parses");
+        let mut v = Vec::new();
+        walk(tree.root(), &mut v);
+        v.retain(|(t, bx)| !t.trim().is_empty() && bx.2 > bx.0);
+        v
     }
 }
