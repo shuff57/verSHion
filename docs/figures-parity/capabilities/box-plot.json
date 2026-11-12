@@ -112,15 +112,15 @@
    "id": "cap-06a",
    "text": "Finish an end of the number line with an arrow",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"left_end\":\"None\",\"right_end\":\"Line arrow\"}",
+   "note": "Built in batch 9, round 361 (2026-11-11)."
   },
   {
    "id": "cap-06b",
    "text": "Finish an end of the number line with a circle",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:right_end=Circle",
+   "note": "Built in batch 9, round 362 (2026-11-11)."
   }
  ]
 }

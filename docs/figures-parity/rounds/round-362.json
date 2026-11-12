@@ -1,0 +1,35 @@
+{
+ "round": 362,
+ "figure": "box-plot",
+ "capability": "cap-06b",
+ "hypothesis": "Batch 9 box-plot: cap-06b; evidence changes:right_end=Circle",
+ "started_at": "2026-11-11T16:25:59",
+ "git": "992084b",
+ "before": {
+  "figure": 94.7,
+  "pooled": 98.7
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-11T16:26:00",
+ "after": {
+  "figure": 100.0,
+  "pooled": 98.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:right_end=Circle",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/box-plot/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/box-plot/37021a175a2c1ac7.png"
+   }
+  ]
+ },
+ "checker": "pass: open circle past the end tick, nothing clipped with several plots and a -1000 to 1000 range",
+ "result": "hit",
+ "evidence": "versions_b9 tests (64) and six freeze fixtures (5,874 old figures and links; one gel generator row corrected and verified legitimate); census unchanged; no task run (builder on pc2): 1 to 2 actions each",
+ "next": "gel cap-03c (Student + key export regression) and population-growth cap-05e (blank line dropped on some views): back with the builder; vector-diagram, pyramid fixes; pulley; particle/Bohr check"
+}

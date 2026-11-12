@@ -175,8 +175,8 @@
    "id": "cap-07e",
    "text": "End caps on the axes",
    "class": "control",
-   "evidence": "",
-   "note": "Our axes end plain; no end-cap choice."
+   "evidence": "changes:x_right_end=Triangle arrow + changes:y_top_end=Circle",
+   "note": "Built in batch 9, round 363 (2026-11-11). Our axes end plain; no end-cap choice."
   },
   {
    "id": "cap-07f",

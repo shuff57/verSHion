@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-11T22:45:38+00:00",
- "probe_checked_at": "2026-11-11T14:45:38",
+ "generated_at": "2026-11-12T00:26:16+00:00",
+ "probe_checked_at": "2026-11-11T16:26:16",
  "comparable": true,
  "drift": [],
- "pooled": 98.6,
- "mean": 98.7,
+ "pooled": 99.0,
+ "mean": 99.1,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -39,26 +39,11 @@
    ]
   },
   "box-plot": {
-   "score": 89.5,
-   "got": 51.0,
+   "score": 100.0,
+   "got": 57.0,
    "total": 57.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-06a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Finish an end of the number line with an arrow",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Finish an end of the number line with a circle",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "circle": {
    "score": 98.8,
@@ -395,18 +380,11 @@
    "gaps": []
   },
   "population-growth": {
-   "score": 95.4,
-   "got": 125.0,
+   "score": 97.7,
+   "got": 128.0,
    "total": 131.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-03a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Load one of ten setups (yeast in a flask, bacteria doubling every hour, deer on an island, boom and crash...)",
-     "why": "no evidence"
-    },
     {
      "id": "cap-05e",
      "class": "version",
@@ -417,19 +395,11 @@
    ]
   },
   "predator-prey": {
-   "score": 96.9,
-   "got": 93.0,
+   "score": 100.0,
+   "got": 96.0,
    "total": 96.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-04c",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Draw neither population: blank axes",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "prism": {
    "score": 100.0,
@@ -439,19 +409,11 @@
    "gaps": []
   },
   "projectile-motion": {
-   "score": 95.9,
-   "got": 71.0,
+   "score": 100.0,
+   "got": 74.0,
    "total": 74.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-06d",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Make a height/range/cliff mark's label a blank line for students",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "pulley": {
    "score": 90.2,
@@ -669,19 +631,11 @@
    "gaps": []
   },
   "waves": {
-   "score": 97.0,
-   "got": 97.0,
+   "score": 100.0,
+   "got": 100.0,
    "total": 100.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-07e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "End caps on the axes",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   }
  }
 }

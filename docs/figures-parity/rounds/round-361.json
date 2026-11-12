@@ -1,0 +1,37 @@
+{
+ "round": 361,
+ "figure": "box-plot",
+ "capability": "cap-06a",
+ "hypothesis": "Batch 9 box-plot: cap-06a; evidence changes:{\"left_end\":\"None\",\"right_end\":\"Line arrow\"}",
+ "started_at": "2026-11-11T16:25:58",
+ "git": "992084b",
+ "before": {
+  "figure": 89.5,
+  "pooled": 98.6
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T16:25:59",
+ "after": {
+  "figure": 94.7,
+  "pooled": 98.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"left_end\":\"None\",\"right_end\":\"Line arrow\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/box-plot/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/box-plot/d9d51498043d40eb.png"
+   }
+  ]
+ },
+ "checker": "pass (checker on the NAS): ends set separately, cap exactly past the end tick, default as before",
+ "result": "hit",
+ "evidence": "versions_b9 tests (64) and six freeze fixtures (5,874 old figures and links; one gel generator row corrected and verified legitimate); census unchanged; no task run (builder on pc2): 1 to 2 actions each",
+ "next": "gel cap-03c (Student + key export regression) and population-growth cap-05e (blank line dropped on some views): back with the builder; vector-diagram, pyramid fixes; pulley; particle/Bohr check"
+}

@@ -1,0 +1,37 @@
+{
+ "round": 366,
+ "figure": "population-growth",
+ "capability": "cap-03a",
+ "hypothesis": "Batch 9 population-growth: cap-03a; evidence changes:{\"growth\":\"Boom and crash\",\"n0\":30.0,\"k\":6000.0,\"tspan\":30.0,\"organism\":\"reindeer\",\"census_every\":5.0,\"y_title\":\"Number of reindeer\",\"rate_title\":\"Growth rate (reindeer/year)\",\"fit\":false,\"x_max\":30.0,\"x_step\":2.0,\"y_max\":6500.0,\"y_step\":500.0}",
+ "started_at": "2026-11-11T16:26:15",
+ "git": "992084b",
+ "before": {
+  "figure": 95.4,
+  "pooled": 98.9
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T16:26:17",
+ "after": {
+  "figure": 97.7,
+  "pooled": 99.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"growth\":\"Boom and crash\",\"n0\":30.0,\"k\":6000.0,\"tspan\":30.0,\"organism\":\"reindeer\",\"census_every\":5.0,\"y_title\":\"Number of reindeer\",\"rate_title\":\"Growth rate (reindeer/year)\",\"fit\":false,\"x_max\":30.0,\"x_step\":2.0,\"y_max\":6500.0,\"y_step\":500.0}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/population-growth/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/population-growth/1c0b9eff849a8d73.png"
+   }
+  ]
+ },
+ "checker": "pass: the Classic setups dropdown (present since 2026-10-17) lists the reference's ten by name; each draws its situation and stays editable; token is one setup's params as the checker proposed",
+ "result": "hit",
+ "evidence": "versions_b9 tests (64) and six freeze fixtures (5,874 old figures and links; one gel generator row corrected and verified legitimate); census unchanged; no task run (builder on pc2): 1 to 2 actions each",
+ "next": "gel cap-03c (Student + key export regression) and population-growth cap-05e (blank line dropped on some views): back with the builder; vector-diagram, pyramid fixes; pulley; particle/Bohr check"
+}

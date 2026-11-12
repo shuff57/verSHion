@@ -1,0 +1,37 @@
+{
+ "round": 364,
+ "figure": "predator-prey",
+ "capability": "cap-04c",
+ "hypothesis": "Batch 9 predator-prey: cap-04c; evidence changes:show=Neither (blank axes)",
+ "started_at": "2026-11-11T16:26:06",
+ "git": "992084b",
+ "before": {
+  "figure": 96.9,
+  "pooled": 98.8
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T16:26:08",
+ "after": {
+  "figure": 100.0,
+  "pooled": 98.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:show=Neither (blank axes)",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/predator-prey/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/predator-prey/b409cdf2f3171055.png"
+   }
+  ]
+ },
+ "checker": "pass: axes, numbers, titles and legend stay; no curve, count or mark shows in colour or black and white",
+ "result": "hit",
+ "evidence": "versions_b9 tests (64) and six freeze fixtures (5,874 old figures and links; one gel generator row corrected and verified legitimate); census unchanged; no task run (builder on pc2): 1 to 2 actions each",
+ "next": "gel cap-03c (Student + key export regression) and population-growth cap-05e (blank line dropped on some views): back with the builder; vector-diagram, pyramid fixes; pulley; particle/Bohr check"
+}

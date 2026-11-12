@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-11T22:45:38+00:00",
+ "generated_at": "2026-11-12T00:26:16+00:00",
  "spec_generated_at": "2026-11-08T05:54:07+00:00",
  "figures": [
   {
@@ -274,9 +274,11 @@
     "title_mode",
     "axis_title_mode",
     "numbers",
-    "label_size"
+    "label_size",
+    "left_end",
+    "right_end"
    ],
-   "param_count": 37,
+   "param_count": 39,
    "handles": 0,
    "label_drag": false,
    "show_answers": false,
@@ -3272,9 +3274,12 @@
     "mark_cliff",
     "cliff_lab",
     "mirror",
-    "color"
+    "color",
+    "h_lab_mode",
+    "r_lab_mode",
+    "cliff_lab_mode"
    ],
-   "param_count": 31,
+   "param_count": 34,
    "handles": 4,
    "label_drag": false,
    "show_answers": false,
@@ -3744,9 +3749,13 @@
     "yaxis_num",
     "yaxis_letter",
     "color",
+    "x_left_end",
+    "x_right_end",
+    "y_bottom_end",
+    "y_top_end",
     "label_size"
    ],
-   "param_count": 37,
+   "param_count": 41,
    "handles": 7,
    "label_drag": false,
    "show_answers": false,
@@ -3820,9 +3829,10 @@
     "key",
     "shell_labels",
     "brackets",
-    "title_style"
+    "title_style",
+    "protons"
    ],
-   "param_count": 21,
+   "param_count": 22,
    "handles": 2,
    "label_drag": false,
    "show_answers": false,
@@ -4781,9 +4791,12 @@
     "key_list",
     "note",
     "border",
-    "title_style"
+    "title_style",
+    "lat_rows",
+    "lat_cols",
+    "lat_spacing"
    ],
-   "param_count": 58,
+   "param_count": 61,
    "handles": 1,
    "label_drag": false,
    "show_answers": false,
@@ -5644,15 +5657,16 @@
     "ladder_sizes",
     "size_units",
     "electrode_style",
-    "answer_kind"
+    "answer_kind",
+    "show_answers",
+    "blank_lanes"
    ],
-   "param_count": 18,
+   "param_count": 20,
    "handles": 17,
    "label_drag": false,
-   "show_answers": false,
+   "show_answers": true,
    "style": false,
    "interaction_gaps": [
-    "reference has a student version; ours has no show_answers",
     "reference has black-and-white; ours has no style switch"
    ]
   },
@@ -6094,9 +6108,11 @@
     "y_hi_end",
     "y2_max",
     "y2_step",
+    "infl_label_style",
+    "phase_label_style",
     "label_size"
    ],
-   "param_count": 53,
+   "param_count": 55,
    "handles": 7,
    "label_drag": false,
    "show_answers": false,

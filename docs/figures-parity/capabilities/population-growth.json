@@ -84,8 +84,8 @@
    "id": "cap-03a",
    "text": "Load one of ten setups (yeast in a flask, bacteria doubling every hour, deer on an island, boom and crash...)",
    "class": "control",
-   "evidence": "",
-   "note": "No setups list; the blank-graph setup is covered by our blank switch (cap-07b)."
+   "evidence": "changes:{\"growth\":\"Boom and crash\",\"n0\":30.0,\"k\":6000.0,\"tspan\":30.0,\"organism\":\"reindeer\",\"census_every\":5.0,\"y_title\":\"Number of reindeer\",\"rate_title\":\"Growth rate (reindeer/year)\",\"fit\":false,\"x_max\":30.0,\"x_step\":2.0,\"y_max\":6500.0,\"y_step\":500.0}",
+   "note": "Built in batch 9, round 366 (2026-11-11). No setups list; the blank-graph setup is covered by our blank switch (cap-07b)."
   },
   {
    "id": "cap-03b",

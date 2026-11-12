@@ -119,8 +119,8 @@
    "id": "cap-06d",
    "text": "Make a height/range/cliff mark's label a blank line for students",
    "class": "version",
-   "evidence": "",
-   "note": "Our mark labels are text only (h_lab, r_lab, cliff_lab), with no blank-line mode; an empty text leaves the label off but draws no blank."
+   "evidence": "changes:{\"mark_h\":true,\"h_lab_mode\":\"Blank line\"} + changes:{\"mark_r\":true,\"r_lab_mode\":\"None\"}",
+   "note": "Built in batch 9, round 365 (2026-11-11). Our mark labels are text only (h_lab, r_lab, cliff_lab), with no blank-line mode; an empty text leaves the label off but draws no blank."
   },
   {
    "id": "cap-06e",

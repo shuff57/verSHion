@@ -1,0 +1,42 @@
+{
+ "round": 363,
+ "figure": "waves",
+ "capability": "cap-07e",
+ "hypothesis": "Batch 9 waves: cap-07e; evidence changes:x_right_end=Triangle arrow + changes:y_top_end=Circle",
+ "started_at": "2026-11-11T16:26:02",
+ "git": "992084b",
+ "before": {
+  "figure": 97.0,
+  "pooled": 98.8
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T16:26:04",
+ "after": {
+  "figure": 100.0,
+  "pooled": 98.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:x_right_end=Triangle arrow",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/waves/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/waves/8508626758ab0d3e.png"
+   },
+   {
+    "token": "changes:y_top_end=Circle",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/waves/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/waves/dfe6c772e23f1c3c.png"
+   }
+  ]
+ },
+ "checker": "pass: four ends set separately, every option distinct, numbers and titles move clear",
+ "result": "hit",
+ "evidence": "versions_b9 tests (64) and six freeze fixtures (5,874 old figures and links; one gel generator row corrected and verified legitimate); census unchanged; no task run (builder on pc2): 1 to 2 actions each",
+ "next": "gel cap-03c (Student + key export regression) and population-growth cap-05e (blank line dropped on some views): back with the builder; vector-diagram, pyramid fixes; pulley; particle/Bohr check"
+}

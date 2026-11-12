@@ -1,0 +1,42 @@
+{
+ "round": 365,
+ "figure": "projectile-motion",
+ "capability": "cap-06d",
+ "hypothesis": "Batch 9 projectile-motion: cap-06d; evidence changes:{\"mark_h\":true,\"h_lab_mode\":\"Blank line\"} + changes:{\"mark_r\":true,\"r_lab_mode\":\"None\"}",
+ "started_at": "2026-11-11T16:26:11",
+ "git": "992084b",
+ "before": {
+  "figure": 95.9,
+  "pooled": 98.9
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T16:26:12",
+ "after": {
+  "figure": 100.0,
+  "pooled": 98.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:{\"mark_h\":true,\"h_lab_mode\":\"Blank line\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/projectile-motion/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/projectile-motion/3999a436ee3aa61b.png"
+   },
+   {
+    "token": "changes:{\"mark_r\":true,\"r_lab_mode\":\"None\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/projectile-motion/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/projectile-motion/d75b1c79443f54d2.png"
+   }
+  ]
+ },
+ "checker": "pass: Text, Blank line or None per mark; blank line where the label was, None leaves no stray line",
+ "result": "hit",
+ "evidence": "versions_b9 tests (64) and six freeze fixtures (5,874 old figures and links; one gel generator row corrected and verified legitimate); census unchanged; no task run (builder on pc2): 1 to 2 actions each",
+ "next": "gel cap-03c (Student + key export regression) and population-growth cap-05e (blank line dropped on some views): back with the builder; vector-diagram, pyramid fixes; pulley; particle/Bohr check"
+}

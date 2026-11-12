@@ -10,7 +10,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 |---|---|---:|---:|---:|---|---:|
 | angles | `angles` | 52 | 3 | 6 | — | 100 |
 | bar-graph | `bar-chart` | 35 | 0 | 7 | — | 100 |
-| box-plot | `box-plot` | 37 | 0 | 6 | reference has a student version; ours has no show_answers | 90 |
+| box-plot | `box-plot` | 39 | 0 | 6 | reference has a student version; ours has no show_answers | 100 |
 | circle | `circle` | 81 | 3 | 7 | — | 99 |
 | composite-shape | `composite-shape` | 9 | 10 | 3 | — | 100 |
 | cone | `cone` | 30 | 4 | 6 | — | 100 |
@@ -47,18 +47,18 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | length-reading | `length-reading` | 24 | 3 | 9 | — | 100 |
 | motion-graphs | `motion-graphs` | 58 | 8 | 8 | reference has black-and-white; ours has no style switch | 100 |
 | motion-map | `motion-map` | 43 | 0 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 100 |
-| projectile-motion | `projectile-motion` | 31 | 4 | 7 | reference has black-and-white; ours has no style switch | 96 |
+| projectile-motion | `projectile-motion` | 34 | 4 | 7 | reference has black-and-white; ours has no style switch | 100 |
 | pulley | `pulley` | 38 | 6 | 7 | reference has black-and-white; ours has no style switch | 90 |
 | ray-diagram | `ray-diagram` | 52 | 2 | 8 | reference has black-and-white; ours has no style switch | 100 |
 | spring-scale | `spring-scale` | 15 | 4 | 7 | reference has black-and-white; ours has no style switch | 100 |
 | vector-diagram | `vector-diagram` | 56 | 5 | 5 | reference has black-and-white; ours has no style switch | 90 |
-| waves | `waves` | 37 | 7 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 97 |
+| waves | `waves` | 41 | 7 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 100 |
 
 ## chemistry
 
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
-| bohr-model | `bohr-model` | 21 | 2 | 6 | reference has a student version; ours has no show_answers | 92 |
+| bohr-model | `bohr-model` | 22 | 2 | 6 | reference has a student version; ours has no show_answers | 92 |
 | dot-and-cross | `dot-and-cross` | 16 | 4 | 7 | — | 100 |
 | gas-syringe | `gas-syringe` | 9 | 1 | 5 | — | 100 |
 | half-life-graph | `half-life-graph` | 36 | 1 | 6 | reference adds/removes rows; ours has no list/data/text-table control | 100 |
@@ -70,7 +70,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | mass-spectrum | `mass-spectrum` | 35 | 3 | 6 | reference has a student version; ours has no show_answers | 100 |
 | nuclide-notation | `nuclide-notation` | 22 | 0 | 7 | — | 100 |
 | orbital-diagram | `orbital-diagram` | 19 | 6 | 6 | reference has a student version; ours has no show_answers | 100 |
-| particle-diagram | `particle-diagram` | 58 | 1 | 5 | — | 92 |
+| particle-diagram | `particle-diagram` | 61 | 1 | 5 | — | 92 |
 | ph-reading | `ph-reading` | 8 | 1 | 5 | — | 100 |
 | photoelectron-spectrum | `photoelectron-spectrum` | 18 | 1 | 6 | reference has a student version; ours has no show_answers | 100 |
 | potential-energy-diagram | `reaction-energy-diagram` | 60 | 3 | 7 | — | 100 |
@@ -86,13 +86,13 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 |---|---|---:|---:|---:|---|---:|
 | dna-protein-synthesis | `dna-protein-synthesis` | 32 | 0 | 8 | — | 100 |
 | enzyme-activity | `enzyme-kinetics` | 52 | 1 | 6 | — | 100 |
-| gel-electrophoresis | `gel-electrophoresis` | 18 | 17 | 8 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 97 |
+| gel-electrophoresis | `gel-electrophoresis` | 20 | 17 | 8 | reference has black-and-white; ours has no style switch | 97 |
 | micropipette-reading | `micropipette-reading` | 10 | 5 | 6 | reference has black-and-white; ours has no style switch | 100 |
 | osmosis | `osmosis` | 46 | 0 | 7 | — | 100 |
 | pedigree | `pedigree` | 17 | 1 | 8 | reference has a student version; ours has no show_answers | 95 |
 | photosynthesis-rate | `photosynthesis` | 51 | 0 | 8 | — | 100 |
-| population-growth | `population-growth` | 53 | 7 | 7 | reference has a student version; ours has no show_answers | 95 |
-| predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 97 |
+| population-growth | `population-growth` | 55 | 7 | 7 | reference has a student version; ours has no show_answers | 98 |
+| predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 100 |
 | punnett-square | `punnett-square` | 24 | 3 | 8 | — | 94 |
 
 ## Reference figures we do not have
@@ -101,15 +101,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-11T22:45:38+00:00 · probe: 2026-11-11T14:45:38
+Generated: 2026-11-12T00:26:16+00:00 · probe: 2026-11-11T16:26:16
 
-**Pooled 98.6** · mean 98.7 over 70 figures · built 71 of 71 reference figures
+**Pooled 99.0** · mean 99.1 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `box-plot`: 90 (51/57)
-  - cap-06a [control 3] Finish an end of the number line with an arrow — no evidence
-  - cap-06b [control 3] Finish an end of the number line with a circle — no evidence
 - `vector-diagram`: 90 (51/57)
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
@@ -130,25 +127,19 @@ Comparable with the frozen baseline: **yes**
 - `pedigree`: 95 (90/95)
   - cap-03 [control 3] Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness,  — no evidence
   - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
-- `population-growth`: 95 (125/131)
-  - cap-03a [control 3] Load one of ten setups (yeast in a flask, bacteria doubling every hour, deer on an island, boom and crash...) — no evidence
-  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
-- `projectile-motion`: 96 (71/74)
-  - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
-- `predator-prey`: 97 (93/96)
-  - cap-04c [version 3] Draw neither population: blank axes — no evidence
 - `free-body-diagram`: 97 (65/67)
   - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
-- `waves`: 97 (97/100)
-  - cap-07e [control 3] End caps on the axes — no evidence
+- `population-growth`: 98 (128/131)
+  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
   - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
 - `angles`: 100 (71/71)
 - `bar-chart`: 100 (87/87)
+- `box-plot`: 100 (57/57)
 - `circuit-diagram`: 100 (61/61)
 - `composite-shape`: 100 (50/50)
 - `cone`: 100 (66/66)
@@ -184,7 +175,9 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `predator-prey`: 100 (96/96)
 - `prism`: 100 (94/94)
+- `projectile-motion`: 100 (74/74)
 - `ray-diagram`: 100 (115/115)
 - `reaction-energy-diagram`: 100 (101/101)
 - `rectangle`: 100 (86/86)
@@ -201,3 +194,4 @@ Comparable with the frozen baseline: **yes**
 - `venn-diagram`: 100 (53/53)
 - `volume-by-displacement`: 100 (58/58)
 - `volume-reading`: 100 (59/59)
+- `waves`: 100 (100/100)

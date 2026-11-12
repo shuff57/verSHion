@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-11T22:45:35+00:00",
-  "src_mtime": 1794436879.745954,
-  "git": "7d3a71d",
+  "built_at": "2026-11-12T00:26:14+00:00",
+  "src_mtime": 1794443033.530739,
+  "git": "992084b",
   "figures": 191
  },
  "figures": {
@@ -2388,6 +2388,39 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "h_lab_mode",
+     "label": "Height label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "r_lab_mode",
+     "label": "Range label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "cliff_lab_mode",
+     "label": "Cliff height label shows",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
     }
    ],
    "handle_list": [
@@ -3290,6 +3323,54 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "x_left_end",
+     "label": "Left end",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "x_right_end",
+     "label": "Right end",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "y_bottom_end",
+     "label": "Bottom end",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "y_top_end",
+     "label": "Top end",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle"
+     ],
+     "default": "None"
     },
     {
      "key": "label_size",
@@ -5537,6 +5618,28 @@
      "default": "0.0"
     },
     {
+     "key": "infl_label_style",
+     "label": "Inflection point label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "phase_label_style",
+     "label": "Growth phase labels",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
      "key": "label_size",
      "label": "Label size",
      "kind": "choice",
@@ -6148,7 +6251,8 @@
      "options": [
       "Both",
       "Prey only",
-      "Predators only"
+      "Predators only",
+      "Neither (blank axes)"
      ],
      "default": "Both"
     },
@@ -6693,6 +6797,20 @@
       "Both"
      ],
      "default": "Matching lanes"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "blank_lanes",
+     "label": "Sample lanes left blank for students (lane numbers)",
+     "kind": "text",
+     "options": [],
+     "default": ""
     }
    ],
    "handle_list": [
@@ -6832,7 +6950,7 @@
    ],
    "handles": true,
    "label_drag": false,
-   "show_answers": false,
+   "show_answers": true,
    "style": false,
    "label_size": false
   },
@@ -12358,6 +12476,30 @@
       "None"
      ],
      "default": "Text"
+    },
+    {
+     "key": "lat_rows",
+     "label": "Lattice rows",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "lat_cols",
+     "label": "Lattice columns",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "lat_spacing",
+     "label": "Lattice particles",
+     "kind": "choice",
+     "options": [
+      "Touching",
+      "Spaced apart"
+     ],
+     "default": "Touching"
     }
    ],
    "handle_list": [
@@ -12702,6 +12844,13 @@
       "None"
      ],
      "default": "Text"
+    },
+    {
+     "key": "protons",
+     "label": "Protons",
+     "kind": "int",
+     "options": [],
+     "default": "-1"
     }
    ],
    "handle_list": [
@@ -25587,6 +25736,30 @@
       "Small"
      ],
      "default": "Medium"
+    },
+    {
+     "key": "left_end",
+     "label": "Left end",
+     "kind": "choice",
+     "options": [
+      "Triangle arrow",
+      "Line arrow",
+      "Circle",
+      "None"
+     ],
+     "default": "Triangle arrow"
+    },
+    {
+     "key": "right_end",
+     "label": "Right end",
+     "kind": "choice",
+     "options": [
+      "Triangle arrow",
+      "Line arrow",
+      "Circle",
+      "None"
+     ],
+     "default": "Triangle arrow"
     }
    ],
    "handle_list": [],

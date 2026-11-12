@@ -1,14 +1,11 @@
 # Figures parity score
 
-Generated: 2026-11-11T22:45:38+00:00 · probe: 2026-11-11T14:45:38
+Generated: 2026-11-12T00:26:16+00:00 · probe: 2026-11-11T16:26:16
 
-**Pooled 98.6** · mean 98.7 over 70 figures · built 71 of 71 reference figures
+**Pooled 99.0** · mean 99.1 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `box-plot`: 90 (51/57)
-  - cap-06a [control 3] Finish an end of the number line with an arrow — no evidence
-  - cap-06b [control 3] Finish an end of the number line with a circle — no evidence
 - `vector-diagram`: 90 (51/57)
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
@@ -29,25 +26,19 @@ Comparable with the frozen baseline: **yes**
 - `pedigree`: 95 (90/95)
   - cap-03 [control 3] Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness,  — no evidence
   - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
-- `population-growth`: 95 (125/131)
-  - cap-03a [control 3] Load one of ten setups (yeast in a flask, bacteria doubling every hour, deer on an island, boom and crash...) — no evidence
-  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
-- `projectile-motion`: 96 (71/74)
-  - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
-- `predator-prey`: 97 (93/96)
-  - cap-04c [version 3] Draw neither population: blank axes — no evidence
 - `free-body-diagram`: 97 (65/67)
   - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
-- `waves`: 97 (97/100)
-  - cap-07e [control 3] End caps on the axes — no evidence
+- `population-growth`: 98 (128/131)
+  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
   - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
 - `angles`: 100 (71/71)
 - `bar-chart`: 100 (87/87)
+- `box-plot`: 100 (57/57)
 - `circuit-diagram`: 100 (61/61)
 - `composite-shape`: 100 (50/50)
 - `cone`: 100 (66/66)
@@ -83,7 +74,9 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `predator-prey`: 100 (96/96)
 - `prism`: 100 (94/94)
+- `projectile-motion`: 100 (74/74)
 - `ray-diagram`: 100 (115/115)
 - `reaction-energy-diagram`: 100 (101/101)
 - `rectangle`: 100 (86/86)
@@ -100,3 +93,4 @@ Comparable with the frozen baseline: **yes**
 - `venn-diagram`: 100 (53/53)
 - `volume-by-displacement`: 100 (58/58)
 - `volume-reading`: 100 (59/59)
+- `waves`: 100 (100/100)

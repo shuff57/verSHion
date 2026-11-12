@@ -77,8 +77,8 @@
    "id": "cap-04c",
    "text": "Draw neither population: blank axes",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:show=Neither (blank axes)",
+   "note": "Built in batch 9, round 364 (2026-11-11)."
   },
   {
    "id": "cap-05a",
