@@ -119,15 +119,18 @@ fn slope_with(p: &Params, tp: Option<(f64, f64, f64)>) -> Slope {
                 let s1 = (len * 0.5).min(len - 6.0 - 3.0 * hl);
                 let tip = (s1 - hl + 3.0) * th.cos() - (top + 46.0) * th.sin();
                 let (w, _, _) = super::pulley_b10::tex_box(&lab_mode(p, "norm_lab", "norm_lab_mode"), 22.0);
-                let lx = tip - 10.0 * th.sin();
-                let left = if th.sin() > 0.4 { lx - w } else { lx - w / 2.0 };
+                let d = norm_lab_dir((th.cos(), -th.sin()), (-th.sin(), -th.cos()));
+                let lx = tip + 10.0 * d.0;
+                let left = if d.0 < -0.4 { lx - w } else { lx - w / 2.0 };
                 ax = ax.max(8.0 - left);
             }
         }
         Slope { ax, ground, uu: (th.cos(), -th.sin()), nn: (-th.sin(), -th.cos()), apex: (ax + bw, ground - bw * th.tan()) }
     } else {
-        // the table top acts as a flat "ramp"
-        Slope { ax: 50.0, ground: 230.0, uu: (1.0, 0.0), nn: (0.0, -1.0), apex: (340.0, 230.0) }
+        // the table top acts as a flat "ramp"; objects touching: it moves down the page as far as the string over
+        // them, the acceleration above it (34 px) and its label need
+        let ground = match tp { Some((h, _, _)) => (230.0f64).max(h + 90.0), None => 230.0 };
+        Slope { ax: 50.0, ground, uu: (1.0, 0.0), nn: (0.0, -1.0), apex: (340.0, ground) }
     }
 }
 
@@ -142,7 +145,7 @@ fn obj_dims(p: &Params, ls: f64) -> (f64, f64) { if p.s("l_kind") == "Cart" { (l
 
 /// How far above the objects' tops the string runs when they touch (it leaves the first object from a post and
 /// passes over the second, which sits between the first and the pulley).
-pub(super) const POST: f64 = 44.0;
+pub(super) const POST: f64 = 54.0;
 
 /// Objects touching on the table or ramp, as drawn: the first object's centre along the surface, the objects' half
 /// length and height, the string's height above the surface.
@@ -186,19 +189,28 @@ pub(super) fn touch_fits_side_by_side(p: &Params) -> bool {
     s1 - hl >= if p.s("setup") == "Ramp" { 84.0 } else { 4.0 } && !labels_fit(p, &sl)
 }
 
-/// Where the pair of contact forces goes: the arrows' length and height above the surface, the first object's
-/// normal force's place along the surface, and each label's centre (screen) and size, on the second object then on
-/// the first. The first's is None when it has no place that reads as its own: one label then names the pair.
-pub(super) struct PairAt { pub len: f64, pub hc: f64, pub n_at: f64, pub labs: [Option<(Pt, f64)>; 2] }
+/// Objects touching, along the surface: the contact pair's centre (where they meet) and its height above the surface,
+/// each arrow's length, the post the string leaves the first object from (behind the pair's back arrow) and the first
+/// object's normal force (behind the post, so the string never crosses it).
+pub(super) struct PairGeo { pub i: f64, pub hc: f64, pub len: f64, pub post: f64, pub n_at: f64 }
 
-/// The pair's two arrows, on the second object then the first: (tail, tip) along the surface.
-fn pair_ends(t: &Touch, len: f64) -> [(f64, f64); 2] {
+pub(super) fn pair_geo(t: &Touch) -> PairGeo {
     let i = t.s1 + t.hl;
-    [(i + 2.5, i + 2.5 + len), (i - 10.5, i - 10.5 - len)]
+    let len = (2.0 * t.hl - 21.0).clamp(10.0, 28.0);
+    let post = i - len - 11.0;
+    let n_at = (post - 12.0).min(t.s1).max(t.s1 - t.hl + 3.0);
+    PairGeo { i, hc: t.top + 12.0, len, post, n_at }
+}
+
+/// Objects touching: the direction the first object's normal force label sits in from its tip (up and back).
+fn norm_lab_dir(uu: Pt, nn: Pt) -> Pt {
+    let d = (nn.0 - 0.9 * uu.0, nn.1 - 0.9 * uu.1);
+    let l = d.0.hypot(d.1);
+    (d.0 / l, d.1 / l)
 }
 
 /// An arrow's strokes as `G::arrow` draws them: the shaft and the head's three edges.
-fn arrow_segs(a: Pt, b: Pt, sw: f64) -> Vec<super::pulley_b10::Seg> {
+pub(super) fn arrow_segs(a: Pt, b: Pt, sw: f64) -> Vec<super::pulley_b10::Seg> {
     use super::pulley_b10::Seg;
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let l = (dx * dx + dy * dy).sqrt().max(1e-6);
@@ -209,61 +221,45 @@ fn arrow_segs(a: Pt, b: Pt, sw: f64) -> Vec<super::pulley_b10::Seg> {
     vec![Seg { a, b: (b.0 - ux * hl * 0.8, b.1 - uy * hl * 0.8), hw: sw / 2.0 }, Seg { a: b, b: c1, hw: 0.25 }, Seg { a: c1, b: c2, hw: 0.25 }, Seg { a: c2, b, hw: 0.25 }]
 }
 
-pub(super) fn pair_at(p: &Params, t: &Touch) -> PairAt {
-    use super::pulley_b10::{reads_as_own, Seg};
+/// The contact pair's two arrows (on the second object, toward the pulley, then on the first), as drawn (page
+/// coordinates before mirroring): from where the objects meet, apart.
+pub(super) fn pair_arrows(p: &Params, t: &Touch) -> [(Pt, Pt); 2] {
     let sl = slope(p);
-    let (uu, nn) = (sl.uu, sl.nn);
-    let at = |l: f64, h: f64| (sl.ax + uu.0 * l + nn.0 * h, sl.ground + uu.1 * l + nn.1 * h);
-    let i = t.s1 + t.hl;
-    let len = (1.7 * t.hl - 21.0).clamp(12.0, 22.0);
-    let hc = t.top + 12.0;
-    let normal = p.b("normal");
-    // the first object's normal force moves back, as far as its rear edge, to leave room for the pair
-    let n_at = if normal { (i - 10.5 - len - 16.0).clamp(t.s1 - t.hl + 3.0, t.s1) } else { t.s1 };
-    let lab = lab_mode(p, "cont_lab", "cont_lab_mode");
-    let ends = pair_ends(t, len);
-    let arrows: Vec<Vec<Seg>> = ends.iter().map(|&(a, b)| arrow_segs(at(a, hc), at(b, hc), SW)).collect();
-    // everything else drawn near the pair
-    let mut fixed = vec![
-        Seg { a: at(i - 4.0, t.top), b: at(i - 4.0, t.h), hw: 1.2 },
-        Seg { a: at(i - 4.0, t.h), b: at(i - 4.0 + 400.0, t.h), hw: 1.0 },
-        Seg { a: at(i - 4.0, t.h), b: at(i - 4.0, t.h), hw: 2.6 },
-        Seg { a: at(t.s1 - t.hl, t.top), b: at(i + 2.0 * t.hl, t.top), hw: 1.25 },
-        Seg { a: at(i, 0.0), b: at(i, t.top), hw: 1.25 },
-    ];
-    if normal { fixed.extend(arrow_segs(at(n_at, t.top), at(n_at, t.top + 46.0), SW)); }
-    // the tension arrow on the string at the post (`t_arrow_along`, 30 long)
-    if p.b("tension") { fixed.extend(arrow_segs(at(i - 4.0, t.h), at(i - 4.0 + 30.0, t.h), 2.2)); }
-    // a spot for side k at size fs: near the arrow's middle, low first (just clear of the head), then further along
-    let spot = |k: usize, fs: f64| -> Option<Pt> {
-        let others: Vec<Seg> = fixed.iter().copied().chain(arrows[1 - k].iter().copied()).collect();
-        let mid = (ends[k].0 + ends[k].1) / 2.0;
-        for dh in 0..16 {
-            for ds in 0..24 {
-                for sg in [1.0, -1.0] {
-                    if ds == 0 && sg < 0.0 { continue; }
-                    let c = at(mid + sg * ds as f64, hc + 6.0 + dh as f64 * 1.5);
-                    let (_, up, down) = super::pulley_b10::tex_box(&lab, fs);
-                    let c = (c.0, c.1 - (up.max(down) - 2.0).max(0.0));
-                    if reads_as_own(&lab, fs, c, &arrows[k], &others) { return Some(c); }
-                }
-            }
-        }
-        None
-    };
-    let best = |k: usize| (0..19).map(|n| 18.0 - n as f64 * 0.5).find(|fs| spot(k, *fs).is_some());
-    let labs = if lab.trim().eq_ignore_ascii_case("none") {
-        [None, None]
-    } else {
-        match (best(0), best(1)) {
-            // one size for both
-            (Some(a), Some(b)) => { let fs = a.min(b); [spot(0, fs).map(|c| (c, fs)), spot(1, fs).map(|c| (c, fs))] }
-            (Some(a), None) => [spot(0, a).map(|c| (c, a)), None],
-            _ => [None, None],
-        }
-    };
-    PairAt { len, hc, n_at, labs }
+    let at = |l: f64, h: f64| (sl.ax + sl.uu.0 * l + sl.nn.0 * h, sl.ground + sl.uu.1 * l + sl.nn.1 * h);
+    let g = pair_geo(t);
+    [(at(g.i, g.hc), at(g.i + g.len, g.hc)), (at(g.i, g.hc), at(g.i - g.len, g.hc))]
 }
+
+/// Where the pair's one label goes (page coordinates as drawn, mirrored or not), with a leader from the pair when it
+/// sits away from it. None inside: the teacher's label has no place anywhere near that reads as the pair's, and is
+/// left off with a note. Outer None: no label to place (no pair, or label set to None).
+pub(super) fn contact_label(p: &Params) -> Option<Option<super::pulley_b10::LabSpot>> {
+    let t = touch(p)?;
+    if !p.b("contact") { return None; }
+    let lab = lab_mode(p, "cont_lab", "cont_lab_mode");
+    if lab.trim().eq_ignore_ascii_case("none") { return None; }
+    // the drawing without the pair: everything the label must keep clear of
+    let base = render_with(p, PairDraw::Skip);
+    let geo = pulley_geo(p);
+    let mir = |q: Pt| if p.b("mirror") { (geo.w - q.0, q.1) } else { q };
+    let arrows = pair_arrows(p, &t);
+    let own: Vec<super::pulley_b10::Seg> = arrows.iter().flat_map(|(a, b)| arrow_segs(mir(*a), mir(*b), SW)).collect();
+    let sl = slope(p);
+    let g = pair_geo(&t);
+    let at = |l: f64, h: f64| mir((sl.ax + sl.uu.0 * l + sl.nn.0 * h, sl.ground + sl.uu.1 * l + sl.nn.1 * h));
+    // the ideal spot: just above the pair's middle, as the inclined plane puts it
+    let anchor = at(g.i, g.hc + 0.45 * head_len(SW));
+    let foot = at(g.i, g.hc);
+    Some(super::pulley_b10::place_label(&base, &lab, 22.0, anchor, &own, (geo.w, geo.h)).map(|mut sp| {
+        // a leader starts on the pair's shaft, where the objects meet
+        if let Some((_, b)) = sp.leader { sp.leader = Some((foot, b)); }
+        sp
+    }))
+}
+
+/// How `slope_setup` draws the contact pair: not at all (the placing pass), or with its label at a found spot.
+#[derive(Clone)]
+pub(super) enum PairDraw { Skip, Draw(Option<super::pulley_b10::LabSpot>) }
 
 fn slope_wheel(sl: &Slope, hh: f64) -> (Pt, f64) {
     let flat = sl.uu.1.abs() < 1e-9;
@@ -408,6 +404,11 @@ fn a_arrow(g: &mut G, st: &Style, x: f64, top: f64, s: f64, down: bool, side: f6
 }
 
 pub(super) fn pulley_render(p: &Params) -> String {
+    let lab = contact_label(p).flatten();
+    render_with(p, PairDraw::Draw(lab))
+}
+
+fn render_with(p: &Params, pd: PairDraw) -> String {
     let geo = pulley_geo(p);
     let mut g = G::new(geo.w, geo.h, p.b("mirror"));
     let st = Style { col: p.b("color"), tens: lab_mode(p, "tens_lab", "tens_lab_mode"), acc: lab_mode(p, "acc_lab", "acc_lab_mode") };
@@ -415,7 +416,7 @@ pub(super) fn pulley_render(p: &Params) -> String {
     let accel = p.s("accel").to_string();
     let (ten, grav) = (p.b("tension"), p.b("gravity"));
     match p.s("setup") {
-        "Table" | "Ramp" => slope_setup(&mut g, p, &geo, &st, &llab, &rlab),
+        "Table" | "Ramp" => slope_setup(&mut g, p, &geo, &st, &llab, &rlab, &pd),
         "Block & tackle" => {
             let n = p.i("strands").clamp(2, 5) as usize;
             let r = 22.0;
@@ -518,7 +519,7 @@ pub(super) fn pulley_render(p: &Params) -> String {
 
 /// Table and ramp setups share one drawing: an object on a surface tied over a pulley at the
 /// surface's far end to a hanging mass.
-fn slope_setup(g: &mut G, p: &Params, geo: &PGeo, st: &Style, llab: &str, rlab: &str) {
+fn slope_setup(g: &mut G, p: &Params, geo: &PGeo, st: &Style, llab: &str, rlab: &str, pd: &PairDraw) {
     let ramp = p.s("setup") == "Ramp";
     let sl = slope(p);
     let (uu, nn) = (sl.uu, sl.nn);
@@ -584,12 +585,13 @@ fn slope_setup(g: &mut G, p: &Params, geo: &PGeo, st: &Style, llab: &str, rlab: 
     // a point `l` along the surface and `h` above it
     let at = |l: f64, h: f64| (sl.ax + uu.0 * l + nn.0 * h, sl.ground + uu.1 * l + nn.1 * h);
     // string from the object's front face (at its mid height) to the top of the wheel; objects touching: from a post
-    // at the first object's front edge, over the second (which sits in front, between it and the pulley)
+    // on the first object, behind the contact pair, over the second (which sits in front, between it and the pulley)
     let sa = match &touch {
         Some(t) => {
             let i = t.s1 + t.hl;
             obj(g, i + t.hl, p.s("s_lab"));
-            let (foot, knot) = (at(i - 4.0, t.top), at(i - 4.0, t.h));
+            let post = pair_geo(t).post;
+            let (foot, knot) = (at(post, t.top), at(post, t.h));
             g.line(foot.0, foot.1, knot.0, knot.1, INK, 2.4);
             knot
         }
@@ -628,31 +630,30 @@ fn slope_setup(g: &mut G, p: &Params, geo: &PGeo, st: &Style, llab: &str, rlab: 
         lab_at(g, from.0, from.1 + 72.0, &weight_lab(p, llab), "middle");
         w_arrow(g, st, hb.cx, hb.top + hb.s, &weight_lab(p, rlab));
     }
-    // the pair of contact forces where the objects touch, just above them under the string: on the second (pushed
-    // toward the pulley by the first) and on the first (pushed back by the second), equal and opposite, each labelled
-    let pair = touch.as_ref().filter(|_| p.b("contact"));
-    // with the pair drawn the first object's normal force moves back off the pair's arrow when the object is small
-    let mut n_at = s_main;
-    if let Some(t) = pair {
-        // each label above its own arrow, under the string, placed where it reads as that arrow's (clear of the
-        // post, the string, the other arrow and the first object's normal force, which moves back to make room) and
-        // sized down to 9 px at the least; a first object too small for its own label leaves one label for the pair
-        let pa = pair_at(p, t);
-        n_at = pa.n_at;
-        let lab = lab_mode(p, "cont_lab", "cont_lab_mode");
+    // the pair of contact forces where the objects touch, just above them under the string, as the inclined plane
+    // draws it: from where they meet, on the second (pushed toward the pulley by the first) and on the first (pushed
+    // back), equal and opposite, with one label for the pair at the force labels' 22 px, placed where it reads as the
+    // pair's (`contact_label`), by a leader if it has to sit further off
+    let n_at = touch.as_ref().map(|t| pair_geo(t).n_at).unwrap_or(s_main);
+    if let (Some(t), true, PairDraw::Draw(spot)) = (touch.as_ref(), p.b("contact"), pd) {
         let col = if st.col { PAL[5] } else { INK };
-        for (k, (a, b)) in pair_ends(t, pa.len).into_iter().enumerate() {
-            let (q0, q1) = (at(a, pa.hc), at(b, pa.hc));
-            g.arrow(q0.0, q0.1, q1.0, q1.1, col, SW);
-            if let Some((m, fs)) = pa.labs[k] { g.label_at(m.0, m.1, fs, &lab, ITALIC); }
+        for (a, b) in pair_arrows(p, t) { g.arrow(a.0, a.1, b.0, b.1, col, SW); }
+        if let Some(sp) = spot {
+            // the spot is in page coordinates as drawn; `G` mirrors again
+            let un = |q: Pt| if p.b("mirror") { (geo.w - q.0, q.1) } else { q };
+            if let Some((a, b)) = sp.leader { let (a, b) = (un(a), un(b)); g.line(a.0, a.1, b.0, b.1, col, 1.2); }
+            let c = un(sp.c);
+            g.label_at(c.0, c.1, 22.0, &lab_mode(p, "cont_lab", "cont_lab_mode"), ITALIC);
         }
     }
     if p.b("normal") {
-        let c = if n_at != s_main { at(n_at, dn) } else { com };
+        let c = if touch.is_some() { at(n_at, dn) } else { com };
         let from = (c.0 + nn.0 * up, c.1 + nn.1 * up);
         let tip = (from.0 + nn.0 * 46.0, from.1 + nn.1 * 46.0);
         g.arrow(from.0, from.1, tip.0, tip.1, if st.col { PAL[3] } else { INK }, SW);
-        g.label_dir(tip.0, tip.1, nn.0, nn.1, 22.0, &lab_mode(p, "norm_lab", "norm_lab_mode"), ITALIC);
+        // objects touching: the label goes up and back from the tip, away from the post just in front of it
+        let d = if touch.is_some() { norm_lab_dir(uu, nn) } else { nn };
+        g.label_dir(tip.0, tip.1, d.0, d.1, 22.0, &lab_mode(p, "norm_lab", "norm_lab_mode"), ITALIC);
     }
     let fr = p.s("friction");
     if fr != "None" {

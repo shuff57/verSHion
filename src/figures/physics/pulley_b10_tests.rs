@@ -147,9 +147,9 @@ fn touching_draws_the_second_object_in_front_and_the_pair_the_right_way() {
             assert_eq!((fwd.len(), back.len()), (1, 1), "{setup}: equal and opposite");
             // the forward one (on the second object) lies nearer the pulley than the backward one (on the first)
             assert!((fwd[0][0].0 - back[0][0].0) * toward > 0.0, "{setup} {mirror}: the pair points apart");
-            // both are drawn above the objects (the ramp rises toward the pulley, so compare with the surface there)
-            let labs = tags(&t, "text").into_iter().filter(|x| t[t.find(x).unwrap()..].split("</text>").next().unwrap().contains(">P<")).count();
-            assert_eq!(labs, 2, "{setup}: each object's contact force labelled");
+            // one label names the pair, as on the inclined plane
+            let labs = texts(&t).into_iter().filter(|&(a, b)| plain(&t[a..b]) == "P").count();
+            assert_eq!(labs, 1, "{setup}: one label for the pair");
         }
     }
 }
@@ -174,7 +174,7 @@ fn the_pair_is_where_they_touch() {
                 let up = |q: (f64, f64)| -(q.0 - ax) * th.sin() - (q.1 - ground) * th.cos();
                 let i0 = tc.s1 + tc.hl;
                 let tips: Vec<f64> = heads.iter().map(|h| along(h[0]) - i0).collect();
-                assert!(tips.iter().any(|d| *d > 8.0) && tips.iter().any(|d| *d < -15.0), "{setup} {kind} {size}: {tips:?}");
+                assert!(tips.iter().any(|d| *d > 8.0) && tips.iter().any(|d| *d < -8.0), "{setup} {kind} {size}: {tips:?}");
                 assert!(tips.iter().all(|d| d.abs() < 40.0), "{setup} {kind} {size}: the pair stays at the contact {tips:?}");
                 for h in &heads {
                     let u = up(h[0]);
@@ -440,7 +440,7 @@ fn the_contact_arrows_touch_no_other_ink_as_rasterized() {
                 t0 = t0.replacen(h, "", 1);
             }
         }
-        // ... and without its two labels (their text is the contact label's letters)
+        // ... and without its label (its text is the contact label's letters)
         let want: String = p.s("cont_lab").chars().filter(|c| c.is_alphanumeric()).collect();
         if p.s("cont_lab_mode") == "Text" {
             let mut k = 0;
@@ -448,7 +448,7 @@ fn the_contact_arrows_touch_no_other_ink_as_rasterized() {
                 let e = &t[i0..i1];
                 if plain(e) == want { t0 = t0.replacen(e, "", 1); k += 1; }
             }
-            assert!((1..=2).contains(&k), "{st:?}");
+            assert_eq!(k, 1, "{st:?}");
         }
         let (w, h, a) = crate::figures::to_rgba(&t, 2.0).unwrap();
         let (_, _, z) = crate::figures::to_rgba(&t0, 2.0).unwrap();
@@ -471,59 +471,171 @@ fn the_contact_arrows_touch_no_other_ink_as_rasterized() {
 }
 
 #[test]
-fn each_contact_label_is_nearest_its_own_arrow() {
-    // read from the drawn glyph boxes (each label's ink, rasterized at 2x with and without it, boxed): the nearest
-    // stroke edge to each contact label's box is a contact arrow's, by 2 px over any other stroke, and the two labels
-    // are nearest different arrows (one per object)
+fn the_contact_label_is_nearest_its_own_pair() {
+    // read from the drawn glyph box (the label's ink, rasterized at 2x with and without it, boxed): the nearest stroke
+    // edge to the pair's label is the pair's own (an arrow, or the leader to it), by 2 px over any other stroke
     use super::pulley_b10::{box_seg, Seg};
-    let (mut n, mut single) = (0, 0);
+    let mut n = 0;
     for mut st in crowded().into_iter().step_by(2) {
         st.extend([b("color", true), s("cont_lab", "P"), s("cont_lab_mode", "Text")]);
         let p = with(&st);
         let t = svg(&p);
         let segs = segments_w(&t);
         let (w, h, a) = crate::figures::to_rgba(&t, 2.0).unwrap();
-        let mut own = vec![];
-        for (i0, i1) in texts(&t) {
-            let e = &t[i0..i1];
-            if plain(e) != "P" { continue; }
-            let t0 = format!("{}{}", &t[..i0], &t[i1..]);
-            let (_, _, z) = crate::figures::to_rgba(&t0, 2.0).unwrap();
-            let mut r = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
-            for y in 0..h {
-                for x in 0..w {
-                    let o = ((y * w + x) * 4) as usize;
-                    if a[o].min(a[o + 1]).min(a[o + 2]) < 160 && z[o].min(z[o + 1]).min(z[o + 2]) > 200 {
-                        let q = (x as f64 / 2.0, y as f64 / 2.0);
-                        r = (r.0.min(q.0), r.1.min(q.1), r.2.max(q.0 + 0.5), r.3.max(q.1 + 0.5));
-                    }
+        let found: Vec<(usize, usize)> = texts(&t).into_iter().filter(|&(a, b)| plain(&t[a..b]) == "P").collect();
+        assert_eq!(found.len(), 1, "{st:?}");
+        let (i0, i1) = found[0];
+        let t0 = format!("{}{}", &t[..i0], &t[i1..]);
+        let (_, _, z) = crate::figures::to_rgba(&t0, 2.0).unwrap();
+        let mut r = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for y in 0..h {
+            for x in 0..w {
+                let o = ((y * w + x) * 4) as usize;
+                if a[o].min(a[o + 1]).min(a[o + 2]) < 160 && z[o].min(z[o + 1]).min(z[o + 2]) > 200 {
+                    let q = (x as f64 / 2.0, y as f64 / 2.0);
+                    r = (r.0.min(q.0), r.1.min(q.1), r.2.max(q.0 + 0.5), r.3.max(q.1 + 0.5));
                 }
             }
-            let d: Vec<f64> = segs.iter().map(|sg| box_seg(r, &Seg { a: sg.0, b: sg.1, hw: sg.3 })).collect();
-            let mine = (0..segs.len()).filter(|k| segs[*k].2 == TEAL).min_by(|x, y| d[*x].total_cmp(&d[*y])).unwrap();
-            let ko = (0..segs.len()).filter(|k| segs[*k].2 != TEAL).min_by(|x, y| d[*x].total_cmp(&d[*y])).unwrap();
-            assert!(d[ko] >= d[mine] + 2.0, "a contact label's box is as near another stroke ({:.1}, {:?}) as its own arrow ({:.1}) {st:?}", d[ko], segs[ko], d[mine]);
-            let sg = &segs[mine];
-            own.push(((sg.0 .0 + sg.1 .0) / 2.0, (sg.0 .1 + sg.1 .1) / 2.0));
         }
-        // the two nearest arrow parts lie on opposite sides of the post; a first object too small for its own label
-        // leaves one label, on the second object's arrow, for the pair
-        // which side of the post, measured along the surface (the post stands square to it)
-        let post = tags(&t, "line").into_iter().find(|l| l.contains("stroke-width=\"2.4\"")).unwrap();
-        let (f0, f1) = ((num(post, "x1"), num(post, "y1")), (num(post, "x2"), num(post, "y2")));
-        let l = ((f1.0 - f0.0).powi(2) + (f1.1 - f0.1).powi(2)).sqrt();
-        let along = (-(f1.1 - f0.1) / l, (f1.0 - f0.0) / l); // square to the post: toward the pulley unmirrored
-        let side = |q: (f64, f64)| (q.0 - f0.0) * along.0 + (q.1 - f0.1) * along.1;
-        let toward = if p.b("mirror") { -1.0 } else { 1.0 };
-        match own.len() {
-            2 => assert!(side(own[0]) * side(own[1]) < 0.0, "both labels read as one arrow's {own:?} {st:?}"),
-            1 => { assert!(side(own[0]) * toward > 0.0, "the one label is the second object's {st:?}"); single += 1; }
-            _ => panic!("{st:?}"),
-        }
+        let d: Vec<f64> = segs.iter().map(|sg| box_seg(r, &Seg { a: sg.0, b: sg.1, hw: sg.3 })).collect();
+        let mine = (0..segs.len()).filter(|k| segs[*k].2 == TEAL).map(|k| d[k]).fold(f64::INFINITY, f64::min);
+        let ko = (0..segs.len()).filter(|k| segs[*k].2 != TEAL).min_by(|x, y| d[*x].total_cmp(&d[*y])).unwrap();
+        assert!(d[ko] >= mine + 2.0, "the pair's label is as near another stroke ({:.1}, {:?}) as the pair ({mine:.1}) {st:?}", d[ko], segs[ko]);
         n += 1;
     }
     assert!(n > 50, "{n}");
-    assert!(single * 4 < n, "one label for the pair only on the smallest objects: {single} of {n}");
+}
+
+/// The pair's label as drawn: the text elements whose letters are the typed label's.
+fn contact_texts<'a>(t: &'a str, lab: &str) -> Vec<&'a str> {
+    let want: String = lab.chars().filter(|c| c.is_alphanumeric()).collect();
+    texts(t).into_iter().map(|(a, b)| &t[a..b]).filter(|e| plain(e) == want).collect()
+}
+
+#[test]
+fn a_typed_contact_label_is_drawn_or_the_panel_says_it_was_left_off() {
+    // checker round 1: "F_{contact}" on a ramp drew no label and said nothing. Over the table and ramps of 10 to 60
+    // degrees, every force switch together, object sizes and labels from P to F_{1 on 2}: the pair's label is in the
+    // drawing (once, as typed), or a note in the panel names it as left off; on ordinary figures (the table, ramps of
+    // 20 to 45 degrees, the opening sizes) it is never left off
+    let labels = ["P", "F_{c}", "F_{31}", "F_{contact}", "F_{1 on 2}"];
+    let setups: Vec<(&str, f64)> = std::iter::once(("Table", 30.0)).chain([10.0, 15.0, 20.0, 30.0, 40.0, 45.0, 50.0, 60.0].into_iter().map(|a| ("Ramp", a))).collect();
+    let combos = || {
+        let mut v = vec![];
+        for m in 0..8 { for fr in ["None", "Toward the pulley", "Away from it"] { for ac in ["None", "Right falls", "Left falls"] {
+            v.push(vec![b("tension", m & 1 != 0), b("gravity", m & 2 != 0), b("normal", m & 4 != 0), s("friction", fr), s("accel", ac)]);
+        } } }
+        v
+    };
+    let (mut drawn, mut off) = (0, 0);
+    let mut check = |setup: &str, angle: f64, size: i64, lab: &str, extra: &[(&'static str, Value)]| {
+        let mut l = touching(setup);
+        l.extend([f("angle", angle), i("l_size", size), b("contact", true), s("cont_lab", lab)]);
+        l.extend(extra.iter().cloned());
+        let p = with(&l);
+        if super::pulley::touch(&p).is_none() { return; }
+        let t = svg(&p);
+        let n = contact_texts(&t, lab).len();
+        let notes = notes_for("pulley", &p);
+        let noted = notes.iter().any(|x| x.contains("left off") && x.contains(lab));
+        assert!(n == 1 || (n == 0 && noted), "{lab} on {setup} {angle} {size}: drawn {n} times, notes {notes:?}");
+        assert!(n == 0 || !noted, "{lab}: drawn and also noted as left off");
+        let ordinary = size == 100 && (setup == "Table" || (20.0..=45.0).contains(&angle));
+        assert!(n == 1 || !ordinary, "{lab} left off on an ordinary figure: {setup} {angle} {extra:?}");
+        if n == 1 { drawn += 1 } else { off += 1 }
+    };
+    for &(setup, angle) in &setups {
+        for c in combos() {
+            for lab in ["F_{contact}", "F_{1 on 2}"] { check(setup, angle, 100, lab, &c); }
+        }
+        for size in [50, 70, 100, 150, 200] {
+            for lab in labels {
+                check(setup, angle, size, lab, &[]);
+                check(setup, angle, size, lab, &[b("tension", true), b("gravity", true), b("normal", true), s("friction", "Away from it"), s("accel", "Right falls")]);
+            }
+        }
+    }
+    eprintln!("contact label drawn {drawn}, left off with a note {off}");
+    assert!(drawn > 1000 && off * 50 < drawn, "{drawn} {off}");
+}
+
+#[test]
+fn a_blank_line_stands_for_the_pairs_label() {
+    // checker round 1: Blank line drew a blank over one arrow only. The pair has one label slot (as on the inclined
+    // plane), and Blank line draws its 26 px answer line there, just above the pair, with no text in its place
+    for setup in ["Table", "Ramp"] {
+        let mut l = touching(setup);
+        l.extend([b("contact", true), b("tension", true), b("gravity", true), b("normal", true), s("accel", "Right falls"), s("cont_lab_mode", "Blank line"), b("color", true)]);
+        let p = with(&l);
+        let t = svg(&p);
+        let blanks: Vec<&str> = tags(&t, "line").into_iter().filter(|e| (num(e, "x2") - num(e, "x1")).abs() > 25.9 && (num(e, "x2") - num(e, "x1")).abs() < 26.1 && (num(e, "y2") - num(e, "y1")).abs() < 0.01 && e.contains("stroke-width=\"1.5\"")).collect();
+        assert_eq!(blanks.len(), 1, "{setup}: one blank for the pair");
+        // it sits by the pair: within 30 px of a pair arrowhead
+        let heads = pair_heads(&t);
+        let e = blanks[0];
+        let mid = ((num(e, "x1") + num(e, "x2")) / 2.0, num(e, "y1"));
+        let near = heads.iter().map(|h| (h[0].0 - mid.0).hypot(h[0].1 - mid.1)).fold(f64::INFINITY, f64::min);
+        assert!(near < 40.0, "{setup}: the blank is by the pair ({near})");
+        let mut q = p.clone();
+        q.set_s("cont_lab_mode", "Text");
+        assert_eq!(contact_texts(&svg(&q), "P").len(), 1);
+    }
+}
+
+#[test]
+fn the_contact_label_is_the_size_of_the_other_force_labels() {
+    // checker round 1: contact labels shrank to about 9 px against 22 px for every other force. Read from the drawn
+    // text: the pair's label is set at the size the tension, normal, friction and weight labels are
+    for (setup, angle) in [("Table", 30.0), ("Ramp", 20.0), ("Ramp", 40.0), ("Ramp", 60.0)] {
+        for lab in ["P", "F_{c}", "F_{31}", "F_{contact}"] {
+            for size in [50, 100, 200] {
+                let mut l = touching(setup);
+                l.extend([f("angle", angle), i("l_size", size), b("contact", true), b("tension", true), b("gravity", true), b("normal", true), s("friction", "Away from it"), s("cont_lab", lab)]);
+                let p = with(&l);
+                if super::pulley::touch(&p).is_none() { continue; }
+                let t = svg(&p);
+                let size_of = |e: &str| num(e, "font-size");
+                let others: Vec<f64> = texts(&t).into_iter().map(|(a, b)| &t[a..b]).filter(|e| ["T", "FN", "Ff"].contains(&plain(e).as_str())).map(size_of).collect();
+                assert!(!others.is_empty());
+                for e in contact_texts(&t, lab) {
+                    assert!(others.iter().all(|o| size_of(e) >= *o), "{lab} at {} against {others:?} on {setup} {angle} {size}", size_of(e));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn one_label_for_the_pair_as_on_the_inclined_plane() {
+    // checker round 1: the inclined plane labels its touching pair once, above the pair; the pulley labelled each
+    // arrow. Both now draw one label, just above the pair's middle (the pulley's within the pair's span, over it)
+    let ip = registry().into_iter().find(|d| d.id == "inclined-plane").unwrap();
+    let mut q = crate::figures::start_params(&ip);
+    for (k, v) in [i("n", 2), s("joined", "Touching"), b("contact", true)] { q.0.insert(k.into(), v); }
+    q.normalize(&(ip.params)(), false);
+    let it = ip.svg(&q);
+    assert_eq!(texts(&it).into_iter().filter(|&(a, b)| plain(&it[a..b]) == "P").count(), 1, "the inclined plane's convention");
+    for setup in ["Table", "Ramp"] {
+        for st in [vec![], vec![b("tension", true), b("gravity", true), b("normal", true), s("friction", "Away from it"), s("accel", "Right falls")]] {
+            let mut l = touching(setup);
+            l.extend([b("contact", true), b("color", true)]);
+            l.extend(st);
+            let t = svg(&with(&l));
+            let labs = contact_texts(&t, "P");
+            assert_eq!(labs.len(), 1, "{setup}");
+            let heads = pair_heads(&t);
+            let (x0, x1) = (heads[0][0].0.min(heads[1][0].0), heads[0][0].0.max(heads[1][0].0));
+            let x = num(labs[0], "x");
+            assert!(x > x0 && x < x1, "{setup}: the label sits over the pair ({x} in {x0}..{x1})");
+            // above it: on the far side of the pair's line from the objects (the surface normal's side)
+            let (h0, h1) = (heads[0][0], heads[1][0]);
+            let mut nrm = (h1.1 - h0.1, -(h1.0 - h0.0));
+            if nrm.1 > 0.0 { nrm = (-nrm.0, -nrm.1); }
+            let q = (num(labs[0], "x"), num(labs[0], "y") - 6.0);
+            assert!((q.0 - h0.0) * nrm.0 + (q.1 - h0.1) * nrm.1 > 0.0, "{setup}: above it");
+            assert!(!tags(&t, "line").iter().any(|e| e.contains(TEAL) && e.contains("stroke-width=\"1.2\"")), "{setup}: no leader needed");
+        }
+    }
 }
 
 #[test]
