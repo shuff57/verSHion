@@ -4857,23 +4857,67 @@ const SORTS: [&str; 5] = ["Newest", "Oldest", "Bank order", "Question type", "A 
 /// The shelf's "Open bank" control: an outlined button at the shelf's compact height that opens
 /// the menu of banks not open yet. It was a bare 14 px "+" beside the tabs, easy to miss.
 fn open_bank_button(ui: &mut egui::Ui) -> egui::Response {
-    crate::pageshell::styled_button(
-        ui,
-        RichText::new(format!("{}  Open bank", egui_phosphor::regular::PLUS)).family(theme::bold_family()).size(12.5).color(theme::ink()),
-        theme::card(),
-        theme::hover_bg(),
-        theme::accent_faded(),
-        Stroke::new(1.0, theme::rule()),
-        28.0,
-    )
-    .on_hover_text("Open another question bank in this panel")
+    // 28 tall, like the search, sort and filters (the app's 34 interact minimum would win over
+    // the 28 asked for).
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = SHELF_CONTROL_H;
+        crate::pageshell::styled_button(
+            ui,
+            RichText::new(format!("{}  Open bank", egui_phosphor::regular::PLUS)).family(theme::bold_family()).size(12.5).color(theme::ink()),
+            theme::card(),
+            theme::hover_bg(),
+            theme::accent_faded(),
+            Stroke::new(1.0, theme::rule()),
+            SHELF_CONTROL_H,
+        )
+        .on_hover_text("Open another question bank in this panel")
+    })
+    .inner
 }
 
 /// A shelf filter button that opens a popup (highlighted while a filter is active).
 fn filter_button(ui: &mut egui::Ui, label: &str, active: usize) -> egui::Response {
     let text = if active > 0 { format!("{label} · {active}") } else { label.to_string() };
-    ui.add(egui::Button::new(RichText::new(text).size(12.0)).selected(active > 0))
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = egui::vec2(SHELF_BUTTON_PAD_X, SHELF_BUTTON_PAD_Y);
+        ui.spacing_mut().interact_size.y = SHELF_CONTROL_H;
+        ui.add(egui::Button::new(RichText::new(text).size(12.0)).selected(active > 0))
+    })
+    .inner
 }
+
+/// The width of [`open_bank_button`] in `ui`.
+fn open_bank_width(ui: &egui::Ui) -> f32 {
+    let text = format!("{}  Open bank", egui_phosphor::regular::PLUS);
+    ui.fonts_mut(|f| f.layout_no_wrap(text, FontId::new(12.5, theme::bold_family()), theme::ink()).size().x) + 2.0 * 18.0
+}
+
+/// "N of M used": the count on the exam in bold ink, then "of M used" at meta size; one label, so
+/// it reads (and is named) as one phrase.
+fn used_count_job(used: usize, total: usize) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let fmt = |family: egui::FontFamily, color: Color32| egui::TextFormat { font_id: FontId::new(kit::ty::META, family), color, ..Default::default() };
+    job.append(&used.to_string(), 0.0, fmt(theme::bold_family(), theme::ink()));
+    job.append(&format!(" of {total} used"), 0.0, fmt(egui::FontFamily::Proportional, theme::text_col()));
+    job
+}
+
+/// The vertical gap between the bank panel's rows above its list.
+const SHELF_ROW_GAP: f32 = 8.0;
+
+/// The height of the bank panel's search, sort, filters and "Add all" (that of "Open bank").
+const SHELF_CONTROL_H: f32 = 28.0;
+
+/// The bank panel's sort menu's width, beside the search.
+const SHELF_SORT_W: f32 = 112.0;
+
+/// Side padding of the bank panel's filter buttons and "Add all", so the three filters and
+/// "Add all" share a row beside the page.
+const SHELF_BUTTON_PAD_X: f32 = 9.0;
+
+/// Top and bottom padding of the bank panel's filters, "Add all" and sort menu: small enough
+/// that [`SHELF_CONTROL_H`] sets their height (the theme's 9 made them 30 to 34).
+const SHELF_BUTTON_PAD_Y: f32 = 4.0;
 
 fn draw_shelf_inner(
     app: &mut crate::App,
@@ -4891,10 +4935,23 @@ fn draw_shelf_inner(
     st.open_banks.retain(|b| app.store.bank(b).is_some());
     let mut close: Option<Id> = None;
     let mut open_menu: Option<egui::Response> = None;
-    // Beside the page the shelf has its title on the left and "Open bank" on the right, and the
-    // tabs get the whole row under them, so a bank's name shows in full where it fits. Alone in
-    // the narrow window the switch above already says "Question bank": the tabs come first and
-    // the button follows them.
+    // The panel's top is four compact rows beside the page (three alone in the narrow window),
+    // so the list starts higher and shows more of the questions (round 21; it was five rows):
+    //   1. "Question bank" and "Open bank" at the right (alone: the switch above already says
+    //      "Question bank", so the open banks' tabs and "Open bank" make this row);
+    //   2. the open banks' tabs, "N of M used" directly after the shown bank's tab (it counts
+    //      that bank's questions only);
+    //   3. search, with the sort menu at its right;
+    //   4. the three filters, with "Add all (N)" at the right.
+    // A row that cannot fit its right-hand control puts it at the right of a line of its own:
+    // nothing is cut, overlaps or leaves.
+    // How many of the shown bank's questions are on the exam (that bank's alone, not every open
+    // bank's), for beside its tab.
+    let used_of: Option<(usize, usize)> = app.panel_bank.as_ref().and_then(|b| app.store.bank(b)).map(|bank| {
+        let in_exam = app.store.exam(exam_id).map(|e| e.items.as_slice()).unwrap_or(&[]);
+        let used = bank.questions.iter().filter(|q| in_exam.iter().any(|it| it.bank_id == bank.id && it.question_id == q.id)).count();
+        (used, bank.questions.len())
+    });
     if !st.shelf_alone {
         ui.horizontal(|ui| {
             ui.label(theme::serif("Question bank").size(17.0));
@@ -4902,7 +4959,7 @@ fn draw_shelf_inner(
                 open_menu = Some(open_bank_button(ui));
             });
         });
-        ui.add_space(6.0);
+        ui.add_space(SHELF_ROW_GAP - ui.spacing().item_spacing.y);
     }
     // The wrapped row's height comes from the interact size when it is made: at the app's 34 px
     // a tab stood half again as tall as its text.
@@ -4952,12 +5009,36 @@ fn draw_shelf_inner(
                     if r.clicked() {
                         app.panel_bank = Some(b.clone());
                     }
-                    if ui.add(egui::Button::new(RichText::new(egui_phosphor::regular::X).size(12.0)).frame(false)).on_hover_text("Close this bank").clicked() {
+                    let x = ui.add(egui::Button::new(RichText::new(egui_phosphor::regular::X).size(12.0)).frame(false)).on_hover_text("Close this bank");
+                    x.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Close {name}")));
+                    if x.clicked() {
                         close = Some(b.clone());
                     }
                 });
+            // "N of M used" counts the bank shown (the accent tab), so it follows that tab:
+            // beside it, or at the start of the next line where the line is full.
+            if on {
+                if let Some((used, total)) = used_of {
+                    let job = used_count_job(used, total);
+                    let w = ui.fonts_mut(|f| f.layout_job(job.clone()).size().x);
+                    if w + 2.0 > ui.available_size_before_wrap().x + 0.5 {
+                        ui.end_row();
+                    } else {
+                        ui.add_space(2.0);
+                    }
+                    // centred on the tabs' height (a tab is 18 tall inside 4 px margins)
+                    ui.allocate_ui_with_layout(Vec2::new(w, 26.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.add(egui::Label::new(job).selectable(false)).on_hover_text(format!("Questions from {name} already on the exam"));
+                    });
+                    ui.add_space(4.0);
+                }
+            }
         }
         if st.shelf_alone {
+            let w = open_bank_width(ui);
+            if w > ui.available_size_before_wrap().x + 0.5 && ui.cursor().min.x > ui.max_rect().left() + 1.0 {
+                ui.end_row();
+            }
             open_menu = Some(open_bank_button(ui));
         }
     });
@@ -5002,16 +5083,43 @@ fn draw_shelf_inner(
     };
     let in_exam: Vec<ExamItem> = app.store.exam(exam_id).map(|e| e.items.clone()).unwrap_or_default();
 
-    ui.add_space(8.0);
-    ui.add(
-        egui::TextEdit::singleline(&mut st.search)
-            .hint_text("Search questions")
-            .margin(Margin::symmetric(10, 5))
-            .desired_width(ui.available_width()),
-    );
-    ui.add_space(4.0);
+    // The search and filter rows' controls stand at the compact height of "Open bank".
+    let item_y = ui.spacing().item_spacing.y;
+    ui.add_space(SHELF_ROW_GAP - item_y);
+    ui.spacing_mut().interact_size.y = SHELF_CONTROL_H;
 
-    // ---- filters: Question Type / Difficulty / Topic ----
+    // ---- search, with the sort menu at its right ----
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        let search_w = (ui.available_width() - SHELF_SORT_W - 6.0).max(80.0);
+        let search = ui.add(
+            egui::TextEdit::singleline(&mut st.search)
+                .hint_text("Search questions")
+                .margin(Margin::symmetric(10, 5))
+                .min_size(Vec2::new(0.0, SHELF_CONTROL_H))
+                .vertical_align(egui::Align::Center)
+                .desired_width(search_w),
+        );
+        // named, not only a placeholder that goes once something is typed
+        ui.ctx().accesskit_node_builder(search.id, |n| n.set_label("Search questions"));
+        // at the row's right edge, as tall as the search
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().button_padding.y = SHELF_BUTTON_PAD_Y;
+            let sort = egui::ComboBox::from_id_salt("shelf_sort")
+                .selected_text(SORTS[st.sort.min(SORTS.len() as u8 - 1) as usize])
+                .width(SHELF_SORT_W)
+                .show_ui(ui, |ui| {
+                    for (k, l) in SORTS.iter().enumerate() {
+                        ui.selectable_value(&mut st.sort, k as u8, *l);
+                    }
+                });
+            // named for what it does; its value is the order chosen
+            ui.ctx().accesskit_node_builder(sort.response.id, |n| n.set_label("Sort questions"));
+        });
+    });
+    ui.add_space(SHELF_ROW_GAP - item_y);
+
+    // ---- filters: Question Type / Difficulty / Topic, and "Add all" at the right ----
     let mut topics: Vec<String> = bank
         .questions
         .iter()
@@ -5021,8 +5129,39 @@ fn draw_shelf_inner(
     topics.sort();
     topics.dedup();
     st.topics.retain(|t| topics.contains(t));
+
+    let needle = st.search.trim().to_lowercase();
+    let mut qs: Vec<(usize, model::Question)> = bank
+        .questions
+        .iter()
+        .enumerate()
+        .filter(|(_, q)| needle.is_empty() || q.stem.to_lowercase().contains(&needle) || crate::equation::stem_preview(&q.stem).to_lowercase().contains(&needle))
+        .filter(|(_, q)| st.kinds.is_empty() || st.kinds.contains(&q.kind.qkind()))
+        .filter(|(_, q)| st.topics.is_empty() || st.topics.iter().any(|t| q.topics.contains(t)))
+        .filter(|(_, q)| match (st.diff, &q.difficulty) {
+            (0, _) => true,
+            (1, Some(model::Difficulty::Low))
+            | (2, Some(model::Difficulty::Medium))
+            | (3, Some(model::Difficulty::High)) => true,
+            _ => false,
+        })
+        .map(|(i, q)| (i, q.clone()))
+        .collect();
+    match st.sort {
+        0 => qs.sort_by_key(|(i, q)| (-q.created, -(*i as i64))),
+        1 => qs.sort_by_key(|(i, q)| (q.created, *i)),
+        3 => qs.sort_by_key(|(i, q)| (q.kind.qkind() as u8, *i)),
+        4 => qs.sort_by_key(|(_, q)| crate::equation::stem_preview(&q.stem).to_lowercase()),
+        _ => qs.sort_by_key(|(i, _)| *i),
+    }
+    let not_in: Vec<Id> = qs
+        .iter()
+        .filter(|(_, q)| !in_exam.iter().any(|it| it.bank_id == bank_id && it.question_id == q.id))
+        .map(|(_, q)| q.id.clone())
+        .collect();
+
     ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(5.0, 5.0);
+        ui.spacing_mut().item_spacing = egui::vec2(5.0, 6.0);
         let close_outside = egui::PopupCloseBehavior::CloseOnClickOutside;
         let r = filter_button(ui, "Question Type", st.kinds.len());
         egui::Popup::menu(&r).close_behavior(close_outside).show(|ui| {
@@ -5066,58 +5205,21 @@ fn draw_shelf_inner(
                 st.topics.clear();
             }
         });
-    });
-    ui.add_space(4.0);
-
-    let needle = st.search.trim().to_lowercase();
-    let mut qs: Vec<(usize, model::Question)> = bank
-        .questions
-        .iter()
-        .enumerate()
-        .filter(|(_, q)| needle.is_empty() || q.stem.to_lowercase().contains(&needle) || crate::equation::stem_preview(&q.stem).to_lowercase().contains(&needle))
-        .filter(|(_, q)| st.kinds.is_empty() || st.kinds.contains(&q.kind.qkind()))
-        .filter(|(_, q)| st.topics.is_empty() || st.topics.iter().any(|t| q.topics.contains(t)))
-        .filter(|(_, q)| match (st.diff, &q.difficulty) {
-            (0, _) => true,
-            (1, Some(model::Difficulty::Low))
-            | (2, Some(model::Difficulty::Medium))
-            | (3, Some(model::Difficulty::High)) => true,
-            _ => false,
-        })
-        .map(|(i, q)| (i, q.clone()))
-        .collect();
-    match st.sort {
-        0 => qs.sort_by_key(|(i, q)| (-q.created, -(*i as i64))),
-        1 => qs.sort_by_key(|(i, q)| (q.created, *i)),
-        3 => qs.sort_by_key(|(i, q)| (q.kind.qkind() as u8, *i)),
-        4 => qs.sort_by_key(|(_, q)| crate::equation::stem_preview(&q.stem).to_lowercase()),
-        _ => qs.sort_by_key(|(i, _)| *i),
-    }
-    let not_in: Vec<Id> = qs
-        .iter()
-        .filter(|(_, q)| !in_exam.iter().any(|it| it.bank_id == bank_id && it.question_id == q.id))
-        .map(|(_, q)| q.id.clone())
-        .collect();
-
-    let used = bank
-        .questions
-        .iter()
-        .filter(|q| in_exam.iter().any(|it| it.bank_id == bank_id && it.question_id == q.id))
-        .count();
-
-    // ---- sort + Add all, and how many of the bank are on the exam ----
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        egui::ComboBox::from_id_salt("shelf_sort")
-            .selected_text(SORTS[st.sort.min(SORTS.len() as u8 - 1) as usize])
-            .width(112.0)
-            .show_ui(ui, |ui| {
-                for (k, l) in SORTS.iter().enumerate() {
-                    ui.selectable_value(&mut st.sort, k as u8, *l);
-                }
-            });
+        // "Add all" at the row's right, or at the right of a line of its own.
+        let add_text = RichText::new(format!("+ Add all ({})", not_in.len())).family(theme::bold_family()).size(12.5);
+        let add_w = ui.fonts_mut(|f| f.layout_no_wrap(add_text.text().to_string(), FontId::new(12.5, theme::bold_family()), theme::ink()).size().x) + 2.0 * SHELF_BUTTON_PAD_X;
+        let gap = 12.0;
+        if add_w + gap > ui.available_size_before_wrap().x + 0.5 {
+            ui.end_row();
+        }
+        ui.add_space((ui.available_size_before_wrap().x - add_w).max(0.0));
         let add_all = ui
-            .add_enabled(!not_in.is_empty(), egui::Button::new(RichText::new(format!("+ Add all ({})", not_in.len())).family(theme::bold_family()).size(12.5)))
+            .scope(|ui| {
+                ui.spacing_mut().button_padding = egui::vec2(SHELF_BUTTON_PAD_X, SHELF_BUTTON_PAD_Y);
+                ui.spacing_mut().interact_size.y = SHELF_CONTROL_H;
+                ui.add_enabled(!not_in.is_empty(), egui::Button::new(add_text))
+            })
+            .inner
             .on_hover_text("Adds every question shown here that is not on the exam yet");
         if add_all.clicked() {
             let len = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
@@ -5136,17 +5238,11 @@ fn draw_shelf_inner(
                 screens::toast(app, &format!("Added {n} question{}{skipped}", if n == 1 { "" } else { "s" }), false);
             }
         }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.spacing_mut().item_spacing.x = 3.0;
-            ui.label(kit::meta(format!("of {} used", bank.questions.len())));
-            ui.label(RichText::new(used.to_string()).family(theme::bold_family()).size(kit::ty::META).color(theme::ink()));
-        })
-        .response
-        .on_hover_text("Questions from this bank already on the exam");
     });
-    ui.add_space(6.0);
+    ui.spacing_mut().interact_size.y = interact_y;
+    ui.add_space(SHELF_ROW_GAP + 2.0 - item_y);
 
-    // The list runs to the card's foot: the used count sits on the sort row above, and the
+    // The list runs to the card's foot: the used count sits on the tabs' row above, and the
     // card's own + and grab cursor say how a question gets onto the page.
     let list_h = ui.available_height().max(60.0);
     let list_top = ui.cursor().top();
@@ -8993,7 +9089,7 @@ mod system_pass_tests {
 mod review_tests {
     use super::*;
     use crate::model::{Answer, Exam, ExamItem, Margins, Question, QuestionBank};
-    use egui_kittest::{kittest::{NodeT, Queryable}, Harness};
+    use egui_kittest::{kittest::{by, NodeT, Queryable}, Harness};
 
     /// An app on a scratch store holding `bank` and `exam` (nothing here is read back).
     fn scratch_app(bank: QuestionBank, exam: Exam) -> crate::App {
@@ -9393,5 +9489,144 @@ mod review_tests {
         for (a, b) in back.cards.iter().zip(&before.cards) {
             assert_eq!((&a.id, a.shown, a.rect), (&b.id, b.shown, b.rect), "the panel is back as it was");
         }
+    }
+
+    /// The bank panel at `w` by 760 (`alone`: the narrow window's bank tab) with `banks` open
+    /// (the first one shown), drawn until it settles; no pointer anywhere.
+    fn panel_harness<'a>(banks: Vec<QuestionBank>, w: f32, alone: bool) -> Harness<'a, (crate::App, EditUi)> {
+        let mut app = scratch_app(banks[0].clone(), exam_of(vec![ExamItem::new("b", "q0")], 0));
+        app.store.banks.extend(banks[1..].iter().cloned());
+        let mut st = EditUi::default();
+        st.open_banks = banks.iter().map(|b| b.id.clone()).collect();
+        let mut first = true;
+        Harness::builder().with_size(Vec2::new(w + 40.0, 800.0)).build_ui_state(
+            move |ui, s: &mut (crate::App, EditUi)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let ctx = ui.ctx().clone();
+                let (app, st) = s;
+                st.shelf_alone = alone;
+                draw_shelf(app, ui, &ctx, &"e".into(), st, Rect::from_min_size(Pos2::ZERO, Vec2::new(w, 760.0)));
+            },
+            (app, st),
+        )
+    }
+
+    /// Every control above the bank panel's list is there under its name at the panel's desktop
+    /// width (its narrowest beside the page) and alone in the narrowest window, with one bank open,
+    /// with two (one with a long name) and with three (two long, the shown one in the middle):
+    /// Open bank, each open bank's tab and its close (named for the bank), the search, the sort
+    /// menu, the three filters, Add all and the used count, each inside the panel, none on
+    /// another or on the list; Open bank, search, sort, filters and Add all one height (28);
+    /// the used count right after the shown bank's tab (or first on the next line); at most
+    /// four rows beside the page and three alone (at 614) with one bank.
+    #[test]
+    fn bank_panel_controls_are_named_and_apart() {
+        use egui::accesskit::Role;
+        let qs: Vec<Question> = (0..10).map(|k| short(&format!("q{k}"), &"Which of the following elements is the least electronegative? ".repeat(1 + k % 3))).collect();
+        let bank = QuestionBank { id: "b".into(), name: "Ch4 Quiz 5A and 5B (answer key)".into(), questions: qs, created: 0, modified: 0, details: Default::default() };
+        let long = |id: &str, name: &str| QuestionBank { id: id.into(), name: name.into(), questions: vec![short(&format!("{id}x"), "Define a mole.")], created: 0, modified: 0, details: Default::default() };
+        let long2 = long("b2", "Unit 7 Stoichiometry and the mole: review questions for the final");
+        let long3 = long("b3", "Chemistry semester one final exam practice questions (all units)");
+        let plus = format!("{}  Open bank", egui_phosphor::regular::PLUS);
+        // SHELF_W beside the page; alone in a 760 window the panel is the work area's 614.
+        for (w, alone) in [(SHELF_W, false), (614.0, true), (SHELF_W, true)] {
+            for banks in [vec![bank.clone()], vec![bank.clone(), long2.clone()], vec![long3.clone(), bank.clone(), long2.clone()]] {
+                let how = format!("{w} wide, alone {alone}, {} bank(s)", banks.len());
+                let mut h = panel_harness(banks.clone(), w, alone);
+                h.run_steps(6);
+                let mut found: Vec<(String, Rect)> = Vec::new();
+                let mut one = |label: &str, role: Role| {
+                    let n: Vec<_> = h.query_all(by().label(label).role(role)).collect();
+                    assert_eq!(n.len(), 1, "{how}: one {label}");
+                    found.push((label.to_string(), n[0].rect()));
+                };
+                one(&plus, Role::Button);
+                for b in &banks {
+                    one(&b.name, Role::Label);
+                    one(&format!("Close {}", b.name), Role::Button);
+                }
+                one("Search questions", Role::TextInput);
+                one("Sort questions", Role::ComboBox);
+                for f in ["Question Type", "Difficulty", "Topic"] {
+                    one(f, Role::Button);
+                }
+                one("+ Add all (9)", Role::Button);
+                one("1 of 10 used", Role::Label);
+                assert_eq!(h.query_all(by().role(Role::ComboBox)).next().and_then(|n| n.value()), Some("Newest".to_string()), "{how}: the sort menu's value");
+                let st = &h.state().1;
+                let rect = |l: &str| found.iter().find(|(a, _)| a == l).map(|(_, r)| *r).unwrap();
+                // The list spans the panel's content width.
+                let view = st.shelf_seen.view.expect("the list's view");
+                let list_top = view.top();
+                assert!((view.width() - (w - 30.0)).abs() < 1.0, "{how}: the list's width {}", view.width());
+                for (i, (a, ra)) in found.iter().enumerate() {
+                    assert!(ra.left() >= view.left() - 0.5 && ra.right() <= view.right() + 0.5, "{how}: {a} leaves the panel: {ra:?} {view:?}");
+                    assert!(ra.bottom() <= list_top + 0.5, "{how}: {a} on the list");
+                    for (b, rb) in &found[i + 1..] {
+                        assert!(!ra.shrink(0.5).intersects(rb.shrink(0.5)), "{how}: {a} on {b}: {ra:?} {rb:?}");
+                    }
+                }
+                // One height: Open bank, the search and sort row, the filters and Add all.
+                for l in [plus.as_str(), "Search questions", "Sort questions", "Question Type", "Difficulty", "Topic", "+ Add all (9)"] {
+                    assert!((rect(l).height() - SHELF_CONTROL_H).abs() < 0.6, "{how}: {l} is {} tall", rect(l).height());
+                }
+                for (a, b) in [("Search questions", "Sort questions"), ("Question Type", "+ Add all (9)")] {
+                    assert!((rect(a).center().y - rect(b).center().y).abs() < 0.6, "{how}: {a} and {b} not on one line");
+                }
+                // The used count counts the shown bank ("b"): right after its close, on its line,
+                // or first on the next line.
+                let close = rect(&format!("Close {}", bank.name));
+                let used = rect("1 of 10 used");
+                let beside = (used.center().y - close.center().y).abs() < 3.0 && used.left() >= close.right() && used.left() <= close.right() + 24.0;
+                let next = used.top() >= close.bottom() && (used.left() - view.left()).abs() < 1.0;
+                assert!(beside || next, "{how}: the used count is not with the shown bank's tab: {used:?} {close:?}");
+                // Rows: controls whose middles share a line.
+                let mut mids: Vec<f32> = found.iter().filter(|(l, _)| !l.starts_with("Close") && !banks.iter().any(|b| &b.name == l)).map(|(_, r)| r.center().y).collect();
+                mids.sort_by(f32::total_cmp);
+                mids.dedup_by(|a, b| (*a - *b).abs() < 8.0);
+                // (alone, the panel is never under 614: 340 alone only checks that nothing collides)
+                if banks.len() == 1 && (!alone || w >= 600.0) {
+                    let rows = if alone { 3 } else { 4 };
+                    assert!(mids.len() <= rows, "{how}: {} rows: {mids:?}", mids.len());
+                }
+            }
+        }
+    }
+
+    /// Tab walks the bank panel's controls in reading order (Open bank, the tabs, search, sort,
+    /// the three filters, Add all), and Enter on a focused control activates it: on Add all it
+    /// adds the nine questions not on the exam yet.
+    #[test]
+    fn bank_panel_controls_work_from_the_keyboard() {
+        let qs: Vec<Question> = (0..10).map(|k| short(&format!("q{k}"), "Define a catalyst.")).collect();
+        let bank = QuestionBank { id: "b".into(), name: "Ch4 Quiz 5A and 5B (answer key)".into(), questions: qs, created: 0, modified: 0, details: Default::default() };
+        let mut h = panel_harness(vec![bank], SHELF_W, false);
+        h.run_steps(6);
+        let focused = |h: &Harness<'_, (crate::App, EditUi)>| h.query_all(by().predicate(|n| n.is_focused())).next().and_then(|n| n.accesskit_node().label().or_else(|| n.accesskit_node().value()));
+        let mut order: Vec<String> = Vec::new();
+        for _ in 0..24 {
+            h.key_press(egui::Key::Tab);
+            h.run_steps(2);
+            if let Some(l) = focused(&h) {
+                if order.last() != Some(&l) {
+                    order.push(l);
+                }
+            }
+            if order.last().is_some_and(|l| l.starts_with("+ Add all")) {
+                break;
+            }
+        }
+        let want = [format!("{}  Open bank", egui_phosphor::regular::PLUS), "Search questions".into(), "Sort questions".into(), "Question Type".into(), "Difficulty".into(), "Topic".into(), "+ Add all (9)".into()];
+        let at: Vec<usize> = want.iter().map(|l| order.iter().position(|o| o == l).unwrap_or_else(|| panic!("Tab never reaches {l}: {order:?}"))).collect();
+        assert!(at.windows(2).all(|p| p[0] < p[1]), "Tab order {order:?}");
+        // Enter on the focused Add all adds the nine questions.
+        h.key_press(egui::Key::Enter);
+        h.run_steps(4);
+        let n = h.state().0.store.exam(&"e".into()).map(|e| e.items.len());
+        assert_eq!(n, Some(10), "Enter on Add all");
     }
 }
