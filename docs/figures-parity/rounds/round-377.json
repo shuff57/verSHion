@@ -1,0 +1,29 @@
+{
+ "round": 377,
+ "figure": "pedigree",
+ "capability": "cap-04h",
+ "hypothesis": "Batch 11 pedigree: cap-04h; evidence the workspace click test",
+ "started_at": "2026-11-12T06:51:09",
+ "git": "c965c57",
+ "before": {
+  "figure": 97.9,
+  "pooled": 99.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-12T07:00:31",
+ "after": {
+  "figure": 100.0,
+  "pooled": 99.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass (NAS): the workspace's own canvas click at the opening state, judged an honest use of ui-test, not the opening-state workaround",
+ "result": "hit",
+ "evidence": "last_b11 frozen tests (1,804 Punnett, 1,123 pedigree, 1,724 free-body cases), the builder's tests and figuresui last_b11 ui tests, census: 46 passed, 0 failed on the NAS at c965c57",
+ "next": "pulley cap-06e (label crossed by the string on 50 and 60 degree ramps: with a builder); vector-diagram, population-growth, cylinder fixes on pc2"
+}

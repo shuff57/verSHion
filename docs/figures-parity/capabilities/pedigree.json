@@ -63,8 +63,8 @@
    "id": "cap-03",
    "text": "Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness, vitamin D–resistant rickets)",
    "class": "control",
-   "evidence": "",
-   "note": "Collapsed to one entry per list (owner decision 2026-11-08: a preset list is one capability, not one per preset)."
+   "evidence": "changes:{\"inherit\":\"X-linked recessive\",\"allele_letter\":\"H\",\"title\":\"Hemophilia in Queen Victoria’s family\",\"carrier_style\":\"Half filled\",\"gens\":4,\"family\":\"1:m-fC1(m,fC1-m(fC1-m(mA1,m,mA1),mA1,fC1-m(f,f,f,f,mA1)),mA1-f(fC2-m(f,mA1),m),fC1-m(m,fC1-m(mA1,m,mA1),mA1,m))\"}",
+   "note": "Built in batch 11, round 376 (2026-11-12). Collapsed to one entry per list (owner decision 2026-11-08: a preset list is one capability, not one per preset)."
   },
   {
    "id": "cap-04a",
@@ -119,8 +119,8 @@
    "id": "cap-04h",
    "text": "Click a person in the pedigree to change them",
    "class": "interaction",
-   "evidence": "",
-   "note": "In our app a click selects the person for the panel, but that is drawn by the workspace, not a handle in handle_list, so the probe cannot see it."
+   "evidence": "ui-test:figuresui::tests::last_b11::pedigree_click_a_person_then_change_them",
+   "note": "Built in batch 11, round 377 (2026-11-12). In our app a click selects the person for the panel, but that is drawn by the workspace, not a handle in handle_list, so the probe cannot see it."
   },
   {
    "id": "cap-05a",

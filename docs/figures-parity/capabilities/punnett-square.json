@@ -42,8 +42,8 @@
    "id": "cap-02b",
    "text": "Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO blood type)",
    "class": "control",
-   "evidence": "",
-   "note": "Collapsed to one entry per list (owner decision 2026-11-08: a preset list is one capability, not one per preset). The ABO preset also needs a multiple-allele cross, which we lack."
+   "evidence": "changes:{\"dominance\":\"Codominance\",\"parents\":\"I^A i x I^B i\",\"phenotypes\":\"I^A: type A; I^A+I^B: type AB; I^B: type B; i: type O\"}",
+   "note": "Built in batch 11, round 374 (2026-11-12). Collapsed to one entry per list (owner decision 2026-11-08: a preset list is one capability, not one per preset). The ABO preset also needs a multiple-allele cross, which we lack."
   },
   {
    "id": "cap-03",
@@ -105,8 +105,8 @@
    "id": "cap-05d",
    "text": "Click a cell to blank it",
    "class": "interaction",
-   "evidence": "",
-   "note": "Our notes say to click the cells, but no cell handle exists at the opening state (cells start Filled in), so it cannot be evidenced yet."
+   "evidence": "handle:click:Click a cell to blank it for students",
+   "note": "Built in batch 11, round 375 (2026-11-12). Our notes say to click the cells, but no cell handle exists at the opening state (cells start Filled in), so it cannot be evidenced yet."
   },
   {
    "id": "cap-05e",

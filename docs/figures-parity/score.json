@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-12T03:16:04+00:00",
- "probe_checked_at": "2026-11-11T19:16:04",
+ "generated_at": "2026-11-12T15:00:43+00:00",
+ "probe_checked_at": "2026-11-12T07:00:43",
  "comparable": true,
  "drift": [],
- "pooled": 99.4,
- "mean": 99.5,
+ "pooled": 99.7,
+ "mean": 99.7,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -109,19 +109,11 @@
    "gaps": []
   },
   "free-body-diagram": {
-   "score": 97.0,
-   "got": 65.0,
+   "score": 100.0,
+   "got": 67.0,
    "total": 67.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02e",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "gas-syringe": {
    "score": 100.0,
@@ -299,26 +291,11 @@
    "gaps": []
   },
   "pedigree": {
-   "score": 94.7,
-   "got": 90.0,
+   "score": 100.0,
+   "got": 95.0,
    "total": 95.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-03",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness, ",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04h",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a person in the pedigree to change them",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "ph-reading": {
    "score": 100.0,
@@ -400,26 +377,11 @@
    ]
   },
   "punnett-square": {
-   "score": 94.4,
-   "got": 85.0,
+   "score": 100.0,
+   "got": 90.0,
    "total": 90.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05d",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a cell to blank it",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "pyramid": {
    "score": 100.0,

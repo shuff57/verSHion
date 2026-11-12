@@ -1,0 +1,29 @@
+{
+ "round": 375,
+ "figure": "punnett-square",
+ "capability": "cap-05d",
+ "hypothesis": "Batch 11 punnett-square: cap-05d; evidence the cell click handle at the opening state",
+ "started_at": "2026-11-12T06:50:51",
+ "git": "c965c57",
+ "before": {
+  "figure": 97.8,
+  "pooled": 99.5
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-12T06:50:53",
+ "after": {
+  "figure": 100.0,
+  "pooled": 99.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass (NAS): four cell handles at the opening state; a click blanks only that cell, a second fills it back; parent and title clicks untouched",
+ "result": "hit",
+ "evidence": "last_b11 frozen tests (1,804 Punnett, 1,123 pedigree, 1,724 free-body cases), the builder's tests and figuresui last_b11 ui tests, census: 46 passed, 0 failed on the NAS at c965c57",
+ "next": "pulley cap-06e (label crossed by the string on 50 and 60 degree ramps: with a builder); vector-diagram, population-growth, cylinder fixes on pc2"
+}

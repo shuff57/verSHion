@@ -1,0 +1,37 @@
+{
+ "round": 376,
+ "figure": "pedigree",
+ "capability": "cap-03",
+ "hypothesis": "Batch 11 pedigree: cap-03; evidence the royal family classic setup",
+ "started_at": "2026-11-12T06:50:59",
+ "git": "c965c57",
+ "before": {
+  "figure": 94.7,
+  "pooled": 99.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-12T06:51:09",
+ "after": {
+  "figure": 97.9,
+  "pooled": 99.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"inherit\":\"X-linked recessive\",\"allele_letter\":\"H\",\"title\":\"Hemophilia in Queen Victoria’s family\",\"carrier_style\":\"Half filled\",\"gens\":4,\"family\":\"1:m-fC1(m,fC1-m(fC1-m(mA1,m,mA1),mA1,fC1-m(f,f,f,f,mA1)),mA1-f(fC2-m(f,mA1),m),fC1-m(m,fC1-m(mA1,m,mA1),mA1,m))\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pedigree/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/pedigree/106d4d104ab51978.png"
+   }
+  ]
+ },
+ "checker": "pass (NAS): all six classic families follow their inheritance; 24 renders clean; royal family matches the history where drawn (simplified)",
+ "result": "hit",
+ "evidence": "last_b11 frozen tests (1,804 Punnett, 1,123 pedigree, 1,724 free-body cases), the builder's tests and figuresui last_b11 ui tests, census: 46 passed, 0 failed on the NAS at c965c57",
+ "next": "pulley cap-06e (label crossed by the string on 50 and 60 degree ramps: with a builder); vector-diagram, population-growth, cylinder fixes on pc2"
+}

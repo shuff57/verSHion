@@ -1,0 +1,37 @@
+{
+ "round": 374,
+ "figure": "punnett-square",
+ "capability": "cap-02b",
+ "hypothesis": "Batch 11 punnett-square: cap-02b; evidence the ABO classic cross",
+ "started_at": "2026-11-12T06:50:43",
+ "git": "c965c57",
+ "before": {
+  "figure": 94.4,
+  "pooled": 99.4
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-12T06:50:51",
+ "after": {
+  "figure": 97.8,
+  "pooled": 99.5
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"dominance\":\"Codominance\",\"parents\":\"I^A i x I^B i\",\"phenotypes\":\"I^A: type A; I^A+I^B: type AB; I^B: type B; i: type O\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/punnett-square/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/punnett-square/bdcef7ce1e5ca3a6.png"
+   }
+  ]
+ },
+ "checker": "pass (NAS): all six classic crosses worked by hand, cells and both ratios; the 8 corrected old figures are real genetics corrections; 336-case sweep, no phenotype listed twice",
+ "result": "hit",
+ "evidence": "last_b11 frozen tests (1,804 Punnett, 1,123 pedigree, 1,724 free-body cases), the builder's tests and figuresui last_b11 ui tests, census: 46 passed, 0 failed on the NAS at c965c57",
+ "next": "pulley cap-06e (label crossed by the string on 50 and 60 degree ramps: with a builder); vector-diagram, population-growth, cylinder fixes on pc2"
+}

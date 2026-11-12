@@ -49,8 +49,8 @@
    "id": "cap-02e",
    "text": "Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the usual way and labelled",
    "class": "interaction",
-   "evidence": "",
-   "note": "Our extra forces come with fixed default directions and labels (F_f right, F_T left, F_app 45°...), but there is no per-type button or picker; no handle either."
+   "evidence": "ui-test:figuresui::tests::last_b11::free_body_add_buttons_add_a_labelled_force_pointing_the_usual_way",
+   "note": "Built in batch 11, round 378 (2026-11-12). Our extra forces come with fixed default directions and labels (F_f right, F_T left, F_app 45°...), but there is no per-type button or picker; no handle either."
   },
   {
    "id": "cap-03a",

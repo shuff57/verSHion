@@ -1,24 +1,16 @@
 # Figures parity score
 
-Generated: 2026-11-12T03:16:04+00:00 · probe: 2026-11-11T19:16:04
+Generated: 2026-11-12T15:00:43+00:00 · probe: 2026-11-12T07:00:43
 
-**Pooled 99.4** · mean 99.5 over 70 figures · built 71 of 71 reference figures
+**Pooled 99.7** · mean 99.7 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
 - `vector-diagram`: 90 (51/57)
   - cap-03b [control 3] Mark the angle of any individual vector — no evidence
   - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
-- `punnett-square`: 94 (85/90)
-  - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
-  - cap-05d [interaction 2] Click a cell to blank it — no evidence
-- `pedigree`: 95 (90/95)
-  - cap-03 [control 3] Load one of six classic families (royal hemophilia, Huntington's, cystic fibrosis, albinism, red–green color blindness,  — no evidence
-  - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
 - `pulley`: 95 (97/102)
   - cap-06e [core 5] The contact forces between objects touching — no evidence
-- `free-body-diagram`: 97 (65/67)
-  - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
 - `population-growth`: 98 (128/131)
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
@@ -37,6 +29,7 @@ Comparable with the frozen baseline: **yes**
 - `dna-protein-synthesis`: 100 (102/102)
 - `dot-and-cross`: 100 (56/56)
 - `enzyme-kinetics`: 100 (85/85)
+- `free-body-diagram`: 100 (67/67)
 - `gas-syringe`: 100 (32/32)
 - `gel-electrophoresis`: 100 (90/90)
 - `half-life-graph`: 100 (84/84)
@@ -62,6 +55,7 @@ Comparable with the frozen baseline: **yes**
 - `parallel-lines`: 100 (46/46)
 - `parallelogram`: 100 (94/94)
 - `particle-diagram`: 100 (76/76)
+- `pedigree`: 100 (95/95)
 - `ph-reading`: 100 (38/38)
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
@@ -69,6 +63,7 @@ Comparable with the frozen baseline: **yes**
 - `predator-prey`: 100 (96/96)
 - `prism`: 100 (94/94)
 - `projectile-motion`: 100 (74/74)
+- `punnett-square`: 100 (90/90)
 - `pyramid`: 100 (75/75)
 - `ray-diagram`: 100 (115/115)
 - `reaction-energy-diagram`: 100 (101/101)
