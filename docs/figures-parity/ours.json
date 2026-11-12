@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-12T02:14:48+00:00",
-  "src_mtime": 1794447808.3339984,
-  "git": "69e8df6",
+  "built_at": "2026-11-12T03:16:03+00:00",
+  "src_mtime": 1794453276.320402,
+  "git": "60d8bc0",
   "figures": 191
  },
  "figures": {
@@ -6120,6 +6120,34 @@
      ],
      "edit": null,
      "tip": "Click to cycle this parent's genotype"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click a cell to blank it for students"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click a cell to blank it for students"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click a cell to blank it for students"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click a cell to blank it for students"
     }
    ],
    "handles": true,
@@ -6978,13 +7006,6 @@
      "default": "Matching lanes"
     },
     {
-     "key": "show_answers",
-     "label": "Show answers",
-     "kind": "bool",
-     "options": [],
-     "default": "true"
-    },
-    {
      "key": "blank_lanes",
      "label": "Sample lanes left blank for students (lane numbers)",
      "kind": "text",
@@ -7129,7 +7150,7 @@
    ],
    "handles": true,
    "label_drag": false,
-   "show_answers": true,
+   "show_answers": false,
    "style": false,
    "label_size": false
   },

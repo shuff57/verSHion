@@ -1,6 +1,6 @@
 # Figures parity score
 
-Generated: 2026-11-12T02:14:49+00:00 · probe: 2026-11-11T18:14:49
+Generated: 2026-11-12T03:16:04+00:00 · probe: 2026-11-11T19:16:04
 
 **Pooled 99.4** · mean 99.5 over 70 figures · built 71 of 71 reference figures
 
@@ -17,8 +17,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04h [interaction 2] Click a person in the pedigree to change them — no evidence
 - `pulley`: 95 (97/102)
   - cap-06e [core 5] The contact forces between objects touching — no evidence
-- `gel-electrophoresis`: 97 (87/90)
-  - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
 - `free-body-diagram`: 97 (65/67)
   - cap-02e [interaction 2] Add a gravity, normal, friction, tension, applied, spring or air-resistance force from a button, already pointing the us — no evidence
 - `population-growth`: 98 (128/131)
@@ -40,6 +38,7 @@ Comparable with the frozen baseline: **yes**
 - `dot-and-cross`: 100 (56/56)
 - `enzyme-kinetics`: 100 (85/85)
 - `gas-syringe`: 100 (32/32)
+- `gel-electrophoresis`: 100 (90/90)
 - `half-life-graph`: 100 (84/84)
 - `heating-cooling-curve`: 100 (96/96)
 - `histogram`: 100 (90/90)

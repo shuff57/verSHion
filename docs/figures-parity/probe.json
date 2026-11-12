@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-11T18:14:49",
- "ours_built_at": "2026-11-12T02:14:48+00:00",
- "git": "69e8df6",
+ "checked_at": "2026-11-11T19:16:04",
+ "ours_built_at": "2026-11-12T03:16:03+00:00",
+ "git": "60d8bc0",
  "figures": {
   "vector-diagram": {
    "caps": {
@@ -5038,7 +5038,7 @@
       {
        "token": "changes:{\"lanes\":\"Ladder: ladder 1kb | A: 5000 | B: 4000 | C: 3000 | D: 2500 | E: 2000 | F: 1500 | G: 1200 | H: 1000 | I: 800 | J: 600 | Ladder 2: ladder 100bp\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/1993f4a260306a98.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/cd77e76355afb022.png"
       }
      ]
     },
@@ -5050,7 +5050,7 @@
       {
        "token": "changes:{\"lanes\":\"A: 500, 300 | Ladder: ladder 100bp\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/7cecac6fbda8c815.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/f87a585356c9df9b.png"
       }
      ]
     },
@@ -5062,7 +5062,7 @@
       {
        "token": "changes:{\"lanes\":\"Ladder: ladder 1kb | Unknown: 5200, 3100\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/8f8750ea5d03c3e2.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/0c6d19a89cf30cf0.png"
       }
      ]
     },
@@ -5074,7 +5074,7 @@
       {
        "token": "changes:setup=Paternity test",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/6243c9e9df524e3a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/854e2ebe11681390.png"
       }
      ]
     },
@@ -5086,7 +5086,7 @@
       {
        "token": "changes:{\"lanes\":\"A: 500, 300 | Ladder: ladder 100bp\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/7cecac6fbda8c815.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/f87a585356c9df9b.png"
       }
      ]
     },
@@ -5098,7 +5098,7 @@
       {
        "token": "changes:{\"lanes\":\"Ladder: ladder 1kb | A: 2500\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/73855df143f82901.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/71ae069e1c9bc625.png"
       }
      ]
     },
@@ -5110,7 +5110,7 @@
       {
        "token": "changes:{\"lanes\":\"Ladder: ladder lambda | A: 5000, 2000\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/cd69a7ad973d9191.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/b8a44c19080ce4f2.png"
       }
      ]
     },
@@ -5122,7 +5122,7 @@
       {
        "token": "changes:{\"lanes\":\"Ladder: ladder 1kb | A: 1.5 kb, 400\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/53b8c51053071296.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/67776cd0ede00b0c.png"
       }
      ]
     },
@@ -5134,15 +5134,21 @@
       {
        "token": "changes:{\"lanes\":\"Ladder: ladder 1kb | Crime scene: 5200 x2, 3100, 1800 x0.5, 900 | Suspect 1: 6000, 3100, 1500, 700 | Suspect 2: 5200, 3100, 1800, 900 | Suspect 3: 4200, 2400, 1800, 1100\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/3c258d9bdcbcd68c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/d416343e2d31f4ba.png"
       }
      ]
     },
     "cap-03c": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "version",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:blank_lanes=3",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/bf381a2a40b2b97f.png"
+      }
+     ]
     },
     "cap-04": {
      "pass": true,
@@ -5152,7 +5158,7 @@
       {
        "token": "changes:agarose=2%",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/301be64c5507959c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/430b7d250ef53187.png"
       }
      ]
     },
@@ -5164,7 +5170,7 @@
       {
        "token": "changes:look=Blue stain",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/39e09da7ac336164.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/7aae4e6a9ce450a2.png"
       }
      ]
     },
@@ -5176,7 +5182,7 @@
       {
        "token": "changes:look=Blue stain",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/39e09da7ac336164.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/7aae4e6a9ce450a2.png"
       }
      ]
     },
@@ -5188,7 +5194,7 @@
       {
        "token": "changes:look=Glowing",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/6e9b8c688e8821cd.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/01b324beae1c80e1.png"
       }
      ]
     },
@@ -5200,7 +5206,7 @@
       {
        "token": "changes:lane_labels=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/8f266664bd3103a1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/119e8b7e9ec9c8fb.png"
       }
      ]
     },
@@ -5212,7 +5218,7 @@
       {
        "token": "changes:lane_labels=Blank lines",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/4a9a4a4a2d811d6c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/ac7fc4b7452c3460.png"
       }
      ]
     },
@@ -5224,7 +5230,7 @@
       {
        "token": "changes:lane_labels=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/8f266664bd3103a1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/119e8b7e9ec9c8fb.png"
       }
      ]
     },
@@ -5236,7 +5242,7 @@
       {
        "token": "changes:lane_numbers=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/3ad2feb40eda29ff.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/73062bafe98cf26e.png"
       }
      ]
     },
@@ -5248,7 +5254,7 @@
       {
        "token": "changes:size_units=kb",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/1a1a078432aeb1bd.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/0bf2e7a0e0f18a5c.png"
       }
      ]
     },
@@ -5260,7 +5266,7 @@
       {
        "token": "changes:ladder_sizes=Blank lines",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/7f9e6f232bf230b6.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/449a50283702f3d4.png"
       }
      ]
     },
@@ -5272,7 +5278,7 @@
       {
        "token": "changes:ladder_sizes=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/800efb9141f39738.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/d7657262c82adca2.png"
       }
      ]
     },
@@ -5284,7 +5290,7 @@
       {
        "token": "changes:electrode_style=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/5d438faf4bcca944.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/b97d83581c875a21.png"
       }
      ]
     },
@@ -5296,7 +5302,7 @@
       {
        "token": "changes:electrode_style=Named",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/9fd7803d291cf449.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/59c217ee5e3c3881.png"
       }
      ]
     },
@@ -5308,7 +5314,7 @@
       {
        "token": "changes:electrode_style=Blank",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/4d487a02be9727b0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/17827ab0bd3a314e.png"
       }
      ]
     },
@@ -5320,7 +5326,7 @@
       {
        "token": "changes:electrode_style=None",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/5d438faf4bcca944.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/b97d83581c875a21.png"
       }
      ]
     },
@@ -5332,7 +5338,7 @@
       {
        "token": "changes:ruler=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/6844490588550184.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/541b586a09d75005.png"
       }
      ]
     },
@@ -5344,7 +5350,7 @@
       {
        "token": "changes:title=Crime scene gel",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/b5cbab7f46229cea.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/1448e029f35a1751.png"
       }
      ]
     },
@@ -5356,7 +5362,7 @@
       {
        "token": "changes:answer=true",
        "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/50f23a98f45c2175.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/7728f0a963c6f25a.png"
       }
      ]
     }

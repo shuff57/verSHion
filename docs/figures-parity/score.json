@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-12T02:14:49+00:00",
- "probe_checked_at": "2026-11-11T18:14:49",
+ "generated_at": "2026-11-12T03:16:04+00:00",
+ "probe_checked_at": "2026-11-11T19:16:04",
  "comparable": true,
  "drift": [],
  "pooled": 99.4,
@@ -131,19 +131,11 @@
    "gaps": []
   },
   "gel-electrophoresis": {
-   "score": 96.7,
-   "got": 87.0,
+   "score": 100.0,
+   "got": 90.0,
    "total": 90.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-03c",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Leave a sample lane blank for students, with its bands kept for the answer key",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "half-life-graph": {
    "score": 100.0,

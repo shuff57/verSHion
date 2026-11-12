@@ -1,0 +1,37 @@
+{
+ "round": 373,
+ "figure": "gel-electrophoresis",
+ "capability": "cap-03c",
+ "hypothesis": "Batch 9 gel-electrophoresis: cap-03c; evidence lane 3 left blank for students",
+ "started_at": "2026-11-11T19:16:03",
+ "git": "60d8bc0",
+ "before": {
+  "figure": 96.7,
+  "pooled": 99.4
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-11T19:16:04",
+ "after": {
+  "figure": 100.0,
+  "pooled": 99.4
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:blank_lanes=3",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/gel-electrophoresis/bf381a2a40b2b97f.png"
+   }
+  ]
+ },
+ "checker": "pass on the second check (NAS): a blanked lane is empty on the student copy and outlined with its bands on the key over 432 pairs; 720 old Student + key pairs built from the old commit match byte for byte",
+ "result": "hit",
+ "evidence": "versions_b9, answer_rule, gel tests (49 with popdyn and projectile) incl. gel_student_and_key_pairs_are_the_old_pairs; gel freeze fixture unchanged since first written; full suite 5,208 passed on the NAS",
+ "next": "population-growth cap-05e (inflection blank line far from its point: back with the builder); pulley cap-06e check; punnett-square, pedigree, free-body-diagram check; vector-diagram, cylinder fixes"
+}

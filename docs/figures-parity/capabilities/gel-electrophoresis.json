@@ -70,8 +70,8 @@
    "id": "cap-03c",
    "text": "Leave a sample lane blank for students, with its bands kept for the answer key",
    "class": "version",
-   "evidence": "",
-   "note": "An empty lane can be typed, but its bands are then gone; there is no per-lane blank that keeps the answer."
+   "evidence": "changes:blank_lanes=3",
+   "note": "Built in batch 10, round 373 (2026-11-11). An empty lane can be typed, but its bands are then gone; there is no per-lane blank that keeps the answer."
   },
   {
    "id": "cap-04",

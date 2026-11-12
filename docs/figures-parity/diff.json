@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-12T02:14:49+00:00",
+ "generated_at": "2026-11-12T03:16:04+00:00",
  "spec_generated_at": "2026-11-08T05:54:07+00:00",
  "figures": [
   {
@@ -5678,15 +5678,15 @@
     "size_units",
     "electrode_style",
     "answer_kind",
-    "show_answers",
     "blank_lanes"
    ],
-   "param_count": 20,
+   "param_count": 19,
    "handles": 17,
    "label_drag": false,
-   "show_answers": true,
+   "show_answers": false,
    "style": false,
    "interaction_gaps": [
+    "reference has a student version; ours has no show_answers",
     "reference has black-and-white; ours has no style switch"
    ]
   },
@@ -6324,7 +6324,7 @@
     "label_size"
    ],
    "param_count": 24,
-   "handles": 3,
+   "handles": 7,
    "label_drag": false,
    "show_answers": false,
    "style": false,
