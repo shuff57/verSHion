@@ -10,6 +10,7 @@
 use super::*;
 
 mod family;
+mod classics_b11;
 #[cfg(test)]
 mod legacy;
 
@@ -834,25 +835,28 @@ pub fn render(p: &Params) -> String {
 }
 
 /// "Start from an example" entries (reference gallery, on our seeded families).
-/// The reference's "Classic setups" dropdown: the disease, its inheritance, allele letter and
-/// title (the reference also fixes the family; ours keeps the generated family, and "New
-/// pedigree" draws another).
+/// The reference's "Classic setups" dropdown: the disease, its inheritance, allele letter and title, and a fixed
+/// family whose marks follow that inheritance (`classics_b11`), loaded as a family changed by hand so every person
+/// stays editable; "New pedigree" draws a random family instead.
 pub fn classics() -> Vec<Example> {
     let st = |v: &str| Value::S(v.into());
-    let setup = |name, mode: &str, letter: &str, title: &str| Example {
-        name,
-        params: vec![("inherit", st(mode)), ("allele_letter", st(letter)), ("title", st(title))],
-    };
-    let mut royal = setup("Hemophilia, royal family", "X-linked recessive", "H", "Hemophilia in a royal family");
-    royal.params.extend([("gens", Value::I(4)), ("size", st("Large"))]);
-    vec![
-        royal,
-        setup("Huntington’s disease", "Autosomal dominant", "H", "Huntington’s disease"),
-        setup("Cystic fibrosis", "Autosomal recessive", "F", "Cystic fibrosis"),
-        setup("Albinism", "Autosomal recessive", "A", "Albinism"),
-        setup("Red–green color blindness", "X-linked recessive", "B", "Red–green color blindness"),
-        setup("Vitamin D–resistant rickets", "X-linked dominant", "R", "Vitamin D–resistant rickets"),
-    ]
+    classics_b11::FAMILIES
+        .iter()
+        .map(|&(name, inherit, letter, title, carriers, fam)| {
+            let gens = Family::parse(fam).map(|f| f.depth()).unwrap_or(3) as i64;
+            Example {
+                name,
+                params: vec![
+                    ("inherit", st(inherit)),
+                    ("allele_letter", st(letter)),
+                    ("title", st(title)),
+                    ("carrier_style", st(carriers)),
+                    ("gens", Value::I(gens)),
+                    ("family", st(fam)),
+                ],
+            }
+        })
+        .collect()
 }
 
 pub fn examples() -> Vec<Example> {
@@ -976,7 +980,9 @@ mod tests {
                 }
             }
         }
-        for ex in examples().into_iter().chain(classics()) {
+        // (the classic setups load a family set by hand since batch 11, which the legacy renderer never drew; the old
+        // generated classics are pinned in last_b11_frozen)
+        for ex in examples() {
             let p = params_with(&ex.params);
             assert_eq!(content(&render(&p)), content(&legacy::legacy_render(&p)), "{}", ex.name);
         }

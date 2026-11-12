@@ -5072,6 +5072,7 @@ impl crate::App {
 
 #[cfg(test)]
 mod tests {
+    mod last_b11;
     use super::*;
 
     // (batch 7: the coordinate grid's workspace tests, in their own file, src/figuresui/tests/grid_b7_ui_tests.rs)
