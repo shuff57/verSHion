@@ -304,6 +304,49 @@ pub const STEPS: [(&str, &str); 4] = [
 /// two lines with the short STEPS copy (at 920 the old copy wrapped to five).
 const STEPS_W: f32 = 1000.0;
 
+/// The welcome lead's measure on a wide window (changed in round 28, C1): 440 pt holds about 60
+/// characters a line at HERO_LEAD, so the one sentence runs to three lines. At round 27's 620 it
+/// ran about 85 a line, which two judges read as slow to scan. 620 restores the old two lines.
+const HERO_LEAD_W: f32 = 440.0;
+/// The welcome lead's measure at 760 (unchanged in round 28).
+const HERO_LEAD_W_NARROW: f32 = 560.0;
+
+/// "How it works" sits flush left on the edge the hero and the steps card share (changed in round
+/// 28, C2): centred, it floated off that edge (the critics' words). `false` centres it again.
+const STEPS_HEADING_LEFT: bool = true;
+
+/// The welcome page's one-sentence lead, in softened ink, wrapped to `w`. Returns its response.
+fn hero_lead(ui: &mut egui::Ui, roomy: bool, w: f32) -> egui::Response {
+    // The one sentence that explains the product, in softened ink: the pale tan was the hardest
+    // text on the page to read.
+    let size = if roomy { crate::kit::ty::HERO_LEAD } else { crate::kit::ty::HERO_LEAD_NARROW };
+    ui.allocate_ui_with_layout(Vec2::new(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+        ui.set_width(w);
+        ui.label(RichText::new(HERO_LEAD_TEXT).size(size).color(theme::ink().gamma_multiply(0.82)));
+    })
+    .response
+}
+
+const HERO_LEAD_TEXT: &str = "PDFs, scans, screenshots, old Word documents, questions you type \
+                              yourself: verSHion gathers them into Question Banks and lays \
+                              them out as a clean, printable exam.";
+
+/// "How it works" and its steps card in the column `ui` was given. Returns (heading, card).
+fn steps_section(ui: &mut egui::Ui, col_w: f32) -> (Rect, Rect) {
+    // A real section heading: as a small-caps caption the four steps had no title.
+    let heading = theme::serif("How it works").size(crate::kit::ty::SECTION);
+    let head = if STEPS_HEADING_LEFT {
+        ui.label(heading).rect
+    } else {
+        ui.vertical_centered(|ui| ui.label(heading).rect).inner
+    };
+    ui.add_space(10.0);
+    // Four columns while the strip itself is at least 1000 wide, else one column of rows: decided
+    // on the strip's width, never on a measured text column.
+    let card = steps_panel(ui, col_w >= STEPS_W);
+    (head, card)
+}
+
 /// One numbered how-it-works card.
 /// One step as a column of the welcome panel: the numbered disc, the title, the body.
 /// A patch of `fill` over `core` whose edge fades to nothing across `feather` (x and y apart), so
@@ -1201,21 +1244,11 @@ impl crate::App {
                 };
                 // The rest of the hero's text, top to bottom, flush left in its column.
                 let mut hero_text = |ui: &mut egui::Ui, hero: &mut Rect| {
-                    let lead_w = ui.available_width().min(if roomy { 620.0 } else { 560.0 });
                     // Narrower than the step column below it at every width (the critics read a lead
-                    // running wider than the cards as a page with no single column edge), and about
-                    // 80 characters a line.
-                    // The one sentence that explains the product, in softened ink: the pale tan was
-                    // the hardest text on the page to read.
-                    let lead_text = "PDFs, scans, screenshots, old Word documents, questions you type \
-                                     yourself: verSHion gathers them into Question Banks and lays \
-                                     them out as a clean, printable exam.";
-                    let r = ui.allocate_ui_with_layout(Vec2::new(lead_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        ui.set_width(lead_w);
-                        let size = if roomy { crate::kit::ty::HERO_LEAD } else { crate::kit::ty::HERO_LEAD_NARROW };
-                        ui.label(RichText::new(lead_text).size(size).color(theme::ink().gamma_multiply(0.82)));
-                    });
-                    *hero |= r.response.rect;
+                    // running wider than the cards as a page with no single column edge); about 60
+                    // characters a line on a wide window (round 28).
+                    let lead_w = ui.available_width().min(if roomy { HERO_LEAD_W } else { HERO_LEAD_W_NARROW });
+                    *hero |= hero_lead(ui, roomy, lead_w).rect;
                     ui.add_space(if roomy { 28.0 } else { 22.0 });
                     // A returning teacher is not a first-run visitor: the button goes back to work,
                     // and a second way in sits beside it. A first run names where the button leads:
@@ -1346,14 +1379,7 @@ impl crate::App {
                 let left = ui.max_rect().center().x - col_w / 2.0;
                 let area = egui::Rect::from_min_size(egui::pos2(left, top), Vec2::new(col_w, ui.available_height().max(0.0)));
                 ui.scope_builder(UiBuilder::new().max_rect(area), |ui| {
-                    ui.vertical_centered(|ui| {
-                        // A real section heading: as a small-caps caption the four steps had no title.
-                        ui.label(theme::serif("How it works").size(crate::kit::ty::SECTION));
-                    });
-                    ui.add_space(10.0);
-                    // Four columns while the strip itself is at least 1000 wide, else one column of
-                    // rows: decided on the strip's width, never on a measured text column.
-                    let _ = steps_panel(ui, col_w >= STEPS_W);
+                    let _ = steps_section(ui, col_w);
                 });
                 let measured = ui.cursor().top() - block_top - extra;
                 if block_h.is_none_or(|h| (h - measured).abs() > 0.5) {
@@ -3780,6 +3806,78 @@ mod tests {
                 let old_h = *o.state();
                 assert!(panel.height() <= old_h + 0.5, "desktop panel {} tall, round 26's {old_h}", panel.height());
             }
+        }
+    }
+
+    /// Round 28, C1: on a wide window the welcome lead is one label with the whole sentence, its
+    /// lines no wider than the cap, about 60 characters each (at most 65), three lines.
+    #[test]
+    fn the_welcome_lead_keeps_a_short_measure_at_desktop() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        let mut first = true;
+        let mut h = Harness::builder().with_size(egui::vec2(800.0, 400.0)).build_ui_state(
+            move |ui, out: &mut (Rect, Vec<(f32, usize)>)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let r = hero_lead(ui, true, 660.0_f32.min(HERO_LEAD_W));
+                // The same wrap the label used, read line by line.
+                let g = ui.ctx().fonts_mut(|f| {
+                    let mut job = egui::text::LayoutJob::simple(
+                        HERO_LEAD_TEXT.to_owned(),
+                        egui::FontId::proportional(crate::kit::ty::HERO_LEAD),
+                        Color32::WHITE,
+                        HERO_LEAD_W,
+                    );
+                    job.wrap.max_width = HERO_LEAD_W;
+                    f.layout_job(job)
+                });
+                let lines = g.rows.iter().map(|row| (row.rect().width(), row.glyphs.len())).collect();
+                *out = (r.rect, lines);
+            },
+            (Rect::NOTHING, Vec::new()),
+        );
+        h.run();
+        let node = h.get_by_label(HERO_LEAD_TEXT);
+        let (rect, lines) = h.state().clone();
+        assert!(node.rect().width() <= HERO_LEAD_W + 0.5, "the lead label is {} wide", node.rect().width());
+        assert!(rect.width() <= HERO_LEAD_W + 0.5);
+        assert_eq!(lines.len(), 3, "three lines: {lines:?}");
+        for (w, n) in &lines {
+            assert!(*w <= HERO_LEAD_W + 0.5, "a line {w} wide");
+            assert!(*n <= 65, "a line of {n} characters");
+        }
+        assert!(lines[0].1 >= 50, "the first line is a full measure: {lines:?}");
+    }
+
+    /// Round 28, C2: the "How it works" heading starts on the steps card's left edge, at desktop
+    /// (a 1000 strip) and at 760 (a 640 strip), and sits above the card as before.
+    #[test]
+    fn how_it_works_heading_is_flush_with_the_steps_card() {
+        use egui_kittest::Harness;
+        for w in [STEPS_W, NARROW_STEPS_W] {
+            let mut first = true;
+            let mut h = Harness::builder().with_size(egui::vec2(w + 200.0, 900.0)).build_ui_state(
+                move |ui, out: &mut (Rect, Rect)| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    let area = Rect::from_min_size(Pos2::new(100.0, 20.0), Vec2::new(w, 860.0));
+                    ui.scope_builder(UiBuilder::new().max_rect(area), |ui| {
+                        *out = steps_section(ui, w);
+                    });
+                },
+                (Rect::NOTHING, Rect::NOTHING),
+            );
+            h.run();
+            let (head, card) = *h.state();
+            assert!((head.left() - card.left()).abs() < 0.5, "{w}: heading at {} and card at {}", head.left(), card.left());
+            assert_eq!(card.left(), 100.0, "{w}: the card keeps its column edge");
+            assert!(head.bottom() + 10.0 <= card.top() + 0.5 && head.top() == 20.0, "{w}: heading above the card");
         }
     }
 

@@ -2169,7 +2169,7 @@ fn empty_bank_strip(ui: &mut Ui) {
                             ui.with_layout(Layout::top_down(Align::Min), |ui| {
                                 strip_title(ui, i);
                                 ui.add_space(6.0);
-                                strip_body(ui, i);
+                                strip_body(ui, i, 2);
                             });
                         });
                     }
@@ -2180,8 +2180,10 @@ fn empty_bank_strip(ui: &mut Ui) {
                     ui.painter().vline(x, r.top() + 2.0..=r.bottom() - 2.0, rule);
                 }
             } else {
-                // Rows: the title in a fixed column, its text beside it, a hairline between rows.
-                let title_w = 210.0_f32.min(ui.available_width() * 0.4);
+                // Rows: the titles in a column as wide as the widest title (round 28: a fixed 210 pt
+                // share left a dead gap and squeezed the texts), its text 24 pt beside it, a
+                // hairline between rows.
+                let title_w = strip_title_width(ui).min(ui.available_width() * 0.4);
                 for i in 0..3 {
                     if i > 0 {
                         ui.add_space(12.0);
@@ -2190,7 +2192,7 @@ fn empty_bank_strip(ui: &mut Ui) {
                         ui.add_space(13.0);
                     }
                     ui.horizontal_top(|ui| {
-                        ui.spacing_mut().item_spacing.x = 12.0;
+                        ui.spacing_mut().item_spacing.x = STRIP_TITLE_GAP;
                         ui.allocate_ui_with_layout(Vec2::new(title_w, 0.0), Layout::top_down(Align::Min), |ui| {
                             ui.set_width(title_w);
                             strip_title(ui, i);
@@ -2198,13 +2200,31 @@ fn empty_bank_strip(ui: &mut Ui) {
                         let bw = ui.available_width();
                         ui.allocate_ui_with_layout(Vec2::new(bw, 0.0), Layout::top_down(Align::Min), |ui| {
                             ui.set_width(bw);
-                            // the body's first line on the title's (both 20 tall since round 24)
-                            strip_body(ui, i);
+                            // the body's first line on the title's (both 20 tall since round 24);
+                            // the six types three across where they fit (round 28)
+                            strip_body(ui, i, 3);
                         });
                     });
                 }
             }
         });
+}
+
+/// The gap between the narrow strip's title column and its texts.
+const STRIP_TITLE_GAP: f32 = 24.0;
+/// A strip title's glyph slot width, and the gap between it and the title's words.
+const STRIP_ICON_W: f32 = 16.0;
+const STRIP_ICON_GAP: f32 = 6.0;
+
+/// The width of the widest strip title as [`strip_title`] draws it: glyph, gap, title.
+fn strip_title_width(ui: &Ui) -> f32 {
+    EMPTY_STRIP
+        .iter()
+        .map(|(_, title, _)| {
+            let g = ui.painter().layout_no_wrap(title.to_string(), egui::FontId::new(kit::ty::BODY, theme::semibold()), theme::ink());
+            STRIP_ICON_W + STRIP_ICON_GAP + g.size().x.ceil()
+        })
+        .fold(0.0_f32, f32::max)
 }
 
 /// A strip part's title in the small label tier (round 24: the 17 pt serif card title made the
@@ -2213,24 +2233,25 @@ fn empty_bank_strip(ui: &mut Ui) {
 fn strip_title(ui: &mut Ui, i: usize) {
     let (icon, title, _) = EMPTY_STRIP[i];
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, 20.0), Sense::hover());
+        ui.spacing_mut().item_spacing.x = STRIP_ICON_GAP;
+        let (r, _) = ui.allocate_exact_size(Vec2::new(STRIP_ICON_W, 20.0), Sense::hover());
         crate::handicons::paint_glyph(ui.painter(), r.center(), icon, kit::ty::BODY, theme::muted_col());
         ui.add(egui::Label::new(RichText::new(title).font(egui::FontId::new(kit::ty::BODY, theme::semibold())).color(theme::ink()).line_height(Some(20.0))).wrap());
     });
 }
 
 /// A strip part's text: BODY in `text`; the first part lists the six types, each with the swatch
-/// its tiles' key and bar use, in the bar's order.
-fn strip_body(ui: &mut Ui, i: usize) {
+/// its tiles' key and bar use, in the bar's order, in at most `max_cols` columns.
+fn strip_body(ui: &mut Ui, i: usize, max_cols: usize) {
     if i > 0 {
         ui.add(egui::Label::new(RichText::new(EMPTY_STRIP[i].2).size(kit::ty::BODY).color(theme::text_col()).line_height(Some(20.0))).wrap());
         return;
     }
     let mut kinds = crate::bankops::KINDS;
     kinds.sort_by_key(|k| mix_index(*k));
-    // An aligned grid, two columns of three in the bar's order read across, every name starting on
-    // its column's x (one column if two will not fit); the same grid at every width.
+    // An aligned grid in the bar's order read across, every name starting on its column's x: two
+    // columns of three in the wide strip's part, three of two in the narrow strip's row (round 28),
+    // fewer columns where those will not fit.
     const SW: f32 = 9.0;
     const SGAP: f32 = 6.0;
     const COL_GAP: f32 = 24.0;
@@ -2242,7 +2263,8 @@ fn strip_body(ui: &mut Ui, i: usize) {
         .map(|t| egui::WidgetText::from(t.clone()).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Body).size().x.ceil())
         .collect();
     let item_w = SW + SGAP + name_w.iter().copied().fold(0.0_f32, f32::max);
-    let cols = if 2.0 * item_w + COL_GAP <= ui.available_width() { 2 } else { 1 };
+    let avail = ui.available_width();
+    let cols = (1..=max_cols).rev().find(|&c| c as f32 * item_w + (c as f32 - 1.0) * COL_GAP <= avail).unwrap_or(1);
     let rows = kinds.len().div_ceil(cols);
     let (area, _) = ui.allocate_exact_size(Vec2::new(cols as f32 * item_w + (cols as f32 - 1.0) * COL_GAP, rows as f32 * ROW_H + (rows as f32 - 1.0) * ROW_GAP), Sense::hover());
     for (n, (k, text)) in kinds.iter().zip(texts).enumerate() {
@@ -5291,31 +5313,37 @@ mod tests {
         assert!((pair_mid - body.center().x).abs() <= 2.0, "the buttons centred under the sentence: {pair_mid} vs {}", body.center().x);
     }
 
-    /// "Six question types": the six names in two columns of three, in the bar's order read
-    /// across, the names of a column starting on one x and a row's names on one line, each name
-    /// its own label, all inside the first part of the strip (under its title, before the next
-    /// part), at both widths.
+    /// "Six question types": the six names in an aligned grid in the bar's order read across,
+    /// two columns of three in the wide strip and three of two in the narrow one (round 28), the
+    /// names of a column starting on one x and a row's names on one line, each name its own
+    /// label, all inside the first part of the strip (under its title, before the next part), at
+    /// both widths.
     #[test]
     fn the_six_types_form_an_aligned_grid() {
         use egui_kittest::kittest::Queryable;
         let mut kinds = crate::bankops::KINDS;
         kinds.sort_by_key(|k| mix_index(*k));
-        for w in [1110.0, 615.0] {
+        for (w, cols) in [(1110.0, 2), (615.0, 2), (678.0, 3)] {
+            let rows = 6 / cols;
             let mut h = bank_page_harness(w);
             h.run();
             let rects: Vec<Rect> = kinds.iter().map(|k| h.get_by_label(k.label()).rect()).collect();
-            for row in 0..3 {
-                let (a, b) = (rects[row * 2], rects[row * 2 + 1]);
-                assert!((a.center().y - b.center().y).abs() <= 0.5, "{w}: row {row} on one line: {a:?} {b:?}");
-                assert!(a.right() < b.left(), "{w}: row {row} left then right, apart: {a:?} {b:?}");
+            for row in 0..rows {
+                for c in 1..cols {
+                    let (a, b) = (rects[row * cols + c - 1], rects[row * cols + c]);
+                    assert!((a.center().y - b.center().y).abs() <= 0.5, "{w}: row {row} on one line: {a:?} {b:?}");
+                    assert!(a.right() < b.left(), "{w}: row {row} left then right, apart: {a:?} {b:?}");
+                }
                 if row > 0 {
-                    assert!(rects[row * 2 - 2].bottom() <= a.top() + 0.5, "{w}: row {row} under the row before");
+                    for c in 0..cols {
+                        assert!(rects[(row - 1) * cols + c].bottom() <= rects[row * cols].top() + 0.5, "{w}: row {row} under the row before");
+                    }
                 }
             }
-            for col in 0..2 {
+            for col in 0..cols {
                 let x = rects[col].left();
-                for row in 1..3 {
-                    assert!((rects[row * 2 + col].left() - x).abs() <= 0.5, "{w}: column {col} shares its x at row {row}: {:?} vs {x}", rects[row * 2 + col]);
+                for row in 1..rows {
+                    assert!((rects[row * cols + col].left() - x).abs() <= 0.5, "{w}: column {col} shares its x at row {row}: {:?} vs {x}", rects[row * cols + col]);
                 }
             }
             let title = h.get_by_label("Six question types").rect();
@@ -5329,6 +5357,48 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// At 760 (a 678 page: the window less the dock) the narrow strip's title column is as wide as its widest title: each
+    /// text and the type grid start about 24 pt after that title's end (round 28: a fixed 210 pt
+    /// column left a dead gap), the texts take the freed width without overlapping or leaving
+    /// the strip, and the strip is shorter than round 27's (title top to last text bottom 218 pt,
+    /// measured on that build).
+    #[test]
+    fn the_narrow_strip_sizes_its_titles_to_the_widest() {
+        use egui_kittest::kittest::Queryable;
+        let w = 678.0;
+        let mut h = bank_page_harness(w);
+        h.run();
+        let titles: Vec<Rect> = EMPTY_STRIP.iter().map(|(_, t, _)| h.get_by_label(t).rect()).collect();
+        let widest = titles.iter().map(|r| r.right()).fold(f32::MIN, f32::max);
+        let mut kinds = crate::bankops::KINDS;
+        kinds.sort_by_key(|k| mix_index(*k));
+        let types: Vec<Rect> = kinds.iter().map(|k| h.get_by_label(k.label()).rect()).collect();
+        // the grid's first swatch sits 15 pt before its name
+        let grid_left = types[0].left() - 15.0;
+        let bodies: Vec<Rect> = [EMPTY_STRIP[1].2, EMPTY_STRIP[2].2].iter().map(|b| h.get_by_label(b).rect()).collect();
+        for left in std::iter::once(grid_left).chain(bodies.iter().map(|b| b.left())) {
+            let gap = left - widest;
+            assert!((20.0..=28.0).contains(&gap), "content starts about 24 pt after the widest title: gap {gap}");
+        }
+        assert!((bodies[0].left() - grid_left).abs() <= 0.5 && (bodies[1].left() - grid_left).abs() <= 0.5, "one content column: {bodies:?} {grid_left}");
+        // nothing overlaps: titles left of their content, rows apart, everything inside the page
+        let all: Vec<Rect> = titles.iter().chain(&types).chain(&bodies).copied().collect();
+        for (a, ra) in all.iter().enumerate() {
+            assert!(ra.left() >= 0.0 && ra.right() <= w + 0.5 && ra.bottom() <= 800.0, "inside the window: {ra:?}");
+            for rb in &all[a + 1..] {
+                assert!(!ra.shrink(0.5).intersects(rb.shrink(0.5)), "no overlap: {ra:?} {rb:?}");
+            }
+        }
+        for t in &titles {
+            assert!(t.right() < grid_left, "title in its column: {t:?}");
+        }
+        assert!(types.iter().all(|r| r.bottom() < titles[1].top()) && bodies[0].bottom() < titles[2].top(), "rows in order, apart");
+        // each title fits whole: as tall as one line
+        assert!(titles.iter().all(|r| r.height() <= 20.5), "titles on one line: {titles:?}");
+        let span = bodies[1].bottom() - titles[0].top();
+        assert!(span < 218.0, "the strip is shorter than round 27's 218 pt: {span}");
     }
 
 }

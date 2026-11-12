@@ -886,19 +886,18 @@ const FORMAT_HEAD_GAP: f32 = 6.0;
 /// The widest gap between blocks when they share one row and the panel has room to spare
 /// (two and a half times [`FORMAT_BLOCK_GAP`]); past it the group stays left-aligned.
 const FORMAT_SPREAD_GAP: f32 = FORMAT_BLOCK_GAP * 2.5;
-/// Space between one row of group blocks and the row under it (the 760 layout).
-const FORMAT_ROW_GAP: f32 = 12.0;
 /// Space between the panel's heading (and its sentence) and the first group headings.
 const FORMAT_INTRO_BELOW: f32 = 14.0;
 /// Clear room between "WHAT IT READS" and its sentence when they share a line.
 const FORMAT_INTRO_GAP: f32 = 24.0;
 
-/// What the importer reads, by group: the group's label, its format names, and how many columns
-/// its names take in its block (each a near-square block).
-const FORMAT_GROUPS: [(&str, &[&str], usize); 3] = [
-    ("Documents", &["PDF", "Word", "Photos of a worksheet", "Pasted text"], 2),
-    ("Spreadsheets", &["Excel", "CSV"], 1),
-    ("Quiz tools", &["Respondus", "Canvas QTI", "Blackboard", "Moodle XML", "GIFT", "Aiken", "Kahoot", "Quizlet", "Test Parrot .json"], 3),
+/// What the importer reads, by group: the group's label and its format names, in order.
+/// In the 760 band Documents and Spreadsheets take one column each and Quiz tools the rest of
+/// the grid; on the desktop each group is a block of [`FORMAT_BLOCK_COLS`] columns.
+const FORMAT_GROUPS: [(&str, &[&str]); 3] = [
+    ("Documents", &["PDF", "Word", "Photos of a worksheet", "Pasted text"]),
+    ("Spreadsheets", &["Excel", "CSV"]),
+    ("Quiz tools", &["Respondus", "Canvas QTI", "Blackboard", "Moodle XML", "GIFT", "Aiken", "Kahoot", "Quizlet", "Test Parrot .json"]),
 ];
 
 /// How many format columns of `col_w` (the longest name) fit in `width` with a `gap` between two
@@ -906,6 +905,10 @@ const FORMAT_GROUPS: [(&str, &[&str], usize); 3] = [
 fn format_cols(width: f32, col_w: f32, gap: f32) -> usize {
     (((width + gap) / (col_w + gap)).floor() as usize).max(1)
 }
+
+/// How many columns each group's names take in its block on the desktop (each a near-square
+/// block): Documents two by two, Spreadsheets one column, Quiz tools three by three.
+const FORMAT_BLOCK_COLS: [usize; 3] = [2, 1, 3];
 
 /// The x of each side-by-side group block in a panel `inner` wide, given each block's own width
 /// (its columns at content width), and the x of the hairline midway in each gap; `None` when the
@@ -936,7 +939,8 @@ fn format_blocks(inner: f32, widths: &[f32], max_gap: f32) -> Option<(Vec<f32>, 
 /// The rows of group blocks for a panel `inner` wide: all groups on one row when they fit, else
 /// the first two side by side over the last on a row of its own (Documents and Spreadsheets over
 /// Quiz tools); `None` when even that does not fit. One row shares the spare room out between
-/// its blocks (up to [`FORMAT_SPREAD_GAP`]); two rows sit packed left.
+/// its blocks (up to [`FORMAT_SPREAD_GAP`]); two rows sit packed left. Since round 28 the panel
+/// draws only the one-row answer; where the blocks need two rows it draws the 760 band instead.
 fn format_rows(inner: f32, widths: &[f32]) -> Option<Vec<std::ops::Range<usize>>> {
     let n = widths.len();
     if format_blocks(inner, widths, FORMAT_BLOCK_GAP).is_some() {
@@ -944,6 +948,45 @@ fn format_rows(inner: f32, widths: &[f32]) -> Option<Vec<std::ops::Range<usize>>
     }
     let rows = vec![0..n - 1, n - 1..n];
     rows.iter().all(|r| format_blocks(inner, &widths[r.clone()], FORMAT_BLOCK_GAP).is_some()).then_some(rows)
+}
+
+/// The one shared column grid of a panel `inner` wide whose columns must each hold `widest`
+/// (the longest name or heading): Documents and Spreadsheets one column each and Quiz tools
+/// three columns, or two where three do not fit. Equal columns across the full width, with equal
+/// gaps of [`FORMAT_COL_GAP`] to [`FORMAT_BLOCK_GAP`] and a hairline midway in the gap between
+/// two groups. Returns Quiz tools' column count, each column's x, each column's width and each
+/// hairline's x; `None` when even two Quiz tools columns do not fit.
+fn format_grid(inner: f32, widest: f32) -> Option<(usize, Vec<f32>, Vec<f32>, Vec<f32>)> {
+    [3_usize, 2].into_iter().find_map(|quiz| {
+        let n = 2 + quiz;
+        let gap = ((inner - n as f32 * widest) / (n - 1) as f32).min(FORMAT_BLOCK_GAP);
+        if gap < FORMAT_COL_GAP {
+            return None;
+        }
+        let col = (inner - gap * (n - 1) as f32) / n as f32;
+        let xs: Vec<f32> = (0..n).map(|i| (i as f32 * (col + gap)).round()).collect();
+        let ws = (0..n).map(|c| xs.get(c + 1).map_or(inner, |x| x - gap) - xs[c]).collect();
+        let rules = vec![xs[1] - gap / 2.0, xs[2] - gap / 2.0];
+        Some((quiz, xs, ws, rules))
+    })
+}
+
+/// Each group's first column in a grid where Quiz tools takes `quiz` columns, and each name's
+/// (column, line) inside the grid: Documents and Spreadsheets down their one column, Quiz tools
+/// down its columns in turn (each column read top to bottom, as the other groups are).
+fn format_cells(quiz: usize) -> Vec<(usize, Vec<(usize, usize)>)> {
+    let mut first = 0;
+    FORMAT_GROUPS
+        .iter()
+        .map(|(_, items)| {
+            let cols = if first < 2 { 1 } else { quiz };
+            let lines = items.len().div_ceil(cols);
+            let cells = (0..items.len()).map(|i| (first + i / lines, i % lines)).collect();
+            let at = first;
+            first += cols;
+            (at, cells)
+        })
+        .collect()
 }
 
 /// One cell of text (one AccessKit node a format or group heading).
@@ -965,15 +1008,18 @@ fn format_head(t: &str) -> egui::RichText {
 }
 
 /// What the importer can read, grouped so a teacher can scan for their tool instead of
-/// picking a format out of one long line. Each group is a block: its semibold heading over its
-/// own small grid, each column as wide as its longest name (Documents two by two, Spreadsheets
-/// one column, Quiz tools three by three), each block as wide as its content, left-aligned, a hairline in the one gap
-/// between two blocks and every line on one shared pitch. Wide, the three blocks share one row;
-/// at 760 Documents and Spreadsheets share a row over Quiz tools. Narrower still, the headings
-/// make a left column and every group's names share the same equal columns, as many as fit.
-/// Never a name cut or abbreviated. Plain text on purpose: these are what the importer reads,
-/// not things to press, so the only button-shaped things on the page are Choose files, Paste
-/// text and Add photo.
+/// picking a format out of one long line. Wide (the desktop), each group is a block: its
+/// semibold heading over its own small grid, each column as wide as its longest name (Documents
+/// two by two, Spreadsheets one column, Quiz tools three by three), the three blocks on one row,
+/// the spare room in equal gaps between them with a hairline in each, every line on one shared
+/// pitch. Where the three blocks do not fit on one row (760), one band on one grid of equal
+/// columns across the card's full width: Documents one column of four, Spreadsheets one column
+/// of two, Quiz tools the remaining columns, each column read top down, every name under its own
+/// heading, a hairline midway in the gap between two groups (changed in round 28: this was two
+/// rows of blocks). Narrower than that band allows, the headings make a left column and every
+/// group's names share the same equal columns, as many as fit. Never a name cut or abbreviated.
+/// Plain text on purpose: these are what the importer reads, not things to press, so the only
+/// button-shaped things on the page are Choose files, Paste text and Add photo.
 fn formats_panel(ui: &mut egui::Ui) {
     kit::card().inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -1013,47 +1059,69 @@ fn formats_panel(ui: &mut egui::Ui) {
         let line_h = ui.fonts_mut(|f| f.row_height(&font));
         let pitch = line_h + FORMAT_LINE_GAP;
 
-        // Blocks sized to their content: each column as wide as its own longest name, so a block
-        // ends where its widest line ends. Per block: each column's x, and the block's width.
+        // Desktop (round 27's layout, kept in round 28): blocks sized to their content, each
+        // column as wide as its own longest name, so a block ends where its widest line ends.
+        // Per block: each column's x, and the block's width.
         let blocks: Vec<(Vec<f32>, f32)> = FORMAT_GROUPS
             .iter()
-            .map(|(group, items, cols)| {
+            .zip(FORMAT_BLOCK_COLS)
+            .map(|((group, items), cols)| {
                 let mut xs = Vec::new();
                 let mut x = 0.0;
-                for c in 0..*cols {
+                for c in 0..cols {
                     xs.push(x);
-                    x += items.iter().skip(c).step_by(*cols).map(|t| name_w(t)).fold(0.0_f32, f32::max) + FORMAT_COL_GAP;
+                    x += items.iter().skip(c).step_by(cols).map(|t| name_w(t)).fold(0.0_f32, f32::max) + FORMAT_COL_GAP;
                 }
                 let grid = x - FORMAT_COL_GAP;
                 (xs, grid.max(head_w(group)))
             })
             .collect();
         let widths: Vec<f32> = blocks.iter().map(|b| b.1).collect();
-        if let Some(rows) = format_rows(inner, &widths) {
-            let spread = rows.len() == 1;
-            for (ri, range) in rows.into_iter().enumerate() {
-                if ri > 0 {
-                    ui.add_space(FORMAT_ROW_GAP);
+        if format_rows(inner, &widths).is_some_and(|rows| rows.len() == 1) {
+            let (xs, rules) = format_blocks(inner, &widths, FORMAT_SPREAD_GAP).expect("format_rows checked the fit");
+            let lines = FORMAT_GROUPS.iter().zip(FORMAT_BLOCK_COLS).map(|((_, items), cols)| items.len().div_ceil(cols)).max().unwrap_or(1);
+            let h = line_h + FORMAT_HEAD_GAP + lines as f32 * pitch - FORMAT_LINE_GAP;
+            let (area, _) = ui.allocate_exact_size(Vec2::new(inner, h), Sense::hover());
+            for x in rules {
+                let x = (area.left() + x).round() + 0.5;
+                ui.painter().vline(x, area.y_range(), Stroke::new(1.0, theme::border()));
+            }
+            for (((group, items), cols), (x, (col_xs, bw))) in FORMAT_GROUPS.iter().zip(FORMAT_BLOCK_COLS).zip(xs.into_iter().zip(blocks.iter())) {
+                let left = area.left() + x;
+                format_name(ui, Rect::from_min_size(Pos2::new(left, area.top()), Vec2::new(*bw, line_h)), format_head(group));
+                let top = area.top() + line_h + FORMAT_HEAD_GAP;
+                for (i, it) in items.iter().enumerate() {
+                    let (r, c) = (i / cols, i % cols);
+                    let at = Pos2::new(left + col_xs[c], top + r as f32 * pitch);
+                    format_name(ui, Rect::from_min_size(at, Vec2::new(bw - col_xs[c], line_h)), format_text(it));
                 }
-                let groups = &FORMAT_GROUPS[range.clone()];
-                let max_gap = if spread { FORMAT_SPREAD_GAP } else { FORMAT_BLOCK_GAP };
-                let (xs, rules) = format_blocks(inner, &widths[range.clone()], max_gap).expect("format_rows checked the fit");
-                let lines = groups.iter().map(|(_, items, cols)| items.len().div_ceil(*cols)).max().unwrap_or(1);
-                let h = line_h + FORMAT_HEAD_GAP + lines as f32 * pitch - FORMAT_LINE_GAP;
-                let (area, _) = ui.allocate_exact_size(Vec2::new(inner, h), Sense::hover());
-                for x in rules {
-                    let x = (area.left() + x).round() + 0.5;
-                    ui.painter().vline(x, area.y_range(), Stroke::new(1.0, theme::border()));
-                }
-                for ((group, items, cols), (x, (col_xs, bw))) in groups.iter().zip(xs.into_iter().zip(blocks[range].iter())) {
-                    let left = area.left() + x;
-                    format_name(ui, Rect::from_min_size(Pos2::new(left, area.top()), Vec2::new(*bw, line_h)), format_head(group));
-                    let top = area.top() + line_h + FORMAT_HEAD_GAP;
-                    for (i, it) in items.iter().enumerate() {
-                        let (r, c) = (i / cols, i % cols);
-                        let at = Pos2::new(left + col_xs[c], top + r as f32 * pitch);
-                        format_name(ui, Rect::from_min_size(at, Vec2::new(bw - col_xs[c], line_h)), format_text(it));
-                    }
+            }
+            return;
+        }
+
+        // 760 (changed in round 28): one band on one grid of equal columns, every column as wide
+        // as the longest name or heading, so nothing wraps.
+        let widest = FORMAT_GROUPS
+            .iter()
+            .flat_map(|(group, items)| std::iter::once(head_w(group)).chain(items.iter().map(|t| name_w(t))))
+            .fold(0.0_f32, f32::max);
+        if let Some((quiz, xs, ws, rules)) = format_grid(inner, widest) {
+            let groups = format_cells(quiz);
+            let lines = groups.iter().flat_map(|(_, cells)| cells.iter().map(|c| c.1 + 1)).max().unwrap_or(1);
+            let h = line_h + FORMAT_HEAD_GAP + lines as f32 * pitch - FORMAT_LINE_GAP;
+            let (area, _) = ui.allocate_exact_size(Vec2::new(inner, h), Sense::hover());
+            let col_w = |c: usize| ws[c];
+            for x in rules {
+                let x = (area.left() + x).round() + 0.5;
+                ui.painter().vline(x, area.y_range(), Stroke::new(1.0, theme::border()));
+            }
+            let top = area.top() + line_h + FORMAT_HEAD_GAP;
+            for ((group, items), (first, cells)) in FORMAT_GROUPS.iter().zip(&groups) {
+                let head = Rect::from_min_size(Pos2::new(area.left() + xs[*first], area.top()), Vec2::new(col_w(*first), line_h));
+                format_name(ui, head, format_head(group));
+                for (it, (c, l)) in items.iter().zip(cells) {
+                    let at = Pos2::new(area.left() + xs[*c], top + *l as f32 * pitch);
+                    format_name(ui, Rect::from_min_size(at, Vec2::new(col_w(*c), line_h)), format_text(it));
                 }
             }
             return;
@@ -1062,9 +1130,9 @@ fn formats_panel(ui: &mut egui::Ui) {
         // Narrowest: a fixed heading column, and every group's names in the same equal columns.
         let lab_w = 104.0_f32.min(inner * 0.3);
         let rest = (inner - lab_w).max(120.0);
-        let col_w = FORMAT_GROUPS.iter().flat_map(|(_, items, _)| items.iter()).map(|t| name_w(t)).fold(0.0_f32, f32::max);
+        let col_w = FORMAT_GROUPS.iter().flat_map(|(_, items)| items.iter()).map(|t| name_w(t)).fold(0.0_f32, f32::max);
         let cols = format_cols(rest, col_w, FORMAT_COL_GAP);
-        for (gi, (group, items, _)) in FORMAT_GROUPS.into_iter().enumerate() {
+        for (gi, (group, items)) in FORMAT_GROUPS.into_iter().enumerate() {
             if gi > 0 {
                 ui.add_space(5.0);
             }
@@ -3306,6 +3374,42 @@ mod tests {
         assert_eq!(format_rows(149.0, &[100.0, 50.0, 150.0]), None);
     }
 
+    /// The grid takes three Quiz tools columns where they fit with at least the column gap,
+    /// else two, else none; equal columns from the panel's left to its right edge, a hairline
+    /// midway in each gap between two groups.
+    #[test]
+    fn format_grid_is_equal_columns_across_the_full_width() {
+        // 5 columns of 100 in 600: gaps of 25.
+        let (quiz, xs, ws, rules) = format_grid(600.0, 100.0).expect("fits");
+        assert_eq!(quiz, 3);
+        assert_eq!(xs, vec![0.0, 125.0, 250.0, 375.0, 500.0]);
+        assert_eq!(ws, vec![100.0; 5]);
+        assert_eq!(rules, vec![112.5, 237.5]);
+        // Wide: gaps stop at the block gap and the columns take the rest, equally.
+        let (quiz, xs, ws, _) = format_grid(1000.0, 100.0).unwrap();
+        assert_eq!(quiz, 3);
+        let col = (1000.0 - 4.0 * FORMAT_BLOCK_GAP) / 5.0;
+        assert!(xs.windows(2).all(|p| (p[1] - p[0] - (col + FORMAT_BLOCK_GAP)).abs() <= 1.0), "{xs:?}");
+        assert!((xs[4] + ws[4] - 1000.0).abs() < 1e-3, "the last column ends at the edge: {xs:?}");
+        // Too narrow for five: four columns (Quiz tools two).
+        assert_eq!(format_grid(595.0, 100.0).unwrap().0, 2);
+        assert_eq!(format_grid(472.0, 100.0).unwrap().0, 2);
+        assert!(format_grid(471.0, 100.0).is_none());
+    }
+
+    /// Documents and Spreadsheets fill their own column top down; Quiz tools fills its columns
+    /// in turn, each top down, keeping the order.
+    #[test]
+    fn format_cells_keep_each_group_under_its_heading() {
+        let three = format_cells(3);
+        assert_eq!(three[0], (0, vec![(0, 0), (0, 1), (0, 2), (0, 3)]));
+        assert_eq!(three[1], (1, vec![(1, 0), (1, 1)]));
+        assert_eq!(three[2].0, 2);
+        assert_eq!(three[2].1, vec![(2, 0), (2, 1), (2, 2), (3, 0), (3, 1), (3, 2), (4, 0), (4, 1), (4, 2)]);
+        let two = format_cells(2);
+        assert_eq!(two[2].1, vec![(2, 0), (2, 1), (2, 2), (2, 3), (2, 4), (3, 0), (3, 1), (3, 2), (3, 3)]);
+    }
+
     /// Renders the panel and returns each group label's and format name's rect, in order.
     fn format_rects(width: f32) -> Vec<(String, Rect)> {
         use egui_kittest::{kittest::Queryable, Harness};
@@ -3321,7 +3425,7 @@ mod tests {
         h.run();
         assert!(h.query_by_label_contains("·").is_none(), "no separator text at {width}");
         let mut out = Vec::new();
-        for (group, items, _) in FORMAT_GROUPS {
+        for (group, items) in FORMAT_GROUPS {
             out.push((group.to_string(), h.get_by_label(group).rect()));
             for n in items.iter() {
                 let r = h.get_by_label(n).rect();
@@ -3337,7 +3441,7 @@ mod tests {
     fn format_block_rects(all: &[(String, Rect)]) -> Vec<(Rect, Vec<Rect>)> {
         let mut at = 0;
         let mut out = Vec::new();
-        for (_, items, cols) in FORMAT_GROUPS {
+        for ((_, items), cols) in FORMAT_GROUPS.into_iter().zip(FORMAT_BLOCK_COLS) {
             let head = all[at].1;
             let names: Vec<Rect> = all[at + 1..at + 1 + items.len()].iter().map(|p| p.1).collect();
             at += 1 + items.len();
@@ -3407,29 +3511,120 @@ mod tests {
         }
     }
 
-    /// At 760 (a 620 pt panel): Documents and Spreadsheets side by side with one gap, Quiz tools
-    /// under them as a block of its own starting at the same left, its heading clear below the
-    /// last line above; no orphan line, each block its own grid.
+    /// The rendered grid at `width`: every heading and name is one label of its own on one
+    /// line, no two overlap, every left edge is one of the shared column starts, each name sits
+    /// under its own group's heading (inside the group's columns, below it), the headings share
+    /// one top and the lines one pitch. Returns the column starts (relative to the panel's
+    /// first) and each group's heading and names.
+    fn format_grid_rects(width: f32) -> (Vec<f32>, Vec<(Rect, Vec<Rect>)>) {
+        let all = format_rects(width);
+        let line_h = all.iter().map(|p| p.1.height()).fold(f32::MAX, f32::min);
+        for (n, r) in &all {
+            assert!(r.height() < line_h * 1.5, "{n} wraps at {width}: {r:?}");
+        }
+        for (i, (a, ra)) in all.iter().enumerate() {
+            for (b, rb) in &all[i + 1..] {
+                assert!(!ra.shrink(0.5).intersects(rb.shrink(0.5)), "{a} overlaps {b} at {width}");
+            }
+        }
+        let mut starts: Vec<f32> = Vec::new();
+        for (_, r) in &all {
+            if !starts.iter().any(|x| (x - r.left()).abs() < 0.5) {
+                starts.push(r.left());
+            }
+        }
+        starts.sort_by(f32::total_cmp);
+        let mut at = 0;
+        let mut groups = Vec::new();
+        for (_, items) in FORMAT_GROUPS {
+            let head = all[at].1;
+            let names: Vec<Rect> = all[at + 1..at + 1 + items.len()].iter().map(|p| p.1).collect();
+            at += 1 + items.len();
+            groups.push((head, names));
+        }
+        for (gi, (head, names)) in groups.iter().enumerate() {
+            assert!((head.top() - groups[0].0.top()).abs() < 0.5, "one top line for all headings at {width}");
+            // The group's columns: from its heading's start to the next group's.
+            let end = groups.get(gi + 1).map_or(f32::MAX, |g| g.0.left());
+            for r in names {
+                assert!(r.top() > head.bottom(), "names sit under their heading at {width}");
+                assert!(r.left() >= head.left() - 0.5 && r.right() < end, "a name stays in its own group's columns at {width}");
+            }
+            assert!(names.iter().any(|r| (r.left() - head.left()).abs() < 0.5), "the heading tops its first column");
+        }
+        let x0 = starts[0];
+        (starts.iter().map(|x| x - x0).collect(), groups)
+    }
+
+    /// 760 (a panel of about 570) and up to where the desktop blocks fit on one row: one band
+    /// on one grid of four equal columns spanning the panel, Documents and Spreadsheets one
+    /// column each, Quiz tools the other two, every line on one shared pitch.
     #[test]
-    fn mid_width_puts_quiz_tools_under_documents_and_spreadsheets() {
-        for width in [560.0, 620.0, 660.0] {
-            let blocks = format_block_rects(&format_rects(width));
-            let (docs, sheets, quiz) = (&blocks[0], &blocks[1], &blocks[2]);
-            assert!((docs.0.top() - sheets.0.top()).abs() < 0.5, "Documents and Spreadsheets share a row at {width}");
-            let gap = block_span(sheets).0 - block_span(docs).1;
-            assert!((FORMAT_BLOCK_GAP - 1.0..=FORMAT_BLOCK_GAP + 1.5).contains(&gap), "one gap: {gap}");
-            let above = docs.1.iter().chain(sheets.1.iter()).map(|r| r.bottom()).fold(0.0_f32, f32::max);
-            assert!(quiz.0.top() > above + 8.0, "Quiz tools sits under both at {width}");
-            assert!((quiz.0.left() - docs.0.left()).abs() < 0.5, "the rows start on one left");
-            assert_eq!(docs.1.iter().filter(|r| (r.top() - docs.1[0].top()).abs() < 0.5).count(), 2, "Documents two by two");
+    fn format_groups_share_one_grid_across_the_panel() {
+        for (width, cols) in [(615.0_f32, 4_usize), (640.0, 4), (680.0, 4)] {
+            let (starts, groups) = format_grid_rects(width);
+            assert_eq!(starts.len(), cols, "{cols} column starts at {width}: {starts:?}");
+            let pitch = starts[1] - starts[0];
+            for w in starts.windows(2) {
+                assert!((w[1] - w[0] - pitch).abs() < 1.5, "equal columns at {width}: {starts:?}");
+            }
+            // The grid spans the panel: the last column ends one gap (24 to 48) short of where
+            // one more would start, at the panel's inner edge (the harness's 8 pt frame and the
+            // card's 16 pt margin each side).
+            let inner = width - 48.0;
+            let over = starts[cols - 1] + pitch - inner;
+            assert!((FORMAT_COL_GAP - 1.5..=FORMAT_BLOCK_GAP + 1.5).contains(&over), "the grid spans the panel at {width}: {starts:?}, {over}");
+            let one_col = |g: &(Rect, Vec<Rect>)| g.1.iter().all(|r| (r.left() - g.0.left()).abs() < 0.5);
+            assert!(one_col(&groups[0]) && one_col(&groups[1]), "Documents and Spreadsheets one column each at {width}");
+            let mut tops: Vec<f32> = Vec::new();
+            for t in groups.iter().flat_map(|g| g.1.iter().map(|r| r.top())) {
+                if !tops.iter().any(|u| (u - t).abs() < 0.5) {
+                    tops.push(t);
+                }
+            }
+            tops.sort_by(f32::total_cmp);
+            assert_eq!(tops.len(), 5, "{tops:?}");
+            for w in tops.windows(2) {
+                assert!((w[1] - w[0] - (tops[1] - tops[0])).abs() < 0.5, "one pitch: {tops:?}");
+            }
         }
     }
 
-    /// The panel is shorter than r16's at desktop (157) and no taller at 760 (213.75).
+    /// The breakpoint under the 760 band: the narrowest width that still takes the four-column
+    /// band lays it out whole (contained, no overlap, every name under its heading), one point
+    /// narrower takes the heading-column layout, also contained and clear, and 760's panel
+    /// (615 here) is wider than the breakpoint, so it cannot slip into the fallback.
+    #[test]
+    fn the_four_column_band_holds_down_to_its_breakpoint() {
+        let heads_share_left = |w: f32| {
+            let all = format_rects(w);
+            let heads: Vec<Rect> = FORMAT_GROUPS.iter().map(|g| all.iter().find(|p| p.0 == g.0).unwrap().1).collect();
+            heads.iter().all(|h| (h.left() - heads[0].left()).abs() < 0.5)
+        };
+        let mut w = 615.0_f32;
+        assert!(!heads_share_left(w), "760 takes the band");
+        while !heads_share_left(w - 1.0) {
+            w -= 1.0;
+            assert!(w > 500.0, "no fallback found");
+        }
+        let (starts, _) = format_grid_rects(w);
+        assert_eq!(starts.len(), 4, "the band at its narrowest ({w}) is four columns");
+        assert!(w < 615.0, "760's panel clears the breakpoint ({w})");
+        let all = format_rects(w - 1.0);
+        for (i, (a, ra)) in all.iter().enumerate() {
+            assert!(ra.height() < 25.0, "{a} wraps at {}", w - 1.0);
+            for (b, rb) in &all[i + 1..] {
+                assert!(!ra.shrink(0.5).intersects(rb.shrink(0.5)), "{a} overlaps {b} at {}", w - 1.0);
+            }
+        }
+    }
+
+    /// The panel is shorter than r16's at desktop (157) and, in round 28's band, well under
+    /// round 27's 210.5 at 760.
     #[test]
     fn formats_panel_is_no_taller_than_before() {
         use egui_kittest::Harness;
-        for (width, cap) in [(1100.0_f32, 157.0_f32), (1600.0, 157.0), (620.0, 213.75)] {
+        for (width, cap) in [(1100.0_f32, 157.0_f32), (1600.0, 157.0), (620.0, 180.0)] {
             let mut first = true;
             let out = std::sync::Arc::new(std::sync::Mutex::new(0.0_f32));
             let o2 = out.clone();
@@ -3447,11 +3642,11 @@ mod tests {
         }
     }
 
-    /// Quiz tools' 3 x 3 grid at 760 and on desktop: three column x positions, each shared by all
+    /// Quiz tools' 3 x 3 grid on desktop: three column x positions, each shared by all
     /// three rows, and every row using all three, so each name sits straight under the one above.
     #[test]
     fn quiz_tools_columns_share_their_x_on_every_row() {
-        for width in [560.0, 620.0, 1100.0, 1600.0] {
+        for width in [1100.0, 1600.0] {
             let blocks = format_block_rects(&format_rects(width));
             let quiz = &blocks[2].1;
             let mut xs: Vec<f32> = Vec::new();
@@ -3474,6 +3669,27 @@ mod tests {
             for t in &tops {
                 let row: Vec<f32> = quiz.iter().filter(|r| (r.top() - t).abs() < 0.5).map(|r| r.left()).collect();
                 assert!(xs.iter().all(|x| row.iter().any(|l| (l - x).abs() < 0.5)), "every row uses all three columns at {width}");
+            }
+        }
+    }
+
+    /// Quiz tools in the 760 band: two columns (five and four), each read top down and each name straight under the one above.
+    #[test]
+    fn quiz_tools_band_columns_read_down() {
+        for (width, cols) in [(640.0_f32, 2_usize), (615.0, 2), (680.0, 2)] {
+            let (_, groups) = format_grid_rects(width);
+            let quiz = &groups[2].1;
+            let mut xs: Vec<f32> = Vec::new();
+            for r in quiz {
+                if !xs.iter().any(|x| (x - r.left()).abs() < 0.5) {
+                    xs.push(r.left());
+                }
+            }
+            assert_eq!(xs.len(), cols, "{cols} columns at {width}: {xs:?}");
+            let lines = 9_usize.div_ceil(cols);
+            for (i, r) in quiz.iter().enumerate() {
+                assert!((r.left() - xs[i / lines]).abs() < 0.5, "read down each column at {width}");
+                assert!((r.top() - quiz[i % lines].top()).abs() < 0.5, "a line shares one top at {width}");
             }
         }
     }
