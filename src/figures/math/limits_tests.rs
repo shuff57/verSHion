@@ -912,3 +912,99 @@ fn debug_model() {
     for pc in &md.pieces { println!("piece {} lo {:?} hi {:?} holes {:?}", pc.n, pc.lo.as_ref().map(|e| e.x.v), pc.hi.as_ref().map(|e| e.x.v), pc.holes.iter().map(|h| h.0.v).collect::<Vec<_>>()); }
     println!("{:?}", md.notes);
 }
+
+/// Every classic setup and example is what its name says, by the figure's own analysis.
+#[test]
+fn every_example_is_what_its_title_says() {
+    let d = def();
+    for e in crate::figures::examples_for(ID) {
+        let mut p = Params::defaults(&(d.params)());
+        for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); }
+        let md = super::limits::model_of(&p);
+        let (ds, complete) = md.discontinuities();
+        assert!(complete, "{}", e.name);
+        let kinds: Vec<&str> = ds.iter().map(|d| d.kind).collect();
+        let has = |k: &str| kinds.contains(&k);
+        match e.name {
+            "Hole with the point moved" => assert!(kinds == ["removable"] && md.dots.len() == 1, "{}: {kinds:?}", e.name),
+            "Jump with one-sided limits" => {
+                // x + 2 → 3 from the left of 1, 4 - 2x → 2 from the right: a real jump
+                assert_eq!(kinds, ["jump"], "{}", e.name);
+                let a = Num::read("1").unwrap().k;
+                assert_eq!((md.side(&a, -1.0), md.side(&a, 1.0)), (Lim::Val(3.0, "3".into()), Lim::Val(2.0, "2".into())));
+            }
+            "Vertical asymptote with limits of \u{b1}\u{221e}" => { assert_eq!(kinds, ["infinite"], "{}", e.name); assert_eq!(md.verticals().len(), 1); }
+            "Horizontal asymptote at infinity" => { assert!(kinds.is_empty()); assert_eq!(md.horizontals().iter().map(|h| h.1.clone()).collect::<Vec<_>>(), ["2"]); }
+            "AP-style graph with every kind of discontinuity" => assert!(has("removable") && has("jump") && has("infinite"), "{}: {kinds:?}", e.name),
+            "A graph from points with a hole" => assert!(has("removable"), "{}: {kinds:?}", e.name),
+            "sin x / x near 0" => assert_eq!(kinds, ["removable"], "{}", e.name),
+            "Piecewise function with a closed and an open end" => assert_eq!(kinds, ["jump"], "{}: x² meets 6 - x at 2 (4 = 4), 2 then 1 at 4", e.name),
+            other => panic!("an example without a check: {other}"),
+        }
+        assert!(warnings(&p).is_empty(), "{}: {:?}", e.name, warnings(&p));
+    }
+}
+
+/// No student copy gives an answer away: over every function of a set and every combination of the options a student copy
+/// can have, no answer the key writes appears in it (as "= answer"), no kind label or asymptote equation the teacher has
+/// not kept, and no L beside a limit it asks for.
+#[test]
+fn no_student_copy_gives_an_answer_away() {
+    let fns = [
+        json!({}),
+        json!({"pieces": "y = (x^2 - 4)/(x - 2)", "dots": "(2, 1)", "ask_at": "2"}),
+        json!({"pieces": "y = x + 2, x < 1\ny = 4 - 2x, x >= 1", "dots": "", "ask_at": "1"}),
+        json!({"pieces": "y = (2x^2 + 1)/(x^2 + 1)", "dots": "", "ask_at": "0"}),
+        json!({"pieces": "y = sin(x)/x", "dots": "", "ask_at": "0", "eps": "1/4"}),
+        json!({"pieces": "y = (exp(x) - exp(3))/(x - 3)", "dots": "", "ask_at": "3", "ymax": 30.0}),
+    ];
+    let mut n = 0;
+    for f in &fns {
+        for mask in 0..64u32 {
+            let opt = |i: u32| mask & (1 << i) != 0;
+            let o = json!({"ask_disc": opt(0), "ask_inf": if opt(1) { "Both" } else { "None" }, "kind_labels": opt(2), "asym_eqs": opt(3), "eps_band": opt(4), "ask_two": !opt(5)});
+            let mut kv = f.as_object().unwrap().clone();
+            for (k, v) in o.as_object().unwrap() { kv.insert(k.clone(), v.clone()); }
+            let key = with(J::Object(kv.clone()));
+            let mut stu = key.clone();
+            stu.set_b("show_answers", false);
+            let (ks, ss) = (svg(&key), svg(&stu));
+            let block = |s: &str| { let i = s.find(r#"data-lim="block""#).unwrap(); words(&s[i + s[i..].find('>').unwrap() + 1..]) };
+            let (kb, sb) = (block(&ks), block(&ss));
+            // every "= answer" of the key, missing from the student copy (whose prompts end in "=")
+            for part in kb.split(" = ").skip(1) {
+                let ans: String = part.split(" lim ").next().unwrap().split(" f(").next().unwrap().trim().to_string();
+                if ans.is_empty() || ans.starts_with("lim") { continue; }
+                assert!(!sb.contains(&format!("= {ans}")), "{f} {o}: the student copy writes = {ans}: {sb}");
+            }
+            assert!(!sb.contains("nowhere") && !sb.contains("(removable)") && !sb.contains("(jump)") && !sb.contains("(infinite)"), "{f} {o}: {sb}");
+            let labels = { let i = ss.find(r#"data-lim="labels""#).unwrap(); let i = i + ss[i..].find('>').unwrap() + 1; words(&ss[i..ss[i..].find("</g>").unwrap() + i]) };
+            assert!(labels.trim().is_empty(), "{f} {o}: labels on the student copy: {labels}");
+            // the ε band and its L only where the limit at a is not asked
+            if opt(4) && (!opt(5) || stu.b("ask_left") || stu.b("ask_right")) { assert!(!sb.contains("L = "), "{f} {o}: {sb}"); }
+            // and nothing in the SVG's own title or description
+            let annotated = svg(&stu);
+            assert!(!annotated[..annotated.find("</desc>").unwrap()].contains(" = "), "{f}");
+            n += 1;
+        }
+    }
+    assert_eq!(n, 6 * 64);
+}
+
+#[test]
+fn an_empty_function_asks_nothing_and_says_why() {
+    let p = with(json!({"pieces": "", "dots": "", "ask_at": "1", "ask_inf": "Both", "ask_disc": true}));
+    let w = words(&svg(&p));
+    assert!(!w.contains("does not exist") && !w.contains("undefined") && !w.contains("lim "), "{w}");
+    assert!(warnings(&p).iter().any(|n| n.starts_with("Type the function in Function")), "{:?}", warnings(&p));
+}
+
+/// δ for (x² - 4)/(x - 2) = x + 2 at 2 with ε = 1/2: |x + 2 - 4| < 1/2 exactly when |x - 2| < 1/2, so δ = 0.5; for x² at 1 with
+/// ε = 1: |x² - 1| < 1 for 0 < x < √2, so δ = √2 - 1 = 0.414…, 0.41 to the hundredth below.
+#[test]
+fn the_widest_delta_worked_by_hand() {
+    let w = words(&svg(&with(json!({"pieces": "y = (x^2 - 4)/(x - 2)", "dots": "", "ask_at": "2", "eps_band": true, "eps": "1/2", "xmin": -4.0, "xmax": 6.0}))));
+    assert!(w.contains("δ = 0.5"), "{w}");
+    let w = words(&svg(&with(json!({"pieces": "y = x^2", "dots": "", "ask_at": "1", "eps_band": true, "eps": "1"}))));
+    assert!(w.contains("δ = 0.41"), "{w}");
+}

@@ -1219,11 +1219,11 @@ fn build(p0: &Params) -> (String, Drawn) {
                 labels_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" data-lim="leader"/>"#, s.0, s.1, e.0, e.1, ink.text));
                 labels_svg.push_str(&text_el(c.0 - tw(&r.text, lab_size) / 2.0 + 0.5, c.1 + 0.32 * lab_size, lab_size, &r.text, ink.text, true));
             }
-            Spot::Off => beside.push(if *kind == 'k' { format!("{} at x = {}", r.text, discs.iter().find(|d| sx(d.x) == r.anchor.0).map(|d| d.text.clone()).unwrap_or_default()) } else { r.text.clone() }),
+            Spot::Off => beside.push(if *kind == 'k' { format!("{} ({})", eq_text("x", &discs.iter().find(|d| sx(d.x) == r.anchor.0).map(|d| d.text.clone()).unwrap_or_default()), r.text) } else { format!("the asymptote {}", r.text) }),
         }
         dr.labels.push((*kind, r.text.clone(), spot, r.own.clone()));
     }
-    if !beside.is_empty() { notes.push(format!("No clear room on the graph for {}: it is written under the graph (narrowing or widening the window, or a smaller label size, makes room)", beside.join(", ").replace('-', "\u{2212}"))); }
+    if !beside.is_empty() { notes.push(format!("No clear room on the graph for the label{} {}: written under the graph instead (narrowing or widening the window, or a smaller label size, makes room)", if beside.len() > 1 { "s" } else { "" }, beside.join("; ").replace('-', "\u{2212}"))); }
 
     // the grid's texts over the curves: a tick number a point mark sits on is left out; where an x number meets a y number at
     // the corner of the axes (Large labels), the x number drops below its row, as the grid does beside a conic
@@ -1346,7 +1346,8 @@ fn widest_delta(m: &Model, a: f64, l: f64, eps: f64) -> f64 {
             }
         }
     }
-    let d = floor_to(d, 2);
+    // (to the hundredth below; a δ that is exactly a hundredth, such as 1/2, is that hundredth)
+    let d = floor_to(d + 1e-9, 2);
     if d <= 0.0 { 0.01 } else { d }
 }
 
@@ -1661,10 +1662,10 @@ fn ex_list() -> Vec<Example> {
     let with = |mut v: Vec<(&'static str, Value)>, more: Vec<(&'static str, Value)>| { v.extend(more); v };
     vec![
         Example { name: "Hole with the point moved", params: with(win(-4.0, 6.0, -2.0, 7.0), vec![("pieces", s("y = (x^2 - 4)/(x - 2)")), ("dots", s("(2, 1)")), ("ask_at", s("2")), ("guide", b(true)), ("kind_labels", b(true)), ("title", s("A removable discontinuity"))]) },
-        Example { name: "Jump with one-sided limits", params: with(win(-5.0, 5.0, -3.0, 6.0), vec![("pieces", s("y = x + 2, x < 1\ny = 4 - x, x >= 1")), ("dots", s("")), ("ask_at", s("1")), ("guide", b(true)), ("kind_labels", b(true)), ("title", s("A jump discontinuity"))]) },
+        Example { name: "Jump with one-sided limits", params: with(win(-5.0, 5.0, -3.0, 6.0), vec![("pieces", s("y = x + 2, x < 1\ny = 4 - 2x, x >= 1")), ("dots", s("")), ("ask_at", s("1")), ("guide", b(true)), ("kind_labels", b(true)), ("title", s("A jump discontinuity"))]) },
         Example { name: "Vertical asymptote with limits of \u{b1}\u{221e}", params: with(win(-4.0, 8.0, -7.0, 7.0), vec![("pieces", s("y = 2/(x - 3)")), ("dots", s("")), ("ask_at", s("3")), ("ask_value", b(false)), ("asym_eqs", b(true)), ("title", s("An infinite discontinuity"))]) },
         Example { name: "Horizontal asymptote at infinity", params: with(win(-8.0, 8.0, -3.0, 6.0), vec![("pieces", s("y = (2x^2 + 1)/(x^2 + 1)")), ("dots", s("")), ("ask_at", s("")), ("ask_inf", s("Both")), ("asym_eqs", b(true)), ("arrows", b(true)), ("title", s("Limits at infinity"))]) },
-        Example { name: "AP-style graph with every kind of discontinuity", params: with(win(-6.0, 8.0, -5.0, 6.0), vec![("pieces", s("(-6, -1) (-4, 1) (-2, 2) open\nopen (-2, -1) (0, 0) (1, 2) closed\nopen (1, 4) (2, 3) (3, 3.5) open\ny = 1 + 1/(x - 5), x > 3")), ("dots", s("(3, 1)")), ("ask_at", s("-2, 1, 3, 5")), ("ask_disc", b(true)), ("title", s("Read the limits from the graph"))]) },
+        Example { name: "AP-style graph with every kind of discontinuity", params: with(win(-6.0, 8.0, -5.0, 6.0), vec![("pieces", s("(-6, -1) (-4, 1) (-2, 2) open\nopen (-2, -1) (0, 0) (1, 2) closed\nopen (1, 4) (1.5, 3.2) (2, 3) open\nopen (2, 3) (2.5, 3.1) (3, 3.5) open\ny = 1 + 1/(x - 5), x > 3")), ("dots", s("(3, 1)")), ("ask_at", s("-2, 1, 2, 3, 5")), ("ask_disc", b(true)), ("title", s("Read the limits from the graph"))]) },
         Example { name: "A graph from points with a hole", params: with(win(-5.0, 5.0, -3.0, 5.0), vec![("pieces", s("(-5, 3) (-3, 1) (-1, 2) (1, 0) open\nopen (1, 0) (3, 2) (5, 1)")), ("dots", s("(1, 3)")), ("ask_at", s("1")), ("guide", b(true))]) },
         Example { name: "sin x / x near 0", params: with(win(-10.0, 10.0, -1.0, 2.0), vec![("pieces", s("y = sin(x)/x")), ("dots", s("")), ("ask_at", s("0")), ("ask_inf", s("Both")), ("xstep", f(2.0)), ("ystep", f(0.5)), ("eps_band", b(true)), ("eps", s("1/4")), ("square", b(false))]) },
         Example { name: "Piecewise function with a closed and an open end", params: with(win(-5.0, 6.0, -3.0, 7.0), vec![("pieces", s("y = x^2, x < 2\ny = 6 - x, 2 <= x < 4\ny = 1, x >= 4")), ("dots", s("")), ("ask_at", s("2, 4")), ("ask_disc", b(true))]) },
