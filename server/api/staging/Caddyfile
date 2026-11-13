@@ -45,7 +45,8 @@
 		# index.html runs an old build (a Brave tab did, after a redeploy). no-cache makes it ask first; an unchanged
 		# file costs one 304.
 		header Cache-Control "no-cache"
-		try_files {path} /index.html
+		# A folder path such as /contact/ or /legal/ serves that folder's index.html; anything else with no file is the app.
+		try_files {path} {path}index.html /index.html
 		file_server
 	}
 
