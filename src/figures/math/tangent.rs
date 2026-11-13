@@ -104,7 +104,8 @@ fn minus(s: &str) -> String { s.replace('-', "\u{2212}") }
 /// reading as 0.
 pub(crate) fn decimal(v: f64, dec: usize) -> String {
     let mut dec = dec;
-    if v != 0.0 && v.is_finite() && v.abs() >= 1e-12 && v.abs() < 0.5 * 10f64.powi(-(dec as i32)) { dec = ((-v.abs().log10()).ceil() as usize + 1).min(12); }
+    // (below 10^-6 a worked-out value is rounding noise of the arithmetic, not a value: it is written as 0)
+    if v != 0.0 && v.is_finite() && v.abs() >= 1e-6 && v.abs() < 0.5 * 10f64.powi(-(dec as i32)) { dec = ((-v.abs().log10()).ceil() as usize + 1).min(12); }
     let s = format!("{:.*}", dec, v);
     let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
     if s == "-0" { "0".into() } else { minus(&s) }
@@ -625,7 +626,7 @@ fn dash(style: &str) -> &'static str { match style { "Dashed" => "9 6", "Dotted"
 
 struct Ink { tangent: &'static str, secant: &'static str, normal: &'static str, extra_sec: [&'static str; 6], extra_tan: [&'static str; 4], tri: &'static str, mark: &'static str, curve: &'static str }
 const COLOUR: Ink = Ink { tangent: "#c0392b", secant: "#2a8a3e", normal: "#8e44ad", extra_sec: ["#d68910", "#16a085", "#b03a7a", "#5d6d7e", "#a04000", "#2e86c1"], extra_tan: ["#d35400", "#7d3c98", "#117a65", "#922b21"], tri: "#1f2937", mark: "#374151", curve: "#1f5fbf" };
-const PRINT: Ink = Ink { tangent: "#111111", secant: "#444444", normal: "#555555", extra_sec: ["#666666", "#777777", "#555555", "#888888", "#666666", "#777777"], extra_tan: ["#333333", "#555555", "#444444", "#666666"], tri: "#222222", mark: "#333333", curve: "#111111" };
+const PRINT: Ink = Ink { tangent: "#5e5e5e", secant: "#444444", normal: "#555555", extra_sec: ["#666666", "#777777", "#555555", "#888888", "#666666", "#777777"], extra_tan: ["#333333", "#555555", "#444444", "#666666"], tri: "#222222", mark: "#333333", curve: "#111111" };
 
 const LINE_W: f64 = 2.2;
 const LEG_W: f64 = 2.0;
@@ -781,14 +782,14 @@ fn place_one(sc: &mut Scene, r: &Req, text: &str, lead_ok: bool) -> Option<(Bx, 
         let (s0, e) = leader(anchor, b);
         let (dx, dy) = (e.0 - s0.0, e.1 - s0.1);
         let n = (dx * dx + dy * dy).sqrt().max(1e-9);
-        // (the lines through the point itself are crossed only within 9 px of it)
+        // (the lines through the point itself are crossed only within 13 px of it)
         let s1 = (s0.0 + dx / n * 6.0, s0.1 + dy / n * 6.0);
         // (and keeps 2.5 px from every stroke, so it never grazes one)
         !sc.segs.iter().any(|(a, c)| seg_cross(s1, e, *a, *c) || pt_seg(s1, *a, *c).min(pt_seg(e, *a, *c)).min(pt_seg(*a, s1, e)).min(pt_seg(*c, s1, e)) < 2.5) && !sc.boxes.iter().any(|o| seg_hits(s1, e, *o, 0.5)) && !sc.dots.iter().any(|d| pt_seg(*d, s1, e) < DOT_R + 1.0)
     };
     let mut found = None;
     let mut lead = None;
-    let radii: &[f64] = if lead_ok { &[32.0, 42.0, 55.0, 70.0, 90.0, 115.0] } else { &[4.0, 7.0, 10.0, 14.0, 19.0, 24.0] };
+    let radii: &[f64] = if lead_ok { &[32.0, 42.0, 55.0, 70.0, 90.0] } else { &[4.0, 7.0, 10.0, 14.0, 19.0, 24.0] };
     'o: for &rad in radii {
         for anchor in std::iter::once(r.anchor).chain(r.along.iter().copied()) {
             for d in &dirs {
@@ -945,7 +946,11 @@ pub(super) fn build(p0: &Params) -> Out {
 
     let tan = m.p.as_ref();
     let p_px = tan.map(|t| (sx(t.a), sy(t.fan.v))).filter(|q| inside(*q));
-    if let (Some(t), None) = (tan, p_px) { notes.push(format!("P is outside the window: set the axes so that {} = {} and {} = {} are inside them", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s)); }
+    if let (Some(t), None) = (tan, p_px) {
+        notes.push(if t.a.abs() > 1000.0 || t.fan.v.abs() > 1000.0 || (pi_mode && t.a.abs() > 1000.0 * PI) {
+            format!("P is at {} = {}, {} = {}, beyond the largest axes this figure draws (\u{b1}1000): choose another a", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s)
+        } else { format!("P is outside the window: set the axes so that {} = {} and {} = {} are inside them", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s) });
+    }
     let mut q_px = None;
     let mut sec_lines: Vec<(String, &'static str)> = vec![];
     let tangent_exists = tan.is_some_and(|t| matches!(t.slope, Slope::Finite(..) | Slope::Vertical));
@@ -961,7 +966,7 @@ pub(super) fn build(p0: &Params) -> Out {
         // ── the tangent and normal at P ──
         let mslope = t.m.as_ref().map(|n| n.v);
         if draw_tangent && tangent_exists {
-            if let Some((a, b)) = line_through((t.a, t.fan.v), mslope) { over += &seg_svg(a, b, ink.tangent, LINE_W, tan_dash, "tangent"); sc.segs.push((a, b)); }
+            if let Some((a, b)) = line_through((t.a, t.fan.v), mslope) { over += &seg_svg(a, b, ink.tangent, if print { 1.6 } else { LINE_W }, tan_dash, "tangent"); sc.segs.push((a, b)); }
         }
         if normal_on {
             if let Some((a, b)) = line_through((t.a, t.fan.v), normal_slope.as_ref().map(|n| n.v)) {
@@ -990,7 +995,11 @@ pub(super) fn build(p0: &Params) -> Out {
                 if let Some((a, b)) = seg { over += &seg_svg(a, b, col, if i == 0 { LINE_W } else { 1.9 }, dsh, &format!("secant{i}")); sc.segs.push((a, b)); }
                 let qq = (sx(t.a + s.h), sy(s.fb.v));
                 if inside(qq) { if i == 0 { q_px = Some(qq); } else { sc.dots.push(qq); over += &format!(r##"<circle cx="{:.2}" cy="{:.2}" r="3.2" fill="{col}" stroke="#fff" stroke-width="1"/>"##, qq.0, qq.1); } }
-                else if i == 0 { notes.push(format!("Q is outside the window: set the axes so that {} = {} and {} = {} are inside them, or choose another h", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s)); }
+                else if i == 0 {
+                    notes.push(if s.qx.v.abs() > 1000.0 || s.fb.v.abs() > 1000.0 {
+                        format!("Q is at {} = {}, {} = {}, beyond the largest axes this figure draws (\u{b1}1000): choose a smaller h", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s)
+                    } else { format!("Q is outside the window: set the axes so that {} = {} and {} = {} are inside them, or choose another h", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s) });
+                }
             }
         }
         // P's and Q's labels (built here so the slope triangle's trial below places them first, as the drawing does)
@@ -1300,7 +1309,9 @@ pub(super) fn build(p0: &Params) -> Out {
     let swatch = |out: &mut String, x: f64, base: f64, sw_: &(String, &'static str)| {
         let yy = base - 0.3 * size;
         let d = if sw_.1.is_empty() { String::new() } else { format!(r#" stroke-dasharray="{}""#, sw_.1) };
-        out.push_str(&format!(r#"<line x1="{x:.2}" y1="{yy:.2}" x2="{:.2}" y2="{yy:.2}" stroke="{}" stroke-width="2.6"{d} data-tsl="swatch"/>"#, x + sw, sw_.0));
+        // (in Print the tangent's swatch is as thin as its line, so it is told from the curve's)
+        let wd = if print && sw_.0 == PRINT.tangent { 1.6 } else { 2.6 };
+        out.push_str(&format!(r#"<line x1="{x:.2}" y1="{yy:.2}" x2="{:.2}" y2="{yy:.2}" stroke="{}" stroke-width="{wd}"{d} data-tsl="swatch"/>"#, x + sw, sw_.0));
     };
     for l in &lines {
         let mut x = px0 + 12.0;

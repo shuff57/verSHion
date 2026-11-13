@@ -364,6 +364,8 @@ fn classroom() -> Vec<Case> {
         ("-16t^2 + 64t", "s", "t", "2", "-1/2", [0.0, 4.0, 0.0, 80.0], false), ("-4.9t^2 + 19.6t", "h", "t", "1", "1", [0.0, 4.0, 0.0, 25.0], false), ("t^3 - 6t^2 + 9t", "s", "t", "1", "1", [0.0, 4.0, -2.0, 6.0], false),
         ("5t^2", "d", "t", "3", "-1", [0.0, 4.0, 0.0, 90.0], false), ("100e^(0.5t)", "P", "t", "2", "1", [0.0, 4.0, 0.0, 800.0], false), n("2x + 1", "1", "2", [-3.0, 4.0, -6.0, 10.0]),
         n("abs(x - 1)", "2", "1", [-2.0, 4.0, -1.0, 4.0]), n("x^2 - 4", "2", "0.1", [0.0, 3.0, -5.0, 5.0]),
+        // the second check's crowded cases
+        pi("tan(x)", "-pi/6", "pi/12", [-0.5, 0.5, -4.0, 4.0]), pi("tan(x)", "pi/4", "pi/12", [-0.5, 0.5, -4.0, 4.0]),
     ]
 }
 
@@ -426,7 +428,8 @@ fn classroom_sweep_labels_are_clear() {
 }
 
 /// Named cases where one label may be crowded (drawn where it is least in the way, with a note telling the teacher to drag
-/// it): none at Small; at Medium one student copy with every option on; at Large these. (size, function, a, option set)
+/// it): at Small and Medium only the second check's tan at −π/6 and two student copies with every option on; at Large
+/// these. (size, function, a, option set)
 const EXCEPTIONS: &[(&str, &str, &str, &str)] = &[
     ("Large", "1/x", "-2", "all"),
     ("Large", "1/x", "2", "all"),
@@ -452,6 +455,25 @@ const EXCEPTIONS: &[(&str, &str, &str, &str)] = &[
     ("Large", "x^2", "-3/2", "pt_labels"),
     ("Large", "x^3 - 3x", "2", "pt_labels"),
     ("Medium", "sin(x)", "pi/6", "stud"),
+    // the second check's crowded case (tan at −π/6, h = π/12): the secant's triangle is about 22 px tall, between the x-axis,
+    // its numbers and the curve, so Δy has no clear place at any size (drawn where least in the way, with a note)
+    ("Large", "tan(x)", "-pi/6", "all"),
+    ("Large", "tan(x)", "-pi/6", "allkey"),
+    ("Large", "tan(x)", "-pi/6", "print"),
+    ("Large", "tan(x)", "-pi/6", "pt_labels"),
+    ("Large", "tan(x)", "-pi/6", "stud"),
+    ("Large", "x^4 - 4x^2", "1", "pt_labels"),
+    ("Medium", "e^x", "-1", "stud"),
+    ("Medium", "tan(x)", "-pi/6", "all"),
+    ("Medium", "tan(x)", "-pi/6", "allkey"),
+    ("Medium", "tan(x)", "-pi/6", "print"),
+    ("Medium", "tan(x)", "-pi/6", "pt_labels"),
+    ("Medium", "tan(x)", "-pi/6", "secant_triangle"),
+    ("Medium", "tan(x)", "-pi/6", "stud"),
+    ("Small", "tan(x)", "-pi/6", "all"),
+    ("Small", "tan(x)", "-pi/6", "allkey"),
+    ("Small", "tan(x)", "-pi/6", "print"),
+    ("Small", "tan(x)", "-pi/6", "stud"),
 ];
 
 /// Every example renders with no note and every label in a clear place.
