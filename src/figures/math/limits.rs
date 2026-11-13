@@ -776,7 +776,8 @@ fn grid_texts(body: &str) -> (String, Vec<GText>) {
         for ch in content.chars() { match ch { '<' => inside = true, '>' => inside = false, _ if !inside => txt.push(ch), _ => {} } }
         if let (Some(x), Some(y), Some(fs)) = (attr(tag, "x"), attr(tag, "y"), attr(tag, "font-size")) {
             let number = tag.contains("Arial") && txt.chars().all(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '\u{2212}' | '/'));
-            let w = txt.chars().map(|c| if c.is_ascii_digit() { 0.56 } else if c == '.' { 0.28 } else { 0.6 }).sum::<f64>() * fs + 2.0;
+            // (Arial bold's advances: a digit 0.556 em, the minus 0.584, the point 0.278)
+            let w = txt.chars().map(|c| if c.is_ascii_digit() { 0.556 } else if c == '.' { 0.278 } else if c == '\u{2212}' || c == '-' { 0.584 } else { 0.6 }).sum::<f64>() * fs + if number { 0.0 } else { 2.0 };
             let anchor = attr_s(tag, "text-anchor").unwrap_or("start");
             let x0 = match anchor { "end" => x - w, "middle" => x - w / 2.0, _ => x };
             // (a plate, drawn white under its digits, is not a text of its own)
@@ -867,7 +868,7 @@ impl Board {
 }
 
 /// A label's box: the text's width, and the ink from the cap height down to the descenders.
-fn label_box(c: Pt, w: f64, size: f64) -> Bx { [c.0 - w / 2.0, c.1 - 0.5 * size, c.0 + w / 2.0, c.1 + 0.42 * size] }
+fn label_box(c: Pt, w: f64, size: f64) -> Bx { [c.0 - w / 2.0, c.1 - 0.42 * size, c.0 + w / 2.0, c.1 + 0.58 * size] }
 
 /// Where a label went: beside its thing, on a short leader, or nowhere on the graph.
 #[derive(Clone, Debug, PartialEq)]
@@ -880,22 +881,24 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
     let w = tw(&r.text, size);
     // beside its own thing, and nearer it than any other thing on the board
     let near_own = |b: Bx| -> f64 { r.own.iter().map(|(a, c)| seg_box_dist(*a, *c, b)).fold(f64::MAX, f64::min) };
+    let own_pts: Vec<Pt> = r.own.iter().flat_map(|(a, c)| [*a, *c]).collect();
     for c in &r.tries {
         let b = label_box(*c, w, size);
-        if board.free(grow(b, 1.5)) && nearest_is_own(board, b, near_own(b)) {
+        if board.free(grow(b, 1.5)) && nearest_is_own(board, b, near_own(b), &own_pts) {
             board.boxes.push(grow(b, 1.0));
             return Spot::Beside(*c);
         }
     }
     // a short leader from the thing to a clear spot, crossing nothing drawn
-    for rad in [34.0, 44.0, 56.0, 70.0] {
-        for k in 0..24 {
-            let ang = k as f64 * PI / 12.0;
+    for rad in [30.0, 38.0, 46.0, 56.0, 68.0, 82.0] {
+        for k in 0..36 {
+            let ang = k as f64 * PI / 18.0;
             let c = (r.anchor.0 + rad * ang.cos() * 1.3, r.anchor.1 - rad * ang.sin());
             let b = label_box(c, w, size);
             if !board.free(grow(b, 2.0)) { continue; }
             // from 7 px out of the anchor to the box's nearest edge point
-            let e = (r.anchor.0.clamp(b[0] - 2.0, b[2] + 2.0), r.anchor.1.clamp(b[1] - 2.0, b[3] + 2.0));
+            let e = (r.anchor.0.clamp(b[0] + 3.0, b[2] - 3.0), r.anchor.1.clamp(b[1] + 1.0, b[3] - 1.0));
+            let e = (e.0 + if r.anchor.0 < b[0] { -3.0 } else if r.anchor.0 > b[2] { 3.0 } else { 0.0 }, e.1 + if r.anchor.1 < b[1] { -2.0 } else if r.anchor.1 > b[3] { 2.0 } else { 0.0 });
             let (dx, dy) = (e.0 - r.anchor.0, e.1 - r.anchor.1);
             let l = dx.hypot(dy);
             if l < 10.0 { continue; }
@@ -916,7 +919,10 @@ fn seg_box_dist(a: Pt, c: Pt, b: Bx) -> f64 {
     (0..=n).map(|i| { let t = i as f64 / n as f64; box_pt(b, (a.0 + t * (c.0 - a.0), a.1 + t * (c.1 - a.1))) }).fold(f64::MAX, f64::min)
 }
 /// The label is no nearer any other point mark than its own thing (a label among several circles names the right one).
-fn nearest_is_own(board: &Board, b: Bx, own: f64) -> bool { board.dots.iter().all(|(q, _)| box_pt(b, *q) + 0.5 >= own || own < 0.5) }
+/// (clearly nearer: any other mark at least 8 px and half as far again further off than its own thing)
+fn nearest_is_own(board: &Board, b: Bx, own: f64, own_pts: &[Pt]) -> bool {
+    board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 0.5 && (o.1 - q.1).abs() < 0.5)).all(|(q, _)| box_pt(b, *q) >= (own + 8.0).max(1.5 * own))
+}
 
 // ───────────────────────── render ─────────────────────────
 
@@ -939,6 +945,8 @@ pub struct Drawn {
     pub circle_marks: Vec<Pt>,
     /// Axis numbers left out because a point mark covers them.
     pub hidden_numbers: usize,
+    /// Axis numbers left out where they would meet another number (the corner of the axes, a tight row at Large).
+    pub dropped_numbers: usize,
     pub heads: usize,
     pub frame: (f64, f64, f64, f64, f64, f64, f64, f64),
     pub asks_drawn: usize,
@@ -946,13 +954,17 @@ pub struct Drawn {
     pub discs: Vec<Disc>,
     pub verticals: usize,
     pub horizontals: usize,
+    /// Asymptotes the graph has in the window, drawn or not.
+    pub asymptotes: usize,
+    /// The first value of a has a limit that is a number (the epsilon band can be drawn there).
+    pub eps_possible: bool,
     pub infinite_answer: bool,
     pub dne_answer: bool,
     pub eps_drawn: bool,
     pub inf_asked: bool,
 }
 
-thread_local! { static CACHE: std::cell::RefCell<Option<(String, String, Drawn)>> = const { std::cell::RefCell::new(None) }; }
+thread_local! { static CACHE: std::cell::RefCell<Vec<(String, String, Drawn)>> = const { std::cell::RefCell::new(Vec::new()) }; }
 
 pub fn render(p: &Params) -> String { built(p).0 }
 pub fn last_drawn(p: &Params) -> Drawn { built(p).1 }
@@ -960,9 +972,10 @@ pub fn warnings(p: &Params) -> Vec<String> { built(p).1.notes }
 
 fn built(p0: &Params) -> (String, Drawn) {
     let key = format!("{:?}", p0.0);
-    if let Some(hit) = CACHE.with(|c| c.borrow().as_ref().filter(|c| c.0 == key).map(|c| (c.1.clone(), c.2.clone()))) { return hit; }
+    // (the panel asks about the same params many times a frame: the last few builds are kept; a build is pure, so this only saves time)
+    if let Some(hit) = CACHE.with(|c| c.borrow().iter().find(|c| c.0 == key).map(|c| (c.1.clone(), c.2.clone()))) { return hit; }
     let out = build(p0);
-    CACHE.with(|c| *c.borrow_mut() = Some((key, out.0.clone(), out.1.clone())));
+    CACHE.with(|c| { let mut c = c.borrow_mut(); if c.len() >= 4 { c.remove(0); } c.push((key, out.0.clone(), out.1.clone())); });
     out
 }
 
@@ -1015,9 +1028,15 @@ fn build(p0: &Params) -> (String, Drawn) {
     let mut curves = String::new();
     for (i, pc) in m.pieces.iter().enumerate() {
         for (k, row) in rows_of(pc).iter().enumerate() {
-            let gp = grid_params(p, row, true);
+            let mut gp = grid_params(p, row, true);
             let mut rn = vec![];
-            let s = coordinate_grid_build(&gp, &mut rn);
+            let mut s = coordinate_grid_build(&gp, &mut rn);
+            // (asked for arrows but no end of this piece reaches the edge: drawn again without, so nothing changes that is not seen)
+            if p.b("arrows") && !s.contains("data-row-arrow") {
+                gp.set_s("eq1_arrows", "None");
+                rn.clear();
+                s = coordinate_grid_build(&gp, &mut rn);
+            }
             for n in rn {
                 if n.contains("No part of this curve is inside the window") { let t = format!("Piece {} is outside the window: widen the axes to see it", pc.n); if !notes.contains(&t) { notes.push(t); } }
                 else if n.contains("too long") || n.contains("Too detailed") { notes.push(format!("Piece {} is too long to draw", pc.n)); }
@@ -1028,6 +1047,11 @@ fn build(p0: &Params) -> (String, Drawn) {
                     for w in clipped.windows(2) { if !(w[0].1 == w[1].1 && (w[0].1 <= rect[1] || w[0].1 >= rect[3])) { board.segs.push((w[0], w[1])); dr.things.push((w[0], w[1])); } }
                 }
                 dr.heads += grp.matches("data-row-arrow").count();
+                for part in grp.split("<polygon").skip(1) {
+                    let Some(pts) = attr_s(part, "points") else { continue };
+                    let q: Vec<Pt> = pts.split(' ').filter_map(|t| { let (a, b) = t.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect();
+                    for k in 0..q.len() { let (a, b) = (q[k], q[(k + 1) % q.len()]); board.segs.push((a, b)); dr.things.push((a, b)); }
+                }
                 curves.push_str(&grp);
             }
         }
@@ -1039,6 +1063,8 @@ fn build(p0: &Params) -> (String, Drawn) {
     let mut asym_svg = String::new();
     let (adash, aw) = if print { ("7 5", 1.6) } else { ("6 4", 1.5) };
     let mut asym_lines: Vec<(char, String, Pt, Pt)> = vec![];
+    dr.asymptotes = verts.len() + horiz.iter().filter(|h| inside_y(h.0)).count();
+    dr.eps_possible = m.asks.first().is_some_and(|a| m.two(a.v).num().is_some());
     if p.b("show_asym") {
         for (x, t) in &verts {
             let (a, b) = ((sx(*x), rect[1]), (sx(*x), rect[3]));
@@ -1169,22 +1195,6 @@ fn build(p0: &Params) -> (String, Drawn) {
     // ── labels on the plot ──
     let mut reqs: Vec<(char, Req)> = vec![];
     let lab_size = size;
-    let show_asym_eqs = p.b("show_asym") && p.b("asym_eqs") && !(stu && p.b("stu_hide_asym"));
-    if show_asym_eqs {
-        for (k, t, a, b) in &asym_lines {
-            let w = tw(t, lab_size);
-            let hgt = lab_size;
-            let mut tries = vec![];
-            if *k == 'v' {
-                let n = 14;
-                for side in [1.0, -1.0] { for j in 0..n { let y = rect[1] + 4.0 + hgt * 0.6 + (rect[3] - rect[1] - 8.0 - hgt) * j as f64 / (n - 1) as f64; tries.push((a.0 + side * (w / 2.0 + 5.0), y)); } }
-            } else {
-                let n = 14;
-                for side in [-1.0, 1.0] { for j in 0..n { let x = rect[2] - 4.0 - w / 2.0 - (rect[2] - rect[0] - 8.0 - w) * j as f64 / (n - 1) as f64; tries.push((x, a.1 + side * (hgt * 0.5 + 4.0))); } }
-            }
-            reqs.push(('a', Req { text: t.clone(), own: vec![(*a, *b)], tries, anchor: if *k == 'v' { (a.0, rect[1] + 30.0) } else { (rect[2] - 40.0, a.1) } }));
-        }
-    }
     let show_kinds = p.b("kind_labels") && !(stu && p.b("stu_hide_kinds"));
     if show_kinds {
         for d in &discs {
@@ -1203,12 +1213,31 @@ fn build(p0: &Params) -> (String, Drawn) {
             let w = tw(d.kind, lab_size);
             let mut tries = vec![];
             for an in &anchors {
-                for gap in [8.0, 14.0, 22.0] {
+                for gap in [6.0, 10.0, 16.0, 24.0, 34.0] {
                     let (hx, hy) = (w / 2.0 + cr + gap, 0.5 * lab_size + cr + gap * 0.6);
                     for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (1.0, -1.0), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (0.0, -1.0), (0.0, 1.0)] { tries.push((an.0 + dx * hx, an.1 + dy * hy)); }
                 }
             }
             reqs.push(('k', Req { text: d.kind.to_string(), own, tries, anchor: anchors[0] }));
+        }
+    }
+    let show_asym_eqs = p.b("show_asym") && p.b("asym_eqs") && !(stu && p.b("stu_hide_asym"));
+    if show_asym_eqs {
+        for (k, t, a, b) in &asym_lines {
+            let w = tw(t, lab_size);
+            let hgt = lab_size;
+            let mut tries = vec![];
+            // along the line from its ends inward (the top end of a vertical one first), on either side of it
+            let n = 24;
+            let mut ts: Vec<f64> = (0..n).map(|j| j as f64 / (n - 1) as f64).collect();
+            if *k == 'h' { ts.sort_by(|u, v| (u.min(1.0 - u), *u).partial_cmp(&(v.min(1.0 - v), *v)).unwrap()); }
+            for t in ts {
+                for side in [1.0, -1.0] {
+                    if *k == 'v' { tries.push((a.0 + side * (w / 2.0 + 5.0), rect[1] + 4.0 + hgt * 0.6 + (rect[3] - rect[1] - 8.0 - 1.2 * hgt) * t)); }
+                    else { tries.push((rect[2] - 4.0 - w / 2.0 - (rect[2] - rect[0] - 8.0 - w) * t, a.1 - side * (hgt * 0.5 + 4.0))); }
+                }
+            }
+            reqs.push(('a', Req { text: t.clone(), own: vec![(*a, *b)], tries, anchor: if *k == 'v' { (a.0, rect[1] + 30.0) } else { (rect[2] - 40.0, a.1) } }));
         }
     }
     let mut labels_svg = String::new();
@@ -1227,9 +1256,56 @@ fn build(p0: &Params) -> (String, Drawn) {
     }
     if !beside.is_empty() { notes.push(format!("No clear room on the graph for {}: it is written under the graph (narrowing or widening the window, or a smaller label size, makes room)", beside.join(", ").replace('-', "\u{2212}"))); }
 
-    // the grid's texts over the curves: a tick number a point mark sits on is left out
+    // the grid's texts over the curves: a tick number a point mark sits on is left out; where an x number meets a y number at
+    // the corner of the axes (Large labels), the x number drops below its row, as the grid does beside a conic
+    let mut gtexts = gtexts;
+    {
+        let is_x = |t: &GText| t.number && t.el.contains(r#"text-anchor="middle""#);
+        let ys: Vec<Bx> = gtexts.iter().filter(|t| t.number && !is_x(t)).map(|t| grow(t.bx, 1.0)).collect();
+        for t in gtexts.iter_mut().filter(|t| is_x(t)) {
+            if !ys.iter().any(|o| hit(*o, t.bx)) { continue; }
+            let y0 = attr(&t.el, "y").unwrap_or(0.0);
+            if let Some(dy) = (13..=26).map(|d| d as f64).find(|d| !ys.iter().any(|o| hit(*o, [t.bx[0], t.bx[1] + d, t.bx[2], t.bx[3] + d]))) {
+                t.el = t.el.replacen(&format!(r#" y="{y0:.2}""#), &format!(r#" y="{:.2}""#, y0 + dy), 1);
+                t.bx = [t.bx[0], t.bx[1] + dy, t.bx[2], t.bx[3] + dy];
+            } else { t.number = false; t.el.clear(); dr.dropped_numbers += 1; }
+        }
+        // the origin's zero: below left of the origin, else below right, else left out (as on the grid beside a conic)
+        let ys: Vec<Bx> = gtexts.iter().filter(|t| t.number && !is_x(t) && !t.el.ends_with(">0</text>")).map(|t| grow(t.bx, 1.0)).collect();
+        let xs_boxes: Vec<Bx> = gtexts.iter().filter(|t| is_x(t)).map(|t| grow(t.bx, 1.0)).collect();
+        for t in gtexts.iter_mut().filter(|t| t.number && !is_x(t) && t.el.ends_with(">0</text>")) {
+            if !ys.iter().chain(xs_boxes.iter()).any(|o| hit(*o, t.bx)) { continue; }
+            let x0 = attr(&t.el, "x").unwrap_or(0.0);
+            let w = t.bx[2] - t.bx[0];
+            let nx = x0 + 13.5;
+            let nb = [nx, t.bx[1], nx + w, t.bx[3]];
+            if !ys.iter().chain(xs_boxes.iter()).any(|o| hit(*o, nb)) {
+                t.el = t.el.replacen(&format!(r#" x="{x0:.2}""#), &format!(r#" x="{nx:.2}""#), 1).replacen(r#"text-anchor="end""#, r#"text-anchor="start""#, 1);
+                t.bx = nb;
+            } else { t.number = false; t.el.clear(); dr.dropped_numbers += 1; }
+        }
+        // a row of x numbers too tight to read apart (Large, a wide window): every 2nd, 5th or 10th is kept, as the grid thins
+        // its own numbers
+        let step = p.f("xstep").max(1e-9);
+        let row: Vec<usize> = (0..gtexts.len()).filter(|&i| is_x(&gtexts[i]) && !gtexts[i].el.is_empty()).collect();
+        let val = |t: &GText| -> Option<f64> { let i = t.el.rfind("\">")?; t.el[i + 2..t.el.len() - 7].replace('\u{2212}', "-").parse::<f64>().ok() };
+        let tight = |keep: &dyn Fn(&GText) -> bool, g: &Vec<GText>| -> bool {
+            let mut bs: Vec<Bx> = row.iter().map(|&i| &g[i]).filter(|t| keep(t)).map(|t| t.bx).collect();
+            bs.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap());
+            bs.windows(2).any(|w| w[1][0] - w[0][2] < 1.0)
+        };
+        if tight(&|_| true, &gtexts) {
+            for stride in [2i64, 5, 10, 20, 50, 100] {
+                let keep = move |t: &GText| val(t).is_some_and(|v| ((v / step).round() as i64).rem_euclid(stride) == 0);
+                if !tight(&keep, &gtexts) || stride == 100 {
+                    for &i in &row { if !keep(&gtexts[i]) { gtexts[i].el.clear(); dr.dropped_numbers += 1; } }
+                    break;
+                }
+            }
+        }
+    }
     let mut texts_svg = String::new();
-    for t in &gtexts {
+    for t in gtexts.iter().filter(|t| !t.el.is_empty()) {
         if t.number && dr.circle_marks.iter().chain(dr.markers.iter().map(|m| &m.0)).any(|q| box_pt([t.bx[0] + 1.5, t.bx[1] + 1.5, t.bx[2] - 1.5, t.bx[3] - 1.0], *q) < cr) { dr.hidden_numbers += 1; continue; }
         // a halo under each number, so a curve crossing it does not cut through the digits
         if t.number {
@@ -1462,25 +1538,31 @@ pub(super) fn model_of(p: &Params) -> Model {
 
 /// Controls shown only where they change the drawing.
 pub fn relevant(key: &str, p: &Params) -> bool {
+    let mut q = p.clone();
+    q.normalize(&params(), false);
+    let p = &q;
     let dr = last_drawn(p);
     let stu = !p.b("show_answers");
-    let has_asks = dr.asks_drawn > 0;
-    let asym = dr.verticals + dr.horizontals > 0;
-    let any_q = has_asks || p.b("ask_disc") || dr.inf_asked;
+    let asks = !read_asks(p.s("ask_at"), &mut vec![]).is_empty();
+    let asym = dr.asymptotes > 0;
+    let inf_possible = { let m = model_of(p); m.at_inf(1.0).is_some() || m.at_inf(-1.0).is_some() };
+    let any_q = (asks && ["ask_left", "ask_right", "ask_two", "ask_value"].iter().any(|k| p.b(k))) || p.b("ask_disc") || dr.inf_asked;
     match key {
-        "ask_left" | "ask_right" | "ask_two" | "ask_value" => !read_asks(p.s("ask_at"), &mut vec![]).is_empty(),
+        "ask_left" | "ask_right" | "ask_two" | "ask_value" => asks,
+        "ask_inf" => inf_possible,
         "guide" => !dr.markers.is_empty(),
         "inf_answer" => !stu && dr.infinite_answer,
         "dne_word" => !stu && dr.dne_answer,
-        "asym_eqs" => asym && p.b("show_asym") && !(stu && p.b("stu_hide_asym")),
         "show_asym" => asym,
+        "asym_eqs" => asym && p.b("show_asym") && !(stu && p.b("stu_hide_asym")),
         "kind_labels" => !dr.discs.is_empty() && !(stu && p.b("stu_hide_kinds")),
         "stu_hide_kinds" => stu && p.b("kind_labels") && !dr.discs.is_empty(),
         "stu_hide_asym" => stu && asym && p.b("show_asym") && p.b("asym_eqs"),
         "arrows" => { let mut q = p.clone(); q.set_b("arrows", true); last_drawn(&q).heads > 0 }
-        "eps" => p.b("eps_band"),
-        "eps_band" => !read_asks(p.s("ask_at"), &mut vec![]).is_empty(),
+        "eps_band" => dr.eps_possible,
+        "eps" => p.b("eps_band") && dr.eps_possible,
         "title" => p.s("title_mode") == "Text",
+        "square" => { let (x0, x1, y0, y1, ..) = dr.frame; ((x1 - x0) - (y1 - y0)).abs() > 1e-9 }
         "show_answers" => any_q || (p.b("kind_labels") && p.b("stu_hide_kinds") && !dr.discs.is_empty()) || (asym && p.b("show_asym") && p.b("asym_eqs") && p.b("stu_hide_asym")),
         _ => true,
     }

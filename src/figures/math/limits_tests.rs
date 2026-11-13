@@ -233,3 +233,514 @@ fn what_cannot_be_drawn_is_said() {
     assert!(notes(json!({"ask_at": "1, abc"})).iter().any(|n| n.contains("\u{201c}abc\u{201d}")));
     assert!(notes(json!({"dots": "(1, 2), (3"})).iter().any(|n| n.contains("not closed")));
 }
+
+#[test]
+#[ignore]
+fn debug_labels() {
+    let p = with(serde_json::from_str(&std::env::var("LIM_CASE").unwrap()).unwrap());
+    let _ = svg(&p);
+    for l in last_drawn(&p).labels { println!("{l:?}"); }
+    println!("{:?}", last_drawn(&p).frame);
+}
+
+// ───────────────────────── labels ─────────────────────────
+
+type Bx = [f64; 4];
+type Pt = (f64, f64);
+struct Meter { opt: resvg::usvg::Options<'static>, memo: std::collections::HashMap<String, Option<Bx>> }
+impl Meter {
+    fn new() -> Meter { let mut opt = resvg::usvg::Options::default(); opt.fontdb = crate::figures::fontdb(); Meter { opt, memo: Default::default() } }
+    /// The ink box of one `<text>` element as drawn.
+    fn ink(&mut self, el: &str) -> Option<Bx> {
+        if let Some(v) = self.memo.get(el) { return *v; }
+        fn find(g: &resvg::usvg::Group) -> Option<resvg::usvg::Rect> {
+            for n in g.children() {
+                match n { resvg::usvg::Node::Text(t) => return Some(t.flattened().abs_bounding_box()), resvg::usvg::Node::Group(g2) => if let Some(r) = find(g2) { return Some(r); }, _ => {} }
+            }
+            None
+        }
+        let s = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="4000">{el}</svg>"#);
+        let out = resvg::usvg::Tree::from_str(&s, &self.opt).ok().and_then(|t| find(t.root())).filter(|r| r.width() > 0.0).map(|r| [r.left() as f64, r.top() as f64, r.right() as f64, r.bottom() as f64]);
+        self.memo.insert(el.to_string(), out);
+        out
+    }
+}
+fn attr(tag: &str, n: &str) -> Option<f64> { let pat = format!(" {n}=\""); let j = tag.find(&pat)? + pat.len(); tag[j..].split('"').next()?.parse().ok() }
+fn group<'a>(svg: &'a str, name: &str) -> &'a str {
+    let pat = format!(r#"data-lim="{name}">"#);
+    let Some(i) = svg.find(&pat) else { return "" };
+    let rest = &svg[i..];
+    // up to the matching </g>
+    let mut depth = 0i32;
+    let mut k = 0;
+    while k < rest.len() {
+        if rest[k..].starts_with("<g") { depth += 1; } else if rest[k..].starts_with("</g>") { if depth == 0 { return &rest[..k]; } depth -= 1; }
+        k += rest[k..].chars().next().unwrap().len_utf8();
+    }
+    rest
+}
+/// (group, element) for every text drawn in ink (the white halo copies are left out).
+fn texts(svg: &str) -> Vec<(String, String)> {
+    let mut out = vec![];
+    for name in ["texts", "labels", "block"] {
+        let g = group(svg, name);
+        let mut rest = g;
+        while let Some(i) = rest.find("<text") {
+            let end = rest[i..].find("</text>").unwrap() + i + 7;
+            let el = &rest[i..end];
+            if !el.contains(r##"fill="#fff""##) { out.push((name.to_string(), el.to_string())); }
+            rest = &rest[end..];
+        }
+    }
+    out
+}
+/// The plot's strokes (curves, asymptotes, guides, band edges, leaders, the axes), arrowheads and point marks.
+fn scene(svg: &str) -> (Vec<(Pt, Pt)>, Vec<(Pt, f64)>, Vec<(Pt, Pt)>) {
+    let mut segs = vec![];
+    let mut dots = vec![];
+    let mut leaders = vec![];
+    let mut curves = group(svg, "curves").to_string();
+    while let Some(a) = curves.find("<mask") { let b = curves[a..].find("</mask>").unwrap(); curves.replace_range(a..a + b + 7, ""); }
+    for part in curves.split('<') {
+        if part.starts_with("polyline ") || part.starts_with("polygon ") {
+            let pts: Vec<Pt> = part.split("points=\"").nth(1).unwrap().split('"').next().unwrap().split(' ').filter_map(|q| { let (a, b) = q.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect();
+            for w in pts.windows(2) { segs.push((w[0], w[1])); }
+            if part.starts_with("polygon ") && pts.len() > 2 { segs.push((pts[pts.len() - 1], pts[0])); }
+        }
+    }
+    for name in ["lines", "band", "labels"] {
+        for part in group(svg, name).split('<').filter(|p| p.starts_with("line ")) {
+            let s = ((attr(part, "x1").unwrap(), attr(part, "y1").unwrap()), (attr(part, "x2").unwrap(), attr(part, "y2").unwrap()));
+            if name == "labels" { leaders.push(s); } else { segs.push(s); }
+        }
+    }
+    for part in group(svg, "marks").split('<') {
+        if part.starts_with("circle ") { dots.push(((attr(part, "cx").unwrap(), attr(part, "cy").unwrap()), attr(part, "r").unwrap())); }
+        if part.starts_with("polygon ") {
+            let pts: Vec<f64> = part.split("points=\"").nth(1).unwrap().split('"').next().unwrap().split([' ', ',']).filter_map(|t| t.parse().ok()).collect();
+            dots.push(((pts[0], pts[3]), 6.0));
+        }
+    }
+    // the axes: the frame's lines 2 px or heavier, before the first group of this figure
+    let frame = &svg[..svg.find(r#"data-lim="band""#).unwrap_or(0)];
+    for part in frame.split('<').filter(|p| p.starts_with("line ") && attr(p, "stroke-width").is_some_and(|w| w >= 2.0)) {
+        segs.push(((attr(part, "x1").unwrap(), attr(part, "y1").unwrap()), (attr(part, "x2").unwrap(), attr(part, "y2").unwrap())));
+    }
+    (segs, dots, leaders)
+}
+fn seg_box(a: Pt, b: Pt, r: Bx) -> bool {
+    let n = (((b.0 - a.0).abs() + (b.1 - a.1).abs()) / 0.5).ceil().clamp(1.0, 4000.0) as usize;
+    (0..=n).any(|i| { let t = i as f64 / n as f64; let (x, y) = (a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)); x > r[0] && x < r[2] && y > r[1] && y < r[3] })
+}
+fn pt_box(q: Pt, r: Bx) -> f64 { let dx = (r[0] - q.0).max(q.0 - r[2]).max(0.0); let dy = (r[1] - q.1).max(q.1 - r[3]).max(0.0); dx.hypot(dy) }
+fn seg_dist(a: Pt, b: Pt, r: Bx) -> f64 {
+    if seg_box(a, b, r) { return 0.0; }
+    let n = (((b.0 - a.0).abs() + (b.1 - a.1).abs()) / 1.0).ceil().clamp(1.0, 4000.0) as usize;
+    (0..=n).map(|i| { let t = i as f64 / n as f64; pt_box((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)), r) }).fold(f64::MAX, f64::min)
+}
+
+/// What one figure's check counted.
+#[derive(Default, Debug, Clone)]
+struct Res { beside: usize, leader: usize, under: usize, hidden_numbers: usize, dropped_numbers: usize, labels_on_plot: usize, problems: Vec<String> }
+
+/// Checks one figure as drawn: every text on the page and on no other text; every label on the plot clear of every stroke
+/// and point mark, nearer its own thing than any other mark, and on a leader only when it has one.
+fn check(m: &mut Meter, s: &str, p: &Params) -> Res {
+    let dr = last_drawn(p);
+    let (w, h) = crate::figures::svg_size(s);
+    let (segs, dots, leaders) = scene(s);
+    let all: Vec<(String, String, Bx)> = texts(s).into_iter().filter_map(|(g, el)| m.ink(&el).map(|b| (g, el, b))).collect();
+    let mut r = Res { hidden_numbers: dr.hidden_numbers, dropped_numbers: dr.dropped_numbers, ..Default::default() };
+    for (i, (g, el, b)) in all.iter().enumerate() {
+        if !(b[0] >= 0.0 && b[1] >= 0.0 && b[2] <= w && b[3] <= h) { r.problems.push(format!("off the page: {g} {b:?}")); }
+        for (j, (g2, _, b2)) in all.iter().enumerate() {
+            if j <= i { continue; }
+            if b[0] + 0.5 < b2[2] && b2[0] + 0.5 < b[2] && b[1] + 0.5 < b2[3] && b2[1] + 0.5 < b[3] { r.problems.push(format!("text on text: {g} {b:?} and {g2} {b2:?}: {}", &el[el.len().saturating_sub(60)..])); }
+        }
+        if g != "labels" { continue; }
+        r.labels_on_plot += 1;
+        for (a, c) in &segs { if seg_box(*a, *c, *b) { r.problems.push(format!("label on a line: {b:?} {a:?}-{c:?}")); break; } }
+        for (q, rr) in &dots { if pt_box(*q, *b) < *rr + 1.0 { r.problems.push(format!("label on a point: {b:?} {q:?}")); } }
+    }
+    // each label by its own thing: its ink box nearer its own thing than any other point mark
+    let lab_boxes: Vec<Bx> = all.iter().filter(|t| t.0 == "labels").map(|t| t.2).collect();
+    let placed: Vec<&(char, String, Spot, Vec<(Pt, Pt)>)> = dr.labels.iter().filter(|l| l.2 != Spot::Off).collect();
+    assert_eq!(placed.len(), lab_boxes.len(), "labels drawn and labels recorded differ");
+    for (l, b) in placed.iter().zip(&lab_boxes) {
+        match &l.2 { Spot::Beside(_) => r.beside += 1, Spot::Leader(_, s0, e0) => {
+            r.leader += 1;
+            // a leader runs from its own thing to its own text and crosses no stroke
+            if pt_box(*e0, grow(*b, 5.0)) > 0.0 { r.problems.push(format!("leader does not reach its label {}", l.1)); }
+            for (a, c) in &segs { if seg_cross(*s0, *e0, *a, *c) { r.problems.push(format!("leader of {} crosses a stroke", l.1)); } }
+        }, Spot::Off => {} }
+        let own = l.3.iter().map(|(a, c)| seg_dist(*a, *c, *b)).fold(f64::MAX, f64::min);
+        let own_pts: Vec<Pt> = l.3.iter().flat_map(|(a, c)| [*a, *c]).collect();
+        if matches!(l.2, Spot::Beside(_)) {
+            for (q, _) in &dots {
+                if own_pts.iter().any(|o| (o.0 - q.0).abs() < 0.6 && (o.1 - q.1).abs() < 0.6) { continue; }
+                if pt_box(*q, *b) < own { r.problems.push(format!("{} is nearer a point {q:?} than its own thing ({own:.1})", l.1)); }
+            }
+        }
+    }
+    for (s0, e0) in &leaders { for (s1, e1) in &leaders { if (s0, e0) != (s1, e1) && seg_cross(*s0, *e0, *s1, *e1) { r.problems.push("two leaders cross".into()); } } }
+    r.under = dr.labels.iter().filter(|l| l.2 == Spot::Off).count();
+    r
+}
+fn grow(r: Bx, t: f64) -> Bx { [r[0] - t, r[1] - t, r[2] + t, r[3] + t] }
+fn seg_cross(a: Pt, b: Pt, c: Pt, d: Pt) -> bool {
+    let o = |p: Pt, q: Pt, r: Pt| (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0);
+    let (d1, d2, d3, d4) = (o(c, d, a), o(c, d, b), o(a, b, c), o(a, b, d));
+    (d1 > 0.0) != (d2 > 0.0) && (d3 > 0.0) != (d4 > 0.0)
+}
+
+/// The written classroom list: the functions, windows and values of a a limits unit uses (rational functions with holes and
+/// poles, piecewise functions with jumps and steps, graphs drawn from points, limits at infinity).
+fn classroom() -> Vec<(&'static str, J)> {
+    let f = |pieces: &str, ask: &str, w: [f64; 4]| json!({"pieces": pieces, "dots": "", "ask_at": ask, "xmin": w[0], "xmax": w[1], "ymin": w[2], "ymax": w[3]});
+    let fd = |pieces: &str, dots: &str, ask: &str, w: [f64; 4]| json!({"pieces": pieces, "dots": dots, "ask_at": ask, "xmin": w[0], "xmax": w[1], "ymin": w[2], "ymax": w[3]});
+    let std = [-6.0, 6.0, -6.0, 6.0];
+    vec![
+        ("hole (x^2-4)/(x-2)", f("y = (x^2 - 4)/(x - 2)", "2", [-4.0, 6.0, -2.0, 7.0])),
+        ("hole (x^2-1)/(x-1)", f("y = (x^2 - 1)/(x - 1)", "1", std)),
+        ("hole (x^2-9)/(x+3)", f("y = (x^2 - 9)/(x + 3)", "-3", [-8.0, 4.0, -9.0, 3.0])),
+        ("hole (x^2+x-6)/(x-2)", f("y = (x^2 + x - 6)/(x - 2)", "2", [-6.0, 6.0, -4.0, 8.0])),
+        ("hole (x^3-8)/(x-2)", f("y = (x^3 - 8)/(x - 2)", "2", [-4.0, 5.0, -2.0, 14.0])),
+        ("1/x", f("y = 1/x", "0", std)),
+        ("1/x^2", f("y = 1/x^2", "0", [-5.0, 5.0, -2.0, 8.0])),
+        ("1/(x-2)", f("y = 1/(x - 2)", "2", [-4.0, 8.0, -6.0, 6.0])),
+        ("3/(x+1)^2", f("y = 3/(x + 1)^2", "-1", [-6.0, 4.0, -2.0, 8.0])),
+        ("(x+1)/(x-3)", f("y = (x + 1)/(x - 3)", "3", [-6.0, 10.0, -6.0, 8.0])),
+        ("2x/(x-1)", f("y = 2x/(x - 1)", "1", [-6.0, 8.0, -6.0, 8.0])),
+        ("(2x^2+1)/(x^2+1)", f("y = (2x^2 + 1)/(x^2 + 1)", "0", [-8.0, 8.0, -3.0, 4.0])),
+        ("x^2/(x^2-4)", f("y = x^2/(x^2 - 4)", "2", [-7.0, 7.0, -5.0, 6.0])),
+        ("1/(x^2-1)", f("y = 1/(x^2 - 1)", "-1, 1", [-5.0, 5.0, -5.0, 5.0])),
+        ("(x-1)/(x^2-1)", f("y = (x - 1)/(x^2 - 1)", "-1, 1", [-5.0, 5.0, -5.0, 5.0])),
+        ("|x|/x", f("y = |x|/x", "0", [-5.0, 5.0, -3.0, 3.0])),
+        ("|x-2|/(x-2)", f("y = |x - 2|/(x - 2)", "2", [-3.0, 7.0, -3.0, 3.0])),
+        ("sin x / x", json!({"pieces": "y = sin(x)/x", "dots": "", "ask_at": "0", "xmin": -10.0, "xmax": 10.0, "ymin": -1.0, "ymax": 2.0, "ystep": 0.5, "xstep": 2.0, "square": false})),
+        ("(1-cos x)/x", json!({"pieces": "y = (1 - cos(x))/x", "dots": "", "ask_at": "0", "xmin": -10.0, "xmax": 10.0, "ymin": -2.0, "ymax": 2.0, "ystep": 0.5, "xstep": 2.0, "square": false})),
+        ("e^(-x)", f("y = e^(-x)", "0", [-3.0, 8.0, -2.0, 8.0])),
+        ("ln x", f("y = ln(x)", "1", [-2.0, 10.0, -5.0, 4.0])),
+        ("sqrt x", f("y = sqrt(x)", "0, 4", [-2.0, 10.0, -2.0, 5.0])),
+        ("tan x", f("y = tan(x)", "", [-5.0, 5.0, -6.0, 6.0])),
+        ("1/(x-2)+3", f("y = 1/(x - 2) + 3", "2", [-4.0, 8.0, -2.0, 9.0])),
+        ("(3x-6)/(x+2)", f("y = (3x - 6)/(x + 2)", "-2", [-10.0, 6.0, -8.0, 12.0])),
+        ("jump x+2 | 4-x", f("y = x + 2, x < 1\ny = 4 - x, x >= 1", "1", [-5.0, 5.0, -3.0, 6.0])),
+        ("three pieces x^2 | 6-x | 1", f("y = x^2, x < 2\ny = 6 - x, 2 <= x < 4\ny = 1, x >= 4", "2, 4", [-5.0, 6.0, -3.0, 7.0])),
+        ("continuous join", f("y = 2x + 1, x <= 0\ny = x^2 + 1, x > 0", "0", [-4.0, 4.0, -4.0, 8.0])),
+        ("-x | sqrt x", f("y = -x, x < 0\ny = sqrt(x), x >= 0", "0", [-5.0, 9.0, -2.0, 6.0])),
+        ("3 | x^2 | 4-x", f("y = 3, x < -1\ny = x^2, -1 <= x <= 2\ny = 4 - x, x > 2", "-1, 2", [-5.0, 6.0, -3.0, 6.0])),
+        ("x^2-4 | 2x and a point", fd("y = x^2 - 4, x < 2\ny = 2x, x > 2", "(2, 1)", "2", [-4.0, 5.0, -5.0, 9.0])),
+        ("hole by x≠2 with a point", fd("y = x + 1, x \u{2260} 2", "(2, 5)", "2", [-4.0, 6.0, -3.0, 7.0])),
+        ("hole by x≠1", f("y = x^2 - 1, x != 1", "1", [-4.0, 4.0, -2.0, 6.0])),
+        ("step 2 | -1", f("y = 2, x < 0\ny = -1, x >= 0", "0", [-5.0, 5.0, -4.0, 4.0])),
+        ("staircase", f("y = 0, 0 <= x < 1\ny = 1, 1 <= x < 2\ny = 2, 2 <= x < 3\ny = 3, 3 <= x < 4", "1, 2, 3", [-1.0, 5.0, -1.0, 5.0])),
+        ("1/(x-1) | x-1", f("y = 1/(x - 1), x < 1\ny = x - 1, x >= 1", "1", [-5.0, 6.0, -6.0, 5.0])),
+        ("(x^2-1)/(x+1) | 5-x", f("y = (x^2 - 1)/(x + 1), x < 2\ny = 5 - x, x >= 2", "-1, 2", [-5.0, 7.0, -7.0, 6.0])),
+        ("sin x | x", f("y = sin(x), x < 0\ny = x, x >= 0", "0", [-7.0, 4.0, -3.0, 4.0])),
+        ("e^x | 2-x", f("y = e^x, x < 0\ny = 2 - x, x >= 0", "0", [-5.0, 5.0, -4.0, 4.0])),
+        ("closed both ends 4-x^2", f("y = 4 - x^2, -2 <= x <= 2", "-2, 0, 2", [-4.0, 4.0, -2.0, 6.0])),
+        ("semicircle", f("y = sqrt(9 - x^2)", "3", [-5.0, 5.0, -2.0, 5.0])),
+        ("2+1/(x-3) | x-1", f("y = x - 1, x <= 3\ny = 2 + 1/(x - 3), x > 3", "3", [-3.0, 10.0, -4.0, 8.0])),
+        ("x^2 | -2/(x+1)", f("y = x^2, x < -1\ny = -2/(x + 1), x > -1", "-1", [-5.0, 5.0, -7.0, 7.0])),
+        ("AP style", json!({"pieces": "(-6, -1) (-4, 1) (-2, 2) open\nopen (-2, -1) (0, 0) (1, 2) closed\nopen (1, 4) (2, 3) (3, 3.5) open\ny = 1 + 1/(x - 5), x > 3", "dots": "(3, 1)", "ask_at": "-2, 1, 3, 5", "xmin": -6.0, "xmax": 8.0, "ymin": -5.0, "ymax": 6.0})),
+        ("points: jump", f("(-5, 1) (-3, 3) (-1, 2) (1, 4) open\nclosed (1, 1) (3, 0) (5, 2)", "1", std)),
+        ("points: hill", f("(-4, -2) (-2, 0) (0, 1) (2, 0) (4, -2)", "0", std)),
+        ("points: hole with a point", fd("(-5, 2) (-3, 2) (-1, 4) open\nopen (-1, 4) (2, 3) (4, 3)", "(-1, 1)", "-1", std)),
+        ("points: jump down", f("(-6, 0) (-4, 3) (-2, 1) open\nopen (-2, 4) (0, 2) (3, 2)", "-2", std)),
+        ("points: zigzag", f("(0, 0) (1, 1) (2, 0) (3, 1) (4, 0)", "2", [-1.0, 5.0, -1.0, 3.0])),
+        ("points: closed ends", f("closed (-3, 1) (0, 3) (3, 1) closed", "-3, 3", std)),
+        ("points and a pole", f("(-6, 1) (-4, 2) (-2, 0) open\ny = 1/(x + 1), x > -1", "-2, -1", std)),
+        ("points: open and closed", f("open (-4, 3) (-2, 1) (0, 2) closed\nopen (0, -1) (2, -2) (4, 0)", "0", std)),
+        ("points: wave", f("(-3, -1) (-1, 2) (1, -1) (3, 2)", "1", std)),
+        ("points: three parts", fd("(-5, 4) (-3, 2) open\n(-3, 0) (-1, -2) (1, 0) open\n(1, 3) (3, 3)", "(-3, 2)", "-3, 1", std)),
+        ("(2x-1)/(x+1)", f("y = (2x - 1)/(x + 1)", "-1", [-8.0, 6.0, -6.0, 8.0])),
+        ("(x^2-4)/(x^2-x-2)", f("y = (x^2 - 4)/(x^2 - x - 2)", "-1, 2", [-6.0, 6.0, -5.0, 6.0])),
+        ("5x/(x^2+1)", f("y = 5x/(x^2 + 1)", "0", [-8.0, 8.0, -4.0, 4.0])),
+        ("(x^2+1)/(x-1)", f("y = (x^2 + 1)/(x - 1)", "1", [-6.0, 7.0, -8.0, 10.0])),
+        ("3-2/x^2", f("y = 3 - 2/x^2", "0", [-6.0, 6.0, -5.0, 6.0])),
+        ("arctan", json!({"pieces": "y = arctan(x)", "dots": "", "ask_at": "", "xmin": -8.0, "xmax": 8.0, "ymin": -3.0, "ymax": 3.0})),
+        ("(4x^2-1)/(2x^2+3x-2)", f("y = (4x^2 - 1)/(2x^2 + 3x - 2)", "1/2, -2", [-6.0, 4.0, -6.0, 8.0])),
+        ("opening state", json!({})),
+    ]
+}
+fn merge(a: &J, b: &J) -> J { let mut o = a.as_object().unwrap().clone(); for (k, v) in b.as_object().unwrap() { o.insert(k.clone(), v.clone()); } J::Object(o) }
+
+/// Labels left off the graph (written under it) at Large on the classroom list, each named with why there is no room.
+const LARGE_UNDER: &[&str] = &[
+    // the hole sits near the top of a window 9 wide, on a curve rising almost straight up between the y-axis and the edge
+    "hole (x^3-8)/(x-2)",
+    // the hole at (1/2, 4/5) sits in the corner between the axes and the curve, under the asymptote y = 2
+    "(4x^2-1)/(2x^2+3x-2)",
+];
+/// With every option on at once (the guide, the epsilon band, both kinds of label, arrows), the crowded cases whose label is
+/// written under the graph, each named.
+const ALL_UNDER: &[&str] = &["hole (x^3-8)/(x-2)", "sin x / x", "ln x", "hole by x≠1", "points and a pole", "5x/(x^2+1)", "(4x^2-1)/(2x^2+3x-2)"];
+
+#[test]
+fn every_label_on_the_classroom_list_is_clear_and_by_its_own_thing() {
+    let mut m = Meter::new();
+    let list = classroom();
+    assert!(list.len() >= 60, "{}", list.len());
+    let options = [
+        ("none", json!({})),
+        ("asymptote equations", json!({"asym_eqs": true})),
+        ("kind labels", json!({"kind_labels": true})),
+        ("guide", json!({"guide": true})),
+        ("arrows", json!({"arrows": true})),
+        ("epsilon band", json!({"eps_band": true})),
+        ("questions", json!({"ask_inf": "Both", "ask_disc": true})),
+        ("all", json!({"asym_eqs": true, "kind_labels": true, "guide": true, "arrows": true, "eps_band": true, "ask_inf": "Both", "ask_disc": true})),
+    ];
+    let mut tally: std::collections::BTreeMap<String, Res> = Default::default();
+    let mut problems: Vec<String> = vec![];
+    let mut figs = 0;
+    for (name, base) in &list {
+        for (oname, o) in &options {
+            for size in ["Small", "Medium", "Large"] {
+                let kv = merge(&merge(base, o), &json!({"label_size": size}));
+                let p = with(kv.clone());
+                let s = svg(&p);
+                let r = check(&mut m, &s, &p);
+                figs += 1;
+                for pr in &r.problems { problems.push(format!("{name} / {oname} / {size}: {pr}")); }
+                if r.under > 0 && !(*oname == "all" && ALL_UNDER.contains(name)) && (size != "Large" || !LARGE_UNDER.contains(name)) { problems.push(format!("{name} / {oname} / {size}: {} label(s) written under the graph: {:?}", r.under, last_drawn(&p).labels.iter().filter(|l| l.2 == Spot::Off).map(|l| l.1.clone()).collect::<Vec<_>>())); }
+                for kind in ['a', 'k'] {
+                    let key = format!("{size} {}", if kind == 'a' { "asymptote equation" } else { "kind label" });
+                    let t = tally.entry(key).or_default();
+                    for l in last_drawn(&p).labels.iter().filter(|l| l.0 == kind) { match l.2 { Spot::Beside(_) => t.beside += 1, Spot::Leader(..) => t.leader += 1, Spot::Off => t.under += 1 } }
+                }
+                { let t = tally.entry(format!("{size} axis numbers")).or_default(); t.hidden_numbers += r.hidden_numbers; t.dropped_numbers += r.dropped_numbers; }
+            }
+        }
+    }
+    for (name, base) in &list { for size in ["Medium"] { let p = with(merge(base, &json!({"label_size": size}))); let _ = svg(&p); let d = last_drawn(&p).dropped_numbers; if d > 0 { println!("numbers left out: {name} {size}: {d}"); } } }
+    for (k, t) in &tally { if k.ends_with("numbers") { println!("{k}: under a point {}, left out where two numbers met {}", t.hidden_numbers, t.dropped_numbers); } else { println!("{k}: beside {}, on a leader {}, written under the graph {}", t.beside, t.leader, t.under); } }
+    println!("{figs} figures checked");
+    assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+// ───────────────────────── controls ─────────────────────────
+
+fn bases() -> Vec<J> {
+    vec![
+        json!({}),
+        json!({"show_answers": false}),
+        json!({"show_answers": false, "kind_labels": true, "asym_eqs": true}),
+        json!({"kind_labels": true, "asym_eqs": true, "guide": true, "arrows": true, "eps_band": true, "ask_at": "-2", "ask_inf": "Both", "ask_disc": true}),
+        json!({"pieces": "y = x + 2, x < 1\ny = 4 - x, x >= 1", "dots": "", "xmin": -5.0, "xmax": 5.0, "ymin": -5.0, "ymax": 5.0}),
+        json!({"pieces": "y = (x^2 - 4)/(x - 2)", "dots": "(2, 1)", "ask_at": "2", "inf_answer": "does not exist"}),
+        json!({"pieces": "(-5, 1) (-3, 3) (-1, 2) (1, 4) open\nclosed (1, 1) (3, 0) (5, 2)", "dots": "", "ask_at": ""}),
+        json!({"pieces": "y = 1/x^2", "dots": "", "ask_at": "0", "dne_word": "DNE", "show_asym": false}),
+        json!({"ask_at": "", "show_answers": false}),
+        json!({"pieces": "y = sin(x)/x", "dots": "", "ask_at": "0", "eps_band": true, "show_answers": false, "title_mode": "Blank line"}),
+        json!({"ask_at": "4", "show_answers": false, "eps_band": true}),
+    ]
+}
+
+/// Each switch and choice is shown exactly where changing it changes the drawing; the hidden ones change nothing.
+#[test]
+fn every_control_is_shown_exactly_where_it_draws() {
+    let d = def();
+    let defs = (d.params)();
+    let mut n = 0;
+    for base in bases() {
+        let p = with(base.clone());
+        let s0 = svg(&p);
+        for pd in &defs {
+            let changed = match &pd.kind {
+                crate::figures::Kind::Bool => { let mut q = p.clone(); q.set_b(pd.key, !p.b(pd.key)); svg(&q) != s0 }
+                crate::figures::Kind::Choice(opts) => opts.iter().any(|o| { let mut q = p.clone(); q.set_s(pd.key, o); svg(&q) != s0 }),
+                _ => continue,
+            };
+            assert_eq!(crate::figures::param_relevant(ID, pd.key, &p), changed, "{base}: {} shown {} but changes the drawing {changed}", pd.key, !changed);
+            n += 1;
+        }
+        // the typed boxes that act only sometimes
+        for (key, v) in [("title", "Limits"), ("eps", "1/10")] {
+            let mut q = p.clone();
+            q.set_s(key, v);
+            assert_eq!(crate::figures::param_relevant(ID, key, &p), svg(&q) != s0, "{base}: {key}");
+        }
+    }
+    assert!(n > 200, "{n}");
+}
+
+#[test]
+fn each_option_draws_differently() {
+    for (key, opts, base) in [
+        ("ask_inf", vec!["None", "x \u{2192} \u{221e}", "x \u{2192} \u{2212}\u{221e}", "Both"], json!({})),
+        ("inf_answer", vec!["\u{221e} or \u{2212}\u{221e}", "does not exist"], json!({"ask_at": "4"})),
+        ("dne_word", vec!["does not exist", "DNE"], json!({})),
+        ("title_mode", vec!["Text", "Blank line", "None"], json!({"title": "Limits from a graph"})),
+        ("grid", vec!["Light", "Standard", "Bold", "None"], json!({})),
+        ("label_size", vec!["Large", "Medium", "Small"], json!({})),
+        ("style", vec!["Colour", "Print"], json!({})),
+    ] {
+        let renders: Vec<String> = opts.iter().map(|o| { let mut p = with(base.clone()); p.set_s(key, o); svg(&p) }).collect();
+        for i in 0..renders.len() { for j in i + 1..renders.len() { assert_ne!(renders[i], renders[j], "{key}: {} and {} draw the same", opts[i], opts[j]); } }
+    }
+    // the axes' From, To and Count by, minor lines, numbers, square cells and the axis labels each change the drawing
+    let s0 = svg(&with(json!({})));
+    for kv in [json!({"xmin": -8.0}), json!({"xmax": 12.0}), json!({"xstep": 2.0}), json!({"ymin": -8.0}), json!({"ymax": 8.0}), json!({"ystep": 2.0}), json!({"minor": 2}), json!({"numbers": false}), json!({"square": false}), json!({"xlabel": "t"}), json!({"ylabel": "d"}), json!({"title": "Limits"}), json!({"ask_at": "-2, 1, 4"}), json!({"dots": "(-2, 3), (7, -3)"})] {
+        assert_ne!(svg(&with(kv.clone())), s0, "{kv}");
+    }
+    // the same params always give the same drawing (a build in between does not change it)
+    let p = with(json!({"kind_labels": true, "asym_eqs": true}));
+    let a = svg(&p);
+    let _ = svg(&with(json!({"ask_at": "4"})));
+    for k in 0..6 { let _ = svg(&with(json!({"ask_at": format!("{k}")}))); }
+    assert_eq!(svg(&p), a);
+}
+
+// ───────────────────────── copies, Print, links ─────────────────────────
+
+#[test]
+fn student_copy_and_key() {
+    let d = def();
+    let p = with(json!({"ask_inf": "Both", "ask_disc": true, "kind_labels": true, "asym_eqs": true}));
+    let (stu, key) = crate::figures::answer_pair(&d, &p).unwrap();
+    let (ws, wk) = (words(&stu), words(&key));
+    // the key, worked by hand above: 4, 1, does not exist, 1 at x = 1; 2 at ∞ and -∞ at -∞; the three discontinuities
+    for answer in ["lim x→1- f(x) = 4", "lim x→1+ f(x) = 1", "lim x→1 f(x) = does not exist", "f(1) = 1", "lim x→∞ f(x) = 2", "lim x→-∞ f(x) = -∞", "x = -2 (removable)", "x = 1 (jump)", "x = 4 (infinite)", "removable", "jump", "infinite", "x = 4", "y = 2"] {
+        assert!(wk.contains(answer), "key lacks {answer}: {wk}");
+    }
+    // the student copy asks the same questions with a line for each answer, and gives nothing away: no answer, no kind label,
+    // no asymptote equation (the dashed asymptotes and every circle stay)
+    for q in ["lim x→1- f(x) =", "lim x→1+ f(x) =", "lim x→1 f(x) =", "f(1) =", "lim x→∞ f(x) =", "lim x→-∞ f(x) =", "Where is f not continuous?"] { assert!(ws.contains(q), "student copy lacks {q}: {ws}"); }
+    for answer in ["= 4", "= 1 ", "does not exist", "= 2", "= -∞", "removable", "jump", "infinite", "x = 4", "y = 2", "(removable)"] { assert!(!ws.contains(answer), "student copy shows {answer}: {ws}"); }
+    assert_eq!(stu.matches("data-blank").count(), 7, "a line for each of the 4 + 2 limits asked and one for the list");
+    assert_eq!(key.matches("data-blank").count(), 0);
+    assert_eq!(stu.matches("<circle").count(), key.matches("<circle").count(), "the circles and points stay");
+    assert_eq!(stu.matches(r#"data-lim="asym""#).count(), 2, "the dashed asymptotes stay");
+    // the SVG's own title and description name the figure only
+    let annotated = svg(&{ let mut q = p.clone(); q.set_b("show_answers", false); q });
+    let desc = &annotated[..annotated.find("</desc>").unwrap()];
+    assert!(!desc.contains("does not exist") && !desc.contains("x = 4"));
+    // a teacher may keep the kind labels and the equations on the student copy
+    let mut q = p.clone();
+    q.set_b("show_answers", false);
+    q.set_b("stu_hide_kinds", false);
+    q.set_b("stu_hide_asym", false);
+    let w = words(&svg(&q));
+    assert!(w.contains("removable") && w.contains("x = 4") && !w.contains("does not exist"), "{w}");
+    // a title can be a line to write on
+    let w = svg(&with(json!({"title_mode": "Blank line"})));
+    assert!(w.contains(r#"y1="28.00""#) && w.contains(r#"y2="28.00""#));
+}
+
+#[test]
+fn print_is_grey_only() {
+    for base in bases() {
+        let p = with(merge(&base, &json!({"style": "Print", "kind_labels": true, "asym_eqs": true, "guide": true, "arrows": true, "eps_band": true})));
+        let s = svg(&p);
+        for cap in s.split('#').skip(1) {
+            let h: String = cap.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+            if h.len() != 6 { continue; }
+            let ch: Vec<i32> = (0..3).map(|i| i32::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap()).collect();
+            assert!(ch.iter().max().unwrap() - ch.iter().min().unwrap() <= 24, "{base}: colour #{h} in Print");
+        }
+        crate::figures::to_png(&s, 0.5).unwrap();
+    }
+}
+
+#[test]
+fn shared_links_and_saved_specs_round_trip() {
+    use crate::figures::{share, Value};
+    let d = def();
+    let start = start_params(&d);
+    let mut cases = vec![start.clone()];
+    for e in crate::figures::examples_for(ID) {
+        let mut p = start.clone();
+        for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); }
+        cases.push(p);
+    }
+    cases.push(with(json!({"pieces": "y = x \u{2260} 2; y = 3/(x - 1), x >= 2", "dots": "(2, -1)", "ask_at": "1/2, \u{2212}3", "style": "Print", "label_size": "Large", "show_answers": false, "kind_labels": true})));
+    for p in cases {
+        let link = share::encode(ID, &p, &start);
+        let (lid, changed) = share::decode(&link).unwrap();
+        assert_eq!(lid, ID);
+        let q = share::link_params(&d, changed, share::version(&link));
+        assert_eq!(d.svg(&q), d.svg(&p), "share link");
+        let spec = crate::model::FigureSpec { id: ID.to_string(), params: p.0.iter().map(|(k, v)| (k.clone(), match v { Value::F(f) => json!(f), Value::I(i) => json!(i), Value::B(b) => json!(b), Value::S(s) => json!(s) })).collect() };
+        let back: crate::model::FigureSpec = serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
+        let r = crate::figures::spec::params_from_spec(&d, &back);
+        assert_eq!(d.svg(&r), d.svg(&p), "saved spec");
+    }
+}
+
+// ───────────────────────── handles ─────────────────────────
+
+fn handles(p: &Params) -> Vec<crate::figures::interact::Handle> {
+    let s = svg(p);
+    crate::figures::interact::handles_for(ID, p, crate::figures::svg_size(&s))
+}
+/// The handle the workspace gives a press at `at` (the real hit test).
+fn under(p: &Params, at: (f64, f64)) -> crate::figures::interact::Handle {
+    let hs = handles(p);
+    let i = crate::figures::interact::pick(&hs, at, 1.0).expect("a handle under the pointer");
+    hs.into_iter().nth(i).unwrap()
+}
+
+#[test]
+fn the_opening_state_has_its_handles_and_they_act() {
+    let p = start_params(&def());
+    let hs = handles(&p);
+    let tips: Vec<&str> = hs.iter().map(|h| h.tip.as_str()).collect();
+    for t in ["Click to switch this endpoint to closed", "Click to switch this endpoint to open", "Click to fill this hole (takes out its x \u{2260} part)", "Drag up or down to change f(\u{2212}2)", "Drag along the x-axis to move x = a, where the limits are asked (a = 1)"] {
+        assert!(tips.contains(&t), "{t}: {tips:?}");
+    }
+    let (x0, _, y0, _, ml, mt, ux, uy) = last_drawn(&p).frame;
+    let ph = { let g = last_drawn(&p).frame; let _ = g; 13.0 * uy };
+    let px = |x: f64, y: f64| (ml + (x - x0) * ux, mt + ph - (y - y0) * uy);
+    // the open end of piece 1 at (1, 4): a click makes it closed (x < 1 becomes x <= 1)
+    let h = under(&p, px(1.0, 4.0));
+    assert_eq!(h.tip, "Click to switch this endpoint to closed");
+    let mut q = p.clone();
+    (h.click.as_ref().unwrap())(&mut q);
+    assert!(q.s("pieces").starts_with("y = 4 - (x - 1)^2/3, x <= 1"), "{}", q.s("pieces"));
+    assert!(svg(&q).matches(r#"data-lim="closed""#).count() == svg(&p).matches(r#"data-lim="closed""#).count() + 1);
+    // the closed end of piece 2 at (1, 1): a click makes it open (x >= 1 becomes x > 1), and f(1) is then undefined
+    let h = under(&p, px(1.0, 1.0));
+    let mut q = p.clone();
+    (h.click.as_ref().unwrap())(&mut q);
+    assert!(q.s("pieces").ends_with("y = 2 + 3/(x - 4), x > 1"), "{}", q.s("pieces"));
+    assert!(words(&svg(&q)).contains("f(1) = undefined"));
+    // the hole at (-2, 1): a click fills it (the x ≠ -2 is taken out), and f then has two values at -2 (the curve and the point)
+    let h = under(&p, px(-2.0, 1.0));
+    let mut q = p.clone();
+    (h.click.as_ref().unwrap())(&mut q);
+    assert!(q.s("pieces").starts_with("y = 4 - (x - 1)^2/3, x < 1\n"), "{}", q.s("pieces"));
+    assert!(warnings(&q).iter().any(|n| n.starts_with("f has two values at x = \u{2212}2")), "{:?}", warnings(&q));
+    // the point above the hole: dragged up to 5, f(-2) = 5
+    let h = under(&p, px(-2.0, 3.0));
+    let mut q = p.clone();
+    (h.drag.as_ref().unwrap())(&mut q, px(-2.3, 5.1));
+    assert_eq!(q.s("dots"), "(-2, 5)");
+    q.set_s("ask_at", "-2");
+    assert!(words(&svg(&q)).contains("f(-2) = 5"));
+    // the marker at x = 1 on the axis: dragged to 3, the questions are asked at 3
+    let h = under(&p, px(1.0, 0.0));
+    assert!(h.tip.starts_with("Drag along the x-axis to move x = a"));
+    let mut q = p.clone();
+    (h.drag.as_ref().unwrap())(&mut q, px(2.9, 0.4));
+    assert_eq!(q.s("ask_at"), "3");
+    assert!(words(&svg(&q)).contains("lim x→3- f(x) = -1"), "2 + 3/(3 - 4) = -1: {}", words(&svg(&q)));
+    // with several values of a, a drag moves only its own
+    let p2 = with(json!({"ask_at": "-2, 1/2, 4"}));
+    let h = under(&p2, px(4.0, 0.0));
+    let mut q = p2.clone();
+    (h.drag.as_ref().unwrap())(&mut q, px(6.0, 0.0));
+    assert_eq!(q.s("ask_at"), "-2, 1/2, 6");
+}
+
+#[test]
+fn points_ends_switch_by_their_words() {
+    let p = with(json!({"pieces": "(-5, 1) (-3, 3) (-1, 2) (1, 4) open\nclosed (1, 1) (3, 0) (5, 2)", "dots": "", "ask_at": "1"}));
+    let (x0, _, y0, y1, ml, mt, ux, uy) = last_drawn(&p).frame;
+    let px = |x: f64, y: f64| (ml + (x - x0) * ux, mt + (y1 - y0) * uy - (y - y0) * uy);
+    let h = under(&p, px(1.0, 4.0));
+    let mut q = p.clone();
+    (h.click.as_ref().unwrap())(&mut q);
+    assert_eq!(q.s("pieces"), "(-5, 1) (-3, 3) (-1, 2) (1, 4) closed\nclosed (1, 1) (3, 0) (5, 2)");
+}
