@@ -93,7 +93,7 @@ fn hyperbolas_worked_by_hand() {
     // the asymptotes drawn: y - 2 = ±(4/3)(x - 1)
     let p = with(json!({"conic": "Hyperbola", "h": "1", "k": "2", "a": "3/2", "b": "2", "show_p": false}));
     let w = words(&svg(&p));
-    assert!(w.contains("y - 2 = (4/3)(x - 1)") && w.contains("y - 2 = (-4/3)(x - 1)"), "{w}");
+    assert!(w.contains("y - 2 = (4/3)(x - 1)") && w.contains("y - 2 = -(4/3)(x - 1)"), "{w}");
 }
 
 #[test]
@@ -307,7 +307,7 @@ fn student_copy_and_key() {
     // a hyperbola's key gives its asymptotes: y = ±(3/4)x
     let p = with(json!({"conic": "Hyperbola", "h": "0", "k": "0", "a": "4", "b": "3", "key_line": true, "show_p": false}));
     let (stu, key) = crate::figures::answer_pair(&d, &p).unwrap();
-    assert!(words(&key).contains("asymptote y = (3/4)x") && words(&key).contains("asymptote y = (-3/4)x"));
+    assert!(words(&key).contains("asymptote y = (3/4)x") && words(&key).contains("asymptote y = -(3/4)x"));
     assert!(!words(&stu).contains("asymptote"));
     // no answer in the SVG's own text either (its title and description are the figure's name and blurb)
     let desc = &stu[..stu.find("</desc>").unwrap_or(0)];

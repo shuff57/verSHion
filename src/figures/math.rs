@@ -4075,6 +4075,8 @@ pub(crate) mod conics;
 #[cfg(test)]
 mod conics_tests;
 #[cfg(test)]
+mod conics_r1_tests;
+#[cfg(test)]
 mod number_line_b7_tests;
 
 #[derive(Clone, Copy)]

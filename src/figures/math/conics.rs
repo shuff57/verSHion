@@ -136,6 +136,8 @@ impl Ex {
         Some(if c.is_zero() { Ex(vec![]) } else { Ex(vec![(c, t)]) })
     }
     pub fn f(&self) -> f64 { self.0.iter().map(|(c, r)| c.f() * (*r as f64).sqrt()).sum() }
+    /// Small enough to read: denominators up to 1000, numerators and radicands up to a million (a typed 0.3333 is 3333/10000, shown as a decimal).
+    pub fn readable(&self) -> bool { self.0.iter().all(|(c, r)| c.d <= 1000 && c.n.abs() <= 1_000_000 && *r <= 1_000_000) }
     /// "2 + √5", "-(3√2)/2", "√5/…" written as (√5)/2 so it reads one way.
     pub fn text(&self) -> String {
         if self.0.is_empty() { return "0".into(); }
@@ -182,13 +184,20 @@ impl N {
     pub fn sq(&self) -> N { self.mul(self) }
     pub fn sqrt(&self) -> N { N { v: self.v.max(0.0).sqrt(), ex: self.ex.as_ref().and_then(|e| e.as_rat()).and_then(Ex::sqrt) } }
     pub fn rat(&self) -> Option<Rat> { self.ex.as_ref().and_then(|e| e.as_rat()) }
-    pub fn is_zero(&self) -> bool { self.v.abs() < 1e-12 }
-    /// As printed: the exact form (when asked and known) or a decimal.
+    pub fn is_zero(&self) -> bool { match &self.ex { Some(e) => e.0.is_empty(), None => self.v.abs() < 1e-12 } }
+    /// As printed: the exact form (when asked and known, and readable: no denominator over 1000) or a decimal.
     pub fn show(&self, exact: bool, dec: i64) -> String {
-        match (&self.ex, exact) { (Some(e), true) => e.text(), _ => fmt(self.v, dec).replace('\u{2212}', "-") }
+        match (&self.ex, exact) { (Some(e), true) if e.readable() => e.text(), _ => fx(self.v, dec) }
     }
     /// As written back into a value box (typeable, read again by the app's number reader).
     pub fn typed(&self) -> String { match &self.ex { Some(e) => e.text(), None => num_str(self.v, 6) } }
+}
+
+/// A decimal rounded half away from zero (1.875 to 2 places is 1.88; a value a hair under from the arithmetic rounds the same).
+pub fn fx(v: f64, dec: i64) -> String {
+    let m = 10f64.powi(dec.clamp(0, 6) as i32);
+    let r = ((v * m) + v.signum() * 1e-7).round() / m;
+    fmt(r, dec).replace('\u{2212}', "-")
 }
 
 // ───────────────────────── the conic ─────────────────────────
@@ -335,13 +344,19 @@ fn over(term: &str, d: &N, exact: bool, dec: i64) -> String {
         Some(r) if r == Rat::int(1) => term.to_string(),
         Some(r) if r.d == 1 => format!("{term}/{}", r.n),
         Some(r) => format!("{}{term}/{}", r.d, r.n),
-        None => format!("{term}/{}", fmt(d.v, dec).replace('\u{2212}', "-")),
+        None => format!("{term}/{}", fx(d.v, dec)),
     }
 }
 /// A coefficient before a bracket: "" for 1, "-" for -1, "8", "(2/3)".
 fn coef_txt(q: &N, exact: bool, dec: i64) -> String {
     let t = q.show(exact, dec);
-    match t.as_str() { "1" => String::new(), "-1" => "-".into(), _ if t.contains('/') || t.contains(' ') => format!("({t})"), _ => t }
+    match t.as_str() {
+        "1" => String::new(),
+        "-1" => "-".into(),
+        // a negative fraction or sum keeps its sign outside: -(3/5)(x - 1), not (-3/5)(x - 1)
+        _ if t.contains('/') || t.contains(' ') => match t.strip_prefix('-') { Some(r) if !r.contains(' ') => format!("-({r})"), _ => format!("({t})") },
+        _ => t,
+    }
 }
 
 /// The standard form, as typed (ASCII, ^ for powers).
@@ -368,7 +383,7 @@ pub fn general(c: &Conic, exact: bool, dec: i64) -> String {
         Some(r) => {
             let mut l: i128 = 1;
             for q in &r { l = l / gcd(l, q.d) * q.d; if l > 1_000_000_000_000 { l = 0; break; } }
-            if l == 0 { g.iter().map(|n| fmt(n.v, 3)).collect() } else {
+            if l == 0 { g.iter().map(|n| fx(n.v, 3)).collect() } else {
                 let mut ints: Vec<i128> = r.iter().map(|q| q.n * (l / q.d)).collect();
                 let gg = ints.iter().fold(0i128, |a, b| gcd(a, *b)).max(1);
                 for v in ints.iter_mut() { *v /= gg; }
@@ -379,7 +394,7 @@ pub fn general(c: &Conic, exact: bool, dec: i64) -> String {
         }
         None => {
             let lead = if g[0].v.abs() > 1e-12 { g[0].v } else { g[1].v };
-            g.iter().map(|n| fmt(n.v / lead, 3).replace('\u{2212}', "-")).collect()
+            g.iter().map(|n| fx(n.v / lead, 3)).collect()
         }
     };
     let mut out = String::new();
@@ -398,27 +413,35 @@ pub fn general(c: &Conic, exact: bool, dec: i64) -> String {
 
 // ───────────────────────── reading a typed equation ─────────────────────────
 
-/// A polynomial of degree at most 2 in x and y: coefficients of 1, x, y, x², xy, y².
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Q([Rat; 6]);
+/// A polynomial of degree at most 2 in x and y: coefficients of 1, x, y, x², xy, y², each kept exact where it can be (a
+/// fraction, or a fraction times a square root), so an equation the figure writes with √2 or 1/3 reads back exactly.
+#[derive(Clone, Debug)]
+struct Q([N; 6]);
 const DEG: [u8; 6] = [0, 1, 1, 2, 2, 2];
 const XP: [u8; 6] = [0, 1, 0, 2, 1, 0];
 const YP: [u8; 6] = [0, 0, 1, 0, 1, 2];
+fn big(n: &N) -> bool { !n.v.is_finite() || n.v.abs() > 1e15 }
 impl Q {
-    fn c(r: Rat) -> Q { let mut q = [Rat::int(0); 6]; q[0] = r; Q(q) }
-    fn var(i: usize) -> Q { let mut q = [Rat::int(0); 6]; q[i] = Rat::int(1); Q(q) }
-    fn add(&self, o: &Q) -> Result<Q, String> { let mut r = self.0; for i in 0..6 { r[i] = r[i].add(o.0[i]).ok_or(TOO_BIG)?; } Ok(Q(r)) }
-    fn neg(&self) -> Q { let mut r = self.0; for v in r.iter_mut() { *v = v.neg(); } Q(r) }
-    fn konst(&self) -> Option<Rat> { self.0[1..].iter().all(|v| v.is_zero()).then_some(self.0[0]) }
+    fn zero() -> [N; 6] { std::array::from_fn(|_| N::i(0)) }
+    fn c(r: N) -> Q { let mut q = Q::zero(); q[0] = r; Q(q) }
+    fn var(i: usize) -> Q { let mut q = Q::zero(); q[i] = N::i(1); Q(q) }
+    fn add(&self, o: &Q) -> Result<Q, String> {
+        let r: [N; 6] = std::array::from_fn(|i| self.0[i].add(&o.0[i]));
+        if r.iter().any(big) { return Err(TOO_BIG.into()); }
+        Ok(Q(r))
+    }
+    fn neg(&self) -> Q { Q(std::array::from_fn(|i| self.0[i].neg())) }
+    fn konst(&self) -> Option<N> { self.0[1..].iter().all(|v| v.is_zero()).then(|| self.0[0].clone()) }
     fn mul(&self, o: &Q) -> Result<Q, String> {
-        let mut r = [Rat::int(0); 6];
+        let mut r = Q::zero();
         for i in 0..6 {
             for j in 0..6 {
                 if self.0[i].is_zero() || o.0[j].is_zero() { continue; }
                 if DEG[i] + DEG[j] > 2 { return Err("A conic's equation has no powers above 2 (no x\u{b3}, x\u{b2}y, \u{2026}).".into()); }
                 let (xp, yp) = (XP[i] + XP[j], YP[i] + YP[j]);
                 let t = (0..6).find(|&t| XP[t] == xp && YP[t] == yp).unwrap();
-                r[t] = r[t].add(self.0[i].mul(o.0[j]).ok_or(TOO_BIG)?).ok_or(TOO_BIG)?;
+                r[t] = r[t].add(&self.0[i].mul(&o.0[j]));
+                if big(&r[t]) { return Err(TOO_BIG.into()); }
             }
         }
         Ok(Q(r))
@@ -427,7 +450,7 @@ impl Q {
 const TOO_BIG: &str = "The numbers in the equation are too large to work with.";
 
 #[derive(Clone, Debug, PartialEq)]
-enum Tok { Num(Rat), X, Y, Op(char), Open, Close }
+enum Tok { Num(Rat), X, Y, Sqrt, Op(char), Open, Close }
 
 fn lex(s: &str) -> Result<Vec<Tok>, String> {
     let cs: Vec<char> = s.chars().collect();
@@ -447,6 +470,8 @@ fn lex(s: &str) -> Result<Vec<Tok>, String> {
                 let n: i128 = format!("{ip}{fp}").parse().map_err(|_| format!("\u{201c}{t}\u{201d} is not a number."))?;
                 v.push(Tok::Num(Rat::new(n, den).ok_or(TOO_BIG)?));
             }
+            's' | 'S' if cs[i..].iter().take(4).collect::<String>().to_lowercase() == "sqrt" => { v.push(Tok::Sqrt); i += 4; }
+            '\u{221a}' => { v.push(Tok::Sqrt); i += 1; }
             'x' | 'X' => { v.push(Tok::X); i += 1; }
             'y' | 'Y' => { v.push(Tok::Y); i += 1; }
             '+' | '-' | '*' | '/' | '^' => { v.push(Tok::Op(c)); i += 1; }
@@ -456,7 +481,7 @@ fn lex(s: &str) -> Result<Vec<Tok>, String> {
             '\u{b2}' => { v.push(Tok::Op('^')); v.push(Tok::Num(Rat::int(2))); i += 1; }
             '(' | '[' => { v.push(Tok::Open); i += 1; }
             ')' | ']' => { v.push(Tok::Close); i += 1; }
-            _ => return Err(format!("The equation can use only numbers, x, y, + \u{2212} \u{d7} / ^ and brackets (\u{201c}{c}\u{201d} can\u{2019}t be read).")),
+            _ => return Err(format!("The equation can use only numbers, x, y, \u{221a}, + \u{2212} \u{d7} / ^ and brackets (\u{201c}{c}\u{201d} can\u{2019}t be read).")),
         }
     }
     Ok(v)
@@ -484,9 +509,9 @@ impl Rd {
                     let r = self.unary()?;
                     let k = r.konst().ok_or("Divide only by numbers (x/2 is fine, 2/x is not a conic).")?;
                     if k.is_zero() { return Err("The equation divides by 0.".into()); }
-                    q = q.mul(&Q::c(Rat::int(1).div(k).ok_or(TOO_BIG)?))?;
+                    q = q.mul(&Q::c(N::i(1).div(&k)))?;
                 }
-                Some(Tok::Num(_) | Tok::X | Tok::Y | Tok::Open) => { let r = self.power()?; q = q.mul(&r)?; }
+                Some(Tok::Num(_) | Tok::X | Tok::Y | Tok::Open | Tok::Sqrt) => { let r = self.power()?; q = q.mul(&r)?; }
                 _ => break,
             }
         }
@@ -504,9 +529,9 @@ impl Rd {
         let mut q = base;
         while let Some(Tok::Op('^')) = self.peek() {
             self.i += 1;
-            let e = self.atom()?.konst().ok_or("A power must be a number, such as ^2.")?;
+            let e = self.atom()?.konst().and_then(|n| n.rat()).ok_or("A power must be a whole number, such as ^2.")?;
             if e.d != 1 || !(0..=6).contains(&e.n) { return Err("Powers in a conic's equation are whole numbers: ^2 or ^1.".into()); }
-            let mut r = Q::c(Rat::int(1));
+            let mut r = Q::c(N::i(1));
             for _ in 0..e.n { r = r.mul(&q)?; }
             q = r;
         }
@@ -516,9 +541,14 @@ impl Rd {
         let t = self.peek().cloned().ok_or("The equation ends too soon.")?;
         self.i += 1;
         match t {
-            Tok::Num(r) => Ok(Q::c(r)),
+            Tok::Num(r) => Ok(Q::c(N::r(r))),
             Tok::X => Ok(Q::var(1)),
             Tok::Y => Ok(Q::var(2)),
+            Tok::Sqrt => {
+                let k = self.atom()?.konst().ok_or("Take the square root of a number only, such as \u{221a}5 or \u{221a}(3/2).")?;
+                if k.v < 0.0 { return Err("A square root of a negative number has no value here.".into()); }
+                Ok(Q::c(k.sqrt()))
+            }
             Tok::Open => { let q = self.expr()?; if self.peek() != Some(&Tok::Close) { return Err("A bracket is not closed.".into()); } self.i += 1; Ok(q) }
             _ => Err("Something is missing between the signs of the equation.".into()),
         }
@@ -533,6 +563,13 @@ fn side(s: &str) -> Result<Q, String> {
     Ok(q)
 }
 
+/// A number typed in a value box (5, 3/2, √5, 2√3, (√5)/2, sqrt(12)), read exactly; None when it is not a plain number.
+pub fn read_exact(text: &str) -> Option<N> {
+    let q = side(text).ok()?;
+    let k = q.konst()?;
+    k.v.is_finite().then_some(k)
+}
+
 /// A typed equation in standard or general form, completed to a conic in standard position, or what is wrong with it.
 pub fn parse_equation(text: &str) -> Result<Conic, String> {
     let t = text.trim();
@@ -541,10 +578,14 @@ pub fn parse_equation(text: &str) -> Result<Conic, String> {
     let q = side(parts[0])?.add(&side(parts[1])?.neg())?;
     let [f, d, e, a, b, c] = q.0;
     if !b.is_zero() { return Err("The equation has an xy term, so the conic is turned: this figure draws conics whose axes run along the grid (no xy term).".into()); }
-    let n = |r: Rat| N::r(r);
-    let half = Rat::new(1, 2).unwrap();
-    let ov = |x: Option<Rat>| x.ok_or(TOO_BIG.to_string());
-    if a.is_zero() && c.is_zero() { return Err("This is a straight line (no x\u{b2} or y\u{b2}), not a conic.".into()); }
+    let half = N::r(Rat::new(1, 2).unwrap());
+    if a.is_zero() && c.is_zero() {
+        if d.is_zero() && e.is_zero() {
+            return Err(if f.is_zero() { "Both sides are the same for every point (it reduces to 0 = 0): there is no curve to draw.".into() } else { "No point fits this equation: it reduces to a number that is not 0.".into() });
+        }
+        return Err("This is a straight line (no x\u{b2} or y\u{b2}), not a conic.".into());
+    }
+    let finite = |ns: &[&N]| ns.iter().all(|n| n.v.is_finite() && n.v.abs() < 1e12);
     if a.is_zero() || c.is_zero() {
         // a parabola: one square
         let vert = !a.is_zero();
@@ -552,30 +593,32 @@ pub fn parse_equation(text: &str) -> Result<Conic, String> {
         if lin_other.is_zero() {
             return Err(format!("With no {} term this is not a parabola: it is one or two straight lines, or nothing at all.", if vert { "y" } else { "x" }));
         }
-        let m = ov(lin_sq.neg().mul(half).and_then(|x| x.div(sq)))?; // the square's centre
+        let m = lin_sq.neg().mul(&half).div(&sq); // the square's centre
         // sq (v - m)^2 = -lin_other w - f + lin_sq^2/(4 sq)  =>  (v - m)^2 = (-lin_other/sq)(w - w0)
-        let w0 = ov(lin_sq.mul(lin_sq).and_then(|x| x.div(Rat::int(4).mul(sq)?)).and_then(|x| x.sub(f)).and_then(|x| x.div(lin_other)))?;
-        let qq = ov(lin_other.neg().div(sq))?;
-        let p = ov(Rat::new(qq.n.abs(), qq.d).and_then(|x| x.div(Rat::int(4))))?;
-        let s = if qq.n > 0 { 1.0 } else { -1.0 };
+        let w0 = lin_sq.sq().div(&N::i(4).mul(&sq)).sub(&f).div(&lin_other);
+        let qq = lin_other.neg().div(&sq);
+        let s = if qq.v > 0.0 { 1.0 } else { -1.0 };
+        let p = (if s > 0.0 { qq } else { qq.neg() }).div(&N::i(4));
+        if !finite(&[&m, &w0, &p]) { return Err(TOO_BIG.into()); }
         let (h, k) = if vert { (m, w0) } else { (w0, m) };
-        return Ok(Conic::parabola(n(h), n(k), n(p), vert, s));
+        return Ok(Conic::parabola(h, k, p, vert, s));
     }
-    let h = ov(d.neg().mul(half).and_then(|x| x.div(a)))?;
-    let k = ov(e.neg().mul(half).and_then(|x| x.div(c)))?;
-    let r = ov(a.mul(h).and_then(|x| x.mul(h)).and_then(|x| x.add(c.mul(k)?.mul(k)?)).and_then(|x| x.sub(f)))?;
-    let (ra, rc) = (ov(r.div(a))?, ov(r.div(c))?);
-    let at = format!("({}, {})", h.text(), k.text());
-    if (a.n > 0) == (c.n > 0) {
+    let h = d.neg().mul(&half).div(&a);
+    let k = e.neg().mul(&half).div(&c);
+    let r = a.mul(&h).mul(&h).add(&c.mul(&k).mul(&k)).sub(&f);
+    let (ra, rc) = (r.div(&a), r.div(&c));
+    if !finite(&[&h, &k, &ra, &rc]) { return Err(TOO_BIG.into()); }
+    let at = format!("({}, {})", h.show(true, 3), k.show(true, 3));
+    if (a.v > 0.0) == (c.v > 0.0) {
         if r.is_zero() { return Err(format!("This equation is a single point, {at}: the right-hand side is 0 once the squares are completed.")); }
-        if ra.n < 0 { return Err("No point fits this equation: once the squares are completed the right-hand side is negative.".into()); }
-        if a == c { return Ok(Conic::circle(n(h), n(k), N { v: ra.f().sqrt(), ex: Ex::sqrt(ra) })); }
-        let (big, small, vert) = if ra.f() > rc.f() { (ra, rc, false) } else { (rc, ra, true) };
-        return Ok(Conic::ellipse(n(h), n(k), N { v: big.f().sqrt(), ex: Ex::sqrt(big) }, N { v: small.f().sqrt(), ex: Ex::sqrt(small) }, vert));
+        if ra.v < 0.0 { return Err("No point fits this equation: once the squares are completed the right-hand side is negative.".into()); }
+        if a.sub(&c).is_zero() { return Ok(Conic::circle(h, k, ra.sqrt())); }
+        let (big, small, vert) = if ra.v > rc.v { (ra, rc, false) } else { (rc, ra, true) };
+        return Ok(Conic::ellipse(h, k, big.sqrt(), small.sqrt(), vert));
     }
     if r.is_zero() { return Err(format!("This equation is two straight lines crossing at {at} (the right-hand side is 0 once the squares are completed), not a hyperbola.")); }
-    let (a2, b2, vert) = if ra.n > 0 { (ra, rc.neg(), false) } else { (rc, ra.neg(), true) };
-    Ok(Conic::hyperbola(n(h), n(k), N { v: a2.f().sqrt(), ex: Ex::sqrt(a2) }, N { v: b2.f().sqrt(), ex: Ex::sqrt(b2) }, vert))
+    let (a2, b2, vert) = if ra.v > 0.0 { (ra, rc.neg(), false) } else { (rc, ra.neg(), true) };
+    Ok(Conic::hyperbola(h, k, a2.sqrt(), b2.sqrt(), vert))
 }
 
 /// Whether a typed equation is in general form (no brackets or fractions, and = 0).
@@ -587,6 +630,8 @@ fn is_general(text: &str) -> bool {
 // ───────────────────────── params ─────────────────────────
 
 const KINDS: [&str; 4] = ["Circle", "Ellipse", "Parabola", "Hyperbola"];
+/// `eq_written` (set by the panel, never shown): the typed general form is being written in standard form.
+const KEPT_STANDARD: &str = "Standard form (general would be irrational)";
 const GRID_KEYS: [&str; 12] = ["xmin", "xmax", "xstep", "ymin", "ymax", "ystep", "minor", "numbers", "xlabel", "ylabel", "grid", "label_size"];
 
 pub fn defs() -> Vec<FigureDef> {
@@ -653,6 +698,7 @@ pub fn params() -> Vec<ParamDef> {
         ParamDef::bool("blank_curve", "Student copy: leave the curve off (to sketch)", false),
         ParamDef::bool("blank_equation", "Student copy: a blank line for the equation", true),
         ParamDef::bool("key_line", "Answer line under the figure (equation, centre, vertices, foci, e)", false),
+        ParamDef::choice("eq_written", "Equation written in", &["As typed", KEPT_STANDARD], "As typed"),
     ]
 }
 
@@ -660,10 +706,13 @@ pub fn params() -> Vec<ParamDef> {
 
 fn read(p: &Params, key: &str, name: &str, positive: bool) -> Result<N, String> {
     let t = p.s(key).trim().to_string();
-    let v = eval_typed(&t).ok_or_else(|| format!("{name} \u{201c}{t}\u{201d} can\u{2019}t be read: type a number, a fraction or a square root, such as 5, 3/2, \u{221a}5 or 2\u{221a}3."))?;
+    let bad = || format!("{name} \u{201c}{t}\u{201d} can\u{2019}t be read: type a number, a fraction or a square root, such as 5, 3/2, \u{221a}5 or 2\u{221a}3.");
+    // exactly as typed (3/2, √5, 2√3, (√5)/2), else the app's number reader (which also takes pi) as a decimal
+    let n = match read_exact(&t) { Some(n) => n, None => N::of(eval_typed(&t).ok_or_else(bad)?) };
+    let v = n.v;
     if positive && v <= 0.0 { return Err(format!("{name} has to be more than 0.")); }
     if v.abs() > 1000.0 || (positive && v < 0.001) { return Err(format!("{name} \u{201c}{t}\u{201d} is too {} to draw.", if v.abs() > 1000.0 { "big" } else { "small" })); }
-    Ok(N::of(v))
+    Ok(n)
 }
 
 /// The conic the params ask for (the typed equation when there is one, else the values), the notes about it, and whether
@@ -676,6 +725,7 @@ pub fn model(p: &Params) -> (Result<Conic, String>, Vec<String>) {
             Ok(c) => {
                 if c.a.v > 1000.0 || c.b.v > 1000.0 || c.h.v.abs() > 1000.0 || c.k.v.abs() > 1000.0 || c.a.v < 0.001 { return (Err("The conic in this equation is too big or too small to draw.".into()), notes); }
                 notes.push(format!("The equation is {} {}: {}.", if c.kind == K::Ellipse { "an" } else { "a" }, c.kind.name().to_lowercase(), standard(&c, true, 3).replace('-', "\u{2212}")));
+                if p.s("eq_written") == KEPT_STANDARD { notes.push("The equation is written in standard form: with these values its general form would have irrational coefficients.".into()); }
                 (Ok(c), notes)
             }
             Err(e) => (Err(e), notes),
@@ -720,21 +770,33 @@ pub fn write_values(p: &mut Params, c: &Conic) {
     }
 }
 
-/// Rewrites a typed equation from the values, in the form it was typed in (after a value changes or a handle is dragged).
+/// Whether every coefficient of the general form is a fraction (it can then be written in whole numbers).
+fn general_is_rational(c: &Conic) -> bool { c.general().iter().all(|n| n.rat().is_some()) }
+
+/// Rewrites a typed equation from the values, exactly and in the form it was typed in (after a value changes or a handle is
+/// dragged): the values are the source of truth. A general form whose coefficients would be irrational (a centre at √2) is
+/// written in standard form instead, and the panel says so; it goes back to general form once the values allow.
 pub fn write_equation(p: &mut Params) {
     if p.s("equation").trim().is_empty() { return; }
-    let general_form = is_general(p.s("equation"));
+    let general_form = is_general(p.s("equation")) || p.s("eq_written") == KEPT_STANDARD;
     let mut q = p.clone();
     q.set_s("equation", "");
     if let (Ok(c), _) = model(&q) {
-        let exact = [&c.h, &c.k, &c.a.sq(), &c.b.sq(), &c.c].iter().all(|n| n.rat().is_some());
-        p.set_s("equation", &if general_form { general(&c, exact, 4) } else { standard(&c, exact, 4) });
+        let text = if general_form && general_is_rational(&c) {
+            p.set_s("eq_written", "As typed");
+            general(&c, true, 4)
+        } else {
+            p.set_s("eq_written", if general_form { KEPT_STANDARD } else { "As typed" });
+            standard(&c, true, 4)
+        };
+        p.set_s("equation", &text);
     }
 }
 
 /// The panel's follow-up: a typed equation fills the values; a changed value rewrites the typed equation.
 pub fn panel_changed(key: &str, p: &mut Params) {
     if key == "equation" {
+        p.set_s("eq_written", "As typed");
         if let Ok(c) = parse_equation(p.s("equation")) { write_values(p, &c); }
     } else if matches!(key, "conic" | "h" | "k" | "r" | "a" | "b" | "pf" | "axis" | "opens") {
         write_equation(p);
@@ -743,7 +805,21 @@ pub fn panel_changed(key: &str, p: &mut Params) {
 
 /// Controls shown only where they act on the conic drawn.
 pub fn relevant(key: &str, p: &Params) -> bool {
+    if key == "eq_written" { return false; }
     let m = model(p).0;
+    // a typed equation that cannot be drawn: only the equation and the page's own controls act
+    if m.is_err() && !p.s("equation").trim().is_empty() && CONIC_KEYS.contains(&key) { return false; }
+    let stu = !p.b("show_answers");
+    // on a student copy with the parts unlabelled, the label styles draw nothing; numbers show only in a written equation
+    let eq_shown = p.s("eq_form") != "None" && !(stu && p.b("blank_equation"));
+    if stu && p.b("blank_labels") {
+        match key {
+            "pt_labels" => return false,
+            "coords" | "dec" if !eq_shown => return false,
+            "dec" => return p.s("coords") == "Decimals" && relevant("coords", p),
+            _ => {}
+        }
+    }
     if key == "coords" {
         // exact and decimal coordinates differ only where a value is not whole
         return match &m { Ok(c) => [&c.h, &c.k, &c.a, &c.b, &c.c].iter().any(|n| (n.v - n.v.round()).abs() > 1e-9 || n.ex.is_none()), Err(_) => false };
@@ -768,6 +844,8 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         _ => true,
     }
 }
+/// The controls that act on the conic itself (none of them draws anything while a typed equation cannot be read).
+const CONIC_KEYS: [&str; 34] = ["conic", "h", "k", "r", "a", "b", "pf", "axis", "opens", "show_name", "show_centre", "show_vertices", "show_covertices", "show_foci", "show_directrix", "show_directrices", "show_axes", "show_sym", "show_asymptotes", "show_rect", "show_latus", "show_p", "p_at", "show_ecc", "show_work", "pt_labels", "coords", "dec", "eq_form", "show_answers", "blank_labels", "blank_curve", "blank_equation", "key_line"];
 
 // ───────────────────────── layout ─────────────────────────
 
@@ -1281,7 +1359,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 if !fr.inside(pp) { notes.push("P is outside the window: drag it back along the curve or widen the axes.".into()); }
                 // (P off the window draws none of its parts)
                 let d = |q: Pt| (pp.0 - q.0).hypot(pp.1 - q.1);
-                let num = |v: f64| fmt(v, dec);
+                let num = |v: f64| fx(v, dec);
                 if fr.inside(pp) { match kind {
                     K::Circle => {
                         let id = seg(&mut over, &mut board, (h, k), pp, ink.radii, 1.8, "");
@@ -1358,7 +1436,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                     let s = fr.s(pp);
                     over.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="{}" stroke="#fff" stroke-width="1.2"/>"##, s.0, s.1, ink.pt));
                     board.dots.push(s);
-                    let coords = format!("({}, {})", fmt(pp.0, dec).replace('\u{2212}', "-"), fmt(pp.1, dec).replace('\u{2212}', "-"));
+                    let coords = format!("({}, {})", fx(pp.0, dec), fx(pp.1, dec));
                     let text = match mode { "Letters only" => "P".into(), "Coordinates only" => coords, _ => format!("P{coords}") };
                     let at = At::Pt(s, outward(pp));
                     let pos = reqs.iter().position(|r| matches!(r.at, At::Line(_))).unwrap_or(reqs.len());
@@ -1394,7 +1472,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
             LAST.with(|l| *l.borrow_mut() = drawn);
             // the working column
             let ecc = c.ecc();
-            let ecc_txt = { let e = ecc.show(exact, dec.max(2)); if exact && ecc.ex.as_ref().is_some_and(|x| x.as_rat().is_none()) { format!("{e} \u{2248} {}", fmt(ecc.v, 2)) } else { e } };
+            let ecc_txt = { let e = ecc.show(exact, dec.max(2)); if exact && ecc.ex.as_ref().is_some_and(|x| x.as_rat().is_none()) { format!("{e} \u{2248} {}", fx(ecc.v, 2)) } else { e } };
             let bl = |s: &str, ans: String| if stu { format!("{s}{BLANK}") } else { ans };
             if let Some((lead, full)) = pnote { side.push(bl(&format!("{lead} = "), full)); }
             if p.b("show_work") {
@@ -1425,7 +1503,8 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 key = if stu {
                     let mut v = vec![format!("Equation: {BLANK}{BLANK}{BLANK}")];
                     if kind != K::Parabola { v.push(format!("centre: {BLANK}")); }
-                    if kind != K::Circle { v.push(format!("vertices: {BLANK}{BLANK}")); v.push(format!("foci: {BLANK}{BLANK}")); }
+                    if kind == K::Parabola { v.push(format!("vertex: {BLANK}")); v.push(format!("focus: {BLANK}")); v.push(format!("directrix: {BLANK}")); }
+                    else if kind != K::Circle { v.push(format!("vertices: {BLANK}{BLANK}")); v.push(format!("foci: {BLANK}{BLANK}")); }
                     v.push(format!("e = {BLANK}"));
                     v
                 } else { parts };
