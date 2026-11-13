@@ -818,3 +818,12 @@ fn drags_stay_in_the_window() {
     assert!((1.0 + h).powi(2) <= 10.0 + 1e-9, "h = {h}");
     assert!(build(&q).q_px.is_some());
 }
+
+/// A horizontal secant has no rise: its slope triangle is not drawn and the panel says why. By hand: −x² + 6x − 5 at 2 and 4
+/// is 3 at both, so Δy = 0.
+#[test]
+fn a_flat_secant_has_no_triangle() {
+    let o = build(&with(&[("func", s("-x^2 + 6x - 5")), ("a", s("2")), ("h", s("2")), ("secant_triangle", b(true)), ("xmin", f(-1.0)), ("xmax", f(6.0)), ("ymin", f(-4.0)), ("ymax", f(5.0))]));
+    assert!(!o.svg.contains(r#"data-leg="rise""#) && o.notes.join(" ").contains("horizontal"), "{:?}", o.notes);
+    assert!(has(&texts(&o.svg, "panel"), "slope m = 0"));
+}

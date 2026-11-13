@@ -1073,7 +1073,9 @@ pub(super) fn build(p0: &Params) -> Out {
         };
         if let (true, Some(s), Some(pp)) = (draw_secant && p.b("secant_triangle"), m.secants.first(), p_px) {
             let c = (sx(t.a + s.h), pp.1);
-            if let Some(qq) = q_px {
+            if q_px.is_some_and(|qq| (qq.1 - pp.1).abs() < 1.0) {
+                notes.push("The secant is horizontal (\u{394}y = 0), so its slope triangle has no rise".into());
+            } else if let Some(qq) = q_px {
                 over += &leg_svg(pp, c, tri_col, "run");
                 over += &leg_svg(c, qq, tri_col, "rise");
                 sc.segs.push((pp, c));
