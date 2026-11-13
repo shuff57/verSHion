@@ -222,6 +222,9 @@ pub fn search_field_with(ui: &mut Ui, text: &mut String, w: f32, hint: &str, id:
             // The row takes its height from the theme's 34 px control size, which would make the
             // box 54 px tall; the frame's padding supplies the height instead.
             ui.spacing_mut().interact_size.y = 20.0;
+            // The placeholder in the muted tone, as the magnifier (5.5:1 on the light card, 5.2:1
+            // on the dark), not egui's 60% text (3.0:1 and 4.1:1); typed text stays ink.
+            ui.visuals_mut().weak_text_color = Some(theme::muted_col());
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(Vec2::splat(15.0), Sense::hover());
                 let s = Stroke::new(1.6, theme::muted_col());
@@ -553,8 +556,9 @@ pub fn secondary(ui: &mut Ui, label: &str, h: f32) -> egui::Response {
     tier_button(ui, None, label, h, Tier { fill: theme::card(), stroke: Stroke::new(1.0, theme::edge()), fg: theme::ink(), family: theme::bold_family() })
 }
 
-/// A card's main action (exams Open): card fill, 1.5 pt accent outline, accent bold label. Never
-/// filled; the page region's one filled primary stays `pageshell::primary`.
+/// A card's main action: card fill, 1.5 pt accent outline, accent bold label. Never filled; the
+/// page region's one filled primary stays `pageshell::primary`. (The Exams grid's Open is one step
+/// stronger, a tinted fill: `examui::exams_open_button`.)
 pub fn secondary_accent(ui: &mut Ui, label: &str, h: f32) -> egui::Response {
     tier_button(ui, None, label, h, Tier { fill: theme::card(), stroke: Stroke::new(1.5, theme::accent_col()), fg: theme::accent_col(), family: theme::bold_family() })
 }
@@ -611,6 +615,53 @@ pub fn more_dots(ui: &mut Ui, side: f32, tip: &str) -> egui::Response {
         ui.painter().circle_filled(resp.rect.center() + Vec2::new(dx, 0.0), 2.0, fg);
     }
     resp
+}
+
+/// A card's main action one step stronger than [`secondary_accent`]: a tinted accent fill, a
+/// 1.5 pt accent outline and an accent bold label, `h` tall (the look the Exams grid's Open won
+/// with). For a card whose other actions are quiet; the page's one filled primary stays filled.
+pub fn tinted_accent(ui: &mut Ui, label: &str, h: f32) -> egui::Response {
+    let tint = theme::accent_faded();
+    let toward = theme::accent_col();
+    let text = RichText::new(label).family(theme::bold_family()).size(ty::BUTTON_SM).color(theme::accent_col());
+    crate::pageshell::styled_button(ui, text, tint, tint.lerp_to_gamma(toward, 0.12), tint.lerp_to_gamma(toward, 0.22), Stroke::new(1.5, theme::accent_col()), h)
+}
+
+/// The width [`tinted_accent`] takes for `label` (its 18 pt side pads and the 13.5 bold label).
+pub fn tinted_accent_w(ui: &Ui, label: &str) -> f32 {
+    let g = ui.painter().layout_no_wrap(label.to_owned(), FontId::new(ty::BUTTON_SM, theme::bold_family()), theme::accent_col());
+    (g.size().x + 36.0).ceil()
+}
+
+/// A quiet overflow "…" beside a card's stronger main action: no fill and a 1 pt [`theme::edge`]
+/// outline at rest (the quiet outlined icon-button tier; the dots in `text`), the same `side`
+/// square hit area; under the pointer it takes the
+/// secondary look (hover_bg, 1 pt [`theme::edge`], ink dots), accent_faded while pressed or while
+/// its menu is open, the focus ring, PointingHand, and `tip` as hover text and accessible name.
+pub fn quiet_more_dots(ui: &mut Ui, side: f32, tip: &str) -> egui::Response {
+    let enabled = ui.is_enabled();
+    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(side), sense);
+    let (fill, edge, fg) = if !enabled {
+        (Color32::TRANSPARENT, Color32::TRANSPARENT, theme::muted_col())
+    } else if resp.is_pointer_button_down_on() || popup_open(ui, &resp) {
+        (theme::accent_faded(), theme::edge(), theme::ink())
+    } else if resp.hovered() {
+        (theme::hover_bg(), theme::edge(), theme::ink())
+    } else {
+        (Color32::TRANSPARENT, theme::edge(), theme::text_col())
+    };
+    ui.painter().rect(rect, CornerRadius::same(12), fill, Stroke::new(1.0, edge), StrokeKind::Inside);
+    let step = if side >= 36.0 { 6.5 } else { 5.5 };
+    for dx in [-step, 0.0, step] {
+        ui.painter().circle_filled(rect.center() + Vec2::new(dx, 0.0), 2.0, fg);
+    }
+    if resp.has_focus() {
+        focus_ring(ui, rect, 12);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tip));
+    let resp = if enabled { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp };
+    resp.on_hover_text(tip)
 }
 
 /// A text link: 13 pt accent semibold, no underline at rest, underlined under the pointer and

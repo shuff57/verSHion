@@ -129,7 +129,7 @@ pub fn desk_panel<R>(
             right: if margin >= 16 { margin.saturating_add(14) } else { margin },
         }))
         .show(root, |ui| {
-            if !theme::chem_skin() { theme::paint_grid(ui.painter(), ui.max_rect()); }
+            if !theme::chem_skin() { theme::paint_page_grid(ui.painter(), ui.max_rect()); }
             f(ui)
         })
         .inner
@@ -304,6 +304,49 @@ pub const STEPS: [(&str, &str); 4] = [
 /// two lines with the short STEPS copy (at 920 the old copy wrapped to five).
 const STEPS_W: f32 = 1000.0;
 
+/// The welcome lead's measure on a wide window (changed in round 28, C1): 440 pt holds about 60
+/// characters a line at HERO_LEAD, so the one sentence runs to three lines. At round 27's 620 it
+/// ran about 85 a line, which two judges read as slow to scan. 620 restores the old two lines.
+const HERO_LEAD_W: f32 = 440.0;
+/// The welcome lead's measure at 760 (unchanged in round 28).
+const HERO_LEAD_W_NARROW: f32 = 560.0;
+
+/// "How it works" sits flush left on the edge the hero and the steps card share (changed in round
+/// 28, C2): centred, it floated off that edge (the critics' words). `false` centres it again.
+const STEPS_HEADING_LEFT: bool = true;
+
+/// The welcome page's one-sentence lead, in softened ink, wrapped to `w`. Returns its response.
+fn hero_lead(ui: &mut egui::Ui, roomy: bool, w: f32) -> egui::Response {
+    // The one sentence that explains the product, in softened ink: the pale tan was the hardest
+    // text on the page to read.
+    let size = if roomy { crate::kit::ty::HERO_LEAD } else { crate::kit::ty::HERO_LEAD_NARROW };
+    ui.allocate_ui_with_layout(Vec2::new(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+        ui.set_width(w);
+        ui.label(RichText::new(HERO_LEAD_TEXT).size(size).color(theme::ink().gamma_multiply(0.82)));
+    })
+    .response
+}
+
+const HERO_LEAD_TEXT: &str = "PDFs, scans, screenshots, old Word documents, questions you type \
+                              yourself: verSHion gathers them into Question Banks and lays \
+                              them out as a clean, printable exam.";
+
+/// "How it works" and its steps card in the column `ui` was given. Returns (heading, card).
+fn steps_section(ui: &mut egui::Ui, col_w: f32) -> (Rect, Rect) {
+    // A real section heading: as a small-caps caption the four steps had no title.
+    let heading = theme::serif("How it works").size(crate::kit::ty::SECTION);
+    let head = if STEPS_HEADING_LEFT {
+        ui.label(heading).rect
+    } else {
+        ui.vertical_centered(|ui| ui.label(heading).rect).inner
+    };
+    ui.add_space(10.0);
+    // Four columns while the strip itself is at least 1000 wide, else one column of rows: decided
+    // on the strip's width, never on a measured text column.
+    let card = steps_panel(ui, col_w >= STEPS_W);
+    (head, card)
+}
+
 /// One numbered how-it-works card.
 /// One step as a column of the welcome panel: the numbered disc, the title, the body.
 /// A patch of `fill` over `core` whose edge fades to nothing across `feather` (x and y apart), so
@@ -364,13 +407,77 @@ fn soft_backing(core: Rect, feather: Vec2, fill: Color32) -> egui::Shape {
 /// 222 px thumbnail's 7.6 px question text too small to inspect: the sheet is drawn larger, and its
 /// type a step larger again than the sheet, so the questions read at about 10 px.
 const PREVIEW_SIZE: Vec2 = Vec2::new(272.0, 352.0);
+/// Round 31 (a): the size the page is drawn at on a wide window, 13.2% larger than `PREVIEW_SIZE`
+/// with the same proportions. Its right edge (the answer key's reach) stays on the steps card's
+/// right edge and its top on the hero's top, so it grows left into the band beside the copy and
+/// down into the empty space under the steps; its print scales with it. Revert: `PREVIEW_SIZE`.
+const PREVIEW_DRAWN: Vec2 = Vec2::new(308.0, 398.6);
+/// Round 31 (b): at desktop the hero's text column (headline to install link) is centred
+/// vertically on the sample sheet, so the spare height is shared above and below the copy instead
+/// of pooling under the install link. At 760 it was tried and withdrawn by the council (it parted
+/// the paragraph from the headline): the narrow hero is as in round 30. Revert: `false`.
+const HERO_TEXT_CENTRED: bool = true;
 /// The same page in a narrow window, beside the hero's text: the critics read the narrow page's
 /// steps as a text-only explanation with no example of the printed exam it describes.
 const NARROW_PREVIEW_SIZE: Vec2 = Vec2::new(200.0, 259.0);
+/// Round 29 (b): the size the page is drawn at 760. It grows left into the gap beside the hero's
+/// text and down by as little as it can; the text column keeps the width `NARROW_PREVIEW_SIZE`
+/// leaves it, so nothing in it moves or re-wraps. Revert: `NARROW_PREVIEW_SIZE`.
+const NARROW_PREVIEW_DRAWN: Vec2 = Vec2::new(208.0, 269.4);
+/// Round 29 (a): the page's fine print (the graph's "p" and "q", the "Version A" tag and the
+/// "Page 1 of 2" folio) is set no smaller than its answer labels (the body); the critics read it as
+/// too small to judge the print by. Revert: `false`.
+const PREVIEW_FINE_PRINT_FLOOR: bool = true;
+/// The least room between the sheet's title and its "Version A" pill (round 29).
+const PREVIEW_TAG_GAP: f32 = 10.0;
 /// The narrow window's column for the hero and the steps.
 const NARROW_STEPS_W: f32 = 640.0;
 
-fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
+/// The answer key behind the welcome sheet: its centre's offset from the page's (scaled with the
+/// page) and its turn in radians.
+fn preview_back(size: Vec2) -> (Vec2, f32) {
+    let k = size.x / 222.0;
+    (Vec2::new(14.0 * k, 8.0 * k), 0.06)
+}
+
+/// How far the answer key behind a `size` sheet (and its 1 pt shadow) reaches right of the sheet:
+/// the hero places the sheet so this reach ends on the steps panel's right edge, so hero and
+/// panel share one right margin.
+fn preview_reach(size: Vec2) -> f32 {
+    let (off, a) = preview_back(size);
+    let half = size / 2.0;
+    off.x + half.x * a.cos() + half.y * a.sin() - half.x + 1.0
+}
+
+/// The narrow hero's page and the width of the text column beside it. The column is sized from
+/// `NARROW_PREVIEW_SIZE` (36 pt short of where that page starts); the page is drawn at
+/// `NARROW_PREVIEW_DRAWN`, its answer key still ending on the steps panel's right edge.
+fn narrow_hero_geometry(x0: f32, row_w: f32, body_top: f32) -> (Rect, f32) {
+    let left_of = |size: Vec2| x0 + row_w - size.x - preview_reach(size);
+    let page = Rect::from_min_size(Pos2::new(left_of(NARROW_PREVIEW_DRAWN), body_top + 4.0), NARROW_PREVIEW_DRAWN);
+    (page, left_of(NARROW_PREVIEW_SIZE) - 36.0 - x0)
+}
+
+/// The wide hero's page (top on `top`, its answer key ending on the row's right edge) and the
+/// width of the text column left of it.
+fn desk_hero_geometry(x0: f32, row_w: f32, top: f32) -> (Rect, f32) {
+    let size = PREVIEW_DRAWN;
+    let right = x0 + row_w - preview_reach(size);
+    let page = Rect::from_min_size(Pos2::new(right - size.x, top), size);
+    (page, 660.0_f32.min(row_w - size.x - 60.0))
+}
+
+/// How far below `col_top` a text column `col_h` tall starts so that it is centred on `page`
+/// (round 31 b); never above `col_top`. Zero until the column has been measured once.
+fn hero_text_offset(page: Rect, col_top: f32, col_h: Option<f32>) -> f32 {
+    match col_h {
+        Some(h) if HERO_TEXT_CENTRED => (page.center().y - h / 2.0 - col_top).max(0.0),
+        _ => 0.0,
+    }
+}
+
+/// `narrow`: the 760 sheet (its print scale is chosen by which sheet it is, never by its width).
+fn paint_exam_preview(painter: &egui::Painter, page: Rect, narrow: bool) {
     use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
     use egui::{FontId, Shape};
     // Geometry is laid out on the old 222 px sheet and scaled by `k`; the title, tag and folio
@@ -379,14 +486,18 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     // exempt from the 12 pt floor, but it has to be read to be believed).
     let k = page.width() / 222.0;
     let tk = k * 1.12;
-    let bk = if page.width() >= 250.0 { 12.0 } else { 11.0 } / 7.6;
+    // A desktop sheet drawn larger than `PREVIEW_SIZE` (round 31) scales its print with it.
+    let bk = if !narrow { 12.0 * (page.width() / PREVIEW_SIZE.x).max(1.0) } else { 11.0 } / 7.6;
     let g = |v: f32| v * k;
     let t = |v: f32| v * tk;
     let b = |v: f32| v * bk;
+    // The fine print's floor: the answer labels' size.
+    let fine = |v: f32| if PREVIEW_FINE_PRINT_FLOOR { v.max(b(7.6)) } else { v };
     let shade = if theme::is_dark() { 90 } else { 30 };
     // The answer key behind, turned a little and peeking out at the lower right.
-    let back_c = page.center() + Vec2::new(g(14.0), g(8.0));
-    let turn = egui::emath::Rot2::from_angle(0.06);
+    let (back_off, back_turn) = preview_back(page.size());
+    let back_c = page.center() + back_off;
+    let turn = egui::emath::Rot2::from_angle(back_turn);
     let half = page.size() / 2.0;
     let back: Vec<Pos2> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
         .iter()
@@ -411,11 +522,22 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     let ring = Stroke::new(0.9, PAPER_SOFT);
     let text = |pos: Pos2, s: &str, f: &FontId, c: Color32| painter.text(pos, Align2::LEFT_TOP, s, f.clone(), c).width();
     let mut y = page.top() + g(14.0);
-    text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(t(11.5), theme::serif_family()), PAPER_INK);
+    let title_w = text(Pos2::new(l, y), "Linear Equations Quiz", &FontId::new(t(11.5), theme::serif_family()), PAPER_INK);
     // The one touch of accent: the version tag, as a small filled pill (accent text alone faded on
     // white paper in dark mode).
-    let tag = painter.layout_no_wrap("Version A".into(), FontId::new(t(6.4), theme::bold_family()), theme::on_accent_col());
-    let pad = Vec2::new(g(4.0), g(1.5));
+    // With the floor the pill is held at least `PREVIEW_TAG_GAP` clear of the title: its side
+    // padding is tightened, and where that is not enough (the narrow sheet) its text is set at the
+    // largest size that keeps the gap, never under the old size. The title keeps its size.
+    let pad = Vec2::new(if PREVIEW_FINE_PRINT_FLOOR { g(2.5) } else { g(4.0) }, g(1.5));
+    let tag_at = |sz: f32| painter.layout_no_wrap("Version A".into(), FontId::new(sz, theme::bold_family()), theme::on_accent_col());
+    let mut tag = tag_at(fine(t(6.4)));
+    if PREVIEW_FINE_PRINT_FLOOR {
+        let mut sz = fine(t(6.4));
+        while sz > t(6.4) && r - tag.size().x - 2.0 * pad.x < l + title_w + PREVIEW_TAG_GAP + 0.5 {
+            sz = (sz - 0.25).max(t(6.4));
+            tag = tag_at(sz);
+        }
+    }
     let pill = Rect::from_min_size(Pos2::new(r - tag.size().x - 2.0 * pad.x, y + t(2.0)), tag.size() + 2.0 * pad);
     painter.rect_filled(pill, CornerRadius::same(6), theme::accent_col());
     painter.galley(pill.min + pad, tag, theme::on_accent_col());
@@ -466,8 +588,11 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     let at = |dx: f32, dy: f32| fig.min + Vec2::new(g(dx), g(dy));
     painter.line_segment([at(10.0, 42.0), at(30.0, 3.5)], Stroke::new(1.3, PAPER_INK));
     painter.line_segment([at(2.0, 26.0), at(62.0, 12.0)], Stroke::new(1.3, PAPER_SOFT));
-    painter.text(at(32.0, 2.0), Align2::LEFT_TOP, "p", FontId::proportional(t(6.5)), PAPER_INK);
-    painter.text(at(55.0, 3.0), Align2::LEFT_TOP, "q", FontId::proportional(t(6.5)), PAPER_SOFT);
+    painter.text(at(32.0, 2.0), Align2::LEFT_TOP, "p", FontId::proportional(fine(t(6.5))), PAPER_INK);
+    // At the floor's size "q" hangs under its line's right end, clear of the figure's top edge
+    // (above the line it touched the border, hung from the top it ran into the line).
+    let (q_at, q_align) = if PREVIEW_FINE_PRINT_FLOOR { (at(53.0, 14.5), Align2::LEFT_TOP) } else { (at(55.0, 3.0), Align2::LEFT_TOP) };
+    painter.text(q_at, q_align, "q", FontId::proportional(fine(t(6.5))), PAPER_SOFT);
     let ax = fig.right() + g(14.0);
     for (i, s) in ["line p", "line q"].iter().enumerate() {
         let yy = fig.top() + g(8.0) + i as f32 * b(16.0);
@@ -499,28 +624,113 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
         Pos2::new(page.center().x, page.bottom() - g(12.0)),
         Align2::CENTER_CENTER,
         "Page 1 of 2",
-        FontId::proportional(t(6.4)),
+        FontId::proportional(fine(t(6.4))),
         PAPER_SOFT,
     );
 }
 
-pub fn step_cell(ui: &mut egui::Ui, i: usize, big: bool) {
-    let Some((title, body)) = STEPS.get(i) else { return };
+/// Round 30, C1: the step bodies one step up the kit's type scale, from BODY 14 to the next size
+/// it has (15, the narrow welcome lead's), at both widths. The judges read the 14 pt bodies as
+/// undersized beside their titles. False puts them back at BODY.
+const STEP_BODY_RAISED: bool = true;
+
+/// The step bodies' size (see [`STEP_BODY_RAISED`]).
+fn step_body_size() -> f32 {
+    if STEP_BODY_RAISED { crate::kit::ty::HERO_LEAD_NARROW } else { crate::kit::ty::BODY }
+}
+
+/// The step number's filled accent disc: a 28 pt slot, the numeral in it a real label.
+const STEP_DISC: f32 = 28.0;
+
+/// One step: the numbered disc, then the title in the ink serif (PANEL, CARD as a row), then the
+/// body at [`step_body_size`] in `text`.
+/// Stacked (`row` false) the disc sits over the title; as a row the disc sits left of the title
+/// and body. Returns the disc's rect, for the connector between steps.
+pub fn step_cell(ui: &mut egui::Ui, i: usize, row: bool) -> Rect {
+    let Some((title, body)) = STEPS.get(i) else { return Rect::NOTHING };
+    let title_text = |ui: &mut egui::Ui| {
+        // The page's serif voice, as the hero heading and "How it works" (sans semibold broke it).
+        ui.add(egui::Label::new(theme::serif(*title).size(if row { crate::kit::ty::CARD } else { crate::kit::ty::PANEL })).wrap());
+    };
+    // Body in `text` on 20 pt lines, so the bodies keep up with their headings instead of reading
+    // as small, tight print under them (one step up the scale from round 30, see STEP_BODY_RAISED).
+    let body_text = |ui: &mut egui::Ui| {
+        ui.add(egui::Label::new(step_body(body, step_body_size()).line_height(Some(20.0))).wrap());
+    };
     // Left-aligned rows (a `columns` cell is justified, which stretched the copy).
-    Frame::new().inner_margin(Margin::symmetric(if big { 18 } else { 22 }, 0)).show(ui, |ui| {
-        ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-            // The number just above its title. Beside it, the titles wrapped to two lines in a column
-            // this narrow; 10 px above it, the number read as detached from its heading.
-            step_badge(ui, i);
-            ui.add_space(2.0);
-            ui.add(egui::Label::new(theme::serif(*title).size(if big { crate::kit::ty::PANEL } else { crate::kit::ty::CARD })).wrap());
-            ui.add_space(6.0);
-            // Body at 14 in `text` on loose lines, so the two-line bodies keep up with their headings
-            // instead of reading as small, tight print under them.
-            let text = step_body(body, crate::kit::ty::BODY).line_height(Some(20.0));
-            ui.add(egui::Label::new(text).wrap());
-        });
-    });
+    Frame::new()
+        .inner_margin(Margin::symmetric(if row { 22 } else { 18 }, 0))
+        .show(ui, |ui| {
+            if row {
+                ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = 14.0;
+                    let disc = step_badge(ui, i);
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        // The title's first line centred on the disc.
+                        ui.add_space(3.0);
+                        title_text(ui);
+                        ui.add_space(2.0);
+                        body_text(ui);
+                    });
+                    disc
+                })
+                .inner
+            } else {
+                ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                    let disc = step_badge(ui, i);
+                    ui.add_space(4.0);
+                    title_text(ui);
+                    ui.add_space(4.0);
+                    body_text(ui);
+                    disc
+                })
+                .inner
+            }
+        })
+        .inner
+}
+
+/// The welcome page's "How it works" panel: one card holding the four steps as a numbered
+/// sequence (changed in round 27): a filled accent disc per step joined to the next by a thin
+/// rule, and no dividers. Split by full-height hairlines (and a cross at 760) the steps read as a
+/// table (the critics' words); four bordered, filled cards read as four buttons beside the one
+/// real action. `wide`: four columns, the rule running across between the discs; else one column
+/// of rows, top to bottom, the rule running down between them. Tried in round 27 and not kept:
+/// the discs with spacing alone (at desktop they floated over four columns and read as a table
+/// again). Returns the card's rect.
+fn steps_panel(ui: &mut egui::Ui, wide: bool) -> Rect {
+    let w = ui.available_width();
+    let pad = if wide { Margin::symmetric(4, 18) } else { Margin::symmetric(4, 20) };
+    crate::kit::card().inner_margin(pad).show(ui, |ui| {
+        ui.set_width(w - 10.0);
+        let rule = Stroke::new(1.0, theme::border());
+        let mut discs = [Rect::NOTHING; 4];
+        if wide {
+            ui.columns(4, |cols| {
+                for (i, col) in cols.iter_mut().enumerate() {
+                    discs[i] = step_cell(col, i, false);
+                }
+            });
+            for k in 0..3 {
+                let (a, b) = (discs[k], discs[k + 1]);
+                ui.painter().hline(a.right() + 10.0..=b.left() - 10.0, a.center().y.round() + 0.5, rule);
+            }
+        } else {
+            for (i, disc) in discs.iter_mut().enumerate() {
+                if i > 0 {
+                    ui.add_space(12.0);
+                }
+                *disc = step_cell(ui, i, true);
+            }
+            for k in 0..3 {
+                let (a, b) = (discs[k], discs[k + 1]);
+                ui.painter().vline(a.center().x.round() + 0.5, a.bottom() + 6.0..=b.top() - 6.0, rule);
+            }
+        }
+    })
+    .response
+    .rect
 }
 
 /// A step's body copy: BODY in `text`, never the pale brown `muted`, which the critics read as four
@@ -538,22 +748,17 @@ fn no_widow(body: &str) -> String {
     }
 }
 
-/// The step number that heads a step: a plain accent numeral, set flush with its title.
-fn step_badge(ui: &mut egui::Ui, i: usize) {
-    // No ring or disc: an outlined circle read as a step control or workflow button, as if a step
-    // could be clicked. The same 28 px slot keeps the titles and bodies where they were.
-    let (r, _) = ui.allocate_exact_size(Vec2::splat(28.0), egui::Sense::hover());
-    ui.painter().text(
-        r.left_center(),
-        Align2::LEFT_CENTER,
-        format!("{}", i + 1),
-        egui::FontId::new(crate::kit::ty::SECTION, theme::bold_family()),
-        theme::accent_col(),
-    );
+/// The step number that heads a step: its numeral in `on_accent` on a filled accent disc, a
+/// real label so a screen reader reads 1 to 4 before each title. Only the numeral is filled: the
+/// steps themselves stay plain text, so nothing reads as a button.
+fn step_badge(ui: &mut egui::Ui, i: usize) -> Rect {
+    let (r, _) = ui.allocate_exact_size(Vec2::splat(STEP_DISC), egui::Sense::hover());
+    ui.painter().circle_filled(r.center(), STEP_DISC / 2.0, theme::accent_col());
+    let n = RichText::new(format!("{}", i + 1)).size(crate::kit::ty::BODY).family(theme::bold_family()).color(theme::on_accent_col());
+    ui.put(r, egui::Label::new(n).selectable(false));
+    r
 }
 
-/// A step as a wide row: the disc and title on one line, the body beneath. Used when the
-/// steps stack, where a full-width card would otherwise be mostly empty height.
 /// Free-function toast used by other screen modules: `screens::toast(app, msg, err?)`.
 pub fn toast(app: &mut crate::App, text: impl Into<String>, is_error: bool) {
     if is_error {
@@ -790,170 +995,318 @@ impl crate::App {
     }
 
     fn draw_sidebar_into(&mut self, root: &mut egui::Ui) {
-        // V4 dock: 88 px rounded rail inside a 10 px app gutter; below ~900 px it
-        // collapses to a 64 px icon rail (labels hidden).
-        let narrow = root.max_rect().width() < 900.0;
-        let dock_w = if narrow { 64.0 } else { 88.0 };
-        egui::Panel::left(egui::Id::new("sidebar"))
-            .exact_size(dock_w + 10.0 + DOCK_GAP)
-            .show_separator_line(false)
-            .frame(Frame::new().fill(theme::cream()).inner_margin(Margin {
-                left: 10,
-                right: DOCK_GAP as i8,
-                top: 10,
-                bottom: 10,
-            }))
-            .show(root, |ui| {
-                if !theme::chem_skin() { theme::paint_grid(ui.painter(), ui.max_rect()); }
-                let rect = ui.max_rect();
-                ui.painter().rect(
-                    rect,
-                    CornerRadius::same(18),
-                    theme::rail(),
-                    if theme::is_dark() { Stroke::new(1.0, theme::border()) } else { Stroke::NONE },
-                    StrokeKind::Inside,
-                );
-                let inner = rect.shrink2(Vec2::new((dock_w - if narrow { 48.0 } else { 70.0 }) / 2.0, 12.0));
-                let mut ui = ui.new_child(UiBuilder::new().max_rect(inner));
-                let ui = &mut ui;
-                ui.spacing_mut().item_spacing = Vec2::new(0.0, 4.0);
-                let item_w = inner.width();
-
-                ui.add_space(2.0);
-
-                // Who is signed in: a saved session is looked up once, quietly (no request at all without one), so the
-                // Account item can show it on every screen, not only after Account was opened.
-                let probed = egui::Id::new("account_probed");
-                if !ui.ctx().data(|d| d.get_temp::<bool>(probed)).unwrap_or(false) {
-                    ui.ctx().data_mut(|d| d.insert_temp(probed, true));
-                    self.account.open_quiet();
-                }
-                let who = self.account.model.me.as_ref().map(|m| (initials_of(&m.display_name, &m.email), m.email.clone()));
-
-                let nav = [
-                    (NavIcon::Home, "Home", crate::Screen::Home),
-                    (NavIcon::Banks, "Banks", crate::Screen::Banks),
-                    (NavIcon::Exams, "Exams", crate::Screen::Exams),
-                    (NavIcon::Grade, "Grade", crate::Screen::Grade),
-                    (NavIcon::Import, "Import", crate::Screen::Imports),
-                    (NavIcon::Figures, "Figures", crate::Screen::Figures),
-                    (NavIcon::Shared, "Shared", crate::Screen::Shared),
-                    // One item for the account and the settings: signed in, it wears the person's initials,
-                    // a filled disc as Google does; signed out, the plain person icon.
-                    (NavIcon::Account, "Account", crate::Screen::Settings),
-                ];
-                for (icon, label, target) in nav {
-                    let active = match (&self.screen, &target) {
-                        (crate::Screen::BankEdit(_), crate::Screen::Banks) => true,
-                        (crate::Screen::ExamEdit(_), crate::Screen::Exams) => true,
-                        (crate::Screen::Account, crate::Screen::Settings) => true,
-                        (cur, t) => std::mem::discriminant(cur) == std::mem::discriminant(t),
-                    };
-                    let badge = if matches!(icon, NavIcon::Account) { who.as_ref() } else { None };
-                    if self.dock_item(ui, icon, label, active, item_w, narrow, badge) {
-                        self.screen = target;
-                    }
-                }
-
-                // Floor of the dock: the light/dark button.
-                let btn_h = if narrow { 52.0 } else { 56.0 };
-                let floor = (ui.available_height() - btn_h - 4.0).max(0.0);
-                ui.allocate_at_least(Vec2::new(item_w, floor), egui::Sense::hover());
-                self.theme_button(ui, item_w, narrow);
-            });
-    }
-
-    /// Light/dark: one button, not a switch. It shows the mode a click moves to (a moon while it is light, a
-    /// sun while it is dark), drawn like a nav item: icon over a small label.
-    fn theme_button(&mut self, ui: &mut egui::Ui, w: f32, narrow: bool) {
-        let dark = theme::is_dark();
-        let h = if narrow { 52.0 } else { 56.0 };
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
-        if resp.hovered() {
-            ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        // Who is signed in: a saved session is looked up once, quietly (no request at all without one), so the
+        // Account item can show it on every screen, not only after Account was opened.
+        let probed = egui::Id::new("account_probed");
+        if !root.ctx().data(|d| d.get_temp::<bool>(probed)).unwrap_or(false) {
+            root.ctx().data_mut(|d| d.insert_temp(probed, true));
+            self.account.open_quiet();
         }
-        let (glyph, label) = if dark { (crate::handicons::SUN, "Light") } else { (crate::handicons::MOON, "Dark") };
-        let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
-        crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
-        // Labelled at every width: bare outline glyphs on the narrow rail were "guesswork".
-        ui.painter().text(
-            Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
-            egui::Align2::CENTER_CENTER,
-            label,
-            egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
-            theme::dock_text(),
-        );
-        let hint = format!("Switch to {} mode", label.to_lowercase());
-        if resp.clone().on_hover_text(hint).clicked() {
-            let ctx = ui.ctx().clone();
+        let who = self.account.model.me.as_ref().map(|m| (initials_of(&m.display_name, &m.email), m.email.clone()));
+        let screens = [
+            crate::Screen::Home,
+            crate::Screen::Banks,
+            crate::Screen::Exams,
+            crate::Screen::Grade,
+            crate::Screen::Imports,
+            crate::Screen::Figures,
+            crate::Screen::Shared,
+            crate::Screen::Settings,
+        ];
+        let active = screens.clone().map(|target| match (&self.screen, &target) {
+            (crate::Screen::BankEdit(_), crate::Screen::Banks) => true,
+            (crate::Screen::ExamEdit(_), crate::Screen::Exams) => true,
+            (crate::Screen::Account, crate::Screen::Settings) => true,
+            (cur, t) => std::mem::discriminant(cur) == std::mem::discriminant(t),
+        });
+        let wants_report = crate::alphanote::wants_dock(root.ctx());
+        let out = draw_dock(root, active, who.as_ref(), wants_report, theme::is_dark());
+        if let Some(i) = out.picked {
+            self.screen = screens[i].clone();
+        }
+        if out.theme_pressed {
+            let ctx = root.ctx().clone();
+            let dark = theme::is_dark();
             self.set_dark_mode(!dark, &ctx);
         }
     }
+}
 
-    /// One dock nav item: icon over a small label; active = highlighter fill, dark ink.
-    fn dock_item(
-        &mut self,
-        ui: &mut egui::Ui,
-        icon: NavIcon,
-        label: &str,
-        active: bool,
-        w: f32,
-        narrow: bool,
-        badge: Option<&(String, String)>,
-    ) -> bool {
-        let h = if narrow { 52.0 } else { 56.0 };
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
-        if active {
-            ui.painter().rect_filled(rect, CornerRadius::same(13), theme::highlighter());
-        } else if resp.hovered() {
-            ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
-        }
-        let (icon_c, text_c) = if active {
-            (theme::on_highlighter(), theme::on_highlighter())
-        } else {
-            (theme::dock_text(), theme::dock_text())
-        };
-        let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
-        if let Some((initials, _)) = badge {
-            // Signed in: the person's initials in an accent disc stand in for the generic account icon.
-            let centre = Pos2::new(rect.center().x, cy);
-            ui.painter().circle_filled(centre, 12.5, theme::accent_col());
-            ui.painter().text(
-                centre,
-                egui::Align2::CENTER_CENTER,
-                initials,
-                egui::FontId::new(if initials.chars().count() > 1 { 11.0 } else { 13.0 }, theme::bold_family()),
-                theme::on_accent_col(),
+/// The dock's nav items, in order: icon and visible label (also the accessible name).
+const DOCK_NAV: [(NavIcon, &str); 8] = [
+    (NavIcon::Home, "Home"),
+    (NavIcon::Banks, "Banks"),
+    (NavIcon::Exams, "Exams"),
+    (NavIcon::Grade, "Grade"),
+    (NavIcon::Import, "Import"),
+    (NavIcon::Figures, "Figures"),
+    (NavIcon::Shared, "Shared"),
+    // One item for the account and the settings: signed in, it wears the person's initials,
+    // a filled disc as Google does; signed out, the plain person icon.
+    (NavIcon::Account, "Account"),
+];
+
+/// What the dock drew and what was pressed this frame.
+struct DockOut {
+    /// Index into [`DOCK_NAV`] of the item pressed.
+    picked: Option<usize>,
+    theme_pressed: bool,
+    /// The dark rail's rect.
+    #[cfg_attr(not(test), allow(dead_code))]
+    rail: egui::Rect,
+}
+
+/// The dock as a left panel of `root`: the [`DOCK_NAV`] items (`active` marks the current page),
+/// then at its floor the Report item (narrow, when `wants_report` and there is room) and the
+/// light/dark button (`dark` is the current mode).
+fn draw_dock(root: &mut egui::Ui, active: [bool; 8], who: Option<&(String, String)>, wants_report: bool, dark: bool) -> DockOut {
+    // V4 dock: an 88 pt rounded rail inside a 10 pt app gutter; below ~900 pt a 72 pt rail
+    // (still labelled, at a smaller size) whose gap to the page is 8 instead of 16, so the page
+    // keeps the x and width it had beside the old 64 pt rail.
+    let narrow = root.max_rect().width() < 900.0;
+    let dock_w = dock_width(narrow);
+    let gap = dock_gap(narrow);
+    let mut out = DockOut { picked: None, theme_pressed: false, rail: egui::Rect::NOTHING };
+    egui::Panel::left(egui::Id::new("sidebar"))
+        .exact_size(dock_w + 10.0 + gap)
+        .show_separator_line(false)
+        .frame(Frame::new().fill(theme::cream()).inner_margin(Margin {
+            left: 10,
+            right: gap as i8,
+            top: 10,
+            bottom: 10,
+        }))
+        .show(root, |ui| {
+            if !theme::chem_skin() { theme::paint_page_grid(ui.painter(), ui.max_rect()); }
+            let rect = ui.max_rect();
+            out.rail = rect;
+            ui.painter().rect(
+                rect,
+                CornerRadius::same(18),
+                theme::rail(),
+                if theme::is_dark() { Stroke::new(1.0, theme::border()) } else { Stroke::NONE },
+                StrokeKind::Inside,
             );
-        } else {
-            draw_nav_icon_k(ui.painter(), icon, Pos2::new(rect.center().x, cy), icon_c, 21.0 / 16.0);
-        }
-        if let Some((_, email)) = badge {
-            resp.clone().on_hover_text(format!("Signed in as {email}"));
-        }
-        // Labelled at every width: on the narrow rail eight unlabelled outline glyphs (three of them
-        // alike) could only be told apart by hovering.
-        ui.painter().text(
-            Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
-            egui::Align2::CENTER_CENTER,
-            label,
-            egui::FontId::new(if narrow { 9.5 } else { 10.5 }, theme::bold_family()),
-            text_c,
-        );
-        resp.clicked()
-    }
+            let inner = rect.shrink2(Vec2::new((dock_w - dock_item_w(narrow)) / 2.0, 12.0));
+            let mut ui = ui.new_child(UiBuilder::new().max_rect(inner));
+            let ui = &mut ui;
+            ui.spacing_mut().item_spacing = Vec2::new(0.0, 4.0);
+            let item_w = inner.width();
 
+            ui.add_space(2.0);
+
+            for (i, (icon, label)) in DOCK_NAV.into_iter().enumerate() {
+                let badge = if matches!(icon, NavIcon::Account) { who } else { None };
+                if dock_item(ui, icon, label, active[i], item_w, narrow, badge) {
+                    out.picked = Some(i);
+                }
+            }
+
+            // Floor of the dock: the light/dark button.
+            let btn_h = dock_item_h(narrow);
+            // Narrow, the floating "Report an issue" pill sat over page content (Home's last bank
+            // card), so it moves into the dock as an item over light/dark, when the dock has a
+            // free item's height to spare above the nav. Too short a window keeps the pill.
+            let report = narrow && wants_report && ui.available_height() >= 2.0 * btn_h + 4.0 + DOCK_REPORT_CLEAR;
+            let reserve = if report { 2.0 * btn_h + 4.0 } else { btn_h };
+            let floor = (ui.available_height() - reserve - 4.0).max(0.0);
+            ui.allocate_at_least(Vec2::new(item_w, floor), egui::Sense::hover());
+            if report {
+                crate::alphanote::dock_item(ui, item_w, btn_h, |ui, rect, resp| {
+                    dock_glyph_item(ui, rect, resp, egui_phosphor::regular::BUG, "Report", narrow)
+                });
+            }
+            out.theme_pressed = theme_toggle(ui, item_w, narrow, dark);
+        });
+    out
+}
+
+/// Free height the narrow dock keeps between its last nav item and the Report item, so Report
+/// reads as a utility beside light/dark rather than a ninth page.
+const DOCK_REPORT_CLEAR: f32 = 24.0;
+
+/// The dock's outer width: 88 on a wide window, 72 on the narrow rail (64 before its labels
+/// grew to 12: "Account" needs a 56 pt item). Each keeps its old side margins round the item
+/// column ([`dock_item_w`]).
+fn dock_width(narrow: bool) -> f32 {
+    if narrow { 72.0 } else { SIDEBAR_WIDTH }
+}
+
+/// The cream gap between the dock and the page: [`DOCK_GAP`] on a wide window; on the narrow rail
+/// the 8 pt the rail grew by comes out of it, so the page's x and width stay as beside the old
+/// 64 pt rail (`dock_width + gap` is 80 either way there).
+fn dock_gap(narrow: bool) -> f32 {
+    if narrow { DOCK_GAP - (dock_width(true) - 64.0) } else { DOCK_GAP }
+}
+
+/// The width of one dock item (its hover tint and the selected pill): the widest label
+/// ("Account", 43 pt at 12 bold, 46.6 at 13; 49 / 53 under the chem skin's Noto) with room
+/// either side.
+fn dock_item_w(narrow: bool) -> f32 {
+    if narrow { 56.0 } else { 70.0 }
+}
+
+/// One dock item's height: the 21 pt icon over the label, with clear space under the label.
+fn dock_item_h(narrow: bool) -> f32 {
+    if narrow { 56.0 } else { 60.0 }
+}
+
+/// The dock's label size, on the `kit::ty` scale: META 13 on a wide window, LABEL 12 on the
+/// narrow rail (it was 10.5 / 9.5, read as "tiny" by the critics for four rounds).
+fn dock_label_size(narrow: bool) -> f32 {
+    if narrow { crate::kit::ty::LABEL } else { crate::kit::ty::META }
+}
+
+/// A dock item's label, centred under its icon near the item's foot. Painted: the item's
+/// response carries the same words as its accessible name.
+fn dock_label(ui: &egui::Ui, rect: egui::Rect, label: &str, narrow: bool, color: Color32) {
+    ui.painter().text(
+        Pos2::new(rect.center().x, rect.bottom() - if narrow { 12.0 } else { 13.0 }),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::new(dock_label_size(narrow), theme::bold_family()),
+        color,
+    );
+}
+
+/// Where a dock item's 21 pt icon is centred, from the item's top.
+fn dock_icon_y(rect: egui::Rect, narrow: bool) -> f32 {
+    rect.top() + if narrow { 19.0 } else { 21.0 }
+}
+
+/// Keyboard focus on any dock item: the app's ring (2 pt, 1 pt clear of the edge, corner + 1, as
+/// `pageshell` and `kit` draw it) in the dock's own ink, drawn only while the item has focus. The
+/// accent green is about 1.6:1 on the light rail.
+fn dock_focus_ring(ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response) {
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect.expand(1.0), CornerRadius::same(14), Stroke::new(2.0, theme::dock_text()), StrokeKind::Outside);
+    }
+}
+
+/// A dock utility item (not a page): `glyph` over a small `label`, hover tint, drawn like
+/// the light/dark button.
+fn dock_glyph_item(ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, glyph: &str, label: &str, narrow: bool) {
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    dock_focus_ring(ui, rect, resp);
+    let cy = dock_icon_y(rect, narrow);
+    crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
+    dock_label(ui, rect, label, narrow, theme::dock_text());
+}
+
+/// The light/dark button: one button, not a switch. It shows the mode a click moves to (a moon
+/// while it is light, a sun while it is dark), drawn like a nav item: icon over a small label.
+/// `dark` is the current mode. True when it was pressed.
+fn theme_toggle(ui: &mut egui::Ui, w: f32, narrow: bool, dark: bool) -> bool {
+    let h = dock_item_h(narrow);
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    dock_focus_ring(ui, rect, &resp);
+    let (glyph, label) = if dark { (crate::handicons::SUN, "Light") } else { (crate::handicons::MOON, "Dark") };
+    let cy = dock_icon_y(rect, narrow);
+    crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
+    // Labelled at every width: bare outline glyphs on the narrow rail were "guesswork".
+    dock_label(ui, rect, label, narrow, theme::dock_text());
+    // Named for screen readers by what it does, matching the visible label ("Dark mode").
+    let name = format!("{label} mode");
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &name));
+    let hint = format!("Switch to {} mode", label.to_lowercase());
+    resp.on_hover_text(hint).clicked()
+}
+
+/// One dock nav item: icon over a small label; active = highlighter fill, dark ink.
+fn dock_item(
+    ui: &mut egui::Ui,
+    icon: NavIcon,
+    label: &str,
+    active: bool,
+    w: f32,
+    narrow: bool,
+    badge: Option<&(String, String)>,
+) -> bool {
+    let h = dock_item_h(narrow);
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
+    // Named for screen readers by its visible label. The active page is not marked: egui's only
+    // flag for it (`WidgetInfo::selected`) makes every item a toggle button.
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
+    if active {
+        ui.painter().rect_filled(rect, CornerRadius::same(13), theme::highlighter());
+    } else if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
+    }
+    dock_focus_ring(ui, rect, &resp);
+    let (icon_c, text_c) = if active {
+        (theme::on_highlighter(), theme::on_highlighter())
+    } else {
+        (theme::dock_text(), theme::dock_text())
+    };
+    let cy = dock_icon_y(rect, narrow);
+    if let Some((initials, _)) = badge {
+        // Signed in: the person's initials in an accent disc stand in for the generic account icon.
+        let centre = Pos2::new(rect.center().x, cy);
+        ui.painter().circle_filled(centre, 12.5, theme::accent_col());
+        ui.painter().text(
+            centre,
+            egui::Align2::CENTER_CENTER,
+            initials,
+            egui::FontId::new(if initials.chars().count() > 1 { 11.0 } else { 13.0 }, theme::bold_family()),
+            theme::on_accent_col(),
+        );
+    } else {
+        draw_nav_icon_k(ui.painter(), icon, Pos2::new(rect.center().x, cy), icon_c, 21.0 / 16.0);
+    }
+    if let Some((_, email)) = badge {
+        resp.clone().on_hover_text(format!("Signed in as {email}"));
+    }
+    // Labelled at every width: on the narrow rail eight unlabelled outline glyphs (three of them
+    // alike) could only be told apart by hovering.
+    dock_label(ui, rect, label, narrow, text_c);
+    resp.clicked()
+}
+
+impl crate::App {
     // ---------- welcome ----------
 
     pub fn draw_welcome(&mut self, ctx: &egui::Context) {
         let fresh = self.store.banks.is_empty() && self.store.exams.is_empty();
         shell_frame(self, ctx, false, |app, ui| {
+            if let Some(go) = welcome_page(ui, fresh).go {
+                app.screen = go;
+            }
+        });
+    }
+}
+
+/// Where the welcome page put its parts (for tests) and the screen a click asked for.
+struct WelcomeLayout {
+    go: Option<crate::Screen>,
+    /// The headline's rect.
+    head: Rect,
+    /// The hero's text below the headline (paragraph to install link).
+    text: Rect,
+    /// The sample sheet (NOTHING when it is not drawn).
+    page: Rect,
+    /// The steps card.
+    card: Rect,
+}
+
+/// The welcome page's body in the desk `ui`.
+fn welcome_page(ui: &mut egui::Ui, fresh: bool) -> WelcomeLayout {
             let desk = ui.max_rect();
+            let mut out = WelcomeLayout { go: None, head: Rect::NOTHING, text: Rect::NOTHING, page: Rect::NOTHING, card: Rect::NOTHING };
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                // Hero and steps sit as one block near the top. The block's height is last frame's
-                // measure; it decides how much of the spare height opens the gap before the steps.
-                let content_id = egui::Id::new("welcome_content_h");
+                // Hero and steps sit as one block near the top. The block's height decides how much
+                // of the spare height opens the gap before the steps. It is measured where it is
+                // drawn and kept per width and per content (first run or returning), as the desktop
+                // column's height (round 31); a height not yet known for this key re-runs the pass
+                // before anything is presented (round 32 council fix: unkeyed, it was last frame's
+                // and the steps card moved by up to 16 pt after the first frame).
+                let content_id = egui::Id::new(("welcome_content_h", fresh, ui.available_width().to_bits()));
                 let view_h = ui.available_height();
                 // A wide window gets the landing page at landing-page size. At the old sizes the hero,
                 // steps and footer filled two-thirds of a 1280 x 800 window, and every way of placing
@@ -992,22 +1345,13 @@ impl crate::App {
                     ui.add_space(if roomy { 14.0 } else { 12.0 });
                 };
                 // The rest of the hero's text, top to bottom, flush left in its column.
+                let mut go = None;
                 let mut hero_text = |ui: &mut egui::Ui, hero: &mut Rect| {
-                    let lead_w = ui.available_width().min(if roomy { 620.0 } else { 560.0 });
                     // Narrower than the step column below it at every width (the critics read a lead
-                    // running wider than the cards as a page with no single column edge), and about
-                    // 80 characters a line.
-                    // The one sentence that explains the product, in softened ink: the pale tan was
-                    // the hardest text on the page to read.
-                    let lead_text = "PDFs, scans, screenshots, old Word documents, questions you type \
-                                     yourself: verSHion gathers them into Question Banks and lays \
-                                     them out as a clean, printable exam.";
-                    let r = ui.allocate_ui_with_layout(Vec2::new(lead_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        ui.set_width(lead_w);
-                        let size = if roomy { crate::kit::ty::HERO_LEAD } else { crate::kit::ty::HERO_LEAD_NARROW };
-                        ui.label(RichText::new(lead_text).size(size).color(theme::ink().gamma_multiply(0.82)));
-                    });
-                    *hero |= r.response.rect;
+                    // running wider than the cards as a page with no single column edge); about 60
+                    // characters a line on a wide window (round 28).
+                    let lead_w = ui.available_width().min(if roomy { HERO_LEAD_W } else { HERO_LEAD_W_NARROW });
+                    *hero |= hero_lead(ui, roomy, lead_w).rect;
                     ui.add_space(if roomy { 28.0 } else { 22.0 });
                     // A returning teacher is not a first-run visitor: the button goes back to work,
                     // and a second way in sits beside it. A first run names where the button leads:
@@ -1015,12 +1359,12 @@ impl crate::App {
                     // ("Get started" told the critics nothing about what opens).
                     let cta = if fresh { "Make your first Question Bank" } else { "Back to your work" };
                     if crate::pageshell::primary_large(ui, cta).clicked() {
-                        app.screen = crate::Screen::Home;
+                        go = Some(crate::Screen::Home);
                     }
                     if !fresh {
                         ui.add_space(2.0);
                         if crate::kit::link(ui, "Open your banks", true).clicked() {
-                            app.screen = crate::Screen::Banks;
+                            go = Some(crate::Screen::Banks);
                         }
                     }
                     ui.add_space(6.0);
@@ -1059,19 +1403,34 @@ impl crate::App {
                     let x0 = ui.max_rect().center().x - row_w / 2.0;
                     ui.add_space(lead);
                     let top = ui.cursor().top();
-                    let text_w = 660.0_f32.min(row_w - PREVIEW_SIZE.x - 60.0);
-                    let col = Rect::from_min_size(Pos2::new(x0, top), Vec2::new(text_w, ui.available_height().max(0.0)));
-                    let mut text = Rect::NOTHING;
+                    // The page sits right of the text, its top on the hero's top and the answer key
+                    // behind it ending on the steps panel's right edge (one right margin for hero and
+                    // panel). The text column is centred on it (round 31 b).
+                    let (page, text_w) = desk_hero_geometry(x0, row_w, top);
+                    // The column's height is measured where it is drawn and kept per width and per
+                    // content (first run or returning), so a resize or the other variant never uses
+                    // a stale value. A height not yet known for this key re-runs the pass (egui's
+                    // `request_discard`) before anything is painted or read by AccessKit, so no
+                    // presented frame shows the column top-aligned and then jumping. (An invisible
+                    // sizing pass would also measure first, but its disabled copies of the button
+                    // and link would reach the AccessKit tree twice.)
+                    let col_id = egui::Id::new(("welcome_hero_col_h", fresh, text_w.to_bits()));
+                    let known = ui.ctx().data(|d| d.get_temp::<f32>(col_id));
+                    let off = hero_text_offset(page, top, known);
+                    let col = Rect::from_min_size(Pos2::new(x0, top + off), Vec2::new(text_w, ui.available_height().max(0.0)));
+                    let (mut head, mut text) = (Rect::NOTHING, Rect::NOTHING);
                     ui.scope_builder(UiBuilder::new().max_rect(col).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
-                        hero_head(ui, &mut text);
+                        hero_head(ui, &mut head);
                         hero_text(ui, &mut text);
                     });
-                    // The page sits midway across the space right of the text, its top level with the
-                    // headline's top.
-                    let cx = (x0 + text_w + x0 + row_w) / 2.0;
-                    let page = Rect::from_min_size(Pos2::new(cx - PREVIEW_SIZE.x / 2.0, text.top()), PREVIEW_SIZE);
-                    paint_exam_preview(ui.painter(), page);
-                    hero = text | page;
+                    let h = (head | text).height();
+                    if HERO_TEXT_CENTRED && known.is_none_or(|o| (o - h).abs() > 0.5) {
+                        ui.ctx().data_mut(|d| d.insert_temp(col_id, h));
+                        ui.ctx().request_discard("welcome hero column measured");
+                    }
+                    paint_exam_preview(ui.painter(), page, false);
+                    (out.head, out.text, out.page) = (head, text, page);
+                    hero = head | text | page;
                     let below = page.bottom() + 8.0 - ui.cursor().top();
                     if below > 0.0 {
                         ui.add_space(below);
@@ -1091,22 +1450,23 @@ impl crate::App {
                     });
                     let body_top = head.bottom() + 12.0;
                     // The page's right edge sits in from the column's, leaving room for the answer
-                    // key that peeks out behind it. A column too narrow to hold the text beside it
-                    // goes without the page.
+                    // key that peeks out behind it, which ends on the steps panel's right edge. A
+                    // column too narrow to hold the text beside it goes without the page.
                     let with_page = row_w >= 520.0;
-                    let page = Rect::from_min_size(
-                        Pos2::new(x0 + row_w - NARROW_PREVIEW_SIZE.x - 18.0, body_top + 4.0),
-                        NARROW_PREVIEW_SIZE,
-                    );
-                    let text_w = if with_page { page.left() - 36.0 - x0 } else { row_w };
+                    let (page, beside) = narrow_hero_geometry(x0, row_w, body_top);
+                    let text_w = if with_page { beside } else { row_w };
                     let body = Rect::from_min_size(Pos2::new(x0, body_top), Vec2::new(text_w, ui.available_height().max(0.0)));
                     let mut text = Rect::NOTHING;
                     ui.scope_builder(UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
                         hero_text(ui, &mut text);
                     });
+                    (out.head, out.text) = (head, text);
+                    if with_page {
+                        out.page = page;
+                    }
                     hero = if with_page { head | text | page } else { head | text };
                     if with_page {
-                        paint_exam_preview(ui.painter(), page);
+                        paint_exam_preview(ui.painter(), page, true);
                         let below = page.bottom() + 8.0 - ui.cursor().top();
                         if below > 0.0 {
                             ui.add_space(below);
@@ -1137,76 +1497,19 @@ impl crate::App {
                 let left = ui.max_rect().center().x - col_w / 2.0;
                 let area = egui::Rect::from_min_size(egui::pos2(left, top), Vec2::new(col_w, ui.available_height().max(0.0)));
                 ui.scope_builder(UiBuilder::new().max_rect(area), |ui| {
-                    ui.vertical_centered(|ui| {
-                        // A real section heading: as a small-caps caption the four steps had no title.
-                        ui.label(theme::serif("How it works").size(crate::kit::ty::SECTION));
-                    });
-                    ui.add_space(10.0);
-                    // One panel holding the four steps, split by hairlines. Four bordered, filled cards
-                    // read as four buttons beside the one real action (the critics' words), and their
-                    // uneven text left each card a different empty floor.
-                    let w = ui.available_width();
-                    // Four columns while the strip itself is at least 1000 wide, else two rows of two:
-                    // decided on the strip's width, never on a measured text column.
-                    let wide = col_w >= STEPS_W;
-                    // Narrow: a little less above the first numerals, whose 28 px slot already
-                    // holds space over the figure, so the panel's top and bottom read even.
-                    let pad = if wide { Margin::symmetric(4, 18) } else { Margin { left: 4, right: 4, top: 10, bottom: 16 } };
-                    crate::kit::card().inner_margin(pad).show(ui, |ui| {
-                        ui.set_width(w - 10.0);
-                        if wide {
-                            ui.columns(4, |cols| {
-                                for (i, col) in cols.iter_mut().enumerate() {
-                                    step_cell(col, i, true);
-                                }
-                            });
-                            let r = ui.min_rect();
-                            for k in 1..4 {
-                                let x = r.left() + r.width() * k as f32 / 4.0;
-                                ui.painter().vline(x, r.top() + 4.0..=r.bottom() - 4.0, Stroke::new(1.0, theme::border()));
-                            }
-                        } else {
-                            // Narrow: two rows of two, each cell its own column with real side
-                            // padding, split by one divider down the panel and one hairline across
-                            // it that meet in a clean cross.
-                            let top = ui.cursor().top();
-                            let full = ui.available_width();
-                            let cell_w = ((full - 1.0) / 2.0).floor();
-                            let mut mid = 0.0;
-                            for row in 0..2 {
-                                if row > 0 {
-                                    // Rows read 1, 2 then 3, 4: a full-width hairline between them
-                                    // that crosses the divider cleanly, with room above and below.
-                                    ui.add_space(16.0);
-                                    mid = ui.cursor().top().round() + 0.5;
-                                    ui.add_space(17.0);
-                                }
-                                ui.horizontal_top(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 1.0;
-                                    for k in 0..2 {
-                                        ui.allocate_ui_with_layout(Vec2::new(cell_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                                            ui.set_width(cell_w);
-                                            step_cell(ui, row * 2 + k, false);
-                                        });
-                                    }
-                                });
-                            }
-                            let x = ui.min_rect().left() + cell_w + 0.5;
-                            let rule = Stroke::new(1.0, theme::border());
-                            ui.painter().vline(x, top + 6.0..=ui.cursor().top() - 4.0, rule);
-                            let r = ui.min_rect();
-                            ui.painter().hline(r.left() + 16.0..=r.right() - 16.0, mid, rule);
-                        }
-                    });
+                    out.card = steps_section(ui, col_w).1;
                 });
                 let measured = ui.cursor().top() - block_top - extra;
-                if block_h.is_none_or(|h| (h - measured).abs() > 0.5) {
+                if ui.ctx().data(|d| d.get_temp::<f32>(content_id)).is_none_or(|old| (old - measured).abs() > 0.5) {
                     ui.ctx().data_mut(|d| d.insert_temp(content_id, measured));
-                    ui.ctx().request_repaint();
+                    ui.ctx().request_discard("welcome block measured");
                 }
+                out.go = go;
             });
-        });
-    }
+            out
+}
+
+impl crate::App {
 
     // ---------- home ----------
 
@@ -1214,8 +1517,11 @@ impl crate::App {
         shell_frame(self, ctx, true, |app, ui| {
             // The bar floats and shows only under the pointer: always drawn, it read as a dark
             // rule down the page's right edge.
+            // The same content width as Banks (its wide cap), so the stat tiles, action cards,
+            // both grids and their view toggles end on the Banks grid's right edge. No gutter:
+            // this bar floats and is hidden at rest, so nothing is drawn over the content.
             crate::kit::quiet_scroll_area(ui, egui::ScrollArea::vertical().auto_shrink([false, false]), |ui| {
-                ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
+                ui.set_max_width(crate::bankui::banks_page_w(ui.available_width()));
                 app.draw_home_body(ui);
             });
         });
@@ -1322,7 +1628,11 @@ impl crate::App {
             Some(2) => self.screen = crate::Screen::Imports,
             _ => {}
         }
-        ui.add_space(18.0);
+        // The narrow page gives a little of this gap to the bank row so its tiles (taller since
+        // round 21, when a key needs a third line) end on the first screen (with recent exams
+        // above it; a page without them is left as it was).
+        let narrow_with_exams = ui.available_width() < HOME_COMPACT_W && !self.store.exams.is_empty();
+        ui.add_space(if narrow_with_exams { HOME_ACTIONS_GAP_NARROW } else { 18.0 });
 
         if fresh {
             // First run: teach the shape of the app instead of one long line on a wide card.
@@ -1486,7 +1796,18 @@ impl crate::App {
         if let Some(id) = open_ex {
             self.open_exam(&id);
         }
-        ui.add_space(22.0);
+        // The exam card grid already ends on its grid gap; the section gap gives back the room
+        // the cards' and tiles' padded Open took, so the bank row ends where it did.
+        let card_grid = !exams.is_empty() && !compact_exams && exam_mode == kit::ViewMode::Cards;
+        // Narrow: the compact rows' list card already closes the section, so a smaller gap still
+        // parts it from Your banks and leaves the bank row on the first screen (round 21).
+        ui.add_space(if card_grid {
+            HOME_SECTION_GAP_AFTER_CARDS
+        } else if compact_exams && !exams.is_empty() {
+            HOME_SECTION_GAP_NARROW
+        } else {
+            22.0
+        });
 
         // ---- Your banks ----
         let mut banks: Vec<crate::bankui::BankTile> = self.store.banks.iter().map(|b| crate::bankui::BankTile::of(&self.store, b)).collect();
@@ -1517,15 +1838,23 @@ impl crate::App {
             }
         } else if bank_mode == kit::ViewMode::Cards {
             use crate::bankui::{bank_tile, TileAct, TileVariant};
-            let mut cols = grid_cols(ui.available_width(), 226.0, grid_gap, 4);
+            // The Banks grid's narrowest tile, so a tile has the room to name every question type
+            // in its key (two lines) instead of folding them into "+N more".
+            let mut cols = grid_cols(ui.available_width(), crate::bankui::BANK_TILE_MIN_W, grid_gap, 4);
+            // A wide window shows one row (the recent exams' three-up row above it; All banks
+            // lists the rest), a narrow one two rows of two, as before.
+            let rows = if cols >= 3 { 1 } else { 2 };
             cols = banks.len().clamp(1, cols);
             let cw = ((ui.available_width() - grid_gap * (cols as f32 - 1.0)) / cols as f32).floor();
-            for chunk in banks.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
-                // Every tile is BANK_TILE_H (the Banks screen's tile), so a row ends on one line.
+            let shown: Vec<_> = banks.iter().take(cols * rows).collect();
+            for chunk in shown.chunks(cols) {
+                // A row's tiles are one height, the key lines its fullest key needs (the Banks
+                // screen's rule, round 22), so a row ends on one line.
+                let lines = crate::bankui::tile_key_lines(ui, chunk.iter().map(|b| (*b, cw)));
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = grid_gap;
                     for b in chunk {
-                        match bank_tile(ui, self, cw, b, TileVariant::Home) {
+                        match bank_tile(ui, self, cw, lines, b, TileVariant::Home) {
                             Some(TileAct::Usage) => crate::bankui::open_usage(ui.ctx(), b.name.clone(), b.used_in.clone()),
                             Some(_) => open_bk = Some(b.id.clone()),
                             None => {}
@@ -2842,9 +3171,34 @@ fn paint_preview_bg(p: &egui::Painter, r: Rect) {
 const HOME_THUMB: Vec2 = Vec2::new(88.0, 114.0);
 /// Every Home exam card is this tall. The text column flows from the top: pad 13, the name (one or
 /// two lines of 22), gap 4, meta 18, gap 2, "From <bank>" (one or two lines of 18, so a bank's
-/// name is read whole); the footer is pinned: gap 7, hairline 1, gap 7, footer 18, pad 13. The
-/// longest case (44 + 36) ends 7 above the hairline.
-const HOME_EXAM_H: f32 = 164.0;
+/// name is read whole); the footer is pinned: gap 5, hairline 1, gap 6, Open (the bank tiles'
+/// 32 tall tinted button, the edited text level with its middle), pad 16 (the card's side pad,
+/// so Open is as far from the bottom edge as from the right). The longest case (44 + 36) ends 5
+/// above the hairline.
+const HOME_EXAM_H: f32 = 176.0;
+/// A Home exam card's top pad, its Open's height, the gap from the hairline to Open, and the pad
+/// under Open.
+const HOME_EXAM_TOP: f32 = 12.0;
+const HOME_EXAM_ACT: f32 = 32.0;
+const HOME_EXAM_RULE_GAP: f32 = 6.0;
+const HOME_EXAM_FOOT_PAD: f32 = 16.0;
+/// Between the Recent exams card grid (after its grid gap) and Your banks.
+const HOME_SECTION_GAP_AFTER_CARDS: f32 = 4.0;
+/// Narrow Home (below [`HOME_COMPACT_W`]): the gap after the action cards (18 wide) and after the
+/// compact recent-exam rows (22 wide), smaller so the bank row ends on the first screen at 760x800
+/// now that a three-line tile key makes its tiles 223 tall (round 21).
+const HOME_ACTIONS_GAP_NARROW: f32 = 12.0;
+const HOME_SECTION_GAP_NARROW: f32 = 6.0;
+/// Open on a compact recent-exam row (Home at 760): the same tinted button, compact.
+const HOME_ROW_ACT: f32 = 28.0;
+
+/// A child Ui in `r` (it never moves `ui`'s cursor) whose widgets are at least `h` tall rather
+/// than the theme's 34, so a button asked for `h` is drawn exactly `h` tall.
+fn fixed_h_child(ui: &mut egui::Ui, r: Rect, salt: impl std::hash::Hash + std::fmt::Debug) -> egui::Ui {
+    let mut c = ui.new_child(UiBuilder::new().max_rect(r).id_salt(salt));
+    c.spacing_mut().interact_size.y = r.height();
+    c
+}
 
 /// Where a Home exam card's text starts (from the card's left edge) and how wide it may run.
 fn exam_card_text_x(w: f32) -> (f32, f32) {
@@ -2867,7 +3221,7 @@ fn edited_label(secs: i64) -> String {
 
 /// A Home exam card, `w` wide and [`HOME_EXAM_H`] tall: the first page on the left, beside it the
 /// name over two lines, "11 questions · 26 points", "From <bank>", a hairline, then when it was
-/// edited and an Open link. The whole card opens the exam; so does the link. Returns true on either.
+/// edited and Open (a tinted button). The whole card opens the exam; so does Open. Returns true on either.
 fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_right: bool) -> bool {
     use crate::kit;
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, HOME_EXAM_H), egui::Sense::click());
@@ -2895,7 +3249,7 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_
     }
     let (dx, iw) = exam_card_text_x(w);
     let x = rect.min.x + dx;
-    let mut y = rect.min.y + 13.0;
+    let mut y = rect.min.y + HOME_EXAM_TOP;
     // Name: two lines at most, then the facts right under it.
     let mut job = egui::text::LayoutJob::default();
     job.append(&e.name, 0.0, egui::TextFormat { font_id: kit::card_title_font(), color: theme::ink(), line_height: Some(kit::ty::CARD_LINE), ..Default::default() });
@@ -2917,15 +3271,16 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_
     job.append(&e.bank, 0.0, egui::TextFormat { font_id: egui::FontId::new(kit::ty::META, theme::semibold()), color: theme::text_col(), line_height: Some(18.0), ..Default::default() });
     job.wrap = egui::text::TextWrapping { max_width: iw, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
     p.galley(Pos2::new(x, y), p.layout_job(job), theme::text_col());
-    // The footer, pinned to the card's foot.
-    let y = rect.max.y - 13.0 - 18.0;
-    p.hline(x..=x + iw, y - 7.0 - 0.5, Stroke::new(1.0, theme::border()));
-    line(p, y, &edited_label(e.edited), sans(kit::ty::META), theme::muted_col());
-    // The Open link, at the footer's right, added after the card so it takes its own click.
-    let link_w = ui.painter().layout_no_wrap("Open".to_string(), egui::FontId::new(kit::ty::META, theme::semibold()), theme::accent_col()).size().x + 17.0;
-    let lr = Rect::from_min_size(Pos2::new(x + iw - link_w.ceil(), y), Vec2::new(link_w.ceil(), 18.0));
-    // (a child Ui: the link never moves the row's cursor)
-    let open = kit::link(&mut ui.new_child(UiBuilder::new().max_rect(lr).id_salt(("home_exam_open", &e.id))), "Open", true).clicked();
+    // The footer, pinned to the card's foot: the edited text level with Open's middle.
+    let act_y = rect.max.y - HOME_EXAM_FOOT_PAD - HOME_EXAM_ACT;
+    p.hline(x..=x + iw, act_y - HOME_EXAM_RULE_GAP - 0.5, Stroke::new(1.0, theme::border()));
+    line(p, act_y + (HOME_EXAM_ACT - 18.0) / 2.0, &edited_label(e.edited), sans(kit::ty::META), theme::muted_col());
+    // Open, the bank tiles' tinted accent button at the footer's right, added after the card so
+    // it takes its own click.
+    let open_w = kit::tinted_accent_w(ui, "Open");
+    let lr = Rect::from_min_size(Pos2::new(x + iw - open_w, act_y), Vec2::new(open_w, HOME_EXAM_ACT));
+    // (a child Ui: the button never moves the row's cursor)
+    let open = kit::tinted_accent(&mut fixed_h_child(ui, lr, ("home_exam_open", &e.id)), "Open", HOME_EXAM_ACT).clicked();
     resp.clicked() || open
 }
 
@@ -2954,8 +3309,8 @@ fn exam_rows_compact(ui: &mut egui::Ui, app: &mut crate::App, rows: &[&ExamRow])
     let w = ui.available_width();
     let (outer, _) = ui.allocate_exact_size(Vec2::new(w, HOME_ROW_H * rows.len() as f32 + 2.0), egui::Sense::hover());
     ui.painter().rect(outer, CornerRadius::same(16), theme::card(), Stroke::new(1.0, theme::border()), StrokeKind::Inside);
-    let open_font = egui::FontId::new(kit::ty::META, theme::semibold());
-    let open_w = (ui.painter().layout_no_wrap("Open".to_string(), open_font, theme::accent_col()).size().x + 17.0).ceil();
+    // Open is the tinted button the bank cards below carry (compact), one style for one action.
+    let open_w = kit::tinted_accent_w(ui, "Open");
     let ctx = ui.ctx().clone();
     let mut hit = None;
     for (i, e) in rows.iter().enumerate() {
@@ -2997,8 +3352,8 @@ fn exam_rows_compact(ui: &mut egui::Ui, app: &mut crate::App, rows: &[&ExamRow])
         let g = p.layout_job(job);
         p.galley(Pos2::new(x, y + (18.0 - g.size().y) / 2.0), g, theme::text_col());
         // Open, right, level with the row's middle; a child Ui so it takes its own click.
-        let lr = Rect::from_min_size(Pos2::new(r.right() - 16.0 - open_w, r.center().y - 9.0), Vec2::new(open_w, 18.0));
-        let open = kit::link(&mut ui.new_child(UiBuilder::new().max_rect(lr).id_salt(("home_exam_row_open", &e.id))), "Open", true).clicked();
+        let lr = Rect::from_min_size(Pos2::new(r.right() - 16.0 - open_w, r.center().y - HOME_ROW_ACT / 2.0), Vec2::new(open_w, HOME_ROW_ACT));
+        let open = kit::tinted_accent(&mut fixed_h_child(ui, lr, ("home_exam_row_open", &e.id)), "Open", HOME_ROW_ACT).clicked();
         if resp.clicked() || open {
             hit = Some(e.id.clone());
         }
@@ -3265,10 +3620,12 @@ mod tests {
     #[test]
     fn a_home_exam_card_holds_two_name_and_two_bank_lines() {
         // The longest text (two name lines, two bank lines) still clears the pinned footer.
-        let text = 13.0 + 44.0 + 4.0 + 18.0 + 2.0 + 36.0;
-        let footer = 7.0 + 1.0 + 7.0 + 18.0 + 13.0;
+        let text = HOME_EXAM_TOP + 44.0 + 4.0 + 18.0 + 2.0 + 36.0;
+        // gap, hairline, gap, the 32 tall Open, foot pad (the card's side pad)
+        let footer = 5.0 + 1.0 + HOME_EXAM_RULE_GAP + HOME_EXAM_ACT + HOME_EXAM_FOOT_PAD;
         assert!(text + footer <= HOME_EXAM_H + 0.01);
-        assert_eq!(HOME_EXAM_H, 164.0);
+        assert_eq!(HOME_EXAM_FOOT_PAD, 16.0, "Open is as far from the bottom edge as from the right");
+        assert_eq!(HOME_EXAM_H, 176.0);
         // At 1280 the text column is 316 - 124 - 16 = 176 wide.
         assert_eq!(exam_card_text_x(316.0), (124.0, 176.0));
     }
@@ -3356,6 +3713,315 @@ mod tests {
         assert_eq!(exams[0].items[1].question_id, "q2"); // ids pass through verbatim
     }
 
+    /// A dock nav item takes keyboard focus: Tab reaches it, it reports focus (the state its
+    /// ring is drawn from, and nothing else at rest), and Enter activates it as a click does.
+    #[test]
+    fn tab_reaches_a_dock_item_and_enter_opens_it() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        let mut first = true;
+        let mut h = Harness::builder().build_ui_state(
+            move |ui, opened: &mut bool| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                if dock_item(ui, NavIcon::Home, "Home", false, 48.0, true, None) {
+                    *opened = true;
+                }
+            },
+            false,
+        );
+        h.run();
+        assert!(!h.get_by_label("Home").is_focused() && !*h.state(), "at rest: no focus, nothing opened");
+        h.key_press(egui::Key::Tab);
+        h.run();
+        assert!(h.get_by_label("Home").is_focused(), "Tab focuses the dock item");
+        assert!(!*h.state());
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert!(*h.state(), "Enter on the focused item opens its page");
+    }
+
+    /// At 800 tall, on a wide window (1280) and at 760: every nav item, the light/dark button and
+    /// (at 760) Report lie inside the dark rail, top to bottom, without overlapping; and every
+    /// label fits its item, across and under its icon, in the default face and the chem skin's
+    /// Noto. The page beside the dock starts where it did beside the old 64 / 88 pt rails.
+    #[test]
+    fn every_dock_item_and_label_fits_at_800_tall_at_both_widths() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        for (w, narrow) in [(1280.0, false), (760.0, true)] {
+            let mut first = true;
+            let mut h = Harness::builder().with_size(egui::vec2(w, 800.0)).build_ui_state(
+                move |ui, rail: &mut (egui::Rect, bool, f32)| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    let mut root = root_ui(ui.ctx());
+                    let mut active = [false; 8];
+                    active[7] = true;
+                    let out = draw_dock(&mut root, active, None, true, false);
+                    let page_x = egui::CentralPanel::default().frame(Frame::NONE).show(&mut root, |ui| ui.max_rect().left()).inner;
+                    *rail = (out.rail, root.max_rect().width() < 900.0, page_x);
+                },
+                (egui::Rect::NOTHING, false, 0.0),
+            );
+            h.run();
+            let (rail, is_narrow, page_x) = *h.state();
+            assert_eq!(is_narrow, narrow, "{w} wide");
+            assert_eq!(page_x, 10.0 + if narrow { 64.0 } else { 88.0 } + DOCK_GAP, "{w}: the page keeps its x");
+            let mut names: Vec<&str> = DOCK_NAV.iter().map(|(_, l)| *l).collect();
+            if narrow {
+                names.push("Report an issue");
+            }
+            names.push("Dark mode");
+            let rects: Vec<egui::Rect> = names.iter().map(|n| h.get_by_label(n).rect()).collect();
+            for (n, r) in names.iter().zip(&rects) {
+                assert!(rail.contains_rect(*r), "{w}: {n} {r:?} leaves the dock {rail:?}");
+                assert_eq!(r.height(), dock_item_h(narrow), "{w}: {n} height");
+                assert_eq!(r.width(), dock_item_w(narrow), "{w}: {n} width");
+            }
+            for (i, pair) in rects.windows(2).enumerate() {
+                assert!(pair[0].bottom() <= pair[1].top(), "{w}: {} overlaps {}", names[i], names[i + 1]);
+            }
+
+            // Each label inside its item: across with 3 pt clear each side, and under the 21 pt
+            // icon with its whole line box above the item's foot.
+            let ctx = h.ctx.clone();
+            let item = egui::Rect::from_min_size(Pos2::ZERO, Vec2::new(dock_item_w(narrow), dock_item_h(narrow)));
+            let icon_bottom = dock_icon_y(item, narrow) + 10.5;
+            let label_y = item.bottom() - if narrow { 12.0 } else { 13.0 };
+            for family in ["vs-sans-bold", "vs-noto-bold"] {
+                let font = egui::FontId::new(dock_label_size(narrow), egui::FontFamily::Name(family.into()));
+                for label in ["Home", "Banks", "Exams", "Grade", "Import", "Figures", "Shared", "Account", "Report", "Dark", "Light"] {
+                    let g = ctx.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), Color32::WHITE));
+                    let s = g.size();
+                    assert!(s.x + 6.0 <= item.width(), "{w} {family}: {label} is {} wide in a {} item", s.x, item.width());
+                    assert!(label_y - s.y / 2.0 >= icon_bottom, "{w} {family}: {label} runs into its icon");
+                    assert!(label_y + s.y / 2.0 <= item.bottom(), "{w} {family}: {label} drops below its item");
+                }
+            }
+        }
+    }
+
+    /// Tab walks a dock of the active item, an inactive one and the light/dark button in order;
+    /// each takes focus under its own name, and Enter presses the light/dark button.
+    #[test]
+    fn tab_walks_active_and_inactive_items_and_the_theme_button() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        let mut first = true;
+        let mut h = Harness::builder().build_ui_state(
+            move |ui, pressed: &mut Vec<&'static str>| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                if dock_item(ui, NavIcon::Home, "Home", true, 48.0, true, None) {
+                    pressed.push("Home");
+                }
+                if dock_item(ui, NavIcon::Banks, "Banks", false, 48.0, true, None) {
+                    pressed.push("Banks");
+                }
+                if theme_toggle(ui, 48.0, true, false) {
+                    pressed.push("Dark mode");
+                }
+            },
+            Vec::new(),
+        );
+        h.run();
+        let names = ["Home", "Banks", "Dark mode"];
+        for n in names {
+            assert!(!h.get_by_label(n).is_focused(), "{n} is not focused at rest");
+        }
+        for (i, n) in names.iter().enumerate() {
+            h.key_press(egui::Key::Tab);
+            h.run();
+            for (j, m) in names.iter().enumerate() {
+                assert_eq!(h.get_by_label(m).is_focused(), i == j, "after {} Tab(s), focus on {m}", i + 1);
+            }
+            assert!(h.state().is_empty(), "Tab to {n} presses nothing");
+        }
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert_eq!(h.state().as_slice(), ["Dark mode"], "Enter presses the focused light/dark button");
+    }
+
+    /// "How it works" at desktop (a 1000 strip, four columns) and at 760 (a 640 strip, one column):
+    /// each step's numeral, title and body are labels (AccessKit nodes), in reading order: number
+    /// before title before body, and step k before step k + 1 (left to right on one row at desktop,
+    /// top to bottom at 760). The panel draws no taller at desktop than round 26's (its cells rebuilt
+    /// here): round 30 raised the bodies one step on the scale and the card's geometry did not change.
+    /// The bodies are at [`step_body_size`] at both widths, at most two lines at desktop and one line
+    /// at 760.
+    #[test]
+    fn how_it_works_steps_are_labels_in_reading_order_at_both_widths() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        for (w, wide) in [(STEPS_W, true), (NARROW_STEPS_W, false)] {
+            let mut first = true;
+            let mut h = Harness::builder().with_size(egui::vec2(w + 40.0, 800.0)).build_ui_state(
+                move |ui, panel: &mut Rect| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    ui.set_width(w);
+                    *panel = steps_panel(ui, wide);
+                },
+                Rect::NOTHING,
+            );
+            h.run();
+            let mut prev: Option<(Rect, Rect)> = None;
+            for (i, (title, body)) in STEPS.iter().enumerate() {
+                let n = h.get_by_label(&format!("{}", i + 1)).rect();
+                let t = h.get_by_label(title).rect();
+                let b = h.get_by_label(&no_widow(body)).rect();
+                // One 20 pt line per row: one line at 760, at most two at desktop.
+                let lines = (b.height() / 20.0).round();
+                // The body is set at the raised size: laid out at that size in its own width it
+                // breaks into the same lines and its longest line spans the label's width.
+                assert_eq!(step_body_size(), crate::kit::ty::HERO_LEAD_NARROW, "the bodies sit one step above BODY");
+                let g = h.ctx.fonts_mut(|f| {
+                    let mut job = egui::text::LayoutJob::simple(no_widow(body), egui::FontId::proportional(step_body_size()), Color32::WHITE, b.width() + 0.5);
+                    job.wrap.max_width = b.width() + 0.5;
+                    f.layout_job(job)
+                });
+                assert_eq!(g.rows.len() as f32, lines, "{w}: step {} body breaks as at the raised size", i + 1);
+                assert!((g.size().x - b.width()).abs() < 1.0, "{w}: step {} body {} wide, {} at the raised size", i + 1, b.width(), g.size().x);
+                if wide {
+                    assert!(lines <= 2.0, "{w}: step {} body is {lines} lines", i + 1);
+                } else {
+                    assert_eq!(lines, 1.0, "{w}: step {} body is one line at 760", i + 1);
+                }
+                if wide {
+                    assert!(n.bottom() <= t.top() && t.bottom() <= b.top(), "{w}: step {} reads number, title, body down", i + 1);
+                } else {
+                    assert!(n.right() <= t.left() && t.bottom() <= b.top() && n.top() < t.bottom(), "{w}: step {} reads number then title, body under", i + 1);
+                }
+                if let Some((pn, pb)) = prev {
+                    if wide {
+                        assert!((pn.top() - n.top()).abs() < 0.5 && pn.right() < n.left(), "{w}: step {} sits right of step {} on one row", i + 1, i);
+                    } else {
+                        assert!(pb.bottom() <= n.top() && (pn.left() - n.left()).abs() < 0.5, "{w}: step {} sits under step {}", i + 1, i);
+                    }
+                }
+                prev = Some((n, b));
+            }
+            let panel = *h.state();
+            if wide {
+                // Round 26's desktop card, in a harness of its own (its labels would double these).
+                let mut first = true;
+                let mut o = Harness::builder().with_size(egui::vec2(w + 40.0, 800.0)).build_ui_state(
+                    move |ui, out: &mut f32| {
+                        if std::mem::take(&mut first) {
+                            theme::setup(ui.ctx());
+                            ui.ctx().request_repaint();
+                            return;
+                        }
+                        ui.set_width(w);
+                        // Round 26's desktop card, rebuilt with its own sizes for comparison: the 28 pt
+                        // numeral slot, 2, the serif PANEL title, 6, the two-line body, in the same pad.
+                        let old = crate::kit::card().inner_margin(Margin::symmetric(4, 18)).show(ui, |ui| {
+                            ui.set_width(w - 10.0);
+                            ui.columns(4, |cols| {
+                                for (i, col) in cols.iter_mut().enumerate() {
+                                    let (title, body) = STEPS[i];
+                                    Frame::new().inner_margin(Margin::symmetric(18, 0)).show(col, |ui| {
+                                        ui.allocate_exact_size(Vec2::splat(28.0), egui::Sense::hover());
+                                        ui.add_space(2.0);
+                                        ui.add(egui::Label::new(theme::serif(title).size(crate::kit::ty::PANEL)).wrap());
+                                        ui.add_space(6.0);
+                                        ui.add(egui::Label::new(step_body(body, crate::kit::ty::BODY).line_height(Some(20.0))).wrap());
+                                    });
+                                }
+                            });
+                        });
+                        *out = old.response.rect.height();
+                    },
+                    0.0,
+                );
+                o.run();
+                let old_h = *o.state();
+                assert!(panel.height() <= old_h + 0.5, "desktop panel {} tall, round 26's {old_h}", panel.height());
+            }
+        }
+    }
+
+    /// Round 28, C1: on a wide window the welcome lead is one label with the whole sentence, its
+    /// lines no wider than the cap, about 60 characters each (at most 65), three lines.
+    #[test]
+    fn the_welcome_lead_keeps_a_short_measure_at_desktop() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        let mut first = true;
+        let mut h = Harness::builder().with_size(egui::vec2(800.0, 400.0)).build_ui_state(
+            move |ui, out: &mut (Rect, Vec<(f32, usize)>)| {
+                if std::mem::take(&mut first) {
+                    theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let r = hero_lead(ui, true, 660.0_f32.min(HERO_LEAD_W));
+                // The same wrap the label used, read line by line.
+                let g = ui.ctx().fonts_mut(|f| {
+                    let mut job = egui::text::LayoutJob::simple(
+                        HERO_LEAD_TEXT.to_owned(),
+                        egui::FontId::proportional(crate::kit::ty::HERO_LEAD),
+                        Color32::WHITE,
+                        HERO_LEAD_W,
+                    );
+                    job.wrap.max_width = HERO_LEAD_W;
+                    f.layout_job(job)
+                });
+                let lines = g.rows.iter().map(|row| (row.rect().width(), row.glyphs.len())).collect();
+                *out = (r.rect, lines);
+            },
+            (Rect::NOTHING, Vec::new()),
+        );
+        h.run();
+        let node = h.get_by_label(HERO_LEAD_TEXT);
+        let (rect, lines) = h.state().clone();
+        assert!(node.rect().width() <= HERO_LEAD_W + 0.5, "the lead label is {} wide", node.rect().width());
+        assert!(rect.width() <= HERO_LEAD_W + 0.5);
+        assert_eq!(lines.len(), 3, "three lines: {lines:?}");
+        for (w, n) in &lines {
+            assert!(*w <= HERO_LEAD_W + 0.5, "a line {w} wide");
+            assert!(*n <= 65, "a line of {n} characters");
+        }
+        assert!(lines[0].1 >= 50, "the first line is a full measure: {lines:?}");
+    }
+
+    /// Round 28, C2: the "How it works" heading starts on the steps card's left edge, at desktop
+    /// (a 1000 strip) and at 760 (a 640 strip), and sits above the card as before.
+    #[test]
+    fn how_it_works_heading_is_flush_with_the_steps_card() {
+        use egui_kittest::Harness;
+        for w in [STEPS_W, NARROW_STEPS_W] {
+            let mut first = true;
+            let mut h = Harness::builder().with_size(egui::vec2(w + 200.0, 900.0)).build_ui_state(
+                move |ui, out: &mut (Rect, Rect)| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    let area = Rect::from_min_size(Pos2::new(100.0, 20.0), Vec2::new(w, 860.0));
+                    ui.scope_builder(UiBuilder::new().max_rect(area), |ui| {
+                        *out = steps_section(ui, w);
+                    });
+                },
+                (Rect::NOTHING, Rect::NOTHING),
+            );
+            h.run();
+            let (head, card) = *h.state();
+            assert!((head.left() - card.left()).abs() < 0.5, "{w}: heading at {} and card at {}", head.left(), card.left());
+            assert_eq!(card.left(), 100.0, "{w}: the card keeps its column edge");
+            assert!(head.bottom() + 10.0 <= card.top() + 0.5 && head.top() == 20.0, "{w}: heading above the card");
+        }
+    }
+
     #[test]
     fn issue_links_are_percent_encoded() {
         let u = issue_url(0, "Caret loss & tabs", "Line one\nLine two");
@@ -3387,5 +4053,268 @@ mod initials_tests {
     fn punctuation_only_words_are_skipped() {
         assert_eq!(initials_of("- Ana -", "a@b.c"), "A");
         assert_eq!(initials_of("Ana - Ruiz", "a@b.c"), "AR");
+    }
+}
+
+#[cfg(test)]
+mod welcome_sheet_tests {
+    use super::*;
+
+    /// Everything the sheet paints at `size`: each text (string, smallest font size, galley rect,
+    /// ink rect), the filled "Version A" pill, the graph's frame and its two plotted lines.
+    struct Sheet {
+        page: Rect,
+        texts: Vec<(String, f32, Rect, Rect)>,
+        pill: Rect,
+        fig: Rect,
+        lines: Vec<[Pos2; 2]>,
+    }
+
+    /// Every sheet the page draws, and whether it is the 760 one.
+    const SHEETS: [(Vec2, bool); 3] = [(PREVIEW_SIZE, false), (PREVIEW_DRAWN, false), (NARROW_PREVIEW_DRAWN, true)];
+
+    fn paint_sheet(size: Vec2, narrow: bool) -> Sheet {
+        fn walk(shape: &egui::Shape, out: &mut Sheet) {
+            match shape {
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                egui::Shape::Text(t) => {
+                    let size = t.galley.job.sections.iter().map(|s| s.format.font_id.size).fold(f32::INFINITY, f32::min);
+                    let mut ink = Rect::NOTHING;
+                    for row in &t.galley.rows {
+                        for g in &row.glyphs {
+                            if g.uv_rect.size.x > 0.0 {
+                                let min = t.pos + row.pos.to_vec2() + g.pos.to_vec2() + g.uv_rect.offset;
+                                ink |= Rect::from_min_size(min, g.uv_rect.size);
+                            }
+                        }
+                    }
+                    out.texts.push((t.galley.text().to_owned(), size, shape.visual_bounding_rect(), ink));
+                }
+                egui::Shape::Rect(r) if r.fill == theme::accent_col() => out.pill = r.rect,
+                egui::Shape::Rect(r) if (r.stroke.width - 0.9).abs() < 0.01 => out.fig = r.rect,
+                egui::Shape::LineSegment { points, stroke } if (stroke.width - 1.3).abs() < 0.01 => out.lines.push(*points),
+                _ => {}
+            }
+        }
+        let page = Rect::from_min_size(Pos2::new(20.0, 20.0), size);
+        let mut first = true;
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 400.0)).build_ui(move |ui| {
+            if std::mem::take(&mut first) {
+                theme::setup(ui.ctx());
+                ui.ctx().request_repaint();
+                return;
+            }
+            paint_exam_preview(ui.painter(), page, narrow);
+        });
+        h.run();
+        let mut out = Sheet { page, texts: Vec::new(), pill: Rect::NOTHING, fig: Rect::NOTHING, lines: Vec::new() };
+        for c in &h.output().shapes {
+            walk(&c.shape, &mut out);
+        }
+        out
+    }
+
+    /// Round 29, B1: in the welcome sheet, at desktop and at 760, no text is set smaller than its
+    /// answer labels (the "3", "5", "line p" beside the bubbles), the graph's "p" and "q" and the
+    /// "Page 1 of 2" folio included, and every text lies on the page. Two named exceptions: the
+    /// letters inside the answer bubbles (part of the bubble mark, they keep their size) and, on the
+    /// narrow sheet only, the "Version A" tag, which is set at the largest size that keeps it 10 pt
+    /// clear of the title (never under its round 28 size). The graph's "p" and "q" lie inside the
+    /// figure, at least 2 pt in from its frame, and touch neither plotted line.
+    #[test]
+    fn the_welcome_sheet_has_no_text_smaller_than_its_answer_labels() {
+        for (size, narrow) in SHEETS {
+            let sheet = paint_sheet(size, narrow);
+            let all = &sheet.texts;
+            let answer = all.iter().find(|t| t.0 == "line p").map(|t| t.1).expect("the answer label");
+            for want in ["p", "q", "Version A", "Page 1 of 2", "3", "25"] {
+                assert!(all.iter().any(|t| t.0 == want), "{size:?}: {want:?} is drawn");
+            }
+            for (s, sz, r, _) in all {
+                assert!(sheet.page.contains_rect(*r), "{size:?}: {s:?} lies on the page");
+                if ["A", "B", "C", "D"].contains(&s.as_str()) {
+                    continue;
+                }
+                if narrow && s == "Version A" {
+                    let old = size.x / 222.0 * 1.12 * 6.4;
+                    assert!(*sz + 0.01 >= old, "{size:?}: the tag is {sz} pt, under its round 28 size {old}");
+                    continue;
+                }
+                assert!(*sz + 0.01 >= answer, "{size:?}: {s:?} is {sz} pt, under the answer labels' {answer}");
+            }
+            assert!(sheet.fig.is_positive() && sheet.lines.len() == 2, "{size:?}: the figure and its two lines");
+            let inner = sheet.fig.shrink(0.9 + 2.0);
+            for label in ["p", "q"] {
+                let ink = all.iter().find(|t| t.0 == label).map(|t| t.3).expect("the label");
+                assert!(inner.contains_rect(ink), "{size:?}: {label:?} ink {ink:?} lies inside the figure {inner:?}");
+                let clear = ink.expand(0.65);
+                for [a, b] in &sheet.lines {
+                    let hit = (0..=200).any(|i| clear.contains(a.lerp(*b, i as f32 / 200.0)));
+                    assert!(!hit, "{size:?}: {label:?} ink {ink:?} touches the line {a:?}-{b:?}");
+                }
+            }
+        }
+    }
+
+    /// Round 29, B1 (council fix): at desktop and at 760 the "Version A" pill's left edge is at
+    /// least 10 pt right of the title's galley, and the title keeps its size on one line.
+    #[test]
+    fn the_version_pill_clears_the_sheet_title() {
+        for (size, narrow) in SHEETS {
+            let sheet = paint_sheet(size, narrow);
+            let title = sheet.texts.iter().find(|t| t.0 == "Linear Equations Quiz").expect("the title");
+            assert!((title.1 - size.x / 222.0 * 1.12 * 11.5).abs() < 0.01, "{size:?}: the title keeps its size");
+            assert!(sheet.pill.is_positive(), "{size:?}: the pill is drawn");
+            let gap = sheet.pill.left() - title.2.right();
+            assert!(gap >= PREVIEW_TAG_GAP - 0.01, "{size:?}: the pill is {gap} pt from the title");
+            let tag = sheet.texts.iter().find(|t| t.0 == "Version A").expect("the tag");
+            assert!(sheet.pill.contains_rect(tag.2), "{size:?}: the tag sits in its pill");
+            eprintln!("{size:?}: tag {} pt, gap {gap} pt", tag.1);
+        }
+    }
+
+    /// Round 29, B1: at 760 (a 640 column) the sheet is drawn wider than round 28's, its answer key
+    /// still ends on the column's right edge, and it stays clear of the text column, which keeps
+    /// round 28's width.
+    #[test]
+    fn the_narrow_welcome_sheet_is_larger_and_clear_of_the_text() {
+        let (x0, row_w, top) = (60.0, NARROW_STEPS_W, 100.0);
+        let (page, text_w) = narrow_hero_geometry(x0, row_w, top);
+        let old_left = x0 + row_w - NARROW_PREVIEW_SIZE.x - preview_reach(NARROW_PREVIEW_SIZE);
+        assert!(page.width() > NARROW_PREVIEW_SIZE.x && page.height() > NARROW_PREVIEW_SIZE.y);
+        assert!((page.width() / page.height() - NARROW_PREVIEW_SIZE.x / NARROW_PREVIEW_SIZE.y).abs() < 0.005, "same proportions");
+        assert_eq!(text_w, old_left - 36.0 - x0, "the text column keeps its width");
+        assert!(page.left() >= x0 + text_w + 12.0, "the sheet starts {} right of the text column", page.left() - x0 - text_w);
+        assert!((page.right() + preview_reach(page.size()) - (x0 + row_w)).abs() < 0.01, "the answer key ends on the column's edge");
+        assert_eq!(page.top(), top + 4.0);
+    }
+
+    /// Round 31 (a): at desktop (a 1000 row) the sheet is drawn larger than round 30's, with the
+    /// same proportions, its answer key still ending on the row's (the steps card's) right edge and
+    /// its top unchanged; the text column stays clear of it.
+    #[test]
+    fn the_desktop_welcome_sheet_is_larger_on_the_same_right_edge() {
+        let (x0, top) = (140.0, 90.0);
+        let (page, text_w) = desk_hero_geometry(x0, STEPS_W, top);
+        let grow = page.width() / PREVIEW_SIZE.x;
+        assert!((1.12..=1.15).contains(&grow), "the sheet grows {grow}x");
+        assert!((page.width() / page.height() - PREVIEW_SIZE.x / PREVIEW_SIZE.y).abs() < 0.002, "same proportions");
+        assert!((page.right() + preview_reach(page.size()) - (x0 + STEPS_W)).abs() < 0.01, "the answer key ends on the card's edge");
+        assert_eq!(page.top(), top);
+        assert!(page.left() >= x0 + text_w + 24.0, "the text column ends {} left of the sheet", page.left() - x0 - text_w);
+    }
+
+    /// Round 31 (b) and (a): the whole welcome page in a 1280 x 800 window and a 760 x 800 one
+    /// (a fresh install, the desk's 20 pt margin): at desktop the hero's text column (headline to
+    /// install link) is centred on the sheet within 2 pt; at 760 the paragraph's top stays on the
+    /// sheet's top as in round 30; at both the steps card ends at least 24 pt above the window's
+    /// bottom edge.
+    #[test]
+    fn the_welcome_hero_text_is_centred_on_the_sheet_and_the_steps_fit() {
+        use egui_kittest::Harness;
+        for w in [1280.0, 760.0] {
+            let mut first = true;
+            let mut h = Harness::builder().with_size(egui::vec2(w, 800.0)).build_ui_state(
+                move |ui, out: &mut [Rect; 4]| {
+                    let ctx = &ui.ctx().clone();
+                    if std::mem::take(&mut first) {
+                        theme::setup(ctx);
+                        ctx.request_repaint();
+                        return;
+                    }
+                    let mut root = root_ui(ctx);
+                    let l = desk_panel(&mut root, 20, |ui| welcome_page(ui, true));
+                    *out = [l.head, l.text, l.page, l.card];
+                },
+                [Rect::NOTHING; 4],
+            );
+            h.run();
+            let [head, text, page, card] = *h.state();
+            assert!(page.is_positive() && card.is_positive(), "{w}: sheet and card drawn");
+            if w > 940.0 {
+                let col = head | text;
+                let d = col.center().y - page.center().y;
+                assert!(d.abs() <= 2.0, "{w}: the column's centre is {d} from the sheet's ({col:?} vs {page:?})");
+            } else {
+                // As in round 30: the paragraph starts where the sheet does (the sheet 4 pt lower).
+                assert_eq!(text.top(), page.top() - 4.0, "{w}: the paragraph's top is the sheet's");
+            }
+            assert!(head.bottom() <= text.top(), "{w}: headline above the text");
+            let room = 800.0 - card.bottom();
+            assert!(room >= 24.0, "{w}: the steps card ends {room} pt above the window's bottom");
+            eprintln!("{w}: head {head:?} text {text:?} page {page:?} card {card:?} room {room}");
+        }
+    }
+
+    /// Round 32, council fix: the steps card is where it settles on the very first frame the page
+    /// is drawn (one step), at 760 x 800 and at 1280 x 800, and again on the first frame after the
+    /// window widens or narrows across the two layouts, each width met cold.
+    #[test]
+    fn the_welcome_steps_card_is_placed_on_its_first_frame() {
+        use egui_kittest::Harness;
+        for (a, b) in [(760.0, 1280.0), (1280.0, 760.0)] {
+            let mut h = Harness::builder().with_size(egui::vec2(a, 800.0)).build_ui_state(
+                |ui, st: &mut (bool, Rect)| {
+                    if !st.0 {
+                        return;
+                    }
+                    let mut root = root_ui(ui.ctx());
+                    st.1 = desk_panel(&mut root, 20, |ui| welcome_page(ui, true)).card;
+                },
+                (false, Rect::NOTHING),
+            );
+            theme::setup(&h.ctx);
+            h.step();
+            h.state_mut().0 = true;
+            for (w, what) in [(a, "first frame"), (b, "first frame after the change"), (a, "first frame back")] {
+                h.set_size(egui::vec2(w, 800.0));
+                h.step();
+                let first = h.state().1;
+                for _ in 0..4 {
+                    h.step();
+                }
+                let settled = h.state().1;
+                assert!(first.is_positive(), "{w}: {what}: the card is drawn");
+                assert_eq!(first, settled, "{w}: {what}: the card moved after its first frame");
+            }
+        }
+    }
+
+    /// Round 31 (b), council fix: at 1280 x 800 the column is centred on the very first frame the
+    /// page is drawn (one step, no settling), and again on the first frame after the window
+    /// narrows (still the desktop layout) and on the first frame after it widens back.
+    #[test]
+    fn the_desktop_hero_text_is_centred_on_its_first_frame() {
+        use egui_kittest::Harness;
+        // (draw the page?, head, text, page)
+        let mut h = Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(
+            |ui, st: &mut (bool, [Rect; 3])| {
+                if !st.0 {
+                    return;
+                }
+                let mut root = root_ui(ui.ctx());
+                let l = desk_panel(&mut root, 20, |ui| welcome_page(ui, true));
+                st.1 = [l.head, l.text, l.page];
+            },
+            (false, [Rect::NOTHING; 3]),
+        );
+        // The app sets its theme before its first frame; here that takes a frame of its own.
+        theme::setup(&h.ctx);
+        h.step();
+        let check = |h: &Harness<'_, (bool, [Rect; 3])>, what: &str| {
+            let [head, text, page] = h.state().1;
+            assert!(page.is_positive(), "{what}: the sheet is drawn");
+            let d = (head | text).center().y - page.center().y;
+            assert!(d.abs() <= 2.0, "{what}: the column's centre is {d} from the sheet's");
+        };
+        h.state_mut().0 = true;
+        h.step();
+        check(&h, "first frame");
+        h.set_size(egui::vec2(1000.0, 800.0));
+        h.step();
+        check(&h, "first frame at 1000");
+        h.set_size(egui::vec2(1280.0, 800.0));
+        h.step();
+        check(&h, "first frame back at 1280");
     }
 }

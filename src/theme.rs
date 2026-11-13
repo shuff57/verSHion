@@ -265,10 +265,27 @@ pub fn paper_edge() -> Color32 {
     }
 }
 
+/// How much of the grid line's strength the page background keeps (light palette). At full
+/// strength the grid across a page's unused lower half read as a pattern competing with the
+/// content (the critics' words); at half it is a faint paper texture behind it. The dark
+/// grid is already one level off the desk in 8-bit colour, so halving it would erase it.
+const PAGE_GRID_FADE: f32 = 0.5;
+
+/// The page background's graph-paper grid (desk and dock gutter): the grid at
+/// `PAGE_GRID_FADE` of its strength. Cards and the exam desk keep `paint_grid`.
+pub fn paint_page_grid(painter: &egui::Painter, rect: egui::Rect) {
+    let col = if is_dark() { grid_line() } else { grid_line().gamma_multiply(PAGE_GRID_FADE) };
+    paint_grid_in(painter, rect, col);
+}
+
 /// Paint the faint 24 px graph-paper grid across `rect` (clipped to the painter).
 pub fn paint_grid(painter: &egui::Painter, rect: egui::Rect) {
+    paint_grid_in(painter, rect, grid_line());
+}
+
+fn paint_grid_in(painter: &egui::Painter, rect: egui::Rect, col: Color32) {
     let step = 24.0;
-    let stroke = Stroke::new(1.0, grid_line());
+    let stroke = Stroke::new(1.0, col);
     let mut x = (rect.left() / step).floor() * step;
     while x <= rect.right() {
         painter.line_segment([egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())], stroke);
