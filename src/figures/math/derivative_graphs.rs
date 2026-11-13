@@ -16,6 +16,8 @@ pub(crate) mod sym;
 mod tests;
 #[cfg(test)]
 mod sweep;
+#[cfg(test)]
+mod versions;
 
 pub(crate) const ID: &str = "derivative-graphs";
 pub(crate) const STARTS: [&str; 2] = ["f(x)", "f\u{2032}(x)"];
@@ -25,6 +27,8 @@ pub(crate) const ROUNDING: [&str; 4] = ["Exact", "1 decimal", "2 decimals", "3 d
 pub(crate) const STUDENT: [&str; 3] = ["Graphs, no marks", "Sketch f\u{2032} from f", "Sketch f from f\u{2032}"];
 pub(crate) const GRAPH_LABELS: [&str; 3] = ["y = f(x)", "Name only", "None"];
 const MAX_PIECES: usize = 8;
+/// Most critical (or inflection) points marked in one window.
+const MAX_MARKS: usize = 40;
 /// The default f′ of the AP-style example: segments and a semicircle below the axis.
 pub(crate) const AP_FP: &str = "-x - 2, -4 <= x <= -2; -sqrt(4 - x^2), -2 < x <= 2; x - 2, x > 2";
 
@@ -111,9 +115,11 @@ fn strip_lhs(s: &str, name: &str) -> String {
     let t = s.trim();
     if let Some(i) = t.find('=') {
         let l = t[..i].trim().replace(' ', "").to_lowercase();
-        let n = name.to_lowercase();
-        let primes = ["", "'", PRIME, "''", DPRIME];
-        if l == "y" || primes.iter().any(|p| l == format!("{n}{p}(x)") || l == format!("f{p}(x)")) { return t[i + 1..].trim().to_string(); }
+        let _ = name;
+        // y = ..., f(x) = ..., g'(x) = ...: a name (letters), primes, (x)
+        let core = l.trim_end_matches("(x)");
+        let named = l.ends_with("(x)") && { let c = core.trim_end_matches(|c| c == '\'' || c == '\u{2032}' || c == '\u{2033}'); !c.is_empty() && c.chars().all(|c| c.is_alphabetic()) };
+        if l == "y" || named { return t[i + 1..].trim().to_string(); }
     }
     t.to_string()
 }
@@ -333,11 +339,11 @@ pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Op
             Some(v) if zero(v) => {}
             Some(v) => {
                 if let Some((j, pv)) = last {
-                    if pv.signum() != v.signum() && k - j == 1 {
+                    if pv.signum() != v.signum() && k - j == 1 && ev.len() <= 3 * MAX_MARKS {
                         let (mut lo, mut hi, sl) = (xs[j], xs[k], pv.signum());
                         let mut undef = None;
                         let mut root = None;
-                        for _ in 0..200 {
+                        for _ in 0..80 {
                             let m = 0.5 * (lo + hi);
                             if m <= lo || m >= hi { break; }
                             match g(m) { None => { undef = Some(m); break; } Some(w) if w == 0.0 => { root = Some(m); break; } Some(w) => if w.signum() == sl { lo = m } else { hi = m } }
@@ -363,18 +369,18 @@ pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Op
     // touching zeros: a dip of |g| to zero without a change of sign (a double root), found as a zero of g′
     for k in 1..n {
         let (Some(l), Some(m), Some(r)) = (vs[k - 1], vs[k], vs[k + 1]) else { continue };
-        if zero(m) || l.signum() != m.signum() || r.signum() != m.signum() || !(m.abs() < l.abs() && m.abs() <= r.abs()) || m.abs() > 0.05 * s { continue; }
+        if ev.len() > 3 * MAX_MARKS || zero(m) || l.signum() != m.signum() || r.signum() != m.signum() || !(m.abs() < l.abs() && m.abs() <= r.abs()) || m.abs() > 0.05 * s { continue; }
         let (Some(da), Some(db)) = (dg(xs[k - 1]), dg(xs[k + 1])) else { continue };
         if da.signum() == db.signum() { continue; }
         let (mut lo, mut hi, sl) = (xs[k - 1], xs[k + 1], da.signum());
-        for _ in 0..200 { let mm = 0.5 * (lo + hi); if mm <= lo || mm >= hi { break; } match dg(mm) { Some(w) if w.signum() == sl => lo = mm, Some(_) => hi = mm, None => break } }
+        for _ in 0..80 { let mm = 0.5 * (lo + hi); if mm <= lo || mm >= hi { break; } match dg(mm) { Some(w) if w.signum() == sl => lo = mm, Some(_) => hi = mm, None => break } }
         let x = 0.5 * (lo + hi);
         if g(x).is_some_and(|w| w.abs() <= 1e-7 * (1.0 + s)) { ev.push(Event { x, k: EvK::Zero }); }
     }
     // a pole that keeps its sign (1/x² between two samples): a spike of |g| that runs off as it is narrowed down
     for k in 1..n {
         let (Some(l), Some(m), Some(r)) = (vs[k - 1], vs[k], vs[k + 1]) else { continue };
-        if !(m.abs() > l.abs() && m.abs() >= r.abs() && m.abs() > 20.0 * s) { continue; }
+        if ev.len() > 3 * MAX_MARKS || !(m.abs() > l.abs() && m.abs() >= r.abs() && m.abs() > 20.0 * s) { continue; }
         let (mut lo, mut hi) = (xs[k - 1], xs[k + 1]);
         let mut none_at = None;
         let mut big = false;
@@ -793,15 +799,14 @@ impl SegIdx {
         }
         SegIdx { segs: segs.to_vec(), map }
     }
-    fn near(&self, b: &B4) -> Vec<(Pt, Pt)> {
-        let mut ks: Vec<u32> = vec![];
+    /// Whether any stroke near the box `b` passes the test (no list is built: this is asked thousands of times a label).
+    fn any(&self, b: &B4, f: impl Fn(Pt, Pt) -> bool) -> bool {
         for cx in (b[0] / Self::CELL).floor() as i32..=(b[2] / Self::CELL).floor() as i32 {
             for cy in (b[1] / Self::CELL).floor() as i32..=(b[3] / Self::CELL).floor() as i32 {
-                if let Some(v) = self.map.get(&(cx, cy)) { ks.extend(v.iter().copied()); }
+                if let Some(v) = self.map.get(&(cx, cy)) { if v.iter().any(|k| { let (a, c) = self.segs[*k as usize]; f(a, c) }) { return true; } }
             }
         }
-        ks.sort_unstable(); ks.dedup();
-        ks.into_iter().map(|k| self.segs[k as usize]).collect()
+        false
     }
 }
 
@@ -815,16 +820,21 @@ fn place(room: &Room, anchor: Pt, text: &str, size: f64, within: B4, prefer_up: 
     // the label's own dot is not in its way (a dot's box is centred on its mark; a number or label a curve runs through
     // is not the label's own)
     let own = |o: &B4| ((o[0] + o[2]) / 2.0 - anchor.0).abs() < 1.0 && ((o[1] + o[3]) / 2.0 - anchor.1).abs() < 1.0 && o[2] - o[0] < 16.0;
-    let boxes: Vec<B4> = room.boxes.iter().copied().filter(|o| !own(o)).collect();
-    let (hard, soft) = (SegIdx::new(&room.segs), SegIdx::new(&room.soft));
-    let clear = |b: &B4| { let gb = grow(b, 1.5); !boxes.iter().any(|o| bhit(&gb, o)) && !hard.near(&gb).iter().any(|(a, c)| seg_box(&gb, *a, *c)) };
+    // (only what a label here can reach: the 150 px scan and its leader)
+    let (ax0, ay0) = anchor;
+    let reach_box: B4 = [ax0 - 170.0 - w, ay0 - 170.0 - h, ax0 + 170.0 + w, ay0 + 170.0 + h];
+    let boxes: Vec<B4> = room.boxes.iter().copied().filter(|o| !own(o) && bhit(o, &reach_box)).collect();
+    let near = |v: &[(Pt, Pt)]| -> Vec<(Pt, Pt)> { v.iter().copied().filter(|(a, c)| seg_box(&reach_box, *a, *c)).collect() };
+    let (hard, soft) = (SegIdx::new(&near(&room.segs)), SegIdx::new(&near(&room.soft)));
+    let mine_pts: Vec<Pt> = room.pts.iter().copied().filter(|q| (q.0 - ax0).abs() < 400.0 && (q.1 - ay0).abs() < 400.0).collect();
+    let clear = |b: &B4| { let gb = grow(b, 1.5); !boxes.iter().any(|o| bhit(&gb, o)) && !hard.any(&gb, |a, c| seg_box(&gb, a, c)) };
     // a leader keeps 2.5 px from every stroke (the guides and the tracer too) and off every text and mark
     let leader_ok = |s: Pt, e: Pt| {
         let bb = [s.0.min(e.0) - 3.0, s.1.min(e.1) - 3.0, s.0.max(e.0) + 3.0, s.1.max(e.1) + 3.0];
-        !hard.near(&bb).iter().chain(soft.near(&bb).iter()).any(|(a, c)| seg_dist(s, e, *a, *c) < 2.5) && !boxes.iter().any(|o| seg_box(&grow(o, 1.0), s, e))
+        !hard.any(&bb, |a, c| seg_dist(s, e, a, c) < 2.5) && !soft.any(&bb, |a, c| seg_dist(s, e, a, c) < 2.5) && !boxes.iter().any(|o| seg_box(&grow(o, 1.0), s, e))
     };
     // nearer its own point than any other mark
-    let mine_nearest = |b: &B4| { let d = |q: Pt| { let dx = (b[0] - q.0).max(0.0).max(q.0 - b[2]); let dy = (b[1] - q.1).max(0.0).max(q.1 - b[3]); dx.hypot(dy) }; let own_d = d(anchor); !room.pts.iter().any(|q| (q.0 - anchor.0).hypot(q.1 - anchor.1) > 1.0 && d(*q) < own_d + 3.0) };
+    let mine_nearest = |b: &B4| { let d = |q: Pt| { let dx = (b[0] - q.0).max(0.0).max(q.0 - b[2]); let dy = (b[1] - q.1).max(0.0).max(q.1 - b[3]); dx.hypot(dy) }; let own_d = d(anchor); !mine_pts.iter().any(|q| (q.0 - anchor.0).hypot(q.1 - anchor.1) > 1.0 && d(*q) < own_d + 3.0) };
     let (ax, ay) = anchor;
     let v = if prefer_up { -1.0 } else { 1.0 };
     // candidate boxes by (left, top): above / below (centred, then flush to either side of the point), the sides, the corners
@@ -1061,6 +1071,8 @@ pub(crate) fn build(p: &Params) -> Built {
         // (a label numbered for want of room counts against a drawing too, less than one left off)
         let cost = |b: &Built| 1000 * b.stats.left_off + b.stats.numbered;
         if cost(&b) == 0 { return b; }
+        // (a function with dozens of marks, such as sin(1/x), is not helped by a taller plot: drawn once)
+        if b.analysis.as_ref().is_some_and(|a| a.crit.len() + a.infl.len() > 16) { return b; }
         if best.as_ref().is_none_or(|o| cost(&b) < cost(o)) { best = Some(b); }
     }
     best.unwrap()
@@ -1087,6 +1099,12 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     if let Err(e) = &model { notes.push(e.clone()); }
     let model = model.ok();
     let an = model.as_ref().map(|m| m.analyse(wa, wb));
+    // (sin(1/x) near 0: more points than can be marked; the figure says so and marks none)
+    let an = an.filter(|a| {
+        let many = a.crit.len() > MAX_MARKS || a.fpp_marks.len() > MAX_MARKS || a.fp_marks.len() > MAX_MARKS;
+        if many { notes.push(format!("{name} has more than {MAX_MARKS} critical or inflection points in this window, too many to mark: narrow the window")); }
+        !many
+    });
 
     // ── the panels, each the coordinate grid itself ──
     let kinds: Vec<PK> = if one { vec![PK::One] } else if fpp { vec![PK::F, PK::Fp, PK::Fpp] } else { vec![PK::F, PK::Fp] };
@@ -1696,10 +1714,10 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     let page_h = (y + 12.0).ceil();
     let mut d = Doc::new(page_w.ceil(), page_h);
     let desc = match copy {
-        Copy::Key => format!("Graphs of {name} and its derivatives on {}.", if one { "one grid" } else { "aligned axes" }),
-        Copy::NoMarks => format!("Graphs of {name} and its derivatives, unmarked, for students."),
-        Copy::SketchFp => format!("Graph of {name} with blank axes below for students to sketch its derivative."),
-        Copy::SketchF => format!("Graph of {}{PRIME} with blank axes for students to sketch {name}.", name),
+        Copy::Key => format!("Graphs of a function and its derivatives on {}.", if one { "one grid" } else { "aligned axes" }),
+        Copy::NoMarks => "Graphs of a function and its derivatives, unmarked, for students.".to_string(),
+        Copy::SketchFp => "Graph of a function with blank axes below for students to sketch its derivative.".to_string(),
+        Copy::SketchF => "Graph of a derivative with blank axes for students to sketch the function.".to_string(),
     };
     d.describe("Derivative graphs", &desc);
     d.raw(&head);
