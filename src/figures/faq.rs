@@ -205,6 +205,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "scatterplot" => SCATTERPLOT,
         "mapping-diagram" => MAPPING_DIAGRAM,
         "ruler-reading" => RULER_READING,
+        "tangent-secant-lines" => TANGENT_SECANT_LINES,
         _ => &[],
     }
 }
@@ -1298,6 +1299,29 @@ const VOLUME_READING: &[Faq] = &[
 ];
 
 // ----- math -----
+
+const TANGENT_SECANT_LINES: &[Faq] = &[
+    Faq {
+        q: "What is the difference between a secant line and a tangent line?",
+        a: "A secant line cuts the curve at two points, P at x = a and Q at x = a + h; its slope [f(a + h) − f(a)]/h is the average rate of change between them. The tangent line touches the curve at P alone and has the slope of the curve there, f′(a), the instantaneous rate of change.",
+    },
+    Faq {
+        q: "How do I show the secants approaching the tangent?",
+        a: "Type several values under More secants, for h =, such as 1, 0.5, 0.1, and tick Table of secant slopes. Each secant is drawn in its own colour and the table lists its slope, ending with h → 0, the tangent's slope. Dragging Q towards P on the figure does the same live.",
+    },
+    Faq {
+        q: "Why is a slope written as a decimal with ≈?",
+        a: "Slopes are written exactly (fractions, roots, π and e) where the numbers allow, as with x² or sin x at π/3. Where no exact form exists, as for the secant of ln x from 1 to 2 (ln 2), the slope is rounded to the decimal places chosen and written with ≈. Choose Numbers: Decimals to round everything.",
+    },
+    Faq {
+        q: "Why is there no tangent at some points?",
+        a: "A tangent needs the curve to be smooth there. At a corner such as |x| at 0 the slopes from the left and right differ, at a cusp they grow without bound, and at the end of a domain such as √x at 0 there is only one side; the panel says which. Where the slope grows without bound on both sides alike, as for the cube root at 0, the tangent is the vertical line x = a.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. Blank lines for the slopes and equations keeps the lines and leaves the slopes, equations and the slope triangle's rise for students; Curve and P only leaves just the curve and the point, for students to draw the tangent themselves. Student + key exports both copies, and Answer key line under the graph sums up the answers on the key.",
+    },
+];
 
 const COORDINATE_GRID: &[Faq] = &[
     Faq {
