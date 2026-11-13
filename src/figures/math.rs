@@ -5102,13 +5102,20 @@ fn cylinder_render_k(p: &Params) -> String {
     if p.b("hidden") { dpoly(&mut d, &mpts(&m, &ell(0.0, 0.0, r, r * s, t0d, t0d + 180.0)), INK, 1.6, "6 5"); }
     // the radius runs across the top face, away from the lean
     let dir: f64 = if lean > 0.0 { -1.0 } else { 1.0 };
-    let tc = m.p((lean, h));
-    let foot = m.p((lean, 0.0));
-    let base_c = m.p((0.0, 0.0));
+    let (mut tc, mut foot, mut base_c) = (m.p((lean, h)), m.p((lean, 0.0)), m.p((0.0, 0.0)));
     let center = m.p((lean / 2.0, h / 2.0));
     // the oblique cylinder's height line has its own switch (`obl_height`); off, it takes the height and lean labels with it
     let h_off = solids_b8::height_off("cylinder", p);
     let draw_h = (oblique || p.b("show_height")) && !h_off;
+    // batch 8: a typed oblique cylinder whose centre height line would lie mostly under the top face (drawn after it) has its
+    // height drawn outside the solid, as textbooks draw an oblique solid's: dashed from the top rim's outer point on the lean
+    // side straight down to the base's level, with its square, and the lean along that level from the base rim's outer point.
+    // Every label is then seen with the line it measures. A figure with no typed measure keeps the centre line.
+    let outside = draw_h && oblique && lean.abs() > 1e-9 && r * s > 0.5 * h && solids_b8::any_typed(p);
+    if outside {
+        let sg = lean.signum();
+        (tc, foot, base_c) = (m.p((lean + sg * r, h)), m.p((lean + sg * r, 0.0)), m.p((sg * r, 0.0)));
+    }
     // written as typed unless a typed slanted edge works the height out
     let htxt = if h != sv(p, "height") { mtext(p, "h", "Measure", h, false) } else { xtext(p, "h", "height", "Measure", h, false) };
     if draw_h {
@@ -5118,7 +5125,9 @@ fn cylinder_render_k(p: &Params) -> String {
             let toward = if lean.abs() > 1e-9 { base_c } else { (foot.0 + 10.0, foot.1) };
             square_mark(&mut d, foot, (foot.0, foot.1 - 10.0), toward, 12.0);
         }
-        if let Some(txt) = &htxt { sbeside_r(&mut d, "h", foot, tc, 0.5, (tc.0 - dir * 100.0, tc.1), txt, fs); }
+        // (outside, the label goes on the far side of its line from the solid)
+        let away = if outside { (tc.0 - lean.signum() * 100.0, tc.1) } else { (tc.0 - dir * 100.0, tc.1) };
+        if let Some(txt) = &htxt { sbeside_r(&mut d, "h", foot, tc, 0.5, away, txt, fs); }
     }
     d.poly(&mpts(&m, &ell(lean, h, r, r * s, 0.0, 360.0)), "#f4f9ff", INK, 2.4);
     d.line(l0.0, l0.1, l1.0, l1.1, INK, 2.4);
