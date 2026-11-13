@@ -14,6 +14,8 @@ use sym::Ex;
 pub(crate) mod sym;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod sweep;
 
 pub(crate) const ID: &str = "derivative-graphs";
 pub(crate) const STARTS: [&str; 2] = ["f(x)", "f\u{2032}(x)"];
@@ -313,7 +315,13 @@ pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Op
         if vs[i].is_some_and(zero) {
             let st = i;
             while i <= n && vs[i].is_some_and(zero) { i += 1; }
-            if i - st >= 4 { flats.push((xs[st], xs[i - 1])); } else { for k in st..i { if k > 0 && k < n { ev.push(Event { x: xs[k], k: EvK::Zero }); } } }
+            if i - st >= 4 {
+                // the stretch's true ends, between its last zero sample and the first that is not
+                let end = |inz: f64, out: f64| { let (mut a1, mut b1) = (inz, out); for _ in 0..80 { let m = 0.5 * (a1 + b1); if m == a1 || m == b1 { break; } if g(m).is_some_and(zero) { a1 = m } else { b1 = m } } a1 };
+                let l = if st > 0 { end(xs[st], xs[st - 1]) } else { xs[st] };
+                let r = if i <= n { end(xs[i - 1], xs[i]) } else { xs[i - 1] };
+                flats.push((l, r));
+            } else { for k in st..i { if k > 0 && k < n { ev.push(Event { x: xs[k], k: EvK::Zero }); } } }
         } else { i += 1; }
     }
     let in_flat = |x: f64| flats.iter().any(|&(l, r)| x >= l - 1e-12 && x <= r + 1e-12);
@@ -500,11 +508,15 @@ impl Model {
             cuts.extend(extra.iter().copied());
             cuts.sort_by(|p, q| p.partial_cmp(q).unwrap());
             cuts.dedup_by(|p, q| (*p - *q).abs() < 1e-9 * span);
-            let mut v = vec![];
+            let mut v: Vec<Span1> = vec![];
             for w in cuts.windows(2) {
                 if w[1] - w[0] < 1e-9 * span { continue; }
                 if self.f(0.5 * (w[0] + w[1])).is_none() { continue; }
-                if let Some(sg) = sign_at(g, w[0], w[1]) { v.push(Span1 { a: w[0], b: w[1], sign: sg }); }
+                if let Some(sg) = sign_at(g, w[0], w[1]) {
+                    // (two pieces of one sign with no mark or break between them are one interval)
+                    if let Some(l) = v.last_mut() { if l.sign == sg && (l.b - w[0]).abs() < 1e-9 * span && !marks.iter().any(|e| (e.x - w[0]).abs() < 1e-6 * span) && !extra.iter().any(|x| (x - w[0]).abs() < 1e-6 * span) { l.b = w[1]; continue; } }
+                    v.push(Span1 { a: w[0], b: w[1], sign: sg });
+                }
             }
             v
         };
@@ -599,6 +611,39 @@ fn flat_b9_char(c: char) -> f64 {
 // ───────────────────────── layout ─────────────────────────
 
 type B4 = [f64; 4];
+/// The ink of a label set from x (left) on the centre line y at `size`: measured on the serif the labels use (glyphs reach
+/// 0.49 em above the centre line and 0.59 em below it; an italic f hangs 0.17 em left of its start).
+pub(crate) fn inkb(x: f64, y: f64, s: &str, size: f64) -> B4 { let r = ink_rel(s, size); [x + r[0] - 0.5, y + r[1] - 0.5, x + r[2] + 0.5, y + r[3] + 0.5] }
+thread_local! { static INK: std::cell::RefCell<std::collections::HashMap<(String, u64), B4>> = std::cell::RefCell::new(std::collections::HashMap::new()); }
+/// The ink of a label as this figure sets it (text_el at x = 0 on the centre line y = 0), measured once with the app's own
+/// fonts (the renderer's layout), so every box, guide cut and leader end is where the letters are. [left, top, right, bottom]
+pub(crate) fn ink_rel(s: &str, size: f64) -> B4 {
+    let key = (s.to_string(), size.to_bits());
+    if let Some(b) = INK.with(|c| c.borrow().get(&key).copied()) { return b; }
+    let est = [-0.18 * size, -0.52 * size, tw(s, size), 0.62 * size];
+    let svg = format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="400" viewBox="-2000 -200 4000 400">{}</svg>"##, text_svg(0.0, 0.0, size, s, "#000", "start", ""));
+    let mut opt = resvg::usvg::Options::default();
+    opt.fontdb = crate::figures::fontdb();
+    let mut b = est;
+    if let Ok(tree) = resvg::usvg::Tree::from_str(&crate::figures::serif_stack(&svg), &opt) {
+        fn first(g: &resvg::usvg::Group) -> Option<B4> {
+            for n in g.children() {
+                match n {
+                    resvg::usvg::Node::Group(gg) => if let Some(b) = first(gg) { return Some(b); },
+                    resvg::usvg::Node::Text(t) => { let r = t.flattened().bounding_box().transform(t.abs_transform())?; return Some([r.left() as f64, r.top() as f64, r.right() as f64, r.bottom() as f64]); }
+                    _ => {}
+                }
+            }
+            None
+        }
+        // (the canvas is the viewBox moved by 2000, 200)
+        if let Some(m) = first(tree.root()) { if m[2] > m[0] { b = [m[0] - 2000.0, m[1] - 200.0, m[2] - 2000.0, m[3] - 200.0]; } }
+    }
+    INK.with(|c| c.borrow_mut().insert(key, b));
+    b
+}
+/// The advance a label takes from its start (its ink's right edge).
+pub(crate) fn adv(s: &str, size: f64) -> f64 { ink_rel(s, size)[2] }
 fn bhit(a: &B4, b: &B4) -> bool { a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3] }
 fn grow(b: &B4, k: f64) -> B4 { [b[0] - k, b[1] - k, b[2] + k, b[3] + k] }
 fn seg_box(r: &B4, a: Pt, b: Pt) -> bool {
@@ -612,7 +657,13 @@ fn seg_box(r: &B4, a: Pt, b: Pt) -> bool {
     }
     true
 }
-fn seg_cross2(a: Pt, b: Pt, c: Pt, d: Pt) -> bool {
+/// The least distance between the segments a-b and c-d.
+pub(crate) fn seg_dist(a: Pt, b: Pt, c: Pt, d: Pt) -> f64 {
+    if seg_cross2(a, b, c, d) { return 0.0; }
+    let pd = |p: Pt, s: Pt, e: Pt| { let (dx, dy) = (e.0 - s.0, e.1 - s.1); let l2 = dx * dx + dy * dy; let t = if l2 > 0.0 { (((p.0 - s.0) * dx + (p.1 - s.1) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 }; (p.0 - s.0 - t * dx).hypot(p.1 - s.1 - t * dy) };
+    pd(a, c, d).min(pd(b, c, d)).min(pd(c, a, b)).min(pd(d, a, b))
+}
+pub(crate) fn seg_cross2(a: Pt, b: Pt, c: Pt, d: Pt) -> bool {
     let o = |p: Pt, q: Pt, r: Pt| (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0);
     let (d1, d2, d3, d4) = (o(c, d, a), o(c, d, b), o(a, b, c), o(a, b, d));
     ((d1 > 0.0) != (d2 > 0.0)) && ((d3 > 0.0) != (d4 > 0.0))
@@ -711,7 +762,7 @@ fn place_rows(rows: &[(usize, Vec<String>)]) -> String {
 
 /// Everything a label must keep clear of, and where it may go.
 #[derive(Default, Clone)]
-pub(crate) struct Room { pub segs: Vec<(Pt, Pt)>, pub boxes: Vec<B4>, /** lines cut around text (guides, the tracer): a leader still may not cross them */ pub soft: Vec<(Pt, Pt)> }
+pub(crate) struct Room { pub segs: Vec<(Pt, Pt)>, pub boxes: Vec<B4>, /** lines cut around text (guides, the tracer): a leader still may not cross them */ pub soft: Vec<(Pt, Pt)>, /** the marks: a label must be nearer its own than any other */ pub pts: Vec<Pt> }
 impl Room {
     fn clear(&self, b: &B4, skip_near: Option<Pt>) -> bool {
         let gb = grow(b, 1.5);
@@ -727,11 +778,53 @@ impl Room {
 pub(crate) struct Placed { pub b: B4, pub at: Pt, pub leader: Option<(Pt, Pt)> }
 /// Beside its point first (above, below, the sides, the corners, a little farther), then on a short leader; None when
 /// nowhere is clear.
-fn place(room: &Room, anchor: Pt, w: f64, h: f64, within: B4, prefer_up: bool) -> Option<Placed> {
+/// Segments bucketed in 24 px cells, so a box or a leader is checked only against the strokes near it.
+struct SegIdx { segs: Vec<(Pt, Pt)>, map: std::collections::HashMap<(i32, i32), Vec<u32>> }
+impl SegIdx {
+    const CELL: f64 = 24.0;
+    fn new(segs: &[(Pt, Pt)]) -> Self {
+        let mut map: std::collections::HashMap<(i32, i32), Vec<u32>> = std::collections::HashMap::new();
+        for (k, (a, b)) in segs.iter().enumerate() {
+            if !(a.0.is_finite() && a.1.is_finite() && b.0.is_finite() && b.1.is_finite()) { continue; }
+            let (x0, x1) = ((a.0.min(b.0) / Self::CELL).floor() as i32, (a.0.max(b.0) / Self::CELL).floor() as i32);
+            let (y0, y1) = ((a.1.min(b.1) / Self::CELL).floor() as i32, (a.1.max(b.1) / Self::CELL).floor() as i32);
+            if (x1 - x0 + 1) as i64 * (y1 - y0 + 1) as i64 > 4000 { continue; }
+            for cx in x0..=x1 { for cy in y0..=y1 { map.entry((cx, cy)).or_default().push(k as u32); } }
+        }
+        SegIdx { segs: segs.to_vec(), map }
+    }
+    fn near(&self, b: &B4) -> Vec<(Pt, Pt)> {
+        let mut ks: Vec<u32> = vec![];
+        for cx in (b[0] / Self::CELL).floor() as i32..=(b[2] / Self::CELL).floor() as i32 {
+            for cy in (b[1] / Self::CELL).floor() as i32..=(b[3] / Self::CELL).floor() as i32 {
+                if let Some(v) = self.map.get(&(cx, cy)) { ks.extend(v.iter().copied()); }
+            }
+        }
+        ks.sort_unstable(); ks.dedup();
+        ks.into_iter().map(|k| self.segs[k as usize]).collect()
+    }
+}
+
+/// Beside its point first (above, below, the sides, the corners, a little farther), then on a short leader, then the
+/// nearest clear spot within 150 px on a leader; None when nowhere is clear.
+fn place(room: &Room, anchor: Pt, text: &str, size: f64, within: B4, prefer_up: bool) -> Option<Placed> {
+    let r = ink_rel(text, size);
+    let (w, h) = (r[2] - r[0] + 1.0, r[3] - r[1] + 1.0);
+    let at = |b: &B4| (b[0] + 0.5 - r[0], b[1] + 0.5 - r[1]);
     let fits = |b: &B4| b[0] >= within[0] && b[2] <= within[2] && b[1] >= within[1] && b[3] <= within[3];
-    // the label's own dot is not in its way
-    let own = |o: &B4| anchor.0 >= o[0] && anchor.0 <= o[2] && anchor.1 >= o[1] && anchor.1 <= o[3];
-    let mine = Room { segs: room.segs.clone(), boxes: room.boxes.iter().copied().filter(|o| !own(o)).collect(), soft: vec![] };
+    // the label's own dot is not in its way (a dot's box is centred on its mark; a number or label a curve runs through
+    // is not the label's own)
+    let own = |o: &B4| ((o[0] + o[2]) / 2.0 - anchor.0).abs() < 1.0 && ((o[1] + o[3]) / 2.0 - anchor.1).abs() < 1.0 && o[2] - o[0] < 16.0;
+    let boxes: Vec<B4> = room.boxes.iter().copied().filter(|o| !own(o)).collect();
+    let (hard, soft) = (SegIdx::new(&room.segs), SegIdx::new(&room.soft));
+    let clear = |b: &B4| { let gb = grow(b, 1.5); !boxes.iter().any(|o| bhit(&gb, o)) && !hard.near(&gb).iter().any(|(a, c)| seg_box(&gb, *a, *c)) };
+    // a leader keeps 2.5 px from every stroke (the guides and the tracer too) and off every text and mark
+    let leader_ok = |s: Pt, e: Pt| {
+        let bb = [s.0.min(e.0) - 3.0, s.1.min(e.1) - 3.0, s.0.max(e.0) + 3.0, s.1.max(e.1) + 3.0];
+        !hard.near(&bb).iter().chain(soft.near(&bb).iter()).any(|(a, c)| seg_dist(s, e, *a, *c) < 2.5) && !boxes.iter().any(|o| seg_box(&grow(o, 1.0), s, e))
+    };
+    // nearer its own point than any other mark
+    let mine_nearest = |b: &B4| { let d = |q: Pt| { let dx = (b[0] - q.0).max(0.0).max(q.0 - b[2]); let dy = (b[1] - q.1).max(0.0).max(q.1 - b[3]); dx.hypot(dy) }; let own_d = d(anchor); !room.pts.iter().any(|q| (q.0 - anchor.0).hypot(q.1 - anchor.1) > 1.0 && d(*q) < own_d + 3.0) };
     let (ax, ay) = anchor;
     let v = if prefer_up { -1.0 } else { 1.0 };
     // candidate boxes by (left, top): above / below (centred, then flush to either side of the point), the sides, the corners
@@ -748,25 +841,46 @@ fn place(room: &Room, anchor: Pt, w: f64, h: f64, within: B4, prefer_up: bool) -
     for d in [6.0, 10.0, 15.0, 22.0] {
         for (l, t) in cands(d) {
             let b = [l, t, l + w, t + h];
-            if fits(&b) && mine.clear(&b, None) { return Some(Placed { b, at: (l, t + h / 2.0), leader: None }); }
+            if fits(&b) && clear(&b) && mine_nearest(&b) { return Some(Placed { b, at: at(&b), leader: None }); }
         }
     }
-    // a short leader: the text a little away, the line from the mark to the nearest point of the box crossing nothing
-    for r in [32.0, 42.0, 54.0, 68.0] {
-        for k in 0..16 {
-            let ang = std::f64::consts::TAU * k as f64 / 16.0 - std::f64::consts::FRAC_PI_2;
-            let (cx, cy) = (ax + (r + w / 2.0 - 10.0) * ang.cos(), ay + (r + h / 2.0 - 6.0) * ang.sin());
+    // a leader from the mark to the letters (not the room an italic overhang is given)
+    let lead = |b: &B4| -> Option<(Pt, Pt)> {
+        let core = [b[0] + 0.5, b[1] + 0.15 * size, b[2] - 0.5, b[3] - 0.15 * size];
+        let q = (ax.clamp(core[0], core[2]), ay.clamp(core[1], core[3]));
+        let (dx, dy) = (q.0 - ax, q.1 - ay);
+        let l = dx.hypot(dy);
+        if l < 12.0 { return None; }
+        let (s, e) = ((ax + dx / l * 7.0, ay + dy / l * 7.0), (q.0 - dx / l * 2.0, q.1 - dy / l * 2.0));
+        leader_ok(s, e).then_some((s, e))
+    };
+    for rr in [28.0, 36.0, 46.0, 58.0, 72.0, 88.0, 106.0] {
+        for k in 0..24 {
+            let ang = std::f64::consts::TAU * k as f64 / 24.0 - std::f64::consts::FRAC_PI_2;
+            let (cx, cy) = (ax + (rr + w / 2.0 - 10.0) * ang.cos(), ay + (rr + h / 2.0 - 6.0) * ang.sin());
             let b = [cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0];
-            if !fits(&b) || !mine.clear(&b, None) { continue; }
-            let q = (ax.clamp(b[0], b[2]), ay.clamp(b[1], b[3]));
-            let (dx, dy) = (q.0 - ax, q.1 - ay);
-            let l = dx.hypot(dy);
-            if l < 12.0 { continue; }
-            let s = (ax + dx / l * 7.0, ay + dy / l * 7.0);
-            let e = (q.0 - dx / l * 2.0, q.1 - dy / l * 2.0);
-            if mine.segs.iter().chain(room.soft.iter()).any(|(a, c)| seg_cross2(s, e, *a, *c)) || mine.boxes.iter().any(|o| seg_box(&grow(o, 1.0), s, e)) { continue; }
-            return Some(Placed { b, at: (b[0], cy), leader: Some((s, e)) });
+            if !fits(&b) || !clear(&b) { continue; }
+            if let Some(le) = lead(&b) { return Some(Placed { b, at: at(&b), leader: Some(le) }); }
         }
+    }
+    // the last resort before leaving it off: the nearest clear spot within 150 px whose leader is clear
+    let reach = 150.0;
+    let mut spots: Vec<(f64, B4)> = vec![];
+    let mut yy = ay - reach - h;
+    while yy <= ay + reach {
+        let mut xx = ax - reach - w;
+        while xx <= ax + reach {
+            let b = [xx, yy, xx + w, yy + h];
+            let d = { let dx = (b[0] - ax).max(0.0).max(ax - b[2]); let dy = (b[1] - ay).max(0.0).max(ay - b[3]); dx.hypot(dy) };
+            if d >= 12.0 && d <= reach && fits(&b) { spots.push((d, b)); }
+            xx += 6.0;
+        }
+        yy += 6.0;
+    }
+    spots.sort_by(|p, q| p.0.partial_cmp(&q.0).unwrap());
+    for (_, b) in spots {
+        if !clear(&b) { continue; }
+        if let Some(le) = lead(&b) { return Some(Placed { b, at: at(&b), leader: Some(le) }); }
     }
     None
 }
@@ -775,7 +889,7 @@ fn place(room: &Room, anchor: Pt, w: f64, h: f64, within: B4, prefer_up: bool) -
 
 /// Counts of the labels this render placed, for the sweep test: (kind, beside, on a leader, left off).
 #[derive(Default, Clone, Debug)]
-pub(crate) struct LabelStats { pub beside: usize, pub leader: usize, pub moved: usize, pub left_off: usize, pub kinds: Vec<(String, &'static str)> }
+pub(crate) struct LabelStats { pub beside: usize, pub leader: usize, pub moved: usize, pub left_off: usize, pub numbered: usize, pub kinds: Vec<(String, &'static str)> }
 
 pub(crate) struct Built {
     pub svg: String,
@@ -788,11 +902,15 @@ pub(crate) struct Built {
     pub analysis: Option<Analysis>,
     /// every label drawn (text, box) and every stroke (segments) that labels must keep clear of, for the tests
     pub labels: Vec<(String, B4, &'static str)>,
+    /// each point label's mark (text, the point) and every mark drawn
+    pub anchors: Vec<(String, Pt)>,
+    pub dots: Vec<Pt>,
     pub strokes: Vec<(Pt, Pt, &'static str)>,
     pub size: (f64, f64),
 }
 
 pub(crate) fn render(p: &Params) -> String { build(p).svg }
+
 pub(crate) fn warnings(p: &Params) -> Vec<String> { build(p).notes }
 
 fn sanitize(p: &Params) -> Params {
@@ -824,7 +942,7 @@ fn grid_text_boxes(svg: &str, ox: f64, oy: f64) -> Vec<B4> {
         if let (Some(x), Some(y), Some(fs)) = (attr("x").and_then(|v| v.parse::<f64>().ok()), attr("y").and_then(|v| v.parse::<f64>().ok()), attr("font-size").and_then(|v| v.parse::<f64>().ok())) {
             let w = if head.contains("Arial") { text.chars().map(|c| match c { '-' | '\u{2212}' => 0.36, '.' | ',' => 0.3, '/' => 0.3, c if c.is_ascii_digit() => 0.56, _ => 0.64 }).sum::<f64>() * fs + 1.0 } else { tw(&text, fs) * 1.1 };
             let (a, b) = match attr("text-anchor").as_deref() { Some("end") => (x - w, x), Some("middle") => (x - w / 2.0, x + w / 2.0), _ => (x, x + w) };
-            out.push([ox + a, oy + y - 0.75 * fs, ox + b, oy + y + 0.25 * fs]);
+            out.push([ox + a - 2.0, oy + y - 0.82 * fs, ox + b + 2.0, oy + y + 0.3 * fs]);
         }
         rest = &tail[end.min(tail.len())..];
         if rest.len() == tail.len() { break; }
@@ -861,14 +979,56 @@ fn curve_px(pn: &Panel, f: &dyn Fn(f64) -> Option<f64>) -> Vec<Vec<Pt>> {
     }).collect()
 }
 
-fn text_el(x: f64, y: f64, size: f64, s: &str, fill: &str, anchor: &str) -> String {
-    let body = math_tspans(s);
-    format!(r##"<text x="{x:.2}" y="{:.2}" font-size="{size:.1}" text-anchor="{anchor}" font-family="{LABEL_SERIF}" fill="{fill}" data-dg="1">{body}</text>"##, y + size * 0.34)
+thread_local! { static NID: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+/// Each label's id names its kind (dgt-extremum-3): the tests find every label by it, as drawn.
+fn nid(kind: &str) -> String { NID.with(|c| { let n = c.get(); c.set(n + 1); format!("dgt-{kind}-{n}") }) }
+/// A function's curves as the coordinate grid drew them in a panel: its polylines of that colour, on the page, cut to the plot.
+fn grid_curves(svg: &str, pn: &Panel, col: &str) -> Vec<Vec<Pt>> {
+    let pr = pn.plot();
+    let inside = |q: Pt| q.0 >= pr[0] - 0.5 && q.0 <= pr[2] + 0.5 && q.1 >= pr[1] - 0.5 && q.1 <= pr[3] + 0.5;
+    let mut out: Vec<Vec<Pt>> = vec![];
+    let mut rest = svg;
+    while let Some(i) = rest.find("<polyline ") {
+        let tail = &rest[i..];
+        let head = &tail[..tail.find('>').unwrap_or(tail.len())];
+        rest = &tail[head.len().min(tail.len())..];
+        if !head.contains(&format!("stroke=\"{col}\"")) { continue; }
+        let Some(j) = head.find(" points=\"") else { continue };
+        let pts: Vec<Pt> = head[j + 9..].split('"').next().unwrap_or("").split_whitespace().filter_map(|q| { let (a, b) = q.split_once(',')?; Some((pn.ox + a.parse::<f64>().ok()?, pn.oy + b.parse::<f64>().ok()?)) }).collect();
+        // (cut where it leaves the plot; a crossing piece keeps its end at the edge)
+        let mut run: Vec<Pt> = vec![];
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if inside(a) && inside(b) { if run.is_empty() { run.push(a); } run.push(b); continue; }
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let (mut t0, mut t1) = (0.0f64, 1.0f64);
+            let mut ok = true;
+            for (pp, q) in [(-dx, a.0 - pr[0]), (dx, pr[2] - a.0), (-dy, a.1 - pr[1]), (dy, pr[3] - a.1)] {
+                if pp == 0.0 { if q < 0.0 { ok = false; } continue; }
+                let t = q / pp;
+                if pp < 0.0 { t0 = t0.max(t); } else { t1 = t1.min(t); }
+            }
+            if ok && t0 < t1 {
+                let (p0, p1) = ((a.0 + t0 * dx, a.1 + t0 * dy), (a.0 + t1 * dx, a.1 + t1 * dy));
+                if run.is_empty() || !inside(a) { if run.len() > 1 { out.push(std::mem::take(&mut run)); } run = vec![p0]; }
+                run.push(p1);
+                if !inside(b) { out.push(std::mem::take(&mut run)); }
+            } else if run.len() > 1 { out.push(std::mem::take(&mut run)); } else { run.clear(); }
+        }
+        if run.len() > 1 { out.push(run); }
+    }
+    out
 }
-fn halo_el(x: f64, y: f64, size: f64, s: &str, fill: &str) -> String {
+
+fn text_el(x: f64, y: f64, size: f64, s: &str, fill: &str, anchor: &str, kind: &str) -> String { text_svg(x, y, size, s, fill, anchor, &nid(kind)) }
+fn text_svg(x: f64, y: f64, size: f64, s: &str, fill: &str, anchor: &str, id: &str) -> String {
+    let body = math_tspans(s);
+    format!(r##"<text id="{id}" x="{x:.2}" y="{:.2}" font-size="{size:.1}" text-anchor="{anchor}" font-family="{LABEL_SERIF}" fill="{fill}">{body}</text>"##, y + size * 0.34)
+}
+fn halo_el(x: f64, y: f64, size: f64, s: &str, fill: &str, kind: &str) -> String {
     let body = math_tspans(s);
     let ty = y + size * 0.34;
-    format!(r##"<text x="{x:.2}" y="{ty:.2}" font-size="{size:.1}" text-anchor="start" font-family="{LABEL_SERIF}" fill="#fff" stroke="#fff" stroke-width="5" stroke-linejoin="round">{body}</text><text x="{x:.2}" y="{ty:.2}" font-size="{size:.1}" text-anchor="start" font-family="{LABEL_SERIF}" fill="{fill}" data-dg="1">{body}</text>"##)
+    format!(r##"<text x="{x:.2}" y="{ty:.2}" font-size="{size:.1}" text-anchor="start" font-family="{LABEL_SERIF}" fill="#fff" stroke="#fff" stroke-width="5" stroke-linejoin="round">{body}</text><text id="{}" x="{x:.2}" y="{ty:.2}" font-size="{size:.1}" text-anchor="start" font-family="{LABEL_SERIF}" fill="{fill}">{body}</text>"##, nid(kind))
 }
 /// A vertical guide from y0 to y1 at x, cut where it would run through text.
 fn vguide(x: f64, ya: f64, yb: f64, boxes: &[B4], col: &str, w: f64, dash: &str) -> (String, Vec<(Pt, Pt)>) {
@@ -891,8 +1051,23 @@ fn vguide(x: f64, ya: f64, yb: f64, boxes: &[B4], col: &str, w: f64, dash: &str)
     (out, segs)
 }
 
+/// The figure. Where a label finds no room beside its mark or on a short leader, it is drawn again with taller plots
+/// (1.3, 1.6, then 2 times, and 1.25 then 1.5 times as wide: the curves spread out, the labels keep their size), keeping the first drawing where every label
+/// fits, else the one that leaves off fewest (its note says which).
 pub(crate) fn build(p: &Params) -> Built {
+    let mut best: Option<Built> = None;
+    for (k, wide) in [(1.0, 1.0), (1.3, 1.0), (1.6, 1.0), (1.6, 1.25), (2.0, 1.5)] {
+        let b = build_at(p, k, wide);
+        // (a label numbered for want of room counts against a drawing too, less than one left off)
+        let cost = |b: &Built| 1000 * b.stats.left_off + b.stats.numbered;
+        if cost(&b) == 0 { return b; }
+        if best.as_ref().is_none_or(|o| cost(&b) < cost(o)) { best = Some(b); }
+    }
+    best.unwrap()
+}
+pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     let p = &sanitize(p);
+    NID.with(|c| c.set(0));
     let mut notes: Vec<String> = vec![];
     let ls = lscale(p);
     let print = p.s("style") == "Print";
@@ -915,7 +1090,7 @@ pub(crate) fn build(p: &Params) -> Built {
 
     // ── the panels, each the coordinate grid itself ──
     let kinds: Vec<PK> = if one { vec![PK::One] } else if fpp { vec![PK::F, PK::Fp, PK::Fpp] } else { vec![PK::F, PK::Fp] };
-    let plot_h = if one { 400.0 } else { 260.0 };
+    let plot_h = (if one { 400.0 } else { 260.0 }) * tall;
     let head_h = 26.0 * ls.max(1.0);
     let mut y = 10.0;
     let title_on = match p.s("title_mode") { "Blank line" => true, "None" => false, _ => !p.s("title").trim().is_empty() };
@@ -925,6 +1100,7 @@ pub(crate) fn build(p: &Params) -> Built {
     let mut body = String::new();
     let mut grid_boxes: Vec<B4> = vec![];
     let mut grid_notes: Vec<String> = vec![];
+    let mut panel_svgs: Vec<String> = vec![];
     let fis_of = |k: PK| -> Vec<usize> { match k { PK::F => vec![0], PK::Fp => vec![1], PK::Fpp => vec![2], PK::One => if fpp { vec![0, 1, 2] } else { vec![0, 1] } } };
     let mut strip_after_f = 0.0;
     let strips_on = key && (p.b("incdec") || p.b("concavity")) && an.is_some();
@@ -935,14 +1111,15 @@ pub(crate) fn build(p: &Params) -> Built {
         let mut rows: Vec<(usize, Vec<String>)> = vec![];
         if let Some(m) = &model { for &fi in &fis { if shows(p, fi) { rows.push((fi, rows_of(m, fi, line_of(p, fi, one)))); } } }
         let gp = grid_params(p, &place_rows(&rows), yr);
-        let g = grid_layout_in(&gp, (480.0, plot_h));
+        let g = grid_layout_in(&gp, (480.0 * wide, plot_h));
         let mut gn = vec![];
-        let svg = coordinate_grid_build_in(&gp, &mut gn, (480.0, plot_h));
+        let svg = coordinate_grid_build_in(&gp, &mut gn, (480.0 * wide, plot_h));
         grid_notes.extend(gn);
         let (w, h) = (svg_dim(&svg, "width"), svg_dim(&svg, "height"));
         let head_y = y;
         let oy = y + head_h;
         grid_boxes.extend(grid_text_boxes(&svg, 0.0, oy));
+        panel_svgs.push(svg.clone());
         body.push_str(&embed(&svg, k, 0.0, oy));
         panels.push(Panel { kind: *kind, g, ox: 0.0, oy, gp, w, h, head_y });
         y = oy + h;
@@ -969,7 +1146,9 @@ pub(crate) fn build(p: &Params) -> Built {
         if let Some(m) = &model {
             for fi in fis_of(pn.kind) {
                 if !shows(p, fi) { continue; }
-                let c = curve_px(pn, &|x| m.d(fi, x));
+                let _ = m;
+                // the curve as the grid drew it (its rows have this function's colour), cut to the plot
+                let c = grid_curves(&panel_svgs[k], pn, cols[fi]);
                 for r in &c { room.add_poly(r); for w in r.windows(2) { strokes.push((w[0], w[1], "curve")); } }
                 curves_of.push((k, fi, c));
             }
@@ -981,7 +1160,6 @@ pub(crate) fn build(p: &Params) -> Built {
     let mut labels: Vec<(String, B4, &'static str)> = vec![];
     let mut stats = LabelStats::default();
     let fs = 15.0 * ls;
-    let lab_h = fs * 1.05;
 
     // ── f drawn from f′ (start from f′): a worked-out line in the f panel, on the key only ──
     let fpanel = panels.iter().position(|q| q.kind == PK::F || q.kind == PK::One);
@@ -1049,10 +1227,10 @@ pub(crate) fn build(p: &Params) -> Built {
             // one grid: the readings in the header, the names beside their curves (below)
             if tracer_on && tx.is_some() {
                 let s = fis.iter().filter(|&&fi| shows(p, fi)).filter_map(|&fi| reading(fi)).collect::<Vec<_>>().join(",  ");
-                let w = tw(&s, 14.0 * ls);
+                let w = adv(&s, 14.0 * ls);
                 let x = (pr[2] - w).max(4.0);
-                over.push_str(&text_el(x, hy, 14.0 * ls, &s, ink, "start"));
-                let b = [x, hy - 0.62 * 14.0 * ls, x + w, hy + 0.5 * 14.0 * ls];
+                over.push_str(&text_el(x, hy, 14.0 * ls, &s, ink, "start", "reading"));
+                let b = inkb(x, hy, &s, 14.0 * ls);
                 labels.push((s, b, "reading"));
                 room.boxes.push(b);
             }
@@ -1061,19 +1239,19 @@ pub(crate) fn build(p: &Params) -> Built {
         let fi = fis[0];
         let mut x = pr[0];
         if let Some(c) = cap(fi) {
-            let w = tw(&c, fs);
-            over.push_str(&text_el(x, hy, fs, &c, if print { ink } else { cols[fi] }, "start"));
-            let b = [x, hy - 0.62 * fs, x + w, hy + 0.5 * fs];
+            let w = adv(&c, fs);
+            over.push_str(&text_el(x, hy, fs, &c, if print { ink } else { cols[fi] }, "start", "name"));
+            let b = inkb(x, hy, &c, fs);
             labels.push((c, b, "name"));
             room.boxes.push(b);
             x += w + 16.0;
         }
         if tracer_on && shows(p, fi) {
             if let Some(s) = reading(fi) {
-                let w = tw(&s, 14.0 * ls);
+                let w = adv(&s, 14.0 * ls);
                 let rx = (pr[2] - w).max(x);
-                over.push_str(&text_el(rx, hy, 14.0 * ls, &s, ink, "start"));
-                let b = [rx, hy - 0.62 * 14.0 * ls, rx + w, hy + 0.5 * 14.0 * ls];
+                over.push_str(&text_el(rx, hy, 14.0 * ls, &s, ink, "start", "reading"));
+                let b = inkb(rx, hy, &s, 14.0 * ls);
                 labels.push((s, b, "reading"));
                 room.boxes.push(b);
             }
@@ -1084,6 +1262,8 @@ pub(crate) fn build(p: &Params) -> Built {
     let mut dots: Vec<(Pt, &'static str)> = vec![];
     let mut guides: Vec<(f64, f64, f64, &'static str)> = vec![];
     let mut point_labels: Vec<(Pt, String, &'static str, bool)> = vec![];
+    let mut anchors: Vec<(String, Pt)> = vec![];
+    let mut callouts: Vec<String> = vec![];
     let panel_of = |fi: usize| panels.iter().position(|q| fis_of(q.kind).contains(&fi));
     let inside = |pn: &Panel, x: f64, y: f64| { let r = pn.plot(); let (a, b) = (pn.sx(x), pn.sy(y)); a >= r[0] - 0.5 && a <= r[2] + 0.5 && b >= r[1] - 0.5 && b <= r[3] + 0.5 };
     let coord = |x: f64, y: f64| format!("({}, {})", num_text(x, dec, false), num_text(y, dec, false));
@@ -1216,7 +1396,8 @@ pub(crate) fn build(p: &Params) -> Built {
         }
     }
     // dots and guides are obstacles for the labels
-    for (q, _) in &dots { room.boxes.push([q.0 - 5.0, q.1 - 5.0, q.0 + 5.0, q.1 + 5.0]); }
+    for (q, _) in &dots { room.boxes.push([q.0 - 6.5, q.1 - 6.5, q.0 + 6.5, q.1 + 6.5]); room.pts.push(*q); }
+    if let Some(q) = through { room.pts.push(q); }
     if let Some((a, b)) = tangent { room.segs.push((a, b)); strokes.push((a, b, "tangent")); }
     for (x, a, b, _) in &guides { room.soft.push(((*x, *a), (*x, *b))); }
     if let Some((x, a, b)) = tracer_line { room.soft.push(((x, a), (x, b))); }
@@ -1236,9 +1417,9 @@ pub(crate) fn build(p: &Params) -> Built {
             for frac in [0.88, 0.8, 0.94, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.12] {
                 if n == 0 { break; }
                 let q = pts[((n as f64 * frac) as usize).min(n - 1)];
-                if let Some(pl) = place(&room, q, w, lab_h, within, true) {
+                if let Some(pl) = place(&room, q, &text, fs, within, true) {
                     if pl.leader.is_some() { continue; }
-                    over.push_str(&halo_el(pl.at.0, pl.at.1, fs, &text, if print { ink } else { cols[fi] }));
+                    over.push_str(&halo_el(pl.at.0, pl.at.1, fs, &text, if print { ink } else { cols[fi] }, "name"));
                     room.boxes.push(pl.b);
                     labels.push((text.clone(), pl.b, "name"));
                     stats.beside += 1; stats.kinds.push(("name".into(), "beside"));
@@ -1248,10 +1429,10 @@ pub(crate) fn build(p: &Params) -> Built {
             }
             if !done && n > 0 {
                 let q = pts[n * 4 / 5];
-                if let Some(pl) = place(&room, q, w, lab_h, within, true) {
+                if let Some(pl) = place(&room, q, &text, fs, within, true) {
                     let (s, e) = pl.leader.unwrap_or((q, q));
                     over.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1" data-leader="1"/>"#, s.0, s.1, e.0, e.1));
-                    over.push_str(&halo_el(pl.at.0, pl.at.1, fs, &text, if print { ink } else { cols[fi] }));
+                    over.push_str(&halo_el(pl.at.0, pl.at.1, fs, &text, if print { ink } else { cols[fi] }, "name"));
                     room.boxes.push(pl.b);
                     labels.push((text.clone(), pl.b, "name"));
                     stats.leader += 1; stats.kinds.push(("name".into(), "leader"));
@@ -1276,7 +1457,7 @@ pub(crate) fn build(p: &Params) -> Built {
         let mut got = None;
         for (i, t) in [text.clone(), short].into_iter().enumerate() {
             if i == 1 && t == *text { break; }
-            if let Some(pl) = place(&room, *q, tw(&t, fs), lab_h, within, *up) { got = Some((pl, t, i)); break; }
+            if let Some(pl) = place(&room, *q, &t, fs, within, *up) { got = Some((pl, t, i)); break; }
         }
         match got {
             Some((pl, text, i)) => {
@@ -1286,13 +1467,33 @@ pub(crate) fn build(p: &Params) -> Built {
                     room.segs.push((s, e));
                     stats.leader += 1; stats.kinds.push((kind.to_string(), "leader"));
                 } else { stats.beside += 1; stats.kinds.push((kind.to_string(), "beside")); }
-                over.push_str(&halo_el(pl.at.0, pl.at.1, fs, &text, ink));
+                over.push_str(&halo_el(pl.at.0, pl.at.1, fs, &text, ink, kind));
+                anchors.push((text.clone(), *q));
                 room.boxes.push(pl.b);
                 labels.push((text.clone(), pl.b, kind));
             }
             None => {
-                stats.left_off += 1; stats.kinds.push((kind.to_string(), "left off"));
-                notes.push(format!("No room on the figure for the label {text}: widen the axes around it or make the labels smaller (it is in the key list)"));
+                // no room for the words even on a leader (a crowded one-grid figure): a number beside the point, its words
+                // listed under the graphs
+                let n = (callouts.len() + 1).to_string();
+                match place(&room, *q, &n, fs, within, *up) {
+                    Some(pl) => {
+                        if let Some((s0, e)) = pl.leader {
+                            over.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1" data-leader="1"/>"#, s0.0, s0.1, e.0, e.1));
+                            room.segs.push((s0, e));
+                        }
+                        over.push_str(&halo_el(pl.at.0, pl.at.1, fs, &n, ink, "callout"));
+                        room.boxes.push(pl.b);
+                        labels.push((n.clone(), pl.b, "callout"));
+                        anchors.push((n.clone(), *q));
+                        stats.moved += 1; stats.numbered += 1; stats.kinds.push((kind.to_string(), "numbered"));
+                        callouts.push(format!("{n}: {text}"));
+                    }
+                    None => {
+                        stats.left_off += 1; stats.kinds.push((kind.to_string(), "left off"));
+                        notes.push(format!("No room on the figure for the label {text}: widen the axes around it or make the labels smaller (it is in the key list)"));
+                    }
+                }
             }
         }
     }
@@ -1318,7 +1519,7 @@ pub(crate) fn build(p: &Params) -> Built {
                 let room_w = b - a - 6.0;
                 // the word in its interval, moved along it off any guide or the tracer
                 let fit = |t: &str| -> Option<f64> {
-                    let w = tw(t, tfs);
+                    let w = adv(t, tfs);
                     if w > room_w { return None; }
                     let c = 0.5 * (a + b) - w / 2.0;
                     let ok = |x: f64| x >= a + 3.0 && x + w <= b - 3.0 && !avoid_x.iter().any(|g| *g > x - 4.0 && *g < x + w + 4.0);
@@ -1327,10 +1528,10 @@ pub(crate) fn build(p: &Params) -> Built {
                 let pick = [words[k], short[k], sym_[k]].into_iter().find_map(|t| fit(t).map(|x| (t, x)));
                 match pick {
                     Some((t, x)) => {
-                        let w = tw(t, tfs);
+                        let w = adv(t, tfs);
                         let cy = ly - tfs * 0.72;
-                        extra.push_str(&text_el(x, cy, tfs, t, ink, "start"));
-                        let bxx = [x, cy - 0.62 * tfs, x + w, cy + 0.5 * tfs];
+                        extra.push_str(&text_el(x, cy, tfs, t, ink, "start", "interval"));
+                        let bxx = inkb(x, cy, t, tfs);
                         labels.push((t.to_string(), bxx, "interval"));
                         if t == words[k] { stats.beside += 1; stats.kinds.push(("interval".into(), "beside")); } else { stats.moved += 1; stats.kinds.push(("interval".into(), "shortened")); }
                     }
@@ -1392,28 +1593,34 @@ pub(crate) fn build(p: &Params) -> Built {
     }
 
     // ── sign charts ──
+    // (rows from the top: the caption; the signs, with 0 or und. over each mark; the line; the x of each mark, a second
+    // row for one too close to its neighbour)
     let mut chart_y = y + 6.0;
-    let chart_h = 70.0 * ls.max(1.0);
     for (on, fi) in [(p.b("sign_fp"), 1usize), (p.b("sign_fpp"), 2usize)] {
         if !on { continue; }
-        let cfs = 14.0 * ls;
+        let (cfs, ss, zs, vs) = (14.0 * ls, 17.0 * ls, 12.0 * ls, 13.0 * ls);
         let cap_t = format!("sign of {}(x)", names[fi]);
-        let cy = chart_y + cfs * 0.9;
-        extra.push_str(&text_el(plot_l, cy, cfs, &cap_t, ink, "start"));
-        labels.push((cap_t.clone(), [plot_l, cy - 0.62 * cfs, plot_l + tw(&cap_t, cfs), cy + 0.5 * cfs], "chart"));
-        let ly = chart_y + chart_h * 0.6;
+        let cy = chart_y + 0.52 * cfs + 2.0;
+        extra.push_str(&text_el(plot_l, cy, cfs, &cap_t, ink, "start", "chart"));
+        labels.push((cap_t.clone(), inkb(plot_l, cy, &cap_t, cfs), "chart"));
+        let srow = cy + 0.62 * cfs + 0.52 * ss + 5.0;
+        let ly = srow + 0.62 * ss + 7.0;
+        let vrow = ly + 9.0 + 0.52 * vs;
+        let vrow2 = vrow + 1.2 * vs;
         extra.push_str(&format!(r#"<line x1="{plot_l:.2}" y1="{ly:.2}" x2="{plot_r:.2}" y2="{ly:.2}" stroke="{ink}" stroke-width="1.4" data-chart="{fi}"/>"#));
         strokes.push(((plot_l, ly), (plot_r, ly), "chart"));
         if key { if let Some(an) = &an {
             let marks_ = if fi == 1 { &an.fp_marks } else { &an.fpp_marks };
             let signs = if fi == 1 { &an.fp_signs } else { &an.fpp_signs };
             let mut placed: Vec<B4> = vec![];
-            let mut put = |extra: &mut String, labels: &mut Vec<(String, B4, &'static str)>, stats: &mut LabelStats, notes: &mut Vec<String>, cx: f64, cyy: &[f64], t: &str, size: f64, kind: &'static str| {
-                let w = tw(t, size);
-                for (i, yy) in cyy.iter().enumerate() {
-                    let b = [cx - w / 2.0, yy - 0.62 * size, cx + w / 2.0, yy + 0.5 * size];
+            // (each text tries its spots in turn: (centre x, centre line y))
+            let mut put = |extra: &mut String, labels: &mut Vec<(String, B4, &'static str)>, stats: &mut LabelStats, notes: &mut Vec<String>, spots: &[(f64, f64)], t: &str, size: f64, kind: &'static str| {
+                let w = adv(t, size);
+                for (i, (cx, yy)) in spots.iter().enumerate() {
+                    let x = cx - w / 2.0;
+                    let b = inkb(x, *yy, t, size);
                     if b[0] < 1.0 || b[2] > page_w - 1.0 || placed.iter().any(|o| bhit(&grow(&b, 1.5), o)) { continue; }
-                    extra.push_str(&text_el(b[0], *yy, size, t, ink, "start"));
+                    extra.push_str(&text_el(x, *yy, size, t, ink, "start", kind));
                     placed.push(b);
                     labels.push((t.to_string(), b, kind));
                     if i == 0 { stats.beside += 1; stats.kinds.push((kind.to_string(), "beside")); } else { stats.moved += 1; stats.kinds.push((kind.to_string(), "moved")); }
@@ -1424,24 +1631,40 @@ pub(crate) fn build(p: &Params) -> Built {
             };
             for e in marks_.iter() {
                 let x = px_of(e.x);
-                extra.push_str(&format!(r#"<line x1="{x:.2}" y1="{:.2}" x2="{x:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.4"/>"#, ly - 7.0, ly + 7.0));
-                strokes.push(((x, ly - 7.0), (x, ly + 7.0), "chart"));
+                extra.push_str(&format!(r#"<line x1="{x:.2}" y1="{:.2}" x2="{x:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.4"/>"#, ly - 6.0, ly + 6.0));
+                strokes.push(((x, ly - 6.0), (x, ly + 6.0), "chart"));
                 let top_t = if e.k == EvK::Zero { "0" } else { "und." };
-                put(&mut extra, &mut labels, &mut stats, &mut notes, x, &[ly - 15.0 * ls], top_t, 12.0 * ls, "chart");
+                put(&mut extra, &mut labels, &mut stats, &mut notes, &[(x, srow)], top_t, zs, "chart");
                 let xt = num_text(e.x, dec, false);
-                put(&mut extra, &mut labels, &mut stats, &mut notes, x, &[ly + 17.0 * ls, ly + 31.0 * ls], &xt, 13.0 * ls, "chart");
+                put(&mut extra, &mut labels, &mut stats, &mut notes, &[(x, vrow), (x, vrow2)], &xt, vs, "chart");
             }
-            for s in signs.iter() {
-                let t = match s.sign { 1 => "+", -1 => MINUS, _ => "0" };
-                put(&mut extra, &mut labels, &mut stats, &mut notes, 0.5 * (px_of(s.a) + px_of(s.b)), &[ly - 15.0 * ls], t, 17.0 * ls, "sign");
+            for sg in signs.iter() {
+                let t = match sg.sign { 1 => "+", -1 => MINUS, _ => "0" };
+                let (a, bq) = (px_of(sg.a), px_of(sg.b));
+                let c = 0.5 * (a + bq);
+                let w = adv(t, ss);
+                // the middle of its interval, else nearer either end, never past them
+                let spots: Vec<(f64, f64)> = [0.0, -0.25, 0.25, -0.38, 0.38].iter().map(|k| (c + k * (bq - a), srow)).filter(|(x, _)| x - w / 2.0 > a + 1.0 && x + w / 2.0 < bq - 1.0).collect();
+                put(&mut extra, &mut labels, &mut stats, &mut notes, &spots, t, ss, "sign");
             }
-            // breaks of f on the chart: a gap in the line
-            for &bk in &an.breaks { let x = px_of(bk); extra.push_str(&format!(r#"<line x1="{x:.2}" y1="{:.2}" x2="{x:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.4" stroke-dasharray="2 2"/>"#, ly - 9.0, ly + 9.0)); }
+            // breaks of f on the chart: a dashed mark
+            for &bk in &an.breaks { let x = px_of(bk); extra.push_str(&format!(r#"<line x1="{x:.2}" y1="{:.2}" x2="{x:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.4" stroke-dasharray="2 2"/>"#, ly - 6.0, ly + 6.0)); }
         } }
-        chart_y += chart_h;
+        chart_y = vrow2 + 0.62 * vs + 10.0;
     }
     y = chart_y;
 
+    // ── the numbered labels' words ──
+    if !callouts.is_empty() {
+        let kfs = 14.0 * ls;
+        let mut ky = y + 4.0;
+        for part in wrap(&callouts.join(";   "), kfs, page_w - 16.0) {
+            ky += kfs * 1.45;
+            extra.push_str(&text_el(8.0, ky, kfs, &part, ink, "start", "callout-list"));
+            labels.push((part.clone(), inkb(8.0, ky, &part, kfs), "callout-list"));
+        }
+        y = ky + 6.0;
+    }
     // ── the key's list ──
     if key && p.b("key_list") {
         if let (Some(m), Some(an)) = (&model, &an) {
@@ -1452,8 +1675,8 @@ pub(crate) fn build(p: &Params) -> Built {
             for l in lines {
                 for part in wrap(&l, kfs, maxw) {
                     ky += kfs * 1.45;
-                    extra.push_str(&text_el(8.0, ky, kfs, &part, ink, "start"));
-                    labels.push((part.clone(), [8.0, ky - 0.62 * kfs, 8.0 + tw(&part, kfs), ky + 0.5 * kfs], "key"));
+                    extra.push_str(&text_el(8.0, ky, kfs, &part, ink, "start", "key"));
+                    labels.push((part.clone(), inkb(8.0, ky, &part, kfs), "key"));
                 }
             }
             y = ky + 8.0;
@@ -1467,7 +1690,7 @@ pub(crate) fn build(p: &Params) -> Built {
         "None" => {}
         _ => if !p.s("title").trim().is_empty() {
             let t = p.s("title").trim();
-            head.push_str(&format!(r##"<text x="{:.2}" y="{:.2}" font-size="{}" text-anchor="middle" font-family="DejaVu Sans, Arial, Liberation Sans, Helvetica, sans-serif" font-weight="bold" fill="#000" data-dg="1">{}</text>"##, page_w / 2.0, title_y, 18.0 * ls.min(1.2), math_tspans(t)));
+            head.push_str(&format!(r##"<text x="{:.2}" y="{:.2}" font-size="{}" text-anchor="middle" font-family="DejaVu Sans, Arial, Liberation Sans, Helvetica, sans-serif" font-weight="bold" fill="#000" id="dgt-title-0">{}</text>"##, page_w / 2.0, title_y, 18.0 * ls.min(1.2), math_tspans(t)));
         },
     }
     let page_h = (y + 12.0).ceil();
@@ -1486,7 +1709,8 @@ pub(crate) fn build(p: &Params) -> Built {
     d.raw(&over);
     d.raw(&extra);
     let svg = d.finish();
-    Built { svg, notes, panels, tracer_pts, through, stats, analysis: an, labels, strokes, size: (page_w.ceil(), page_h) }
+    let dots: Vec<Pt> = dots.iter().map(|d| d.0).chain(through).collect();
+    Built { svg, notes, panels, tracer_pts, through, stats, analysis: an, labels, anchors, dots, strokes, size: (page_w.ceil(), page_h) }
 }
 
 fn svg_dim(svg: &str, which: &str) -> f64 {
