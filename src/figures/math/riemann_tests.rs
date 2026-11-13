@@ -550,10 +550,8 @@ fn option(p: &mut Params, o: &str) {
 }
 
 /// Labels left off at Large on the classroom list (each refused with a panel note): strips too narrow for their labels.
-/// (Strips 3/8 wide carrying every label at once; x₀ … x₄ under strips that straddle the axis on both sides.)
+/// (x₀ … x₄ under strips that straddle the axis on both sides.)
 const LARGE_EXCEPTIONS: &[&str] = &[
-    "1/x [1, 4] Trapezoid n=6 / all: strip labels",
-    "between sqrt(x) and x/2 Vertical Midpoint / all: strip labels",
     "between 4 - x^2 and x^2 - 4 Vertical Left / x_marks: x marks",
     "between 4 - x^2 and x^2 - 4 Vertical Left / all: x marks",
     "between 4 - x^2 and x^2 - 4 Vertical Midpoint / x_marks: x marks",
@@ -630,8 +628,99 @@ fn ends_of_the_ranges() {
         h.set_s("rule", rule);
         let t = std::time::Instant::now();
         let _ = build(&h);
-        assert!(t.elapsed().as_secs_f64() < 8.0, "horizontal {rule}: {:?}", t.elapsed());
+        assert!(t.elapsed().as_secs_f64() < 1.0, "horizontal {rule}: {:?}", t.elapsed());
     }
     let big = with(&[("xmin", fl(-1000.0)), ("xmax", fl(1000.0)), ("xstep", fl(0.05)), ("a", s("-999")), ("b", s("999")), ("n", i(MAX_N))]);
     assert!(render(&big).contains("<svg"));
 }
+
+/// A pole or other unbounded point anywhere in [a, b], also between the 2,001 samples, is refused with a note and never
+/// summed; bounded functions with sharp peaks, kinks or fast wiggles are not refused. Decision: an integrable singularity
+/// (ln|x| at 0, 1/√|x − 2/5|) is refused like a pole, since a Riemann sum samples f and f has no value there.
+#[test]
+fn poles_and_unbounded_points_are_refused() {
+    let lined_with = |f: &str, a: &str, b: &str| lined(&[("f", s(f)), ("a", s(a)), ("b", s(b)), ("rule", s("Midpoint")), ("xmin", fl(-6.0)), ("xmax", fl(6.0)), ("ymin", fl(-10.0)), ("ymax", fl(10.0)), ("ystep", fl(2.0))]);
+    let unbounded = [
+        ("1/x^2", "-2", "5"), ("1/x^2", "-3", "2.1"), ("1/(x - sqrt(2))^2", "0", "3"), ("1/(x - pi/3)^2", "0", "2"), ("1/(x - e)^2", "0", "4"),
+        ("1/(x - 0.3)^2", "0", "1.1"), ("1/(x - 1/7)^4", "0", "1"), ("1/(x - 2.71)^2", "-1", "5"), ("1/(x - sqrt(3))", "0", "3"), ("1/x", "-1.3", "2.9"),
+        ("(x + 1)/(x - 0.77)", "0", "2"), ("1/(x - pi/5)^3", "0", "2"), ("tan(x)", "0", "2"), ("tan(x)", "1", "5"), ("sec(x)^2", "0", "2"),
+        ("1/sin(x)", "-1", "1.3"), ("1/cos(x)^2", "1", "2"), ("1/sin(x)^2", "2", "4"), ("ln(abs(x))", "-1", "2"), ("ln(abs(x - sqrt(2)))", "0", "3"),
+        ("ln((x - 0.3)^2)", "0", "1"), ("1/sqrt(abs(x - 0.4))", "0", "1"), ("1/(x^2 - 2)", "0", "3"),
+    ];
+    for (f, a, b) in unbounded {
+        let p = lined_with(f, a, b);
+        let n = warnings(&p);
+        assert!(n.iter().any(|x| x.contains("no value at x")), "{f} on [{a}, {b}] is not refused: {n:?}");
+        assert!(!render(&p).contains(r#"data-rs="line""#), "{f} on [{a}, {b}]: nothing is written for it");
+    }
+    let bounded = [("sin(50x)", "0", "3"), ("e^(-100x^2)", "-1", "1"), ("1/(1 + 100x^2)", "-2", "2"), ("sqrt(x)", "0", "4"), ("abs(x - 1)", "0", "3"),
+        ("x^3", "-2", "2"), ("1/(x^2 + 0.01)", "-1", "1"), ("1 - abs(x)^(1/3)", "-1", "1"), ("ln(x)", "1", "5"), ("tan(x)", "-1.5", "1.5")];
+    for (f, a, b) in bounded {
+        let n = warnings(&lined_with(f, a, b));
+        assert!(!n.iter().any(|x| x.contains("no value")), "{f} on [{a}, {b}] is refused: {n:?}");
+    }
+}
+
+/// An integral with a kink is worked to the places shown and exactly where it can be: ∫₀³ |x − 1| dx = 1/2 + 2 = 5/2.
+#[test]
+fn kinks_and_written_places() {
+    let p = with(&[("f", s("abs(x - 1)")), ("b", s("3")), ("integral_line", bo(true)), ("exact_line", bo(true)), ("xmax", fl(4.0))]);
+    has_line(&p, "\u{222b}03 |x \u{2212} 1| dx = 5/2");
+    let mut q = p.clone(); q.set_s("values", "Decimals"); q.set_i("dec", 6);
+    has_line(&q, "dx = 2.5");
+    // a value known only roughly is never written to more places than it is known, and an inexact value keeps its places
+    let mut e = with(&[("f", s("e^x")), ("b", s("1")), ("strip_labels", s("Heights")), ("sum_line", bo(true))]);
+    has_line(&e, "= (1/4)(1 + 1.2840 + 1.6487 + 2.1170) \u{2248} 1.5124");
+    e.set_s("f", "e^(-x)");
+    // (1, e^(−1/4), e^(−1/2), e^(−3/4): all rounded alike, never 1 + 0.7788 + …)
+    assert!(lines(&e).iter().any(|l| l.contains("(1 + 0.7788 + 0.6065 + 0.4724)")), "{:?}", lines(&e));
+    // book typesetting: √x, |x − 1|, no double brackets, a power in a power
+    has_line(&with(&[("f", s("sqrt(x)")), ("b", s("4")), ("integral_line", bo(true))]), "\u{222b}04 \u{221a}x dx");
+    has_line(&with(&[("f", s("1/(1 + x^2)")), ("b", s("1")), ("integral_line", bo(true))]), "\u{222b}01 1/(1 + x2) dx");
+    has_line(&with(&[("f", s("e^(-x^2)")), ("b", s("1")), ("integral_line", bo(true))]), "e\u{2212}x\u{b2} dx");
+    // b = e is read
+    has_line(&with(&[("f", s("1/x")), ("a", s("1")), ("b", s("e")), ("integral_line", bo(true)), ("exact_line", bo(true))]), "\u{222b}1e 1/x dx = 1");
+}
+
+/// Without signed area, the value written under a region partly below the axis is said to be the integral, and the
+/// area shaded is written too: x³ − 4x on [−2, 3] has ∫ = 25/4 (4 − 4 + 25/4) and area 4 + 4 + 25/4 = 57/4.
+#[test]
+fn integral_and_shaded_area_are_told_apart() {
+    let p = with(&[("f", s("x^3 - 4x")), ("a", s("-2")), ("b", s("3")), ("strips", s("None (shade the exact area)")), ("exact_line", bo(true)), ("xmin", fl(-3.0)), ("xmax", fl(4.0)), ("ymin", fl(-5.0)), ("ymax", fl(16.0)), ("ystep", fl(2.0))]);
+    has_line(&p, "Exact value = 25/4");
+    has_line(&p, "Area shaded = 57/4");
+    let mut q = p.clone(); q.set_b("signed", true);
+    has_line(&q, "= 4 + 25/4 \u{2212} 4 = 25/4".replace("4 + 25/4", "41/4").as_str());
+}
+
+/// The window: an interval, a table or strips running past it are said, with the axis value to type.
+#[test]
+fn past_the_window_is_said() {
+    let n = warnings(&with(&[("b", s("5"))]));
+    assert!(n.iter().any(|x| x.contains("raise the x-axis To to at least 5")), "{n:?}");
+    let n = warnings(&with(&[("region", s("From a table of values"))]));
+    assert!(n.iter().any(|x| x.contains("table's x values run past the right of the window: raise the x-axis To to at least 7")), "{n:?}");
+    let n = warnings(&with(&[("f", s("x^3")), ("b", s("2"))]));
+    assert!(n.iter().any(|x| x.contains("raise the y-axis To to at least")) || n.is_empty(), "{n:?}");
+    let n = warnings(&with(&[("f", s("x^3")), ("b", s("2")), ("rule", s("Right"))]));
+    assert!(n.iter().any(|x| x.contains("The strips run above the window: raise the y-axis To to at least 8")), "{n:?}");
+    assert!(warnings(&with(&[])).is_empty());
+}
+
+/// Student copies leak no answer: bounds found from crossings (and a horizontal slice's c, d) are letters; strip areas
+/// are blanks; the title and description carry no value.
+#[test]
+fn student_copies_leak_no_answer() {
+    let cross = with(&[("show_answers", bo(false)), ("region", s("Between f(x) and g(x)")), ("f", s("x + 2")), ("g", s("x^2")), ("bounds", s("Where f and g cross")), ("sum_line", bo(true)), ("integral_line", bo(true)), ("exact_line", bo(true)), ("show_dx", bo(true)), ("error_line", bo(true)), ("xmin", fl(-2.0))]);
+    let svg = crate::figures::registry().into_iter().find(|d| d.id == ID).unwrap().svg(&cross);
+    // (they cross at x = −1 and x = 2; the area is 9/2, the left sum 135/32)
+    for l in texts(&svg, "line") { for ans in ["\u{2212}1", "= 2", "9/2", "135/32", "3/4"] { assert!(!l.contains(ans), "{l} gives {ans}"); } }
+    assert!(texts(&svg, "line").iter().any(|l| l.contains("\u{222b}ab (x + 2 \u{2212} x2) dx =")));
+    assert_eq!(texts(&svg, "bound"), vec!["a", "b"]);
+    let h = with(&[("show_answers", bo(false)), ("region", s("Between f(x) and g(x)")), ("f", s("sqrt(x)")), ("g", s("x/2")), ("b", s("4")), ("strips", s("Horizontal")), ("integral_line", bo(true)), ("xmax", fl(5.0))]);
+    assert!(lines(&h).iter().any(|l| l.contains("\u{222b}cd (xR \u{2212} xL) dy")), "{:?}", lines(&h));
+    let ar = with(&[("show_answers", bo(false)), ("strip_labels", s("Areas"))]);
+    assert!(texts(&render(&ar), "strip-label").is_empty());
+    assert_eq!(render(&ar).matches(r#"data-rs="blank""#).count(), 4);
+}
+

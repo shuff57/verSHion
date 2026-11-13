@@ -161,43 +161,63 @@ pub fn poly_of(f: &dyn Fn(f64) -> Option<f64>) -> Option<Poly> {
     Some(p)
 }
 
-/// ∫ₐᵇ f by tanh-sinh quadrature (good at end-point singularities such as √x at 0): the value and how far the last two
-/// levels differ. None when f has no value somewhere it is sampled.
+const XGK: [f64; 8] = [0.991455371120812639206854697526329, 0.949107912342758524526189684047851, 0.864864423359769072789712788640926, 0.741531185599394439863864773280788, 0.586087235467691130294144845693013, 0.405845151377397166906606412076961, 0.207784955007898467600689403773245, 0.0];
+const WGK: [f64; 8] = [0.022935322010529224963732008058970, 0.063092092629978553290700663189204, 0.104790010322250183839876322541518, 0.140653259715525918745189590510238, 0.169004726639267902826583426598550, 0.190350578064785409913256402421014, 0.204432940075298892414161999234649, 0.209482141084727828012999174891714];
+const WG: [f64; 4] = [0.129484966168869693270611432679082, 0.279705391489276667901467771423780, 0.381830050505118944950369775488975, 0.417959183673469387755102040816327];
+
+/// Gauss–Kronrod 7-15 on [a, b]: the Kronrod value and |Kronrod − Gauss|.
+fn gk15(f: &dyn Fn(f64) -> Option<f64>, a: f64, b: f64) -> Option<(f64, f64)> {
+    let (c, r) = ((a + b) / 2.0, (b - a) / 2.0);
+    let fc = f(c)?;
+    let (mut k, mut g) = (fc * WGK[7], fc * WG[3]);
+    for j in 0..7 {
+        let (f1, f2) = (f(c - r * XGK[j])?, f(c + r * XGK[j])?);
+        k += WGK[j] * (f1 + f2);
+        if j % 2 == 1 { g += WG[j / 2] * (f1 + f2); }
+    }
+    if !(k.is_finite() && g.is_finite()) { return None; }
+    Some((k * r, ((k - g) * r).abs()))
+}
+
+/// ∫ₐᵇ f by adaptive Gauss–Kronrod (the interval with the largest error is halved until the whole is within 1e-13 of
+/// its size, so a kink such as |x − 1|'s or an end like √x's at 0 is subdivided round): the value and its error bound.
+/// None when f has no value somewhere it is sampled.
 pub fn integrate(f: &dyn Fn(f64) -> Option<f64>, a: f64, b: f64) -> Option<(f64, f64)> {
     if !(a.is_finite() && b.is_finite()) { return None; }
     if a == b { return Some((0.0, 0.0)); }
-    let (c, r) = ((a + b) / 2.0, (b - a) / 2.0);
-    let h0 = 1.0;
-    let term = |t: f64| -> Option<f64> {
-        let s = PI / 2.0 * t.sinh();
-        let x = s.tanh();
-        let w = PI / 2.0 * t.cosh() / s.cosh().powi(2);
-        if w < 1e-300 || (1.0 - x.abs()) < 1e-16 { return Some(0.0); }
-        let y = f(c + r * x)?;
-        if !y.is_finite() { return None; }
-        Some(w * y)
-    };
-    let mut sum = term(0.0)?;
-    let mut k = 1;
-    loop { let t = k as f64 * h0; if t > 4.5 { break; } sum += term(t)? + term(-t)?; k += 1; }
-    let mut h = h0;
-    let mut prev = sum * h * r;
-    for _level in 0..7 {
-        h /= 2.0;
-        let mut k = 1;
-        loop { let t = k as f64 * h; if t > 4.5 { break; } sum += term(t)? + term(-t)?; k += 2; }
-        let est = sum * h * r;
-        let diff = (est - prev).abs();
-        prev = est;
-        if diff < 1e-14 * est.abs().max(1.0) && _level >= 2 { return Some((est, diff)); }
+    let mut parts: Vec<(f64, f64, f64, f64)> = vec![];
+    let (v, e) = gk15(f, a, b)?;
+    parts.push((a, b, v, e));
+    for _ in 0..3000 {
+        let total: f64 = parts.iter().map(|q| q.2).sum();
+        let err: f64 = parts.iter().map(|q| q.3).sum();
+        if err <= 1e-13 * total.abs().max(1.0) { break; }
+        let (k, _) = parts.iter().enumerate().max_by(|x, y| x.1 .3.total_cmp(&y.1 .3)).unwrap();
+        let (l, r, _, _) = parts.swap_remove(k);
+        let m = 0.5 * (l + r);
+        if m <= l || m >= r { break; }
+        let (v1, e1) = gk15(f, l, m)?;
+        let (v2, e2) = gk15(f, m, r)?;
+        parts.push((l, m, v1, e1));
+        parts.push((m, r, v2, e2));
     }
-    Some((prev, 1e-9 * prev.abs().max(1.0)))
+    let total: f64 = parts.iter().map(|q| q.2).sum();
+    // (the Gauss–Kronrod difference overstates the error of a smooth piece many times over; it is kept as the bound)
+    let err: f64 = parts.iter().map(|q| q.3).sum::<f64>().max(4.0 * f64::EPSILON * total.abs());
+    Some((total, err))
 }
 
 /// A computed value recognised as a textbook exact form, in the figure's markup: a rational (denominator to 1000), a
 /// rational times π, π² or π³, r + s√k (k = 2, 3, 5, 6, 7), r·ln k + s (k = 2, 3, 5, 10), r·e^k + s. None: no form fits to
 /// within 1e-10 (relative), so the value is only ever written rounded.
 pub fn recognise(v: f64) -> Option<String> {
+    thread_local!(static SEEN: std::cell::RefCell<std::collections::HashMap<u64, Option<String>>> = Default::default());
+    if let Some(hit) = SEEN.with(|m| m.borrow().get(&v.to_bits()).cloned()) { return hit; }
+    let out = recognise_new(v);
+    SEEN.with(|m| { let mut m = m.borrow_mut(); if m.len() > 4096 { m.clear(); } m.insert(v.to_bits(), out.clone()); });
+    out
+}
+fn recognise_new(v: f64) -> Option<String> {
     if !v.is_finite() { return None; }
     let tol = 1e-10 * v.abs().max(1.0);
     if let Some(r) = Rat::near(v, 1000, tol) { return Some(r.text()); }
@@ -211,6 +231,8 @@ pub fn recognise(v: f64) -> Option<String> {
                 if sn == 0 { continue; }
                 let s = Rat::new(sn, sd)?;
                 let rest = v - s.f() * x;
+                // (a quick test of the 24 denominators first; the rational is built only for a hit)
+                if !(1..=24).any(|d| { let t = rest * d as f64; (t - t.round()).abs() <= tol * d as f64 }) { continue; }
                 if let Some(r) = Rat::near(rest, 24, tol) {
                     let st = name(s);
                     // the irrational term first when it is positive (e − 1, √2 + 1), else after the rational (1 − √2/2)
@@ -274,5 +296,9 @@ mod tests {
         assert!((v - 2.0 / 3.0).abs() < 1e-12, "{v}");
         let (v, _) = integrate(&|x: f64| Some(x.sin()), 0.0, PI).unwrap();
         assert!((v - 2.0).abs() < 1e-13, "{v}");
+        // a kink: ∫₀³ |x − 1| dx = 1/2 + 2 = 5/2
+        let (v, e) = integrate(&|x: f64| Some((x - 1.0).abs()), 0.0, 3.0).unwrap();
+        assert!((v - 2.5).abs() < 1e-12 && e < 1e-11, "{v} {e}");
+        assert_eq!(recognise(v).as_deref(), Some("5/2"));
     }
 }
