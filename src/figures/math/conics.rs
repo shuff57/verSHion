@@ -1318,7 +1318,7 @@ fn grid_body(svg: &str) -> String {
 
 struct Ink { curve: &'static str, focus: &'static str, vert: &'static str, cov: &'static str, centre: &'static str, pt: &'static str, aux: &'static str, dir: &'static str, rect: &'static str, radii: &'static str, lr: &'static str }
 fn inks(print: bool) -> Ink {
-    if print { Ink { curve: "#000000", focus: "#000000", vert: "#000000", cov: "#000000", centre: "#000000", pt: "#000000", aux: "#555555", dir: "#333333", rect: "#777777", radii: "#333333", lr: "#000000" } }
+    if print { Ink { curve: "#000000", focus: "#000000", vert: "#000000", cov: "#000000", centre: "#000000", pt: "#000000", aux: "#555555", dir: "#333333", rect: "#000000", radii: "#333333", lr: "#000000" } }
     else { Ink { curve: "#1f5fbf", focus: "#c0392b", vert: "#1f5fbf", cov: "#2a8a3e", centre: "#111111", pt: "#b35900", aux: "#555b66", dir: "#8e44ad", rect: "#8e44ad", radii: "#d68910", lr: "#c0392b" } }
 }
 
@@ -1411,7 +1411,9 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
             if kind == K::Hyperbola && p.b("show_rect") {
                 let (a, b) = (c.a.v, c.b.v);
                 let cr = [c.atf(-a, -b), c.atf(a, -b), c.atf(a, b), c.atf(-a, b)];
-                for i in 0..4 { seg(&mut over, &mut board, cr[i], cr[(i + 1) % 4], ink.rect, 1.3, "4 3"); }
+                // (in Print a heavier, dotted black line, so it stands out from the grey gridlines it runs along)
+                let (w, dash) = if print { (1.8, "1.5 3") } else { (1.3, "4 3") };
+                for i in 0..4 { seg(&mut over, &mut board, cr[i], cr[(i + 1) % 4], ink.rect, w, dash); }
             }
             if kind == K::Hyperbola && p.b("show_asymptotes") {
                 let mslope = c.slope();
@@ -1468,7 +1470,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
             let mut pnote = None;
             if p.b("show_p") {
                 let pp = c.point(p.f("p_at"));
-                if !fr.inside(pp) { notes.push("P is outside the window: drag it back along the curve or widen the axes.".into()); }
+                if !fr.inside(pp) { notes.push("P is outside the window: set \u{201c}Where P is on the curve\u{201d} or widen the axes.".into()); }
                 // (P off the window draws none of its parts)
                 let d = |q: Pt| (pp.0 - q.0).hypot(pp.1 - q.1);
                 let num = |v: f64| fx(v, dec);
@@ -1850,15 +1852,40 @@ pub fn handles(p: &Params) -> Vec<Handle> {
                 for i in 0..720 { let t = -180.0 + i as f64 * 0.5; if ok(t) { let v = d(t); if v < best.0 { best = (v, t); } } }
                 let (mut lo, mut hi) = (best.1 - 0.5, best.1 + 0.5);
                 for _ in 0..60 { let (m1, m2) = (lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0); if d(m1) < d(m2) { hi = m2; } else { lo = m1; } }
-                let t = ((lo + hi) / 2.0 * 100.0).round() / 100.0;
-                // keep the turn the stored angle was in, so a P set at 400 degrees round-trips
                 let old = p.f("p_at");
+                // dropped where it is: unchanged
+                if { let o = fr.s(cc.point(old)); (o.0 - s.0).hypot(o.1 - s.1) < 0.5 } { return; }
+                let t = (lo + hi) / 2.0;
+                // P lands on a clean coordinate: the one along the conic's axis (across it for a parabola) snapped to half a grid
+                // step, where that point is within a few pixels of the pointer
+                let t = clean_t(&cc, t, fr).filter(|t2| { let q = fr.s(cc.point(*t2)); (q.0 - s.0).hypot(q.1 - s.1) < 14.0 }).unwrap_or(t);
+                let t = (t * 100.0).round() / 100.0;
+                // keep the turn the stored angle was in, so a P set at 400 degrees round-trips
                 let t = if (t - old).abs() > 180.0 { let k = ((old - t) / 360.0).round(); t + 360.0 * k } else { t };
                 p.set_f("p_at", t.clamp(-360.0, 360.0));
             }));
         }
     }
     hs
+}
+
+/// The parameter near `t` whose point has a clean coordinate: along the axis for a circle, ellipse or hyperbola, across it for a
+/// parabola, snapped to half a grid step.
+fn clean_t(c: &Conic, t: f64, fr: Fr) -> Option<f64> {
+    let q = c.point(t);
+    let (dx, dy) = (q.0 - c.h.v, q.1 - c.k.v);
+    let along_x = matches!(c.kind, K::Parabola) == c.vert; // the coordinate snapped is x
+    let step = if along_x { fr.snapx } else { fr.snapy } / 2.0;
+    let raw = if along_x { dx } else { dy };
+    let v = snap(raw, step);
+    let near = |a: f64, b: f64| { let d = (a - b).rem_euclid(360.0); d.min(360.0 - d) };
+    let pick = |cands: [f64; 2]| -> Option<f64> { cands.into_iter().filter(|x| x.is_finite()).min_by(|a, b| near(*a, t).partial_cmp(&near(*b, t)).unwrap()) };
+    let deg = |x: f64| x.to_degrees();
+    match c.kind {
+        K::Circle | K::Ellipse => { let cs = v / c.a.v; (cs.abs() <= 1.0).then(|| pick([deg(cs.acos()), -deg(cs.acos())])).flatten() }
+        K::Hyperbola => { if v.abs() < c.a.v { return None; } let cs = c.a.v / v; pick([deg(cs.acos()), -deg(cs.acos())]) }
+        K::Parabola => Some(deg(2.0 * (v / (2.0 * c.c.v)).atan())),
+    }
 }
 
 // ───────────────────────── examples ─────────────────────────

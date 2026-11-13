@@ -571,3 +571,40 @@ fn every_token_render_keeps_its_point_labels() {
 fn show_tspans() {
     for t in ["F_1(1 \u{2212} \u{221a}34, \u{2212}1)", "F_1(\u{2212}3, \u{2212}1)", "b = \u{221a}11", "c = \u{221a}13"] { println!("TS {t} => {}", super::super::math::math_tspans_pub(t)); }
 }
+
+#[test]
+fn the_checkers_cosmetic_points() {
+    // P dragged lands on a clean coordinate: half a grid step along the axis (x = 3.5 on the opening ellipse, its y worked out:
+    // y = -1 + 3 sqrt(1 - (2.5/5)^2) = -1 + 3(0.866) = 1.6)
+    let p = start_params(&def());
+    let hs = interact::handles_for(ID, &p, crate::figures::svg_size(&svg(&p)));
+    let h = hs.iter().find(|h| h.tip == "Drag P along the curve").unwrap();
+    let c = hs.iter().find(|h| h.tip == "Drag the centre to move the conic").unwrap().pos;
+    let unit = (hs.iter().filter(|h| h.tip == "Drag a vertex to change a").nth(1).unwrap().pos.0 - c.0) / 5.0;
+    let mut q = p.clone();
+    (h.drag.as_ref().unwrap())(&mut q, (c.0 + 2.45 * unit, c.1 - 2.6 * unit));
+    q.normalize(&(def().params)(), true);
+    let w = words(&svg(&q));
+    assert!(w.contains("P(3.5, 1.6)"), "{w}");
+    // dropped where it is, P does not move
+    let mut q = p.clone();
+    (h.drag.as_ref().unwrap())(&mut q, h.pos);
+    assert_eq!(q.f("p_at"), p.f("p_at"));
+    // P off the window: the note does not ask for a drag (its handle is not there)
+    let off = with(json!({"p_at": 0.0, "xmax": 5.0}));
+    assert!(warnings(&off).iter().any(|n| n.contains("set \u{201c}Where P is on the curve\u{201d}")));
+    // a negative slope keeps its sign outside the fraction: y + 1 = -(3/5)(x - 1)
+    let h = with(json!({"conic": "Hyperbola", "show_p": false}));
+    assert!(words(&svg(&h)).contains("y + 1 = -(3/5)(x - 1)"));
+    // a parabola's student key line asks for its vertex, focus and directrix
+    let pb = with(json!({"conic": "Parabola", "key_line": true, "show_answers": false}));
+    let w = words(&svg(&pb));
+    assert!(w.contains("vertex:") && w.contains("focus:") && w.contains("directrix:") && !w.contains("vertices") && !w.contains("foci"), "{w}");
+    // 1.875 rounds to 1.88 (half away from zero): a parabola p = 3/2 at P where PF = 1.875
+    assert_eq!(fx(1.875, 2), "1.88");
+    assert_eq!(fx(-0.125, 2), "-0.13");
+    assert_eq!(fx(2.0 - 1e-12, 2), "2");
+    // in Print the central rectangle is a heavier dotted black line, apart from the grey gridlines
+    let r = svg(&with(json!({"conic": "Hyperbola", "show_rect": true, "style": "Print"})));
+    assert!(r.contains(r##"stroke="#000000" stroke-width="1.8" stroke-linecap="butt" stroke-dasharray="1.5 3""##));
+}
