@@ -70,8 +70,8 @@
    "id": "cap-03b",
    "text": "Mark the angle of any individual vector",
    "class": "control",
-   "evidence": "",
-   "note": "Our angle mark is on the resultant only (with one vector, the resultant is that vector)."
+   "evidence": "changes:{\"v1_ang\":30.0,\"v1_mark\":true}",
+   "note": "Built in batch 8, round 380 (2026-11-12). Our angle mark is on the resultant only (with one vector, the resultant is that vector)."
   },
   {
    "id": "cap-03c",
@@ -91,8 +91,8 @@
    "id": "cap-03e",
    "text": "Show the x and y components of any individual vector",
    "class": "control",
-   "evidence": "",
-   "note": "Components are drawn for the resultant only."
+   "evidence": "changes:{\"v1_ang\":30.0,\"v1_comps\":true}",
+   "note": "Built in batch 8, round 381 (2026-11-12). Components are drawn for the resultant only."
   },
   {
    "id": "cap-04a",

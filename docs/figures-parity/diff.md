@@ -51,7 +51,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | pulley | `pulley` | 42 | 6 | 7 | reference has black-and-white; ours has no style switch | 100 |
 | ray-diagram | `ray-diagram` | 52 | 2 | 8 | reference has black-and-white; ours has no style switch | 100 |
 | spring-scale | `spring-scale` | 15 | 4 | 7 | reference has black-and-white; ours has no style switch | 100 |
-| vector-diagram | `vector-diagram` | 72 | 5 | 5 | reference has black-and-white; ours has no style switch | 90 |
+| vector-diagram | `vector-diagram` | 72 | 5 | 5 | reference has black-and-white; ours has no style switch | 100 |
 | waves | `waves` | 41 | 7 | 7 | reference has a student version; ours has no show_answers; reference has black-and-white; ours has no style switch | 100 |
 
 ## chemistry
@@ -101,15 +101,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 121
 
-Generated: 2026-11-12T23:48:05+00:00 · probe: 2026-11-12T15:48:05
+Generated: 2026-11-13T04:03:45+00:00 · probe: 2026-11-12T20:03:45
 
-**Pooled 99.8** · mean 99.8 over 70 figures · built 71 of 71 reference figures
+**Pooled 99.9** · mean 99.9 over 70 figures · built 71 of 71 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `vector-diagram`: 90 (51/57)
-  - cap-03b [control 3] Mark the angle of any individual vector — no evidence
-  - cap-03e [control 3] Show the x and y components of any individual vector — no evidence
 - `population-growth`: 98 (128/131)
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
@@ -178,6 +175,7 @@ Comparable with the frozen baseline: **yes**
 - `trapezoid`: 100 (85/85)
 - `triangle`: 100 (77/77)
 - `two-way-table`: 100 (68/68)
+- `vector-diagram`: 100 (57/57)
 - `venn-diagram`: 100 (53/53)
 - `volume-by-displacement`: 100 (58/58)
 - `volume-reading`: 100 (59/59)

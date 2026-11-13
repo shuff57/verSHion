@@ -1,0 +1,37 @@
+{
+ "round": 380,
+ "figure": "vector-diagram",
+ "capability": "cap-03b",
+ "hypothesis": "Batch 8 vector-diagram: cap-03b; evidence an angle mark with its value on any vector at an angle",
+ "started_at": "2026-11-12T20:03:35",
+ "git": "80a5fb4",
+ "before": {
+  "figure": 89.5,
+  "pooled": 99.8
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 1 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-12T20:03:43",
+ "after": {
+  "figure": 94.7,
+  "pooled": 99.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"v1_ang\":30.0,\"v1_mark\":true}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/vector-diagram/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/vector-diagram/9b4c1d85249f5f39.png"
+   }
+  ]
+ },
+ "checker": "pass on the fourth check (NAS): any vector at an angle gets its arc and value, in its own wedge or tied to its arc by a leader; no page grows (0 of 5,313); render pure (0 of 400 differ after a 23-step drag); no-op switches move nothing (0 of 6,733). Cosmetic, not blocking: values left off with a note in hard geometry (16% of the sweep, 14 of 340 ordinary figures)",
+ "result": "hit",
+ "evidence": "vector_b8 and census tests: 26 passed, 0 failed on the NAS at 80a5fb4, including vector_b8_frozen; 5,714 figures with no marks and no components byte for byte against the parent commit",
+ "next": "population-growth cap-05e (fifth fix with the builder on pc2: a phase blank's leader through the K label when K sits above the plot); solids typed labels (third check running on the NAS); conic sections new figure (rejected on its second check, back with the builder)"
+}

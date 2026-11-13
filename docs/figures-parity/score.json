@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-12T23:48:05+00:00",
- "probe_checked_at": "2026-11-12T15:48:05",
+ "generated_at": "2026-11-13T04:03:45+00:00",
+ "probe_checked_at": "2026-11-12T20:03:45",
  "comparable": true,
  "drift": [],
- "pooled": 99.8,
- "mean": 99.8,
+ "pooled": 99.9,
+ "mean": 99.9,
  "figures_scored": 70,
  "figures_built": 71,
  "figures_missing": [],
@@ -489,26 +489,11 @@
    "gaps": []
   },
   "vector-diagram": {
-   "score": 89.5,
-   "got": 51.0,
+   "score": 100.0,
+   "got": 57.0,
    "total": 57.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-03b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Mark the angle of any individual vector",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03e",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Show the x and y components of any individual vector",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "venn-diagram": {
    "score": 100.0,
