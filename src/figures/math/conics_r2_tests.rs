@@ -639,3 +639,28 @@ fn a_part_label_goes_beside_the_figure_only_on_tiny_conics() {
     println!("part labels beside the figure (figures): {counts:?}");
     assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
 }
+
+#[test]
+fn round3_cosmetics() {
+    let mut m = Meter::new();
+    // a co-vertex dragged to b = 1 from the opening state: F1 lies 2.4 px from V1, F2 from V2; every point keeps its letter at least
+    for size in ["Small", "Medium"] {
+        let o = json!({"b": "1", "label_size": size});
+        let p = with(&o);
+        let s = svg(&p);
+        let r = check(&mut m, &s);
+        let d = last_drawn();
+        // (two marks 2.4 px apart cannot be told apart by any label's distance: only that ambiguity is allowed)
+        let other: Vec<&String> = r.issues.iter().filter(|i| !(i.starts_with("ambiguous point label cl-V") || i.starts_with("ambiguous point label cl-F"))).collect();
+        assert!(other.is_empty(), "{size}: {other:?}");
+        assert_eq!(d.placed.iter().filter(|x| x.1 != 'L').count(), r.marks, "{size}: {:?}", warnings(&p));
+    }
+    // the opening state shows both focal radii's lengths on the figure
+    let _ = svg(&start_params(&def()));
+    let d = last_drawn();
+    assert!(d.labels.iter().any(|l| l.0 == "cl-pf1") && d.labels.iter().any(|l| l.0 == "cl-pf2"), "{:?}", d.labels.iter().map(|l| &l.0).collect::<Vec<_>>());
+    // exact coordinates are written from the centre: √2 − 3, √2 + 3, √2 − √5
+    let p = with(&json!({"h": "\u{221a}2", "k": "1", "a": "3", "b": "2", "key_line": true, "show_p": false, "eq_form": "General form"}));
+    let words: String = texts(&svg(&p)).into_iter().map(|t| t.3).collect::<Vec<_>>().join(" | ");
+    assert!(words.contains("vertices (\u{221a}2 - 3, 1), (\u{221a}2 + 3, 1)") && words.contains("foci (\u{221a}2 - \u{221a}5, 1), (\u{221a}2 + \u{221a}5, 1)"), "{words}");
+}

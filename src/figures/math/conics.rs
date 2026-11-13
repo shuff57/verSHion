@@ -1087,7 +1087,8 @@ impl Board {
     /// (a point on its own line excepted). `ink` is the text's own extent.
     fn owns(&self, ink: [f64; 4], at: &At) -> bool {
         match at {
-            At::Pt(q, _) => { let own = box_pt(ink, *q); self.dots.iter().filter(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5).all(|d| box_pt(ink, *d) > own + 4.0) }
+            // (a point on top of this one, a focus 2 px from its vertex, cannot be told apart by distance: it is not counted)
+            At::Pt(q, _) => { let own = box_pt(ink, *q); self.dots.iter().filter(|d| (d.0 - q.0).hypot(d.1 - q.1) > DOT).all(|d| box_pt(ink, *d) > own + 4.0) }
             At::Line(gid) => {
                 let own = self.strokes.iter().filter(|s| s.2 == *gid).map(|s| box_seg(ink, s.0, s.1)).fold(f64::MAX, f64::min);
                 if own == f64::MAX { return false; }
@@ -1218,7 +1219,7 @@ impl Board {
                 let (dot_gap, lead_gap) = if level == 2 { (12.0, DOT + 1.5) } else { (14.0, DOT + 3.0) };
                 // the text is nearer its own leader (which ends 3 px from it) than any other line
                 if self.any_near(grow(ink, 6.0), |i| { let s = self.strokes[i]; !own_line(s.2) && box_seg(ink, s.0, s.1) < 6.0 }) { continue; }
-                if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && box_pt(ink, *d) < dot_gap) { continue; }
+                if self.dots.iter().any(|d| (d.0 - q.0).hypot(d.1 - q.1) > DOT && box_pt(ink, *d) < dot_gap) { continue; }
                 // the leader points at the text's middle and ends 2 px before its ink (never grazing along an edge of it)
                 let mid = ((ink[0] + ink[2]) / 2.0, (ink[1] + ink[3]) / 2.0);
                 let (vx, vy) = (mid.0 - q.0, mid.1 - q.1);
@@ -1234,7 +1235,7 @@ impl Board {
                 let start = if matches!(at, At::Pt(..)) { DOT + 1.5 } else { 2.0 };
                 let from = (q.0 + dx / l * start, q.1 + dy / l * start);
                 // it starts by its own point only
-                if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && (d.0 - from.0).hypot(d.1 - from.1) < DOT + 4.0) { continue; }
+                if self.dots.iter().any(|d| (d.0 - q.0).hypot(d.1 - q.1) > DOT && (d.0 - from.0).hypot(d.1 - from.1) < DOT + 4.0) { continue; }
                 let lb = [from.0.min(to.0) - 3.0, from.1.min(to.1) - 3.0, from.0.max(to.0) + 3.0, from.1.max(to.1) + 3.0];
                 let hit: Vec<usize> = self.near(lb).into_iter().filter(|&i| { let s = self.strokes[i]; !own_line(s.2) && s.2 != AXES && seg_cross(from, to, s.0, s.1) }).collect();
                 let hard = |i: &usize| self.hard.contains(&self.strokes[*i].2);
@@ -1250,7 +1251,7 @@ impl Board {
                 // it may cross an axis but never run along one (it would vanish into the axis line)
                 let along_axis = self.strokes.iter().filter(|s| s.2 == AXES).any(|s| { let m = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0); seg_pt(m, s.0, s.1) < 5.0 || (seg_pt(from, s.0, s.1) < 4.0 && seg_pt(to, s.0, s.1) < 4.0) });
                 if along_axis { continue; }
-                if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && seg_pt(*d, from, to) < lead_gap) { continue; }
+                if self.dots.iter().any(|d| (d.0 - q.0).hypot(d.1 - q.1) > DOT && seg_pt(*d, from, to) < lead_gap) { continue; }
                 if self.boxes.iter().any(|o| seg_hits_box(from, to, grow(*o, 8.0))) { continue; }
                 // (a leader crosses an axis number only where its label may cover numbers: the number is then left off)
                 if !over_nums && self.nums.iter().filter(|(i, _)| !self.hidden.contains(i)).any(|(_, o)| seg_hits_box(from, to, grow(*o, 1.0))) { continue; }
@@ -1288,12 +1289,12 @@ impl Board {
                 for level in [1, 2] {
                     if let Some((c, l)) = self.with_leader(anchors[0], mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level, group: None }); break 'stages; }
                 }
-            } else if !r.optional {
-                // a line's label (not a focal radius's length) may stand off on a leader across another part line, then (inside a
-                // curve with no room) across the curve, once
+            } else {
+                // a line's label may stand off on a leader across another part line, then (inside a curve with no room) across the
+                // curve, once (a focal radius's length too, but never over an axis number)
                 for level in [1, 2] {
                     for q in &anchors {
-                        if let Some((c, l)) = self.with_leader(*q, mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level, group: None }); break 'stages; }
+                        if let Some((c, l)) = self.with_leader(*q, mw(text, size), size, text, &r.at, !r.optional, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level, group: None }); break 'stages; }
                     }
                 }
             }
@@ -1450,6 +1451,19 @@ fn inks(print: bool) -> Ink {
 
 /// Labels left off for want of room (for the panel note), recorded by the last build on this thread.
 fn pair_text(x: &N, y: &N, exact: bool, dec: i64) -> String { format!("({}, {})", x.show(exact, dec), y.show(exact, dec)) }
+/// A coordinate written centre first, then plus or minus its offset (√2 − 3 beside √2 − √5, never −3 + √2), when both are
+/// exact; otherwise as one number.
+fn from_centre(base: &N, v: &N, exact: bool, dec: i64) -> String {
+    let off = v.sub(base);
+    let ok = exact && [base, &off].iter().all(|n| n.ex.as_ref().is_some_and(|e| e.readable()));
+    // (a coordinate that is a fraction is one number: 5, not 2 + 3)
+    if !ok || off.is_zero() || base.is_zero() || v.rat().is_some() { return v.show(exact, dec); }
+    let (bt, ot) = (base.show(true, dec), off.show(true, dec));
+    let wrap = |t: &str| if t.contains(' ') { format!("({t})") } else { t.to_string() };
+    match ot.strip_prefix('-') { Some(r) if !r.contains(' ') => format!("{} - {r}", bt), _ => format!("{} + {}", bt, wrap(&ot)) }
+}
+/// A point of the conic written from its centre (or vertex).
+fn conic_pair(c: &Conic, q: &(N, N), exact: bool, dec: i64) -> String { format!("({}, {})", from_centre(&c.h, &q.0, exact, dec), from_centre(&c.k, &q.1, exact, dec)) }
 
 pub fn render(p: &Params) -> String { build(p, &mut vec![]) }
 
@@ -1675,9 +1689,11 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 let q = (x.v, y.v);
                 if !fr.inside(q) { off += 1; continue; }
                 let s = fr.s(q);
-                marks_svg.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="{DOT}" fill="{col}" stroke="#fff" stroke-width="1.2"/>"##, s.0, s.1));
+                // (a mark on top of one drawn before it, a focus by its vertex, is drawn smaller so both show)
+                let r = if board.dots.iter().any(|d| (d.0 - s.0).hypot(d.1 - s.1) < 2.0 * DOT) { DOT - 2.0 } else { DOT };
+                marks_svg.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="{r}" fill="{col}" stroke="#fff" stroke-width="1.2"/>"##, s.0, s.1));
                 board.dots.push(s);
-                let coords = pair_text(x, y, exact, dec);
+                let coords = conic_pair(c, &(x.clone(), y.clone()), exact, dec);
                 let text = match mode { "Letters only" => nm.clone(), "Coordinates only" => coords, _ => format!("{nm}{coords}") };
                 let kind = nm.chars().next().unwrap();
                 let prio = match kind { 'V' => 0, 'F' => 1, 'C' => 2, _ => 3 };
@@ -1813,7 +1829,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
             if !beside_key.is_empty() { side.push("For lack of room on the figure:".into()); side.append(&mut beside_key); }
             // the answer line
             if p.b("key_line") {
-                let pts = |v: Vec<(N, N)>| v.iter().map(|(x, y)| pair_text(x, y, exact, dec)).collect::<Vec<_>>().join(", ");
+                let pts = |v: Vec<(N, N)>| v.iter().map(|q| conic_pair(c, q, exact, dec)).collect::<Vec<_>>().join(", ");
                 let mut parts = vec![format!("{}: {}", name, standard(c, exact, dec.max(2)))];
                 if kind != K::Parabola { parts.push(format!("centre {}", pair_text(&c.h, &c.k, exact, dec))); }
                 if kind == K::Circle { parts.push(format!("radius {}", c.a.show(exact, dec))); }
