@@ -771,7 +771,7 @@ fn prose_tspans(s: &str) -> String {
         let tail = &w[core.len()..];
         let mathy = core.chars().count() == 1 && core.chars().all(|c| c.is_alphabetic())
             || core.contains('(') && core.chars().next().is_some_and(|c| c.is_alphabetic()) && core.chars().nth(1) == Some('(')
-            || core.chars().any(|c| c.is_ascii_digit() || matches!(c, '\u{221e}' | '\u{221a}' | '\u{3c0}')) && !core.chars().filter(|c| c.is_alphabetic()).any(|c| c != 'x');
+            || core.chars().any(|c| c.is_ascii_digit() || matches!(c, '\u{221e}' | '\u{221a}' | '\u{3c0}')) && !core.chars().filter(|c| c.is_alphabetic()).any(|c| !matches!(c, 'x' | 'e' | '\u{3c0}'));
         if mathy { format!("{}{}", math_tspans(core), svg::esc(tail)) } else { svg::esc(w) }
     }).collect::<Vec<_>>().join(" ")
 }
@@ -1088,12 +1088,18 @@ fn build(p0: &Params) -> (String, Drawn) {
     }
     // a hole the formula itself has (0/0) inside a piece
     let (discs, discs_complete) = m.discontinuities();
+    // and a jump inside one formula (floor(x) at a whole number): an open circle at each one-sided limit, a filled one at f(a)
     for d in &discs {
-        if d.kind != "removable" { continue; }
-        let Some(l) = d.left.num() else { continue };
-        let (cx, cy) = (sx(d.x), sy(l));
-        if !inside_y(l) || circles.iter().any(|c| (c.at.0 - cx).abs() < 0.5 && (c.at.1 - cy).abs() < 0.5) { continue; }
-        if let Some(i) = m.pieces.iter().position(|pc| pc.covers_side(d.x, -1.0) && pc.covers_side(d.x, 1.0)) { circles.push(Circ { at: (cx, cy), closed: false, piece: i, which: 'g' }); }
+        if !matches!(d.kind, "removable" | "jump") { continue; }
+        let Some(i) = m.pieces.iter().position(|pc| pc.covers_side(d.x, -1.0) && pc.covers_side(d.x, 1.0)) else { continue };
+        let cx = sx(d.x);
+        let fv = d.value.num();
+        for l in [d.left.num(), d.right.num()].into_iter().flatten() {
+            let cy = sy(l);
+            if !inside_y(l) || fv.is_some_and(|f| (f - l).abs() < 1e-9 * (1.0 + l.abs())) || circles.iter().any(|c| (c.at.0 - cx).abs() < 0.5 && (c.at.1 - cy).abs() < 0.5) { continue; }
+            circles.push(Circ { at: (cx, cy), closed: false, piece: i, which: 'g' });
+        }
+        if d.kind == "jump" { if let Some(f) = fv.filter(|f| inside_y(*f)) { if !m.dots.iter().any(|dd| (dd.x.v - d.x).abs() < 1e-9) { circles.push(Circ { at: (cx, sy(f)), closed: true, piece: i, which: 'v' }); } } }
     }
     // open circles first, closed over them (a filled end sitting on an open one shows the value)
     circles.sort_by_key(|c| c.closed);
@@ -1167,7 +1173,8 @@ fn build(p0: &Params) -> (String, Drawn) {
             let x = sx(d.x);
             let anchors: Vec<Pt> = match (d.left.num(), d.right.num()) {
                 _ if d.kind == "infinite" => vec![(x, rect[1] + 0.25 * g.ph), (x, rect[1] + 0.5 * g.ph), (x, rect[1] + 0.75 * g.ph)],
-                (Some(l), Some(r)) if d.kind == "jump" => vec![(x, sy(0.5 * (l + r)))],
+                // (beside the gap, or beside either of its ends)
+                (Some(l), Some(r)) if d.kind == "jump" => vec![(x, sy(0.5 * (l + r))), (x, sy(l)), (x, sy(r))],
                 (Some(l), _) => vec![(x, sy(l))],
                 _ => vec![(x, sy(0.5 * (g.y0 + g.y1)))],
             };
