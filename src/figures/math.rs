@@ -2411,7 +2411,7 @@ fn math_text_halo_in(x: f64, y: f64, size: f64, s: &str, fill: &str, family: &st
     let (ty, body) = (y + size * 0.34, math_tspans(s));
     format!(r##"<text x="{x:.2}" y="{ty:.2}" font-size="{size}" text-anchor="start" font-family="{family}" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round" paint-order="stroke">{body}</text><text x="{x:.2}" y="{ty:.2}" font-size="{size}" text-anchor="start" font-family="{family}" fill="{fill}">{body}</text>"##)
 }
-const LABEL_SERIF: &str = "Source Serif 4, Liberation Serif, DejaVu Serif, Times New Roman, serif";
+pub(super) const LABEL_SERIF: &str = "Source Serif 4, Liberation Serif, DejaVu Serif, Times New Roman, serif";
 
 /// Rough size of a 15 px serif label, for keeping labels apart.
 fn label_w(s: &str) -> f64 { 7.2 * s.chars().filter(|c| !matches!(c, '^' | '*' | ' ')).count() as f64 + 6.0 }
@@ -4071,6 +4071,13 @@ pub(super) fn sv(p: &Params, key: &str) -> f64 { solids_b8::val(p, key) }
 pub(crate) mod number_line_b7;
 /// The ruler reading's Random button (batch 9).
 pub(crate) mod ruler_b9;
+pub(crate) mod conics;
+#[cfg(test)]
+mod conics_tests;
+#[cfg(test)]
+mod conics_r1_tests;
+#[cfg(test)]
+mod conics_r2_tests;
 #[cfg(test)]
 mod number_line_b7_tests;
 
@@ -5737,6 +5744,8 @@ pub(super) fn is_sci_e(ch: &[char], i: usize) -> bool {
     !before.is_some_and(|c| *c == '^' || *c == '_')
 }
 
+#[cfg(test)]
+pub(crate) fn math_tspans_pub(s: &str) -> String { math_tspans(s) }
 pub(super) fn math_tspans(s: &str) -> String {
     let ch: Vec<char> = s.chars().collect();
     let mut out = String::new();
@@ -6573,7 +6582,7 @@ pub(super) fn render_for(id: &str) -> Option<fn(&Params) -> String> {
 /// "Start from an example" entries for this subject's figures. Solids and plots (math-b) live in
 /// `examples_b`; flat shapes (math-a) chain their own `examples_a` here with `.or_else`.
 pub fn examples(id: &str) -> Option<Vec<super::Example>> {
-    flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id))
+    flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id))
 }
 
 /// The Measures card of the figure (none yet): rows for the shape's sides/angles/dimensions.
@@ -6738,6 +6747,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::H
         .or_else(|| (id == super::transform::ID).then(|| super::transform::handles(p)))
         .or_else(|| (id == super::stats::twoway::ID).then(|| super::stats::twoway::handles(p)))
         .or_else(|| (id == super::stats::venn::ID).then(|| super::stats::venn::handles(p)))
+        .or_else(|| (id == conics::ID).then(|| conics::handles(p)))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's
