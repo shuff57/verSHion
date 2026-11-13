@@ -354,7 +354,7 @@ fn signed_join(items: &[String]) -> String {
     out
 }
 /// A factor before a bracket: "2", "(1/2)", "(π/4)".
-fn factor(t: &str) -> String { if t.chars().all(|c| c.is_ascii_digit()) { t.to_string() } else { format!("({t})") } }
+fn factor(t: &str) -> String { if t.chars().all(|c| c.is_ascii_digit() || c == '.') { t.to_string() } else { format!("({t})") } }
 
 fn sum_name(ru: Rule, n: usize) -> String {
     match ru { Rule::L => format!("L_{n}"), Rule::R => format!("R_{n}"), Rule::M => format!("M_{n}"), Rule::T => format!("T_{n}"), Rule::U => "Upper sum".into(), Rule::Lo => "Lower sum".into() }
@@ -667,8 +667,9 @@ fn table_model(p: &Params, mut m: Model, rows: Vec<(f64, f64, String)>, ru: Rule
     let xval = |k: usize| Val::with_form(rows[k].0, XPt::of(rows[k].0).map(|q| q.text()));
     m.xa = rows[0].0;
     m.xb = rows[rows.len() - 1].0;
-    m.a_txt = fmt_of(p).t(&xval(0));
-    m.b_txt = fmt_of(p).t(&xval(rows.len() - 1));
+    let exact = Fmt { exact: true, dec: 4 };
+    m.a_txt = exact.t(&xval(0));
+    m.b_txt = exact.t(&xval(rows.len() - 1));
     m.nodes = rows.iter().map(|r| r.0).collect();
     m.samples = rows.iter().map(|r| (r.0, r.1)).collect();
     m.integrand = "f(x)".into();
@@ -723,7 +724,8 @@ fn table_model(p: &Params, mut m: Model, rows: Vec<(f64, f64, String)>, ru: Rule
     Ok(m)
 }
 
-fn fmt_of(p: &Params) -> Fmt { Fmt { exact: p.s("values") != "Decimals", dec: p.i("dec").clamp(0, 6) as usize } }
+/// Values as fractions and exact forms (any other value to 4 places), or rounded to the chosen places.
+fn fmt_of(p: &Params) -> Fmt { let exact = p.s("values") != "Decimals"; Fmt { exact, dec: if exact { 4 } else { p.i("dec").clamp(0, 6) as usize } } }
 
 /// The worked sum after its symbolic form: "(1/2)(1 + 5/4 + 2 + 13/4)" or, for a table, "1·2 + 2·5 + …", and whether
 /// every value in it is exact.
@@ -1047,7 +1049,8 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         }
         // each strip's height or area (a blank line on the student copy's "Strip heights blank")
         let heights_blank = smode == "Strip heights blank";
-        let lab_mode = if heights_blank && p.s("strip_labels") == "None" { "Heights" } else { p.s("strip_labels") };
+        let lab_mode = if heights_blank && student && p.s("strip_labels") == "None" { "Heights" } else { p.s("strip_labels") };
+        if heights_blank && student && kd == Kind::V && p.s("strip_labels") != "Heights" { notes.push("The student copy has a blank on each strip: choose Label each strip with Heights so the key gives the heights".into()); }
         if kd == Kind::V && !no_strips && lab_mode != "None" {
             let size = 14.0 * ls;
             let mut placed: Vec<String> = vec![];
@@ -1055,20 +1058,25 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             let mut boxes_added = vec![];
             for s in &m.strips {
                 let blank = student && heights_blank;
-                let text = if lab_mode == "Areas" && !(heights_blank) { fm.t(&s.area) } else { fm.t(&s.h) };
+                let text = if lab_mode == "Areas" { fm.t(&s.area) } else { fm.t(&s.h) };
                 let wd = if blank { 26.0 * ls } else { mwidth(&text, size) };
                 let (xl, xr) = (sx(s.x0), sx(s.x1));
                 let xc = 0.5 * (xl + xr) - wd / 2.0;
                 let (yt, yb) = (clampy(sy(s.top)), clampy(sy(s.base)));
                 let up = yt <= yb;
-                let mut cands = vec![];
+                // (baselines) inside the strip at its far edge, beyond the far edge, anywhere down the strip's inside, then
+                // just past its base on the other side of the axis
                 let asc = 0.76 * size;
                 let desc = 0.24 * size;
-                if up {
-                    cands.push(yt + 4.0 + asc); cands.push(yt - 4.0 - desc); cands.push(yt - 20.0 - desc); cands.push(0.5 * (yt + yb) + 0.3 * size); cands.push(yt - 36.0 - desc);
-                } else {
-                    cands.push(yt - 4.0 - desc); cands.push(yt + 4.0 + asc); cands.push(yt + 20.0 + asc); cands.push(0.5 * (yt + yb) + 0.3 * size); cands.push(yt + 36.0 + asc);
-                }
+                let dir = if yt <= yb { 1.0 } else { -1.0 };
+                let edge_in = |y: f64| if dir > 0.0 { y + asc } else { y - desc };
+                let edge_out = |y: f64| if dir > 0.0 { y - desc } else { y + asc };
+                let mut cands = vec![edge_in(yt + 4.0 * dir), edge_out(yt - 4.0 * dir), edge_out(yt - 20.0 * dir), edge_out(yt - 36.0 * dir)];
+                let depth = (yb - yt).abs();
+                let mut k = 7.0;
+                while k + 4.0 < depth { cands.push(edge_in(yt + k * dir)); k += 3.0; }
+                cands.push(edge_in(yb + 4.0 * dir));
+                cands.push(edge_in(yb + 18.0 * dir));
                 let bx = |y: f64| if blank { [xc, y - 3.0, xc + wd, y + 3.0] } else { mbox(&text, xc, y, size) };
                 match cands.into_iter().find(|y| ob.free(&bx(*y), &plot)) {
                     Some(y) => {
@@ -1223,22 +1231,51 @@ pub fn warnings(p: &Params) -> Vec<String> { build(p).1 }
 
 // ───────────────────────── panel, handles, examples ─────────────────────────
 
+/// Whether part of f (or of the table) between a and b lies below the x-axis, so signed area changes the drawing.
+fn dips_below(p: &Params) -> bool {
+    if region(p) == Region::Table { return read_table(p.s("table")).is_ok_and(|r| r.iter().any(|q| q.1 < 0.0)); }
+    let (Ok(f), Ok((a, _)), Ok((b, _))) = (read_fn(p.s("f"), "f"), read_bound(p.s("a"), "a"), read_bound(p.s("b"), "b")) else { return false };
+    b > a && (0..=400).any(|i| ev(&f, a + (b - a) * i as f64 / 400.0).is_some_and(|y| y < 0.0))
+}
+/// Whether the strips are drawn (the student copy "Curve and bounds only" leaves them off).
+fn strips_drawn(p: &Params) -> bool { kind(p) != Kind::None && (p.b("show_answers") || p.s("student") != "Curve and bounds only") }
+/// Whether any value is written as a number (not a blank): the lines under the graph on the key, the crossings, the strip labels.
+fn values_written(p: &Params) -> bool {
+    let reg = region(p);
+    let kd = kind(p);
+    let answers = p.b("show_answers");
+    let strips = kd != Kind::None;
+    let lines = (strips && reg != Region::Table && p.b("show_dx")) || (strips && p.b("sum_line")) || (reg != Region::Table && p.b("exact_line")) || (strips && reg != Region::Table && p.b("error_line")) || p.b("key_line") || (reg == Region::Table && p.b("integral_line") && strips);
+    let labels = kd == Kind::V && strips_drawn(p) && p.s("strip_labels") != "None" && (answers || p.s("student") != "Strip heights blank");
+    (answers && (lines || crossing(p))) || labels
+}
+
 /// Whether `key` changes the drawing for these params (hidden otherwise; a hidden control has no effect).
 pub fn relevant(key: &str, p: &Params) -> bool {
     let reg = region(p);
     let kd = kind(p);
     let table = reg == Region::Table;
     let strips = kd != Kind::None;
+    let drawn = strips_drawn(p);
     match key {
         "f" | "curve" | "strips" | "exact_line" => !table,
         "g" | "bounds" => reg == Region::Between,
         "a" | "b" => !table && !crossing(p),
         "table" => table,
-        "rule" => strips,
-        "n" | "show_dx" | "error_line" => strips && !table,
-        "signed" => reg != Region::Between && kd != Kind::H,
-        "sample_pts" | "strip_labels" | "x_marks" => strips && kd != Kind::H,
-        "sum_line" | "student" => strips,
+        "rule" | "n" => drawn && (key == "rule" || !table),
+        "show_dx" | "error_line" => strips && !table,
+        "sum_line" => strips,
+        "signed" => reg != Region::Between && kd != Kind::H && dips_below(p),
+        // (a table's points are always marked)
+        "sample_pts" => drawn && kd != Kind::H && !table,
+        "strip_labels" | "x_marks" => drawn && kd != Kind::H,
+        "student" => strips && !p.b("show_answers"),
+        "key_line" => p.b("show_answers"),
+        "values" => values_written(p),
+        "dec" => values_written(p) && p.s("values") == "Decimals",
+        "shading" => drawn || kd == Kind::None,
+        "minor" => p.s("grid") != "None",
+        "title" => p.s("title_mode") == "Text",
         _ => true,
     }
 }
