@@ -795,6 +795,10 @@ pub enum S {
     OscU,
     /// Poles keep coming (tan x as x → ∞, 1/sin(1/x) at 0): no limit.
     Poles,
+    /// Tends to ±∞ through jumps (built from a floor): never fed to a sine as if it ran through every value.
+    InfJ(i8),
+    /// Keeps oscillating through jumps (x - floor(x) as x → ∞): no limit, but not a continuous oscillation either.
+    OscJ(f64, f64),
     /// No values there.
     NoVal,
     Unk,
@@ -819,6 +823,8 @@ fn coarse(s: &S) -> B {
         S::Lim(k) => if k.sign() == Some(0) { B::Zero(0) } else { B::Fin(k.clone()) },
         S::Osc(a, b) => B::Osc(*a, *b),
         S::OscU | S::Poles => B::OscU,
+        S::InfJ(s) => if *s > 0 { B::PInf } else { B::NInf },
+        S::OscJ(a, b) => B::Osc(*a, *b),
         S::NoVal => B::NoVal,
         S::Unk => B::Unk,
     }
@@ -826,7 +832,16 @@ fn coarse(s: &S) -> B {
 fn from_b(b: B) -> S { match b { B::Fin(k) => S::Lim(k), B::Zero(s) => S::Z(s), B::PInf => S::Inf(1), B::NInf => S::Inf(-1), B::Osc(a, c) => S::Osc(a, c), B::OscU => S::OscU, B::NoVal => S::NoVal, B::Unk => S::Unk } }
 fn bval(b: &B) -> Option<f64> { match b { B::Fin(k) => Some(k.value()), B::Zero(_) => Some(0.0), _ => None } }
 
-fn s_add(a: S, b: S) -> S {
+/// Built from a floor: its values jump, so what holds for a quantity that runs through every value does not hold for it.
+fn jumpy(s: &S) -> bool { matches!(s, S::SO(..) | S::InfJ(_) | S::OscJ(..)) }
+fn taint(s: S) -> S { match s { S::Inf(x) | S::Huge(x) => S::InfJ(x), S::Osc(l, h) => S::OscJ(l, h), o => o } }
+fn untaint(s: S) -> S { match s { S::InfJ(x) => S::Inf(x), S::OscJ(l, h) => S::Osc(l, h), o => o } }
+fn s_add(a: S, b: S) -> S { let j = jumpy(&a) || jumpy(&b); let r = s_add0(untaint(a), untaint(b)); if j { taint(r) } else { r } }
+fn s_mul(a: S, b: S) -> S { let j = jumpy(&a) || jumpy(&b); let r = s_mul0(untaint(a), untaint(b)); if j { taint(r) } else { r } }
+/// A function of a jumpy argument: through the function as for any argument, the result still jumpy (a sine of one is
+/// not known at all: sin(π floor(x)) is 0, not oscillating).
+fn s_fun(a: S, f: impl Fn(S) -> S, periodic: bool) -> S { if jumpy(&a) { if periodic { S::Unk } else { taint(f(untaint(a))) } } else { f(a) } }
+fn s_add0(a: S, b: S) -> S {
     use S::*;
     match (a, b) {
         (NoVal, _) | (_, NoVal) => NoVal,
@@ -863,9 +878,9 @@ fn s_add(a: S, b: S) -> S {
 }
 fn s_neg(a: S) -> S {
     use S::*;
-    match a { Ser(x) => Ser(x.neg()), SO(x, l, h) => SO(x.neg(), -h, -l), Flat(s) => Flat(-s), Huge(s) => Huge(-s), Inf(s) => Inf(-s), Z(s) => Z(-s), Lim(k) => Lim(k.neg()), Osc(l, h) => Osc(-h, -l), o => o }
+    match a { Ser(x) => Ser(x.neg()), SO(x, l, h) => SO(x.neg(), -h, -l), Flat(s) => Flat(-s), Huge(s) => Huge(-s), Inf(s) => Inf(-s), InfJ(s) => InfJ(-s), Z(s) => Z(-s), Lim(k) => Lim(k.neg()), Osc(l, h) => Osc(-h, -l), OscJ(l, h) => OscJ(-h, -l), o => o }
 }
-fn s_mul(a: S, b: S) -> S {
+fn s_mul0(a: S, b: S) -> S {
     use S::*;
     match (a, b) {
         (NoVal, _) | (_, NoVal) => NoVal,
@@ -1190,17 +1205,50 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
             fs.iter().map(|a| ser_of(a, at, n)).reduce(s_mul).unwrap_or(Unk)
         }
         X::Neg(a) => s_neg(ser_of(a, at, n)),
-        X::Inv(a) => s_inv(ser_of(a, at, n), n),
+        X::Inv(a) => s_fun(ser_of(a, at, n), |s| s_inv(s, n), false),
         X::Pow(b, p) => {
-            if let Some(q) = const_q(p) { return s_powq(ser_of(b, at, n), q, n); }
+            if let Some(q) = const_q(p) { return s_fun(ser_of(b, at, n), |s| s_powq(s, q, n), false); }
             // b^p = e^(p ln b)
-            s_exp(s_mul(ser_of(p, at, n), s_ln(ser_of(b, at, n), n)), n)
+            let l = s_fun(ser_of(b, at, n), |s| s_ln(s, n), false);
+            s_fun(s_mul(ser_of(p, at, n), l), |s| s_exp(s, n), false)
         }
         X::F(f, a) => {
+            // the sine or cosine of a whole-number multiple of π times something whole (π floor(x)): a constant
+            if matches!(f, Fun::Sin | Fun::Cos) { if let Some(k) = whole_multiple_of_pi(a, *f == Fun::Sin) { return Ser(Sr::c(k)); } }
             let s = ser_of(a, at, n);
-            match f { Fun::Abs => s_abs(s), Fun::Sin => s_trig(s, true, n), Fun::Cos => s_trig(s, false, n), Fun::Atan => s_atan(s, n), Fun::Asin => s_asin(s, n), Fun::Ln => s_ln(s, n), Fun::Floor => s_floor(s) }
+            match f {
+                Fun::Abs => s_fun(s, s_abs, false),
+                Fun::Sin => s_fun(s, |s| s_trig(s, true, n), true),
+                Fun::Cos => s_fun(s, |s| s_trig(s, false, n), true),
+                Fun::Atan => s_fun(s, |s| s_atan(s, n), false),
+                Fun::Asin => s_fun(s, |s| s_asin(s, n), true),
+                Fun::Ln => s_fun(s, |s| s_ln(s, n), false),
+                Fun::Floor => s_fun(s, s_floor, false),
+            }
         }
     }
+}
+
+/// Whole-number valued: a floor, a whole constant, and sums, products and negatives of them.
+fn whole_valued(e: &X) -> bool {
+    match e {
+        X::F(Fun::Floor, _) => true,
+        X::C(k) => k.rational().is_some_and(|q| q.is_int()),
+        X::Neg(a) => whole_valued(a),
+        X::Add(v) | X::Mul(v) => v.iter().all(whole_valued),
+        _ => false,
+    }
+}
+/// sin(qπ·N) = 0 for a whole q and whole-valued N; cos(qπ·N) = 1 for an even q: the constant, else None.
+fn whole_multiple_of_pi(a: &X, sin: bool) -> Option<K> {
+    let fs: Vec<&X> = match a { X::Mul(v) => v.iter().collect(), o => vec![o] };
+    let mut c = K::one();
+    let mut rest: Vec<&X> = vec![];
+    for f in fs { if f.has_x() { rest.push(f); } else { match exact(f, &K::zero()) { EV::Val(k) => c = c.mul(&k), _ => return None } } }
+    if rest.is_empty() || !rest.iter().all(|f| whole_valued(f)) { return None; }
+    let q = c.div(&K::pi())?.rational()?;
+    if !q.is_int() { return None; }
+    if sin { Some(K::zero()) } else if q.n % 2 == 0 { Some(K::one()) } else { None }
 }
 
 // ───────────────────────── limits ─────────────────────────
@@ -1251,6 +1299,39 @@ fn confirm(e: &X, at: &At, l: &L) -> bool {
             v.len() >= 2 && v[v.len() - 1] * sg > 0.0 && v[v.len() - 1].abs() > v[0].abs()
         }
         L::NoVal => ys[2..].iter().all(|y| y.is_none()),
+        // "does not exist": in each of three bands ever nearer (or further out) the values keep spreading apart by a
+        // clear amount that does not die away, so two runs of values settle on clearly different heights
+        L::Dne => {
+            let bands: Vec<(f64, f64)> = match at {
+                At::Fin(a, s) => { let a = a.value(); [1e-2, 1e-3, 1e-4].iter().map(|h| { let h = h * (1.0 + a.abs()); (a + *s as f64 * h, a + *s as f64 * 2.0 * h) }).collect() }
+                At::Inf(s) => [137.0, 1370.0, 13700.0].iter().map(|x| (*s as f64 * x, *s as f64 * 2.0 * x)).collect(),
+            };
+            let amps: Vec<f64> = bands.iter().map(|(p, q)| {
+                let v: Vec<f64> = (0..=600).filter_map(|i| ev(e, p + (q - p) * (i as f64 + 0.318) / 600.7)).collect();
+                if v.len() < 20 { return 0.0; }
+                let (lo, hi) = v.iter().fold((f64::MAX, f64::MIN), |(a, b), y| (a.min(*y), b.max(*y)));
+                let scale = 1.0 + v.iter().map(|y| y.abs()).fold(0.0, f64::max).min(1e6) * 1e-3;
+                if hi - lo > 1e-3 * scale { hi - lo } else { 0.0 }
+            }).collect();
+            // or: a pole in every band (a sign change across which the values grow to ten thousand times their typical size
+            // as it is narrowed down), so near points as far out as you like the values are unbounded
+            let pole_in = |(p, q): &(f64, f64)| -> bool {
+                let xs: Vec<f64> = (0..=600).map(|i| p + (q - p) * (i as f64 + 0.318) / 600.7).collect();
+                // (the band's typical size: the median of |f|)
+                let mut mags: Vec<f64> = xs.iter().filter_map(|x| ev(e, *x)).map(f64::abs).collect();
+                if mags.len() < 20 { return false; }
+                mags.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let big = (1e4 * mags[mags.len() / 2]).max(1e3);
+                xs.windows(2).any(|w| {
+                    let (Some(fa), Some(fb)) = (ev(e, w[0]), ev(e, w[1])) else { return false };
+                    if fa.signum() == fb.signum() { return false; }
+                    let (mut l, mut r, sl) = (w[0], w[1], fa.signum());
+                    for _ in 0..80 { let m = 0.5 * (l + r); match ev(e, m) { Some(v) if v.signum() == sl => l = m, Some(_) => r = m, None => break } }
+                    ev(e, l).is_some_and(|v| v.abs() > big) && ev(e, r).is_some_and(|v| v.abs() > big)
+                })
+            };
+            (amps.iter().all(|a| *a > 0.0) && amps[2] >= 0.3 * amps[0]) || bands.iter().all(pole_in)
+        }
         _ => true,
     }
 }
@@ -1387,6 +1468,22 @@ fn solve(t: &X, y: &K, lo: f64, hi: f64) -> Option<(Vec<K>, bool)> {
             Some(sub(p, ly.div(&lc)?))
         }
         X::F(Fun::Ln, u) => Some(sub(u, y.exp())),
+        // sin u = y: u = asin y + 2kπ or π - asin y + 2kπ; cos u = y: u = ±(π/2 - asin y) + 2kπ (u linear in x)
+        X::F(f @ (Fun::Sin | Fun::Cos), u) => {
+            let c = poly(u)?;
+            if c.len() != 2 || c[1].sign()? == 0 { return None; }
+            match K::one().sub(&y.mul(y)).sign()? { -1 => return Some((vec![], true)), _ => {} }
+            let KR::Ok(a0) = y.asin() else { return None };
+            let half = K::pi().mulq(Q::new(1, 2)?);
+            let bases = if *f == Fun::Sin { vec![a0.clone(), K::pi().sub(&a0)] } else { let b = half.sub(&a0); vec![b.clone(), b.neg()] };
+            let (beta, ai) = (&c[0], c[1].inv()?);
+            let span = { let (u0, u1) = (c[1].value() * lo + c[0].value(), c[1].value() * hi + c[0].value()); (u0.min(u1), u0.max(u1)) };
+            let (k0, k1) = ((span.0 / (2.0 * PI)).floor() as i128 - 1, (span.1 / (2.0 * PI)).ceil() as i128 + 1);
+            if k1 - k0 > 400 { return None; }
+            let mut out: Vec<K> = vec![];
+            for b in &bases { for k in k0..=k1 { let x = b.add(&K::pi().mulq(Q::i(2 * k))).sub(beta).mul(&ai); let v = x.value(); if v >= lo - 1e-9 && v <= hi + 1e-9 && !out.iter().any(|o| (o.value() - v).abs() < 1e-12) { out.push(x); } } }
+            Some((out, true))
+        }
         X::F(Fun::Abs, u) => {
             let s = y.sign()?;
             if s < 0 { return Some((vec![], true)); }
@@ -1517,8 +1614,11 @@ pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
                                 if u1 - u0 <= 400 { let ai = c[1].inv().unwrap(); push(((u0..=u1).map(|k| K::int(k).sub(&c[0]).mul(&ai)).collect(), true), out); } else { push((vec![], false), out); }
                             }
                             _ => {
-                                let (z, _) = scan(&|x| ev(a, x).map(|v| (v - v.round()) * if (v - v.round()).abs() < 0.5 { 1.0 } else { 0.0 }), lo, hi);
-                                push((z.into_iter().map(K::approx).collect(), false), out);
+                                // every whole number k the argument reaches on [lo, hi]: where it equals k
+                                let vals: Vec<f64> = (0..=4000).filter_map(|i| ev(a, lo + (hi - lo) * i as f64 / 4000.0)).collect();
+                                let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));
+                                if vals.is_empty() || mx - mn > 400.0 { push((vec![], false), out); }
+                                else { for k in (mn.floor() as i128 - 1)..=(mx.ceil() as i128 + 1) { push(zeros(&X::Add(vec![(**a).clone(), X::C(K::int(-k))]), lo, hi), out); } }
                             }
                         }
                     }

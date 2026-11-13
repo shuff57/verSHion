@@ -46,3 +46,17 @@ fn engine_probe() {
     let (z, d) = breaks(&x("(x^2 + 3x)/(2x^2 - 1)"), -6.0, 10.0);
     println!("breaks: {:?} {d}", z.iter().map(|k| k.show()).collect::<Vec<_>>());
 }
+
+#[test]
+#[ignore]
+fn engine_probe2() {
+    for (n, v) in [
+        ("sin(pi floor x) +inf", pinf("sin(pi floor(x))")), ("cos(2pi floor x) -inf", ninf("cos(2pi floor(x))")),
+        ("sin(pi floor(1/x)) 0+", r("sin(pi floor(1/x))", "0")), ("sin(pi floor(1/x)) 0-", l("sin(pi floor(1/x))", "0")),
+        ("cos(pi floor x) inf", pinf("cos(pi floor(x))")), ("x - floor x", pinf("x - floor(x)")), ("sin x inf", pinf("sin(x)")),
+        ("sin(1/x)", r("sin(1/x)", "0")), ("tan x inf", pinf("tan(x)")), ("floor(sin x) pi/2-", l("floor(sin(x))", "pi/2")),
+        ("floor(cos x) 0+", r("floor(cos(x))", "0")), ("x floor(x) inf", pinf("x floor(x)")), ("floor x / x", pinf("floor(x)/x")),
+    ] { println!("{n:28} {v}"); }
+    let (z, d) = breaks(&x("floor(sin(x))"), -6.0, 10.0);
+    println!("breaks floor(sin x): {:?} {d}", z.iter().map(|k| k.show()).collect::<Vec<_>>());
+}
