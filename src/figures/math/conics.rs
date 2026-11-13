@@ -343,7 +343,9 @@ fn over(term: &str, d: &N, exact: bool, dec: i64) -> String {
     match d.rat().filter(|_| exact) {
         Some(r) if r == Rat::int(1) => term.to_string(),
         Some(r) if r.d == 1 => format!("{term}/{}", r.n),
+        Some(r) if r.n == 1 => format!("{}{term}", r.d),
         Some(r) => format!("{}{term}/{}", r.d, r.n),
+        None if fx(d.v, dec) == "1" => term.to_string(),
         None => format!("{term}/{}", fx(d.v, dec)),
     }
 }
@@ -354,7 +356,11 @@ fn coef_txt(q: &N, exact: bool, dec: i64) -> String {
         "1" => String::new(),
         "-1" => "-".into(),
         // a negative fraction or sum keeps its sign outside: -(3/5)(x - 1), not (-3/5)(x - 1)
-        _ if t.contains('/') || t.contains(' ') => match t.strip_prefix('-') { Some(r) if !r.contains(' ') => format!("-({r})"), _ => format!("({t})") },
+        // ((3√2)/2) is written (3√2/2): one pair of brackets
+        _ if t.contains('/') || t.contains(' ') => {
+            let flat = |u: &str| match u.split_once(")/") { Some((num, den)) if u.starts_with('(') && !num[1..].contains('(') => format!("{}/{den}", &num[1..]), _ => u.to_string() };
+            match t.strip_prefix('-') { Some(r) if !r.contains(' ') => format!("-({})", flat(r)), _ => format!("({})", flat(&t)) }
+        }
         _ => t,
     }
 }
@@ -723,6 +729,11 @@ pub fn model(p: &Params) -> (Result<Conic, String>, Vec<String>) {
     if !eq.is_empty() {
         return match parse_equation(eq) {
             Ok(c) => {
+                // the value boxes are the source of truth: a value that cannot be drawn is refused here as it is without an
+                // equation, so the boxes, the equation, the key and the drawing never disagree silently
+                let mut boxes = p.clone();
+                boxes.set_s("equation", "");
+                if let (Err(e), _) = model(&boxes) { return (Err(format!("{e} The typed equation is kept as it was until the values can be drawn.")), notes); }
                 if c.a.v > 1000.0 || c.b.v > 1000.0 || c.h.v.abs() > 1000.0 || c.k.v.abs() > 1000.0 || c.a.v < 0.001 { return (Err("The conic in this equation is too big or too small to draw.".into()), notes); }
                 notes.push(format!("The equation is {} {}: {}.", if c.kind == K::Ellipse { "an" } else { "a" }, c.kind.name().to_lowercase(), standard(&c, true, 3).replace('-', "\u{2212}")));
                 if p.s("eq_written") == KEPT_STANDARD { notes.push("The equation is written in standard form: with these values its general form would have irrational coefficients.".into()); }
@@ -808,7 +819,8 @@ pub fn relevant(key: &str, p: &Params) -> bool {
     if key == "eq_written" { return false; }
     let m = model(p).0;
     // a typed equation that cannot be drawn: only the equation and the page's own controls act
-    if m.is_err() && !p.s("equation").trim().is_empty() && CONIC_KEYS.contains(&key) { return false; }
+    let eq = p.s("equation").trim();
+    if !eq.is_empty() && parse_equation(eq).is_err() && CONIC_KEYS.contains(&key) { return false; }
     let stu = !p.b("show_answers");
     // on a student copy with the parts unlabelled, the label styles draw nothing; numbers show only in a written equation
     let eq_shown = p.s("eq_form") != "None" && !(stu && p.b("blank_equation"));
@@ -879,7 +891,7 @@ impl Fr {
 fn ls(p: &Params) -> f64 { lscale(p) }
 fn student(p: &Params) -> bool { !p.b("show_answers") }
 fn title_row(p: &Params) -> bool { match p.s("title_mode") { "Blank line" => true, "None" => false, _ => !p.s("title").trim().is_empty() } }
-fn eq_row(p: &Params) -> bool { p.s("eq_form") != "None" }
+fn eq_row(p: &Params) -> bool { p.s("eq_form") != "None" && model(p).0.is_ok() }
 fn top_band(p: &Params) -> f64 {
     let rows = title_row(p) as u8 as f64 * 30.0 + eq_row(p) as u8 as f64 * (26.0 * ls(p) + 6.0);
     if rows > 0.0 { rows + 10.0 } else { 0.0 }
@@ -954,31 +966,50 @@ fn box_seg(r: [f64; 4], a: Pt, b: Pt) -> f64 {
 fn boxes_hit(a: [f64; 4], b: [f64; 4]) -> bool { a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3] }
 fn grow(r: [f64; 4], t: f64) -> [f64; 4] { [r[0] - t, r[1] - t, r[2] + t, r[3] + t] }
 
-/// Width of a label as drawn in the serif face (math_tspans: italic letters, ^ and _ at 70%), a little over.
-pub fn mw(s: &str, size: f64) -> f64 {
-    let ch: Vec<char> = s.chars().collect();
-    // advance widths (em) of Source Serif 4 as rendered, the wider of its upright and italic (letters are set italic by
-    // math_tspans), measured through the app's font database by conics_tests::measure_advances
-    let w1 = |c: char| match c {
-        '0'..='9' => 0.511, '(' | ')' => 0.321, ',' | '.' => 0.264, ' ' => 0.25, ':' => 0.3, '/' => 0.257, '|' => 0.291,
+/// Width of a label as drawn: Source Serif 4's advance widths (measured through the app's font database by
+/// conics_tests::measure_advances), set as math_tspans sets the text: a letter alone in italic, a word upright, what follows
+/// ^ or _ at 70%.
+pub fn mw(s: &str, size: f64) -> f64 { em_width(&s.chars().collect::<Vec<_>>()) * size + 1.0 }
+fn upright(c: char) -> f64 {
+    // (measured between digits, as the characters stand in a label: conics_r2_tests::measure_in_context)
+    match c {
+        '0'..='9' => 0.5, '(' | ')' => 0.339, ',' | '.' => 0.3, ' ' => 0.233, ':' => 0.3, '/' => 0.33, '|' => 0.291,
         '=' | '+' | '-' | '\u{2212}' | '\u{d7}' | '\u{b1}' | '\u{2248}' => 0.53, '\u{221a}' => 0.558, '\u{3c0}' => 0.593, '_' => 0.512,
-        'A' => 0.684, 'B' => 0.605, 'C' => 0.629, 'D' => 0.681, 'E' => 0.603, 'F' => 0.569, 'G' => 0.688, 'H' => 0.788, 'I' => 0.371, 'J' => 0.365, 'K' => 0.667, 'L' => 0.577, 'M' => 0.927, 'N' => 0.734, 'O' => 0.711, 'P' => 0.579, 'Q' => 0.711, 'R' => 0.651, 'S' => 0.502, 'T' => 0.613, 'U' => 0.712, 'V' => 0.674, 'W' => 0.962, 'X' => 0.661, 'Y' => 0.633, 'Z' => 0.551, 'a' => 0.520, 'b' => 0.566, 'c' => 0.485, 'd' => 0.565, 'e' => 0.507, 'f' => 0.329, 'g' => 0.507, 'h' => 0.601, 'i' => 0.304, 'j' => 0.277, 'k' => 0.547, 'l' => 0.298, 'm' => 0.901, 'n' => 0.606, 'o' => 0.545, 'p' => 0.569, 'q' => 0.553, 'r' => 0.421, 's' => 0.430, 't' => 0.332, 'u' => 0.581, 'v' => 0.508, 'w' => 0.767, 'x' => 0.530, 'y' => 0.515, 'z' => 0.461,
+        'A' => 0.664, 'B' => 0.629, 'C' => 0.631, 'D' => 0.710, 'E' => 0.603, 'F' => 0.579, 'G' => 0.682, 'H' => 0.788, 'I' => 0.371, 'J' => 0.374, 'K' => 0.667, 'L' => 0.596, 'M' => 0.902, 'N' => 0.735, 'O' => 0.707, 'P' => 0.589, 'Q' => 0.707, 'R' => 0.651, 'S' => 0.512, 'T' => 0.604, 'U' => 0.727, 'V' => 0.674, 'W' => 0.962, 'X' => 0.648, 'Y' => 0.633, 'Z' => 0.551, 'a' => 0.509, 'b' => 0.577, 'c' => 0.488, 'd' => 0.567, 'e' => 0.510, 'f' => 0.354, 'g' => 0.518, 'h' => 0.601, 'i' => 0.298, 'j' => 0.277, 'k' => 0.547, 'l' => 0.298, 'm' => 0.901, 'n' => 0.606, 'o' => 0.549, 'p' => 0.583, 'q' => 0.557, 'r' => 0.423, 's' => 0.434, 't' => 0.325, 'u' => 0.583, 'v' => 0.505, 'w' => 0.764, 'x' => 0.526, 'y' => 0.512, 'z' => 0.456,
         _ => 0.6,
-    };
-    let (mut w, mut i) = (0.0, 0usize);
+    }
+}
+fn italic(c: char) -> f64 { match c { 'A' => 0.676, 'B' => 0.624, 'C' => 0.593, 'D' => 0.701, 'E' => 0.587, 'F' => 0.550, 'G' => 0.655, 'H' => 0.764, 'I' => 0.358, 'J' => 0.350, 'K' => 0.663, 'L' => 0.568, 'M' => 0.927, 'N' => 0.727, 'O' => 0.660, 'P' => 0.563, 'Q' => 0.660, 'R' => 0.646, 'S' => 0.494, 'T' => 0.569, 'U' => 0.712, 'V' => 0.605, 'W' => 0.872, 'X' => 0.661, 'Y' => 0.554, 'Z' => 0.537, 'a' => 0.522, 'b' => 0.494, 'c' => 0.407, 'd' => 0.524, 'e' => 0.407, 'f' => 0.294, 'g' => 0.486, 'h' => 0.544, 'i' => 0.305, 'j' => 0.250, 'k' => 0.472, 'l' => 0.279, 'm' => 0.818, 'n' => 0.563, 'o' => 0.488, 'p' => 0.512, 'q' => 0.488, 'r' => 0.400, 's' => 0.360, 't' => 0.329, 'u' => 0.572, 'v' => 0.478, 'w' => 0.729, 'x' => 0.519, 'y' => 0.476, 'z' => 0.462, _ => upright(c) } }
+fn em_width(ch: &[char]) -> f64 {
+    let (mut w, mut i, mut prose) = (0.0, 0usize, false);
     while i < ch.len() {
-        if (ch[i] == '^' || ch[i] == '_') && i + 1 < ch.len() {
+        let c = ch[i];
+        if (c == '^' || c == '_') && i + 1 < ch.len() {
             i += 1;
-            if ch[i] == '(' { let mut d = 0; while i < ch.len() { if ch[i] == '(' { d += 1; } if ch[i] == ')' { d -= 1; if d == 0 { i += 1; break; } } w += 0.7 * w1(ch[i]); i += 1; } }
-            else if ch[i] == '-' { w += 0.7 * w1('-'); i += 1; while i < ch.len() && ch[i].is_ascii_digit() { w += 0.7 * 0.5; i += 1; } }
-            else if ch[i].is_alphabetic() { w += 0.7 * w1(ch[i]); i += 1; }
-            else { while i < ch.len() && (ch[i].is_ascii_digit() || ch[i] == '.') { w += 0.7 * w1(ch[i]); i += 1; } }
+            let st = i;
+            if ch[i] == '(' {
+                let mut d = 0;
+                while i < ch.len() { if ch[i] == '(' { d += 1; } if ch[i] == ')' { d -= 1; if d == 0 { i += 1; break; } } i += 1; }
+                w += 0.7 * em_width(&ch[st + 1..(i - 1).max(st + 1)]);
+            } else {
+                if ch[i] == '-' || ch[i] == '\u{2212}' { i += 1; while i < ch.len() && (ch[i].is_ascii_digit() || ch[i] == '.') { i += 1; } }
+                else if ch[i].is_alphabetic() { i += 1; }
+                else { while i < ch.len() && (ch[i].is_ascii_digit() || ch[i] == '.') { i += 1; } }
+                w += 0.7 * em_width(&ch[st..i]);
+            }
             continue;
         }
-        w += w1(ch[i]);
+        if c.is_alphabetic() {
+            let st = i;
+            while i < ch.len() && ch[i].is_alphabetic() { i += 1; }
+            let run = &ch[st..i];
+            if run.len() == 1 && !prose { w += italic(run[0]); } else { prose = run.len() > 3 || prose; w += run.iter().map(|c| upright(*c)).sum::<f64>(); }
+            continue;
+        }
+        w += upright(c);
         i += 1;
     }
-    w * size + 1.0
+    w
 }
 
 // ───────────────────────── labels ─────────────────────────
@@ -1072,8 +1103,14 @@ impl Board {
     /// Where the glyphs of `text` centred at `c` really are: caps and digits from 0.72 em above the baseline, brackets,
     /// commas, subscripts and descenders down to 0.22 em below it; an italic first letter leans a little left.
     fn ink(c: Pt, w: f64, size: f64, text: &str) -> [f64; 4] {
-        let low = text.contains(['(', ',', '_', ')', 'g', 'j', 'p', 'q', 'y', '|']);
-        [c.0 - w / 2.0 - 1.0, c.1 + 0.3 * size - 0.72 * size, c.0 + w / 2.0 - 0.5, c.1 + 0.3 * size + if low { 0.22 * size } else { 0.02 * size }]
+        // (measured from the drawn text: brackets, a slash and a root stand 0.75 em above the baseline, digits and letters
+        // 0.69; brackets and descenders reach 0.24 em below it, a slash 0.2, a comma 0.15, a subscript 0.06)
+        let top = if text.contains(['(', ')', '/', '|', '\u{221a}']) { 0.78 } else { 0.72 };
+        let depth = text.chars().map(|c| match c { '(' | ')' | 'g' | 'j' | 'p' | 'q' | 'y' | '|' => 0.24, '/' => 0.2, ',' => 0.15, '\u{221a}' => 0.12, '_' => 0.06, _ => 0.02 }).fold(0.02f64, f64::max);
+        // the text runs from its origin over its advance; a last letter set italic leans a little past it, a first one before it
+        let lean = if text.chars().last().is_some_and(|c| c.is_alphabetic()) && text.chars().rev().nth(1).is_none_or(|c| !c.is_alphabetic()) { 0.06 * size } else { 0.0 };
+        let base = c.1 + 0.3 * size;
+        [c.0 - w / 2.0 + 0.5 - 0.05 * size, base - top * size, c.0 + w / 2.0 - 0.5 + lean, base + depth * size]
     }
     /// Beside its point: the eight positions round it (and slid along the sides), the ink within a few pixels of the mark.
     fn beside_point(q: Pt, out: Pt, hw: f64, hh: f64) -> Vec<Pt> {
@@ -1154,13 +1191,22 @@ impl Board {
                 // the text is nearer its own leader (which ends 3 px from it) than any other line
                 if self.any_near(grow(ink, 6.0), |i| { let s = self.strokes[i]; !own_line(s.2) && box_seg(ink, s.0, s.1) < 6.0 }) { continue; }
                 if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && box_pt(ink, *d) < dot_gap) { continue; }
-                let to = (q.0.clamp(ink[0], ink[2]), q.1.clamp(ink[1], ink[3]));
-                let (dx, dy) = (to.0 - q.0, to.1 - q.1);
+                // the leader points at the text's middle and ends 2 px before its ink (never grazing along an edge of it)
+                let mid = ((ink[0] + ink[2]) / 2.0, (ink[1] + ink[3]) / 2.0);
+                let (vx, vy) = (mid.0 - q.0, mid.1 - q.1);
+                let slab = |a: f64, lo: f64, hi: f64, v: f64| if v > 1e-9 { (lo - a) / v } else if v < -1e-9 { (hi - a) / v } else { f64::NEG_INFINITY };
+                let t_in = slab(q.0, ink[0], ink[2], vx).max(slab(q.1, ink[1], ink[3], vy));
+                if !(t_in > 0.0 && t_in < 1.0) { continue; }
+                let near_ink = (q.0 + t_in * vx, q.1 + t_in * vy);
+                let (dx, dy) = (near_ink.0 - q.0, near_ink.1 - q.1);
                 let l = dx.hypot(dy);
+                if l < 1.0 { continue; }
+                let to = (near_ink.0 - dx / l * 2.0, near_ink.1 - dy / l * 2.0);
                 if !(12.0..=if level == 2 { 160.0 } else { 90.0 }).contains(&l) { continue; }
                 let start = if matches!(at, At::Pt(..)) { DOT + 1.5 } else { 2.0 };
                 let from = (q.0 + dx / l * start, q.1 + dy / l * start);
-                let to = (to.0 - dx / l * 3.0, to.1 - dy / l * 3.0);
+                // it starts by its own point only
+                if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && (d.0 - from.0).hypot(d.1 - from.1) < DOT + 4.0) { continue; }
                 let lb = [from.0.min(to.0) - 3.0, from.1.min(to.1) - 3.0, from.0.max(to.0) + 3.0, from.1.max(to.1) + 3.0];
                 let hit: Vec<usize> = self.near(lb).into_iter().filter(|&i| { let s = self.strokes[i]; !own_line(s.2) && s.2 != AXES && seg_cross(from, to, s.0, s.1) }).collect();
                 let hard = |i: &usize| self.hard.contains(&self.strokes[*i].2);
@@ -1178,7 +1224,8 @@ impl Board {
                 if along_axis { continue; }
                 if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && seg_pt(*d, from, to) < lead_gap) { continue; }
                 if self.boxes.iter().any(|o| seg_hits_box(from, to, grow(*o, 8.0))) { continue; }
-                if self.nums.iter().filter(|(i, _)| !self.hidden.contains(i)).any(|(_, o)| seg_hits_box(from, to, grow(*o, 1.0))) { continue; }
+                // (a leader crosses an axis number only where its label may cover numbers: the number is then left off)
+                if !over_nums && self.nums.iter().filter(|(i, _)| !self.hidden.contains(i)).any(|(_, o)| seg_hits_box(from, to, grow(*o, 1.0))) { continue; }
                 return Some((c, (from, to)));
             }
         }
@@ -1225,7 +1272,13 @@ impl Board {
         }
         let f = found?;
         self.take(Board::bx(f.c, mw(&f.text, size), size));
-        if let Some((a, b)) = f.leader { let id = self.next; self.next += 1; self.add(a, b, id); }
+        if let Some((a, b)) = f.leader {
+            let id = self.next;
+            self.next += 1;
+            self.add(a, b, id);
+            let crossed: Vec<usize> = self.nums.iter().filter(|(i, o)| !self.hidden.contains(i) && seg_hits_box(a, b, grow(*o, 1.0))).map(|(i, _)| *i).collect();
+            self.hidden.extend(crossed);
+        }
         Some(f)
     }
     fn take(&mut self, b: [f64; 4]) {
@@ -1318,6 +1371,30 @@ fn keep_texts(t: &[(String, [f64; 4], bool)], dots: &[Pt]) -> Vec<usize> {
     out
 }
 
+/// The placer's estimate of a label's ink, from its drawn box (centre and half size as `labels::wrap` records them), for tests.
+#[cfg(test)]
+pub(crate) fn em_width_of(text: &str) -> f64 { em_width(&text.chars().collect::<Vec<_>>()) }
+#[cfg(test)]
+pub(crate) fn ink_estimate(base: Pt, half: Pt, size: f64, text: &str) -> [f64; 4] { Board::ink((base.0, base.1 - 0.06 * size), (half.0 - 1.0) * 2.0, size, text) }
+
+/// What a part line's label names, for the list beside the figure.
+fn part_name(id: &str, kind: K) -> &'static str {
+    match id {
+        i if i.starts_with("asym") => "asymptote",
+        i if i.starts_with("dir") => "directrix",
+        "sym" => "axis of symmetry",
+        "ax2a" => if kind == K::Hyperbola { "transverse axis" } else { "major axis" },
+        "ax2b" => if kind == K::Hyperbola { "conjugate axis" } else { "minor axis" },
+        "latus" => "latus rectum",
+        "rad" => "radius",
+        "pf1" => "PF_1",
+        "pf2" => "PF_2",
+        "pf" => "PF",
+        "pd" => "PD",
+        _ => "label",
+    }
+}
+
 // ───────────────────────── render ─────────────────────────
 
 fn grid_body(svg: &str) -> String {
@@ -1340,7 +1417,7 @@ pub fn render(p: &Params) -> String { build(p, &mut vec![]) }
 /// What the last build on this thread drew, for the label tests: each placed label's id with its own thing (segments; a
 /// point is a zero-length one), and every stroke and point mark on the plot.
 #[derive(Clone, Debug, Default)]
-pub struct Drawn { pub labels: Vec<(String, Vec<(Pt, Pt)>)>, pub things: Vec<(Pt, Pt)>, pub dropped: usize, pub shortened: usize, pub placed: Vec<(String, char, bool, u8)>, pub dropped_kinds: Vec<char> }
+pub struct Drawn { pub labels: Vec<(String, Vec<(Pt, Pt)>)>, pub things: Vec<(Pt, Pt)>, pub dropped: usize, pub shortened: usize, pub placed: Vec<(String, char, bool, u8)>, pub dropped_kinds: Vec<char>, pub keyed: usize }
 thread_local! { static LAST: std::cell::RefCell<Drawn> = std::cell::RefCell::new(Drawn::default()); }
 pub fn last_drawn() -> Drawn { LAST.with(|l| l.borrow().clone()) }
 
@@ -1376,6 +1453,8 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
     let mut marks_svg = String::new();
     let mut lbls = String::new();
     let mut side: Vec<String> = vec![];
+    // labels with no room on the figure, written under the working
+    let mut beside_key: Vec<String> = vec![];
     let mut key: Vec<String> = vec![];
     let mut eq_text = String::new();
     let mut name = String::new();
@@ -1393,7 +1472,10 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
         Ok(c) => {
             let reach = ((fr.x1 - fr.x0).hypot(fr.y1 - fr.y0) + (c.h.v - (fr.x0 + fr.x1) / 2.0).hypot(c.k.v - (fr.y0 + fr.y1) / 2.0)) * 1.2;
             name = c.kind.name().to_string();
-            eq_text = if p.s("eq_form") == "General form" { general(c, exact, dec.max(2)) } else { standard(c, exact, dec.max(2)) };
+            eq_text = if p.s("eq_form") == "General form" {
+                // irrational coefficients (a centre at √2) are not written as decimals: standard form, said in the panel
+                if exact && !general_is_rational(c) { notes.push("With these values the general form would have irrational coefficients: the equation on the figure is in standard form.".into()); standard(c, exact, dec.max(2)) } else { general(c, exact, dec.max(2)) }
+            } else { standard(c, exact, dec.max(2)) };
             let mut gid = 1u32;
             let mut reqs: Vec<Req> = vec![];
             let line = |over: &mut String, a: Pt, b: Pt, col: &str, w: f64, dash: &str| {
@@ -1577,6 +1659,8 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
             if !hide_labels {
                 let mut dropped = vec![];
                 let mut shortened = vec![];
+                let mut keyed: Vec<String> = vec![];
+                let mut beside_only: Vec<String> = vec![];
                 // One fixed order cannot suit every shape (the foci can take the room the centre needs): the labels are placed
                 // in several orders of the vertices, foci and centre, either way round each pair, and the arrangement with the
                 // fewest labels left off or cut to their letter, then the fewest leaders, is drawn.
@@ -1585,9 +1669,13 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 let mut best: Option<(u64, Board, Vec<Option<Placed>>)> = None;
                 let mut stale = 0;
                 // `compact`: every point's label is its letter alone (tried only when a point would otherwise go unlabelled)
-                for compact in [false, true] {
-                    if compact && best.as_ref().is_some_and(|b| reqs.iter().zip(&b.2).all(|(r, g)| g.is_some() || r.kind == 'L')) { break; }
-                    let rq: Vec<Req> = reqs.iter().map(|r| Req { id: r.id.clone(), text: if compact && r.kind != 'L' { r.short.clone().unwrap_or(r.text.clone()) } else { r.text.clone() }, short: r.short.clone(), at: r.at, optional: r.optional, prio: r.prio, kind: r.kind }).collect();
+                // pass 0: as asked; pass 1: the points left unlabelled as their letters; pass 2: every point as its letter
+                for pass in 0..3 {
+                    let compact = pass > 0;
+                    let unlabelled: Vec<String> = best.as_ref().map(|b| reqs.iter().zip(&b.2).filter(|(r, g)| g.is_none() && r.kind != 'L').map(|(r, _)| r.id.clone()).collect()).unwrap_or_default();
+                    if compact && unlabelled.is_empty() { break; }
+                    let shorten = |r: &Req| r.kind != 'L' && (pass == 2 || unlabelled.contains(&r.id));
+                    let rq: Vec<Req> = reqs.iter().map(|r| Req { id: r.id.clone(), text: if compact && shorten(r) { r.short.clone().unwrap_or(r.text.clone()) } else { r.text.clone() }, short: r.short.clone(), at: r.at, optional: r.optional, prio: r.prio, kind: r.kind }).collect();
                     stale = 0;
                     'orders: for minor_first in [false, true] { for flip in [false, true] {
                         for ord in &orders {
@@ -1632,19 +1720,24 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                                 over.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" data-leader="1"/>"##, a.0, a.1, b.0, b.1, if print { "#555555" } else { "#6b7280" }));
                                 own.push((a, b));
                             }
-                            if pl.short { shortened.push(r.text.replace('_', "").replace('-', "\u{2212}")); }
+                            if pl.short { shortened.push(r.text.replace('_', "").replace('-', "\u{2212}")); keyed.push(r.text.clone()); }
                             drawn.labels.push((format!("cl-{}", r.id), own));
                             drawn.placed.push((format!("cl-{}", r.id), r.kind, pl.short, if pl.leader.is_some() { 1 + pl.level } else { 0 }));
                         }
-                        // (a focal radius's length is also written beside the figure, so it is simply left off where it does not fit)
-                        None if r.optional => {}
-                        None => { dropped.push(r.text.replace('_', "").replace('-', "\u{2212}")); drawn.dropped_kinds.push(r.kind); }
+                        // (a focal radius's length is also in the working beside the figure: it is said there, and in the panel)
+                        None if r.optional => { beside_only.push(format!("{} = {}", part_name(&r.id, kind), r.text).replace('_', "").replace('-', "\u{2212}")); }
+                        // a part line's label with no room on the figure is written beside it, the part named
+                        None if r.kind == 'L' => { keyed.push(format!("{}: {}", part_name(&r.id, kind), r.text)); drawn.keyed += 1; }
+                        None => { dropped.push(r.text.replace('_', "").replace('-', "\u{2212}")); drawn.dropped_kinds.push(r.kind); keyed.push(r.text.clone()); }
                     }
                 }
                 drawn.dropped = dropped.len();
                 drawn.shortened = shortened.len();
-                if !shortened.is_empty() { notes.push(format!("Labelled with the letter only, for lack of room: {}.", shortened.join(", "))); }
-                if !dropped.is_empty() { notes.push(format!("No clear room for {}: they are left off. Turn off some parts, choose Letters only or widen the axes.", dropped.join(", "))); }
+                if !shortened.is_empty() { notes.push(format!("Labelled with the letter only, for lack of room: {}. The full labels are written beside the figure.", shortened.join(", "))); }
+                if !dropped.is_empty() { notes.push(format!("No clear room for {}: they are left off the figure and written beside it. Turn off some parts, choose Letters only or a smaller label size, or set the axes closer round the conic.", dropped.join(", "))); }
+                if drawn.keyed > 0 { notes.push(format!("Written beside the figure, for lack of room on it: {}.", keyed.iter().filter(|k| k.contains(": ")).map(|k| k.replace('_', "").replace('-', "\u{2212}")).collect::<Vec<_>>().join("; "))); }
+                if !beside_only.is_empty() { notes.push(format!("{} given in the working beside the figure only, for lack of room on it.", beside_only.join(", "))); }
+                beside_key = std::mem::take(&mut keyed);
             }
             drawn.things = board.strokes.iter().map(|s| (s.0, s.1)).chain(board.dots.iter().map(|d| (*d, *d))).collect();
             LAST.with(|l| *l.borrow_mut() = drawn);
@@ -1668,7 +1761,9 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                     }
                 }
             }
-            if p.b("show_ecc") { side.push(bl("e = c/a = ", match kind { K::Parabola => "e = 1".into(), K::Circle => "e = 0".into(), _ => format!("e = c/a = {ecc_txt}") })); }
+            let ecc_row = p.b("show_ecc");
+            if ecc_row { side.push(match kind { K::Parabola => bl("e = ", "e = 1".into()), K::Circle => bl("e = ", "e = 0".into()), _ => bl("e = c/a = ", format!("e = c/a = {ecc_txt}")) }); }
+            if !beside_key.is_empty() { side.push("For lack of room on the figure:".into()); side.append(&mut beside_key); }
             // the answer line
             if p.b("key_line") {
                 let pts = |v: Vec<(N, N)>| v.iter().map(|(x, y)| pair_text(x, y, exact, dec)).collect::<Vec<_>>().join(", ");
@@ -1676,6 +1771,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 if kind != K::Parabola { parts.push(format!("centre {}", pair_text(&c.h, &c.k, exact, dec))); }
                 if kind == K::Circle { parts.push(format!("radius {}", c.a.show(exact, dec))); }
                 if kind != K::Circle { parts.push(format!("{} {}", if kind == K::Parabola { "vertex" } else { "vertices" }, pts(c.vertices()))); parts.push(format!("{} {}", if kind == K::Parabola { "focus" } else { "foci" }, pts(c.foci()))); }
+                if matches!(kind, K::Ellipse | K::Hyperbola) { parts.push(format!("co-vertices {}", pts(c.covertices()))); }
                 parts.extend(key.iter().cloned());
                 parts.push(format!("e = {ecc_txt}"));
                 key = if stu {
@@ -1709,7 +1805,10 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
         let widest = klines.iter().map(|l| rw(l, kfs)).fold(0.0f64, f64::max) + 24.0;
         w = w.max(widest);
     }
-    let h = top + gh + if klines.is_empty() { 0.0 } else { 10.0 + 21.0 * lsz * klines.len() as f64 };
+    // (the column beside the plot can run below it: the page holds it, and the answer line goes under both)
+    let side_bottom = if side.is_empty() { 0.0 } else { fr.mt + 14.0 + 24.0 * lsz * (side.len() as f64 - 1.0) + 10.0 * lsz };
+    let body_bottom = (top + gh).max(side_bottom);
+    let h = body_bottom + if klines.is_empty() { 0.0 } else { 10.0 + 21.0 * lsz * klines.len() as f64 };
     let mut out = format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="{w:.2}" height="{h:.2}" viewBox="0 0 {w:.2} {h:.2}"><rect width="100%" height="100%" fill="#fff"/>"##);
     if top > 0.0 { out.push_str(&format!(r#"<g transform="translate(0 {top:.2})">{body}</g>"#)); } else { out.push_str(&body); }
     // title and equation band
@@ -1743,9 +1842,10 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
     out.push_str("</g>");
     out.push_str(&lbls);
     for (i, s) in side.iter().enumerate() { out.push_str(&row_at(gw + 8.0, fr.mt + 14.0 + 24.0 * lsz * i as f64, size, s)); }
-    for (i, l) in klines.iter().enumerate() { out.push_str(&row_at(12.0, top + gh + 20.0 * lsz + 21.0 * lsz * i as f64, kfs, l)); }
+    for (i, l) in klines.iter().enumerate() { out.push_str(&row_at(12.0, body_bottom + 20.0 * lsz + 21.0 * lsz * i as f64, kfs, l)); }
     out.push_str("</svg>");
-    if !gnotes.is_empty() { notes.extend(gnotes); }
+    // (the grid's own advice names its Square cells control, which this figure does not have)
+    for n in gnotes { notes.push(if n.contains("Square cells") { if n.contains("thinned") { "Some axis numbers were thinned to keep them apart: count the axes by a larger step to number every line.".into() } else { "The window is much wider than it is tall: set the axes' ranges closer in size.".into() } } else { n }); }
     out
 }
 

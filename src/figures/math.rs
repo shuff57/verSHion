@@ -4077,6 +4077,8 @@ mod conics_tests;
 #[cfg(test)]
 mod conics_r1_tests;
 #[cfg(test)]
+mod conics_r2_tests;
+#[cfg(test)]
 mod number_line_b7_tests;
 
 #[derive(Clone, Copy)]
