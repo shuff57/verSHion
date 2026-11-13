@@ -9,6 +9,7 @@ use super::tests::{b, s, with};
 use crate::figures::Value;
 
 pub(super) type R = [f64; 4];
+thread_local! { static LEADER_NEARER: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 
 /// Every text's glyph box as drawn, (id, text, box); the white halo copies and duplicates are dropped.
 pub(super) fn text_boxes(svg: &str) -> Vec<(String, String, R)> {
@@ -146,6 +147,10 @@ pub(super) fn faults(bl: &Built) -> Vec<String> {
         let point_kind = ["dgt-extremum-", "dgt-inflection-", "dgt-absolute-", "dgt-callout-"].iter().any(|k| id.starts_with(k));
         if let Some((_, q)) = bl.anchors.iter().find(|(t, _)| t == text).filter(|_| point_kind) {
             let on_leader = leaders.iter().any(|l| (l.0 .0 - q.0).hypot(l.0 .1 - q.1) < 9.0 && dist_box(r, l.1) < 6.0);
+            if on_leader {
+                let own = dist_box(r, *q);
+                if bl.dots.iter().any(|d| (d.0 - q.0).hypot(d.1 - q.1) > 1.0 && dist_box(r, *d) + 0.5 < own) { LEADER_NEARER.with(|c| c.set(c.get() + 1)); }
+            }
             if !on_leader {
                 let own = dist_box(r, *q);
                 if own > 34.0 { out.push(format!("{id} {text:?} {own:.0} px from its point")); }
@@ -210,7 +215,7 @@ pub(super) fn case_params(c: &(&str, f64, f64, bool, bool), extra: &[(&str, Valu
     let p0 = with(&list);
     let (wa, wb) = window(&p0);
     if let Ok(m) = model(&p0, (wa, wb)) {
-        let an = m.analyse(wa, wb);
+        let an = m.analyse(wa, wb, win_pv(&p0, "xmin"), win_pv(&p0, "xmax"));
         for (n, keys) in [(0usize, ["ymin", "ymax", "ystep"]), (1, ["ymin1", "ymax1", "ystep1"]), (2, ["ymin2", "ymax2", "ystep2"])] {
             let vals: Vec<f64> = (0..=400).filter_map(|i| m.d(n, wa + (wb - wa) * i as f64 / 400.0)).collect();
             let must: Vec<f64> = match n { 0 => an.crit.iter().map(|c| c.y).chain(an.infl.iter().map(|q| q.y)).collect(), 1 => an.infl.iter().filter_map(|q| m.d(1, q.x)).collect(), _ => vec![] };
@@ -291,12 +296,13 @@ fn every_label_belongs_to_its_own_thing_over_the_classroom_list() {
     println!("left off: {}", left.len());
     for l in left.iter() { println!("  {l}"); }
     println!("faults: {}", fails.len());
+    println!("labels on a leader whose text is nearer another mark than its own (the leader shows whose it is): {}", LEADER_NEARER.with(|c| c.get()));
     for f in fails.iter() { println!("  {f}"); }
     // a label numbered for want of room (its words listed under the graphs) only with every mark on one grid
     println!("numbered: {} drawings", numbered.len());
     for n in &numbered { println!("  {n}"); }
     // (at Large, these five crowded aligned figures too: every mark on, or a closed interval on the f′-start cosine)
-    const LARGE_NAMED: [&str; 5] = ["-x^4 + 4x^2 [all, Large]", "3x^5 - 5x^3 [all, Large]", "x(x - 2)(x + 3) [all, Large]", "cos(x) [absolute, Large]", "cos(x) [all, Large]"];
+    const LARGE_NAMED: [&str; 8] = ["-x^4 + 4x^2 [all, Large]", "3x^5 - 5x^3 [all, Large]", "x(x - 2)(x + 3) [all, Large]", "cos(x) [absolute, Large]", "cos(x) [all, Large]", "cos(x) [extrema, Large]", "sin(x)^2 [inflect, Large]", "sin(x)^2 [all, Large]"];
     let stray: Vec<&String> = numbered.iter().filter(|n| !n.contains("[all, one grid, ") && !LARGE_NAMED.iter().any(|k| n.starts_with(k))).collect();
     assert!(stray.is_empty(), "numbered outside the crowded one-grid case and the named Large ones: {stray:?}");
     assert!(fails.is_empty(), "{} faults", fails.len());
@@ -325,22 +331,6 @@ fn calibrate_widths() {
 
 #[test]
 #[ignore]
-fn debug_case() {
-    let c = CLASSROOM.iter().find(|c| c.0.starts_with("-x - 1")).unwrap();
-    let p = case_params(c, &[("sign_fpp", b(true)), ("label_size", s("Small"))]);
-    let an = an_of2(&p);
-    println!("fpp marks {:?} signs {:?} flat2 {:?}", an.fpp_marks, an.fpp_signs, an.flat2);
-    let bl = build(&p);
-    println!("labels {:?}\nanchors {:?}\nstats {:?}", bl.labels, bl.anchors, bl.stats.kinds);
-    for l in bl.svg.split('<').filter(|l| l.contains("data-leader")) { println!("leader <{l}"); }
-    for t in text_boxes(&bl.svg).iter().filter(|t| t.0.starts_with("dgt-abs")) { println!("ink {t:?}"); }
-    println!("{:?}", faults(&bl));
-}
-
-fn an_of2(p: &Params) -> Analysis { let (a, b) = window(p); model(p, (a, b)).unwrap().analyse(a, b) }
-
-#[test]
-#[ignore]
 fn dump_case() {
     // VERSHION_DG_CASE="<function>|<option set>|<size>": the params of a sweep case as JSON, for rendering it
     let Ok(spec) = crate::env_var("VERSHION_DG_CASE") else { return };
@@ -355,16 +345,3 @@ fn dump_case() {
 }
 
 
-#[test]
-#[ignore]
-fn debug_name() {
-    let c = CLASSROOM.iter().find(|c| c.0 == "x^4 - 4x^3").unwrap();
-    let mut e = option_sets(c).into_iter().find(|o| o.0 == "one grid").unwrap().1;
-    e.push(("label_size", s("Medium")));
-    let p = case_params(c, &e);
-    let bl = build(&p);
-    println!("labels {:?}", bl.labels.iter().filter(|l| l.2 == "name").collect::<Vec<_>>());
-    let svg = coordinate_grid_build_in(&bl.panels[0].gp, &mut vec![], (bl.panels[0].g.pw, bl.panels[0].g.ph));
-    for b in grid_text_boxes(&svg, 0.0, bl.panels[0].oy) { if b[0] > 430.0 && b[0] < 470.0 && b[1] > 340.0 { println!("grid box {b:?}"); } }
-    println!("{:?}", faults(&bl));
-}

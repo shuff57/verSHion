@@ -14,9 +14,10 @@ pub(super) fn s(v: &str) -> Value { Value::S(v.into()) }
 pub(super) fn b(v: bool) -> Value { Value::B(v) }
 pub(super) fn f(v: f64) -> Value { Value::F(v) }
 fn near(a: f64, b: f64) -> bool { (a - b).abs() < 1e-7 * (1.0 + b.abs()) }
-fn an_of(p: &Params) -> Analysis { let (a, b) = window(p); model(p, (a, b)).unwrap().analyse(a, b) }
+pub(super) fn an_of(p: &Params) -> Analysis { let (a, b) = window(p); model(p, (a, b)).unwrap().analyse(a, b, win_pv(p, "xmin"), win_pv(p, "xmax")) }
 fn crit_list(an: &Analysis) -> Vec<(f64, f64, bool, Ext)> { an.crit.iter().map(|c| (c.x, c.y, c.undef, c.ext)).collect() }
-fn svg_texts(svg: &str) -> String {
+fn svg_texts(svg: &str) -> String { svg_texts_raw(svg).replace('\u{a0}', " ") }
+fn svg_texts_raw(svg: &str) -> String {
     // every drawn text run, tags removed (so "f(3/2) = −9/8" is found whatever its italics)
     let mut out = String::new();
     let mut rest = svg;
@@ -103,22 +104,48 @@ fn odd_roots_have_values_left_of_zero() {
 }
 
 #[test]
-fn exact_values_as_a_book_writes_them() {
+fn exact_values_are_derived_and_written_as_a_book_writes_them() {
     let m = "\u{2212}";
-    for (v, want) in [
-        (0.5, "1/2".to_string()), (-9.0 / 8.0, format!("{m}9/8")), (15.0 / 4.0, "15/4".into()), (3.0f64.sqrt(), "\u{221a}3".into()), (-(3.0f64.sqrt()), format!("{m}\u{221a}3")),
-        (3.0f64.sqrt() / 3.0, "\u{221a}3/3".into()), ((1.0 + 5.0f64.sqrt()) / 2.0, "(1 + \u{221a}5)/2".into()), (PI / 2.0, "\u{3c0}/2".into()), (-3.0 * PI / 2.0, format!("{m}3\u{3c0}/2")),
-        (1.0 / std::f64::consts::E, "1/e".into()), (2.0 / std::f64::consts::E.powi(2), "2/e\u{b2}".into()), (3.0 + PI, "3 + \u{3c0}".into()), (3.0 - PI, format!("3 {m} \u{3c0}")), (5.0 - PI, format!("5 {m} \u{3c0}")),
-    ] { assert_eq!(sym::exact(v).as_deref(), Some(want.as_str()), "{v}"); }
-    // a value with no such form is not dressed up as one
-    assert_eq!(sym::exact(1.2345678901), None);
-    assert_eq!(num_text(1.2345678901, None, false), "\u{2248}1.23");
-    // rounding: half away from zero, a nonzero value never 0, a decimal tracer x keeps decimals
-    assert_eq!(num_text(-1.125, Some(2), false), format!("{m}1.13"));
-    assert_eq!(num_text(-1.125, Some(1), false), format!("{m}1.1"));
-    assert_eq!(num_text(0.0004, Some(2), false), "0.0004");
-    assert_eq!(num_text(-1.125, None, true), format!("{m}1.125"));
-    assert_eq!(num_text(-1.125, None, false), format!("{m}9/8"));
+    // every value here is DERIVED from an expression and an exact x (never read off a float)
+    let at = |f: &str, x: &str| exact::ev(&sym::parse(f).unwrap(), &exact::of_text(x).unwrap()).map(|v| exact::text(&v));
+    for (f, x, want) in [
+        ("x^3 - 3x", "3/2", format!("{m}9/8")), ("3x^2 - 3", "3/2", "15/4".into()), ("x^4 - 6x^2", "sqrt(3)", format!("{m}9")),
+        ("x e^(-x)", "1", "1/e".into()), ("x e^(-x)", "2", "2/e\u{b2}".into()), ("sin(x)", "pi/4", "\u{221a}2/2".into()), ("cos(x)", "5pi/6", format!("{m}\u{221a}3/2")),
+        ("x^(1/3)(x + 4)", "0", "0".into()), ("x^(1/3)(x + 4)", "-8", "8".into()), ("x^(2/3)", "-8", "4".into()), ("sqrt(4 - x^2)", "1", "\u{221a}3".into()),
+        ("x/(x^2 + 1)", "1/2", "2/5".into()), ("(x^2 - 1)^(1/3)", "3", "2".into()), ("2^x", "-3", "1/8".into()), ("ln(x)", "e^2", "2".into()), ("arctan(x)", "1", "\u{3c0}/4".into()),
+    ] { assert_eq!(at(f, x).as_deref(), Some(want.as_str()), "{f} at {x}"); }
+    // nothing is dressed up: a value with no derived form is None (the figure writes ≈ and a decimal)
+    for (f, x) in [("sin(x)", "1"), ("e^x", "sqrt(2)"), ("ln(x)", "3"), ("x^(1/3)", "2")] { assert_eq!(at(f, x), None, "{f} at {x}"); }
+    // zeros derived from the structure: rational roots and the quadratic formula, e^u taken out, table angles, roots' bases
+    let z = |f: &str, lo: f64, hi: f64| exact::zeros(&sym::parse(f).unwrap(), lo, hi).map(|v| v.iter().map(exact::text).collect::<Vec<_>>());
+    assert_eq!(z("3x^2 - 3", -3.0, 3.0), Some(vec![format!("{m}1"), "1".into()]));
+    assert_eq!(z("4x^3 - 12x", -3.0, 3.0), Some(vec![format!("{m}\u{221a}3"), "0".into(), "\u{221a}3".into()]));
+    assert_eq!(z("x^2 - x - 1", -3.0, 3.0), Some(vec![format!("(1 {m} \u{221a}5)/2"), "(1 + \u{221a}5)/2".into()]));
+    assert_eq!(z("(1 - x)e^(-x)", -1.0, 6.0), Some(vec!["1".into()]));
+    assert_eq!(z("cos(x)", -7.0, 7.0), Some(vec![format!("{m}3\u{3c0}/2"), format!("{m}\u{3c0}/2"), "\u{3c0}/2".into(), "3\u{3c0}/2".into()]));
+    assert_eq!(z("1 - 2sin(x)", 0.0, 6.3), Some(vec!["\u{3c0}/6".into(), "5\u{3c0}/6".into()]));
+    // x^(1/3)(x + 4): f' = (1/3)x^(-2/3)(x + 4) + x^(1/3) = (4x + 4)/(3x^(2/3)): zero at -1 only (none at 0, where it has no value)
+    let d = sym::deriv(&sym::parse("x^(1/3)(x + 4)").unwrap());
+    assert_eq!(exact::zeros(&d, -6.0, 8.0).map(|v| v.iter().map(exact::text).collect::<Vec<_>>()), Some(vec![format!("{m}1")]));
+    // a cubic with no rational root: not derived (the figure writes ≈)
+    assert_eq!(z("x^3 - 3x + 1", -3.0, 3.0), None);
+    // the semicircle's area: ∫ from -2 to 0 of √(4 - x²) is π, exactly
+    let fa = exact::antideriv(&sym::parse("sqrt(4 - x^2)").unwrap()).unwrap();
+    let area = exact::ev(&fa, &exact::of_text("0").unwrap()).unwrap().sub_pub(&exact::ev(&fa, &exact::of_text("-2").unwrap()).unwrap()).unwrap();
+    assert_eq!(exact::text(&area), "\u{3c0}");
+    // writing: ≈ for anything not exact; a rounded value takes ≈ unless the rounding is exact; a nonzero value never 0
+    let ex = |t: &str| Pv { ex: exact::of_text(t), show: None };
+    assert_eq!(val_text(1.2345678901, &Pv::default(), None, false), "\u{2248}1.23");
+    assert_eq!(val_text(-1.125, &ex("-9/8"), Some(2), false), format!("\u{2248}{m}1.13"));
+    assert_eq!(val_text(-1.125, &ex("-9/8"), Some(3), false), format!("{m}1.125"));
+    assert_eq!(val_text(3.75, &ex("15/4"), Some(2), false), "3.75");
+    assert_eq!(val_text(3.75, &ex("15/4"), Some(1), false), "\u{2248}3.8");
+    assert_eq!(val_text(9.0, &ex("9"), Some(2), false), "9");
+    assert_eq!(val_text(-0.299, &ex("-299/1000"), Some(2), false), format!("\u{2248}{m}0.3"));
+    assert_eq!(val_text(0.0004, &Pv::default(), Some(2), false), "\u{2248}0.0004");
+    assert_eq!(val_text(-1.125, &ex("-9/8"), None, true), format!("{m}1.125"));
+    assert_eq!(val_text(-1.125, &ex("-9/8"), None, false), format!("{m}9/8"));
+    assert_eq!(eq_text("f(3/2)", "\u{2248}1.13"), "f(3/2) \u{2248} 1.13");
 }
 
 // ───────────────────────── the analysis, worked by hand ─────────────────────────
@@ -145,11 +172,11 @@ fn the_cubic_worked_by_hand() {
     // the tracer at 3/2: f = 27/8 - 9/2 = -9/8, f' = 27/4 - 3 = 15/4, f'' = 9
     let t = svg_texts(&render(&with(&[("show_fpp", b(true))])));
     for want in ["f(3/2) = \u{2212}9/8", "f\u{2032}(3/2) = 15/4", "f\u{2033}(3/2) = 9"] { assert!(t.contains(want), "{want} in\n{t}"); }
-    // rounded: -1.125 to 2 decimals is -1.13, 15/4 is 3.75
+    // rounded: -1.125 to 2 decimals is ≈ -1.13 (not exact), 15/4 is exactly 3.75
     let t = svg_texts(&render(&with(&[("rounding", s("2 decimals"))])));
-    assert!(t.contains("f(3/2) = \u{2212}1.13") && t.contains("f\u{2032}(3/2) = 3.75"), "{t}");
+    assert!(t.contains("f(3/2) \u{2248} \u{2212}1.13") && t.contains("f\u{2032}(3/2) = 3.75"), "{t}");
     // the key lists it all
-    let k = key_lines(&p, &model(&p, (-3.0, 3.0)).unwrap(), &an, (-3.0, 3.0)).join("\n");
+    let k = key_lines(&p, &model(&p, (-3.0, 3.0)).unwrap(), &an, (-3.0, 3.0)).join("\n").replace('\u{a0}', " ");
     for want in ["Critical points of f: x = \u{2212}1, x = 1", "Local maximum: (\u{2212}1, 2);  local minimum: (1, \u{2212}2)", "Inflection points: (0, 0)", "Increasing on (\u{2212}3, \u{2212}1) and (1, 3);  decreasing on (\u{2212}1, 1)", "Concave up on (0, 3);  concave down on (\u{2212}3, 0)"] {
         assert!(k.contains(want), "{want} in\n{k}");
     }
@@ -220,7 +247,7 @@ fn the_ap_graph_of_f_prime_worked_by_hand() {
     for (x, want) in [(-4.0, 1.0 + PI), (-2.0, 3.0 + PI), (0.0, 3.0), (2.0, 3.0 - PI), (4.0, 5.0 - PI), (-3.0, 2.5 + PI)] {
         assert!((m.f(x).unwrap() - want).abs() < 1e-9, "f({x}) = {:?}, want {want}", m.f(x));
     }
-    let an = m.analyse(-4.0, 4.0);
+    let an = m.analyse(-4.0, 4.0, win_pv(&p, "xmin"), win_pv(&p, "xmax"));
     let c = crit_list(&an);
     assert_eq!(c.len(), 2, "{c:?}");
     assert!(near(c[0].0, -2.0) && !c[0].2 && c[0].3 == Ext::Max, "{:?}", c[0]);
@@ -229,8 +256,8 @@ fn the_ap_graph_of_f_prime_worked_by_hand() {
     assert!(an.infl[0].x.abs() < 1e-9 && near(an.infl[0].y, 3.0));
     let t = svg_texts(&render(&p));
     assert!(t.contains("local max (\u{2212}2, 3 + \u{3c0})") && t.contains("local min (2, 3 \u{2212} \u{3c0})") && t.contains("inflection (0, 3)"), "{t}");
-    // the tracer at -1: f'(-1) = -√3; f(-1) = 3 + (√3/2 + π/3) = 4.9132..., which has no simple form: ≈ 4.91
-    assert!(t.contains("f\u{2032}(\u{2212}1) = \u{2212}\u{221a}3") && t.contains("f(\u{2212}1) \u{2248} 4.91"), "{t}");
+    // the tracer at -1: f'(-1) = -√3; f(-1) = 3 + ∫ from -1 to 0 of √(4 - x²) = 3 + (√3/2 + π/3), derived exactly
+    assert!(t.contains("f\u{2032}(\u{2212}1) = \u{2212}\u{221a}3") && t.contains("f(\u{2212}1) = 3 + \u{3c0}/3 + \u{221a}3/2"), "{t}");
     assert!((m.f(-1.0).unwrap() - (3.0 + 3.0f64.sqrt() / 2.0 + PI / 3.0)).abs() < 1e-9);
 }
 
@@ -252,8 +279,9 @@ fn corners_cusps_poles_and_flat_points_worked_by_hand() {
     let c = crit_list(&an);
     assert_eq!(c.len(), 1);
     assert!(c[0].0.abs() < 1e-7 && c[0].3 == Ext::Neither);
-    assert_eq!(an.mono.len(), 1);
-    assert!(an.mono[0].sign == 1 && near(an.mono[0].a, -3.0) && near(an.mono[0].b, 3.0));
+    // (written as AP writes it: split at the critical point, both sides increasing)
+    assert_eq!(an.mono.iter().map(|s| (s.sign, s.a, s.b)).collect::<Vec<_>>().len(), 2);
+    assert!(an.mono.iter().all(|s| s.sign == 1) && near(an.mono[0].a, -3.0) && an.mono[0].b.abs() < 1e-9 && near(an.mono[1].b, 3.0));
     // x^(2/3): a cusp minimum at 0 (f' = (2/3)x^(-1/3) has no value there)
     let c = crit_list(&an_of(&with(&[("f", s("x^(2/3)"))])));
     assert_eq!(c.len(), 1);
@@ -293,7 +321,7 @@ fn absolute_extrema_on_a_closed_interval_worked_by_hand() {
     assert!(t.contains("On [\u{2212}1/2, 4]: absolute maximum 17 at x = 4;  absolute minimum \u{2212}3 at x = 2"), "{t}");
     // a tie: x^3 - 3x on [-2, 2] has max 2 at x = -1 and at the end x = 2, min -2 at x = -2 and x = 1
     let pt = with(&[("absolute", b(true)), ("key_list", b(true)), ("tracer", b(false))]);
-    let k = key_lines(&pt, &model(&pt, (-3.0, 3.0)).unwrap(), &an_of(&pt), (-3.0, 3.0)).join("\n");
+    let k = key_lines(&pt, &model(&pt, (-3.0, 3.0)).unwrap(), &an_of(&pt), (-3.0, 3.0)).join("\n").replace('\u{a0}', " ");
     let bl = build(&pt);
     assert_eq!(bl.stats.left_off, 0, "{:?}", bl.notes);
     assert!(k.contains("absolute maximum 2 at x = 2 and x = \u{2212}1;  absolute minimum \u{2212}2 at x = \u{2212}2 and x = 1"), "{k}");
@@ -321,10 +349,162 @@ fn bad_input_is_said_never_drawn() {
     assert!(w.iter().any(|n| n.contains("outside the window")), "{w:?}");
 }
 
+
+// ───────────────────────── piecewise functions, worked by hand (round 2) ─────────────────────────
+
+/// The key's lines for params, with plain spaces.
+fn key_of(p: &Params) -> String { let (a, b) = window(p); key_lines(p, &model(p, (a, b)).unwrap(), &an_of(p), (a, b)).join("\n").replace('\u{a0}', " ") }
+/// (x, "0" or "und.") of a sign chart's marks
+fn chart(an: &Analysis, n: usize) -> Vec<(f64, &'static str)> { (if n == 1 { &an.fp_marks } else { &an.fpp_marks }).iter().map(|m| (m.x, if m.k == EvK::Zero { "0" } else { "und." })).collect() }
+fn signs(an: &Analysis, n: usize) -> Vec<i8> { (if n == 1 { &an.fp_signs } else { &an.fpp_signs }).iter().map(|s| s.sign).collect() }
+fn has(k: &str, want: &[&str]) { for w in want { assert!(k.contains(w), "{w:?} not in\n{k}"); } }
+fn pw(f: &str, a: f64, b: f64) -> Params { with(&[("f", s(f)), ("xmin", super::tests::f(a)), ("xmax", super::tests::f(b)), ("tracer", b_(false)), ("absolute", b_(false))]) }
+fn b_(v: bool) -> Value { Value::B(v) }
+const M: &str = "\u{2212}";
+
 #[test]
-#[ignore]
-fn debug_notes() {
-    let p = with(&[("f", s("1/x^2")), ("xmin", f(-3.1)), ("xmax", f(2.9))]);
+fn piecewise_functions_with_flat_stretches_corners_and_jumps() {
+    // 1. -x - 2 (x < -1), -1 on [-1, 2], x - 3 (x > 2): f is continuous (-1 at both joins); f' = -1, 0, 1: corners at -1 and 2
+    let p = pw("-x - 2, x < -1; -1, -1 <= x <= 2; x - 3, x > 2", -4.0, 5.0);
     let an = an_of(&p);
-    println!("crit {:?} breaks {:?} mono {:?}", crit_list(&an), an.breaks, an.mono);
+    assert_eq!(chart(&an, 1).iter().map(|c| c.1).collect::<Vec<_>>(), vec!["und.", "und."]);
+    assert_eq!(signs(&an, 1), vec![-1, 0, 1]);
+    has(&key_of(&p), &[&format!("Critical points of f: x = {M}1 (f′ does not exist), x = 2 (f′ does not exist)"), &format!("Increasing on (2, 5);  decreasing on ({M}4, {M}1);  constant on [{M}1, 2]"), &format!("Every point of [{M}1, 2] is a local minimum (f(x) = {M}1)")]);
+    // 2. x^2 (x < 0), 0 on [0, 1], (x - 1)^2 (x > 1): f' = 2x, 0, 2(x - 1) meets 0 at both joins: critical points with f' = 0; f'' = 2, 0, 2 jumps
+    let p = pw("x^2, x < 0; 0, 0 <= x <= 1; (x-1)^2, x > 1", -2.0, 3.0);
+    let an = an_of(&p);
+    assert_eq!(chart(&an, 1).iter().map(|c| c.1).collect::<Vec<_>>(), vec!["0", "0"]);
+    assert_eq!(chart(&an, 2).iter().map(|c| c.1).collect::<Vec<_>>(), vec!["und.", "und."]);
+    assert_eq!((signs(&an, 1), signs(&an, 2)), (vec![-1, 0, 1], vec![1, 0, 1]));
+    has(&key_of(&p), &["Critical points of f: x = 0, x = 1", &format!("Increasing on (1, 3);  decreasing on ({M}2, 0);  constant on [0, 1]"), &format!("Concave up on ({M}2, 0) and (1, 3)"), "neither (a straight line) on [0, 1]", "Inflection points: none"]);
+    // 3. x^2 (x < 1), 2 - x (x >= 1): a corner maximum at (1, 1), a minimum at (0, 0)
+    let p = pw("x^2, x < 1; 2 - x, x >= 1", -2.0, 4.0);
+    has(&key_of(&p), &["Critical points of f: x = 0, x = 1 (f′ does not exist)", "Local maximum: (1, 1);  local minimum: (0, 0)", &format!("Increasing on (0, 1);  decreasing on ({M}2, 0) and (1, 4)")]);
+    // 4. a jump: x + 1 (x < 0), x - 1 (x >= 0): no critical point, increasing on both sides of the break, f' has no value at 0
+    let p = pw("x + 1, x < 0; x - 1, x >= 0", -3.0, 3.0);
+    let an = an_of(&p);
+    assert!(an.crit.is_empty() && an.breaks.len() == 1 && an.breaks[0].abs() < 1e-12);
+    assert_eq!(chart(&an, 1).iter().map(|c| c.1).collect::<Vec<_>>(), vec!["und."]);
+    has(&key_of(&p), &[&format!("Increasing on ({M}3, 0) and (0, 3)")]);
+    // 5. x^2 (x <= 1), 3 - x on (1, 2], 1 (x > 2): a jump at 1 (1, then 2), a corner at 2 (f = 1 both sides, f' -1 then 0)
+    let p = pw("x^2, x <= 1; 3 - x, 1 < x <= 2; 1, x > 2", -2.0, 4.0);
+    let an = an_of(&p);
+    assert_eq!(an.breaks.len(), 1);
+    assert!((an.breaks[0] - 1.0).abs() < 1e-12);
+    has(&key_of(&p), &["Critical points of f: x = 0, x = 2 (f′ does not exist)", &format!("Increasing on (0, 1);  decreasing on ({M}2, 0) and (1, 2);  constant on [2, 4]"), "Every point inside (2, 4) is both a local maximum and a local minimum (f(x) = 1"]);
+    // 6. -1 (x < 0), x^2 - 1 (x >= 0): f' = 0 then 2x: 0 from both sides at 0 (a critical point); f'' = 0 then 2 (no value at 0)
+    let p = pw("-1, x < 0; x^2 - 1, x >= 0", -2.0, 2.0);
+    let an = an_of(&p);
+    assert_eq!(chart(&an, 1).iter().map(|c| c.1).collect::<Vec<_>>(), vec!["0"]);
+    assert_eq!(chart(&an, 2).iter().map(|c| c.1).collect::<Vec<_>>(), vec!["und."]);
+    has(&key_of(&p), &["Critical points of f: x = 0", &format!("constant on [{M}2, 0]"), "Increasing on (0, 2)", "Concave up on (0, 2)", "Inflection points: none"]);
+    // 7. 4 - x^2 on [-2, 2] only: the maximum (0, 4); increasing on (-2, 0), decreasing on (0, 2) (the typed ends), nothing outside
+    let p = pw("4 - x^2, -2 <= x <= 2", -3.0, 3.0);
+    has(&key_of(&p), &["Critical points of f: x = 0", "Local maximum: (0, 4)", &format!("Increasing on ({M}2, 0);  decreasing on (0, 2)")]);
+    // 8. x^3 (x < 1), 3x - 2 (x >= 1): f and f' (3 = 3) join smoothly at 1; f'' (6 then 0) does not; 0 is critical (f' = 3x^2), no extremum
+    let p = pw("x^3, x < 1; 3x - 2, x >= 1", -2.0, 3.0);
+    let an = an_of(&p);
+    assert_eq!(an.crit.len(), 1);
+    assert!(an.crit[0].x.abs() < 1e-12 && an.crit[0].ext == Ext::Neither);
+    assert_eq!(chart(&an, 1).len(), 1);
+    has(&key_of(&p), &[&format!("Increasing on ({M}2, 0) and (0, 3)"), &format!("Concave up on (0, 1);  concave down on ({M}2, 0);  neither (a straight line) on [1, 3]"), "Inflection points: (0, 0)"]);
+    // 9. -√(-x) (x < 0), √x (x >= 0): a vertical tangent at 0 (f' runs off on both sides): critical, no extremum; concavity changes: (0, 0)
+    let p = pw("-sqrt(-x), x < 0; sqrt(x), x >= 0", -4.0, 4.0);
+    has(&key_of(&p), &["Critical points of f: x = 0 (f′ does not exist)", "Local maximum: none;  local minimum: none", "Inflection points: (0, 0)", &format!("Increasing on ({M}4, 0) and (0, 4)")]);
+    // 10. 2 (x < 1), x + 1 (x >= 1): continuous (2 = 2), f' 0 then 1: a corner at 1; constant up to it
+    let p = pw("2, x < 1; x + 1, x >= 1", -1.0, 3.0);
+    has(&key_of(&p), &["Critical points of f: x = 1 (f′ does not exist)", &format!("Increasing on (1, 3);  decreasing on none;  constant on [{M}1, 1]")]);
+    // 11. the AP start, f' = x + 2 on [-4, -2], 0 on (-2, 1], x - 1 after, f(-2) = 1: f(-4) = 1 - ∫(x + 2) from -4 to -2 = 1 + 2 = 3,
+    //     f(4) = 1 + ∫(x - 1) from 1 to 4 = 1 + 9/2 = 11/2, constant 1 on [-2, 1] (every point a local minimum)
+    let p = with(&[("start", s(STARTS[1])), ("fp", s("x + 2, -4 <= x <= -2; 0, -2 < x <= 1; x - 1, x > 1")), ("pt_x", s("-2")), ("pt_y", s("1")), ("xmin", super::tests::f(-4.0)), ("xmax", super::tests::f(4.0)), ("tracer_x", s("4"))]);
+    let m = model(&p, (-4.0, 4.0)).unwrap();
+    assert_eq!(m.exact_f(&exact::of_text("-4").unwrap()).map(|v| exact::text(&v)).as_deref(), Some("3"));
+    assert_eq!(m.exact_f(&exact::of_text("4").unwrap()).map(|v| exact::text(&v)).as_deref(), Some("11/2"));
+    has(&key_of(&p), &[&format!("Critical points of f: x = {M}2, x = 1"), &format!("constant on [{M}2, 1]"), &format!("Every point of [{M}2, 1] is a local minimum (f(x) = 1)")]);
+    assert!(svg_texts(&render(&p)).contains("f(4) = 11/2"));
+    // 12. the AP start, f' = 1 (x < 0), -1 (x >= 0), f(0) = 0: f = -|x|, a corner maximum at (0, 0); f(3) = -3
+    let p = with(&[("start", s(STARTS[1])), ("fp", s("1, x < 0; -1, x >= 0")), ("pt_x", s("0")), ("pt_y", s("0")), ("tracer_x", s("3"))]);
+    has(&key_of(&p), &["Critical points of f: x = 0 (f′ does not exist)", "Local maximum: (0, 0)", &format!("Increasing on ({M}3, 0);  decreasing on (0, 3)")]);
+    assert!(svg_texts(&render(&p)).contains(&format!("f(3) = {M}3")));
+}
+
+#[test]
+fn odd_roots_worked_by_hand() {
+    let k = |f: &str| key_of(&pw(f, -6.0, 8.0));
+    // x^(1/3): f' = (1/3)x^(-2/3) runs off at 0 (vertical tangent), f'' = -(2/9)x^(-5/3) changes sign: inflection (0, 0)
+    has(&k("x^(1/3)"), &["Critical points of f: x = 0 (f′ does not exist)", "Inflection points: (0, 0)", "Local maximum: none;  local minimum: none"]);
+    // x^(2/3): a cusp minimum (0, 0)
+    has(&k("x^(2/3)"), &["Critical points of f: x = 0 (f′ does not exist)", "local minimum: (0, 0)", "Inflection points: none"]);
+    // x^(1/3)(x + 4): f' = (4x + 4)/(3x^(2/3)): min at -1, f(-1) = -1·3 = -3; f'' = 4(x - 2)/(9x^(5/3)): inflections at 0 (f = 0) and 2 (6∛2)
+    has(&k("x^(1/3)(x + 4)"), &[&format!("Critical points of f: x = {M}1, x = 0 (f′ does not exist)"), &format!("local minimum: ({M}1, {M}3)"), "Inflection points: (0, 0), (2, \u{2248}7.56)"]);
+    // x^(4/3) - 4x^(1/3) = x^(1/3)(x - 4): f' = (4/3)x^(-2/3)(x - 1): min (1, -3); f'' = (4/9)x^(-5/3)(x + 2): inflections -2 (6∛2) and 0
+    has(&k("x^(4/3) - 4x^(1/3)"), &[&format!("local minimum: (1, {M}3)"), &format!("Inflection points: ({M}2, \u{2248}7.56), (0, 0)")]);
+    // 2x^(1/3) + x^(4/3): f' = (2/3)x^(-2/3)(1 + 2x): min at -1/2; f'' = (4/9)x^(-5/3)(x - 1): inflections (0, 0) and (1, 3)
+    has(&k("2x^(1/3) + x^(4/3)"), &[&format!("Critical points of f: x = {M}1/2, x = 0 (f′ does not exist)"), "Inflection points: (0, 0), (1, 3)"]);
+    // (x^2 - 4)^(1/3): f' = (2x/3)(x^2 - 4)^(-2/3): min at 0 (∛-4, no exact rational form), vertical tangents at ±2, inflections (±2, 0)
+    has(&k("(x^2 - 4)^(1/3)"), &[&format!("Critical points of f: x = {M}2 (f′ does not exist), x = 0, x = 2 (f′ does not exist)"), &format!("Inflection points: ({M}2, 0), (2, 0)"), &format!("local minimum: (0, \u{2248}{M}1.59)")]);
+    // x^(2/3)(x - 5): f' = (5/3)x^(-1/3)(x - 2): a cusp max (0, 0), min at 2; f'' = (10/9)x^(-4/3)(x + 1): inflection (-1, -6)
+    has(&k("x^(2/3)(x - 5)"), &["Critical points of f: x = 0 (f′ does not exist), x = 2", "Local maximum: (0, 0)", &format!("Inflection points: ({M}1, {M}6)")]);
+    // (x - 1)^(1/3) + 2: a vertical tangent at 1, f(1) = 2, inflection (1, 2)
+    has(&k("(x - 1)^(1/3) + 2"), &["Critical points of f: x = 1 (f′ does not exist)", "Inflection points: (1, 2)"]);
+}
+
+/// A written value in the figure's typesetting, read back by the app's reader ("−9/8", "3 + π/3 + √3/2", "2/e²").
+fn read_back(t: &str) -> Option<f64> {
+    let mut s = t.trim().replace("\u{221a}e", "sqrt(e)").replace('\u{2212}', "-").replace('\u{3c0}', "pi").replace('\u{b2}', "^2").replace('\u{b3}', "^3");
+    // √n → sqrt(n)
+    while let Some(i) = s.find('\u{221a}') { let rest = &s[i + '\u{221a}'.len_utf8()..]; let n: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect(); s = format!("{}sqrt({n}){}", &s[..i], &rest[n.len()..]); }
+    eval(&s, 0.0)
+}
+
+#[test]
+fn every_value_written_with_an_equals_sign_is_the_true_value() {
+    // every reading "f(t) = v", every coordinate in a label or the key not marked ≈: rebuilt from what is written, it equals the
+    // true value (to 1e-9: the true values are worked numerically to 1e-12); a value marked ≈ is within its rounding
+    let mut checked = 0;
+    for c in super::sweep::CLASSROOM.iter() {
+        for rounding in ROUNDING {
+            let p = super::sweep::case_params(c, &[("extrema", b(true)), ("inflect", b(true)), ("key_list", b(true)), ("tracer", b(true)), ("tracer_x", s(if c.3 { "pi/4" } else { "1/2" })), ("rounding", s(rounding))]);
+            let bl = build(&p);
+            let Some(an) = bl.analysis.as_ref() else { continue };
+            let Ok(m) = model(&p, window(&p)) else { continue };
+            let names = [fname(&p), format!("{}\u{2032}", fname(&p)), format!("{}\u{2033}", fname(&p))];
+            // readings
+            for (text, _, kind) in &bl.labels {
+                if *kind != "reading" { continue; }
+                for part in text.split(",  ") {
+                    let fi = names.iter().rposition(|n| part.starts_with(&format!("{n}("))).unwrap();
+                    let t = typed(p.s("tracer_x")).unwrap().v;
+                    let truth = if fi == 0 { m.f(t) } else { m.d(fi, t) };
+                    if let Some((_, v)) = part.split_once(" = ") { let got = read_back(v).unwrap_or_else(|| panic!("{part}")); assert!(truth.is_some_and(|w| (got - w).abs() < 1e-9 * (1.0 + w.abs())), "{} [{rounding}]: {part} but {truth:?}", c.0); checked += 1; }
+                    else if let Some((_, v)) = part.split_once(" \u{2248} ") { let got = read_back(v).unwrap(); assert!(truth.is_some_and(|w| (got - w).abs() <= 0.51 * 10f64.powi(-(decimals(&p).unwrap_or(2) as i32)) + 1e-12 && (got - w).abs() > 1e-12), "{} [{rounding}]: {part} but {truth:?}", c.0); }
+                }
+            }
+            // coordinates of the marked points, in the labels and the key: x and y of the true point
+            let mut pts: Vec<(f64, f64)> = an.crit.iter().map(|q| (q.x, q.y)).chain(an.infl.iter().map(|q| (q.x, q.y))).collect();
+            if let Ok(r) = absolute(&p, &m, an) { pts.extend(r.cands.iter().map(|q| (q.x, q.y))); }
+            let mut texts: Vec<String> = bl.labels.iter().filter(|l| matches!(l.2, "extremum" | "inflection" | "absolute")).map(|l| l.0.clone()).collect();
+            texts.extend(key_lines(&p, &m, an, window(&p)));
+            for t in texts {
+                let t = t.replace('\u{a0}', " ");
+                let mut rest = t.as_str();
+                while let Some(i) = rest.find('(') {
+                    let Some(j) = rest[i..].find(')') else { break };
+                    let inner = &rest[i + 1..i + j];
+                    rest = &rest[i + j..];
+                    let Some((xs, ys)) = inner.split_once(", ") else { continue };
+                    if xs.contains("does not") || xs.contains("every") { continue; }
+                    let (xa, ya) = (xs.trim().strip_prefix('\u{2248}'), ys.trim().strip_prefix('\u{2248}'));
+                    let (Some(xv), Some(yv)) = (read_back(xa.unwrap_or(xs)), read_back(ya.unwrap_or(ys))) else { continue };
+                    // a point: the true one nearest
+                    let Some(&(tx, ty)) = pts.iter().min_by(|a, b| ((a.0 - xv).abs() + (a.1 - yv).abs()).partial_cmp(&((b.0 - xv).abs() + (b.1 - yv).abs())).unwrap()) else { continue };
+                    if (tx - xv).abs() > 0.06 || (ty - yv).abs() > 0.06 * (1.0 + ty.abs()) { continue; } // (an interval, not a point)
+                    if xa.is_none() { assert!((xv - tx).abs() < 1e-9 * (1.0 + tx.abs()), "{} [{rounding}]: x in {t:?} is {tx}", c.0); checked += 1; }
+                    if ya.is_none() { assert!((yv - ty).abs() < 1e-9 * (1.0 + ty.abs()), "{} [{rounding}]: y in {t:?} is {ty}", c.0); checked += 1; }
+                }
+            }
+        }
+    }
+    println!("{checked} written values checked");
+    assert!(checked > 2000);
 }

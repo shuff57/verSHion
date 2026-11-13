@@ -223,14 +223,16 @@ fn is_num(e: &Ex, v: f64) -> bool { matches!(e, Num(n) if *n == v) }
 pub(crate) fn num(v: f64) -> Ex { if v < 0.0 { Neg(bx(Num(-v))) } else { Num(v) } }
 fn val(e: &Ex) -> Option<f64> { match e { Num(v) => Some(*v), Neg(a) => match a.as_ref() { Num(v) => Some(-v), _ => None }, _ => None } }
 pub(crate) fn add(a: Ex, b: Ex) -> Ex {
-    if let (Some(x), Some(y)) = (val(&a), val(&b)) { return num(x + y); }
+    // (two whole numbers only: 1/3 stays a ratio, 0.1 stays as typed, so exact values read back exactly)
+    if let (Some(x), Some(y)) = (val(&a), val(&b)) { if x.fract() == 0.0 && y.fract() == 0.0 && (x + y).abs() < 1e15 { return num(x + y); } }
     if val(&a) == Some(0.0) { return b; }
     if val(&b) == Some(0.0) { return a; }
     if let Neg(nb) = b { return sub(a, *nb); }
     Add(bx(a), bx(b))
 }
 pub(crate) fn sub(a: Ex, b: Ex) -> Ex {
-    if let (Some(x), Some(y)) = (val(&a), val(&b)) { return num(x - y); }
+    // (two whole numbers only: 1/3 stays a ratio, 0.1 stays as typed, so exact values read back exactly)
+    if let (Some(x), Some(y)) = (val(&a), val(&b)) { if x.fract() == 0.0 && y.fract() == 0.0 && (x - y).abs() < 1e15 { return num(x - y); } }
     if val(&b) == Some(0.0) { return a; }
     if val(&a) == Some(0.0) { return neg(b); }
     if let Neg(nb) = b { return add(a, *nb); }
@@ -242,7 +244,8 @@ pub(crate) fn neg(a: Ex) -> Ex {
     Neg(bx(a))
 }
 pub(crate) fn mul(a: Ex, b: Ex) -> Ex {
-    if let (Some(x), Some(y)) = (val(&a), val(&b)) { return num(x * y); }
+    // (two whole numbers only: 1/3 stays a ratio, 0.1 stays as typed, so exact values read back exactly)
+    if let (Some(x), Some(y)) = (val(&a), val(&b)) { if x.fract() == 0.0 && y.fract() == 0.0 && (x * y).abs() < 1e15 { return num(x * y); } }
     if val(&a) == Some(0.0) || val(&b) == Some(0.0) { return Num(0.0); }
     if val(&a) == Some(1.0) { return b; }
     if val(&b) == Some(1.0) { return a; }
@@ -250,7 +253,7 @@ pub(crate) fn mul(a: Ex, b: Ex) -> Ex {
     if val(&b) == Some(-1.0) { return neg(a); }
     // a number always leads, and two numbers meet: 2 * (3 * u) is 6 * u
     if val(&a).is_none() && val(&b).is_some() { return mul(b, a); }
-    if let (Some(x), Mul(c, d)) = (val(&a), &b) { if let Some(y) = val(c) { return mul(num(x * y), (**d).clone()); } }
+    if let (Some(x), Mul(c, d)) = (val(&a), &b) { if let Some(y) = val(c) { if x.fract() == 0.0 && y.fract() == 0.0 { return mul(num(x * y), (**d).clone()); } } }
     if let Neg(x) = a { return neg(mul(*x, b)); }
     if let Neg(y) = b { return neg(mul(a, *y)); }
     Mul(bx(a), bx(b))

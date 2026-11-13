@@ -209,18 +209,30 @@ fn the_ends_of_every_range_draw_quickly_and_cleanly() {
         vec![("tracer_x", s("1e300")), ("abs_a", s("-1e300")), ("abs_b", s("1e300")), ("absolute", b(true))],
         vec![("name", s(&"g".repeat(400))), ("title", s(&"T".repeat(500)))],
         vec![("start", s(STARTS[1])), ("fp", s("x")), ("pt_x", s("900")), ("pt_y", s("0"))],
+        // f′ that oscillates without end near 0, or ever faster: refused with a note, quickly
+        vec![("start", s(STARTS[1])), ("fp", s("sin(1/x)")), ("pt_x", s("1")), ("pt_y", s("0"))],
+        vec![("start", s(STARTS[1])), ("fp", s("x sin(1/x)")), ("pt_x", s("1")), ("pt_y", s("0"))],
+        vec![("start", s(STARTS[1])), ("fp", s("cos(1/x)")), ("pt_x", s("1")), ("pt_y", s("0"))],
+        vec![("start", s(STARTS[1])), ("fp", s("sin(x^2)")), ("pt_x", s("0")), ("pt_y", s("0")), ("xmin", f(-100.0)), ("xmax", f(100.0))],
+        vec![("start", s(STARTS[1])), ("fp", s("sin(x^2)")), ("pt_x", s("0")), ("pt_y", s("0")), ("xmin", f(-1000.0)), ("xmax", f(1000.0))],
+        vec![("f", s("sin(x^2)")), ("xmin", f(-1000.0)), ("xmax", f(1000.0)), ("show_fpp", b(true)), ("extrema", b(true)), ("inflect", b(true))],
     ];
     for list in cases {
         let p = with(&list);
-        let t0 = std::time::Instant::now();
+        // (the work, not the clock, which another build on the machine can slow: the typed function evaluated at most
+        // WORK_MAX times a drawing, over the drawings tried, and the label placer's spots bounded)
         let bl = build(&p);
-        let el = t0.elapsed().as_secs_f64();
-        assert!(el < 0.6, "{list:?}: {el:.2} s");
+        assert!(bl.work < 5 * (WORK_MAX + 200_000), "{list:?}: work {}", bl.work);
         assert!(bl.svg.len() < 3_000_000, "{list:?}: {} bytes", bl.svg.len());
         // (no NaN and no bare "inf" written as a number anywhere)
         let bare_inf = bl.svg.match_indices("inf").any(|(i, _)| { let b = bl.svg.as_bytes(); let before = i.checked_sub(1).map(|j| b[j]); let after = b.get(i + 3).copied(); !before.is_some_and(|c| c.is_ascii_alphabetic()) && !after.is_some_and(|c| c.is_ascii_alphabetic()) });
         assert!(!bl.svg.contains("NaN") && !bare_inf, "{list:?}");
         let _ = crate::figures::to_png(&bl.svg, 0.5).unwrap();
+    }
+    // f′ oscillating without end, or ever faster over a wide window: f is not drawn from it, and the note says why
+    for (fp, lo, hi) in [("sin(1/x)", -3.0, 3.0), ("x sin(1/x)", -3.0, 3.0), ("cos(1/x)", -3.0, 3.0), ("sin(x^2)", -1000.0, 1000.0)] {
+        let w = warnings(&with(&[("start", s(STARTS[1])), ("fp", s(fp)), ("pt_x", s("1")), ("pt_y", s("0")), ("xmin", f(lo)), ("xmax", f(hi))]));
+        assert!(w.iter().any(|n| n.contains("changes too fast") || n.contains("pole")), "{fp}: {w:?}");
     }
     // sin(1/x) oscillates past what can be drawn: the figure says so rather than marking hundreds of points
     let w = warnings(&with(&[("f", s("1/x")), ("tracer_x", s("0"))]));
@@ -253,7 +265,7 @@ pub(super) const TOKENS: [(&str, &str); 34] = [
     ("cap-04", r#"{"show_fpp":true}"#),
     ("cap-05", r#"{"layout":"One grid","show_fpp":true,"ymin":-6.0,"ymax":10.0,"ystep":2.0}"#),
     ("cap-06", r#"{"start":"f′(x)","xmin":-4.0,"xmax":4.0,"ymin":-2.0,"ymax":8.0,"ymin1":-3.0,"ymax1":3.0,"ystep1":1.0}"#),
-    ("cap-07", r#"{"crit":false}"#),
+    ("cap-07", r#"{"crit":true,"tracer":false}"#),
     ("cap-08", r#"{"extrema":true}"#),
     ("cap-09", r#"{"inflect":true,"show_fpp":true}"#),
     ("cap-10", r#"{"incdec":true}"#),
@@ -300,5 +312,22 @@ fn every_evidence_token_changes_the_opening_drawing_and_draws_cleanly() {
     }
     // the interaction: a drag handle at the opening state with its tip
     let p = crate::figures::start_params(&d);
-    assert!(interact::handles_for(ID, &p, crate::figures::svg_size(&base)).iter().any(|h| h.drag.is_some() && h.tip.contains("Drag the tracer along the graphs")));
+    assert!(interact::handles_for(ID, &p, crate::figures::svg_size(&base)).iter().any(|h| h.drag.is_some() && h.tip.contains("Drag the tracer along the graphs to read f, f\u{2032} and f\u{2033} at one x")));
+    // cap-07 shows only the critical points and their guides: the opening state less the tracer
+    let p07 = crate::figures::params_from_json(&d, &serde_json::json!({"crit": true, "tracer": false}));
+    let svg = d.svg(&p07);
+    assert!(svg.contains("data-mark=\"crit\"") && !svg.contains("data-mark=\"tracer\"") && !svg.contains("data-mark=\"tangent\"") && !svg.contains("data-mark=\"infl\""));
+}
+
+#[test]
+#[ignore]
+fn show_case() {
+    // VERSHION_DG_JSON='<params json>': the figure's notes, labels and key, for a look
+    let Ok(j) = crate::env_var("VERSHION_DG_JSON") else { return };
+    let d = def();
+    let p = crate::figures::params_from_json(&d, &serde_json::from_str(&j).unwrap());
+    let bl = build(&p);
+    println!("NOTES {:?}", bl.notes);
+    for l in &bl.labels { if !matches!(l.2, "key") { println!("LABEL {}: {}", l.2, l.0.replace('\u{a0}', " ")); } }
+    if let (Ok(m), Some(an)) = (model(&p, window(&p)), bl.analysis.as_ref()) { for k in key_lines(&p, &m, an, window(&p)) { println!("KEY {}", k.replace('\u{a0}', " ")); } }
 }
