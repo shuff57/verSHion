@@ -9,7 +9,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
 | complex-plane | **missing** | | | 37 | | |
-| conic-sections | **missing** | | | 46 | | |
+| conic-sections | `conic-sections` | 52 | 16 | 46 | — | 100 |
 | coordinate-grid-limits | `coordinate-grid` | 59 | 2 | 10 | — | 0 |
 | derivative-graphs | **missing** | | | 35 | | |
 | limits-discontinuities | **missing** | | | 34 | | |
@@ -21,13 +21,13 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 ## Reference figures we do not have
 
-`new/conic-sections`, `new/tangent-secant-lines`, `new/riemann-sums`, `new/derivative-graphs`, `new/limits-discontinuities`, `new/sequences-series`, `new/complex-plane`, `new/polar-parametric`, `new/slope-fields`
+`new/tangent-secant-lines`, `new/riemann-sums`, `new/derivative-graphs`, `new/limits-discontinuities`, `new/sequences-series`, `new/complex-plane`, `new/polar-parametric`, `new/slope-fields`
 
 Our figures with no reference page: 190
 
-Generated: 2026-11-12T18:21:03+00:00 · probe: 2026-11-12T10:21:03
+Generated: 2026-11-13T17:01:26+00:00 · probe: 2026-11-13T09:01:26
 
-**Pooled 0.0** · mean 0.0 over 10 figures · built 1 of 10 reference figures (missing: new/conic-sections, new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/limits-discontinuities, new/sequences-series, new/complex-plane, new/polar-parametric, new/slope-fields)
+**Pooled 12.9** · mean 10.0 over 10 figures · built 2 of 10 reference figures (missing: new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/limits-discontinuities, new/sequences-series, new/complex-plane, new/polar-parametric, new/slope-fields)
 
 Comparable with the frozen baseline: **yes**
 
@@ -38,13 +38,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [core 5] Draw and write the modulus |z| — not built
   - cap-05 [core 5] Mark the argument with an arc and write it (principal value) — not built
   - cap-06 [core 5] Draw the conjugate, reflected in the real axis — not built
-- `conic-sections`: 0 (0/151)
-  - cap-01 [core 5] Choose a circle, ellipse, parabola or hyperbola — not built
-  - cap-02 [core 5] Set the centre (h, k), or the vertex of a parabola — not built
-  - cap-03 [core 5] Set a circle's radius — not built
-  - cap-04 [core 5] Set an ellipse's or hyperbola's a and b — not built
-  - cap-05 [core 5] Set a parabola's focal distance p (vertex to focus) — not built
-  - cap-06 [core 5] Open a parabola up, down, left or right — not built
 - `coordinate-grid`: 0 (0/34)
   - cap-01 [core 5] Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a on a graphed row, the answers in the key — no evidence
   - cap-02 [core 5] Ask for the limits as x → ∞ and x → -∞ of a graphed row — no evidence
@@ -101,3 +94,4 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [core 5] Draw the secant line through x = a and x = a + h — not built
   - cap-05 [core 5] Set h, positive or negative — not built
   - cap-06 [core 5] Draw several secants for shrinking h (such as 2, 1, 0.5, 0.1) approaching the tangent — not built
+- `conic-sections`: 100 (151/151)

@@ -1,0 +1,37 @@
+{
+ "round": 1,
+ "figure": "conic-sections",
+ "capability": "cap-01",
+ "hypothesis": "New figure conic-sections: all 46 checklist entries built and accepted on the fourth independent check",
+ "started_at": "2026-11-13T09:01:25",
+ "git": "e2da437",
+ "before": {
+  "figure": 0.0,
+  "pooled": 0.0
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 2 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-13T09:01:26",
+ "after": {
+  "figure": 100.0,
+  "pooled": 12.9
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"conic\":\"Hyperbola\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/8641b2e9bfc8a82e.png"
+   }
+  ]
+ },
+ "checker": "accept on the fourth independent check (NAS, aaf9497): all 46 entries pass; 2,694 swept figures with nothing missing, on text or off the page; side list only on named tiny conics; cosmetic faults listed",
+ "result": "miss",
+ "evidence": "conic and census tests 48 passed, 0 failed",
+ "next": "tangent-secant-lines and riemann-sums (second checks running); derivative-graphs (building)"
+}

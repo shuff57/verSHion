@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-12T16:43:51+00:00",
-  "src_mtime": 1794501279.16356,
-  "git": "12b1f0b",
-  "figures": 191
+  "built_at": "2026-11-13T17:01:25+00:00",
+  "src_mtime": 1794589241.8502274,
+  "git": "e2da437",
+  "figures": 192
  },
  "figures": {
   "free-body-diagram": {
@@ -37955,6 +37955,549 @@
    "handle_list": [],
    "handles": false,
    "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "conic-sections": {
+   "id": "conic-sections",
+   "title": "Conic sections",
+   "blurb": "A circle, ellipse, parabola or hyperbola on a coordinate grid, from its values or a typed equation, with its parts marked and worked out exactly.",
+   "params": [
+    {
+     "key": "conic",
+     "label": "Conic",
+     "kind": "choice",
+     "options": [
+      "Circle",
+      "Ellipse",
+      "Parabola",
+      "Hyperbola"
+     ],
+     "default": "Ellipse"
+    },
+    {
+     "key": "equation",
+     "label": "Equation",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "h",
+     "label": "h (centre or vertex x)",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "k",
+     "label": "k (centre or vertex y)",
+     "kind": "text",
+     "options": [],
+     "default": "-1"
+    },
+    {
+     "key": "r",
+     "label": "Radius r",
+     "kind": "text",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "a",
+     "label": "a",
+     "kind": "text",
+     "options": [],
+     "default": "5"
+    },
+    {
+     "key": "b",
+     "label": "b",
+     "kind": "text",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "pf",
+     "label": "p (vertex to focus)",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "axis",
+     "label": "Major / transverse axis",
+     "kind": "choice",
+     "options": [
+      "Horizontal",
+      "Vertical"
+     ],
+     "default": "Horizontal"
+    },
+    {
+     "key": "opens",
+     "label": "Opens",
+     "kind": "choice",
+     "options": [
+      "Up",
+      "Down",
+      "Left",
+      "Right"
+     ],
+     "default": "Up"
+    },
+    {
+     "key": "show_name",
+     "label": "Name the conic",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_centre",
+     "label": "Centre",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_vertices",
+     "label": "Vertices",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_covertices",
+     "label": "Co-vertices",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_foci",
+     "label": "Foci",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_directrix",
+     "label": "Directrix (parabola)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_directrices",
+     "label": "The two directrices",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_axes",
+     "label": "Major and minor axes (transverse and conjugate), with 2a and 2b",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_sym",
+     "label": "Axis of symmetry",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_asymptotes",
+     "label": "Asymptotes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_rect",
+     "label": "Central rectangle",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_latus",
+     "label": "Latus rectum",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_p",
+     "label": "A point P on the curve with its focal radii",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p_at",
+     "label": "Where P is on the curve (degrees)",
+     "kind": "float",
+     "options": [],
+     "default": "53.13"
+    },
+    {
+     "key": "show_ecc",
+     "label": "Eccentricity e = c/a",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_work",
+     "label": "List a, b, c and how c is found",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "pt_labels",
+     "label": "Point labels",
+     "kind": "choice",
+     "options": [
+      "Letters and coordinates",
+      "Letters only",
+      "Coordinates only"
+     ],
+     "default": "Letters and coordinates"
+    },
+    {
+     "key": "coords",
+     "label": "Coordinates",
+     "kind": "choice",
+     "options": [
+      "Exact",
+      "Decimals"
+     ],
+     "default": "Exact"
+    },
+    {
+     "key": "dec",
+     "label": "Decimal places",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "eq_form",
+     "label": "Equation on the figure",
+     "kind": "choice",
+     "options": [
+      "Standard form",
+      "General form",
+      "None"
+     ],
+     "default": "Standard form"
+    },
+    {
+     "key": "title_mode",
+     "label": "Title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-10.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "xstep",
+     "label": "x-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ymin",
+     "label": "y-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-10.0"
+    },
+    {
+     "key": "ymax",
+     "label": "y-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "ystep",
+     "label": "y-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines per step",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "numbers",
+     "label": "Number the axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "xlabel",
+     "label": "x-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "ylabel",
+     "label": "y-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Light"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "blank_labels",
+     "label": "Student copy: leave the parts unlabelled",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "blank_curve",
+     "label": "Student copy: leave the curve off (to sketch)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "blank_equation",
+     "label": "Student copy: a blank line for the equation",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "key_line",
+     "label": "Answer line under the figure (equation, centre, vertices, foci, e)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "eq_written",
+     "label": "Equation written in",
+     "kind": "choice",
+     "options": [
+      "As typed",
+      "Standard form (general would be irrational)"
+     ],
+     "default": "As typed"
+    },
+    {
+     "key": "label_offsets",
+     "label": "Label positions",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag the centre to move the conic"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag a vertex to change a"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag a vertex to change a"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag a co-vertex to change b"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag a co-vertex to change b"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag P along the curve"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    }
+   ],
+   "handles": true,
+   "label_drag": true,
    "show_answers": true,
    "style": true,
    "label_size": true

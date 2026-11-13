@@ -7,323 +7,323 @@
    "id": "cap-01",
    "text": "Choose a circle, ellipse, parabola or hyperbola",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"conic\":\"Hyperbola\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-02",
    "text": "Set the centre (h, k), or the vertex of a parabola",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"h\":\"3\",\"k\":\"2\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-03",
    "text": "Set a circle's radius",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"conic\":\"Circle\",\"r\":\"6\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-04",
    "text": "Set an ellipse's or hyperbola's a and b",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"a\":\"6\",\"b\":\"2\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-05",
    "text": "Set a parabola's focal distance p (vertex to focus)",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"conic\":\"Parabola\",\"pf\":\"3\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-06",
    "text": "Open a parabola up, down, left or right",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"conic\":\"Parabola\",\"opens\":\"Left\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-07",
    "text": "Lay an ellipse's major axis or a hyperbola's transverse axis horizontal or vertical",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"axis\":\"Vertical\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-08",
    "text": "Type the equation in standard form, such as (x - 2)^2/9 + (y + 1)^2/4 = 1, and have it drawn with its parts",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"equation\":\"(x - 2)^2/9 + (y + 1)^2/4 = 1\",\"xmin\":-3.0,\"xmax\":7.0,\"ymin\":-5.0,\"ymax\":3.0}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-09",
    "text": "Type the equation in general form, such as 4x^2 + 9y^2 - 16x + 18y - 11 = 0, and have the conic named and drawn",
    "class": "core",
-   "evidence": "",
-   "note": "completing the square is the textbook skill this supports"
+   "evidence": "changes:{\"equation\":\"4x^2 + 9y^2 - 16x + 18y - 11 = 0\",\"xmin\":-3.0,\"xmax\":7.0,\"ymin\":-5.0,\"ymax\":3.0}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-10",
    "text": "Type values as fractions or square roots (a = √5, p = 3/2)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"b\":\"√5\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-11",
    "text": "Mark and label the centre",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_centre\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-12",
    "text": "Mark and label the vertices",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_vertices\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-13",
    "text": "Mark and label an ellipse's co-vertices",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_covertices\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-14",
    "text": "Mark and label the foci",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_foci\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-15",
    "text": "Draw and label a parabola's directrix with its equation",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"conic\":\"Parabola\",\"show_p\":false,\"show_directrix\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-16",
    "text": "Draw the two directrices of an ellipse or hyperbola",
    "class": "control",
-   "evidence": "",
-   "note": "beyond most US texts; in precalculus books that teach eccentricity"
+   "evidence": "changes:{\"show_directrices\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-17",
    "text": "Draw the major and minor axes (transverse and conjugate for a hyperbola), labelled with their lengths 2a and 2b",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_axes\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-18",
    "text": "Draw a parabola's axis of symmetry with its equation",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"conic\":\"Parabola\",\"show_sym\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-19",
    "text": "Draw a hyperbola's asymptotes, labelled with their equations",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"conic\":\"Hyperbola\",\"h\":\"0\",\"k\":\"0\",\"a\":\"4\",\"b\":\"3\",\"show_p\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-20",
    "text": "Draw a hyperbola's central rectangle",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"conic\":\"Hyperbola\",\"h\":\"0\",\"k\":\"0\",\"a\":\"4\",\"b\":\"3\",\"show_p\":false,\"show_rect\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-21",
    "text": "Draw the latus rectum, labelled with its length",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_latus\":true,\"show_p\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-22",
    "text": "Show a point P on the curve with its focal radii and their lengths (to both foci, or to the focus and directrix of a parabola)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"p_at\":120.0}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-23",
    "text": "Write the eccentricity e = c/a",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_ecc\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-24",
    "text": "List a, b, c and the relation c^2 = a^2 - b^2 (or a^2 + b^2) beside the figure, worked with the values",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_work\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-25",
    "text": "Label points with their coordinates or with letters only",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"pt_labels\":\"Letters only\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-26",
    "text": "Give coordinates exactly (2 + √5, -1) or as rounded decimals",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"b\":\"√5\",\"coords\":\"Decimals\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-27",
    "text": "Write the equation on the figure in standard or general form",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"eq_form\":\"General form\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-28",
    "text": "Load a classic example (orbit, satellite dish, whispering gallery, hyperbola with asymptotes, circle from general form)",
    "class": "control",
-   "evidence": "",
-   "note": "a setup choice that loads the values, as the parity figures' Classic setups"
+   "evidence": "changes:{\"xmin\":-8.0,\"xmax\":8.0,\"ymin\":-3.0,\"ymax\":9.0,\"conic\":\"Parabola\",\"h\":\"0\",\"k\":\"0\",\"pf\":\"2\",\"opens\":\"Up\",\"title\":\"A satellite dish: the receiver at the focus\",\"show_latus\":true,\"show_p\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-29",
    "text": "Set each axis's From, To and Count by",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"xmin\":-6.0,\"xmax\":8.0,\"xstep\":2.0}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-30",
    "text": "Make the gridlines light, standard, bold or none",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"grid\":\"Bold\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-31",
    "text": "Add minor gridlines between the numbered lines",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"minor\":2}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-32",
    "text": "Number the axes, or leave the numbers off",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"numbers\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-33",
    "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"xlabel\":\"t\",\"ylabel\":\"d\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-34",
    "text": "Write a title",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"title\":\"An ellipse\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-35",
    "text": "Put a blank line in place of the title for students",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"title\":\"An ellipse\",\"title_mode\":\"Blank line\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-36",
    "text": "Make the labels small, medium or large",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"label_size\":\"Large\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-37",
    "text": "Draw it in black and white for photocopying (Print)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"style\":\"Print\"}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-38",
    "text": "A student copy that leaves the parts unlabelled for students to name and find",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\":false,\"blank_equation\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-39",
    "text": "A student copy that keeps the marked points and leaves the curve off, for students to sketch it",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\":false,\"blank_curve\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-40",
    "text": "A student copy with a blank line for the equation, to write it from the graph",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\":false,\"blank_labels\":false}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-41",
    "text": "An answer key line giving the equation, centre, vertices, foci and eccentricity",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"key_line\":true}",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-42",
    "text": "Drag the centre on the figure to move the conic",
    "class": "interaction",
-   "evidence": "",
-   "note": "opening state: the ellipse's centre is a handle"
+   "evidence": "handle:drag:Drag the centre to move the conic",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-43",
    "text": "Drag a vertex on the figure to change a",
    "class": "interaction",
-   "evidence": "",
-   "note": "opening state: the ellipse's vertex is a handle"
+   "evidence": "handle:drag:Drag a vertex to change a",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-44",
    "text": "Drag a co-vertex on the figure to change b",
    "class": "interaction",
-   "evidence": "",
-   "note": "opening state: the ellipse's co-vertex is a handle"
+   "evidence": "handle:drag:Drag a co-vertex to change b",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-45",
    "text": "Drag P along the curve on the figure, the focal radii and their lengths following it",
    "class": "interaction",
-   "evidence": "",
-   "note": "opening state: P is on the ellipse"
+   "evidence": "handle:drag:Drag P along the curve",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   },
   {
    "id": "cap-46",
    "text": "Drag a label on the figure to move it",
    "class": "interaction",
-   "evidence": "",
-   "note": ""
+   "evidence": "label-drag",
+   "note": "Round 1 (2026-11-13): accepted on the fourth independent check (NAS)."
   }
  ]
 }
