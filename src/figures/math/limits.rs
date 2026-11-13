@@ -12,6 +12,12 @@ use crate::figures::{answers_param, svg, Example, FigureDef, ParamDef, Params, S
 use std::f64::consts::PI;
 
 pub const ID: &str = "limits-discontinuities";
+/// The exact analysis: constants, the typed formula, limits by series, zeros.
+#[path = "limits_cas.rs"]
+pub(crate) mod cas;
+#[cfg(test)]
+#[path = "limits_cas_tests.rs"]
+mod cas_tests;
 type Pt = (f64, f64);
 type Bx = [f64; 4];
 
@@ -78,83 +84,51 @@ pub fn params() -> Vec<ParamDef> {
     ]
 }
 
-// ───────────────────────── numbers written exactly ─────────────────────────
+// ───────────────────────── numbers ─────────────────────────
+
+use cas::{At, K, L as CL, X};
 
 fn gcd(a: i64, b: i64) -> i64 { if b == 0 { a.abs() } else { gcd(b, a % b) } }
-/// v as n/d (d up to `maxd`) within `tol`.
+/// v as n/d (d up to `maxd`) within `tol`: only for a value the figure itself put on a grid of steps (a drag).
 fn frac_of(v: f64, maxd: i64, tol: f64) -> Option<(i64, i64)> {
     if !v.is_finite() || v.abs() > 1e9 { return None; }
     for d in 1..=maxd {
         let n = v * d as f64;
-        if (n - n.round()).abs() <= tol * d as f64 {
-            let n = n.round() as i64;
-            let g = gcd(n, d).max(1);
-            return Some((n / g, d / g));
-        }
+        if (n - n.round()).abs() <= tol * d as f64 { let n = n.round() as i64; let g = gcd(n, d).max(1); return Some((n / g, d / g)); }
     }
     None
 }
-fn squarefree(n: i64) -> bool { (2..=n).take_while(|k| k * k <= n).all(|k| n % (k * k) != 0) }
 fn trim_dec(v: f64, places: usize) -> String {
     let s = format!("{:.*}", places, v);
     let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
     if s == "-0" { "0".into() } else { s }
 }
-/// A value written as a book prints it: a whole number, a fraction, a multiple of a square root or of π, else a rounded
-/// decimal with ≈. `tol` is how close the value must be (1e-9 for a value read straight off a formula; looser for one
-/// worked out by approaching a point). `decimal`: the formula was typed in decimals, so the answer is a decimal too.
-pub fn exact_text(v: f64, tol: f64, decimal: bool) -> String {
-    let tol = tol * (1.0 + v.abs());
-    if v.abs() <= tol { return "0".into(); }
-    // (a small value keeps its first figures: 0.00001 is never written as 0)
-    let places = |base: i32| -> usize { (base.max(-(v.abs().log10().floor() as i32) + 2)).clamp(0, 12) as usize };
-    if decimal {
-        let k = places(4);
-        let r = (v * 10f64.powi(k as i32)).round() / 10f64.powi(k as i32);
-        return if (r - v).abs() <= tol { trim_dec(r, k) } else { format!("\u{2248} {}", trim_dec(v, places(3))) };
-    }
-    if let Some((n, d)) = frac_of(v, 64, tol) { return if d == 1 { n.to_string() } else { format!("{n}/{d}") }; }
-    for k in (2..=200i64).filter(|k| squarefree(*k)) {
-        if let Some((n, d)) = frac_of(v / (k as f64).sqrt(), 12, tol).filter(|(n, _)| n.abs() <= 99 && *n != 0) {
-            let sign = if n < 0 { "-" } else { "" };
-            let c = if n.abs() == 1 { String::new() } else { n.abs().to_string() };
-            return if d == 1 { format!("{sign}{c}\u{221a}{k}") } else { format!("{sign}{c}\u{221a}{k}/{d}") };
-        }
-    }
-    if let Some((n, d)) = frac_of(v / PI, 12, tol).filter(|(n, _)| n.abs() <= 99 && *n != 0) {
-        let sign = if n < 0 { "-" } else { "" };
-        let c = if n.abs() == 1 { String::new() } else { n.abs().to_string() };
-        return if d == 1 { format!("{sign}{c}\u{3c0}") } else { format!("{sign}{c}\u{3c0}/{d}") };
-    }
-    format!("\u{2248} {}", trim_dec(v, places(3)))
-}
+/// "x = 1/3", or "x ≈ 0.739" for a place known only as a number.
+fn eq_text(var: &str, t: &str) -> String { match t.strip_prefix('\u{2248}') { Some(r) => format!("{var} \u{2248}{r}"), None => format!("{var} = {t}") } }
 
-/// A typed number kept as it was typed (its value, and the text written on the figure: 1/2 stays 1/2, 0.5 stays 0.5).
-#[derive(Clone, Debug, PartialEq)]
-pub struct Num { pub v: f64, pub text: String }
+/// A typed number: its exact value (1/2, √2, π/2, 0.37 typed as a decimal) and how it is written.
+#[derive(Clone, Debug)]
+pub struct Num { pub v: f64, pub text: String, pub k: K }
 impl Num {
     pub fn read(t: &str) -> Option<Num> {
         let t = t.trim();
         if t.is_empty() { return None; }
-        let v = eval_typed(t)?;
+        let e = cas::parse(t)?;
+        if e.has_x() { return None; }
+        let cas::EV::Val(k) = cas::exact(&e, &K::zero()) else { return None };
+        let v = k.value();
         if !v.is_finite() || v.abs() > 1e6 { return None; }
-        Some(Num { v, text: tidy_number(t) })
+        Some(Num { v, text: k.show(), k })
     }
-    fn of(v: f64) -> Num { Num { v, text: exact_text(v, 1e-9, false) } }
-}
-/// A typed number as it is written: the minus, √ and π signs, no spaces inside, a leading + dropped.
-fn tidy_number(t: &str) -> String {
-    let s: String = t.chars().filter(|c| !c.is_whitespace()).collect();
-    let s = s.replace('\u{2212}', "-").replace("sqrt", "\u{221a}").replace("pi", "\u{3c0}");
-    s.strip_prefix('+').map(|r| r.to_string()).unwrap_or(s)
+    fn of(k: K) -> Num { Num { v: k.value(), text: k.show(), k } }
 }
 
 // ───────────────────────── the typed function ─────────────────────────
 
 #[derive(Clone, Debug)]
 pub enum Src {
-    /// A formula in x, as the grid reads it; `dec` when typed in decimals.
-    Formula { expr: String, dec: bool },
+    /// A formula in x, read exactly.
+    Formula { x: X },
     /// Points joined by a smooth curve that keeps their shape (a monotone cubic: no bump between two points that the
     /// points do not show); `m` the slope at each point.
     Points { pts: Vec<(Num, Num)>, m: Vec<f64> },
@@ -168,37 +142,43 @@ pub struct End { pub x: Num, pub closed: bool, pub mark: bool, pub at: Option<(u
 #[derive(Clone, Debug)]
 pub struct Piece { pub n: usize, pub line: usize, pub text: String, pub src: Src, pub lo: Option<End>, pub hi: Option<End>, pub holes: Vec<(Num, (usize, usize))> }
 
-fn raw_val(v: f64) -> Option<f64> { if v.is_nan() { None } else if v.is_infinite() { Some(v.signum() * 1e300) } else { Some(v) } }
-
 impl Piece {
     fn lo_x(&self) -> f64 { self.lo.as_ref().map_or(f64::NEG_INFINITY, |e| e.x.v) }
     fn hi_x(&self) -> f64 { self.hi.as_ref().map_or(f64::INFINITY, |e| e.x.v) }
-    /// The piece's formula (or curve through its points) at x, whatever its domain says; a pole is a huge value.
+    /// The piece's formula (or curve through its points) at x, whatever its domain says.
     pub fn g(&self, x: f64) -> Option<f64> {
         match &self.src {
-            Src::Formula { expr, .. } => eval(expr, x).and_then(raw_val),
+            Src::Formula { x: e } => cas::ev(e, x),
             Src::Points { pts, m } => spline(pts, m, x),
         }
     }
-    fn hole_at(&self, x: f64) -> bool { self.holes.iter().any(|(h, _)| (h.v - x).abs() < 1e-9) }
+    fn hole_at(&self, x: f64) -> bool { self.holes.iter().any(|(h, _)| (h.v - x).abs() < 1e-9 * (1.0 + x.abs())) }
     /// x is in the piece's domain.
     fn includes(&self, x: f64) -> bool {
         if self.hole_at(x) { return false; }
-        let lo = match &self.lo { None => true, Some(e) => x > e.x.v + 1e-12 || (e.closed && (x - e.x.v).abs() < 1e-9) };
-        let hi = match &self.hi { None => true, Some(e) => x < e.x.v - 1e-12 || (e.closed && (x - e.x.v).abs() < 1e-9) };
+        let t = 1e-9 * (1.0 + x.abs());
+        let lo = match &self.lo { None => true, Some(e) => x > e.x.v + t || (e.closed && (x - e.x.v).abs() <= t) };
+        let hi = match &self.hi { None => true, Some(e) => x < e.x.v - t || (e.closed && (x - e.x.v).abs() <= t) };
         lo && hi
+    }
+    /// The exact value of the piece's formula (or typed point) at a.
+    fn value_at(&self, a: &K) -> Option<Lim> {
+        match &self.src {
+            Src::Formula { x } => match cas::exact(x, a) { cas::EV::Val(k) => Some(Lim::of_k(&k)), cas::EV::Undef => None, cas::EV::Unk => Some(Lim::Unknown) },
+            Src::Points { pts, m } => pts.iter().find(|q| (q.0.v - a.value()).abs() < 1e-9 * (1.0 + a.value().abs())).map(|q| Lim::Val(q.1.v, q.1.text.clone())).or_else(|| spline(pts, m, a.value()).map(|v| Lim::Val(v, format!("\u{2248} {}", cas::short(v))))),
+        }
+    }
+    /// Where the piece runs to at a from inside it (dir +1: from the right).
+    fn end_lim(&self, a: &K, dir: f64) -> Lim {
+        match &self.src {
+            Src::Formula { x } => Lim::of_cas(cas::limit(x, &At::Fin(a.clone(), dir as i8))),
+            Src::Points { .. } => self.value_at(a).unwrap_or(Lim::Undef),
+        }
     }
     /// The piece runs on just left of a (dir -1) or right of it (dir +1).
     fn covers_side(&self, a: f64, dir: f64) -> bool {
-        if dir < 0.0 { self.lo_x() < a - 1e-12 && self.hi_x() >= a - 1e-12 } else { self.lo_x() <= a + 1e-12 && self.hi_x() > a + 1e-12 }
-    }
-    fn decimal(&self) -> bool { matches!(&self.src, Src::Formula { dec: true, .. }) }
-    /// The formula has a power the app reads only for a positive base (x^(1/3) has no value for x < 0 here), and this x is
-    /// one it has no value at although the same formula has one at -x.
-    fn unread_at(&self, x: f64) -> bool {
-        // (no value on a whole stretch round x, not at a single point such as the hole of (x^2 - 9)/(x + 3) at -3)
-        let h = 1e-3 * (1.0 + x.abs());
-        matches!(&self.src, Src::Formula { expr, .. } if expr.contains('^')) && x < 0.0 && [x - h, x, x + h].iter().all(|t| *t < 0.0 && self.g(*t).is_none()) && self.g(-x).is_some()
+        let t = 1e-9 * (1.0 + a.abs());
+        if dir < 0.0 { self.lo_x() < a - t && self.hi_x() >= a - t } else { self.lo_x() <= a + t && self.hi_x() > a + t }
     }
 }
 
@@ -245,21 +225,22 @@ fn sign_at(s: &str, i: usize) -> Option<(usize, &'static str)> {
     None
 }
 
-/// Reads one typed line; `off` is where the line starts in the box.
+/// Reads one typed line.
 fn read_line(n: usize, line_idx: usize, raw: &str, notes: &mut Vec<String>) -> Option<Piece> {
     let line = raw.trim_end();
     let lead = line.len() - line.trim_start().len();
     let t = line.trim();
     if t.is_empty() { return None; }
-    let starts_points = t.starts_with('(') || ["open", "closed"].iter().any(|w| t.to_lowercase().starts_with(w) && t[w.len()..].trim_start().starts_with('('));
+    let starts_points = t.starts_with('(') && t.contains("),") || t.starts_with('(') && t[1..].find('(').is_none() && t.matches('(').count() == 1 && t.contains(',') && !t.contains('x') || ["open", "closed"].iter().any(|w| t.to_lowercase().starts_with(w) && t[w.len()..].trim_start().starts_with('(')) || (t.starts_with('(') && t.matches(") (").count() > 0);
     if starts_points { return read_points(n, line_idx, line, notes); }
     let (main, dom) = split_domain(t);
     let expr = match parse_row(main) {
         Some(Row::Func(e)) if !e.trim().is_empty() => e,
         _ => { notes.push(format!("Piece {n} is not a function of x: write it as y = (a formula in x), then its domain, such as y = x + 1, x < 2: {t}")); return None; }
     };
-    let dec = { let c: Vec<char> = expr.chars().collect(); (1..c.len().saturating_sub(1)).any(|i| c[i] == '.' && c[i - 1].is_ascii_digit() && c[i + 1].is_ascii_digit()) };
-    let mut pc = Piece { n, line: line_idx, text: line.to_string(), src: Src::Formula { expr, dec }, lo: None, hi: None, holes: vec![] };
+    // a formula is read if it parses; where it has values is found, not assumed
+    let Some(x) = cas::parse(&expr).map(cas::fold) else { notes.push(format!("Piece {n}: the formula cannot be read: {t}")); return None };
+    let mut pc = Piece { n, line: line_idx, text: line.to_string(), src: Src::Formula { x }, lo: None, hi: None, holes: vec![] };
     if let Some(dom) = dom {
         // where the domain starts in the line
         let base = lead + (dom.as_ptr() as usize - t.as_ptr() as usize);
@@ -267,17 +248,6 @@ fn read_line(n: usize, line_idx: usize, raw: &str, notes: &mut Vec<String>) -> O
     }
     if let (Some(a), Some(b)) = (&pc.lo, &pc.hi) {
         if a.x.v >= b.x.v { notes.push(format!("Piece {n} has no x in its domain ({} is not less than {}): {t}", a.x.text, b.x.text)); return None; }
-    }
-    // a formula the reader cannot read anywhere in its domain (a typo, an unknown function)
-    let (lo, hi) = (pc.lo_x().max(-1e4), pc.hi_x().min(1e4));
-    let vals: Vec<Option<f64>> = (0..=40).map(|k| pc.g(lo + (hi - lo) * (k as f64 + 0.37) / 41.0)).collect();
-    if vals.iter().all(|v| v.is_none()) {
-        notes.push(format!("Piece {n}: the formula cannot be read: {t}"));
-        return None;
-    }
-    if vals.iter().flatten().all(|v| v.abs() > 1e12) {
-        notes.push(format!("Piece {n}: its values are too large to draw or write (more than a million million): {t}"));
-        return None;
     }
     Some(pc)
 }
@@ -313,7 +283,7 @@ fn read_domain(pc: &mut Piece, dom: &str, base: usize, notes: &mut Vec<String>) 
         }
         parts.push((ost, &clause[ost..]));
         let bad = |notes: &mut Vec<String>| notes.push(format!("Piece {n}: the domain \u{201c}{}\u{201d} cannot be read: write it as x < 2, x >= -1, -1 <= x < 2 or x \u{2260} 3", clause.trim()));
-        if signs.is_empty() || signs.iter().any(|s| s.2 == "=") { bad(notes); return false; }
+        if signs.is_empty() || signs.iter().any(|s| s.2 == "=") || parts.iter().any(|p| p.1.trim().is_empty()) { bad(notes); return false; }
         let is_x = |s: &str| s.trim().eq_ignore_ascii_case("x");
         for k in 0..signs.len() {
             let (l, r) = (parts[k].1, parts[k + 1].1);
@@ -337,19 +307,22 @@ fn read_points(n: usize, line_idx: usize, line: &str, notes: &mut Vec<String>) -
     let mut at = 0;
     while let Some(a) = line[at..].find('(') {
         let a = at + a;
-        let Some(b) = line[a..].find(')').map(|b| a + b) else { break };
+        // the bracket that closes this point (a value such as sqrt(2) has brackets of its own)
+        let mut depth = 0;
+        let mut end = None;
+        for (i, c) in line[a..].char_indices() { match c { '(' => depth += 1, ')' => { depth -= 1; if depth == 0 { end = Some(a + i); break; } } _ => {} } }
+        let Some(b) = end else { break };
         groups.push((a, b));
         at = b + 1;
     }
     let mut pts: Vec<(Num, Num)> = vec![];
     for (a, b) in &groups {
         let inner = &line[a + 1..*b];
-        let xy: Vec<&str> = inner.split(',').collect();
-        let (Some(x), Some(y)) = (xy.first().and_then(|t| Num::read(t)), xy.get(1).and_then(|t| Num::read(t))) else {
+        let (xs, ys) = match split_domain(inner) { (x, Some(y)) => (x, y), _ => ("", "") };
+        let (Some(x), Some(y)) = (Num::read(xs), Num::read(ys)) else {
             notes.push(format!("Piece {n}: the point ({inner}) cannot be read: write points as (x, y), such as (-2, 3) or (1/2, 4)"));
             return None;
         };
-        if xy.len() != 2 { notes.push(format!("Piece {n}: the point ({inner}) cannot be read: write points as (x, y)")); return None; }
         pts.push((x, y));
     }
     if pts.len() < 2 { notes.push(format!("Piece {n}: a curve through points needs at least two points; a point on its own goes in Single points")); return None; }
@@ -386,13 +359,16 @@ fn read_dots(text: &str, notes: &mut Vec<String>) -> Vec<Dot> {
     let mut at = 0;
     while let Some(a) = text[at..].find('(') {
         let a = at + a;
-        let Some(b) = text[a..].find(')').map(|b| a + b) else { notes.push("Single points: a bracket is not closed".into()); break };
+        let mut depth = 0;
+        let mut end = None;
+        for (i, c) in text[a..].char_indices() { match c { '(' => depth += 1, ')' => { depth -= 1; if depth == 0 { end = Some(a + i); break; } } _ => {} } }
+        let Some(b) = end else { notes.push("Single points: a bracket is not closed".into()); break };
         at = b + 1;
         let inner = &text[a + 1..b];
-        let Some(c) = inner.find(',') else { notes.push(format!("Single points: ({inner}) is not a point (x, y)")); continue };
-        let (xs, ys) = (&inner[..c], &inner[c + 1..]);
+        let (xs, ys) = match split_domain(inner) { (x, Some(y)) => (x, y), _ => { notes.push(format!("Single points: ({inner}) is not a point (x, y)")); continue } };
         match (Num::read(xs), Num::read(ys)) {
-            (Some(x), Some(y)) if !ys.contains(',') => {
+            (Some(x), Some(y)) => {
+                let c = xs.len();
                 let st = a + 1 + c + 1 + (ys.len() - ys.trim_start().len());
                 out.push(Dot { x, y, y_at: (st, st + ys.trim().len()) });
             }
@@ -430,160 +406,24 @@ pub enum Lim {
     NInf,
     /// The limit does not exist (the sides differ, or it oscillates).
     Dne,
-    /// f has no value there (or is not defined on that side).
+    /// f has no value there (or no values on that side).
     Undef,
     /// The graph gives f two values there: not a function (said in the panel).
     Two,
-    /// The app cannot read the formula there (a fractional power of a negative number; said in the panel).
-    Unread,
+    /// The app cannot establish it: the key leaves a line for the teacher (said in the panel).
+    Unknown,
 }
 impl Lim {
     fn num(&self) -> Option<f64> { if let Lim::Val(v, _) = self { Some(*v) } else { None } }
     fn infinite(&self) -> bool { matches!(self, Lim::PInf | Lim::NInf) }
+    fn of_k(k: &K) -> Lim { let v = k.value(); if !v.is_finite() || v.abs() > 1e12 { Lim::Unknown } else { Lim::Val(v, k.show()) } }
+    fn of_cas(l: CL) -> Lim { match l { CL::Val(k) => Lim::of_k(&k), CL::PInf => Lim::PInf, CL::NInf => Lim::NInf, CL::Dne => Lim::Dne, CL::NoVal => Lim::Undef, CL::Unknown => Lim::Unknown } }
 }
 
-enum Raw { Val(f64, bool), PInf, NInf, Osc, Undef }
-
-/// The limit of g as x approaches a from one side (dir -1 from the left, +1 from the right). A value g has at a and keeps
-/// right next to it is the limit itself; otherwise g is followed in toward a: values that settle give the limit (with the
-/// first-order error taken out), values that grow without bound one way give ∞ or -∞, anything else does not exist.
-fn approach(g: &dyn Fn(f64) -> Option<f64>, a: f64, dir: f64) -> Raw {
-    let s = 1.0 + a.abs();
-    if let Some(v) = g(a).filter(|v| v.abs() < 1e200) {
-        // the value at a, when the values beside it close in on it (as fast as x - a, or as slowly as √(x - a))
-        let gaps: Vec<Option<f64>> = [1e-4, 1e-6, 1e-8, 1e-10].iter().map(|h| g(a + dir * h * s).map(|w| (w - v).abs())).collect();
-        if gaps.iter().all(|d| d.is_some()) {
-            let d: Vec<f64> = gaps.iter().map(|d| d.unwrap()).collect();
-            if d[3] <= 1e-4 * (1.0 + v.abs()) && d.windows(2).all(|w| w[1] <= w[0] * 0.5 || w[1] <= 1e-12 * (1.0 + v.abs())) { return Raw::Val(v, false); }
-        }
-    }
-    let hs = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9];
-    let ys: Vec<Option<f64>> = hs.iter().map(|h| g(a + dir * h * s)).collect();
-    if ys[3..].iter().all(|y| y.is_none()) { return Raw::Undef; }
-    if ys[3..].iter().any(|y| y.is_none()) { return Raw::Osc; }
-    let y: Vec<f64> = ys.iter().map(|v| v.unwrap_or(f64::NAN)).collect();
-    let r = |h: f64| -> Option<f64> { let (p, q) = (g(a + dir * h * s / 2.0)?, g(a + dir * h * s)?); (p.abs() < 1e200 && q.abs() < 1e200).then(|| 2.0 * p - q) };
-    if let (Some(r1), Some(r2), Some(r3)) = (r(1e-3), r(1e-4), r(1e-5)) {
-        if (r2 - r3).abs() <= 1e-6 * (1.0 + r3.abs()) && (r1 - r2).abs() <= 1e-3 * (1.0 + r2.abs()) { return Raw::Val(r3, true); }
-    }
-    let tail = &y[4..];
-    let (mx, mn) = tail.iter().fold((f64::MIN, f64::MAX), |(a, b), v| (a.max(*v), b.min(*v)));
-    if mx - mn <= 1e-5 * (1.0 + y[7].abs()) && y[7].abs() < 1e200 { return Raw::Val(y[7], true); }
-    // values that close in by the same ratio each step (√h: by 1/√10), however slowly: the limit their steps add up to
-    {
-        let d: Vec<f64> = y[2..7].windows(2).map(|w| w[1] - w[0]).collect();
-        let r: Vec<f64> = d.windows(2).map(|w| w[1] / w[0]).collect();
-        if d.iter().all(|v| v.abs() > 0.0) && r.iter().all(|q| *q > 0.0 && *q < 0.8) && r.iter().fold((f64::MAX, f64::MIN), |(a, b), q| (a.min(*q), b.max(*q))).1 - r.iter().cloned().fold(f64::MAX, f64::min) < 0.1 {
-            let q = r[r.len() - 1];
-            return Raw::Val(y[6] + d[d.len() - 1] * q / (1.0 - q), true);
-        }
-    }
-    let t = &y[2..];
-    let sg = t[t.len() - 1].signum();
-    if t.iter().all(|v| v.signum() == sg && *v != 0.0) && t.windows(2).all(|w| w[1].abs() > w[0].abs()) { return if sg > 0.0 { Raw::PInf } else { Raw::NInf }; }
-    Raw::Osc
-}
-
-/// The limit of g as x runs off to ∞ (dir +1) or -∞ (dir -1).
-fn at_infinity(g: &dyn Fn(f64) -> Option<f64>, dir: f64) -> Raw {
-    // x = 10^5, 2·10^5, ... 3.2·10^6: settling values shrink their steps by the same ratio each doubling (1/x halves them,
-    // 1/√x by 1/√2); growing ones keep or grow them; anything else waves
-    let xs: Vec<f64> = (0..6).map(|k| 1e5 * 2f64.powi(k)).collect();
-    let ys: Vec<Option<f64>> = xs.iter().map(|x| g(dir * x)).collect();
-    if ys.iter().all(|y| y.is_none()) { return Raw::Undef; }
-    if ys.iter().any(|y| y.is_none()) { return Raw::Osc; }
-    let y: Vec<f64> = ys.iter().map(|v| v.unwrap()).collect();
-    let last = y[5];
-    if last.abs() > 1e12 && y.windows(2).all(|w| w[1].signum() == last.signum() && w[1].abs() >= w[0].abs()) { return if last > 0.0 { Raw::PInf } else { Raw::NInf }; }
-    let d: Vec<f64> = y.windows(2).map(|w| w[1] - w[0]).collect();
-    let tiny = 1e-10 * (1.0 + last.abs());
-    if d.iter().all(|v| v.abs() <= tiny) { return Raw::Val(last, true); }
-    if d.iter().all(|v| v.abs() > tiny) {
-        let r: Vec<f64> = d.windows(2).map(|w| w[1] / w[0]).collect();
-        let (lo, hi) = r.iter().fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
-        if lo > 0.0 && hi < 0.85 && hi - lo < 0.15 {
-            let q = r[3];
-            return Raw::Val(last + d[4] * q / (1.0 - q), true);
-        }
-        if lo >= 0.85 && d.iter().all(|v| v.signum() == d[4].signum()) { return if d[4] > 0.0 { Raw::PInf } else { Raw::NInf }; }
-    }
-    // a wave whose size shrinks to nothing (sin x / x): read much further out, where it is a millionth of what it was
-    if d.iter().all(|v| v.abs() < 1e-4) { if let Some(far) = g(dir * 1e11) { return Raw::Val(far, true); } }
-    Raw::Osc
-}
-
-/// Where the formula of a piece breaks inside (lo, hi): poles (odd and even), jumps and ends of the stretch it has a value
-/// on, found by sampling and then narrowing each down.
-fn breaks(pc: &Piece, lo: f64, hi: f64, extra: &[f64]) -> Vec<f64> {
-    let mut out: Vec<f64> = vec![];
-    if !(hi > lo) || matches!(pc.src, Src::Points { .. }) { return out; }
-    let n = 1600usize;
-    let xs: Vec<f64> = (0..=n).map(|i| lo + (hi - lo) * (i as f64 + 0.5) / (n as f64 + 1.0)).collect();
-    let ys: Vec<Option<f64>> = xs.iter().map(|x| pc.g(*x)).collect();
-    let d: Vec<f64> = (0..n).map(|i| match (ys[i], ys[i + 1]) { (Some(a), Some(b)) => (b - a).abs(), _ => 0.0 }).collect();
-    for i in 0..n {
-        match (ys[i], ys[i + 1]) {
-            (Some(_), None) | (None, Some(_)) => {
-                let good_left = ys[i].is_some();
-                let (mut a, mut b) = (xs[i], xs[i + 1]);
-                for _ in 0..80 { let m = 0.5 * (a + b); if pc.g(m).is_some() == good_left { a = m; } else { b = m; } }
-                out.push(if good_left { b } else { a });
-            }
-            (Some(_), Some(_)) => {
-                let nb = d[i.saturating_sub(1)].max(d[(i + 1).min(n - 1)]);
-                if d[i] > 8.0 * nb.max(1e-12) && d[i] > 1e-6 {
-                    let (mut a, mut b) = (xs[i], xs[i + 1]);
-                    let mut ok = true;
-                    for _ in 0..70 {
-                        let m = 0.5 * (a + b);
-                        let (fa, fm, fb) = (pc.g(a), pc.g(m), pc.g(b));
-                        match (fa, fm, fb) {
-                            (Some(fa), Some(fm), Some(fb)) => { if (fm - fa).abs() > (fb - fm).abs() { b = m; } else { a = m; } }
-                            _ => { a = m; b = m; break; }
-                        }
-                        if b - a < 1e-13 * (1.0 + a.abs()) { break; }
-                    }
-                    if let (Some(fa), Some(fb)) = (pc.g(a), pc.g(b)) { if (fb - fa).abs() < 1e-6 * (1.0 + fa.abs()) { ok = false; } }
-                    if ok { out.push(0.5 * (a + b)); }
-                }
-            }
-            _ => {}
-        }
-    }
-    // even poles (1/x^2) sit between two samples without a jump: a peak of |g| that keeps growing as it is narrowed down
-    for i in 1..n {
-        let (Some(a), Some(b), Some(c)) = (ys[i - 1], ys[i], ys[i + 1]) else { continue };
-        if b.abs() > a.abs() && b.abs() > c.abs() {
-            let (mut l, mut r) = (xs[i - 1], xs[i + 1]);
-            for _ in 0..100 {
-                let (m1, m2) = (l + (r - l) / 3.0, r - (r - l) / 3.0);
-                match (pc.g(m1), pc.g(m2)) { (Some(f1), Some(f2)) => { if f1.abs() < f2.abs() { l = m1; } else { r = m2; } } _ => { break; } }
-            }
-            let m = 0.5 * (l + r);
-            if pc.g(m).is_none_or(|v| v.abs() > 1e4 * (1.0 + b.abs())) { out.push(m); }
-        }
-    }
-    // a point the reader has no value at with values all round it (a hole such as (x^2 - 4)/(x - 2) at 2): tried at the
-    // given points (the grid's quarter steps and the typed values)
-    for &c in extra { if c > lo && c < hi && pc.g(c).is_none() && pc.g(c - 1e-7 * (1.0 + c.abs())).is_some() && pc.g(c + 1e-7 * (1.0 + c.abs())).is_some() { out.push(c); } }
-    out
-}
-
-/// A break found by narrowing, moved onto the nice number it is (a whole number, a 24th, a multiple of π/12, or a
-/// typed value) when it is that close to one.
-fn snap(c: f64, typed: &[f64]) -> f64 {
-    let tol = 1e-6 * (1.0 + c.abs());
-    if let Some(t) = typed.iter().find(|t| (*t - c).abs() < tol) { return *t; }
-    let k = (c * 24.0).round() / 24.0;
-    if (k - c).abs() < tol { return k; }
-    let k = (c / (PI / 12.0)).round() * (PI / 12.0);
-    if (k - c).abs() < tol { return k; }
-    c
-}
-
-/// A discontinuity and its kind.
+/// A discontinuity and its kind ("cannot be determined" when the analysis cannot establish it).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Disc { pub x: f64, pub text: String, pub kind: &'static str, pub left: Lim, pub right: Lim, pub value: Lim }
+pub const UNSURE: &str = "cannot be determined";
 
 /// The function the params describe, with every answer about it.
 #[derive(Clone, Debug)]
@@ -605,120 +445,160 @@ impl Model {
             for j in i + 1..pieces.len() {
                 let (a, b) = (&pieces[i], &pieces[j]);
                 let (lo, hi) = (a.lo_x().max(b.lo_x()), a.hi_x().min(b.hi_x()));
-                if lo < hi - 1e-12 { notes.push(format!("Pieces {} and {} both cover x from {} to {}: a function has one value for each x, so change one of the domains", a.n, b.n, show_x(lo), show_x(hi))); }
+                if lo < hi - 1e-12 { notes.push(format!("Pieces {} and {} both cover x from {} to {}: a function has one value for each x, so change one of the domains", a.n, b.n, show_f(lo), show_f(hi))); }
             }
         }
-        let dots = read_dots(p.s("dots"), &mut notes);
+        let mut dots = read_dots(p.s("dots"), &mut notes);
         let asks = read_asks(p.s("ask_at"), &mut notes);
-        Model { pieces, dots, asks, notes, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, xs: g.xs }
+        let mut m = Model { pieces, dots: vec![], asks, notes, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, xs: g.xs };
+        // a single point where a piece already has a different value would give f two values: it is not drawn
+        dots.retain(|d| {
+            match m.piece_value(&d.x.k) {
+                Lim::Val(v, t) if (v - d.y.v).abs() > 1e-9 * (1.0 + v.abs()) => {
+                    m.notes.push(format!("The point ({}, {}) is not drawn: f already has the value {} at x = {} (a function has one value at each x); to give f(a) another value, leave a out of the piece (x \u{2260} {})", d.x.text, d.y.text, t, d.x.text, d.x.text));
+                    false
+                }
+                _ => true,
+            }
+        });
+        m.dots = dots;
+        if m.pieces.is_empty() && m.dots.is_empty() && !m.notes.iter().any(|n| n.starts_with("Piece")) { m.notes.push("Type the function in Function (one piece a line), such as y = x^2 or y = x + 1, x < 2".into()); }
+        m
     }
-    fn typed_xs(&self) -> Vec<f64> {
-        let mut v: Vec<f64> = self.asks.iter().map(|a| a.v).collect();
-        for pc in &self.pieces { v.extend(pc.lo.iter().chain(pc.hi.iter()).map(|e| e.x.v)); v.extend(pc.holes.iter().map(|h| h.0.v)); }
-        v.extend(self.dots.iter().map(|d| d.x.v));
+    fn typed(&self) -> Vec<K> {
+        let mut v: Vec<K> = self.asks.iter().map(|a| a.k.clone()).collect();
+        for pc in &self.pieces { v.extend(pc.lo.iter().chain(pc.hi.iter()).map(|e| e.x.k.clone())); v.extend(pc.holes.iter().map(|h| h.0.k.clone())); }
+        v.extend(self.dots.iter().map(|d| d.x.k.clone()));
         v
     }
-    /// The value a piece gives at x, as the key writes it.
-    fn piece_val(pc: &Piece, x: f64, raw: Raw) -> Lim {
-        match raw {
-            // (a number past a million million is not a value a key can state)
-            Raw::Val(v, _) if v.abs() > 1e12 => Lim::Unread,
-            Raw::Val(v, approx) => {
-                if let Src::Points { pts, .. } = &pc.src { if let Some(k) = pts.iter().find(|q| (q.0.v - x).abs() < 1e-9) { return Lim::Val(k.1.v, k.1.text.clone()); } }
-                Lim::Val(v, exact_text(v, if approx { 1e-7 } else { 1e-9 }, pc.decimal()))
+    /// The value the pieces give at a (no single points).
+    fn piece_value(&self, a: &K) -> Lim {
+        let av = a.value();
+        let mut found: Vec<Lim> = vec![];
+        for pc in self.pieces.iter().filter(|pc| pc.includes(av)) {
+            match &pc.src {
+                Src::Formula { x } => match cas::exact(x, a) { cas::EV::Val(k) => found.push(Lim::of_k(&k)), cas::EV::Undef => {} cas::EV::Unk => found.push(Lim::Unknown) },
+                Src::Points { pts, m } => {
+                    if let Some(k) = pts.iter().find(|q| (q.0.v - av).abs() < 1e-9 * (1.0 + av.abs())) { found.push(Lim::Val(k.1.v, k.1.text.clone())); }
+                    else if let Some(v) = spline(pts, m, av) { found.push(Lim::Val(v, format!("\u{2248} {}", cas::short(v)))); }
+                }
             }
-            Raw::PInf => Lim::PInf,
-            Raw::NInf => Lim::NInf,
-            Raw::Osc => Lim::Dne,
-            Raw::Undef => Lim::Undef,
         }
+        combine(found)
     }
     /// f(a).
-    pub fn value(&self, a: f64) -> Lim {
-        let mut found: Vec<Lim> = vec![];
-        for d in self.dots.iter().filter(|d| (d.x.v - a).abs() < 1e-9) { found.push(Lim::Val(d.y.v, d.y.text.clone())); }
-        for pc in self.pieces.iter().filter(|pc| pc.includes(a)) {
-            if let Some(v) = pc.g(a).filter(|v| v.abs() < 1e200) { found.push(Self::piece_val(pc, a, Raw::Val(v, false))); }
-        }
-        let Some(first) = found.first().cloned() else {
-            return if self.pieces.iter().any(|pc| pc.includes(a) && pc.unread_at(a)) { Lim::Unread } else { Lim::Undef };
-        };
-        if found.iter().any(|f| f.num().zip(first.num()).is_none_or(|(u, v)| (u - v).abs() > 1e-9 * (1.0 + v.abs()))) { return Lim::Two; }
-        // a typed point gives the value as typed
-        found.into_iter().find(|f| matches!(f, Lim::Val(_, t) if !t.starts_with('\u{2248}'))).unwrap_or(first)
+    pub fn value(&self, a: &K) -> Lim {
+        let av = a.value();
+        let mut found: Vec<Lim> = self.dots.iter().filter(|d| (d.x.v - av).abs() < 1e-9 * (1.0 + av.abs())).map(|d| Lim::Val(d.y.v, d.y.text.clone())).collect();
+        match self.piece_value(a) { Lim::Undef => {} l => found.push(l) }
+        combine(found)
     }
     /// The one-sided limit at a.
-    pub fn side(&self, a: f64, dir: f64) -> Lim {
-        let Some(pc) = self.pieces.iter().find(|pc| pc.covers_side(a, dir)) else { return Lim::Undef };
-        let r = Self::piece_val(pc, a, approach(&|x| pc.g(x), a, dir));
-        if r == Lim::Undef && pc.unread_at(a + dir * 1e-6 * (1.0 + a.abs())) { Lim::Unread } else { r }
+    pub fn side(&self, a: &K, dir: f64) -> Lim {
+        let av = a.value();
+        let Some(pc) = self.pieces.iter().find(|pc| pc.covers_side(av, dir)) else { return Lim::Undef };
+        match &pc.src {
+            Src::Formula { x } => Lim::of_cas(cas::limit(x, &At::Fin(a.clone(), dir as i8))),
+            // the curve through points is continuous: its limit is its value (a typed point's as typed)
+            Src::Points { pts, m } => match pts.iter().find(|q| (q.0.v - av).abs() < 1e-9 * (1.0 + av.abs())) {
+                Some(q) => Lim::Val(q.1.v, q.1.text.clone()),
+                None => spline(pts, m, av).map_or(Lim::Undef, |v| Lim::Val(v, format!("\u{2248} {}", cas::short(v)))),
+            },
+        }
     }
-    pub fn two(&self, a: f64) -> Lim {
+    pub fn two(&self, a: &K) -> Lim {
         let (l, r) = (self.side(a, -1.0), self.side(a, 1.0));
         match (&l, &r) {
-            (Lim::Val(u, _), Lim::Val(v, _)) if (u - v).abs() <= 1e-7 * (1.0 + v.abs()) => l,
+            (Lim::Unknown, _) | (_, Lim::Unknown) => Lim::Unknown,
+            (Lim::Val(u, ut), Lim::Val(v, vt)) => if ut == vt || (u - v).abs() <= 1e-12 * (1.0 + v.abs()) && !ut.starts_with('\u{2248}') && !vt.starts_with('\u{2248}') { l } else if (u - v).abs() > 1e-9 * (1.0 + v.abs()) { Lim::Dne } else { Lim::Unknown },
             (Lim::PInf, Lim::PInf) | (Lim::NInf, Lim::NInf) => l,
-            (Lim::Unread, _) | (_, Lim::Unread) => Lim::Unread,
             _ => Lim::Dne,
         }
     }
-    /// The limit as x → ∞ (dir +1) or -∞; None when no piece runs on that far.
+    /// The limit as x → ∞ (dir +1) or -∞; None when no piece runs on that far (or the formula has no values there).
     pub fn at_inf(&self, dir: f64) -> Option<Lim> {
         let pc = self.pieces.iter().find(|pc| if dir > 0.0 { pc.hi.is_none() } else { pc.lo.is_none() })?;
-        // (a formula with no values that far out, such as ln x as x → -∞, is not asked about)
-        match at_infinity(&|x| pc.g(x), dir) { Raw::Undef => None, raw => Some(Self::piece_val(pc, f64::INFINITY, raw)) }
+        let Src::Formula { x } = &pc.src else { return None };
+        match cas::limit(x, &At::Inf(dir as i8)) { CL::NoVal => None, l => Some(Lim::of_cas(l)) }
     }
-    /// Every x where something may happen: the pieces' ends and holes, the points, and where a formula breaks.
-    fn candidates(&self, lo: f64, hi: f64) -> Vec<f64> {
-        let typed = self.typed_xs();
-        let mut extra: Vec<f64> = typed.clone();
-        let q = self.xs / 4.0;
-        let mut k = (lo / q).ceil();
-        let mut guard = 0;
-        while k * q <= hi && guard < 4000 { extra.push(k * q); k += 1.0; guard += 1; }
-        let mut c: Vec<f64> = typed.iter().copied().filter(|x| *x >= lo - 1e-9 && *x <= hi + 1e-9).collect();
+    /// Every x where something may happen in [lo, hi]: the typed ends, holes, points and values of a, and where a formula
+    /// breaks (exactly where it can be found); and whether that list is surely complete.
+    fn candidates(&self, lo: f64, hi: f64) -> (Vec<K>, bool) {
+        let mut c: Vec<K> = self.typed().into_iter().filter(|k| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 }).collect();
+        let mut done = true;
         for pc in &self.pieces {
+            let Src::Formula { x } = &pc.src else { continue };
             let (a, b) = (pc.lo_x().max(lo), pc.hi_x().min(hi));
-            for x in breaks(pc, a, b, &extra) { c.push(snap(x, &typed)); }
+            if !(b > a) { continue; }
+            let (z, d) = cas::breaks(x, a, b);
+            done &= d;
+            c.extend(z.into_iter().filter(|k| { let v = k.value(); v > a - 1e-12 && v < b + 1e-12 }));
         }
-        c.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        c.dedup_by(|a, b| (*a - *b).abs() < 1e-7 * (1.0 + b.abs()));
-        c
+        c.sort_by(|a, b| a.value().partial_cmp(&b.value()).unwrap_or(std::cmp::Ordering::Equal));
+        let mut out: Vec<K> = vec![];
+        for k in c { if let Some(u) = out.iter_mut().find(|u| (u.value() - k.value()).abs() < 1e-9 * (1.0 + k.value().abs())) { if !u.is_exact() && k.is_exact() { *u = k; } } else { out.push(k); } }
+        (out, done)
     }
-    fn classify(&self, c: f64) -> Option<Disc> {
+    fn classify(&self, c: &K) -> Option<Disc> {
         let (l, r) = (self.side(c, -1.0), self.side(c, 1.0));
-        if matches!(l, Lim::Undef | Lim::Unread) || matches!(r, Lim::Undef | Lim::Unread) { return None; }
+        // (an end of the domain is not a discontinuity)
+        if l == Lim::Undef || r == Lim::Undef { return None; }
         let v = self.value(c);
-        let kind = if l.infinite() || r.infinite() { "infinite" } else if l == Lim::Dne || r == Lim::Dne { "oscillating" } else {
-            let (a, b) = (l.num()?, r.num()?);
-            if (a - b).abs() > 1e-7 * (1.0 + b.abs()) { "jump" }
-            else if v.num().is_some_and(|f| (f - a).abs() <= 1e-7 * (1.0 + a.abs())) && v != Lim::Two { return None; }
-            else { "removable" }
-        };
-        Some(Disc { x: c, text: show_x(c), kind, left: l, right: r, value: v })
+        if v == Lim::Two { return None; }
+        let text = c.show();
+        let disc = |kind| Some(Disc { x: c.value(), text: text.clone(), kind, left: l.clone(), right: r.clone(), value: v.clone() });
+        if l == Lim::Unknown || r == Lim::Unknown || v == Lim::Unknown { return disc(UNSURE); }
+        if l.infinite() || r.infinite() { return disc("infinite"); }
+        if l == Lim::Dne || r == Lim::Dne { return disc("oscillating"); }
+        match self.two(c) {
+            Lim::Dne => disc("jump"),
+            Lim::Val(lv, lt) => match &v {
+                Lim::Val(fv, ft) if *ft == lt || ((fv - lv).abs() < 1e-12 * (1.0 + lv.abs()) && !ft.starts_with('\u{2248}')) => None,
+                Lim::Val(fv, _) if (fv - lv).abs() < 1e-9 * (1.0 + lv.abs()) => disc(UNSURE),
+                _ => disc("removable"),
+            },
+            _ => disc(UNSURE),
+        }
     }
-    /// The discontinuities in the window, left to right.
-    pub fn discontinuities(&self) -> Vec<Disc> { self.candidates(self.x0, self.x1).into_iter().filter_map(|c| self.classify(c)).collect() }
-    /// Discontinuities just outside the window (for the panel note).
+    /// The discontinuities in the window, left to right, and whether the list is surely complete.
+    pub fn discontinuities(&self) -> (Vec<Disc>, bool) {
+        let (c, done) = self.candidates(self.x0, self.x1);
+        (c.iter().filter_map(|k| self.classify(k)).collect(), done)
+    }
+    /// Discontinuities outside the window (for the panel note): the near ones, and exactly found far ones.
     pub fn outside(&self) -> Vec<Disc> {
         let w = self.x1 - self.x0;
-        let mut v: Vec<Disc> = self.candidates(self.x0 - w, self.x1 + w).into_iter().filter(|c| *c < self.x0 - 1e-9 || *c > self.x1 + 1e-9).filter_map(|c| self.classify(c)).collect();
-        v.truncate(4);
-        v
+        let mut seen: Vec<K> = vec![];
+        for (lo, hi, exact_only) in [(self.x0 - 3.0 * w, self.x1 + 3.0 * w, false), (-1e6, 1e6, true)] {
+            for k in self.candidates(lo, hi).0 {
+                let v = k.value();
+                if (v >= self.x0 - 1e-9 && v <= self.x1 + 1e-9) || (exact_only && !k.is_exact()) || seen.iter().any(|s| (s.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { continue; }
+                seen.push(k);
+            }
+        }
+        seen.iter().filter_map(|k| self.classify(k)).collect()
     }
     /// The vertical asymptotes in the window: where a one-sided limit is infinite.
     pub fn verticals(&self) -> Vec<(f64, String)> {
-        self.candidates(self.x0, self.x1).into_iter().filter(|c| *c > self.x0 + 1e-9 && *c < self.x1 - 1e-9).filter(|c| self.side(*c, -1.0).infinite() || self.side(*c, 1.0).infinite()).map(|c| (c, show_x(c))).collect()
+        self.candidates(self.x0, self.x1).0.into_iter().filter(|c| c.value() > self.x0 + 1e-9 && c.value() < self.x1 - 1e-9).filter(|c| self.side(c, -1.0).infinite() || self.side(c, 1.0).infinite()).map(|c| (c.value(), c.show())).collect()
     }
     /// The horizontal asymptotes: the finite limits at ∞ and -∞ (one line if they agree).
     pub fn horizontals(&self) -> Vec<(f64, String)> {
         let mut v: Vec<(f64, String)> = vec![];
-        for dir in [1.0, -1.0] { if let Some(Lim::Val(y, t)) = self.at_inf(dir) { if !v.iter().any(|o| (o.0 - y).abs() < 1e-9) { v.push((y, t)); } } }
+        for dir in [1.0, -1.0] { if let Some(Lim::Val(y, t)) = self.at_inf(dir) { if !v.iter().any(|o| (o.0 - y).abs() < 1e-9 * (1.0 + y.abs())) { v.push((y, t)); } } }
         v
     }
 }
-/// An x worked out (a break) or typed, as written.
-fn show_x(x: f64) -> String { if x.is_infinite() { if x > 0.0 { "\u{221e}".into() } else { "-\u{221e}".into() } } else { exact_text(x, 1e-9, false) } }
+/// Values found for f at one x: none, one, or two that differ (not a function).
+fn combine(found: Vec<Lim>) -> Lim {
+    let Some(first) = found.first().cloned() else { return Lim::Undef };
+    if found.iter().any(|f| *f == Lim::Unknown) { return Lim::Unknown; }
+    if found.iter().any(|f| f.num().zip(first.num()).is_none_or(|(u, v)| (u - v).abs() > 1e-9 * (1.0 + v.abs()))) { return Lim::Two; }
+    // a typed point gives the value as typed
+    found.into_iter().find(|f| matches!(f, Lim::Val(_, t) if !t.starts_with('\u{2248}'))).unwrap_or(first)
+}
+/// A window end or other plain number, as written.
+fn show_f(x: f64) -> String { if x.is_infinite() { if x > 0.0 { "\u{221e}".into() } else { "-\u{221e}".into() } } else { trim_dec(x, 4) } }
 
 // ───────────────────────── the grid and its curves ─────────────────────────
 
@@ -742,7 +622,7 @@ fn grid_params(p: &Params, eq: &str, for_curve: bool) -> Params {
 }
 
 /// The row the grid draws for a piece (or for one stretch of a curve through points).
-fn rows_of(pc: &Piece) -> Vec<String> {
+fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
     let num = |v: f64| format!("{v}");
     let dom = |lo: f64, hi: f64| -> String {
         match (lo.is_finite(), hi.is_finite()) {
@@ -753,7 +633,23 @@ fn rows_of(pc: &Piece) -> Vec<String> {
         }
     };
     match &pc.src {
-        Src::Formula { expr, .. } => vec![format!("y = {expr}{}", dom(pc.lo_x(), pc.hi_x()))],
+        // (the formula as this figure reads it, written for the grid's reader; a floor is drawn a stretch at a time, with
+        // the whole number it has on each)
+        Src::Formula { x } if x.uses_floor() => {
+            let (lo, hi) = (pc.lo_x().max(x0 - 1.0), pc.hi_x().min(x1 + 1.0));
+            if !(hi > lo) { return vec![]; }
+            let mut cuts: Vec<f64> = vec![lo];
+            cuts.extend(cas::breaks(x, lo, hi).0.iter().map(|k| k.value()).filter(|v| *v > lo && *v < hi));
+            cuts.push(hi);
+            cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+            if cuts.len() > 400 { return vec![]; }
+            cuts.windows(2).map(|w| {
+                let mid = 0.5 * (w[0] + w[1]);
+                let at = |arg: &X| cas::ev(arg, mid).map(f64::floor);
+                format!("y = {}{}", cas::grid_text(x, &at), dom(w[0], w[1]))
+            }).collect()
+        }
+        Src::Formula { x } => vec![format!("y = {}{}", cas::grid_text(x, &|_| None), dom(pc.lo_x(), pc.hi_x()))],
         Src::Points { pts, m } => (0..pts.len() - 1).map(|k| {
             let (a, b, c, d) = seg_coeffs(pts, m, k);
             let u = format!("(x - ({}))", num(pts[k].0.v));
@@ -1088,7 +984,7 @@ fn build(p0: &Params) -> (String, Drawn) {
     // the curves, each piece drawn by the grid
     let mut curves = String::new();
     for (i, pc) in m.pieces.iter().enumerate() {
-        for (k, row) in rows_of(pc).iter().enumerate() {
+        for (k, row) in rows_of(pc, g.x0, g.x1).iter().enumerate() {
             let mut gp = grid_params(p, row, true);
             let mut rn = vec![];
             let mut s = coordinate_grid_build(&gp, &mut rn);
@@ -1125,14 +1021,14 @@ fn build(p0: &Params) -> (String, Drawn) {
     let (adash, aw) = if print { ("7 5", 1.6) } else { ("6 4", 1.5) };
     let mut asym_lines: Vec<(char, String, Pt, Pt)> = vec![];
     dr.asymptotes = verts.len() + horiz.iter().filter(|h| inside_y(h.0)).count();
-    dr.eps_possible = m.asks.first().is_some_and(|a| m.two(a.v).num().is_some());
+    dr.eps_possible = m.asks.first().is_some_and(|a| m.two(&a.k).num().is_some());
     if p.b("show_asym") {
         for (x, t) in &verts {
             let (a, b) = ((sx(*x), rect[1]), (sx(*x), rect[3]));
             asym_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{aw}" stroke-dasharray="{adash}" data-lim="asym"/>"#, a.0, a.1, b.0, b.1, ink.asym));
             board.segs.push((a, b));
             dr.things.push((a, b));
-            asym_lines.push(('v', format!("x = {t}"), a, b));
+            asym_lines.push(('v', eq_text("x", t), a, b));
             dr.verticals += 1;
         }
         for (y, t) in &horiz {
@@ -1174,21 +1070,21 @@ fn build(p0: &Params) -> (String, Drawn) {
             let Some(e) = e else { continue };
             if !e.mark { continue; }
             // the height the piece runs to at its end (a closed end must have a value there)
-            let raw = approach(&|x| pc.g(x), e.x.v, dir);
-            let y = match raw { Raw::Val(v, _) => v, _ => continue };
-            if e.closed && pc.g(e.x.v).is_none_or(|v| v.abs() > 1e200) { notes.push(format!("Piece {} includes x = {} but its formula has no value there: write {} for an open circle", pc.n, e.x.text.replace('-', "\u{2212}"), if which == 'l' { ">" } else { "<" })); }
-            if !inside_x(e.x.v) || !inside_y(y) { notes.push(format!("The {} circle of piece {} at ({}, {}) is outside the window", if e.closed { "closed" } else { "open" }, pc.n, e.x.text.replace('-', "\u{2212}"), exact_text(y, 1e-7, pc.decimal()).replace('-', "\u{2212}"))); continue; }
-            circles.push(Circ { at: (sx(e.x.v), sy(y)), closed: e.closed && pc.g(e.x.v).is_some(), piece: i, which });
+            let (y, yt) = match pc.end_lim(&e.x.k, dir) { Lim::Val(v, t) => (v, t), _ => continue };
+            let has_value = pc.value_at(&e.x.k).is_some();
+            if e.closed && !has_value { notes.push(format!("Piece {} includes x = {} but its formula has no value there: write {} for an open circle", pc.n, e.x.text.replace('-', "\u{2212}"), if which == 'l' { ">" } else { "<" })); }
+            if !inside_x(e.x.v) || !inside_y(y) { notes.push(format!("The {} circle of piece {} at ({}, {}) is outside the window", if e.closed { "closed" } else { "open" }, pc.n, e.x.text.replace('-', "\u{2212}"), yt.replace('-', "\u{2212}"))); continue; }
+            circles.push(Circ { at: (sx(e.x.v), sy(y)), closed: e.closed && has_value, piece: i, which });
         }
         for (hi, (h, _)) in pc.holes.iter().enumerate() {
             if !pc.includes(h.v + 1e-6) && !pc.includes(h.v - 1e-6) { continue; }
-            let Raw::Val(y, _) = approach(&|x| pc.g(x), h.v, 1.0) else { continue };
+            let Lim::Val(y, _) = pc.end_lim(&h.k, 1.0) else { continue };
             if !inside_x(h.v) || !inside_y(y) { continue; }
             circles.push(Circ { at: (sx(h.v), sy(y)), closed: false, piece: i, which: char::from(b'0' + hi as u8) });
         }
     }
     // a hole the formula itself has (0/0) inside a piece
-    let discs = m.discontinuities();
+    let (discs, discs_complete) = m.discontinuities();
     for d in &discs {
         if d.kind != "removable" { continue; }
         let Some(l) = d.left.num() else { continue };
@@ -1216,13 +1112,16 @@ fn build(p0: &Params) -> (String, Drawn) {
     for c in &dr.circle_marks { dr.things.push((*c, *c)); }
 
     // two values at one x
-    for x in m.typed_xs() { if m.value(x) == Lim::Two { let t = format!("f has two values at x = {}: a function has one, so make one of them an open circle or remove a point", show_x(x).replace('-', "\u{2212}")); if !notes.contains(&t) { notes.push(t); } } }
-    for d in m.outside() { notes.push(format!("f also has {} {} discontinuity at x = {}, outside the window: widen the x-axis to show it", if d.kind == "infinite" { "an" } else { "a" }, d.kind, d.text.replace('-', "\u{2212}"))); }
-    for pc in &m.pieces {
-        if let Src::Formula { expr, .. } = &pc.src {
-            if expr.contains('^') && (0..=20).any(|k| { let x = g.x0 + (g.x1 - g.x0) * k as f64 / 20.0; pc.includes(x) && pc.g(x).is_none() && pc.g(-x).is_some() && x < 0.0 }) {
-                notes.push(format!("Piece {}: the app reads a fractional power of a negative number, such as (-8)^(1/3), as having no value, so the piece is not drawn for those x and the key writes \u{2014} for what depends on them; write those x as a piece of their own, such as y = -(-x)^(1/3), x < 0", pc.n));
-            }
+    for x in m.typed() { if m.value(&x) == Lim::Two { let t = format!("f has two values at x = {}: a function has one, so make one of them an open circle or remove a point", x.show().replace('-', "\u{2212}")); if !notes.contains(&t) { notes.push(t); } } }
+    {
+        let out = m.outside();
+        let say = |d: &Disc| if d.kind == UNSURE { format!("x {}", eq_text("", &d.text).trim_start().replace('-', "\u{2212}")) } else { format!("{} ({})", eq_text("x", &d.text).replace('-', "\u{2212}"), d.kind) };
+        let (left, right): (Vec<&Disc>, Vec<&Disc>) = out.iter().partition(|d| d.x < g.x0);
+        let mut shown: Vec<String> = left.iter().rev().take(2).rev().map(|d| say(d)).collect();
+        shown.extend(right.iter().take(2).map(|d| say(d)));
+        if !shown.is_empty() {
+            let more = out.len() - shown.len();
+            notes.push(format!("f also has discontinuities outside the window: {}{}: widen the x-axis to show them", shown.join(", "), if more > 0 { format!(" and {more} more") } else { String::new() }));
         }
     }
 
@@ -1233,7 +1132,9 @@ fn build(p0: &Params) -> (String, Drawn) {
         match (m.asks.first(), Num::read(p.s("eps")).filter(|e| e.v > 0.0)) {
             (None, _) => notes.push("The epsilon band is drawn at the first value of a: type one in Ask the limits at x =".into()),
             (_, None) => notes.push("\u{3b5} has to be a number more than 0, such as 1/2".into()),
-            (Some(a), Some(eps)) => match m.two(a.v) {
+            // (on the student copy the band would give away the limit asked at a: it is left off while that limit is asked)
+            (Some(a), Some(_)) if stu && (p.b("ask_two") || p.b("ask_left") || p.b("ask_right")) => notes.push(format!("The \u{3b5} band shows the limit at x = {}, which the student copy asks for, so it is left off the student copy (turn off the limit questions to give students the band)", a.text.replace('-', "\u{2212}"))),
+            (Some(a), Some(eps)) => match m.two(&a.k) {
                 Lim::Val(l, lt) => {
                     let delta = widest_delta(&m, a.v, l, eps.v);
                     let (yl, yh) = (l - eps.v, l + eps.v);
@@ -1246,7 +1147,7 @@ fn build(p0: &Params) -> (String, Drawn) {
                     for yv in [yl, yh] { if inside_y(yv) { let (a1, b1) = ((rect[0], sy(yv)), (rect[2], sy(yv))); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
                     for xv in [xl, xh] { if inside_x(xv) && !stu { let (a1, b1) = ((sx(xv), rect[1]), (sx(xv), rect[3])); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
                     dr.eps_drawn = true;
-                    let dt = if delta >= 0.01 { trim_dec(floor_to(delta, 2), 2) } else { format!("{:.1e}", delta) };
+                    let dt = if delta >= 0.01 { trim_dec(floor_to(delta + 1e-9, 2), 2) } else { format!("{:.1e}", delta) };
                     eps_line = Some(format!("\u{3b5} = {}, L = {lt}, a = {}: f stays within \u{3b5} of L for every x \u{2260} a within \u{3b4} of a, the widest \u{3b4} (to the hundredth below) being \u{3b4} = {}", eps.text, a.text, if stu { BLANK.to_string() } else { dt }));
                 }
                 _ => notes.push(format!("The epsilon band needs a limit that is a number at x = {}: there is none there", a.text.replace('-', "\u{2212}"))),
@@ -1384,7 +1285,7 @@ fn build(p0: &Params) -> (String, Drawn) {
     }
 
     // ── the questions and the key, under the graph ──
-    let blk = block(p, &m, &discs, stu, size, &mut dr, &mut notes);
+    let blk = block(p, &m, &discs, discs_complete, stu, &mut dr, &mut notes);
     let mut rows = blk;
     if let Some(e) = eps_line { rows.push(vec![Item::Text(e)]); }
     if !beside.is_empty() { rows.push(vec![Item::Text(format!("On the graph: {}", beside.join("; ")))]); }
@@ -1468,26 +1369,36 @@ fn written(l: &Lim, p: &Params, dr: &mut Drawn) -> String {
         }
         Lim::Dne => { dr.dne_answer = true; dne.to_string() }
         Lim::Undef => "undefined".into(),
-        Lim::Two | Lim::Unread => "\u{2014}".into(),
+        Lim::Two => "\u{2014}".into(),
+        // (the key leaves a line for the teacher; the panel says what could not be established)
+        Lim::Unknown => BLANK.into(),
     }
 }
 
-fn block(p: &Params, m: &Model, discs: &[Disc], stu: bool, _size: f64, dr: &mut Drawn, notes: &mut Vec<String>) -> Vec<Vec<Item>> {
+fn block(p: &Params, m: &Model, discs: &[Disc], discs_complete: bool, stu: bool, dr: &mut Drawn, notes: &mut Vec<String>) -> Vec<Vec<Item>> {
     let mut rows: Vec<Vec<Item>> = vec![];
-    let ans = |l: &Lim, dr: &mut Drawn| -> String { let t = written(l, p, dr); if stu { BLANK.to_string() } else { t } };
-    // (a limit from a side f has no values on does not exist; "undefined" is for f(a))
-    let lim_ans = |l: &Lim, dr: &mut Drawn| -> String { if *l == Lim::Undef { ans(&Lim::Dne, dr) } else { ans(l, dr) } };
+    // (no function: nothing to ask)
+    if m.pieces.is_empty() && m.dots.is_empty() { return rows; }
+    let mut unknown: Vec<String> = vec![];
+    let mut ans = |l: &Lim, what: String, dr: &mut Drawn| -> String {
+        if *l == Lim::Unknown { unknown.push(what); }
+        let t = written(l, p, dr);
+        if stu { BLANK.to_string() } else { t }
+    };
     let sup = |dir: f64| if dir < 0.0 { "^(-)" } else { "^(+)" };
     for a in &m.asks {
         let mut row = vec![];
         let at = a.text.clone();
-        if p.b("ask_left") { let l = m.side(a.v, -1.0); row.push(Item::Lim { under: format!("x\u{2192}{at}{}", sup(-1.0)), ans: lim_ans(&l, dr) }); }
-        if p.b("ask_right") { let l = m.side(a.v, 1.0); row.push(Item::Lim { under: format!("x\u{2192}{at}{}", sup(1.0)), ans: lim_ans(&l, dr) }); }
-        if p.b("ask_two") { let l = m.two(a.v); row.push(Item::Lim { under: format!("x\u{2192}{at}"), ans: lim_ans(&l, dr) }); }
+        let sh = at.replace('-', "\u{2212}");
+        // (a limit from a side f has no values on does not exist; "undefined" is for f(a))
+        let lim = |l: Lim| if l == Lim::Undef { Lim::Dne } else { l };
+        if p.b("ask_left") { let l = lim(m.side(&a.k, -1.0)); row.push(Item::Lim { under: format!("x\u{2192}{at}{}", sup(-1.0)), ans: ans(&l, format!("the limit as x \u{2192} {sh} from the left"), dr) }); }
+        if p.b("ask_right") { let l = lim(m.side(&a.k, 1.0)); row.push(Item::Lim { under: format!("x\u{2192}{at}{}", sup(1.0)), ans: ans(&l, format!("the limit as x \u{2192} {sh} from the right"), dr) }); }
+        if p.b("ask_two") { let l = lim(m.two(&a.k)); row.push(Item::Lim { under: format!("x\u{2192}{at}"), ans: ans(&l, format!("the limit as x \u{2192} {sh}"), dr) }); }
         if p.b("ask_value") {
-            let v = m.value(a.v);
-            if v == Lim::Two && !notes.iter().any(|n| n.starts_with("f has two values")) { notes.push(format!("f has two values at x = {}, so f({}) has no one answer", a.text, a.text)); }
-            row.push(Item::Ask { text: format!("f({at}) ="), ans: ans(&v, dr) });
+            let v = m.value(&a.k);
+            if v == Lim::Two && !notes.iter().any(|n| n.starts_with("f has two values")) { notes.push(format!("f has two values at x = {sh}, so f({sh}) has no one answer")); }
+            row.push(Item::Ask { text: format!("f({at}) ="), ans: ans(&v, format!("f({sh})"), dr) });
         }
         if !row.is_empty() { rows.push(row); dr.asks_drawn += 1; }
     }
@@ -1496,18 +1407,24 @@ fn block(p: &Params, m: &Model, discs: &[Disc], stu: bool, _size: f64, dr: &mut 
     for (dir, name, want) in [(1.0, "\u{221e}", inf == "x \u{2192} \u{221e}" || inf == "Both"), (-1.0, "-\u{221e}", inf == "x \u{2192} \u{2212}\u{221e}" || inf == "Both")] {
         if !want { continue; }
         match m.at_inf(dir) {
-            Some(l) => row.push(Item::Lim { under: format!("x\u{2192}{name}"), ans: ans(&l, dr) }),
+            Some(l) => row.push(Item::Lim { under: format!("x\u{2192}{name}"), ans: ans(&l, format!("the limit as x \u{2192} {}", name.replace('-', "\u{2212}")), dr) }),
             None => {
-                let open_end = m.pieces.iter().any(|pc| if dir > 0.0 { pc.hi.is_none() } else { pc.lo.is_none() });
-                notes.push(if open_end { format!("f has no values as x \u{2192} {}, so that limit is not asked", name.replace('-', "\u{2212}")) } else { format!("No piece runs on to x \u{2192} {}, so that limit is not asked: give the {} piece no {} end (such as y = 2 + 3/(x - 4), x >= 1)", name.replace('-', "\u{2212}"), if dir > 0.0 { "last" } else { "first" }, if dir > 0.0 { "upper" } else { "lower" }) });
+                let open_end = m.pieces.iter().any(|pc| if dir > 0.0 { pc.hi.is_none() } else { pc.lo.is_none() } && matches!(pc.src, Src::Formula { .. }));
+                notes.push(if open_end { format!("f has no values as x \u{2192} {}, so that limit is not asked", name.replace('-', "\u{2212}")) } else { format!("No formula piece runs on to x \u{2192} {}, so that limit is not asked: give the {} piece no {} end (such as y = 2 + 3/(x - 4), x >= 1)", name.replace('-', "\u{2212}"), if dir > 0.0 { "last" } else { "first" }, if dir > 0.0 { "upper" } else { "lower" }) });
             }
         }
     }
     if !row.is_empty() { rows.push(row); dr.inf_asked = true; }
     if p.b("ask_disc") {
-        let key = if discs.is_empty() { "nowhere in the window".to_string() } else { discs.iter().map(|d| format!("x = {} ({})", d.text, d.kind)).collect::<Vec<_>>().join(", ") };
+        let sure = discs_complete && discs.iter().all(|d| d.kind != UNSURE);
+        let key = if !sure {
+            let which: Vec<String> = discs.iter().filter(|d| d.kind == UNSURE).map(|d| eq_text("x", &d.text)).collect();
+            notes.push(if which.is_empty() { "The app cannot be sure it has found every place where f is not continuous (a formula whose breaks it can only search for numerically), so the key leaves that answer as a line to fill in".into() } else { format!("The app cannot determine whether f is continuous at {} or what kind of discontinuity it has there, so the key leaves that answer as a line to fill in", which.join(", ").replace('-', "\u{2212}")) });
+            format!("{BLANK}{BLANK}{BLANK}")
+        } else if discs.is_empty() { "nowhere in the window".to_string() } else { discs.iter().map(|d| format!("{} ({})", eq_text("x", &d.text), d.kind)).collect::<Vec<_>>().join(", ") };
         rows.push(vec![Item::Ask { text: "Where is f not continuous? Give each x and its kind:".into(), ans: if stu { format!("{BLANK}{BLANK}{BLANK}") } else { key } }]);
     }
+    if !unknown.is_empty() { notes.push(format!("The app cannot determine {} for this formula, so the key leaves {} as a line to fill in", unknown.join(", "), if unknown.len() > 1 { "them" } else { "it" })); }
     rows
 }
 
@@ -1519,7 +1436,7 @@ fn item_svg(it: &Item, x: f64, y: f64, size: f64, fill: &str) -> (String, f64) {
             let n = t.matches(BLANK).count() as f64;
             let w = blank_w * n;
             (format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{fill}" stroke-width="1.2" data-blank="1"/>"##, x + 2.0, y + 3.0, x + w, y + 3.0), w + 2.0)
-        } else { (prose_el(x, y, size, t, fill), tw(t, size)) }
+        } else if t.chars().any(|c| c.is_ascii_digit() || matches!(c, '\u{221e}' | '\u{221a}' | '\u{3c0}' | '\u{2248}')) || t.len() <= 2 { (text_el(x, y, size, t, fill, false), tw(t, size)) } else { (prose_el(x, y, size, t, fill), tw(t, size)) }
     };
     match it {
         Item::Lim { under, ans } => {
@@ -1638,8 +1555,9 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "stu_hide_kinds" => stu && p.b("kind_labels") && !dr.discs.is_empty(),
         "stu_hide_asym" => stu && asym && p.b("show_asym") && p.b("asym_eqs"),
         "arrows" => { let mut q = p.clone(); q.set_b("arrows", true); last_drawn(&q).heads > 0 }
-        "eps_band" => dr.eps_possible,
-        "eps" => p.b("eps_band") && dr.eps_possible,
+        // (on a student copy that asks the limit at a, the band is left off)
+        "eps_band" => dr.eps_possible && !(stu && (p.b("ask_two") || p.b("ask_left") || p.b("ask_right"))),
+        "eps" => p.b("eps_band") && dr.eps_possible && !(stu && (p.b("ask_two") || p.b("ask_left") || p.b("ask_right"))),
         "title" => p.s("title_mode") == "Text",
         "square" => { let (x0, x1, y0, y1, ..) = dr.frame; ((x1 - x0) - (y1 - y0)).abs() > 1e-9 }
         "show_answers" => any_q || (p.b("kind_labels") && p.b("stu_hide_kinds") && !dr.discs.is_empty()) || (asym && p.b("show_asym") && p.b("asym_eqs") && p.b("stu_hide_asym")),
@@ -1682,7 +1600,8 @@ fn switched(p: &Params, c: &Circ, m: &Model) -> Option<String> {
 /// stays a fraction, a decimal a decimal).
 fn num_text(v: f64, like: &str) -> String {
     if (v - v.round()).abs() < 1e-9 { return format!("{}", v.round() as i64); }
-    if like.contains('/') { exact_text(v, 1e-9, false) } else { trim_dec(v, 3) }
+    // (the value is on the drag's own grid of steps: its fraction is that grid's)
+    if like.contains('/') { match frac_of(v, 64, 1e-9) { Some((n, d)) => format!("{n}/{d}"), None => trim_dec(v, 3) } } else { trim_dec(v, 3) }
 }
 
 pub fn handles(p: &Params) -> Vec<Handle> {
