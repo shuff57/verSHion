@@ -664,3 +664,32 @@ fn round3_cosmetics() {
     let words: String = texts(&svg(&p)).into_iter().map(|t| t.3).collect::<Vec<_>>().join(" | ");
     assert!(words.contains("vertices (\u{221a}2 - 3, 1), (\u{221a}2 + 3, 1)") && words.contains("foci (\u{221a}2 - \u{221a}5, 1), (\u{221a}2 + \u{221a}5, 1)"), "{words}");
 }
+
+/// Writes the checker's round-3 examples to ~/newfig-out/conics-r3/.
+#[test]
+#[ignore]
+fn dump_round3_examples() {
+    let dir = std::path::PathBuf::from(std::env::var("HOME").unwrap()).join("newfig-out/conics-r3");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, c) in [
+        ("latus_E_4_2_small", json!({"h":"0","k":"0","a":"4","b":"2","label_size":"Small","show_latus":true,"show_p":false})),
+        ("latus_faq_ellipse_medium", json!({"equation":"(x - 2)^2/9 + (y + 1)^2/4 = 1","label_size":"Medium","show_latus":true,"show_p":false})),
+        ("latus_parabola_small", json!({"conic":"Parabola","label_size":"Small","show_latus":true,"show_p":false})),
+        ("latus_y_x2_medium_P", json!({"equation":"y = x^2","label_size":"Medium","show_latus":true,"show_p":true})),
+        ("axes_H_2_1_small", json!({"conic":"Hyperbola","h":"0","k":"0","a":"2","b":"1","label_size":"Small","show_axes":true,"show_p":false})),
+        ("dirs_default_hyperbola", json!({"conic":"Hyperbola","show_directrices":true})),
+        ("b1_from_opening_medium", json!({"b":"1","label_size":"Medium"})),
+        ("opening", json!({})),
+        ("vertical_ellipse_medium", json!({"axis":"Vertical","label_size":"Medium"})),
+        ("centre_root2_general", json!({"h":"\u{221a}2","k":"1","a":"3","b":"2","eq_form":"General form","key_line":true})),
+        ("y_x2_medium", json!({"equation":"y = x^2","label_size":"Medium"})),
+    ] {
+        let p = with(&c);
+        for (look, set) in [("colour", json!({})), ("student", json!({"show_answers": false, "key_line": true})), ("key", json!({"key_line": true})), ("print", json!({"style": "Print"}))] {
+            let mut q = p.clone();
+            for (k, v) in set.as_object().unwrap() { match v { J::Bool(b) => q.set_b(k, *b), J::String(s) => q.set_s(k, s), _ => {} } }
+            std::fs::write(dir.join(format!("{name}_{look}.png")), crate::figures::to_png(&svg(&q), 1.0).unwrap()).unwrap();
+            if look == "colour" { println!("EX {name}: {:?}", warnings(&q)); }
+        }
+    }
+}
