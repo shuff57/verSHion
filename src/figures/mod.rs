@@ -591,6 +591,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(language::defs());
     v.extend(health::defs());
     v.extend(art::defs());
+    v.extend(math::limits::defs());
     v
 }
 
@@ -821,6 +822,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "waves" | "projectile-motion" => physics::relevant(id, key, p) && cards::relevant(id, key, p),
         // batch 9: the inflection point's and the phases' label modes only where they draw
         "population-growth" => biology::popdyn::growth_b9_relevant(key, p) && cards::relevant(id, key, p),
+        "limits-discontinuities" => math::limits::relevant(key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -896,6 +898,7 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
     match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => physics::ray_warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "boltzmann-distribution" => chemistry::boltzmann::warnings(p), "vsepr-shapes" => chemistry::vsepr::warnings(p), "dot-and-cross" => chemistry::dotcross::warnings(p), "nuclide-notation" => chemistry::nuclide::warnings(p), "periodic-table" => chemistry::periodic::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), "xylem-phloem" => biology::xylem::warnings(p), "ogive" => stats::ogive::warnings(p), "bar-chart" => stats::bar::warnings(p), "pie-chart" => stats::pie::warnings(p), "frequency-table" => stats::frequency::warnings(p), "two-way-table" => stats::twoway::warnings(p), "number-line" => math::number_line_b7::warnings(p), "heating-cooling-curve" => chemistry::heatcurve_warnings(p), "cylinder" | "prism" | "cone" | "pyramid" => math::solids_b8::warnings(id, p), "vector-diagram" => physics::vector_warnings(p),
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon" => math::flat_b9::warnings(id, p),
         "pulley" => physics::pulley_warnings(p),
+        "limits-discontinuities" => math::limits::warnings(p),
         _ => vec![] }
 }
 
@@ -995,7 +998,7 @@ pub fn random_reading(id: &str, p: &mut Params, seed: u64) -> bool {
 /// The reference's "Classic setups" dropdown (population growth, Punnett square, pedigree):
 /// named starting points like `Example`, applied over the plain defaults.
 pub fn classic_setups(id: &str) -> Vec<Example> {
-    biology::classic_setups(id).unwrap_or_default()
+    biology::classic_setups(id).or_else(|| math::limits::classic_setups(id)).unwrap_or_default()
 }
 
 /// A named starting point for a figure ("Start from an example"): parameter overrides on top of

@@ -69,6 +69,16 @@ static FIG_6: [RefSection; 4] = [
     s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label"], ""),
 ];
 
+static LIMITS: [RefSection; 7] = [
+    s("Function", &["pieces", "dots"], "One piece a line: a formula with its domain, or points joined smoothly. Click a circle on the figure to switch it open or closed; drag a single point up or down."),
+    s("Questions", &["ask_at", "ask_left", "ask_right", "ask_two", "ask_value", "ask_inf", "ask_disc", "inf_answer", "dne_word"], "Drag a marker along the x-axis to move x = a."),
+    s("On the graph", &["guide", "show_asym", "asym_eqs", "kind_labels", "arrows", "eps_band", "eps"], ""),
+    s("Title and labels", &["title_mode", "title", "label_size"], ""),
+    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "xlabel"], ""),
+    s("y-axis", &["ymin", "ymax", "ystep", "ylabel"], ""),
+    s("Grid and copies", &["minor", "grid", "square", "style", "show_answers", "stu_hide_kinds", "stu_hide_asym"], "Turn off Show answers for the student copy: each answer becomes a line to write on; Student + key exports both."),
+];
+
 static TRANSFORMATIONS: [RefSection; 7] = [
     s("Show", &["show_answers", "question", "show_pre", "show_between", "show_guides", "show_arrows", "pt_labels", "coord_list", "style", "label_size"], "Show answers off is the student copy, where the images are left to draw; with Question on as well, the images are drawn and the transformations left to name."),
     s("Pre-image", &["pre", "closed", "adding", "names", "pre_colour", "pre_line", "pre_weight"], "Click grid points on the figure to add vertices, or type them, one x, y pair per line. Drag a vertex to move it."),
@@ -1250,6 +1260,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "composite-shape" => &FIG_4,
         "cone" => &FIG_5,
         "coordinate-grid" => &FIG_6,
+        "limits-discontinuities" => &LIMITS,
         "transformations" => &TRANSFORMATIONS,
         "cylinder" => &FIG_7,
         "free-body-diagram" => &FIG_8,

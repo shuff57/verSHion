@@ -205,9 +205,33 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "scatterplot" => SCATTERPLOT,
         "mapping-diagram" => MAPPING_DIAGRAM,
         "ruler-reading" => RULER_READING,
+        "limits-discontinuities" => LIMITS_DISCONTINUITIES,
         _ => &[],
     }
 }
+
+const LIMITS_DISCONTINUITIES: &[Faq] = &[
+    Faq {
+        q: "How do I type a piecewise function?",
+        a: "One piece a line: the formula, a comma, then its domain, such as y = x + 2, x < 1 and y = 4 - x, x >= 1. A < or > end gets an open circle and a <= or >= end a closed one; x \u{2260} 2 (or x != 2) leaves a hole. Each piece is drawn by the coordinate grid's own plotter, so poles and holes in a formula such as (x^2 - 4)/(x - 2) are found too.",
+    },
+    Faq {
+        q: "Can I draw a graph from points instead of a formula?",
+        a: "Yes. Type the points on one line, such as (-5, 1) (-3, 2) (0, 1): they are joined by a smooth curve that never bulges past them, turning flat at a point where it changes direction. Write open or closed before the first point or after the last for a circle there. A point on its own goes in Single points.",
+    },
+    Faq {
+        q: "How are the limits in the key worked out?",
+        a: "From the pieces: a one-sided limit follows the piece on that side in toward a (its value there, or where its values settle, or \u{221e} or \u{2212}\u{221e} where they grow without bound). The limit exists when the two sides agree; f(a) is the closed circle or single point at a. Values stay exact: fractions, roots and multiples of \u{3c0}.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers, or export Student + key. Every answer becomes a line to write on, and the kind labels and the asymptotes' equations are left off unless you choose to keep them.",
+    },
+    Faq {
+        q: "What can I do on the figure itself?",
+        a: "Click an endpoint circle to switch it between open and closed (the < or <= in its piece is changed for you), drag a single point up or down to change f(a), and drag a marker along the x-axis to move x = a.",
+    },
+];
 
 // ----- physics -----
 
