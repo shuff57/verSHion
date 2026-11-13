@@ -127,6 +127,10 @@ fn infinite_limits_and_poles() {
     // 1/(x - 2): -∞ from the left, ∞ from the right
     let md = m(json!({"pieces": "y = 1/(x - 2)", "dots": ""}));
     assert_eq!((md.side(2.0, -1.0), md.side(2.0, 1.0), md.two(2.0)), (Lim::NInf, Lim::PInf, Lim::Dne));
+    // √x and x^(3/2) at 0 from the right: 0 (the first closes in as slowly as √h); -x for x < 0 meets √x at 0: continuous
+    assert_eq!(val(&m(json!({"pieces": "y = sqrt(x)", "dots": ""})).side(0.0, 1.0)), "0");
+    assert_eq!(val(&m(json!({"pieces": "y = x/sqrt(x)", "dots": ""})).side(0.0, 1.0)), "0");
+    assert!(m(json!({"pieces": "y = -x, x < 0\ny = sqrt(x), x >= 0", "dots": ""})).discontinuities().is_empty());
     // ln x: -∞ as x → 0 from the right, nothing to the left (a domain edge, not listed as a discontinuity), and the vertical
     // asymptote x = 0
     let md = m(json!({"pieces": "y = ln(x)", "dots": ""}));
@@ -372,11 +376,15 @@ fn check(m: &mut Meter, s: &str, p: &Params) -> Res {
             // a leader runs from its own thing to its own text and crosses no stroke
             if pt_box(*e0, grow(*b, 5.0)) > 0.0 { r.problems.push(format!("leader does not reach its label {}", l.1)); }
             for (a, c) in &segs { if seg_cross(*s0, *e0, *a, *c) { r.problems.push(format!("leader of {} crosses a stroke", l.1)); } }
+            // and starts on (or at the edge of the circle of) its own thing
+            let start = l.3.iter().map(|(a, c)| dist_pt_seg(*s0, *a, *c)).fold(f64::MAX, f64::min);
+            if start > 8.0 { r.problems.push(format!("leader of {} starts {start:.1} px from its own thing", l.1)); }
         }, Spot::Off => {} }
         let own = l.3.iter().map(|(a, c)| seg_dist(*a, *c, *b)).fold(f64::MAX, f64::min);
         let own_pts: Vec<Pt> = l.3.iter().flat_map(|(a, c)| [*a, *c]).collect();
         if matches!(l.2, Spot::Beside(_)) {
-            for (q, _) in &dots {
+            // (the circles and points a label could be taken to name; the x = a markers carry no label)
+            for (q, _) in dots.iter().filter(|(_, r)| *r < 5.5) {
                 if own_pts.iter().any(|o| (o.0 - q.0).abs() < 0.6 && (o.1 - q.1).abs() < 0.6) { continue; }
                 if pt_box(*q, *b) < own { r.problems.push(format!("{} is nearer a point {q:?} than its own thing ({own:.1})", l.1)); }
             }
@@ -386,6 +394,7 @@ fn check(m: &mut Meter, s: &str, p: &Params) -> Res {
     r.under = dr.labels.iter().filter(|l| l.2 == Spot::Off).count();
     r
 }
+fn dist_pt_seg(q: Pt, a: Pt, c: Pt) -> f64 { let (dx, dy) = (c.0 - a.0, c.1 - a.1); let l = dx * dx + dy * dy; let t = if l < 1e-9 { 0.0 } else { (((q.0 - a.0) * dx + (q.1 - a.1) * dy) / l).clamp(0.0, 1.0) }; (q.0 - a.0 - t * dx).hypot(q.1 - a.1 - t * dy) }
 fn grow(r: Bx, t: f64) -> Bx { [r[0] - t, r[1] - t, r[2] + t, r[3] + t] }
 fn seg_cross(a: Pt, b: Pt, c: Pt, d: Pt) -> bool {
     let o = |p: Pt, q: Pt, r: Pt| (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0);

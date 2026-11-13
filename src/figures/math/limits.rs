@@ -270,8 +270,13 @@ fn read_line(n: usize, line_idx: usize, raw: &str, notes: &mut Vec<String>) -> O
     }
     // a formula the reader cannot read anywhere in its domain (a typo, an unknown function)
     let (lo, hi) = (pc.lo_x().max(-1e4), pc.hi_x().min(1e4));
-    if (0..=40).all(|k| pc.g(lo + (hi - lo) * (k as f64 + 0.37) / 41.0).is_none()) {
+    let vals: Vec<Option<f64>> = (0..=40).map(|k| pc.g(lo + (hi - lo) * (k as f64 + 0.37) / 41.0)).collect();
+    if vals.iter().all(|v| v.is_none()) {
         notes.push(format!("Piece {n}: the formula cannot be read: {t}"));
+        return None;
+    }
+    if vals.iter().flatten().all(|v| v.abs() > 1e12) {
+        notes.push(format!("Piece {n}: its values are too large to draw or write (more than a million million): {t}"));
         return None;
     }
     Some(pc)
@@ -445,8 +450,12 @@ enum Raw { Val(f64, bool), PInf, NInf, Osc, Undef }
 fn approach(g: &dyn Fn(f64) -> Option<f64>, a: f64, dir: f64) -> Raw {
     let s = 1.0 + a.abs();
     if let Some(v) = g(a).filter(|v| v.abs() < 1e200) {
-        let near = [1e-6, 1e-7, 1e-8].map(|h| g(a + dir * h * s));
-        if near.iter().all(|w| w.is_some_and(|w| (w - v).abs() <= 1e-4 * (1.0 + v.abs()))) { return Raw::Val(v, false); }
+        // the value at a, when the values beside it close in on it (as fast as x - a, or as slowly as √(x - a))
+        let gaps: Vec<Option<f64>> = [1e-4, 1e-6, 1e-8, 1e-10].iter().map(|h| g(a + dir * h * s).map(|w| (w - v).abs())).collect();
+        if gaps.iter().all(|d| d.is_some()) {
+            let d: Vec<f64> = gaps.iter().map(|d| d.unwrap()).collect();
+            if d[3] <= 1e-4 * (1.0 + v.abs()) && d.windows(2).all(|w| w[1] <= w[0] * 0.5 || w[1] <= 1e-12 * (1.0 + v.abs())) { return Raw::Val(v, false); }
+        }
     }
     let hs = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9];
     let ys: Vec<Option<f64>> = hs.iter().map(|h| g(a + dir * h * s)).collect();
@@ -460,6 +469,15 @@ fn approach(g: &dyn Fn(f64) -> Option<f64>, a: f64, dir: f64) -> Raw {
     let tail = &y[4..];
     let (mx, mn) = tail.iter().fold((f64::MIN, f64::MAX), |(a, b), v| (a.max(*v), b.min(*v)));
     if mx - mn <= 1e-5 * (1.0 + y[7].abs()) && y[7].abs() < 1e200 { return Raw::Val(y[7], true); }
+    // values that close in by the same ratio each step (√h: by 1/√10), however slowly: the limit their steps add up to
+    {
+        let d: Vec<f64> = y[2..7].windows(2).map(|w| w[1] - w[0]).collect();
+        let r: Vec<f64> = d.windows(2).map(|w| w[1] / w[0]).collect();
+        if d.iter().all(|v| v.abs() > 0.0) && r.iter().all(|q| *q > 0.0 && *q < 0.8) && r.iter().fold((f64::MAX, f64::MIN), |(a, b), q| (a.min(*q), b.max(*q))).1 - r.iter().cloned().fold(f64::MAX, f64::min) < 0.1 {
+            let q = r[r.len() - 1];
+            return Raw::Val(y[6] + d[d.len() - 1] * q / (1.0 - q), true);
+        }
+    }
     let t = &y[2..];
     let sg = t[t.len() - 1].signum();
     if t.iter().all(|v| v.signum() == sg && *v != 0.0) && t.windows(2).all(|w| w[1].abs() > w[0].abs()) { return if sg > 0.0 { Raw::PInf } else { Raw::NInf }; }
@@ -603,6 +621,8 @@ impl Model {
     /// The value a piece gives at x, as the key writes it.
     fn piece_val(pc: &Piece, x: f64, raw: Raw) -> Lim {
         match raw {
+            // (a number past a million million is not a value a key can state)
+            Raw::Val(v, _) if v.abs() > 1e12 => Lim::Unread,
             Raw::Val(v, approx) => {
                 if let Src::Points { pts, .. } = &pc.src { if let Some(k) = pts.iter().find(|q| (q.0.v - x).abs() < 1e-9) { return Lim::Val(k.1.v, k.1.text.clone()); } }
                 Lim::Val(v, exact_text(v, if approx { 1e-7 } else { 1e-9 }, pc.decimal()))
@@ -889,12 +909,12 @@ fn box_pt(r: Bx, q: Pt) -> f64 { let dx = (r[0] - q.0).max(q.0 - r[2]).max(0.0);
 
 /// What a label must keep clear of.
 #[derive(Default)]
-struct Board { segs: Vec<(Pt, Pt)>, dots: Vec<(Pt, f64)>, boxes: Vec<Bx>, bounds: Bx }
+struct Board { segs: Vec<(Pt, Pt)>, dots: Vec<(Pt, f64)>, boxes: Vec<Bx>, bounds: Bx, markers: Vec<(Pt, f64)> }
 impl Board {
     fn free(&self, b: Bx) -> bool {
         b[0] >= self.bounds[0] && b[1] >= self.bounds[1] && b[2] <= self.bounds[2] && b[3] <= self.bounds[3]
             && !self.segs.iter().any(|(a, c)| seg_hits(*a, *c, b))
-            && !self.dots.iter().any(|(q, r)| box_pt(b, *q) < *r + 1.5)
+            && !self.dots.iter().chain(self.markers.iter()).any(|(q, r)| box_pt(b, *q) < *r + 1.5)
             && !self.boxes.iter().any(|o| hit(*o, b))
     }
     fn add_poly(&mut self, pts: &[Pt]) { for w in pts.windows(2) { self.segs.push((w[0], w[1])); } }
@@ -908,7 +928,8 @@ fn label_box(c: Pt, w: f64, size: f64) -> Bx { [c.0 - w / 2.0, c.1 - 0.42 * size
 pub enum Spot { Beside(Pt), Leader(Pt, Pt, Pt), Off }
 
 /// A label to place: its text, its own thing (a point, or a segment), and the spots to try, best first.
-struct Req { text: String, own: Vec<(Pt, Pt)>, tries: Vec<Pt>, anchor: Pt, rivals: Vec<(Pt, Pt)> }
+/// (`gap`: how far from the anchor a leader starts: the edge of a circle, or 0 on a line or a jump's gap)
+struct Req { text: String, own: Vec<(Pt, Pt)>, tries: Vec<Pt>, anchor: Pt, rivals: Vec<(Pt, Pt)>, gap: f64 }
 
 fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
     let w = tw(&r.text, size);
@@ -938,8 +959,8 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
             let (dx, dy) = (e.0 - r.anchor.0, e.1 - r.anchor.1);
             let l = dx.hypot(dy);
             if l < 10.0 { continue; }
-            let s = (r.anchor.0 + dx / l * 7.0, r.anchor.1 + dy / l * 7.0);
-            let crosses = board.segs.iter().any(|(a, c2)| seg_cross(s, e, *a, *c2)) || board.dots.iter().any(|(q, rr)| dist_seg(*q, s, e) < *rr + 1.0) || board.boxes.iter().any(|o| seg_hits(s, e, *o));
+            let s = (r.anchor.0 + dx / l * r.gap, r.anchor.1 + dy / l * r.gap);
+            let crosses = board.segs.iter().any(|(a, c2)| seg_cross(s, e, *a, *c2)) || board.dots.iter().chain(board.markers.iter()).any(|(q, rr)| dist_seg(*q, s, e) < *rr + 1.0) || board.boxes.iter().any(|o| seg_hits(s, e, *o));
             if crosses { continue; }
             board.boxes.push(grow(b, 1.0));
             board.segs.push((s, e));
@@ -1140,7 +1161,7 @@ fn build(p0: &Params) -> (String, Drawn) {
         }
         let r = 6.0;
         marker_svg.push_str(&format!(r##"<polygon points="{:.2},{:.2} {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}" fill="{}" stroke="#fff" stroke-width="1" data-lim="marker"/>"##, x, yax - r, x + r, yax, x, yax + r, x - r, yax, ink.guide));
-        board.dots.push(((x, yax), r));
+        board.markers.push(((x, yax), r));
         dr.markers.push(((x, yax), i));
     }
 
@@ -1259,7 +1280,8 @@ fn build(p0: &Params) -> (String, Drawn) {
                     for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (1.0, -1.0), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (0.0, -1.0), (0.0, 1.0)] { tries.push((an.0 + dx * hx, an.1 + dy * hy)); }
                 }
             }
-            reqs.push(('k', Req { text: d.kind.to_string(), own, tries, anchor: anchors[0], rivals: vec![] }));
+            let gap = if d.kind == "removable" { cr + 2.0 } else { 1.5 };
+            reqs.push(('k', Req { text: d.kind.to_string(), own, tries, anchor: anchors[0], rivals: vec![], gap }));
         }
     }
     let show_asym_eqs = p.b("show_asym") && p.b("asym_eqs") && !(stu && p.b("stu_hide_asym"));
@@ -1278,7 +1300,7 @@ fn build(p0: &Params) -> (String, Drawn) {
                     else { tries.push((rect[2] - 4.0 - w / 2.0 - (rect[2] - rect[0] - 8.0 - w) * t, a.1 - side * (hgt * 0.5 + 4.0))); }
                 }
             }
-            reqs.push(('a', Req { text: t.clone(), own: vec![(*a, *b)], tries, anchor: if *k == 'v' { (a.0, rect[1] + 30.0) } else { (rect[2] - 40.0, a.1) }, rivals: asym_lines.iter().filter(|o| o.2 != *a || o.3 != *b).map(|o| (o.2, o.3)).collect() }));
+            reqs.push(('a', Req { text: t.clone(), own: vec![(*a, *b)], tries, anchor: if *k == 'v' { (a.0, rect[1] + 30.0) } else { (rect[2] - 40.0, a.1) }, rivals: asym_lines.iter().filter(|o| o.2 != *a || o.3 != *b).map(|o| (o.2, o.3)).collect(), gap: 1.5 }));
         }
     }
     let kind_owns: Vec<Vec<(Pt, Pt)>> = reqs.iter().filter(|r| r.0 == 'k').map(|r| r.1.own.clone()).collect();
