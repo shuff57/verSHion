@@ -415,6 +415,8 @@ impl Ex {
         // the irrational terms first, the rational one last (e − 1, 7√2/2 + 7/2); a negative first term after a positive
         // rational one (1 − √2/2)
         let (mut irr, rat): (Vec<_>, Vec<_>) = terms.into_iter().partition(|t| !t.2);
+        // (a positive irrational term first where there is one: ln 5 − 2 ln 2)
+        irr.sort_by_key(|t| t.0);
         let mut order: Vec<(bool, String, bool)> = vec![];
         if irr.first().is_some_and(|t| t.0) && rat.first().is_some_and(|t| !t.0) { order.extend(rat.clone()); order.append(&mut irr); } else { order.append(&mut irr); order.extend(rat); }
         let mut out = String::new();

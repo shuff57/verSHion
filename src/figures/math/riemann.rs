@@ -953,6 +953,8 @@ fn sum_worked(m: &Model, fm: Fmt, table: bool, trap: bool) -> (String, bool) {
     }
     let items: Vec<String> = m.terms.iter().map(|(h, w)| {
         let hs = t(h);
+        // (a height with several terms, ln 5 − 2 ln 2, in brackets, so each height reads as one)
+        let hs = if hs.contains(" + ") || hs.contains(" \u{2212} ") { format!("({hs})") } else { hs };
         match w { Some(w) => { let ws = t(w); match hs.strip_prefix('\u{2212}') { Some(r) => format!("\u{2212}{ws}\u{b7}{r}"), None => format!("{ws}\u{b7}{hs}") } } None => hs }
     }).collect();
     let f = factor(&coef);
