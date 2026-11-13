@@ -102,7 +102,8 @@ fn hand_worked_sums_integrals_and_errors() {
     has_line(&inv, "dx = 2 ln 2");
     // √x on [0, 4]: ∫ = (2/3)·8 = 16/3; trapezoid n = 4: (1/2)(0 + 2 + 2√2 + 2√3 + 2) = 2 + √2 + √3 ≈ 5.1463
     let sq = lined(&[("f", s("sqrt(x)")), ("b", s("4")), ("rule", s("Trapezoid")), ("xmax", fl(5.0)), ("ymax", fl(3.0))]);
-    has_line(&sq, "= (1/2)(0 + 2\u{b7}1 + 2\u{b7}\u{221a}2 + 2\u{b7}\u{221a}3 + 2) \u{2248} 5.1463");
+    // (now exact, from exact heights: 2 + √2 + √3)
+    has_line(&sq, "= (1/2)(0 + 2\u{b7}1 + 2\u{b7}\u{221a}2 + 2\u{b7}\u{221a}3 + 2) = \u{221a}2 + \u{221a}3 + 2");
     has_line(&sq, "dx = 16/3");
     // the error 5.14626… − 5.33333… = −0.18707…, to 3 places
     let mut sqd = sq.clone(); sqd.set_s("values", "Decimals"); sqd.set_i("dec", 3);
@@ -162,12 +163,13 @@ fn tables_and_horizontal_strips() {
     // ∫₀² (2y − y²) dy = 4 − 8/3 = 4/3; error 11/8 − 4/3 = 1/24
     let h = lined(&[("region", s("Between f(x) and g(x)")), ("f", s("sqrt(x)")), ("g", s("x/2")), ("bounds", s("Where f and g cross")), ("strips", s("Horizontal")), ("rule", s("Midpoint")), ("xmax", fl(5.0)), ("ymax", fl(3.0))]);
     has_line(&h, "\u{394}y = (d \u{2212} c)/n = (2 \u{2212} 0)/4 = 1/2");
-    has_line(&h, "= (1/2)(7/16 + 15/16 + 15/16 + 7/16) = 11/8");
+    // (a width across is found by search, so it has no exact form here: written rounded)
+    has_line(&h, "= (1/2)(0.4375 + 0.9375 + 0.9375 + 0.4375) \u{2248} 1.3750");
     has_line(&h, "\u{222b}02 (xR \u{2212} xL) dy = 4/3");
-    has_line(&h, "Error = M4 \u{2212} exact = 11/8 \u{2212} 4/3 = 1/24");
+    has_line(&h, "Error = M4 \u{2212} exact = 1.3750 \u{2212} 4/3 \u{2248} 0.0417");
     // bottom of each strip (Left): widths at 0, 1/2, 1, 3/2 = 0, 3/4, 1, 3/4: (1/2)(5/2) = 5/4
     let mut hl = h.clone(); hl.set_s("rule", "Left");
-    has_line(&hl, "= (1/2)(0 + 3/4 + 1 + 3/4) = 5/4");
+    has_line(&hl, "= (1/2)(0 + 0.7500 + 1.0000 + 0.7500) \u{2248} 1.2500");
 }
 
 #[test]
@@ -267,7 +269,8 @@ fn controls_show_exactly_when_they_change_the_drawing() {
         with(&[("show_answers", bo(false)), ("student", s("Curve and bounds only"))]),
         lined(&[("f", s("x^2 - 1")), ("values", s("Decimals"))]),
         with(&[("strips", s("None (shade the exact area)")), ("f", s("x^2 - 1")), ("b", s("pi")), ("exact_line", bo(true))]),
-        lined(&[("region", s("Between f(x) and g(x)")), ("f", s("x")), ("g", s("x^2")), ("bounds", s("Where f and g cross"))]),
+        // (a window round the crossings, so the strips have room for their labels)
+        lined(&[("region", s("Between f(x) and g(x)")), ("f", s("x")), ("g", s("x^2")), ("bounds", s("Where f and g cross")), ("xmin", fl(-0.25)), ("xmax", fl(1.25)), ("xstep", fl(0.25)), ("ymin", fl(-0.25)), ("ymax", fl(1.25)), ("ystep", fl(0.25))]),
         lined(&[("region", s("Between f(x) and g(x)")), ("f", s("sqrt(x)")), ("g", s("x/2")), ("strips", s("Horizontal")), ("b", s("4")), ("xmax", fl(5.0))]),
         lined(&[("region", s("From a table of values")), ("rule", s("Trapezoid")), ("xmax", fl(8.0)), ("ymax", fl(7.0)), ("strip_labels", s("Heights"))]),
         with(&[("grid", s("None")), ("title_mode", s("Blank line"))]),
@@ -371,7 +374,7 @@ fn handles_through_the_real_hit_test() {
     let mut q = pp.clone();
     (hs[k].drag.as_ref().unwrap())(&mut q, (sxp(3.0 * PI / 4.0 + 0.05), 0.0));
     assert_eq!(q.s("b"), "3pi/4");
-    assert!(read_bound(q.s("b"), "b").is_ok_and(|(v, t)| (v - 3.0 * PI / 4.0).abs() < 1e-12 && t == "3\u{3c0}/4"));
+    assert!(read_bound(q.s("b"), "b").is_ok_and(|(v, t, _)| (v - 3.0 * PI / 4.0).abs() < 1e-12 && t == "3\u{3c0}/4"));
 }
 
 #[test]
@@ -558,18 +561,32 @@ fn option(p: &mut Params, o: &str) {
 }
 
 /// Labels left off at Large on the classroom list (each refused with a panel note): strips too narrow for their labels.
-/// (x₀ … xₙ under strips that straddle the axis or with every label on at once: only x₀ and xₙ, or none, marked with a note;
-/// one set of strip labels between y = x and y = x² with everything on.)
+/// (Strip labels where some strips are too short or narrow for any label at Large, and x₀ … xₙ under strips that
+/// straddle the axis: each left off with a note.)
 const LARGE_EXCEPTIONS: &[&str] = &[
-    "sin(x) [0, pi] Midpoint n=4 / all: x marks",
-    "cos(x) [0, pi/2] Midpoint n=4 / all: x marks",
-    "sqrt(x) [0, 4] Left n=8 / all: x marks",
-    "between x and x^2 Vertical Midpoint / all: strip labels",
+    "x^3 [0, 2] Trapezoid n=4 / all: strip labels",
+    "cos(x) [0, pi/2] Right n=4 / student: strip labels",
+    "cos(x) [0, pi/2] Lower n=4 / student: strip labels",
+    "ln(x) [1, 3] Left n=4 / strip_heights: strip labels",
+    "ln(x) [1, 3] Left n=4 / strip_areas: strip labels",
+    "ln(x) [1, 3] Left n=4 / all: strip labels",
+    "ln(x) [1, 3] Trapezoid n=4 / strip_heights: strip labels",
+    "ln(x) [1, 3] Trapezoid n=4 / strip_areas: strip labels",
+    "ln(x) [1, 3] Trapezoid n=4 / all: strip labels",
+    "ln(x) [1, 3] Lower n=4 / strip_heights: strip labels",
+    "ln(x) [1, 3] Lower n=4 / strip_areas: strip labels",
+    "ln(x) [1, 3] Lower n=4 / all: strip labels",
+    "sqrt(x) [0, 4] Left n=8 / student: strip labels",
+    "sqrt(x) [0, 4] Midpoint n=8 / student: strip labels",
+    "x^3 [0, 1] Left n=5 / student: strip labels",
+    "between x and x^2 Vertical Left / student: strip labels",
     "between 4 - x^2 and x^2 - 4 Vertical Left / x_marks: x marks",
     "between 4 - x^2 and x^2 - 4 Vertical Left / all: x marks",
     "between 4 - x^2 and x^2 - 4 Vertical Midpoint / x_marks: x marks",
     "between 4 - x^2 and x^2 - 4 Vertical Midpoint / all: x marks",
 ];
+/// At Small and Medium: one, the student copy's blank on the zero-height strip where y = x meets y = x² at the origin.
+const SMALL_MEDIUM_EXCEPTIONS: &[&str] = &["between x and x^2 Vertical Left / student / Medium"];
 
 #[test]
 fn label_sweep_over_the_classroom_list() {
@@ -593,11 +610,11 @@ fn label_sweep_over_the_classroom_list() {
                 let (svg, notes) = build(&q);
                 renders += 1;
                 for f in label_faults(&svg) { faults.push(format!("{name} / {what} / {size}: {f}")); }
-                for n in notes.iter().filter(|n| n.contains("no room") || n.contains("do not fit")) {
+                for n in notes.iter().filter(|n| (n.contains("no room") || n.contains("do not fit")) && !n.contains("are marked")) {
                     let kind = if n.contains("strip labels") { "strip labels" } else if n.contains("x\u{2080}") { "x marks" } else { "a and b" };
                     *refused.entry((size.to_string(), kind)).or_default() += 1;
                     if size == "Large" { large_left_off.push(format!("{name} / {what}: {kind}")); }
-                    else { faults.push(format!("{name} / {what} / {size}: left off: {n}")); }
+                    else if !SMALL_MEDIUM_EXCEPTIONS.contains(&format!("{name} / {what} / {size}").as_str()) { faults.push(format!("{name} / {what} / {size}: left off: {n}")); }
                 }
             }
         }
@@ -682,11 +699,14 @@ fn kinks_and_written_places() {
     let mut q = p.clone(); q.set_s("values", "Decimals"); q.set_i("dec", 6);
     has_line(&q, "dx = 2.5");
     // a value known only roughly is never written to more places than it is known, and an inexact value keeps its places
-    let mut e = with(&[("f", s("e^x")), ("b", s("1")), ("strip_labels", s("Heights")), ("sum_line", bo(true))]);
-    has_line(&e, "= (1/4)(1 + 1.2840 + 1.6487 + 2.1170) \u{2248} 1.5124");
-    e.set_s("f", "e^(-x)");
-    // (1, e^(−1/4), e^(−1/2), e^(−3/4): all rounded alike, never 1 + 0.7788 + …)
-    assert!(lines(&e).iter().any(|l| l.contains("(1 + 0.7788 + 0.6065 + 0.4724)")), "{:?}", lines(&e));
+    // (sin 1/4 and the rest have no exact form: all the terms rounded alike, the exact 1 among them)
+    let mut e = with(&[("f", s("sin(x) + 1")), ("b", s("1")), ("strip_labels", s("Heights")), ("sum_line", bo(true))]);
+    has_line(&e, "= (1/4)(1 + 1.2474 + 1.4794 + 1.6816) \u{2248} 1.3521");
+    e.set_s("f", "cos(x)");
+    assert!(lines(&e).iter().any(|l| l.contains("(1 + 0.9689 + 0.8776 + 0.7317)")), "{:?}", lines(&e));
+    // eˣ at x = 1/4, 1/2, 3/4 is exact: e^(1/4) …
+    let ex = with(&[("f", s("e^x")), ("b", s("1")), ("sum_line", bo(true))]);
+    has_line(&ex, "= (1/4)(1 + e1/4 + e1/2 + e3/4)");
     // book typesetting: √x, |x − 1|, no double brackets, a power in a power
     has_line(&with(&[("f", s("sqrt(x)")), ("b", s("4")), ("integral_line", bo(true))]), "\u{222b}04 \u{221a}x dx");
     has_line(&with(&[("f", s("1/(1 + x^2)")), ("b", s("1")), ("integral_line", bo(true))]), "\u{222b}01 1/(1 + x2) dx");
@@ -754,20 +774,27 @@ fn refusal_advice_works() {
         let Some(note) = n.iter().find(|x| x.contains("have no room") || x.contains("do not fit")) else { continue };
         tried += 1;
         assert!(!note.contains("wider"), "never advise widening: {note}");
-        let k = note.find("(From ").unwrap_or_else(|| panic!("{note}"));
-        let v: Vec<f64> = note[k + 6..].split([' ', ')', ',']).filter_map(|t| t.parse().ok()).collect();
-        let mut q = p.clone();
-        q.set_f("xmin", v[0]);
-        q.set_f("xmax", v[1]);
-        let after = warnings(&q);
-        assert!(!after.iter().any(|x| x.contains("have no room") || x.contains("do not fit")), "{note} -> {after:?}");
+        // the advice taken: the x-axis From and To it names, or fewer strips (halved until they fit)
+        if let Some(k) = note.find("(From ") {
+            let v: Vec<f64> = note[k + 6..].split([' ', ')', ',']).filter_map(|t| t.parse().ok()).collect();
+            let mut q = p.clone();
+            q.set_f("xmin", v[0]);
+            q.set_f("xmax", v[1]);
+            let after = warnings(&q);
+            assert!(!after.iter().any(|x| x.contains("have no room") || x.contains("do not fit")), "{note} -> {after:?}");
+        } else {
+            assert!(note.contains("fewer strips"), "{note}");
+            let mut q = p.clone();
+            let fits = (0..6).any(|_| { let n = q.i("n"); q.set_i("n", (n / 2).max(1)); !warnings(&q).iter().any(|x| x.contains("have no room") || x.contains("do not fit")) });
+            assert!(fits, "fewer strips never fit: {note}");
+        }
     }
     assert!(tried >= 3, "the cases must be refused before the advice is taken ({tried})");
 }
 
 /// An odd root of a negative base is read by the figure: ∫₋₁¹ x^(1/3) dx = 0, ∫₋₁¹ x^(2/3) dx = 2·(3/5) = 6/5,
 /// ∫₋₁¹ x^(1/5) dx = 0, ∫₀² (x − 1)^(1/3) dx = 0, ∫₋₈¹ x^(1/3) dx = (3/4)(1 − 16) = −45/4; L₂ of x^(1/3) on [−8, 0]:
-/// Δx = 4, heights −2 and −∛4 = −1.5874: 4(−3.5874) = −14.3496. The coordinate grid itself is unchanged.
+/// Δx = 4, heights −2 and −∛4: 4(−2 − ∛4) = −4∛4 − 8. The coordinate grid itself is unchanged.
 #[test]
 fn odd_roots_of_negative_bases() {
     let ex = |f: &str, a: &str, b: &str| with(&[("f", s(f)), ("a", s(a)), ("b", s(b)), ("exact_line", bo(true)), ("xmin", fl(-9.0)), ("xmax", fl(3.0)), ("ymin", fl(-3.0)), ("ymax", fl(3.0))]);
@@ -777,7 +804,8 @@ fn odd_roots_of_negative_bases() {
     has_line(&ex("(x - 1)^(1/3)", "0", "2"), "Exact value = 0");
     has_line(&ex("x^(1/3)", "-8", "1"), "Exact value = \u{2212}45/4");
     let mut l = ex("x^(1/3)", "-8", "0"); l.set_i("n", 2); l.set_b("sum_line", true);
-    has_line(&l, "= 4\u{b7}(\u{2212}2 \u{2212} 1.5874) \u{2248} \u{2212}14.3496");
+    // (exact: 4(−2 − ∛4) = −4∛4 − 8 ≈ −14.3496)
+    has_line(&l, "= 4\u{b7}(\u{2212}2 \u{2212} 3\u{221a}4) = \u{2212}4\u{2009}3\u{221a}4 \u{2212} 8");
     assert!(warnings(&ex("x^(1/3)", "-1", "1")).is_empty());
     // drawn by the figure on both sides of 0
     let svg = render(&ex("x^(1/3)", "-1", "1"));
@@ -807,3 +835,88 @@ fn values_large_typed_and_ends() {
     assert!(e.iter().any(|n| n.contains("the end a") && n.contains("move a just inside")), "{e:?}");
     has_line(&with(&[("f", s("sqrt(abs(x))")), ("a", s("-1")), ("b", s("1")), ("integral_line", bo(true))]), "\u{221a}|x| dx");
 }
+
+/// Exact values are derived, never guessed: over the third checker's 36 functions × 6 rules × 8 strip counts (and the
+/// between-curves and table cases), every sum, error and integral written with "=" is rebuilt here term by term from
+/// exact heights at exact sample points and the exact Δx, agrees with an independent floating-point sum to 1e-12, and
+/// holds no irrational that is not in a height, Δx or the bounds; an integral written exactly agrees with quadrature.
+#[test]
+fn exact_values_are_derived_never_guessed() {
+    let fns: Vec<(&str, &str, &str)> = vec![
+        ("x^2", "0", "4"), ("x^3", "0", "3"), ("sqrt(x)", "0", "9"), ("sqrt(x) + 1", "0", "4"), ("2sqrt(x)", "1", "4"), ("1/x", "1", "5"), ("2/x", "1", "3"),
+        ("1/(x + 1)", "0", "3"), ("e^x", "-1", "1"), ("e^(-x)", "0", "2"), ("3e^(-x/2)", "0", "4"), ("ln(x)", "1", "5"), ("ln(x + 1)", "0", "3"),
+        ("sin(x)", "0", "pi/2"), ("cos(x)", "-pi/2", "pi/2"), ("sin(x) + 1", "0", "2pi"), ("2cos(x)", "0", "pi"), ("1 + 1/x^2", "1", "3"),
+        ("x^(1/3)", "0", "8"), ("x^(1/3)", "-8", "1"), ("x^(1/3)", "-1", "2"), ("x^(2/3)", "-1", "8"), ("x^(1/5)", "-1", "2"), ("(x - 1)^(1/3)", "-1", "3"),
+        ("sqrt(9 - x^2)", "0", "3"), ("1/(1 + x^2)", "0", "1"), ("e^(-x^2)", "0", "2"), ("x e^(-x)", "0", "3"), ("sqrt(x + 1)", "0", "3"), ("ln(x)", "1", "e^2"),
+        ("x^2 + 1", "0", "3"), ("4 - x^2", "0", "2"), ("sin(x)", "1", "3"), ("2^x", "0", "3"), ("e^(x/2)", "0", "2"), ("x sin(x)", "0", "pi"),
+    ];
+    let (mut values, mut exact_written, mut checked_terms) = (0, 0, 0);
+    let atoms = |e: &Ex| -> Vec<String> { e.0.keys().flat_map(|m| { let mut v = vec![]; if m.sq != 1 { v.push(format!("s{}", m.sq)); } if m.cb != 1 { v.push(format!("c{}", m.cb)); } if m.pi != 0 { v.push("pi".into()); } if m.e.0 != 0 { v.push("e".into()); } for (p, _) in &m.ln { v.push(format!("l{p}")); } v }).collect() };
+    for (fx, a, b) in &fns {
+        for rule in RULES {
+            for n in [3, 4, 5, 6, 7, 8, 10, 12] {
+                let p = with(&[("f", s(fx)), ("a", s(a)), ("b", s(b)), ("rule", s(rule)), ("n", i(n))]);
+                let Ok(m) = model(&p) else { continue };
+                let fm = fmt_of(&p);
+                let Some(sum) = &m.sum else { continue };
+                values += 1;
+                // an independent floating-point sum
+                let f = |x: f64| ev(fx, x).unwrap();
+                let (xa, xb) = (m.xa, m.xb);
+                let dx = (xb - xa) / n as f64;
+                let heights: Vec<f64> = m.terms.iter().map(|t| t.0.v).collect();
+                let float_sum = match rule {
+                    "Left" => (0..n).map(|k| f(xa + k as f64 * dx)).sum::<f64>() * dx,
+                    "Right" => (1..=n).map(|k| f(xa + k as f64 * dx)).sum::<f64>() * dx,
+                    "Midpoint" => (0..n).map(|k| f(xa + (k as f64 + 0.5) * dx)).sum::<f64>() * dx,
+                    "Trapezoid" => (0..n).map(|k| f(xa + k as f64 * dx) + f(xa + (k + 1) as f64 * dx)).sum::<f64>() * dx / 2.0,
+                    _ => heights.iter().sum::<f64>() * dx,
+                };
+                let (_, said_exact) = fm.text(sum);
+                if said_exact {
+                    exact_written += 1;
+                    let e = sum.ex.as_ref().expect("written exact with no exact form");
+                    assert!((e.approx() - float_sum).abs() <= 1e-12 * float_sum.abs().max(1.0), "{fx} {rule} {n}: {} vs {float_sum}", e.approx());
+                    // rebuilt from the terms: Δx (or Δx/2) times Σ weight · exact height
+                    let coef = m.coef.as_ref().and_then(|c| c.ex.clone()).expect("an exact sum has an exact Δx");
+                    let mut acc = Ex::zero();
+                    for (h, w) in &m.terms {
+                        let he = h.ex.as_ref().expect("an exact sum has exact heights");
+                        let we = w.as_ref().map(|w| w.ex.clone().unwrap()).unwrap_or(Ex::int(1));
+                        acc = acc.add(&he.mul(&we).unwrap()).unwrap();
+                        checked_terms += 1;
+                    }
+                    assert_eq!(&acc.mul(&coef).unwrap(), e, "{fx} {rule} {n}: the sum is not rebuilt from its terms");
+                    // and holds no irrational that is not in a height, Δx or a bound
+                    let mut seen: Vec<String> = atoms(&coef);
+                    for (h, _) in &m.terms { seen.extend(atoms(h.ex.as_ref().unwrap())); }
+                    for at in atoms(e) { assert!(seen.contains(&at), "{fx} {rule} {n}: {at} from nowhere"); }
+                }
+                if let Some(ex) = &m.exact && fm.text(ex).1 {
+                    let (q, _) = integrate(&|x| ev(fx, x), xa, xb).unwrap();
+                    assert!((ex.v - q).abs() <= 1e-10 * q.abs().max(1.0), "{fx}: exact integral {} vs quadrature {q}", ex.v);
+                    if fm.text(sum).1 {
+                        let err = sum.sub(ex);
+                        // (exact when written exact: the exact difference; one too long to read is written rounded)
+                        assert_eq!(err.ex.as_ref(), sum.ex.as_ref().unwrap().sub(ex.ex.as_ref().unwrap()).as_ref(), "{fx} {rule} {n}");
+                        if !fm.text(&err).1 { assert!(err.ex.as_ref().unwrap().text().is_none(), "{fx} {rule} {n}: an exact error written rounded"); }
+                    }
+                }
+            }
+        }
+    }
+    println!("values {values}, written exact {exact_written}, exact terms checked {checked_terms}");
+    assert!(values >= 1700 && exact_written >= 500, "{values} {exact_written}");
+    // the checker's false forms are gone: no exact form where none is derived
+    for j in [
+        with(&[("f", s("ln(x)")), ("a", s("1")), ("b", s("e^2")), ("rule", s("Left")), ("n", i(4))]),
+        with(&[("f", s("ln(x + 1)")), ("a", s("0")), ("b", s("3")), ("rule", s("Left")), ("n", i(12))]),
+    ] {
+        let m = model(&j).unwrap();
+        assert!(!fmt_of(&j).text(m.sum.as_ref().unwrap()).1, "a sum of logarithms of non-integers has no exact form here");
+    }
+    // ∛: L₃ of x^(1/3) on [−8, 1] = 3(−2 − ∛5 − ∛2), exact
+    let c = with(&[("f", s("x^(1/3)")), ("a", s("-8")), ("b", s("1")), ("rule", s("Left")), ("n", i(3)), ("sum_line", bo(true)), ("xmin", fl(-9.0)), ("ymin", fl(-3.0))]);
+    has_line(&c, "= 3\u{b7}(\u{2212}2 \u{2212} 3\u{221a}5 \u{2212} 3\u{221a}2) = \u{2212}3\u{2009}3\u{221a}2 \u{2212} 3\u{2009}3\u{221a}5 \u{2212} 6");
+}
+

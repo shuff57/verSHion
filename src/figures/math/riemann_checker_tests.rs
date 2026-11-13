@@ -304,17 +304,27 @@ fn extra_cases() -> Vec<(String, String)> {
 }
 
 /// Label sets left off at Small or Medium with only one label option on, each with a note (named, and asserted to be all).
-/// (All strips 12 to 15 px wide: 8 or 10 strips on a window 4 units wide; the note's advice, an x-axis set closer round
-/// a and b, makes them fit, as `refusal_advice_works` checks.)
+/// (Strips too short for a label near a curve's low point (x⁴ near 0, ln x near 1, x² − 2x near 0), or 12 to 15 px
+/// wide (8 or 10 strips on a window 4 units wide); each left off with a note whose advice works, as
+/// `refusal_advice_works` checks.)
 const SMALL_MEDIUM_REFUSED: &[&str] = &[
+    "Medium x^2 - 2x [0,3] n=6 heights: strip labels",
+    "Medium x^2 - 2x [0,3] n=6 areas: strip labels",
+    "Small x^4 [0,1] n=6 heights: strip labels",
+    "Medium x^4 [0,1] n=6 heights: strip labels",
+    "Small x^4 [0,1] n=6 areas: strip labels",
+    "Medium x^4 [0,1] n=6 areas: strip labels",
+    "Small ln(x) [1/2,3] n=4 heights: strip labels",
+    "Medium ln(x) [1/2,3] n=4 heights: strip labels",
+    "Small ln(x) [1/2,3] n=4 areas: strip labels",
+    "Medium ln(x) [1/2,3] n=4 areas: strip labels",
+    "Small ln(x) [1/2,3] n=6 areas: strip labels",
+    "Medium ln(x) [1/2,3] n=6 areas: strip labels",
     "Medium x^2 + 2 [-1,2] n=8 Midpoint areas: strip labels",
-    "Medium x^3 [1,2] n=8 Midpoint xmarks: x marks",
     "Small x^3 [1,2] n=10 Trapezoid heights: strip labels",
     "Medium x^3 [1,2] n=10 Trapezoid heights: strip labels",
     "Small x^3 [1,2] n=10 Trapezoid areas: strip labels",
     "Medium x^3 [1,2] n=10 Trapezoid areas: strip labels",
-    "Medium x^3 [1,2] n=10 Trapezoid xmarks: x marks",
-    "Medium 0.01x^3 [0,10] n=8 Midpoint areas: strip labels",
 ];
 
 #[test]
@@ -335,7 +345,8 @@ fn the_checkers_sweep_is_clean() {
                 j.push_str(&format!(",\"label_size\":\"{size}\"}}"));
                 let p = from_json(&j);
                 let r = measure(&p);
-                for n in warnings(&p).iter().filter(|n| n.contains("no room") || n.contains("do not fit")) {
+                // (a whole set left off: not the partial x₀, x₁, …, xₙ forms, which are drawn with their own note)
+                for n in warnings(&p).iter().filter(|n| (n.contains("no room") || n.contains("do not fit")) && !n.contains("are marked")) {
                     let kind = if n.contains("strip labels") { "strip labels" } else if n.contains("x\u{2080}") { "x marks" } else { "a and b" };
                     *sets.entry(format!("{size} {kind}")).or_default() += 1;
                     if size != "Large" && matches!(on, "heights" | "areas" | "xmarks") { one_option.push(format!("{size} {name} {on}: {kind}")); }
@@ -354,4 +365,102 @@ fn the_checkers_sweep_is_clean() {
     let unnamed: Vec<&String> = one_option.iter().filter(|n| !SMALL_MEDIUM_REFUSED.contains(&n.as_str())).collect();
     assert!(unnamed.is_empty() && one_option.len() == SMALL_MEDIUM_REFUSED.len(), "unnamed: {unnamed:#?}");
     assert!(faults.is_empty(), "{} faults:\n{}", faults.len(), faults.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// The third checker's 223 cases (its round-3 harness, riemann_r3.rs `mine`, ported unchanged).
+fn detach_cases() -> Vec<(String, String)> {
+    let fns: Vec<(&str, &str, &str)> = vec![
+        ("x^2", "0", "4"), ("x^2", "-2", "2"), ("x^2 + 3", "0", "3"), ("2x^2", "0", "2"), ("x^3", "0", "3"), ("x^3 + 1", "-1", "2"),
+        ("9 - x^2", "0", "3"), ("4 - x^2", "-1", "2"), ("3x + 2", "0", "4"), ("5 - x", "0", "5"), ("x/3", "0", "6"), ("sqrt(x)", "0", "9"),
+        ("sqrt(x) + 1", "0", "4"), ("2sqrt(x)", "1", "4"), ("1/x", "1", "5"), ("2/x", "1", "3"), ("1/(x + 1)", "0", "3"), ("e^x", "-1", "1"),
+        ("e^(-x)", "0", "2"), ("3e^(-x/2)", "0", "4"), ("ln(x)", "1", "5"), ("ln(x + 1)", "0", "3"), ("sin(x)", "0", "pi/2"), ("cos(x)", "-pi/2", "pi/2"),
+        ("sin(x) + 1", "0", "2pi"), ("2cos(x)", "0", "pi"), ("x^2 - 6x + 10", "1", "5"), ("(x - 1)^2", "0", "3"), ("12 - 3x^2", "0", "2"),
+        ("x^4 - 2x^2 + 2", "-1", "2"), ("x^(1/3)", "0", "8"), ("abs(x)", "-2", "3"), ("x^2/2 + 1", "0", "4"), ("1 + 1/x^2", "1", "3"),
+    ];
+    let combos = [(4, "Left"), (4, "Right"), (5, "Midpoint"), (6, "Trapezoid"), (8, "Upper"), (3, "Lower"), (10, "Midpoint"), (5, "Left")];
+    let mut out = vec![];
+    for (fi, (f, a, b)) in fns.iter().enumerate() {
+        let av = eval_typed(a).unwrap(); let bv = eval_typed(b).unwrap();
+        let (mut lo, mut hi) = (0.0f64, 0.0f64);
+        for i in 0..=400 { let x = av + (bv - av) * i as f64 / 400.0; if let Some(y) = ev(f, x) { lo = lo.min(y); hi = hi.max(y); } }
+        let ys = nice((hi - lo).max(1.0) * 1.15);
+        let ymin = ((lo / ys).floor() - 1.0) * ys; let ymax = ((hi / ys).ceil() + 1.0) * ys;
+        let pi = b.contains("pi");
+        for k in 0..6 {
+            let (n, rule) = combos[(fi + k) % combos.len()];
+            let loose = k % 2 == 1;
+            let (xmin, xmax, xstep, xu) = if pi {
+                let (l, h) = (av / PI, bv / PI);
+                if loose { ((l - 1.0).floor().min(-1.0), h.ceil() + 1.0, 0.5, "Multiples of \u{3c0}") } else { ((l - 0.25).min(-0.25), h + 0.25, 0.25, "Multiples of \u{3c0}") }
+            } else if loose {
+                let s = nice((bv - av) * 2.5);
+                ((((av - (bv - av)) / s).floor() * s).min(-s), ((bv + (bv - av) / 2.0) / s).ceil() * s, s, "Numbers")
+            } else {
+                let s = nice((bv - av + 2.0).max(2.0) * 1.1);
+                ((((av - 1.0) / s).floor() * s).min(-s), ((bv + 1.0) / s).ceil() * s, s, "Numbers")
+            };
+            out.push((format!("{f} [{a},{b}] n={n} {rule} {}", if loose { "loose" } else { "tight" }), format!(r#"{{"f":"{f}","a":"{a}","b":"{b}","n":{n},"rule":"{rule}","xmin":{xmin:.4},"xmax":{xmax:.4},"xstep":{xstep:.4},"ymin":{ymin:.4},"ymax":{ymax:.4},"ystep":{ys:.4},"xunits":"{xu}"}}"#)));
+        }
+    }
+    for (t, x1, y1, xs, ys) in [
+        ("0, 4; 2, 7; 3, 9; 6, 8; 8, 5", 9.0, 10.0, 1.0, 1.0), ("0, 12; 4, 15; 9, 18; 12, 14; 15, 10", 16.0, 20.0, 1.0, 2.0),
+        ("1, 3; 1.5, 4; 2.5, 6; 3, 5; 4.5, 2", 5.0, 7.0, 0.5, 1.0), ("0, 0; 5, 20; 10, 35; 20, 50; 30, 55", 32.0, 60.0, 5.0, 10.0),
+        ("0, 100; 2, 80; 4, 65; 6, 50; 8, 42; 10, 35", 11.0, 110.0, 1.0, 10.0), ("0, 1.2; 0.5, 1.8; 1, 2.1; 2, 2.6; 3, 2.2", 3.5, 3.0, 0.5, 0.5),
+    ] {
+        for rule in ["Left", "Trapezoid"] {
+            out.push((format!("table {t} {rule}"), format!(r#"{{"region":"From a table of values","table":"{t}","rule":"{rule}","xmin":-{xs},"xmax":{x1},"xstep":{xs},"ymin":-{ys},"ymax":{y1},"ystep":{ys}}}"#)));
+        }
+    }
+    for (f, a, b, n, x0, x1, y0, y1) in [("x^2 - 4", "0", "3", 6, -1.0, 4.0, -5.0, 6.0), ("x - 2", "0", "5", 5, -1.0, 6.0, -3.0, 4.0), ("cos(x)", "0", "pi", 6, -1.0, 4.0, -1.5, 1.5), ("x^3 - 3x^2 + 2x", "0", "3", 6, -1.0, 4.0, -2.0, 7.0)] {
+        out.push((format!("signed {f}"), format!(r#"{{"f":"{f}","a":"{a}","b":"{b}","n":{n},"signed":true,"rule":"Midpoint","xmin":{x0},"xmax":{x1},"ymin":{y0},"ymax":{y1},"ystep":0.5}}"#)));
+    }
+    for (f, g, n) in [("x", "x^2", 4), ("x + 2", "x^2", 6), ("2x", "x^2", 5)] {
+        out.push((format!("between {f} {g}"), format!(r#"{{"region":"Between f(x) and g(x)","f":"{f}","g":"{g}","bounds":"Where f and g cross","n":{n},"rule":"Midpoint","xmin":-2.0,"xmax":3.0,"ymin":-1.0,"ymax":5.0}}"#)));
+    }
+    out
+}
+
+
+/// The third checker's measures, ported: no strip label under the row of axis numbers, none more than 22 px from its
+/// own strip, on its 223 cases with heights or areas on, at every size.
+#[test]
+fn strip_labels_sit_on_their_strips() {
+    let cases = detach_cases();
+    assert!(cases.len() >= 223, "{}", cases.len());
+    let mut tot: std::collections::BTreeMap<String, [usize; 5]> = Default::default();
+    let mut bad = vec![];
+    let mut refused: std::collections::BTreeMap<String, usize> = Default::default();
+    for (name, base) in &cases {
+        for on in ["\"Heights\"", "\"Areas\""] {
+            for size in ["Small", "Medium", "Large"] {
+                let j = format!("{},\"strip_labels\":{on},\"label_size\":\"{size}\"}}", base.trim_end_matches('}'));
+                let p = from_json(&j);
+                let (svg, notes) = build(&p);
+                if notes.iter().any(|n| n.contains("strip labels do not fit")) { *refused.entry(format!("{size} {on}")).or_default() += 1; }
+                let Ok(m) = model(&p) else { continue };
+                let g = grid_layout(&grid_params(&p));
+                let sx = |x: f64| g.ml + (x - g.x0) * g.ux;
+                let sy = |y: f64| g.mt + g.ph - (y - g.y0) * g.uy;
+                let axy = sy(if g.y0 <= 0.0 && g.y1 >= 0.0 { 0.0 } else { g.y0 });
+                let labs: Vec<(String, String, [f64; 4])> = labels(&svg).into_iter().filter(|l| l.0 == "strip-label").collect();
+                if labs.is_empty() { continue; }
+                let inwin: Vec<usize> = (0..m.strips.len()).filter(|&i| { let c = 0.5 * (sx(m.strips[i].x0) + sx(m.strips[i].x1)); c >= g.ml && c <= g.ml + g.pw }).collect();
+                let (mut under, mut far) = (0, 0);
+                for (k, l) in labs.iter().enumerate() {
+                    let Some(&i) = inwin.get(k) else { continue };
+                    let st = &m.strips[i];
+                    let (y0, y1) = { let (a, b) = (sy(st.top).clamp(g.mt, g.mt + g.ph), sy(st.base).clamp(g.mt, g.mt + g.ph)); (a.min(b), a.max(b)) };
+                    let gap = (y0 - l.2[3]).max(l.2[1] - y1).max(0.0);
+                    if l.2[1] > axy + 12.0 && y1 <= axy + 0.5 { under += 1; }
+                    if gap > 22.0 { far += 1; }
+                }
+                let e = tot.entry(format!("{size} {on}")).or_default();
+                e[0] += 1; e[1] += (under > 0) as usize; e[2] += (far > 0) as usize; e[3] += under; e[4] += far;
+                if under + far > 0 { bad.push(format!("{size} {on} {name}: under {under}, far {far}")); }
+            }
+        }
+    }
+    println!("[figures with labels, with a label under the numbers, with one far, labels under, labels far]: {tot:?}");
+    println!("label sets left off with a note: {refused:?}");
+    assert!(bad.is_empty(), "{} figures:\n{}", bad.len(), bad.iter().take(30).cloned().collect::<Vec<_>>().join("\n"));
 }

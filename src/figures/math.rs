@@ -2188,6 +2188,7 @@ pub(crate) use angles::handles as angles_handles;
 mod grid_b7;
 pub(crate) mod riemann;
 mod riemann_exact;
+mod riemann_sym;
 pub(super) use grid_b7::{circle_room as grid_circle_room, label_ext as grid_label_ext};
 pub(super) use grid_b7::{float_text as grid_float_text, row_style_keys as grid_row_style_keys, typed_range as grid_typed_float, ROW_STYLE_KEYS as GRID_ROW_STYLE_KEYS};
 use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};

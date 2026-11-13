@@ -6,7 +6,8 @@
 //!
 //! Upper and lower sums use the true greatest and least value of the function on each strip (owner's decision,
 //! 2026-11-12), found by sampling and refining, not the larger or smaller end value.
-use super::riemann_exact::{integrate, pipoly_text, poly_of, recognise, Poly, Pt as XPt, Rat};
+use super::riemann_exact::{integrate, Rat};
+use super::riemann_sym::{self as sym, Ex, Node};
 use super::{coordinate_grid_params, flat::{eval_typed, pretty}, grid_layout, label_text, rect_hit, rect_seg, tidy_spacing, GridHooks, GridL, SERIF};
 use crate::figures::interact::Handle;
 use crate::figures::{Example, ParamDef, Params, Value};
@@ -158,42 +159,68 @@ fn odd_power(src: &str) -> Option<(usize, usize, usize, i64, i64)> {
 }
 
 /// A typed bound: its value and how it prints (as typed: 1/2, π/2, 2π, √2).
-fn read_bound(t: &str, name: &str) -> Result<(f64, String), String> {
+fn read_bound(t: &str, name: &str) -> Result<(f64, String, Option<Ex>), String> {
     // (the typed-measure reader takes numbers, fractions, roots and π; e, e^2 and ln 3 are read by the grid's expression reader)
     let alt = || { let low = t.trim().to_lowercase(); (!low.contains('x') && !low.contains('y')).then(|| super::eval_full(&low, 0.0, None, false)).flatten().filter(|v| v.is_finite()) };
     let v = eval_typed(t).or_else(alt).ok_or_else(|| format!("{name} cannot be read: type a number such as 2, 1/2, -3, pi/2, 2pi or e"))?;
     if v.abs() > 1e6 { return Err(format!("{name} is too far out: type a value between -1000000 and 1000000")); }
     // (as typed: 1.5 stays 1.5, 3/2 stays 3/2, 2pi is 2π)
     let show = pretty(t);
-    Ok((v, show))
+    Ok((v, show, typed_ex(t, v)))
+}
+
+/// A typed number's exact value (1/2, 2pi, sqrt2, √3, e^2, ln 3), read by exact arithmetic and checked against its value.
+fn typed_ex(t: &str, v: f64) -> Option<Ex> {
+    let s = t.trim().replace('\u{221a}', "sqrt").replace('\u{3c0}', "pi").replace('\u{2212}', "-").replace('\u{b7}', "*").replace('\u{d7}', "*").replace('\u{f7}', "/").to_lowercase();
+    // sqrt2 → sqrt(2), as the typed-measure reader takes it
+    let cs: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < cs.len() {
+        if cs[i..].starts_with(&['s', 'q', 'r', 't']) && cs.get(i + 4).is_some_and(|c| c.is_ascii_digit() || *c == '.') {
+            out.push_str("sqrt(");
+            i += 4;
+            while i < cs.len() && (cs[i].is_ascii_digit() || cs[i] == '.') { out.push(cs[i]); i += 1; }
+            out.push(')');
+            continue;
+        }
+        out.push(cs[i]);
+        i += 1;
+    }
+    if out.contains('x') && !out.contains("exp") { return None; }
+    let n = sym::parse(&out)?;
+    sym::checked(sym::eval(&n, &Ex::zero()), v)
 }
 
 // ───────────────────────── exact-or-rounded values ─────────────────────────
 
-/// A value as the figure writes it: its number, and its exact rational or textbook form when it has one.
+/// A value as the figure writes it: its number, and its exact form when one was derived by exact arithmetic (never
+/// guessed from the number), and the form it was typed in.
 #[derive(Clone, Debug)]
-pub(crate) struct Val { pub v: f64, pub r: Option<Rat>, pub form: Option<String>, /** how far the value may be off (0: to the last bit); a value known only roughly is never written as exact, nor to more places than it is known */ pub err: f64 }
+pub(crate) struct Val { pub v: f64, pub ex: Option<Ex>, pub form: Option<String>, /** how far the value may be off (0: to the last bit); a value known only roughly is never written to more places than it is known */ pub err: f64 }
 impl Val {
-    fn num(v: f64) -> Val { Val { v, r: Rat::near(v, 1000, 1e-11 * v.abs().max(1.0)), form: None, err: 0.0 } }
-    fn rat(r: Rat) -> Val { Val { v: r.f(), r: Some(r), form: None, err: 0.0 } }
-    fn with_form(v: f64, form: Option<String>) -> Val { let mut x = Val::num(v); if x.r.is_none() { x.form = form; } x }
+    /// A value with no exact form: written rounded, with ≈.
+    fn num(v: f64) -> Val { Val { v, ex: None, form: None, err: 0.0 } }
+    fn exact(e: Ex) -> Val { Val { v: e.approx(), ex: Some(e), form: None, err: 0.0 } }
+    fn rat(r: Rat) -> Val { Val::exact(Ex::rat(r)) }
+    /// The value v, with the exact form e when e was derived and agrees with v.
+    fn of(e: Option<Ex>, v: f64) -> Val { Val { v, ex: sym::checked(e, v), form: None, err: 0.0 } }
     fn sum(vs: &[Val], w: &[Rat]) -> Val {
         let v: f64 = vs.iter().zip(w).map(|(a, k)| a.v * k.f()).sum();
-        let r = vs.iter().zip(w).try_fold(Rat::zero(), |acc, (a, k)| acc.add(a.r?.mul(*k)?));
-        match r { Some(r) => Val::rat(r), None => Val::num(v) }
+        let ex = vs.iter().zip(w).try_fold(Ex::zero(), |acc, (a, k)| acc.add(&a.ex.as_ref()?.scale(*k)?));
+        Val { v, ex: sym::checked(ex, v), form: None, err: vs.iter().map(|a| a.err).sum() }
     }
     fn mul(&self, o: &Val) -> Val {
-        let mut x = match (self.r, o.r) { (Some(a), Some(b)) => a.mul(b).map(Val::rat).unwrap_or_else(|| Val::num(self.v * o.v)), _ => Val::num(self.v * o.v) };
-        x.err = self.err * o.v.abs() + o.err * self.v.abs();
-        if x.rough() { x.r = None; }
-        x
+        let ex = match (&self.ex, &o.ex) { (Some(a), Some(b)) => a.mul(b), _ => None };
+        let v = self.v * o.v;
+        Val { v, ex: sym::checked(ex, v), form: None, err: self.err * o.v.abs() + o.err * self.v.abs() }
     }
     fn sub(&self, o: &Val) -> Val {
-        let mut x = match (self.r, o.r) { (Some(a), Some(b)) => a.sub(b).map(Val::rat).unwrap_or_else(|| Val::num(self.v - o.v)), _ => Val::num(self.v - o.v) };
-        x.err = self.err + o.err;
-        if x.rough() { x.r = None; }
-        x
+        let ex = match (&self.ex, &o.ex) { (Some(a), Some(b)) => a.sub(b), _ => None };
+        let v = self.v - o.v;
+        Val { v, ex: sym::checked(ex, v), form: None, err: self.err + o.err }
     }
+    fn neg(&self) -> Val { Val { v: -self.v, ex: self.ex.as_ref().map(|e| e.neg()), form: None, err: self.err } }
     fn rough(&self) -> bool { self.err > 1e-11 * self.v.abs().max(1.0) }
 }
 
@@ -206,21 +233,22 @@ fn rounded(v: f64, dec: usize) -> String {
     s.replace('-', "\u{2212}")
 }
 impl Fmt {
-    /// The text and whether it is exactly the value (else it is rounded). A rounded value keeps all its places (1.2840
-    /// beside 1.6487), and never more places than the value is known to.
+    /// The text and whether it is exactly the value. Exact only for a value whose exact form was derived: in Exact, that
+    /// form (or the form it was typed in); in Decimals, a rational whose decimal ends within the places. Anything else is
+    /// rounded (all its places kept, 1.2840 beside 1.6487, never more places than it is known to) and written with ≈.
     fn text(&self, x: &Val) -> (String, bool) {
-        if self.exact && !x.rough() {
-            // (a typed form first: a value typed 2.5 is written 2.5, one typed 5/2 is written 5/2)
+        let rat = x.ex.as_ref().and_then(|e| e.as_rat());
+        if self.exact && !x.rough() && let Some(e) = &x.ex {
             if let Some(f) = &x.form { return (f.clone(), true); }
-            if let Some(r) = x.r { if r.d <= 10_000_000 { return (r.text(), true); } }
-            if let Some(f) = recognise(x.v) { return (f, true); }
+            if let Some(t) = e.text() { return (t, true); }
         }
         let known = if x.err > 0.0 { (-(2.0 * x.err).log10()).floor().clamp(0.0, 12.0) as usize } else { 12 };
         let dec = self.dec.min(known);
-        let s = rounded(x.v, dec);
-        let back: f64 = s.replace('\u{2212}', "-").parse().unwrap_or(f64::NAN);
-        let ex = !x.rough() && (back - x.v).abs() <= 1e-12 * x.v.abs().max(1.0);
-        if ex { return (s, true); }
+        // (a rational whose decimal ends within the places is written exactly: 3/2 as 1.5)
+        if let Some(r) = rat && let Some(t) = Rat::int(10).pow(dec as u32).and_then(|p| r.mul(p)) && t.d == 1 {
+            if let Some(f) = &x.form && self.exact { return (f.clone(), true); }
+            return (rounded(r.f(), dec), true);
+        }
         let full = format!("{:.*}", dec, x.v);
         let full = if full.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') { "0".to_string() } else { full };
         (full.replace('-', "\u{2212}"), false)
@@ -263,6 +291,8 @@ pub(crate) struct Model {
     pub integrand: String,
     pub var: char,
     pub ylo: f64, pub yhi: f64,
+    /// a horizontal slice's lowest and highest y, exact where they can be
+    pub y_lo: Option<Val>, pub y_hi: Option<Val>,
 }
 
 /// A typed function as a book prints it: √x, √(x + 1), |x − 1|, powers raised (by the markup), no * between factors.
@@ -343,7 +373,7 @@ fn roots(h: &dyn Fn(f64) -> Option<f64>, lo: f64, hi: f64) -> Vec<f64> {
     out
 }
 /// A computed x that is a rational or a multiple of π to within the reader's error is that exact number.
-fn snap_x(x: f64) -> f64 { match XPt::of(x) { Some(q) if (q.v() - x).abs() < 1e-9 * x.abs().max(1.0) => q.v(), _ => x } }
+fn snap_x(x: f64) -> f64 { x }
 
 /// Where f has no finite, bounded value on [a, b] (a pole of any order, an integrable singularity such as ln|x| at 0, a
 /// gap in its domain), found between samples too; None when f is finite and bounded all the way. Integrable singularities
@@ -424,51 +454,37 @@ fn extreme(h: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, max: bool) -> Optio
     Some((best.0, best.1 * s))
 }
 
-struct Fns { f: Option<String>, g: Option<String>, poly_f: Option<Poly>, poly_g: Option<Poly> }
+struct Fns { f: Option<String>, g: Option<String>, ast_f: Option<Node>, ast_g: Option<Node> }
 impl Fns {
     fn f(&self, x: f64) -> Option<f64> { ev(self.f.as_ref()?, x) }
     fn g(&self, x: f64) -> Option<f64> { match &self.g { Some(s) => ev(s, x), None => Some(0.0) } }
-    /// f at x as a value: exact for a polynomial at a rational x
-    fn fval(&self, x: f64) -> Option<Val> {
-        let v = self.f(x)?;
-        if let (Some(p), Some(XPt::R(r))) = (&self.poly_f, XPt::of(x)) { if let Some(e) = p.eval(r) { return Some(Val::rat(e)); } }
-        Some(Val::num(v))
+    /// f − g as a tree (f alone under f), when both trees are trusted.
+    fn h_tree(&self) -> Option<Node> {
+        let f = self.ast_f.clone()?;
+        match (&self.g, &self.ast_g) { (None, _) => Some(f), (Some(_), Some(g)) => Some(Node::Sub(Box::new(f), Box::new(g.clone()))), _ => None }
     }
-    fn hval(&self, x: f64, between: bool) -> Option<Val> {
-        if !between { return self.fval(x); }
+    fn g_ex(&self, xe: &Ex) -> Option<Ex> { match &self.g { None => Some(Ex::zero()), Some(_) => sym::eval(self.ast_g.as_ref()?, xe) } }
+    /// f at x as a value: exact when x is exact and f's tree evaluates there exactly.
+    fn fval(&self, x: f64, xe: Option<&Ex>) -> Option<Val> {
+        let v = self.f(x)?;
+        let e = match (&self.ast_f, xe) { (Some(n), Some(xe)) => sym::eval(n, xe), _ => None };
+        Some(Val::of(e, v))
+    }
+    /// The strip height at x: f(x), or |f(x) − g(x)| between the curves.
+    fn hval(&self, x: f64, xe: Option<&Ex>, between: bool) -> Option<Val> {
+        if !between { return self.fval(x, xe); }
         let (f, g) = (self.f(x)?, self.g(x)?);
-        if let (Some(p), Some(q), Some(XPt::R(r))) = (&self.poly_f, &self.poly_g, XPt::of(x)) {
-            if let (Some(a), Some(b)) = (p.eval(r), q.eval(r)) { if let Some(d) = a.sub(b) { return Some(Val::rat(if d.n < 0 { Rat { n: -d.n, d: d.d } } else { d })); } }
-        }
-        Some(Val::num((f - g).abs()))
+        let e = (|| { let xe = xe?; let d = sym::eval(self.ast_f.as_ref()?, xe)?.sub(&self.g_ex(xe)?)?; Some(if d.sign()? < 0 { d.neg() } else { d }) })();
+        Some(Val::of(e, (f - g).abs()))
     }
 }
 
-/// ∫ₐᵇ h exactly where it can be: a polynomial over rational or π-multiple bounds exactly (split where it changes sign
-/// when `abs`), anything else by quadrature, recognised as a textbook form when one fits.
-fn exact_integral(poly: Option<&Poly>, h: &dyn Fn(f64) -> Option<f64>, a: f64, b: f64, abs: bool) -> Option<Val> {
+/// ∫ₐᵇ h (or ∫ₐᵇ |h| with `abs`): its value by adaptive quadrature, and its exact value when the tree of h has an
+/// antiderivative here and both bounds are exact.
+fn exact_integral(tree: Option<&Node>, h: &dyn Fn(f64) -> Option<f64>, a: f64, b: f64, abs: bool, ae: Option<&Ex>, be: Option<&Ex>) -> Option<Val> {
     let mut cuts = vec![a];
     if abs { cuts.extend(roots(h, a, b).into_iter().filter(|r| *r > a + 1e-12 && *r < b - 1e-12)); }
     cuts.push(b);
-    if let Some(p) = poly {
-        let pts: Option<Vec<XPt>> = cuts.iter().map(|c| XPt::of(*c).filter(|q| (q.v() - c).abs() < 1e-9 * c.abs().max(1.0))).collect();
-        if let Some(pts) = pts {
-            let mut acc: Vec<Rat> = vec![Rat::zero()];
-            let mut ok = true;
-            for w in pts.windows(2) {
-                let Some(mut piece) = p.integral(w[0], w[1]) else { ok = false; break };
-                let num: f64 = piece.iter().enumerate().map(|(k, c)| c.f() * PI.powi(k as i32)).sum();
-                if abs && num < 0.0 { piece = piece.iter().map(|c| Rat { n: -c.n, d: c.d }).collect(); }
-                if acc.len() < piece.len() { acc.resize(piece.len(), Rat::zero()); }
-                for (k, c) in piece.iter().enumerate() { match acc[k].add(*c) { Some(s) => acc[k] = s, None => ok = false } }
-            }
-            if ok {
-                while acc.len() > 1 && acc.last().is_some_and(|c| c.is_zero()) { acc.pop(); }
-                let v: f64 = acc.iter().enumerate().map(|(k, c)| c.f() * PI.powi(k as i32)).sum();
-                return Some(if acc.len() == 1 { Val::rat(acc[0]) } else { Val { v, r: None, form: Some(pipoly_text(&acc)), err: 0.0 } });
-            }
-        }
-    }
     let mut total = 0.0;
     let mut err = 0.0;
     for w in cuts.windows(2) {
@@ -476,17 +492,19 @@ fn exact_integral(poly: Option<&Poly>, h: &dyn Fn(f64) -> Option<f64>, a: f64, b
         total += v;
         err += e;
     }
-    // (a quadrature whose last two levels still differ is never taken for an exact value)
-    if err > 1e-11 * total.abs().max(1.0) { return Some(Val { v: total, r: None, form: None, err }); }
-    let mut out = Val::num(total);
-    out.err = err;
-    if out.r.is_none() { out.form = recognise(total); }
-    Some(out)
+    let exact = (|| {
+        let t = tree?;
+        let t = if abs { Node::F(sym::Fun::Abs, Box::new(t.clone())) } else { t.clone() };
+        sym::integral(&t, ae?, be?)
+    })();
+    let ex = sym::checked(exact, total);
+    Some(match ex { Some(e) => Val { v: e.approx(), ex: Some(e), form: None, err: 0.0 }, None => Val { v: total, ex: None, form: None, err } })
 }
 
-/// The table typed as x, f(x) pairs (each value typed exactly as for a and b).
-fn read_table(t: &str) -> Result<Vec<(f64, f64, String, String)>, String> {
-    let mut out: Vec<(f64, f64, String, String)> = vec![];
+/// A table row: x and f(x), their typed forms and exact values.
+struct Cell { x: f64, y: f64, xs: String, ys: String, xe: Option<Ex>, ye: Option<Ex> }
+fn read_table(t: &str) -> Result<Vec<Cell>, String> {
+    let mut out: Vec<Cell> = vec![];
     for row in t.split([';', '\n']).map(|r| r.trim()).filter(|r| !r.is_empty()) {
         if out.len() >= MAX_TABLE { return Err(format!("The table has more than {MAX_TABLE} rows: type {MAX_TABLE} or fewer")); }
         let cells: Vec<&str> = row.split([',', '\t']).map(|c| c.trim()).filter(|c| !c.is_empty()).collect();
@@ -495,9 +513,9 @@ fn read_table(t: &str) -> Result<Vec<(f64, f64, String, String)>, String> {
         let x = eval_typed(cells[0]).ok_or_else(bad)?;
         let y = eval_typed(cells[1]).ok_or_else(bad)?;
         if x.abs() > 1e6 || y.abs() > 1e6 { return Err(bad()); }
-        if out.last().is_some_and(|l| x <= l.0) { return Err("The table's x values must increase from row to row".into()); }
-        // (each value as typed; the x values' typed forms go with them for the bounds)
-        out.push((x, y, pretty(cells[1]), pretty(cells[0])));
+        if out.last().is_some_and(|l| x <= l.x) { return Err("The table's x values must increase from row to row".into()); }
+        // (each value as typed and read exactly; the x values' typed forms go with them for the bounds)
+        out.push(Cell { x, y, ys: pretty(cells[1]), xs: pretty(cells[0]), xe: typed_ex(cells[0], x), ye: typed_ex(cells[1], y) });
     }
     if out.len() < 2 { return Err("Type at least two rows in the table, like 0, 2; 1, 5".into()); }
     Ok(out)
@@ -528,6 +546,15 @@ fn sum_name(ru: Rule, n: usize) -> String {
     match ru { Rule::L => format!("L_{n}"), Rule::R => format!("R_{n}"), Rule::M => format!("M_{n}"), Rule::T => format!("T_{n}"), Rule::U => "Upper sum".into(), Rule::Lo => "Lower sum".into() }
 }
 
+/// The exact x of an interior extreme of a polynomial: the simple fraction near x where its derivative is exactly 0.
+fn stationary(tree: Option<&Node>, x: f64) -> Option<Ex> {
+    let p = sym::poly(tree?)?;
+    let d: Vec<Rat> = p.iter().enumerate().skip(1).map(|(k, c)| c.mul(Rat::int(k as i128))).collect::<Option<_>>()?;
+    let r = Rat::near(x, 1000, 1e-6 * x.abs().max(1.0))?;
+    let xe = Ex::rat(r);
+    sym::poly_at(&d, &xe)?.is_zero().then_some(xe)
+}
+
 /// Everything the figure draws and writes, worked out from the params (or what is wrong with them).
 pub(crate) fn model(p: &Params) -> Result<Model, String> {
     let reg = region(p);
@@ -542,27 +569,30 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
     }
     let f = read_fn(p.s("f"), "f")?;
     let g = if reg == Region::Between { Some(read_fn(p.s("g"), "g")?) } else { None };
-    let poly_f = poly_of(&|x| ev(&f, x));
-    let poly_g = g.as_ref().and_then(|g| poly_of(&|x| ev(g, x)));
-    let fns = Fns { f: Some(f.clone()), g: g.clone(), poly_f, poly_g };
+    // (each function's tree, for exact values, trusted only where it agrees with the reader)
+    let ast_f = sym::tree_of(&f, &|x| ev(&f, x));
+    let ast_g = g.as_ref().and_then(|g| sym::tree_of(g, &|x| ev(g, x)));
+    let fns = Fns { f: Some(f.clone()), g: g.clone(), ast_f, ast_g };
     m.f_src = Some(f.clone());
     m.g_src = g.clone();
     let between = reg == Region::Between;
-    let (xa, xb) = if crossing(p) {
+    let (xa, xb, a_ex, b_ex) = if crossing(p) {
         let gl = grid_layout(&grid_params(p));
         let rs = roots(&|x| Some(fns.f(x)? - fns.g(x)?), gl.x0, gl.x1);
         if rs.len() < 2 { return Err("f and g do not cross twice in the window: widen the x-axis to take in both crossings, or choose From a to b".into()); }
-        m.crossings = rs.iter().map(|r| Val::with_form(*r, recognise(*r))).collect();
+        // (a crossing is exact only when f − g is exactly 0 there, checked by exact arithmetic)
+        let ht = fns.h_tree();
+        m.crossings = rs.iter().map(|r| Val::of(ht.as_ref().and_then(|t| sym::exact_zero(t, *r)), *r)).collect();
         m.a_txt = fm.t(&m.crossings[0]);
         m.b_txt = fm.t(m.crossings.last().unwrap());
-        (rs[0], *rs.last().unwrap())
+        (rs[0], *rs.last().unwrap(), m.crossings[0].ex.clone(), m.crossings.last().unwrap().ex.clone())
     } else {
-        let (a, at) = read_bound(p.s("a"), "a")?;
-        let (b, bt) = read_bound(p.s("b"), "b")?;
+        let (a, at, ae) = read_bound(p.s("a"), "a")?;
+        let (b, bt, be) = read_bound(p.s("b"), "b")?;
         if b <= a { return Err("b must be greater than a: type a smaller a or a larger b".into()); }
         m.a_txt = at;
         m.b_txt = bt;
-        (a, b)
+        (a, b, ae, be)
     };
     m.xa = xa;
     m.xb = xb;
@@ -585,28 +615,26 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
     let h = |x: f64| -> Option<f64> { Some(fns.f(x)? - fns.g(x)?) };
     // the exact value: signed under f, the area (always positive) between curves or sliced across
     let integ_abs = between || kd == Kind::H;
-    let poly_h = if between { match (&fns.poly_f, &fns.poly_g) { (Some(a), Some(b)) => a.sub(b), _ => None } } else { fns.poly_f.clone() };
-    m.exact = exact_integral(poly_h.as_ref(), &h, xa, xb, integ_abs);
+    let ht = fns.h_tree();
+    m.exact = exact_integral(ht.as_ref(), &h, xa, xb, integ_abs, a_ex.as_ref(), b_ex.as_ref());
     if !between && kd != Kind::H && (0..=400).any(|i| fns.f(xa + (xb - xa) * i as f64 / 400.0).is_some_and(|y| y < 0.0)) {
-        m.abs_area = exact_integral(fns.poly_f.as_ref(), &|x| fns.f(x), xa, xb, true);
+        m.abs_area = exact_integral(fns.ast_f.as_ref(), &|x| fns.f(x), xa, xb, true, a_ex.as_ref(), b_ex.as_ref());
     }
     let signed = p.b("signed") && !between && kd != Kind::H;
     if signed {
         let rs: Vec<f64> = roots(&|x| fns.f(x), xa, xb).into_iter().filter(|r| *r > xa + 1e-12 && *r < xb - 1e-12).collect();
         if !rs.is_empty() {
-            let mut cuts = vec![xa]; cuts.extend(rs.iter().copied()); cuts.push(xb);
+            // (each zero of f inside exact or not; the pieces between them integrated exactly where they can be)
+            let mut cuts: Vec<(f64, Option<Ex>)> = vec![(xa, a_ex.clone())];
+            cuts.extend(rs.iter().map(|r| (*r, fns.ast_f.as_ref().and_then(|t| sym::exact_zero(t, *r)))));
+            cuts.push((xb, b_ex.clone()));
             let (mut pv, mut nv): (Vec<Val>, Vec<Val>) = (vec![], vec![]);
             for w in cuts.windows(2) {
-                let mid = 0.5 * (w[0] + w[1]);
-                let Some(v) = exact_integral(fns.poly_f.as_ref(), &|x| fns.f(x), w[0], w[1], false) else { continue };
+                let mid = 0.5 * (w[0].0 + w[1].0);
+                let Some(v) = exact_integral(fns.ast_f.as_ref(), &|x| fns.f(x), w[0].0, w[1].0, false, w[0].1.as_ref(), w[1].1.as_ref()) else { continue };
                 if fns.f(mid).unwrap_or(0.0) >= 0.0 { pv.push(v); } else { nv.push(v); }
             }
-            let add = |vs: &[Val]| -> Val {
-                let v: f64 = vs.iter().map(|x| x.v).sum();
-                let err: f64 = vs.iter().map(|x| x.err).sum();
-                let r = vs.iter().try_fold(Rat::zero(), |acc, x| acc.add(x.r?));
-                match r { Some(r) => Val::rat(r), None => { let mut o = Val::num(v); if o.r.is_none() { o.form = recognise(v); } o.err = err; o } }
-            };
+            let add = |vs: &[Val]| -> Val { Val::sum(vs, &vec![Rat::int(1); vs.len()]) };
             if !nv.is_empty() && !pv.is_empty() { m.breakdown = Some((add(&pv), add(&nv))); }
         }
     }
@@ -634,21 +662,22 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
     } else { wrap(&integrand_text(&f)) };
     m.sum_name = sum_name(ru, n);
     if kd == Kind::None { return Ok(m); }
-    if kd == Kind::H { return horizontal(m, &fns, between, ru, n, fm); }
+    if kd == Kind::H { return horizontal(m, &fns, between, ru, n, fm, a_ex, b_ex); }
     // vertical strips of width Δx = (b − a)/n
-    let dx = match (XPt::of(xa), XPt::of(xb)) {
-        (Some(XPt::R(a)), Some(XPt::R(b))) if !crossing(p) || (a.f() == xa && b.f() == xb) => b.sub(a).and_then(|d| d.div(Rat::int(n as i128))).map(Val::rat).unwrap_or_else(|| Val::num((xb - xa) / n as f64)),
-        _ => { let v = (xb - xa) / n as f64; Val::with_form(v, recognise(v)) }
-    };
+    // Δx = (b − a)/n and x₀ … xₙ, exact when a and b are
+    let dx_ex = (|| b_ex.as_ref()?.sub(a_ex.as_ref()?)?.scale(Rat::new(1, n as i128)?))();
+    let dx = Val::of(dx_ex.clone(), (xb - xa) / n as f64);
     m.delta = Some(dx.clone());
     m.coef = Some(dx.clone());
-    m.nodes = (0..=n).map(|i| if i == n { xb } else { snap_x(xa + (xb - xa) * i as f64 / n as f64) }).collect();
+    m.nodes = (0..=n).map(|i| if i == n { xb } else { xa + (xb - xa) * i as f64 / n as f64 }).collect();
+    let node_ex: Vec<Option<Ex>> = (0..=n).map(|i| (|| a_ex.as_ref()?.add(&dx_ex.as_ref()?.scale(Rat::int(i as i128))?))()).collect();
+    let mid_ex = |i: usize| -> Option<Ex> { node_ex[i].as_ref()?.add(node_ex[i + 1].as_ref()?)?.scale(Rat::new(1, 2)?) };
     let hfun = |x: f64| -> Option<f64> { if between { Some((fns.f(x)? - fns.g(x)?).abs()) } else { fns.f(x) } };
     let base_at = |x: f64| if between { lo(x) } else { 0.0 };
     let top_at = |x: f64| if between { hi(x) } else { fns.f(x).unwrap_or(0.0) };
     let bad = || "f(x) could not be worked out on a strip: choose a and b where it is defined".to_string();
     if ru == Rule::T {
-        let vals: Vec<Val> = m.nodes.iter().map(|x| fns.hval(*x, between)).collect::<Option<_>>().ok_or_else(bad)?;
+        let vals: Vec<Val> = m.nodes.iter().enumerate().map(|(i, x)| fns.hval(*x, node_ex[i].as_ref(), between)).collect::<Option<_>>().ok_or_else(bad)?;
         for i in 0..n {
             let (x0, x1) = (m.nodes[i], m.nodes[i + 1]);
             let (b0, t0, b1, t1) = (base_at(x0), top_at(x0), base_at(x1), top_at(x1));
@@ -687,12 +716,16 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
     for i in 0..n {
         let (x0, x1) = (m.nodes[i], m.nodes[i + 1]);
         let (xs, hv) = match ru {
-            Rule::L => (x0, fns.hval(x0, between).ok_or_else(bad)?),
-            Rule::R => (x1, fns.hval(x1, between).ok_or_else(bad)?),
-            Rule::M => { let c = snap_x(0.5 * (x0 + x1)); (c, fns.hval(c, between).ok_or_else(bad)?) }
+            Rule::L => (x0, fns.hval(x0, node_ex[i].as_ref(), between).ok_or_else(bad)?),
+            Rule::R => (x1, fns.hval(x1, node_ex[i + 1].as_ref(), between).ok_or_else(bad)?),
+            Rule::M => { let c = 0.5 * (x0 + x1); (c, fns.hval(c, mid_ex(i).as_ref(), between).ok_or_else(bad)?) }
             _ => {
                 let (xs, y) = extreme(&hfun, x0, x1, ru == Rule::U).ok_or_else(bad)?;
-                let v = fns.hval(xs, between).filter(|v| (v.v - y).abs() < 1e-9 * y.abs().max(1.0)).unwrap_or_else(|| Val::num(y));
+                // (exact only where the extreme is exactly known: at an end of the strip, or where the polynomial's
+                // derivative is exactly 0)
+                let tol = 1e-9 * (x1 - x0);
+                let xe = if (xs - x0).abs() <= tol { node_ex[i].clone() } else if (xs - x1).abs() <= tol { node_ex[i + 1].clone() } else { stationary(ht.as_ref(), xs) };
+                let v = fns.hval(xs, xe.as_ref(), between).filter(|v| (v.v - y).abs() < 1e-9 * y.abs().max(1.0)).unwrap_or_else(|| Val::num(y));
                 (xs, v)
             }
         };
@@ -722,14 +755,25 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
 
 /// Horizontal strips: the region (between f and g, or between f and the x-axis, from a to b) cut across at
 /// y₀ < y₁ < … < yₙ, each strip as wide as the region at its sample height.
-fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: Fmt) -> Result<Model, String> {
+fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: Fmt, a_ex: Option<Ex>, b_ex: Option<Ex>) -> Result<Model, String> {
     if ru == Rule::T { return Err("Horizontal strips use Left (the bottom of each strip), Right (its top), Midpoint, Upper or Lower: choose one of these, or vertical strips for trapezoids".into()); }
     let (xa, xb) = (m.xa, m.xb);
     let lo = |x: f64| -> f64 { let (f, g) = (fns.f(x).unwrap_or(0.0), fns.g(x).unwrap_or(0.0)); f.min(g) };
     let hi = |x: f64| -> f64 { let (f, g) = (fns.f(x).unwrap_or(0.0), fns.g(x).unwrap_or(0.0)); f.max(g) };
-    let (_, c) = extreme(&|x| Some(lo(x)), xa, xb, false).ok_or("f(x) could not be worked out between a and b")?;
-    let (_, d) = extreme(&|x| Some(hi(x)), xa, xb, true).ok_or("f(x) could not be worked out between a and b")?;
-    let (c, d) = (snap_x(c), snap_x(d));
+    let (xc, c) = extreme(&|x| Some(lo(x)), xa, xb, false).ok_or("f(x) could not be worked out between a and b")?;
+    let (xd, d) = extreme(&|x| Some(hi(x)), xa, xb, true).ok_or("f(x) could not be worked out between a and b")?;
+    // the lowest and highest y exactly, where the curve reaching them is known there exactly (at a or b, or a polynomial's
+    // stationary point)
+    let at_ex = |x: f64, y: f64| -> Option<Ex> {
+        let tol = 1e-9 * (xb - xa);
+        let use_f = fns.f(x).is_some_and(|f| (f - y).abs() <= 1e-9 * y.abs().max(1.0));
+        let tree = if use_f { fns.ast_f.as_ref()? } else if fns.g.is_some() { fns.ast_g.as_ref()? } else { return (y == 0.0).then(Ex::zero) };
+        let xe = if (x - xa).abs() <= tol { a_ex.clone()? } else if (x - xb).abs() <= tol { b_ex.clone()? } else { stationary(Some(tree), x)? };
+        sym::eval(tree, &xe)
+    };
+    let (c_ex, d_ex) = (sym::checked(at_ex(xc, c), c), sym::checked(at_ex(xd, d), d));
+    m.y_lo = Some(Val::of(c_ex.clone(), c));
+    m.y_hi = Some(Val::of(d_ex.clone(), d));
     if d - c < 1e-9 * (d.abs() + c.abs()).max(1.0) { return Err("The region has no height to slice across: choose vertical strips".into()); }
     let _ = between;
     const K: usize = 1200;
@@ -760,10 +804,10 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
         out.into_iter().filter(|(a, b)| b > a).collect()
     };
     let width = |y: f64, fine: bool| -> f64 { intervals(y, fine).iter().map(|(a, b)| b - a).sum() };
-    let dy = { let v = (d - c) / n as f64; Val::with_form(v, recognise(v)) };
+    let dy = Val::of((|| d_ex.as_ref()?.sub(c_ex.as_ref()?)?.scale(Rat::new(1, n as i128)?))(), (d - c) / n as f64);
     m.delta = Some(dy.clone());
     m.coef = Some(dy.clone());
-    m.nodes = (0..=n).map(|j| if j == n { d } else { snap_x(c + (d - c) * j as f64 / n as f64) }).collect();
+    m.nodes = (0..=n).map(|j| if j == n { d } else { c + (d - c) * j as f64 / n as f64 }).collect();
     m.ylo = c;
     m.yhi = d;
     let mut vals = vec![];
@@ -818,19 +862,20 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
 }
 
 /// Strips from a typed table: widths as the table's x values fall (AP style), heights the table's values.
-fn table_model(p: &Params, mut m: Model, rows: Vec<(f64, f64, String, String)>, ru: Rule, fm: Fmt) -> Result<Model, String> {
+fn table_model(p: &Params, mut m: Model, rows: Vec<Cell>, ru: Rule, fm: Fmt) -> Result<Model, String> {
     let _ = fm;
     if matches!(ru, Rule::U | Rule::Lo) { return Err("A table gives the function only at its points, so it has no upper or lower sum: choose Left, Right, Midpoint or Trapezoid".into()); }
     let signed = p.b("signed");
-    let val = |k: usize| Val { v: rows[k].1, r: Rat::near(rows[k].1, 1000, 1e-11 * rows[k].1.abs().max(1.0)), form: Some(rows[k].2.clone()), err: 0.0 };
-    let xval = |k: usize| { let mut v = Val::num(rows[k].0); v.form = Some(rows[k].3.clone()); v };
-    m.xa = rows[0].0;
-    m.xb = rows[rows.len() - 1].0;
+    // (each value as typed, exact as read)
+    let val = |k: usize| Val { v: rows[k].y, ex: rows[k].ye.clone(), form: Some(rows[k].ys.clone()), err: 0.0 };
+    let xval = |k: usize| Val { v: rows[k].x, ex: rows[k].xe.clone(), form: Some(rows[k].xs.clone()), err: 0.0 };
+    m.xa = rows[0].x;
+    m.xb = rows[rows.len() - 1].x;
     let exact = Fmt { exact: true, dec: 4 };
     m.a_txt = exact.t(&xval(0));
     m.b_txt = exact.t(&xval(rows.len() - 1));
-    m.nodes = rows.iter().map(|r| r.0).collect();
-    m.samples = rows.iter().map(|r| (r.0, r.1)).collect();
+    m.nodes = rows.iter().map(|r| r.x).collect();
+    m.samples = rows.iter().map(|r| (r.x, r.y)).collect();
     m.integrand = "f(x)".into();
     let mut vals = vec![];
     let mut widths = vec![];
@@ -842,17 +887,17 @@ fn table_model(p: &Params, mut m: Model, rows: Vec<(f64, f64, String, String)>, 
         Rule::M => {
             if rows.len() < 3 || rows.len() % 2 == 0 { return Err("A midpoint sum from a table needs an odd number of rows (3, 5, 7 …): each strip runs from one x to the next but one, with the middle row its midpoint".into()); }
             for k in (0..rows.len() - 2).step_by(2) {
-                let (x0, xm, x1) = (rows[k].0, rows[k + 1].0, rows[k + 2].0);
+                let (x0, xm, x1) = (rows[k].x, rows[k + 1].x, rows[k + 2].x);
                 if (xm - 0.5 * (x0 + x1)).abs() > 1e-9 * x1.abs().max(1.0) { return Err(format!("For a midpoint sum each middle x must be halfway between its neighbours: {} is not halfway between {} and {}", rounded(xm, 4), rounded(x0, 4), rounded(x1, 4))); }
                 let w = xval(k + 2).sub(&xval(k));
-                push(&mut m, x0, x1, rows[k + 1].1, val(k + 1), w.clone());
+                push(&mut m, x0, x1, rows[k + 1].y, val(k + 1), w.clone());
                 vals.push(val(k + 1)); widths.push(w);
             }
-            m.nodes = rows.iter().step_by(2).map(|r| r.0).collect();
+            m.nodes = rows.iter().step_by(2).map(|r| r.x).collect();
         }
         Rule::T => {
             for k in 0..rows.len() - 1 {
-                let (x0, x1, t0, t1) = (rows[k].0, rows[k + 1].0, rows[k].1, rows[k + 1].1);
+                let (x0, x1, t0, t1) = (rows[k].x, rows[k + 1].x, rows[k].y, rows[k + 1].y);
                 let w = xval(k + 1).sub(&xval(k));
                 let hv = Val::sum(&[val(k), val(k + 1)], &[Rat::new(1, 2).unwrap(), Rat::new(1, 2).unwrap()]);
                 let area = hv.mul(&w);
@@ -868,7 +913,7 @@ fn table_model(p: &Params, mut m: Model, rows: Vec<(f64, f64, String, String)>, 
             for k in 0..rows.len() - 1 {
                 let j = if ru == Rule::L { k } else { k + 1 };
                 let w = xval(k + 1).sub(&xval(k));
-                push(&mut m, rows[k].0, rows[k + 1].0, rows[j].1, val(j), w.clone());
+                push(&mut m, rows[k].x, rows[k + 1].x, rows[j].y, val(j), w.clone());
                 vals.push(val(j)); widths.push(w);
             }
         }
@@ -877,8 +922,8 @@ fn table_model(p: &Params, mut m: Model, rows: Vec<(f64, f64, String, String)>, 
     m.sum_name = sum_name(ru, ns);
     // Σ Δxᵢ·hᵢ
     let v: f64 = vals.iter().zip(&widths).map(|(h, w)| h.v * w.v).sum();
-    let r = vals.iter().zip(&widths).try_fold(Rat::zero(), |acc, (h, w)| acc.add(h.r?.mul(w.r?)?));
-    m.sum = Some(match r { Some(r) => Val::rat(r), None => Val::with_form(v, recognise(v)) });
+    let ex = vals.iter().zip(&widths).try_fold(Ex::zero(), |acc, (h, w)| acc.add(&h.ex.as_ref()?.mul(w.ex.as_ref()?)?));
+    m.sum = Some(Val::of(ex, v));
     for (h, w) in vals.into_iter().zip(widths) { m.terms.push((h, Some(w))); }
     Ok(m)
 }
@@ -1024,10 +1069,17 @@ fn closer_advice(p: &Params, m: &Model, g: &GridL) -> String {
     let q = g.xs / 4.0;
     let from = ((lo - (hi - lo) / 8.0) / q).floor() * q;
     let to = ((hi + (hi - lo) / 8.0) / q).ceil() * q;
-    if (to - from) < 0.8 * (g.x1 - g.x0) {
+    // (the window advice is given only when taking it really does make them fit: tried here)
+    let works = (to - from) < 0.8 * (g.x1 - g.x0) && {
+        let mut q = p.clone();
+        q.set_f("xmin", from / k);
+        q.set_f("xmax", to / k);
+        !build(&q).1.iter().any(|n| n.contains("do not fit") || n.contains("have no room"))
+    };
+    if works {
         let t = |v: f64| { let t = rounded(v / k, 4).replace('\u{2212}', "-"); t };
         format!("use fewer strips, or set the x-axis closer round a and b (From {} To {}{})", t(from), t(to), if pi_units { ", in multiples of \u{3c0}" } else { "" })
-    } else { "use fewer strips or Small labels".to_string() }
+    } else if p.s("label_size") == "Small" { "use fewer strips".to_string() } else { "use fewer strips or Small labels".to_string() }
 }
 
 /// What a label must keep clear of: strokes (as segments) and boxes (text, dots), in px.
@@ -1127,7 +1179,9 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         let (ylo, yhi) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |a, v| (a.0.min(*v), a.1.max(*v)));
         let ty = 1e-9 * (y1 - y0);
         let shapes = if kind(p) == Kind::None { "The shaded area runs" } else { "The strips run" };
-        if yhi > y1 + ty { notes.push(format!("{shapes} above the window: raise the y-axis To to at least {}", rounded((yhi / ystep_real - 1e-9).ceil() * ystep_real, 4).replace('\u{2212}', "-"))); }
+        // (advice only within what the y-axis boxes take, ±1000)
+        let to = (yhi / ystep_real - 1e-9).ceil() * ystep_real;
+        if yhi > y1 + ty { notes.push(if to <= 1000.0 { format!("{shapes} above the window: raise the y-axis To to at least {}", rounded(to, 4).replace('\u{2212}', "-")) } else { format!("{shapes} above the window and higher than the y-axis can reach (1000): choose a and b where f is smaller") }); }
         if ylo < y0 - ty { notes.push(format!("{shapes} below the window: lower the y-axis From to at most {}", rounded((ylo / ystep_real + 1e-9).floor() * ystep_real, 4).replace('\u{2212}', "-"))); }
     }
     let sx = |x: f64| ml + (x - x0) * ux;
@@ -1318,90 +1372,93 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         let lab_mode = if heights_blank && student && p.s("strip_labels") == "None" { "Heights" } else { p.s("strip_labels") };
         if heights_blank && student && kd == Kind::V && p.s("strip_labels") != "Heights" { notes.push("The student copy has a blank on each strip: choose Label each strip with Heights so the key gives the heights".into()); }
         if kd == Kind::V && !no_strips && lab_mode != "None" {
-            // each label over its own strip: centred, or moved sideways at most 0.3 of the strip's width, so its middle is
-            // always nearer its own strip's middle than any other. Tried level inside the strip, in up to three rows
-            // above it and past its base; then turned up the strip (as the y-axis title is) inside it or above it; then
-            // both again at 0.8 of the size (never under 11 px). Only when a label has no place at all is the set left
-            // off, with a note saying what helps.
+            // Each label sits on its own strip: centred, or moved sideways at most 0.3 of the strip's width (its middle
+            // always nearer its own strip's middle than any other's), and all the labels of the figure in one style, so
+            // they read as a set. Tried in turn: all level inside their strips; all turned up their strips (as the y-axis
+            // title is) inside them; level, any that do not fit inside just past their own strip's top; turned, likewise;
+            // then the same at 0.8 of the size (never under 11 px). Never in or under the row of axis numbers, never
+            // further from its strip than touching. If none of these fits every label, the set is left off with a note.
             let full = 14.0 * ls;
             let base_len = ob.boxes.len();
-            // (never in the row of axis numbers, where a value would read as a tick number)
             let dn = 14.0 * (ls - 1.0);
             if p.b("numbers") { ob.boxes.push([ml, axy + 3.0, ml + pw, axy + 21.0 + dn + 4.0 * ls]); }
             // (the values all exact, or all rounded alike)
             let raw: Vec<Val> = m.strips.iter().map(|s| if lab_mode == "Areas" { s.area.clone() } else { s.h.clone() }).collect();
             let tf = if raw.iter().all(|v| fm.text(v).1) { fm } else { Fmt { exact: false, dec: fm.dec } };
-            let mut placed: Vec<String> = vec![];
-            let mut ok = true;
-            for (si, s) in m.strips.iter().enumerate() {
-                let (xl, xr) = (sx(s.x0), sx(s.x1));
-                // (a strip outside the window has no label to place; the window note says so)
-                if 0.5 * (xl + xr) < ml || 0.5 * (xl + xr) > ml + pw { continue; }
-                // (a strip's area is a part of the answer: blank on the student copy; its height is the given value)
-                let blank = student && (heights_blank || lab_mode == "Areas");
-                let text = tf.t(&raw[si]);
-                let (yt, yb) = (clampy(sy(s.top)), clampy(sy(s.base)));
-                let sw = xr - xl;
-                let cxs = [0.0, 0.15 * sw, -0.15 * sw, 0.3 * sw, -0.3 * sw].map(|d| 0.5 * (xl + xr) + d);
-                let dir = if yt <= yb { 1.0 } else { -1.0 };
-                let depth = (yb - yt).abs();
-                let mut found: Option<(String, [f64; 4])> = None;
-                'sizes: for size in [full, (full * 0.8).max(11.2)] {
-                    let wd = if blank { 26.0 * ls } else { mwidth(&text, size) };
-                    let (asc, desc) = (0.76 * size, 0.24 * size);
-                    let edge_in = |y: f64| if dir > 0.0 { y + asc } else { y - desc };
-                    let edge_out = |y: f64| if dir > 0.0 { y - desc } else { y + asc };
-                    // level: (baselines)
-                    let mut ys = vec![edge_in(yt + 4.0 * dir)];
-                    for k in 0..3 { ys.push(edge_out(yt - (4.0 + 16.0 * k as f64) * dir)); }
-                    let mut k = 7.0;
-                    while k + 4.0 < depth { ys.push(edge_in(yt + k * dir)); k += 3.0; }
-                    ys.push(edge_in(yb + 4.0 * dir));
-                    // (under a strip on the axis, below the row of axis numbers, never in it)
-                    if dir > 0.0 && p.b("numbers") && (yb - axy).abs() < 0.5 { ys.push(axy + 25.0 + dn + 4.0 * ls + asc); }
-                    let bx = |x: f64, y: f64| if blank { [x, y - 3.0, x + wd, y + 3.0] } else { mbox(&text, x, y, size) };
-                    for y in &ys { for cx in &cxs {
-                        let b = bx(cx - wd / 2.0, *y);
-                        if ob.free(&b, &plot) {
-                            found = Some((if blank { format!(r#"<line data-rs="blank" data-box="{:.2} {:.2} {:.2} {:.2}" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{ink}" stroke-width="1.2"/>"#, b[0], b[1], b[2], b[3], b[0], b[2]) } else { mtext("strip-label", b[0], *y, size, &text, ink).0 }, b));
-                            break 'sizes;
+            let blank = student && (heights_blank || lab_mode == "Areas");
+            let mut done: Option<Vec<String>> = None;
+            'tries: for size in [full, (full * 0.8).max(11.2)] {
+                for (turned, past_top) in [(false, false), (true, false), (false, true), (true, true)] {
+                    if turned && blank { continue; }
+                    let mut placed: Vec<String> = vec![];
+                    let mut ok = true;
+                    for (si, s) in m.strips.iter().enumerate() {
+                        let (xl, xr) = (sx(s.x0), sx(s.x1));
+                        // (a strip outside the window has no label to place; the window note says so)
+                        if 0.5 * (xl + xr) < ml || 0.5 * (xl + xr) > ml + pw { continue; }
+                        let text = tf.t(&raw[si]);
+                        let (yt, yb) = (clampy(sy(s.top)), clampy(sy(s.base)));
+                        let sw = xr - xl;
+                        let cxs = [0.0, 0.15 * sw, -0.15 * sw, 0.3 * sw, -0.3 * sw].map(|d| 0.5 * (xl + xr) + d);
+                        let dir = if yt <= yb { 1.0 } else { -1.0 };
+                        let depth = (yb - yt).abs();
+                        let wd = if blank { 26.0 * ls } else { mwidth(&text, size) };
+                        let mut found: Option<(String, [f64; 4])> = None;
+                        if !turned {
+                            let (asc, desc) = (0.76 * size, 0.24 * size);
+                            let edge_in = |y: f64| if dir > 0.0 { y + asc } else { y - desc };
+                            let edge_out = |y: f64| if dir > 0.0 { y - desc } else { y + asc };
+                            // (baselines) inside from the far edge in; then just past the far edge
+                            let mut ys = vec![];
+                            let mut k = 4.0;
+                            while k + 0.98 * size <= depth - 2.0 { ys.push(edge_in(yt + k * dir)); k += 3.0; }
+                            // (past the top: touching, or at most 18 px off, about a label's height)
+                            if past_top { for gap in [3.0, 8.0, 13.0, 18.0] { ys.push(edge_out(yt - gap * dir)); } }
+                            let bx = |x: f64, y: f64| if blank { [x, y - 3.0, x + wd, y + 3.0] } else { mbox(&text, x, y, size) };
+                            'level: for y in &ys { for cx in &cxs {
+                                let b = bx(cx - wd / 2.0, *y);
+                                if ob.free(&b, &plot) {
+                                    found = Some((if blank { format!(r#"<line data-rs="blank" data-box="{:.2} {:.2} {:.2} {:.2}" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{ink}" stroke-width="1.2"/>"#, b[0], b[1], b[2], b[3], b[0], b[2]) } else { mtext("strip-label", b[0], *y, size, &text, ink).0 }, b));
+                                    break 'level;
+                                }
+                            } }
+                        } else {
+                            let half = 0.5 * wd;
+                            let thick = 0.5 * size;
+                            let mut cys = vec![];
+                            let mut k = 4.0 + half;
+                            while k + half + 2.0 <= depth { cys.push(yt + k * dir); k += 4.0; }
+                            if past_top { for gap in [3.0, 8.0, 13.0, 18.0] { cys.push(yt - (gap + half) * dir); } }
+                            'turn: for cy in cys { for cx in &cxs {
+                                let b = [cx - thick, cy - half, cx + thick, cy + half];
+                                if ob.free(&b, &plot) { found = Some((mtext_up("strip-label", *cx, cy, size, &text, ink, b), b)); break 'turn; }
+                            } }
                         }
-                    } }
-                    // turned up the strip: (centres) inside from the far edge in, then above the far edge
-                    if !blank {
-                        let half = 0.5 * wd;
-                        let thick = 0.5 * size;
-                        let mut cys = vec![];
-                        let mut k = 4.0 + half;
-                        while k + half + 4.0 <= depth { cys.push(yt + k * dir); k += 4.0; }
-                        cys.push(yt - (4.0 + half) * dir);
-                        for cy in cys { for cx in &cxs {
-                            let b = [cx - thick, cy - half, cx + thick, cy + half];
-                            if ob.free(&b, &plot) { found = Some((mtext_up("strip-label", *cx, cy, size, &text, ink, b), b)); break 'sizes; }
-                        } }
+                        match found {
+                            Some((svg, b)) => {
+                                // (two strips' labels keep a clear gap, so neither reads as the other's; a label turned up
+                                // its strip has the strip's edges between it and the next)
+                                let gap = if turned { 1.0 } else { 6.0 };
+                                ob.boxes.push([b[0] - gap, b[1], b[2] + gap, b[3]]);
+                                placed.push(svg);
+                            }
+                            None => { ok = false; break; }
+                        }
                     }
-                }
-                match found {
-                    Some((svg, b)) => {
-                        // (two strips' labels keep a clear gap, so neither reads as the other's; a label turned up its strip
-                        // has the strip's edges between it and the next)
-                        let gap = if svg.contains("rotate(-90") { 1.0 } else { 6.0 };
-                        ob.boxes.push([b[0] - gap, b[1], b[2] + gap, b[3]]);
-                        placed.push(svg);
-                    }
-                    None => { ok = false; break; }
+                    ob.boxes.truncate(base_len + usize::from(p.b("numbers")));
+                    if ok { done = Some(placed); break 'tries; }
                 }
             }
             ob.boxes.truncate(base_len);
-            if ok {
-                for (t, b) in placed.iter().map(|t| (t, t.split("data-box=\"").nth(1).map(|r| r.split('"').next().unwrap_or("")).unwrap_or(""))) {
+            match done {
+                Some(placed) => for t in &placed {
+                    let b = t.split("data-box=\"").nth(1).map(|r| r.split('"').next().unwrap_or("")).unwrap_or("");
                     let v: Vec<f64> = b.split(' ').filter_map(|q| q.parse().ok()).collect();
                     let gap = if t.contains("rotate(-90") { 1.0 } else { 6.0 };
                     if v.len() == 4 { ob.boxes.push([v[0] - gap, v[1], v[2] + gap, v[3]]); }
                     overlay.push_str(t);
-                }
-            } else {
-                notes.push(format!("The strip labels do not fit over their strips: {}, or label the strips with None", closer_advice(p, m, &g)));
+                },
+                None => notes.push(format!("The strip labels do not fit on their strips: {}, or label the strips with None", closer_advice(p, m, &g))),
             }
         }
         // x₀, x₁, …, xₙ under (or over) the axis, each at its own tick
@@ -1438,7 +1495,9 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             match got {
                 Some(v) => {
                     // (only the two ends and an ellipsis: said, with what helps)
-                    if nn >= 3 && v.len() == 3 { notes.push(format!("x\u{2081}, x\u{2082}, \u{2026} have no room under the axis, so only x\u{2080} and x\u{2099} are marked: {}", closer_advice(p, m, &g))); }
+                    let dots = v.iter().any(|t| t.0 == "\u{2026}");
+                    if dots && v.len() == 4 { notes.push(format!("x\u{2082} \u{2026} x\u{2099}\u{208b}\u{2081} have no room under the axis, so only x\u{2080}, x\u{2081} and x\u{2099} are marked: {}", closer_advice(p, m, &g))); }
+                    if dots && v.len() == 3 { notes.push(format!("x\u{2081}, x\u{2082}, \u{2026} have no room under the axis, so only x\u{2080} and x\u{2099} are marked: {}", closer_advice(p, m, &g))); }
                     for (s, x, y) in v { let (t, b) = mtext("xmark", x, y, size, &s, ink); overlay.push_str(&t); ob.boxes.push(b); }
                 }
                 None => notes.push(format!("x\u{2080}, x\u{2081}, \u{2026}, x\u{2099} have no room under the axis: {}", closer_advice(p, m, &g))),
@@ -1468,7 +1527,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         }
         // (on the student copy, bounds the figure found itself, the crossings or a horizontal slice's lowest and highest y,
         // are answers: written as letters there)
-        let (lo_t, hi_t) = if student && m.var == 'y' { ("c".to_string(), "d".to_string()) } else if student && crossing(p) { ("a".to_string(), "b".to_string()) } else if m.var == 'y' { (fm.t(&Val::with_form(m.ylo, recognise(m.ylo))), fm.t(&Val::with_form(m.yhi, recognise(m.yhi)))) } else { (m.a_txt.clone(), m.b_txt.clone()) };
+        let (lo_t, hi_t) = if student && m.var == 'y' { ("c".to_string(), "d".to_string()) } else if student && crossing(p) { ("a".to_string(), "b".to_string()) } else if m.var == 'y' { (m.y_lo.as_ref().map(|v| fm.t(v)).unwrap_or_default(), m.y_hi.as_ref().map(|v| fm.t(v)).unwrap_or_default()) } else { (m.a_txt.clone(), m.b_txt.clone()) };
         if p.b("show_dx") && strips_on && !table && let Some(dx) = &m.delta {
             let n = m.strips.len();
             let form = if m.var == 'y' { format!("{d} = (d \u{2212} c)/n") } else { format!("{d} = (b \u{2212} a)/n") };
@@ -1501,7 +1560,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                     if m.abs_area.is_some() && m.breakdown.is_none() { lines.push(vec![Piece::T("Area shaded =".into()), Piece::Blank]); }
                 }
                 else {
-                    let brk = m.breakdown.as_ref().map(|(a, b)| { let (at, ae) = fm.text(a); let (bt, be) = fm.text(&Val { v: -b.v, r: b.r.map(|r| Rat { n: -r.n, d: r.d }), form: None, err: b.err }); (format!("{} \u{2212} {} ", at, wrap(&bt)), ae && be) });
+                    let brk = m.breakdown.as_ref().map(|(a, b)| { let (at, ae) = fm.text(a); let (bt, be) = fm.text(&b.neg()); (format!("{} \u{2212} {} ", at, wrap(&bt)), ae && be) });
                     match brk { Some((bt, be)) => lines.push(vec![Piece::T(format!("{lhs} {} {bt}{} {et}", eqs(be), eqs(*ee)))]), None => lines.push(vec![Piece::T(format!("{lhs} {} {et}", eqs(*ee)))]) }
                     // (without signed area the part below the axis is shaded like the rest, but the integral counts it
                     // negative: the area shaded is written too, and said to be the area)
@@ -1565,8 +1624,8 @@ pub fn warnings(p: &Params) -> Vec<String> { build(p).1 }
 
 /// Whether part of f (or of the table) between a and b lies below the x-axis, so signed area changes the drawing.
 fn dips_below(p: &Params) -> bool {
-    if region(p) == Region::Table { return read_table(p.s("table")).is_ok_and(|r| r.iter().any(|q| q.1 < 0.0)); }
-    let (Ok(f), Ok((a, _)), Ok((b, _))) = (read_fn(p.s("f"), "f"), read_bound(p.s("a"), "a"), read_bound(p.s("b"), "b")) else { return false };
+    if region(p) == Region::Table { return read_table(p.s("table")).is_ok_and(|r| r.iter().any(|q| q.y < 0.0)); }
+    let (Ok(f), Ok((a, _, _)), Ok((b, _, _))) = (read_fn(p.s("f"), "f"), read_bound(p.s("a"), "a"), read_bound(p.s("b"), "b")) else { return false };
     b > a && (0..=400).any(|i| ev(&f, a + (b - a) * i as f64 / 400.0).is_some_and(|y| y < 0.0))
 }
 /// Whether the strips are drawn (the student copy "Curve and bounds only" leaves them off).
@@ -1599,6 +1658,12 @@ fn changes_render(p: &Params, key: &str) -> bool {
     out
 }
 
+/// Whether the figure refuses the chosen rule (trapezoids across, upper and lower from a table, a midpoint sum from a
+/// table it cannot make).
+fn rule_refused(p: &Params) -> bool {
+    model(p).err().is_some_and(|e| ["Horizontal strips use", "no upper or lower sum", "midpoint sum from a table", "midpoint sum each middle"].iter().any(|w| e.contains(w)))
+}
+
 /// Whether `key` changes the drawing for these params (hidden otherwise; a hidden control has no effect).
 pub fn relevant(key: &str, p: &Params) -> bool {
     let reg = region(p);
@@ -1612,10 +1677,13 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "a" | "b" => !table && !crossing(p),
         "table" => table,
         // (the student copy without strips still names the sum, L₄ or M₆, when it asks for it)
-        "rule" | "n" => strips && (drawn || p.b("sum_line")) && (key == "rule" || !table),
+        // (the student copy without strips still names the sum when it asks for it: L₄ needs n, "Upper sum" does not;
+        // and a rule the figure refuses must stay where it can be changed)
+        "rule" => strips && (drawn || p.b("sum_line") || rule_refused(p)),
+        "n" => strips && !table && (drawn || (p.b("sum_line") && matches!(rule(p), Rule::L | Rule::R | Rule::M | Rule::T))),
         "show_dx" | "error_line" => strips && !table,
         "sum_line" => strips,
-        "signed" => reg != Region::Between && kd != Kind::H && dips_below(p),
+        "signed" => reg != Region::Between && kd != Kind::H && dips_below(p) && (drawn || kd == Kind::None),
         // (a table's points are always marked)
         "sample_pts" => drawn && kd != Kind::H && !table,
         // (the student copy's "Strip heights blank" puts a blank on every strip, whatever the labels are)
@@ -1660,7 +1728,7 @@ pub fn handles(p0: &Params) -> Vec<Handle> {
     let step = xs / 4.0;
     let mut hs = vec![];
     let table = region(p) == Region::Table;
-    let ab = if table || crossing(p) { None } else { match (read_bound(p.s("a"), "a"), read_bound(p.s("b"), "b")) { (Ok((a, _)), Ok((b, _))) if a < b => Some((a, b)), _ => None } };
+    let ab = if table || crossing(p) { None } else { match (read_bound(p.s("a"), "a"), read_bound(p.s("b"), "b")) { (Ok((a, _, _)), Ok((b, _, _))) if a < b => Some((a, b)), _ => None } };
     if let Some((a, b)) = ab {
         for (key, v, other) in [("a", a, b), ("b", b, a)] {
             let pos = (sx(v), axy);
