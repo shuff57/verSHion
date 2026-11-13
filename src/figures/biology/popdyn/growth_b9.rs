@@ -136,13 +136,43 @@ pub(super) fn infl_blank_spot(r: &InflRoom) -> InflSpot {
     let leader_clear = |f: (f64, f64), t: (f64, f64), guides: bool| {
         // sampled every pixel along it, so no curve slips between samples
         let n = ((t.0 - f.0).hypot(t.1 - f.1)).ceil().max(10.0) as usize;
+        // only the curve pieces and counts near the leader's box can come within reach of it
+        let (bx0, bx1, by0, by1) = (f.0.min(t.0) - 8.0, f.0.max(t.0) + 8.0, f.1.min(t.1) - 8.0, f.1.max(t.1) + 8.0);
+        let near_box = |p: (f64, f64), q: (f64, f64)| p.0.max(q.0) >= bx0 && p.0.min(q.0) <= bx1 && p.1.max(q.1) >= by0 && p.1.min(q.1) <= by1;
+        let segs: Vec<((f64, f64), (f64, f64))> = r.curves.iter().flat_map(|c| c.windows(2).map(|w| (w[0], w[1]))).filter(|(p, q)| near_box(*p, *q)).collect();
+        let dots: Vec<(f64, f64)> = r.census.iter().copied().filter(|c| near_box(*c, *c)).collect();
         (0..=n).all(|i| {
             let u = i as f64 / n as f64;
             let q = (f.0 + (t.0 - f.0) * u, f.1 + (t.1 - f.1) * u);
-            r.curves.iter().all(|c| c.windows(2).all(|w| seg_d(q, w[0], w[1]) >= 2.5))
-                && r.census.iter().all(|c| ((c.0 - q.0).powi(2) + (c.1 - q.1).powi(2)).sqrt() >= 7.0)
+            segs.iter().all(|(a, b)| seg_d(q, *a, *b) >= 2.5)
+                && dots.iter().all(|c| ((c.0 - q.0).powi(2) + (c.1 - q.1).powi(2)).sqrt() >= 7.0)
                 && (!guides || r.phase_x.iter().all(|x| (x - q.0).abs() >= 3.0))
         })
+    };
+    // a leader from the point to `to`: straight out of the point towards it, else from another spot on the ring round the
+    // point (so it keeps clear of census counts crowded beside the point), the one nearest the straight route first
+    // clear of the census counts only (a leader that must cross a curve still keeps off the dots)
+    let dots_clear = |f: (f64, f64), t: (f64, f64)| r.census.iter().all(|c| seg_d(*c, f, t) >= 7.0);
+    let route_dots = |r0: f64, to: (f64, f64)| -> Option<(f64, f64)> {
+        let e = dist(to).max(1e-6);
+        let th = (to.1 - cy).atan2(to.0 - cx);
+        (0..=24).flat_map(|j| [1.0, -1.0].map(|sg: f64| th + sg * j as f64 * std::f64::consts::PI / 12.0)).flat_map(|a| [r0, 8.5].map(|rr| (cx + rr * a.cos(), cy + rr * a.sin())))
+            .find(|from| e > dist(*from) + 2.0 && dots_clear(*from, to))
+    };
+    let route = |r0: f64, to: (f64, f64), guides: bool| -> Option<(f64, f64)> {
+        let e = dist(to).max(1e-6);
+        let th = (to.1 - cy).atan2(to.0 - cx);
+        for j in 0..=12 {
+            for sg in [1.0, -1.0] {
+                if j == 0 && sg < 0.0 { continue; }
+                for rr in [r0, 8.5] {
+                    let a = th + sg * j as f64 * std::f64::consts::PI / 12.0;
+                    let from = (cx + rr * a.cos(), cy + rr * a.sin());
+                    if e > rr + 2.0 && leader_clear(from, to, guides) { return Some(from); }
+                }
+            }
+        }
+        None
     };
     // its own: nearer the point than any census count or the K line
     let owned = |x0: f64, x1: f64, y: f64| {
@@ -162,12 +192,13 @@ pub(super) fn infl_blank_spot(r: &InflRoom) -> InflSpot {
                     let near = if f0 >= cx { (x0, y) } else { (x1, y) };
                     let e = dist(near);
                     let leader = if e > INFL_LEADER {
-                        let from = (cx + (near.0 - cx) / e * 8.0, cy + (near.1 - cy) / e * 8.0);
                         let to = (near.0 + if near.0 > cx { 1.0 } else { -1.0 }, near.1 + if near.1 > cy { -3.0 } else { 3.0 });
-                        if !leader_clear(from, to, guides) {
-                            crossing.push((e, false, InflSpot { x0, x1, y, leader: Some((from, to)) }));
+                        let Some(from) = route(8.0, to, guides) else {
+                            // (a route off the dots, if any, marked as the better of these)
+                            let (from, off_dots) = match route_dots(8.0, to) { Some(f) => (f, true), None => ((cx + (near.0 - cx) / e * 8.0, cy + (near.1 - cy) / e * 8.0), false) };
+                            crossing.push((e, off_dots, InflSpot { x0, x1, y, leader: Some((from, to)) }));
                             continue;
-                        }
+                        };
                         Some((from, to))
                     } else { None };
                     cands.push((e, owned(x0, x1, y), InflSpot { x0, x1, y, leader }));
@@ -188,8 +219,9 @@ pub(super) fn infl_blank_spot(r: &InflRoom) -> InflSpot {
         if let Some(l) = b.leader { return Some(l); }
         let near = (cx.clamp(b.x0, b.x1), b.y);
         let e = dist(near).max(1e-6);
-        let l = ((cx + (near.0 - cx) / e * 6.0, cy + (near.1 - cy) / e * 6.0), (near.0, near.1 + if near.1 > cy { -2.0 } else { 2.0 }));
-        leader_clear(l.0, l.1, false).then_some(l)
+        let _ = e;
+        let to = (near.0, near.1 + if near.1 > cy { -2.0 } else { 2.0 });
+        route(6.0, to, false).map(|from| (from, to))
     };
     let with_leader = |mut b: InflSpot| { if b.leader.is_none() { b.leader = lead_of(&b); } b };
     // unowned candidates keep only those whose leader is clear
@@ -201,10 +233,42 @@ pub(super) fn infl_blank_spot(r: &InflRoom) -> InflSpot {
     if let Some(b) = pick(true, f64::MAX, &mut c1) { return with_leader(b); }
     if let Some(b) = pick(true, f64::MAX, &mut c2) { return with_leader(b); }
     for c in [&mut c1, &mut c2] { if let Some(b) = pick(false, f64::MAX, c) { return with_leader(b); } }
+    for c in [&mut x1, &mut x2] { if let Some(b) = pick(true, f64::MAX, c) { return b; } }
+    // every leader to a spot found runs through the counts crowding round the point: follow a way out that keeps off
+    // them (nearest first, clear of the curves where one is) and put the line where it ends, reaching away from the point
+    for curves_too in [true, false] {
+        let mut best: Option<(f64, InflSpot)> = None;
+        for j in 0..144 {
+            let th = j as f64 * std::f64::consts::TAU / 144.0;
+            let (ux, uy) = (th.cos(), th.sin());
+            let from = (cx + 8.5 * ux, cy + 8.5 * uy);
+            let mut dd = 20.0;
+            while dd <= INFL_REACH && best.as_ref().is_none_or(|b| dd < b.0) {
+                let to = (cx + dd * ux, cy + dd * uy);
+                let ok = if curves_too { leader_clear(from, to, false) } else { dots_clear(from, to) };
+                if !ok { break; }
+                let y = (to.1 + if uy > 0.0 { 3.0 } else { -3.0 }).round();
+                if (y - cy).abs() >= 8.0 {
+                    for (f0, f1) in free_on(y, false) {
+                        let (x0, x1) = if ux >= 0.0 { (to.0 - 1.0, to.0 - 1.0 + MIN_BLANK) } else { (to.0 + 1.0 - MIN_BLANK, to.0 + 1.0) };
+                        if x0 >= f0 && x1 <= f1 { best = Some((dd, InflSpot { x0, x1, y, leader: Some((from, to)) })); break; }
+                    }
+                }
+                dd += 2.0;
+            }
+        }
+        if let Some((_, b)) = best { return b; }
+    }
     for c in [&mut x1, &mut x2] { if let Some(b) = pick(false, f64::MAX, c) { return b; } }
     // nowhere clear at all (a graph filled with counts): beside the point, under it, with its leader
     let x0 = (cx + 10.0).min(a.x + a.w - 6.0 - MIN_BLANK);
     with_leader(InflSpot { x0, x1: x0 + MIN_BLANK, y: (cy + 12.0).min(a.y + a.h - 6.0), leader: None })
+}
+
+/// The least distance between two segments (sampled every pixel along the first).
+fn seg_seg_d(a: (f64, f64), b: (f64, f64), c: (f64, f64), e: (f64, f64)) -> f64 {
+    let n = (a.0 - b.0).hypot(a.1 - b.1).ceil().max(1.0) as usize;
+    (0..=n).map(|i| { let u = i as f64 / n as f64; seg_d((a.0 + (b.0 - a.0) * u, a.1 + (b.1 - a.1) * u), c, e) }).fold(seg_d(c, a, b).min(seg_d(e, a, b)), f64::min)
 }
 
 fn seg_d(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
@@ -238,8 +302,8 @@ pub(super) fn phase_blanks(d: &mut Doc, brackets: &[(usize, f64, f64)], by: f64,
     let mut later: Vec<(usize, f64)> = vec![]; // (phase, middle) to place on the high row
     for &(i, xa, xb) in brackets {
         let (va, vb) = (xa.max(plot.0), xb.min(plot.1));
-        if vb <= va { continue; }
-        let mid = (va + vb) / 2.0;
+        // the bracket's own middle (a bracket under 4 px, its feet crossed, still has one: its line stands off on a leader)
+        let mid = if vb > va { (va + vb) / 2.0 } else { ((xa + xb) / 2.0).clamp(plot.0, plot.1) };
         let room = vb - va - 12.0;
         let mut done = false;
         if room >= MIN_BLANK {
@@ -259,6 +323,10 @@ pub(super) fn phase_blanks(d: &mut Doc, brackets: &[(usize, f64, f64)], by: f64,
         }
         if !done { later.push((i, mid)); }
     }
+    // left to right, so leaders from neighbouring narrow brackets fan out without crossing
+    later.sort_by(|p, q| p.1.partial_cmp(&q.1).unwrap());
+    // leaders drawn: (foot, top)
+    let mut leads: Vec<((f64, f64), (f64, f64))> = vec![];
     for (i, mid) in later {
         // nearest the middle first, on the higher row (the line covering the middle where it can), else on the bracket
         // row beside the bracket (a label up among the brackets can stand between the rows)
@@ -273,6 +341,9 @@ pub(super) fn phase_blanks(d: &mut Doc, brackets: &[(usize, f64, f64)], by: f64,
                     let (f, t) = ((mid, by - 2.0), (lx, y + 3.0));
                     // the leader crosses no other line on the bracket row, and not the label
                     let crosses = y != row && placed.iter().any(|q| (q.2 - row).abs() < 1e-6 && { let u = (row - f.1) / (t.1 - f.1); let x = f.0 + (t.0 - f.0) * u; x >= q.0 - 3.0 && x <= q.1 + 3.0 });
+                    // nor another line, nor another leader (bar their feet, side by side on neighbouring brackets)
+                    let crosses = crosses || placed.iter().any(|q| seg_seg_d(f, t, (q.0, q.2), (q.1, q.2)) < 3.0)
+                        || leads.iter().any(|(g, h)| { let n = 4.0 / (h.0 - g.0).hypot(h.1 - g.1).max(4.0); seg_seg_d(f, t, (g.0 + (h.0 - g.0) * n, g.1 + (h.1 - g.1) * n), *h) < 3.0 });
                     if !crosses && (!strict || !seg_hits(f, t)) { best = Some((x0, lx, y)); }
                 }
                 off += 2.0;
@@ -282,6 +353,39 @@ pub(super) fn phase_blanks(d: &mut Doc, brackets: &[(usize, f64, f64)], by: f64,
         let (x0, lx, y) = best.unwrap_or((mid - MIN_BLANK / 2.0, mid, high));
         blank_line(d, x0, x0 + MIN_BLANK, y, &format!("phase-{i}"));
         placed.push((x0, x0 + MIN_BLANK, y));
+        leads.push(((mid, by - 2.0), (lx, y + 3.0)));
         d.raw(&format!(r#"<line x1="{mid:.2}" y1="{:.2}" x2="{lx:.2}" y2="{:.2}" stroke="{INK}" stroke-width="1" stroke-linecap="round" data-leader="phase-{i}"/>"#, by - 2.0, y + 3.0));
     }
+}
+
+/// Is the value point `v` on the plot (between the axes' ends)?
+pub(super) fn on_plot(a: &Axes, v: (f64, f64)) -> bool {
+    v.0 >= a.x0.min(a.x1) && v.0 <= a.x0.max(a.x1) && v.1 >= a.y0.min(a.y1) && v.1 <= a.y0.max(a.y1)
+}
+
+/// The panel's notes (never drawn): an inflection point outside the graph, and phases with no bracket on it.
+pub(super) fn warnings(p: &Params) -> Vec<String> {
+    let mut out = vec![];
+    if !infl_labelled(p) && !phases_drawn(p) { return out; }
+    let Some(ax) = axes_of(p, false).into_iter().find(|a| a.kind == 0) else { return out };
+    let ti = t_inf(p).unwrap_or(0.0);
+    let (n0, r, k) = (p.f("n0").max(1e-6), p.f("r").max(1e-6), p.f("k").max(1.0));
+    let t = |v: f64| sig3(v);
+    if infl_labelled(p) && !ax.inside((ti, k / 2.0)) {
+        let what = if p.s("infl_label_style") == "Blank line" { "so it is not marked" } else { "so its mark falls off the plot" };
+        out.push(format!("The inflection point (t = {}) lies outside the graph, {what}. Widen the time span or the axes to show it.", t(ti)));
+    }
+    if phases_drawn(p) {
+        // as the brackets are drawn: each phase's stretch of the time axis shown
+        let slope = r * k / 4.0;
+        let (t1, t2) = ((ti + (n0 - k / 2.0) / slope).max(ax.x0), (ti + (k / 2.0) / slope).min(ax.x1));
+        let names = ["lag", "exponential", "stationary"];
+        let missing: Vec<&str> = [(ax.x0, t1), (t1, t2), (t2, ax.x1)].iter().zip(names).filter(|((lo, hi), _)| hi - lo <= 1e-9).map(|(_, n)| n).collect();
+        if !missing.is_empty() {
+            let list = match missing.len() { 1 => missing[0].to_string(), 2 => format!("{} and {}", missing[0], missing[1]), _ => "lag, exponential and stationary".to_string() };
+            let (s, have) = if missing.len() == 1 { ("phase has", "it falls") } else { ("phases have", "they fall") };
+            out.push(format!("The {list} {s} no bracket: {have} outside the time shown."));
+        }
+    }
+    out
 }

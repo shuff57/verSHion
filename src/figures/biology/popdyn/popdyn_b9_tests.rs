@@ -251,7 +251,7 @@ fn growth_inflection_and_phase_labels_blank_or_none_leave_nothing_of_the_words()
             }
             // the blank lines: one for the point, one per phase bracket shown; None draws none
             let tag = if key == "infl_label_style" { "data-blank=\"infl\"" } else { "data-blank=\"phase-" };
-            let want = if key == "infl_label_style" { 1 } else { phase_brackets(&bs, &p).len() };
+            let want = if key == "infl_label_style" { infl_on_graph(&p) as usize } else { phase_brackets(&bs, &p).len() };
             assert_eq!(bs.matches(tag).count(), want, "{key}: blank lines in {c:?}");
             assert_eq!(ns.matches("data-blank").count(), 0, "{key}: None draws no line in {c:?}");
             // the other mark's label is untouched
@@ -261,6 +261,12 @@ fn growth_inflection_and_phase_labels_blank_or_none_leave_nothing_of_the_words()
         n += 1;
     }
     assert!(n >= 60, "{n} setups drew both marks");
+}
+
+/// Is the inflection point on the population graph?
+fn infl_on_graph(p: &Params) -> bool {
+    let ax = super::axes_of(p, false).into_iter().find(|a| a.kind == 0).expect("the population graph");
+    super::growth_b9::t_inf(p).is_some_and(|ti| ax.inside((ti, p.f("k").max(1.0) / 2.0)))
 }
 
 /// The phase brackets as drawn on the population graph (four-point polylines: two 6 px feet and a top), with the part
@@ -273,7 +279,9 @@ fn phase_brackets(svg: &str, p: &Params) -> Vec<(f64, f64, f64, f64, f64)> {
         let pts: Vec<(f64, f64)> = attr(el, "points").unwrap().split_whitespace().map(|q| { let (a, b) = q.split_once(',').unwrap(); (a.parse().unwrap(), b.parse().unwrap()) }).collect();
         if pts.len() == 4 && pts[0].0 == pts[1].0 && pts[2].0 == pts[3].0 && pts[1].1 == pts[2].1 && (pts[0].1 - pts[1].1 - 6.0).abs() < 1e-6 && pts[0].1 < ax.y {
             let (va, vb) = (pts[1].0.max(ax.x), pts[2].0.min(ax.x + ax.w));
+            // (a bracket under 4 px, its feet crossed, is a bracket too: its visible part is its middle; round 3)
             if vb > va { out.push((pts[1].0, pts[2].0, pts[1].1, va, vb)); }
+            else { let m = ((pts[1].0 + pts[2].0) / 2.0).clamp(ax.x, ax.x + ax.w); out.push((pts[1].0, pts[2].0, pts[1].1, m, m)); }
         }
     }
     out.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
@@ -359,7 +367,8 @@ fn growth_blank_lines_always_drawn_long_clear_and_own() {
         let brackets = if super::growth_b9::phases_drawn(&p) { phase_brackets(&svg, &p) } else { vec![] };
         let ax = super::axes_of(&p, false).into_iter().find(|a| a.kind == 0);
         // every mark drawn has its line
-        let want_infl = super::growth_b9::infl_labelled(&p) as usize;
+        // (a point off the graph, its time past the span shown, is not marked in Blank line mode: round 3)
+        let want_infl = (super::growth_b9::infl_labelled(&p) && infl_on_graph(&p)) as usize;
         assert_eq!(blanks.iter().filter(|q| q.0 == "infl").count(), want_infl, "the point's blank line in {c:?}");
         assert_eq!(blanks.iter().filter(|q| q.0.starts_with("phase")).count(), brackets.len(), "the phases' blank lines in {c:?}");
         for (k, (tag, a, bb)) in blanks.iter().enumerate() {
@@ -440,7 +449,8 @@ fn growth_blank_lines_always_drawn_long_clear_and_own() {
             }
         }
     }
-    assert!(n_infl >= 500 && n_phase >= 1500, "{n_infl} point lines, {n_phase} phase lines ({n_lead} with leaders)");
+    // (450: since round 3 a point off the graph draws no blank line)
+    assert!(n_infl >= 450 && n_phase >= 1500, "{n_infl} point lines, {n_phase} phase lines ({n_lead} with leaders)");
     eprintln!("{} cases: {n_infl} point lines ({n_visible} with the point on the graph, {n_far} more than 60 px away (each with a leader), {n_point_leader} with a leader, {unowned} count or K-line checks met only by the leader, {n_cross} leaders across a curve), {n_phase} phase lines, {n_lead} leaders in all", n_cases);
 }
 

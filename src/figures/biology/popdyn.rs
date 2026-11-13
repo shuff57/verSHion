@@ -152,6 +152,8 @@ pub fn growth_params() -> Vec<ParamDef> {
 pub(crate) mod growth_b9;
 /// The panel's batch-9 controls of population growth (`growth_b9::relevant`).
 pub fn growth_b9_relevant(key: &str, p: &Params) -> bool { growth_b9::relevant(key, p) }
+/// The panel's notes on population growth: a mark that cannot be shown (`growth_b9::warnings`).
+pub fn growth_warnings(p: &Params) -> Vec<String> { growth_b9::warnings(p) }
 
 struct Series {
     name: String,
@@ -453,7 +455,9 @@ pub fn growth_render(p: &Params) -> String {
                     Panel::NRate => Some((k / 2.0, r * k / 4.0)),
                     _ => None,
                 };
-                if let Some(pt) = pt {
+                // (Blank line mode leaves out a point off the population graph; Text and None draw as they always did)
+                let off = matches!(pk, Panel::TimeN) && p.s("infl_label_style") == "Blank line" && !growth_b9::on_plot(&a, pt.unwrap_or((0.0, 0.0)));
+                if let Some(pt) = pt.filter(|_| !off) {
                     let (cx, cy) = a.pt(pt);
                     dashed(&mut d, &[(a.px(a.x0), cy), (cx, cy), (cx, a.py(a.y0))], INK, 1.2, "5 4");
                     d.circle(cx, cy, 5.5, "#fff", INK, 2.0);
@@ -479,7 +483,7 @@ pub fn growth_render(p: &Params) -> String {
             bold(&mut d, a.px(k) - 5.0, a.y + 16.0, 13.0, "end", "K");
         }
         if p.b("mark_infl") && matches!(pk, Panel::TimeN) {
-            if let Some(ti) = t_inf {
+            if let Some(ti) = t_inf.filter(|ti| p.s("infl_label_style") != "Blank line" || growth_b9::on_plot(&a, (*ti, k / 2.0))) {
                 let (cx, cy) = a.pt((ti, k / 2.0));
                 // what a blank line must keep clear of: the curves and counts as drawn, the phase boundaries, the K line
                 let curves: Vec<Vec<(f64, f64)>> = if draw_curve { series.iter().map(|s| ts.iter().zip(&s.ys).map(|(t, y)| a.pt((*t, *y))).collect()).collect() } else { vec![] };
@@ -1625,3 +1629,5 @@ mod tests {
 
 #[cfg(test)]
 mod popdyn_b9_tests;
+#[cfg(test)]
+mod growth_r3_tests;
