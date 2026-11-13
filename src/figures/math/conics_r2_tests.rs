@@ -601,3 +601,41 @@ fn dump_round2_examples() {
         }
     }
 }
+
+/// Checker round 3: with one part on (latus rectum, the axes' lengths 2a and 2b, the directrices), P on and off, at Small and
+/// Medium, a part's label goes to the list beside the figure only on the named tiny conics; counted per part and size.
+#[test]
+fn a_part_label_goes_beside_the_figure_only_on_tiny_conics() {
+    // Conics too small in the default window (24 px a unit) for a part's label on or round them, each looked at in a PNG:
+    // semi-axes of at most 2.5 and 1.5 units (60 x 36 px, every point already on a leader), or a parabola with p = 1/4 (its
+    // latus rectum 24 px long, 6 px from its vertex). Each shape is listed as values and as the typed equation.
+    let tiny: &[&str] = &["E small 2,1", "eq x^2 + 4y^2 = 4", "H origin 1,1", "eq x^2 - y^2 = 1", "H origin 2,1", "eq x^2 - 4y^2 = 4", "E 5/2,3/2", "H (3,2) 2,1 V", "P origin 1/4 up", "eq y = x^2"];
+    let parts = [("latus", json!({"show_latus": true}), &["latus"][..]), ("axes", json!({"show_axes": true}), &["ax2a", "ax2b"][..]), ("directrices", json!({"show_directrices": true}), &["dir1", "dir2"][..])];
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut bad = vec![];
+    let mut m = Meter::new();
+    for (name, c) in classroom() {
+        let kind = model(&with(&c)).0.map(|k| k.kind);
+        for (pn, pv, ids) in &parts {
+            // (a circle has none of these parts; a parabola has no axes' lengths and one directrix, always drawn)
+            if matches!(kind, Ok(K::Circle)) || (matches!(kind, Ok(K::Parabola)) && *pn != "latus") { continue; }
+            for pon in [true, false] {
+                for size in ["Small", "Medium"] {
+                    let o = merge(&merge(&c, pv), &json!({"label_size": size, "show_p": pon}));
+                    let p = with(&o);
+                    let s = svg(&p);
+                    let r = check(&mut m, &s);
+                    if !r.issues.is_empty() { bad.push(format!("{name} {o}: {:?}", r.issues)); }
+                    let d = last_drawn();
+                    let beside = d.keyed_ids.iter().filter(|k| ids.contains(&k.as_str())).count();
+                    if beside > 0 {
+                        *counts.entry(format!("{pn} {size}")).or_default() += 1;
+                        if !tiny.contains(&name.as_str()) { bad.push(format!("{name} [{pn}{}] {size}: beside the figure {:?}", if pon { " P" } else { "" }, d.keyed_ids)); }
+                    }
+                }
+            }
+        }
+    }
+    println!("part labels beside the figure (figures): {counts:?}");
+    assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
+}

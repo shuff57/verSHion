@@ -1019,9 +1019,9 @@ enum At { Pt(Pt, Pt), Line(u32) }
 /// One label to place: `short` is the letter alone, used when the full coordinates find no room; `prio` orders the placing
 /// (vertices, foci, centre, co-vertices, P, D, then the lines' labels, which give way to the points'); `kind` is for the
 /// reports (V F C B P D, or L for a line's label).
-struct Req { id: String, text: String, short: Option<String>, at: At, optional: bool, prio: u8, kind: char }
+struct Req { id: String, text: String, short: Option<String>, at: At, optional: bool, prio: u8, kind: char, alts: Vec<u32> }
 impl Req {
-    fn line(id: impl Into<String>, text: String, g: u32, optional: bool) -> Req { Req { id: id.into(), text, short: None, at: At::Line(g), optional, prio: if optional { 10 } else { 9 }, kind: 'L' } }
+    fn line(id: impl Into<String>, text: String, g: u32, optional: bool) -> Req { Req { id: id.into(), text, short: None, at: At::Line(g), optional, prio: if optional { 10 } else { 9 }, kind: 'L', alts: vec![] } }
 }
 
 /// Group id of the axes on the board; leaders are numbered from LEADER up.
@@ -1037,7 +1037,7 @@ const DOT: f64 = 4.5;
 struct Board { strokes: Vec<(Pt, Pt, u32)>, hard: Vec<u32>, dots: Vec<Pt>, boxes: Vec<[f64; 4]>, nums: Vec<(usize, [f64; 4])>, hidden: Vec<usize>, bounds: [f64; 4], next: u32, cells: Vec<Vec<usize>>, cols: usize, rows: usize }
 /// How a label was placed: its centre, a leader, the text used.
 #[derive(Clone)]
-struct Placed { c: Pt, leader: Option<(Pt, Pt)>, text: String, short: bool, level: u8 }
+struct Placed { c: Pt, leader: Option<(Pt, Pt)>, text: String, short: bool, level: u8, group: Option<u32> }
 /// The board's buckets are this many pixels square (a stroke is listed in every bucket its box meets).
 const CELL: f64 = 24.0;
 impl Board {
@@ -1094,7 +1094,8 @@ impl Board {
                 let on_own = |d: &Pt| self.strokes.iter().any(|s| s.2 == *gid && seg_pt(*d, s.0, s.1) < 0.5);
                 // (a line lying along its own, a major axis on the x-axis, is not another thing)
                 let along = |s: &(Pt, Pt, u32)| self.strokes.iter().filter(|o| o.2 == *gid).any(|o| line_pt(s.0, o.0, o.1) < 1.0 && line_pt(s.1, o.0, o.1) < 1.0);
-                !self.any_near(grow(ink, own + 4.5), |i| { let s = self.strokes[i]; s.2 != *gid && !along(&s) && box_seg(ink, s.0, s.1) <= own + 4.0 }) && self.dots.iter().all(|d| on_own(d) || box_pt(ink, *d) > own + 4.0)
+                // (the axes are not another thing a part's label could be read as labelling: they carry no labels of this kind)
+                !self.any_near(grow(ink, own + 4.5), |i| { let s = self.strokes[i]; s.2 != *gid && s.2 != AXES && !along(&s) && box_seg(ink, s.0, s.1) <= own + 4.0 }) && self.dots.iter().all(|d| on_own(d) || box_pt(ink, *d) > own + 4.0)
             }
         }
     }
@@ -1105,7 +1106,9 @@ impl Board {
     fn ink(c: Pt, w: f64, size: f64, text: &str) -> [f64; 4] {
         // (measured from the drawn text: brackets, a slash and a root stand 0.75 em above the baseline, digits and letters
         // 0.69; brackets and descenders reach 0.24 em below it, a slash 0.2, a comma 0.15, a subscript 0.06)
-        let top = if text.contains(['(', ')', '/', '|', '\u{221a}']) { 0.78 } else { 0.72 };
+        // (the tallest glyph present: brackets, a slash and a root 0.78 em, digits, capitals and ascenders 0.72, the rest the
+        // x-height, 0.5: y = x stands no higher)
+        let top = text.chars().map(|c| match c { '(' | ')' | '/' | '|' | '\u{221a}' => 0.78, '0'..='9' | 'A'..='Z' | 'b' | 'd' | 'f' | 'h' | 'k' | 'l' | 't' | 'i' | 'j' | '\u{3c0}' => 0.72, _ => 0.5 }).fold(0.5f64, f64::max);
         let depth = text.chars().map(|c| match c { '(' | ')' | 'g' | 'j' | 'p' | 'q' | 'y' | '|' => 0.24, '/' => 0.2, ',' => 0.15, '\u{221a}' => 0.12, '_' => 0.06, _ => 0.02 }).fold(0.02f64, f64::max);
         // the text runs from its origin over its advance; a last letter set italic leans a little past it, a first one before it
         let lean = if text.chars().last().is_some_and(|c| c.is_alphabetic()) && text.chars().rev().nth(1).is_none_or(|c| !c.is_alphabetic()) { 0.06 * size } else { 0.0 };
@@ -1169,7 +1172,31 @@ impl Board {
             let mut left = f * total;
             for (a, b) in &segs { let l = (b.0 - a.0).hypot(b.1 - a.1); if left <= l && l > 0.0 { let t = left / l; return Some((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1))); } left -= l; }
             None
-        }).filter(|q| self.dots.iter().all(|d| (d.0 - q.0).hypot(d.1 - q.1) > 12.0) && !self.any_near([q.0 - 10.0, q.1 - 10.0, q.0 + 10.0, q.1 + 10.0], |i| { let s = self.strokes[i]; s.2 != gid && s.2 < LEADER && seg_pt(*q, s.0, s.1) <= 10.0 && !segs.iter().any(|o| line_pt(s.0, o.0, o.1) < 1.0 && line_pt(s.1, o.0, o.1) < 1.0) })).take(5).collect()
+        }).filter(|q| self.dots.iter().all(|d| (d.0 - q.0).hypot(d.1 - q.1) > 9.0) && !self.any_near([q.0 - 10.0, q.1 - 10.0, q.0 + 10.0, q.1 + 10.0], |i| { let s = self.strokes[i]; s.2 != gid && s.2 < LEADER && seg_pt(*q, s.0, s.1) <= 5.0 && !segs.iter().any(|o| line_pt(s.0, o.0, o.1) < 1.0 && line_pt(s.1, o.0, o.1) < 1.0) })).take(5)
+        // and the segment's two ends (a short chord's only room may be outside the curve, reached from its end)
+        .chain(self.line_ends(gid)).chain(self.line_gaps(gid)).collect()
+    }
+    /// Along a part's line lined with points (a major axis through V1, F1, C, F2, V2), the middle of each gap between two
+    /// points long enough to start a leader in.
+    fn line_gaps(&self, gid: u32) -> Vec<Pt> {
+        let segs: Vec<(Pt, Pt)> = self.strokes.iter().filter(|s| s.2 == gid).map(|s| (s.0, s.1)).collect();
+        let (Some(first), Some(last)) = (segs.first(), segs.last()) else { return vec![] };
+        let (a, b) = (first.0, last.1);
+        let l = (b.0 - a.0).hypot(b.1 - a.1);
+        if l < 1.0 { return vec![]; }
+        let (ux, uy) = ((b.0 - a.0) / l, (b.1 - a.1) / l);
+        let mut ts: Vec<f64> = self.dots.iter().filter(|d| line_pt(**d, a, b) < 1.0).map(|d| (d.0 - a.0) * ux + (d.1 - a.1) * uy).filter(|t| (-1.0..=l + 1.0).contains(t)).collect();
+        ts.push(0.0);
+        ts.push(l);
+        ts.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        ts.windows(2).filter(|w| w[1] - w[0] > 2.0 * (DOT + 4.0)).map(|w| { let t = (w[0] + w[1]) / 2.0; (a.0 + ux * t, a.1 + uy * t) }).collect()
+    }
+    /// The two ends of a part's line, 1.5 px inside it, where they are clear of the points.
+    fn line_ends(&self, gid: u32) -> Vec<Pt> {
+        let segs: Vec<(Pt, Pt)> = self.strokes.iter().filter(|s| s.2 == gid).map(|s| (s.0, s.1)).collect();
+        let (Some(first), Some(last)) = (segs.first(), segs.last()) else { return vec![] };
+        let inward = |p: Pt, q: Pt| { let l = (q.0 - p.0).hypot(q.1 - p.1).max(1e-9); (p.0 + (q.0 - p.0) / l * 1.5, p.1 + (q.1 - p.1) / l * 1.5) };
+        [inward(first.0, first.1), inward(last.1, last.0)].into_iter().filter(|q| self.dots.iter().all(|d| (d.0 - q.0).hypot(d.1 - q.1) > DOT + 4.0)).collect()
     }
     /// A label standing off from `q` with a short leader. The leader crosses at most the axes (level 0), also the conic's part
     /// lines (level 1), also the curve (level 2, a tiny conic's last resort); never another leader, a point or a label.
@@ -1248,27 +1275,34 @@ impl Board {
         let cover: &[bool] = if r.optional { &[false] } else { &[false, true] };
         'stages: for (text, short) in &texts {
             for &over_nums in cover {
-                if let Some(c) = try_beside(self, text, over_nums) { found = Some(Placed { c, leader: None, text: text.clone(), short: *short, level: 0 }); break 'stages; }
+                if let Some(c) = try_beside(self, text, over_nums) { found = Some(Placed { c, leader: None, text: text.clone(), short: *short, level: 0, group: None }); break 'stages; }
             }
             for &over_nums in cover {
                 for q in &anchors {
-                    if let Some((c, l)) = self.with_leader(*q, mw(text, size), size, text, &r.at, over_nums, 0) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level: 0 }); break 'stages; }
+                    if let Some((c, l)) = self.with_leader(*q, mw(text, size), size, text, &r.at, over_nums, 0) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level: 0, group: None }); break 'stages; }
                 }
             }
             // still nothing: a point's label stands off on a leader that may cross the conic's part lines, then (out of a curve
             // too small to hold it) the curve itself, once
             if matches!(r.at, At::Pt(..)) {
                 for level in [1, 2] {
-                    if let Some((c, l)) = self.with_leader(anchors[0], mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level }); break 'stages; }
+                    if let Some((c, l)) = self.with_leader(anchors[0], mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level, group: None }); break 'stages; }
                 }
             } else if !r.optional {
                 // a line's label (not a focal radius's length) may stand off on a leader across another part line, then (inside a
                 // curve with no room) across the curve, once
                 for level in [1, 2] {
                     for q in &anchors {
-                        if let Some((c, l)) = self.with_leader(*q, mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level }); break 'stages; }
+                        if let Some((c, l)) = self.with_leader(*q, mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level, group: None }); break 'stages; }
                     }
                 }
+            }
+        }
+        // a part with two pieces (the latus rectum's two chords) may carry its label on the other piece
+        if found.is_none() && !r.alts.is_empty() {
+            for g in &r.alts {
+                let alt = Req { id: r.id.clone(), text: r.text.clone(), short: r.short.clone(), at: At::Line(*g), optional: r.optional, prio: r.prio, kind: r.kind, alts: vec![] };
+                if let Some(mut p) = self.place(&alt, size) { p.group = Some(*g); return Some(p); }
             }
         }
         let f = found?;
@@ -1422,7 +1456,7 @@ pub fn render(p: &Params) -> String { build(p, &mut vec![]) }
 /// What the last build on this thread drew, for the label tests: each placed label's id with its own thing (segments; a
 /// point is a zero-length one), and every stroke and point mark on the plot.
 #[derive(Clone, Debug, Default)]
-pub struct Drawn { pub labels: Vec<(String, Vec<(Pt, Pt)>)>, pub things: Vec<(Pt, Pt)>, pub dropped: usize, pub shortened: usize, pub placed: Vec<(String, char, bool, u8)>, pub dropped_kinds: Vec<char>, pub keyed: usize }
+pub struct Drawn { pub labels: Vec<(String, Vec<(Pt, Pt)>)>, pub things: Vec<(Pt, Pt)>, pub dropped: usize, pub shortened: usize, pub placed: Vec<(String, char, bool, u8)>, pub dropped_kinds: Vec<char>, pub keyed: usize, pub keyed_ids: Vec<String> }
 thread_local! { static LAST: std::cell::RefCell<Drawn> = std::cell::RefCell::new(Drawn::default()); }
 pub fn last_drawn() -> Drawn { LAST.with(|l| l.borrow().clone()) }
 
@@ -1533,10 +1567,10 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                     let (a, b) = if *is_x { ((v.v, fr.y0 - 1.0), (v.v, fr.y1 + 1.0)) } else { ((fr.x0 - 1.0, v.v), (fr.x1 + 1.0, v.v)) };
                     if want_dir || kind == K::Parabola {
                         let id = seg(&mut over, &mut board, a, b, ink.dir, 1.6, "9 5");
-                        if want_dir {
-                            reqs.push(Req::line(format!("dir{}", i + 1), line_eq(*is_x, v), id, false));
-                            if !fr.inside(if *is_x { (v.v, (fr.y0 + fr.y1) / 2.0) } else { ((fr.x0 + fr.x1) / 2.0, v.v) }) { notes.push(format!("The directrix {} is outside the window: widen the axes to see it.", line_eq(*is_x, v).replace('-', "\u{2212}"))); }
-                        }
+                        let shows = board.strokes.iter().any(|s| s.2 == id);
+                        if want_dir && shows { reqs.push(Req::line(format!("dir{}", i + 1), line_eq(*is_x, v), id, false)); }
+                        // (a directrix outside the window is said to be off it, not listed for lack of room)
+                        if want_dir && !shows { notes.push(format!("The directrix {} is outside the window: widen the axes to see it.", line_eq(*is_x, v).replace('-', "\u{2212}"))); }
                     }
                     if kind == K::Parabola { key.push(format!("directrix {}", line_eq(*is_x, v))); }
                 }
@@ -1558,10 +1592,16 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
             if kind != K::Circle && p.b("show_latus") {
                 let half = c.latus().v / 2.0;
                 let fs: Vec<f64> = match kind { K::Parabola => vec![c.s * c.c.v], _ => vec![-c.c.v, c.c.v] };
-                let mut first = None;
-                for f in fs { let id = seg(&mut over, &mut board, c.atf(f, -half), c.atf(f, half), ink.lr, 1.8, ""); first.get_or_insert(id); }
+                let mut ids = vec![];
+                for f in fs { ids.push(seg(&mut over, &mut board, c.atf(f, -half), c.atf(f, half), ink.lr, 1.8, "")); }
                 let what = if kind == K::Parabola { "4p" } else { "2b^2/a" };
-                reqs.push(Req::line("latus", format!("{what} = {}", c.latus().show(exact, dec)), first.unwrap(), false));
+                // (on whichever chord shows in the window, the other as the alternative)
+                let shown: Vec<u32> = ids.iter().copied().filter(|g| board.strokes.iter().any(|s| s.2 == *g)).collect();
+                if let Some((g0, rest)) = shown.split_first() {
+                    let mut r = Req::line("latus", format!("{what} = {}", c.latus().show(exact, dec)), *g0, false);
+                    r.alts = rest.to_vec();
+                    reqs.push(r);
+                }
             }
             // P and its focal radii
             let mut pnote = None;
@@ -1587,7 +1627,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                         reqs.push(Req::line("pd", num(d(foot)), id2, true));
                         board.dots.push(fr.s(foot));
                         marks_svg.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="3" fill="{}" stroke="#fff" stroke-width="1"/>"##, fr.sx(foot.0), fr.sy(foot.1), ink.radii));
-                        reqs.push(Req { id: "D".into(), text: "D".into(), short: None, at: At::Pt(fr.s(foot), outward(foot)), optional: false, prio: 5, kind: 'D' });
+                        reqs.push(Req { id: "D".into(), text: "D".into(), short: None, at: At::Pt(fr.s(foot), outward(foot)), optional: false, prio: 5, kind: 'D' , alts: vec![] });
                         pnote = Some(("PF = PD".to_string(), format!("PF = PD = {}", num(d(fp)))));
                     }
                     _ => {
@@ -1641,7 +1681,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 let text = match mode { "Letters only" => nm.clone(), "Coordinates only" => coords, _ => format!("{nm}{coords}") };
                 let kind = nm.chars().next().unwrap();
                 let prio = match kind { 'V' => 0, 'F' => 1, 'C' => 2, _ => 3 };
-                reqs.push(Req { id: nm.replace('_', ""), short: Some(nm.clone()), text, at: At::Pt(s, outward(q)), optional: false, prio, kind });
+                reqs.push(Req { id: nm.replace('_', ""), short: Some(nm.clone()), text, at: At::Pt(s, outward(q)), optional: false, prio, kind, alts: vec![] });
             }
             if off > 0 { notes.push(format!("{off} of the marked points {} outside the window: widen the axes to see {}.", if off == 1 { "is" } else { "are" }, if off == 1 { "it" } else { "them" })); }
             if p.b("show_p") {
@@ -1653,7 +1693,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                     let coords = format!("({}, {})", fx(pp.0, dec), fx(pp.1, dec));
                     let text = match mode { "Letters only" => "P".into(), "Coordinates only" => coords, _ => format!("P{coords}") };
                     let at = At::Pt(s, outward(pp));
-                    reqs.push(Req { id: "P".into(), short: Some("P".into()), text, at, optional: false, prio: 4, kind: 'P' });
+                    reqs.push(Req { id: "P".into(), short: Some("P".into()), text, at, optional: false, prio: 4, kind: 'P' , alts: vec![] });
                 }
             }
             // the grid's numbers: one a marked point sits on is left off (the point is what matters), as is one on another number
@@ -1680,7 +1720,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                     let unlabelled: Vec<String> = best.as_ref().map(|b| reqs.iter().zip(&b.2).filter(|(r, g)| g.is_none() && r.kind != 'L').map(|(r, _)| r.id.clone()).collect()).unwrap_or_default();
                     if compact && unlabelled.is_empty() { break; }
                     let shorten = |r: &Req| r.kind != 'L' && (pass == 2 || unlabelled.contains(&r.id));
-                    let rq: Vec<Req> = reqs.iter().map(|r| Req { id: r.id.clone(), text: if compact && shorten(r) { r.short.clone().unwrap_or(r.text.clone()) } else { r.text.clone() }, short: r.short.clone(), at: r.at, optional: r.optional, prio: r.prio, kind: r.kind }).collect();
+                    let rq: Vec<Req> = reqs.iter().map(|r| Req { id: r.id.clone(), text: if compact && shorten(r) { r.short.clone().unwrap_or(r.text.clone()) } else { r.text.clone() }, short: r.short.clone(), at: r.at, optional: r.optional, prio: r.prio, kind: r.kind, alts: r.alts.clone() }).collect();
                     stale = 0;
                     'orders: for minor_first in [false, true] { for flip in [false, true] {
                         for ord in &orders {
@@ -1721,7 +1761,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                     match g {
                         Some(pl) => {
                             lbls.push_str(&label_svg(&format!("cl-{}", r.id), pl.c, size, &pl.text));
-                            let mut own: Vec<(Pt, Pt)> = match r.at { At::Pt(q, _) => vec![(q, q)], At::Line(g) => board.strokes.iter().filter(|s| s.2 == g).map(|s| (s.0, s.1)).collect() };
+                            let mut own: Vec<(Pt, Pt)> = match r.at { At::Pt(q, _) => vec![(q, q)], At::Line(g) => { let g = pl.group.unwrap_or(g); board.strokes.iter().filter(|s| s.2 == g).map(|s| (s.0, s.1)).collect() } };
                             if let Some((a, b)) = pl.leader {
                                 over.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" data-leader="1"/>"##, a.0, a.1, b.0, b.1, if print { "#555555" } else { "#6b7280" }));
                                 own.push((a, b));
@@ -1733,7 +1773,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                         // (a focal radius's length is also in the working beside the figure: it is said there, and in the panel)
                         None if r.optional => { beside_only.push(format!("{} = {}", part_name(&r.id, kind), r.text).replace('_', "").replace('-', "\u{2212}")); }
                         // a part line's label with no room on the figure is written beside it, the part named
-                        None if r.kind == 'L' => { keyed.push(format!("{}: {}", part_name(&r.id, kind), r.text)); drawn.keyed += 1; }
+                        None if r.kind == 'L' => { keyed.push(format!("{}: {}", part_name(&r.id, kind), r.text)); drawn.keyed += 1; drawn.keyed_ids.push(r.id.clone()); }
                         None => { dropped.push(r.text.replace('_', "").replace('-', "\u{2212}")); drawn.dropped_kinds.push(r.kind); keyed.push(r.text.clone()); }
                     }
                 }
@@ -1745,7 +1785,8 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 if !beside_only.is_empty() { notes.push(format!("{} given in the working beside the figure only, for lack of room on it.", beside_only.join(", "))); }
                 beside_key = std::mem::take(&mut keyed);
             }
-            drawn.things = board.strokes.iter().map(|s| (s.0, s.1)).chain(board.dots.iter().map(|d| (*d, *d))).collect();
+            // (the axes are not among the things a label could be read as labelling: they carry no labels of these kinds)
+            drawn.things = board.strokes.iter().filter(|s| s.2 != AXES).map(|s| (s.0, s.1)).chain(board.dots.iter().map(|d| (*d, *d))).collect();
             LAST.with(|l| *l.borrow_mut() = drawn);
             // the working column
             let ecc = c.ecc();
