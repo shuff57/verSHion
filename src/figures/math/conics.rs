@@ -1316,7 +1316,11 @@ fn row_at(x: f64, y: f64, size: f64, s: &str) -> String {
     out
 }
 /// A hyphen typed in math is the minus sign (the typesetter keeps a hyphen after a long word such as "Ellipse:").
-fn minus(s: &str) -> String { s.replace('-', "\u{2212}") }
+fn minus(s: &str) -> String {
+    // (a hyphen between two letters, as in co-vertices, stays a hyphen)
+    let cs: Vec<char> = s.chars().collect();
+    cs.iter().enumerate().map(|(i, c)| if *c == '-' && !(i > 0 && cs[i - 1].is_alphabetic() && cs.get(i + 1).is_some_and(|n| n.is_alphabetic())) { '\u{2212}' } else { *c }).collect()
+}
 fn text_at(x: f64, y: f64, size: f64, anchor: &str, s: &str, bold: bool) -> String {
     let s = &if bold { s.to_string() } else { minus(s) };
     let (fam, wt) = if bold { ("DejaVu Sans, Arial, Liberation Sans, Helvetica, sans-serif", r#" font-weight="bold""#) } else { (SERIF, "") };
