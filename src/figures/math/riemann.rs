@@ -67,7 +67,7 @@ pub fn params() -> Vec<ParamDef> {
         ParamDef::choice("label_size", "Label size", &["Large", "Medium", "Small"], "Medium"),
         crate::figures::svg::style_param(),
         crate::figures::answers_param(),
-        ParamDef::choice("student", "The student copy", &STUDENT, "Blank the written values").hint("Blank the written values: each value written under the graph becomes a blank line. Curve and bounds only: students draw the strips. Strip heights blank: a blank line on each strip (filled in on the key)."),
+        ParamDef::choice("student", "The student copy", &STUDENT, "Blank the written values").hint("Blank the written values: each value written under the graph becomes a blank line. Curve and bounds only: students draw the strips. Strip heights blank: a blank line on each strip; with Label each strip with Heights the key gives them."),
         ParamDef::bool("key_line", "Answer key line: the sum, the exact integral and the error", false),
     ]
 }
