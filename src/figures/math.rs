@@ -4072,6 +4072,7 @@ pub(crate) mod number_line_b7;
 /// The ruler reading's Random button (batch 9).
 pub(crate) mod ruler_b9;
 pub(crate) mod tangent;
+pub(crate) mod tangent_expr;
 #[cfg(test)]
 mod tangent_tests;
 #[cfg(test)]

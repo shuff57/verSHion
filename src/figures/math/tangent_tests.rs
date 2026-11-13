@@ -1,6 +1,7 @@
 //! Tests of the tangent and secant lines figure (`tangent-secant-lines`). Every number checked here was worked by hand
 //! (the working is in the comments), never read back from the figure's own code.
-use super::tangent::{self, build, exact_form, slope_at, Slope, ID};
+use super::tangent::{self, build, Slope, ID};
+use super::tangent_expr as ex;
 use crate::figures::{registry, start_params, FigureDef, Params, Value};
 
 fn def() -> FigureDef { registry().into_iter().find(|d| d.id == ID).expect("registered") }
@@ -17,10 +18,11 @@ fn b(v: bool) -> Value { Value::B(v) }
 
 /// The plain text of every element tagged `tag` (tspans dropped, entities read).
 fn texts(svg: &str, tag: &str) -> Vec<String> {
-    let pat = format!(r#"data-tsl="{tag}">"#);
+    let pat = format!(r#"data-tsl="{}">"#, tag.trim_end_matches('^'));
     svg.match_indices(&pat).map(|(i, _)| {
         let rest = &svg[i + pat.len()..];
         let body = &rest[..rest.find("</text>").unwrap_or(0)];
+        let body = if tag.ends_with('^') { body.replace(r#"<tspan baseline-shift="super" font-size="70%">"#, "^") } else { body.to_string() };
         let mut out = String::new();
         let mut inside = false;
         for c in body.chars() { match c { '<' => inside = true, '>' => inside = false, c if !inside => out.push(c), _ => {} } }
@@ -33,45 +35,64 @@ const M: &str = "\u{2212}";
 
 // ───────────────────────── numbers, worked by hand ─────────────────────────
 
+/// The exact text of a typed constant, or of a function's exact value at an exact point.
+fn tx(t: &str, dec_ok: bool) -> Option<String> { ex::text(&ex::typed_exact(t)?, dec_ok) }
+fn fx_at(f: &str, a: &str) -> Option<String> { ex::text(&ex::exact(&ex::parse(f)?, Some(&ex::typed_exact(a)?))?, false) }
+
 #[test]
-fn exact_forms_are_the_textbook_ones() {
-    let t = 1e-12;
-    assert_eq!(exact_form(3.0, t, false).as_deref(), Some("3"));
-    assert_eq!(exact_form(-0.5, t, false).as_deref(), Some("\u{2212}1/2"));
-    assert_eq!(exact_form(-0.5, t, true).as_deref(), Some("\u{2212}0.5"));
-    assert_eq!(exact_form(2.1, 1e-12, true).as_deref(), Some("2.1"));
-    assert_eq!(exact_form(1.0 / 3.0, t, true).as_deref(), Some("1/3"));
-    // √3/2 = sin(π/3); 1/(2√2) = √2/4; 3√2
-    assert_eq!(exact_form(3f64.sqrt() / 2.0, t, false).as_deref(), Some("\u{221a}3/2"));
-    assert_eq!(exact_form(1.0 / (2.0 * 2f64.sqrt()), t, false).as_deref(), Some("\u{221a}2/4"));
-    assert_eq!(exact_form(-3.0 * 2f64.sqrt(), t, false).as_deref(), Some("\u{2212}3\u{221a}2"));
-    assert_eq!(exact_form(std::f64::consts::PI / 4.0, t, false).as_deref(), Some("\u{3c0}/4"));
-    assert_eq!(exact_form(std::f64::consts::E, t, false).as_deref(), Some("e"));
-    assert_eq!(exact_form(std::f64::consts::E.powi(2) / 2.0, t, false).as_deref(), Some("e^2/2"));
-    assert_eq!(exact_form(1.0 / std::f64::consts::E, t, false).as_deref(), Some("1/e"));
-    // ln 2 and e^0.3 have none of these forms
-    assert_eq!(exact_form(2f64.ln(), t, false), None);
-    assert_eq!(exact_form(0.3f64.exp(), t, false), None);
+fn exact_forms_are_derived_and_textbook() {
+    assert_eq!(tx("3", false).as_deref(), Some("3"));
+    assert_eq!(tx("-1/2", false).as_deref(), Some("\u{2212}1/2"));
+    assert_eq!(tx("-0.5", true).as_deref(), Some("\u{2212}0.5"));
+    assert_eq!(tx("-0.5", false).as_deref(), Some("\u{2212}1/2"));
+    assert_eq!(tx("1/3", true).as_deref(), Some("1/3"));
+    assert_eq!(tx("1/(2sqrt(2))", false).as_deref(), Some("\u{221a}2/4"));
+    assert_eq!(tx("-3sqrt(2)", false).as_deref(), Some("\u{2212}3\u{221a}2"));
+    assert_eq!(tx("pi/4", false).as_deref(), Some("\u{3c0}/4"));
+    assert_eq!(tx("e", false).as_deref(), Some("e"));
+    assert_eq!(tx("e^2/2", false).as_deref(), Some("e^2/2"));
+    assert_eq!(tx("1/e", false).as_deref(), Some("1/e"));
+    assert_eq!(tx("2/pi", false).as_deref(), Some("2/\u{3c0}"));
+    assert_eq!(tx("e - 1", false).as_deref(), Some(&*format!("e {M} 1")));
+    assert_eq!(tx("1 + sqrt(2)", false).as_deref(), Some("\u{221a}2 + 1"));
+    // known exact values of the functions: sin(π/3) = √3/2, cos(π/12) = (√6 + √2)/4, tan(π/6) = √3/3, ln(e^2) = 2, e^0 = 1,
+    // arctan(1) = π/4
+    assert_eq!(fx_at("sin(x)", "pi/3").as_deref(), Some("\u{221a}3/2"));
+    assert_eq!(fx_at("cos(x)", "pi/12").as_deref(), Some("\u{221a}2/4 + \u{221a}6/4"));
+    assert_eq!(fx_at("tan(x)", "pi/6").as_deref(), Some("\u{221a}3/3"));
+    assert_eq!(fx_at("ln(x)", "e^2").as_deref(), Some("2"));
+    assert_eq!(fx_at("e^x", "0").as_deref(), Some("1"));
+    assert_eq!(fx_at("arctan(x)", "1").as_deref(), Some("\u{3c0}/4"));
+    // nothing is recognised from a float: ln 2, e^0.3, cos(1.2) and √1.0001 have no exact form here
+    assert_eq!(fx_at("ln(x)", "2"), None);
+    assert_eq!(fx_at("e^x", "0.3"), None);
+    assert_eq!(fx_at("cos(x)", "1.2"), None);
+    // (√1.0001 = √10001/100 exactly, but a root over 200 is written as a decimal)
+    assert_eq!(fx_at("sqrt(x)", "1.0001"), None);
+    // (1.0001)^2 = 1.00020001 exactly
+    assert_eq!(ex::text(&ex::exact(&ex::parse("x^2").unwrap(), Some(&ex::typed_exact("1.0001").unwrap())).unwrap(), true).as_deref(), Some("1.00020001"));
 }
 
 #[test]
 fn slopes_of_the_curve_by_hand() {
-    let fx = |e: &'static str| move |x: f64| super::eval(e, x).filter(|v| v.is_finite());
-    let d = |e: &'static str, a: f64| match slope_at(&fx(e), a) { Slope::Finite(v, _) => v, o => panic!("{e} at {a}: {o:?}") };
+    let d = |e: &str, a: f64| match tangent::slope_of(e, a) { Slope::Finite(v) => v, o => panic!("{e} at {a}: {o:?}") };
     // d/dx x^2 = 2x; x^3 = 3x^2; sin = cos; e^x = e^x; ln = 1/x; sqrt = 1/(2 sqrt x); 1/x = -1/x^2
-    assert!((d("x^2", 1.0) - 2.0).abs() < 1e-10);
-    assert!((d("x^3", 2.0) - 12.0).abs() < 1e-9);
-    assert!((d("sin(x)", std::f64::consts::PI / 3.0) - 0.5).abs() < 1e-10);
-    assert!((d("e^x", 0.0) - 1.0).abs() < 1e-10);
-    assert!((d("ln(x)", 2.0) - 0.5).abs() < 1e-10);
-    assert!((d("sqrt(x)", 4.0) - 0.25).abs() < 1e-10);
-    assert!((d("1/x", 2.0) + 0.25).abs() < 1e-10);
-    assert!((d("x^3 - 3x", 1.0)).abs() < 1e-10);
-    assert!(matches!(slope_at(&fx("abs(x)"), 0.0), Slope::Corner(l, r) if (l + 1.0).abs() < 1e-6 && (r - 1.0).abs() < 1e-6));
-    assert_eq!(slope_at(&fx("sqrt(abs(x))"), 0.0), Slope::Cusp);
-    assert_eq!(slope_at(&fx("sqrt(x)"), 0.0), Slope::OneSided);
-    assert_eq!(slope_at(&fx("ln(x)"), 0.0), Slope::Undefined);
-    assert_eq!(slope_at(&|x: f64| Some(x.cbrt()), 0.0), Slope::Vertical);
+    assert!((d("x^2", 1.0) - 2.0).abs() < 1e-14);
+    assert!((d("x^3", 2.0) - 12.0).abs() < 1e-13);
+    assert!((d("sin(x)", std::f64::consts::PI / 3.0) - 0.5).abs() < 1e-14);
+    assert!((d("e^x", 0.0) - 1.0).abs() < 1e-14);
+    assert!((d("ln(x)", 2.0) - 0.5).abs() < 1e-14);
+    assert!((d("sqrt(x)", 4.0) - 0.25).abs() < 1e-14);
+    assert!((d("1/x", 2.0) + 0.25).abs() < 1e-14);
+    assert!((d("x^3 - 3x", 1.0)).abs() < 1e-14);
+    assert!(matches!(tangent::slope_of("abs(x)", 0.0), Slope::Corner(l, r) if (l + 1.0).abs() < 1e-6 && (r - 1.0).abs() < 1e-6));
+    assert_eq!(tangent::slope_of("sqrt(abs(x))", 0.0), Slope::Cusp);
+    assert_eq!(tangent::slope_of("x^(2/3)", 0.0), Slope::Cusp);
+    assert_eq!(tangent::slope_of("sqrt(x)", 0.0), Slope::OneSided);
+    assert_eq!(tangent::slope_of("ln(x)", 0.0), Slope::Undefined);
+    assert_eq!(tangent::slope_of("x^(1/3)", 0.0), Slope::Vertical);
+    // |x|·x at 0: the derivative's formula has 0/0 there, both sides give 0
+    assert!(matches!(tangent::slope_of("abs(x)*x", 0.0), Slope::Finite(v) if v.abs() < 1e-6));
 }
 
 #[test]
@@ -114,9 +135,12 @@ fn hand_worked_slopes_and_equations() {
     assert!(has(&l, &format!("= (3 {M} 2)/5 = 1/5")) && has(&l, "f\u{2032}(4) = 1/4") && has(&l, "y = (1/4)x + 1"), "{l:?}");
     // sin at pi/3, h = pi/2: f(pi/3) = √3/2, f(5pi/6) = 1/2, f'(pi/3) = cos(pi/3) = 1/2; secant (1/2 - √3/2)/(pi/2) = (1 - √3)/pi ≈ -0.233
     let l = panel(&with(&[("func", s("sin(x)")), ("a", s("pi/3")), ("h", s("pi/2")), ("worked", b(true)), ("tangent_eq", s("Slope-intercept")), ("xunits", s("Multiples of \u{3c0}")), ("xmin", f(-1.0)), ("xmax", f(1.0)), ("xstep", f(0.25)), ("ymin", f(-2.0)), ("ymax", f(2.0))]));
-    assert!(has(&l, "f\u{2032}(\u{3c0}/3) = 1/2") && has(&l, &format!("= [f(5\u{3c0}/6) {M} f(\u{3c0}/3)]/(\u{3c0}/2)")) && has(&l, &format!("= (1/2 {M} \u{221a}3/2)/(\u{3c0}/2) \u{2248} {M}0.23")), "{l:?}");
-    // its intercept √3/2 - π/6 = 0.3424 has no exact form: the whole equation is in decimals, y ≈ 0.5x + 0.34
-    assert!(has(&l, "y \u{2248} 0.5x + 0.34"), "{l:?}");
+    assert!(has(&l, "f\u{2032}(\u{3c0}/3) = 1/2") && has(&l, &format!("= [f(5\u{3c0}/6) {M} f(\u{3c0}/3)]/(\u{3c0}/2)")) && has(&l, &format!("= (1/2 {M} \u{221a}3/2)/(\u{3c0}/2) = ")), "{l:?}");
+    // the slope (1 − √3)/π = −0.2330 is derived exactly, and read back is that value
+    let w = l.iter().find(|x| x.starts_with("= (1/2")).unwrap();
+    assert!((read_back(w.rsplit(" = ").next().unwrap()).unwrap() - (1.0 - 3f64.sqrt()) / std::f64::consts::PI).abs() < 1e-12, "{w}");
+    // its intercept √3/2 − π/6 is derived exactly too (f(a) − f′(a)·a)
+    assert!(has(&l, &format!("y = (1/2)x + \u{221a}3/2 {M} \u{3c0}/6")), "{l:?}");
     // the cubic x^3 - 3x at 1: f'(1) = 3 - 3 = 0, tangent y = -2; secant to (2, 2): (2 - (-2))/1 = 4
     let l = panel(&with(&[("func", s("x^3 - 3x")), ("tangent_eq", s("Slope-intercept")), ("worked", b(true)), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-4.0)), ("ymax", f(4.0))]));
     assert!(has(&l, "f\u{2032}(1) = 0") && has(&l, &format!("y = {M}2")) && has(&l, &format!("= (2 {M} ({M}2))/1 = 4")), "{l:?}");
@@ -694,8 +718,9 @@ fn typed_values_keep_their_form() {
     // pi/4 and 0.1: Q at π/4 + 0.1 (a decimal beside π keeps its decimal); a typed e is read
     let l = panel(&with(&[("func", s("sin(x)")), ("a", s("pi/4")), ("h", s("0.1")), ("worked", b(true)), ("xunits", s("Multiples of \u{3c0}")), ("xmin", f(-1.0)), ("xmax", f(1.0)), ("xstep", f(0.25)), ("ymin", f(-2.0)), ("ymax", f(2.0))]));
     assert!(has(&l, &format!("= [f(\u{3c0}/4 + 0.1) {M} f(\u{3c0}/4)]/0.1")), "{l:?}");
-    // the working with a rounded value is all in decimals: sin(π/4 + 0.1) = 0.7741, sin(π/4) = 0.7071, (0.0670)/0.1 = 0.67
-    assert!(has(&l, &format!("\u{2248} (0.774 {M} 0.707)/0.1 \u{2248} 0.67")), "{l:?}");
+    // the working with a rounded value is all in decimals, with places enough for the difference (0.067 needs 4):
+    // sin(π/4 + 0.1) = 0.7742, sin(π/4) = 0.7071, 0.0671/0.1 = 0.67
+    assert!(has(&l, &format!("\u{2248} (0.7742 {M} 0.7071)/0.1 \u{2248} 0.67")), "{l:?}");
     let l = panel(&with(&[("func", s("ln(x)")), ("a", s("e")), ("tangent_eq", s("Slope-intercept")), ("xmin", f(0.0)), ("xmax", f(5.0)), ("ymin", f(-2.0)), ("ymax", f(3.0))]));
     // ln at e: slope 1/e, ln e = 1, tangent y = (1/e)x (intercept 1 − 1 = 0)
     assert!(has(&l, "f\u{2032}(e) = 1/e") && has(&l, "y = (1/e)x"), "{l:?}");
@@ -728,10 +753,10 @@ fn point_slope_is_exact_where_it_can_be() {
     assert!(has(&l, &format!("y {M} 1/2 = (\u{221a}3/2)(x {M} \u{3c0}/6)")), "{l:?}");
     let l = panel(&with(&[("func", s("e^x")), ("a", s("1")), ("normal", s("With its equation")), ("tangent_eq", s("Point-slope")), ("xmin", f(-2.0)), ("xmax", f(3.0)), ("ymin", f(-1.0)), ("ymax", f(8.0))]));
     assert!(has(&l, &format!("y {M} e = e(x {M} 1)")) && has(&l, &format!("y {M} e = {M}(1/e)(x {M} 1)")), "{l:?}");
-    // with no form chosen, the key and the normal take the exact one: here the intercept √3/2 − π/6 is not exact, so point-slope
+    // with no form chosen, the key takes slope-intercept where it is exact (here the intercept √3/2 − π/6 is derived exactly)
     let p = with(&[("func", s("sin(x)")), ("a", s("pi/3")), ("h", s("pi/6")), ("normal", s("With its equation")), ("xunits", s("Multiples of \u{3c0}")), ("xmin", f(-1.0)), ("xmax", f(1.0)), ("xstep", f(0.25)), ("ymin", f(-2.0)), ("ymax", f(2.0)), ("key_line", b(true))]);
     let svg = build(&p).svg;
-    assert!(texts(&svg, "key").join(" ").contains(&format!("tangent y {M} \u{221a}3/2 = (1/2)(x {M} \u{3c0}/3)")));
+    assert!(texts(&svg, "key").join(" ").contains(&format!("tangent y = (1/2)x + \u{221a}3/2 {M} \u{3c0}/6")), "{:?}", texts(&svg, "key"));
     // written forms: y = x − 2 (not y = (x − 2)); y = −4 for a horizontal line in point-slope; |x| for abs(x)
     let l = panel(&with(&[("func", s("x^2 - 4x")), ("a", s("2")), ("h", s("1")), ("secant_eq", s("Point-slope")), ("tangent_eq", s("Point-slope")), ("xmin", f(-1.0)), ("xmax", f(5.0)), ("ymin", f(-5.0)), ("ymax", f(5.0))]));
     // tangent at the vertex (2, −4): y = −4; secant to (3, −3): slope 1, y + 4 = x − 2
@@ -747,8 +772,7 @@ fn point_slope_is_exact_where_it_can_be() {
     assert!(labs.iter().any(|x| x == "Q(\u{221a}2 + 1, 2\u{221a}2 + 3)") && labs.iter().any(|x| x == "P(\u{221a}2, 2)"), "{labs:?}");
     assert!(has(&texts(&o.svg, "panel"), "= 2\u{221a}2 + 1"));
     // 2/π, 3/π and e − 1 are exact forms
-    assert_eq!(exact_form(2.0 / std::f64::consts::PI, 1e-12, false).as_deref(), Some("2/\u{3c0}"));
-    assert_eq!(exact_form(std::f64::consts::E - 1.0, 1e-12, false).as_deref(), Some(&*format!("e {M} 1")));
+    assert_eq!(tx("2/pi", false).as_deref(), Some("2/\u{3c0}"));
     // a rounded coordinate is said with ≈: e^x at 0.1, f = 1.105…
     let o = build(&with(&[("func", s("e^x")), ("a", s("0.1")), ("pt_labels", s("Letters and coordinates")), ("xmin", f(-2.0)), ("xmax", f(3.0)), ("ymin", f(-1.0)), ("ymax", f(8.0))]));
     assert!(my_labels(&o.svg).iter().any(|x| x.1 == "P \u{2248} (0.1, 1.11)"), "{:?}", my_labels(&o.svg));
@@ -826,4 +850,174 @@ fn a_flat_secant_has_no_triangle() {
     let o = build(&with(&[("func", s("-x^2 + 6x - 5")), ("a", s("2")), ("h", s("2")), ("secant_triangle", b(true)), ("xmin", f(-1.0)), ("xmax", f(6.0)), ("ymin", f(-4.0)), ("ymax", f(5.0))]));
     assert!(!o.svg.contains(r#"data-leg="rise""#) && o.notes.join(" ").contains("horizontal"), "{:?}", o.notes);
     assert!(has(&texts(&o.svg, "panel"), "slope m = 0"));
+}
+
+// ───────────────────────── round 2: the second check's numerical faults ─────────────────────────
+
+/// A written number read back (√n, π, e, fractions, −): its value.
+fn read_back(t: &str) -> Option<f64> {
+    let mut s = String::new();
+    let cs: Vec<char> = t.trim().chars().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        match cs[i] {
+            '\u{221a}' => { s.push_str("sqrt("); i += 1; while i < cs.len() && cs[i].is_ascii_digit() { s.push(cs[i]); i += 1; } s.push(')'); continue; }
+            '\u{3c0}' => s.push_str("pi"),
+            '\u{2212}' => s.push('-'),
+            c => s.push(c),
+        }
+        i += 1;
+    }
+    ex::eval(&ex::parse(&s)?, 0.0).is_finite().then(|| ex::eval(&ex::parse(&s).unwrap(), 0.0))
+}
+
+/// f′(a) is the derivative to every digit shown, however near a pole of f: 60 points 0.2, 0.05, 0.01 and 0.001 either side
+/// of poles of tan, sec, csc, cot, 1/(x − c) and 1/(x − c)², and 0.2 … 0.001 from the end of ln's and √'s domains, each
+/// against its closed-form derivative (sec² x; sec x tan x; −csc x cot x; −csc² x; −1/(x − c)²; −2/(x − c)³; 1/x; 1/(2√x)),
+/// written to 6 places.
+#[test]
+fn derivative_is_right_near_poles() {
+    use std::f64::consts::PI;
+    type D = fn(f64) -> f64;
+    let fams: Vec<(&str, f64, D)> = vec![
+        ("tan(x)", PI / 2.0, |x| 1.0 / x.cos().powi(2)),
+        ("tan(x)", -PI / 2.0, |x| 1.0 / x.cos().powi(2)),
+        ("sec(x)", PI / 2.0, |x| x.tan() / x.cos()),
+        ("csc(x)", PI, |x| -1.0 / (x.sin() * x.tan())),
+        ("cot(x)", PI, |x| -1.0 / x.sin().powi(2)),
+        ("1/(x - 0.7)", 0.7, |x| -1.0 / (x - 0.7).powi(2)),
+        ("1/(x - 0.7)^2", 0.7, |x| -2.0 / (x - 0.7).powi(3)),
+    ];
+    let mut n = 0;
+    let mut bad = vec![];
+    let mut check = |func: &str, a: f64, d: fn(f64) -> f64| {
+        let at = format!("{a:.12}");
+        let a: f64 = at.parse().unwrap();
+        let p = with(&[("func", s(func)), ("a", s(&at)), ("show_secant", b(false)), ("slope_form", s("Decimals")), ("dec", Value::I(6)), ("xmin", f((a - 3.0).floor())), ("xmax", f((a + 3.0).ceil())), ("ymin", f(-20.0)), ("ymax", f(20.0)), ("ystep", f(5.0))]);
+        let l = panel(&p);
+        let Some(line) = l.iter().find(|x| x.contains('\u{2032}')) else { bad.push(format!("{func} at {at}: no slope written: {l:?}")); return };
+        let val = line.rsplit([' ']).next().and_then(read_back);
+        let want = d(a);
+        match val {
+            Some(v) if (v - want).abs() <= 0.5e-6 + 1e-12 * want.abs() => {}
+            _ => bad.push(format!("{func} at {at}: wrote {line}, true {want}")),
+        }
+        n += 1;
+    };
+    for (func, pole, d) in &fams {
+        for dist in [0.2, 0.05, 0.01, 0.001] { for side in [-1.0, 1.0] { check(func, pole + side * dist, *d); } }
+    }
+    for dist in [0.2, 0.05, 0.01, 0.001] { check("ln(x)", dist, |x| 1.0 / x); check("sqrt(x)", dist, |x| 0.5 / x.sqrt()); }
+    // the second check's cases: tan at 1.5 (199.85…), 1.55, 1.57; sec at 1.5; 1/(x − 0.05) at 0.1 (−400); 1/(x − 0.7) at 0.65
+    check("tan(x)", 1.5, |x| 1.0 / x.cos().powi(2));
+    check("tan(x)", 1.55, |x| 1.0 / x.cos().powi(2));
+    check("tan(x)", 1.57, |x| 1.0 / x.cos().powi(2));
+    check("sec(x)", 1.5, |x| x.tan() / x.cos());
+    check("1/(x - 0.05)", 0.1, |x| -1.0 / (x - 0.05).powi(2));
+    check("1/(x - 0.7)", 0.65, |x| -1.0 / (x - 0.7).powi(2));
+    println!("derivative points checked: {n}");
+    assert!(n >= 60, "{n}");
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    // and in the exact mode, 1/(x − 0.05) at 0.1 is exactly −400 (exact arithmetic on what was typed)
+    let l = panel(&with(&[("func", s("1/(x-0.05)")), ("a", s("0.1")), ("h", s("0.5")), ("xmin", f(-1.0)), ("xmax", f(1.0)), ("ymin", f(-10.0)), ("ymax", f(30.0)), ("ystep", f(5.0)), ("worked", b(true)), ("tangent_eq", s("Point-slope"))]));
+    assert!(has(&l, &format!("f\u{2032}(0.1) = {M}400")), "{l:?}");
+}
+
+/// An exact form is written only when derived exactly; anything else is a decimal with ≈. Over 200 decimal and mixed
+/// inputs: no written value mixes a root (or π) with a decimal of more than 3 places, and every value written with "=" is
+/// the true value (checked against the closed-form f and f′).
+#[test]
+fn exact_forms_are_only_derived() {
+    type F = fn(f64) -> f64;
+    let fams: Vec<(&str, F, F)> = vec![
+        ("x^2", |x| x * x, |x| 2.0 * x),
+        ("x^3", |x| x.powi(3), |x| 3.0 * x * x),
+        ("sin(x)", f64::sin, f64::cos),
+        ("cos(x)", f64::cos, |x| -x.sin()),
+        ("tan(x)", f64::tan, |x| 1.0 / x.cos().powi(2)),
+        ("e^x", f64::exp, f64::exp),
+        ("ln(x)", f64::ln, |x| 1.0 / x),
+        ("sqrt(x)", f64::sqrt, |x| 0.5 / x.sqrt()),
+        ("1/x", |x| 1.0 / x, |x| -1.0 / (x * x)),
+        ("1000(1.05)^x", |x| 1000.0 * 1.05f64.powf(x), |x| 1000.0 * 1.05f64.powf(x) * 1.05f64.ln()),
+    ];
+    let a_s = ["0.3", "1.1", "1.2", "2.5", "e", "pi/4", "sqrt(2)", "1.0001"];
+    let h_s = ["0.5", "0.0001", "-0.4", "0.2"];
+    let mut n = 0;
+    let mut bad = vec![];
+    for (func, fv, dv) in &fams {
+        for at in a_s {
+            for ht in h_s {
+                let a = ex::eval(&ex::parse(&at.replace("pi", "pi")).unwrap(), 0.0);
+                let h: f64 = ht.parse().unwrap();
+                let p = with(&[("func", s(func)), ("a", s(at)), ("h", s(ht)), ("worked", b(true)), ("table", b(true)), ("key_line", b(true)), ("normal", s("With its equation")), ("tangent_eq", s("Slope-intercept")), ("secant_eq", s("Point-slope")), ("pt_labels", s("Letters and coordinates")), ("xmin", f(-1.0)), ("xmax", f(4.0)), ("ymin", f(-5.0)), ("ymax", f(30.0)), ("ystep", f(5.0))]);
+                let o = build(&p);
+                if o.notes.iter().any(|x| x.contains("undefined")) { continue; }
+                n += 1;
+                // (superscripts read as ^: 3e^2, not 3e2)
+                let mut written: Vec<String> = texts(&o.svg, "panel^");
+                written.extend(texts(&o.svg, "key^"));
+                written.extend(my_labels(&o.svg).into_iter().map(|t| t.1));
+                for line in &written {
+                    // a root or π beside a decimal of 4 or more places
+                    let cs: Vec<char> = line.chars().collect();
+                    let mut k = 0;
+                    while k < cs.len() {
+                        if cs[k].is_ascii_digit() {
+                            let st = k;
+                            while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+                            let tok: String = cs[st..k].iter().collect();
+                            let places = tok.split_once('.').map(|(_, f)| f.len()).unwrap_or(0);
+                            let near: String = cs[st.saturating_sub(4)..(k + 4).min(cs.len())].iter().collect();
+                            if places > 3 && (near.contains('\u{221a}') || near.contains('\u{3c0}')) { bad.push(format!("{func} a={at} h={ht}: mixed form in {line}")); }
+                            continue;
+                        }
+                        k += 1;
+                    }
+                }
+                // every "=" slope is the true value: f′(a), and the secant's (f(a + h) − f(a))/h
+                let want_d = dv(a);
+                let want_m = (fv(a + h) - fv(a)) / h;
+                for line in &written {
+                    let checks: Vec<(&str, f64)> = vec![("\u{2032}(", want_d), ("m = ", want_m)];
+                    for (marker, want) in checks {
+                        if let Some(i) = line.find(marker) {
+                            let rest = &line[i..];
+                            if let Some(j) = rest.find(" = ") {
+                                let val: String = rest[j + 3..].split(';').next().unwrap_or("").split(" (").next().unwrap_or("").trim().trim_end_matches('.').to_string();
+                                if let Some(v) = read_back(&val) {
+                                    if (v - want).abs() > 1e-9 * (1.0 + want.abs()) { bad.push(format!("{func} a={at} h={ht}: {line} is not {want}")); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    println!("exactness inputs checked: {n}");
+    assert!(n >= 200, "{n}");
+    assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// The figure's tree reads every expression as the grid's reader does (the same value at every x where the reader gives
+/// one; nothing where it gives nothing), apart from the odd roots of negative numbers, which the tree takes as real.
+#[test]
+fn the_tree_reads_as_the_grid_does() {
+    let exprs = ["x^2", "2x^2 - 3x + 1", "-x^2", "x^-1", "2^-1x", "2^x", "e^x", "2ex", "xe^x", "x e^(-x)", "sin(x)", "sin(x)^2", "sin^-1(x)", "arcsin(x)", "tan(x)", "sec(x)", "csc(x)", "cot(x)", "arctan(x)", "acos(x)", "arcsec(x)", "arccsc(x)", "arccot(x)", "ln(x)", "log(x)", "log_2(x)", "exp(x)", "sqrt(x)", "sqrt(x + 2)", "|x - 1|", "abs(x)*x", "1/x", "1/(x - 0.05)", "(x + 1)/(x - 1)", "x/(x^2 + 1)", "x^0.5", "x^(1/2)", "x^2/4", "3x(x - 1)", "(x - 1)(x + 2)", "4/3pi x^3", "pi x^2", "\u{3c0}x", "2.5x", ".5x", "1e2x", "x^2e3", "100e^(0.5x)", "1000(1.05)^x", "x^x", "sin(2x)cos(x)", "-16x^2 + 64x", "x^3 - 6x^2 + 9x", "5x^4 - 2", "1/(x^2 + 1)", "e^(-x^2)", "ln(x + 1)", "x ln(x)", "sin(x)/x", "(x^2 - 1)/(x - 1)"];
+    let xs = [-2.5, -1.0, -0.3, 0.0, 0.25, 0.5, 1.0, 1.7, 2.0, 3.3];
+    let mut bad = vec![];
+    for e in exprs {
+        let tree = ex::parse(e);
+        for x in xs {
+            let grid = super::eval(e, x).filter(|v| v.is_finite());
+            let mine = tree.as_ref().map(|t| ex::eval(t, x)).filter(|v| v.is_finite());
+            let same = match (grid, mine) { (Some(g), Some(m)) => (g - m).abs() <= 1e-12 * (1.0 + g.abs()), (None, None) => true, _ => false };
+            if !same { bad.push(format!("{e} at {x}: grid {grid:?}, tree {mine:?}")); }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    // the one difference on purpose: (−8)^(1/3) = −2 in the tree, nothing in the reader
+    assert_eq!(super::eval("x^(1/3)", -8.0).filter(|v| v.is_finite()), None);
+    assert!((ex::eval(&ex::parse("x^(1/3)").unwrap(), -8.0) + 2.0).abs() < 1e-12);
 }

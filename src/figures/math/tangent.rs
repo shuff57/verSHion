@@ -21,7 +21,8 @@ use super::super::svg::{esc, Doc};
 use super::super::{labels, ParamDef, Params, Value};
 use super::flat::{parse_typed, pretty};
 use super::{coordinate_grid_build, coordinate_grid_params, eval, grid_layout, math_tspans, GridL, SERIF};
-use std::f64::consts::{E, PI};
+use super::tangent_expr::{self as ex, Ex};
+use std::f64::consts::PI;
 
 pub(crate) const ID: &str = "tangent-secant-lines";
 
@@ -92,114 +93,48 @@ pub(crate) fn warnings(p: &Params) -> Vec<String> { build(p).notes }
 
 // ───────────────────────── numbers ─────────────────────────
 
-/// A value as written: its text and whether that text is exact.
+/// A value as written: its value, its text, whether that text is exact, and its exact value where it was derived exactly
+/// (from what was typed, by exact arithmetic) — never recognised from a float.
 #[derive(Clone, Debug)]
-pub(crate) struct Num { pub v: f64, pub s: String, pub exact: bool }
+pub(crate) struct Num { pub v: f64, pub s: String, pub exact: bool, pub ex: Option<Ex> }
 
 fn minus(s: &str) -> String { s.replace('-', "\u{2212}") }
 
-/// A decimal rounded to `dec` places, trailing zeros dropped; a small nonzero value keeps two significant figures
-/// rather than reading as 0.
+/// A decimal rounded to `dec` places, trailing zeros dropped; a small nonzero value keeps two significant figures rather than
+/// reading as 0.
 pub(crate) fn decimal(v: f64, dec: usize) -> String {
     let mut dec = dec;
-    if v != 0.0 && v.is_finite() && v.abs() < 0.5 * 10f64.powi(-(dec as i32)) { dec = ((-v.abs().log10()).ceil() as usize + 1).min(12); }
+    if v != 0.0 && v.is_finite() && v.abs() >= 1e-12 && v.abs() < 0.5 * 10f64.powi(-(dec as i32)) { dec = ((-v.abs().log10()).ceil() as usize + 1).min(12); }
     let s = format!("{:.*}", dec, v);
     let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
     if s == "-0" { "0".into() } else { minus(&s) }
 }
 
-fn rat(v: f64, qmax: i64, tol: f64) -> Option<(i64, i64)> {
-    if !v.is_finite() || v.abs() > 1e9 { return None; }
-    (1..=qmax).find_map(|q| { let pn = (v * q as f64).round(); ((pn / q as f64 - v).abs() <= tol).then_some((pn as i64, q)) })
-}
-fn gcd(a: i64, b: i64) -> i64 { let (mut a, mut b) = (a.abs(), b.abs()); while b != 0 { let t = a % b; a = b; b = t; } a }
-fn squarefree(n: i64) -> bool { (2..=10).all(|k| n % (k * k) != 0) }
-
-/// A rational number as written: an integer, a terminating decimal (when decimals were typed), or p/q.
-fn rational_text(v: f64, tol: f64, dec_ok: bool, qmax: i64) -> Option<String> {
-    let sign = if v < 0.0 { "\u{2212}" } else { "" };
-    let a = v.abs();
-    if (a - a.round()).abs() <= tol && a < 1e12 { return Some(if a.round() == 0.0 { "0".into() } else { format!("{sign}{}", a.round() as i64) }); }
-    if dec_ok {
-        for k in 1..=6 {
-            let q = 10f64.powi(k);
-            let n = (a * q).round();
-            if (n / q - a).abs() <= tol { return Some(format!("{sign}{}", decimal(n / q, k as usize))); }
-        }
-    }
-    rat(a, qmax, tol).map(|(n, q)| format!("{sign}{n}/{q}"))
-}
-
-/// k·sym/q written as a textbook does: √2, 3√2/4, π/2, 2e.
-fn unit(k: i64, q: i64, sym: &str) -> String {
-    let top = if k == 1 { sym.to_string() } else { format!("{k}{sym}") };
-    if q == 1 { top } else { format!("{top}/{q}") }
-}
-
-/// The exact form of `v` (within `tol`), or None. `dec_ok`: terminating decimals are written as decimals (the inputs
-/// were typed as decimals).
-pub(crate) fn exact_form(v: f64, tol: f64, dec_ok: bool) -> Option<String> {
-    if !v.is_finite() { return None; }
-    if v.abs() <= tol { return Some("0".into()); }
-    let sign = if v < 0.0 { "\u{2212}" } else { "" };
-    let a = v.abs();
-    if let Some(r) = rational_text(v, tol, dec_ok, 1000) { return Some(r); }
-    for n in (2..100).filter(|n| squarefree(*n)) {
-        let r = (n as f64).sqrt();
-        if let Some((k, q)) = rat(a / r, 24, tol / r) { return Some(format!("{sign}{}", unit(k, q, &format!("\u{221a}{n}")))); }
-    }
-    if let Some((k, q)) = rat(a / PI, 12, tol / PI) { return Some(format!("{sign}{}", unit(k, q, "\u{3c0}"))); }
-    if let Some((k, q)) = rat(a * PI, 12, tol * PI) { return Some(if q == 1 { format!("{sign}{k}/\u{3c0}") } else { format!("{sign}{k}/({q}\u{3c0})") }); }
-    for (k, sym) in [(1, "e"), (2, "e^2"), (3, "e^3")] {
-        let r = E.powi(k);
-        if let Some((n, q)) = rat(a / r, 12, tol / r) { return Some(format!("{sign}{}", unit(n, q, sym))); }
-    }
-    if let Some((n, q)) = rat(a * E, 12, tol * E) { return Some(if q == 1 { format!("{sign}{n}/e") } else { format!("{sign}{n}/({q}e)") }); }
-    // a rational plus one irrational term: 1 + √2, 3 + 2√2, π/4 + 0.1, e − 1
-    let mut consts: Vec<(f64, String)> = (2..31).filter(|n| squarefree(*n)).map(|n| ((n as f64).sqrt(), format!("\u{221a}{n}"))).collect();
-    consts.push((PI, "\u{3c0}".into()));
-    consts.push((E, "e".into()));
-    for (kv, sym) in &consts {
-        for q in 1..=12i64 {
-            for k in 1..=24i64 {
-                if gcd(k, q) != 1 { continue; }
-                for sg in [1.0, -1.0] {
-                    let s = sg * k as f64 / q as f64;
-                    let r = v - s * kv;
-                    if r.abs() <= 1e-9 { continue; }
-                    let Some(rt) = rational_text(r, tol, dec_ok, 12) else { continue };
-                    let term = unit(k, q, sym);
-                    let rabs = rt.trim_start_matches('\u{2212}');
-                    return Some(match (sg > 0.0, r > 0.0) {
-                        (true, true) => format!("{term} + {rabs}"),
-                        (true, false) => format!("{term} \u{2212} {rabs}"),
-                        (false, true) => format!("{rabs} \u{2212} {term}"),
-                        (false, false) => format!("\u{2212}{term} \u{2212} {rabs}"),
-                    });
-                }
-            }
-        }
-    }
-    None
-}
+/// The exact text of `v`, or None: only from an exact value derived by exact arithmetic (see `tangent_expr`).
+pub(crate) fn exact_text(x: &Ex, dec_ok: bool) -> Option<String> { ex::text(x, dec_ok) }
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Ctx { pub exact: bool, pub dec: usize, pub dec_ok: bool }
 impl Ctx {
-    /// A worked-out value: exact when the figure writes exact numbers and one is found, else rounded.
-    pub(crate) fn num(&self, v: f64, tol: f64) -> Num {
-        if self.exact && tol > 0.0 { if let Some(s) = exact_form(v, tol, self.dec_ok) { return Num { v, s, exact: true }; } }
+    /// A worked-out value: exact when the figure writes exact numbers and it was derived exactly, else rounded (with ≈
+    /// unless the rounding is the value itself).
+    pub(crate) fn make(&self, x: Option<Ex>, v: f64) -> Num {
+        if self.exact { if let Some(s) = x.as_ref().and_then(|x| exact_text(x, self.dec_ok)) { return Num { v, s, exact: true, ex: x }; } }
+        let v = x.as_ref().map(|x| x.value()).unwrap_or(v);
         let s = decimal(v, self.dec);
-        let back: f64 = s.replace('\u{2212}', "-").parse().unwrap_or(f64::NAN);
-        Num { v, exact: (back - v).abs() <= tol.max(1e-12 * v.abs().max(1.0)), s }
+        // a rounded value is "=" only when it is the exact value itself (a terminating decimal of an exact rational)
+        let exact = x.as_ref().and_then(|x| x.rational()).is_some_and(|(p, q)| { let back: f64 = s.replace('\u{2212}', "-").parse().unwrap_or(f64::NAN); (back * q as f64 - p as f64).abs() < 1e-9 });
+        Num { v, s, exact, ex: x }
     }
-    /// A value made of typed values (a + h): always exact where possible.
-    pub(crate) fn given(&self, v: f64) -> Num {
-        let tol = 1e-11 * v.abs().max(1.0);
-        if let Some(s) = exact_form(v, tol, self.dec_ok) { return Num { v, s, exact: true }; }
-        Num { v, s: decimal(v, self.dec.max(3)), exact: false }
+    /// A value made of typed values (a + h): written exactly where it was derived exactly, in either mode.
+    pub(crate) fn given(&self, x: Option<Ex>, v: f64) -> Num {
+        if let Some(s) = x.as_ref().and_then(|x| exact_text(x, self.dec_ok)) { return Num { v, s, exact: true, ex: x }; }
+        Num { v, s: decimal(v, self.dec.max(3)), exact: false, ex: x }
     }
 }
+fn ex_sub(a: &Num, b: &Num) -> Option<Ex> { a.ex.as_ref()?.sub(b.ex.as_ref()?) }
+fn ex_mul(a: &Num, b: &Num) -> Option<Ex> { a.ex.as_ref()?.mul(b.ex.as_ref()?) }
+fn ex_div(a: &Num, b: &Num) -> Option<Ex> { a.ex.as_ref()?.div(b.ex.as_ref()?) }
 
 /// A number written with more than one term (1 + √2): bracketed wherever it is multiplied, divided or subtracted.
 fn compound(n: &Num) -> bool { n.s.contains(' ') }
@@ -213,7 +148,7 @@ fn paren_den(n: &Num) -> String { if n.s.starts_with('\u{2212}') || compound(n) 
 /// The same number rounded (an equation or a working line with one inexact number is written all in decimals).
 fn as_dec(n: &Num, dec: usize) -> Num {
     let plain = n.s.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '\u{2212}');
-    if n.exact && plain { n.clone() } else { Num { v: n.v, s: decimal(n.v, dec), exact: false } }
+    if n.exact && plain { n.clone() } else { Num { v: n.v, s: decimal(n.v, dec), exact: false, ex: n.ex.clone() } }
 }
 
 /// m times `what` (a variable or a bracket): 2x, x, −x, (1/2)x, √2·x, πx, (1 + √2)x, 2(x − 1).
@@ -258,7 +193,7 @@ fn line_eq(form: &str, dep: &str, var: &str, m: &Num, b: &Num, x1: &Num, y1: &Nu
         let left = minus_n(dep, y1);
         let right = if is_zero(x1) { times(m, var) } else {
             let inner = minus_n(var, x1);
-            // y = 1(x − 2) is y = x − 2
+            // y + 4 = 1(x − 2) is y + 4 = x − 2
             if m.s == "1" { inner } else { times(m, &format!("({inner})")) }
         };
         return format!("{left} {rel} {right}");
@@ -267,69 +202,53 @@ fn line_eq(form: &str, dep: &str, var: &str, m: &Num, b: &Num, x1: &Num, y1: &Nu
     format!("{dep} {rel} {}", plus(&times(m, var), b))
 }
 
-/// f'(a) by Ridders' method (Numerical Recipes `dfridr`): (derivative, error estimate).
-fn ridders(f: &dyn Fn(f64) -> Option<f64>, a: f64, h0: f64) -> Option<(f64, f64)> {
-    const CON: f64 = 1.4;
-    const NTAB: usize = 12;
-    let c = |h: f64| Some((f(a + h)? - f(a - h)?) / (2.0 * h));
-    let mut t = [[0.0f64; NTAB]; NTAB];
-    let mut hh = h0;
-    t[0][0] = c(hh)?;
-    let (mut err, mut ans) = (f64::MAX, t[0][0]);
-    for i in 1..NTAB {
-        hh /= CON;
-        t[0][i] = c(hh)?;
-        let mut fac = CON * CON;
-        for j in 1..=i {
-            t[j][i] = (t[j - 1][i] * fac - t[j - 1][i - 1]) / (fac - 1.0);
-            fac *= CON * CON;
-            let e = (t[j][i] - t[j - 1][i]).abs().max((t[j][i] - t[j - 1][i - 1]).abs());
-            if e <= err { err = e; ans = t[j][i]; }
-        }
-        if (t[i][i] - t[i - 1][i - 1]).abs() >= 2.0 * err { break; }
-    }
-    ans.is_finite().then_some((ans, err))
-}
-
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Slope { Finite(f64, f64), Vertical, Corner(f64, f64), Cusp, OneSided, Undefined }
+pub(crate) enum Slope { Finite(f64), Vertical, Corner(f64, f64), Cusp, OneSided, Undefined }
 
-/// The slope of f at a: finite (with its error), a vertical tangent, a corner or cusp, f defined on one side only.
-pub(crate) fn slope_at(f: &dyn Fn(f64) -> Option<f64>, a: f64) -> Slope {
-    let Some(fa) = f(a) else { return Slope::Undefined };
+/// The slope of f at a, from the derivative's tree `df` (exact to the last digit wherever f is differentiable). Where the
+/// derivative's formula gives no value at a, the derivative just either side tells a corner (finite, different), a cusp
+/// (unbounded, opposite signs), a vertical tangent (unbounded, one sign), or a removable gap in the formula (|x|·x at 0:
+/// the two sides agree).
+pub(crate) fn slope_at(f: &dyn Fn(f64) -> Option<f64>, df: &dyn Fn(f64) -> Option<f64>, a: f64) -> Slope {
+    if f(a).is_none() { return Slope::Undefined; }
     let s = a.abs().max(1.0);
-    let both = |t: f64| f(a - t).is_some() && f(a + t).is_some();
-    let mut h0 = 0.1 * s;
-    while !both(h0) && h0 > 1e-7 * s { h0 /= 10.0; }
-    if !both(h0) { return if f(a + 1e-7 * s).is_some() || f(a - 1e-7 * s).is_some() { Slope::OneSided } else { Slope::Undefined }; }
-    let side = |t: f64| -> Option<(f64, f64)> { Some(((fa - f(a - t)?) / t, (f(a + t)? - fa) / t)) };
-    let (t6, t4) = ((1e-6 * s).min(h0), (1e-4 * s).min(h0));
-    if let (Some((l6, r6)), Some((l4, r4))) = (side(t6), side(t4)) {
-        let (d6, d4) = ((l6 - r6).abs(), (l4 - r4).abs());
-        if d6 > 1e-3 * (1.0 + l6.abs() + r6.abs()) && d6 > 0.3 * d4 {
-            // slopes from both sides growing without bound as the step shrinks: a cusp, not a corner
-            return if l6.abs() > 2.0 * l4.abs() && r6.abs() > 2.0 * r4.abs() && l6.abs() > 10.0 { Slope::Cusp } else { Slope::Corner(l6, r6) };
+    let (e7, e4) = (1e-7 * s, 1e-4 * s);
+    if f(a - e7).is_none() || f(a + e7).is_none() { return if f(a - e7).is_some() || f(a + e7).is_some() { Slope::OneSided } else { Slope::Undefined }; }
+    if let Some(d) = df(a) { return Slope::Finite(d); }
+    let (l7, r7, l4, r4) = (df(a - e7), df(a + e7), df(a - e4), df(a + e4));
+    match (l7, r7) {
+        (Some(l), Some(r)) => {
+            // unbounded: three times larger at a thousandth of the distance (x^(2/3): 143 against 14; x^(1/3): 1547 against 15)
+            let grow = |near: f64, far: Option<f64>| near.abs() > 10.0 && far.is_none_or(|w| near.abs() > 3.0 * w.abs());
+            if grow(l, l4) && grow(r, r4) { return if l.signum() == r.signum() { Slope::Vertical } else { Slope::Cusp }; }
+            if (l - r).abs() <= 1e-5 * (1.0 + l.abs()) { Slope::Finite(0.5 * (l + r)) } else { Slope::Corner(l, r) }
         }
+        _ => Slope::Undefined,
     }
-    let c = |t: f64| Some((f(a + t)? - f(a - t)?) / (2.0 * t));
-    if let (Some(c1), Some(c2)) = (c((1e-4 * s).min(h0)), c((1e-7 * s).min(h0))) {
-        if c2.abs() > 1e3 && c2.abs() > 5.0 * c1.abs() { return Slope::Vertical; }
-    }
-    match ridders(f, a, h0) { Some((d, e)) => Slope::Finite(d, e), None => Slope::Undefined }
 }
 
-/// f(x) as this figure reads it: the grid's reader, with a value it gives as enormous at an exact pole (tan(π/2) is
-/// 1.6e16 because π is rounded) taken as undefined: there the values just either side are far smaller, or missing.
-pub(crate) fn fval(expr: &str, x: f64) -> Option<f64> {
-    let v = eval(expr, x).filter(|v| v.is_finite())?;
+/// The slope of an expression in x (the reader's spelling) at a: its tree's derivative, classified as `slope_at` does.
+pub(crate) fn slope_of(expr: &str, a: f64) -> Slope {
+    let Some(f) = ex::parse(expr) else { return Slope::Undefined };
+    let df = ex::deriv(&f);
+    slope_at(&|x| guarded(&|t| ex::eval(&f, t), x), &|x| Some(ex::eval(&df, x)).filter(|v| v.is_finite()), a)
+}
+
+/// A value of the tree at x, with an enormous value at an exact pole (tan(π/2) is 1.6e16 because π is rounded) taken as
+/// undefined: there the values just either side are far smaller, or missing.
+fn guarded(g: &dyn Fn(f64) -> f64, x: f64) -> Option<f64> {
+    let v = g(x);
+    if !v.is_finite() { return None; }
     if v.abs() > 1e7 {
         let d = 1e-6 * x.abs().max(1.0);
-        let near: Vec<Option<f64>> = [x - d, x + d].iter().map(|w| eval(expr, *w).filter(|w| w.is_finite()).map(f64::abs)).collect();
+        let near: Vec<Option<f64>> = [x - d, x + d].iter().map(|w| Some(g(*w)).filter(|w| w.is_finite()).map(f64::abs)).collect();
         let lo = near.iter().map(|w| w.unwrap_or(0.0)).fold(f64::INFINITY, f64::min);
         if near.iter().any(|w| w.is_none()) || v.abs() > 1e4 * lo { return None; }
     }
     Some(v)
 }
+/// f(x) for an expression in x as this figure reads it (its tree, poles undefined).
+pub(crate) fn fval(expr: &str, x: f64) -> Option<f64> { let n = ex::parse(expr)?; guarded(&|t| ex::eval(&n, t), x) }
 
 // ───────────────────────── the typed inputs ─────────────────────────
 
@@ -357,15 +276,14 @@ fn plain_symbols(t: &str) -> String {
     out
 }
 
-/// The real odd root of a negative base (see the module's notes): `b^(p/q)` with q odd becomes |b|^(p/q), times the sign
-/// of b when p is odd. The sign is 2/(1 + e^(−10^300 b)) − 1, which the reader gives as exactly ±1 (and 0 at 0).
+/// The real odd root of a negative base for the grid's reader (see the module's notes): `b^(p/q)` with q odd becomes
+/// |b|^(p/q), times the sign of b when p is odd. The sign is 2/(1 + e^(−10^300 b)) − 1, which the reader gives as exactly ±1.
 pub(crate) fn real_odd_roots(s: &str) -> String {
     let cs: Vec<char> = s.chars().collect();
     let mut out: Vec<char> = vec![];
     let mut i = 0;
     while i < cs.len() {
         if cs[i] == '^' {
-            // the exponent: (p/q) with integers, q odd
             let rest: String = cs[i + 1..].iter().collect();
             let compact: String = rest.chars().take_while(|c| *c != ')').filter(|c| !c.is_whitespace()).collect();
             let close = rest.find(')');
@@ -396,6 +314,7 @@ pub(crate) fn real_odd_roots(s: &str) -> String {
     }
     out.into_iter().collect()
 }
+fn gcd(a: i64, b: i64) -> i64 { let (mut a, mut b) = (a.abs(), b.abs()); while b != 0 { let t = a % b; a = b; b = t; } a }
 /// Where the base of a power ending `out` starts: a bracket (with its function's name), a number, x, e or pi.
 fn base_start(out: &[char]) -> Option<usize> {
     let mut j = out.len();
@@ -420,8 +339,9 @@ fn base_start(out: &[char]) -> Option<usize> {
     None
 }
 
-/// The typed function in x for the reader: the variable renamed to x, odd roots made real. Err: what is wrong.
-pub(crate) fn expr_in_x(typed: &str, fname: &str, var: char) -> Result<String, String> {
+/// The typed function in x (the variable renamed to x), in the reader's spelling, before the odd roots are rewritten for
+/// the grid. Err: what is wrong.
+pub(crate) fn expr_plain(typed: &str, fname: &str, var: char) -> Result<String, String> {
     let mut t = plain_symbols(typed.trim()).to_lowercase();
     if let Some(i) = t.find('=') {
         let left: String = t[..i].chars().filter(|c| !c.is_whitespace()).collect();
@@ -449,18 +369,38 @@ pub(crate) fn expr_in_x(typed: &str, fname: &str, var: char) -> Result<String, S
         } else { out.push(c); }
         i += 1;
     }
-    if eval(&out, 0.37).is_none() { return Err("Cannot read the function: check its brackets, and write sin(x), sqrt(x), ln(x) with brackets".into()); }
-    Ok(real_odd_roots(&out))
+    if eval(&out, 0.37).is_none() || ex::parse(&out).is_none() { return Err("Cannot read the function: check its brackets, and write sin(x), sqrt(x), ln(x) with brackets".into()); }
+    Ok(out)
 }
+/// The typed function for the grid's reader: as `expr_plain`, odd roots made real.
+pub(crate) fn expr_in_x(typed: &str, fname: &str, var: char) -> Result<String, String> { expr_plain(typed, fname, var).map(|e| real_odd_roots(&e)) }
 
-/// The function as the panel writes it: √ and π for sqrt and pi, |x| for abs(x).
+/// The function as the panel writes it: √ and π for sqrt and pi, |x| for abs(x), a binary + or − between spaces and no
+/// other spaces, a product of two letters or brackets kept with ·.
 fn shown_func(typed: &str) -> String {
     let t = typed.trim();
     let t = t.split_once('=').map(|(_, r)| r).unwrap_or(t).trim();
-    let s = pretty(&plain_symbols(t)).replace('\u{b7}', "");
+    let s = pretty(&plain_symbols(t));
+    // ·: dropped after a number (2·x is 2x), kept between letters or brackets (x·x^(1/3))
+    let cs: Vec<char> = s.chars().collect();
+    let mut s = String::new();
+    for (i, c) in cs.iter().enumerate() {
+        if *c == '\u{b7}' {
+            let prev = cs[..i].iter().rev().find(|c| **c != ' ');
+            if prev.is_some_and(|p| p.is_ascii_digit()) { continue; }
+        }
+        s.push(*c);
+    }
+    // spacing: one space either side of a binary + or −, none elsewhere
+    let cs: Vec<char> = s.chars().filter(|c| *c != ' ').collect();
+    let mut s = String::new();
+    for (i, c) in cs.iter().enumerate() {
+        let binary = matches!(c, '+' | '\u{2212}') && i > 0 && !matches!(cs[i - 1], '(' | '^' | '*' | '/' | '\u{b7}' | '+' | '\u{2212}');
+        if binary { s.push(' '); s.push(*c); s.push(' '); } else { s.push(*c); }
+    }
     // √(x) as √x: a root of one letter or number needs no bracket
     let s = { let cs: Vec<char> = s.chars().collect(); let mut o = String::new(); let mut i = 0;
-        while i < cs.len() { if cs[i] == '\u{221a}' && i + 3 < cs.len() + 1 && cs.get(i + 1) == Some(&'(') && cs.get(i + 3) == Some(&')') && cs[i + 2].is_alphanumeric() { o.push('\u{221a}'); o.push(cs[i + 2]); i += 4; } else { o.push(cs[i]); i += 1; } } o };
+        while i < cs.len() { if cs[i] == '\u{221a}' && cs.get(i + 1) == Some(&'(') && cs.get(i + 3) == Some(&')') && cs[i + 2].is_alphanumeric() { o.push('\u{221a}'); o.push(cs[i + 2]); i += 4; } else { o.push(cs[i]); i += 1; } } o };
     // abs(...) as |...|
     let cs: Vec<char> = s.chars().collect();
     let mut out = String::new();
@@ -476,29 +416,25 @@ fn shown_func(typed: &str) -> String {
 
 fn plain_typed(s: &str) -> bool { let t = s.trim(); !t.is_empty() && t.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-' || c == '\u{2212}' || c == '+') }
 
-/// A typed number: its value and how it is written (a decimal as typed, anything else in √ and π). Numbers, fractions,
-/// roots, π and e are read (e by the grid's reader, as are ln(2) and the like).
+/// A typed number: its value, how it is written (a decimal as typed, anything else in √ and π), and its exact value.
+/// Numbers, fractions, roots, π and e are read (and ln(2) and the like, as the reader reads them).
 pub(crate) fn typed_num(raw: &str) -> Option<Num> {
     let t = plain_symbols(raw.trim());
     if t.is_empty() { return None; }
-    let v = match parse_typed(&t) {
-        Ok(Some(tv)) => tv.v,
-        _ => {
-            let l = t.to_lowercase();
-            let mut rest = l.clone();
-            for n in NAMES { rest = rest.replace(n, ""); }
-            if rest.chars().any(|c| c.is_ascii_alphabetic() && c != 'e') { return None; }
-            eval(&l, 0.0).filter(|v| v.is_finite())?
-        }
-    };
+    let l = t.to_lowercase();
+    let mut rest = l.clone();
+    for n in NAMES { rest = rest.replace(n, ""); }
+    if rest.chars().any(|c| c.is_ascii_alphabetic() && c != 'e') { return None; }
+    let v = match parse_typed(&t) { Ok(Some(tv)) => tv.v, _ => eval(&l, 0.0).filter(|v| v.is_finite())? };
     if v.abs() > 1e6 { return None; }
+    let ex = ex::typed_exact(&l);
     let s = if plain_typed(&t) {
         let mut s = t.trim_start_matches('+').to_string();
         if s.starts_with('.') { s.insert(0, '0'); }
         if s.starts_with("-.") { s.insert(1, '0'); }
         minus(&s)
     } else { pretty(&t).replace('\u{b7}', "") };
-    Some(Num { v, s, exact: true })
+    Some(Num { v, s, exact: true, ex })
 }
 
 /// Terminating decimals are written as decimals only for values made with a decimal typed (h = 0.1); typed integers and
@@ -540,19 +476,27 @@ pub(crate) struct Model {
     pub notes: Vec<(About, String)>,
 }
 
-fn tangent_at(f: &dyn Fn(f64) -> Option<f64>, an: Num, ctx: Ctx) -> Option<Tangent> {
+/// The function's tree and its derivative's.
+struct Fx { f: ex::Node, df: ex::Node }
+impl Fx {
+    fn f(&self, x: f64) -> Option<f64> { guarded(&|t| ex::eval(&self.f, t), x) }
+    fn df(&self, x: f64) -> Option<f64> { Some(ex::eval(&self.df, x)).filter(|v| v.is_finite()) }
+    fn f_ex(&self, x: &Num) -> Option<Ex> { ex::exact(&self.f, Some(x.ex.as_ref()?)) }
+    fn df_ex(&self, x: &Num) -> Option<Ex> { ex::exact(&self.df, Some(x.ex.as_ref()?)) }
+}
+
+fn tangent_at(fx: &Fx, an: Num, ctx: Ctx) -> Option<Tangent> {
     let a = an.v;
-    let fa = f(a)?;
-    let slope = slope_at(f, a);
-    let fan = ctx.num(fa, 1e-12 * (1.0 + fa.abs()));
+    let fa = fx.f(a)?;
+    let slope = slope_at(&|x| fx.f(x), &|x| fx.df(x), a);
+    let fan = ctx.make(fx.f_ex(&an), fa);
     let (m, b) = match slope {
-        Slope::Finite(d, e) => {
-            let tol = (4.0 * e).max(1e-11 * (1.0 + d.abs()));
-            let tol = if tol > 1e-7 * (1.0 + d.abs()) { 0.0 } else { tol };
-            let m = ctx.num(d, tol);
-            let bv = fa - m.v * a;
-            let btol = if tol > 0.0 { tol * (1.0 + a.abs()) + 1e-11 * (1.0 + bv.abs()) } else { 0.0 };
-            (Some(m), Some(ctx.num(bv, btol)))
+        Slope::Finite(d) => {
+            // the slope exactly where it can be derived (f′ at an exact a), else the derivative's value
+            let m = ctx.make(if fx.df(a).is_some() { fx.df_ex(&an) } else { None }, d);
+            let bex = ex_sub(&fan, &Num { v: 0.0, s: String::new(), exact: true, ex: ex_mul(&m, &an) });
+            let b = ctx.make(bex, fa - d * a);
+            (Some(m), Some(b))
         }
         _ => (None, None),
     };
@@ -585,16 +529,17 @@ pub(crate) fn model(p: &Params) -> Model {
     let dep = if var == 'x' { "y".to_string() } else { fname.clone() };
     let exact = p.s("slope_form") != "Decimals";
     let dec = p.i("dec").clamp(0, 6) as usize;
-    let expr = match expr_in_x(p.s("func"), &fname, var) { Ok(e) => Some(e), Err(e) => { notes.push((About::All, e)); None } };
-    let mut m = Model { expr: expr.clone(), fname: fname.clone(), var: var.to_string(), dep, dec, p: None, secants: vec![], more: vec![], notes: vec![] };
-    let Some(expr) = expr else { m.notes = notes; return m };
-    let f = |x: f64| fval(&expr, x);
-    let fx = |n: &Num| format!("{fname}({})", n.s);
+    let plain = match expr_plain(p.s("func"), &fname, var) { Ok(e) => Some(e), Err(e) => { notes.push((About::All, e)); None } };
+    let mut m = Model { expr: plain.as_ref().map(|e| real_odd_roots(e)), fname: fname.clone(), var: var.to_string(), dep, dec, p: None, secants: vec![], more: vec![], notes: vec![] };
+    let Some(fnode) = plain.as_ref().and_then(|e| ex::parse(e)) else { m.notes = notes; return m };
+    let fx = Fx { df: ex::deriv(&fnode), f: fnode };
+    let f = |x: f64| fx.f(x);
+    let fxs = |n: &Num| format!("{fname}({})", n.s);
     let a_raw = p.s("a");
     match typed_num(a_raw) {
         None => notes.push((About::All, "Type a as a number, such as 1, -1/2, 2.5, sqrt(2), pi/4 or e".into())),
-        Some(an) => match tangent_at(&f, an.clone(), ctx_for(exact, dec, &[a_raw])) {
-            None => notes.push((About::All, format!("{} is undefined: choose another a", fx(&an)))),
+        Some(an) => match tangent_at(&fx, an.clone(), ctx_for(exact, dec, &[a_raw])) {
+            None => notes.push((About::All, format!("{} is undefined: choose another a", fxs(&an)))),
             Some(t) => {
                 match t.slope {
                     Slope::Corner(l, r) => notes.push((About::All, format!("{fname} has a corner at {var} = {}: its slope is {} from the left and {} from the right, so there is no tangent line there", t.an.s, decimal(l, 3), decimal(r, 3)))),
@@ -624,17 +569,16 @@ pub(crate) fn model(p: &Params) -> Model {
                     let ctx = ctx_for(exact, dec, &[a_raw, &raw]);
                     let h = hn.v;
                     let x = t.a + h;
-                    let qx = ctx.given(x);
-                    let Some(fb) = f(x) else { notes.push((About::Secant, format!("{} is undefined, so there is no secant for h = {}", fx(&qx), hn.s))); continue };
+                    let qx = ctx.given(t.an.ex.as_ref().zip(hn.ex.as_ref()).and_then(|(a, h)| a.add(h)), x);
+                    let Some(fb) = f(x) else { notes.push((About::Secant, format!("{} is undefined, so there is no secant for h = {}", fxs(&qx), hn.s))); continue };
+                    let fbn = ctx.make(fx.f_ex(&qx), fb);
                     let fa = t.fan.v;
-                    let mv = (fb - fa) / h;
-                    let tol = 1e-13 * (fa.abs() + fb.abs() + 1.0) / h.abs() + 1e-12 * mv.abs();
-                    let mn = ctx.num(mv, tol);
-                    let bv = fa - mn.v * t.a;
-                    let bn = ctx.num(bv, tol * (1.0 + t.a.abs()) + 1e-12 * (1.0 + bv.abs()));
+                    let mn = ctx.make(ex_sub(&fbn, &t.fan).and_then(|d| d.div(hn.ex.as_ref()?)), (fb - fa) / h);
+                    let bex = t.fan.ex.as_ref().zip(ex_mul(&mn, &t.an)).and_then(|(fa, ma)| fa.sub(&ma));
+                    let bn = ctx.make(bex, fa - mn.v * t.a);
                     let gap = gap_between(&f, t.a, x);
                     if gap { gaps.push(hn.s.clone()); }
-                    m.secants.push(Secant { h, hn, qx, fb: ctx.num(fb, 1e-12 * (1.0 + fb.abs())), m: mn, b: bn, ctx, gap });
+                    m.secants.push(Secant { h, hn, qx, fb: fbn, m: mn, b: bn, ctx, gap });
                 }
                 if !gaps.is_empty() {
                     notes.push((About::Secant, format!("{fname} is undefined or jumps between P and Q for h = {}: the secant joins points on separate pieces of the curve", gaps.join(", "))));
@@ -648,8 +592,8 @@ pub(crate) fn model(p: &Params) -> Model {
     for (v, raw) in more {
         if m.p.as_ref().is_some_and(|t| (t.a - v.v).abs() < 1e-12) || m.more.iter().any(|t| (t.a - v.v).abs() < 1e-12) { continue; }
         if m.more.len() == MAX_MORE_A { notes.push((About::More, format!("More tangents: only the first {MAX_MORE_A} are drawn"))); break; }
-        match tangent_at(&f, v.clone(), ctx_for(exact, dec, &[&raw])) {
-            None => notes.push((About::More, format!("More tangents: {} is undefined", fx(&v)))),
+        match tangent_at(&fx, v.clone(), ctx_for(exact, dec, &[&raw])) {
+            None => notes.push((About::More, format!("More tangents: {} is undefined", fxs(&v)))),
             Some(t) if !matches!(t.slope, Slope::Finite(..) | Slope::Vertical) => notes.push((About::More, format!("More tangents: {fname} has no tangent line at {var} = {}", t.an.s))),
             Some(t) => m.more.push(t),
         }
@@ -1007,8 +951,8 @@ pub(super) fn build(p0: &Params) -> Out {
     let tangent_exists = tan.is_some_and(|t| matches!(t.slope, Slope::Finite(..) | Slope::Vertical));
     // the normal: its slope (None: vertical), when P has a tangent
     let normal_slope: Option<Num> = tan.and_then(|t| match (&t.slope, &t.m) {
-        (Slope::Vertical, _) => Some(t.ctx.num(0.0, 1e-12)),
-        (_, Some(mn)) if !is_zero(mn) => Some(t.ctx.num(-1.0 / mn.v, if mn.exact { 1e-10 * (1.0 + 1.0 / mn.v.abs()) } else { 0.0 })),
+        (Slope::Vertical, _) => Some(t.ctx.make(Some(Ex::rat(ex::R(0, 1))), 0.0)),
+        (_, Some(mn)) if !is_zero(mn) => Some(t.ctx.make(mn.ex.as_ref().and_then(|m| m.inv()).map(|i| i.neg()), -1.0 / mn.v)),
         _ => None,
     });
     let normal_on = p.s("normal") != "Off" && !curve_only && tangent_exists;
@@ -1080,7 +1024,7 @@ pub(super) fn build(p0: &Params) -> Out {
                 over += &leg_svg(c, qq, tri_col, "rise");
                 sc.segs.push((pp, c));
                 sc.segs.push((c, qq));
-                let rise = s.ctx.num(s.fb.v - t.fan.v, if s.fb.exact && t.fan.exact { 1e-12 * (1.0 + s.fb.v.abs() + t.fan.v.abs()) } else { 0.0 });
+                let rise = s.ctx.make(ex_sub(&s.fb, &t.fan), s.fb.v - t.fan.v);
                 let rise_t = if answers { format!("\u{394}{} {} {}", m.dep, if rise.exact { "=" } else { "\u{2248}" }, rise.s) } else { format!("\u{394}{}", m.dep) };
                 let run_t = format!("h = {}", s.hn.s);
                 let below = if qq.1 < pp.1 { 1.0 } else { -1.0 };
@@ -1091,6 +1035,8 @@ pub(super) fn build(p0: &Params) -> Out {
         }
         if let (true, Slope::Finite(..), Some(mn), Some(_)) = (draw_tangent && p.b("tangent_triangle"), &t.slope, t.m.as_ref(), p_px) {
             let step = g.xs;
+            // the step exactly: the count-by as typed (a decimal), times π on a π axis
+            let step_ex = ex::typed_exact(&format!("{}", p.f("xstep"))).and_then(|s| if pi_mode { s.mul(&ex::typed_exact("pi")?) } else { Some(s) });
             let yt = |x: f64| t.fan.v + mn.v * (x - t.a);
             let sec_tri = draw_secant && p.b("secant_triangle") && q_px.is_some();
             let sec_h = m.secants.first().map(|s| s.h).unwrap_or(0.0);
@@ -1128,8 +1074,9 @@ pub(super) fn build(p0: &Params) -> Out {
                 }
             }
             let tri_reqs = |hz: (Pt, Pt), vt: (Pt, Pt), run_x: f64| -> [Req; 2] {
-                let run = t.ctx.given(run_x);
-                let rise = t.ctx.num(mn.v * run_x, if mn.exact { 1e-11 * (1.0 + (mn.v * run_x).abs()) } else { 0.0 });
+                let run_ex = step_ex.as_ref().and_then(|s| s.mul(&ex::typed_exact(&format!("{}", run_x / step))?));
+                let run = t.ctx.given(run_ex.clone(), run_x);
+                let rise = t.ctx.make(mn.ex.as_ref().zip(run_ex.as_ref()).and_then(|(m, r)| m.mul(r)), mn.v * run_x);
                 let rel = if rise.exact { "=" } else { "\u{2248}" };
                 let ((h0, h1), (v0, v1)) = (hz, vt);
                 // the run's label away from the triangle (the rise leg's side), the rise's label away from the run
@@ -1255,7 +1202,7 @@ pub(super) fn build(p0: &Params) -> Out {
                     let e = match &normal_slope {
                         Some(n) => {
                             let bv = t.fan.v - n.v * t.a;
-                            let b = t.ctx.num(bv, if n.exact && t.fan.exact && t.an.exact { 1e-10 * (1.0 + bv.abs()) } else { 0.0 });
+                            let b = t.ctx.make(t.fan.ex.as_ref().zip(ex_mul(n, &t.an)).and_then(|(fa, na)| fa.sub(&na)), bv);
                             // the normal follows the tangent's chosen form while the tangent is drawn
                             let form = if draw_tangent && p.s("tangent_eq") == PS { PS } else { auto_form(n, &b, &t.an, &t.fan) };
                             line_eq(form, &m.dep, &m.var, n, &b, &t.an, &t.fan, dec)
@@ -1278,10 +1225,13 @@ pub(super) fn build(p0: &Params) -> Out {
                             if s.fb.exact && t.fan.exact {
                                 lines.push(ind(vec![mt(&format!("= ({} \u{2212} {})/{} {rel} {}", s.fb.s, paren_neg(&t.fan), paren_den(&s.hn), s.m.s))]));
                             } else {
-                                // one value is rounded: the whole line is in decimals
-                                let d1 = dec + 1;
+                                // one value is rounded: the whole line is in decimals, with places enough for the difference
+                                // to show (f(1.0001) − f(1) with h = 0.0001 needs 6 places, not 1 − 1)
+                                let diff = (s.fb.v - t.fan.v).abs();
+                                let d1 = if diff > 0.0 { (dec + 1).max(((-diff.log10()).ceil() as i64 + 2).max(0) as usize) } else { dec + 1 }.min(12);
                                 let (fb, fa, hd) = (as_dec(&s.fb, d1), as_dec(&t.fan, d1), as_dec(&s.hn, d1));
-                                lines.push(ind(vec![mt(&format!("\u{2248} ({} \u{2212} {})/{} {rel} {}", fb.s, paren_neg(&fa), paren_den(&hd), s.m.s))]));
+                                let md = Num { v: s.m.v, s: decimal(s.m.v, dec), exact: false, ex: None };
+                                lines.push(ind(vec![mt(&format!("\u{2248} ({} \u{2212} {})/{} \u{2248} {}", fb.s, paren_neg(&fa), paren_den(&hd), md.s))]));
                             }
                         } else { lines.push(ind(vec![mt("= "), Part::Blank])); }
                     } else {
