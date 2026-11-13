@@ -274,7 +274,7 @@ impl K {
         if let Some(v) = self.ap { return KR::Ok(K::approx(v.ln())); }
         let lnq = |q: Q| -> K {
             let mut out = K::zero();
-            for (num, sgn) in [(q.n.unsigned_abs(), 1i128), (q.d.unsigned_abs(), -1)] { for (p, e) in factor(num) { out = out.add(&K::atom(Atom::ln(p)).mulq(Q::i(e as i128 * sgn))); } }
+            for (num, sgn) in [(q.n.unsigned_abs(), 1i128), (q.d.unsigned_abs(), -1)] { if num > 1 { out = out.add(&K::atom(Atom::ln(num)).mulq(Q::i(sgn))); } }
             out
         };
         match self.t.as_slice() {
@@ -283,6 +283,7 @@ impl K {
                 for (a, p) in m {
                     let piece = match a.kind {
                         AK::Prime(pr) => K::atom(Atom::ln(pr)).mulq(*p),
+                        AK::Ln(_) | AK::Pi | AK::Fun => K::atom(Atom::fun("ln", &K::atom(a.clone()), a.val.ln())).mulq(*p),
                         AK::E => K::q(*p),
                         _ => K::atom(Atom::fun("ln", &K::atom(a.clone()), a.val.ln())).mulq(*p),
                     };
@@ -607,7 +608,8 @@ pub fn ev(e: &X, x: f64) -> Option<f64> {
             match f { Fun::Abs => a.abs(), Fun::Sin => a.sin(), Fun::Cos => a.cos(), Fun::Atan => a.atan(), Fun::Asin => { if a.abs() > 1.0 { return None; } a.asin() } Fun::Ln => { if a <= 0.0 { return None; } a.ln() } Fun::Floor => a.floor() }
         }
     };
-    v.is_finite().then_some(v)
+    // (a value past the largest number is that largest number: it is there, only huge)
+    if v.is_nan() { None } else if v.is_infinite() { Some(v.signum() * f64::MAX) } else { Some(v) }
 }
 
 pub enum EV { Val(K), Undef, Unk }
@@ -791,6 +793,8 @@ pub enum S {
     Osc(f64, f64),
     /// Keeps oscillating ever wider: no limit (and not ∞).
     OscU,
+    /// Poles keep coming (tan x as x → ∞, 1/sin(1/x) at 0): no limit.
+    Poles,
     /// No values there.
     NoVal,
     Unk,
@@ -814,7 +818,7 @@ fn coarse(s: &S) -> B {
         S::Huge(s) | S::Inf(s) => if *s > 0 { B::PInf } else { B::NInf },
         S::Lim(k) => if k.sign() == Some(0) { B::Zero(0) } else { B::Fin(k.clone()) },
         S::Osc(a, b) => B::Osc(*a, *b),
-        S::OscU => B::OscU,
+        S::OscU | S::Poles => B::OscU,
         S::NoVal => B::NoVal,
         S::Unk => B::Unk,
     }
@@ -827,6 +831,8 @@ fn s_add(a: S, b: S) -> S {
     match (a, b) {
         (NoVal, _) | (_, NoVal) => NoVal,
         (Unk, _) | (_, Unk) => Unk,
+        (Poles, Poles) => Unk,
+        (Poles, o) | (o, Poles) => if matches!(o, OscU) { Unk } else { Poles },
         (Ser(x), Ser(y)) => Ser(x.add(&y)),
         (Ser(x), SO(y, l, h)) | (SO(y, l, h), Ser(x)) => SO(x.add(&y), l, h),
         (Ser(x), Flat(_)) | (Flat(_), Ser(x)) => Ser(x.add(&Sr { t: vec![], rem: Some(FLAT) })),
@@ -864,6 +870,8 @@ fn s_mul(a: S, b: S) -> S {
     match (a, b) {
         (NoVal, _) | (_, NoVal) => NoVal,
         (Unk, _) | (_, Unk) => Unk,
+        // poles times something that is surely not 0 near them (a power series with a known nonzero leading term)
+        (Poles, o) | (o, Poles) => match &o { Ser(x) if x.lead_sign().is_some() => Poles, Lim(k) if k.sign().is_some_and(|s| s != 0) => Poles, Inf(_) | Huge(_) => Poles, _ => Unk },
         (Ser(x), Ser(y)) => x.mul(&y).map_or(Unk, Ser),
         (SO(x, l, h), Ser(m)) | (Ser(m), SO(x, l, h)) => match coarse(&Ser(m.clone())) {
             B::Fin(k) => { let v = k.value(); x.mul(&m).map_or(Unk, |p| SO(p, (l * v).min(h * v), (l * v).max(h * v))) }
@@ -930,8 +938,8 @@ fn s_inv(a: S, n: usize) -> S {
         Inf(s) => Z(s),
         Z(s) => if s != 0 { Inf(s) } else { Unk },
         Lim(k) => match k.inv() { Some(i) if k.sign().is_some_and(|s| s != 0) => Lim(i), _ => Unk },
-        Osc(l, h) => if l > 0.0 || h < 0.0 { Osc(1.0 / h, 1.0 / l) } else { OscU },
-        OscU => Unk,
+        Osc(l, h) => if l > 0.0 || h < 0.0 { Osc(1.0 / h, 1.0 / l) } else { Poles },
+        OscU | Poles => Unk,
         o => o,
     }
 }
@@ -1162,7 +1170,25 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
             At::Inf(s) => Sr { t: vec![T { e: (Q::i(-1), 0), c: K::int(*s as i128) }], rem: None },
         }),
         X::Add(v) => v.iter().map(|a| ser_of(a, at, n)).reduce(s_add).unwrap_or(Unk),
-        X::Mul(v) => v.iter().map(|a| ser_of(a, at, n)).reduce(s_mul).unwrap_or(Unk),
+        X::Mul(v) => {
+            // the same factor above and below the line cancels (the limit ignores the one point it leaves out)
+            let key = |e: &X| format!("{e:?}");
+            let mut fs: Vec<&X> = v.iter().collect();
+            let mut i = 0;
+            while i < fs.len() {
+                if let X::Inv(d) = fs[i] {
+                    let kd = key(d);
+                    if let Some(j) = fs.iter().position(|f| !matches!(f, X::Inv(_)) && key(f) == kd) { let (a, b) = (i.max(j), i.min(j)); fs.remove(a); fs.remove(b); i = 0; continue; }
+                }
+                i += 1;
+            }
+            if fs.is_empty() { return Ser(Sr::c(K::one())); }
+            // tan and cot of an argument that runs off to ±∞: poles keep coming
+            if let [X::F(f1, a1), X::Inv(d)] = fs.as_slice() {
+                if let X::F(f2, a2) = &**d { if matches!((f1, f2), (Fun::Sin, Fun::Cos) | (Fun::Cos, Fun::Sin)) && key(a1) == key(a2) && matches!(coarse(&ser_of(a1, at, n)), B::PInf | B::NInf) { return Poles; } }
+            }
+            fs.iter().map(|a| ser_of(a, at, n)).reduce(s_mul).unwrap_or(Unk)
+        }
         X::Neg(a) => s_neg(ser_of(a, at, n)),
         X::Inv(a) => s_inv(ser_of(a, at, n), n),
         X::Pow(b, p) => {
@@ -1203,7 +1229,8 @@ pub fn limit(e: &X, at: &At) -> L {
 }
 fn confirm(e: &X, at: &At, l: &L) -> bool {
     let xs: Vec<f64> = match at {
-        At::Fin(a, s) => { let a = a.value(); [1e-1, 1e-2, 1e-3, 1e-4, 1e-5].iter().map(|h| a + *s as f64 * h * (1.0 + a.abs())).collect() }
+        // (at offsets that are no round numbers, so a power such as x^(1/x) is not caught at a whole-number exponent)
+        At::Fin(a, s) => { let a = a.value(); [1e-1, 1e-2, 1e-3, 1e-4, 1e-5].iter().map(|h| a + *s as f64 * 1.37 * h * (1.0 + a.abs())).collect() }
         At::Inf(s) => (1..=6).map(|k| *s as f64 * 1.37 * 10f64.powi(k)).collect(),
     };
     let ys: Vec<Option<f64>> = xs.iter().map(|x| ev(e, *x)).collect();
@@ -1211,7 +1238,8 @@ fn confirm(e: &X, at: &At, l: &L) -> bool {
         L::Val(k) => {
             let v = k.value();
             let errs: Vec<f64> = ys.iter().flatten().map(|y| (y - v).abs()).collect();
-            if errs.len() < 3 { return ys[2..].iter().any(|y| y.is_some()); }
+            if errs.is_empty() { return false; }
+            if errs.len() < 3 { return errs[errs.len() - 1] <= 1e-6 * (1.0 + v.abs()) || errs[errs.len() - 1] < 0.9 * errs[0]; }
             let first = errs[0].max(errs[1]);
             let last = errs[errs.len() - 1];
             last <= 1e-6 * (1.0 + v.abs()) || last < 0.9 * first
@@ -1254,6 +1282,21 @@ pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
         let (out, done) = poly_roots(c);
         return (out.into_iter().filter(inside).collect(), done);
     }
+    // a quotient of polynomials: the zeros of its top
+    if let Some((num, _)) = rat(e) {
+        let mut c = num;
+        while c.len() > 1 && c.last().is_some_and(|k| k.sign() == Some(0)) { c.pop(); }
+        if c.iter().all(|k| k.sign().is_some()) && c.len() > 1 { let (out, done) = poly_roots(c); return (out.into_iter().filter(inside).collect(), done); }
+    }
+    // one term in x plus a constant: solved for that term (√x - 2 = 0 at 4, ln x = 0 at 1)
+    if let X::Add(v) = e {
+        let xs: Vec<&X> = v.iter().filter(|t| t.has_x()).collect();
+        if xs.len() == 1 {
+            let mut c = K::zero();
+            for t in v.iter().filter(|t| !t.has_x()) { match exact(t, &K::zero()) { EV::Val(k) => c = c.add(&k), _ => return numeric_zeros(e, lo, hi) } }
+            if let Some(r) = solve(xs[0], &c.neg(), lo, hi) { return r; }
+        }
+    }
     match e {
         X::Mul(v) => { let mut out = vec![]; let mut done = true; for a in v { if matches!(a, X::Inv(_)) { continue; } let (z, d) = zeros(a, lo, hi); out.extend(z); done &= d; } (out, done) }
         X::Neg(a) => zeros(a, lo, hi),
@@ -1282,6 +1325,76 @@ pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
         X::F(Fun::Abs | Fun::Atan | Fun::Asin, a) => zeros(a, lo, hi),
         X::Pow(b, _) if matches!(&**b, X::C(_)) => (vec![], true),
         _ => numeric_zeros(e, lo, hi),
+    }
+}
+/// e as a quotient of polynomials (top, bottom), when it is one.
+fn rat(e: &X) -> Option<(Vec<K>, Vec<K>)> {
+    let add = |a: &[K], b: &[K]| -> Vec<K> { let n = a.len().max(b.len()); (0..n).map(|i| a.get(i).cloned().unwrap_or_else(K::zero).add(b.get(i).unwrap_or(&K::zero()))).collect() };
+    let mul = |a: &[K], b: &[K]| -> Option<Vec<K>> { if a.len() + b.len() > 14 { return None; } let mut o = vec![K::zero(); a.len() + b.len() - 1]; for (i, x) in a.iter().enumerate() { for (j, y) in b.iter().enumerate() { o[i + j] = o[i + j].add(&x.mul(y)); } } Some(o) };
+    Some(match e {
+        X::Add(v) => { let mut acc = (vec![K::zero()], vec![K::one()]); for a in v { let (n, d) = rat(a)?; acc = (add(&mul(&acc.0, &d)?, &mul(&n, &acc.1)?), mul(&acc.1, &d)?); } acc }
+        X::Mul(v) => { let mut acc = (vec![K::one()], vec![K::one()]); for a in v { let (n, d) = rat(a)?; acc = (mul(&acc.0, &n)?, mul(&acc.1, &d)?); } acc }
+        X::Neg(a) => { let (n, d) = rat(a)?; (n.iter().map(|k| k.neg()).collect(), d) }
+        X::Inv(a) => { let (n, d) = rat(a)?; (d, n) }
+        X::Pow(b, p) => { let q = const_q(p)?; if !q.is_int() || q.n.abs() > 12 { return None; } let (n, d) = rat(b)?; let (mut pn, mut pd) = (vec![K::one()], vec![K::one()]); for _ in 0..q.n.abs() { pn = mul(&pn, &n)?; pd = mul(&pd, &d)?; } if q.n < 0 { (pd, pn) } else { (pn, pd) } }
+        _ => (poly(e)?, vec![K::one()]),
+    })
+}
+/// The x where t = y (t a formula with x in it), when t can be undone step by step.
+fn solve(t: &X, y: &K, lo: f64, hi: f64) -> Option<(Vec<K>, bool)> {
+    let sub = |u: &X, v: K| -> (Vec<K>, bool) { zeros(&X::Add(vec![u.clone(), X::C(v.neg())]), lo, hi) };
+    match t {
+        X::V => Some((vec![y.clone()].into_iter().filter(|k| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 }).collect(), true)),
+        X::Neg(u) => solve(u, &y.neg(), lo, hi),
+        X::Mul(v) => {
+            let xs: Vec<&X> = v.iter().filter(|f| f.has_x()).collect();
+            if xs.len() != 1 { return None; }
+            let mut c = K::one();
+            for f in v.iter().filter(|f| !f.has_x()) { match exact(f, &K::zero()) { EV::Val(k) => c = c.mul(&k), _ => return None } }
+            if c.sign()? == 0 { return None; }
+            solve(xs[0], &y.div(&c)?, lo, hi)
+        }
+        X::Inv(u) => { if y.sign()? == 0 { return Some((vec![], true)); } solve(u, &y.inv()?, lo, hi) }
+        X::Pow(b, p) if !p.has_x() => {
+            let q = const_q(p)?;
+            if q.is_int() && q.n > 0 {
+                let s = y.sign()?;
+                if q.n % 2 == 0 {
+                    if s < 0 { return Some((vec![], true)); }
+                    if s == 0 { return Some(sub(b, K::zero())); }
+                    let KR::Ok(r) = y.powq(Q::new(1, q.n)?) else { return None };
+                    let (mut a, da) = sub(b, r.clone());
+                    let (bb, db) = sub(b, r.neg());
+                    a.extend(bb);
+                    return Some((a, da && db));
+                }
+                let KR::Ok(r) = y.powq(Q::new(1, q.n)?) else { return None };
+                return Some(sub(b, r));
+            }
+            if q.n == 1 && q.d > 1 {
+                // u^(1/n) = y: u = y^n (an even root is never negative)
+                if q.d % 2 == 0 && y.sign()? < 0 { return Some((vec![], true)); }
+                let KR::Ok(r) = y.powq(Q::i(q.d)) else { return None };
+                return Some(sub(b, r));
+            }
+            None
+        }
+        X::Pow(b, p) if !b.has_x() => {
+            // c^u = y: u = ln y / ln c
+            if y.sign()? <= 0 { return Some((vec![], true)); }
+            let EV::Val(c) = exact(b, &K::zero()) else { return None };
+            let (KR::Ok(ly), KR::Ok(lc)) = (y.ln(), c.ln()) else { return None };
+            Some(sub(p, ly.div(&lc)?))
+        }
+        X::F(Fun::Ln, u) => Some(sub(u, y.exp())),
+        X::F(Fun::Abs, u) => {
+            let s = y.sign()?;
+            if s < 0 { return Some((vec![], true)); }
+            let (mut a, da) = sub(u, y.clone());
+            if s > 0 { let (b, db) = sub(u, y.neg()); a.extend(b); return Some((a, da && db)); }
+            Some((a, da))
+        }
+        _ => None,
     }
 }
 fn poly_roots(c: Vec<K>) -> (Vec<K>, bool) {

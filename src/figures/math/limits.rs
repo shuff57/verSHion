@@ -18,6 +18,9 @@ pub(crate) mod cas;
 #[cfg(test)]
 #[path = "limits_cas_tests.rs"]
 mod cas_tests;
+#[cfg(test)]
+#[path = "limits_table_tests.rs"]
+mod table_tests;
 type Pt = (f64, f64);
 type Bx = [f64; 4];
 
