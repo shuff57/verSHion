@@ -16,6 +16,8 @@
   <meta name="theme-color" content="#2F5D46" />
   <link data-trunk rel="copy-file" href="assets/loading-logo.svg" />
   <link data-trunk rel="copy-dir" href="assets/help" data-target-path="help" />
+  <!-- The contact page (the shared Left Hand Dev form), served at /contact/ beside the app. -->
+  <link data-trunk rel="copy-dir" href="server/web/contact" data-target-path="contact" />
   <!-- Faces the wasm does not compile in (src/fonts.rs, `fetch`): fetched before the app starts,
        preloaded so they download alongside the wasm. Keep in step with src/fonts.rs (a test checks). -->
   <link data-trunk rel="copy-dir" href="assets/fonts" data-target-path="fonts" />
