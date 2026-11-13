@@ -759,7 +759,7 @@ fn dump_svgs() {
 #[ignore]
 fn measure_advances() {
     let mut m = Meter::new();
-    let fam = "Liberation Serif, DejaVu Serif, Times New Roman, Times, serif";
+    let fam = std::env::var("CONIC_FAM").unwrap_or_else(|_| "Source Serif 4, Liberation Serif, DejaVu Serif, Times New Roman, serif".into());
     let chars = "0123456789()/,.=+\u{2212}\u{221a}\u{3c0}\u{b1}\u{2248}|: abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_";
     let mut out = String::new();
     for italic in [false, true] {

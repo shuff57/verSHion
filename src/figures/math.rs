@@ -2411,7 +2411,7 @@ fn math_text_halo_in(x: f64, y: f64, size: f64, s: &str, fill: &str, family: &st
     let (ty, body) = (y + size * 0.34, math_tspans(s));
     format!(r##"<text x="{x:.2}" y="{ty:.2}" font-size="{size}" text-anchor="start" font-family="{family}" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round" paint-order="stroke">{body}</text><text x="{x:.2}" y="{ty:.2}" font-size="{size}" text-anchor="start" font-family="{family}" fill="{fill}">{body}</text>"##)
 }
-const LABEL_SERIF: &str = "Source Serif 4, Liberation Serif, DejaVu Serif, Times New Roman, serif";
+pub(super) const LABEL_SERIF: &str = "Source Serif 4, Liberation Serif, DejaVu Serif, Times New Roman, serif";
 
 /// Rough size of a 15 px serif label, for keeping labels apart.
 fn label_w(s: &str) -> f64 { 7.2 * s.chars().filter(|c| !matches!(c, '^' | '*' | ' ')).count() as f64 + 6.0 }
@@ -5742,6 +5742,8 @@ pub(super) fn is_sci_e(ch: &[char], i: usize) -> bool {
     !before.is_some_and(|c| *c == '^' || *c == '_')
 }
 
+#[cfg(test)]
+pub(crate) fn math_tspans_pub(s: &str) -> String { math_tspans(s) }
 pub(super) fn math_tspans(s: &str) -> String {
     let ch: Vec<char> = s.chars().collect();
     let mut out = String::new();

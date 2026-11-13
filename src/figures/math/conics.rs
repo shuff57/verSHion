@@ -14,7 +14,7 @@ use super::super::interact::{Handle, Pt};
 use super::super::svg;
 use super::super::{answers_param, labels, Example, FigureDef, ParamDef, Params, Subject, Value};
 use super::flat::{eval_typed, num_str};
-use super::{coordinate_grid_build, coordinate_grid_params, fmt, grid_layout, lscale, math_tspans, GridL, SERIF};
+use super::{coordinate_grid_build, coordinate_grid_params, fmt, grid_layout, lscale, math_tspans, GridL, LABEL_SERIF as SERIF};
 use std::collections::BTreeMap;
 
 pub const ID: &str = "conic-sections";
@@ -937,6 +937,8 @@ fn seg_pt(q: Pt, a: Pt, b: Pt) -> f64 {
     ((q.0 - a.0 - t * dx).powi(2) + (q.1 - a.1 - t * dy).powi(2)).sqrt()
 }
 fn seg_hits_box(a: Pt, b: Pt, r: [f64; 4]) -> bool { clip(a, b, r).is_some() }
+/// Distance from `q` to the whole line through `a` and `b`.
+fn line_pt(q: Pt, a: Pt, b: Pt) -> f64 { let (dx, dy) = (b.0 - a.0, b.1 - a.1); let l = dx.hypot(dy); if l < 1e-9 { (q.0 - a.0).hypot(q.1 - a.1) } else { ((q.0 - a.0) * dy - (q.1 - a.1) * dx).abs() / l } }
 fn seg_cross(a: Pt, b: Pt, c: Pt, d: Pt) -> bool {
     let o = |p: Pt, q: Pt, r: Pt| (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0);
     let (d1, d2, d3, d4) = (o(c, d, a), o(c, d, b), o(a, b, c), o(a, b, d));
@@ -955,14 +957,13 @@ fn grow(r: [f64; 4], t: f64) -> [f64; 4] { [r[0] - t, r[1] - t, r[2] + t, r[3] +
 /// Width of a label as drawn in the serif face (math_tspans: italic letters, ^ and _ at 70%), a little over.
 pub fn mw(s: &str, size: f64) -> f64 {
     let ch: Vec<char> = s.chars().collect();
-    // advance widths (em) of the serif face as rendered (Liberation Serif; letters set italic by math_tspans), measured
-    // through the app's font database by conics_tests::measure_advances
+    // advance widths (em) of Source Serif 4 as rendered, the wider of its upright and italic (letters are set italic by
+    // math_tspans), measured through the app's font database by conics_tests::measure_advances
     let w1 = |c: char| match c {
-        '1' => 0.467, '0'..='9' => 0.5, '(' | ')' => 0.333, ',' | '.' | ' ' => 0.25, ':' => 0.278, '/' => 0.278, '|' => 0.2,
-        '=' | '+' | '-' | '\u{2212}' | '\u{d7}' => 0.564, '\u{221a}' => 0.568, '\u{3c0}' => 0.505, '\u{b1}' => 0.549, '\u{2248}' => 0.54, '_' => 0.5,
-        'm' => 0.722, 'w' => 0.667, 'f' | 'i' | 'j' | 'l' | 't' => 0.278, 'r' | 's' => 0.389, 'c' | 'e' | 'k' => 0.444, 'v' | 'x' | 'y' | 'z' => 0.444,
-        'a'..='z' => 0.5, 'M' | 'W' => 0.833, 'C' | 'D' | 'G' | 'H' | 'O' | 'Q' | 'U' => 0.722, 'I' => 0.333, 'J' | 'S' => 0.5,
-        'A'..='Z' => 0.611, _ => 0.6,
+        '0'..='9' => 0.511, '(' | ')' => 0.321, ',' | '.' => 0.264, ' ' => 0.25, ':' => 0.3, '/' => 0.257, '|' => 0.291,
+        '=' | '+' | '-' | '\u{2212}' | '\u{d7}' | '\u{b1}' | '\u{2248}' => 0.53, '\u{221a}' => 0.558, '\u{3c0}' => 0.593, '_' => 0.512,
+        'A' => 0.684, 'B' => 0.605, 'C' => 0.629, 'D' => 0.681, 'E' => 0.603, 'F' => 0.569, 'G' => 0.688, 'H' => 0.788, 'I' => 0.371, 'J' => 0.365, 'K' => 0.667, 'L' => 0.577, 'M' => 0.927, 'N' => 0.734, 'O' => 0.711, 'P' => 0.579, 'Q' => 0.711, 'R' => 0.651, 'S' => 0.502, 'T' => 0.613, 'U' => 0.712, 'V' => 0.674, 'W' => 0.962, 'X' => 0.661, 'Y' => 0.633, 'Z' => 0.551, 'a' => 0.520, 'b' => 0.566, 'c' => 0.485, 'd' => 0.565, 'e' => 0.507, 'f' => 0.329, 'g' => 0.507, 'h' => 0.601, 'i' => 0.304, 'j' => 0.277, 'k' => 0.547, 'l' => 0.298, 'm' => 0.901, 'n' => 0.606, 'o' => 0.545, 'p' => 0.569, 'q' => 0.553, 'r' => 0.421, 's' => 0.430, 't' => 0.332, 'u' => 0.581, 'v' => 0.508, 'w' => 0.767, 'x' => 0.530, 'y' => 0.515, 'z' => 0.461,
+        _ => 0.6,
     };
     let (mut w, mut i) = (0.0, 0usize);
     while i < ch.len() {
@@ -984,138 +985,246 @@ pub fn mw(s: &str, size: f64) -> f64 {
 
 #[derive(Clone, Copy)]
 enum At { Pt(Pt, Pt), Line(u32) }
-struct Req { id: String, text: String, at: At, optional: bool }
+/// One label to place: `short` is the letter alone, used when the full coordinates find no room; `prio` orders the placing
+/// (vertices, foci, centre, co-vertices, P, D, then the lines' labels, which give way to the points'); `kind` is for the
+/// reports (V F C B P D, or L for a line's label).
+struct Req { id: String, text: String, short: Option<String>, at: At, optional: bool, prio: u8, kind: char }
+impl Req {
+    fn line(id: impl Into<String>, text: String, g: u32, optional: bool) -> Req { Req { id: id.into(), text, short: None, at: At::Line(g), optional, prio: if optional { 10 } else { 9 }, kind: 'L' } }
+}
 
-/// Everything already on the plot: strokes (grouped by the thing they draw), point marks and text boxes.
-struct Board { strokes: Vec<(Pt, Pt, u32)>, dots: Vec<Pt>, boxes: Vec<[f64; 4]>, nums: Vec<(usize, [f64; 4])>, hidden: Vec<usize>, bounds: [f64; 4], next: u32 }
+/// Group id of the axes on the board; leaders are numbered from LEADER up.
+const AXES: u32 = 0;
+const LEADER: u32 = 10_000;
+/// A point mark's radius.
+const DOT: f64 = 4.5;
+
+/// Everything already on the plot: strokes (grouped by the thing they draw), point marks and text boxes. `hard` strokes
+/// (the curve) are never crossed by a leader; `nums` are the axes' numbers, which a label may cover as a last resort (the
+/// number is then left off).
+#[derive(Clone)]
+struct Board { strokes: Vec<(Pt, Pt, u32)>, hard: Vec<u32>, dots: Vec<Pt>, boxes: Vec<[f64; 4]>, nums: Vec<(usize, [f64; 4])>, hidden: Vec<usize>, bounds: [f64; 4], next: u32, cells: Vec<Vec<usize>>, cols: usize, rows: usize }
+/// How a label was placed: its centre, a leader, the text used.
+#[derive(Clone)]
+struct Placed { c: Pt, leader: Option<(Pt, Pt)>, text: String, short: bool, level: u8 }
+/// The board's buckets are this many pixels square (a stroke is listed in every bucket its box meets).
+const CELL: f64 = 24.0;
 impl Board {
+    fn new(bounds: [f64; 4]) -> Board {
+        let (cols, rows) = ((((bounds[2] - bounds[0]) / CELL).ceil() as usize).max(1) + 4, (((bounds[3] - bounds[1]) / CELL).ceil() as usize).max(1) + 4);
+        Board { strokes: vec![], hard: vec![], dots: vec![], boxes: vec![], nums: vec![], hidden: vec![], bounds, next: LEADER, cells: vec![vec![]; cols * rows], cols, rows }
+    }
+    fn cell_range(&self, r: [f64; 4]) -> (usize, usize, usize, usize) {
+        let c = |x: f64, n: usize| ((((x - self.bounds[0]) / CELL).floor() as i64 + 2).clamp(0, n as i64 - 1)) as usize;
+        let rr = |y: f64, n: usize| ((((y - self.bounds[1]) / CELL).floor() as i64 + 2).clamp(0, n as i64 - 1)) as usize;
+        (c(r[0], self.cols), rr(r[1], self.rows), c(r[2], self.cols), rr(r[3], self.rows))
+    }
+    /// Adds a stroke of thing `id`, clipped to the plot.
+    fn add(&mut self, a: Pt, b: Pt, id: u32) {
+        let i = self.strokes.len();
+        self.strokes.push((a, b, id));
+        let (x0, y0, x1, y1) = self.cell_range([a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1)]);
+        for y in y0..=y1 { for x in x0..=x1 { self.cells[y * self.cols + x].push(i); } }
+    }
+    /// Whether any stroke whose box may meet `r` satisfies `f` (a stroke may be offered more than once).
+    fn any_near(&self, r: [f64; 4], mut f: impl FnMut(usize) -> bool) -> bool {
+        let (x0, y0, x1, y1) = self.cell_range(r);
+        for y in y0..=y1 { for x in x0..=x1 { for &i in &self.cells[y * self.cols + x] { if f(i) { return true; } } } }
+        false
+    }
+    /// The strokes whose boxes may meet `r` (each once).
+    fn near(&self, r: [f64; 4]) -> Vec<usize> {
+        let (x0, y0, x1, y1) = self.cell_range(r);
+        let mut v: Vec<usize> = vec![];
+        for y in y0..=y1 { for x in x0..=x1 { v.extend_from_slice(&self.cells[y * self.cols + x]); } }
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
     /// Clear of everything; `over_nums` lets it cover the axes' tick numbers (they are then left off).
     fn clear_of(&self, b: [f64; 4], over_nums: bool) -> bool {
         if b[0] < self.bounds[0] || b[1] < self.bounds[1] || b[2] > self.bounds[2] || b[3] > self.bounds[3] { return false; }
         let g = grow(b, 3.0);
-        if self.strokes.iter().any(|(a, c, _)| seg_hits_box(*a, *c, g)) { return false; }
-        if self.dots.iter().any(|d| box_pt(b, *d) < 6.5) { return false; }
+        let gl = grow(b, 6.0);
+        if self.any_near(gl, |i| { let (a, c, id) = self.strokes[i]; seg_hits_box(a, c, if id >= LEADER { gl } else { g }) }) { return false; }
+        if self.dots.iter().any(|d| box_pt(b, *d) < DOT + 2.0) { return false; }
         if self.boxes.iter().any(|o| boxes_hit(grow(b, 4.0), *o)) { return false; }
         if !over_nums && self.nums.iter().any(|(i, o)| !self.hidden.contains(i) && boxes_hit(grow(b, 1.5), *o)) { return false; }
         true
     }
-    /// `b` is the padded box (for clearance); `ink` the text's own extent (for which thing it is nearest).
-    fn clear(&self, b: [f64; 4], ink: [f64; 4], at: &At, over_nums: bool) -> bool {
-        if !self.clear_of(b, over_nums) { return false; }
-        let b = ink;
-        // it belongs to its own thing: nearer that than any other point or line
+    /// Nearer its own thing than any other: a point's label than any other point, a line's label than any other line or point
+    /// (a point on its own line excepted). `ink` is the text's own extent.
+    fn owns(&self, ink: [f64; 4], at: &At) -> bool {
         match at {
-            At::Pt(q, _) => { let own = box_pt(b, *q); self.dots.iter().filter(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5).all(|d| box_pt(b, *d) > own + 3.0) }
+            At::Pt(q, _) => { let own = box_pt(ink, *q); self.dots.iter().filter(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5).all(|d| box_pt(ink, *d) > own + 4.0) }
             At::Line(gid) => {
-                let own = self.strokes.iter().filter(|s| s.2 == *gid).map(|s| box_seg(b, s.0, s.1)).fold(f64::MAX, f64::min);
-                own < f64::MAX && self.strokes.iter().filter(|s| s.2 != *gid).all(|s| box_seg(b, s.0, s.1) > own + 3.0) && self.dots.iter().all(|d| box_pt(b, *d) > own + 3.0 || self.strokes.iter().any(|s| s.2 == *gid && (seg_pt(*d, s.0, s.1) < 0.5)))
+                let own = self.strokes.iter().filter(|s| s.2 == *gid).map(|s| box_seg(ink, s.0, s.1)).fold(f64::MAX, f64::min);
+                if own == f64::MAX { return false; }
+                let on_own = |d: &Pt| self.strokes.iter().any(|s| s.2 == *gid && seg_pt(*d, s.0, s.1) < 0.5);
+                // (a line lying along its own, a major axis on the x-axis, is not another thing)
+                let along = |s: &(Pt, Pt, u32)| self.strokes.iter().filter(|o| o.2 == *gid).any(|o| line_pt(s.0, o.0, o.1) < 1.0 && line_pt(s.1, o.0, o.1) < 1.0);
+                !self.any_near(grow(ink, own + 4.5), |i| { let s = self.strokes[i]; s.2 != *gid && !along(&s) && box_seg(ink, s.0, s.1) <= own + 4.0 }) && self.dots.iter().all(|d| on_own(d) || box_pt(ink, *d) > own + 4.0)
             }
         }
     }
-    /// The box a label takes, centred at `c`.
-    fn bx(c: Pt, w: f64, size: f64) -> [f64; 4] { [c.0 - w / 2.0, c.1 - 0.5 * size, c.0 + w / 2.0, c.1 + 0.62 * size] }
-    /// Where the glyphs of `text` centred at `c` really are: caps and digits from 0.7 em above the baseline, brackets,
-    /// commas and subscripts down to 0.2 em below it.
+    /// The box a label takes, centred at `c` (for clearance).
+    fn bx(c: Pt, w: f64, size: f64) -> [f64; 4] { [c.0 - w / 2.0 - 1.0, c.1 - 0.5 * size, c.0 + w / 2.0, c.1 + 0.62 * size] }
+    /// Where the glyphs of `text` centred at `c` really are: caps and digits from 0.72 em above the baseline, brackets,
+    /// commas, subscripts and descenders down to 0.22 em below it; an italic first letter leans a little left.
     fn ink(c: Pt, w: f64, size: f64, text: &str) -> [f64; 4] {
         let low = text.contains(['(', ',', '_', ')', 'g', 'j', 'p', 'q', 'y', '|']);
-        [c.0 - w / 2.0 + 0.5, c.1 + 0.3 * size - 0.72 * size, c.0 + w / 2.0 - 0.5, c.1 + 0.3 * size + if low { 0.22 * size } else { 0.02 * size }]
+        [c.0 - w / 2.0 - 1.0, c.1 + 0.3 * size - 0.72 * size, c.0 + w / 2.0 - 0.5, c.1 + 0.3 * size + if low { 0.22 * size } else { 0.02 * size }]
     }
-    /// Where label `r` goes: its centre, and a leader (from, to) when it stands clear of its mark.
-    fn place(&mut self, r: &Req, size: f64) -> Option<(Pt, Option<(Pt, Pt)>)> {
-        let w = mw(&r.text, size);
-        let (hw, hh) = (w / 2.0, 0.56 * size);
-        let mut cands: Vec<Pt> = vec![];
-        match r.at {
-            At::Pt(q, out) => {
-                let base = (out.1).atan2(out.0);
-                let mut dirs: Vec<f64> = (0..24).map(|i| i as f64 * std::f64::consts::PI / 12.0).collect();
-                let off = |a: f64| { let d = a - base; d.sin().atan2(d.cos()).abs() };
-                dirs.sort_by(|a, b| off(*a).partial_cmp(&off(*b)).unwrap());
-                for rr in [4.0, 7.0, 10.0, 14.0, 19.0, 25.0, 32.0] {
-                    for a in &dirs { let (ux, uy) = (a.cos(), a.sin()); let e = rr + ux.abs() * hw + uy.abs() * hh; cands.push((q.0 + ux * e, q.1 + uy * e + 0.06 * size)); }
-                    // beside the point, slid along: the label's near corner by the point
-                    for (sx, sy) in [(1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] { cands.push((q.0 + sx * (hw * 0.6 + rr), q.1 + sy * (hh + rr))); }
-                }
-            }
-            At::Line(gid) => {
-                let segs: Vec<(Pt, Pt)> = self.strokes.iter().filter(|s| s.2 == gid).map(|s| (s.0, s.1)).collect();
-                let total: f64 = segs.iter().map(|(a, b)| (b.0 - a.0).hypot(b.1 - a.1)).sum();
-                if total < 1.0 { return None; }
-                let fracs: Vec<f64> = { let mut v: Vec<f64> = (1..20).map(|i| i as f64 / 20.0).collect(); v.sort_by(|a, b| (a - 0.5).abs().partial_cmp(&(b - 0.5).abs()).unwrap()); v };
-                for d in [3.0, 6.0, 10.0, 15.0, 22.0] {
-                    for f in &fracs {
-                        let mut left = f * total;
-                        for (a, b) in &segs {
-                            let l = (b.0 - a.0).hypot(b.1 - a.1);
-                            if left <= l && l > 0.0 {
-                                let t = left / l;
-                                let q = (a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1));
-                                let (nx, ny) = (-(b.1 - a.1) / l, (b.0 - a.0) / l);
-                                for sgn in [1.0, -1.0] { let e = d + nx.abs() * hw + ny.abs() * hh; cands.push((q.0 + sgn * nx * e, q.1 + sgn * ny * e)); }
-                                break;
-                            }
-                            left -= l;
-                        }
-                    }
-                }
+    /// Beside its point: the eight positions round it (and slid along the sides), the ink within a few pixels of the mark.
+    fn beside_point(q: Pt, out: Pt, hw: f64, hh: f64) -> Vec<Pt> {
+        let base = out.1.atan2(out.0);
+        let mut dirs: Vec<(f64, f64)> = (0..8).map(|i| { let a = i as f64 * std::f64::consts::FRAC_PI_4; (a.cos(), a.sin()) }).collect();
+        let off = |d: &(f64, f64)| { let a = d.1.atan2(d.0) - base; a.sin().atan2(a.cos()).abs() };
+        dirs.sort_by(|a, b| off(a).partial_cmp(&off(b)).unwrap());
+        let mut v = vec![];
+        for g in [2.5, 5.0, 7.5] {
+            for (ux, uy) in &dirs {
+                let (ux, uy) = (ux.round_half(), uy.round_half());
+                let diag = ux != 0.0 && uy != 0.0;
+                let r = if diag { DOT * 0.72 } else { DOT };
+                let c = (q.0 + ux * (r + g + hw), q.1 + uy * (r + g + hh));
+                v.push(c);
+                // slid along the side: a label above or below with the point under its left or right part; beside with the
+                // point by its top or bottom
+                if !diag && uy != 0.0 && hw > 10.0 { for f in [1.0, -1.0, 0.5, -0.5] { v.push((c.0 + f * (hw - 8.0), c.1)); } }
+                if !diag && ux != 0.0 { for f in [0.7, -0.7, 0.35, -0.35] { v.push((c.0, c.1 + f * hh)); } }
             }
         }
-        // beside its thing; then beside it over an axis number (left off); then clear of it, joined by a leader
-        for over_nums in [false, true] {
-            if let Some(c) = cands.iter().copied().find(|c| self.clear(Board::bx(*c, w, size), Board::ink(*c, w, size, &r.text), &r.at, over_nums)) {
-                self.take(Board::bx(c, w, size));
-                return Some((c, None));
-            }
-        }
-        let anchors: Vec<Pt> = match r.at { At::Pt(q, _) => vec![q], At::Line(g) => {
-            let segs: Vec<(Pt, Pt)> = self.strokes.iter().filter(|s| s.2 == g).map(|s| (s.0, s.1)).collect();
-            let total: f64 = segs.iter().map(|(a, b)| (b.0 - a.0).hypot(b.1 - a.1)).sum();
-            [0.5, 0.35, 0.65, 0.2, 0.8].iter().filter_map(|f| {
+        v
+    }
+    /// Beside a line: along it, either side, middle first.
+    fn beside_line(&self, gid: u32, hw: f64, hh: f64) -> Vec<Pt> {
+        let segs: Vec<(Pt, Pt)> = self.strokes.iter().filter(|s| s.2 == gid).map(|s| (s.0, s.1)).collect();
+        let total: f64 = segs.iter().map(|(a, b)| (b.0 - a.0).hypot(b.1 - a.1)).sum();
+        let mut v = vec![];
+        if total < 1.0 { return v; }
+        let fracs: Vec<f64> = { let mut f: Vec<f64> = (1..40).map(|i| i as f64 / 40.0).collect(); f.sort_by(|a, b| (a - 0.5).abs().partial_cmp(&(b - 0.5).abs()).unwrap()); f };
+        for d in [3.0, 6.0, 10.0, 15.0] {
+            for f in &fracs {
                 let mut left = f * total;
-                for (a, b) in &segs { let l = (b.0 - a.0).hypot(b.1 - a.1); if left <= l && l > 0.0 { let t = left / l; return Some((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1))); } left -= l; }
-                None
-            }).collect()
-        } };
-        for over_nums in [false, true] {
-            for q in anchors.iter().copied() {
-            for rr in [24.0, 32.0, 42.0, 54.0, 68.0, 84.0] {
-                for i in 0..32 {
-                    let a = i as f64 * std::f64::consts::PI / 16.0;
-                    let (ux, uy) = (a.cos(), a.sin());
-                    let c = (q.0 + ux * (rr + ux.abs() * hw), q.1 + uy * (rr + uy.abs() * hh));
-                    let b = Board::bx(c, w, size);
-                    if !self.clear_of(b, over_nums) { continue; }
-                    // the leader runs from beside the mark to the box's nearest edge, through nothing
-                    let ink = Board::ink(c, w, size, &r.text);
-                    let to = (q.0.clamp(ink[0], ink[2]), q.1.clamp(ink[1], ink[3]));
-                    let (dx, dy) = (to.0 - q.0, to.1 - q.1);
-                    let l = dx.hypot(dy);
-                    if l < 12.0 { continue; }
-                    let from = (q.0 + dx / l * 6.0, q.1 + dy / l * 6.0);
-                    let to = (to.0 - dx / l * 3.0, to.1 - dy / l * 3.0);
-                    // (it may cross the axes, which are reference lines like the gridlines, but no part of the conic, other leader or text)
-                    let own = |g: u32| matches!(r.at, At::Line(o) if o == g);
-                    if self.strokes.iter().any(|s| !own(s.2) && s.2 != 0 && seg_cross(from, to, s.0, s.1)) { continue; }
-                    if self.dots.iter().any(|d| seg_pt(*d, from, to) < 6.0) { continue; }
-                    // (well clear of the other labels, so it cannot be read as theirs)
-                    if self.boxes.iter().any(|o| seg_hits_box(from, to, grow(*o, 9.0))) { continue; }
-                    if self.nums.iter().filter(|(i, _)| !self.hidden.contains(i)).any(|(_, o)| seg_hits_box(from, to, grow(*o, 1.0))) { continue; }
-                    self.take(b);
-                    let id = self.next;
-                    self.next += 1;
-                    self.strokes.push((from, to, id));
-                    return Some((c, Some((from, to))));
+                for (a, b) in &segs {
+                    let l = (b.0 - a.0).hypot(b.1 - a.1);
+                    if left <= l && l > 0.0 {
+                        let t = left / l;
+                        let q = (a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1));
+                        let (nx, ny) = (-(b.1 - a.1) / l, (b.0 - a.0) / l);
+                        for sgn in [1.0, -1.0] { let e = d + nx.abs() * hw + ny.abs() * hh; v.push((q.0 + sgn * nx * e, q.1 + sgn * ny * e)); }
+                        break;
+                    }
+                    left -= l;
                 }
             }
+        }
+        v
+    }
+    /// Where along a line a leader may start: away from points and from where other lines cross it.
+    fn line_anchors(&self, gid: u32) -> Vec<Pt> {
+        let segs: Vec<(Pt, Pt)> = self.strokes.iter().filter(|s| s.2 == gid).map(|s| (s.0, s.1)).collect();
+        let total: f64 = segs.iter().map(|(a, b)| (b.0 - a.0).hypot(b.1 - a.1)).sum();
+        let mut f: Vec<f64> = (1..20).map(|i| i as f64 / 20.0).collect();
+        f.sort_by(|a, b| (a - 0.5).abs().partial_cmp(&(b - 0.5).abs()).unwrap());
+        f.iter().filter_map(|f| {
+            let mut left = f * total;
+            for (a, b) in &segs { let l = (b.0 - a.0).hypot(b.1 - a.1); if left <= l && l > 0.0 { let t = left / l; return Some((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1))); } left -= l; }
+            None
+        }).filter(|q| self.dots.iter().all(|d| (d.0 - q.0).hypot(d.1 - q.1) > 12.0) && !self.any_near([q.0 - 10.0, q.1 - 10.0, q.0 + 10.0, q.1 + 10.0], |i| { let s = self.strokes[i]; s.2 != gid && s.2 < LEADER && seg_pt(*q, s.0, s.1) <= 10.0 && !segs.iter().any(|o| line_pt(s.0, o.0, o.1) < 1.0 && line_pt(s.1, o.0, o.1) < 1.0) })).take(5).collect()
+    }
+    /// A label standing off from `q` with a short leader. The leader crosses at most the axes (level 0), also the conic's part
+    /// lines (level 1), also the curve (level 2, a tiny conic's last resort); never another leader, a point or a label.
+    fn with_leader(&self, q: Pt, w: f64, size: f64, text: &str, at: &At, over_nums: bool, level: u8) -> Option<(Pt, (Pt, Pt))> {
+        let (hw, hh) = (w / 2.0, 0.56 * size);
+        let own_line = |g: u32| matches!(at, At::Line(o) if *o == g);
+        let reach: &[f64] = if level == 2 { &[16.0, 22.0, 30.0, 40.0, 52.0, 66.0, 80.0, 96.0, 112.0, 130.0, 150.0] } else { &[16.0, 22.0, 30.0, 40.0, 52.0, 66.0, 80.0] };
+        for &rr in reach {
+            let n = if level == 2 { 48 } else { 32 };
+            for i in 0..n {
+                let a = i as f64 * 2.0 * std::f64::consts::PI / n as f64;
+                let (ux, uy) = (a.cos(), a.sin());
+                let c = (q.0 + ux * (rr + ux.abs() * hw), q.1 + uy * (rr + uy.abs() * hh));
+                let b = Board::bx(c, w, size);
+                if !self.clear_of(b, over_nums) { continue; }
+                let ink = Board::ink(c, w, size, text);
+                // the label stands clear of every other point, so the leader is what ties it
+                let (dot_gap, lead_gap) = if level == 2 { (7.0, DOT + 1.5) } else { (10.0, DOT + 3.0) };
+                // the text is nearer its own leader (which ends 3 px from it) than any other line
+                if self.any_near(grow(ink, 6.0), |i| { let s = self.strokes[i]; !own_line(s.2) && box_seg(ink, s.0, s.1) < 6.0 }) { continue; }
+                if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && box_pt(ink, *d) < dot_gap) { continue; }
+                let to = (q.0.clamp(ink[0], ink[2]), q.1.clamp(ink[1], ink[3]));
+                let (dx, dy) = (to.0 - q.0, to.1 - q.1);
+                let l = dx.hypot(dy);
+                if !(12.0..=if level == 2 { 160.0 } else { 90.0 }).contains(&l) { continue; }
+                let start = if matches!(at, At::Pt(..)) { DOT + 1.5 } else { 2.0 };
+                let from = (q.0 + dx / l * start, q.1 + dy / l * start);
+                let to = (to.0 - dx / l * 3.0, to.1 - dy / l * 3.0);
+                let lb = [from.0.min(to.0) - 3.0, from.1.min(to.1) - 3.0, from.0.max(to.0) + 3.0, from.1.max(to.1) + 3.0];
+                let hit: Vec<usize> = self.near(lb).into_iter().filter(|&i| { let s = self.strokes[i]; !own_line(s.2) && s.2 != AXES && seg_cross(from, to, s.0, s.1) }).collect();
+                let hard = |i: &usize| self.hard.contains(&self.strokes[*i].2);
+                let ok = match level {
+                    0 => hit.is_empty(),
+                    1 => hit.iter().all(|i| !hard(i) && self.strokes[*i].2 < LEADER),
+                    // the curve crossed at one place only (one run of neighbouring pieces of its polyline), no leader crossed
+                    _ => hit.iter().all(|i| self.strokes[*i].2 < LEADER) && { let c: Vec<usize> = hit.iter().copied().filter(hard).collect(); c.len() <= 40 && c.windows(2).all(|w| w[1] - w[0] <= 1) },
+                };
+                if !ok { continue; }
+                // it may cross an axis but never run along one (it would vanish into the axis line)
+                let along_axis = self.strokes.iter().filter(|s| s.2 == AXES).any(|s| { let m = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0); seg_pt(m, s.0, s.1) < 5.0 || (seg_pt(from, s.0, s.1) < 4.0 && seg_pt(to, s.0, s.1) < 4.0) });
+                if along_axis { continue; }
+                if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && seg_pt(*d, from, to) < lead_gap) { continue; }
+                if self.boxes.iter().any(|o| seg_hits_box(from, to, grow(*o, 8.0))) { continue; }
+                if self.nums.iter().filter(|(i, _)| !self.hidden.contains(i)).any(|(_, o)| seg_hits_box(from, to, grow(*o, 1.0))) { continue; }
+                return Some((c, (from, to)));
             }
         }
         None
+    }
+    /// Places label `r`, or None when it finds no room even as its letter alone.
+    fn place(&mut self, r: &Req, size: f64) -> Option<Placed> {
+        let mut texts = vec![(r.text.clone(), false)];
+        if let Some(s) = &r.short && *s != r.text { texts.push((s.clone(), true)); }
+        let try_beside = |me: &Board, text: &str, over_nums: bool| -> Option<Pt> {
+            let w = mw(text, size);
+            let (hw, hh) = (w / 2.0, 0.56 * size);
+            let cands = match r.at { At::Pt(q, out) => Board::beside_point(q, out, hw, hh), At::Line(g) => me.beside_line(g, hw, hh) };
+            cands.into_iter().find(|c| me.clear_of(Board::bx(*c, w, size), over_nums) && me.owns(Board::ink(*c, w, size, text), &r.at))
+        };
+        let anchors: Vec<Pt> = match r.at { At::Pt(q, _) => vec![q], At::Line(g) => self.line_anchors(g) };
+        let mut found: Option<Placed> = None;
+        // (an optional label, a focal radius's length, never covers an axis number)
+        let cover: &[bool] = if r.optional { &[false] } else { &[false, true] };
+        'stages: for (text, short) in &texts {
+            for &over_nums in cover {
+                if let Some(c) = try_beside(self, text, over_nums) { found = Some(Placed { c, leader: None, text: text.clone(), short: *short, level: 0 }); break 'stages; }
+            }
+            for &over_nums in cover {
+                for q in &anchors {
+                    if let Some((c, l)) = self.with_leader(*q, mw(text, size), size, text, &r.at, over_nums, 0) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level: 0 }); break 'stages; }
+                }
+            }
+            // still nothing: a point's label stands off on a leader that may cross the conic's part lines, then (out of a curve
+            // too small to hold it) the curve itself, once
+            if matches!(r.at, At::Pt(..)) {
+                for level in [1, 2] {
+                    if let Some((c, l)) = self.with_leader(anchors[0], mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level }); break 'stages; }
+                }
+            }
+        }
+        let f = found?;
+        self.take(Board::bx(f.c, mw(&f.text, size), size));
+        if let Some((a, b)) = f.leader { let id = self.next; self.next += 1; self.add(a, b, id); }
+        Some(f)
     }
     fn take(&mut self, b: [f64; 4]) {
         for (i, o) in &self.nums { if boxes_hit(grow(b, 1.5), *o) && !self.hidden.contains(i) { self.hidden.push(*i); } }
         self.boxes.push(b);
     }
 }
+trait RoundHalf { fn round_half(self) -> f64; }
+impl RoundHalf for f64 { fn round_half(self) -> f64 { if self.abs() < 0.3 { 0.0 } else { self.signum() } } }
 
 /// A label's text over a white halo (it reads over a gridline), centred at `c`, wrapped so it can be dragged.
 fn label_svg(id: &str, c: Pt, size: f64, text: &str) -> String {
@@ -1188,7 +1297,9 @@ fn keep_texts(t: &[(String, [f64; 4], bool)], dots: &[Pt]) -> Vec<usize> {
     let mut kept: Vec<usize> = vec![];
     for (i, (_, b, number)) in t.iter().enumerate() {
         if halo(i) { continue; }
-        if *number && (dots.iter().any(|d| box_pt(*b, *d) < 6.0) || kept.iter().any(|&j| t[j].2 && boxes_hit(*b, t[j].1))) { continue; }
+        // (the digits are the box less its padding: a dot that only touches the padding covers no digit)
+        let digits = [b[0] + 1.5, b[1] + 1.5, b[2] - 1.5, b[3] - 2.0];
+        if *number && (dots.iter().any(|d| box_pt(digits, *d) < DOT - 1.0) || kept.iter().any(|&j| t[j].2 && boxes_hit(*b, t[j].1))) { continue; }
         kept.push(i);
     }
     let same = |a: [f64; 4], b: [f64; 4]| (0..4).all(|k| (a[k] - b[k]).abs() < 0.5);
@@ -1219,7 +1330,7 @@ pub fn render(p: &Params) -> String { build(p, &mut vec![]) }
 /// What the last build on this thread drew, for the label tests: each placed label's id with its own thing (segments; a
 /// point is a zero-length one), and every stroke and point mark on the plot.
 #[derive(Clone, Debug, Default)]
-pub struct Drawn { pub labels: Vec<(String, Vec<(Pt, Pt)>)>, pub things: Vec<(Pt, Pt)>, pub dropped: usize }
+pub struct Drawn { pub labels: Vec<(String, Vec<(Pt, Pt)>)>, pub things: Vec<(Pt, Pt)>, pub dropped: usize, pub shortened: usize, pub placed: Vec<(String, char, bool, u8)>, pub dropped_kinds: Vec<char> }
 thread_local! { static LAST: std::cell::RefCell<Drawn> = std::cell::RefCell::new(Drawn::default()); }
 pub fn last_drawn() -> Drawn { LAST.with(|l| l.borrow().clone()) }
 
@@ -1252,6 +1363,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
     LAST.with(|l| *l.borrow_mut() = Drawn::default());
 
     let mut over = String::new();
+    let mut marks_svg = String::new();
     let mut lbls = String::new();
     let mut side: Vec<String> = vec![];
     let mut key: Vec<String> = vec![];
@@ -1262,9 +1374,9 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
     let ax_y = if fr.y0 <= 0.0 && fr.y1 >= 0.0 { 0.0 } else { fr.y0 };
     let ax_x = if fr.x0 <= 0.0 && fr.x1 >= 0.0 { 0.0 } else { fr.x0 };
     let (body, gtexts) = grid_texts(&body, top);
-    let mut board = Board { strokes: vec![], dots: vec![], boxes: vec![], nums: vec![], hidden: vec![], next: 10_000, bounds: [rect[0] + 1.0, rect[1] + 1.0, rect[2] - 1.0, rect[3] - 1.0] };
-    board.strokes.push(((fr.ml - 20.0, fr.sy(ax_y)), (fr.ml + fr.pw + 20.0, fr.sy(ax_y)), 0));
-    board.strokes.push(((fr.sx(ax_x), fr.mt - 20.0), (fr.sx(ax_x), fr.mt + fr.ph + 20.0), 0));
+    let mut board = Board::new([rect[0] + 1.0, rect[1] + 1.0, rect[2] - 1.0, rect[3] - 1.0]);
+    board.add((fr.ml - 20.0, fr.sy(ax_y)), (fr.ml + fr.pw + 20.0, fr.sy(ax_y)), AXES);
+    board.add((fr.sx(ax_x), fr.mt - 20.0), (fr.sx(ax_x), fr.mt + fr.ph + 20.0), AXES);
 
     match &m {
         Err(e) => notes.push(format!("{e} Nothing is drawn on the grid until it is fixed.")),
@@ -1284,7 +1396,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 gid += 1;
                 if let Some((s, e)) = clip(fr.s(a), fr.s(b), rect) {
                     line(over, s, e, col, w, dash);
-                    board.strokes.push((s, e, id));
+                    board.add(s, e, id);
                 }
                 id
             };
@@ -1311,7 +1423,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                     let rhs = { let co = coef_txt(&mt, exact, dec); let l = lin_txt("x", &c.h, exact, dec); if c.h.is_zero() { format!("{co}x") } else { format!("{co}{l}") } };
                     let eq = if c.k.is_zero() { format!("y = {rhs}") } else { format!("{lhs} = {rhs}") };
                     key.push(format!("asymptote {eq}"));
-                    reqs.push(Req { id: format!("asym{}", if sg > 0.0 { 1 } else { 2 }), text: eq, at: At::Line(id), optional: false });
+                    reqs.push(Req::line(format!("asym{}", if sg > 0.0 { 1 } else { 2 }), eq, id, false));
                 }
             }
             // directrices
@@ -1323,7 +1435,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                     if want_dir || kind == K::Parabola {
                         let id = seg(&mut over, &mut board, a, b, ink.dir, 1.6, "9 5");
                         if want_dir {
-                            reqs.push(Req { id: format!("dir{}", i + 1), text: line_eq(*is_x, v), at: At::Line(id), optional: false });
+                            reqs.push(Req::line(format!("dir{}", i + 1), line_eq(*is_x, v), id, false));
                             if !fr.inside(if *is_x { (v.v, (fr.y0 + fr.y1) / 2.0) } else { ((fr.x0 + fr.x1) / 2.0, v.v) }) { notes.push(format!("The directrix {} is outside the window: widen the axes to see it.", line_eq(*is_x, v).replace('-', "\u{2212}"))); }
                         }
                     }
@@ -1334,14 +1446,14 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
             if kind == K::Parabola && p.b("show_sym") {
                 let (a, b) = if c.vert { ((h, fr.y0 - 1.0), (h, fr.y1 + 1.0)) } else { ((fr.x0 - 1.0, k), (fr.x1 + 1.0, k)) };
                 let id = seg(&mut over, &mut board, a, b, ink.aux, 1.3, "2 4");
-                reqs.push(Req { id: "sym".into(), text: if c.vert { line_eq(true, &c.h) } else { line_eq(false, &c.k) }, at: At::Line(id), optional: false });
+                reqs.push(Req::line("sym", if c.vert { line_eq(true, &c.h) } else { line_eq(false, &c.k) }, id, false));
             }
             // major and minor (transverse and conjugate) axes
             if ell_hyp && p.b("show_axes") {
                 let id1 = seg(&mut over, &mut board, c.atf(-c.a.v, 0.0), c.atf(c.a.v, 0.0), ink.aux, 1.6, "");
                 let id2 = seg(&mut over, &mut board, c.atf(0.0, -c.b.v), c.atf(0.0, c.b.v), ink.aux, 1.6, "");
-                reqs.push(Req { id: "ax2a".into(), text: format!("2a = {}", N::i(2).mul(&c.a).show(exact, dec)), at: At::Line(id1), optional: false });
-                reqs.push(Req { id: "ax2b".into(), text: format!("2b = {}", N::i(2).mul(&c.b).show(exact, dec)), at: At::Line(id2), optional: false });
+                reqs.push(Req::line("ax2a", format!("2a = {}", N::i(2).mul(&c.a).show(exact, dec)), id1, false));
+                reqs.push(Req::line("ax2b", format!("2b = {}", N::i(2).mul(&c.b).show(exact, dec)), id2, false));
             }
             // latus rectum
             if kind != K::Circle && p.b("show_latus") {
@@ -1350,7 +1462,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 let mut first = None;
                 for f in fs { let id = seg(&mut over, &mut board, c.atf(f, -half), c.atf(f, half), ink.lr, 1.8, ""); first.get_or_insert(id); }
                 let what = if kind == K::Parabola { "4p" } else { "2b^2/a" };
-                reqs.push(Req { id: "latus".into(), text: format!("{what} = {}", c.latus().show(exact, dec)), at: At::Line(first.unwrap()), optional: false });
+                reqs.push(Req::line("latus", format!("{what} = {}", c.latus().show(exact, dec)), first.unwrap(), false));
             }
             // P and its focal radii
             let mut pnote = None;
@@ -1363,7 +1475,7 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 if fr.inside(pp) { match kind {
                     K::Circle => {
                         let id = seg(&mut over, &mut board, (h, k), pp, ink.radii, 1.8, "");
-                        reqs.push(Req { id: "rad".into(), text: format!("r = {}", c.a.show(exact, dec)), at: At::Line(id), optional: false });
+                        reqs.push(Req::line("rad", format!("r = {}", c.a.show(exact, dec)), id, false));
                         pnote = Some(("CP = r".to_string(), format!("CP = r = {}", c.a.show(exact, dec))));
                     }
                     K::Parabola => {
@@ -1372,11 +1484,11 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                         let foot = if c.vert { (pp.0, dirs[0].1.v) } else { (dirs[0].1.v, pp.1) };
                         let id1 = seg(&mut over, &mut board, pp, fp, ink.radii, 1.8, "");
                         let id2 = seg(&mut over, &mut board, pp, foot, ink.radii, 1.8, "3 3");
-                        reqs.push(Req { id: "pf".into(), text: num(d(fp)), at: At::Line(id1), optional: true });
-                        reqs.push(Req { id: "pd".into(), text: num(d(foot)), at: At::Line(id2), optional: true });
+                        reqs.push(Req::line("pf", num(d(fp)), id1, true));
+                        reqs.push(Req::line("pd", num(d(foot)), id2, true));
                         board.dots.push(fr.s(foot));
-                        over.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="3" fill="{}" stroke="#fff" stroke-width="1"/>"##, fr.sx(foot.0), fr.sy(foot.1), ink.radii));
-                        reqs.push(Req { id: "D".into(), text: "D".into(), at: At::Pt(fr.s(foot), outward(foot)), optional: false });
+                        marks_svg.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="3" fill="{}" stroke="#fff" stroke-width="1"/>"##, fr.sx(foot.0), fr.sy(foot.1), ink.radii));
+                        reqs.push(Req { id: "D".into(), text: "D".into(), short: None, at: At::Pt(fr.s(foot), outward(foot)), optional: false, prio: 5, kind: 'D' });
                         pnote = Some(("PF = PD".to_string(), format!("PF = PD = {}", num(d(fp)))));
                     }
                     _ => {
@@ -1384,8 +1496,8 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                         let (f1, f2) = ((fo[0].0.v, fo[0].1.v), (fo[1].0.v, fo[1].1.v));
                         let id1 = seg(&mut over, &mut board, pp, f1, ink.radii, 1.8, "");
                         let id2 = seg(&mut over, &mut board, pp, f2, ink.radii, 1.8, "");
-                        reqs.push(Req { id: "pf1".into(), text: num(d(f1)), at: At::Line(id1), optional: true });
-                        reqs.push(Req { id: "pf2".into(), text: num(d(f2)), at: At::Line(id2), optional: true });
+                        reqs.push(Req::line("pf1", num(d(f1)), id1, true));
+                        reqs.push(Req::line("pf2", num(d(f2)), id2, true));
                         let two_a = N::i(2).mul(&c.a).show(exact, dec);
                         pnote = Some(if kind == K::Ellipse {
                             ("PF_1 + PF_2".to_string(), format!("PF_1 + PF_2 = {} + {} = {two_a} = 2a", num(d(f1)), num(d(f2))))
@@ -1403,11 +1515,12 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
             }
             if cruns.is_empty() { notes.push("The conic is outside the window: set the axes' From and To to take it in.".into()); }
             let cid = gid;
+            board.hard.push(cid);
             if !(stu && p.b("blank_curve")) {
                 for run in &cruns {
                     let pts: Vec<String> = run.iter().map(|q| format!("{:.2},{:.2}", q.0, q.1)).collect();
                     over.push_str(&format!(r#"<polyline points="{}" fill="none" stroke="{}" stroke-width="2.4" stroke-linejoin="round"/>"#, pts.join(" "), ink.curve));
-                    for w in run.windows(2) { board.strokes.push((w[0], w[1], cid)); }
+                    for w in run.windows(2) { board.add(w[0], w[1], cid); }
                 }
             }
             // the points
@@ -1423,49 +1536,102 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                 let q = (x.v, y.v);
                 if !fr.inside(q) { off += 1; continue; }
                 let s = fr.s(q);
-                over.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="{col}" stroke="#fff" stroke-width="1.2"/>"##, s.0, s.1));
+                marks_svg.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="{DOT}" fill="{col}" stroke="#fff" stroke-width="1.2"/>"##, s.0, s.1));
                 board.dots.push(s);
                 let coords = pair_text(x, y, exact, dec);
                 let text = match mode { "Letters only" => nm.clone(), "Coordinates only" => coords, _ => format!("{nm}{coords}") };
-                reqs.insert(0, Req { id: nm.replace('_', ""), text, at: At::Pt(s, outward(q)), optional: false });
+                let kind = nm.chars().next().unwrap();
+                let prio = match kind { 'V' => 0, 'F' => 1, 'C' => 2, _ => 3 };
+                reqs.push(Req { id: nm.replace('_', ""), short: Some(nm.clone()), text, at: At::Pt(s, outward(q)), optional: false, prio, kind });
             }
             if off > 0 { notes.push(format!("{off} of the marked points {} outside the window: widen the axes to see {}.", if off == 1 { "is" } else { "are" }, if off == 1 { "it" } else { "them" })); }
             if p.b("show_p") {
                 let pp = c.point(p.f("p_at"));
                 if fr.inside(pp) {
                     let s = fr.s(pp);
-                    over.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="{}" stroke="#fff" stroke-width="1.2"/>"##, s.0, s.1, ink.pt));
+                    marks_svg.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="{DOT}" fill="{}" stroke="#fff" stroke-width="1.2"/>"##, s.0, s.1, ink.pt));
                     board.dots.push(s);
                     let coords = format!("({}, {})", fx(pp.0, dec), fx(pp.1, dec));
                     let text = match mode { "Letters only" => "P".into(), "Coordinates only" => coords, _ => format!("P{coords}") };
                     let at = At::Pt(s, outward(pp));
-                    let pos = reqs.iter().position(|r| matches!(r.at, At::Line(_))).unwrap_or(reqs.len());
-                    reqs.insert(pos, Req { id: "P".into(), text, at, optional: false });
+                    reqs.push(Req { id: "P".into(), short: Some("P".into()), text, at, optional: false, prio: 4, kind: 'P' });
                 }
             }
             // the grid's numbers: one a marked point sits on is left off (the point is what matters), as is one on another number
             for i in keep_texts(&gtexts, &board.dots) { if gtexts[i].2 { board.nums.push((i, gtexts[i].1)); } else { board.boxes.push(gtexts[i].1); } }
-            // place the labels
+            // place the labels: the points' first (vertices, foci, centre, co-vertices, P, D), then the lines', which give way
+            reqs.sort_by_key(|r| r.prio);
             let mut drawn = Drawn::default();
             if !hide_labels {
                 let mut dropped = vec![];
-                for r in &reqs {
-                    match board.place(r, size) {
-                        Some((cpos, leader)) => {
-                            lbls.push_str(&label_svg(&format!("cl-{}", r.id), cpos, size, &r.text));
+                let mut shortened = vec![];
+                // One fixed order cannot suit every shape (the foci can take the room the centre needs): the labels are placed
+                // in several orders of the vertices, foci and centre, either way round each pair, and the arrangement with the
+                // fewest labels left off or cut to their letter, then the fewest leaders, is drawn.
+                let orders: [[char; 3]; 6] = [['V', 'F', 'C'], ['C', 'F', 'V'], ['F', 'C', 'V'], ['C', 'V', 'F'], ['F', 'V', 'C'], ['V', 'C', 'F']];
+                let base = board.clone();
+                let mut best: Option<(u64, Board, Vec<Option<Placed>>)> = None;
+                let mut stale = 0;
+                // `compact`: every point's label is its letter alone (tried only when a point would otherwise go unlabelled)
+                for compact in [false, true] {
+                    if compact && best.as_ref().is_some_and(|b| reqs.iter().zip(&b.2).all(|(r, g)| g.is_some() || r.kind == 'L')) { break; }
+                    let rq: Vec<Req> = reqs.iter().map(|r| Req { id: r.id.clone(), text: if compact && r.kind != 'L' { r.short.clone().unwrap_or(r.text.clone()) } else { r.text.clone() }, short: r.short.clone(), at: r.at, optional: r.optional, prio: r.prio, kind: r.kind }).collect();
+                    stale = 0;
+                    'orders: for minor_first in [false, true] { for flip in [false, true] {
+                        for ord in &orders {
+                            let mut idx: Vec<usize> = (0..rq.len()).collect();
+                            // (the other points, co-vertices, P and D, go after the three kinds, or before them)
+                            let rank = |r: &Req| match ord.iter().position(|k| *k == r.kind) { Some(i) => if minor_first { 10 + i as u8 } else { i as u8 }, None if minor_first && r.kind != 'L' => r.prio, None => 20 + r.prio };
+                            idx.sort_by_key(|&i| (rank(&rq[i]), if flip { usize::MAX - i } else { i }));
+                            let mut b = base.clone();
+                            let mut got: Vec<Option<Placed>> = vec![None; rq.len()];
+                            for &i in &idx {
+                                got[i] = b.place(&rq[i], size);
+                                // (a compact label is its letter: it counts as cut short wherever the full text had coordinates)
+                                if let Some(g) = got[i].as_mut() && compact && rq[i].text != reqs[i].text { g.short = true; }
+                            }
+                            let points_ok = rq.iter().zip(&got).all(|(r, g)| r.kind == 'L' || g.as_ref().is_some_and(|p| !p.short));
+                            let score: u64 = rq.iter().zip(&got).map(|(r, g)| match (g, r.kind) {
+                                (None, 'L') => if r.optional { 1 } else { 400 },
+                                (None, _) => 100_000,
+                                (Some(p), k) if p.short => if matches!(k, 'V' | 'F' | 'C') { 5_000 } else { 1_000 },
+                                (Some(p), _) => match (p.leader.is_some(), p.level) { (false, _) => 0, (true, 0) => 20, (true, 1) => 60, _ => 300 },
+                            }).sum::<u64>() + 8 * b.hidden.len() as u64;
+                            if best.as_ref().is_none_or(|b| score < b.0) { best = Some((score, b, got)); stale = 0; } else { stale += 1; }
+                            // (twelve orders in a row with nothing better: the rest will not do better either)
+                            if stale >= 12 { break 'orders; }
+                            // nothing left off or cut short: done at once with no leader, else after the first six orders
+                            // every point's full label placed: done at once when nothing needed a leader, else after the first six orders
+                            let best_score = best.as_ref().map_or(u64::MAX, |b| b.0);
+                            if best_score < 20 || (points_ok && score == best_score && (minor_first || flip || ord == &orders[5])) { break 'orders; }
+                            // (a compact pass needs only a few orders)
+                            if compact && !flip && ord == &orders[1] { break; }
+                        }
+                    } }
+                }
+                let (_, b, got) = best.unwrap();
+                board = b;
+                for (r, g) in reqs.iter().zip(got) {
+                    match g {
+                        Some(pl) => {
+                            lbls.push_str(&label_svg(&format!("cl-{}", r.id), pl.c, size, &pl.text));
                             let mut own: Vec<(Pt, Pt)> = match r.at { At::Pt(q, _) => vec![(q, q)], At::Line(g) => board.strokes.iter().filter(|s| s.2 == g).map(|s| (s.0, s.1)).collect() };
-                            if let Some((a, b)) = leader {
+                            if let Some((a, b)) = pl.leader {
                                 over.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" data-leader="1"/>"##, a.0, a.1, b.0, b.1, if print { "#555555" } else { "#6b7280" }));
                                 own.push((a, b));
                             }
+                            if pl.short { shortened.push(r.text.replace('_', "").replace('-', "\u{2212}")); }
                             drawn.labels.push((format!("cl-{}", r.id), own));
+                            drawn.placed.push((format!("cl-{}", r.id), r.kind, pl.short, if pl.leader.is_some() { 1 + pl.level } else { 0 }));
                         }
                         // (a focal radius's length is also written beside the figure, so it is simply left off where it does not fit)
                         None if r.optional => {}
-                        None => dropped.push(r.text.replace('_', "").replace('-', "\u{2212}")),
+                        None => { dropped.push(r.text.replace('_', "").replace('-', "\u{2212}")); drawn.dropped_kinds.push(r.kind); }
                     }
                 }
                 drawn.dropped = dropped.len();
+                drawn.shortened = shortened.len();
+                if !shortened.is_empty() { notes.push(format!("Labelled with the letter only, for lack of room: {}.", shortened.join(", "))); }
                 if !dropped.is_empty() { notes.push(format!("No clear room for {}: they are left off. Turn off some parts, choose Letters only or widen the axes.", dropped.join(", "))); }
             }
             drawn.things = board.strokes.iter().map(|s| (s.0, s.1)).chain(board.dots.iter().map(|d| (*d, *d))).collect();
@@ -1559,6 +1725,10 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
     if top > 0.0 { out.push_str(&format!(r#"<g transform="translate(0 {top:.2})">"#)); }
     for i in kept { out.push_str(&gtexts[i].0); }
     if top > 0.0 { out.push_str("</g>"); }
+    // the marked points over the numbers (a dot by a number covers no digit: keep_texts leaves off a number a dot would)
+    out.push_str(r#"<g data-conic="marks">"#);
+    out.push_str(&marks_svg);
+    out.push_str("</g>");
     out.push_str(&lbls);
     for (i, s) in side.iter().enumerate() { out.push_str(&row_at(gw + 8.0, fr.mt + 14.0 + 24.0 * lsz * i as f64, size, s)); }
     for (i, l) in klines.iter().enumerate() { out.push_str(&row_at(12.0, top + gh + 20.0 * lsz + 21.0 * lsz * i as f64, kfs, l)); }
