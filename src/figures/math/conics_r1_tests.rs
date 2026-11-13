@@ -610,3 +610,40 @@ fn the_checkers_cosmetic_points() {
     let r = svg(&with(json!({"conic": "Hyperbola", "show_rect": true, "style": "Print"})));
     assert!(r.contains(r##"stroke="#000000" stroke-width="1.8" stroke-linecap="butt" stroke-dasharray="1.5 3""##));
 }
+
+/// The checker's failing examples, in colour, student copy, key and Print, to ~/newfig-out/conics-r1/.
+#[test]
+#[ignore]
+fn dump_checker_examples() {
+    let dir = std::path::PathBuf::from(std::env::var("HOME").unwrap()).join("newfig-out/conics-r1");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut cases: Vec<(&str, serde_json::Value)> = vec![
+        ("hyp_x2_16_y2_9", json!({"equation": "x^2/16 - y^2/9 = 1"})),
+        ("faq_ellipse", json!({"equation": "(x - 2)^2/9 + (y + 1)^2/4 = 1"})),
+        ("default_hyperbola", json!({"conic": "Hyperbola"})),
+        ("parabola_left", json!({"conic": "Parabola", "opens": "Left"})),
+        ("default_parabola", json!({"conic": "Parabola"})),
+        ("vertical_ellipse", json!({"axis": "Vertical"})),
+        ("opening_large", json!({"label_size": "Large"})),
+        ("opening_directrices", json!({"show_directrices": true})),
+        ("opening_window_m6_8_by2", json!({"xmin": -6.0, "xmax": 8.0, "xstep": 2.0})),
+        ("y_eq_x2", json!({"equation": "y = x^2"})),
+    ];
+    // a value set under a typed equation (through the panel)
+    let mut extra: Vec<(&str, Params)> = vec![];
+    for (name, eq, key, v) in [("h_third_under_typed", "(x - 2)^2/9 + (y + 1)^2/4 = 1", "h", "1/3"), ("h_root2_under_typed", "(x - 2)^2/9 + (y + 1)^2/4 = 1", "h", "\u{221a}2"), ("a5_under_general", "4x^2 + 9y^2 - 16x + 18y - 11 = 0", "a", "5")] {
+        let mut p = start_params(&def());
+        edit(&mut p, "equation", eq);
+        edit(&mut p, key, v);
+        extra.push((name, p));
+    }
+    for (name, c) in cases.drain(..) { extra.push((name, with(c))); }
+    for (name, p) in extra {
+        for (look, set) in [("colour", json!({})), ("student", json!({"show_answers": false, "key_line": true, "show_work": true})), ("key", json!({"key_line": true, "show_work": true})), ("print", json!({"style": "Print", "key_line": true}))] {
+            let mut q = p.clone();
+            for (k, v) in set.as_object().unwrap() { match v { serde_json::Value::Bool(b) => q.set_b(k, *b), serde_json::Value::String(s) => q.set_s(k, s), _ => {} } }
+            std::fs::write(dir.join(format!("{name}_{look}.png")), crate::figures::to_png(&svg(&q), 1.0).unwrap()).unwrap();
+            if look == "colour" { println!("EX {name}: eq {:?} notes {:?}", q.s("equation"), warnings(&q)); }
+        }
+    }
+}
