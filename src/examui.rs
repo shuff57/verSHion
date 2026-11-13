@@ -1658,9 +1658,31 @@ fn page_setup_fit(ui: &egui::Ui, e: &model::Exam, room: f32) -> [String; 3] {
     page_setup_values(e, words)
 }
 
-/// The button's top line: "Page setup" in the small label tier (`kit::label_text`).
+/// Round 31 (B2): the button's top line reads "Page setup" in sentence case (12 semibold, muted:
+/// the bank cards' type label) instead of the spaced capitals of `kit::label_text`, and the values
+/// are parted by [`PAGE_SETUP_SEP`] instead of thin pipes. The button's size and place do not
+/// change. False restores the round 25 face.
+const PAGE_SETUP_R31: bool = true;
+
+/// What parts the button's values (round 31), inside the same [`PAGE_SETUP_VALUE_GAP`].
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum PageSetupSep {
+    /// The meta lines' middle dot, centred in the gap.
+    Dot,
+    /// Nothing: the gap alone.
+    Space,
+}
+const PAGE_SETUP_SEP: PageSetupSep = PageSetupSep::Dot;
+
+/// The button's top line: "Page setup" (round 31: sentence case, 12 semibold, muted; until then
+/// the small label tier, `kit::label_text`).
 fn page_setup_name_galley(ui: &egui::Ui) -> std::sync::Arc<egui::Galley> {
-    egui::WidgetText::from(kit::label_text("Page setup")).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::FontSelection::Default)
+    let text = if PAGE_SETUP_R31 {
+        egui::RichText::new("Page setup").size(kit::ty::LABEL).family(theme::semibold()).color(theme::muted_col())
+    } else {
+        kit::label_text("Page setup")
+    };
+    egui::WidgetText::from(text).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::FontSelection::Default)
 }
 
 /// The values (ink, semibold, 14), `PAGE_SETUP_VALUE_GAP` apart; the gaps hold the dividers.
@@ -1671,6 +1693,11 @@ fn page_setup_values_job(values: &[String]) -> LayoutJob {
         job.append(v, gap, egui::TextFormat::simple(FontId::new(14.0, theme::semibold()), theme::ink()));
     }
     job
+}
+
+/// The middle dot parting the values (round 31): the values' font, muted.
+fn page_setup_dot_galley(p: &egui::Painter) -> std::sync::Arc<egui::Galley> {
+    p.layout_no_wrap("·".to_string(), FontId::new(14.0, theme::semibold()), theme::muted_col())
 }
 
 fn page_setup_caret(open: bool) -> &'static str {
@@ -1686,9 +1713,9 @@ fn page_setup_button_w(ui: &egui::Ui, values: &[String; 3]) -> f32 {
 }
 
 /// The narrow top card's Page setup button (round 25), 34 tall as before: two lines, "Page setup"
-/// in the small label tier on top and the paper style, text size and margins under it in ink
-/// semibold with a thin divider between each (until round 25 one line: a bold name and a middot
-/// run of values), then the caret, centred. Card fill and `rule` outline at rest, the hover wash,
+/// on top (round 31: sentence case, see [`PAGE_SETUP_R31`]) and the paper style, text size and
+/// margins under it in ink semibold, parted by a middle dot (round 25 to 30: a thin divider; until
+/// round 25 one line: a bold name and a middot run of values), then the caret, centred. Card fill and `rule` outline at rest, the hover wash,
 /// the accent wash and outline while its controls are open, the accent ring on keyboard focus.
 /// Screen readers hear "Page setup: Condensed, 12 pt, 1 in margins".
 fn page_setup_button(ui: &mut egui::Ui, values: &[String; 3], open: bool) -> egui::Response {
@@ -1726,7 +1753,17 @@ fn page_setup_button(ui: &mut egui::Ui, values: &[String; 3], open: bool) -> egu
         let wk = p.layout_job(page_setup_values_job(&values[..k])).size().x;
         let x = (x0 + wk + PAGE_SETUP_VALUE_GAP / 2.0).round() + 0.5;
         let cy = vy + vh / 2.0;
-        p.vline(x, (cy - 6.0)..=(cy + 6.0), Stroke::new(1.0, theme::border()));
+        match (PAGE_SETUP_R31, PAGE_SETUP_SEP) {
+            (false, _) => {
+                p.vline(x, (cy - 6.0)..=(cy + 6.0), Stroke::new(1.0, theme::border()));
+            }
+            // The dot in the values' own font, on their line, centred in the gap.
+            (true, PageSetupSep::Dot) => {
+                let dot = page_setup_dot_galley(p);
+                p.galley(Pos2::new(x0 + wk + (PAGE_SETUP_VALUE_GAP - dot.size().x) / 2.0, vy), dot, theme::muted_col());
+            }
+            (true, PageSetupSep::Space) => {}
+        }
     }
     p.text(Pos2::new(x0 + text_w + PAGE_SETUP_CARET_GAP, rect.center().y), Align2::LEFT_CENTER, page_setup_caret(open), theme::icon_font(13.0), theme::text_col());
     resp
@@ -5792,6 +5829,22 @@ const SHELF_ICON_GAP: f32 = 6.0;
 /// The glyph in edit and copy: the size `kit::icon_button` gives a 24 square.
 const SHELF_ICON_GLYPH: f32 = 14.0;
 
+/// Round 31 (B1): a bank card's points ("1 pt") in the normal `text` colour (until then the muted
+/// tone) and [`SHELF_POINTS_GAP`] clear of the edit button (until then 6). False restores both.
+const SHELF_POINTS_R31: bool = true;
+/// The least air between the points and the edit button (round 31).
+const SHELF_POINTS_GAP: f32 = 10.0;
+
+/// The colour of a bank card's points.
+fn shelf_points_col() -> Color32 {
+    if SHELF_POINTS_R31 { theme::text_col() } else { theme::muted_col() }
+}
+
+/// The air between a bank card's points and its edit button.
+fn shelf_points_gap() -> f32 {
+    if SHELF_POINTS_R31 { SHELF_POINTS_GAP } else { 6.0 }
+}
+
 /// The gap between two bank cards.
 const SHELF_CARD_GAP: f32 = 8.0;
 
@@ -6195,9 +6248,9 @@ fn shelf_row(
     // The header row: type, badges and points on the left, then edit, copy and the "+" at its right
     // end, all on one middle line.
     let (add_rect, copy_rect, edit_rect, head_cy) = shelf_head_rects(rect);
-    let meta_end = edit_rect.left() - 6.0;
+    let meta_end = edit_rect.left() - shelf_points_gap();
     // The points at the type line's end; the badges give way to them.
-    let pts_g = q.points.map(|pts| p.layout_no_wrap(format!("{} pt", fmt_number(pts)), FontId::proportional(kit::ty::LABEL), theme::muted_col()));
+    let pts_g = q.points.map(|pts| p.layout_no_wrap(format!("{} pt", fmt_number(pts)), FontId::proportional(kit::ty::LABEL), shelf_points_col()));
     let pts_left = pts_g.as_ref().map_or(meta_end, |g| meta_end - g.size().x);
     let toggle_word = if open { "Show less" } else { "Show all" };
     let meta_right = pts_left - 4.0;
@@ -6215,6 +6268,8 @@ fn shelf_row(
     let ty_y = (head_cy - line_h / 2.0).round();
     p.galley(Pos2::new(x, ty_y), tg, theme::muted_col());
     x += tw + 8.0;
+    // Where `x` stands with no badge drawn: the type label's end and its 8.
+    let label_x = x;
     let badge_g = |label: &str, fg: Color32| p.layout_no_wrap(label.to_string(), FontId::new(kit::ty::LABEL, theme::bold_family()), fg);
     let put_badge = |x: &mut f32, g: std::sync::Arc<egui::Galley>, bg: Color32| {
         let r = Rect::from_min_size(Pos2::new(*x, ty_y + (line_h - g.size().y) / 2.0 - 1.0), g.size() + Vec2::new(10.0, 2.0));
@@ -6255,14 +6310,22 @@ fn shelf_row(
     if q.image.is_some() {
         optional(&mut x, "Image", theme::muted_col(), theme::field());
     }
+    // `x` carries the 6 after the last badge (8 after the type label). Round 31: the points are
+    // measured against the right edge of what is drawn (the last badge or mark, else the type
+    // label), so a badge that ends at `meta_right` (4 before the points) keeps them (until then
+    // its trailing 6 crossed `pts_left` and the points were left out).
+    let badges_right = match (SHELF_POINTS_R31, x == label_x) {
+        (false, _) => x,
+        (true, true) => x - 8.0,
+        (true, false) => x - 6.0,
+    };
     let mut pts_rect = None;
     if let Some(g) = pts_g {
-        if pts_left > x {
+        if pts_left > badges_right + if SHELF_POINTS_R31 { 4.0 - 0.01 } else { 0.0 } {
             pts_rect = Some(Rect::from_min_size(Pos2::new(pts_left, ty_y), g.size()));
             p.galley(Pos2::new(pts_left, ty_y), g, Color32::PLACEHOLDER);
         }
     }
-    let badges_right = x;
     // Stem, and where "Show all" / "Show less" goes: right-aligned at the stem's right edge on
     // the last line shown (under it for an opened card whose last line is full).
     let stem_pos = Pos2::new(rect.left() + SHELF_CARD_PAD_X, rect.top() + SHELF_TEXT_TOP);
@@ -9459,6 +9522,96 @@ mod system_pass_tests {
         }
     }
 
+    /// Round 31: the button's name reads "Page setup" in sentence case at the label size (no
+    /// spaced capitals), and the new face leaves the button exactly as wide as the round 25 face in
+    /// every paper style, wording and margins (the values keep their gaps; the name is narrower and
+    /// never the wider line), so `page_setup_fit` trims at exactly the rooms it trimmed at before.
+    #[test]
+    fn the_page_setup_face_reads_in_sentence_case_and_keeps_its_width() {
+        let bad = in_ui(|ui| {
+            let mut bad = vec![];
+            let name = page_setup_name_galley(ui);
+            if name.text() != "Page setup" {
+                bad.push(format!("name reads {:?}", name.text()));
+            }
+            let size = name.job.sections.first().map_or(0.0, |s| s.format.font_id.size);
+            if (size - kit::ty::LABEL).abs() > 0.01 {
+                bad.push(format!("name at {size}"));
+            }
+            // The round 25 width: the spaced capitals over the same values.
+            let old_name = egui::WidgetText::from(kit::label_text("Page setup")).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::FontSelection::Default).size().x;
+            let caret = ui.painter().layout_no_wrap(page_setup_caret(false).into(), theme::icon_font(13.0), theme::text_col()).size().x;
+            let old_w = |v: &[String; 3]| PAGE_SETUP_PAD_X + old_name.max(ui.painter().layout_job(page_setup_values_job(v)).size().x) + PAGE_SETUP_CARET_GAP + caret + PAGE_SETUP_PAD_X;
+            for margins in [model::Margins::all(25.4), model::Margins::all(19.05), model::Margins { top: 25.4, right: 19.05, bottom: 25.4, left: 19.05 }] {
+                for body_pt in [10.0, 12.0, 14.0] {
+                    for &paper_style in model::PaperStyle::ALL.iter() {
+                        let e = model::Exam { paper_style, body_pt, margins: Some(margins), ..Default::default() };
+                        for words in [true, false] {
+                            let v = page_setup_values(&e, words);
+                            let (new, old) = (page_setup_button_w(ui, &v), old_w(&v));
+                            if (new - old).abs() > 0.01 {
+                                bad.push(format!("{v:?}: {new} wide, was {old}"));
+                            }
+                        }
+                        // The old fit: the word while every style's worded button fits.
+                        for room in [150.0, 200.0, 240.0, 260.0, 280.0, 300.0, 340.0, 600.0] {
+                            let old_words = model::PaperStyle::ALL.iter().all(|&ps| old_w(&page_setup_values(&model::Exam { paper_style: ps, ..e.clone() }, true)) <= room);
+                            if page_setup_fit(ui, &e, room) != page_setup_values(&e, old_words) {
+                                bad.push(format!("{paper_style:?} at {room}: trims differently"));
+                            }
+                        }
+                    }
+                }
+            }
+            Some(bad)
+        })
+        .unwrap();
+        assert!(bad.is_empty(), "{bad:#?}");
+    }
+
+    /// Round 31: drawn, the button's top line is "Page setup" and its values are parted by the
+    /// middle dot (muted, centred in each gap, on the values' line), with no thin pipes; the
+    /// screen reader's name is unchanged.
+    #[test]
+    fn the_page_setup_button_parts_its_values_with_the_middle_dot() {
+        let values = ["Standard".to_string(), "12 pt".to_string(), "1 in margins".to_string()];
+        let mut first = true;
+        let mut h = Harness::builder().with_size(Vec2::new(400.0, 100.0)).build_ui(move |ui: &mut egui::Ui| {
+            if std::mem::take(&mut first) {
+                theme::setup(ui.ctx());
+                ui.ctx().request_repaint();
+                return;
+            }
+            page_setup_button(ui, &values, false);
+        });
+        h.run_steps(3);
+        use egui_kittest::kittest::{by, NodeT, Queryable};
+        let btn = h.query_all(by().label("Page setup: Standard, 12 pt, 1 in margins")).next().expect("the button").rect();
+        let mut texts = vec![];
+        let mut lines = 0;
+        for cs in &h.output().shapes {
+            match &cs.shape {
+                egui::Shape::Text(t) => texts.push((t.galley.text().to_string(), t.visual_bounding_rect())),
+                egui::Shape::LineSegment { points, .. } if (points[0].x - points[1].x).abs() < 0.01 && btn.contains(points[0]) => lines += 1,
+                _ => {}
+            }
+        }
+        assert!(texts.iter().any(|(t, _)| t == "Page setup"), "{texts:?}");
+        assert!(!texts.iter().any(|(t, _)| t.chars().any(|c| c == '\u{200A}') || t.starts_with("PAGE")), "spaced capitals: {texts:?}");
+        let vals = texts.iter().find(|(t, _)| t.starts_with("Standard")).expect("the values").1;
+        let dots: Vec<Rect> = texts.iter().filter(|(t, _)| t == "·").map(|(_, r)| *r).collect();
+        match PAGE_SETUP_SEP {
+            PageSetupSep::Dot => {
+                assert_eq!(dots.len(), 2, "{texts:?}");
+                for d in &dots {
+                    assert!(vals.contains_rect(*d) && (d.center().y - vals.center().y).abs() < vals.height() / 2.0, "dot {d:?} off the values {vals:?}");
+                }
+            }
+            PageSetupSep::Space => assert!(dots.is_empty()),
+        }
+        assert_eq!(lines, 0, "no pipes");
+    }
+
     /// Short of room the strip drops the "Page setup" name, then the page prefix, then the
     /// summary, then the words, and never needs more than it was given once the words are gone
     /// (or the smallest it can be).
@@ -10719,6 +10872,22 @@ mod review_tests {
     /// two-digit point value on a long type label) nothing in the row overlaps: the badges give way
     /// (the warning to its mark), never the "+". Beside the page and alone in the bank tab, at the
     /// panel's 340, the "+" is a named button 26 square at least and a click on it adds the question.
+    /// The colour each drawn text shape reading one of `words` is painted in (its first section's
+    /// colour, or the shape's override where it has one).
+    fn shelf_points_texts<S>(h: &Harness<'_, S>, words: &[&str]) -> Vec<Color32> {
+        h.output()
+            .shapes
+            .iter()
+            .filter_map(|cs| match &cs.shape {
+                egui::Shape::Text(t) if words.contains(&t.galley.text()) => {
+                    let c = t.galley.job.sections.first().map_or(Color32::PLACEHOLDER, |s| s.format.color);
+                    Some(if t.override_text_color.is_some() { t.override_text_color.unwrap() } else if c == Color32::PLACEHOLDER { t.fallback_color } else { c })
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn the_add_button_sits_in_the_header_row_and_overlaps_nothing() {
         let img = || Some(crate::model::ImageRef { file: "media/x.png".into(), width: 10, height: 10 });
@@ -10769,7 +10938,16 @@ mod review_tests {
                     assert!((p.center().y - add.center().y).abs() < 1.5, "{how}: points off the line");
                     assert!(p.right() <= card.edit.left() && p.left() >= card.badges_right - 0.01, "{how}: points on the icons or badges");
                 }
-                assert!(card.badges_right - 6.0 <= card.edit.left() - 6.0 + 0.01, "{how}: badges under the icons ({} vs {})", card.badges_right, card.edit.left());
+                // Round 31: `badges_right` is the right edge of what is drawn: 4 before the
+                // points where they are drawn, else clear of the edit button by the points' gap.
+                match card.points {
+                    Some(p) => assert!(card.badges_right <= p.left() - 4.0 + 0.02, "{how}: badges at {} against the points at {}", card.badges_right, p.left()),
+                    None => assert!(card.badges_right <= card.edit.left() - SHELF_POINTS_GAP + 0.01, "{how}: badges under the icons ({} vs {})", card.badges_right, card.edit.left()),
+                }
+                // Every card here has points, and they never give way (the longest header's
+                // badges do); they stand at least 10 clear of the edit button.
+                let p = card.points.unwrap_or_else(|| panic!("{how}: the points gave way"));
+                assert!(card.edit.left() - p.right() >= 10.0 - 0.01, "{how}: points {} from edit", card.edit.left() - p.right());
                 if let Some(t) = card.toggle {
                     assert!(!t.intersects(add), "{how}: Show all on the +");
                 }
@@ -10791,6 +10969,17 @@ mod review_tests {
                 assert!(card.add.left() - card.copy.right() >= SHELF_ICON_GAP - 0.01, "{how}: copy against the +");
                 assert!(!card.edit.intersects(card.copy) && !card.copy.intersects(card.add) && !card.edit.intersects(card.add), "{how}: icons overlap");
             }
+            // Round 31: with the longest header ("long": a draft warning, "In exam ×2+", "Image",
+            // 12.5 pt) a badge gives way and the points stay.
+            let long = seen.cards.iter().find(|c| c.id == "long").unwrap();
+            assert!(long.points.is_some(), "alone {alone}: the longest header lost its points");
+            // The points are painted in the normal text colour, not the muted tone.
+            let pts_cols = shelf_points_texts(&h, &["12.5 pt", "10 pt", "1 pt"]);
+            assert_eq!(pts_cols.len(), 3, "alone {alone}: points painted {pts_cols:?}");
+            for c in &pts_cols {
+                assert_eq!(*c, theme::text_col(), "alone {alone}: points colour");
+                assert_ne!(*c, theme::muted_col(), "alone {alone}: points muted");
+            }
             // A click on the plain card's + adds it.
             let before = h.state().0.store.exam(&"e".into()).unwrap().items.len();
             let plain = seen.cards.iter().find(|c| c.id == "plain").unwrap().add;
@@ -10798,6 +10987,57 @@ mod review_tests {
             h.run_steps(4);
             assert_eq!(h.state().0.store.exam(&"e".into()).unwrap().items.len(), before + 1, "alone {alone}: the + adds the question");
         }
+    }
+
+    /// Round 31: the bug the points' new check fixes. A card ("Short answer", "Image", 1 pt) is
+    /// drawn once to measure its slack, then in a panel narrowed so its "Image" badge ends 0.5
+    /// inside its limit (4 before the points; pixel rounding leaves it within 6): the badge stays and so do the points (until round
+    /// 31 the badge's trailing 6 crossed the points' left edge there and they were left out). With
+    /// no badge, `badges_right` is the type label's own right edge.
+    #[test]
+    fn a_badge_at_its_limit_keeps_the_points() {
+        let seen = |q: Question, w: f32| {
+            let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![q], created: 0, modified: 0, details: Default::default() };
+            let app = scratch_app(bank, exam_of(vec![], 0));
+            let mut first = true;
+            let mut h = Harness::builder().with_size(Vec2::new(SHELF_W + 40.0, 800.0)).build_ui_state(
+                move |ui, s: &mut (crate::App, EditUi)| {
+                    if std::mem::take(&mut first) {
+                        theme::setup(ui.ctx());
+                        ui.ctx().request_repaint();
+                        return;
+                    }
+                    let ctx = ui.ctx().clone();
+                    let (app, st) = s;
+                    draw_shelf(app, ui, &ctx, &"e".into(), st, Rect::from_min_size(Pos2::ZERO, Vec2::new(w, 760.0)));
+                },
+                (app, EditUi::default()),
+            );
+            h.run_steps(6);
+            let label_w = h.ctx.fonts_mut(|f| f.layout_no_wrap("Short answer".into(), FontId::new(kit::ty::LABEL, theme::semibold()), Color32::WHITE).size().x);
+            (h.state().1.shelf_seen.cards[0].clone(), label_w)
+        };
+        let mut q = short("img", "Which of the following elements is the least electronegative?");
+        q.points = Some(1.0);
+        q.image = Some(crate::model::ImageRef { file: "media/x.png".into(), width: 10, height: 10 });
+        let (wide, _) = seen(q.clone(), SHELF_W);
+        let pts = wide.points.expect("the points at full width");
+        // The badge's drawn edge (before round 31 `badges_right` carried the 6 after it).
+        let edge = |c: &ShelfCardSeen| if SHELF_POINTS_R31 { c.badges_right } else { c.badges_right - 6.0 };
+        let slack = pts.left() - 4.0 - edge(&wide);
+        assert!(slack > 1.0, "no slack to take: {slack}");
+        let (tight, _) = seen(q.clone(), SHELF_W - slack + 0.5);
+        assert!((edge(&tight) - edge(&wide)).abs() < 0.01, "the badge moved or gave way: {} vs {}", edge(&tight), edge(&wide));
+        let p = tight.points.expect("the points gave way to a badge at its limit");
+        let air = p.left() - edge(&tight);
+        // The old check's blind spot: the badge kept (within 4 of the points' limit) but its
+        // trailing 6 past the points' left edge.
+        assert!(air >= 4.0 - 0.05 && air < 6.0, "the badge is not near its limit: {air} before the points");
+        // No badge: the edge is the type label's own.
+        q.image = None;
+        let (bare, label_w) = seen(q, SHELF_W);
+        assert!(bare.points.is_some());
+        assert!((bare.badges_right - (bare.rect.left() + SHELF_CARD_PAD_X) - label_w).abs() < 0.05, "no badge: badges_right {} is not the type label's edge", bare.badges_right);
     }
 
     /// Round 30: the bank panel's Question Type, Difficulty and Topic each carry the compact

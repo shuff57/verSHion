@@ -407,6 +407,16 @@ fn soft_backing(core: Rect, feather: Vec2, fill: Color32) -> egui::Shape {
 /// 222 px thumbnail's 7.6 px question text too small to inspect: the sheet is drawn larger, and its
 /// type a step larger again than the sheet, so the questions read at about 10 px.
 const PREVIEW_SIZE: Vec2 = Vec2::new(272.0, 352.0);
+/// Round 31 (a): the size the page is drawn at on a wide window, 13.2% larger than `PREVIEW_SIZE`
+/// with the same proportions. Its right edge (the answer key's reach) stays on the steps card's
+/// right edge and its top on the hero's top, so it grows left into the band beside the copy and
+/// down into the empty space under the steps; its print scales with it. Revert: `PREVIEW_SIZE`.
+const PREVIEW_DRAWN: Vec2 = Vec2::new(308.0, 398.6);
+/// Round 31 (b): at desktop the hero's text column (headline to install link) is centred
+/// vertically on the sample sheet, so the spare height is shared above and below the copy instead
+/// of pooling under the install link. At 760 it was tried and withdrawn by the council (it parted
+/// the paragraph from the headline): the narrow hero is as in round 30. Revert: `false`.
+const HERO_TEXT_CENTRED: bool = true;
 /// The same page in a narrow window, beside the hero's text: the critics read the narrow page's
 /// steps as a text-only explanation with no example of the printed exam it describes.
 const NARROW_PREVIEW_SIZE: Vec2 = Vec2::new(200.0, 259.0);
@@ -448,6 +458,24 @@ fn narrow_hero_geometry(x0: f32, row_w: f32, body_top: f32) -> (Rect, f32) {
     (page, left_of(NARROW_PREVIEW_SIZE) - 36.0 - x0)
 }
 
+/// The wide hero's page (top on `top`, its answer key ending on the row's right edge) and the
+/// width of the text column left of it.
+fn desk_hero_geometry(x0: f32, row_w: f32, top: f32) -> (Rect, f32) {
+    let size = PREVIEW_DRAWN;
+    let right = x0 + row_w - preview_reach(size);
+    let page = Rect::from_min_size(Pos2::new(right - size.x, top), size);
+    (page, 660.0_f32.min(row_w - size.x - 60.0))
+}
+
+/// How far below `col_top` a text column `col_h` tall starts so that it is centred on `page`
+/// (round 31 b); never above `col_top`. Zero until the column has been measured once.
+fn hero_text_offset(page: Rect, col_top: f32, col_h: Option<f32>) -> f32 {
+    match col_h {
+        Some(h) if HERO_TEXT_CENTRED => (page.center().y - h / 2.0 - col_top).max(0.0),
+        _ => 0.0,
+    }
+}
+
 fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
     use egui::{FontId, Shape};
@@ -457,7 +485,8 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     // exempt from the 12 pt floor, but it has to be read to be believed).
     let k = page.width() / 222.0;
     let tk = k * 1.12;
-    let bk = if page.width() >= 250.0 { 12.0 } else { 11.0 } / 7.6;
+    // A desktop sheet drawn larger than `PREVIEW_SIZE` (round 31) scales its print with it.
+    let bk = if page.width() >= 250.0 { 12.0 * (page.width() / PREVIEW_SIZE.x).max(1.0) } else { 11.0 } / 7.6;
     let g = |v: f32| v * k;
     let t = |v: f32| v * tk;
     let b = |v: f32| v * bk;
@@ -1245,7 +1274,30 @@ impl crate::App {
     pub fn draw_welcome(&mut self, ctx: &egui::Context) {
         let fresh = self.store.banks.is_empty() && self.store.exams.is_empty();
         shell_frame(self, ctx, false, |app, ui| {
+            if let Some(go) = welcome_page(ui, fresh).go {
+                app.screen = go;
+            }
+        });
+    }
+}
+
+/// Where the welcome page put its parts (for tests) and the screen a click asked for.
+struct WelcomeLayout {
+    go: Option<crate::Screen>,
+    /// The headline's rect.
+    head: Rect,
+    /// The hero's text below the headline (paragraph to install link).
+    text: Rect,
+    /// The sample sheet (NOTHING when it is not drawn).
+    page: Rect,
+    /// The steps card.
+    card: Rect,
+}
+
+/// The welcome page's body in the desk `ui`.
+fn welcome_page(ui: &mut egui::Ui, fresh: bool) -> WelcomeLayout {
             let desk = ui.max_rect();
+            let mut out = WelcomeLayout { go: None, head: Rect::NOTHING, text: Rect::NOTHING, page: Rect::NOTHING, card: Rect::NOTHING };
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 // Hero and steps sit as one block near the top. The block's height is last frame's
                 // measure; it decides how much of the spare height opens the gap before the steps.
@@ -1288,6 +1340,7 @@ impl crate::App {
                     ui.add_space(if roomy { 14.0 } else { 12.0 });
                 };
                 // The rest of the hero's text, top to bottom, flush left in its column.
+                let mut go = None;
                 let mut hero_text = |ui: &mut egui::Ui, hero: &mut Rect| {
                     // Narrower than the step column below it at every width (the critics read a lead
                     // running wider than the cards as a page with no single column edge); about 60
@@ -1301,12 +1354,12 @@ impl crate::App {
                     // ("Get started" told the critics nothing about what opens).
                     let cta = if fresh { "Make your first Question Bank" } else { "Back to your work" };
                     if crate::pageshell::primary_large(ui, cta).clicked() {
-                        app.screen = crate::Screen::Home;
+                        go = Some(crate::Screen::Home);
                     }
                     if !fresh {
                         ui.add_space(2.0);
                         if crate::kit::link(ui, "Open your banks", true).clicked() {
-                            app.screen = crate::Screen::Banks;
+                            go = Some(crate::Screen::Banks);
                         }
                     }
                     ui.add_space(6.0);
@@ -1345,20 +1398,34 @@ impl crate::App {
                     let x0 = ui.max_rect().center().x - row_w / 2.0;
                     ui.add_space(lead);
                     let top = ui.cursor().top();
-                    let text_w = 660.0_f32.min(row_w - PREVIEW_SIZE.x - 60.0);
-                    let col = Rect::from_min_size(Pos2::new(x0, top), Vec2::new(text_w, ui.available_height().max(0.0)));
-                    let mut text = Rect::NOTHING;
+                    // The page sits right of the text, its top on the hero's top and the answer key
+                    // behind it ending on the steps panel's right edge (one right margin for hero and
+                    // panel). The text column is centred on it (round 31 b).
+                    let (page, text_w) = desk_hero_geometry(x0, row_w, top);
+                    // The column's height is measured where it is drawn and kept per width and per
+                    // content (first run or returning), so a resize or the other variant never uses
+                    // a stale value. A height not yet known for this key re-runs the pass (egui's
+                    // `request_discard`) before anything is painted or read by AccessKit, so no
+                    // presented frame shows the column top-aligned and then jumping. (An invisible
+                    // sizing pass would also measure first, but its disabled copies of the button
+                    // and link would reach the AccessKit tree twice.)
+                    let col_id = egui::Id::new(("welcome_hero_col_h", fresh, text_w.to_bits()));
+                    let known = ui.ctx().data(|d| d.get_temp::<f32>(col_id));
+                    let off = hero_text_offset(page, top, known);
+                    let col = Rect::from_min_size(Pos2::new(x0, top + off), Vec2::new(text_w, ui.available_height().max(0.0)));
+                    let (mut head, mut text) = (Rect::NOTHING, Rect::NOTHING);
                     ui.scope_builder(UiBuilder::new().max_rect(col).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
-                        hero_head(ui, &mut text);
+                        hero_head(ui, &mut head);
                         hero_text(ui, &mut text);
                     });
-                    // The page sits right of the text, its top level with the headline's top and the
-                    // answer key behind it ending on the steps panel's right edge (one right margin
-                    // for hero and panel).
-                    let right = x0 + row_w - preview_reach(PREVIEW_SIZE);
-                    let page = Rect::from_min_size(Pos2::new(right - PREVIEW_SIZE.x, text.top()), PREVIEW_SIZE);
+                    let h = (head | text).height();
+                    if HERO_TEXT_CENTRED && known.is_none_or(|o| (o - h).abs() > 0.5) {
+                        ui.ctx().data_mut(|d| d.insert_temp(col_id, h));
+                        ui.ctx().request_discard("welcome hero column measured");
+                    }
                     paint_exam_preview(ui.painter(), page);
-                    hero = text | page;
+                    (out.head, out.text, out.page) = (head, text, page);
+                    hero = head | text | page;
                     let below = page.bottom() + 8.0 - ui.cursor().top();
                     if below > 0.0 {
                         ui.add_space(below);
@@ -1388,6 +1455,10 @@ impl crate::App {
                     ui.scope_builder(UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
                         hero_text(ui, &mut text);
                     });
+                    (out.head, out.text) = (head, text);
+                    if with_page {
+                        out.page = page;
+                    }
                     hero = if with_page { head | text | page } else { head | text };
                     if with_page {
                         paint_exam_preview(ui.painter(), page);
@@ -1421,16 +1492,24 @@ impl crate::App {
                 let left = ui.max_rect().center().x - col_w / 2.0;
                 let area = egui::Rect::from_min_size(egui::pos2(left, top), Vec2::new(col_w, ui.available_height().max(0.0)));
                 ui.scope_builder(UiBuilder::new().max_rect(area), |ui| {
-                    let _ = steps_section(ui, col_w);
+                    out.card = steps_section(ui, col_w).1;
                 });
                 let measured = ui.cursor().top() - block_top - extra;
-                if block_h.is_none_or(|h| (h - measured).abs() > 0.5) {
-                    ui.ctx().data_mut(|d| d.insert_temp(content_id, measured));
-                    ui.ctx().request_repaint();
-                }
+                remember_height(ui.ctx(), content_id, measured);
+                out.go = go;
             });
-        });
+            out
+}
+
+/// Keeps `h` under `id` for the next frame, asking for one more frame when it changed.
+fn remember_height(ctx: &egui::Context, id: egui::Id, h: f32) {
+    if ctx.data(|d| d.get_temp::<f32>(id)).is_none_or(|old| (old - h).abs() > 0.5) {
+        ctx.data_mut(|d| d.insert_temp(id, h));
+        ctx.request_repaint();
     }
+}
+
+impl crate::App {
 
     // ---------- home ----------
 
@@ -4041,7 +4120,7 @@ mod welcome_sheet_tests {
     /// figure, at least 2 pt in from its frame, and touch neither plotted line.
     #[test]
     fn the_welcome_sheet_has_no_text_smaller_than_its_answer_labels() {
-        for size in [PREVIEW_SIZE, NARROW_PREVIEW_DRAWN] {
+        for size in [PREVIEW_SIZE, PREVIEW_DRAWN, NARROW_PREVIEW_DRAWN] {
             let sheet = paint_sheet(size);
             let all = &sheet.texts;
             let answer = all.iter().find(|t| t.0 == "line p").map(|t| t.1).expect("the answer label");
@@ -4079,7 +4158,7 @@ mod welcome_sheet_tests {
     /// least 10 pt right of the title's galley, and the title keeps its size on one line.
     #[test]
     fn the_version_pill_clears_the_sheet_title() {
-        for size in [PREVIEW_SIZE, NARROW_PREVIEW_DRAWN] {
+        for size in [PREVIEW_SIZE, PREVIEW_DRAWN, NARROW_PREVIEW_DRAWN] {
             let sheet = paint_sheet(size);
             let title = sheet.texts.iter().find(|t| t.0 == "Linear Equations Quiz").expect("the title");
             assert!((title.1 - size.x / 222.0 * 1.12 * 11.5).abs() < 0.01, "{size:?}: the title keeps its size");
@@ -4106,5 +4185,100 @@ mod welcome_sheet_tests {
         assert!(page.left() >= x0 + text_w + 12.0, "the sheet starts {} right of the text column", page.left() - x0 - text_w);
         assert!((page.right() + preview_reach(page.size()) - (x0 + row_w)).abs() < 0.01, "the answer key ends on the column's edge");
         assert_eq!(page.top(), top + 4.0);
+    }
+
+    /// Round 31 (a): at desktop (a 1000 row) the sheet is drawn larger than round 30's, with the
+    /// same proportions, its answer key still ending on the row's (the steps card's) right edge and
+    /// its top unchanged; the text column stays clear of it.
+    #[test]
+    fn the_desktop_welcome_sheet_is_larger_on_the_same_right_edge() {
+        let (x0, top) = (140.0, 90.0);
+        let (page, text_w) = desk_hero_geometry(x0, STEPS_W, top);
+        let grow = page.width() / PREVIEW_SIZE.x;
+        assert!((1.12..=1.15).contains(&grow), "the sheet grows {grow}x");
+        assert!((page.width() / page.height() - PREVIEW_SIZE.x / PREVIEW_SIZE.y).abs() < 0.002, "same proportions");
+        assert!((page.right() + preview_reach(page.size()) - (x0 + STEPS_W)).abs() < 0.01, "the answer key ends on the card's edge");
+        assert_eq!(page.top(), top);
+        assert!(page.left() >= x0 + text_w + 24.0, "the text column ends {} left of the sheet", page.left() - x0 - text_w);
+    }
+
+    /// Round 31 (b) and (a): the whole welcome page in a 1280 x 800 window and a 760 x 800 one
+    /// (a fresh install, the desk's 20 pt margin): at desktop the hero's text column (headline to
+    /// install link) is centred on the sheet within 2 pt; at 760 the paragraph's top stays on the
+    /// sheet's top as in round 30; at both the steps card ends at least 24 pt above the window's
+    /// bottom edge.
+    #[test]
+    fn the_welcome_hero_text_is_centred_on_the_sheet_and_the_steps_fit() {
+        use egui_kittest::Harness;
+        for w in [1280.0, 760.0] {
+            let mut first = true;
+            let mut h = Harness::builder().with_size(egui::vec2(w, 800.0)).build_ui_state(
+                move |ui, out: &mut [Rect; 4]| {
+                    let ctx = &ui.ctx().clone();
+                    if std::mem::take(&mut first) {
+                        theme::setup(ctx);
+                        ctx.request_repaint();
+                        return;
+                    }
+                    let mut root = root_ui(ctx);
+                    let l = desk_panel(&mut root, 20, |ui| welcome_page(ui, true));
+                    *out = [l.head, l.text, l.page, l.card];
+                },
+                [Rect::NOTHING; 4],
+            );
+            h.run();
+            let [head, text, page, card] = *h.state();
+            assert!(page.is_positive() && card.is_positive(), "{w}: sheet and card drawn");
+            if w > 940.0 {
+                let col = head | text;
+                let d = col.center().y - page.center().y;
+                assert!(d.abs() <= 2.0, "{w}: the column's centre is {d} from the sheet's ({col:?} vs {page:?})");
+            } else {
+                // As in round 30: the paragraph starts where the sheet does (the sheet 4 pt lower).
+                assert_eq!(text.top(), page.top() - 4.0, "{w}: the paragraph's top is the sheet's");
+            }
+            assert!(head.bottom() <= text.top(), "{w}: headline above the text");
+            let room = 800.0 - card.bottom();
+            assert!(room >= 24.0, "{w}: the steps card ends {room} pt above the window's bottom");
+            eprintln!("{w}: head {head:?} text {text:?} page {page:?} card {card:?} room {room}");
+        }
+    }
+
+    /// Round 31 (b), council fix: at 1280 x 800 the column is centred on the very first frame the
+    /// page is drawn (one step, no settling), and again on the first frame after the window
+    /// narrows (still the desktop layout) and on the first frame after it widens back.
+    #[test]
+    fn the_desktop_hero_text_is_centred_on_its_first_frame() {
+        use egui_kittest::Harness;
+        // (draw the page?, head, text, page)
+        let mut h = Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(
+            |ui, st: &mut (bool, [Rect; 3])| {
+                if !st.0 {
+                    return;
+                }
+                let mut root = root_ui(ui.ctx());
+                let l = desk_panel(&mut root, 20, |ui| welcome_page(ui, true));
+                st.1 = [l.head, l.text, l.page];
+            },
+            (false, [Rect::NOTHING; 3]),
+        );
+        // The app sets its theme before its first frame; here that takes a frame of its own.
+        theme::setup(&h.ctx);
+        h.step();
+        let check = |h: &Harness<'_, (bool, [Rect; 3])>, what: &str| {
+            let [head, text, page] = h.state().1;
+            assert!(page.is_positive(), "{what}: the sheet is drawn");
+            let d = (head | text).center().y - page.center().y;
+            assert!(d.abs() <= 2.0, "{what}: the column's centre is {d} from the sheet's");
+        };
+        h.state_mut().0 = true;
+        h.step();
+        check(&h, "first frame");
+        h.set_size(egui::vec2(1000.0, 800.0));
+        h.step();
+        check(&h, "first frame at 1000");
+        h.set_size(egui::vec2(1280.0, 800.0));
+        h.step();
+        check(&h, "first frame back at 1280");
     }
 }

@@ -873,8 +873,12 @@ fn intake(app: &mut crate::App, ctx: &egui::Context, st: &mut State) {
     }
 }
 
-/// Text size of the format names and of their group labels (one size, so a row reads on one baseline).
-const FORMAT_PT: f32 = 13.0;
+/// Text size of the format names and of their group labels (one size, so a row reads on one
+/// baseline) on the desktop: the app's body size (changed in round 31: it was META 13).
+const FORMAT_PT: f32 = kit::ty::BODY;
+/// The same in the 760 band and the narrowest layout: META 13, as before round 31 (at BODY 14
+/// the longest name no longer fits the band's four equal columns, and the band's layout stays).
+const FORMAT_BAND_PT: f32 = kit::ty::META;
 /// The clear space between one format column and the next.
 const FORMAT_COL_GAP: f32 = 24.0;
 /// The room between two side-by-side groups; a hairline runs down its middle.
@@ -996,15 +1000,17 @@ fn format_name(ui: &mut egui::Ui, cell: Rect, text: egui::RichText) {
     });
 }
 
-/// A format name: ink, [`FORMAT_PT`].
-fn format_text(t: &str) -> egui::RichText {
-    egui::RichText::new(t).size(FORMAT_PT).color(theme::text_col())
+/// A format name at `pt`: the normal `text` colour, regular ([`kit::body`] at the desktop's
+/// [`FORMAT_PT`]).
+fn format_text(t: &str, pt: f32) -> egui::RichText {
+    kit::body(t).size(pt)
 }
 
-/// A group heading: the meta-strong tier (semibold ink, the names' size), so it reads as the
-/// heading of the names under it rather than one more of them.
-fn format_head(t: &str) -> egui::RichText {
-    kit::meta_strong(t).size(FORMAT_PT)
+/// A group heading: semibold in `ink`, the names' size, so category and entry differ in weight
+/// and tone and the heading reads as the head of the names under it (changed in round 31: it
+/// was semibold in `text`, the names' colour, at 13).
+fn format_head(t: &str, pt: f32) -> egui::RichText {
+    egui::RichText::new(t).size(pt).family(theme::semibold()).color(theme::ink())
 }
 
 /// What the importer can read, grouped so a teacher can scan for their tool instead of
@@ -1052,11 +1058,16 @@ fn formats_panel(ui: &mut egui::Ui) {
             });
         }
         ui.add_space(FORMAT_INTRO_BELOW);
-        let font = FontId::proportional(FORMAT_PT);
-        let head_font = FontId::new(FORMAT_PT, theme::semibold());
-        let name_w = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), theme::text_col()).size().x.ceil();
-        let head_w = |t: &str| ui.painter().layout_no_wrap(t.to_string(), head_font.clone(), theme::text_col()).size().x.ceil();
-        let line_h = ui.fonts_mut(|f| f.row_height(&font));
+        // Measured at a given size: the desktop blocks at [`FORMAT_PT`], the 760 band and the
+        // narrowest layout at [`FORMAT_BAND_PT`].
+        let measure = |ui: &egui::Ui, pt: f32| {
+            let (font, head_font) = (FontId::proportional(pt), FontId::new(pt, theme::semibold()));
+            let width = |t: &str, f: &FontId| ui.painter().layout_no_wrap(t.to_string(), f.clone(), theme::text_col()).size().x.ceil();
+            let names: Vec<Vec<f32>> = FORMAT_GROUPS.iter().map(|(_, items)| items.iter().map(|t| width(t, &font)).collect()).collect();
+            let heads: Vec<f32> = FORMAT_GROUPS.iter().map(|(g, _)| width(g, &head_font)).collect();
+            (names, heads, ui.fonts_mut(|f| f.row_height(&font)))
+        };
+        let (names, heads, line_h) = measure(ui, FORMAT_PT);
         let pitch = line_h + FORMAT_LINE_GAP;
 
         // Desktop (round 27's layout, kept in round 28): blocks sized to their content, each
@@ -1065,15 +1076,16 @@ fn formats_panel(ui: &mut egui::Ui) {
         let blocks: Vec<(Vec<f32>, f32)> = FORMAT_GROUPS
             .iter()
             .zip(FORMAT_BLOCK_COLS)
-            .map(|((group, items), cols)| {
+            .enumerate()
+            .map(|(g, ((_, items), cols))| {
                 let mut xs = Vec::new();
                 let mut x = 0.0;
                 for c in 0..cols {
                     xs.push(x);
-                    x += items.iter().skip(c).step_by(cols).map(|t| name_w(t)).fold(0.0_f32, f32::max) + FORMAT_COL_GAP;
+                    x += (0..items.len()).skip(c).step_by(cols).map(|i| names[g][i]).fold(0.0_f32, f32::max) + FORMAT_COL_GAP;
                 }
                 let grid = x - FORMAT_COL_GAP;
-                (xs, grid.max(head_w(group)))
+                (xs, grid.max(heads[g]))
             })
             .collect();
         let widths: Vec<f32> = blocks.iter().map(|b| b.1).collect();
@@ -1088,23 +1100,23 @@ fn formats_panel(ui: &mut egui::Ui) {
             }
             for (((group, items), cols), (x, (col_xs, bw))) in FORMAT_GROUPS.iter().zip(FORMAT_BLOCK_COLS).zip(xs.into_iter().zip(blocks.iter())) {
                 let left = area.left() + x;
-                format_name(ui, Rect::from_min_size(Pos2::new(left, area.top()), Vec2::new(*bw, line_h)), format_head(group));
+                format_name(ui, Rect::from_min_size(Pos2::new(left, area.top()), Vec2::new(*bw, line_h)), format_head(group, FORMAT_PT));
                 let top = area.top() + line_h + FORMAT_HEAD_GAP;
                 for (i, it) in items.iter().enumerate() {
                     let (r, c) = (i / cols, i % cols);
                     let at = Pos2::new(left + col_xs[c], top + r as f32 * pitch);
-                    format_name(ui, Rect::from_min_size(at, Vec2::new(bw - col_xs[c], line_h)), format_text(it));
+                    format_name(ui, Rect::from_min_size(at, Vec2::new(bw - col_xs[c], line_h)), format_text(it, FORMAT_PT));
                 }
             }
             return;
         }
 
         // 760 (changed in round 28): one band on one grid of equal columns, every column as wide
-        // as the longest name or heading, so nothing wraps.
-        let widest = FORMAT_GROUPS
-            .iter()
-            .flat_map(|(group, items)| std::iter::once(head_w(group)).chain(items.iter().map(|t| name_w(t))))
-            .fold(0.0_f32, f32::max);
+        // as the longest name or heading, so nothing wraps. The names stay at META 13 here: at
+        // BODY 14 "Photos of a worksheet" no longer fits four equal columns at 760.
+        let (names, heads, line_h) = measure(ui, FORMAT_BAND_PT);
+        let pitch = line_h + FORMAT_LINE_GAP;
+        let widest = heads.iter().chain(names.iter().flatten()).copied().fold(0.0_f32, f32::max);
         if let Some((quiz, xs, ws, rules)) = format_grid(inner, widest) {
             let groups = format_cells(quiz);
             let lines = groups.iter().flat_map(|(_, cells)| cells.iter().map(|c| c.1 + 1)).max().unwrap_or(1);
@@ -1118,10 +1130,10 @@ fn formats_panel(ui: &mut egui::Ui) {
             let top = area.top() + line_h + FORMAT_HEAD_GAP;
             for ((group, items), (first, cells)) in FORMAT_GROUPS.iter().zip(&groups) {
                 let head = Rect::from_min_size(Pos2::new(area.left() + xs[*first], area.top()), Vec2::new(col_w(*first), line_h));
-                format_name(ui, head, format_head(group));
+                format_name(ui, head, format_head(group, FORMAT_BAND_PT));
                 for (it, (c, l)) in items.iter().zip(cells) {
                     let at = Pos2::new(area.left() + xs[*c], top + *l as f32 * pitch);
-                    format_name(ui, Rect::from_min_size(at, Vec2::new(col_w(*c), line_h)), format_text(it));
+                    format_name(ui, Rect::from_min_size(at, Vec2::new(col_w(*c), line_h)), format_text(it, FORMAT_BAND_PT));
                 }
             }
             return;
@@ -1130,7 +1142,7 @@ fn formats_panel(ui: &mut egui::Ui) {
         // Narrowest: a fixed heading column, and every group's names in the same equal columns.
         let lab_w = 104.0_f32.min(inner * 0.3);
         let rest = (inner - lab_w).max(120.0);
-        let col_w = FORMAT_GROUPS.iter().flat_map(|(_, items)| items.iter()).map(|t| name_w(t)).fold(0.0_f32, f32::max);
+        let col_w = names.iter().flatten().copied().fold(0.0_f32, f32::max);
         let cols = format_cols(rest, col_w, FORMAT_COL_GAP);
         for (gi, (group, items)) in FORMAT_GROUPS.into_iter().enumerate() {
             if gi > 0 {
@@ -1140,7 +1152,7 @@ fn formats_panel(ui: &mut egui::Ui) {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.allocate_ui_with_layout(Vec2::new(lab_w, 0.0), Layout::left_to_right(Align::Min), |ui| {
                     ui.set_min_width(lab_w);
-                    ui.label(format_head(group));
+                    ui.label(format_head(group, FORMAT_BAND_PT));
                 });
                 ui.allocate_ui_with_layout(Vec2::new(rest, 0.0), Layout::top_down(Align::Min), |ui| {
                     ui.spacing_mut().item_spacing.y = FORMAT_LINE_GAP;
@@ -1150,7 +1162,7 @@ fn formats_panel(ui: &mut egui::Ui) {
                         let (row, _) = ui.allocate_exact_size(Vec2::new(rest, line_h), Sense::hover());
                         for (ci, it) in line.iter().enumerate() {
                             let x = row.left() + ci as f32 * (col_w + FORMAT_COL_GAP);
-                            format_name(ui, Rect::from_min_size(Pos2::new(x, row.top()), Vec2::new(col_w, line_h)), format_text(it));
+                            format_name(ui, Rect::from_min_size(Pos2::new(x, row.top()), Vec2::new(col_w, line_h)), format_text(it, FORMAT_BAND_PT));
                         }
                     }
                 });
@@ -3640,6 +3652,48 @@ mod tests {
             let got = *out.lock().unwrap();
             assert!(got > 60.0 && got <= cap, "panel {got} tall at {width}, cap {cap}");
         }
+    }
+
+    /// Round 31: the format names are body prose (14 pt, the normal `text` colour, regular) and
+    /// the group headings a step stronger (the same size, semibold, `ink`), each 4:1 or more on
+    /// the card in light and dark.
+    #[test]
+    fn format_names_are_body_text_and_headings_semibold_ink() {
+        fn contrast(a: egui::Color32, b: egui::Color32) -> f32 {
+            let lum = |c: egui::Color32| {
+                let ch = |v: u8| {
+                    let v = v as f32 / 255.0;
+                    if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+                };
+                0.2126 * ch(c.r()) + 0.7152 * ch(c.g()) + 0.0722 * ch(c.b())
+            };
+            let (x, y) = (lum(a), lum(b));
+            (x.max(y) + 0.05) / (x.min(y) + 0.05)
+        }
+        let format = |t: egui::RichText| {
+            let job = egui::WidgetText::from(t).into_layout_job(&egui::Style::default(), egui::FontSelection::Default, Align::Min);
+            let f = &job.sections[0].format;
+            (f.font_id.clone(), f.color)
+        };
+        for dark in [false, true] {
+            theme::begin_frame(dark);
+            for pt in [FORMAT_BAND_PT] {
+                assert_eq!(format(format_text("Respondus", pt)).0, FontId::proportional(pt));
+                assert_eq!(format(format_head("Quiz tools", pt)), (FontId::new(pt, theme::semibold()), theme::ink()), "dark {dark}: band headings semibold ink");
+            }
+            let (name_font, name_col) = format(format_text("Respondus", FORMAT_PT));
+            let (head_font, head_col) = format(format_head("Quiz tools", FORMAT_PT));
+            assert_eq!(name_font, FontId::proportional(kit::ty::BODY), "dark {dark}: desktop names at the body size, regular");
+            assert_eq!(name_col, theme::text_col(), "dark {dark}: names in the normal text colour");
+            assert_eq!(head_font, FontId::new(kit::ty::BODY, theme::semibold()), "dark {dark}: headings semibold at the names' size");
+            assert_eq!(head_col, theme::ink(), "dark {dark}: headings in ink");
+            for (what, c) in [("name", name_col), ("heading", head_col)] {
+                let r = contrast(c, theme::card());
+                assert!(r >= 4.0, "dark {dark}: {what} {r:.2}:1 on the card");
+            }
+            assert!(contrast(head_col, theme::card()) > contrast(name_col, theme::card()), "dark {dark}: the heading is the stronger tone");
+        }
+        theme::begin_frame(false);
     }
 
     /// Quiz tools' 3 x 3 grid on desktop: three column x positions, each shared by all
