@@ -14,10 +14,10 @@ type Case = Vec<(&'static str, Value)>;
 fn f(v: f64) -> Value { Value::F(v) }
 fn b(v: bool) -> Value { Value::B(v) }
 
-struct Rng(u64);
+pub(super) struct Rng(pub u64);
 impl Rng {
-    fn next(&mut self, n: usize) -> usize { self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); ((self.0 >> 33) % n as u64) as usize }
-    fn pick<T: Clone>(&mut self, v: &[T]) -> T { v[self.next(v.len())].clone() }
+    pub fn next(&mut self, n: usize) -> usize { self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); ((self.0 >> 33) % n as u64) as usize }
+    pub fn pick<T: Clone>(&mut self, v: &[T]) -> T { v[self.next(v.len())].clone() }
 }
 
 /// The checker's figures.
@@ -34,7 +34,7 @@ fn checker_cases() -> Vec<Case> {
 /// Logistic, both and exponential growth over K 10 to 1e6, r 0.01 to 5, N0 0.1% to 45% of K and spans 1 to 1000, each
 /// with a seeded graph view, label size, gridlines, census counts and the three label modes; then the classic setups at
 /// every view and label size. `modes`: the label modes the inflection point and the phases may take.
-fn sweep(seed: u64, modes: &[&'static str]) -> Vec<Case> {
+pub(super) fn sweep(seed: u64, modes: &[&'static str]) -> Vec<Case> {
     let mut g = Rng(seed);
     let mut out = vec![];
     let mut dress = |c: &mut Case, g: &mut Rng, tspan: f64| {
@@ -82,8 +82,8 @@ fn sweep(seed: u64, modes: &[&'static str]) -> Vec<Case> {
     out
 }
 
-fn attr<'a>(el: &'a str, k: &str) -> Option<&'a str> { Some(el.split(&format!(" {k}=\"")).nth(1)?.split('"').next()?) }
-fn tagged(svg: &str, what: &str) -> Vec<(String, (f64, f64), (f64, f64))> {
+pub(super) fn attr<'a>(el: &'a str, k: &str) -> Option<&'a str> { Some(el.split(&format!(" {k}=\"")).nth(1)?.split('"').next()?) }
+pub(super) fn tagged(svg: &str, what: &str) -> Vec<(String, (f64, f64), (f64, f64))> {
     svg.split("<line").skip(1).filter_map(|el| {
         let el = el.split('>').next().unwrap();
         let t = attr(el, what)?.to_string();
@@ -91,18 +91,18 @@ fn tagged(svg: &str, what: &str) -> Vec<(String, (f64, f64), (f64, f64))> {
         Some((t, (g("x1"), g("y1")), (g("x2"), g("y2"))))
     }).collect()
 }
-fn pt_seg(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+pub(super) fn pt_seg(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let l2 = (dx * dx + dy * dy).max(1e-12);
     let u = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0);
     ((p.0 - a.0 - dx * u).powi(2) + (p.1 - a.1 - dy * u).powi(2)).sqrt()
 }
-fn seg_seg(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) -> f64 {
+pub(super) fn seg_seg(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) -> f64 {
     let n = (((b.0 - a.0).hypot(b.1 - a.1)).ceil() as usize).clamp(4, 2000);
     (0..=n).map(|i| { let t = i as f64 / n as f64; pt_seg((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t), c, d) }).fold(f64::MAX, f64::min)
         .min(pt_seg(c, a, b)).min(pt_seg(d, a, b))
 }
-fn seg_box(a: (f64, f64), b: (f64, f64), bx: (f64, f64, f64, f64), pad: f64) -> bool {
+pub(super) fn seg_box(a: (f64, f64), b: (f64, f64), bx: (f64, f64, f64, f64), pad: f64) -> bool {
     let n = (((b.0 - a.0).hypot(b.1 - a.1)).ceil() as usize).clamp(4, 2000);
     (0..=n).any(|i| { let t = i as f64 / n as f64; let q = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t); q.0 > bx.0 - pad && q.0 < bx.2 + pad && q.1 > bx.1 - pad && q.1 < bx.3 + pad })
 }

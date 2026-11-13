@@ -465,15 +465,59 @@ pub fn growth_render(p: &Params) -> String {
             }
         }
         end_clip(&mut d);
+        // the phase brackets on the population graph: (phase, left, right), and their line's y
+        let phase_brackets = || -> (Vec<(usize, f64, f64)>, f64) {
+            let ti = t_inf.unwrap_or(0.0);
+            let slope = r * k / 4.0;
+            let (t1, t2) = ((ti + (n0 - k / 2.0) / slope).max(a.x0), (ti + (k / 2.0) / slope).min(a.x1));
+            let by = a.y - 10.0 - if has_ends { 16.0 } else { 0.0 };
+            let br = [(a.x0, t1), (t1, t2), (t2, a.x1)].into_iter().enumerate().filter(|(_, (lo, hi))| hi - lo > 1e-9).map(|(i, (lo, hi))| (i, a.px(lo) + 2.0, a.px(hi) - 2.0)).collect();
+            (br, by)
+        };
+        let k_text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
+        // what the phases' blank lines keep clear of: the K line's label (or its blank line) as drawn on this graph, `dx`
+        // along from where it starts (a fixed axis can put it up among the brackets), and the chart's title
+        let phase_avoid = |dx: f64| -> Vec<(f64, f64, f64, f64)> {
+            let mut avoid = vec![];
+            if has_k && p.b("mark_k") {
+                match kstyle {
+                    "None" => {}
+                    "Blank line" => avoid.push((a.x + 8.0 + dx, a.py(k) + 18.0, a.x + 170.0 + dx, a.py(k) + 22.0)),
+                    _ => {
+                        let (x, y, size) = (a.x + 8.0 + dx, a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
+                        // (Arial's widths; the bold face drawn runs up to a fifth wider)
+                        avoid.push((x - 2.0, y - size * 0.95, x + bold_width(k_text, size) * 1.25 + 2.0, y + size * 0.3));
+                    }
+                }
+            }
+            // the title (its words or blank line), which a line searching upward past the K label can reach
+            if !avoid.is_empty() {
+                if !title.is_empty() {
+                    let size = 19.0 * growth_b9::label_scale(p);
+                    let (cx, tw) = ((x0 + aw / 2.0).max(w / 2.0 - if ntab > 0 { ntab as f64 * 81.0 } else { 0.0 }), bold_width(&title, size) * 1.25);
+                    avoid.push((cx - tw / 2.0 - 2.0, 32.0 - size * 0.95, cx + tw / 2.0 + 2.0, 32.0 + size * 0.3));
+                } else if title_blank { avoid.push((x0 + aw / 2.0 - 140.0, 34.0, x0 + aw / 2.0 + 140.0, 38.0)); }
+            }
+            avoid
+        };
+        // Blank line phases only: where the K label up among the brackets covers a bracket so that no leader can leave it
+        // clear of the words, the label slides right along its row to the first place where every phase's line is clear
+        // (Text and None phases keep it where it always was)
+        let k_dx = if phases && matches!(pk, Panel::TimeN) && p.s("phase_label_style") == "Blank line" && has_k && p.b("mark_k") && kstyle != "None" {
+            let (br, by) = phase_brackets();
+            let kw = if kstyle == "Blank line" { 162.0 } else { bold_width(k_text, 14.7 * growth_b9::label_scale(p)) * 1.25 };
+            let ok = |dx: f64| growth_b9::phase_blanks(&mut Doc::new(w, h), &br, by, (a.x, a.x + a.w), w, &phase_avoid(dx));
+            if ok(0.0) { 0.0 } else { (1..).map(|j| j as f64 * 8.0).take_while(|dx| a.x + 8.0 + dx + kw <= a.x + a.w - 8.0).find(|dx| ok(*dx)).unwrap_or(0.0) }
+        } else { 0.0 };
         if has_k && matches!(pk, Panel::TimeN) && p.b("mark_k") {
             match kstyle {
                 "None" => {}
-                "Blank line" => { d.line(a.x + 8.0, a.py(k) + 20.0, a.x + 170.0, a.py(k) + 20.0, INK, 1.3); }
+                "Blank line" => { d.line(a.x + 8.0 + k_dx, a.py(k) + 20.0, a.x + 170.0 + k_dx, a.py(k) + 20.0, INK, 1.3); }
                 _ => {
                     // the reference paints a white plate under the label, then the text with a white halo,
                     // so the dashed line and the gridlines never run through the words
-                    let text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
-                    let (x, y, size) = (a.x + 8.0, a.py(k) + 21.7, 14.7);
+                    let text = k_text;
+                    let (x, y, size) = (a.x + 8.0 + k_dx, a.py(k) + 21.7, 14.7);
                     d.raw(&format!(r##"<g fill="#fff"><rect x="{:.3}" y="{:.3}" width="{:.4}" height="{:.3}"/></g>"##, x - 2.0, y - size * 0.78, bold_width(text, size) + 4.0, size * 1.02));
                     txt(&mut d, x, y, size, "start", SANS, r##"font-weight="bold" stroke="#fff" stroke-width="4" paint-order="stroke" stroke-linejoin="round""##, text);
                 }
@@ -494,7 +538,7 @@ pub fn growth_render(p: &Params) -> String {
                 let kd = has_k && p.b("mark_k");
                 let k_label = (kd && kstyle != "None").then(|| {
                     let text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
-                    let (x, y, size) = (a.x + 8.0, a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
+                    let (x, y, size) = (a.x + 8.0 + k_dx, a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
                     (x - 2.0, y - size * 0.95 - 2.0, x + (bold_width(text, size) * 1.25).max(162.0) + 2.0, y + size * 0.3 + 2.0)
                 });
                 let room = growth_b9::InflRoom { a: &a, at: (cx, cy), curves, census: census.iter().map(|q| a.pt(*q)).collect(), phase_x, k_line: kd.then(|| a.py(k)), k_label, minor: minor_of(p.s("minor")) };
@@ -516,21 +560,7 @@ pub fn growth_render(p: &Params) -> String {
                 brackets.push((i, xa, xb));
             }
             if p.s("phase_label_style") == "Blank line" {
-                // the K line's label (or its blank line) as drawn on this graph: a fixed axis can put it up among the brackets
-                let mut avoid = vec![];
-                if has_k && p.b("mark_k") {
-                    match kstyle {
-                        "None" => {}
-                        "Blank line" => avoid.push((a.x + 8.0, a.py(k) + 18.0, a.x + 170.0, a.py(k) + 22.0)),
-                        _ => {
-                            let text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
-                            let (x, y, size) = (a.x + 8.0, a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
-                            // (Arial's widths; the bold face drawn runs up to a fifth wider)
-                            avoid.push((x - 2.0, y - size * 0.95, x + bold_width(text, size) * 1.25 + 2.0, y + size * 0.3));
-                        }
-                    }
-                }
-                growth_b9::phase_blanks(&mut d, &brackets, by, (a.x, a.x + a.w), w, &avoid);
+                growth_b9::phase_blanks(&mut d, &brackets, by, (a.x, a.x + a.w), w, &phase_avoid(k_dx));
             }
         }
     }
@@ -1631,3 +1661,5 @@ mod tests {
 mod popdyn_b9_tests;
 #[cfg(test)]
 mod growth_r3_tests;
+#[cfg(test)]
+mod growth_r5_tests;

@@ -279,9 +279,13 @@ fn phase_brackets(svg: &str, p: &Params) -> Vec<(f64, f64, f64, f64, f64)> {
         let pts: Vec<(f64, f64)> = attr(el, "points").unwrap().split_whitespace().map(|q| { let (a, b) = q.split_once(',').unwrap(); (a.parse().unwrap(), b.parse().unwrap()) }).collect();
         if pts.len() == 4 && pts[0].0 == pts[1].0 && pts[2].0 == pts[3].0 && pts[1].1 == pts[2].1 && (pts[0].1 - pts[1].1 - 6.0).abs() < 1e-6 && pts[0].1 < ax.y {
             let (va, vb) = (pts[1].0.max(ax.x), pts[2].0.min(ax.x + ax.w));
-            // (a bracket under 4 px, its feet crossed, is a bracket too: its visible part is its middle; round 3)
+            // (a bracket under 4 px, its feet crossed, is a bracket too: its visible part is its middle and the top drawn
+            // between its crossed feet, where a leader may stand to keep a gap from its neighbour's; rounds 3 and 5)
             if vb > va { out.push((pts[1].0, pts[2].0, pts[1].1, va, vb)); }
-            else { let m = ((pts[1].0 + pts[2].0) / 2.0).clamp(ax.x, ax.x + ax.w); out.push((pts[1].0, pts[2].0, pts[1].1, m, m)); }
+            else {
+                let m = ((pts[1].0 + pts[2].0) / 2.0).clamp(ax.x, ax.x + ax.w);
+                out.push((pts[1].0, pts[2].0, pts[1].1, pts[2].0.max(ax.x).min(m), pts[1].0.min(ax.x + ax.w).max(m)));
+            }
         }
     }
     out.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
