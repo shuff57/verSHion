@@ -55,7 +55,7 @@ pub fn params() -> Vec<ParamDef> {
         ParamDef::bool("kind_labels", "Label each discontinuity's kind (removable, jump, infinite)", false),
         ParamDef::bool("arrows", "Arrows on the curve's ends where it leaves the grid", false),
         ParamDef::bool("eps_band", "Epsilon band at the first x = a (\u{3b5} and \u{3b4})", false),
-        ParamDef::text("eps", "\u{3b5} (epsilon)", "1/2").hint("A number such as 1/2 or 0.25: the band L \u{b1} \u{3b5}, and the widest \u{3b4} that keeps f inside it."),
+        ParamDef::text("eps", "\u{3b5} (epsilon)", "1/2").hint("A number such as 1/2 or 0.25: the band L \u{b1} \u{3b5}, and the widest \u{3b4} that keeps f inside it. The student copy shows the \u{3b5} band and L and leaves \u{3b4} to find."),
         ParamDef::choice("title_mode", "Title", &["Text", "Blank line", "None"], "Text"),
         ParamDef::text("title", "Title text", ""),
         ParamDef::float("xmin", "x-axis from", -100.0, 100.0, 1.0, -6.0),
@@ -804,7 +804,10 @@ fn adv(c: char) -> f64 {
         '=' | '+' | '-' | '\u{2212}' | '<' | '>' | '\u{b1}' | '\u{2264}' | '\u{2265}' | '\u{2260}' | '\u{2248}' => 0.564,
         '\u{2192}' => 1.0, '\u{221e}' => 0.75, '\u{221a}' => 0.55, '\u{3c0}' | '\u{3b5}' | '\u{3b4}' => 0.55, '\u{207a}' | '\u{207b}' => 0.4,
         'f' | 'i' | 'j' | 'l' | 't' | 'I' => 0.30, 'r' => 0.36, 's' => 0.39, 'm' | 'w' => 0.75, 'W' | 'M' => 0.9,
-        'a'..='z' => 0.5, 'A'..='Z' => 0.7, _ => 0.6,
+        'a'..='z' => 0.5, 'A'..='Z' => 0.7,
+        // (a blank to write on)
+        '\u{1}' => 3.67,
+        _ => 0.6,
     }
 }
 /// Width of a math text as math_tspans sets it (a ^ or _ part at 70 %).
@@ -825,6 +828,20 @@ pub fn tw(s: &str, size: f64) -> f64 {
         i += 1;
     }
     w * size + 1.0
+}
+/// A sentence: its words upright, its single letters (f, x, a, L), f(1) and its numbers set as math.
+fn prose_tspans(s: &str) -> String {
+    s.split(' ').map(|w| {
+        let core = w.trim_end_matches([':', '?', ',', ';']);
+        let tail = &w[core.len()..];
+        let mathy = core.chars().count() == 1 && core.chars().all(|c| c.is_alphabetic())
+            || core.contains('(') && core.chars().next().is_some_and(|c| c.is_alphabetic()) && core.chars().nth(1) == Some('(')
+            || core.chars().any(|c| c.is_ascii_digit() || matches!(c, '\u{221e}' | '\u{221a}' | '\u{3c0}')) && !core.chars().filter(|c| c.is_alphabetic()).any(|c| c != 'x');
+        if mathy { format!("{}{}", math_tspans(core), svg::esc(tail)) } else { svg::esc(w) }
+    }).collect::<Vec<_>>().join(" ")
+}
+fn prose_el(x: f64, y: f64, size: f64, s: &str, fill: &str) -> String {
+    format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" font-family="{SERIF}" fill="{fill}">{}</text>"##, prose_tspans(s))
 }
 fn text_el(x: f64, y: f64, size: f64, s: &str, fill: &str, halo: bool) -> String {
     let body = math_tspans(s);
@@ -1180,12 +1197,13 @@ fn build(p0: &Params) -> (String, Drawn) {
                     let (py0, py1) = (sy(yh.min(g.y1)), sy(yl.max(g.y0)));
                     band_svg.push_str(&format!(r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="{}" fill-opacity="0.7"/>"#, rect[0], py0, g.pw, (py1 - py0).max(0.0), ink.band));
                     let (px0, px1) = (sx(xl.max(g.x0)), sx(xh.min(g.x1)));
-                    band_svg.push_str(&format!(r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="{}" fill-opacity="0.45"/>"#, px0, rect[1], (px1 - px0).max(0.0), g.ph, ink.band));
+                    // (δ is the answer: the student copy has the ε band only)
+                    if !stu { band_svg.push_str(&format!(r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="{}" fill-opacity="0.45"/>"#, px0, rect[1], (px1 - px0).max(0.0), g.ph, ink.band)); }
                     for yv in [yl, yh] { if inside_y(yv) { let (a1, b1) = ((rect[0], sy(yv)), (rect[2], sy(yv))); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
-                    for xv in [xl, xh] { if inside_x(xv) { let (a1, b1) = ((sx(xv), rect[1]), (sx(xv), rect[3])); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
+                    for xv in [xl, xh] { if inside_x(xv) && !stu { let (a1, b1) = ((sx(xv), rect[1]), (sx(xv), rect[3])); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
                     dr.eps_drawn = true;
                     let dt = if delta >= 0.01 { trim_dec(floor_to(delta, 2), 2) } else { format!("{:.1e}", delta) };
-                    eps_line = Some(format!("\u{3b5} = {}: f stays within \u{3b5} of L = {lt} for every x within \u{3b4} = {dt} of a = {} (x \u{2260} a)", eps.text, a.text));
+                    eps_line = Some(format!("\u{3b5} = {}, L = {lt}, a = {}: f stays within \u{3b5} of L for every x \u{2260} a within \u{3b4} of a, the widest \u{3b4} (to the hundredth below) being \u{3b4} = {}", eps.text, a.text, if stu { BLANK.to_string() } else { dt }));
                 }
                 _ => notes.push(format!("The epsilon band needs a limit that is a number at x = {}: there is none there", a.text.replace('-', "\u{2212}"))),
             },
@@ -1451,7 +1469,7 @@ fn item_svg(it: &Item, x: f64, y: f64, size: f64, fill: &str) -> (String, f64) {
             let n = t.matches(BLANK).count() as f64;
             let w = blank_w * n;
             (format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{fill}" stroke-width="1.2" data-blank="1"/>"##, x + 2.0, y + 3.0, x + w, y + 3.0), w + 2.0)
-        } else { (text_el(x, y, size, t, fill, false), tw(t, size)) }
+        } else { (prose_el(x, y, size, t, fill), tw(t, size)) }
     };
     match it {
         Item::Lim { under, ans } => {
@@ -1470,13 +1488,24 @@ fn item_svg(it: &Item, x: f64, y: f64, size: f64, fill: &str) -> (String, f64) {
         }
         Item::Ask { text, ans } => {
             let wt = tw(text, size);
-            let mut s = text_el(x, y, size, text, fill, false);
+            let mut s = prose_el(x, y, size, text, fill);
             let gap = 0.3 * size;
             let (a, wa) = ans_svg(x + wt + gap, ans);
             s.push_str(&a);
             (s, wt + gap + wa)
         }
-        Item::Text(t) => (text_el(x, y, size, t, fill, false), tw(t, size)),
+        Item::Text(t) => {
+            // (a line with a blank to write on in it)
+            if t.contains(BLANK) {
+                let mut out = String::new();
+                let mut cx = x;
+                for (i, part) in t.split(BLANK).enumerate() {
+                    if i > 0 { out.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{fill}" stroke-width="1.2" data-blank="1"/>"##, cx + 2.0, y + 3.0, cx + 3.4 * size, y + 3.0)); cx += 3.4 * size + 4.0; }
+                    if !part.is_empty() { out.push_str(&prose_el(cx, y, size, part, fill)); cx += tw(part, size); }
+                }
+                (out, cx - x)
+            } else { (prose_el(x, y, size, t, fill), tw(t, size)) }
+        }
     }
 }
 

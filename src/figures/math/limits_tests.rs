@@ -146,7 +146,7 @@ fn infinite_limits_and_poles() {
     let mut q = p.clone();
     q.set_s("inf_answer", "does not exist");
     let w = words(&svg(&q));
-    assert!(w.contains("lim x→4- f(x) = does not exist") && !w.contains('∞'.to_string().as_str()) || w.contains("x→∞"), "{w}");
+    assert!(w.contains("lim x→4- f(x) = does not exist") && w.contains("lim x→4+ f(x) = does not exist") && !w.contains("= ∞") && !w.contains("= -∞"), "{w}");
     q.set_s("dne_word", "DNE");
     assert!(words(&svg(&q)).contains("lim x→4 f(x) = DNE"));
 }
@@ -743,4 +743,104 @@ fn points_ends_switch_by_their_words() {
     let mut q = p.clone();
     (h.click.as_ref().unwrap())(&mut q);
     assert_eq!(q.s("pieces"), "(-5, 1) (-3, 3) (-1, 2) (1, 4) closed\nclosed (1, 1) (3, 0) (5, 2)");
+}
+
+// ───────────────────────── examples, extremes, time ─────────────────────────
+
+#[test]
+fn examples_and_classic_setups() {
+    let ex = crate::figures::examples_for(ID);
+    assert!(ex.len() >= 6);
+    let names: Vec<&str> = crate::figures::classic_setups(ID).iter().map(|e| e.name).collect();
+    assert_eq!(names, ["Hole with the point moved", "Jump with one-sided limits", "Vertical asymptote with limits of \u{b1}\u{221e}", "Horizontal asymptote at infinity", "AP-style graph with every kind of discontinuity"]);
+    let d = def();
+    for e in &ex {
+        let mut p = Params::defaults(&(d.params)());
+        for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); }
+        let s = d.svg(&p);
+        assert!(s.contains("<polyline"), "{}: no curve", e.name);
+        assert!(warnings(&p).is_empty(), "{}: {:?}", e.name, warnings(&p));
+    }
+    // the AP-style graph, read by hand: a jump at -2 (2 and -1, no value), a jump at 1 (2 closed, 4 open), a jump at 3 (3.5 and
+    // 1 + 1/(3 - 5) = 1/2, the point gives f(3) = 1), an infinite one at 5; at ∞, 1 + 1/(x - 5) → 1
+    let ap = &ex[4];
+    let mut p = Params::defaults(&(d.params)());
+    for (k, v) in &ap.params { p.0.insert(k.to_string(), v.clone()); }
+    let w = words(&d.svg(&p));
+    for a in ["lim x→-2- f(x) = 2", "lim x→-2+ f(x) = -1", "f(-2) = undefined", "lim x→1- f(x) = 2", "lim x→1+ f(x) = 4", "f(1) = 2", "lim x→3- f(x) = 3.5", "lim x→3+ f(x) = 1/2", "f(3) = 1", "lim x→5- f(x) = -∞", "lim x→5+ f(x) = ∞", "x = -2 (jump)", "x = 1 (jump)", "x = 3 (jump)", "x = 5 (infinite)"] {
+        assert!(w.contains(a), "{a}: {w}");
+    }
+}
+
+#[test]
+fn the_ends_of_every_range_draw_cleanly_and_quickly() {
+    let long = (0..12).map(|k| format!("y = {k} + 1/(x - {k}.5) + sin({k}x)/(x^2 + 1), {} <= x < {}", k - 6, k - 5)).collect::<Vec<_>>().join("\n");
+    let knots = (0..30).map(|k| format!("({}, {})", k - 15, (k * 7) % 5)).collect::<Vec<_>>().join(" ");
+    let cases = vec![
+        json!({"xmin": -100.0, "xmax": 100.0, "xstep": 0.1, "ymin": -100.0, "ymax": 100.0, "ystep": 0.1, "minor": 10, "kind_labels": true, "asym_eqs": true, "guide": true, "arrows": true, "eps_band": true, "ask_inf": "Both", "ask_disc": true}),
+        json!({"xmin": -0.5, "xmax": 0.5, "xstep": 0.1, "ymin": -0.5, "ymax": 0.5, "ystep": 0.1}),
+        json!({"pieces": long, "ask_at": "-6, -3, 0, 2, 4, 6, 8", "kind_labels": true, "asym_eqs": true, "ask_disc": true, "ask_inf": "Both", "label_size": "Large"}),
+        json!({"pieces": knots, "dots": "(1, 1) (2, 2) (3, 3) (4, 4) (5, 5) (6, 6) (7, 7) (8, 8) (9, 9) (10, 10) (11, 11) (12, 12) (13, 13)"}),
+        json!({"pieces": "y = tan(x)", "xmin": -100.0, "xmax": 100.0, "xstep": 10.0, "ymin": -10.0, "ymax": 10.0, "kind_labels": true, "asym_eqs": true, "ask_disc": true}),
+        json!({"pieces": "y = sin(1/x)", "ask_at": "0", "kind_labels": true, "ask_disc": true}),
+        json!({"pieces": "y = 1e300 * x", "ask_inf": "Both"}),
+        json!({"pieces": "", "dots": "", "ask_at": ""}),
+        json!({"pieces": ")))(((", "dots": "(((", "ask_at": "1/0, 2"}),
+        json!({"pieces": "y = x, 1000 < x", "dots": "(1000, 1000)", "ask_at": "999"}),
+        json!({"xmin": 5.0, "xmax": -5.0, "ymin": 3.0, "ymax": 3.0}),
+    ];
+    for c in cases {
+        let p = with(c.clone());
+        let t = std::time::Instant::now();
+        let s = svg(&p);
+        let ms = t.elapsed().as_millis();
+        let _ = warnings(&p);
+        let _ = handles(&p);
+        assert!(ms < 800, "{c}: {ms} ms");
+        assert!(s.len() < 3_000_000, "{c}: {} bytes", s.len());
+        assert!(!s.contains("NaN") && !s.contains("inf\"") && !s.contains("e+") && !s.contains("e-1"), "{c}");
+        assert!(!words(&s).contains("0000000") && !words(&s).contains("999999"), "{c}: float noise in {}", words(&s));
+        crate::figures::validate_svg(&s).unwrap_or_else(|e| panic!("{c}: {e}"));
+        crate::figures::to_png(&s, 0.3).unwrap();
+    }
+    // the opening state and every example well under a second
+    for e in std::iter::once(start_params(&def())).chain(crate::figures::examples_for(ID).iter().map(|e| { let mut p = start_params(&def()); for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); } p })) {
+        let t = std::time::Instant::now();
+        let _ = (def().render)(&{ let mut q = e.clone(); q.set_s("title", &format!("{:?}", t)); q });
+        assert!(t.elapsed().as_millis() < 300);
+    }
+}
+
+/// The epsilon band: sin x / x at 0 has L = 1; with ε = 1/4 the band is 3/4 < y < 5/4, and sin x / x first falls to 3/4 at
+/// x ≈ 1.2757 (sin 1.2757 = 0.95679, / 1.2757 = 0.7500), so δ = 1.27 to the hundredth below.
+#[test]
+fn the_epsilon_band_worked_by_hand() {
+    let p = with(json!({"pieces": "y = sin(x)/x", "dots": "", "ask_at": "0", "eps_band": true, "eps": "1/4", "xmin": -10.0, "xmax": 10.0, "ymin": -1.0, "ymax": 2.0, "square": false}));
+    let key = svg(&p);
+    let w = words(&key);
+    assert!(w.contains("ε = 1/4, L = 1, a = 0") && w.contains("δ = 1.27"), "{w}");
+    assert_eq!(key.matches(r#"data-lim="eps""#).count(), 4, "L ± ε and a ± δ");
+    // the student copy keeps the ε band and L, and leaves δ to find
+    let mut q = p.clone();
+    q.set_b("show_answers", false);
+    let stu = svg(&q);
+    assert!(!words(&stu).contains("1.27") && stu.matches(r#"data-lim="eps""#).count() == 2, "{}", words(&stu));
+    // the opening state at a = 1 has no limit, so the band is refused with a note, and the switch is hidden
+    let p = with(json!({"eps_band": true}));
+    assert!(warnings(&p).iter().any(|n| n.starts_with("The epsilon band needs a limit that is a number at x = 1")));
+    assert!(!crate::figures::param_relevant(ID, "eps_band", &p));
+    // with ε = 1/2 at the hole at -2 of the opening state (L = 1): the parabola 4 - (x - 1)^2/3 leaves 1/2 < y < 3/2 where
+    // (x - 1)^2 = 7.5, x = 1 - √7.5 ≈ -1.7386 on the right (δ ≈ 0.2614) and (x - 1)^2 = 10.5, x ≈ -2.2404 on the left
+    // (δ ≈ 0.2404): δ = 0.24. The point (-2, 3) is at a itself, which the definition leaves out.
+    let w = words(&svg(&with(json!({"eps_band": true, "ask_at": "-2"}))));
+    assert!(w.contains("δ = 0.24"), "{w}");
+}
+
+/// Words in a sentence upright, its letters and f(1) in italic.
+#[test]
+fn sentences_set_their_letters_in_italic() {
+    let s = svg(&with(json!({"ask_disc": true})));
+    let i = s.find("Where is").unwrap();
+    let el = &s[s[..i].rfind("<text").unwrap()..i + s[i..].find("</text>").unwrap()];
+    assert!(el.contains(r#"<tspan font-style="italic">f</tspan> not"#) && el.contains(r#"<tspan font-style="italic">x</tspan> and"#), "{el}");
 }
