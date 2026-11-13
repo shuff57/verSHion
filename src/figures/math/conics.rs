@@ -1171,6 +1171,8 @@ impl Board {
                     _ => hit.iter().all(|i| self.strokes[*i].2 < LEADER) && { let c: Vec<usize> = hit.iter().copied().filter(hard).collect(); c.len() <= 40 && c.windows(2).all(|w| w[1] - w[0] <= 1) },
                 };
                 if !ok { continue; }
+                // a line's leader leaves its own line (one running along it reads as the line's continuation)
+                if let At::Line(g) = at && self.strokes.iter().filter(|s| s.2 == *g).any(|s| line_pt(to, s.0, s.1) < 8.0 || line_pt(((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0), s.0, s.1) < 4.0) { continue; }
                 // it may cross an axis but never run along one (it would vanish into the axis line)
                 let along_axis = self.strokes.iter().filter(|s| s.2 == AXES).any(|s| { let m = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0); seg_pt(m, s.0, s.1) < 5.0 || (seg_pt(from, s.0, s.1) < 4.0 && seg_pt(to, s.0, s.1) < 4.0) });
                 if along_axis { continue; }
@@ -1210,6 +1212,14 @@ impl Board {
             if matches!(r.at, At::Pt(..)) {
                 for level in [1, 2] {
                     if let Some((c, l)) = self.with_leader(anchors[0], mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level }); break 'stages; }
+                }
+            } else if !r.optional {
+                // a line's label (not a focal radius's length) may stand off on a leader across another part line, then (inside a
+                // curve with no room) across the curve, once
+                for level in [1, 2] {
+                    for q in &anchors {
+                        if let Some((c, l)) = self.with_leader(*q, mw(text, size), size, text, &r.at, true, level) { found = Some(Placed { c, leader: Some(l), text: text.clone(), short: *short, level }); break 'stages; }
+                    }
                 }
             }
         }

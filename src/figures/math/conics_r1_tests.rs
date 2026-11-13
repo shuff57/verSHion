@@ -562,6 +562,8 @@ fn every_token_render_keeps_its_point_labels() {
         if !hidden {
             assert_eq!(d.placed.iter().filter(|x| x.1 != 'L').count(), marks(&s), "{t}: {:?}", warnings(&p));
             assert!(d.placed.iter().all(|x| x.1 == 'L' || !x.2), "{t}: letter only {:?}", warnings(&p));
+            // and no label at all is left off (the latus rectum's length, the asymptotes' equations ...)
+            assert!(!warnings(&p).iter().any(|n| n.contains("No clear room")), "{t}: {:?}", warnings(&p));
         }
     }
 }
