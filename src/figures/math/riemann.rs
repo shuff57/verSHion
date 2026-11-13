@@ -1037,6 +1037,29 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                     let (l, r) = ((xp - 5.0 - wd, yt + dy + 0.3 * size), (xp + 5.0, yt + dy + 0.3 * size));
                     if left_first { cands.push(l); cands.push(r); } else { cands.push(r); cands.push(l); }
                 }
+                // then any spot whose box comes within 3 to 12 px (16.8 at Large) of an end of the line (a crossing point is a line of no
+                // length), nearest first
+                let hgt = mbox(&s, 0.0, 0.0, size);
+                let (up, dn) = (-hgt[1], hgt[3]);
+                let mut ring: Vec<(f64, f64, f64)> = vec![];
+                for end in [yt, yb] {
+                    let reach = 12.0 * ls.max(1.0);
+                    let mut dx = -(wd + reach);
+                    while dx <= reach {
+                        let mut top = -(up + dn + reach);
+                        while top <= reach {
+                            let bx = [xp + dx, end + top, xp + dx + wd, end + top + up + dn];
+                            let ddx = (bx[0] - xp).max(xp - bx[2]).max(0.0);
+                            let ddy = (bx[1] - end).max(end - bx[3]).max(0.0);
+                            let dist = ddx.hypot(ddy);
+                            if (3.0..=reach).contains(&dist) { ring.push((dist, bx[0], bx[1] + up)); }
+                            top += 2.0;
+                        }
+                        dx += 2.0;
+                    }
+                }
+                ring.sort_by(|a, b| a.0.total_cmp(&b.0));
+                cands.extend(ring.into_iter().map(|(_, x, y)| (x, y)));
                 let off_strips = |b: &[f64; 4]| !strip_boxes.iter().any(|o| rect_hit(&[b[0] + 0.5, b[1] + 0.5, b[2] - 0.5, b[3] - 0.5], o));
                 let all: Vec<(f64, f64)> = cands.clone();
                 let pick = all.iter().copied().find(|(x, y)| { let b = mbox(&s, *x, *y, size); ob.free(&b, &plot) && off_strips(&b) }).or_else(|| cands.into_iter().find(|(x, y)| ob.free(&mbox(&s, *x, *y, size), &plot)));
@@ -1077,12 +1100,18 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                 while k + 4.0 < depth { cands.push(edge_in(yt + k * dir)); k += 3.0; }
                 cands.push(edge_in(yb + 4.0 * dir));
                 cands.push(edge_in(yb + 18.0 * dir));
-                let bx = |y: f64| if blank { [xc, y - 3.0, xc + wd, y + 3.0] } else { mbox(&text, xc, y, size) };
-                match cands.into_iter().find(|y| ob.free(&bx(*y), &plot)) {
-                    Some(y) => {
-                        let b = bx(y);
-                        ob.boxes.push(b);
-                        boxes_added.push(b);
+                let bx = |x: f64, y: f64| if blank { [x, y - 3.0, x + wd, y + 3.0] } else { mbox(&text, x, y, size) };
+                // centred on its strip first, then shifted sideways (off the y-axis, clear of a curve), never past the
+                // strip's middle by more than its own width
+                let xs_try = [xc, xl + 2.0, xr - 2.0 - wd, xc + 0.5 * wd, xc - 0.5 * wd, xc + wd, xc - wd];
+                let found = cands.iter().flat_map(|y| xs_try.iter().map(move |x| (*x, *y))).find(|(x, y)| ob.free(&bx(*x, *y), &plot));
+                match found {
+                    Some((xc, y)) => {
+                        let b = bx(xc, y);
+                        // (two strips' labels keep a clear gap, so neither reads as the other's)
+                        let wide = [b[0] - 6.0, b[1], b[2] + 6.0, b[3]];
+                        ob.boxes.push(wide);
+                        boxes_added.push(wide);
                         if blank { placed.push(format!(r#"<line data-rs="blank" data-box="{:.2} {:.2} {:.2} {:.2}" x1="{xc:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{ink}" stroke-width="1.2"/>"#, b[0], b[1], b[2], b[3], xc + wd)); }
                         else { placed.push(mtext("strip-label", xc, y, size, &text, ink).0); }
                     }
@@ -1100,7 +1129,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             let dn = 14.0 * (ls - 1.0);
             let below = if p.b("numbers") { axy + 20.0 + dn + 4.0 * ls + 4.0 + 0.76 * size } else { axy + 7.0 + 0.76 * size };
             let above = axy - 7.0 - 0.4 * size;
-            let try_set = |ob: &Obst, set: &[usize], dots: Option<usize>| -> Option<Vec<(String, f64, f64)>> {
+            let try_set = |ob: &Obst, set: &[usize], dots: Option<usize>, strict: bool| -> Option<Vec<(String, f64, f64)>> {
                 let mut local: Vec<[f64; 4]> = vec![];
                 let mut out = vec![];
                 let mut items: Vec<(String, f64)> = set.iter().map(|&i| (format!("x_{i}"), sx(ticks[i]))).collect();
@@ -1110,7 +1139,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                     // centred under its tick, else just to its right or left (x₀ on the y-axis), under the numbers or over the axis
                     let mut cands = vec![];
                     for y in [below, above, below + 16.0] { for x in [xc - wd / 2.0, xc + 3.0, xc - 3.0 - wd] { cands.push((x, y)); } }
-                    let (fx, fy) = cands.into_iter().find(|(x, y)| { let b = mbox(&s, *x, *y, size); ob.free(&b, &page) && !strip_boxes.iter().any(|o| rect_hit(&[b[0] + 0.5, b[1] + 0.5, b[2] - 0.5, b[3] - 0.5], o)) && !local.iter().any(|o| rect_hit(&[b[0] - 2.0, b[1], b[2] + 2.0, b[3]], o)) })?;
+                    let (fx, fy) = cands.into_iter().find(|(x, y)| { let b = mbox(&s, *x, *y, size); ob.free(&b, &page) && !(strict && strip_boxes.iter().any(|o| rect_hit(&[b[0] + 0.5, b[1] + 0.5, b[2] - 0.5, b[3] - 0.5], o))) && !local.iter().any(|o| rect_hit(&[b[0] - 2.0, b[1], b[2] + 2.0, b[3]], o)) })?;
                     local.push(mbox(&s, fx, fy, size));
                     out.push((s, fx, fy));
                 }
@@ -1119,7 +1148,8 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             let nn = ticks.len() - 1;
             let all: Vec<usize> = (0..=nn).collect();
             let short: Vec<usize> = if nn >= 3 { vec![0, 1, nn] } else { all.clone() };
-            let got = try_set(&ob, &all, None).or_else(|| if nn >= 3 { try_set(&ob, &short, Some(2)) } else { None });
+            // off the strips where there is room, else over their tint (never on an edge)
+            let got = [true, false].into_iter().find_map(|strict| try_set(&ob, &all, None, strict).or_else(|| if nn >= 3 { try_set(&ob, &short, Some(2), strict) } else { None }));
             match got {
                 Some(v) => for (s, x, y) in v { let (t, b) = mtext("xmark", x, y, size, &s, ink); overlay.push_str(&t); ob.boxes.push(b); },
                 None => notes.push("x\u{2080}, x\u{2081}, \u{2026}, x\u{2099} have no room under the axis: use fewer strips, Small labels or a wider window".into()),

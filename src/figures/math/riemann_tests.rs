@@ -506,7 +506,7 @@ fn classroom() -> Vec<(String, Vec<(&'static str, Value)>)> {
         }
     }
     // tables
-    for (t, w) in [("0, 2; 1, 5; 3, 6; 4, 4; 7, 3", win(-1.0, 8.0, 1.0, -1.0, 7.0, 1.0)), ("0, 10; 2, 14; 5, 20; 7, 18; 10, 12", win(-1.0, 11.0, 1.0, -2.0, 22.0, 2.0)), ("0, 1; 1, 3; 2, 4; 3, 2; 4, 5", win(-1.0, 5.0, 1.0, -1.0, 6.0, 1.0))] {
+    for (t, w) in [("0, 2; 1, 5; 3, 6; 4, 4; 7, 3", win(-1.0, 8.0, 1.0, -1.0, 7.0, 1.0)), ("0, 10; 2, 14; 4, 20; 7, 18; 10, 12", win(-1.0, 11.0, 1.0, -2.0, 22.0, 2.0)), ("0, 1; 1, 3; 2, 4; 3, 2; 4, 5", win(-1.0, 5.0, 1.0, -1.0, 6.0, 1.0))] {
         for rule in ["Left", "Right", "Trapezoid", "Midpoint"] {
             if rule == "Midpoint" && t.starts_with("0, 2") { continue; }
             let mut v: Vec<(&'static str, Value)> = vec![("region", s("From a table of values")), ("table", s(t)), ("rule", s(rule))];
@@ -550,7 +550,15 @@ fn option(p: &mut Params, o: &str) {
 }
 
 /// Labels left off at Large on the classroom list (each refused with a panel note): strips too narrow for their labels.
-const LARGE_EXCEPTIONS: &[&str] = &[];
+/// (Strips 3/8 wide carrying every label at once; x₀ … x₄ under strips that straddle the axis on both sides.)
+const LARGE_EXCEPTIONS: &[&str] = &[
+    "1/x [1, 4] Trapezoid n=6 / all: strip labels",
+    "between sqrt(x) and x/2 Vertical Midpoint / all: strip labels",
+    "between 4 - x^2 and x^2 - 4 Vertical Left / x_marks: x marks",
+    "between 4 - x^2 and x^2 - 4 Vertical Left / all: x marks",
+    "between 4 - x^2 and x^2 - 4 Vertical Midpoint / x_marks: x marks",
+    "between 4 - x^2 and x^2 - 4 Vertical Midpoint / all: x marks",
+];
 
 #[test]
 fn label_sweep_over_the_classroom_list() {
@@ -586,7 +594,8 @@ fn label_sweep_over_the_classroom_list() {
     println!("label sweep: {} cases, {renders} renders, labels left off (refused with a note) by size and kind: {refused:?}", list.len());
     for l in &large_left_off { println!("  Large, left off: {l}"); }
     assert!(faults.is_empty(), "{} faults:\n{}", faults.len(), faults.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
-    let unnamed: Vec<&String> = large_left_off.iter().filter(|l| !LARGE_EXCEPTIONS.iter().any(|e| l.starts_with(e))).collect();
+    let unnamed: Vec<&String> = large_left_off.iter().filter(|l| !LARGE_EXCEPTIONS.contains(&l.as_str())).collect();
+    assert_eq!(large_left_off.len(), LARGE_EXCEPTIONS.len(), "every named exception still happens: {large_left_off:#?}");
     assert!(unnamed.is_empty(), "left off at Large and not named: {unnamed:#?}");
 }
 
