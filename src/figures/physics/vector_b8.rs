@@ -33,8 +33,29 @@ const H: f64 = 360.0;
 fn count(p: &Params) -> usize { p.i("n").clamp(1, 4) as usize }
 
 /// Whether the batch 8 drawing is in use: a vector's angle mark or components, or the resultant's mark from the
-/// vertical. Settings of vectors past the number shown change nothing.
+/// vertical, that draws something. A switch that draws nothing (a mark on an arrow along its reference line, components
+/// of an arrow along the grid, settings of vectors past the number shown) leaves the figure exactly as it was.
 pub fn active(p: &Params) -> bool {
+    let n = count(p);
+    let tip = |i: usize| -> Pt {
+        let (mut x, mut y) = (0.0, 0.0);
+        for k in VK.iter().take(i + 1) {
+            let (m, a) = (p.f(k[0]), p.f(k[2]).to_radians());
+            x += m * a.cos();
+            y += m * a.sin();
+        }
+        (x, y)
+    };
+    let vec_of = |i: usize| { let a = p.f(VK[i][2]).to_radians(); (p.f(VK[i][0]) * a.cos(), p.f(VK[i][0]) * a.sin()) };
+    let marks = |v: Pt, from: &str| v.0.hypot(v.1) >= 0.01 && sweep(v.1.atan2(v.0).to_degrees(), from).1.abs() >= 0.05;
+    let comps = |v: Pt| v.0.abs() > 0.01 && v.1.abs() > 0.01;
+    let res = tip(n - 1);
+    (0..n).any(|i| (p.b(VX[i][0]) && marks(vec_of(i), p.s(VX[i][1]))) || (p.b(VX[i][4]) && comps(vec_of(i))))
+        || (p.b("mark_angle") && p.s("ang_from") == "Vertical" && marks(res, "Vertical"))
+}
+
+/// Whether any of the batch 8 switches is on (its notes are given even when it draws nothing).
+fn any_switch(p: &Params) -> bool {
     (0..count(p)).any(|i| p.b(VX[i][0]) || p.b(VX[i][4])) || (p.b("mark_angle") && p.s("ang_from") == "Vertical")
 }
 
@@ -137,6 +158,9 @@ pub struct Bx { pub c: Pt, pub hw: f64, pub hh: f64 }
 impl Bx {
     fn hits(&self, o: &Bx, gap: f64) -> bool { (self.c.0 - o.c.0).abs() < self.hw + o.hw + gap && (self.c.1 - o.c.1).abs() < self.hh + o.hh + gap }
 }
+
+/// Whether segment a-b comes within `m` of the box (for the tests).
+pub fn seg_hits_box_pub(a: Pt, b: Pt, bx: &Bx, m: f64) -> bool { seg_hits_box(a, b, bx, m) }
 
 /// Whether segment a-b comes within `m` of the box.
 fn seg_hits_box(a: Pt, b: Pt, bx: &Bx, m: f64) -> bool {
@@ -319,10 +343,10 @@ pub struct Scene {
     pub fixed: Vec<(Bx, &'static str, Pt, &'static str)>,
     /// for each label left off, why its spots were refused (for the tests)
     pub why: Vec<String>,
-    /// whether this layout came from a drag step's warm start
-    pub warmed: bool,
     /// the order the labels were placed in (a drag step keeps it)
     order: Vec<Own>,
+    /// the component names placed so far in this arrangement (centre, owner): later arcs keep clear of them
+    comp_spots: Vec<(Pt, Own)>,
     /// component names set smaller (spec index, size) when nothing at their size was free
     shrunk: Vec<(usize, f64)>,
     /// why the last angle's arc found no radius (for the tests)
@@ -336,8 +360,7 @@ pub struct Scene {
     indexed: usize,
     /// the angle marks to draw, their arcs' radii still to choose (`marks` holds them once chosen)
     plans: Vec<Mark>,
-    /// where the last layout put each label and arc (a drag step starts from it)
-    warm: Option<Warm>,
+
     cols: usize,
     rows: usize,
 }
@@ -597,8 +620,10 @@ impl Scene {
         if self.heads.iter().any(|t| (0..3).any(|k| cross(a, e, t[k], t[(k + 1) % 3], 1.0)) || in_tri(e, t)) {
             return false;
         }
-        let near_start = |s: &Seg| seg_dist(a, s.a, s.b) < 2.0;
-        !self.segs.iter().filter(|s| s.solid && matches!(s.own, Own::Arrow(_) | Own::Mark(_) | Own::Axis)).filter(|s| !(near_start(s) && s.own == own)).any(|s| cross(a, e, s.a, s.b, s.hw + 1.0))
+        let near_start = |s: &Seg| seg_dist(a, s.a, s.b) < 1.5;
+        // (a mark's leader starts on its arc, which its own arrow touches at its end)
+        let mine = |o: Own| o == own || matches!(own, Own::Mark(k) if o == Own::Arrow(k));
+        !self.segs.iter().filter(|s| s.solid && matches!(s.own, Own::Arrow(_) | Own::Mark(_) | Own::Axis)).filter(|s| !(near_start(s) && mine(s.own))).any(|s| cross(a, e, s.a, s.b, s.hw + 1.0))
     }
 
     /// Places the labels in `order`, each at its first free spot, else by a leader, else left off. Returns the
@@ -606,6 +631,7 @@ impl Scene {
     fn arrange(&mut self, specs: &[Spec], order: &[usize]) -> Vec<Option<Pt>> {
         self.leaders.clear();
         self.shrunk.clear();
+        self.comp_spots.clear();
         self.segs.truncate(self.indexed);
         self.marks.clear();
         let mut at: Vec<Option<Pt>> = vec![None; specs.len()];
@@ -614,7 +640,6 @@ impl Scene {
         for &k in order {
             let sp = &specs[k];
             let mut found = None;
-            let mut small_fs: Option<f64> = None;
             if let Some(mi) = sp.mark {
                 // an angle's value is placed together with its arc's radius
                 match self.place_mark(mi, sp, &boxes, &specs, order, &at) {
@@ -624,18 +649,37 @@ impl Scene {
                         names.push(sp.lab.text.clone());
                         at[k] = Some(c);
                     }
-                    None => why.push(format!("{}: no radius {:?}", sp.lab.text, std::mem::take(&mut self.tally))),
+                    None => {
+                        why.push(format!("{}: no radius {:?}", sp.lab.text, std::mem::take(&mut self.tally)));
+                        // its arc is still drawn, by the same rules, before the labels still to place
+                        let plan = self.plans[mi];
+                        let placed: Vec<(Pt, usize)> = order.iter().filter_map(|&j| match (specs[j].mark, at[j]) { (Some(q), Some(c)) => Some((c, self.plans[q].arrow)), _ => None }).collect();
+                        let mut r = plan.r;
+                        while r <= plan.len.max(plan.r) + 1e-9 {
+                            let m = Mark { r, ..plan };
+                            if self.arc_ok(&m, &boxes, &placed).is_some() {
+                                self.add_arc(&m);
+                                break;
+                            }
+                            r += 3.0;
+                        }
+                    }
                 }
                 continue;
             }
-            // a drag step: its spots round where it was first
-            if self.warm.is_some() && sp.mark.is_none() {
-                for &c in sp.cands.iter().take(25) {
-                    if self.valid(sp, c, &boxes) {
-                        found = Some(c);
-                        break;
+            if let Own::Comp(..) = sp.own {
+                // a component's name sits at its own segment, or is left off
+                match self.place_comp(sp, &boxes) {
+                    Some(c) => {
+                        self.comp_spots.push((c, sp.own));
+                        let (hw, hh) = sp.lab.half();
+                        boxes.push(Bx { c, hw, hh });
+                        names.push(sp.lab.text.clone());
+                        at[k] = Some(c);
                     }
+                    None => why.push(format!("{}: no room at its segment", sp.lab.text)),
                 }
+                continue;
             }
             // a name keeps clear of the angles' zones (near their arcs, where the values go) when it can
             let zoned = found.is_none() && matches!(sp.own, Own::Arrow(_) | Own::Axis) && !self.plans.is_empty();
@@ -653,57 +697,6 @@ impl Scene {
                     if self.valid(sp, c, &boxes) {
                         found = Some(c);
                         break;
-                    }
-                }
-            }
-            if found.is_none() && matches!(sp.own, Own::Comp(..)) {
-                // a component's name a little further from its leg, still plainly nearest it
-                let (hw, hh) = sp.lab.half();
-                for &c in &sp.cands {
-                    self.work += 1;
-                    if self.free(&Bx { c, hw, hh }, &boxes) && self.owns(c, sp.own, 60.0 + hw.max(hh)) {
-                        found = Some(c);
-                        break;
-                    }
-                }
-                // then all round its leg
-                if found.is_none() {
-                    if let Some((a, b)) = self.segs.iter().find(|g| g.own == sp.own).map(|g| (g.a, g.b)) {
-                        'ring: for t in [0.5, 0.3, 0.7, 0.15, 0.85] {
-                            let m = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
-                            for rr in [hw.max(hh) + 4.0, hw.max(hh) + 12.0, hw.max(hh) + 22.0, hw.max(hh) + 34.0, hw.max(hh) + 48.0, hw.max(hh) + 64.0] {
-                                for k in 0..24 {
-                                    let ang = (k as f64 * 15.0 + 7.5).to_radians();
-                                    let c = (m.0 + rr * ang.cos(), m.1 + rr * ang.sin());
-                                    self.work += 1;
-                                    if self.free(&Bx { c, hw, hh }, &boxes) && self.owns(c, sp.own, 70.0 + hw.max(hh)) {
-                                        found = Some(c);
-                                        break 'ring;
-                                    }
-                                }
-                            }
-                        }
-                        // the last resort before leaving it off: the name set smaller (three quarters, not under 12 px),
-                        // beside its own leg
-                        if found.is_none() {
-                            let small = Lab { fs: (sp.lab.fs * 0.75).max(12.0), ..sp.lab.clone() };
-                            let (shw, shh) = small.half();
-                            'small: for t in [0.5, 0.3, 0.7, 0.15, 0.85] {
-                                let m = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
-                                for rr in [shw.max(shh) + 2.0, shw.max(shh) + 6.0, shw.max(shh) + 12.0, shw.max(shh) + 20.0] {
-                                    for j in 0..24 {
-                                        let ang = (j as f64 * 15.0 + 7.5).to_radians();
-                                        let c = (m.0 + rr * ang.cos(), m.1 + rr * ang.sin());
-                                        self.work += 1;
-                                        if self.free(&Bx { c, hw: shw, hh: shh }, &boxes) && self.owns(c, sp.own, 40.0 + shw.max(shh)) {
-                                            small_fs = Some(small.fs);
-                                            found = Some(c);
-                                            break 'small;
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -758,30 +751,14 @@ impl Scene {
                     }
                 }
             }
-            if found.is_none() {
-                for &c in &sp.beside {
-                    if self.valid_as(sp, c, &boxes, false) {
-                        found = Some(c);
-                        break;
-                    }
-                }
-            }
-            for inside in [true, false] {
-                if found.is_none() && !sp.anchors.is_empty() && (inside || matches!(sp.own, Own::Mark(_) | Own::Comp(..))) {
-                    if let Some((c, a, e)) = self.lead(sp, &boxes, inside) {
-                        self.leaders.push((a, e, sp.own));
-                        found = Some(c);
-                    }
+            if found.is_none() && !sp.anchors.is_empty() {
+                if let Some((c, a, e)) = self.lead(sp, &boxes, true) {
+                    self.leaders.push((a, e, sp.own));
+                    found = Some(c);
                 }
             }
             if let Some(c) = found {
-                let (hw, hh) = match small_fs {
-                    Some(fs) => {
-                        self.shrunk.push((k, fs));
-                        Lab { fs, ..sp.lab.clone() }.half()
-                    }
-                    None => sp.lab.half(),
-                };
+                let (hw, hh) = sp.lab.half();
                 boxes.push(Bx { c, hw, hh });
                 names.push(sp.lab.text.clone());
                 at[k] = Some(c);
@@ -803,24 +780,6 @@ impl Scene {
                 why.push(format!("{}: {:?}", sp.lab.text, tally));
             }
         }
-        // a mark whose value found no room still draws its arc, at the first radius clear of every label
-        for (k, sp) in specs.iter().enumerate() {
-            if let (Some(mi), None) = (sp.mark, at[k]) {
-                let plan = self.plans[mi];
-                let mut r = plan.r;
-                while r <= plan.len.max(plan.r).max(130.0) {
-                    let m = Mark { r, ..plan };
-                    let arc = arc_pts(m.tail.0, m.tail.1, r, m.refa, m.refa + m.d);
-                    let ref_end = pol(m.tail.0, m.tail.1, r + 8.0, m.refa);
-                    let ext = extension(&m);
-                    if !boxes.iter().any(|b| seg_hits_box(m.tail, ref_end, b, 1.0) || ext.is_some_and(|(a, e)| seg_hits_box(a, e, b, 1.0)) || arc.windows(2).any(|w| seg_hits_box(w[0], w[1], b, 1.5))) {
-                        self.add_arc(&m);
-                        break;
-                    }
-                    r += 6.0;
-                }
-            }
-        }
         self.why = why;
         at
     }
@@ -839,125 +798,221 @@ impl Scene {
         self.marks.push(*m);
     }
 
-    /// Places an angle's value together with its arc: radii from the usual one outward to the arrow's length (then
-    /// inward), and at each the spots just outside or just inside the arc within the angle's sector (widened by at
-    /// most 10 degrees), the value's centre no further from the tail than the radius and one and a half text heights,
-    /// plainly nearer its own arc than any other. The arc itself must not cross a label already placed, nor come
-    /// nearer another value than that value's own arc. Returns the value's centre (the arc is added).
+    /// Places an angle's value with its arc: on the bisector inside its own wedge, at or just beyond the arc, at the
+    /// smallest radius (from the usual one up to its arrow's length) where it fits; for a wedge too narrow (or taken),
+    /// just past the arc's end on the reference side with a short leader to the arc. It never has an arrow between it
+    /// and its arc and is plainly nearer its own arc than any other. Otherwise None (left off, with the note).
     fn place_mark(&mut self, mi: usize, sp: &Spec, boxes: &[Bx], specs: &[Spec], order: &[usize], at: &[Option<Pt>]) -> Option<Pt> {
         let plan = self.plans[mi];
         let (hw, hh) = sp.lab.half();
-        let th = 2.0 * (hh - 2.0);
         let s = plan.d.signum();
-        let inner = 0.0;
-        // the values already placed, with their arcs (each must stay nearer its own)
         let placed: Vec<(Pt, usize)> = order.iter().filter_map(|&k| match (specs[k].mark, at[k]) { (Some(j), Some(c)) => Some((c, self.plans[j].arrow)), _ => None }).collect();
-        // (past a short arrow's tip, its line continues dashed out to the arc)
-        let r_hi = plan.len.max(plan.r).max(260.0).min(320.0);
-        let mut radii: Vec<f64> = vec![];
-        if let Some(r) = self.warm.as_ref().and_then(|w| w.radii.iter().find(|x| x.0 == plan.arrow).map(|x| x.1)) {
-            radii.push(r);
-        }
+        let mut radii = vec![];
         let mut r = plan.r;
-        while r <= r_hi + 1e-9 {
+        while r <= plan.len.max(plan.r) + 1e-9 {
             radii.push(r);
-            r += 4.0;
+            r += 3.0;
         }
-        let mut r = plan.r - 4.0;
-        while r >= 16.0 {
-            radii.push(r);
-            r -= 4.0;
-        }
-        let warm_c: Vec<Pt> = sp.cands.clone();
-        // every radius with the spots strictly inside the angle first, then with the 10-degree widening
-        // (a drag step: its last radius and spot, as they were, first)
-        let warm_r = self.warm.as_ref().and_then(|w| w.radii.iter().find(|x| x.0 == plan.arrow).map(|x| x.1));
-        let near: Vec<(f64, bool)> = warm_r.map(|r| [r, r - 4.0, r + 4.0, r - 8.0, r + 8.0].into_iter().filter(|x| *x >= 16.0).map(|x| (x, true)).collect()).unwrap_or_default();
-        let passes: Vec<(f64, bool)> = near.into_iter().chain(radii.iter().map(|&r| (r, false))).chain(radii.iter().map(|&r| (r, true))).collect();
-        for (r, widen) in passes {
-            self.work += 1;
-            if self.work > WORK_CAP {
-                return None;
-            }
+        let bis = plan.refa + plan.d / 2.0;
+        let ext = hw * bis.to_radians().cos().abs() + hh * bis.to_radians().sin().abs();
+        for &r in &radii {
             let m = Mark { r, ..plan };
-            let arc = arc_pts(m.tail.0, m.tail.1, r, m.refa, m.refa + m.d);
-            let ref_end = pol(m.tail.0, m.tail.1, r + 8.0, m.refa);
-            let ext = extension(&m);
-            // the arc and its lines on the page
-            let on = |q: Pt| q.0 >= 2.0 && q.0 <= self.w - 2.0 && q.1 >= 2.0 && q.1 <= self.h - 2.0;
-            if !arc.iter().all(|&q| on(q)) || !on(ref_end) || ext.is_some_and(|(_, e)| !on(e)) {
-                *self.tally.entry("arc off the page").or_default() += 1;
-                continue;
-            }
-            // the arc clear of the labels placed, apart from other arcs at its tail, and no nearer another value
-            if boxes.iter().any(|b| seg_hits_box(m.tail, ref_end, b, 1.0) || ext.is_some_and(|(a, e)| seg_hits_box(a, e, b, 1.0)) || arc.windows(2).any(|w| seg_hits_box(w[0], w[1], b, 1.5))) {
-                *self.tally.entry("arc on a label").or_default() += 1;
-                continue;
-            }
-            if self.leaders.iter().any(|l| arc.windows(2).any(|w| cross(l.0, l.1, w[0], w[1], 1.5)) || cross(l.0, l.1, m.tail, ref_end, 1.5)) {
-                continue;
-            }
-            if self.marks.iter().any(|o| (o.tail.0 - m.tail.0).abs() < 0.5 && (o.tail.1 - m.tail.1).abs() < 0.5 && overlap(o, &m) && (o.r - r).abs() < 14.0) {
-                *self.tally.entry("arc on an arc").or_default() += 1;
-                continue;
-            }
-            let arc_d = |q: Pt, pts: &[Pt]| pts.windows(2).map(|w| seg_dist(q, w[0], w[1])).fold(f64::MAX, f64::min);
-            if placed.iter().any(|&(c, a)| {
-                let own = self.segs.iter().filter(|g| g.own == Own::Mark(a)).map(|g| seg_dist(c, g.a, g.b)).fold(f64::MAX, f64::min);
-                arc_d(c, &arc) < own + 2.5
-            }) {
-                *self.tally.entry("arc nearer a value").or_default() += 1;
-                continue;
-            }
-            // the spots: the warm one first, then just outside the arc, then just inside, along the sector
-            let mut cands: Vec<Pt> = warm_c.clone();
-            let mut angs: Vec<f64> = [0.5, 0.35, 0.65, 0.2, 0.8, 0.08, 0.92].iter().map(|f| m.refa + m.d * f).collect();
-            if widen {
-                angs.extend([5.0, 10.0].iter().flat_map(|&dl| [m.refa - s * dl, m.refa + m.d + s * dl]));
-            }
-            let warm_first = !widen;
-            if !warm_first {
-                cands.clear();
-            }
-            for &a in &angs {
-                let ext = hw * a.to_radians().cos().abs() + hh * a.to_radians().sin().abs();
-                for dd in [3.0, 7.0] {
-                    if ext + dd <= 1.5 * th {
-                        cands.push(pol(m.tail.0, m.tail.1, r + ext + dd, a));
-                    }
+            let Some(arc) = self.arc_ok(&m, boxes, &placed) else { *self.tally.entry("arc").or_default() += 1; continue };
+            // on the bisector: its centre there, or slid across it while the bisector still runs through the text
+            let mut cands = vec![];
+            let (nx, ny) = (-(bis.to_radians().sin()), -(bis.to_radians().cos()));
+            let across = (hw * nx.abs() + hh * ny.abs() - 2.0).max(0.0);
+            for o in [0.0f64, 4.0, -4.0, 8.0, -8.0, 12.0, -12.0] {
+                if o.abs() > across {
+                    continue;
                 }
-            }
-            for &a in &angs[..7] {
-                let ext = hw * a.to_radians().cos().abs() + hh * a.to_radians().sin().abs();
-                for dd in [3.0, 9.0, 16.0, 24.0, 34.0] {
-                    if r - ext - dd > ext + 4.0 {
-                        cands.push(pol(m.tail.0, m.tail.1, r - ext - dd, a));
+                for g in [3.0, 6.0] {
+                    let q = pol(m.tail.0, m.tail.1, r + ext + g, bis);
+                    cands.push((q.0 + nx * o, q.1 + ny * o));
+                }
+                for g in [3.0, 6.0] {
+                    if r - ext - g > ext + 4.0 {
+                        let q = pol(m.tail.0, m.tail.1, r - ext - g, bis);
+                        cands.push((q.0 + nx * o, q.1 + ny * o));
                     }
                 }
             }
             for c in cands {
                 self.work += 1;
-                if !self.sector_ok(&m, c, inner, th) || (!widen && !strictly_inside(&m, c)) {
-                    *self.tally.entry("spot out of sector").or_default() += 1;
-                    continue;
-                }
                 let bx = Bx { c, hw, hh };
-                if !self.free(&bx, boxes) {
-                    *self.tally.entry(if boxes.iter().any(|o| o.hits(&bx, 1.0)) { "spot on a label" } else if bx.c.0 - bx.hw < 2.0 || bx.c.0 + bx.hw > self.w - 2.0 || bx.c.1 - bx.hh < 2.0 || bx.c.1 + bx.hh > self.h - 2.0 { "spot off page" } else { "spot on a line" }).or_default() += 1;
-                    continue;
+                let inw = box_in_wedge(&m, &bx);
+                let why = if !inw { "not in wedge" } else { self.value_why(&m, &arc, &bx, boxes) };
+                *self.tally.entry(why).or_default() += 1;
+                if inw && self.value_ok(&m, &arc, &bx, boxes) {
+                    self.add_arc(&m);
+                    return Some(c);
                 }
-                if seg_hits_box(m.tail, ref_end, &bx, 1.8) || ext.is_some_and(|(a, e)| seg_hits_box(a, e, &bx, 1.8)) || arc.windows(2).any(|w| seg_hits_box(w[0], w[1], &bx, 1.9)) {
-                    *self.tally.entry("spot on own arc").or_default() += 1;
-                    continue;
+            }
+        }
+        // too narrow (or taken): just past the arc's reference end, outside the wedge, a short slanted leader from the
+        // arc
+        for &r in &radii {
+            let m = Mark { r, ..plan };
+            let Some(arc) = self.arc_ok(&m, boxes, &placed) else { *self.tally.entry("arc").or_default() += 1; continue };
+            let a = pol(m.tail.0, m.tail.1, r, m.refa + s * (m.d.abs() / 2.0).min(3.0));
+            for th in [50.0, 35.0, 65.0, 25.0, 80.0] {
+                let phi = (m.refa - s * th).to_radians();
+                let (ux, uy) = (phi.cos(), -phi.sin());
+                let edge = (hw / ux.abs().max(1e-9)).min(hh / uy.abs().max(1e-9));
+                for l in [6.0, 10.0, 16.0, 24.0] {
+                    let e = (a.0 + ux * l, a.1 + uy * l);
+                    let c = (a.0 + ux * (l + 3.0 + edge), a.1 + uy * (l + 3.0 + edge));
+                    self.work += 1;
+                    let bx = Bx { c, hw, hh };
+                    let ok = self.value_ok_as(&m, &arc, &bx, boxes, false);
+                    let path = ok && self.leader_clear(Own::Mark(m.arrow), a, e, boxes);
+                    let why = if !ok { self.value_why(&m, &arc, &bx, boxes) } else if !path { self.path_why(Own::Mark(m.arrow), a, e, boxes) } else { "leader: ok" };
+                    *self.tally.entry(why).or_default() += 1;
+                    if path {
+                        self.add_arc(&m);
+                        self.leaders.push((a, e, Own::Mark(m.arrow)));
+                        return Some(c);
+                    }
                 }
-                // plainly nearer its own arc than any other
-                let mine = arc_d(c, &arc);
-                if self.segs.iter().filter(|g| matches!(g.own, Own::Mark(_))).any(|g| seg_dist(c, g.a, g.b) < mine + 2.5) {
-                    *self.tally.entry("spot nearer another arc").or_default() += 1;
-                    continue;
+            }
+        }
+        None
+    }
+
+    /// Whether mark `m`'s arc (at its radius) can be drawn: on the page, clear of the labels and leaders placed, apart
+    /// from other arcs at its tail, and no nearer a value already placed than that value's own arc. Its points if so.
+    fn arc_ok(&mut self, m: &Mark, boxes: &[Bx], placed: &[(Pt, usize)]) -> Option<Vec<Pt>> {
+        self.work += 1;
+        let arc = arc_pts(m.tail.0, m.tail.1, m.r, m.refa, m.refa + m.d);
+        let ref_end = pol(m.tail.0, m.tail.1, m.r + 8.0, m.refa);
+        let ext = extension(m);
+        let on = |q: Pt| q.0 >= 2.0 && q.0 <= self.w - 2.0 && q.1 >= 2.0 && q.1 <= self.h - 2.0;
+        if !arc.iter().all(|&q| on(q)) || !on(ref_end) || ext.is_some_and(|(_, e)| !on(e)) {
+            return None;
+        }
+        if boxes.iter().any(|b| seg_hits_box(m.tail, ref_end, b, 1.0) || ext.is_some_and(|(a, e)| seg_hits_box(a, e, b, 1.0)) || arc.windows(2).any(|w| seg_hits_box(w[0], w[1], b, 1.5))) {
+            return None;
+        }
+        if self.leaders.iter().any(|l| arc.windows(2).any(|w| cross(l.0, l.1, w[0], w[1], 1.5)) || cross(l.0, l.1, m.tail, ref_end, 1.5)) {
+            return None;
+        }
+        if self.marks.iter().any(|o| (o.tail.0 - m.tail.0).abs() < 0.5 && (o.tail.1 - m.tail.1).abs() < 0.5 && overlap(o, m) && (o.r - m.r).abs() < 14.0) {
+            return None;
+        }
+        let arc_d = |q: Pt| arc.windows(2).map(|w| seg_dist(q, w[0], w[1])).fold(f64::MAX, f64::min);
+        if placed.iter().any(|&(c, a)| {
+            let own = self.segs.iter().filter(|g| g.own == Own::Mark(a)).map(|g| seg_dist(c, g.a, g.b)).fold(f64::MAX, f64::min);
+            arc_d(c) < own + 2.5
+        }) {
+            return None;
+        }
+        // and every component's name placed stays nearest its own segment
+        let lines_d = |q: Pt| arc_d(q).min(seg_dist(q, m.tail, ref_end)).min(ext.map(|(a, e)| seg_dist(q, a, e)).unwrap_or(f64::MAX));
+        if self.comp_spots.iter().any(|&(c, own)| {
+            let mine = self.segs.iter().filter(|g| g.own == own).map(|g| seg_dist(c, g.a, g.b)).fold(f64::MAX, f64::min);
+            lines_d(c) < mine + 1.0
+        }) {
+            return None;
+        }
+        Some(arc)
+    }
+
+    /// Why `value_ok` refuses a spot (for the tests).
+    fn value_why(&self, m: &Mark, arc: &[Pt], bx: &Bx, boxes: &[Bx]) -> &'static str {
+        if bx.c.0 - bx.hw < 2.0 || bx.c.0 + bx.hw > self.w - 2.0 || bx.c.1 - bx.hh < 2.0 || bx.c.1 + bx.hh > self.h - 2.0 { return "spot: page"; }
+        if boxes.iter().any(|o| o.hits(bx, 1.0)) { return "spot: label"; }
+        if let Some(g) = self.segs.iter().filter(|s| s.solid).find(|s| seg_hits_box(s.a, s.b, bx, s.hw + 1.0)) {
+            return match g.own { Own::Arrow(_) => "spot: arrow", Own::Comp(..) => "spot: component", Own::Mark(_) => "spot: arc", Own::Ref(_) => "spot: ref line", Own::Axis => "spot: axis" };
+        }
+        if self.heads.iter().any(|t| tri_hits_box(t, bx, 1.0)) { return "spot: head"; }
+        if !self.free(bx, boxes) { return "spot: leader"; }
+        let ref_end = pol(m.tail.0, m.tail.1, m.r + 8.0, m.refa);
+        if seg_hits_box(m.tail, ref_end, bx, 1.8) { return "spot: own ref line"; }
+        if arc.windows(2).any(|w| seg_hits_box(w[0], w[1], bx, 1.9)) { return "spot: own arc"; }
+        if self.plans.iter().any(|o| o.arrow != m.arrow && in_wedge_zone(o, bx)) { return "spot: another angle"; }
+        "spot: nearer another arc / arrow between"
+    }
+
+    /// Why `leader_clear` refuses a leader (for the tests).
+    fn path_why(&self, own: Own, a: Pt, e: Pt, placed: &[Bx]) -> &'static str {
+        if placed.iter().any(|b| seg_hits_box(a, e, b, 1.0)) { return "path: label"; }
+        if self.leaders.iter().any(|l| cross(a, e, l.0, l.1, 1.5)) { return "path: leader"; }
+        if self.heads.iter().any(|t| (0..3).any(|k| cross(a, e, t[k], t[(k + 1) % 3], 1.0)) || in_tri(e, t)) { return "path: head"; }
+        let _ = own;
+        "path: arrow/arc/axis"
+    }
+
+    /// Whether a value's box can sit by mark `m`'s arc: free, off its own arc and lines, no other arrow between it and
+    /// its arc, and plainly nearer its own arc than any other.
+    fn value_ok(&self, m: &Mark, arc: &[Pt], bx: &Bx, boxes: &[Bx]) -> bool { self.value_ok_as(m, arc, bx, boxes, true) }
+
+    /// `value_ok`; `between` false for a value joined by a leader (the leader's own path is checked instead).
+    fn value_ok_as(&self, m: &Mark, arc: &[Pt], bx: &Bx, boxes: &[Bx], between: bool) -> bool {
+        if !self.free(bx, boxes) {
+            return false;
+        }
+        let ref_end = pol(m.tail.0, m.tail.1, m.r + 8.0, m.refa);
+        if seg_hits_box(m.tail, ref_end, bx, 1.8) || extension(m).is_some_and(|(a, e)| seg_hits_box(a, e, bx, 1.8)) || arc.windows(2).any(|w| seg_hits_box(w[0], w[1], bx, 1.9)) {
+            return false;
+        }
+        // never in another mark's angle (near its arc, where that value goes), nor on its reference line
+        if self.plans.iter().any(|o| o.arrow != m.arrow && (in_wedge_zone(o, bx) || seg_hits_box(o.tail, ref_ray(o), bx, 2.0))) {
+            return false;
+        }
+        let c = bx.c;
+        let (mut mine, mut q) = (f64::MAX, arc[0]);
+        for w in arc.windows(2) {
+            let d = seg_dist(c, w[0], w[1]);
+            if d < mine {
+                mine = d;
+                let (dx, dy) = (w[1].0 - w[0].0, w[1].1 - w[0].1);
+                let t = (((c.0 - w[0].0) * dx + (c.1 - w[0].1) * dy) / (dx * dx + dy * dy).max(1e-12)).clamp(0.0, 1.0);
+                q = (w[0].0 + t * dx, w[0].1 + t * dy);
+            }
+        }
+        if self.segs.iter().filter(|g| matches!(g.own, Own::Mark(_))).any(|g| seg_dist(c, g.a, g.b) < mine + 2.5) {
+            return false;
+        }
+        // no arrow between it and its arc (its own arrow bounds the wedge it sits in)
+        !between || !self.segs.iter().filter(|g| g.solid && matches!(g.own, Own::Arrow(a) if a != m.arrow)).any(|g| cross(c, q, g.a, g.b, 1.5))
+    }
+
+    /// Places a component's name at its own segment: centred along it (sliding along it if need be), just off it on
+    /// the side away from its vector's triangle, else the other side, within 1.2 text heights of it and plainly
+    /// nearer it than any other line. Otherwise None (left off, with the note).
+    fn place_comp(&mut self, sp: &Spec, boxes: &[Bx]) -> Option<Pt> {
+        let Own::Comp(arrow, x) = sp.own else { return None };
+        let &(_, _, a, b) = self.comps.iter().find(|c| c.0 == arrow && c.1 == x)?;
+        let third = *sp.anchors.first()?;
+        let (hw, hh) = sp.lab.half();
+        // (the text's height, also for a blank answer line)
+        let th = sp.lab.fs * 0.98;
+        let len = (b.0 - a.0).hypot(b.1 - a.1).max(1e-6);
+        let (ux, uy) = ((b.0 - a.0) / len, (b.1 - a.1) / len);
+        let (nx, ny) = (uy, -ux);
+        let ext = hw * nx.abs() + hh * ny.abs();
+        let away = -side_of(a, b, third);
+        let own_seg = self.segs.iter().find(|g| g.own == sp.own).map(|g| (g.a, g.b)).unwrap_or((a, b));
+        for side in [away, -away] {
+            for t in [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82] {
+                let m = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+                for g in [2.0, 4.0, 7.0] {
+                    let o = ext + 1.1 + g;
+                    let c = (m.0 - nx * side * o, m.1 - ny * side * o);
+                    self.work += 1;
+                    let bx = Bx { c, hw, hh };
+                    // within 1.2 text heights of its segment (the box's edge)
+                    if !seg_hits_box(a, b, &bx, 1.2 * th) || !self.free(&bx, boxes) {
+                        continue;
+                    }
+                    let mine = seg_dist(c, own_seg.0, own_seg.1).max(seg_dist(c, a, b));
+                    // (a line lying on its segment's line, an axis or a reference line, is the same line)
+                    let on_line = |q: Pt| ((q.0 - a.0) * uy - (q.1 - a.1) * ux).abs() < 0.8;
+                    let other = self.segs.iter().filter(|s| s.own != sp.own && !(on_line(s.a) && on_line(s.b))).map(|s| seg_dist(c, s.a, s.b)).chain(self.leaders.iter().map(|l| seg_dist(c, l.0, l.1))).fold(f64::MAX, f64::min);
+                    if mine + 1.0 < other {
+                        return Some(c);
+                    }
                 }
-                self.add_arc(&m);
-                return Some(c);
             }
         }
         None
@@ -966,6 +1021,9 @@ impl Scene {
     /// Whether a box lies in an angle's zone: within its sector (widened by 10 degrees) and its usual arc's radius
     /// plus the room its value needs.
     fn in_zone(&self, bx: Bx) -> bool {
+        if self.plans.iter().any(|m| seg_hits_box(m.tail, ref_ray(m), &bx, 2.0)) {
+            return true;
+        }
         let pts = [bx.c, (bx.c.0 - bx.hw, bx.c.1 - bx.hh), (bx.c.0 + bx.hw, bx.c.1 - bx.hh), (bx.c.0 - bx.hw, bx.c.1 + bx.hh), (bx.c.0 + bx.hw, bx.c.1 + bx.hh)];
         self.plans.iter().any(|m| pts.iter().any(|&q| {
             let dist = (q.0 - m.tail.0).hypot(q.1 - m.tail.1);
@@ -980,30 +1038,12 @@ impl Scene {
         }))
     }
 
-    /// Whether a value centred on `c` sits by mark `m`: within its sector widened by 10 degrees each side (in its own
-    /// slice when a narrower angle is nested in it), no further from the tail than the arc and 1.5 text heights.
-    fn sector_ok(&self, m: &Mark, c: Pt, inner: f64, th: f64) -> bool {
-        let dist = (c.0 - m.tail.0).hypot(c.1 - m.tail.1);
-        if dist > m.r + 1.5 * th {
-            return false;
-        }
-        let a = (m.tail.1 - c.1).atan2(c.0 - m.tail.0).to_degrees();
-        let mut t = (a - m.refa).rem_euclid(360.0);
-        if m.d < 0.0 {
-            t = (360.0 - t).rem_euclid(360.0);
-        }
-        if t > 180.0 {
-            t -= 360.0;
-        }
-        t >= -10.0 && t <= m.d.abs() + 10.0 && (inner == 0.0 || t > inner)
-    }
-
     /// Places every label: the most hemmed-in first (fewest free spots on the bare figure); if some find no room,
     /// once more with those first. Keeps the better.
     fn place(&mut self, specs: Vec<Spec>) {
         let mut counts = vec![0usize; specs.len()];
         for (k, sp) in specs.iter().enumerate() {
-            if sp.mark.is_some() || self.warm.is_some() {
+            if sp.mark.is_some() {
                 continue;
             }
             // count up to 12 free spots: enough to tell the hemmed-in from the rest
@@ -1042,11 +1082,6 @@ impl Scene {
         }
         let mut order: Vec<usize> = (0..specs.len()).collect();
         order.sort_by_key(|&k| (rank(specs[k].own), counts[k]));
-        if let Some(w) = &self.warm {
-            // a drag step places them in the order the last layout did
-            let at = |o: Own| w.order.iter().position(|x| *x == o).unwrap_or(usize::MAX);
-            order.sort_by_key(|&k| at(specs[k].own));
-        }
         let mut at = self.arrange(&specs, &order);
         let mut chosen = order.clone();
         let mut leaders = std::mem::take(&mut self.leaders);
@@ -1094,56 +1129,12 @@ thread_local! {
     /// The layouts of the last few figures (keyed by their params, the answers switch aside: both copies share one),
     /// so the drawing, the editor notes and the label handles place the labels once.
     static SEEN: std::cell::RefCell<Vec<(String, std::rc::Rc<Scene>)>> = const { std::cell::RefCell::new(Vec::new()) };
-    /// The last layout worked out and its params (the next, one drag step away, starts from it).
-    static LAST: std::cell::RefCell<Option<(Params, Warm)>> = const { std::cell::RefCell::new(None) };
     /// How many layouts this thread has worked out (for the tests).
     static BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-/// Where a layout put its labels and arcs, and the page it chose.
-#[derive(Clone)]
-pub struct Warm {
-    cfg: (u8, f64, [f64; 5], f64, [bool; 5]),
-    labels: Vec<(Own, Pt)>,
-    radii: Vec<(usize, f64)>,
-    /// the order its labels were placed in
-    order: Vec<Own>,
-}
-
-/// Whether `q` is one drag step from `p`: the same figure but for one vector's length (by at most 0.6) or direction
-/// (by at most 10 degrees).
-fn one_step(p: &Params, q: &Params) -> bool {
-    let keys: Vec<&String> = p.0.keys().chain(q.0.keys()).filter(|k| p.0.get(*k) != q.0.get(*k)).collect();
-    if keys.is_empty() || keys.len() > 2 {
-        return false;
-    }
-    let item = |k: &str| crate::figures::layout::item_of(k).map(|x| x.1);
-    let first = item(keys[0]);
-    keys.iter().all(|k| {
-        item(k) == first && (k.ends_with("_mag") && (p.f(k) - q.f(k)).abs() <= 0.6 || k.ends_with("_ang") && { let d = (p.f(k) - q.f(k)).rem_euclid(360.0); d.min(360.0 - d) <= 10.0 })
-    })
-}
-
-/// Where layout `sc` put its labels and arcs, for the next drag step.
-fn warm_of(sc: &Scene) -> Warm {
-    Warm { cfg: sc.cfg, labels: sc.labels.iter().map(|l| (l.2, l.0)).collect(), radii: sc.marks.iter().map(|m| (m.arrow, m.r)).collect(), order: sc.order.clone() }
-}
-
-/// A label's spot in the last layout and a few spots round it (a drag step moves things a little).
-fn warm_ring(c: Option<Pt>) -> Vec<Pt> {
-    let Some(c) = c else { return vec![] };
-    let mut v = vec![c];
-    for r in [4.0, 8.0, 14.0] {
-        for k in 0..8 {
-            let a = (k as f64 * 45.0).to_radians();
-            v.push((c.0 + r * a.cos(), c.1 + r * a.sin()));
-        }
-    }
-    v
-}
-
-/// Forgets the last layout (the tests start a drag from a cold one).
-pub fn forget_last() { LAST.with(|l| *l.borrow_mut() = None); }
+/// Forgets the layouts worked out (the tests draw a figure cold).
+pub fn forget_layouts() { SEEN.with(|c| c.borrow_mut().clear()); }
 
 /// How many layouts this thread has worked out so far (the tests check the drawing, notes and handles share one).
 pub fn layouts_built() -> usize { BUILT.with(|b| b.get()) }
@@ -1154,85 +1145,43 @@ pub fn scene(p: &Params) -> std::rc::Rc<Scene> {
     q.0.remove(SHOW_ANSWERS);
     let key = format!("{:?}", q.0);
     if let Some(s) = SEEN.with(|c| c.borrow().iter().find(|e| e.0 == key).map(|e| e.1.clone())) {
-        // (still the layout a drag step starts from)
-        let mut key_copy = p.clone();
-        key_copy.set_b(SHOW_ANSWERS, true);
-        LAST.with(|l| *l.borrow_mut() = Some((key_copy, warm_of(&s))));
         return s;
     }
     let mut key_copy = p.clone();
     key_copy.set_b(SHOW_ANSWERS, true);
-    // a drag step from the last layout: start from its page and its labels' and arcs' places
-    let warm = LAST.with(|l| l.borrow().as_ref().filter(|(lp, _)| one_step(lp, &key_copy)).map(|(_, w)| w.clone()));
-    let mut work = 0;
-    let mut sc = None;
-    if let Some(w) = warm {
-        let (mode, zoom, _, page, flip) = w.cfg;
-        let s0 = build(&key_copy, &[0.0; 5], mode, zoom, page, flip, Some(w));
-        work += s0.work;
-        if s0.score() == 0 {
-            let mut s0 = s0;
-            s0.warmed = true;
-            sc = Some(s0);
-        }
-    }
-    let mut sc = match sc {
-        Some(s0) => s0,
-        None => {
-            let mut sc = build(&key_copy, &[0.0; 5], 0, 1.0, 1.0, [false; 5], None);
-            work += sc.work;
-            // labels with no room: bigger squares (a small figure on a roomy page), then a bigger page (the squares
-            // grow with it, the text does not; at most 1.75 times, so the smallest text still reads above 8 px shown at
-            // the usual width), each also with a missing name's components drawn the other way round
-            // (2 times, the very last: the smallest text, 16 px, then reads at 8 px shown at the usual width)
-            const TRIES: [(f64, f64); 7] = [(1.0, 1.0), (1.5, 1.0), (1.0, 1.25), (1.0, 1.5), (1.25, 1.5), (1.0, 1.75), (1.0, 2.0)];
-            'tries: for &(zoom, page) in &TRIES {
-              for mode in 0..4u8 {
-                if (zoom, page, mode) == (1.0, 1.0, 0) {
-                    continue;
-                }
-                if sc.score() == 0 || work + WORK_CAP > TOTAL_CAP {
-                    break 'tries;
-                }
-                for flip_missing in [false, true] {
-                    let mut flip = [false; 5];
-                    if flip_missing {
-                        if !sc.missed.iter().any(|o| matches!(o, Own::Comp(..))) {
-                            continue;
-                        }
-                        for o in &sc.missed {
-                            if let Own::Comp(i, _) = o {
-                                flip[(*i).min(4)] = true;
-                            }
-                        }
-                    }
-                    let next = build(&key_copy, &[0.0; 5], mode, zoom, page, flip, None);
-                    work += next.work;
-                    if next.score() < sc.score() {
-                        sc = next;
-                    }
-                }
-              }
+    // the layout depends on the params alone (no state carried between figures), on the usual page
+    let mut sc = build(&key_copy, &[0.0; 5], 0, 1.0, 1.0, [false; 5]);
+    let mut work = sc.work;
+    // something left off: other orders (values or component names before names), bigger squares within the page, and a
+    // missing name's components drawn the other way round
+    'tries: for zoom in [1.0, 1.5] {
+        for mode in 0..4u8 {
+            if (zoom, mode) == (1.0, 0) {
+                continue;
             }
-            // a component's name with no room on the page found: that arrow's components drawn the other way round
-            if sc.missed.iter().any(|o| matches!(o, Own::Comp(..))) && work + WORK_CAP <= TOTAL_CAP {
-                let (mode, zoom, _, page, mut flip) = sc.cfg;
-                for o in &sc.missed {
-                    if let Own::Comp(i, _) = o {
-                        flip[(*i).min(4)] = !flip[(*i).min(4)];
+            if sc.score() == 0 || work + WORK_CAP > TOTAL_CAP {
+                break 'tries;
+            }
+            for flip_missing in [false, true] {
+                let mut flip = [false; 5];
+                if flip_missing {
+                    if !sc.missed.iter().any(|o| matches!(o, Own::Comp(..))) {
+                        continue;
+                    }
+                    for o in &sc.missed {
+                        if let Own::Comp(i, _) = o {
+                            flip[(*i).min(4)] = true;
+                        }
                     }
                 }
-                let next = build(&key_copy, &[0.0; 5], mode, zoom, page, flip, None);
+                let next = build(&key_copy, &[0.0; 5], mode, zoom, 1.0, flip);
                 work += next.work;
                 if next.score() < sc.score() {
                     sc = next;
                 }
             }
-            sc
         }
-    };
-    let w = warm_of(&sc);
-    LAST.with(|l| *l.borrow_mut() = Some((key_copy.clone(), w)));
+    }
     sc.work = work;
     BUILT.with(|b| b.set(b.get() + 1));
     let sc = std::rc::Rc::new(sc);
@@ -1269,18 +1218,19 @@ fn mark_label(p: &Params, arrow: usize, n: usize, d: f64) -> Option<Lab> {
     if lab.text.eq_ignore_ascii_case("none") { None } else { Some(lab) }
 }
 
-/// How far out from the tail the label of a mark must sit to fit inside its angle, and its extent along the bisector.
-fn mark_room(m: &Mark, lab: &Lab, inner: f64) -> (f64, f64) {
-    // `inner`: a narrower angle nested in this one from the same line; the label goes in the slice beyond it
-    let (hw, hh) = lab.half();
-    let slice = m.d.abs() - inner;
-    let bis = (m.refa + m.d.signum() * (inner + slice / 2.0)).to_radians();
-    let ext = hw * bis.cos().abs() + hh * bis.sin().abs();
-    let perp = hw * bis.sin().abs() + hh * bis.cos().abs();
-    let half = (slice / 2.0).to_radians();
-    // clear of both arrows' shafts (up to 6 px wide) by a few pixels
-    let need = if slice >= SMALL { (perp + 7.0) / half.sin() } else { 0.0 };
-    ((m.r + ext + 3.0).max(need), ext)
+/// The end of mark `m`'s reference line drawn at the largest radius its arc may take (its arrow's length).
+fn ref_ray(m: &Mark) -> Pt { pol(m.tail.0, m.tail.1, m.len.max(m.r) + 8.0, m.refa) }
+
+/// Whether box `b` is centred in mark `m`'s angle near its arc (inside the wedge, within its usual radius and 40 px),
+/// where it would read as that angle's value.
+fn in_wedge_zone(m: &Mark, b: &Bx) -> bool {
+    (b.c.0 - m.tail.0).hypot(b.c.1 - m.tail.1) <= m.r + 40.0 && strictly_inside(m, b.c)
+}
+
+/// Whether box `b` lies wholly inside mark `m`'s wedge (its centre and corners between the reference line and the
+/// arrow, seen from the tail).
+pub fn box_in_wedge(m: &Mark, b: &Bx) -> bool {
+    [b.c, (b.c.0 - b.hw, b.c.1 - b.hh), (b.c.0 + b.hw, b.c.1 - b.hh), (b.c.0 - b.hw, b.c.1 + b.hh), (b.c.0 + b.hw, b.c.1 + b.hh)].iter().all(|&q| strictly_inside(m, q))
 }
 
 /// Whether point `c` lies strictly within mark `m`'s angle (no widening).
@@ -1323,7 +1273,7 @@ fn arrow_name(p: &Params, i: usize, n: usize) -> String {
     }
 }
 
-fn build(p: &Params, bump: &[f64; 5], mode: u8, zoom: f64, page: f64, flip: [bool; 5], warm: Option<Warm>) -> Scene {
+fn build(p: &Params, bump: &[f64; 5], mode: u8, zoom: f64, page: f64, flip: [bool; 5]) -> Scene {
     let (w, h) = (W * page, H * page);
     let lay = zoomed(vlayout(p, w, h), zoom * page, w, h);
     let (n, u) = (lay.n, lay.u);
@@ -1331,7 +1281,7 @@ fn build(p: &Params, bump: &[f64; 5], mode: u8, zoom: f64, page: f64, flip: [boo
     let (fs, vsw) = vstyle(p, u);
     let hk = if p.b("bold") { (0.87, 0.94) } else { (1.0, 1.0) };
     let col = p.b("color");
-    let mut sc = Scene { cfg: (mode, zoom, *bump, page, flip), w, h, cols: 1, rows: 1, lay: lay.clone(), vsw, segs: vec![], heads: vec![], marks: vec![], comps: vec![], labels: vec![], misses: vec![], missed: vec![], dropped: vec![], notes: vec![], leaders: vec![], fixed: vec![], work: 0, why: vec![], index: vec![], indexed: 0, plans: vec![], warm, tally: Default::default(), shrunk: vec![], order: vec![], warmed: false };
+    let mut sc = Scene { cfg: (mode, zoom, *bump, page, flip), w, h, cols: 1, rows: 1, lay: lay.clone(), vsw, segs: vec![], heads: vec![], marks: vec![], comps: vec![], labels: vec![], misses: vec![], missed: vec![], dropped: vec![], notes: vec![], leaders: vec![], fixed: vec![], work: 0, why: vec![], index: vec![], indexed: 0, plans: vec![], tally: Default::default(), shrunk: vec![], order: vec![], comp_spots: vec![] };
     let (gx0, gx1, gy0, gy1) = (lay.gx0, lay.gx1, lay.gy0, lay.gy1);
     if p.s("grid") == "Axes only" || p.b("axes") {
         let (a, b) = (pxy((gx0 + 0.25, 0.0)), pxy((gx1 - 0.25, 0.0)));
@@ -1470,7 +1420,6 @@ fn build(p: &Params, bump: &[f64; 5], mode: u8, zoom: f64, page: f64, flip: [boo
     // the labels: each with spots along its own arrow, component or arc
     let tcol: &'static str = if col { "#7c3aed" } else { "#111" };
     let mut specs: Vec<Spec> = vec![];
-    let warm_at = |o: Own| sc.warm.as_ref().and_then(|w| w.labels.iter().find(|x| x.0 == o).map(|x| x.1));
     for (bx, t, _, _) in std::mem::take(&mut sc.fixed) {
         let lab = Lab { text: t.to_string(), fs: 24.0, st: ITALIC, col: "#111" };
         let mut cands = vec![bx.c];
@@ -1494,7 +1443,7 @@ fn build(p: &Params, bump: &[f64; 5], mode: u8, zoom: f64, page: f64, flip: [boo
             specs.push(Spec { mark: None, lab, own: Own::Arrow(i), reach: 0.0, cands, anchors: vec![], beside: vec![], zero: true });
             continue;
         }
-        let mut cands: Vec<Pt> = warm_ring(warm_at(Own::Arrow(i)));
+        let mut cands: Vec<Pt> = vec![];
         cands.push(pref);
         cands.extend(beside(a, b, side_of(a, b, pref), &lab, vsw / 2.0, &[0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.12, 0.88, 0.05, 0.95]));
         let anchors = [0.5, 0.35, 0.65].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)).collect();
@@ -1505,7 +1454,7 @@ fn build(p: &Params, bump: &[f64; 5], mode: u8, zoom: f64, page: f64, flip: [boo
             continue;
         };
         // its spots depend on its arc's radius: worked out while placing (the warm spot first)
-        let cands: Vec<Pt> = warm_ring(warm_at(Own::Mark(m.arrow)));
+        let cands: Vec<Pt> = vec![];
         specs.push(Spec { mark: Some(mi), lab, own: Own::Mark(m.arrow), reach: 0.0, cands, anchors: vec![], beside: vec![], zero: false });
     }
     let ccol: &'static str = if col { "#7c3aed" } else { GREY };
@@ -1515,9 +1464,12 @@ fn build(p: &Params, bump: &[f64; 5], mode: u8, zoom: f64, page: f64, flip: [boo
         let lab = Lab { text, fs: cfs, st: ITALIC, col: ccol };
         let (tail, tip) = if arrow == n { ((0.0, 0.0), res) } else { (pts[arrow], pts[arrow + 1]) };
         let am = pxy(((tail.0 + tip.0) / 2.0, (tail.1 + tip.1) / 2.0));
-        let mut cands: Vec<Pt> = warm_ring(warm_at(Own::Comp(arrow, x)));
-        cands.extend(beside(a, b, side_of(a, b, (2.0 * ((a.0 + b.0) / 2.0) - am.0, 2.0 * ((a.1 + b.1) / 2.0) - am.1)), &lab, 1.1, &[0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9, 0.0, 1.0, 0.25, 0.75, 0.45, 0.55]));
-        let anchors = [0.5, 0.3, 0.7].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)).collect();
+        let _ = am;
+        let cands: Vec<Pt> = vec![];
+        // the vector's triangle: its third corner, the end of tail or tip off this segment
+        let (pt, pp) = (pxy(tail), pxy(tip));
+        let third = if seg_dist(pt, a, b) > seg_dist(pp, a, b) { pt } else { pp };
+        let anchors = vec![third];
         specs.push(Spec { mark: None, lab, own: Own::Comp(arrow, x), reach: 18.0, cands, anchors, beside: vec![], zero: false });
     }
     sc.place(specs);
@@ -1561,14 +1513,16 @@ fn shown(t: &str) -> String {
 /// The editor notes (shown in the panel, never drawn): why a component or mark is not drawn, and any label left off
 /// for want of room.
 pub fn warnings(p: &Params) -> Vec<String> {
-    if !active(p) {
+    if !any_switch(p) {
         return vec![];
     }
     let sc = scene(p);
-    let n = sc.lay.n;
-    // the student copy draws no answer parts, so notes about them are for the key alone (they still apply)
-    let _ = n;
-    sc.notes.clone()
+    let mut notes = sc.notes.clone();
+    // a switch that draws nothing leaves the old drawing, whose labels are all placed
+    if !active(p) {
+        notes.retain(|n| !n.starts_with("No room"));
+    }
+    notes
 }
 
 /// Label centres of the vectors and the resultant in the batch 8 drawing (for the label handles).
