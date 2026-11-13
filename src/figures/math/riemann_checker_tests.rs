@@ -269,10 +269,61 @@ fn optsets() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
     ]
 }
 
+/// The second checker's 120 more cases (its round-2 harness, riemann_r2.rs), ported unchanged.
+fn extra_cases() -> Vec<(String, String)> {
+    let mut out = vec![];
+    let fns: Vec<(&str, &str, &str, f64, f64, f64, f64, f64, f64)> = vec![
+        // f, a, b, xmin, xmax, xstep, ymin, ymax, ystep
+        ("x^2", "0", "3", -1.0, 4.0, 1.0, -1.0, 10.0, 1.0),
+        ("x^2 + 2", "-1", "2", -2.0, 3.0, 1.0, -1.0, 7.0, 1.0),
+        ("9 - x^2", "-3", "3", -4.0, 4.0, 1.0, -1.0, 10.0, 1.0),
+        ("x^3", "1", "2", -1.0, 3.0, 1.0, -1.0, 9.0, 1.0),
+        ("2x", "1", "5", -1.0, 6.0, 1.0, -1.0, 11.0, 1.0),
+        ("x + 1", "0", "4", -1.0, 5.0, 1.0, -1.0, 6.0, 1.0),
+        ("1/x", "1", "e", -1.0, 4.0, 1.0, -0.5, 1.5, 0.5),
+        ("1/(1 + x^2)", "-1", "1", -2.0, 2.0, 0.5, -0.5, 1.5, 0.5),
+        ("e^(-x^2)", "0", "2", -1.0, 3.0, 0.5, -0.5, 1.5, 0.5),
+        ("sqrt(x + 1)", "0", "3", -2.0, 4.0, 1.0, -1.0, 3.0, 0.5),
+        ("cos(x) + 1", "0", "pi", -1.0, 4.0, 1.0, -1.0, 3.0, 0.5),
+        ("x^2 - 4x + 5", "0", "4", -1.0, 5.0, 1.0, -1.0, 6.0, 1.0),
+        ("8 - 2x", "0", "4", -1.0, 5.0, 1.0, -1.0, 9.0, 1.0),
+        ("ln(x)", "1", "e^2", -1.0, 8.0, 1.0, -1.0, 3.0, 0.5),
+        ("x^2/4", "0", "4", -1.0, 5.0, 1.0, -1.0, 5.0, 1.0),
+        ("20 - x^2", "0", "4", -1.0, 5.0, 1.0, -2.0, 22.0, 2.0),
+        ("100 - x^2", "0", "10", -2.0, 12.0, 2.0, -10.0, 110.0, 10.0),
+        ("0.01x^3", "0", "10", -2.0, 12.0, 2.0, -1.0, 11.0, 1.0),
+        ("x sin(x)", "0", "pi", -1.0, 4.0, 1.0, -0.5, 2.5, 0.5),
+        ("3", "1", "4", -1.0, 5.0, 1.0, -1.0, 4.0, 1.0),
+    ];
+    for (f, a, b, x0, x1, xs, y0, y1, ys) in fns {
+        for (n, rule) in [(4, "Left"), (5, "Right"), (8, "Midpoint"), (10, "Trapezoid"), (3, "Upper"), (6, "Lower")] {
+            out.push((format!("{f} [{a},{b}] n={n} {rule}"), format!(r#"{{"f":"{f}","a":"{a}","b":"{b}","n":{n},"rule":"{rule}","xmin":{x0},"xmax":{x1},"xstep":{xs},"ymin":{y0},"ymax":{y1},"ystep":{ys}}}"#)));
+        }
+    }
+    out
+}
+
+/// Label sets left off at Small or Medium with only one label option on, each with a note (named, and asserted to be all).
+/// (All strips 12 to 15 px wide: 8 or 10 strips on a window 4 units wide; the note's advice, an x-axis set closer round
+/// a and b, makes them fit, as `refusal_advice_works` checks.)
+const SMALL_MEDIUM_REFUSED: &[&str] = &[
+    "Medium x^2 + 2 [-1,2] n=8 Midpoint areas: strip labels",
+    "Medium x^3 [1,2] n=8 Midpoint xmarks: x marks",
+    "Small x^3 [1,2] n=10 Trapezoid heights: strip labels",
+    "Medium x^3 [1,2] n=10 Trapezoid heights: strip labels",
+    "Small x^3 [1,2] n=10 Trapezoid areas: strip labels",
+    "Medium x^3 [1,2] n=10 Trapezoid areas: strip labels",
+    "Medium x^3 [1,2] n=10 Trapezoid xmarks: x marks",
+    "Medium 0.01x^3 [0,10] n=8 Midpoint areas: strip labels",
+];
+
 #[test]
 fn the_checkers_sweep_is_clean() {
-    let cases = classroom();
+    let mut cases = classroom();
     assert_eq!(cases.len(), 100);
+    cases.extend(extra_cases());
+    let mut sets: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut one_option: Vec<String> = vec![];
     let mut tot = std::collections::BTreeMap::<String, [usize; 6]>::new();
     let mut faults = vec![];
     let mut noted = vec![];
@@ -284,6 +335,11 @@ fn the_checkers_sweep_is_clean() {
                 j.push_str(&format!(",\"label_size\":\"{size}\"}}"));
                 let p = from_json(&j);
                 let r = measure(&p);
+                for n in warnings(&p).iter().filter(|n| n.contains("no room") || n.contains("do not fit")) {
+                    let kind = if n.contains("strip labels") { "strip labels" } else if n.contains("x\u{2080}") { "x marks" } else { "a and b" };
+                    *sets.entry(format!("{size} {kind}")).or_default() += 1;
+                    if size != "Large" && matches!(on, "heights" | "areas" | "xmarks") { one_option.push(format!("{size} {name} {on}: {kind}")); }
+                }
                 let e = tot.entry(size.to_string()).or_default();
                 e[0] += 1; e[1] += r.faults.len().min(1); e[2] += r.expected; e[3] += r.drawn; e[4] += r.missing_noted; e[5] += r.missing_silent;
                 for f in &r.faults { faults.push(format!("{size} {name} {on}: {f}")); }
@@ -293,6 +349,9 @@ fn the_checkers_sweep_is_clean() {
         }
     }
     println!("checker sweep [figures, with a fault, labels expected, drawn, left off with a note, left off silently]: {tot:?}");
-    for n in &noted { println!("  left off with a note: {n}"); }
+    println!("label sets left off (with a note) by size and kind: {sets:?}");
+    for n in &one_option { println!("  one option on, left off at Small/Medium: {n}"); }
+    let unnamed: Vec<&String> = one_option.iter().filter(|n| !SMALL_MEDIUM_REFUSED.contains(&n.as_str())).collect();
+    assert!(unnamed.is_empty() && one_option.len() == SMALL_MEDIUM_REFUSED.len(), "unnamed: {unnamed:#?}");
     assert!(faults.is_empty(), "{} faults:\n{}", faults.len(), faults.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));
 }

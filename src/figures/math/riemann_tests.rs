@@ -260,7 +260,7 @@ fn print_is_grey_only() {
 #[test]
 fn controls_show_exactly_when_they_change_the_drawing() {
     let defs = params();
-    let states: Vec<Params> = vec![
+    let mut states: Vec<Params> = vec![
         with(&[]),
         lined(&[("key_line", bo(true)), ("strip_labels", s("Heights")), ("x_marks", bo(true)), ("sample_pts", bo(true))]),
         lined(&[("show_answers", bo(false))]),
@@ -272,6 +272,14 @@ fn controls_show_exactly_when_they_change_the_drawing() {
         lined(&[("region", s("From a table of values")), ("rule", s("Trapezoid")), ("xmax", fl(8.0)), ("ymax", fl(7.0)), ("strip_labels", s("Heights"))]),
         with(&[("grid", s("None")), ("title_mode", s("Blank line"))]),
     ];
+    // every student copy with each line option on alone (the sums of x² + 1 are fractions, so Values always shows)
+    for mode in STUDENT {
+        for opt in ["sum_line", "show_dx", "exact_line", "integral_line", "error_line", "key_line", "strip_labels", "x_marks", "sample_pts"] {
+            let mut q = with(&[("show_answers", bo(false)), ("student", s(mode))]);
+            if opt == "strip_labels" { q.set_s("strip_labels", "Heights"); } else { q.set_b(opt, true); }
+            states.push(q);
+        }
+    }
     let alts = |pd: &ParamDef| -> Vec<Value> {
         match &pd.kind {
             PKind::Bool => vec![bo(true), bo(false)],
@@ -310,7 +318,7 @@ fn controls_show_exactly_when_they_change_the_drawing() {
             checked += 1;
         }
     }
-    assert!(checked > 300);
+    assert!(checked > 1000);
 }
 
 #[test]
@@ -550,8 +558,13 @@ fn option(p: &mut Params, o: &str) {
 }
 
 /// Labels left off at Large on the classroom list (each refused with a panel note): strips too narrow for their labels.
-/// (x₀ … x₄ under strips that straddle the axis on both sides.)
+/// (x₀ … xₙ under strips that straddle the axis or with every label on at once: only x₀ and xₙ, or none, marked with a note;
+/// one set of strip labels between y = x and y = x² with everything on.)
 const LARGE_EXCEPTIONS: &[&str] = &[
+    "sin(x) [0, pi] Midpoint n=4 / all: x marks",
+    "cos(x) [0, pi/2] Midpoint n=4 / all: x marks",
+    "sqrt(x) [0, 4] Left n=8 / all: x marks",
+    "between x and x^2 Vertical Midpoint / all: strip labels",
     "between 4 - x^2 and x^2 - 4 Vertical Left / x_marks: x marks",
     "between 4 - x^2 and x^2 - 4 Vertical Left / all: x marks",
     "between 4 - x^2 and x^2 - 4 Vertical Midpoint / x_marks: x marks",
@@ -724,3 +737,73 @@ fn student_copies_leak_no_answer() {
     assert_eq!(render(&ar).matches(r#"data-rs="blank""#).count(), 4);
 }
 
+
+/// When the strip labels (or x₀ … xₙ) are left off, the note says what helps, and doing it makes them fit.
+#[test]
+fn refusal_advice_works() {
+    let cases = [
+        with(&[("f", s("x^3")), ("a", s("1")), ("b", s("2")), ("n", i(10)), ("rule", s("Trapezoid")), ("xmin", fl(-1.0)), ("xmax", fl(3.0)), ("ymax", fl(9.0)), ("strip_labels", s("Heights"))]),
+        with(&[("f", s("x^3")), ("a", s("1")), ("b", s("2")), ("n", i(8)), ("rule", s("Midpoint")), ("xmin", fl(-1.0)), ("xmax", fl(3.0)), ("ymax", fl(9.0)), ("x_marks", bo(true))]),
+        with(&[("f", s("x^3")), ("a", s("1")), ("b", s("2")), ("n", i(10)), ("xmin", fl(-1.0)), ("xmax", fl(3.0)), ("ymax", fl(9.0)), ("strip_labels", s("Areas"))]),
+        with(&[("f", s("x^3")), ("a", s("1")), ("b", s("2")), ("n", i(10)), ("xmin", fl(-1.0)), ("xmax", fl(3.0)), ("ymax", fl(9.0)), ("x_marks", bo(true))]),
+        with(&[("f", s("x^2")), ("a", s("0")), ("b", s("1")), ("n", i(8)), ("xmin", fl(-4.0)), ("xmax", fl(4.0)), ("ymin", fl(-1.0)), ("ymax", fl(2.0)), ("ystep", fl(0.5)), ("strip_labels", s("Areas"))]),
+    ];
+    let mut tried = 0;
+    for p in cases {
+        let n = warnings(&p);
+        let Some(note) = n.iter().find(|x| x.contains("have no room") || x.contains("do not fit")) else { continue };
+        tried += 1;
+        assert!(!note.contains("wider"), "never advise widening: {note}");
+        let k = note.find("(From ").unwrap_or_else(|| panic!("{note}"));
+        let v: Vec<f64> = note[k + 6..].split([' ', ')', ',']).filter_map(|t| t.parse().ok()).collect();
+        let mut q = p.clone();
+        q.set_f("xmin", v[0]);
+        q.set_f("xmax", v[1]);
+        let after = warnings(&q);
+        assert!(!after.iter().any(|x| x.contains("have no room") || x.contains("do not fit")), "{note} -> {after:?}");
+    }
+    assert!(tried >= 3, "the cases must be refused before the advice is taken ({tried})");
+}
+
+/// An odd root of a negative base is read by the figure: ∫₋₁¹ x^(1/3) dx = 0, ∫₋₁¹ x^(2/3) dx = 2·(3/5) = 6/5,
+/// ∫₋₁¹ x^(1/5) dx = 0, ∫₀² (x − 1)^(1/3) dx = 0, ∫₋₈¹ x^(1/3) dx = (3/4)(1 − 16) = −45/4; L₂ of x^(1/3) on [−8, 0]:
+/// Δx = 4, heights −2 and −∛4 = −1.5874: 4(−3.5874) = −14.3496. The coordinate grid itself is unchanged.
+#[test]
+fn odd_roots_of_negative_bases() {
+    let ex = |f: &str, a: &str, b: &str| with(&[("f", s(f)), ("a", s(a)), ("b", s(b)), ("exact_line", bo(true)), ("xmin", fl(-9.0)), ("xmax", fl(3.0)), ("ymin", fl(-3.0)), ("ymax", fl(3.0))]);
+    has_line(&ex("x^(1/3)", "-1", "1"), "Exact value = 0");
+    has_line(&ex("x^(2/3)", "-1", "1"), "Exact value = 6/5");
+    has_line(&ex("x^(1/5)", "-1", "1"), "Exact value = 0");
+    has_line(&ex("(x - 1)^(1/3)", "0", "2"), "Exact value = 0");
+    has_line(&ex("x^(1/3)", "-8", "1"), "Exact value = \u{2212}45/4");
+    let mut l = ex("x^(1/3)", "-8", "0"); l.set_i("n", 2); l.set_b("sum_line", true);
+    has_line(&l, "= 4\u{b7}(\u{2212}2 \u{2212} 1.5874) \u{2248} \u{2212}14.3496");
+    assert!(warnings(&ex("x^(1/3)", "-1", "1")).is_empty());
+    // drawn by the figure on both sides of 0
+    let svg = render(&ex("x^(1/3)", "-1", "1"));
+    assert!(svg.contains(r#"data-rs="curve""#));
+    // an even root of a negative base still has no value
+    assert!(warnings(&ex("x^(1/2)", "-1", "1")).iter().any(|n| n.contains("no value")));
+    // the grid draws as before: its reader gives nothing for (−1)^(1/3)
+    assert!(super::super::eval("x^(1/3)", -1.0).is_none_or(|v| !v.is_finite()));
+}
+
+/// Large values are values; typed decimals stay decimals; an end with no value is said as an end; √|x|.
+#[test]
+fn values_large_typed_and_ends() {
+    let big = with(&[("f", s("x^10")), ("a", s("0")), ("b", s("4")), ("xmax", fl(5.0)), ("ymax", fl(10.0)), ("sum_line", bo(true))]);
+    assert!(!warnings(&big).iter().any(|n| n.contains("no value")), "{:?}", warnings(&big));
+    // L₄ of x¹⁰ on [0, 4]: 1·(0 + 1 + 1024 + 59049) = 60074
+    has_line(&big, "= 1\u{b7}(0 + 1 + 1024 + 59049) = 60074");
+    assert!(!warnings(&with(&[("f", s("e^x")), ("b", s("14")), ("xmax", fl(15.0))])).iter().any(|n| n.contains("no value")));
+    assert!(warnings(&with(&[("f", s("e^x")), ("b", s("40")), ("xmax", fl(41.0))])).iter().any(|n| n.contains("too large")));
+    let d = with(&[("a", s("-1.5")), ("b", s("0.5")), ("xmin", fl(-2.0)), ("xmax", fl(1.0)), ("show_dx", bo(true))]);
+    assert_eq!(texts(&render(&d), "bound"), vec!["a = \u{2212}1.5", "b = 0.5"]);
+    has_line(&d, "(0.5 \u{2212} (\u{2212}1.5))/4");
+    let t = with(&[("region", s("From a table of values")), ("table", s("0, 2.5; 1, 5; 2.5, 6")), ("strip_labels", s("Heights")), ("xmax", fl(3.0))]);
+    assert!(texts(&render(&t), "strip-label").contains(&"2.5".to_string()), "{:?}", texts(&render(&t), "strip-label"));
+    assert_eq!(texts(&render(&t), "bound"), vec!["a = 0", "b = 2.5"]);
+    let e = warnings(&with(&[("f", s("1/sqrt(x)")), ("a", s("0")), ("b", s("1"))]));
+    assert!(e.iter().any(|n| n.contains("the end a") && n.contains("move a just inside")), "{e:?}");
+    has_line(&with(&[("f", s("sqrt(abs(x))")), ("a", s("-1")), ("b", s("1")), ("integral_line", bo(true))]), "\u{221a}|x| dx");
+}
