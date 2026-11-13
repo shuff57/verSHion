@@ -106,9 +106,12 @@ fn trim_dec(v: f64, places: usize) -> String {
 pub fn exact_text(v: f64, tol: f64, decimal: bool) -> String {
     let tol = tol * (1.0 + v.abs());
     if v.abs() <= tol { return "0".into(); }
+    // (a small value keeps its first figures: 0.00001 is never written as 0)
+    let places = |base: i32| -> usize { (base.max(-(v.abs().log10().floor() as i32) + 2)).clamp(0, 12) as usize };
     if decimal {
-        let r = (v * 1e4).round() / 1e4;
-        return if (r - v).abs() <= tol { trim_dec(r, 4) } else { format!("\u{2248} {}", trim_dec(v, 3)) };
+        let k = places(4);
+        let r = (v * 10f64.powi(k as i32)).round() / 10f64.powi(k as i32);
+        return if (r - v).abs() <= tol { trim_dec(r, k) } else { format!("\u{2248} {}", trim_dec(v, places(3))) };
     }
     if let Some((n, d)) = frac_of(v, 64, tol) { return if d == 1 { n.to_string() } else { format!("{n}/{d}") }; }
     for k in (2..=200i64).filter(|k| squarefree(*k)) {
@@ -123,7 +126,7 @@ pub fn exact_text(v: f64, tol: f64, decimal: bool) -> String {
         let c = if n.abs() == 1 { String::new() } else { n.abs().to_string() };
         return if d == 1 { format!("{sign}{c}\u{3c0}") } else { format!("{sign}{c}\u{3c0}/{d}") };
     }
-    format!("\u{2248} {}", trim_dec(v, 3))
+    format!("\u{2248} {}", trim_dec(v, places(3)))
 }
 
 /// A typed number kept as it was typed (its value, and the text written on the figure: 1/2 stays 1/2, 0.5 stays 0.5).
@@ -190,6 +193,13 @@ impl Piece {
         if dir < 0.0 { self.lo_x() < a - 1e-12 && self.hi_x() >= a - 1e-12 } else { self.lo_x() <= a + 1e-12 && self.hi_x() > a + 1e-12 }
     }
     fn decimal(&self) -> bool { matches!(&self.src, Src::Formula { dec: true, .. }) }
+    /// The formula has a power the app reads only for a positive base (x^(1/3) has no value for x < 0 here), and this x is
+    /// one it has no value at although the same formula has one at -x.
+    fn unread_at(&self, x: f64) -> bool {
+        // (no value on a whole stretch round x, not at a single point such as the hole of (x^2 - 9)/(x + 3) at -3)
+        let h = 1e-3 * (1.0 + x.abs());
+        matches!(&self.src, Src::Formula { expr, .. } if expr.contains('^')) && x < 0.0 && [x - h, x, x + h].iter().all(|t| *t < 0.0 && self.g(*t).is_none()) && self.g(-x).is_some()
+    }
 }
 
 /// Fritsch–Carlson slopes: a point where the curve turns gets a flat tangent, so the curve never bulges past the points.
@@ -419,6 +429,8 @@ pub enum Lim {
     Undef,
     /// The graph gives f two values there: not a function (said in the panel).
     Two,
+    /// The app cannot read the formula there (a fractional power of a negative number; said in the panel).
+    Unread,
 }
 impl Lim {
     fn num(&self) -> Option<f64> { if let Lim::Val(v, _) = self { Some(*v) } else { None } }
@@ -608,7 +620,9 @@ impl Model {
         for pc in self.pieces.iter().filter(|pc| pc.includes(a)) {
             if let Some(v) = pc.g(a).filter(|v| v.abs() < 1e200) { found.push(Self::piece_val(pc, a, Raw::Val(v, false))); }
         }
-        let Some(first) = found.first().cloned() else { return Lim::Undef };
+        let Some(first) = found.first().cloned() else {
+            return if self.pieces.iter().any(|pc| pc.includes(a) && pc.unread_at(a)) { Lim::Unread } else { Lim::Undef };
+        };
         if found.iter().any(|f| f.num().zip(first.num()).is_none_or(|(u, v)| (u - v).abs() > 1e-9 * (1.0 + v.abs()))) { return Lim::Two; }
         // a typed point gives the value as typed
         found.into_iter().find(|f| matches!(f, Lim::Val(_, t) if !t.starts_with('\u{2248}'))).unwrap_or(first)
@@ -616,13 +630,15 @@ impl Model {
     /// The one-sided limit at a.
     pub fn side(&self, a: f64, dir: f64) -> Lim {
         let Some(pc) = self.pieces.iter().find(|pc| pc.covers_side(a, dir)) else { return Lim::Undef };
-        Self::piece_val(pc, a, approach(&|x| pc.g(x), a, dir))
+        let r = Self::piece_val(pc, a, approach(&|x| pc.g(x), a, dir));
+        if r == Lim::Undef && pc.unread_at(a + dir * 1e-6 * (1.0 + a.abs())) { Lim::Unread } else { r }
     }
     pub fn two(&self, a: f64) -> Lim {
         let (l, r) = (self.side(a, -1.0), self.side(a, 1.0));
         match (&l, &r) {
             (Lim::Val(u, _), Lim::Val(v, _)) if (u - v).abs() <= 1e-7 * (1.0 + v.abs()) => l,
             (Lim::PInf, Lim::PInf) | (Lim::NInf, Lim::NInf) => l,
+            (Lim::Unread, _) | (_, Lim::Unread) => Lim::Unread,
             _ => Lim::Dne,
         }
     }
@@ -651,7 +667,7 @@ impl Model {
     }
     fn classify(&self, c: f64) -> Option<Disc> {
         let (l, r) = (self.side(c, -1.0), self.side(c, 1.0));
-        if l == Lim::Undef || r == Lim::Undef { return None; }
+        if matches!(l, Lim::Undef | Lim::Unread) || matches!(r, Lim::Undef | Lim::Unread) { return None; }
         let v = self.value(c);
         let kind = if l.infinite() || r.infinite() { "infinite" } else if l == Lim::Dne || r == Lim::Dne { "oscillating" } else {
             let (a, b) = (l.num()?, r.num()?);
@@ -892,7 +908,7 @@ fn label_box(c: Pt, w: f64, size: f64) -> Bx { [c.0 - w / 2.0, c.1 - 0.42 * size
 pub enum Spot { Beside(Pt), Leader(Pt, Pt, Pt), Off }
 
 /// A label to place: its text, its own thing (a point, or a segment), and the spots to try, best first.
-struct Req { text: String, own: Vec<(Pt, Pt)>, tries: Vec<Pt>, anchor: Pt }
+struct Req { text: String, own: Vec<(Pt, Pt)>, tries: Vec<Pt>, anchor: Pt, rivals: Vec<(Pt, Pt)> }
 
 fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
     let w = tw(&r.text, size);
@@ -901,7 +917,10 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
     let own_pts: Vec<Pt> = r.own.iter().flat_map(|(a, c)| [*a, *c]).collect();
     for c in &r.tries {
         let b = label_box(*c, w, size);
-        if board.free(grow(b, 1.5)) && nearest_is_own(board, b, near_own(b), &own_pts) {
+        let own_d = near_own(b);
+        // (and clearly nearer its own thing than any other thing of its kind: another asymptote, another discontinuity)
+        let rival_ok = r.rivals.iter().all(|(a, c)| seg_box_dist(*a, *c, b) >= (own_d + 8.0).max(1.5 * own_d));
+        if board.free(grow(b, 1.5)) && rival_ok && nearest_is_own(board, b, own_d, &own_pts) {
             board.boxes.push(grow(b, 1.0));
             return Spot::Beside(*c);
         }
@@ -1022,7 +1041,11 @@ fn build(p0: &Params) -> (String, Drawn) {
     let g = grid_layout(&fp);
     let mut gnotes = vec![];
     let fsvg = coordinate_grid_build(&fp, &mut gnotes);
-    notes.extend(gnotes.into_iter().filter(|n| !n.starts_with("Row")));
+    // (the grid's own notes, in the words of this figure's controls)
+    notes.extend(gnotes.into_iter().filter(|n| !n.starts_with("Row")).map(|n| n.replace("choose Every 10th line for the axis numbers, or a larger step", "choose a larger count by").replace("widen the window or show every Nth number", "widen the window or choose a larger count by")));
+    for (a, b, name) in [("xmin", "xmax", "x"), ("ymin", "ymax", "y")] {
+        if p.f(a) >= p.f(b) { notes.push(format!("The {name}-axis has to run from a smaller number to a larger one ({name}-axis from {} is not less than {name}-axis to {}): the axis is drawn one step long until it does", trim_dec(p.f(a), 4), trim_dec(p.f(b), 4))); }
+    }
     let (gw, gh) = crate::figures::svg_size(&fsvg);
     let (frame_body, gtexts) = grid_texts(&grid_body(&fsvg));
     let sx = |x: f64| g.ml + (x - g.x0) * g.ux;
@@ -1177,7 +1200,7 @@ fn build(p0: &Params) -> (String, Drawn) {
     for pc in &m.pieces {
         if let Src::Formula { expr, .. } = &pc.src {
             if expr.contains('^') && (0..=20).any(|k| { let x = g.x0 + (g.x1 - g.x0) * k as f64 / 20.0; pc.includes(x) && pc.g(x).is_none() && pc.g(-x).is_some() && x < 0.0 }) {
-                notes.push(format!("Piece {}: the app reads a fractional power of a negative number, such as (-8)^(1/3), as having no value, so it is not drawn for those x; write those x as a piece of their own, such as y = -(-x)^(1/3), x < 0", pc.n));
+                notes.push(format!("Piece {}: the app reads a fractional power of a negative number, such as (-8)^(1/3), as having no value, so the piece is not drawn for those x and the key writes \u{2014} for what depends on them; write those x as a piece of their own, such as y = -(-x)^(1/3), x < 0", pc.n));
             }
         }
     }
@@ -1236,7 +1259,7 @@ fn build(p0: &Params) -> (String, Drawn) {
                     for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (1.0, -1.0), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (0.0, -1.0), (0.0, 1.0)] { tries.push((an.0 + dx * hx, an.1 + dy * hy)); }
                 }
             }
-            reqs.push(('k', Req { text: d.kind.to_string(), own, tries, anchor: anchors[0] }));
+            reqs.push(('k', Req { text: d.kind.to_string(), own, tries, anchor: anchors[0], rivals: vec![] }));
         }
     }
     let show_asym_eqs = p.b("show_asym") && p.b("asym_eqs") && !(stu && p.b("stu_hide_asym"));
@@ -1255,9 +1278,11 @@ fn build(p0: &Params) -> (String, Drawn) {
                     else { tries.push((rect[2] - 4.0 - w / 2.0 - (rect[2] - rect[0] - 8.0 - w) * t, a.1 - side * (hgt * 0.5 + 4.0))); }
                 }
             }
-            reqs.push(('a', Req { text: t.clone(), own: vec![(*a, *b)], tries, anchor: if *k == 'v' { (a.0, rect[1] + 30.0) } else { (rect[2] - 40.0, a.1) } }));
+            reqs.push(('a', Req { text: t.clone(), own: vec![(*a, *b)], tries, anchor: if *k == 'v' { (a.0, rect[1] + 30.0) } else { (rect[2] - 40.0, a.1) }, rivals: asym_lines.iter().filter(|o| o.2 != *a || o.3 != *b).map(|o| (o.2, o.3)).collect() }));
         }
     }
+    let kind_owns: Vec<Vec<(Pt, Pt)>> = reqs.iter().filter(|r| r.0 == 'k').map(|r| r.1.own.clone()).collect();
+    for (i, r) in reqs.iter_mut().filter(|r| r.0 == 'k').enumerate() { r.1.rivals = kind_owns.iter().enumerate().filter(|(j, _)| *j != i).flat_map(|(_, o)| o.clone()).collect(); }
     let mut labels_svg = String::new();
     let mut beside: Vec<String> = vec![];
     for (kind, r) in &reqs {
@@ -1322,6 +1347,7 @@ fn build(p0: &Params) -> (String, Drawn) {
             }
         }
     }
+    if dr.dropped_numbers > 0 { notes.push("Some axis numbers are left out where they would run into each other: a smaller label size or a larger count by keeps them all".into()); }
     let mut texts_svg = String::new();
     for t in gtexts.iter().filter(|t| !t.el.is_empty()) {
         if t.number && dr.circle_marks.iter().chain(dr.markers.iter().map(|m| &m.0)).any(|q| box_pt([t.bx[0] + 1.5, t.bx[1] + 1.5, t.bx[2] - 1.5, t.bx[3] - 1.0], *q) < cr) { dr.hidden_numbers += 1; continue; }
@@ -1420,7 +1446,7 @@ fn written(l: &Lim, p: &Params, dr: &mut Drawn) -> String {
         }
         Lim::Dne => { dr.dne_answer = true; dne.to_string() }
         Lim::Undef => "undefined".into(),
-        Lim::Two => "\u{2014}".into(),
+        Lim::Two | Lim::Unread => "\u{2014}".into(),
     }
 }
 
@@ -1639,7 +1665,7 @@ pub fn handles(p: &Params) -> Vec<Handle> {
     let mut q = p.clone();
     q.normalize(&params(), false);
     let dr = last_drawn(&q);
-    let (x0, _x1, y0, _y1, ml, mt, ux, uy) = dr.frame;
+    let (x0, x1, y0, y1, ml, mt, ux, uy) = dr.frame;
     let g = grid_layout(&grid_params(&q, "", false));
     let my = move |py: f64| y0 + (mt + g.ph - py) / uy;
     let mx = move |px: f64| x0 + (px - ml) / ux;
@@ -1658,7 +1684,7 @@ pub fn handles(p: &Params) -> Vec<Handle> {
         let text = q.s("dots").to_string();
         hs.push(Handle::bar(*at, true, &tip, move |p: &mut Params, s: Pt| {
             if !s.1.is_finite() { return; }
-            let v = ((my(s.1) / ystep).round() * ystep).clamp(-1000.0, 1000.0);
+            let v = ((my(s.1).clamp(y0, y1) / ystep).round() * ystep).clamp(y0, y1);
             if (v - d.y.v).abs() < 1e-9 { return; }
             let mut t = text.clone();
             t.replace_range(d.y_at.0..d.y_at.1, &num_text(v, &d.y.text));
@@ -1671,7 +1697,7 @@ pub fn handles(p: &Params) -> Vec<Handle> {
         let tip = format!("Drag along the x-axis to move x = a, where the limits are asked (a = {})", asks[i].text.replace('-', "\u{2212}"));
         hs.push(Handle::bar(*at, false, &tip, move |p: &mut Params, s: Pt| {
             if !s.0.is_finite() { return; }
-            let v = ((mx(s.0) / xstep).round() * xstep).clamp(-1000.0, 1000.0);
+            let v = ((mx(s.0).clamp(x0, x1) / xstep).round() * xstep).clamp(x0, x1);
             if (v - asks[i].v).abs() < 1e-9 || asks.iter().enumerate().any(|(j, a)| j != i && (a.v - v).abs() < 1e-9) { return; }
             let list: Vec<String> = asks.iter().enumerate().map(|(j, a)| if j == i { num_text(v, &a.text) } else { a.text.clone() }).collect();
             p.set_s("ask_at", &list.join(", "));

@@ -844,3 +844,43 @@ fn sentences_set_their_letters_in_italic() {
     let el = &s[s[..i].rfind("<text").unwrap()..i + s[i..].find("</text>").unwrap()];
     assert!(el.contains(r#"<tspan font-style="italic">f</tspan> not"#) && el.contains(r#"<tspan font-style="italic">x</tspan> and"#), "{el}");
 }
+
+/// A label sits nearer its own asymptote (or discontinuity) than any other: two vertical asymptotes a little apart.
+#[test]
+fn like_labels_sit_on_their_own_thing() {
+    for size in ["Small", "Medium", "Large"] {
+        for e in ["y = 1/(x^2 - 1)", "y = 1/((x - 1)(x - 2))", "y = tan(x)", "y = x/((x + 1)(x - 2)(x - 3))"] {
+            let p = with(json!({"pieces": e, "dots": "", "ask_at": "", "asym_eqs": true, "kind_labels": true, "label_size": size, "xmin": -5.0, "xmax": 5.0, "ymin": -5.0, "ymax": 5.0}));
+            let _ = svg(&p);
+            let dr = last_drawn(&p);
+            for (i, l) in dr.labels.iter().enumerate() {
+                let Spot::Beside(c) = l.2 else { continue };
+                let b = [c.0 - 1.0, c.1 - 1.0, c.0 + 1.0, c.1 + 1.0];
+                let own = l.3.iter().map(|(a, d)| seg_dist(*a, *d, b)).fold(f64::MAX, f64::min);
+                for (j, o) in dr.labels.iter().enumerate() {
+                    if i == j || o.0 != l.0 { continue; }
+                    let other = o.3.iter().map(|(a, d)| seg_dist(*a, *d, b)).fold(f64::MAX, f64::min);
+                    assert!(other > own, "{e} {size}: {} is {own:.1} from its own thing but {other:.1} from {}'s", l.1, o.1);
+                }
+            }
+        }
+    }
+    // a fractional power of a negative number: the key does not say "undefined" where the real cube root has a value
+    let p = with(json!({"pieces": "y = x^(1/3)", "dots": "", "ask_at": "-1"}));
+    let w = words(&svg(&p));
+    assert!(w.contains("lim x→-1- f(x) = —") && w.contains("f(-1) = —") && !w.contains("undefined"), "{w}");
+    // a value this small keeps its first figures: 0.00001x at 1 is 0.00001, never 0
+    assert_eq!(super::limits::exact_text(0.00001, 1e-9, true), "0.00001");
+    assert_eq!(super::limits::exact_text(1e-5 / 3.0, 1e-9, false), "\u{2248} 0.00000333");
+    // a drag never carries a point or a marker off the window
+    let p = start_params(&def());
+    let hs = handles(&p);
+    let dot = hs.iter().find(|h| h.tip.starts_with("Drag up or down")).unwrap();
+    let mut q = p.clone();
+    (dot.drag.as_ref().unwrap())(&mut q, (dot.pos.0, -5000.0));
+    assert_eq!(q.s("dots"), "(-2, 7)");
+    let mk = hs.iter().find(|h| h.tip.starts_with("Drag along")).unwrap();
+    let mut q = p.clone();
+    (mk.drag.as_ref().unwrap())(&mut q, (-5000.0, mk.pos.1));
+    assert_eq!(q.s("ask_at"), "-6");
+}
