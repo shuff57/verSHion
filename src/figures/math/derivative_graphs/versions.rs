@@ -271,7 +271,7 @@ pub(super) const TOKENS: [(&str, &str); 34] = [
     ("cap-22", r#"{"minor":2}"#),
     ("cap-23", r#"{"numbers":false}"#),
     ("cap-24", r#"{"xlabel":"t","ylabel":"s"}"#),
-    ("cap-25", r#"{"xunits":"Multiples of π"}"#),
+    ("cap-25", r#"{"xunits":"Multiples of π","xmin":-1.0,"xmax":1.0,"xstep":0.25}"#),
     ("cap-26", r#"{"title":"Graphs of f and f′"}"#),
     ("cap-27", r#"{"title_mode":"Blank line"}"#),
     ("cap-28", r#"{"label_size":"Large"}"#),

@@ -1109,7 +1109,10 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     // ── the panels, each the coordinate grid itself ──
     let kinds: Vec<PK> = if one { vec![PK::One] } else if fpp { vec![PK::F, PK::Fp, PK::Fpp] } else { vec![PK::F, PK::Fp] };
     let plot_h = (if one { 400.0 } else { 260.0 }) * tall;
-    let head_h = 26.0 * ls.max(1.0);
+    let row_h = 26.0 * ls.max(1.0);
+    // (one grid with both the closed interval and the tracer's readings: a header row for each)
+    let two_rows = one && key && p.b("absolute") && p.b("tracer");
+    let head_h = if two_rows { 2.0 * row_h } else { row_h };
     let mut y = 10.0;
     let title_on = match p.s("title_mode") { "Blank line" => true, "None" => false, _ => !p.s("title").trim().is_empty() };
     let title_y = 26.0;
@@ -1210,6 +1213,7 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
 
     // ── headers: each graph's name, and the tracer's reading ──
     let gl = p.s("graph_labels");
+    let abs_iv: Option<String> = (key && p.b("absolute")).then(|| (typed(p.s("abs_a")), typed(p.s("abs_b")))).and_then(|(a, b)| { let (a, b) = (a?, b?); (b.v > a.v).then(|| format!("on [{}, {}]", a.show, b.show)) });
     let cap = |fi: usize| -> Option<String> { match gl { "None" => None, "Name only" => Some(names[fi].clone()), _ => Some(format!("y = {}(x)", names[fi])) } };
     let tracer_on = key && p.b("tracer") && model.is_some();
     let tx = if tracer_on { typed(p.s("tracer_x")) } else { None };
@@ -1240,13 +1244,20 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     for pn in &panels {
         let fis = fis_of(pn.kind);
         let pr = pn.plot();
-        let hy = pn.head_y + head_h * 0.5;
+        let hy = pn.head_y + row_h * 0.5;
         if pn.kind == PK::One {
             // one grid: the readings in the header, the names beside their curves (below)
+            if let Some(iv) = abs_iv.as_ref() {
+                over.push_str(&text_el(pr[0], hy, 14.0 * ls, iv, ink, "start", "interval-name"));
+                let b = inkb(pr[0], hy, iv, 14.0 * ls);
+                labels.push((iv.clone(), b, "name"));
+                room.boxes.push(b);
+            }
             if tracer_on && tx.is_some() {
                 let s = fis.iter().filter(|&&fi| shows(p, fi)).filter_map(|&fi| reading(fi)).collect::<Vec<_>>().join(",  ");
                 let w = adv(&s, 14.0 * ls);
                 let x = (pr[2] - w).max(4.0);
+                let hy = if two_rows { hy + row_h } else { hy };
                 over.push_str(&text_el(x, hy, 14.0 * ls, &s, ink, "start", "reading"));
                 let b = inkb(x, hy, &s, 14.0 * ls);
                 labels.push((s, b, "reading"));
@@ -1261,6 +1272,15 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
             over.push_str(&text_el(x, hy, fs, &c, if print { ink } else { cols[fi] }, "start", "name"));
             let b = inkb(x, hy, &c, fs);
             labels.push((c, b, "name"));
+            room.boxes.push(b);
+            x += w + 16.0;
+        }
+        // the closed interval the absolute extrema are taken on, as typed (on the key, beside f's name)
+        if let (0, Some(iv)) = (fi, abs_iv.as_ref()) {
+            let w = adv(iv, fs);
+            over.push_str(&text_el(x, hy, fs, iv, ink, "start", "interval-name"));
+            let b = inkb(x, hy, iv, fs);
+            labels.push((iv.clone(), b, "name"));
             room.boxes.push(b);
             x += w + 16.0;
         }

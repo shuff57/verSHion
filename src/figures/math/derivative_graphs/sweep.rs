@@ -228,7 +228,14 @@ pub(super) fn option_sets(c: &(&str, f64, f64, bool, bool)) -> Vec<(&'static str
     let k = if pi { PI } else { 1.0 };
     let (lo, hi) = (a * k, bb * k);
     // a closed interval inside the window, a tracer at about a third of it, both typed as a teacher types them
-    let snap = |v: f64| if pi { let q = (v / (PI / 4.0)).round() as i64; if q == 0 { "0".to_string() } else { format!("{q}pi/4") } } else { format!("{}", (v * 2.0).round() / 2.0) };
+    // (typed as a teacher types them: -pi/4, pi/2, 3pi/4, -pi)
+    let snap = |v: f64| if pi {
+        let q = (v / (PI / 4.0)).round() as i64;
+        let g = if q % 4 == 0 { 4 } else if q % 2 == 0 { 2 } else { 1 };
+        let (n, d) = (q / g, 4 / g);
+        let top = match n { 0 => return "0".to_string(), 1 => "pi".to_string(), -1 => "-pi".to_string(), n => format!("{n}pi") };
+        if d == 1 { top } else { format!("{top}/{d}") }
+    } else { format!("{}", (v * 2.0).round() / 2.0) };
     let (ia, ib) = (snap(lo + 0.2 * (hi - lo)), snap(lo + 0.8 * (hi - lo)));
     let t = snap(lo + 0.37 * (hi - lo));
     let all: Vec<(&'static str, Value)> = vec![("crit", b(true)), ("extrema", b(true)), ("inflect", b(true)), ("incdec", b(true)), ("concavity", b(true)), ("sign_fp", b(true)), ("sign_fpp", b(true)), ("show_fpp", b(true)), ("key_list", b(true)), ("tracer", b(true)), ("tracer_x", Value::S(t.clone())), ("absolute", b(true)), ("abs_a", Value::S(ia.clone())), ("abs_b", Value::S(ib.clone()))];
