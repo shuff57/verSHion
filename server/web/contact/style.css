@@ -1,0 +1,88 @@
+/* verSHion contact page. The app's palette (src/theme.rs light/dark) and faces (fonts/, copied by trunk). */
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/SourceSans3-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/SourceSans3-Semibold.ttf") format("truetype"); font-weight: 600 650; font-display: swap; }
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/SourceSans3-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Source Serif 4"; src: url("../fonts/SourceSerif4-Semibold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+
+:root {
+  color-scheme: light dark;
+  --cream: #f7f4ed;
+  --card: #fffdf8;
+  --field: #f3eee3;
+  --border: #e0d3c2;
+  --edge: #9c8672;
+  --ink: #332a24;
+  --text: #5e4c40;
+  --muted: #7a6350;
+  --accent: #2f6144;
+  --accent-hover: #3b7453;
+  --on-accent: #f7fbf3;
+  --bad: #a33b2e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cream: #211c18;
+    --card: #2b2520;
+    --field: #211c18;
+    --border: #4b3f35;
+    --edge: #85725f;
+    --ink: #f2e8dd;
+    --text: #d3c2b2;
+    --muted: #a9937e;
+    --accent: #9dcba0;
+    --accent-hover: #b3dcb5;
+    --on-accent: #0e2012;
+    --bad: #e0826e;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--ink);
+  font: 1.0625rem/1.55 "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+a { color: var(--accent); text-underline-offset: .15em; }
+a:hover { color: var(--accent-hover); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+header.site, main { max-width: 40rem; margin: 0 auto; padding: 0 1rem; }
+header.site {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem 1rem;
+  padding-top: 1.1rem; padding-bottom: .4rem;
+}
+.brand { display: inline-flex; align-items: center; gap: .5rem; color: var(--ink); text-decoration: none; font-weight: 700; font-size: 1.15rem; }
+.brand img { display: block; }
+.back { font-size: .95rem; }
+
+main { padding-bottom: 2.5rem; }
+h1 { font-family: "Source Serif 4", Georgia, serif; font-weight: 600; font-size: 2rem; line-height: 1.2; margin: 1.4rem 0 .4rem; }
+.lede { color: var(--text); margin: 0 0 1.4rem; max-width: 36rem; }
+.fine { color: var(--muted); font-size: .95rem; margin-top: 1.25rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  /* the shared form (contact.lefthanddev.com/embed.js) */
+  --lhd-cf-accent: var(--accent);
+  --lhd-cf-field-bg: var(--field);
+  --lhd-cf-border: 1px solid var(--edge);
+  --lhd-cf-radius: 10px;
+  --lhd-cf-btn-bg: var(--accent);
+  --lhd-cf-btn-fg: var(--on-accent);
+  --lhd-cf-error: var(--bad);
+  --lhd-cf-max: 100%;
+}
+.card .lhd-cf label { color: var(--ink); }
+.card .lhd-cf button:hover:not([disabled]) { background: var(--accent-hover); }
+.card noscript p { margin: 0; }
+
+@media (max-width: 30rem) {
+  body { font-size: 1rem; }
+  h1 { font-size: 1.65rem; }
+  .card { padding: 1rem; }
+}

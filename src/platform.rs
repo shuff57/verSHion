@@ -226,6 +226,16 @@ pub fn open_url(url: &str) {
     }
 }
 
+/// The contact page (`server/web/contact`, copied beside the app by trunk): the shared Left Hand Dev
+/// form, which mails the team. Support goes through it, never a `mailto:` link.
+pub const CONTACT_URL: &str = "https://vershion.lefthanddev.com/contact/";
+
+/// Opens the contact page: the web build's own `/contact/` (so staging opens staging's), the
+/// desktop build the live site's.
+pub fn open_contact() {
+    open_url(if cfg!(target_arch = "wasm32") { "/contact/" } else { CONTACT_URL });
+}
+
 /// The clip that shows how to obtain a key for `provider`, if we have one.
 pub fn help_clip_name(provider: &str) -> Option<&'static str> {
     match provider {
@@ -332,5 +342,28 @@ fn render_with_hayro(data: &[u8]) -> Result<Vec<Vec<u8>>, String> {
         Err("the PDF has no pages".to_string())
     } else {
         Ok(pages)
+    }
+}
+
+#[cfg(test)]
+mod contact_tests {
+    /// Support is the shared contact form, shipped beside the app and allowed by the CSP.
+    #[test]
+    fn the_contact_page_ships_with_the_app_and_the_csp_allows_its_form() {
+        let page = include_str!("../server/web/contact/index.html");
+        assert!(page.contains(r#"<div data-lhd-contact data-site="vershion"></div>"#));
+        assert!(page.contains(r#"<script src="https://contact.lefthanddev.com/embed.js" defer></script>"#));
+        let index = include_str!("../index.html");
+        assert!(index.contains(r#"rel="copy-dir" href="server/web/contact" data-target-path="contact""#));
+        let caddy = include_str!("../server/api/staging/Caddyfile");
+        let csp = caddy.lines().find(|l| l.contains("Content-Security-Policy \"")).expect("a CSP line");
+        for directive in ["script-src ", "connect-src "] {
+            let part = csp.split(';').find(|p| p.trim_start().starts_with(directive)).expect(directive);
+            assert!(part.split_whitespace().any(|s| s == "https://contact.lefthanddev.com"), "{directive}");
+        }
+        assert_eq!(super::CONTACT_URL, "https://vershion.lefthanddev.com/contact/");
+        for (name, src) in [("contact page", page), ("figuresui.rs", include_str!("figuresui.rs")), ("screens.rs", include_str!("screens.rs"))] {
+            assert!(!src.contains("mailto:"), "{name}: support goes through the contact form");
+        }
     }
 }

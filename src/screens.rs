@@ -2081,8 +2081,8 @@ impl crate::App {
         });
     }
 
-    /// Coffee, the issue list and the report form. The report opens a prefilled GitHub issue;
-    /// nothing is sent from the app and no server secret is involved.
+    /// Coffee, the issue list, the report form and the contact page. The report opens a prefilled
+    /// GitHub issue and Contact opens /contact/ in the browser; nothing is sent from the app itself.
     fn draw_community(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         use crate::kit;
         const COFFEE: &str = "https://www.buymeacoffee.com/shuff57";
@@ -2092,7 +2092,7 @@ impl crate::App {
             ui.label(theme::serif("Community").size(18.0));
             ui.add_space(4.0);
             ui.label(theme::muted(
-                "verSHion is free. A coffee helps keep it going; bugs and ideas live on GitHub.",
+                "verSHion is free. A coffee helps keep it going; bugs and ideas live on GitHub, and the contact form reaches us directly.",
             ));
             ui.add_space(10.0);
             ui.horizontal_wrapped(|ui| {
@@ -2107,6 +2107,9 @@ impl crate::App {
                 }
                 if crate::pageshell::outline(ui, &format!("{}  Report a bug", egui_phosphor::regular::BUG)).clicked() {
                     ctx.data_mut(|d| d.insert_temp(egui::Id::new("report_open"), true));
+                }
+                if crate::pageshell::outline(ui, &format!("{}  Contact us", egui_phosphor::regular::ENVELOPE_SIMPLE)).clicked() {
+                    crate::platform::open_contact();
                 }
             });
         });

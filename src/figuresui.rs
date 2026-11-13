@@ -505,32 +505,16 @@ fn help_fab(ctx: &egui::Context, left: bool) {
                         job.append(t, 0.0, egui::TextFormat { font_id: egui::FontId::new(15.0, egui::TextStyle::Body.resolve(ui.style()).family), color: theme::ink(), line_height: Some(24.0), ..Default::default() });
                         ui.add(egui::Label::new(job));
                     };
-                    para(ui, "If you\u{2019}re running into trouble or have suggestions, email us and we\u{2019}ll help.");
+                    para(ui, "If you\u{2019}re running into trouble or have suggestions, send us a message and we\u{2019}ll help.");
                     ui.add_space(10.0);
-                    para(ui, "Want a figure we don\u{2019}t make yet? Email us to request a generator, and we\u{2019}ll build it.");
+                    para(ui, "Want a figure we don\u{2019}t make yet? Ask for a generator through the contact form, and we\u{2019}ll build it.");
                     ui.add_space(16.0);
-                    Frame::new().stroke(Stroke::new(1.0, theme::border())).corner_radius(CornerRadius::same(10)).inner_margin(Margin { left: 13, right: 6, top: 4, bottom: 4 }).show(ui, |ui| {
-                        ui.set_width(w - 40.0 - 20.0);
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new("support@teacher.dev").family(theme::bold_family()).size(16.0).color(theme::ink()));
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let chip = egui::Button::new(RichText::new(format!("{} Copy", egui_phosphor::regular::COPY)).family(theme::bold_family()).size(14.0).color(theme::accent_hover()))
-                                    .fill(theme::accent_faded())
-                                    .corner_radius(CornerRadius::same(7))
-                                    .min_size(Vec2::new(74.0, 32.0));
-                                if ui.add(chip).clicked() {
-                                    ui.ctx().copy_text("support@teacher.dev".to_string());
-                                }
-                            });
-                        });
-                    });
-                    ui.add_space(10.0);
-                    let btn = egui::Button::new(RichText::new(format!("{} Open in email", egui_phosphor::regular::ENVELOPE_SIMPLE)).family(theme::bold_family()).size(16.0).color(egui::Color32::WHITE))
+                    let btn = egui::Button::new(RichText::new(format!("{} Open the contact form", egui_phosphor::regular::ENVELOPE_SIMPLE)).family(theme::bold_family()).size(16.0).color(egui::Color32::WHITE))
                         .fill(theme::accent_col())
                         .corner_radius(CornerRadius::same(12))
                         .min_size(Vec2::new(w - 40.0, 41.0));
                     if ui.add_sized(Vec2::new(w - 40.0, 41.0), btn).clicked() {
-                        crate::platform::open_url("mailto:support@teacher.dev");
+                        crate::platform::open_contact();
                     }
                 });
         });
@@ -5079,6 +5063,24 @@ mod tests {
     mod grid_b7_ui_tests;
     // (batch 9: student versions and axis ends in the workspace, src/figuresui/tests/versions_b9_ui_tests.rs)
     mod versions_b9_ui_tests;
+
+    /// The "?" card's way to reach us is the contact form, not an address to email.
+    #[test]
+    fn the_help_card_offers_the_contact_form_not_an_email_address() {
+        use egui_kittest::kittest::Queryable;
+        let mut h = ui_test::harness(
+            |ui, _: &mut ()| {
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("fig_help_fab_open"), true));
+                help_fab(ui.ctx(), true);
+            },
+            (),
+        );
+        h.run();
+        assert!(h.query_by_label_contains("Need a hand?").is_some());
+        assert!(h.query_by_label_contains("Open the contact form").is_some());
+        assert!(h.query_by_label_contains("@").is_none(), "no email address on the card");
+        assert!(h.query_by_label_contains("Open in email").is_none());
+    }
 
     fn demo() -> &'static FigureDef {
         find_def("demo-shapes").expect("demo registered under cfg(test)").1
