@@ -560,3 +560,44 @@ fn measure_in_context() {
     }
     println!("CTX {out}");
 }
+
+/// Writes the checker's round-2 examples to ~/newfig-out/conics-r2/ (colour, student copy, key, Print).
+#[test]
+#[ignore]
+fn dump_round2_examples() {
+    let dir = std::path::PathBuf::from(std::env::var("HOME").unwrap()).join("newfig-out/conics-r2");
+    std::fs::create_dir_all(&dir).unwrap();
+    let cases: Vec<(&str, J)> = vec![
+        ("latus_faq_ellipse", json!({"equation": "(x - 2)^2/9 + (y + 1)^2/4 = 1", "show_latus": true, "show_p": false})),
+        ("latus_default_hyperbola", json!({"conic": "Hyperbola", "show_latus": true, "show_p": false})),
+        ("latus_y_x2", json!({"equation": "y = x^2", "show_latus": true, "show_p": false})),
+        ("hyp_2_1_large", json!({"conic": "Hyperbola", "h": "0", "k": "0", "a": "2", "b": "1", "label_size": "Large"})),
+        ("circle_general_large", json!({"equation": "x^2 + y^2 - 2x + 4y - 4 = 0", "label_size": "Large"})),
+        ("dirs_default_hyperbola", json!({"conic": "Hyperbola", "show_directrices": true})),
+        ("dirs_vertical_hyperbola_example", json!({"conic": "Hyperbola", "h": "-2", "k": "1", "a": "2", "b": "3", "axis": "Vertical", "show_directrices": true})),
+        ("axes_x2_4_y2_4", json!({"equation": "x^2/4 - y^2/4 = 1", "show_axes": true})),
+        ("axes_x2_y2_1", json!({"equation": "x^2 - y^2 = 1", "show_axes": true})),
+        ("axes_x2_4y2_4", json!({"equation": "x^2 - 4y^2 = 4", "show_axes": true})),
+        ("parabola_left_noP", json!({"conic": "Parabola", "opens": "Left", "show_p": false})),
+        ("hyp_centre_half", json!({"conic": "Hyperbola", "h": "1/2", "k": "-3/2", "a": "3/2", "b": "2"})),
+        ("vertical_ellipse", json!({"axis": "Vertical"})),
+        ("cap08", json!({"equation": "(x - 2)^2/9 + (y + 1)^2/4 = 1", "xmin": -3.0, "xmax": 7.0, "ymin": -5.0, "ymax": 3.0})),
+        ("cap21_simple", json!({"show_latus": true})),
+    ];
+    let mut invalid = start_params(&def());
+    edit(&mut invalid, "equation", "(x - 2)^2/9 + (y + 1)^2/4 = 1");
+    edit(&mut invalid, "b", "2\u{221a}3");
+    let mut all: Vec<(&str, Params)> = cases.into_iter().map(|(n, c)| (n, with(&c))).collect();
+    all.push(("invalid_b_under_typed", invalid));
+    let mut pr = with(&json!({"conic": "Parabola", "show_sym": true, "show_latus": true}));
+    pr.set_s("style", "Print");
+    all.push(("print_parabola_sym_latus", pr));
+    for (name, p) in all {
+        for (look, set) in [("colour", json!({})), ("student", json!({"show_answers": false, "key_line": true})), ("key", json!({"key_line": true, "show_work": true})), ("print", json!({"style": "Print", "key_line": true}))] {
+            let mut q = p.clone();
+            for (k, v) in set.as_object().unwrap() { match v { J::Bool(b) => q.set_b(k, *b), J::String(s) => q.set_s(k, s), _ => {} } }
+            std::fs::write(dir.join(format!("{name}_{look}.png")), crate::figures::to_png(&svg(&q), 1.0).unwrap()).unwrap();
+            if look == "colour" { println!("EX {name}: notes {:?}", warnings(&q)); }
+        }
+    }
+}

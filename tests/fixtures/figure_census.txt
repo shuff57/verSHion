@@ -66,8 +66,8 @@ cone__defaults 95a39fa272e72581
 cone__start bdae63a6889d6814
 confidence-interval__defaults 0215572bebb0d6c0
 confidence-interval__start 0215572bebb0d6c0
-conic-sections__defaults 253c813df856cf32
-conic-sections__start 253c813df856cf32
+conic-sections__defaults eaeef26462d5c058
+conic-sections__start eaeef26462d5c058
 coordinate-grid__defaults c8327805634055d3
 coordinate-grid__start 4bd1ffb58bb88a2d
 cost-curves__defaults 948ca5ae19d142a9

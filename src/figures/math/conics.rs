@@ -1187,7 +1187,8 @@ impl Board {
                 if !self.clear_of(b, over_nums) { continue; }
                 let ink = Board::ink(c, w, size, text);
                 // the label stands clear of every other point, so the leader is what ties it
-                let (dot_gap, lead_gap) = if level == 2 { (7.0, DOT + 1.5) } else { (10.0, DOT + 3.0) };
+                // (a label on a leader keeps well clear of every other point, so it is not read as that point's)
+                let (dot_gap, lead_gap) = if level == 2 { (12.0, DOT + 1.5) } else { (14.0, DOT + 3.0) };
                 // the text is nearer its own leader (which ends 3 px from it) than any other line
                 if self.any_near(grow(ink, 6.0), |i| { let s = self.strokes[i]; !own_line(s.2) && box_seg(ink, s.0, s.1) < 6.0 }) { continue; }
                 if self.dots.iter().any(|d| (d.0 - q.0).abs() + (d.1 - q.1).abs() > 0.5 && box_pt(ink, *d) < dot_gap) { continue; }
@@ -1695,8 +1696,9 @@ fn build(p0: &Params, notes: &mut Vec<String>) -> String {
                                 (None, 'L') => if r.optional { 1 } else { 400 },
                                 (None, _) => 100_000,
                                 (Some(p), k) if p.short => if matches!(k, 'V' | 'F' | 'C') { 5_000 } else { 1_000 },
-                                (Some(p), _) => match (p.leader.is_some(), p.level) { (false, _) => 0, (true, 0) => 20, (true, 1) => 60, _ => 300 },
-                            }).sum::<u64>() + 8 * b.hidden.len() as u64;
+                                // (a leader costs more the longer it is: a label near its point reads better)
+                                (Some(p), _) => match (p.leader, p.level) { (None, _) => 0, (Some((a, c)), lv) => [20, 60, 300][lv.min(2) as usize] + (0.3 * (c.0 - a.0).hypot(c.1 - a.1)) as u64 },
+                            }).sum::<u64>() + 30 * b.hidden.len() as u64;
                             if best.as_ref().is_none_or(|b| score < b.0) { best = Some((score, b, got)); stale = 0; } else { stale += 1; }
                             // (twelve orders in a row with nothing better: the rest will not do better either)
                             if stale >= 12 { break 'orders; }
