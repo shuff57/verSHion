@@ -476,7 +476,8 @@ fn hero_text_offset(page: Rect, col_top: f32, col_h: Option<f32>) -> f32 {
     }
 }
 
-fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
+/// `narrow`: the 760 sheet (its print scale is chosen by which sheet it is, never by its width).
+fn paint_exam_preview(painter: &egui::Painter, page: Rect, narrow: bool) {
     use crate::examui::{PAPER_INK, PAPER_RULE, PAPER_SOFT};
     use egui::{FontId, Shape};
     // Geometry is laid out on the old 222 px sheet and scaled by `k`; the title, tag and folio
@@ -486,7 +487,7 @@ fn paint_exam_preview(painter: &egui::Painter, page: Rect) {
     let k = page.width() / 222.0;
     let tk = k * 1.12;
     // A desktop sheet drawn larger than `PREVIEW_SIZE` (round 31) scales its print with it.
-    let bk = if page.width() >= 250.0 { 12.0 * (page.width() / PREVIEW_SIZE.x).max(1.0) } else { 11.0 } / 7.6;
+    let bk = if !narrow { 12.0 * (page.width() / PREVIEW_SIZE.x).max(1.0) } else { 11.0 } / 7.6;
     let g = |v: f32| v * k;
     let t = |v: f32| v * tk;
     let b = |v: f32| v * bk;
@@ -1299,9 +1300,13 @@ fn welcome_page(ui: &mut egui::Ui, fresh: bool) -> WelcomeLayout {
             let desk = ui.max_rect();
             let mut out = WelcomeLayout { go: None, head: Rect::NOTHING, text: Rect::NOTHING, page: Rect::NOTHING, card: Rect::NOTHING };
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                // Hero and steps sit as one block near the top. The block's height is last frame's
-                // measure; it decides how much of the spare height opens the gap before the steps.
-                let content_id = egui::Id::new("welcome_content_h");
+                // Hero and steps sit as one block near the top. The block's height decides how much
+                // of the spare height opens the gap before the steps. It is measured where it is
+                // drawn and kept per width and per content (first run or returning), as the desktop
+                // column's height (round 31); a height not yet known for this key re-runs the pass
+                // before anything is presented (round 32 council fix: unkeyed, it was last frame's
+                // and the steps card moved by up to 16 pt after the first frame).
+                let content_id = egui::Id::new(("welcome_content_h", fresh, ui.available_width().to_bits()));
                 let view_h = ui.available_height();
                 // A wide window gets the landing page at landing-page size. At the old sizes the hero,
                 // steps and footer filled two-thirds of a 1280 x 800 window, and every way of placing
@@ -1423,7 +1428,7 @@ fn welcome_page(ui: &mut egui::Ui, fresh: bool) -> WelcomeLayout {
                         ui.ctx().data_mut(|d| d.insert_temp(col_id, h));
                         ui.ctx().request_discard("welcome hero column measured");
                     }
-                    paint_exam_preview(ui.painter(), page);
+                    paint_exam_preview(ui.painter(), page, false);
                     (out.head, out.text, out.page) = (head, text, page);
                     hero = head | text | page;
                     let below = page.bottom() + 8.0 - ui.cursor().top();
@@ -1461,7 +1466,7 @@ fn welcome_page(ui: &mut egui::Ui, fresh: bool) -> WelcomeLayout {
                     }
                     hero = if with_page { head | text | page } else { head | text };
                     if with_page {
-                        paint_exam_preview(ui.painter(), page);
+                        paint_exam_preview(ui.painter(), page, true);
                         let below = page.bottom() + 8.0 - ui.cursor().top();
                         if below > 0.0 {
                             ui.add_space(below);
@@ -1495,18 +1500,13 @@ fn welcome_page(ui: &mut egui::Ui, fresh: bool) -> WelcomeLayout {
                     out.card = steps_section(ui, col_w).1;
                 });
                 let measured = ui.cursor().top() - block_top - extra;
-                remember_height(ui.ctx(), content_id, measured);
+                if ui.ctx().data(|d| d.get_temp::<f32>(content_id)).is_none_or(|old| (old - measured).abs() > 0.5) {
+                    ui.ctx().data_mut(|d| d.insert_temp(content_id, measured));
+                    ui.ctx().request_discard("welcome block measured");
+                }
                 out.go = go;
             });
             out
-}
-
-/// Keeps `h` under `id` for the next frame, asking for one more frame when it changed.
-fn remember_height(ctx: &egui::Context, id: egui::Id, h: f32) {
-    if ctx.data(|d| d.get_temp::<f32>(id)).is_none_or(|old| (old - h).abs() > 0.5) {
-        ctx.data_mut(|d| d.insert_temp(id, h));
-        ctx.request_repaint();
-    }
 }
 
 impl crate::App {
@@ -4070,7 +4070,10 @@ mod welcome_sheet_tests {
         lines: Vec<[Pos2; 2]>,
     }
 
-    fn paint_sheet(size: Vec2) -> Sheet {
+    /// Every sheet the page draws, and whether it is the 760 one.
+    const SHEETS: [(Vec2, bool); 3] = [(PREVIEW_SIZE, false), (PREVIEW_DRAWN, false), (NARROW_PREVIEW_DRAWN, true)];
+
+    fn paint_sheet(size: Vec2, narrow: bool) -> Sheet {
         fn walk(shape: &egui::Shape, out: &mut Sheet) {
             match shape {
                 egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
@@ -4101,7 +4104,7 @@ mod welcome_sheet_tests {
                 ui.ctx().request_repaint();
                 return;
             }
-            paint_exam_preview(ui.painter(), page);
+            paint_exam_preview(ui.painter(), page, narrow);
         });
         h.run();
         let mut out = Sheet { page, texts: Vec::new(), pill: Rect::NOTHING, fig: Rect::NOTHING, lines: Vec::new() };
@@ -4120,14 +4123,13 @@ mod welcome_sheet_tests {
     /// figure, at least 2 pt in from its frame, and touch neither plotted line.
     #[test]
     fn the_welcome_sheet_has_no_text_smaller_than_its_answer_labels() {
-        for size in [PREVIEW_SIZE, PREVIEW_DRAWN, NARROW_PREVIEW_DRAWN] {
-            let sheet = paint_sheet(size);
+        for (size, narrow) in SHEETS {
+            let sheet = paint_sheet(size, narrow);
             let all = &sheet.texts;
             let answer = all.iter().find(|t| t.0 == "line p").map(|t| t.1).expect("the answer label");
             for want in ["p", "q", "Version A", "Page 1 of 2", "3", "25"] {
                 assert!(all.iter().any(|t| t.0 == want), "{size:?}: {want:?} is drawn");
             }
-            let narrow = size == NARROW_PREVIEW_DRAWN;
             for (s, sz, r, _) in all {
                 assert!(sheet.page.contains_rect(*r), "{size:?}: {s:?} lies on the page");
                 if ["A", "B", "C", "D"].contains(&s.as_str()) {
@@ -4158,8 +4160,8 @@ mod welcome_sheet_tests {
     /// least 10 pt right of the title's galley, and the title keeps its size on one line.
     #[test]
     fn the_version_pill_clears_the_sheet_title() {
-        for size in [PREVIEW_SIZE, PREVIEW_DRAWN, NARROW_PREVIEW_DRAWN] {
-            let sheet = paint_sheet(size);
+        for (size, narrow) in SHEETS {
+            let sheet = paint_sheet(size, narrow);
             let title = sheet.texts.iter().find(|t| t.0 == "Linear Equations Quiz").expect("the title");
             assert!((title.1 - size.x / 222.0 * 1.12 * 11.5).abs() < 0.01, "{size:?}: the title keeps its size");
             assert!(sheet.pill.is_positive(), "{size:?}: the pill is drawn");
@@ -4241,6 +4243,40 @@ mod welcome_sheet_tests {
             let room = 800.0 - card.bottom();
             assert!(room >= 24.0, "{w}: the steps card ends {room} pt above the window's bottom");
             eprintln!("{w}: head {head:?} text {text:?} page {page:?} card {card:?} room {room}");
+        }
+    }
+
+    /// Round 32, council fix: the steps card is where it settles on the very first frame the page
+    /// is drawn (one step), at 760 x 800 and at 1280 x 800, and again on the first frame after the
+    /// window widens or narrows across the two layouts, each width met cold.
+    #[test]
+    fn the_welcome_steps_card_is_placed_on_its_first_frame() {
+        use egui_kittest::Harness;
+        for (a, b) in [(760.0, 1280.0), (1280.0, 760.0)] {
+            let mut h = Harness::builder().with_size(egui::vec2(a, 800.0)).build_ui_state(
+                |ui, st: &mut (bool, Rect)| {
+                    if !st.0 {
+                        return;
+                    }
+                    let mut root = root_ui(ui.ctx());
+                    st.1 = desk_panel(&mut root, 20, |ui| welcome_page(ui, true)).card;
+                },
+                (false, Rect::NOTHING),
+            );
+            theme::setup(&h.ctx);
+            h.step();
+            h.state_mut().0 = true;
+            for (w, what) in [(a, "first frame"), (b, "first frame after the change"), (a, "first frame back")] {
+                h.set_size(egui::vec2(w, 800.0));
+                h.step();
+                let first = h.state().1;
+                for _ in 0..4 {
+                    h.step();
+                }
+                let settled = h.state().1;
+                assert!(first.is_positive(), "{w}: {what}: the card is drawn");
+                assert_eq!(first, settled, "{w}: {what}: the card moved after its first frame");
+            }
         }
     }
 
