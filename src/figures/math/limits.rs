@@ -1475,13 +1475,15 @@ fn written(l: &Lim, p: &Params, dr: &mut Drawn) -> String {
 fn block(p: &Params, m: &Model, discs: &[Disc], stu: bool, _size: f64, dr: &mut Drawn, notes: &mut Vec<String>) -> Vec<Vec<Item>> {
     let mut rows: Vec<Vec<Item>> = vec![];
     let ans = |l: &Lim, dr: &mut Drawn| -> String { let t = written(l, p, dr); if stu { BLANK.to_string() } else { t } };
+    // (a limit from a side f has no values on does not exist; "undefined" is for f(a))
+    let lim_ans = |l: &Lim, dr: &mut Drawn| -> String { if *l == Lim::Undef { ans(&Lim::Dne, dr) } else { ans(l, dr) } };
     let sup = |dir: f64| if dir < 0.0 { "^(-)" } else { "^(+)" };
     for a in &m.asks {
         let mut row = vec![];
         let at = a.text.clone();
-        if p.b("ask_left") { let l = m.side(a.v, -1.0); row.push(Item::Lim { under: format!("x\u{2192}{at}{}", sup(-1.0)), ans: ans(&l, dr) }); }
-        if p.b("ask_right") { let l = m.side(a.v, 1.0); row.push(Item::Lim { under: format!("x\u{2192}{at}{}", sup(1.0)), ans: ans(&l, dr) }); }
-        if p.b("ask_two") { let l = m.two(a.v); row.push(Item::Lim { under: format!("x\u{2192}{at}"), ans: ans(&l, dr) }); }
+        if p.b("ask_left") { let l = m.side(a.v, -1.0); row.push(Item::Lim { under: format!("x\u{2192}{at}{}", sup(-1.0)), ans: lim_ans(&l, dr) }); }
+        if p.b("ask_right") { let l = m.side(a.v, 1.0); row.push(Item::Lim { under: format!("x\u{2192}{at}{}", sup(1.0)), ans: lim_ans(&l, dr) }); }
+        if p.b("ask_two") { let l = m.two(a.v); row.push(Item::Lim { under: format!("x\u{2192}{at}"), ans: lim_ans(&l, dr) }); }
         if p.b("ask_value") {
             let v = m.value(a.v);
             if v == Lim::Two && !notes.iter().any(|n| n.starts_with("f has two values")) { notes.push(format!("f has two values at x = {}, so f({}) has no one answer", a.text, a.text)); }

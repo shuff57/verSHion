@@ -131,6 +131,9 @@ fn infinite_limits_and_poles() {
     assert_eq!(val(&m(json!({"pieces": "y = sqrt(x)", "dots": ""})).side(0.0, 1.0)), "0");
     assert_eq!(val(&m(json!({"pieces": "y = x/sqrt(x)", "dots": ""})).side(0.0, 1.0)), "0");
     assert!(m(json!({"pieces": "y = -x, x < 0\ny = sqrt(x), x >= 0", "dots": ""})).discontinuities().is_empty());
+    // √x from the left of 0: no values there, so that limit does not exist (and so neither does the limit); f(0) = 0
+    let w = words(&svg(&with(json!({"pieces": "y = sqrt(x)", "dots": "", "ask_at": "0"}))));
+    assert!(w.contains("lim x→0- f(x) = does not exist") && w.contains("lim x→0+ f(x) = 0") && w.contains("lim x→0 f(x) = does not exist") && w.contains("f(0) = 0"), "{w}");
     // ln x: -∞ as x → 0 from the right, nothing to the left (a domain edge, not listed as a discontinuity), and the vertical
     // asymptote x = 0
     let md = m(json!({"pieces": "y = ln(x)", "dots": ""}));
