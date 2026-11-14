@@ -343,3 +343,17 @@ fn show_zeros() {
     println!("zeros d1 {:?}", exact::zeros(&d1, 0.01, 10.0).map(|v| v.iter().map(exact::text).collect::<Vec<_>>()));
     println!("zeros d2 {:?}", exact::zeros(&d2, 0.01, 10.0).map(|v| v.iter().map(exact::text).collect::<Vec<_>>()));
 }
+
+#[test]
+#[ignore]
+fn show_cuts() {
+    let Ok(j) = crate::env_var("VERSHION_DG_JSON") else { return };
+    let p = crate::figures::params_from_json(&def(), &serde_json::from_str(&j).unwrap());
+    let an = super::tests::an_of(&p);
+    println!("breaks {:?}", an.breaks);
+    println!("mono {:?}", an.mono.iter().map(|s| (s.a, s.b, s.sign)).collect::<Vec<_>>());
+    println!("fpmarks {:?}", an.fp_marks.iter().map(|m| (m.x, m.k)).collect::<Vec<_>>());
+    let e = sym::parse(p.s("f")).unwrap();
+    let d2 = sym::deriv(&sym::deriv(&e));
+    println!("zeros f'' {:?}", exact::zeros(&d2, -5.0, 5.0).map(|v| v.iter().map(exact::text).collect::<Vec<_>>()));
+}

@@ -490,7 +490,7 @@ fn trig_solutions(f: F, a: Q, b: &Xv, v: &Xv, lo: f64, hi: f64) -> Option<Vec<Xv
         let val = match f { F::Sin => Some(s), F::Cos => Some(c), F::Tan => if c.is_zero() { None } else { s.div(&c) }, _ => None };
         if val.as_ref() == Some(v) { qs.push(q); }
     }
-    if qs.is_empty() && !matches!(f, F::Sin | F::Cos | F::Tan) { return None; }
+    if qs.is_empty() { return if v.is_zero() || matches!(f, F::Tan) && false { Some(vec![]) } else { None }; }
     let mut out = vec![];
     // a x + b = (q + 2k) π  →  x = ((q + 2k)π - b)/a
     let pi = Xv::mono(Q::int(1), B { s: 1, pi: 1, e: Q::int(0), l: NOLN });
@@ -506,8 +506,30 @@ fn trig_solutions(f: F, a: Q, b: &Xv, v: &Xv, lo: f64, hi: f64) -> Option<Vec<Xv
     }
     Some(out)
 }
-/// Every zero of `e` in the open interval (lo, hi), exactly, when they can all be derived; None otherwise.
+/// Every zero of `e` in the open interval (lo, hi), exactly, when they can all be derived; None otherwise. The structure
+/// first: a product is zero where a factor is, a quotient where its numerator is (and its denominator has a value), a
+/// power where its base is; e^u and a positive base to a negative power are never zero. Then the expression's expansion.
 pub(crate) fn zeros(e: &Ex, lo: f64, hi: f64) -> Option<Vec<Xv>> {
+    use Ex::*;
+    let merge = |a: Vec<Xv>, b: Vec<Xv>| { let mut v = a; for x in b { if !v.contains(&x) { v.push(x); } } v.sort_by(|p, q| p.f().partial_cmp(&q.f()).unwrap()); v };
+    match e {
+        _ if !super::sym::has_x(e) => return if ev(e, &Xv::default()).is_some_and(|v| v.is_zero()) { None } else { Some(vec![]) },
+        Neg(a) => return zeros(a, lo, hi),
+        Mul(a, b) => if let (Some(za), Some(zb)) = (zeros(a, lo, hi), zeros(b, lo, hi)) {
+            // (a zero of one factor where the other has a value)
+            let ok = |x: &Xv, other: &Ex| ev(other, x).is_some() || !super::sym::has_x(other);
+            return Some(merge(za.into_iter().filter(|x| ok(x, b)).collect(), zb.into_iter().filter(|x| ok(x, a)).collect()));
+        },
+        Div(a, b) => if let Some(za) = zeros(a, lo, hi) { return Some(za.into_iter().filter(|x| ev(b, x).is_some_and(|d| !d.is_zero())).collect()); },
+        Pow(a, _) if matches!(**a, E) => return Some(vec![]),
+        Fun(F::Exp, _) => return Some(vec![]),
+        Pow(a, b) if !super::sym::has_x(b) => {
+            let k = konst_q(b);
+            if let Some(k) = k { if k.n > 0 { if let Some(za) = zeros(a, lo, hi) { return Some(za); } } else if k.n < 0 { return Some(vec![]); } }
+        }
+        Fun(F::Sqrt, a) => if let Some(za) = zeros(a, lo, hi) { return Some(za); },
+        _ => {}
+    }
     let terms = expand(e)?;
     if terms.is_empty() { return None; } // zero everywhere: not a list of points
     // the atoms every term has, to their lowest power, taken out
@@ -544,6 +566,58 @@ pub(crate) fn zeros(e: &Ex, lo: f64, hi: f64) -> Option<Vec<Xv>> {
     groups.retain(|_, (_, p)| !p.is_zero());
     let den_all = lcd.clone();
     let defined = |x: &Xv| den_all.0.is_empty() || { let v = ev(&poly_ex(&den_all), x); v.is_some_and(|v| !v.is_zero()) };
+    // a polynomial in one e^u (u linear): solved for t = e^u, then u = ln t for each positive root (the logistic's f″ is
+    // e^(-x)(e^(-x) − 1)/(1 + e^(-x))³: e^(-x) = 1, x = 0)
+    if groups.len() >= 2 && groups.values().all(|(atoms, p)| p.deg() == 0 && atoms.iter().all(|(a, k)| matches!(a, Atom::Exp(Some(_))) && k.is_int() && k.n > 0)) {
+        let lins: Vec<(Q, Xv)> = groups.values().flat_map(|(atoms, _)| atoms.iter().filter_map(|(a, _)| if let Atom::Exp(Some(l)) = a { Some(l.clone()) } else { None })).collect();
+        let keys: Vec<String> = groups.keys().flat_map(|k| k.iter().map(|s| s.split('^').next().unwrap_or("").to_string())).collect();
+        if !lins.is_empty() && lins.iter().all(|l| *l == lins[0]) && keys.iter().all(|k| *k == keys[0]) {
+            let (ua, ub) = lins[0].clone();
+            let mut poly = P(vec![]);
+            for (atoms, p) in groups.values() {
+                let mut t = P(vec![p.0[0]]);
+                for (_, k) in atoms { for _ in 0..k.n { t = t.mul(&x_poly())?; } }
+                poly = poly.add(&t)?;
+            }
+            if poly.is_zero() { return None; }
+            for v in poly_roots(&poly)? { if v.f() > 0.0 { push(&mut out, vec![lin_solve(ua, &ub, &ln_of(&v)?)?]); } }
+            out.sort_by(|a, b| a.f().partial_cmp(&b.f()).unwrap());
+            return Some(out);
+        }
+    }
+    // a polynomial in one sine (cos²ᵏ written (1 − sin²)ᵏ) or one cosine of one argument: solved for it, then the angles
+    if groups.len() >= 2 && groups.values().all(|(atoms, p)| p.deg() == 0 && atoms.iter().all(|(a, k)| matches!(a, Atom::Trig(F::Sin | F::Cos, ..)) && k.is_int() && k.n > 0)) {
+        let args: Vec<(Q, Xv)> = groups.values().flat_map(|(atoms, _)| atoms.iter().filter_map(|(a, _)| if let Atom::Trig(_, x, y) = a { Some((*x, y.clone())) } else { None })).collect();
+        if !args.is_empty() && args.iter().all(|t| *t == args[0]) {
+            let (ua, ub) = args[0].clone();
+            // the variable: sine, unless the sine has odd powers and the cosine only even ones... (or the other way round)
+            let pw = |f: F| groups.values().flat_map(|(atoms, _)| atoms.iter().filter(move |(a, _)| matches!(a, Atom::Trig(g, ..) if *g == f)).map(|(_, k)| k.n)).collect::<Vec<i128>>();
+            let (ps, pc) = (pw(F::Sin), pw(F::Cos));
+            let var = if pc.iter().all(|k| k % 2 == 0) { Some(F::Sin) } else if ps.iter().all(|k| k % 2 == 0) { Some(F::Cos) } else { None };
+            if let Some(var) = var {
+                let other = if var == F::Sin { F::Cos } else { F::Sin };
+                // 1 − t²
+                let one_m = P(vec![Q::int(1), Q::int(0), Q::int(-1)]);
+                let mut poly = P(vec![]);
+                for (atoms, p) in groups.values() {
+                    let mut t = P(vec![p.0[0]]);
+                    for (a, k) in atoms {
+                        let Atom::Trig(f, ..) = a else { return None };
+                        if *f == var { for _ in 0..k.n { t = t.mul(&x_poly())?; } } else { let _ = other; for _ in 0..k.n / 2 { t = t.mul(&one_m)?; } }
+                    }
+                    poly = poly.add(&t)?;
+                }
+                if poly.is_zero() { return None; }
+                for v in poly_roots(&poly)? {
+                    if v.f().abs() > 1.0 + 1e-12 { continue; }
+                    let sol = trig_solutions(var, ua, &ub, &v, lo, hi)?;
+                    push(&mut out, sol);
+                }
+                out.sort_by(|a, b| a.f().partial_cmp(&b.f()).unwrap());
+                return Some(out);
+            }
+        }
+    }
     match groups.len() {
         0 => return None, // the rest cancels: zero on a stretch
         1 => {
@@ -657,6 +731,16 @@ pub(crate) fn antideriv(e: &Ex) -> Option<Ex> {
         Sub(a, b) => Some(Sub(Box::new(antideriv(a)?), Box::new(antideriv(b)?))),
         Neg(a) => Some(Neg(Box::new(antideriv(a)?))),
         Mul(a, b) if !super::sym::has_x(a) => Some(Mul(a.clone(), Box::new(antideriv(b)?))),
+        Mul(a, b) if !super::sym::has_x(b) => Some(Mul(b.clone(), Box::new(antideriv(a)?))),
+        Div(a, b) if !super::sym::has_x(b) => Some(Div(Box::new(antideriv(a)?), b.clone())),
+        // sin u, cos u, e^u with u = k x + c: −cos u/k, sin u/k, e^u/k
+        Fun(f @ (F::Sin | F::Cos | F::Exp), u) => {
+            let (k, _) = linear_x(u)?;
+            let kq = Div(Box::new(Num(k.n as f64)), Box::new(Num(k.d as f64)));
+            let inner = match f { F::Sin => Neg(Box::new(Fun(F::Cos, u.clone()))), F::Cos => Fun(F::Sin, u.clone()), _ => e.clone() };
+            Some(Div(Box::new(inner), Box::new(kq)))
+        }
+        Pow(a, u) if matches!(**a, E) => { let (k, _) = linear_x(u)?; Some(Div(Box::new(e.clone()), Box::new(Div(Box::new(Num(k.n as f64)), Box::new(Num(k.d as f64)))))) }
         Fun(F::Sqrt, a) => {
             // √(R - (x - h)²) with R > 0: a quadratic -x² + 2h x + (R - h²)
             let p = as_poly(a)?;
@@ -690,7 +774,11 @@ pub(crate) fn special_points(e: &Ex, lo: f64, hi: f64) -> Vec<Xv> {
             Pow(a, b) => { if let Some(p) = as_poly(a) { add(poly_roots(&p)); } walk(a, lo, hi, out); walk(b, lo, hi, out); }
             Fun(f, a) => {
                 match f {
-                    F::Abs | F::Sqrt | F::Ln | F::Log => { if let Some(p) = as_poly(a) { add(poly_roots(&p)); if matches!(f, F::Ln | F::Log) { if let Some(q) = p.add(&P(vec![Q::int(-1)])) { add(poly_roots(&q)); } } } }
+                    F::Abs | F::Sqrt | F::Ln | F::Log => {
+                        if let Some(p) = as_poly(a) { add(poly_roots(&p)); if matches!(f, F::Ln | F::Log) { if let Some(q) = p.add(&P(vec![Q::int(-1)])) { add(poly_roots(&q)); } } }
+                        // (|sin x|: its corners at 0 and π, from the same exact zero finder)
+                        else if matches!(f, F::Abs | F::Sqrt) { add(zeros(a, lo - 1e-9, hi + 1e-9)); }
+                    }
                     F::Tan | F::Sec => if let Some((ka, kb)) = linear_x(a) { add(trig_solutions(F::Cos, ka, &kb, &Xv::default(), lo - 1.0, hi + 1.0)); },
                     F::Cot | F::Csc => if let Some((ka, kb)) = linear_x(a) { add(trig_solutions(F::Sin, ka, &kb, &Xv::default(), lo - 1.0, hi + 1.0)); },
                     _ => {}
@@ -854,4 +942,23 @@ impl Rat {
     }
     pub(crate) fn ex(&self) -> Ex { if self.d.deg() == 0 && self.d.0 == vec![Q::int(1)] { poly_ex(&self.n) } else { Ex::Div(Box::new(poly_ex(&self.n)), Box::new(poly_ex(&self.d))) } }
     pub(crate) fn f(&self, x: f64) -> Option<f64> { let d = self.d.f(x); (d != 0.0).then(|| self.n.f(x) / d) }
+}
+
+/// The expression with every |u| replaced by u or −u, as u's sign is at x (between the zeros of u the sign does not
+/// change, so on such a stretch this IS the expression: |x − 1| + |x + 1| is 2 on (−1, 1)).
+pub(crate) fn specialize(e: &Ex, x: f64) -> Ex {
+    use Ex::*;
+    let s = |a: &Ex| Box::new(specialize(a, x));
+    match e {
+        Fun(F::Abs, a) => { let inner = specialize(a, x); if super::sym::ev(&inner, x) < 0.0 { Neg(Box::new(inner)) } else { inner } }
+        Neg(a) => Neg(s(a)),
+        Add(a, b) => Add(s(a), s(b)),
+        Sub(a, b) => Sub(s(a), s(b)),
+        Mul(a, b) => Mul(s(a), s(b)),
+        Div(a, b) => Div(s(a), s(b)),
+        Pow(a, b) => Pow(s(a), s(b)),
+        Fun(f, a) => Fun(*f, s(a)),
+        LogB(a, b) => LogB(s(a), s(b)),
+        other => other.clone(),
+    }
 }

@@ -193,7 +193,9 @@ fn ev_with(e: &Ex, x: f64, odd: bool) -> f64 {
         Add(a, b) => r(a) + r(b),
         Sub(a, b) => r(a) - r(b),
         Mul(a, b) => r(a) * r(b),
-        Div(a, b) => r(a) / r(b),
+        // (the figure's own values: a division by exactly 0 has no value, as e^(-1/x²) at 0, where the reader's 1/0 = ∞ would
+        // give e^(-∞) = 0; the reader's own values are left as the reader gives them)
+        Div(a, b) => { let d = r(b); if odd && d == 0.0 { f64::NAN } else { r(a) / d } }
         Pow(a, b) => {
             let (u, c) = (r(a), r(b));
             if odd && u < 0.0 && !has_x(b) {

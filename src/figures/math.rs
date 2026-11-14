@@ -3889,7 +3889,8 @@ pub(super) fn coordinate_grid_build_in(p: &Params, notes: &mut Vec<String>, plot
                         let c = k * q;
                         if in_dom(c) && f(r, c).map_or(true, |v| !v.is_finite()) {
                             if let (Some(l), Some(rr)) = (f(r, c - eps).filter(|v| v.is_finite()), f(r, c + eps).filter(|v| v.is_finite())) {
-                                if (l - rr).abs() < 1e-3 * (1.0 + l.abs()) { holes.push((c, (l + rr) / 2.0)); }
+                                // (a "hole" far off the plot is the two sides of an even pole: no circle, which could not be drawn)
+                                if (l - rr).abs() < 1e-3 * (1.0 + l.abs()) { if ((l + rr) / 2.0 - (y0 + y1) / 2.0).abs() <= 1.5 * span_y { holes.push((c, (l + rr) / 2.0)); } }
                                 else if !asym.iter().any(|a| (a - c).abs() < (x1 - x0) / 200.0) { asym.push(c); }
                             }
                         }
