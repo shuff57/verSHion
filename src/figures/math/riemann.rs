@@ -449,7 +449,8 @@ fn singular(src: &str, a: f64, b: f64) -> Option<f64> {
     }
     // a peak of |f| between samples: climbed to its top, then looked at from closer and closer; a top that keeps rising
     // (1/x², sec² x, ln|x|) is no top at all
-    let mut peaks: Vec<usize> = (1..N).filter(|&i| y[i].abs() >= y[i - 1].abs() && y[i].abs() >= y[i + 1].abs()).collect();
+    // (the first sample of a flat run only: a flat stretch is not a peak at every sample)
+    let mut peaks: Vec<usize> = (1..N).filter(|&i| y[i].abs() > y[i - 1].abs() && y[i].abs() >= y[i + 1].abs()).collect();
     peaks.sort_by(|&i, &j| y[j].abs().total_cmp(&y[i].abs()));
     peaks.truncate(400);
     let gr = 0.5 * (5f64.sqrt() - 1.0);
@@ -484,7 +485,8 @@ fn extreme(h: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, max: bool) -> Optio
         let left = if i == 0 { f64::NEG_INFINITY } else { ys[i - 1] };
         let right = if i == K { f64::NEG_INFINITY } else { ys[i + 1] };
         // (a top: at least its neighbours, and the first of a flat run, so a flat strip is not refined at every sample)
-        if !(ys[i] >= left && ys[i] >= right && (i == 0 || ys[i] > left)) { continue; }
+        // (with float noise on a flat run, values within eps of each other count as equal)
+        if !(ys[i] >= right - eps && (i == 0 || ys[i] > left + eps)) { continue; }
         if ys[i] > best.1 + eps { best = (xs[i], ys[i]); }
         let (mut a, mut b) = (xs[i.saturating_sub(1)], xs[(i + 1).min(K)]);
         for _ in 0..100 {

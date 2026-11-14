@@ -1150,3 +1150,4 @@ fn fifth_check_cases() {
         assert!(!(b[0] < c1 && b[2] > c0 && b[1] < y1 && b[3] > y0), "a bound label in the y-number column: {b:?}");
     }
 }
+

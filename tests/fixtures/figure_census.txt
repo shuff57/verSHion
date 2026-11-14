@@ -296,8 +296,8 @@ residual-plot__defaults 27e35e6a92629c17
 residual-plot__start 27e35e6a92629c17
 rhythm-counting__defaults c1c620ae3e27b02a
 rhythm-counting__start c1c620ae3e27b02a
-riemann-sums__defaults 9dd7d5a3c622b729
-riemann-sums__start 9dd7d5a3c622b729
+riemann-sums__defaults dcf0e6995d2be198
+riemann-sums__start dcf0e6995d2be198
 right-triangle-trig__defaults 04ee5345d24965e7
 right-triangle-trig__start 04ee5345d24965e7
 ruler-reading__defaults 3f6161466de39320
