@@ -228,6 +228,12 @@ fn drawn_label_boxes() {
                         assert!(x >= 0. && x < size.0 && y >= 0. && y < size.1);
                     }
                     let bs = labels::boxes(&s);
+                    assert_eq!(
+                        bs.len(),
+                        if mode == "None" { 2 } else { 3 },
+                        "all labels: {a},{b} {mode}; {:?}",
+                        warnings(&p)
+                    );
                     for (i, b) in bs.iter().enumerate() {
                         for c in bs.iter().skip(i + 1) {
                             let a = b.centre();
@@ -670,4 +676,149 @@ fn finite_controls_and_large_locus() {
         assert!(x.abs() < 0.000019, "{x} {y}");
         assert!((x - y * y / 2e6).abs() < 1e-9);
     }
+    let mut p = base();
+    p.set_s("zi", "0");
+    assert!(!relevant("components", &p));
+    p.set_s("zr", "1");
+    p.set_s("operation", "Roots");
+    p.set_s("style", "Print");
+    assert!(!relevant("circle", &p));
+    let s = render(&p);
+    p.set_b("circle", true);
+    assert_eq!(s, render(&p));
+}
+
+#[test]
+fn optional_constructions_keep_every_label() {
+    let mut count = 0;
+    let mut leaders = vec![];
+    let mut large_exceptions = vec![];
+    // Large-only refusals in confined regions bounded by axes, components and
+    // construction legs. Small and Medium retain all three labels in these cases.
+    // The panel correctly advises selecting a smaller label size or moving z.
+    let allowed_large = [
+        (1, -2, "all"),
+        (1, 3, "all"),
+        (2, -4, "all"),
+        (2, -2, "components"),
+        (2, -2, "disc"),
+        (2, -2, "all"),
+        (3, 1, "all"),
+    ];
+    for size in ["Small", "Medium", "Large"] {
+        // Sixty ordinary Cartesian numbers, across all quadrants and the imaginary axis.
+        for a in [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4] {
+            for b in [-4, -2, 1, 2, 3, 4] {
+                for part in [
+                    "base",
+                    "modulus",
+                    "argument",
+                    "circle",
+                    "components",
+                    "polar",
+                    "disc",
+                    "sector",
+                    "all",
+                ] {
+                    let mut p = base();
+                    p.set_s("zr", &a.to_string());
+                    p.set_s("zi", &b.to_string());
+                    p.set_s("label_size", size);
+                    p.set_s("marks", "Points");
+                    p.set_b("modulus", part == "modulus" || part == "all");
+                    p.set_b("argument", part == "argument" || part == "all");
+                    p.set_b("circle", part == "circle" || part == "all");
+                    p.set_b("components", part == "components" || part == "all");
+                    p.set_b("polar", part == "polar" || part == "all");
+                    if part == "disc" || part == "all" {
+                        p.set_s("locus", "Disc");
+                    }
+                    if part == "sector" {
+                        p.set_s("locus", "Argument sector");
+                    }
+                    let s = render(&p);
+                    let boxes = labels::boxes(&s);
+                    if size == "Large" && boxes.len() < 3 {
+                        assert!(
+                            allowed_large.contains(&(a, b, part)),
+                            "new Large refusal: {a},{b} {part}"
+                        );
+                        assert!(warnings(&p).iter().any(|n| n.starts_with("No clear label")));
+                        large_exceptions.push(format!("{a},{b} {part}: {:?}", warnings(&p)));
+                    } else {
+                        assert_eq!(boxes.len(), 3, "{size} {a},{b} {part}; {:?}", warnings(&p));
+                    }
+                    let dom = roxmltree::Document::parse(&s).unwrap();
+                    for group in dom
+                        .descendants()
+                        .filter(|n| n.attribute("data-leader").is_some())
+                    {
+                        leaders.push(format!(
+                            "{size} z={a}+({b})i {part} {}",
+                            group.attribute("data-leader").unwrap()
+                        ));
+                    }
+                    for box_ in &boxes {
+                        let c = box_.centre();
+                        let rect = (
+                            c.0 - box_.half.0,
+                            c.1 - box_.half.1,
+                            c.0 + box_.half.0,
+                            c.1 + box_.half.1,
+                        );
+                        for line in dom.descendants().filter(|n| n.has_tag_name("line")) {
+                            // An owner's leader terminates exactly on its own label box.
+                            if line.parent().and_then(|n| n.attribute("data-leader"))
+                                == Some(box_.id.as_str())
+                            {
+                                continue;
+                            }
+                            if ["#eeeeee", "#dddddd", "#999999"]
+                                .contains(&line.attribute("stroke").unwrap_or(""))
+                            {
+                                continue;
+                            }
+                            let f = |k| line.attribute(k).unwrap().parse::<f64>().unwrap();
+                            assert!(
+                                !segment_hits((f("x1"), f("y1")), (f("x2"), f("y2")), rect),
+                                "label/stroke: {size} {a},{b} {part} {}",
+                                box_.id
+                            );
+                        }
+                        for other in &boxes {
+                            if box_.id == other.id {
+                                continue;
+                            }
+                            let d = other.centre();
+                            assert!(
+                                (c.0 - d.0).abs() >= box_.half.0 + other.half.0
+                                    || (c.1 - d.1).abs() >= box_.half.1 + other.half.1
+                            );
+                        }
+                    }
+                    count += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(count, 1620);
+    eprintln!(
+        "{count} optional layouts; {} leader labels; {:?}",
+        leaders.len(),
+        large_exceptions
+    );
+    if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+        std::fs::write(format!("{dir}/label-leaders.txt"), leaders.join("\n")).unwrap();
+        std::fs::write(
+            format!("{dir}/large-exceptions.txt"),
+            large_exceptions.join("\n"),
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        large_exceptions.len(),
+        allowed_large.len(),
+        "{:?}",
+        large_exceptions
+    );
 }

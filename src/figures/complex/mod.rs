@@ -900,6 +900,17 @@ fn build(raw: &Params) -> (String, Vec<String>) {
     };
     let origin = g.pt(0., 0.);
     let end = g.pt(g.b, g.c);
+    let same_radius = |a: f64, b: f64| format!("{:.2}", a * g.u) == format!("{:.2}", b * g.u);
+    let circle_already_drawn = zs.first().is_some_and(|z| {
+        (!construct
+            && p.s("operation") == "Roots"
+            && zs.len() > given
+            && same_radius(z.r(), zs[given].r()))
+            || (matches!(p.s("locus"), "Circle" | "Disc")
+                && read(p.s("cr")).is_some_and(|v| v.v == 0.)
+                && read(p.s("ci")).is_some_and(|v| v.v == 0.)
+                && read(p.s("lr")).is_some_and(|v| v.v > 0. && same_radius(z.r(), v.v)))
+    });
     // Clip region fills, never point labels. Shading is a teacher's given region.
     doc.defs(&format!(
         "<clipPath id=\"plot\"><rect x=\"70\" y=\"70\" width=\"{}\" height=\"{}\"/></clipPath>",
@@ -990,6 +1001,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         }
     }
     doc.raw("</g>");
+    let mut fixed_boxes = vec![];
     // Every grid loop has a fixed bound, including hostile count-by input.
     for (axis, lo, hi, step) in [(0, g.a, g.b, p.f("xstep")), (1, g.c, g.d, p.f("ystep"))] {
         let count = ((hi - lo) / step).ceil() as usize;
@@ -1037,8 +1049,12 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                 }
                 if axis == 0 {
                     doc.text(a.0, end.1 + 22., 12., "middle", &s);
+                    let w = super::circle::tw(&s, 12., false);
+                    fixed_boxes.push((a.0 - w / 2., end.1 + 12., a.0 + w / 2., end.1 + 23.));
                 } else {
                     doc.text(a.0 - 12., a.1 + 4., 12., "end", &s);
+                    let w = super::circle::tw(&s, 12., false);
+                    fixed_boxes.push((a.0 - 12. - w, a.1 - 6., a.0 - 12., a.1 + 5.));
                 }
             }
         }
@@ -1140,7 +1156,13 @@ fn build(raw: &Params) -> (String, Vec<String>) {
             add_circle(origin, r * g.u);
         }
     }
-    if p.b("circle") && !coord && !blank && !zs.is_empty() && zs[0].r() > 0. {
+    if p.b("circle")
+        && !circle_already_drawn
+        && !coord
+        && !blank
+        && !zs.is_empty()
+        && zs[0].r() > 0.
+    {
         let r = zs[0].r();
         if g.inside(-r, -r) && g.inside(r, r) {
             add_circle(origin, r * g.u);
@@ -1219,7 +1241,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         {
             avoid.push((origin, g.pt(z.a.v, z.b.v)));
         }
-        if p.b("components") && !coord && z.r() > 0. && g.inside(z.a.v, z.b.v) {
+        if p.b("components") && !coord && z.a.v != 0. && z.b.v != 0. && g.inside(z.a.v, z.b.v) {
             let q = g.pt(z.a.v, z.b.v);
             avoid.push((q, (q.0, origin.1)));
             avoid.push((q, (origin.0, q.1)));
@@ -1250,7 +1272,14 @@ fn build(raw: &Params) -> (String, Vec<String>) {
             ));
         }
     }
-    let mut boxes: Vec<(f64, f64, f64, f64)> = vec![];
+    avoid.push(((70., origin.1), (end.0, origin.1)));
+    avoid.push(((origin.0, 70.), (origin.0, end.1)));
+    if p.s("marks") == "Vectors" {
+        for z in zs.iter().take(visible).filter(|z| g.inside(z.a.v, z.b.v)) {
+            avoid.push((origin, g.pt(z.a.v, z.b.v)));
+        }
+    }
+    let mut boxes: Vec<(f64, f64, f64, f64)> = fixed_boxes;
     let aw = super::circle::tw(p.s("xlabel"), fs, false);
     if !p.s("xlabel").is_empty() && aw <= 608. - end.0 - 12. {
         boxes.push((
@@ -1276,7 +1305,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
             if p.b("modulus") && p.s("marks") == "Points" && !coord && !blank && z.r() > 0. {
                 doc.line(origin.0, origin.1, pt.0, pt.1, color(0), 1.);
             }
-            if p.b("circle") && !(blank || coord) && z.r() > 0. {
+            if p.b("circle") && !circle_already_drawn && !(blank || coord) && z.r() > 0. {
                 if g.inside(-z.r(), -z.r()) && g.inside(z.r(), z.r()) {
                     doc.circle(origin.0, origin.1, z.r() * g.u, "none", color(0), 1.);
                 } else {
@@ -1285,7 +1314,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                     )
                 }
             }
-            if p.b("components") && !coord && z.r() > 0. {
+            if p.b("components") && !coord && z.a.v != 0. && z.b.v != 0. {
                 doc.arrow_with(pt.0, pt.1, pt.0, origin.1, color(i), 1., "4 4", false);
                 doc.arrow_with(pt.0, pt.1, origin.0, pt.1, color(i), 1., "4 4", false);
             }
@@ -1316,7 +1345,26 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         if !label.is_empty() {
             let width = super::circle::tw(&label, fs, false);
             let mut found = None;
-            for dy in [-12., -20., -26., fs + 12., -fs - 18., 2. * fs + 18.] {
+            for (dy, leader) in [
+                -12.,
+                -20.,
+                -26.,
+                fs + 12.,
+                -fs - 18.,
+                2. * fs + 18.,
+                fs + 18.,
+                fs + 22.,
+                -18.,
+                -16.,
+                -22.,
+            ]
+            .into_iter()
+            .map(|dy| (dy, false))
+            .chain(
+                [-48., -64., fs + 44., fs + 60., -80., fs + 76.]
+                    .into_iter()
+                    .map(|dy| (dy, true)),
+            ) {
                 for dx in [
                     10.,
                     -width - 10.,
@@ -1325,11 +1373,13 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                     -width - 20.,
                     -width / 2. + 8.,
                     -width / 2. - 8.,
+                    6.,
+                    -width - 6.,
                 ] {
                     let bx = pt.0 + dx;
                     let by = pt.1 + dy;
                     let b = (bx, by - fs, bx + width, by + 3.);
-                    if b.0 < 65.
+                    if b.0 < 8.
                         || b.2 > 610.
                         || b.1 < 65.
                         || b.3 > end.1 - 2.
@@ -1387,14 +1437,52 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                     {
                         continue;
                     }
-                    found = Some((bx, by, b));
+                    if leader {
+                        let to = (pt.0.clamp(b.0, b.2), pt.1.clamp(b.1, b.3));
+                        let length = (to.0 - pt.0).hypot(to.1 - pt.1);
+                        if length < 7. {
+                            continue;
+                        }
+                        let from = (
+                            pt.0 + 6. * (to.0 - pt.0) / length,
+                            pt.1 + 6. * (to.1 - pt.1) / length,
+                        );
+                        if avoid.iter().any(|&(a, b)| segments_close(from, to, a, b))
+                            || boxes.iter().any(|b| {
+                                segment_hits(from, to, (b.0 - 2., b.1 - 2., b.2 + 2., b.3 + 2.))
+                            })
+                            || zs
+                                .iter()
+                                .take(visible)
+                                .filter(|z| g.inside(z.a.v, z.b.v))
+                                .any(|z| {
+                                    let q = g.pt(z.a.v, z.b.v);
+                                    (q.0 - pt.0).hypot(q.1 - pt.1) > 1e-6
+                                        && point_segment(q, from, to) < 7.
+                                })
+                        {
+                            continue;
+                        }
+                    }
+                    found = Some((bx, by, b, leader));
                     break;
                 }
                 if found.is_some() {
                     break;
                 }
             }
-            if let Some((lx, ly, b)) = found {
+            if let Some((lx, ly, b, leader)) = found {
+                if leader {
+                    let offset = labels::get(p, &format!("p{i}"));
+                    let to = (
+                        pt.0.clamp(b.0, b.2) + offset.0,
+                        pt.1.clamp(b.1, b.3) + offset.1,
+                    );
+                    doc.raw(&format!("<g data-leader=\"p{i}\">"));
+                    doc.line(pt.0, pt.1, to.0, to.1, "#444444", 0.8);
+                    doc.raw("</g>");
+                    avoid.push((pt, to));
+                }
                 let inner = text(lx, ly, &label);
                 doc.raw(&labels::wrap(
                     &format!("p{i}"),
@@ -1404,7 +1492,19 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                 ));
                 boxes.push(b);
             } else {
-                notes.push(format!("No clear label position for {}; use letter labels, a smaller label size, or move the number.",z.name));
+                let mut advice = vec![];
+                if p.s("labels") != "Letter" && !blank {
+                    advice.push("switch to letter labels");
+                }
+                if p.s("label_size") != "Small" {
+                    advice.push("select a smaller label size");
+                }
+                advice.push("move the number");
+                notes.push(format!(
+                    "No clear label position for {}; {}.",
+                    z.name,
+                    advice.join(" or ")
+                ));
             }
         }
         let yy = 95. + i as f64 * row * 4.;
@@ -1644,6 +1744,32 @@ fn angle_fraction(s: &str, unit: &str) -> Option<Q> {
     Some(Q::new(n, q.1))
 }
 
+fn point_segment(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (x, y) = (b.0 - a.0, b.1 - a.1);
+    let den = x * x + y * y;
+    let t = if den == 0. {
+        0.
+    } else {
+        ((p.0 - a.0) * x + (p.1 - a.1) * y) / den
+    }
+    .clamp(0., 1.);
+    (p.0 - a.0 - t * x).hypot(p.1 - a.1 - t * y)
+}
+fn segments_close(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) -> bool {
+    let cross = |a: (f64, f64), b: (f64, f64), c: (f64, f64)| {
+        (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
+    };
+    let crosses = cross(a, b, c) * cross(a, b, d) < 0. && cross(c, d, a) * cross(c, d, b) < 0.;
+    crosses
+        || [
+            point_segment(a, c, d),
+            point_segment(b, c, d),
+            point_segment(c, a, b),
+            point_segment(d, a, b),
+        ]
+        .into_iter()
+        .any(|v| v < 2.)
+}
 fn segment_hits(a: (f64, f64), b: (f64, f64), r: (f64, f64, f64, f64)) -> bool {
     let (mut lo, mut hi) = (0f64, 1f64);
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
