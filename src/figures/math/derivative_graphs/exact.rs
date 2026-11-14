@@ -401,6 +401,16 @@ pub(crate) fn poly_roots(p: &P) -> Option<Vec<Xv>> {
             let r = Q::new(sg * pn, qd)?;
             if p.evq(r) == Some(Q::int(0)) { if !roots.contains(&Xv::q(r)) { roots.push(Xv::q(r)); } p = p.deflate(r)?; continue 'outer; }
         } } }
+        // a polynomial in x² (4x⁴ − 26x² + 30): its roots in y = x², then ±√y for each y ≥ 0 that is rational (√5, √6/2)
+        if p.0.iter().enumerate().all(|(i, c)| i % 2 == 0 || c.zero()) {
+            let q = P(p.0.iter().step_by(2).copied().collect());
+            for y in poly_roots(&q)? {
+                if y.sign() < 0 { continue; }
+                let r = if y.is_zero() { Xv::default() } else { y.rational().and_then(|yq| Xv::q(yq).powq(Q::new(1, 2)?))? };
+                for sg in [1i128, -1] { let v = r.mul(&Xv::int(sg))?; if !roots.contains(&v) { roots.push(v); } }
+            }
+            return Some(roots);
+        }
         return None;
     }
     let _ = ints;
@@ -547,7 +557,36 @@ pub(crate) fn zeros(e: &Ex, lo: f64, hi: f64) -> Option<Vec<Xv>> {
             if let Some(k) = k { if k.n > 0 { if let Some(za) = zeros(a, lo, hi) { return Some(za); } } else if k.n < 0 { return Some(vec![]); } }
         }
         Fun(F::Sqrt, a) => if let Some(za) = zeros(a, lo, hi) { return Some(za); },
+        // |u| = 0 where u = 0
+        Fun(F::Abs, a) => return zeros(a, lo, hi),
         _ => {}
+    }
+    // an expression with |u| inside (|x| − 1, ||x| − 2| − 1): on each stretch between the zeros of the insides, |u| is ±u,
+    // and the zeros are those of that plain form there
+    // (|u| itself in the expression: never the printed form, which writes an odd root with abs)
+    fn has_abs(e: &Ex) -> bool { use Ex::*; match e { Fun(F::Abs, _) => true, Neg(a) | Fun(_, a) => has_abs(a), Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) | LogB(a, b) => has_abs(a) || has_abs(b), _ => false } }
+    if has_abs(e) {
+        fn abs_args(e: &Ex, out: &mut Vec<Ex>) {
+            use Ex::*;
+            match e { Fun(F::Abs, a) => { out.push((**a).clone()); abs_args(a, out); } Neg(a) | Fun(_, a) => abs_args(a, out), Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) | LogB(a, b) => { abs_args(a, out); abs_args(b, out); } _ => {} }
+        }
+        let mut args = vec![];
+        abs_args(e, &mut args);
+        let mut pts: Vec<Xv> = vec![];
+        for u in &args { for z in zeros(u, lo, hi)? { if !pts.contains(&z) { pts.push(z); } } }
+        pts.sort_by(|p, q| p.f().partial_cmp(&q.f()).unwrap());
+        let mut edges: Vec<f64> = vec![lo];
+        edges.extend(pts.iter().map(|z| z.f()));
+        edges.push(hi);
+        let mut out: Vec<Xv> = vec![];
+        for w in edges.windows(2) {
+            if w[1] - w[0] < 1e-12 { continue; }
+            let plain = specialize(e, 0.5 * (w[0] + w[1]));
+            if has_abs(&plain) { return None; }
+            for z in zeros(&plain, w[0] - 1e-12, w[1] + 1e-12)? { if z.f() >= w[0] - 1e-12 && z.f() <= w[1] + 1e-12 && z.f() > lo && z.f() < hi && !out.contains(&z) { out.push(z); } }
+        }
+        out.sort_by(|p, q| p.f().partial_cmp(&q.f()).unwrap());
+        return Some(out);
     }
     // a line with an exact constant: x − π is 0 at π
     if let Some((a, b)) = linear_x(e) { let x = lin_solve(a, &b, &Xv::default())?; return Some(if x.f() > lo && x.f() < hi { vec![x] } else { vec![] }); }
@@ -762,6 +801,17 @@ pub(crate) fn antideriv(e: &Ex) -> Option<Ex> {
             Some(Div(Box::new(inner), Box::new(kq)))
         }
         Pow(a, u) if matches!(**a, E) => { let (k, _) = linear_x(u)?; Some(Div(Box::new(e.clone()), Box::new(Div(Box::new(Num(k.n as f64)), Box::new(Num(k.d as f64)))))) }
+        // sin²u = x/2 − sin 2u/(4k), cos²u = x/2 + sin 2u/(4k), u = k x + c
+        Pow(a, two) if super::sym::konst(two) == Some(2.0) && matches!(**a, Fun(F::Sin | F::Cos, _)) => {
+            let Fun(f, u) = &**a else { return None };
+            let (k, _) = linear_x(u)?;
+            let s2 = Div(Box::new(Fun(F::Sin, Box::new(Mul(Box::new(Num(2.0)), u.clone())))), Box::new(Mul(Box::new(Num(4.0)), Box::new(Div(Box::new(Num(k.n as f64)), Box::new(Num(k.d as f64)))))));
+            let half = Div(Box::new(Ex::X), Box::new(Num(2.0)));
+            Some(if *f == F::Sin { Sub(Box::new(half), Box::new(s2)) } else { Add(Box::new(half), Box::new(s2)) })
+        }
+        // p(x) e^u with u = k x + c: e^u Σ (−1)^j p⁽ʲ⁾(x)/k^(j+1) (x e^(−x): −(x + 1) e^(−x))
+        Mul(a, b) if exp_lin(b).is_some() && as_poly(a).is_some() => poly_exp(&as_poly(a)?, b),
+        Mul(a, b) if exp_lin(a).is_some() && as_poly(b).is_some() => poly_exp(&as_poly(b)?, a),
         Fun(F::Sqrt, a) => {
             // √(R - (x - h)²) with R > 0: a quadratic -x² + 2h x + (R - h²)
             let p = as_poly(a)?;
@@ -1093,4 +1143,24 @@ pub(crate) fn undefined_at(e: &Ex, x: &Xv) -> bool {
         Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) | LogB(a, b) => undefined_at(a, x) || undefined_at(b, x),
         _ => false,
     }
+}
+
+/// The slope k when e is e^(k x + c).
+fn exp_lin(e: &Ex) -> Option<Q> {
+    match e { Ex::Fun(F::Exp, u) => Some(linear_x(u)?.0), Ex::Pow(a, u) if matches!(**a, Ex::E) => Some(linear_x(u)?.0), _ => None }
+}
+/// ∫ p(x) e^u = e^u Σ (−1)^j p⁽ʲ⁾(x)/k^(j+1)
+fn poly_exp(p: &P, ex: &Ex) -> Option<Ex> {
+    let k = exp_lin(ex)?;
+    let mut sum = P(vec![]);
+    let mut d = p.clone();
+    let mut kp = k;
+    for j in 0..12 {
+        if d.is_zero() { break; }
+        let c = if j % 2 == 0 { Q::int(1) } else { Q::int(-1) }.div(kp)?;
+        sum = sum.add(&P(d.0.iter().map(|q| q.mul(c)).collect::<Option<Vec<_>>>()?))?;
+        d = d.deriv()?;
+        kp = kp.mul(k)?;
+    }
+    Some(Ex::Mul(Box::new(poly_ex(&sum)), Box::new(ex.clone())))
 }

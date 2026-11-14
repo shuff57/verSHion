@@ -151,3 +151,48 @@ fn a_vertex_a_tiny_distance_from_zero_is_found_and_written_in_decimals() {
         lacks(&k, &["/", "\u{2248}"]);
     }
 }
+
+// ───────────────────────── 5. exact values ─────────────────────────
+
+fn ap(fp: &str, a: f64, bb: f64, pi: bool) -> Params {
+    let mut l: Vec<(&str, Value)> = vec![("start", s(STARTS[1])), ("fp", s(fp)), ("pt_x", s("0")), ("pt_y", s("0")), ("xmin", f(a)), ("xmax", f(bb)), ("tracer", b(false))];
+    if pi { l.push(("xunits", s("Multiples of \u{3c0}"))); l.push(("xstep", f(0.25))); }
+    with(&l)
+}
+
+#[test]
+fn the_reported_values_are_written_exactly() {
+    // f = 0 at a double root: a factor exactly 0 (cos 1 has no exact form, but 0 · cos 1 is 0)
+    for (fx, a, bb, want) in [
+        ("(x - 1)^2*cos(x)", -1.0, 4.0, vec!["(1, 0)"]),
+        ("(x - 1)^2*sin(x)", -1.0, 3.0, vec!["(1, 0)"]),
+        ("(x - 2)^2*sin(x)", 0.0, 4.0, vec!["(2, 0)"]),
+        ("(x^2 - 1)^2*cos(x)", -1.5, 1.5, vec!["(\u{2212}1, 0), (1, 0)"]),
+    ] {
+        let k = key(&pw(fx, a, bb, &[]));
+        has(&k, &want);
+        lacks(&k, &["\u{2248}0)"]);
+    }
+    // nested |·|: ||x| − 1| has corners at −1, 0, 1 (minima (±1, 0), a maximum (0, 1)); ||x| − 2| − 1 at −2, 0, 2
+    let k = key(&pw("abs(abs(x)-1)", -3.0, 3.0, &[]));
+    has(&k, &[&format!("x = {M}1 (f\u{2032} does not exist), x = 0 (f\u{2032} does not exist), x = 1 (f\u{2032} does not exist)"), &format!("local minimum: ({M}1, 0), (1, 0)")]);
+    lacks(&k, &["\u{2248}"]);
+    let k = key(&pw("abs(abs(x)-2)-1", -4.0, 4.0, &[]));
+    has(&k, &[&format!("local minimum: ({M}2, {M}1), (2, {M}1)")]);
+    lacks(&k, &["\u{2248}"]);
+    // x⁶e^(−x²): f″ = 2x⁴e^(−x²)(2x⁴ − 13x² + 15), x² = 5 or 3/2: ±√5 and ±√6/2; f(√5) = 125/e⁵, f(√6/2) = (27/8)e^(−3/2)
+    let k = key(&pw("x^6*e^(-x^2)", -4.0, 4.0, &[]));
+    has(&k, &[&format!("({M}\u{221a}5, 125/e\u{2075})"), "(\u{221a}6/2, 27/(8e^(3/2)))"]);
+    lacks(&k, &["\u{2248}"]);
+    // the AP start f′ = sin²x through (0, 0): f = x/2 − sin 2x/4, f(π/2) = π/4, f(π) = π/2
+    let k = key(&ap("sin(x)^2", 0.0, 2.0, true));
+    has(&k, &["(\u{3c0}/2, \u{3c0}/4)", "(\u{3c0}, \u{3c0}/2)", "(3\u{3c0}/2, 3\u{3c0}/4)"]);
+    lacks(&k, &["\u{2248}"]);
+    // f′ = x e^(−x) through (0, 0): f = 1 − (x + 1)e^(−x), f(1) = 1 − 2/e
+    has(&key(&ap("x*e^(-x)", -3.0, 3.0, false)), &["(1, 1 \u{2212} 2/e)"]);
+    // the AP start f′ = cos²x: f = x/2 + sin 2x/4 (f(π/4) = π/8 + 1/4)
+    let m = model(&ap("cos(x)^2", -1.0, 1.0, true), (-PI, PI)).unwrap();
+    assert_eq!(m.exact_f(&exact::of_text("pi/4").unwrap()).map(|v| exact::text(&v)).as_deref(), Some("1/4 + \u{3c0}/8"));
+    // x² + 0.001x: the minimum −0.00000025, exactly
+    has(&key(&pw("x^2 + 0.001x", -3.0, 3.0, &[])), &["(\u{2212}0.0005, \u{2212}0.00000025)"]);
+}
