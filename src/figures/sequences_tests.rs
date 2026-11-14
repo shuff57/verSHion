@@ -974,3 +974,41 @@ fn sequences_student_toggle_exhaustion_r1() {
     }
     assert_eq!(count, 12288);
 }
+
+#[test]
+fn sequences_recurrence_order_r1() {
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Recursive");
+    p.set_s("first", "2");
+    p.set_s("recurrence", "a_(n-1)/2+3");
+    p.set_b("recursive", true);
+    assert_eq!(
+        data(&p).unwrap().a[..4]
+            .iter()
+            .map(|a| a.q)
+            .collect::<Vec<_>>(),
+        vec![Some((2, 1)), Some((4, 1)), Some((5, 1)), Some((11, 2))]
+    );
+    assert!(!relevant("second", &p));
+    let before = render(&p);
+    p.set_s("second", "1234567890123456789");
+    assert_eq!(render(&p), before);
+    let row = rows_for(&p, &data(&p).unwrap()).join(" ");
+    assert!(row.contains("n ≥ 2"));
+    assert!(!row.contains("; a₂"));
+    for spelling in ["a_(n-1)", "a_{n-1}", "a(n-1)", "aₙ₋₁"] {
+        p.set_s("first", "1");
+        p.set_s("recurrence", &format!("2*{spelling}+1"));
+        assert_eq!(
+            data(&p).unwrap().a[..4]
+                .iter()
+                .map(|a| a.q)
+                .collect::<Vec<_>>(),
+            vec![Some((1, 1)), Some((3, 1)), Some((7, 1)), Some((15, 1))]
+        );
+    }
+    p.set_s("recurrence", "a_{n-1}+a(n-2)");
+    p.set_s("second", "1");
+    assert!(relevant("second", &p));
+    assert_eq!(data(&p).unwrap().a[7].q, Some((21, 1)));
+}

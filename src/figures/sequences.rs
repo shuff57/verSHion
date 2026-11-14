@@ -566,6 +566,25 @@ fn proved_function(s: &str, n: N, a: N, b: N) -> Option<Option<N>> {
     }
     None
 }
+fn recurrence_spelling(s: &str) -> String {
+    s.replace('−', "-")
+        .replace("a_{n-1}", "a_(n-1)")
+        .replace("a_{n-2}", "a_(n-2)")
+        .replace("a(n-1)", "a_(n-1)")
+        .replace("a(n-2)", "a_(n-2)")
+        .replace("aₙ₋₁", "a_(n-1)")
+        .replace("aₙ₋₂", "a_(n-2)")
+}
+fn recurrence_order(p: &Params) -> usize {
+    if recurrence_spelling(p.s("recurrence"))
+        .replace(' ', "")
+        .contains("a_(n-2)")
+    {
+        2
+    } else {
+        1
+    }
+}
 fn read(s: &str, n: N, a: N, b: N) -> Option<N> {
     if s.len() > 256 {
         return None;
@@ -578,8 +597,7 @@ fn read(s: &str, n: N, a: N, b: N) -> Option<N> {
     if let Some(value) = proved_function(s, n, a, b) {
         return value;
     }
-    let s = s
-        .replace('−', "-")
+    let s = recurrence_spelling(s)
         .replace('×', "*")
         .replace('÷', "/")
         .replace('·', "*")
@@ -706,10 +724,10 @@ fn data(p: &Params) -> Result<Data, String> {
             "Recursive" => {
                 if j == 0 {
                     Some(first)
-                } else if j == 1 {
+                } else if j == 1 && recurrence_order(p)==2 {
                     number(p.s("second"))
                 } else {
-                    read(p.s("recurrence"), n, a[j as usize - 1], a[j as usize - 2])
+                    read(p.s("recurrence"), n, a[j as usize - 1], if j>=2 {a[j as usize - 2]}else{N::int(0)})
                 }
             }
             "Geometric" => Some(if j == 0 {
@@ -724,7 +742,7 @@ fn data(p: &Params) -> Result<Data, String> {
             }),
         }
         .ok_or(format!(
-            "The app cannot evaluate term at index {}. Check the expression and its domain; negative-base fractional powers are not supported.",
+            "The app cannot evaluate term at index {}. Check the expression and its domain. Previous terms may be written a_(n-1), a_(n-2), a_{{n-1}} or a(n-1); negative-base fractional powers are not supported.",
             j + start
         ))?;
         if !x.v.is_finite() {
@@ -854,7 +872,8 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "difference" => p.s("mode") == "Arithmetic",
         "ratio" => p.s("mode") == "Geometric",
         "formula" => p.s("mode") == "Explicit",
-        "recurrence" | "second" => p.s("mode") == "Recursive",
+        "recurrence" => p.s("mode") == "Recursive",
+        "second" => p.s("mode") == "Recursive" && recurrence_order(p) == 2,
         "title" => !p.b("blank_title") && p.b(SHOW_ANSWERS),
         "blank_title" => p.b(SHOW_ANSWERS),
         "limit" => p.b(SHOW_ANSWERS) && can_limit(p),
@@ -1066,7 +1085,7 @@ fn coefficient(p: &Params, key: &str) -> String {
     }
 }
 fn fmt_formula(s: &str) -> String {
-    let s = super::math::pretty(s)
+    let s = super::math::pretty(&recurrence_spelling(s))
         .replace("a_(n−1)", "aₙ₋₁")
         .replace("a_(n−2)", "aₙ₋₂");
     let s = if s.contains('/') {
@@ -1528,15 +1547,19 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
                     coefficient(p, "ratio"),
                     d.first.eq()
                 ),
-                "Recursive" => format!(
-                    "aₙ = {} (n ≥ {}); a{} {}; a{} {}",
-                    fmt_formula(p.s("recurrence")),
-                    start + 2,
-                    subscript(start),
-                    d.a[0].eq(),
-                    subscript(start + 1),
-                    d.a[1].eq()
-                ),
+                "Recursive" => {
+                    let mut row = format!(
+                        "aₙ = {} (n ≥ {}); a{} {}",
+                        fmt_formula(p.s("recurrence")),
+                        start + recurrence_order(p),
+                        subscript(start),
+                        d.a[0].eq()
+                    );
+                    if recurrence_order(p) == 2 {
+                        row.push_str(&format!("; a{} {}", subscript(start + 1), d.a[1].eq()));
+                    }
+                    row
+                }
                 _ => "Recurrence: __________ (cannot determine)".into(),
             }
         })
@@ -1684,6 +1707,7 @@ fn canvas_width(p: &Params, count: usize) -> f64 {
     let recursive_width = if p.s("mode") == "Recursive" {
         let seeds = ["first", "second"]
             .iter()
+            .filter(|k| **k != "second" || recurrence_order(p) == 2)
             .filter_map(|k| number(p.s(k)))
             .map(|v| v.text().chars().count())
             .sum::<usize>();
