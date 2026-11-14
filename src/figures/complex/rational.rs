@@ -3,7 +3,7 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Rational(pub i128, pub i128);
 impl Rational {
-    fn new(n: i128, d: i128) -> Option<Self> {
+    pub(super) fn new(n: i128, d: i128) -> Option<Self> {
         if d == 0 || n == i128::MIN || d == i128::MIN {
             return None;
         }
@@ -14,7 +14,7 @@ impl Rational {
         let g = a.max(1);
         Some(Self(n / g * d.signum(), d.abs() / g))
     }
-    fn add(self, r: Self) -> Option<Self> {
+    pub(super) fn add(self, r: Self) -> Option<Self> {
         Self::new(
             self.0
                 .checked_mul(r.1)?
@@ -22,15 +22,15 @@ impl Rational {
             self.1.checked_mul(r.1)?,
         )
     }
-    fn mul(self, r: Self) -> Option<Self> {
+    pub(super) fn mul(self, r: Self) -> Option<Self> {
         let a = Self::new(self.0, r.1)?;
         let b = Self::new(r.0, self.1)?;
         Self::new(a.0.checked_mul(b.0)?, a.1.checked_mul(b.1)?)
     }
-    fn neg(self) -> Option<Self> {
+    pub(super) fn neg(self) -> Option<Self> {
         Self::new(self.0.checked_neg()?, self.1)
     }
-    fn div(self, r: Self) -> Option<Self> {
+    pub(super) fn div(self, r: Self) -> Option<Self> {
         self.mul(Self::new(r.1, r.0)?)
     }
     pub(super) fn value(self) -> f64 {
