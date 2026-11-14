@@ -1194,9 +1194,9 @@ fn zero_to_the_zero_has_no_value_and_is_drawn_open() {
         assert!(matches!(md.side(&z, 1.0), Lim::Val(v, _) if (v - 1.0).abs() < 1e-12), "{pieces}");
         let s = svg(&p);
         let circles: Vec<&str> = s.split("<circle").skip(1).filter(|c| c.contains("data-lim")).collect();
-        // (sin(x)^x also has open circles at (π, 0), (2π, 0), (3π, 0), where it tends to 0 and has no value: the first is at x = 0)
+        // (sin(x)^x at π is 0^π = 0, a value: its only open circle is at (0, 1))
         let opens: Vec<&&str> = circles.iter().filter(|c| c.contains("data-lim=\"open\"")).collect();
-        assert_eq!(opens.len(), if pieces.contains("sin") { 4 } else { 1 }, "{pieces}: open circles: {circles:?}");
+        assert_eq!(opens.len(), 1, "{pieces}: open circles: {circles:?}");
         assert!(opens[0].contains("cx=\"218.80\" cy=\"236.20\""), "{pieces}: the open circle is at (0, 1): {circles:?}");
         assert!(!circles.iter().any(|c| c.contains("data-lim=\"closed\"")), "{pieces}: no filled circle: {circles:?}");
     }
@@ -1245,4 +1245,66 @@ fn labels_with_room_on_the_graph_are_drawn_there() {
     assert!(!warnings(&stair).iter().any(|w| w.contains("under the graph")), "{:?}", warnings(&stair));
     let cot = with(json!({"pieces": "y = 1/tan(x)", "dots": "", "kind_labels": true, "ask_disc": true}));
     for x in ["pi/2", "3pi/2"] { assert!(on_graph(&cot, x), "1/tan x: the hole at {x} is labelled on the graph: {:?}", warnings(&cot)); }
+}
+
+/// One rule for every power, the same in the key and on the graph: a base of 0 has a value only to a positive power
+/// (0^p = 0 for p > 0; 0^0 and 0 to a negative power have none, whether the power is a number or has x in it), and a
+/// negative base to a power with x in it has none. So x^0 is 1 except at 0, where it has no value (a removable
+/// discontinuity, drawn as a hole); (x - 2)^x at 2 is 0^2 = 0; x^x at 0 is 0^0, no value; √x and x^(3/2) at 0 are 0.
+#[test]
+fn powers_of_zero_follow_one_rule() {
+    // (function, a, f(a), left limit, right limit, the discontinuity at a or "")
+    let table: &[(&str, &str, &str, &str, &str, &str)] = &[
+        ("y = x^0", "0", "undef", "1", "1", "removable"),
+        ("y = (x - 2)^0", "2", "undef", "1", "1", "removable"),
+        ("y = (x^2)^0", "0", "undef", "1", "1", "removable"),
+        ("y = x^0", "3", "1", "1", "1", ""),
+        ("y = x^x", "0", "undef", "DNE", "1", ""),
+        ("y = abs(x)^x", "0", "undef", "1", "1", "removable"),
+        ("y = 0^x", "0", "undef", "DNE", "0", ""),
+        ("y = 0^x", "1", "0", "0", "0", ""),
+        ("y = x^(-1)", "0", "undef", "-∞", "∞", "infinite"),
+        ("y = (x - 2)^x", "2", "0", "DNE", "0", ""),
+        ("y = x^(1/(1 - x))", "0", "0", "DNE", "0", ""),
+        ("y = (1 - 1/x)^x", "1", "0", "DNE", "0", ""),
+        ("y = cos(x)^(1/x)", "pi/2", "0", "0", "DNE", ""),
+        ("y = sqrt(x)", "0", "0", "DNE", "0", ""),
+        ("y = x^(3/2)", "0", "0", "DNE", "0", ""),
+        ("y = x^2", "0", "0", "0", "0", ""),
+        ("y = x^3", "0", "0", "0", "0", ""),
+        ("y = sin(x)^x", "pi", "0", "0", "DNE", ""),
+    ];
+    let key = |l: &Lim| match l { Lim::Val(_, t) => t.clone(), Lim::PInf => "∞".into(), Lim::NInf => "-∞".into(), Lim::Undef => "undef".into(), Lim::Dne => "DNE".into(), Lim::Unknown => "?".into(), Lim::Two => "two".into() };
+    let side = |l: &Lim| if *l == Lim::Undef { "DNE".to_string() } else { key(l) };
+    let mut fails = vec![];
+    for (f, a, fa, l, r, kind) in table {
+        let p = with(json!({"pieces": f, "dots": "", "ask_at": a, "ask_disc": true}));
+        let md = model_of(&p);
+        let k = Num::read(a).unwrap().k;
+        let got = (key(&md.value(&k)), side(&md.side(&k, -1.0)), side(&md.side(&k, 1.0)));
+        if got != (fa.to_string(), l.to_string(), r.to_string()) { fails.push(format!("{f} at {a}: got {got:?}, want ({fa}, {l}, {r})")); }
+        let (ds, _) = md.discontinuities();
+        let at = ds.iter().find(|d| (d.x - k.value()).abs() < 1e-9).map_or("", |d| d.kind);
+        if at != *kind { fails.push(format!("{f} at {a}: discontinuity {at:?}, want {kind:?}")); }
+        // the key and the graph agree: a hole is drawn exactly where f(a) has no value but a two-sided limit
+        let s = svg(&p);
+        let holes = s.matches("data-lim=\"open\"").count();
+        if *kind == "removable" && holes == 0 { fails.push(format!("{f}: no hole drawn at {a}")); }
+        if let Lim::Val(y, _) = md.value(&k) {
+            let d = last_drawn(&p);
+            let (x0, _, _, y1, ml, mt, ux, uy) = d.frame;
+            let (cx, cy) = (ml + (k.value() - x0) * ux, mt + (y1 - y) * uy);
+            if d.circles.iter().any(|c| !c.closed && (c.at.0 - cx).abs() < 1.0 && (c.at.1 - cy).abs() < 1.0) { fails.push(format!("{f}: an open circle at ({a}, {fa}), where f has that value")); }
+        }
+    }
+    // a typed domain that includes 0 for x^0: the formula has no value there, so the end is open and a note says so
+    let p = with(json!({"pieces": "y = x^0, x >= 0", "dots": "", "ask_at": "0"}));
+    assert_eq!(model_of(&p).value(&Num::read("0").unwrap().k), Lim::Undef);
+    assert!(warnings(&p).iter().any(|w| w.contains("no value there")), "{:?}", warnings(&p));
+    // 0^0 has no value anywhere: nothing is drawn, and a note says why
+    let p = with(json!({"pieces": "y = 0^0", "dots": "", "ask_at": "1"}));
+    assert_eq!(model_of(&p).value(&Num::read("1").unwrap().k), Lim::Undef);
+    assert!(warnings(&p).iter().any(|w| w.contains("no value anywhere")), "{:?}", warnings(&p));
+    assert!(!svg(&p).contains("polyline"), "0^0 is drawn");
+    assert!(fails.is_empty(), "{}", fails.join("\n"));
 }

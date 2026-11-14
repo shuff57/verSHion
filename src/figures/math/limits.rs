@@ -450,6 +450,13 @@ impl Model {
             if n > MAX_PIECES { notes.push(format!("Only the first {MAX_PIECES} pieces are drawn")); break; }
             if let Some(pc) = read_line(n, li, line, &mut notes) { pieces.push(pc); }
         }
+        // a constant with no value (0^0, 1/0) gives the piece no values anywhere: it is not drawn
+        pieces.retain(|pc| {
+            let Src::Formula { x } = &pc.src else { return true };
+            if x.has_x() || !matches!(cas::exact(x, &K::zero()), cas::EV::Undef) { return true; }
+            notes.push(format!("Piece {} has no value anywhere ({} is undefined: 0^0, 0 to a negative power and 1/0 have no value), so it is not drawn", pc.n, pc.text.trim().trim_start_matches("y =").split(',').next().unwrap_or("").trim()));
+            false
+        });
         // two pieces over the same x would give f two values there
         for i in 0..pieces.len() {
             for j in i + 1..pieces.len() {

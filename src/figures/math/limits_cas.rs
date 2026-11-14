@@ -80,17 +80,17 @@ pub enum AK { Prime(u128), Pi, E, Ln(u128), Fun }
 /// One irreducible factor of a constant: a prime (its power a fraction in (0, 1): a root), π, e, ln of a prime, or a
 /// named value (cos 1, ln π, √(1 + √2)).
 #[derive(Clone, Debug)]
-pub struct Atom { pub key: String, pub val: f64, pub show: String, pub kind: AK }
+pub struct Atom { pub key: String, pub val: f64, pub show: String, pub kind: AK, pub fun: Option<(String, Box<K>)> }
 impl Atom {
-    fn prime(p: u128) -> Atom { Atom { key: format!("a{p:030}"), val: p as f64, show: p.to_string(), kind: AK::Prime(p) } }
-    fn pi() -> Atom { Atom { key: "b".into(), val: PI, show: "\u{3c0}".into(), kind: AK::Pi } }
-    fn e() -> Atom { Atom { key: "c".into(), val: std::f64::consts::E, show: "e".into(), kind: AK::E } }
-    fn ln(p: u128) -> Atom { Atom { key: format!("d{p:030}"), val: (p as f64).ln(), show: format!("ln {p}"), kind: AK::Ln(p) } }
+    fn prime(p: u128) -> Atom { Atom { key: format!("a{p:030}"), val: p as f64, show: p.to_string(), kind: AK::Prime(p), fun: None } }
+    fn pi() -> Atom { Atom { key: "b".into(), val: PI, show: "\u{3c0}".into(), kind: AK::Pi, fun: None } }
+    fn e() -> Atom { Atom { key: "c".into(), val: std::f64::consts::E, show: "e".into(), kind: AK::E, fun: None } }
+    fn ln(p: u128) -> Atom { Atom { key: format!("d{p:030}"), val: (p as f64).ln(), show: format!("ln {p}"), kind: AK::Ln(p), fun: None } }
     fn fun(name: &str, arg: &K, val: f64) -> Atom {
         let a = arg.show();
         let plain = !a.contains([' ', '+', '/', '\u{b7}']) && !a.starts_with('-');
         let show = match name { "sqrt" => format!("\u{221a}({a})"), "cbrt" => format!("\u{221b}({a})"), "exp" => format!("e^({a})"), "inv" => format!("1/({a})"), _ if plain && a.chars().all(|c| c.is_ascii_digit()) => format!("{name} {a}"), _ => format!("{name}({a})") };
-        Atom { key: format!("f{name}[{}]", arg.key()), val, show, kind: AK::Fun }
+        Atom { key: format!("f{name}[{}]", arg.key()), val, show, kind: AK::Fun, fun: Some((name.to_string(), Box::new(arg.clone()))) }
     }
 }
 pub type Mono = Vec<(Atom, Q)>;
@@ -338,15 +338,40 @@ impl K {
         let base = |d: i128| -> Option<K> { Some(match d { 0 => K::zero(), 30 => half.clone(), 45 => r2.clone(), 60 => r3.clone(), 90 => K::one(), _ => return None }) };
         Some(match deg { 0..=90 => base(deg)?, 91..=180 => base(180 - deg)?, 181..=270 => base(deg - 180)?.neg(), _ => base(360 - deg)?.neg() })
     }
+    /// self = pπ + c·arcsin(q) with c = ±1 and p a multiple of 1/2: (p, c, q).
+    fn pi_plus_arcsin(&self) -> Option<(Q, Q, K)> {
+        if self.ap.is_some() { return None; }
+        let mut p = Q::ZERO;
+        let mut rest: Option<(Q, K)> = None;
+        for (q, m) in &self.t {
+            match m.as_slice() {
+                [(a, e)] if a.kind == AK::Pi && *e == Q::ONE => p = *q,
+                [(a, e)] if *e == Q::ONE && a.fun.as_ref().is_some_and(|f| f.0 == "arcsin") && (*q == Q::ONE || *q == Q::i(-1)) && rest.is_none() => rest = Some((*q, (*a.fun.as_ref().unwrap().1).clone())),
+                _ => return None,
+            }
+        }
+        let (c, q) = rest?;
+        p.mul(Q::i(2))?.is_int().then_some((p, c, q))
+    }
+    /// sin and cos of pπ + c·arcsin(q), exactly: sin(arcsin q) = q, cos(arcsin q) = √(1 - q²).
+    fn trig_arcsin(&self) -> Option<(K, K)> {
+        let (p, c, q) = self.pi_plus_arcsin()?;
+        let (sp, cp) = (K::sin_table(p)?, K::sin_table(Q::new(1, 2)?.add(p)?)?);
+        let ca = match K::one().sub(&q.mul(&q)).powq(Q::new(1, 2)?) { KR::Ok(k) => k, _ => return None };
+        let sa = q.mulq(c);
+        Some((sp.mul(&ca).add(&cp.mul(&sa)), cp.mul(&ca).sub(&sp.mul(&sa))))
+    }
     pub fn sin(&self) -> K {
         if let Some(v) = self.ap { return K::approx(v.sin()); }
         if let Some(q) = self.pi_multiple() { if let Some(k) = K::sin_table(q) { return k; } }
+        if let Some((s, _)) = self.trig_arcsin() { return s; }
         if self.sign() == Some(-1) { return self.neg().sin().neg(); }
         K::atom(Atom::fun("sin", self, self.value().sin()))
     }
     pub fn cos(&self) -> K {
         if let Some(v) = self.ap { return K::approx(v.cos()); }
         if let Some(q) = self.pi_multiple() { if let Some(k) = Q::new(1, 2).and_then(|h| h.add(q)).and_then(K::sin_table) { return k; } }
+        if let Some((_, c)) = self.trig_arcsin() { return c; }
         if self.sign() == Some(-1) { return self.neg().cos(); }
         K::atom(Atom::fun("cos", self, self.value().cos()))
     }
@@ -421,8 +446,10 @@ impl K {
                 }
             }
             // sin u over cos u is tan u, cos u over sin u is cot u
-            for (s1, c1, t1) in [("sin ", "cos ", "tan "), ("cos ", "sin ", "cot ")] {
-                while let Some((i, j)) = top.iter().enumerate().find_map(|(i, t)| t.strip_prefix(s1).and_then(|u| bot.iter().position(|b| b.strip_prefix(c1) == Some(u)).map(|j| (i, j)))) {
+            // (sin 1, or sin(1/2) with its argument in brackets)
+            for (s1, c1, t1) in [("sin", "cos", "tan"), ("cos", "sin", "cot")] {
+                let arg = |t: &str, f: &str| t.strip_prefix(f).filter(|u| u.starts_with([' ', '('])).map(|u| u.to_string());
+                while let Some((i, j)) = top.iter().enumerate().find_map(|(i, t)| arg(t, s1).and_then(|u| bot.iter().position(|b| arg(b, c1).as_deref() == Some(u.as_str())).map(|j| (i, j)))) {
                     let u = top[i][s1.len()..].to_string();
                     top[i] = format!("{t1}{u}");
                     bot.remove(j);
@@ -680,7 +707,7 @@ pub fn ev(e: &X, x: f64) -> Option<f64> {
             match const_q(p) {
                 Some(q) if bv < 0.0 => { if q.d % 2 == 0 { return None; } let m = (-bv).powf(q.f()); if q.n % 2 == 0 { m } else { -m } }
                 Some(q) if bv == 0.0 && q <= Q::ZERO => return None,
-                _ => { let pv = ev(p, x)?; if p.has_x() && b.has_x() && bv <= 0.0 { return None; } if bv < 0.0 && pv.fract() != 0.0 { return None; } if bv == 0.0 && pv <= 0.0 { return None; } bv.powf(pv) }
+                _ => { let pv = ev(p, x)?; if p.has_x() && b.has_x() && bv < 0.0 { return None; } if bv < 0.0 && pv.fract() != 0.0 { return None; } if bv == 0.0 && pv <= 0.0 { return None; } bv.powf(pv) }
             }
         }
         X::F(f, a) => {
@@ -712,10 +739,11 @@ pub fn exact(e: &X, a: &K) -> EV {
         X::Pow(b, p) => {
             let bv = get!(b);
             let pv = get!(p);
-            // a base to a power with x in it (x^x, 0^x, sin(x)^x) has a value only where the base is positive: 0^0 is no value
+            // One rule for every power: a base of 0 has a value only to a positive power (0^p = 0 for p > 0; 0^0 and 0 to a
+            // negative power have none, whether the power is a number or has x in it: x^0 and x^x at 0, 0^0 itself), and
+            // a negative base to a power with x in it has none ((x - 2)^x at 2 is 0^2 = 0; x^x at -1 has no value).
+            if bv.sign() == Some(0) { return match pv.sign() { Some(1) => EV::Val(K::zero()), Some(_) => EV::Undef, None => EV::Unk }; }
             if p.has_x() && b.has_x() { match bv.sign() { Some(s) if s > 0 => {} Some(_) => return EV::Undef, None => return EV::Unk } }
-            // 0 to a power with x in it: 0 where the power is positive, no value elsewhere (0^x at 0 is 0^0)
-            if p.has_x() && bv.sign() == Some(0) { return match pv.sign() { Some(1) => EV::Val(K::zero()), Some(_) => EV::Undef, None => EV::Unk }; }
             if let Some(q) = pv.rational() { return match bv.powq(q) { KR::Ok(k) => EV::Val(k), KR::NoVal => EV::Undef, KR::Unk => EV::Unk }; }
             // b^p = e^(p ln b) for b > 0 (e^x: b = e)
             if bv.rational().is_none() && bv.t.len() == 1 && bv.t[0].0 == Q::ONE && bv.t[0].1.len() == 1 && bv.t[0].1[0].0.kind == AK::E && bv.t[0].1[0].1 == Q::ONE { return EV::Val(pv.exp()); }
@@ -1369,6 +1397,8 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
         X::Neg(a) => s_neg(ser_of(a, at, n)),
         X::Inv(a) => s_fun(ser_of(a, at, n), |s| s_inv(s, n), false),
         X::Pow(b, p) => {
+            // (the constant 0 to a constant power: 0 when the power is positive, no value at all otherwise: 0^0)
+            if let Some(q) = const_q(p) { if !b.has_x() && matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)) { return if q > Q::ZERO { Ser(Sr::c(K::zero())) } else { NoVal }; } }
             if let Some(q) = const_q(p) { return s_fun(ser_of(b, at, n), |s| s_powq(s, q, n), false); }
             // 0 to a power with x in it: 0 near where the power is positive, no value where it is negative
             if !b.has_x() && matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)) {
