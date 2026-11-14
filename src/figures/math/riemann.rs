@@ -267,6 +267,12 @@ impl Fmt {
         // (a value that is not 0 is never written as 0: places enough for its first digit)
         // (a value under 10⁻⁹ is float residue of a 0, such as a width at a curve's tip, and stays 0)
         let dec = if x.v.abs() > 1e-9 && x.v.abs() < 0.5 * 10f64.powi(-(dec as i32)) { (-x.v.abs().log10()).ceil().clamp(0.0, 9.0) as usize } else { dec };
+        // (and a small rational that ends within those places is exact: 0.0000005, not ≈ 0.0000005)
+        if let Some(r) = rat && let Some(t) = Rat::int(10).pow(dec as u32).and_then(|p| r.mul(p)) && t.d == 1 {
+            let t = fixed(r.f(), Some(r), dec);
+            let t = if t.contains('.') { t.trim_end_matches('0').trim_end_matches('.').to_string() } else { t };
+            return (t, true);
+        }
         let full = fixed(x.v, rat, dec);
         let full = if full.trim_start_matches('\u{2212}').chars().all(|c| c == '0' || c == '.') { "0".to_string() } else { full };
         (full, false)
@@ -475,10 +481,18 @@ fn singular(src: &str, a: f64, b: f64) -> Option<f64> {
 /// extreme near an end or at a kink is found as well as one in the middle.
 fn extreme(h: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, max: bool) -> Option<(f64, f64)> {
     let s = if max { 1.0 } else { -1.0 };
+    let c = extreme_candidates(h, x0, x1, max)?;
+    c.into_iter().max_by(|a, b| (a.1 * s).total_cmp(&(b.1 * s)))
+}
+/// Every place the greatest (or least) value of h on [x0, x1] may be: the two ends first, then each local top (or
+/// bottom) of 256 samples refined by golden section inside its bracket. None is dropped for a small gain: a top 10⁻⁶ from
+/// an end, 10⁻¹² higher, is still a candidate (the caller decides between candidates, exactly where it can).
+fn extreme_candidates(h: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, max: bool) -> Option<Vec<(f64, f64)>> {
+    let s = if max { 1.0 } else { -1.0 };
     const K: usize = 256;
     let xs: Vec<f64> = (0..=K).map(|i| if i == K { x1 } else { x0 + (x1 - x0) * i as f64 / K as f64 }).collect();
     let ys: Vec<f64> = xs.iter().map(|x| h(*x).map(|y| y * s)).collect::<Option<_>>()?;
-    let mut best = if ys[K] > ys[0] { (x1, ys[K]) } else { (x0, ys[0]) };
+    let mut out = vec![(x0, ys[0] * s), (x1, ys[K] * s)];
     let eps = 1e-12 * ys.iter().fold(1.0f64, |m, v| m.max(v.abs()));
     let g = 0.5 * (5f64.sqrt() - 1.0);
     for i in 0..=K {
@@ -487,18 +501,26 @@ fn extreme(h: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, max: bool) -> Optio
         // (a top: at least its neighbours, and the first of a flat run, so a flat strip is not refined at every sample)
         // (with float noise on a flat run, values within eps of each other count as equal)
         if !(ys[i] >= right - eps && (i == 0 || ys[i] > left + eps)) { continue; }
-        if ys[i] > best.1 + eps { best = (xs[i], ys[i]); }
         let (mut a, mut b) = (xs[i.saturating_sub(1)], xs[(i + 1).min(K)]);
         for _ in 0..100 {
             let (c, d) = (b - g * (b - a), a + g * (b - a));
             if h(c)? * s > h(d)? * s { b = d; } else { a = c; }
         }
         let x = 0.5 * (a + b);
-        let y = h(x)? * s;
-        // (only a real gain over what is found already: float noise never beats an exact end value)
-        if y > best.1 + eps { best = (x, y); }
+        out.push((x, h(x)?));
     }
-    Some((best.0, best.1 * s))
+    Some(out)
+}
+
+/// Which of two exact values is greater: by exact arithmetic where their difference is rational (or 0), else by its
+/// floating-point value where that is far beyond its rounding; None where it cannot be told.
+fn exact_cmp(a: &Ex, b: &Ex) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering::*;
+    let d = a.sub(b)?;
+    if let Some(r) = d.as_rat() { return Some(if r.n > 0 { Greater } else if r.n < 0 { Less } else { Equal }); }
+    let v = d.approx();
+    let scale: f64 = d.0.iter().map(|(m, c)| (c.f() * m.approx()).abs()).fold(0.0, f64::max);
+    (v.abs() > 1e-12 * scale).then(|| if v > 0.0 { Greater } else { Less })
 }
 
 struct Fns { f: Option<String>, g: Option<String>, ast_f: Option<Node>, ast_g: Option<Node> }
@@ -593,16 +615,76 @@ fn sum_name(ru: Rule, n: usize) -> String {
     match ru { Rule::L => format!("L_{n}"), Rule::R => format!("R_{n}"), Rule::M => format!("M_{n}"), Rule::T => format!("T_{n}"), Rule::U => "Upper sum".into(), Rule::Lo => "Lower sum".into() }
 }
 
+/// The greatest (or least) value of h on the strip [x0, x1] and where it is, exact only when it is surely exact: every
+/// candidate (the ends, each refined top) is given its exact place where one is known (an end, a place where the
+/// derivative is exactly 0, a kink); the winner is found by comparing the candidates' values exactly where they come
+/// near each other (a top 10⁻⁶ from an end is 10⁻¹² higher, past what a tolerance sees), and a float-only candidate
+/// that may beat every exact one, or a tie that cannot be told, leaves the value rounded.
+fn pick_extreme(h: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, mx: bool, e0: Option<&Ex>, e1: Option<&Ex>, tree: Option<&Node>, hval: &dyn Fn(f64, Option<&Ex>) -> Option<Val>) -> Option<(f64, Val)> {
+    use std::cmp::Ordering;
+    let s = if mx { 1.0 } else { -1.0 };
+    let cands = extreme_candidates(h, x0, x1, mx)?;
+    let scale = cands.iter().fold(1e-300f64, |m, c| m.max(c.1.abs()));
+    let margin = 1e-14 * scale;
+    // each candidate with its exact place and value, where they are known
+    let mut exact: Vec<(f64, Val)> = vec![];
+    let mut float_best: Option<(f64, f64)> = None;
+    for (k, (x, y)) in cands.iter().enumerate() {
+        let xe = match k { 0 => e0.cloned(), 1 => e1.cloned(), _ => stationary(tree, *x) };
+        let inside = |xe: &Ex| -> bool {
+            // (an exact place inside the closed strip, told exactly against an exact end)
+            let lo = match e0 { Some(e) => exact_cmp(xe, e).map(|o| o != Ordering::Less), None => None }.unwrap_or(xe.approx() >= x0);
+            let hi = match e1 { Some(e) => exact_cmp(xe, e).map(|o| o != Ordering::Greater), None => None }.unwrap_or(xe.approx() <= x1);
+            lo && hi
+        };
+        let ex = xe.filter(|xe| inside(xe)).and_then(|xe| { let cx = xe.approx(); hval(cx.clamp(x0, x1), Some(&xe)).filter(|v| v.ex.is_some()).map(|v| (cx, v)) });
+        match ex {
+            Some(c) => exact.push(c),
+            None => if float_best.is_none_or(|b| y * s > b.1 * s) { float_best = Some((*x, *y)); },
+        }
+    }
+    // the greatest exact candidate, by exact comparison (None: two that cannot be told apart)
+    let mut best: Option<(f64, Val)> = None;
+    let mut undecided = false;
+    for c in exact {
+        let Some(b) = &best else { best = Some(c); continue };
+        let ord = if (c.1.v - b.1.v) * s > margin { Some(Ordering::Greater) } else if (b.1.v - c.1.v) * s > margin { Some(Ordering::Less) } else { exact_cmp(c.1.ex.as_ref()?, b.1.ex.as_ref()?).map(|o| if mx { o } else { o.reverse() }) };
+        match ord { Some(Ordering::Greater) => best = Some(c), Some(_) => {}, None => undecided = true }
+    }
+    let fb = float_best.map(|f| f.1 * s);
+    match best {
+        Some((x, v)) if !undecided && fb.is_none_or(|f| f <= v.v * s + margin) => Some((x, v)),
+        _ => {
+            // rounded: the greatest of all the candidates' values
+            let all = cands.iter().copied().max_by(|a, b| (a.1 * s).total_cmp(&(b.1 * s)))?;
+            Some((all.0, Val::num(all.1)))
+        }
+    }
+}
+
 /// The exact x of an interior extreme: a simple fraction or multiple of π near x where the derivative of the tree is
 /// exactly 0, or where the inside of one of its |…| is exactly 0 (a kink). None when no such place is found: the value
 /// is then written rounded.
 fn stationary(tree: Option<&Node>, x: f64) -> Option<Ex> {
     let tree = tree?;
     let d = sym::deriv(tree);
-    let cands = sym::candidates(x);
-    if let Some(d) = &d && let Some(c) = cands.iter().find(|c| sym::eval(d, c).is_some_and(|v| v.is_zero())) { return Some(c.clone()); }
     let mut args = vec![];
     sym::abs_args_of(tree, &mut args);
+    let mut cands = sym::candidates(x);
+    // a polynomial derivative's (or |…|'s inside's) root near x, polished: exactly for a linear one (x − 1.0000000001),
+    // else by Newton's method and tried as a fraction with a denominator up to 10¹² ((x − 2.000000001)²)
+    for n in d.iter().chain(args.iter()) {
+        let Some(p) = sym::poly(n) else { continue };
+        let deg = p.iter().rposition(|c| !c.is_zero()).unwrap_or(0);
+        if deg == 0 { continue; }
+        if deg == 1 && let Some(r) = (Rat { n: -p[0].n, d: p[0].d }).div(p[1]) { cands.push(Ex::rat(r)); continue; }
+        let f = |t: f64| p.iter().rev().fold(0.0, |acc, c| acc * t + c.f());
+        let df = |t: f64| p.iter().enumerate().skip(1).rev().fold(0.0, |acc, (k, c)| acc * t + k as f64 * c.f());
+        let mut t = x;
+        for _ in 0..60 { let dv = df(t); if dv == 0.0 || !dv.is_finite() { break; } let step = f(t) / dv; t -= step; if step.abs() <= 1e-17 * t.abs().max(1.0) { break; } }
+        if (t - x).abs() <= 1e-6 * x.abs().max(1.0) && let Some(r) = Rat::near(t, 1_000_000_000_000, 1e-15 * t.abs().max(1.0)) { cands.push(Ex::rat(r)); }
+    }
+    if let Some(d) = &d && let Some(c) = cands.iter().find(|c| sym::eval(d, c).is_some_and(|v| v.is_zero())) { return Some(c.clone()); }
     cands.into_iter().find(|c| args.iter().any(|u| sym::eval(u, c).is_some_and(|v| v.is_zero())))
 }
 
@@ -775,16 +857,8 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
             Rule::M => { let c = 0.5 * (x0 + x1); (c, fns.hval(c, mid_ex(i).as_ref(), between).ok_or_else(bad)?) }
             _ => {
                 let mx = ru == Rule::U;
-                let (xs, y) = extreme(&hfun, x0, x1, mx).ok_or_else(bad)?;
-                // (exact only where the extreme's place is exactly known: an end of the strip, a place where the derivative
-                // is exactly 0 or a kink where the inside of |…| is exactly 0; the value is then read at that exact place,
-                // and kept only if it is at least as extreme as the search found)
-                let tol = 1e-9 * (x1 - x0);
-                let xe = if (xs - x0).abs() <= tol { node_ex[i].clone() } else if (xs - x1).abs() <= tol { node_ex[i + 1].clone() } else { stationary(if between { abs_ht.as_ref() } else { ht.as_ref() }, xs) };
-                let scale = 1e-9 * y.abs().max(1.0);
-                let at_exact = xe.as_ref().and_then(|xe| { let cx = xe.approx(); if cx < x0 - tol || cx > x1 + tol { return None; } fns.hval(cx, Some(xe), between).map(|v| (cx, v)) })
-                    .filter(|(_, v)| v.ex.is_some() && if mx { v.v >= y - scale } else { v.v <= y + scale });
-                match at_exact { Some((cx, v)) => (cx, v), None => (xs, Val::num(y)) }
+                let tree = if between { abs_ht.as_ref() } else { ht.as_ref() };
+                pick_extreme(&hfun, x0, x1, mx, node_ex[i].as_ref(), node_ex[i + 1].as_ref(), tree, &|x, xe| fns.hval(x, xe, between)).ok_or_else(bad)?
             }
         };
         let (b, t) = (base_at(xs), top_at(xs));
@@ -1388,7 +1462,6 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         // each strip's height or area (a blank line on the student copy's "Strip heights blank")
         let heights_blank = smode == "Strip heights blank";
         let lab_mode = if heights_blank && student && p.s("strip_labels") == "None" { "Heights" } else { p.s("strip_labels") };
-        if heights_blank && student && kd == Kind::V && p.s("strip_labels") != "Heights" { notes.push("The student copy has a blank on each strip: choose Label each strip with Heights so the key gives the heights".into()); }
         if kd == Kind::V && !no_strips && lab_mode != "None" {
             // Each label sits on its own strip: centred, or moved sideways at most 0.3 of the strip's width (its middle
             // always nearer its own strip's middle than any other's), and all the labels of the figure in one style, so
@@ -1521,14 +1594,14 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                 None => notes.push(format!("x\u{2080}, x\u{2081}, \u{2026}, x\u{2099} have no room under the axis: {}", closer_advice(p, m, &g))),
             }
         }
-        // (a and b last: they have more places to go than the strip labels and x₀ … xₙ)
-        if let Some(c) = ycol { ob.boxes.push(c); }
+        // (a and b last: they have more places to go than the strip labels and x₀ … xₙ; the column of y-axis numbers is
+        // kept clear of them where they have room elsewhere)
         // a and b, each beside its own line
         if p.b("mark_bounds") {
             let crossing_blank = student && crossing(p);
             let names = [("a", &m.a_txt), ("b", &m.b_txt)];
             let size = 15.0 * ls;
-            let mut failed = false;
+            let mut failed: Vec<&str> = vec![];
             for (k, &(xp, yt, yb)) in bound_lines.iter().enumerate() {
                 let (nm, val) = names[k];
                 let s = if crossing_blank { nm.to_string() } else { format!("{nm} = {val}") };
@@ -1546,7 +1619,8 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                 cands.push((xp - wd / 2.0, yb + 5.0 + 0.76 * size));
                 // (under the row of axis numbers when the line ends at the axis, as a point on an axis is marked)
                 // (and a row lower when x₀ … xₙ are there)
-                if p.b("numbers") { for k in 0..2 { let yu = axy + 25.0 + dn_row + 4.0 * ls + 0.76 * size + k as f64 * (1.2 * size + 4.0); for x in [xp - wd / 2.0, xp + 4.0, xp - 4.0 - wd] { cands.push((x, yu)); } } }
+                let mut under_row: Vec<(f64, f64)> = vec![];
+                if p.b("numbers") { for k in 0..3 { let yu = axy + 25.0 + dn_row + 4.0 * ls + 0.76 * size + k as f64 * (1.2 * size + 4.0); for x in [xp - wd / 2.0, xp + 4.0, xp - 4.0 - wd] { cands.push((x, yu)); under_row.push((x, yu)); } } }
                 for dy in [-14.0, 14.0, -28.0, 28.0] {
                     let (l, r) = ((xp - 5.0 - wd, yt + dy + 0.3 * size), (xp + 5.0, yt + dy + 0.3 * size));
                     if left_first { cands.push(l); cands.push(r); } else { cands.push(r); cands.push(l); }
@@ -1578,13 +1652,24 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                 let all: Vec<(f64, f64)> = cands.clone();
                 // (anywhere on the page, the margin under the axis numbers included, but never on a number, line or label)
                 let room = [page[0], page[1], page[2], page[3] + 70.0];
-                let pick = all.iter().copied().find(|(x, y)| { let b = mbox(&s, *x, *y, size); ob.free(&b, &room) && off_strips(&b) }).or_else(|| cands.into_iter().find(|(x, y)| ob.free(&mbox(&s, *x, *y, size), &room)));
+                let off_col = |b: &[f64; 4]| ycol.is_none_or(|c| !rect_hit(b, &c));
+                // (first clear of the y-number column too; then, where nothing else has room, under the row of x-axis
+                // numbers beside the axis even within that column, as long as it touches no number)
+                let pick = all.iter().copied().find(|(x, y)| { let b = mbox(&s, *x, *y, size); ob.free(&b, &room) && off_strips(&b) && off_col(&b) })
+                    .or_else(|| cands.iter().copied().find(|(x, y)| { let b = mbox(&s, *x, *y, size); ob.free(&b, &room) && off_col(&b) }))
+                    .or_else(|| under_row.iter().copied().find(|(x, y)| { let b = mbox(&s, *x, *y, size); ob.free(&b, &room) && off_strips(&b) }))
+                    .or_else(|| under_row.into_iter().find(|(x, y)| ob.free(&mbox(&s, *x, *y, size), &room)));
                 match pick {
                     Some((x, y)) => { let (t, b) = mtext("bound", x, y, size, &s, ink); overlay.push_str(&t); ob.boxes.push(b); }
-                    None => failed = true,
+                    None => failed.push(nm),
                 }
             }
-            if failed { notes.push("The labels of a and b have no room beside their lines: move a or b, or choose Small labels".into()); }
+            // (the note names only the label that has no room)
+            match failed.as_slice() {
+                [] => {}
+                [one] => notes.push(format!("The label of {one} has no room beside its line: move {one}, or choose Small labels")),
+                _ => notes.push("The labels of a and b have no room beside their lines: move a or b, or choose Small labels".into()),
+            }
         }
     }
     // the lines written under the graph
@@ -1631,6 +1716,11 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                 let fin = format!("{worked} {} {st}", eqs(*se && we));
                 if m.sum_symbolic.is_empty() { lines.push(vec![Piece::T(format!("{} = {fin}", m.sum_name))]); }
                 else { lines.push(vec![Piece::T(format!("{} = {}", m.sum_name, m.sum_symbolic))]); lines.push(vec![Piece::T(format!("= {fin}"))]); }
+                // (rounded working said to be rounded: at 0 places "1·(1 + 1 + 1 + 1 + 2) ≈ 4" is worked from 0.6, 0.69 …)
+                if !fm.exact && !(*se && we) {
+                    let places = if fm.dec == 1 { "1 decimal place".to_string() } else { format!("{} decimal places", fm.dec) };
+                    lines.push(vec![Piece::T(format!("(each value rounded to {places}; the sum is worked from the unrounded values)"))]);
+                }
             }
         }
         let integral = format!("\u{222b}_{}^{} {} d{}", lim(&lo_t), lim(&hi_t), m.integrand, m.var);
@@ -1667,8 +1757,9 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                 let (t, e) = fm.text(ev_);
                 // (the difference once: no "= 77/60 − ln 5 = 77/60 − ln 5")
                 let diff = format!("{st} \u{2212} {}", wrap(&neg_par(et.clone())));
-                // (and not rewritten when nothing combines: the error's exact terms are just the sum's and the integral's)
-                let nothing_combines = match (&ev_.ex, m.sum.as_ref().and_then(|s| s.ex.as_ref()), m.exact.as_ref().and_then(|x| x.ex.as_ref())) { (Some(a), Some(b), Some(c)) => a.0.len() == b.0.len() + c.0.len(), _ => false };
+                // (and not rewritten when nothing combines: the error's exact terms are just the sum's and the integral's, neither
+                // of them 0: "−1/2 − 0" and "0 − 9" go on to their value)
+                let nothing_combines = match (&ev_.ex, m.sum.as_ref().and_then(|s| s.ex.as_ref()), m.exact.as_ref().and_then(|x| x.ex.as_ref())) { (Some(a), Some(b), Some(c)) => !b.is_zero() && !c.is_zero() && a.0.len() == b.0.len() + c.0.len(), _ => false };
                 if e && (nothing_combines || t.replace(['(', ')'], "") == diff.replace(['(', ')'], "")) { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff}", m.sum_name))]); }
                 else { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff} {} {t}", m.sum_name, eqs(e)))]); }
             }
@@ -1746,7 +1837,8 @@ fn changes_render(p: &Params, key: &str) -> bool {
     let mut q = p.clone();
     let alts: Vec<Value> = match key {
         "values" => vec![Value::S(if p.s("values") == "Decimals" { "Exact" } else { "Decimals" }.into())],
-        _ => vec![Value::I((p.i("dec") + 1).min(6)), Value::I((p.i("dec") - 1).max(0))],
+        // (every other number of places: dec 3 may write as dec 2 and 4 do, and still differ from dec 0 or 1)
+        _ => (0..=6).filter(|d| *d != p.i("dec")).map(Value::I).collect(),
     };
     let base = render(p);
     let out = alts.into_iter().any(|v| { q.0.insert(key.to_string(), v); render(&q) != base });
@@ -1782,7 +1874,8 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "signed" => reg != Region::Between && kd != Kind::H && dips_below(p) && (drawn || kd == Kind::None),
         // (a table's points are always marked)
         "sample_pts" => drawn && kd != Kind::H && !table,
-        // (the student copy's "Strip heights blank" puts a blank on every strip, whatever the labels are)
+        // (the student copy's "Strip heights blank" puts a blank on every strip, whatever the labels are; no note there
+        // names this control)
         "strip_labels" => drawn && kd != Kind::H && !(!p.b("show_answers") && p.s("student") == "Strip heights blank"),
         "x_marks" => drawn && kd != Kind::H,
         "student" => strips && !p.b("show_answers"),

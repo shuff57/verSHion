@@ -232,10 +232,10 @@ fn student_copy_and_key() {
     assert!(texts(&st, "strip-label").is_empty());
     p.set_b("show_answers", true);
     assert_eq!(texts(&render(&p), "strip-label"), vec!["1", "5/4", "2", "13/4"]);
-    // without height labels the student copy still has the blanks, and the panel asks for Heights for the key
+    // without height labels the student copy still has the blanks (and no note names the hidden label control)
     let q = with(&[("show_answers", bo(false)), ("student", s("Strip heights blank"))]);
     assert_eq!(render(&q).matches(r#"data-rs="blank""#).count(), 4);
-    assert!(warnings(&q).iter().any(|n| n.contains("Heights")));
+    assert!(!warnings(&q).iter().any(|n| n.contains("Label each strip")));
     // crossings found are answers: blank on the student copy, a and b named only
     let bt = with(&[("region", s("Between f(x) and g(x)")), ("f", s("x")), ("g", s("x^2")), ("bounds", s("Where f and g cross")), ("show_answers", bo(false)), ("xmin", fl(-0.5)), ("xmax", fl(1.5))]);
     let sv = render(&bt);
@@ -915,7 +915,7 @@ fn exact_values_are_derived_never_guessed() {
         with(&[("f", s("ln(x + 1)")), ("a", s("0")), ("b", s("3")), ("rule", s("Left")), ("n", i(12))]),
     ] {
         let m = model(&j).unwrap();
-        assert!(!fmt_of(&j).text(m.sum.as_ref().unwrap()).1, "a sum of logarithms of non-integers has no exact form here");
+        assert!(!fmt_of(&j).text(m.sum.as_ref().unwrap()).1, "a sum of logarithms of non-integers has no exact form here: {:?}", fmt_of(&j).text(m.sum.as_ref().unwrap()));
     }
     // ∛: L₃ of x^(1/3) on [−8, 1] = 3(−2 − ∛5 − ∛2), exact
     let c = with(&[("f", s("x^(1/3)")), ("a", s("-8")), ("b", s("1")), ("rule", s("Left")), ("n", i(3)), ("sum_line", bo(true)), ("xmin", fl(-9.0)), ("ymin", fl(-3.0))]);
@@ -1060,6 +1060,93 @@ fn form_expr(t: &str) -> String {
     out
 }
 
+/// A written form read back as a reader of the page would, independently of the writer: juxtaposition and · multiply,
+/// / takes the one factor after it, ^ raises the next number or bracket, √ and ³√ take one number (or e, π, a bracket).
+/// `greedy`: a log takes as its argument every factor set right against it ("ln 2√2" as ln(2√2)); otherwise only the one
+/// number or bracket after it ("ln 2√2" as ln(2)·√2). A form that reads the same both ways has nothing after a log's
+/// argument that could be taken into it.
+pub(super) fn read_form(t: &str, greedy: bool) -> Option<f64> {
+    struct R { c: Vec<char>, i: usize, greedy: bool }
+    impl R {
+        fn peek(&self) -> Option<char> { self.c.get(self.i).copied() }
+        fn peek_past_spaces(&self) -> Option<char> { let mut j = self.i; while self.c.get(j) == Some(&' ') { j += 1; } self.c.get(j).copied() }
+        fn starts_factor(c: char) -> bool { c.is_ascii_digit() || matches!(c, '(' | '\u{3c0}' | 'e' | '\u{221a}' | '^' | 'l') }
+        fn expr(&mut self) -> Option<f64> {
+            let mut neg = false;
+            if self.peek() == Some('\u{2212}') { neg = true; self.i += 1; }
+            let mut v = self.term()?;
+            if neg { v = -v; }
+            loop {
+                let save = self.i;
+                while self.peek() == Some(' ') { self.i += 1; }
+                match self.peek() {
+                    Some('+') => { self.i += 1; while self.peek() == Some(' ') { self.i += 1; } v += self.term()?; }
+                    Some('\u{2212}') => { self.i += 1; while self.peek() == Some(' ') { self.i += 1; } v -= self.term()?; }
+                    _ => { self.i = save; return Some(v); }
+                }
+            }
+        }
+        /// factors multiplied (by juxtaposition, a space before a log or bracket, or ·) and divided left to right
+        fn term(&mut self) -> Option<f64> {
+            let mut v = self.power()?;
+            loop {
+                match self.peek() {
+                    Some('/') => { self.i += 1; v /= self.power()?; }
+                    Some('\u{b7}') => { self.i += 1; v *= self.power()?; }
+                    Some(c) if R::starts_factor(c) => { v *= self.power()?; }
+                    Some(' ') if self.peek_past_spaces().is_some_and(|c| c == 'l' || c == '(') => { while self.peek() == Some(' ') { self.i += 1; } v *= self.power()?; }
+                    _ => return Some(v),
+                }
+            }
+        }
+        fn power(&mut self) -> Option<f64> {
+            let b = self.primary()?;
+            // (^3√ after a factor is a cube root that follows it, not a power)
+            if self.peek() == Some('^') && !(self.c.get(self.i + 1) == Some(&'3') && self.c.get(self.i + 2) == Some(&'\u{221a}')) {
+                self.i += 1;
+                let e = self.tight()?;
+                return Some(b.powf(e));
+            }
+            Some(b)
+        }
+        fn number(&mut self) -> Option<f64> {
+            let st = self.i;
+            while self.peek().is_some_and(|c| c.is_ascii_digit() || c == '.') { self.i += 1; }
+            (self.i > st).then(|| self.c[st..self.i].iter().collect::<String>().parse().ok()).flatten()
+        }
+        /// one number, e, π, or a bracket
+        fn tight(&mut self) -> Option<f64> {
+            match self.peek()? {
+                '(' => { self.i += 1; let v = self.expr()?; (self.peek() == Some(')')).then(|| { self.i += 1; v }) }
+                '\u{3c0}' => { self.i += 1; Some(std::f64::consts::PI) }
+                'e' => { self.i += 1; Some(std::f64::consts::E) }
+                '\u{2212}' => { self.i += 1; Some(-self.tight()?) }
+                _ => self.number(),
+            }
+        }
+        fn primary(&mut self) -> Option<f64> {
+            match self.peek()? {
+                '\u{221a}' => { self.i += 1; Some(self.tight()?.sqrt()) }
+                '^' if self.c.get(self.i + 1) == Some(&'3') && self.c.get(self.i + 2) == Some(&'\u{221a}') => { self.i += 3; Some(self.tight()?.cbrt()) }
+                'l' if self.c.get(self.i + 1) == Some(&'n') => {
+                    self.i += 2;
+                    if self.peek() == Some(' ') { self.i += 1; }
+                    if self.peek() == Some('(') { return Some(self.tight()?.ln()); }
+                    let mut a = self.power()?;
+                    // (greedy: every factor set right against the number goes into the argument)
+                    if self.greedy { while self.peek().is_some_and(|c| R::starts_factor(c) && c != 'l') { a *= self.power()?; } }
+                    Some(a.ln())
+                }
+                _ => self.tight(),
+            }
+        }
+    }
+    let c: Vec<char> = t.replace('\u{2009}', "").chars().collect();
+    let mut r = R { c, i: 0, greedy };
+    let v = r.expr()?;
+    (r.i == r.c.len()).then_some(v)
+}
+
 /// The self-check, tested: every exact form the figure writes (sums, heights, Δx, integrals, errors, areas) over logs, e,
 /// π, roots and rationals, every rule, n from 1 to 100, read back and evaluated, equals the value to 1e-9.
 #[test]
@@ -1069,9 +1156,16 @@ fn every_exact_form_written_evaluates_to_its_value() {
         ("x ln(x)", "1/10", "2"), ("2ln(x)", "1", "5"), ("ln(x)/x", "1", "4"), ("ln(3x)/x", "1", "3"), ("e^(-x)", "0", "3"), ("x^2 e^(-x)", "0", "2"), ("e^(x/2)", "0", "2"),
         ("sin(x)", "0", "pi"), ("cos(x) + sin(x)", "0", "pi"), ("x sin(x)", "0", "pi"), ("sqrt(x)", "0", "4"), ("sqrt(1 - x^2)", "-1", "1"), ("x^(1/3)", "-8", "1"),
         ("1/x", "1", "e"), ("x^2 + 1", "0", "2"), ("abs(x - 1) - abs(x - 2)", "0", "3"),
+        // (the sixth check's families: a root, π or a power of x times a log, squared logs, logs of products, every
+        // spelling of a bound)
+        ("sqrt(x) ln(x)", "1", "4"), ("ln(x)/sqrt(x)", "1", "4"), ("pi ln(x)", "1", "3"), ("x^2 ln(x)", "1", "2"), ("ln(x)^2", "1/2", "2"),
+        ("ln(x)^2", "1", "e"), ("e^x sqrt(x)", "0", "2"), ("ln(pi x)", "1", "3"), ("ln(x^2)", "1", "3"), ("ln(sqrt(x))", "1", "4"), ("log(x)", "1", "10"),
+        ("ln(x)", "1", "e^2"), ("ln(x)", "1/e", "e"), ("sqrt(x)", "0", "sqrt(2)"), ("x e^(-x)", "0", "2.5"), ("e^(2x/3)", "-1", "1.5"), ("sin(x)", "pi/6", "pi"),
+        ("ln(x)", "sqrt(2)", "2"), ("ln(x + 2)", "-1", "0.5"), ("sqrt(x) ln(x)", "1/4", "e"),
     ];
-    let ns: Vec<i64> = (1..=20).chain([24, 30, 36, 40, 48, 60, 72, 80, 96, 100]).collect();
-    let (mut checked, mut bad) = (0, vec![]);
+    let ns: Vec<i64> = (1..=40).chain([48, 60, 72, 80, 96, 100]).collect();
+    let (mut checked, mut bad, mut long_logs) = (0, vec![], vec![]);
+    let t0 = std::time::Instant::now();
     for (fx, a, b) in &fns {
         for rule in RULES {
             for &n in &ns {
@@ -1089,11 +1183,20 @@ fn every_exact_form_written_evaluates_to_its_value() {
                     let got = super::super::eval(&form_expr(&t), 0.0);
                     let ok = got.is_some_and(|g| (g - v.v).abs() <= 1e-9 * v.v.abs().max(1.0));
                     if !ok { bad.push(format!("{fx} {rule} n={n} {what}: {t:?} = {got:?}, value {}", v.v)); }
+                    // read back by a reader that gives ln the one number after it, and by one that gives it every factor
+                    // set against that number: both must give the value (nothing follows a log's argument unseparated)
+                    for greedy in [false, true] {
+                        let r = read_form(&t, greedy);
+                        if !r.is_some_and(|g| (g - v.v).abs() <= 1e-12 * v.v.abs().max(1.0)) { bad.push(format!("{fx} {rule} n={n} {what}: {t:?} read {} as {r:?}, value {}", if greedy { "greedily" } else { "tightly" }, v.v)); }
+                    }
+                    // no log of a prime split out where the logs could be combined, no squared log expanded
+                    if t.matches("ln").count() > 3 || t.contains(" ln 2 ln") || t.contains(" ln 3 ln") { long_logs.push(format!("{fx} {rule} n={n} {what}: {t}")); }
                 }
             }
         }
     }
-    println!("exact forms checked: {checked}, false: {}", bad.len());
+    println!("exact forms checked: {checked}, false: {}, many logs: {} ({:?})", bad.len(), long_logs.len(), t0.elapsed());
+    for l in long_logs.iter().take(30) { println!("  {l}"); }
     assert!(checked > 50_000 && bad.is_empty(), "{checked} checked, {} false:\n{}", bad.len(), bad.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
 }
 
@@ -1151,3 +1254,149 @@ fn fifth_check_cases() {
     }
 }
 
+
+/// A typed decimal or fraction as an exact rational ("2.000002", "1/2", "-3").
+fn rat_of(t: &str) -> Rat {
+    if let Some((a, b)) = t.split_once('/') { return Rat::new(a.trim().parse().unwrap(), b.trim().parse().unwrap()).unwrap(); }
+    let neg = t.starts_with('-');
+    let t = t.trim_start_matches('-');
+    let (w, f) = t.split_once('.').unwrap_or((t, ""));
+    let d = 10i128.pow(f.len() as u32);
+    let n: i128 = format!("{w}{f}").parse().unwrap();
+    Rat::new(if neg { -n } else { n }, d).unwrap()
+}
+
+/// a against b exactly, with no product that could overflow (by their continued fractions).
+fn rat_cmp(a: Rat, b: Rat) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    if (a.n < 0) != (b.n < 0) { return if a.n < 0 { Ordering::Less } else { Ordering::Greater }; }
+    if a.n < 0 { return rat_cmp(Rat { n: -b.n, d: b.d }, Rat { n: -a.n, d: a.d }); }
+    // both ≥ 0: compare whole parts, then the remainders the other way round
+    let (qa, ra, qb, rb) = (a.n / a.d, a.n % a.d, b.n / b.d, b.n % b.d);
+    if qa != qb { return qa.cmp(&qb); }
+    match (ra == 0, rb == 0) {
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        _ => rat_cmp(Rat { n: b.d, d: rb }, Rat { n: a.d, d: ra }),
+    }
+}
+
+/// Upper and lower sums near a strip end, checked exactly: for rational functions of x (polynomials and |x − c|) every
+/// rational height written exact is compared, in exact rational arithmetic, with the true extreme on the closed strip:
+/// the greater (or lesser) of the strip's ends and of the function's critical points and kinks inside it (each listed
+/// here by hand). Bounds typed with up to ten decimals put a turning point 10⁻⁶ … 10⁻⁹ from a strip end.
+#[test]
+fn upper_and_lower_are_exactly_right_near_strip_ends() {
+    type F = Box<dyn Fn(Rat) -> Rat>;
+    let poly = |c: Vec<Rat>| -> F { Box::new(move |x: Rat| c.iter().rev().fold(Rat::zero(), |acc, k| acc.mul(x).unwrap().add(*k).unwrap())) };
+    let r = |t: &str| rat_of(t);
+    let c9 = r("2.000000001");
+    let k10 = r("1.0000000001");
+    let cases: Vec<(&str, F, Vec<Rat>, Vec<(&str, &str)>)> = vec![
+        ("x^2 - 2x", poly(vec![r("0"), r("-2"), r("1")]), vec![r("1")], vec![("0", "2.000002"), ("0", "2.0000002"), ("0", "2"), ("-1", "3.000001"), ("0.999999", "3")]),
+        ("4x - x^2", poly(vec![r("0"), r("4"), r("-1")]), vec![r("2")], vec![("0", "4.000002"), ("0", "4.000000002"), ("0", "4.01"), ("1.999999", "5")]),
+        ("-(x - 2.000000001)^2", Box::new(move |x: Rat| { let d = x.sub(c9).unwrap(); Rat::zero().sub(d.mul(d).unwrap()).unwrap() }), vec![c9], vec![("0", "4"), ("0", "4.000000002"), ("1", "3")]),
+        ("x^3 - 3x", poly(vec![r("0"), r("-3"), r("0"), r("1")]), vec![r("-1"), r("1")], vec![("-2", "2.000002"), ("-2.000002", "2"), ("0", "2.0000004")]),
+        ("abs(x - 1.0000000001)", Box::new(move |x: Rat| { let d = x.sub(k10).unwrap(); if d.n < 0 { Rat { n: -d.n, d: d.d } } else { d } }), vec![k10], vec![("0", "2"), ("0", "3"), ("0.5", "1.5")]),
+    ];
+    let (mut checked, mut rounded, mut bad) = (0, 0, vec![]);
+    for (fx, f, crit, spans) in &cases {
+        for (a, b) in spans {
+            let (ar, br) = (r(a), r(b));
+            for rule in ["Upper", "Lower"] {
+                for n in 1..=60 {
+                    let p = with(&[("f", s(fx)), ("a", s(a)), ("b", s(b)), ("rule", s(rule)), ("n", i(n)), ("xmin", fl(-3.0)), ("xmax", fl(6.0))]);
+                    let Ok(m) = model(&p) else { continue };
+                    let w = br.sub(ar).unwrap().div(Rat::int(n as i128)).unwrap();
+                    let mut sum = Some(Rat::zero());
+                    for (k, st) in m.strips.iter().enumerate() {
+                        let x0 = ar.add(w.mul(Rat::int(k as i128)).unwrap()).unwrap();
+                        let x1 = x0.add(w).unwrap();
+                        let mut best = f(x0);
+                        let better = |a: Rat, b: Rat| { let o = rat_cmp(a, b); if rule == "Upper" { o.is_gt() } else { o.is_lt() } };
+                        for v in std::iter::once(x1).chain(crit.iter().copied().filter(|c| c.sub(x0).unwrap().n >= 0 && x1.sub(*c).unwrap().n >= 0)) { if better(f(v), best) { best = f(v); } }
+                        match st.h.ex.as_ref().and_then(|e| e.as_rat()) {
+                            Some(h) => { checked += 1; if h != best { bad.push(format!("{fx} [{a}, {b}] {rule} n={n} strip {k}: written {} true {}", h.text(), best.text())); } }
+                            None => { rounded += 1; sum = None; }
+                        }
+                        sum = sum.and_then(|q| q.add(best));
+                    }
+                    // the sum written exact is exactly the true sum
+                    if let (Some(q), Some(e)) = (sum, m.sum.as_ref().and_then(|v| v.ex.as_ref()).and_then(|e| e.as_rat())) && let Some(t) = q.mul(w) && t != e { bad.push(format!("{fx} [{a}, {b}] {rule} n={n}: sum written {} true {}", e.text(), t.text())); }
+                }
+            }
+        }
+    }
+    println!("rational heights checked exactly: {checked}, written rounded: {rounded}, false: {}", bad.len());
+    assert!(checked > 3000 && bad.is_empty(), "{checked} checked, {} false:\n{}", bad.len(), bad.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// The sixth checker's cases: a root before a log, extremes 10⁻⁶ from a strip end, logs combined as a book does, the
+/// error line finished, controls shown while some value of them changes the drawing, a and b kept, rounded working said.
+#[test]
+fn sixth_check_cases() {
+    let all = |p: &Params| lines(p).join(" | ");
+    let ht = |m: &Model, k: usize| m.strips[k].h.ex.as_ref().and_then(|e| e.text());
+    // 1. √x ln x, right, 3 strips on [1, 4]: √2 ln 2, √3 ln 3, 4 ln 2, and nowhere "ln 2√2"
+    let p = with(&[("f", s("sqrt(x) ln(x)")), ("a", s("1")), ("b", s("4")), ("rule", s("Right")), ("n", i(3)), ("strip_labels", s("Heights")), ("sum_line", bo(true)), ("key_line", bo(true)), ("show_dx", bo(true)), ("xmin", fl(-0.5)), ("xmax", fl(5.0)), ("ymin", fl(-1.0)), ("ymax", fl(4.0))]);
+    let svg = render(&p);
+    assert_eq!(texts(&svg, "strip-label"), vec!["\u{221a}2 ln 2", "\u{221a}3 ln 3", "4 ln 2"]);
+    let t = all(&p);
+    assert!(!t.contains("ln 2\u{221a}") && !t.contains("ln 3\u{221a}") && t.contains("\u{221a}2 ln 2"), "{t}");
+    // ln x/√x, trapezoid: (√2/4) ln 2 style, no "(ln 2√2)/2"
+    let p = with(&[("f", s("ln(x)/sqrt(x)")), ("a", s("1")), ("b", s("4")), ("rule", s("Trapezoid")), ("n", i(3)), ("sum_line", bo(true)), ("key_line", bo(true)), ("xmax", fl(5.0))]);
+    let t = all(&p);
+    assert!(!t.contains("\u{221a}2)") && !t.contains("ln 2\u{221a}") && !t.contains("ln 3\u{221a}"), "{t}");
+    // 2. a turning point 10⁻⁶ from a strip end
+    let m = model(&with(&[("f", s("x^2 - 2x")), ("a", s("0")), ("b", s("2.000002")), ("rule", s("Lower")), ("n", i(2))])).unwrap();
+    assert_eq!(ht(&m, 0).as_deref(), Some("\u{2212}1"));
+    let m = model(&with(&[("f", s("4x - x^2")), ("a", s("0")), ("b", s("4.000002")), ("rule", s("Upper")), ("n", i(2)), ("xmax", fl(5.0))])).unwrap();
+    assert_eq!(ht(&m, 0).as_deref(), Some("4"));
+    let m = model(&with(&[("f", s("abs(x - 1.0000000001)")), ("a", s("0")), ("b", s("2")), ("rule", s("Lower")), ("n", i(2))])).unwrap();
+    assert_eq!(ht(&m, 1).as_deref(), Some("0"));
+    assert_eq!(m.sum.as_ref().unwrap().ex.as_ref().and_then(|e| e.text()).as_deref(), Some("1/10000000000"));
+    let m = model(&with(&[("f", s("x e^(-x)")), ("a", s("0.999999")), ("b", s("3")), ("rule", s("Upper")), ("n", i(1))])).unwrap();
+    assert_eq!(ht(&m, 0).as_deref(), Some("1/e"));
+    // (10⁻⁹ away the two values cannot be told apart in floating point: rounded, never a false "=")
+    let m = model(&with(&[("f", s("x e^(-x)")), ("a", s("0.999999999")), ("b", s("3")), ("rule", s("Upper")), ("n", i(1))])).unwrap();
+    assert!(ht(&m, 0).is_none_or(|t| t == "1/e"), "{:?}", ht(&m, 0));
+    // 3. squared logs and logs of the typed ratios
+    let m = model(&with(&[("f", s("ln(x)^2")), ("a", s("1/2")), ("b", s("2")), ("rule", s("Lower")), ("n", i(3))])).unwrap();
+    assert_eq!(m.sum.as_ref().unwrap().ex.as_ref().and_then(|e| e.text()).as_deref(), Some("(1/2)(ln(3/2))^2"));
+    let m = model(&with(&[("f", s("ln(x)^2")), ("a", s("1")), ("b", s("2")), ("rule", s("Left")), ("n", i(3))])).unwrap();
+    assert_eq!(ht(&m, 2).as_deref(), Some("(ln(5/3))^2"));
+    let m = model(&with(&[("f", s("x^2 ln(x)")), ("a", s("1")), ("b", s("2")), ("rule", s("Midpoint")), ("n", i(2))])).unwrap();
+    let t = m.sum.as_ref().unwrap().ex.as_ref().and_then(|e| e.text()).unwrap();
+    assert!(t.contains("ln(5/4)") && t.contains("ln(7/4)") && !t.contains("ln 2"), "{t}");
+    // ∫₁⁴ ln x dx = 8 ln 2 − 3; ln x / x has its top 1/e at x = e
+    let p = with(&[("f", s("ln(x)")), ("a", s("1")), ("b", s("4")), ("exact_line", bo(true)), ("integral_line", bo(true)), ("xmax", fl(5.0))]);
+    assert!(all(&p).contains("= 8 ln 2 \u{2212} 3"), "{}", all(&p));
+    let m = model(&with(&[("f", s("ln(x)/x")), ("a", s("1")), ("b", s("4")), ("rule", s("Upper")), ("n", i(3))])).unwrap();
+    assert_eq!(ht(&m, 1).as_deref(), Some("1/e"));
+    // 4. the error line finished
+    let p = with(&[("f", s("x^(1/3)")), ("a", s("-1")), ("b", s("1")), ("rule", s("Left")), ("xmin", fl(-2.0)), ("xmax", fl(2.0)), ("ymin", fl(-2.0)), ("ymax", fl(2.0)), ("sum_line", bo(true)), ("integral_line", bo(true)), ("exact_line", bo(true)), ("error_line", bo(true)), ("key_line", bo(true)), ("show_dx", bo(true))]);
+    let t = all(&p);
+    assert!(t.contains("exact = \u{2212}1/2 \u{2212} 0 = \u{2212}1/2"), "{t}");
+    // 5. dec 3 shown while dec 0 or 1 would change the drawing; Label each strip with shown where the note names it
+    let p = with(&[("f", s("x^2")), ("values", s("Decimals")), ("dec", i(3)), ("sum_line", bo(true)), ("strip_labels", s("Heights"))]);
+    assert!(relevant("dec", &p));
+    // (on the "Strip heights blank" copy the strip-label control is hidden, and no note names it or changes with it)
+    let p = with(&[("show_answers", bo(false)), ("student", s("Strip heights blank"))]);
+    assert!(!relevant("strip_labels", &p) && !warnings(&p).iter().any(|w| w.contains("Label each strip with")), "{:?}", warnings(&p));
+    let mut q = p.clone(); q.set_s("strip_labels", "Heights");
+    assert_eq!(warnings(&q), warnings(&p));
+    // a = 0 kept at Medium beside the axis under the numbers (x³ − 3x, upper, 6 strips, everything on)
+    let p = with(&[("f", s("x^3 - 3x")), ("a", s("0")), ("b", s("2")), ("n", i(6)), ("rule", s("Upper")), ("label_size", s("Medium")), ("strip_labels", s("Heights")), ("x_marks", bo(true)), ("sample_pts", bo(true)), ("sum_line", bo(true)), ("show_dx", bo(true)), ("exact_line", bo(true)), ("integral_line", bo(true)), ("error_line", bo(true)), ("key_line", bo(true))]);
+    for (lo, hi) in [(-3.0, 3.0), (-1.0, 6.0)] {
+        let mut q = p.clone(); q.0.insert("ymin".into(), fl(lo)); q.0.insert("ymax".into(), fl(hi));
+        let svg = render(&q);
+        assert_eq!(tags(&svg, r#"<text data-rs="bound""#).len(), 2, "y {lo}…{hi}: {:?}", warnings(&q));
+        assert!(!warnings(&q).iter().any(|w| w.contains("of a") || w.contains("a and b")), "{:?}", warnings(&q));
+        assert!(label_faults(&svg).is_empty(), "{:?}", label_faults(&svg));
+    }
+    // 6. rounded working said to be rounded; a small exact decimal written with =
+    let p = with(&[("f", s("ln(x + 3)")), ("a", s("-1")), ("b", s("2")), ("rule", s("Right")), ("n", i(5)), ("values", s("Decimals")), ("dec", i(0)), ("sum_line", bo(true)), ("show_dx", bo(true))]);
+    assert!(all(&p).contains("rounded to 0 decimal places"), "{}", all(&p));
+    assert_eq!(Fmt { exact: false, dec: 0 }.text(&Val::rat(Rat::new(1, 2_000_000).unwrap())), ("0.0000005".to_string(), true));
+}
