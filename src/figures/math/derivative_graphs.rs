@@ -185,7 +185,10 @@ pub(crate) fn pieces(text: &str, name: &str, what: &str) -> Result<Vec<Piece>, S
         let which = if rows.len() > 1 { format!("Piece {} of {what}", k + 1) } else { what.to_string() };
         if main.len() > 300 { return Err(format!("{which} is too long to draw")); }
         let Some(e) = sym::parse(&main) else { return Err(format!("{which} cannot be read: {}", main.trim())) };
-        let (mut d1, mut d2, mut d3) = { let d1 = sym::deriv(&e); let d2 = sym::deriv(&d1); let d3 = sym::deriv(&d2); (d1, d2, d3) };
+        // (√(u²) is |u| and ln(e^u) is u: the same function, with its corner and its exact values; each derivative is put in its
+        // plain form too (e^(ln x)/x is 1), so a derivative that is 0 or constant is not rounding noise)
+        let e = sym::simplify(&e, false);
+        let (mut d1, mut d2, mut d3) = { let d1 = sym::simplify(&sym::deriv(&e), true); let d2 = sym::simplify(&sym::deriv(&d1), true); let d3 = sym::simplify(&sym::deriv(&d2), true); (d1, d2, d3) };
         // a rational function: its derivatives worked exactly in lowest terms (stable beside a hole, where the derivative of
         // the typed form cancels badly), and its holes
         let rat: Option<Vec<exact::Rat>> = exact::as_rat(&e).and_then(|r0| { let r1 = r0.deriv()?; let r2 = r1.deriv()?; let r3 = r2.deriv()?; Some(vec![r0, r1, r2, r3]) });
@@ -272,6 +275,10 @@ impl Model {
         self.work.set(self.work.get() + 1);
         match self.fexpr(pi, n) { Some(e) => { let v = sym::ev(e, x); v.is_finite().then_some(v) } None => self.integral(x) }
     }
+    /// A bound on the rounding in dp(pi, n, x) (0 for f worked out from f′, whose error is the integral's own).
+    pub(crate) fn dp_err(&self, pi: usize, n: usize, x: f64) -> f64 {
+        match self.fexpr(pi, n) { Some(e) => sym::ev_err(e, x).1, None => 0.0 }
+    }
     /// f at an exact x, derived exactly (None where it cannot be).
     pub(crate) fn exact_f(&self, x: &XV) -> Option<XV> {
         match &self.mode {
@@ -309,7 +316,7 @@ impl Model {
             return ((0..4).map(|n| self.fexpr(pi, n).cloned()).collect(), (0..4).map(|n| self.rat_of(pi, n).cloned()).collect::<Option<Vec<_>>>().or_else(|| if matches!(self.mode, Mode::Fp { .. }) { p.rat.as_ref().map(|r| { let mut v = vec![r[0].clone()]; v.extend(r.iter().cloned()); v }) } else { None }));
         }
         let base = exact::specialize(&p.e, mid);
-        let d1 = sym::deriv(&base); let d2 = sym::deriv(&d1); let d3 = sym::deriv(&d2);
+        let d1 = sym::simplify(&sym::deriv(&base), true); let d2 = sym::simplify(&sym::deriv(&d1), true); let d3 = sym::simplify(&sym::deriv(&d2), true);
         let rats = exact::as_rat(&base).and_then(|r0| { let r1 = r0.deriv()?; let r2 = r1.deriv()?; let r3 = r2.deriv()?; Some(vec![r0, r1, r2, r3]) });
         match self.mode {
             Mode::F => (vec![Some(base), Some(d1), Some(d2), Some(d3)], rats),
@@ -435,14 +442,25 @@ pub(crate) struct Event { pub x: f64, pub k: EvK }
 /// The zeros of g in (a, b) (crossing and touching) and the points where it has no value or jumps (a pole, a corner,
 /// a jump), with the stretches where it is zero throughout and the gaps where it has no value.
 pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Option<f64>, kinks: &[f64], a: f64, b: f64) -> (Vec<Event>, Vec<(f64, f64)>, Vec<(f64, f64)>) {
+    find_events_e(g, &|_| 0.0, dg, kinks, a, b)
+}
+/// How far past its rounding bound a value must be before its sign is trusted.
+pub(crate) const NOISE_MARGIN: f64 = 16.0;
+/// find_events with a bound on the rounding in each value of g (`ge`): a value within NOISE_MARGIN times its bound has no
+/// sign that can be trusted, so it is never one side of a change of sign (2 sin x cos x − sin 2x is 0, not a thousand
+/// zeros). A touching zero (g = 0 with no change of sign, tan²x at 0) is found where dg changes sign and g there is 0 to
+/// within its rounding, never where g is merely small.
+pub(crate) fn find_events_e(g: &dyn Fn(f64) -> Option<f64>, ge: &dyn Fn(f64) -> f64, dg: &dyn Fn(f64) -> Option<f64>, kinks: &[f64], a: f64, b: f64) -> (Vec<Event>, Vec<(f64, f64)>, Vec<(f64, f64)>) {
     let n = 2000;
     let xs: Vec<f64> = (0..=n).map(|i| a + (b - a) * i as f64 / n as f64).collect();
     let vs: Vec<Option<f64>> = xs.iter().map(|&x| g(x)).collect();
+    let es: Vec<f64> = xs.iter().map(|&x| ge(x)).collect();
+    let indet = |v: f64, e: f64| v == 0.0 || v.abs() <= NOISE_MARGIN * e;
+    let det_at = |x: f64| -> Option<f64> { let v = g(x)?; (!indet(v, ge(x))).then_some(v) };
     let mut mags: Vec<f64> = vs.iter().flatten().map(|v| v.abs().min(1e9)).collect();
     mags.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let s = mags.get(mags.len() * 3 / 4).copied().unwrap_or(1.0).max(1e-12);
-    // (a sample is zero only when it is exactly 0: smallness is never a zero; e^(1/x)'s tiny slope is not one)
-    let zero = |v: f64| v == 0.0;
+    // (a sample is zero when it is 0 to within its rounding: smallness is never a zero; e^(1/x)'s tiny slope is not one)
     let span = b - a;
     let mut ev: Vec<Event> = vec![];
     let mut flats: Vec<(f64, f64)> = vec![];
@@ -450,9 +468,9 @@ pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Op
     // stretches of exact zeros (a piece that is 0, or underflow): reported, never a zero of their own
     let mut i = 0;
     while i <= n {
-        if vs[i].is_some_and(zero) {
+        if vs[i].is_some_and(|v| indet(v, es[i])) {
             let st = i;
-            while i <= n && vs[i].is_some_and(zero) { i += 1; }
+            while i <= n && vs[i].is_some_and(|v| indet(v, es[i])) { i += 1; }
             if i - st >= 4 { flats.push((xs[st], xs[i - 1])); }
         } else { i += 1; }
     }
@@ -461,7 +479,7 @@ pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Op
     for k in 0..=n {
         match vs[k] {
             None => last = None,
-            Some(v) if zero(v) => {}
+            Some(v) if indet(v, es[k]) => {}
             Some(v) => {
                 if let Some((j, pv)) = last {
                     if pv.signum() != v.signum() && ev.len() <= 3 * MAX_MARKS {
@@ -471,11 +489,11 @@ pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Op
                         for _ in 0..80 {
                             let m = 0.5 * (lo + hi);
                             if m <= lo || m >= hi { break; }
-                            match g(m) { None => { undef = Some(m); break; } Some(w) if w == 0.0 => { root = Some(m); break; } Some(w) => if w.signum() == sl { lo = m } else { hi = m } }
+                            match g(m) { None => { undef = Some(m); break; } Some(w) if indet(w, ge(m)) => { root = Some(m); break; } Some(w) => if w.signum() == sl { lo = m } else { hi = m } }
                         }
                         // (exactly 0 over a stretch between the two signs: the middle of that stretch)
                         let root = root.map(|m| {
-                            let edge = |nz: f64, z: f64| { let (mut a1, mut b1) = (nz, z); for _ in 0..80 { let c = 0.5 * (a1 + b1); if c == a1 || c == b1 { break; } if g(c).is_some_and(|w| w != 0.0) { a1 = c } else { b1 = c } } b1 };
+                            let edge = |nz: f64, z: f64| { let (mut a1, mut b1) = (nz, z); for _ in 0..80 { let c = 0.5 * (a1 + b1); if c == a1 || c == b1 { break; } if det_at(c).is_some() { a1 = c } else { b1 = c } } b1 };
                             0.5 * (edge(lo, m) + edge(hi, m))
                         });
                         // landing where g has no value (a pole's huge values): the middle of that stretch
@@ -496,7 +514,31 @@ pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Op
             }
         }
     }
-    let _ = dg;
+    // a touching zero: dg changes sign (g has a turning point) between two samples where g keeps its sign, and g at the turning
+    // point is 0 to within its rounding (tan²x at 0, e^x − 1 − x at 0); a turning point where g is small but not 0 to within
+    // its rounding (x² + 10⁻⁸) is none, and underflow, where dg is 0 too, gives no change of sign of dg
+    let mut prev: Option<(f64, f64)> = None;
+    for k in 0..=n {
+        let x = xs[k];
+        let Some(d) = dg(x) else { prev = None; continue };
+        if d == 0.0 { continue; }
+        if let Some((px, pd)) = prev {
+            // (g's own sign is trusted on both sides: a turning point inside rounding noise is none)
+            if pd.signum() != d.signum() && ev.len() <= 3 * MAX_MARKS && det_at(px).is_some() && det_at(x).is_some() {
+                let (mut lo, mut hi) = (px, x);
+                for _ in 0..200 { let m = 0.5 * (lo + hi); if m <= lo || m >= hi { break; } match dg(m) { Some(w) if w == 0.0 => { lo = m; hi = m; break; } Some(w) if w.signum() == pd.signum() => lo = m, Some(_) => hi = m, None => break } }
+                let c = 0.5 * (lo + hi);
+                // (g at the turning point is 0 to within its rounding, and is 0 there as the bracket closes in: at the two ends
+                // of the narrowed bracket g is no bigger)
+                if let Some(v) = g(c) {
+                    let near0 = v == 0.0 || v.abs() <= NOISE_MARGIN * ge(c).max(1e-300);
+                    let tiny = v.abs() <= 1e-12 * s;
+                    if near0 && tiny && !ev.iter().any(|e| (e.x - c).abs() < 1e-6 * span.max(1e-9)) { ev.push(Event { x: c, k: EvK::Zero }); }
+                }
+            }
+        }
+        prev = Some((x, d));
+    }
     // a pole that keeps its sign (1/x² between two samples): a spike of |g| that runs off as it is narrowed down
     for k in 1..n {
         let (Some(l), Some(m), Some(r)) = (vs[k - 1], vs[k], vs[k + 1]) else { continue };
@@ -563,6 +605,17 @@ pub(crate) fn find_events(g: &dyn Fn(f64) -> Option<f64>, dg: &dyn Fn(f64) -> Op
 
 // ───────────────────────── the analysis ─────────────────────────
 
+/// An exact x where `e` is exactly 0, beside a zero found numerically at x: a small fraction or a multiple of π/12 at which
+/// exact arithmetic gives 0 (cosh′ at 0, sin³x″ at π, 1 − x^(−2/3) at ±1). A candidate where e is not exactly 0 is no
+/// answer, so this never guesses.
+pub(crate) fn exact_zero_near(e: &Ex, x: f64) -> Option<XV> {
+    let tol = 1e-6 * (1.0 + x.abs());
+    let mut cands: Vec<String> = vec![];
+    for q in 1..=12i64 { let n = (x * q as f64).round(); if (n / q as f64 - x).abs() < tol && n.abs() < 1e9 { cands.push(format!("({}/{q})", n as i64)); } }
+    for q in [1i64, 2, 3, 4, 6, 12] { let n = (x / PI * q as f64).round(); if n != 0.0 && (n * PI / q as f64 - x).abs() < tol && n.abs() < 1e6 { cands.push(format!("({}/{q})*pi", n as i64)); } }
+    cands.into_iter().find_map(|t| { let c = exact::of_text(&t)?; exact::ev(e, &c)?.is_zero().then_some(c) })
+}
+
 /// A point's exact value (derived, never read off a float) and its form as typed, when it has them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Pv { pub ex: Option<XV>, pub show: Option<String> }
@@ -591,9 +644,19 @@ pub(crate) struct Analysis {
     pub fpp_signs: Vec<Span1>,
     /// x where f itself breaks (no value, a pole, a jump)
     pub breaks: Vec<f64>,
+    /// what could not be analysed, and why
+    pub notes: Vec<String>,
 }
 
-fn sign_at(g: &dyn Fn(f64) -> Option<f64>, a: f64, b: f64) -> Option<i8> {
+fn sign_at(g: &dyn Fn(f64) -> Option<f64>, ge: &dyn Fn(f64) -> f64, a: f64, b: f64) -> Option<i8> {
+    // the sign where it can be trusted (past its rounding): tanh″ in the quotient form is rounding beyond |x| ≈ 20 and has no
+    // value past the overflow, but is plainly negative on (0, 20)
+    let (mut tp, mut tn) = (0, 0);
+    for k in 1..240 {
+        let x = a + (b - a) * k as f64 / 240.0;
+        if let Some(v) = g(x) { if v != 0.0 && v.abs() > NOISE_MARGIN * ge(x) { if v > 0.0 { tp += 1 } else { tn += 1 } } }
+    }
+    if tp + tn > 0 { return Some(if tp >= tn { 1 } else { -1 }); }
     let mut pos = 0; let mut neg = 0; let mut z = 0;
     let vals: Vec<f64> = (1..12).filter_map(|k| g(a + (b - a) * k as f64 / 12.0)).collect();
     let s = vals.iter().fold(0.0f64, |m, v| m.max(v.abs()));
@@ -658,7 +721,8 @@ impl Model {
             // (a stretch with no value is a gap of the domain only where f has no value there; where its values overflow, as e^(1/x)
             // just right of 0, it is the domain still)
             let overflow = |x: f64| self.piece_at(x).is_some_and(|pi| sym::ev(&self.pieces[pi].e, x).is_infinite());
-            for (l, r) in &fgaps { if overflow(0.5 * (l + r)) { continue; } for e in [*l, *r] { if e > a + tol && e < b - tol { cuts.push((e, match_x(e))); } } }
+            // (tested away from the middle too: e^(1/x²) overflows on (−0.0376, 0.0376) but has no value at 0 itself)
+            for (l, r) in &fgaps { if [0.5, 0.25, 0.75, 0.1, 0.9].iter().any(|t| overflow(l + (r - l) * t)) { continue; } for e in [*l, *r] { if e > a + tol && e < b - tol { cuts.push((e, match_x(e))); } } }
             for k in kinks { if k > a + tol && k < b - tol { cuts.push((k, match_x(k))); } }
         }
         cuts.sort_by(|p, q| p.0.partial_cmp(&q.0).unwrap());
@@ -675,6 +739,7 @@ impl Model {
         let mut marks: [Vec<Mark>; 3] = [vec![], vec![], vec![]];
         let mut seg_piece: Vec<Option<usize>> = vec![];
         let mut seg_forms: Vec<(Vec<Option<Ex>>, Option<Vec<exact::Rat>>)> = vec![];
+        let mut unanalysed: Vec<String> = vec![];
         for w in cuts.windows(2) {
             let ((l, lv), (r, rv)) = (&w[0], &w[1]);
             let mid = 0.5 * (l + r);
@@ -688,7 +753,8 @@ impl Model {
                 let dg = |x: f64| self.dp(pi, n + 1, x);
                 // a derivative that is 0 throughout the piece (a constant piece; a straight one for f″)
                 let sxn = sx.get(n).cloned().flatten();
-                let srn = sr.as_ref().and_then(|r| r.get(n).cloned());
+                // (a derivative that is a rational function, though f is not one (arctan x: 1/(1 + x²)), is worked exactly too)
+                let srn = sr.as_ref().and_then(|r| r.get(n).cloned()).or_else(|| sxn.as_ref().and_then(exact::as_rat));
                 let flat = sxn.as_ref().is_some_and(|e| !sym::has_x(e) && exact::ev(e, &XV::default()).is_some_and(|v| v.is_zero()));
                 let flat = flat || srn.as_ref().is_some_and(|q| q.n.zero_p());
                 if flat { spans[n].push(Span1 { a: *l, b: *r, sign: 0, av: lv.clone(), bv: rv.clone() }); continue; }
@@ -713,10 +779,20 @@ impl Model {
                     }
                 }
                 let inner = (l + 1e-9 * (1.0 + l.abs()), r - 1e-9 * (1.0 + r.abs()));
-                let (evs0, flats0, _) = find_events(&g, &dg, &[], inner.0, inner.1);
+                let ge = |x: f64| self.dp_err(pi, n, x);
+                let (evs0, flats0, _) = find_events_e(&g, &ge, &dg, &[], inner.0, inner.1);
+                // 0 to within its rounding over the whole stretch: constant (straight, for f″) where it is proved 0 for every x;
+                // otherwise its sign cannot be told there, and the figure says so rather than guess
+                let covered: f64 = flats0.iter().map(|(p, q)| q - p).sum();
+                if evs0.is_empty() && covered >= 0.95 * (inner.1 - inner.0) {
+                    if sxn.as_ref().is_some_and(exact::identically_zero) { spans[n].push(Span1 { a: *l, b: *r, sign: 0, av: lv.clone(), bv: rv.clone() }); continue; }
+                    let nm = if n == 1 { "f\u{2032}" } else { "f\u{2033}" };
+                    let note = format!("{nm} is 0 to within rounding from x = {} to x = {} (too small to tell its sign) and could not be shown to be exactly 0 there, so f is not analysed there", fmt(*l, 3), fmt(*r, 3));
+                    if !unanalysed.contains(&note) { unanalysed.push(note); }
+                    continue;
+                }
                 // (samples that are 0 in a row, from cancellation, are one zero; zeros closer than the tolerance are one)
                 let mut evs: Vec<Event> = evs0;
-                let _ = &flats0;
                 evs.sort_by(|p, q| p.x.partial_cmp(&q.x).unwrap());
                 let mut merged: Vec<Event> = vec![];
                 for e in evs { if let Some(l) = merged.last_mut() { if (e.x - l.x).abs() < 1e-6 * span.max(1e-9) { if e.k == EvK::Undef { *l = e; } continue; } } merged.push(e); }
@@ -726,6 +802,9 @@ impl Model {
                 let mut here: Vec<Mark> = vec![];
                 for e in evs.iter() {
                     let pv = match (&exact_z, e.k) { (Some(z), EvK::Zero) => z.iter().find(|c| (c.f() - e.x).abs() < 1e-6 * (1.0 + e.x.abs())).cloned().map(Pv::of).unwrap_or_default(), _ => match_x(e.x) };
+                    // (a zero found numerically at a small fraction or a table angle, where the derivative is exactly 0 by exact
+                    // arithmetic: that exact value; never a guess)
+                    let pv = if pv.ex.is_none() && e.k == EvK::Zero { sxn.as_ref().and_then(|ex| exact_zero_near(ex, e.x)).map(Pv::of).unwrap_or(pv) } else { pv };
                     let x = pv.ex.as_ref().map(|v| v.f()).unwrap_or(e.x);
                     here.push(Mark { x, k: e.k, pv });
                 }
@@ -739,7 +818,7 @@ impl Model {
                 ends.sort_by(|p, q| p.0.partial_cmp(&q.0).unwrap());
                 for e2 in ends.windows(2) {
                     if e2[1].0 - e2[0].0 < tol { continue; }
-                    if let Some(sg) = sign_at(&g, e2[0].0, e2[1].0) { spans[n].push(Span1 { a: e2[0].0, b: e2[1].0, sign: sg, av: e2[0].1.clone(), bv: e2[1].1.clone() }); }
+                    if let Some(sg) = sign_at(&g, &ge, e2[0].0, e2[1].0) { spans[n].push(Span1 { a: e2[0].0, b: e2[1].0, sign: sg, av: e2[0].1.clone(), bv: e2[1].1.clone() }); }
                 }
                 marks[n].extend(here);
             }
@@ -793,18 +872,22 @@ impl Model {
         let (fp_signs, fpp_signs) = (join(1), join(2));
         let sign_beside = |sp: &[Span1], x: f64, left: bool| sp.iter().find(|q| if left { (q.b - x).abs() < 1e-7 * (1.0 + x.abs()) } else { (q.a - x).abs() < 1e-7 * (1.0 + x.abs()) }).map(|q| q.sign);
         // (concavity does not change at a zero of f″ with the same sign on both sides, where f is unbroken (sin x + sin²x/2
-        // at 3π/2, x⁴ at 0): the intervals run on through it; the sign chart keeps its 0)
+        // at 3π/2, x⁴ at 0): the intervals run on through it; the sign chart keeps its 0. Never through a point where f′ or
+        // f″ has no value: a cusp or corner (x^(2/3) at 0, |sin x| at π) is where f′ jumps, and f is concave on each side only)
+        let undef_at = |n: usize, x: f64| marks[n].iter().any(|m| m.k == EvK::Undef && (m.x - x).abs() < 1e-7 * (1.0 + x.abs()));
+        let zero_at = |x: f64| marks[2].iter().any(|m| m.k == EvK::Zero && (m.x - x).abs() < 1e-7 * (1.0 + x.abs()));
         let mut conc: Vec<Span1> = Vec::new();
         for q in &fpp_signs {
             if let Some(l) = conc.last_mut() {
                 let x = q.a;
-                if l.sign == q.sign && q.sign != 0 && (l.b - x).abs() < 1e-9 * (1.0 + x.abs()) && !breaks.iter().any(|z| (z - x).abs() < 1e-7 * (1.0 + x.abs())) && self.f(x).is_some() {
+                if l.sign == q.sign && q.sign != 0 && (l.b - x).abs() < 1e-9 * (1.0 + x.abs()) && !breaks.iter().any(|z| (z - x).abs() < 1e-7 * (1.0 + x.abs())) && self.f(x).is_some()
+                    && zero_at(x) && !undef_at(1, x) && !undef_at(2, x) {
                     l.b = q.b; l.bv = q.bv.clone(); continue;
                 }
             }
             conc.push(q.clone());
         }
-        let mut an = Analysis { breaks: breaks.clone(), mono: fp_signs.clone(), conc, fp_signs, fpp_signs, ..Default::default() };
+        let mut an = Analysis { breaks: breaks.clone(), mono: fp_signs.clone(), conc, fp_signs, fpp_signs, notes: unanalysed, ..Default::default() };
         // ── critical points (f has a value and no break), extrema, inflection points ──
         let yv_of = |x: f64, pv: &Pv| -> (f64, Pv) {
             let y = self.f(x).unwrap_or(f64::NAN);
@@ -817,6 +900,19 @@ impl Model {
             let ext = match (sign_beside(&an.fp_signs, m.x, true), sign_beside(&an.fp_signs, m.x, false)) { (Some(1), Some(-1)) => Ext::Max, (Some(-1), Some(1)) => Ext::Min, _ => Ext::Neither };
             an.crit.push(Crit { x: m.x, y, undef: m.k == EvK::Undef, ext, xv: m.pv.clone(), yv });
         }
+        // a jump where f has a value is a critical point too (f′ has none there), and a local maximum or minimum where f(x) is
+        // above or below every value near it (x² for x < 1/2, 1 − x after: f(1/2) = 1/2, a local maximum)
+        for &x in &breaks {
+            let Some(v) = self.f(x) else { continue };
+            let vals: Vec<f64> = [1e-3, 1e-5, 1e-7].iter().flat_map(|k| { let h = k * (1.0 + x.abs()); [self.f(x - h), self.f(x + h)] }).flatten().collect();
+            if vals.len() < 6 { continue; }
+            let t = 1e-12 * (1.0 + v.abs());
+            let ext = if vals.iter().all(|w| *w <= v + t) { Ext::Max } else if vals.iter().all(|w| *w >= v - t) { Ext::Min } else { Ext::Neither };
+            let xv = cuts.iter().find(|c| (c.0 - x).abs() < 1e-7 * (1.0 + x.abs())).map(|c| c.1.clone()).unwrap_or_default();
+            let (y, yv) = yv_of(x, &xv);
+            an.crit.push(Crit { x, y, undef: true, ext, xv, yv });
+        }
+        an.crit.sort_by(|p, q| p.x.partial_cmp(&q.x).unwrap());
         for m in &marks[2] {
             if is_break(m.x) || self.f(m.x).is_none() || !self.continuous_at(m.x) { continue; }
             let (l, r) = (sign_beside(&an.fpp_signs, m.x, true), sign_beside(&an.fpp_signs, m.x, false));
@@ -1416,6 +1512,7 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     let an = an.filter(|a| {
         let many = a.crit.len() > MAX_MARKS || a.fpp_marks.len() > MAX_MARKS || a.fp_marks.len() > MAX_MARKS;
         if many { notes.push(format!("{name} has more than {MAX_MARKS} critical or inflection points in this window, too many to mark: narrow the window")); }
+        for n in &a.notes { if !notes.contains(n) { notes.push(n.clone()); } }
         !many
     });
 
@@ -1971,6 +2068,29 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
             }
         }
     }
+    // a point where f′ or f″ has no value though its two sides meet (|sin x|″ at 0, π and 2π: f′ jumps there): an open circle
+    // on that graph at every such point alike (the grid's own reader finds one only where a sample lands on it exactly)
+    if let (Some(m), Some(an)) = (&model, &an) {
+        let circles_in = |svg: &str| -> Vec<(f64, f64)> { svg.split("<circle").skip(1).filter_map(|c| { let num = |k: &str| c.split(&format!("{k}=\"")).nth(1)?.split('"').next()?.parse::<f64>().ok(); Some((num("cx")?, num("cy")?)) }).collect() };
+        for (k, pn) in panels.iter().enumerate() {
+            let have = circles_in(&panel_svgs[k]);
+            for fi in fis_of(pn.kind) {
+                if fi == 0 || !shows(p, fi) { continue; }
+                for mk in if fi == 1 { &an.fp_marks } else { &an.fpp_marks } {
+                    let x = mk.x;
+                    if mk.k != EvK::Undef || an.breaks.iter().any(|q| (q - x).abs() < 1e-7 * (1.0 + x.abs())) { continue; }
+                    let h = 1e-7 * (1.0 + x.abs());
+                    let (Some(l), Some(r)) = (m.d(fi, x - h), m.d(fi, x + h)) else { continue };
+                    if (l - r).abs() > 1e-5 * (1.0 + l.abs()) { continue; }
+                    let v = 0.5 * (l + r);
+                    if !inside(pn, x, v) { continue; }
+                    let (cx, cy) = (pn.sx(x), pn.sy(v));
+                    if have.iter().any(|(hx, hy)| (hx - (cx - pn.ox)).abs() < 3.0 && (hy - (cy - pn.oy)).abs() < 3.0) { continue; }
+                    marks.push_str(&format!(r##"<circle cx="{cx:.2}" cy="{cy:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="hole"/>"##, if print { ink } else { cols[fi] }));
+                }
+            }
+        }
+    }
     // corners and jumps of f on the f′ panel are marked open above; a jump of f itself is drawn with its dots
     if let (Some(m), Some(an)) = (&model, &an) {
         if let Some(kf) = panel_of(0) {
@@ -2138,7 +2258,9 @@ pub(crate) fn win_pv(p: &Params, key: &str) -> Pv {
     let v = if key == "xmax" && p.f("xmax") <= p.f("xmin") { p.f("xmin") + 1.0 } else { p.f(key) };
     let q = exact::Q::of_f64(v);
     let pi = p.s("xunits") == "Multiples of \u{3c0}";
-    Pv { ex: q.and_then(|q| exact::of_text(&format!("({}/{}){}", q.n, q.d, if pi { "*pi" } else { "" }))), show: None }
+    // (an end typed as a decimal, 0.1 or 0.9999995, is written as typed, and values there in decimals)
+    let show = (!pi && v.fract() != 0.0).then(|| fmt_full(v, 12)).map(|t| t.replace('-', "\u{2212}"));
+    Pv { ex: q.and_then(|q| exact::of_text(&format!("({}/{}){}", q.n, q.d, if pi { "*pi" } else { "" }))), show }
 }
 
 /// One candidate for an absolute extremum on the closed interval: an end or a critical point inside, with its value.
@@ -2162,6 +2284,7 @@ pub(crate) fn absolute(p: &Params, m: &Model, an: &Analysis) -> Result<AbsRes, S
     // continuous on [a, b]: a value at every point, ends included, and no break inside (an end of the domain, as √(4 − x²)
     // at ±2, is fine)
     let cont = m.f(a.v).is_some() && m.f(b.v).is_some() && (1..400).all(|i| m.f(a.v + span * i as f64 / 400.0).is_some()) && !an.breaks.iter().any(|x| *x > a.v + 1e-9 && *x < b.v - 1e-9);
+    if (0..=400).all(|i| m.f(a.v + span * i as f64 / 400.0).is_none()) { return Err(format!("{name} has no values on [{}, {}], so it has no absolute maximum or minimum there: choose an interval where {name} is defined", a.show, b.show)); }
     if !cont { return Err(format!("{name} is not continuous on [{}, {}], so it need not have an absolute maximum and minimum there: choose an interval where it has no break", a.show, b.show)); }
     let end = |t: &Typed, text: &str| { let xe = exact::of_text(text); let ye = xe.as_ref().and_then(|x| m.exact_f(x)); AbsCand { x: t.v, xv: Pv { ex: xe, show: Some(t.show.clone()) }, y: ye.as_ref().map(|v| v.f()).unwrap_or_else(|| m.f(t.v).unwrap()), yv: Pv { ex: ye, show: None }, end: true, hi: false, lo: false } };
     let mut cands = vec![end(&a, p.s("abs_a")), end(&b, p.s("abs_b"))];
@@ -2206,14 +2329,36 @@ pub(crate) fn key_lines(p: &Params, m: &Model, an: &Analysis, win: (f64, f64)) -
     for q in &flats {
         let before = an.mono.iter().find(|o| (o.b - q.a).abs() < 1e-7 * (1.0 + q.a.abs())).map(|o| o.sign);
         let after = an.mono.iter().find(|o| (o.a - q.b).abs() < 1e-7 * (1.0 + q.b.abs())).map(|o| o.sign);
-        let yv = q.av.ex.as_ref().and_then(|x| m.exact_f(x));
+        // (the constant derived at any exact point of the stretch where it can be: 2 sin x cos x − sin 2x at π/6 is 0)
+        let inside: Vec<XV> = { let mut c: Vec<String> = vec![];
+            for k in -48..=48 { for (den, pi) in [(1, false), (2, false), (6, true), (4, true)] { c.push(format!("({k}/{den}){}", if pi { "*pi" } else { "" })); } }
+            c.iter().filter_map(|t| exact::of_text(t)).filter(|x| x.f() > q.a && x.f() < q.b).collect() };
+        let yv = q.av.ex.as_ref().and_then(|x| m.exact_f(x)).or_else(|| q.bv.ex.as_ref().and_then(|x| m.exact_f(x))).or_else(|| inside.iter().find_map(|x| m.exact_f(x)));
         let y = m.f(0.5 * (q.a + q.b)).unwrap_or(f64::NAN);
         let fv = nb(eq_text(&format!("{name}(x)"), &vt(y, &Pv { ex: yv, show: None })));
         let (ca, cb) = (vt(q.a, &q.av), vt(q.b, &q.bv));
-        v.push(match (before, after) {
-            (Some(-1), Some(1)) => format!("Every point of [{ca},\u{a0}{cb}] is a local minimum ({fv}), and every point inside it a local maximum too ({name} is constant there)"),
-            (Some(1), Some(-1)) => format!("Every point of [{ca},\u{a0}{cb}] is a local maximum ({fv}), and every point inside it a local minimum too ({name} is constant there)"),
-            _ => format!("Every point inside ({ca},\u{a0}{cb}) is both a local maximum and a local minimum ({fv}: {name} is constant there)"),
+        let _ = (before, after);
+        // each end inside the window: a local minimum where f is no lower on either side near it, a maximum where no higher
+        let end_kind = |x: f64| -> Option<Ext> {
+            if x <= win.0 + 1e-9 * (1.0 + x.abs()) || x >= win.1 - 1e-9 * (1.0 + x.abs()) { return None; }
+            let v = m.f(x)?;
+            let vals: Vec<f64> = [1e-3, 1e-5, 1e-7].iter().flat_map(|k| { let h = k * (1.0 + x.abs()); [m.f(x - h), m.f(x + h)] }).flatten().collect();
+            if vals.len() < 6 { return None; }
+            let t = 1e-12 * (1.0 + v.abs());
+            let (lo, hi) = (vals.iter().all(|w| *w >= v - t), vals.iter().all(|w| *w <= v + t));
+            if lo && !hi { Some(Ext::Min) } else if hi && !lo { Some(Ext::Max) } else { None }
+        };
+        let (ka, kb) = (end_kind(q.a), end_kind(q.b));
+        let word = |k: Ext| if k == Ext::Min { "minimum" } else { "maximum" };
+        v.push(match (ka, kb) {
+            (Some(Ext::Min), Some(Ext::Min)) => format!("Every point of [{ca},\u{a0}{cb}] is a local minimum ({fv}), and every point inside it a local maximum too ({name} is constant there)"),
+            (Some(Ext::Max), Some(Ext::Max)) => format!("Every point of [{ca},\u{a0}{cb}] is a local maximum ({fv}), and every point inside it a local minimum too ({name} is constant there)"),
+            _ => {
+                let mut t = format!("Every point inside ({ca},\u{a0}{cb}) is both a local maximum and a local minimum ({fv}: {name} is constant there)");
+                let ends: Vec<String> = [(ka, &ca), (kb, &cb)].iter().filter_map(|(k, c)| k.map(|k| nb(format!("x = {c} is a local {}", word(k))))).collect();
+                if !ends.is_empty() { t.push_str(&format!(";  {} too", ends.join(" and "))); }
+                t
+            }
         });
     }
     v.push(format!("Inflection points: {}", list(an.infl.iter().map(|q| coord(q.x, &q.xv, q.y, &q.yv)).collect())));

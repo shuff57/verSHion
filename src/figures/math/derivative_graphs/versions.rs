@@ -372,3 +372,17 @@ fn render_list() {
         std::fs::write(format!("{dir}/{name}.png"), crate::figures::to_png(&bl.svg, 1.0).unwrap()).unwrap();
     }
 }
+
+#[test]
+#[ignore]
+fn show_ident() {
+    // VERSHION_DG_F=<f>: f′ and f″ in the figure's form, and whether each is proved 0 everywhere
+    let Ok(f) = crate::env_var("VERSHION_DG_F") else { return };
+    let e = sym::simplify(&sym::parse(&f).unwrap(), false);
+    let d1 = sym::simplify(&sym::deriv(&e), true);
+    let d2 = sym::simplify(&sym::deriv(&d1), true);
+    for d in [&d1, &d2] {
+        println!("{} -> {}", sym::print(d), exact::identically_zero(d));
+        for k in 0..4 { let x = exact::of_text(&format!("({k}/12)*pi")).unwrap(); println!("  at {k}pi/12: {:?}", exact::ev(d, &x).map(|v| exact::text(&v))); }
+    }
+}

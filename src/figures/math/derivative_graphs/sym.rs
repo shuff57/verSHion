@@ -206,6 +206,8 @@ fn ev_with(e: &Ex, x: f64, odd: bool) -> f64 {
         Fun(f, a) => {
             let a = r(a);
             match f {
+                // (the figure's own values: ln 0 has no value, so e^(ln x) has none at 0)
+                F::Ln if odd && a == 0.0 => f64::NAN, F::Log if odd && a == 0.0 => f64::NAN,
                 F::Sqrt => a.sqrt(), F::Abs => a.abs(), F::Ln => a.ln(), F::Log => a.log10(), F::Exp => a.exp(),
                 F::Sin => a.sin(), F::Cos => a.cos(), F::Tan => a.tan(),
                 F::Sec => 1.0 / a.cos(), F::Csc => 1.0 / a.sin(), F::Cot => 1.0 / a.tan(),
@@ -405,3 +407,108 @@ pub(crate) fn size(e: &Ex) -> usize {
     }
 }
 
+
+// ───────────────────────── plain identities, and the rounding in a value ─────────────────────────
+
+/// The plain identities that keep a function's domain: √(u²) = |u|, ln(e^u) = u. With `deriv` (a derivative, whose
+/// domain is f's own), also e^(ln u) = u (u > 0 wherever ln u has a value), u − u = 0 and u/u = 1. A derivative typed in
+/// a roundabout form (√(x²), e^(ln x)) is then exact where its rounding would be noise.
+pub(crate) fn simplify(e: &Ex, deriv: bool) -> Ex {
+    let s = |a: &Ex| simplify(a, deriv);
+    match e {
+        Num(_) | X | Pi | E => e.clone(),
+        Neg(a) => neg(s(a)),
+        Add(a, b) => add(s(a), s(b)),
+        Sub(a, b) => { let (a, b) = (s(a), s(b)); if deriv && a == b { Num(0.0) } else { sub(a, b) } }
+        Mul(a, b) => mul(s(a), s(b)),
+        Div(a, b) => { let (a, b) = (s(a), s(b)); if deriv && a == b && has_x(&a) { Num(1.0) } else { div(a, b) } }
+        Pow(a, b) => {
+            let (a, b) = (s(a), s(b));
+            if deriv && a == E { if let Fun(F::Ln, u) = &b { return (**u).clone(); } }
+            pow(a, b)
+        }
+        LogB(b, a) => LogB(bx(s(b)), bx(s(a))),
+        Fun(f, a) => {
+            let a = s(a);
+            match (f, &a) {
+                (F::Sqrt, Pow(u, k)) if val(k) == Some(2.0) => Fun(F::Abs, u.clone()),
+                (F::Ln, Fun(F::Exp, u)) => (**u).clone(),
+                (F::Ln, Pow(base, u)) if **base == E => (**u).clone(),
+                (F::Exp, Fun(F::Ln, u)) if deriv => (**u).clone(),
+                _ => Fun(*f, bx(a)),
+            }
+        }
+    }
+}
+
+/// The value as the figure evaluates it, with a bound on the rounding in it: each operation's own rounding (half a unit
+/// in the last place of its result, taken as a whole unit) and the rounding of its operands carried through it, as the
+/// operation's slope magnifies them. A value smaller than its bound has no sign that can be trusted.
+pub(crate) fn ev_err(e: &Ex, x: f64) -> (f64, f64) {
+    const U: f64 = f64::EPSILON;
+    let r = |a: &Ex| ev_err(a, x);
+    let (v, err) = match e {
+        Num(c) => (*c, c.abs() * U),
+        X => (x, 0.0),
+        Pi => (PI, PI * U),
+        E => (EULER, EULER * U),
+        Neg(a) => { let (va, ea) = r(a); (-va, ea) }
+        Add(a, b) => { let ((va, ea), (vb, eb)) = (r(a), r(b)); let v = va + vb; (v, ea + eb + v.abs() * U) }
+        Sub(a, b) => { let ((va, ea), (vb, eb)) = (r(a), r(b)); let v = va - vb; (v, ea + eb + v.abs() * U) }
+        Mul(a, b) => { let ((va, ea), (vb, eb)) = (r(a), r(b)); let v = va * vb; (v, va.abs() * eb + vb.abs() * ea + ea * eb + v.abs() * U) }
+        Div(a, b) => {
+            let ((va, ea), (vb, eb)) = (r(a), r(b));
+            if vb == 0.0 { (f64::NAN, f64::INFINITY) } else {
+                let v = va / vb;
+                (v, if vb.abs() <= eb { f64::INFINITY } else { (ea + v.abs() * eb) / (vb.abs() - eb) + v.abs() * U })
+            }
+        }
+        Pow(a, b) => {
+            let ((u, ea), (c, eb)) = (r(a), r(b));
+            let v = if u < 0.0 && !has_x(b) { match odd_root(c) { Some((p, _)) => { let m = (-u).powf(c); if p % 2 == 0 { m } else { -m } } None => u.powf(c) } } else { u.powf(c) };
+            let err = if !has_x(b) {
+                if u == 0.0 { if c > 0.0 { ea.powf(c) } else { f64::INFINITY } } else { v.abs() * c.abs() * ea / u.abs() + v.abs() * U * (1.0 + c.abs()) }
+            } else if u == 0.0 { f64::INFINITY } else {
+                let l = u.abs().ln();
+                v.abs() * (l.abs() * eb + c.abs() * ea / u.abs()) + v.abs() * U * (1.0 + (c * l).abs())
+            };
+            (v, err)
+        }
+        LogB(b, a) => {
+            let ((va, ea), (vb, eb)) = (r(a), r(b));
+            let (la, lb) = (va.ln(), vb.ln());
+            let v = la / lb;
+            (v, if lb == 0.0 { f64::INFINITY } else { (ea / va.abs() + v.abs() * eb / vb.abs()) / lb.abs() + v.abs() * U })
+        }
+        Fun(f, a) => {
+            let (va, ea) = r(a);
+            let v = match f {
+                F::Ln | F::Log if va == 0.0 => f64::NAN,
+                F::Sqrt => va.sqrt(), F::Abs => va.abs(), F::Ln => va.ln(), F::Log => va.log10(), F::Exp => va.exp(),
+                F::Sin => va.sin(), F::Cos => va.cos(), F::Tan => va.tan(),
+                F::Sec => 1.0 / va.cos(), F::Csc => 1.0 / va.sin(), F::Cot => 1.0 / va.tan(),
+                F::Asin => va.asin(), F::Acos => va.acos(), F::Atan => va.atan(),
+                F::Asec => super::super::grid_b7::arc_recip("arcsec", va),
+                F::Acsc => super::super::grid_b7::arc_recip("arccsc", va),
+                F::Acot => super::super::grid_b7::arc_recip("arccot", va),
+            };
+            // the slope of the outer function at va carries the operand's rounding through
+            let slope = match f {
+                F::Sqrt => if va > 0.0 { 0.5 / va.sqrt() } else { return (v, ea.sqrt() + v.abs() * U) },
+                F::Abs => 1.0,
+                F::Sin => va.cos().abs(),
+                F::Cos => va.sin().abs(),
+                F::Tan | F::Sec => { let c = va.cos(); (1.0 + va.sin().abs()) / (c * c) }
+                F::Csc | F::Cot => { let s = va.sin(); (1.0 + va.cos().abs()) / (s * s) }
+                F::Asin | F::Acos => 1.0 / (1.0 - va * va).abs().sqrt(),
+                F::Atan | F::Acot => 1.0 / (1.0 + va * va),
+                F::Asec | F::Acsc => 1.0 / (va.abs() * (va * va - 1.0).abs().sqrt()),
+                F::Ln => 1.0 / va.abs(),
+                F::Log => 1.0 / (va.abs() * std::f64::consts::LN_10),
+                F::Exp => v.abs(),
+            };
+            (v, slope * ea + v.abs() * U)
+        }
+    };
+    (v, if err.is_nan() { f64::INFINITY } else { err })
+}

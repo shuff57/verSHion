@@ -384,18 +384,23 @@ fn piecewise_functions_with_flat_stretches_corners_and_jumps() {
     // 3. x^2 (x < 1), 2 - x (x >= 1): a corner maximum at (1, 1), a minimum at (0, 0)
     let p = pw("x^2, x < 1; 2 - x, x >= 1", -2.0, 4.0);
     has(&key_of(&p), &["Critical points of f: x = 0, x = 1 (f′ does not exist)", "Local maximum: (1, 1);  local minimum: (0, 0)", &format!("Increasing on (0, 1);  decreasing on ({M}2, 0) and (1, 4)")]);
-    // 4. a jump: x + 1 (x < 0), x - 1 (x >= 0): no critical point, increasing on both sides of the break, f' has no value at 0
+    // 4. a jump: x + 1 (x < 0), x - 1 (x >= 0): increasing on both sides of the break, f' has no value at 0. f(0) = -1 is in the
+    //    domain with no f' there, so 0 is a critical point, and a local minimum by the definition (f(0) = -1 is below every
+    //    value near it: x + 1 near 1 on the left, x - 1 above -1 on the right)
     let p = pw("x + 1, x < 0; x - 1, x >= 0", -3.0, 3.0);
     let an = an_of(&p);
-    assert!(an.crit.is_empty() && an.breaks.len() == 1 && an.breaks[0].abs() < 1e-12);
+    assert!(an.breaks.len() == 1 && an.breaks[0].abs() < 1e-12);
+    assert!(an.crit.len() == 1 && an.crit[0].x.abs() < 1e-12 && an.crit[0].undef && an.crit[0].ext == Ext::Min, "{:?}", an.crit);
+    has(&key_of(&p), &["Critical points of f: x = 0 (f′ does not exist)", &format!("local minimum: (0, {M}1)")]);
     assert_eq!(chart(&an, 1).iter().map(|c| c.1).collect::<Vec<_>>(), vec!["und."]);
     has(&key_of(&p), &[&format!("Increasing on ({M}3, 0) and (0, 3)")]);
-    // 5. x^2 (x <= 1), 3 - x on (1, 2], 1 (x > 2): a jump at 1 (1, then 2), a corner at 2 (f = 1 both sides, f' -1 then 0)
+    // 5. x^2 (x <= 1), 3 - x on (1, 2], 1 (x > 2): a jump at 1 (1, then 2), a corner at 2 (f = 1 both sides, f' -1 then 0);
+    //    f(1) = 1 has no f′, so 1 is critical, and no extremum (values below it on the left, above it on the right)
     let p = pw("x^2, x <= 1; 3 - x, 1 < x <= 2; 1, x > 2", -2.0, 4.0);
     let an = an_of(&p);
     assert_eq!(an.breaks.len(), 1);
     assert!((an.breaks[0] - 1.0).abs() < 1e-12);
-    has(&key_of(&p), &["Critical points of f: x = 0, x = 2 (f′ does not exist)", &format!("Increasing on (0, 1);  decreasing on ({M}2, 0) and (1, 2);  constant on [2, 4]"), "Every point inside (2, 4) is both a local maximum and a local minimum (f(x) = 1"]);
+    has(&key_of(&p), &["Critical points of f: x = 0, x = 1 (f′ does not exist), x = 2 (f′ does not exist)", &format!("Increasing on (0, 1);  decreasing on ({M}2, 0) and (1, 2);  constant on [2, 4]"), "Every point inside (2, 4) is both a local maximum and a local minimum (f(x) = 1"]);
     // 6. -1 (x < 0), x^2 - 1 (x >= 0): f' = 0 then 2x: 0 from both sides at 0 (a critical point); f'' = 0 then 2 (no value at 0)
     let p = pw("-1, x < 0; x^2 - 1, x >= 0", -2.0, 2.0);
     let an = an_of(&p);

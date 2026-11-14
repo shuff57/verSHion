@@ -327,6 +327,8 @@ pub(crate) fn text(x: &Xv) -> String {
     // the whole number first, as a book writes 3 + π and 1 − √2
     let mut order = terms.clone();
     order.sort_by_key(|(b, _)| (*b != ONE, b.s, b.pi, b.e));
+    // (a positive term leads: π/4 − 1/2 and e − 5/2, as a book writes them, never −1/2 + π/4)
+    if order[0].1.n < 0 { if let Some(j) = order.iter().position(|(_, c)| c.n > 0) { let t = order.remove(j); order.insert(0, t); } }
     for (i, (b, c)) in order.iter().enumerate() {
         let c = c.mul(scale).unwrap_or(*c);
         let t = term(Q { n: c.n.abs(), d: c.d }, b);
@@ -961,4 +963,39 @@ pub(crate) fn specialize(e: &Ex, x: f64) -> Ex {
         LogB(a, b) => LogB(s(a), s(b)),
         other => other.clone(),
     }
+}
+
+/// The degree of a trigonometric polynomial (sums and products of sin(kx + c), cos(kx + c) with k whole, and constants),
+/// when the expression is one.
+fn trig_degree(e: &Ex) -> Option<u32> {
+    use Ex::*;
+    use super::sym::F;
+    match e {
+        Num(_) | Pi | E => Some(0),
+        X => None,
+        Neg(a) => trig_degree(a),
+        Add(a, b) | Sub(a, b) => Some(trig_degree(a)?.max(trig_degree(b)?)),
+        Mul(a, b) => Some(trig_degree(a)? + trig_degree(b)?),
+        Div(a, b) if !super::sym::has_x(b) => trig_degree(a),
+        Pow(a, b) => { let k = super::sym::konst(b)?; (k >= 0.0 && k.fract() == 0.0 && k <= 12.0).then_some(())?; Some(trig_degree(a)? * k as u32) }
+        Fun(F::Sin | F::Cos, u) => {
+            if !super::sym::has_x(u) { return Some(0); }
+            let (k, _) = linear_x(u)?;
+            (k.d == 1 && k.n.abs() <= 12).then_some(k.n.unsigned_abs() as u32)
+        }
+        _ => if super::sym::has_x(e) { None } else { Some(0) },
+    }
+}
+/// Whether an expression is 0 for every x, proved: a rational function whose numerator is the zero polynomial, or a
+/// trigonometric polynomial of degree d that is exactly 0 at 2d + 1 or more distinct angles of one period (it has at most 2d
+/// zeros there unless it is 0 throughout). The angles are the 16 multiples of π/6 and π/4 in [0, 2π), where every sin kx
+/// and cos kx has an exact value, so degree up to 7 is decided. 2 sin x cos x − sin 2x and cos²x − sin²x − cos 2x are 0;
+/// sin 8x is not decided (and not claimed).
+pub(crate) fn identically_zero(e: &Ex) -> bool {
+    if let Some(r) = as_rat(e) { return r.n.zero_p(); }
+    let Some(d) = trig_degree(e) else { return false };
+    let mut angles: Vec<String> = (0..12).map(|k| format!("({k}/6)*pi")).collect();
+    angles.extend([1, 3, 5, 7].iter().map(|k| format!("({k}/4)*pi")));
+    if 2 * d as usize + 1 > angles.len() { return false; }
+    angles.iter().all(|t| of_text(t).and_then(|x| ev(e, &x)).is_some_and(|v| v.is_zero()))
 }
