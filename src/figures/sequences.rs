@@ -1148,7 +1148,7 @@ fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
     let count = d.a.len();
     let width = canvas_width(p, count);
     let (left, right) = (150.0, width - 85.0);
-    let top = 160.0 + g as f64 * (plot_height(p) + 90.0);
+    let top = 160.0 + g as f64 * (plot_height(p) + 160.0);
     let bottom = top + plot_height(p);
     let (lo, hi) = (p.f("from"), p.f("to"));
     if hi <= lo {
@@ -1748,7 +1748,7 @@ fn render(p: &Params) -> String {
     let split = p.s("layout") == "Two aligned graphs";
     let numberline = p.s("layout") == "Number line";
     let plot_bottom = if split {
-        320.0 + 2.0 * plot_height(p)
+        390.0 + 2.0 * plot_height(p)
     } else {
         230.0 + plot_height(p)
     };
@@ -1794,7 +1794,7 @@ fn render(p: &Params) -> String {
     );
     let graphs = if split { 2 } else { 1 };
     for g in 0..graphs {
-        let top = 160.0 + g as f64 * (plot_height(p) + 90.0);
+        let top = 160.0 + g as f64 * (plot_height(p) + 160.0);
         let bottom = top + plot_height(p);
         let py = |v: f64| bottom - (v - lo) / (hi - lo) * plot_height(p);
         let nlx = |v: f64| left + (v - lo) / (hi - lo) * (right - left);

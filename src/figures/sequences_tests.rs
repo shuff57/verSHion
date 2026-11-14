@@ -808,3 +808,21 @@ fn sequences_proven_zeros_and_precision_refusals() {
     p.set_s("ratio", "1e-300");
     assert!(data(&p).is_err());
 }
+
+#[test]
+fn sequences_aligned_graphs_have_separate_label_rows() {
+    for size in ["Small", "Medium", "Large"] {
+        let mut p = Params::defaults(&params());
+        p.set_s("layout", "Two aligned graphs");
+        p.set_s("label_size", size);
+        let svg = render(&p);
+        let xml = roxmltree::Document::parse(&svg).unwrap();
+        let title = xml
+            .descendants()
+            .find(|n| n.has_tag_name("text") && n.text() == Some("Sₙ"))
+            .unwrap();
+        let y = title.attribute("y").unwrap().parse::<f64>().unwrap();
+        let first_index_row = 160.0 + plot_height(&p) + 65.0;
+        assert!(y > first_index_row + 2.0 * 14.0 * svg::label_factor(size));
+    }
+}
