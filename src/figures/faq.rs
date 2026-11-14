@@ -85,7 +85,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
         "sine-cosine" => SINE_COSINE,
         "unit-circle" => UNIT_CIRCLE,
-        "complex-plane" => UNIT_CIRCLE,
+        "complex-plane" => COMPLEX_PLANE,
         "transformations" => TRANSFORMATIONS,
         "fraction-models" => FRACTION_MODELS,
         "triangle-centres" => TRIANGLE_CENTRES,
@@ -4560,4 +4560,11 @@ const OSMOSIS: &[Faq] = &[
         q: "How are the particles and the water level drawn?",
         a: "Each solute is drawn as particles in proportion to its concentration, as crowded as the number says; the key states how much one particle stands for (0.25 %, 0.05 M or 50 mM). Water appears as small discs filling the room the solutes leave. When water moves, the solute particles stay, so a cell that loses water has its solute more crowded. In the beaker and U-tube the level rises on the more concentrated side by an amount that grows with the difference. Shuffle particles picks a new layout without changing the science.",
     },
+];
+
+const COMPLEX_PLANE: &[Faq] = &[
+ Faq {q:"How do I enter complex numbers?",a:"Type the real and imaginary coefficients separately, using fractions or sqrt where needed. More numbers accepts one name, real, imaginary row per line. Polar input accepts a modulus and an angle, in the selected unit."},
+ Faq {q:"What does the construction show?",a:"Choose conjugate, sum, difference, product, quotient, roots or powers. The sum uses a parallelogram. Products rotate by the second argument and stretch by its modulus. Roots lie on a circle; Join roots adds their regular polygon."},
+ Faq {q:"How do I make a student copy?",a:"Select Coordinates, Modulus and argument, or Construction, then turn Show answers off. Student + key exports the matching pair. Print gives neutral greys."},
+ Faq {q:"Why are some values approximate?",a:"Exact rational results and directly derived special arguments are written with equals. Other calculated values use the approximation sign. The principal argument is in (−π, π]; zero has no argument. Notes explain invalid values and items outside the axis window."},
 ];
