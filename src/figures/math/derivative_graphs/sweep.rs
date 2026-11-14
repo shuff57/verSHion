@@ -170,7 +170,7 @@ pub(super) fn faults(bl: &Built) -> Vec<String> {
 // ───────────────────────── the classroom list ─────────────────────────
 
 /// (f or f′ typed, x from, x to, x in multiples of π, start from f′)
-pub(super) const CLASSROOM: [(&str, f64, f64, bool, bool); 70] = [
+pub(super) const CLASSROOM: [(&str, f64, f64, bool, bool); 78] = [
     ("x^2", -3.0, 3.0, false, false), ("x^2 - 4", -3.0, 3.0, false, false), ("-x^2 + 4x", -1.0, 5.0, false, false), ("x^2 - 2x - 3", -2.0, 4.0, false, false),
     ("(x - 1)^2", -2.0, 4.0, false, false), ("x^3", -2.0, 2.0, false, false), ("x^3 - 3x", -3.0, 3.0, false, false), ("x^3 - 3x^2 + 1", -2.0, 4.0, false, false),
     ("x^3 - 6x^2 + 9x + 1", -1.0, 5.0, false, false), ("-x^3 + 3x", -3.0, 3.0, false, false), ("x^3 - 12x", -4.0, 4.0, false, false), ("2x^3 - 3x^2 - 12x", -3.0, 4.0, false, false),
@@ -189,6 +189,10 @@ pub(super) const CLASSROOM: [(&str, f64, f64, bool, bool); 70] = [
     ("|x|", -3.0, 3.0, false, false), ("|x - 1| + x", -2.0, 4.0, false, false), ("|x^2 - 4|", -3.0, 3.0, false, false), ("x^2, x < 1; 2 - x, x >= 1", -2.0, 4.0, false, false),
     ("-x - 1, x < 0; x^2 - 1, x >= 0", -3.0, 3.0, false, false), ("x + 2, x < -1; x^2, -1 <= x <= 1; 2 - x, x > 1", -3.0, 3.0, false, false), ("arctan(x)", -5.0, 5.0, false, false),
     (AP_FP, -4.0, 4.0, false, true), ("2 - x, x < 2; x - 2, x >= 2", -1.0, 5.0, false, true), ("cos(x)", -2.0, 2.0, true, true),
+    // (the fourth check's: a jump that is a maximum, a cusp, corners, constant stretches, a touching zero, √(x²), overflow, cosh)
+    ("x^2, x < 0.5; 1 - x, x >= 0.5", -2.0, 3.0, false, false), ("x^(2/3)", -3.0, 3.0, false, false), ("abs(sin(x))", -1.0, 7.0, false, false),
+    ("abs(x + 2) - abs(x - 1)", -4.0, 3.0, false, false), ("tan(x) - x", -1.5, 1.5, false, false), ("sqrt(x^2)", -2.0, 2.0, false, false),
+    ("e^(1/x^2)", -3.0, 3.0, false, false), ("(e^x + e^(-x))/2", -3.0, 3.0, false, false),
 ];
 
 /// The y ranges a teacher would pick: the curve's middle 90 % and every turning point, padded, on a nice step.
@@ -305,7 +309,10 @@ fn every_label_belongs_to_its_own_thing_over_the_classroom_list() {
     // (at Large, these five crowded aligned figures too: every mark on, or a closed interval on the f′-start cosine)
     // (named: every option on at once on aligned axes, where an inflection point sits within a few pixels of an extremum and
     // a label must stay nearer its own point than the other's; at Large also these single options)
-    const NAMED: [&str; 18] = [
+    // (and |x + 2| − |x − 1| with the closed interval [−2.5, 1.5] at Large: the maximum 3 is reached all along [1, 1.5], so two
+    // "absolute max" labels sit 50 px apart on one level stretch)
+    const NAMED: [&str; 19] = [
+        "abs(x + 2) - abs(x - 1) [absolute, Large]",
         "x^4 - 4x^3 [all, Small]", "x^4 - 4x^3 [all, Medium]", "x^4 - 2x^2 [all, Small]", "x^4 - 2x^2 [all, Medium]", "|x - 1| + x [all, Medium]",
         "x^4 - 4x^3 [all, Large]", "x^4 - 2x^2 [all, Large]", "x^4 - 8x^2 + 3 [all, Large]", "(x^2 - 1)^2 [all, Large]", "|x - 1| + x [all, Large]",
         "-x^4 + 4x^2 [all, Large]", "3x^5 - 5x^3 [all, Large]", "x(x - 2)(x + 3) [all, Large]", "cos(x) [absolute, Large]", "cos(x) [all, Large]", "cos(x) [extrema, Large]", "sin(x)^2 [inflect, Large]", "sin(x)^2 [all, Large]",

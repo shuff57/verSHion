@@ -24,6 +24,8 @@ mod versions;
 mod round2;
 #[cfg(test)]
 mod round3;
+#[cfg(test)]
+mod round4;
 
 pub(crate) const ID: &str = "derivative-graphs";
 pub(crate) const STARTS: [&str; 2] = ["f(x)", "f\u{2032}(x)"];

@@ -461,6 +461,13 @@ fn odd_roots_worked_by_hand() {
 /// A written value in the figure's typesetting, read back by the app's reader ("−9/8", "3 + π/3 + √3/2", "2/e²").
 fn read_back(t: &str) -> Option<f64> {
     let mut s = t.trim().replace("\u{221a}e", "sqrt(e)").replace('\u{2212}', "-").replace('\u{3c0}', "pi").replace('\u{b2}', "^2").replace('\u{b3}', "^3");
+    // (every other run of superscript digits and signs, e⁴ and e⁻¹: one power)
+    let sup = |c: char| -> Option<char> { Some(match c { '\u{2070}' => '0', '\u{b9}' => '1', '\u{2074}' => '4', '\u{2075}' => '5', '\u{2076}' => '6', '\u{2077}' => '7', '\u{2078}' => '8', '\u{2079}' => '9', '\u{207b}' => '-', _ => return None }) };
+    let mut out = String::new();
+    let mut run = String::new();
+    for c in s.chars() { match sup(c) { Some(d) => run.push(d), None => { if !run.is_empty() { out.push_str(&format!("^({run})")); run.clear(); } out.push(c); } } }
+    if !run.is_empty() { out.push_str(&format!("^({run})")); }
+    s = out;
     // √n → sqrt(n)
     // ln 2 → ln(2); ln(3/2) is already bracketed
     while let Some(i) = s.find("ln\u{2009}") { let rest = &s[i + "ln\u{2009}".len()..]; let n: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect(); let star = if s[..i].trim_end().ends_with(|c: char| c.is_ascii_digit() || c == ')') { "*" } else { "" }; s = format!("{}{star}ln({n}){}", &s[..i], &rest[n.len()..]); }
