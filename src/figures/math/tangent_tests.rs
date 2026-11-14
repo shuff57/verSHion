@@ -499,6 +499,11 @@ fn examples_draw_cleanly() {
 fn controls_show_exactly_when_they_act() {
     let d = def();
     let states: Vec<Vec<(&str, Value)>> = vec![
+        // the third check's: P off the axes beside a pole (Points P and Q acts through Q's label); a stacked power; a step Δt
+        vec![("func", s("tan(x)")), ("a", s("pi/2+0.000001")), ("h", s("0.1")), ("xmin", f(0.0)), ("xmax", f(3.0)), ("ymin", f(-10.0)), ("ymax", f(10.0))],
+        vec![("func", s("x^(1/3)^2")), ("a", s("1")), ("h", s("1")), ("tangent_eq", s("Slope-intercept")), ("worked", b(true)), ("key_line", b(true)), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-1.0)), ("ymax", f(3.0))],
+        vec![("func", s("-4.9t^2+19.6t")), ("var", s("t")), ("fname", s("h")), ("worked", b(true)), ("xmin", f(0.0)), ("xmax", f(4.0)), ("ymin", f(0.0)), ("ymax", f(25.0))],
+        vec![("func", s("(-2)^x")), ("a", s("2")), ("xmin", f(-1.0)), ("xmax", f(4.0))],
         vec![],
         vec![("show_answers", b(false))],
         vec![("show_answers", b(false)), ("student_copy", s("Curve and P only, to draw the tangent"))],
@@ -921,7 +926,9 @@ fn derivative_is_right_near_poles() {
         let val = line.rsplit([' ']).next().and_then(read_back);
         let want = d(a);
         match val {
-            Some(v) if (v - want).abs() <= 0.5e-6 + 1e-12 * want.abs() => {}
+            // (to half a unit of the last place written: beside a pole only the digits left standing by rounding a to 16 figures
+            // are written)
+            Some(v) if (v - want).abs() <= 0.5 * 10f64.powi(-(line.rsplit(' ').next().unwrap().split_once('.').map(|(_, f)| f.len()).unwrap_or(0) as i32)).max(0.5e-6) + 1e-12 * want.abs() => {}
             _ => bad.push(format!("{func} at {at}: wrote {line}, true {want}")),
         }
         n += 1;
@@ -1042,4 +1049,200 @@ fn the_tree_reads_as_the_grid_does() {
     // the one difference on purpose: (−8)^(1/3) = −2 in the tree, nothing in the reader
     assert_eq!(super::eval("x^(1/3)", -8.0).filter(|v| v.is_finite()), None);
     assert!((ex::eval(&ex::parse("x^(1/3)").unwrap(), -8.0) + 2.0).abs() < 1e-12);
+}
+
+// ───────────────────────── round 3: the third check's faults ─────────────────────────
+
+/// A written line in the reader's spelling at a point: the variable and the dependent name replaced by numbers, √n, π and
+/// − in the reader's own words.
+fn at_point(text: &str, var: &str, dep: &str, x: f64, y: f64) -> String {
+    let mut out = String::new();
+    let cs: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        let c = cs[i];
+        let alone = |k: usize| (k == 0 || !cs[k - 1].is_ascii_alphabetic()) && (k + 1 >= cs.len() || !cs[k + 1].is_ascii_alphabetic());
+        if c.to_string() == var && alone(i) { out.push_str(&format!("({x:e})")); }
+        else if c.to_string() == dep && alone(i) { out.push_str(&format!("({y:e})")); }
+        else if c == '\u{221a}' {
+            out.push_str("sqrt(");
+            i += 1;
+            while i < cs.len() && cs[i].is_ascii_digit() { out.push(cs[i]); i += 1; }
+            out.push(')');
+            continue;
+        }
+        else if c == '\u{3c0}' { out.push_str("pi"); }
+        else if c == '\u{2212}' { out.push('-'); }
+        else if c == '\u{b7}' { out.push('*'); }
+        else { out.push(c); }
+        i += 1;
+    }
+    out.replace("e+", "e").replace("e-", "e-")
+}
+/// Whether an equation "L = R" written in the panel holds at (x, y).
+fn holds(eq: &str, var: &str, dep: &str, x: f64, y: f64) -> Option<bool> {
+    let (l, r) = eq.split_once(" = ")?;
+    let v = |t: &str| ex::parse(&at_point(t, var, dep, x, y)).map(|n| ex::eval(&n, 0.0));
+    let (lv, rv) = (v(l)?, v(r)?);
+    Some((lv - rv).abs() <= 1e-9 * (1.0 + lv.abs().max(rv.abs())))
+}
+
+/// An a or h typed as a sum, with or without spaces, in a, h, more tangents and more secants: every equation written with
+/// "=" passes through its own point with its own slope (checked at the point and one unit along), the worked line's
+/// denominator is h, and sums are written with their spaces. By hand for x²: the tangent at a has slope 2a, the secant
+/// (a + h)² − a² over h = 2a + h, the normal slope −1/(2a).
+#[test]
+fn typed_sums_are_bracketed_and_spaced() {
+    let sums = ["sqrt(2)-1", "sqrt(2) - 1", "-1-sqrt(2)", "- 1 - sqrt(2)", "pi/4+0.1", "pi/4 + 0.1", "1+sqrt(2)", "2-sqrt(3)", "1/2+sqrt(3)"];
+    let read = |t: &str| ex::eval(&ex::parse(&t.replace(' ', "")).unwrap(), 0.0);
+    let mut bad = vec![];
+    let mut checked = 0;
+    for (var, fname, func, dep) in [("x", "f", "x^2", "y"), ("t", "s", "t^2", "s")] {
+        for sp in sums {
+            for place in ["a", "h", "more_a", "more_h"] {
+                let (a, h) = match place { "a" => (sp, "1"), "h" => ("1", sp), _ => ("1", "1") };
+                let mut o: Vec<(&str, Value)> = vec![("func", s(func)), ("var", s(var)), ("fname", s(fname)), ("a", s(a)), ("h", s(h)), ("tangent_eq", s("Point-slope")), ("secant_eq", s("Point-slope")), ("normal", s("With its equation")), ("worked", b(true)), ("table", b(true)), ("key_line", b(true)), ("xmin", f(-4.0)), ("xmax", f(4.0)), ("ymin", f(-4.0)), ("ymax", f(12.0))];
+                if place == "more_a" { o.push(("more_a", s(sp))); }
+                if place == "more_h" { o.push(("more_h", s(sp))); }
+                let p = with(&o);
+                let svg = build(&p).svg;
+                let mut lines = texts(&svg, "panel^");
+                for k in texts(&svg, "key^") { for part in k.trim_start_matches("Key: ").trim_end_matches('.').split("; ") { lines.push(part.to_string()); } }
+                let av = read(a);
+                let hv = read(h);
+                // which line: follow the headings
+                let mut cur: Option<(f64, f64)> = None; // (point x, slope)
+                for l in &lines {
+                    let l = l.trim();
+                    if l.starts_with("Tangent at P") { cur = Some((av, 2.0 * av)); continue; }
+                    if l.starts_with("Normal at P") { cur = Some((av, -1.0 / (2.0 * av))); continue; }
+                    if l.starts_with("Secant PQ") { cur = Some((av, 2.0 * av + hv)); continue; }
+                    if let Some(rest) = l.strip_prefix(&format!("Tangent at {var} = ")) { let c = ex::eval(&ex::parse(&at_point(rest.split(':').next().unwrap(), "", "", 0.0, 0.0).replace(' ', "")).unwrap(), 0.0); cur = Some((c, 2.0 * c)); continue; }
+                    if l.starts_with("Secant,") { cur = None; continue; }
+                    let eq = l.strip_prefix("tangent ").map(|e| { cur = Some((av, 2.0 * av)); e }).unwrap_or(l);
+                    if !(eq.starts_with(&format!("{dep} ")) && eq.contains(" = ")) { continue; }
+                    let Some((x0, m)) = cur else { continue };
+                    checked += 1;
+                    let ok = holds(eq, var, dep, x0, x0 * x0) == Some(true) && holds(eq, var, dep, x0 + 1.0, x0 * x0 + m) == Some(true);
+                    if !ok { bad.push(format!("{place}={sp} ({var}): {eq}")); }
+                }
+                // the worked line divides by h, read back as h
+                if let Some(w) = lines.iter().find(|l| l.starts_with("= [")) {
+                    let den = w.rsplit("]/").next().unwrap();
+                    let dv = ex::parse(&at_point(den, var, dep, 0.0, 0.0)).map(|n| ex::eval(&n, 0.0));
+                    if dv.is_none_or(|d| (d - hv).abs() > 1e-9) { bad.push(format!("{place}={sp}: worked denominator {den} is not {hv}")); }
+                }
+                // sums are written with their spaces: no √, π or digit run straight into a − or +
+                for l in &lines {
+                    let cs: Vec<char> = l.chars().collect();
+                    for k in 1..cs.len().saturating_sub(1) {
+                        if matches!(cs[k], '+' | '\u{2212}') && cs[k - 1] != ' ' && cs[k - 1] != '(' && cs[k - 1] != '^' && cs[k + 1] != ' ' { bad.push(format!("{place}={sp}: unspaced sum in {l}")); break; }
+                    }
+                }
+            }
+        }
+    }
+    println!("typed-sum equations checked: {checked}");
+    assert!(checked >= 250, "{checked}");
+    assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// A stacked power is one function everywhere: x^(1/3)^2 is x^((1/3)^2) = x^(1/9) for the grid (after its odd-root rewrite)
+/// and the tree, the title is typeset with the second power inside the first, and so for the other spellings the rewrite
+/// touches. By hand: x^(1/9) at 512 is 2; its slope (1/9)x^(−8/9) at 1 is 1/9.
+#[test]
+fn stacked_powers_and_rewritten_spellings_agree() {
+    let exprs = ["x^(1/3)^2", "x^2^3", "2^x^2", "x^(1/3)^(1/3)", "(x^(1/3))^2", "x^(2/3)", "x^(-1/3)", "(x-1)^(1/3)", "sin(x)^(1/3)", "x^(1/3)x", "x^0.2", "x^(0.2)", "x^-0.6", "x^0.5", "x^(3/5)+x^(1/5)", "(x^2-4)^(1/3)", "2x^(1/3)", "x^(2/6)", "e^(x/3)", "x^(1/3)^2+1"];
+    let xs = [-8.0, -2.5, -1.0, -0.3, 0.0, 0.25, 0.5, 1.0, 1.7, 2.0, 3.3, 512.0];
+    let mut bad = vec![];
+    for e in exprs {
+        let grid_e = tangent::real_odd_roots(e);
+        let tree = ex::parse(e).unwrap_or_else(|| panic!("{e}"));
+        for x in xs {
+            let g = super::eval(&grid_e, x).filter(|v| v.is_finite());
+            let t = Some(ex::eval(&tree, x)).filter(|v| v.is_finite());
+            let same = match (g, t) { (Some(a), Some(b)) => (a - b).abs() <= 1e-9 * (1.0 + a.abs()), (None, None) => true, _ => false };
+            if !same { bad.push(format!("{e} at {x}: drawn {g:?}, read {t:?}")); }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    assert!((ex::eval(&ex::parse("x^(1/3)^2").unwrap(), 512.0) - 2.0).abs() < 1e-12);
+    let p = with(&[("func", s("x^(1/3)^2")), ("a", s("1")), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-1.0)), ("ymax", f(3.0))]);
+    let svg = build(&p).svg;
+    assert!(has(&texts(&svg, "panel"), "f\u{2032}(1) = 1/9"), "{:?}", texts(&svg, "panel"));
+    // the title: the 2 is a superscript inside the 1/3 superscript
+    let title = svg.split(r#"data-tsl="panel">"#).nth(1).unwrap().split("</text>").next().unwrap();
+    let first = title.find(r#"baseline-shift="super""#).unwrap();
+    let rest = &title[first + 10..];
+    let second = rest.find(r#"baseline-shift="super""#).expect("a nested superscript");
+    assert!(!rest[..second].contains("</tspan>"), "{title}");
+}
+
+/// A decimal typed in the function (or a, h) makes the figure write decimals: exact where they terminate within 6 places,
+/// else ≈ at the chosen places; never a fraction or a root beside a decimal in a line. By hand: h(t) = −4.9t² + 19.6t,
+/// h′(1) = −9.8 + 19.6 = 9.8, h(1) = 14.7, h(2) = 19.6, secant (19.6 − 14.7)/1 = 4.9; 1000(1.05)^t at 5 to 6: 63.814… ≈ 63.81;
+/// x^0.2 at 32: 0.2·32^(−0.8) = 0.2/16 = 0.0125.
+#[test]
+fn decimals_in_the_function_give_decimals() {
+    let phys = with(&[("func", s("-4.9t^2+19.6t")), ("var", s("t")), ("fname", s("h")), ("a", s("1")), ("h", s("1")), ("worked", b(true)), ("tangent_eq", s("Slope-intercept")), ("key_line", b(true)), ("table", b(true)), ("xmin", f(0.0)), ("xmax", f(4.0)), ("ymin", f(0.0)), ("ymax", f(25.0)), ("ystep", f(5.0))]);
+    let l = panel(&phys);
+    assert!(has(&l, "h\u{2032}(1) = 9.8") && has(&l, &format!("= (19.6 {M} 14.7)/1 = 4.9")) && has(&l, "h = 9.8t + 4.9"), "{l:?}");
+    let l2 = panel(&with(&[("func", s("-4.9t^2+19.6t")), ("var", s("t")), ("fname", s("h")), ("a", s("1")), ("h", s("0.5")), ("worked", b(true)), ("xmin", f(0.0)), ("xmax", f(4.0)), ("ymin", f(0.0)), ("ymax", f(25.0))]));
+    let l3 = panel(&with(&[("func", s("1000(1.05)^t")), ("fname", s("A")), ("var", s("t")), ("a", s("5")), ("h", s("1")), ("worked", b(true)), ("table", b(true)), ("xmin", f(0.0)), ("xmax", f(10.0)), ("ymin", f(0.0)), ("ymax", f(999.0)), ("ystep", f(100.0))]));
+    assert!(has(&l3, "\u{2248} 63.81"), "{l3:?}");
+    let l4 = panel(&with(&[("func", s("x^0.2")), ("a", s("32")), ("show_secant", b(false)), ("xmin", f(0.0)), ("xmax", f(40.0)), ("ymin", f(-1.0)), ("ymax", f(3.0))]));
+    assert!(has(&l4, "f\u{2032}(32) = 0.0125"), "{l4:?}");
+    let l5 = panel(&with(&[("func", s("x^2")), ("a", s("1+sqrt(2)")), ("h", s("0.5")), ("table", b(true)), ("xmin", f(-1.0)), ("xmax", f(4.0)), ("ymin", f(-1.0)), ("ymax", f(12.0))]));
+    for line in l.iter().chain(&l2).chain(&l3).chain(&l4).chain(&l5) {
+        let cs: Vec<char> = line.chars().collect();
+        let frac = (1..cs.len().saturating_sub(1)).any(|k| cs[k] == '/' && cs[k - 1].is_ascii_digit() && cs[k + 1].is_ascii_digit());
+        let dec = (1..cs.len().saturating_sub(1)).any(|k| cs[k] == '.' && cs[k - 1].is_ascii_digit() && cs[k + 1].is_ascii_digit());
+        let root = line.contains('\u{221a}') && !line.starts_with("Tangent") && !line.starts_with("slope f");
+        assert!(!(dec && (frac || root)), "mixed: {line}");
+    }
+}
+
+/// A function named h writes its step Δt everywhere (worked line, panel, table, h mark, the run's label, the key, the
+/// student copy), never "h(a + h)".
+#[test]
+fn a_function_named_h_steps_by_delta() {
+    for answers in [true, false] {
+        let p = with(&[("func", s("-4.9t^2+19.6t")), ("var", s("t")), ("fname", s("h")), ("a", s("1")), ("h", s("1")), ("worked", b(true)), ("table", b(true)), ("key_line", b(true)), ("secant_triangle", b(true)), ("h_mark", b(true)), ("show_answers", b(answers)), ("xmin", f(0.0)), ("xmax", f(4.0)), ("ymin", f(0.0)), ("ymax", f(25.0)), ("ystep", f(5.0))]);
+        let svg = build(&p).svg;
+        let all: Vec<String> = texts(&svg, "panel").into_iter().chain(texts(&svg, "key")).chain(my_labels(&svg).into_iter().map(|x| x.1)).collect();
+        let joined = all.join(" | ");
+        assert!(!joined.contains("h(a + h)") && !joined.contains("h = 1") && !joined.contains("h \u{2192}"), "{joined}");
+        assert!(joined.contains("\u{394}t = 1") && joined.contains("\u{394}t \u{2192} 0") && joined.contains(&format!("m = [h(a + \u{394}t) {M} h(a)]/\u{394}t")), "{joined}");
+        assert!(my_labels(&svg).iter().any(|x| x.1 == "\u{394}t"), "the h mark");
+    }
+}
+
+/// Beside a pole on the far side: f′ is written only to the digits that are right (true 1/sin²(10⁻⁶) = 10¹² + 1/3), no false
+/// "jumps" note (there is no pole between π/2 + 10⁻⁶ and π/2 + 0.1), while a real pole between P and Q is still said (1/x²
+/// from −0.5 to 0.5, tan from π/4 to 3π/4).
+#[test]
+fn far_side_of_a_pole() {
+    let p = with(&[("func", s("tan(x)")), ("a", s("pi/2+0.000001")), ("h", s("0.1")), ("xmin", f(0.0)), ("xmax", f(3.0)), ("ymin", f(-10.0)), ("ymax", f(10.0))]);
+    let o = build(&p);
+    let l = texts(&o.svg, "panel");
+    let line = l.iter().find(|x| x.contains('\u{2032}')).unwrap();
+    let w = line.rsplit(' ').next().unwrap();
+    let v: f64 = w.parse().unwrap();
+    let places = w.split_once('.').map(|(_, f)| f.len() as i32).unwrap_or(0);
+    let trailing = w.trim_end_matches('0').len() as i32 - w.len() as i32;
+    let unit = if places > 0 { 10f64.powi(-places) } else { 10f64.powi(-trailing) };
+    assert!((v - (1e12 + 1.0 / 3.0)).abs() <= 0.5 * unit.max(1.0) * 10.0, "{line}");
+    assert!(!o.notes.join(" ").contains("jumps"), "{:?}", o.notes);
+    let n = tangent::warnings(&with(&[("func", s("x^-2")), ("a", s("-0.5")), ("h", s("1")), ("xmin", f(-2.0)), ("xmax", f(2.0)), ("ymin", f(-1.0)), ("ymax", f(10.0))])).join(" ");
+    assert!(n.contains("jumps"), "{n}");
+}
+
+/// A function defined at a but not on an interval round it ((−2)^x at 2) has no tangent, and the panel says why; x^0.2 is
+/// read as x^(1/5), so at 0 its tangent is vertical (not "one side only"); x·|x| at 0 has slope 0.
+#[test]
+fn no_interval_round_a_is_said() {
+    let n = tangent::warnings(&with(&[("func", s("(-2)^x")), ("a", s("2")), ("xmin", f(-1.0)), ("xmax", f(4.0))])).join(" ");
+    assert!(n.contains("no slope and no tangent"), "{n}");
+    let n = tangent::warnings(&with(&[("func", s("x^0.2")), ("a", s("0")), ("xmin", f(-2.0)), ("xmax", f(2.0)), ("ymin", f(-2.0)), ("ymax", f(2.0))])).join(" ");
+    assert!(n.contains("vertical") && !n.contains("one side"), "{n}");
 }

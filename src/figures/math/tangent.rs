@@ -66,8 +66,8 @@ pub(crate) fn params() -> Vec<ParamDef> {
         ParamDef::float("xmin", "x-axis from", -1000.0, 1000.0, 1.0, -2.0),
         ParamDef::float("xmax", "x-axis to", -1000.0, 1000.0, 1.0, 4.0),
         ParamDef::float("xstep", "x-axis count by", 0.05, 180.0, 0.5, 1.0),
-        ParamDef::float("ymin", "y-axis from", -1000.0, 1000.0, 1.0, -2.0),
-        ParamDef::float("ymax", "y-axis to", -1000.0, 1000.0, 1.0, 10.0),
+        ParamDef::float("ymin", "y-axis from", -999.0, 999.0, 1.0, -2.0),
+        ParamDef::float("ymax", "y-axis to", -999.0, 999.0, 1.0, 10.0),
         ParamDef::float("ystep", "y-axis count by", 0.05, 180.0, 0.5, 1.0),
         ParamDef::int("minor", "Minor gridlines per step", 0, 10, 0).hint("0 = none."),
         ParamDef::bool("numbers", "Number the axes", true),
@@ -112,7 +112,16 @@ pub(crate) fn decimal(v: f64, dec: usize) -> String {
 }
 
 /// The exact text of `v`, or None: only from an exact value derived by exact arithmetic (see `tangent_expr`).
-pub(crate) fn exact_text(x: &Ex, dec_ok: bool) -> Option<String> { ex::text(x, dec_ok) }
+pub(crate) fn exact_text(x: &Ex, dec_ok: bool) -> Option<String> {
+    // (in the decimal mode only a terminating decimal is written exactly)
+    if dec_ok {
+        let (p, q) = x.rational()?;
+        let t = ex::text(&Ex::rat(ex::R(p, q)), true)?;
+        let places = t.split_once('.').map(|(_, f)| f.len()).unwrap_or(0);
+        return (!t.contains('/') && places <= 6).then_some(t);
+    }
+    ex::text(x, dec_ok)
+}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Ctx { pub exact: bool, pub dec: usize, pub dec_ok: bool }
@@ -129,7 +138,7 @@ impl Ctx {
     }
     /// A value made of typed values (a + h): written exactly where it was derived exactly, in either mode.
     pub(crate) fn given(&self, x: Option<Ex>, v: f64) -> Num {
-        if let Some(s) = x.as_ref().and_then(|x| exact_text(x, self.dec_ok)) { return Num { v, s, exact: true, ex: x }; }
+        if let Some(s) = x.as_ref().and_then(|x| ex::text(x, self.dec_ok)) { return Num { v, s, exact: true, ex: x }; }
         Num { v, s: decimal(v, self.dec.max(3)), exact: false, ex: x }
     }
 }
@@ -138,7 +147,62 @@ fn ex_mul(a: &Num, b: &Num) -> Option<Ex> { a.ex.as_ref()?.mul(b.ex.as_ref()?) }
 fn ex_div(a: &Num, b: &Num) -> Option<Ex> { a.ex.as_ref()?.div(b.ex.as_ref()?) }
 
 /// A number written with more than one term (1 + √2): bracketed wherever it is multiplied, divided or subtracted.
-fn compound(n: &Num) -> bool { n.s.contains(' ') }
+/// A value of more than one term (√2 − 1, typed as sqrt(2)-1 or written 1 + √2): read from how it is built — a binary + or
+/// − outside brackets — so it is bracketed wherever it is multiplied, divided or subtracted.
+fn compound(n: &Num) -> bool { binary_top(&n.s) }
+/// Whether text has a binary + or − outside brackets ("√2 − 1", "√2−1"; not "−√2", "2^−1", "(1 − x)").
+fn binary_top(s: &str) -> bool {
+    let mut depth = 0i32;
+    let mut prev: Option<char> = None;
+    for c in s.chars() {
+        match c {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth -= 1,
+            '+' | '\u{2212}' | '-' if depth == 0 => { if prev.is_some_and(|p| !matches!(p, '^' | '/' | '*' | '\u{b7}' | '\u{d7}' | '+' | '\u{2212}' | '-')) { return true; } }
+            _ => {}
+        }
+        if c != ' ' { prev = Some(c); }
+    }
+    false
+}
+/// "a^(b)^c" as "a^((b)^c)" (the reader takes ^ from the right), so the second power is set inside the first.
+fn nest_powers(s: &str) -> String {
+    let cs: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < cs.len() {
+        if cs[i] == '^' && cs.get(i + 1) == Some(&'(') {
+            let mut depth = 0;
+            let mut k = i + 1;
+            while k < cs.len() { if cs[k] == '(' { depth += 1; } if cs[k] == ')' { depth -= 1; if depth == 0 { break; } } k += 1; }
+            if k < cs.len() && cs.get(k + 1) == Some(&'^') {
+                // the following power: a bracket or a run of digits/one letter
+                let st = k + 2;
+                let mut e = st;
+                if cs.get(st) == Some(&'(') { let mut d = 0; while e < cs.len() { if cs[e] == '(' { d += 1; } if cs[e] == ')' { d -= 1; if d == 0 { e += 1; break; } } e += 1; } }
+                else { if cs.get(e) == Some(&'\u{2212}') || cs.get(e) == Some(&'-') { e += 1; } while e < cs.len() && (cs[e].is_ascii_alphanumeric() || cs[e] == '.') { e += 1; } }
+                let first: String = cs[i + 1..=k].iter().collect();
+                let second: String = cs[st..e].iter().collect();
+                out.push_str(&format!("^({first}^{second})"));
+                i = e;
+                continue;
+            }
+        }
+        out.push(cs[i]);
+        i += 1;
+    }
+    out
+}
+/// One space either side of a binary + or −, none elsewhere: "√2−1" is "√2 − 1".
+fn spaced(s: &str) -> String {
+    let cs: Vec<char> = s.chars().filter(|c| *c != ' ').collect();
+    let mut out = String::new();
+    for (i, c) in cs.iter().enumerate() {
+        let binary = matches!(c, '+' | '\u{2212}') && i > 0 && !matches!(cs[i - 1], '(' | '^' | '*' | '/' | '\u{b7}' | '+' | '\u{2212}');
+        if binary { out.push(' '); out.push(*c); out.push(' '); } else { out.push(*c); }
+    }
+    out
+}
 fn neg(n: &Num) -> bool { n.s.starts_with('\u{2212}') && !compound(n) }
 fn abs_s(n: &Num) -> String { n.s.trim_start_matches('\u{2212}').to_string() }
 fn is_zero(n: &Num) -> bool { n.s == "0" }
@@ -169,7 +233,11 @@ fn plus(lhs: &str, n: &Num) -> String {
 /// `lhs` − `n`: "y − 1", "y + 4", "y − (1 + √2)".
 fn minus_n(lhs: &str, n: &Num) -> String {
     if is_zero(n) { return lhs.to_string(); }
-    if compound(n) { return format!("{lhs} \u{2212} ({})", n.s); }
+    // a sum subtracted is written with its terms negated where it is exact (x − (√2 − 1) is x − √2 + 1 … written x + 1 − √2)
+    if compound(n) {
+        if n.exact { if let Some(t) = n.ex.as_ref().and_then(|x| ex::text(&x.neg(), true)) { return match t.strip_prefix('\u{2212}') { Some(r) => format!("{lhs} \u{2212} {r}"), None => format!("{lhs} + {t}") }; } }
+        return format!("{lhs} \u{2212} ({})", n.s);
+    }
     if neg(n) { format!("{lhs} + {}", abs_s(n)) } else { format!("{lhs} \u{2212} {}", n.s) }
 }
 
@@ -285,27 +353,15 @@ pub(crate) fn real_odd_roots(s: &str) -> String {
     let mut i = 0;
     while i < cs.len() {
         if cs[i] == '^' {
-            let rest: String = cs[i + 1..].iter().collect();
-            let compact: String = rest.chars().take_while(|c| *c != ')').filter(|c| !c.is_whitespace()).collect();
-            let close = rest.find(')');
-            if let (Some(inner), Some(close)) = (compact.strip_prefix('('), close) {
-                if let Some((pn, qn)) = inner.split_once('/') {
-                    if let (Ok(p), Ok(q)) = (pn.parse::<i64>(), qn.parse::<i64>()) {
-                        let g = gcd(p, q).max(1);
-                        let (p, q) = (p / g, q / g);
-                        let (p, q) = if q < 0 { (-p, -q) } else { (p, q) };
-                        if q > 1 && q % 2 == 1 {
-                            if let Some(bs) = base_start(&out) {
-                                let base: String = out[bs..].iter().collect();
-                                if !base.starts_with("abs(") {
-                                    out.truncate(bs);
-                                    let rep = if p % 2 == 0 { format!("abs({base})^({p}/{q})") } else { format!("(abs({base})^({p}/{q})*(2/(1+e^(-1e300*({base})))-1))") };
-                                    out.extend(rep.chars());
-                                    i += 1 + rest[..=close].chars().count();
-                                    continue;
-                                }
-                            }
-                        }
+            if let Some((p, q, len)) = odd_exponent(&cs[i + 1..]) {
+                if let Some(bs) = base_start(&out) {
+                    let base: String = out[bs..].iter().collect();
+                    if !base.starts_with("abs(") {
+                        out.truncate(bs);
+                        let rep = if p % 2 == 0 { format!("abs({base})^({p}/{q})") } else { format!("(abs({base})^({p}/{q})*(2/(1+e^(-1e300*({base})))-1))") };
+                        out.extend(rep.chars());
+                        i += 1 + len;
+                        continue;
                     }
                 }
             }
@@ -314,6 +370,34 @@ pub(crate) fn real_odd_roots(s: &str) -> String {
         i += 1;
     }
     out.into_iter().collect()
+}
+/// The exponent just after a ^ when it is a fraction of integers or a decimal with an odd denominator once reduced — (1/3),
+/// (-2/5), 0.2, (-0.6) — and is not itself raised to a power (x^(1/3)^2 is x^((1/3)^2)): (p, q, characters used).
+pub(crate) fn odd_exponent(cs: &[char]) -> Option<(i64, i64, usize)> {
+    let (text, len): (String, usize) = if cs.first() == Some(&'(') {
+        let close = cs.iter().position(|c| *c == ')')?;
+        (cs[1..close].iter().filter(|c| !c.is_whitespace()).collect(), close + 1)
+    } else {
+        let mut k = 0;
+        if cs.get(k) == Some(&'-') { k += 1; }
+        while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+        (cs[..k].iter().collect(), k)
+    };
+    if text.is_empty() || cs[len..].iter().find(|c| !c.is_whitespace()) == Some(&'^') { return None; }
+    let (p, q) = if let Some((a, b)) = text.split_once('/') { (a.parse::<i64>().ok()?, b.parse::<i64>().ok()?) } else {
+        // a decimal exponent (a bare integer is no root)
+        let (ip, fp) = text.split_once('.')?;
+        if fp.is_empty() || fp.len() > 9 { return None; }
+        let neg = ip.starts_with('-');
+        let digits = format!("{}{}", ip.trim_start_matches('-'), fp);
+        let n: i64 = digits.parse().ok()?;
+        (if neg { -n } else { n }, 10i64.pow(fp.len() as u32))
+    };
+    if q == 0 { return None; }
+    let g = gcd(p, q).max(1);
+    let (p, q) = (p / g, q / g);
+    let (p, q) = if q < 0 { (-p, -q) } else { (p, q) };
+    (q > 1 && q % 2 == 1).then_some((p, q, len))
 }
 fn gcd(a: i64, b: i64) -> i64 { let (mut a, mut b) = (a.abs(), b.abs()); while b != 0 { let t = a % b; a = b; b = t; } a }
 /// Where the base of a power ending `out` starts: a bracket (with its function's name), a number, x, e or pi.
@@ -392,13 +476,10 @@ fn shown_func(typed: &str) -> String {
         }
         s.push(*c);
     }
+    // a stacked power is one exponent raised to another: x^(1/3)^2 is typeset x^((1/3)^2), the second power inside the first
+    let s = nest_powers(&s);
     // spacing: one space either side of a binary + or −, none elsewhere
-    let cs: Vec<char> = s.chars().filter(|c| *c != ' ').collect();
-    let mut s = String::new();
-    for (i, c) in cs.iter().enumerate() {
-        let binary = matches!(c, '+' | '\u{2212}') && i > 0 && !matches!(cs[i - 1], '(' | '^' | '*' | '/' | '\u{b7}' | '+' | '\u{2212}');
-        if binary { s.push(' '); s.push(*c); s.push(' '); } else { s.push(*c); }
-    }
+    let s = spaced(&s);
     // √(x) as √x: a root of one letter or number needs no bracket
     let s = { let cs: Vec<char> = s.chars().collect(); let mut o = String::new(); let mut i = 0;
         while i < cs.len() { if cs[i] == '\u{221a}' && cs.get(i + 1) == Some(&'(') && cs.get(i + 3) == Some(&')') && cs[i + 2].is_alphanumeric() { o.push('\u{221a}'); o.push(cs[i + 2]); i += 4; } else { o.push(cs[i]); i += 1; } } o };
@@ -434,18 +515,16 @@ pub(crate) fn typed_num(raw: &str) -> Option<Num> {
         if s.starts_with('.') { s.insert(0, '0'); }
         if s.starts_with("-.") { s.insert(1, '0'); }
         minus(&s)
-    } else { pretty(&t).replace('\u{b7}', "") };
+    } else { spaced(&pretty(&t).replace('\u{b7}', "")) };
     Some(Num { v, s, exact: true, ex })
 }
 
-/// Terminating decimals are written as decimals only for values made with a decimal typed (h = 0.1); typed integers and
-/// fractions give fractions.
+/// When a decimal is typed anywhere a value comes from (the function, a, h), values are written as decimals: exactly when
+/// the exact value is a decimal of at most 6 places, else rounded with ≈; never a fraction or a root beside a decimal.
+/// Otherwise fractions, roots and π.
 fn ctx_for(exact: bool, dec: usize, typed: &[&str]) -> Ctx {
-    // (a typed fraction of integers, such as 1/2, asks for fractions; a decimal beside a root or π, such as π/4 and 0.1, keeps
-    // its decimal: π/4 + 0.1)
-    let int_frac = |t: &str| t.trim().trim_start_matches(['-', '\u{2212}', '+']).split_once('/').is_some_and(|(a, b)| !a.is_empty() && !b.is_empty() && a.trim().chars().all(|c| c.is_ascii_digit()) && b.trim().chars().all(|c| c.is_ascii_digit()));
-    let dec_ok = typed.iter().any(|t| t.contains('.')) && !typed.iter().any(|t| int_frac(t));
-    Ctx { exact, dec, dec_ok }
+    let has_dec = |t: &str| { let cs: Vec<char> = t.chars().collect(); cs.iter().enumerate().any(|(i, c)| *c == '.' && cs.get(i + 1).is_some_and(|d| d.is_ascii_digit())) };
+    Ctx { exact, dec, dec_ok: typed.iter().any(|t| has_dec(t)) }
 }
 
 fn typed_list(s: &str) -> (Vec<(Num, String)>, Vec<String>) {
@@ -470,6 +549,8 @@ pub(crate) struct Model {
     pub fname: String,
     pub var: String,
     pub dep: String,
+    /// The secant's step: h, or Δt (Δx) when the function itself is named h.
+    pub step: String,
     pub dec: usize,
     pub p: Option<Tangent>,
     pub secants: Vec<Secant>,
@@ -490,11 +571,18 @@ fn tangent_at(fx: &Fx, an: Num, ctx: Ctx) -> Option<Tangent> {
     let a = an.v;
     let fa = fx.f(a)?;
     let slope = slope_at(&|x| fx.f(x), &|x| fx.df(x), a);
-    let fan = ctx.make(fx.f_ex(&an), fa);
+    // a is held to 16 figures: where f or f′ change fast (beside a pole) that rounding moves their later digits, so a value
+    // not derived exactly is written only to the digits that rounding leaves standing
+    let wobble = |g: &dyn Fn(f64) -> Option<f64>, v: f64| -> f64 {
+        let u = a.abs().max(f64::MIN_POSITIVE) * 4.0 * f64::EPSILON;
+        [a - u, a + u].iter().filter_map(|x| g(*x)).map(|w| (w - v).abs()).fold(0.0, f64::max)
+    };
+    let fan = reliable(ctx.make(fx.f_ex(&an), fa), wobble(&|x| fx.f(x), fa), ctx.dec);
     let (m, b) = match slope {
         Slope::Finite(d) => {
             // the slope exactly where it can be derived (f′ at an exact a), else the derivative's value
             let m = ctx.make(if fx.df(a).is_some() { fx.df_ex(&an) } else { None }, d);
+            let m = reliable(m, wobble(&|x| fx.df(x), d), ctx.dec);
             let bex = ex_sub(&fan, &Num { v: 0.0, s: String::new(), exact: true, ex: ex_mul(&m, &an) });
             let b = ctx.make(bex, fa - d * a);
             (Some(m), Some(b))
@@ -504,17 +592,27 @@ fn tangent_at(fx: &Fx, an: Num, ctx: Ctx) -> Option<Tangent> {
     Some(Tangent { a, an, fan, slope, m, b, ctx })
 }
 
+/// A rounded value cut to the digits that are right, when `err` (how far its last digits may be off) is larger than half a unit
+/// of its last place: 1000000000287.33 with err 300 is written ≈ 1000000000000.
+fn reliable(n: Num, err: f64, dec: usize) -> Num {
+    if n.exact || err <= 0.5 * 10f64.powi(-(dec as i32)) || !n.v.is_finite() { return n; }
+    let places = (-(4.0 * err).log10()).floor() as i32;
+    let s = if places >= 0 { decimal(n.v, places as usize) } else { let unit = 10f64.powi(-places); minus(&format!("{:.0}", (n.v / unit).round() * unit)) };
+    Num { s, exact: false, ..n }
+}
+
 /// Whether f is undefined somewhere between x0 and x1, or jumps there (a pole): checked on 400 samples.
 fn gap_between(f: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64) -> bool {
     let n = 400;
     let vs: Vec<Option<f64>> = (0..=n).map(|i| f(x0 + (x1 - x0) * i as f64 / n as f64)).collect();
     if vs.iter().any(|v| v.is_none()) { return true; }
     let v: Vec<f64> = vs.into_iter().flatten().collect();
-    let mut d: Vec<f64> = v.windows(2).map(|w| (w[1] - w[0]).abs()).collect();
-    let big = d.iter().cloned().fold(0.0, f64::max);
-    d.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let med = d[d.len() / 2];
-    big > 1000.0 * (med + 1e-12) && big > 0.5 * (v[0].abs() + v[v.len() - 1].abs() + 1.0)
+    // a pole between: values changing sign through huge sizes (tan across π/2), or a spike inside far above both ends (1/x²
+    // across 0); a curve merely steep at one end (tan just past π/2) is no gap
+    let ends = v[0].abs().max(v[v.len() - 1].abs()).max(1.0);
+    let flip = v.windows(2).any(|w| w[0].signum() != w[1].signum() && w[0].abs().min(w[1].abs()) > 10.0 * ends);
+    let spike = (1..v.len() - 1).any(|k| v[k].abs() > 1000.0 * ends && v[k].abs() >= v[k - 1].abs() && v[k].abs() >= v[k + 1].abs());
+    flip || spike
 }
 
 pub(crate) fn model(p: &Params) -> Model {
@@ -531,7 +629,8 @@ pub(crate) fn model(p: &Params) -> Model {
     let exact = p.s("slope_form") != "Decimals";
     let dec = p.i("dec").clamp(0, 6) as usize;
     let plain = match expr_plain(p.s("func"), &fname, var) { Ok(e) => Some(e), Err(e) => { notes.push((About::All, e)); None } };
-    let mut m = Model { expr: plain.as_ref().map(|e| real_odd_roots(e)), fname: fname.clone(), var: var.to_string(), dep, dec, p: None, secants: vec![], more: vec![], notes: vec![] };
+    let step = if fname == "h" { format!("\u{394}{var}") } else { "h".to_string() };
+    let mut m = Model { expr: plain.as_ref().map(|e| real_odd_roots(e)), fname: fname.clone(), var: var.to_string(), dep, step: step.clone(), dec, p: None, secants: vec![], more: vec![], notes: vec![] };
     let Some(fnode) = plain.as_ref().and_then(|e| ex::parse(e)) else { m.notes = notes; return m };
     let fx = Fx { df: ex::deriv(&fnode), f: fnode };
     let f = |x: f64| fx.f(x);
@@ -539,7 +638,7 @@ pub(crate) fn model(p: &Params) -> Model {
     let a_raw = p.s("a");
     match typed_num(a_raw) {
         None => notes.push((About::All, "Type a as a number, such as 1, -1/2, 2.5, sqrt(2), pi/4 or e".into())),
-        Some(an) => match tangent_at(&fx, an.clone(), ctx_for(exact, dec, &[a_raw])) {
+        Some(an) => match tangent_at(&fx, an.clone(), ctx_for(exact, dec, &[a_raw, p.s("func")])) {
             None => notes.push((About::All, format!("{} is undefined: choose another a", fxs(&an)))),
             Some(t) => {
                 match t.slope {
@@ -547,6 +646,7 @@ pub(crate) fn model(p: &Params) -> Model {
                     Slope::Cusp => notes.push((About::All, format!("{fname} has a cusp at {var} = {}: its slopes from the left and from the right grow without bound in opposite directions, so there is no tangent line there", t.an.s))),
                     Slope::OneSided => notes.push((About::All, format!("{fname} is defined on one side of {var} = {} only, so there is no tangent line there", t.an.s))),
                     Slope::Vertical => notes.push((About::All, format!("The tangent at {var} = {} is vertical: its slope is undefined", t.an.s))),
+                    Slope::Undefined => notes.push((About::All, format!("{fname} is defined at {var} = {} but not at the points just either side of it, so it has no slope and no tangent line there", t.an.s))),
                     _ => {}
                 }
                 let mut hs: Vec<(Num, String)> = vec![];
@@ -567,11 +667,11 @@ pub(crate) fn model(p: &Params) -> Model {
                 }
                 let mut gaps = vec![];
                 for (hn, raw) in hs {
-                    let ctx = ctx_for(exact, dec, &[a_raw, &raw]);
+                    let ctx = ctx_for(exact, dec, &[a_raw, &raw, p.s("func")]);
                     let h = hn.v;
                     let x = t.a + h;
                     let qx = ctx.given(t.an.ex.as_ref().zip(hn.ex.as_ref()).and_then(|(a, h)| a.add(h)), x);
-                    let Some(fb) = f(x) else { notes.push((About::Secant, format!("{} is undefined, so there is no secant for h = {}", fxs(&qx), hn.s))); continue };
+                    let Some(fb) = f(x) else { notes.push((About::Secant, format!("{} is undefined, so there is no secant for {step} = {}", fxs(&qx), hn.s))); continue };
                     let fbn = ctx.make(fx.f_ex(&qx), fb);
                     let fa = t.fan.v;
                     let mn = ctx.make(ex_sub(&fbn, &t.fan).and_then(|d| d.div(hn.ex.as_ref()?)), (fb - fa) / h);
@@ -582,7 +682,7 @@ pub(crate) fn model(p: &Params) -> Model {
                     m.secants.push(Secant { h, hn, qx, fb: fbn, m: mn, b: bn, ctx, gap });
                 }
                 if !gaps.is_empty() {
-                    notes.push((About::Secant, format!("{fname} is undefined or jumps between P and Q for h = {}: the secant joins points on separate pieces of the curve", gaps.join(", "))));
+                    notes.push((About::Secant, format!("{fname} is undefined or jumps between P and Q for {step} = {}: the secant joins points on separate pieces of the curve", gaps.join(", "))));
                 }
                 m.p = Some(t);
             }
@@ -593,7 +693,7 @@ pub(crate) fn model(p: &Params) -> Model {
     for (v, raw) in more {
         if m.p.as_ref().is_some_and(|t| (t.a - v.v).abs() < 1e-12) || m.more.iter().any(|t| (t.a - v.v).abs() < 1e-12) { continue; }
         if m.more.len() == MAX_MORE_A { notes.push((About::More, format!("More tangents: only the first {MAX_MORE_A} are drawn"))); break; }
-        match tangent_at(&fx, v.clone(), ctx_for(exact, dec, &[&raw])) {
+        match tangent_at(&fx, v.clone(), ctx_for(exact, dec, &[&raw, p.s("func")])) {
             None => notes.push((About::More, format!("More tangents: {} is undefined", fxs(&v)))),
             Some(t) if !matches!(t.slope, Slope::Finite(..) | Slope::Vertical) => notes.push((About::More, format!("More tangents: {fname} has no tangent line at {var} = {}", t.an.s))),
             Some(t) => m.more.push(t),
@@ -816,11 +916,17 @@ fn place_one(sc: &mut Scene, r: &Req, text: &str, lead_ok: bool) -> Option<(Bx, 
 
 /// Math text (italic single letters, superscripts, minus signs); "Δy" keeps Δ upright.
 fn math_inner(s: &str) -> String {
-    if let Some(rest) = s.strip_prefix('\u{394}') {
-        let (v, tail) = rest.split_at(rest.find(' ').unwrap_or(rest.len()));
-        return format!("\u{394}<tspan font-style=\"italic\">{}</tspan>{}", esc(v), math_tspans(tail));
+    // Δ upright, the letter after it italic (Δy, Δt), anywhere in the text
+    match s.find('\u{394}') {
+        None => math_tspans(s),
+        Some(i) => {
+            let (head, rest) = s.split_at(i);
+            let rest = &rest['\u{394}'.len_utf8()..];
+            let n = rest.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+            let (v, tail) = rest.split_at(n);
+            format!("{}\u{394}<tspan font-style=\"italic\">{}</tspan>{}", math_tspans(head), esc(v), math_inner(tail))
+        }
     }
-    math_tspans(s)
 }
 fn label_text_svg(x: f64, base: f64, size: f64, s: &str, halo: bool) -> String {
     let h = if halo { r##" stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke""## } else { "" };
@@ -947,8 +1053,10 @@ pub(super) fn build(p0: &Params) -> Out {
     let tan = m.p.as_ref();
     let p_px = tan.map(|t| (sx(t.a), sy(t.fan.v))).filter(|q| inside(*q));
     if let (Some(t), None) = (tan, p_px) {
-        notes.push(if t.a.abs() > 1000.0 || t.fan.v.abs() > 1000.0 || (pi_mode && t.a.abs() > 1000.0 * PI) {
-            format!("P is at {} = {}, {} = {}, beyond the largest axes this figure draws (\u{b1}1000): choose another a", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s)
+        notes.push(if t.fan.v.abs() > 999.0 {
+            format!("P is at {} = {}, {} = {}: values beyond \u{b1}999 are past the largest y-axis this figure draws; choose an a where |{}({})| \u{2264} 999, or rescale the function (for example in thousands)", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s, m.fname, m.var)
+        } else if t.a.abs() > 1000.0 || (pi_mode && t.a.abs() > 1000.0 * PI) {
+            format!("P is at {} = {}, beyond the largest x-axis this figure draws (\u{b1}1000): choose another a", m.var, t.an.s)
         } else { format!("P is outside the window: set the axes so that {} = {} and {} = {} are inside them", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s) });
     }
     let mut q_px = None;
@@ -996,8 +1104,8 @@ pub(super) fn build(p0: &Params) -> Out {
                 let qq = (sx(t.a + s.h), sy(s.fb.v));
                 if inside(qq) { if i == 0 { q_px = Some(qq); } else { sc.dots.push(qq); over += &format!(r##"<circle cx="{:.2}" cy="{:.2}" r="3.2" fill="{col}" stroke="#fff" stroke-width="1"/>"##, qq.0, qq.1); } }
                 else if i == 0 {
-                    notes.push(if s.qx.v.abs() > 1000.0 || s.fb.v.abs() > 1000.0 {
-                        format!("Q is at {} = {}, {} = {}, beyond the largest axes this figure draws (\u{b1}1000): choose a smaller h", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s)
+                    notes.push(if s.qx.v.abs() > 1000.0 || s.fb.v.abs() > 999.0 {
+                        format!("Q is at {} = {}, {} = {}, beyond the largest axes this figure draws (x to \u{b1}1000, y to \u{b1}999): choose a smaller {}", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s, m.step)
                     } else { format!("Q is outside the window: set the axes so that {} = {} and {} = {} are inside them, or choose another h", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s) });
                 }
             }
@@ -1035,10 +1143,10 @@ pub(super) fn build(p0: &Params) -> Out {
                 sc.segs.push((c, qq));
                 let rise = s.ctx.make(ex_sub(&s.fb, &t.fan), s.fb.v - t.fan.v);
                 let rise_t = if answers { format!("\u{394}{} {} {}", m.dep, if rise.exact { "=" } else { "\u{2248}" }, rise.s) } else { format!("\u{394}{}", m.dep) };
-                let run_t = format!("h = {}", s.hn.s);
+                let run_t = format!("{} = {}", m.step, s.hn.s);
                 let below = if qq.1 < pp.1 { 1.0 } else { -1.0 };
                 let away = if qq.0 > pp.0 { 1.0 } else { -1.0 };
-                reqs.push(Req { id: "run", kind: "secant run", text: run_t, anchor: ((pp.0 + c.0) / 2.0, pp.1), prefs: vec![(0.0, below)], size, along: along(pp, c), short: Some("h".into()), full: String::new(), own: Own::Leg(pp, c) });
+                reqs.push(Req { id: "run", kind: "secant run", text: run_t, anchor: ((pp.0 + c.0) / 2.0, pp.1), prefs: vec![(0.0, below)], size, along: along(pp, c), short: Some(m.step.clone()), full: String::new(), own: Own::Leg(pp, c) });
                 reqs.push(Req { id: "rise", kind: "secant rise", text: rise_t, anchor: (c.0, (c.1 + qq.1) / 2.0), prefs: vec![(away, 0.0)], size, along: along(c, qq), short: answers.then(|| format!("\u{394}{}", m.dep)), full: String::new(), own: Own::Leg(c, qq) });
             } else { notes.push("The secant's slope triangle needs Q inside the window".into()); }
         }
@@ -1126,7 +1234,7 @@ pub(super) fn build(p0: &Params) -> Out {
             }
             sc.segs.push(((xa, y), (xb, y)));
             let up = if y > sy(ax_y) { 1.0 } else { -1.0 };
-            reqs.push(Req { id: "hmark", kind: "h mark", text: "h".into(), anchor: ((xa + xb) / 2.0, y), prefs: vec![(0.0, up), (0.0, -up)], size, along: along((xa, y), (xb, y)), short: None, full: String::new(), own: Own::Leg((xa, y), (xb, y)) });
+            reqs.push(Req { id: "hmark", kind: "h mark", text: m.step.clone(), anchor: ((xa + xb) / 2.0, y), prefs: vec![(0.0, up), (0.0, -up)], size, along: along((xa, y), (xb, y)), short: None, full: String::new(), own: Own::Leg((xa, y), (xb, y)) });
         }
         // ── more tangents ──
         if draw_tangent {
@@ -1223,12 +1331,13 @@ pub(super) fn build(p0: &Params) -> Out {
             }
             if draw_secant && !m.secants.is_empty() {
                 let s = &m.secants[0];
-                lines.push(pl(Some((sec_lines.first().map(|x| x.0.as_str()).unwrap_or(ink.secant), sec_dash)), vec![pr("Secant "), mt("P"), mt("Q"), pr(", "), mt(&format!("h = {}", s.hn.s))]));
+                lines.push(pl(Some((sec_lines.first().map(|x| x.0.as_str()).unwrap_or(ink.secant), sec_dash)), vec![pr("Secant "), mt("P"), mt("Q"), pr(", "), mt(&format!("{} = {}", m.step, s.hn.s))]));
                 if slopes {
                     let rel = if s.m.exact { "=" } else { "\u{2248}" };
                     if p.b("worked") {
                         let f = &m.fname;
-                        lines.push(ind(vec![mt(&format!("m = [{f}(a + h) \u{2212} {f}(a)]/h"))]));
+                        let st = &m.step;
+                        lines.push(ind(vec![mt(&format!("m = [{f}(a + {st}) \u{2212} {f}(a)]/{st}"))]));
                         lines.push(ind(vec![mt(&format!("= [{} \u{2212} {}]/{}", fx(&s.qx), fx(&t.an), paren_den(&s.hn)))]));
                         if answers {
                             if s.fb.exact && t.fan.exact {
@@ -1254,7 +1363,7 @@ pub(super) fn build(p0: &Params) -> Out {
                 if !p.b("table") {
                     for (i, s2) in m.secants.iter().enumerate().skip(1) {
                         let col = sec_lines.get(i).map(|x| x.0.clone()).unwrap_or_default();
-                        let mut parts = vec![pr("Secant, "), mt(&format!("h = {}", s2.hn.s))];
+                        let mut parts = vec![pr("Secant, "), mt(&format!("{} = {}", m.step, s2.hn.s))];
                         if slopes { parts.push(pr(": slope ")); if answers { parts.push(mt(&slope_text(&s2.m))); } else { parts.push(Part::Blank); } }
                         lines.push(PLine { swatch: Some((col, sec_dash)), parts, indent: false });
                     }
@@ -1268,7 +1377,7 @@ pub(super) fn build(p0: &Params) -> Out {
         }
         if draw_secant {
             for (i, s) in m.secants.iter().enumerate() {
-                key.push(vec![pr(if i == 0 { "secant slope " } else { "" }), mt(&format!("{} (h = {})", slope_text(&s.m), s.hn.s))]);
+                key.push(vec![pr(if i == 0 { "secant slope " } else { "" }), mt(&format!("{} ({} = {})", slope_text(&s.m), m.step, s.hn.s))]);
             }
         }
     }
@@ -1278,12 +1387,12 @@ pub(super) fn build(p0: &Params) -> Out {
     let sw = 24.0;
     let mut table: Vec<(Option<(String, &'static str)>, Vec<Part>, Vec<Part>)> = vec![];
     if let (true, true, Some(t)) = (p.b("table"), draw_secant && !m.secants.is_empty(), tan) {
-        table.push((None, vec![mt("h")], vec![pr("slope of "), mt("P"), mt("Q")]));
+        table.push((None, vec![mt(&m.step)], vec![pr("slope of "), mt("P"), mt("Q")]));
         for (i, s) in m.secants.iter().enumerate() {
             table.push((sec_lines.get(i).cloned(), vec![mt(&s.hn.s)], if answers { vec![mt(&slope_text(&s.m))] } else { vec![Part::Blank] }));
         }
         if let (Slope::Finite(..), Some(mn)) = (&t.slope, &t.m) {
-            table.push((Some((ink.tangent.to_string(), tan_dash)), vec![mt("h \u{2192} 0")], if answers { vec![mt(&format!("{} {} {}", fp(&t.an), if mn.exact { "=" } else { "\u{2248}" }, mn.s))] } else { vec![mt(&format!("{} = ", fp(&t.an))), Part::Blank] }));
+            table.push((Some((ink.tangent.to_string(), tan_dash)), vec![mt(&format!("{} \u{2192} 0", m.step))], if answers { vec![mt(&format!("{} {} {}", fp(&t.an), if mn.exact { "=" } else { "\u{2248}" }, mn.s))] } else { vec![mt(&format!("{} = ", fp(&t.an))), Part::Blank] }));
         }
     }
     let line_w = |l: &PLine| (if l.swatch.is_some() { sw + 6.0 } else { 0.0 }) + if l.indent { sw + 6.0 } else { 0.0 } + parts_w(&l.parts, size);
@@ -1433,14 +1542,13 @@ thread_local! {
     static SEEN: std::cell::RefCell<std::collections::HashMap<(u64, &'static str), bool>> = std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
-/// Whether flipping `key` to `alt` changes what is drawn or said (cached).
-fn acts(key: &'static str, p: &Params, alt: Value) -> bool {
+/// Whether setting `key` to any of `alts` changes what is drawn or said (cached).
+fn acts(key: &'static str, p: &Params, alt: Value) -> bool { acts_any(key, p, &[alt]) }
+fn acts_any(key: &'static str, p: &Params, alts: &[Value]) -> bool {
     let h = super::super::params_key(p);
     if let Some(v) = SEEN.with(|s| s.borrow().get(&(h, key)).copied()) { return v; }
-    let mut q = p.clone();
-    q.0.insert(key.to_string(), alt);
-    let (a, b) = (build(p), build(&q));
-    let v = a.svg != b.svg || a.notes != b.notes;
+    let a = build(p);
+    let v = alts.iter().any(|alt| { let mut q = p.clone(); q.0.insert(key.to_string(), alt.clone()); let b = build(&q); a.svg != b.svg || a.notes != b.notes });
     SEEN.with(|s| { let mut s = s.borrow_mut(); if s.len() > 512 { s.clear(); } s.insert((h, key), v); });
     v
 }
@@ -1462,6 +1570,7 @@ pub(crate) fn relevant(key: &str, p0: &Params) -> bool {
     let p_in = t.is_some_and(|t| inside(t.a, t.fan.v));
     let sec_ok = !m.secants.is_empty();
     let q_in = t.is_some() && m.secants.first().is_some_and(|s| inside(t.unwrap().a + s.h, s.fb.v));
+    let q_in_any = q_in;
     let more = !m.more.is_empty() || m.notes.iter().any(|n| n.0 == About::More);
     let show_t = p.b("show_tangent") && !co;
     let show_s = p.b("show_secant") && !co;
@@ -1471,7 +1580,8 @@ pub(crate) fn relevant(key: &str, p0: &Params) -> bool {
     match key {
         "show_answers" => acts("show_answers", p, Value::B(!p.b("show_answers"))),
         "slope_form" => acts("slope_form", p, Value::S(if p.s("slope_form") == "Decimals" { "Exact".into() } else { "Decimals".into() })),
-        "dec" => acts("dec", p, Value::I(if p.i("dec") == 2 { 3 } else { 2 })),
+        // (every other count of places: two counts can happen to write the same digits)
+        "dec" => acts_any("dec", p, &(0..=6).filter(|d| *d != p.i("dec")).map(Value::I).collect::<Vec<_>>()),
         "student_copy" => !p.b("show_answers") && p_def,
         "key_line" => p.b("show_answers") && ((show_t && tan_ok) || secant_drawn),
         "title" => p.s("title_mode") == "Text",
@@ -1486,7 +1596,7 @@ pub(crate) fn relevant(key: &str, p0: &Params) -> bool {
         "worked" => secant_drawn && p.b("show_slopes"),
         "tangent_eq" | "tangent_style" => tangent_drawn,
         "secant_eq" | "table" | "secant_style" => secant_drawn,
-        "pt_labels" => p_in,
+        "pt_labels" => p_in || (show_s && q_in_any),
         "secant_triangle" => secant_drawn && p_in,
         "h_mark" => secant_drawn && p_in && q_in,
         "tangent_triangle" => show_t && finite && p_in,
