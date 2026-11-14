@@ -1952,7 +1952,7 @@ fn piles_walk(e: &X, lo: f64, hi: f64, first: bool) -> Vec<Pile> {
             X::Mul(v) => for a in v { walk(a, lo, hi, zero, first, out) },
             X::Neg(a) => walk(a, lo, hi, zero, first, out),
             X::Inv(a) => walk(a, lo, hi, true, first, out),
-            X::Pow(b, p) => { walk(b, lo, hi, p.has_x() || const_q(p).is_none_or(|q| q < Q::ZERO), first, out); walk(p, lo, hi, false, first, out); }
+            X::Pow(b, p) => { walk(b, lo, hi, p.has_x() || const_q(p).is_none_or(|q| q <= Q::ZERO), first, out); walk(p, lo, hi, false, first, out); }
             X::F(f, a) => {
                 if (*f == Fun::Floor || (zero && matches!(f, Fun::Sin | Fun::Cos))) && !poly(a).is_some_and(|c| c.len() <= 2) {
                     for k in piles_of(a, lo, hi, if first { 1 } else { usize::MAX }) { out.push(Pile { at: k, arg: (**a).clone(), level: *f }); }
@@ -2030,6 +2030,17 @@ pub fn floors_inert(e: &X, lo: f64, hi: f64) -> Option<X> {
     Some(with(&c))
 }
 
+/// Whether e has a power whose values the figure's rule decides differently from a plain evaluator: a base and power
+/// both with x in them (no value for a base ≤ 0), or a constant base of 0 (0^(x - 2): no value for x ≤ 2).
+pub fn has_ruled_power(e: &X) -> bool {
+    match e {
+        X::C(_) | X::V => false,
+        X::Add(v) | X::Mul(v) => v.iter().any(has_ruled_power),
+        X::Neg(a) | X::Inv(a) | X::F(_, a) => has_ruled_power(a),
+        X::Pow(b, p) => (p.has_x() && (b.has_x() || matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)))) || has_ruled_power(b) || has_ruled_power(p),
+    }
+}
+
 /// A cheap count of the cuts e has on [lo, hi], before any is solved for: over 4000 samples, how often each floor's
 /// value changes and each denominator (and base of a power that is not a whole positive number) changes sign. A floor
 /// of 10 sin(x²) on -100..100, or tan(e^x), counts in the thousands.
@@ -2048,7 +2059,7 @@ pub fn busy(e: &X, lo: f64, hi: f64) -> usize {
             X::Add(v) | X::Mul(v) => for a in v { walk(a, xs, n) },
             X::Neg(a) => walk(a, xs, n),
             X::Inv(a) => { *n += changes(a, &|v| if v > 0.0 { 0.5 } else { -0.5 }); walk(a, xs, n); }
-            X::Pow(b, p) => { if p.has_x() || const_q(p).is_none_or(|q| !q.is_int() || q < Q::ZERO) { *n += changes(b, &|v| if v > 0.0 { 0.5 } else { -0.5 }); } walk(b, xs, n); walk(p, xs, n); }
+            X::Pow(b, p) => { if p.has_x() || const_q(p).is_none_or(|q| !q.is_int() || q <= Q::ZERO) { *n += changes(b, &|v| if v > 0.0 { 0.5 } else { -0.5 }); } walk(b, xs, n); walk(p, xs, n); }
             X::F(f, a) => { if *f == Fun::Floor { *n += changes(a, &|v| v.floor()); } walk(a, xs, n); }
         }
     }
@@ -2067,7 +2078,10 @@ pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
             X::Neg(a) => walk(a, lo, hi, out, push),
             X::Inv(a) => { push(zeros(a, lo, hi), out); walk(a, lo, hi, out, push); }
             X::Pow(b, p) => {
-                if p.has_x() || const_q(p).is_none_or(|q| !q.is_int() || q < Q::ZERO) { push(zeros(b, lo, hi), out); }
+                // (a base's zeros are breaks unless the power is a whole positive number: b^0 has no value where b = 0,
+                // as b/b has none; and a constant base of 0 has none where its power is not positive: 0^(x - 2) at 2)
+                if p.has_x() || const_q(p).is_none_or(|q| !q.is_int() || q <= Q::ZERO) { push(zeros(b, lo, hi), out); }
+                if !b.has_x() && p.has_x() && matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)) { push(zeros(p, lo, hi), out); }
                 walk(b, lo, hi, out, push);
                 walk(p, lo, hi, out, push);
             }

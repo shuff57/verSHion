@@ -1487,3 +1487,47 @@ fn every_stretch_of_a_step_function_is_drawn_at_its_own_value() {
     assert!(checked > 500, "{checked} stretches checked");
     assert!(fails.is_empty(), "{} wrong:\n{}", fails.len(), fails.join("\n"));
 }
+
+/// b(x)^0 has no value wherever b(x) = 0 (0^0 has none), as b/b has none: every zero of the base is a removable point,
+/// found by the same search, whether or not it is asked about, with a hole drawn; and a power the rule gives no value is
+/// not drawn there (sin(x)^(x - x) where sin x < 0; 0^(x - 2) at and left of 2: no spike to (2, 1)).
+#[test]
+fn every_zero_of_a_base_to_the_power_zero_is_a_hole() {
+    let pi = "\u{3c0}";
+    let cases: Vec<(&str, &str, String)> = vec![
+        ("y = (x - 1)^0 (x - 3)^0", "2", "1 removable, 3 removable".into()),
+        ("y = (x - 2)^0", "", "2 removable".into()),
+        ("y = sin(x)^0", "1", format!("-{pi} removable, 0 removable, {pi} removable, 2{pi} removable, 3{pi} removable")),
+        ("y = cos(x)^0", "0", format!("-3{pi}/2 removable, -{pi}/2 removable, {pi}/2 removable, 3{pi}/2 removable, 5{pi}/2 removable")),
+        ("y = tan(x)^0", "1", format!("-3{pi}/2 removable, -{pi} removable, -{pi}/2 removable, 0 removable, {pi}/2 removable, {pi} removable, 3{pi}/2 removable, 2{pi} removable, 5{pi}/2 removable, 3{pi} removable")),
+        ("y = (x^2 - 2)^0 + sin(x)^0", "", format!("-{pi} removable, -\u{221a}2 removable, 0 removable, \u{221a}2 removable, {pi} removable, 2{pi} removable, 3{pi} removable")),
+        ("y = sin(x)^0 + 1/x", "", format!("-{pi} removable, 0 infinite, {pi} removable, 2{pi} removable, 3{pi} removable")),
+        ("y = sin(x)^0, x >= 0", "", format!("{pi} removable, 2{pi} removable, 3{pi} removable")),
+        ("y = sin(pi x)^0", "1/2", (-6..=10).map(|k| format!("{k} removable")).collect::<Vec<_>>().join(", ")),
+    ];
+    let mut fails = vec![];
+    for (f, at, want) in &cases {
+        let p = with(json!({"pieces": f, "dots": "", "ask_at": at, "ask_disc": true}));
+        let (ds, done) = model_of(&p).discontinuities();
+        let got = ds.iter().map(|d| format!("{} {}", d.text, d.kind)).collect::<Vec<_>>().join(", ");
+        if &got != want || !done { fails.push(format!("{f}: {got:?} (complete {done}), want {want:?}")); continue; }
+        // a hole drawn at each removable point inside the window (the window's edges excepted)
+        let _ = svg(&p);
+        let opens = last_drawn(&p).circles.iter().filter(|c| !c.closed).count();
+        let inside = ds.iter().filter(|d| d.kind == "removable" && d.x > -6.0 + 1e-9 && d.x < 10.0 - 1e-9).count();
+        if opens < inside { fails.push(format!("{f}: {opens} open circles for {inside} removable points")); }
+    }
+    // sin(x)^(x - x): no values where sin x < 0, so nothing is drawn on (π, 2π); its key says nowhere (ends of the domain)
+    let p = with(json!({"pieces": "y = sin(x)^(x - x)", "dots": "", "ask_at": "", "ask_disc": true}));
+    let s = svg(&p);
+    let (fx0, _, _, _, ml, _, ux, _) = last_drawn(&p).frame;
+    let xs: Vec<f64> = group(&s, "curves").split("points=\"").skip(1).flat_map(|t| t.split('"').next().unwrap().split(' ').filter_map(|q| q.split_once(',').and_then(|(a, _)| a.parse::<f64>().ok())).collect::<Vec<_>>()).map(|px| fx0 + (px - ml) / ux).collect();
+    if xs.iter().any(|x| *x > 3.2 && *x < 6.2) { fails.push("sin(x)^(x - x) is drawn where sin x < 0".into()); }
+    // 0^(x - 2): no value at 2 or left of it: nothing drawn there, so no stroke up to (2, 1)
+    let p = with(json!({"pieces": "y = 0^(x - 2)", "dots": "", "ask_at": "2, 3", "ask_inf": "Both", "ask_disc": true}));
+    let s = svg(&p);
+    let (fx0, _, _, fy1, ml, mt, ux, uy) = last_drawn(&p).frame;
+    let pts: Vec<(f64, f64)> = group(&s, "curves").split("points=\"").skip(1).flat_map(|t| t.split('"').next().unwrap().split(' ').filter_map(|q| { let (a, b) = q.split_once(',')?; Some((fx0 + (a.parse::<f64>().ok()? - ml) / ux, fy1 - (b.parse::<f64>().ok()? - mt) / uy)) }).collect::<Vec<_>>()).collect();
+    if pts.iter().any(|(x, y)| *x <= 2.0 + 1e-6 || *y > 0.01) { fails.push(format!("0^(x - 2) drawn at {:?}", pts.iter().filter(|(x, y)| *x <= 2.0 + 1e-6 || *y > 0.01).take(3).collect::<Vec<_>>())); }
+    assert!(fails.is_empty(), "{}", fails.join("\n"));
+}

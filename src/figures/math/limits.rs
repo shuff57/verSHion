@@ -803,6 +803,28 @@ fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
                 format!("y = {}{}", cas::grid_text(x, &at), dom(w[0], w[1]))
             }).collect()
         }
+        // (a power the figure's rule gives no value where a plain evaluator would, as sin(x)^(x - x) where sin x < 0 or
+        // 0^(x - 2) at 2: drawn only on the stretches where it has values, each end found by halving)
+        Src::Formula { x } if cas::has_ruled_power(x) => {
+            let (lo, hi) = (pc.lo_x().max(x0 - 1.0), pc.hi_x().min(x1 + 1.0));
+            if !(hi > lo) { return vec![]; }
+            let n = 4000;
+            let t = |i: usize| lo + (hi - lo) * i as f64 / n as f64;
+            let has = |v: f64| cas::ev(x, v).is_some_and(|y| y.is_finite());
+            let edge = |a: f64, b: f64| -> f64 { let (mut a, mut b) = (a, b); for _ in 0..50 { let m = 0.5 * (a + b); if has(m) == has(a) { a = m; } else { b = m; } } if has(a) { a } else { b } };
+            let mut rows = vec![];
+            let mut start: Option<f64> = None;
+            for i in 0..=n {
+                let (v, ok) = (t(i), has(t(i)));
+                match (start, ok) {
+                    (None, true) => start = Some(if i == 0 { v } else { edge(v, t(i - 1)) }),
+                    (Some(s0), false) => { let e = edge(t(i - 1), v); if e > s0 { rows.push(format!("y = {}{}", cas::grid_text(x, &|_| None), dom(s0, e))); } start = None; }
+                    _ => {}
+                }
+            }
+            if let Some(s0) = start { if hi > s0 { rows.push(format!("y = {}{}", cas::grid_text(x, &|_| None), dom(s0, hi))); } }
+            rows
+        }
         Src::Formula { x } => vec![format!("y = {}{}", cas::grid_text(x, &|_| None), dom(pc.lo_x(), pc.hi_x()))],
         Src::Points { pts, m } => (0..pts.len() - 1).map(|k| {
             let (a, b, c, d) = seg_coeffs(pts, m, k);
