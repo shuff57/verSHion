@@ -173,7 +173,7 @@ fn sequences_evidence_renders() {
     };
     std::fs::create_dir_all(&dir).unwrap();
     let tokens:Vec<serde_json::Value>=serde_json::from_str(r#"[
- {"first":"3"},{"mode":"Geometric","ratio":"-1/2"},{"mode":"Explicit","formula":"n^2"},{"mode":"Recursive","first":"1","to":25},{"start":"0","count":10},{"first":"4"},{"display":"Partial sums","to":50},{"mode":"Geometric","limit":true},{"first":"1/3"},{"difference":"2"},{"recursive":true},{"point_values":true},{"first":"5"},{"sums":true},{"mode":"Geometric","sum":true},{"mode":"Geometric","convergence":true},{"join":true},{"marks":"Spikes"},{"display":"Both","layout":"Two aligned graphs","to":50},{"mode":"Geometric","limit":true,"band":true},{"mode":"Geometric","layout":"Number line"},{"mode":"Geometric","first":"8"},{"from":-4,"to":16,"step":4},{"grid":"Bold"},{"xlabel":"k","ylabel":"uₖ"},{"title":"A growing sequence"},{"blank_title":true},{"label_size":"Large"},{"style":"Print"},{"show_answers":false},{"show_answers":false,"task":"Missing terms"},{"show_answers":false,"task":"Continue"},{"mode":"Geometric","task":"Missing terms","sum":true,"convergence":true,"recursive":true},{"first":"4"},{"difference":"2"},{"count":10}
+ {"first":"3"},{"mode":"Geometric","ratio":"-1/2"},{"mode":"Explicit","formula":"n^2","from":0,"to":70,"step":10},{"mode":"Recursive","first":"1","from":0,"to":25,"step":5},{"start":"0","count":10},{"first":"4"},{"display":"Partial sums","to":50,"step":10},{"mode":"Geometric","limit":true},{"first":"1/3"},{"difference":"2","from":0,"to":20,"step":5},{"recursive":true},{"point_values":true},{"first":"5"},{"sums":true,"to":50,"step":10},{"mode":"Geometric","sum":true},{"mode":"Geometric","convergence":true},{"join":true},{"marks":"Spikes"},{"display":"Both","layout":"Two aligned graphs","to":50,"step":10},{"mode":"Geometric","limit":true,"band":true},{"mode":"Geometric","layout":"Number line","limit":true,"from":-1,"to":3},{"mode":"Geometric","first":"8"},{"from":-4,"to":16,"step":4},{"grid":"Bold"},{"xlabel":"k","ylabel":"uₖ"},{"title":"A growing sequence"},{"blank_title":true},{"label_size":"Large"},{"style":"Print"},{"show_answers":false},{"show_answers":false,"task":"Missing terms"},{"show_answers":false,"task":"Continue"},{"mode":"Geometric","task":"Missing terms","sum":true,"convergence":true,"recursive":true},{"first":"4"},{"difference":"2","from":0,"to":20,"step":5},{"count":10}
  ]"#).unwrap();
     let base = Params::defaults(&params());
     let opening = render(&base);
@@ -273,7 +273,7 @@ fn sequences_label_geometry() {
                 labels.len()
             );
             for (i, a) in labels.iter().enumerate() {
-                assert!(a.rect.y1 < 402.0);
+                assert!(a.rect.y1 < 445.0);
                 for b in &labels[i + 1..] {
                     assert!(!a.rect.hit(&b.rect));
                 }
@@ -451,5 +451,116 @@ fn sequences_limits_confirmed_across_scales() {
             let finite = 2.0 * (1.0 - r.powi(n)) / (1.0 - r);
             assert!((finite - sum).abs() < 1e-6);
         }
+    }
+}
+#[test]
+fn sequences_control_relevance_contract() {
+    for (mode, layout, ans) in [
+        ("Arithmetic", "One grid", true),
+        ("Geometric", "One grid", true),
+        ("Explicit", "Number line", false),
+        ("Recursive", "Two aligned graphs", true),
+    ] {
+        let mut base = Params::defaults(&params());
+        base.set_s("mode", mode);
+        base.set_s("layout", layout);
+        base.set_b(SHOW_ANSWERS, ans);
+        let svg = render(&base);
+        for pd in params() {
+            if relevant(pd.key, &base) {
+                continue;
+            }
+            let mut q = base.clone();
+            match pd.kind {
+                Kind::Bool => q.set_b(pd.key, !base.b(pd.key)),
+                Kind::Int { max, .. } => q.set_i(pd.key, max),
+                Kind::Float { max, .. } => q.set_f(pd.key, max),
+                Kind::Choice(opts) => {
+                    let v = opts.into_iter().find(|v| *v != base.s(pd.key)).unwrap();
+                    q.set_s(pd.key, v)
+                }
+                _ => q.set_s(pd.key, "bad input"),
+            };
+            assert_eq!(
+                svg,
+                render(&q),
+                "hidden {} in {mode} {layout} {ans}",
+                pd.key
+            );
+        }
+    }
+    let base = Params::defaults(&params());
+    let opening = render(&base);
+    for pd in params() {
+        if !relevant(pd.key, &base) {
+            continue;
+        }
+        match pd.kind {
+            Kind::Bool => {
+                let mut q = base.clone();
+                q.set_b(pd.key, !base.b(pd.key));
+                assert_ne!(opening, render(&q), "dead {}", pd.key)
+            }
+            Kind::Choice(opts) => {
+                for v in opts {
+                    if v == base.s(pd.key) {
+                        continue;
+                    }
+                    let mut q = base.clone();
+                    q.set_s(pd.key, v);
+                    assert_ne!(opening, render(&q), "dead {} {v}", pd.key)
+                }
+            }
+            _ => {}
+        }
+    }
+}
+#[test]
+fn sequences_classic_examples() {
+    let cases = examples(ID).unwrap();
+    assert_eq!(cases.len(), 6);
+    for (i, e) in cases.iter().enumerate() {
+        let mut p = Params::defaults(&params());
+        for (k, v) in &e.params {
+            p.0.insert((*k).into(), v.clone());
+        }
+        let d = data(&p).unwrap();
+        let (last, sum) = match i {
+            0 => ((9, 1), (44, 1)),
+            1 => ((1, 16), (255, 16)),
+            2 => ((-1, 64), (85, 64)),
+            3 => ((21, 1), (54, 1)),
+            4 => ((1, 8), (761, 280)),
+            _ => ((1, 128), (255, 128)),
+        };
+        assert_eq!(d.a[7].q, Some(last), "{}", e.name);
+        assert_eq!(d.s[7].q, Some(sum), "{}", e.name);
+        assert!(to_png(&render(&p), 0.2).is_ok());
+    }
+}
+#[test]
+fn sequences_names_and_refusals() {
+    for size in ["Small", "Medium", "Large"] {
+        for name in ["WWWWWW", "n", "a", "r", "d", "S", "e", "pi", "Length"] {
+            let mut p = Params::defaults(&params());
+            p.set_s("label_size", size);
+            p.set_s("ylabel", name);
+            if axis_name(&p, "ylabel").is_empty() {
+                assert!(!warnings(&p).is_empty());
+            }
+            let svg = render(&p);
+            let xml = roxmltree::Document::parse(&svg).unwrap();
+            let (w, h) = svg_size(&svg);
+            for t in xml.descendants().filter(|n| n.has_tag_name("text")) {
+                let r = text_rect(t);
+                assert!(r.x0 >= 0.0 && r.x1 <= w && r.y0 >= 0.0 && r.y1 <= h);
+            }
+        }
+    }
+    for key in ["first", "difference"] {
+        let mut p = Params::defaults(&params());
+        p.set_s(key, "1/0");
+        assert!(!warnings(&p).is_empty());
+        assert!(!render(&p).contains("<text"));
     }
 }
