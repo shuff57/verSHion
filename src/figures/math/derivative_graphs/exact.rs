@@ -71,10 +71,11 @@ fn root_q(v: Q, q: i64) -> Option<Q> {
 
 // ───────────────────────── exact values ─────────────────────────
 
-/// q·√s·πᵏ·eʳ: the key is (s, k, r).
+/// q·√s·πᵏ·eʳ·ln(l): the key is (s, k, r, l); l = 1 is no logarithm (one at most in a term: ln 2, 2 − 2 ln 2).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub(crate) struct B { pub s: i128, pub pi: i32, pub e: Q }
-const ONE: B = B { s: 1, pi: 0, e: Q { n: 0, d: 1 } };
+pub(crate) struct B { pub s: i128, pub pi: i32, pub e: Q, pub l: Q }
+const NOLN: Q = Q { n: 1, d: 1 };
+const ONE: B = B { s: 1, pi: 0, e: Q { n: 0, d: 1 }, l: NOLN };
 
 #[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct Xv(pub BTreeMap<B, Q>);
@@ -85,7 +86,7 @@ impl Xv {
     pub(crate) fn is_zero(&self) -> bool { self.0.is_empty() }
     pub(crate) fn rational(&self) -> Option<Q> { if self.0.is_empty() { return Some(Q::int(0)); } if self.0.len() == 1 { self.0.get(&ONE).copied() } else { None } }
     pub(crate) fn f(&self) -> f64 {
-        self.0.iter().map(|(b, c)| c.f() * (b.s as f64).sqrt() * std::f64::consts::PI.powi(b.pi) * b.e.f().exp()).sum()
+        self.0.iter().map(|(b, c)| c.f() * (b.s as f64).sqrt() * std::f64::consts::PI.powi(b.pi) * b.e.f().exp() * if b.l == NOLN { 1.0 } else { b.l.f().ln() }).sum()
     }
     fn add(&self, o: &Xv) -> Option<Xv> {
         let mut m = self.0.clone();
@@ -103,7 +104,9 @@ impl Xv {
             for (b2, c2) in &o.0 {
                 let (k, s) = squarefree(b1.s.checked_mul(b2.s)?);
                 let c = c1.mul(*c2)?.mul(Q::int(k))?;
-                out = out.add(&Xv::mono(c, B { s, pi: b1.pi.checked_add(b2.pi)?, e: b1.e.add(b2.e)? }))?;
+                // (at most one logarithm in a term)
+                let l = if b1.l == NOLN { b2.l } else if b2.l == NOLN { b1.l } else { return None };
+                out = out.add(&Xv::mono(c, B { s, pi: b1.pi.checked_add(b2.pi)?, e: b1.e.add(b2.e)?, l }))?;
             }
         }
         Some(out)
@@ -112,14 +115,15 @@ impl Xv {
         match self.0.len() {
             1 => {
                 let (b, c) = self.0.iter().next().unwrap();
+                if b.l != NOLN { return None; }
                 // 1/(c√s πᵏ eʳ) = √s/(c s) π⁻ᵏ e⁻ʳ
-                Some(Xv::mono(Q::int(1).div(c.mul(Q::int(b.s))?)?, B { s: b.s, pi: -b.pi, e: b.e.neg() }))
+                Some(Xv::mono(Q::int(1).div(c.mul(Q::int(b.s))?)?, B { s: b.s, pi: -b.pi, e: b.e.neg(), l: NOLN }))
             }
             2 => {
                 // a + b√s (no π, no e): times the conjugate over a² - b² s
                 let a = self.0.get(&ONE).copied()?;
                 let (bb, c) = self.0.iter().find(|(k, _)| **k != ONE)?;
-                if bb.pi != 0 || !bb.e.zero() { return None; }
+                if bb.pi != 0 || !bb.e.zero() || bb.l != NOLN { return None; }
                 let den = a.mul(a)?.sub(c.mul(*c)?.mul(Q::int(bb.s))?)?;
                 let conj = Xv::q(a).add(&Xv::mono(c.neg(), *bb))?;
                 conj.mul(&Xv::q(Q::int(1).div(den)?))
@@ -143,7 +147,7 @@ impl Xv {
         if self.0.len() != 1 { return None; }
         let (b, c) = self.0.iter().next().unwrap();
         let (p, q) = (e.n as i64, e.d as i64);
-        if b.s != 1 || b.pi != 0 { return None; }
+        if b.s != 1 || b.pi != 0 || b.l != NOLN { return None; }
         let neg = c.n < 0;
         if neg && q % 2 == 0 { return None; }
         let ca = Q::new(c.n.abs(), c.d)?;
@@ -152,10 +156,10 @@ impl Xv {
         let sign = if neg && p % 2 != 0 { Q::int(-1) } else { Q::int(1) };
         // the root of |c|: exact, or (for a square root) k√s
         let base = if let Some(r) = root_q(ca, q) {
-            Xv::mono(r, B { s: 1, pi: 0, e: er })
+            Xv::mono(r, B { s: 1, pi: 0, e: er, l: NOLN })
         } else if q == 2 {
             let (k, s) = squarefree(ca.n.checked_mul(ca.d)?);
-            Xv::mono(Q::new(k, ca.d)?, B { s, pi: 0, e: er })
+            Xv::mono(Q::new(k, ca.d)?, B { s, pi: 0, e: er, l: NOLN })
         } else { return None };
         // (√|c|)^p with the sign of an odd root
         let r = if p >= 0 { base.powi(p)? } else { base.powi(-p)?.inv()? };
@@ -166,7 +170,7 @@ impl Xv {
         if self.is_zero() { return Some(Q::int(0)); }
         if self.0.len() != 1 { return None; }
         let (b, c) = self.0.iter().next().unwrap();
-        (b.s == 1 && b.pi == 1 && b.e.zero()).then_some(*c)
+        (b.s == 1 && b.pi == 1 && b.e.zero() && b.l == NOLN).then_some(*c)
     }
     pub(crate) fn add_pub(&self, o: &Xv) -> Option<Xv> { self.add(o) }
     pub(crate) fn sub_pub(&self, o: &Xv) -> Option<Xv> { self.sub(o) }
@@ -180,8 +184,8 @@ fn sincos(q: Q) -> Option<(Xv, Xv)> {
     let t = Q::new(q.n.rem_euclid(2 * q.d), q.d)?;
     let k12 = t.mul(Q::int(12))?;
     let half = Xv::q(Q::new(1, 2)?);
-    let r2 = Xv::mono(Q::new(1, 2)?, B { s: 2, pi: 0, e: Q::int(0) });
-    let r3 = Xv::mono(Q::new(1, 2)?, B { s: 3, pi: 0, e: Q::int(0) });
+    let r2 = Xv::mono(Q::new(1, 2)?, B { s: 2, pi: 0, e: Q::int(0), l: NOLN });
+    let r3 = Xv::mono(Q::new(1, 2)?, B { s: 3, pi: 0, e: Q::int(0), l: NOLN });
     let z = Xv::default();
     let o = Xv::int(1);
     // the first quadrant, then the signs
@@ -209,8 +213,8 @@ pub(crate) fn ev(e: &Ex, x: &Xv) -> Option<Xv> {
     Some(match e {
         Num(v) => Xv::q(Q::of_f64(*v)?),
         Ex::X => x.clone(),
-        Pi => Xv::mono(Q::int(1), B { s: 1, pi: 1, e: Q::int(0) }),
-        E => Xv::mono(Q::int(1), B { s: 1, pi: 0, e: Q::int(1) }),
+        Pi => Xv::mono(Q::int(1), B { s: 1, pi: 1, e: Q::int(0), l: NOLN }),
+        E => Xv::mono(Q::int(1), B { s: 1, pi: 0, e: Q::int(1), l: NOLN }),
         Neg(a) => ev(a, x)?.neg(),
         Add(a, b) => ev(a, x)?.add(&ev(b, x)?)?,
         Sub(a, b) => ev(a, x)?.sub(&ev(b, x)?)?,
@@ -219,7 +223,7 @@ pub(crate) fn ev(e: &Ex, x: &Xv) -> Option<Xv> {
         Pow(a, b) => {
             let (u, c) = (ev(a, x)?, ev(b, x)?);
             if let Some(q) = c.rational() { if u.is_zero() && q.n <= 0 { return None; } u.powq(q)? }
-            else if u == Xv::mono(Q::int(1), B { s: 1, pi: 0, e: Q::int(1) }) { if let Some(q) = c.rational() { Xv::mono(Q::int(1), B { s: 1, pi: 0, e: q }) } else { return None } }
+            else if u == Xv::mono(Q::int(1), B { s: 1, pi: 0, e: Q::int(1), l: NOLN }) { exp_of(&c)? }
             else { return None }
         }
         LogB(b, a) => { let (a, b) = (ev(a, x)?, ev(b, x)?); let (qa, qb) = (a.rational()?, b.rational()?); log_rat(qa, qb)? }
@@ -228,28 +232,49 @@ pub(crate) fn ev(e: &Ex, x: &Xv) -> Option<Xv> {
             match f {
                 F::Sqrt => { if u.f() < 0.0 { return None; } u.powq(Q::new(1, 2)?)? }
                 F::Abs => if u.sign() < 0 { u.neg() } else { u },
-                F::Exp => Xv::mono(Q::int(1), B { s: 1, pi: 0, e: u.rational()? }),
-                F::Ln => {
-                    if u.0.len() == 1 { let (b, c) = u.0.iter().next().unwrap(); if b.s == 1 && b.pi == 0 && *c == Q::int(1) { return Some(Xv::q(b.e)); } }
-                    if u == Xv::int(1) { Xv::default() } else { return None }
-                }
+                F::Exp => exp_of(&u)?,
+                F::Ln => ln_of(&u)?,
                 F::Log => { let q = u.rational()?; log_rat(q, Q::int(10))? }
                 F::Sin | F::Cos | F::Tan | F::Sec | F::Csc | F::Cot => {
                     let (s, c) = sincos(u.pi_multiple()?)?;
                     match f { F::Sin => s, F::Cos => c, F::Tan => { if c.is_zero() { return None; } s.div(&c)? }, F::Sec => { if c.is_zero() { return None; } c.inv()? }, F::Csc => { if s.is_zero() { return None; } s.inv()? }, _ => { if s.is_zero() { return None; } c.div(&s)? } }
                 }
-                F::Asin => Xv::mono(arcsin_table(&u)?, B { s: 1, pi: 1, e: Q::int(0) }),
-                F::Acos => Xv::mono(Q::new(1, 2)?.sub(arcsin_table(&u)?)?, B { s: 1, pi: 1, e: Q::int(0) }),
+                F::Asin => Xv::mono(arcsin_table(&u)?, B { s: 1, pi: 1, e: Q::int(0), l: NOLN }),
+                F::Acos => Xv::mono(Q::new(1, 2)?.sub(arcsin_table(&u)?)?, B { s: 1, pi: 1, e: Q::int(0), l: NOLN }),
                 F::Atan => {
                     // tan(qπ) = u at the table angles in (-π/2, π/2)
                     let mut got = None;
                     for k in -5..=5i128 { let q = Q::new(k, 12)?; if let Some((s, c)) = sincos(q) { if !c.is_zero() && s.div(&c)? == u { got = Some(q); break; } } }
-                    Xv::mono(got?, B { s: 1, pi: 1, e: Q::int(0) })
+                    Xv::mono(got?, B { s: 1, pi: 1, e: Q::int(0), l: NOLN })
                 }
                 _ => return None,
             }
         }
     })
+}
+/// e^u for u = r + Σ cᵢ ln qᵢ (cᵢ whole): eʳ Π qᵢ^cᵢ (e^(ln 2) = 2, e^(1 + ln 3) = 3e)
+fn exp_of(u: &Xv) -> Option<Xv> {
+    let mut out = Xv::int(1);
+    for (b, c) in &u.0 {
+        if *b == ONE { out = out.mul(&Xv::mono(Q::int(1), B { s: 1, pi: 0, e: *c, l: NOLN }))?; }
+        else if b.s == 1 && b.pi == 0 && b.e.zero() && b.l != NOLN && c.is_int() { out = out.mul(&Xv::q(b.l.powi(c.n as i64)?))?; }
+        else { return None; }
+    }
+    Some(out)
+}
+/// ln v for v = c eʳ (c > 0 rational): r + ln c (ln e² = 2, ln 2 stays ln 2)
+fn ln_of(v: &Xv) -> Option<Xv> {
+    if v.0.len() != 1 { return None; }
+    let (b, c) = v.0.iter().next().unwrap();
+    if b.s != 1 || b.pi != 0 || b.l != NOLN || c.n <= 0 { return None; }
+    let r = Xv::q(b.e);
+    if *c == Q::int(1) { return Some(r); }
+    // ln of a whole power: ln 4 = 2 ln 2, ln(1/2) = -ln 2
+    let (mut base, mut k) = (*c, 1i128);
+    let inv = c.n == 1 && c.d > 1;
+    if inv { base = Q::int(c.d); k = -1; }
+    for p in 2..=6i128 { if let Some(r0) = root_q(base, p as i64) { if r0.n > 1 && r0.d == 1 { base = r0; k *= p; break; } } }
+    r.add(&Xv::mono(Q::int(k), B { s: 1, pi: 0, e: Q::int(0), l: base }))
 }
 /// log base b of a, both rational: a whole or fractional power b^k with k found exactly (b^k = a).
 fn log_rat(a: Q, b: Q) -> Option<Xv> {
@@ -276,14 +301,16 @@ fn syms(b: &B) -> (String, String) {
     if b.pi > 0 { top = format!("{}{top}", pi(b.pi)); } else if b.pi < 0 { bot.push_str(&pi(-b.pi)); }
     let ee = |r: Q| if r == Q::int(1) { "e".to_string() } else if r.is_int() { format!("e{}", sup(r.n)) } else if r == Q::new(1, 2).unwrap() { "\u{221a}e".to_string() } else { format!("e^({}/{})", r.n, r.d) };
     if b.e.n > 0 { top.push_str(&ee(b.e)); } else if b.e.n < 0 { bot.push_str(&ee(b.e.neg())); }
+    if b.l != NOLN { let l = if b.l.d == 1 { format!("ln\u{2009}{}", b.l.n) } else { format!("ln({}/{})", b.l.n, b.l.d) }; top = if top.is_empty() { l } else { format!("{top} {l}") }; }
     (top, bot)
 }
 fn term(c: Q, b: &B) -> String {
     let (top, bot) = syms(b);
     let (n, d) = (c.n.abs(), c.d);
-    let num = if top.is_empty() { n.to_string() } else if n == 1 { top.clone() } else { format!("{n}{top}") };
+    // (a thin space before ln: 2 ln 2)
+    let num = if top.is_empty() { n.to_string() } else if n == 1 { top.clone() } else if top.starts_with("ln") { format!("{n}\u{2009}{top}") } else { format!("{n}{top}") };
     // (a denominator of more than one factor is bracketed: 1/(2e), never 1/2e)
-    let den = match (d, bot.is_empty()) { (1, true) => String::new(), (1, false) => if bot.chars().filter(|c| matches!(c, '\u{3c0}' | 'e' | '\u{221a}')).count() > 1 { format!("({bot})") } else { bot }, (d, true) => d.to_string(), (d, false) => format!("({d}{bot})") };
+    let den = match (d, bot.is_empty()) { (1, true) => String::new(), (1, false) => if bot.replace("\u{221a}e", "e").chars().filter(|c| matches!(c, '\u{3c0}' | 'e' | '\u{221a}')).count() > 1 { format!("({bot})") } else { bot }, (d, true) => d.to_string(), (d, false) => format!("({d}{bot})") };
     let body = if den.is_empty() { num } else { format!("{num}/{den}") };
     if c.n < 0 { format!("{MINUS}{body}") } else { body }
 }
@@ -383,7 +410,17 @@ fn ints_of(p: &P) -> Vec<i128> { let l = p.0.iter().fold(1i128, |l, c| l / gcd(l
 #[derive(Clone, Debug)]
 struct T { num: P, den: P, atoms: BTreeMap<String, (Atom, Q)> }
 #[derive(Clone, Debug, PartialEq)]
-enum Atom { Exp, Trig(F, Q, Q), Root(P), Other }
+enum Atom { Exp(Option<(Q, Xv)>), Trig(F, Q, Xv), Root(P), Ln(Q, Xv), Other }
+/// u = a x + b with a rational and b exact (a phase may hold π: x − π/3): (a, b), when u is linear in x.
+pub(crate) fn linear_x(u: &Ex) -> Option<(Q, Xv)> {
+    if !super::sym::has_x(u) { return None; }
+    let b = ev(u, &Xv::default())?;
+    let a = ev(u, &Xv::int(1))?.sub(&b)?.rational()?;
+    if a.zero() || ev(u, &Xv::int(2))? != b.add(&Xv::q(a.mul(Q::int(2))?))? || ev(u, &Xv::int(-3))? != b.add(&Xv::q(a.mul(Q::int(-3))?))? { return None; }
+    Some((a, b))
+}
+/// x with a x + b = t
+fn lin_solve(a: Q, b: &Xv, t: &Xv) -> Option<Xv> { t.sub(b)?.mul(&Xv::q(Q::int(1).div(a)?)) }
 fn x_poly() -> P { P(vec![Q::int(0), Q::int(1)]) }
 fn konst_q(e: &Ex) -> Option<Q> { if super::sym::has_x(e) { return None; } ev(e, &Xv::default())?.rational() }
 /// The polynomial an expression is (with rational coefficients), when it is one.
@@ -426,7 +463,7 @@ fn expand(e: &Ex) -> Option<Vec<T>> {
             expand(a)?.iter().map(|t| tmul(t, &inv)).collect::<Option<Vec<_>>>()?
         }
         // e^u (as the reader reads e^(-x)) is exp(u): never zero
-        Pow(a, b) if matches!(**a, E) => atom(Atom::Exp, format!("exp{}", super::sym::print(b)), Q::int(1))?,
+        Pow(a, b) if matches!(**a, E) => atom(Atom::Exp(linear_x(b)), format!("exp{}", super::sym::print(b)), Q::int(1))?,
         Pow(a, b) => {
             let k = konst_q(b)?;
             if let Some(base) = as_poly(a) { return atom(Atom::Root(base.clone()), format!("root{:?}", base.0), k); }
@@ -434,17 +471,17 @@ fn expand(e: &Ex) -> Option<Vec<T>> {
             else { return None; }
         }
         Fun(F::Sqrt, a) => { let base = as_poly(a)?; return atom(Atom::Root(base.clone()), format!("root{:?}", base.0), Q::new(1, 2)?); }
-        Fun(F::Exp, a) => atom(Atom::Exp, format!("exp{}", super::sym::print(a)), Q::int(1))?,
+        Fun(F::Exp, a) => atom(Atom::Exp(linear_x(a)), format!("exp{}", super::sym::print(a)), Q::int(1))?,
         Fun(f @ (F::Sin | F::Cos | F::Tan | F::Sec | F::Csc | F::Cot), a) => {
-            let u = as_poly(a)?;
-            if u.deg() != 1 { return None; }
-            atom(Atom::Trig(*f, u.0[1], u.0[0]), format!("{f:?}{:?}", u.0), Q::int(1))?
+            let (ka, kb) = linear_x(a)?;
+            atom(Atom::Trig(*f, ka, kb), format!("{f:?}{}", super::sym::print(a)), Q::int(1))?
         }
+        Fun(F::Ln, a) if linear_x(a).is_some() => { let (ka, kb) = linear_x(a)?; atom(Atom::Ln(ka, kb), format!("ln{}", super::sym::print(a)), Q::int(1))? }
         Pow(..) | Fun(..) | LogB(..) | Pi | E | Num(_) | Ex::X => atom(Atom::Other, super::sym::print(e), Q::int(1))?,
     })
 }
 /// x where a sine or cosine of a·x + b takes the table value v, in (lo, hi): exact.
-fn trig_solutions(f: F, a: Q, b: Q, v: &Xv, lo: f64, hi: f64) -> Option<Vec<Xv>> {
+fn trig_solutions(f: F, a: Q, b: &Xv, v: &Xv, lo: f64, hi: f64) -> Option<Vec<Xv>> {
     // the angles θ = qπ in [0, 2π) with f(θ) = v
     let mut qs: Vec<Q> = vec![];
     for k in 0..24i128 {
@@ -456,13 +493,13 @@ fn trig_solutions(f: F, a: Q, b: Q, v: &Xv, lo: f64, hi: f64) -> Option<Vec<Xv>>
     if qs.is_empty() && !matches!(f, F::Sin | F::Cos | F::Tan) { return None; }
     let mut out = vec![];
     // a x + b = (q + 2k) π  →  x = ((q + 2k)π - b)/a
-    let pi = Xv::mono(Q::int(1), B { s: 1, pi: 1, e: Q::int(0) });
+    let pi = Xv::mono(Q::int(1), B { s: 1, pi: 1, e: Q::int(0), l: NOLN });
     for q in qs {
         let (lo_k, hi_k) = { let k1 = ((a.f() * lo + b.f()) / std::f64::consts::PI - q.f()) / 2.0; let k2 = ((a.f() * hi + b.f()) / std::f64::consts::PI - q.f()) / 2.0; (k1.min(k2).floor() as i128 - 1, k1.max(k2).ceil() as i128 + 1) };
         if hi_k - lo_k > 200 { return None; }
         for k in lo_k..=hi_k {
             let ang = pi.mul(&Xv::q(q.add(Q::int(2 * k))?))?;
-            let x = ang.sub(&Xv::q(b))?.mul(&Xv::q(Q::int(1).div(a)?))?;
+            let x = lin_solve(a, b, &ang)?;
             let xf = x.f();
             if xf > lo && xf < hi && !out.contains(&x) { out.push(x); }
         }
@@ -481,9 +518,11 @@ pub(crate) fn zeros(e: &Ex, lo: f64, hi: f64) -> Option<Vec<Xv>> {
     for (atom, e) in common.values() {
         if e.n < 0 { continue; } // (a negative power is never zero)
         match atom {
-            Atom::Exp => {}
+            Atom::Exp(_) => {}
             Atom::Root(base) => push(&mut out, poly_roots(base)?),
-            Atom::Trig(f, a, b) => push(&mut out, match f { F::Sin | F::Tan => trig_solutions(F::Sin, *a, *b, &Xv::default(), lo, hi)?, F::Cos => trig_solutions(F::Cos, *a, *b, &Xv::default(), lo, hi)?, _ => vec![] }),
+            Atom::Trig(f, a, b) => push(&mut out, match f { F::Sin | F::Tan => trig_solutions(F::Sin, *a, b, &Xv::default(), lo, hi)?, F::Cos => trig_solutions(F::Cos, *a, b, &Xv::default(), lo, hi)?, _ => vec![] }),
+            // ln u = 0 where u = 1
+            Atom::Ln(a, b) => push(&mut out, vec![lin_solve(*a, b, &Xv::int(1))?]),
             Atom::Other => return None,
         }
     }
@@ -492,43 +531,77 @@ pub(crate) fn zeros(e: &Ex, lo: f64, hi: f64) -> Option<Vec<Xv>> {
     // a whole-number difference of root powers of one base: multiply through (x^(1/3) and x^(-2/3) → x and 1)
     let rest = clear_roots(rest)?;
     let mut groups: BTreeMap<Vec<String>, (Vec<(Atom, Q)>, P)> = BTreeMap::new();
-    // over a common denominator: Σ num_i Π_{j≠i} den_j
+    // over the least common denominator L: Σ num_i (L / den_i)
     let dens: Vec<P> = rest.iter().map(|t| t.den.clone()).collect();
-    for (i, t) in rest.iter().enumerate() {
-        let mut n = t.num.clone();
-        for (j, d) in dens.iter().enumerate() { if j != i { n = n.mul(d)?; } }
+    let mut lcd = one();
+    for d in &dens { let g = lcd.gcd(d)?; lcd = lcd.mul(&d.exact_div(&g)?)?; }
+    for t in rest.iter() {
+        let n = t.num.mul(&lcd.exact_div(&t.den)?)?;
         let key: Vec<String> = t.atoms.iter().map(|(k, (_, e))| format!("{k}^{e:?}")).collect();
         let ent = groups.entry(key).or_insert((t.atoms.values().cloned().collect(), P(vec![])));
         ent.1 = ent.1.add(&n)?;
     }
     groups.retain(|_, (_, p)| !p.is_zero());
-    let den_all = dens.iter().try_fold(one(), |a, d| a.mul(d))?;
+    let den_all = lcd.clone();
     let defined = |x: &Xv| den_all.0.is_empty() || { let v = ev(&poly_ex(&den_all), x); v.is_some_and(|v| !v.is_zero()) };
     match groups.len() {
         0 => return None, // the rest cancels: zero on a stretch
         1 => {
             let (atoms, p) = groups.into_values().next().unwrap();
             for (atom, e) in atoms {
-                match atom { Atom::Exp => {}, _ if e.n < 0 => {}, Atom::Trig(f, a, b) if matches!(f, F::Sin | F::Cos | F::Tan) => push(&mut out, trig_solutions(if f == F::Cos { F::Cos } else { F::Sin }, a, b, &Xv::default(), lo, hi)?), Atom::Root(base) => push(&mut out, poly_roots(&base)?), _ => return None }
+                match atom { Atom::Exp(_) => {}, _ if e.n < 0 => {}, Atom::Trig(f, a, b) if matches!(f, F::Sin | F::Cos | F::Tan) => push(&mut out, trig_solutions(if f == F::Cos { F::Cos } else { F::Sin }, a, &b, &Xv::default(), lo, hi)?), Atom::Root(base) => push(&mut out, poly_roots(&base)?), Atom::Ln(a, b) => push(&mut out, vec![lin_solve(a, &b, &Xv::int(1))?]), _ => return None }
             }
             let rs: Vec<Xv> = poly_roots(&p)?.into_iter().filter(|x| defined(x)).collect();
             push(&mut out, rs);
         }
         2 => {
-            // c0 + c1·A = 0 with c0, c1 constants and A one sine, cosine or tangent: A = -c0/c1
+            // two terms with constant coefficients: c0 + c1·A = 0 (A a sine, cosine, tangent, e^u or ln u of a linear u),
+            // c1 sin u + c2 cos u = 0 (tan u = -c2/c1), c1 sin² u + c2 cos² u = 0 (tan² u = -c2/c1)
             let mut it = groups.into_values();
-            let (g1, g2) = (it.next().unwrap(), it.next().unwrap());
-            let (plain, trig) = if g1.0.is_empty() { (g1, g2) } else if g2.0.is_empty() { (g2, g1) } else { return None };
-            if plain.1.deg() != 0 || trig.1.deg() != 0 || trig.0.len() != 1 || trig.0[0].1 != Q::int(1) { return None; }
-            let Atom::Trig(f, a, b) = trig.0[0].0.clone() else { return None };
-            if !matches!(f, F::Sin | F::Cos | F::Tan) { return None; }
-            let v = plain.1 .0[0].neg().div(trig.1 .0[0])?;
-            // only table values have derived solutions; any other value: not derived
-            let vx = Xv::q(v);
-            let ok = [Q::int(0), Q::new(1, 2)?, Q::new(-1, 2)?, Q::int(1), Q::int(-1)].contains(&v) || f == F::Tan;
-            if !ok { return None; }
-            push(&mut out, trig_solutions(f, a, b, &vx, lo, hi)?);
-            if f == F::Tan && out.is_empty() && v.f().abs() > 1e-12 { return None; }
+            let (mut g1, mut g2) = (it.next().unwrap(), it.next().unwrap());
+            // a polynomial factor both share (x in x·1/x − x ln x) is taken out: its own roots are zeros where defined
+            let g = g1.1.gcd(&g2.1)?;
+            if g.deg() > 0 {
+                let rs: Vec<Xv> = poly_roots(&g)?.into_iter().filter(|x| defined(x)).collect();
+                push(&mut out, rs);
+                g1.1 = g1.1.exact_div(&g)?;
+                g2.1 = g2.1.exact_div(&g)?;
+            }
+            if g1.1.deg() != 0 || g2.1.deg() != 0 { return None; }
+            let (c1, c2) = (g1.1 .0[0], g2.1 .0[0]);
+            match (&g1.0[..], &g2.0[..]) {
+                ([], [(atom, k)]) | ([(atom, k)], []) => {
+                    if *k != Q::int(1) { return None; }
+                    let (c0, ca) = if g1.0.is_empty() { (c1, c2) } else { (c2, c1) };
+                    let v = c0.neg().div(ca)?;
+                    match atom.clone() {
+                        Atom::Trig(f, a, b) if matches!(f, F::Sin | F::Cos | F::Tan) => {
+                            let ok = [Q::int(0), Q::new(1, 2)?, Q::new(-1, 2)?, Q::int(1), Q::int(-1)].contains(&v) || f == F::Tan;
+                            if !ok { return None; }
+                            let sol = trig_solutions(f, a, &b, &Xv::q(v), lo, hi)?;
+                            if f == F::Tan && sol.is_empty() && v.f().abs() > 1e-12 { return None; }
+                            push(&mut out, sol);
+                        }
+                        // e^u = v: u = ln v (none for v ≤ 0)
+                        Atom::Exp(Some((a, b))) => { if v.n > 0 { push(&mut out, vec![lin_solve(a, &b, &ln_of(&Xv::q(v))?)?]); } }
+                        // ln u = v: u = e^v
+                        Atom::Ln(a, b) => push(&mut out, vec![lin_solve(a, &b, &exp_of(&Xv::q(v))?)?]),
+                        _ => return None,
+                    }
+                }
+                ([(Atom::Trig(f1, a1, b1), k1)], [(Atom::Trig(f2, a2, b2), k2)]) if a1 == a2 && b1 == b2 && k1 == k2 && (*k1 == Q::int(1) || *k1 == Q::int(2)) => {
+                    // c_s sinᵏ u + c_c cosᵏ u = 0: tanᵏ u = -c_c/c_s
+                    let (cs, cc) = match (f1, f2) { (F::Sin, F::Cos) => (c1, c2), (F::Cos, F::Sin) => (c2, c1), _ => return None };
+                    let r = cc.neg().div(cs)?;
+                    let vals: Vec<Xv> = if *k1 == Q::int(1) { vec![Xv::q(r)] } else { if r.n < 0 { vec![] } else { let t = Xv::q(r).powq(Q::new(1, 2)?)?; vec![t.clone(), t.neg()] } };
+                    for v in vals {
+                        let sol = trig_solutions(F::Tan, *a1, b1, &v, lo, hi)?;
+                        if sol.is_empty() && !v.is_zero() { return None; } // (not a table value: not derived)
+                        push(&mut out, sol);
+                    }
+                }
+                _ => return None,
+            }
         }
         _ => return None,
     }
@@ -618,8 +691,8 @@ pub(crate) fn special_points(e: &Ex, lo: f64, hi: f64) -> Vec<Xv> {
             Fun(f, a) => {
                 match f {
                     F::Abs | F::Sqrt | F::Ln | F::Log => { if let Some(p) = as_poly(a) { add(poly_roots(&p)); if matches!(f, F::Ln | F::Log) { if let Some(q) = p.add(&P(vec![Q::int(-1)])) { add(poly_roots(&q)); } } } }
-                    F::Tan | F::Sec => if let Some(u) = as_poly(a).filter(|u| u.deg() == 1) { add(trig_solutions(F::Cos, u.0[1], u.0[0], &Xv::default(), lo - 1.0, hi + 1.0)); },
-                    F::Cot | F::Csc => if let Some(u) = as_poly(a).filter(|u| u.deg() == 1) { add(trig_solutions(F::Sin, u.0[1], u.0[0], &Xv::default(), lo - 1.0, hi + 1.0)); },
+                    F::Tan | F::Sec => if let Some((ka, kb)) = linear_x(a) { add(trig_solutions(F::Cos, ka, &kb, &Xv::default(), lo - 1.0, hi + 1.0)); },
+                    F::Cot | F::Csc => if let Some((ka, kb)) = linear_x(a) { add(trig_solutions(F::Sin, ka, &kb, &Xv::default(), lo - 1.0, hi + 1.0)); },
                     _ => {}
                 }
                 walk(a, lo, hi, out);
@@ -631,4 +704,154 @@ pub(crate) fn special_points(e: &Ex, lo: f64, hi: f64) -> Vec<Xv> {
     }
     walk(e, lo, hi, &mut out);
     out
+}
+
+// ───────────────────────── polynomial algebra: gcd, square-free parts, roots with multiplicity ─────────────────────────
+
+impl P {
+    pub(crate) fn sub_p(&self, o: &P) -> Option<P> { self.add(&o.neg()) }
+    pub(crate) fn mul_p(&self, o: &P) -> Option<P> { self.mul(o) }
+    pub(crate) fn deriv(&self) -> Option<P> { Some(P(self.0.iter().enumerate().skip(1).map(|(i, c)| c.mul(Q::int(i as i128))).collect::<Option<Vec<_>>>()?).trim()) }
+    pub(crate) fn lead(&self) -> Q { *self.0.last().unwrap_or(&Q::int(0)) }
+    /// (quotient, remainder)
+    pub(crate) fn divmod(&self, d: &P) -> Option<(P, P)> {
+        if d.is_zero() { return None; }
+        let mut r = self.clone().trim();
+        let mut q = vec![Q::int(0); r.0.len().saturating_sub(d.0.len()) + 1];
+        while !r.is_zero() && r.deg() >= d.deg() {
+            let k = r.deg() - d.deg();
+            let c = r.lead().div(d.lead())?;
+            q[k] = c;
+            let mut t = vec![Q::int(0); k];
+            t.extend(d.0.iter().map(|x| x.mul(c)).collect::<Option<Vec<_>>>()?);
+            r = r.sub_p(&P(t))?;
+            if r.0.len() > 40 { return None; }
+        }
+        Some((P(q).trim(), r))
+    }
+    pub(crate) fn monic(&self) -> Option<P> { let l = self.lead(); if l.zero() { return Some(self.clone()); } Some(P(self.0.iter().map(|c| c.div(l)).collect::<Option<Vec<_>>>()?)) }
+    pub(crate) fn gcd(&self, o: &P) -> Option<P> {
+        let (mut a, mut b) = (self.clone().trim(), o.clone().trim());
+        while !b.is_zero() { let r = a.divmod(&b)?.1; a = b; b = r; }
+        if a.is_zero() { return Some(P(vec![Q::int(1)])); }
+        a.monic()
+    }
+    pub(crate) fn exact_div(&self, d: &P) -> Option<P> { let (q, r) = self.divmod(d)?; r.is_zero().then_some(q) }
+    /// the value at a rational, exactly
+    pub(crate) fn at(&self, x: Q) -> Option<Q> { self.evq(x) }
+    pub(crate) fn f(&self, x: f64) -> f64 { self.0.iter().rev().fold(0.0, |a, c| a * x + c.f()) }
+    pub(crate) fn degree(&self) -> usize { self.deg() }
+    pub(crate) fn zero_p(&self) -> bool { self.is_zero() }
+}
+/// Yun's square-free factorisation: p = c · Π aᵢ^i, each aᵢ square-free: (aᵢ, i).
+pub(crate) fn square_free(p: &P) -> Option<Vec<(P, u32)>> {
+    let p = p.clone().trim();
+    if p.deg() == 0 { return Some(vec![]); }
+    let dp = p.deriv()?;
+    let mut a = p.gcd(&dp)?;
+    let mut b = p.exact_div(&a)?;
+    let mut c = dp.exact_div(&a)?;
+    let mut d = c.sub_p(&b.deriv()?)?;
+    let mut out = vec![];
+    let mut i = 1u32;
+    while b.deg() > 0 {
+        let ai = b.gcd(&d)?;
+        if ai.deg() > 0 { out.push((ai.clone(), i)); }
+        b = b.exact_div(&ai)?;
+        c = d.exact_div(&ai)?;
+        d = c.sub_p(&b.deriv()?)?;
+        i += 1;
+        if i > 40 { return None; }
+        let _ = &mut a;
+    }
+    Some(out)
+}
+/// One real root: where it is, its exact value when derived, its multiplicity.
+#[derive(Clone, Debug)]
+pub(crate) struct Root { pub x: f64, pub ex: Option<Xv>, pub mult: u32 }
+/// Every real root of p with its multiplicity, from exact algebra: the square-free parts, each solved exactly where it can be
+/// (rational roots, then a quadratic), else its simple roots found numerically (well separated: a square-free polynomial
+/// has no double root). Nothing depends on a window.
+pub(crate) fn roots_mult(p: &P) -> Option<Vec<Root>> {
+    let mut out: Vec<Root> = vec![];
+    for (a, m) in square_free(p)? {
+        match poly_roots(&a) {
+            Some(rs) => for r in rs { out.push(Root { x: r.f(), ex: Some(r), mult: m }); },
+            None => for x in simple_roots(&a) { out.push(Root { x, ex: None, mult: m }); },
+        }
+    }
+    out.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+    Some(out)
+}
+/// The real roots of a square-free polynomial, numerically: inside the Cauchy bound, between the (exactly known in sign)
+/// roots of its derivative's sign changes, by bisection.
+fn simple_roots(a: &P) -> Vec<f64> {
+    let lead = a.lead().f();
+    let bound = 1.0 + a.0.iter().map(|c| (c.f() / lead).abs()).fold(0.0, f64::max);
+    let n = 40_000;
+    let mut out = vec![];
+    let xs: Vec<f64> = (0..=n).map(|i| -bound + 2.0 * bound * i as f64 / n as f64).collect();
+    for w in xs.windows(2) {
+        let (fa, fb) = (a.f(w[0]), a.f(w[1]));
+        if fa == 0.0 { out.push(w[0]); continue; }
+        if fa.signum() != fb.signum() && fb != 0.0 {
+            let (mut lo, mut hi) = (w[0], w[1]);
+            for _ in 0..100 { let m = 0.5 * (lo + hi); if m == lo || m == hi { break; } if a.f(m).signum() == fa.signum() { lo = m } else { hi = m } }
+            out.push(0.5 * (lo + hi));
+        }
+    }
+    out
+}
+/// The sign of p at x (between its roots): exact, at a rational near x.
+pub(crate) fn sign_near(p: &P, x: f64) -> i8 {
+    match Q::of_f64(x).and_then(|q| p.at(q)) { Some(v) => if v.zero() { 0 } else if v.n > 0 { 1 } else { -1 }, None => { let v = p.f(x); if v == 0.0 { 0 } else if v > 0.0 { 1 } else { -1 } } }
+}
+
+/// A rational function n/d with rational coefficients, in lowest terms; `cancelled` is the common factor taken out (its roots
+/// are holes: points where the expression as typed has no value though the reduced one has).
+#[derive(Clone, Debug)]
+pub(crate) struct Rat { pub n: P, pub d: P, pub cancelled: P }
+/// An expression as a rational function, when it is one (+, −, ×, ÷ and whole powers of x and rational numbers).
+pub(crate) fn as_rat(e: &Ex) -> Option<Rat> {
+    fn raw(e: &Ex) -> Option<(P, P)> {
+        use Ex::*;
+        if let Some(p) = as_poly(e) { return Some((p, one())); }
+        Some(match e {
+            Neg(a) => { let (n, d) = raw(a)?; (n.neg(), d) }
+            Add(a, b) | Sub(a, b) => { let ((n1, d1), (n2, d2)) = (raw(a)?, raw(b)?); let t = n2.mul(&d1)?; (n1.mul(&d2)?.add(&if matches!(e, Sub(..)) { t.neg() } else { t })?, d1.mul(&d2)?) }
+            Mul(a, b) => { let ((n1, d1), (n2, d2)) = (raw(a)?, raw(b)?); (n1.mul(&n2)?, d1.mul(&d2)?) }
+            Div(a, b) => { let ((n1, d1), (n2, d2)) = (raw(a)?, raw(b)?); if n2.is_zero() { return None; } (n1.mul(&d2)?, d1.mul(&n2)?) }
+            Pow(a, b) => {
+                let k = konst_q(b)?;
+                if !k.is_int() || k.n.abs() > 12 { return None; }
+                let (n, d) = raw(a)?;
+                let (mut rn, mut rd) = (one(), one());
+                for _ in 0..k.n.abs() { rn = rn.mul(&n)?; rd = rd.mul(&d)?; }
+                if k.n < 0 { (rd, rn) } else { (rn, rd) }
+            }
+            _ => return None,
+        })
+    }
+    let (n, d) = raw(e)?;
+    if d.is_zero() { return None; }
+    let g = n.gcd(&d)?;
+    let (n, d) = (n.exact_div(&g)?, d.exact_div(&g)?);
+    // the denominator's leading coefficient into the numerator
+    let l = d.lead();
+    let (n, d) = (n.mul(&P(vec![Q::int(1).div(l)?]))?, d.monic()?);
+    Some(Rat { n, d, cancelled: g })
+}
+impl Rat {
+    /// d/dx, in lowest terms
+    pub(crate) fn deriv(&self) -> Option<Rat> {
+        let n = self.n.deriv()?.mul(&self.d)?.sub_p(&self.n.mul(&self.d.deriv()?)?)?;
+        let d = self.d.mul(&self.d)?;
+        let g = n.gcd(&d)?;
+        let g = if n.is_zero() { d.clone() } else { g };
+        let (n, d) = (n.exact_div(&g)?, d.exact_div(&g)?);
+        let l = d.lead();
+        Some(Rat { n: n.mul(&P(vec![Q::int(1).div(l)?]))?, d: d.monic()?, cancelled: self.cancelled.clone() })
+    }
+    pub(crate) fn ex(&self) -> Ex { if self.d.deg() == 0 && self.d.0 == vec![Q::int(1)] { poly_ex(&self.n) } else { Ex::Div(Box::new(poly_ex(&self.n)), Box::new(poly_ex(&self.d))) } }
+    pub(crate) fn f(&self, x: f64) -> Option<f64> { let d = self.d.f(x); (d != 0.0).then(|| self.n.f(x) / d) }
 }

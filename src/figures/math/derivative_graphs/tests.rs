@@ -115,7 +115,11 @@ fn exact_values_are_derived_and_written_as_a_book_writes_them() {
         ("x/(x^2 + 1)", "1/2", "2/5".into()), ("(x^2 - 1)^(1/3)", "3", "2".into()), ("2^x", "-3", "1/8".into()), ("ln(x)", "e^2", "2".into()), ("arctan(x)", "1", "\u{3c0}/4".into()),
     ] { assert_eq!(at(f, x).as_deref(), Some(want.as_str()), "{f} at {x}"); }
     // nothing is dressed up: a value with no derived form is None (the figure writes ≈ and a decimal)
-    for (f, x) in [("sin(x)", "1"), ("e^x", "sqrt(2)"), ("ln(x)", "3"), ("x^(1/3)", "2")] { assert_eq!(at(f, x), None, "{f} at {x}"); }
+    for (f, x) in [("sin(x)", "1"), ("e^x", "sqrt(2)"), ("x^(1/3)", "2")] { assert_eq!(at(f, x), None, "{f} at {x}"); }
+    // logarithms are kept exactly: ln 3, ln 4 = 2 ln 2, e^(ln 2) = 2
+    assert_eq!(at("ln(x)", "3").as_deref(), Some("ln\u{2009}3"));
+    assert_eq!(at("ln(x)", "4").as_deref(), Some("2\u{2009}ln\u{2009}2"));
+    assert_eq!(at("e^x", "ln(2)").as_deref(), Some("2"));
     // zeros derived from the structure: rational roots and the quadratic formula, e^u taken out, table angles, roots' bases
     let z = |f: &str, lo: f64, hi: f64| exact::zeros(&sym::parse(f).unwrap(), lo, hi).map(|v| v.iter().map(exact::text).collect::<Vec<_>>());
     assert_eq!(z("3x^2 - 3", -3.0, 3.0), Some(vec![format!("{m}1"), "1".into()]));
@@ -453,6 +457,9 @@ fn odd_roots_worked_by_hand() {
 fn read_back(t: &str) -> Option<f64> {
     let mut s = t.trim().replace("\u{221a}e", "sqrt(e)").replace('\u{2212}', "-").replace('\u{3c0}', "pi").replace('\u{b2}', "^2").replace('\u{b3}', "^3");
     // √n → sqrt(n)
+    // ln 2 → ln(2); ln(3/2) is already bracketed
+    while let Some(i) = s.find("ln\u{2009}") { let rest = &s[i + "ln\u{2009}".len()..]; let n: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect(); let star = if s[..i].trim_end().ends_with(|c: char| c.is_ascii_digit() || c == ')') { "*" } else { "" }; s = format!("{}{star}ln({n}){}", &s[..i], &rest[n.len()..]); }
+    s = s.replace('\u{2009}', "");
     while let Some(i) = s.find('\u{221a}') { let rest = &s[i + '\u{221a}'.len_utf8()..]; let n: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect(); s = format!("{}sqrt({n}){}", &s[..i], &rest[n.len()..]); }
     eval(&s, 0.0)
 }

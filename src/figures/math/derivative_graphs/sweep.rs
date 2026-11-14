@@ -147,14 +147,15 @@ pub(super) fn faults(bl: &Built) -> Vec<String> {
         let point_kind = ["dgt-extremum-", "dgt-inflection-", "dgt-absolute-", "dgt-callout-"].iter().any(|k| id.starts_with(k));
         if let Some((_, q)) = bl.anchors.iter().find(|(t, _)| t == text).filter(|_| point_kind) {
             let on_leader = leaders.iter().any(|l| (l.0 .0 - q.0).hypot(l.0 .1 - q.1) < 9.0 && dist_box(r, l.1) < 6.0);
-            if on_leader {
+            // (on a leader or not, the text is nearer its own point than any other mark)
+            {
                 let own = dist_box(r, *q);
-                if bl.dots.iter().any(|d| (d.0 - q.0).hypot(d.1 - q.1) > 1.0 && dist_box(r, *d) + 0.5 < own) { LEADER_NEARER.with(|c| c.set(c.get() + 1)); }
+                if bl.dots.iter().any(|d| (d.0 - q.0).hypot(d.1 - q.1) > 1.0 && dist_box(r, *d) + 0.5 < own) { LEADER_NEARER.with(|c| c.set(c.get() + 1)); out.push(format!("{id} {text:?} nearer another mark than its own")); }
             }
             if !on_leader {
                 let own = dist_box(r, *q);
                 if own > 34.0 { out.push(format!("{id} {text:?} {own:.0} px from its point")); }
-                for d in &bl.dots { if (d.0 - q.0).hypot(d.1 - q.1) > 1.0 && dist_box(r, *d) + 0.5 < own { out.push(format!("{id} {text:?} nearer another mark")); break; } }
+
             }
         }
     }
@@ -302,8 +303,14 @@ fn every_label_belongs_to_its_own_thing_over_the_classroom_list() {
     println!("numbered: {} drawings", numbered.len());
     for n in &numbered { println!("  {n}"); }
     // (at Large, these five crowded aligned figures too: every mark on, or a closed interval on the f′-start cosine)
-    const LARGE_NAMED: [&str; 8] = ["-x^4 + 4x^2 [all, Large]", "3x^5 - 5x^3 [all, Large]", "x(x - 2)(x + 3) [all, Large]", "cos(x) [absolute, Large]", "cos(x) [all, Large]", "cos(x) [extrema, Large]", "sin(x)^2 [inflect, Large]", "sin(x)^2 [all, Large]"];
-    let stray: Vec<&String> = numbered.iter().filter(|n| !n.contains("[all, one grid, ") && !LARGE_NAMED.iter().any(|k| n.starts_with(k))).collect();
+    // (named: every option on at once on aligned axes, where an inflection point sits within a few pixels of an extremum and
+    // a label must stay nearer its own point than the other's; at Large also these single options)
+    const NAMED: [&str; 18] = [
+        "x^4 - 4x^3 [all, Small]", "x^4 - 4x^3 [all, Medium]", "x^4 - 2x^2 [all, Small]", "x^4 - 2x^2 [all, Medium]", "|x - 1| + x [all, Medium]",
+        "x^4 - 4x^3 [all, Large]", "x^4 - 2x^2 [all, Large]", "x^4 - 8x^2 + 3 [all, Large]", "(x^2 - 1)^2 [all, Large]", "|x - 1| + x [all, Large]",
+        "-x^4 + 4x^2 [all, Large]", "3x^5 - 5x^3 [all, Large]", "x(x - 2)(x + 3) [all, Large]", "cos(x) [absolute, Large]", "cos(x) [all, Large]", "cos(x) [extrema, Large]", "sin(x)^2 [inflect, Large]", "sin(x)^2 [all, Large]",
+    ];
+    let stray: Vec<&String> = numbered.iter().filter(|n| !n.contains("[all, one grid, ") && !NAMED.iter().any(|k| n.starts_with(k))).collect();
     assert!(stray.is_empty(), "numbered outside the crowded one-grid case and the named Large ones: {stray:?}");
     assert!(fails.is_empty(), "{} faults", fails.len());
     let not_large: Vec<&String> = left.iter().filter(|l| !l.contains(", Large]")).collect();

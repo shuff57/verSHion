@@ -331,3 +331,15 @@ fn show_case() {
     for l in &bl.labels { if !matches!(l.2, "key") { println!("LABEL {}: {}", l.2, l.0.replace('\u{a0}', " ")); } }
     if let (Ok(m), Some(an)) = (model(&p, window(&p)), bl.analysis.as_ref()) { for k in key_lines(&p, &m, an, window(&p)) { println!("KEY {}", k.replace('\u{a0}', " ")); } }
 }
+
+#[test]
+#[ignore]
+fn show_zeros() {
+    let Ok(f) = crate::env_var("VERSHION_DG_F") else { return };
+    let e = sym::parse(&f).unwrap();
+    let d1 = sym::deriv(&e);
+    let d2 = sym::deriv(&d1);
+    println!("d2 {}", sym::print(&d2));
+    println!("zeros d1 {:?}", exact::zeros(&d1, 0.01, 10.0).map(|v| v.iter().map(exact::text).collect::<Vec<_>>()));
+    println!("zeros d2 {:?}", exact::zeros(&d2, 0.01, 10.0).map(|v| v.iter().map(exact::text).collect::<Vec<_>>()));
+}

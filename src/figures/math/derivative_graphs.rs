@@ -106,12 +106,47 @@ pub(crate) fn typed(text: &str) -> Option<Typed> {
     let t = text.trim();
     if t.is_empty() { return None; }
     let v = eval(&t.replace('\u{221a}', "sqrt").replace('\u{3c0}', "pi"), 0.0).filter(|v| v.is_finite())?;
-    Some(Typed { v, show: flat::pretty(t), decimal: t.contains('.') })
+    Some(Typed { v, show: book(&flat::pretty(t)), decimal: t.contains('.') })
+}
+/// A typed value as a book prints it: e^2 as e², ln(2) as ln 2, x^-1 as x⁻¹ (whole powers of one digit or two).
+pub(crate) fn book(s: &str) -> String {
+    let sup = |c: char| match c { '0' => '\u{2070}', '1' => '\u{b9}', '2' => '\u{b2}', '3' => '\u{b3}', '4' => '\u{2074}', '5' => '\u{2075}', '6' => '\u{2076}', '7' => '\u{2077}', '8' => '\u{2078}', '9' => '\u{2079}', '-' | '\u{2212}' => '\u{207b}', c => c };
+    let cs: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < cs.len() {
+        if cs[i] == '^' {
+            // ^2, ^-1, ^(2), ^(−1)
+            let (st, br) = if cs.get(i + 1) == Some(&'(') { (i + 2, true) } else { (i + 1, false) };
+            let mut j = st;
+            if j < cs.len() && (cs[j] == '-' || cs[j] == '\u{2212}') { j += 1; }
+            let d0 = j;
+            while j < cs.len() && cs[j].is_ascii_digit() { j += 1; }
+            let ok = j > d0 && j - d0 <= 2 && (!br || cs.get(j) == Some(&')'));
+            if ok { for c in &cs[st..j] { out.push(sup(*c)); } i = if br { j + 1 } else { j }; continue; }
+        }
+        out.push(cs[i]);
+        i += 1;
+    }
+    // ln(2) → ln 2 (a whole number in the brackets)
+    let mut r = out.clone();
+    for f in ["ln", "log"] {
+        let mut from = 0;
+        while let Some(k) = r[from..].find(&format!("{f}(")).map(|k| k + from) {
+            let a = k + f.len() + 1;
+            let Some(e) = r[a..].find(')').map(|e| e + a) else { break };
+            if !r[a..e].is_empty() && r[a..e].chars().all(|c| c.is_ascii_digit()) { r = format!("{}{f}\u{2009}{}{}", &r[..k], &r[a..e], &r[e + 1..]); }
+            from = k + 1;
+        }
+    }
+    r
 }
 
 /// One piece of a typed function: its expression and derivatives, and the domain it was typed with.
 #[derive(Clone)]
-pub(crate) struct Piece { pub e: Ex, pub d: [Ex; 3], pub dom: Vec<Interval>, pub dom_text: Option<String>, /** the domain's ends as typed: value, exact value and form */ pub bounds: Vec<(f64, Pv)> }
+pub(crate) struct Piece { pub e: Ex, pub d: [Ex; 3], pub dom: Vec<Interval>, pub dom_text: Option<String>, /** the domain's ends as typed: value, exact value and form */ pub bounds: Vec<(f64, Pv)>,
+    /** a rational function piece: the typed expression and its three derivatives in lowest terms */ pub rat: Option<Vec<exact::Rat>>,
+    /** holes: where the expression as typed has no value though its reduced form has ((x² − 1)/(x − 1) at 1) */ pub holes: Vec<(f64, Pv)> }
 /// The ends typed in a domain ("-2 < x <= 2" gives -2 and 2), each with its exact value and its form as typed.
 fn dom_bounds(d: &str) -> Vec<(f64, Pv)> {
     let t = d.replace('\u{2264}', "<").replace('\u{2265}', ">").replace("<=", "<").replace(">=", ">").replace('=', "<").replace(" and ", "<").replace(" or ", "<").replace(',', "<");
@@ -146,9 +181,17 @@ pub(crate) fn pieces(text: &str, name: &str, what: &str) -> Result<Vec<Piece>, S
         let which = if rows.len() > 1 { format!("Piece {} of {what}", k + 1) } else { what.to_string() };
         if main.len() > 300 { return Err(format!("{which} is too long to draw")); }
         let Some(e) = sym::parse(&main) else { return Err(format!("{which} cannot be read: {}", main.trim())) };
-        let d1 = sym::deriv(&e);
-        let d2 = sym::deriv(&d1);
-        let d3 = sym::deriv(&d2);
+        let (mut d1, mut d2, mut d3) = { let d1 = sym::deriv(&e); let d2 = sym::deriv(&d1); let d3 = sym::deriv(&d2); (d1, d2, d3) };
+        // a rational function: its derivatives worked exactly in lowest terms (stable beside a hole, where the derivative of
+        // the typed form cancels badly), and its holes
+        let rat: Option<Vec<exact::Rat>> = exact::as_rat(&e).and_then(|r0| { let r1 = r0.deriv()?; let r2 = r1.deriv()?; let r3 = r2.deriv()?; Some(vec![r0, r1, r2, r3]) });
+        let mut holes: Vec<(f64, Pv)> = vec![];
+        if let Some(r) = &rat {
+            d1 = r[1].ex(); d2 = r[2].ex(); d3 = r[3].ex();
+            for root in exact::roots_mult(&r[0].cancelled).unwrap_or_default() {
+                if r[0].d.f(root.x).abs() > 1e-9 { holes.push((root.x, Pv { ex: root.ex.clone(), show: None })); }
+            }
+        }
         if sym::size(&d2) > 4000 || sym::print(&d2).len() > 950 { return Err(format!("{which} is too long for its second derivative to be drawn")); }
         let (dom_iv, dom_text) = match dom {
             Some(d) => {
@@ -163,7 +206,7 @@ pub(crate) fn pieces(text: &str, name: &str, what: &str) -> Result<Vec<Piece>, S
             }
         };
         let bounds = dom_text.as_deref().map(dom_bounds).unwrap_or_default();
-        out.push(Piece { e, d: [d1, d2, d3], dom: dom_iv, dom_text, bounds });
+        out.push(Piece { e, d: [d1, d2, d3], dom: dom_iv, dom_text, bounds, rat, holes });
     }
     // pieces may share an end point, never a stretch of x
     for i in 0..out.len() {
@@ -194,7 +237,7 @@ pub(crate) struct Model {
 /// it, f is not drawn from f′ and the figure says why.
 pub(crate) const WORK_MAX: u64 = 1_500_000;
 impl Model {
-    fn piece(&self, x: f64) -> Option<&Piece> { self.pieces.iter().find(|p| in_dom(&p.dom, x)) }
+    fn piece(&self, x: f64) -> Option<&Piece> { self.pieces.iter().find(|p| in_dom(&p.dom, x)).filter(|p| !p.holes.iter().any(|h| (h.0 - x).abs() <= 1e-12 * (1.0 + x.abs()))) }
     /// k-th derivative of the typed function (k = 0 is the typed one)
     pub(crate) fn g(&self, k: usize, x: f64) -> Option<f64> {
         self.work.set(self.work.get() + 1);
@@ -215,6 +258,11 @@ impl Model {
         match self.mode { Mode::F => Some(if n == 0 { &p.e } else { p.d.get(n - 1)? }), Mode::Fp { .. } => if n == 0 { None } else if n == 1 { Some(&p.e) } else { p.d.get(n - 2) } }
     }
     pub(crate) fn piece_at(&self, x: f64) -> Option<usize> { self.pieces.iter().position(|p| in_dom(&p.dom, x)) }
+    /// The n-th derivative of f on piece `pi` as a rational function in lowest terms, when the piece is one.
+    pub(crate) fn rat_of(&self, pi: usize, n: usize) -> Option<&exact::Rat> {
+        let r = self.pieces.get(pi)?.rat.as_ref()?;
+        match self.mode { Mode::F => r.get(n), Mode::Fp { .. } => if n == 0 { None } else { r.get(n - 1) } }
+    }
     /// The n-th derivative of f by piece `pi`'s own expression, whatever its domain (a one-sided value at a join).
     pub(crate) fn dp(&self, pi: usize, n: usize, x: f64) -> Option<f64> {
         self.work.set(self.work.get() + 1);
@@ -539,7 +587,10 @@ fn sign_at(g: &dyn Fn(f64) -> Option<f64>, a: f64, b: f64) -> Option<i8> {
     let s = vals.iter().fold(0.0f64, |m, v| m.max(v.abs()));
     for v in &vals { if v.abs() <= 1e-9 * (1.0 + s) { z += 1 } else if *v > 0.0 { pos += 1 } else { neg += 1 } }
     if vals.is_empty() { return None; }
-    Some(if pos >= neg && pos >= z && pos > 0 { 1 } else if neg > pos && neg >= z { -1 } else { 0 })
+    let _ = z;
+    // (0 only where every sample is exactly 0: a derivative that is 0 throughout is caught from its expression)
+    if pos == 0 && neg == 0 { let big = vals.iter().cloned().fold(0.0f64, |m, v| if v.abs() > m.abs() { v } else { m }); return Some(if big > 0.0 { 1 } else if big < 0.0 { -1 } else { 0 }); }
+    Some(if pos >= neg { 1 } else { -1 })
 }
 
 impl Model {
@@ -579,8 +630,15 @@ impl Model {
         let mut cuts: Vec<(f64, Pv)> = vec![(a, pa), (b, pb)];
         for p in &self.pieces { for (v, pv) in &p.bounds { if *v > a + tol && *v < b - tol { cuts.push((*v, pv.clone())); } } }
         for c in &cands { let v = c.f(); if v > a + tol && v < b - tol { cuts.push((v, Pv::of(c.clone()))); } }
+        // a rational piece's poles and holes, from exact algebra (with their exact values where derived)
+        for (pi, p) in self.pieces.iter().enumerate() {
+            if let Some(r) = self.rat_of(pi, 0) {
+                for root in exact::roots_mult(&r.d).unwrap_or_default() { if root.x > a + tol && root.x < b - tol && in_dom(&p.dom, root.x) { cuts.push((root.x, Pv { ex: root.ex, show: None })); } }
+            }
+            for h in &p.holes { if h.0 > a + tol && h.0 < b - tol { cuts.push(h.clone()); } }
+        }
         // poles, jumps and gaps of f found numerically (those the structure does not give), and the corners of kinks
-        if matches!(self.mode, Mode::F) {
+        if matches!(self.mode, Mode::F) && self.pieces.iter().enumerate().any(|(pi, _)| self.rat_of(pi, 0).is_none()) {
             let kinks = self.kinks(a, b);
             let (f0, f1) = (|x: f64| self.d(0, x), |x: f64| self.d(1, x));
             let (fev, _, fgaps) = find_events(&f0, &f1, &kinks, a, b);
@@ -612,9 +670,38 @@ impl Model {
                 let dg = |x: f64| self.dp(pi, n + 1, x);
                 // a derivative that is 0 throughout the piece (a constant piece; a straight one for f″)
                 let flat = self.fexpr(pi, n).is_some_and(|e| !sym::has_x(e) && exact::ev(e, &XV::default()).is_some_and(|v| v.is_zero()));
+                let flat = flat || self.rat_of(pi, n).is_some_and(|q| q.n.zero_p());
                 if flat { spans[n].push(Span1 { a: *l, b: *r, sign: 0, av: lv.clone(), bv: rv.clone() }); continue; }
+                // a rational function: its zeros from exact algebra, with their multiplicities (a triple root is one zero, never a
+                // stretch), and its sign between them evaluated exactly
+                if let Some(q) = self.rat_of(pi, n) {
+                    if let Some(roots) = exact::roots_mult(&q.n) {
+                        let inside: Vec<&exact::Root> = roots.iter().filter(|z| z.x > l + tol && z.x < r - tol).collect();
+                        let mut ends: Vec<(f64, Pv)> = vec![(*l, lv.clone())];
+                        for z in &inside {
+                            let pv = Pv { ex: z.ex.clone(), show: None };
+                            marks[n].push(Mark { x: z.x, k: EvK::Zero, pv: pv.clone() });
+                            ends.push((z.x, pv));
+                        }
+                        ends.push((*r, rv.clone()));
+                        for e2 in ends.windows(2) {
+                            let mid = 0.5 * (e2[0].0 + e2[1].0);
+                            let sg = exact::sign_near(&q.n, mid) * exact::sign_near(&q.d, mid);
+                            spans[n].push(Span1 { a: e2[0].0, b: e2[1].0, sign: sg, av: e2[0].1.clone(), bv: e2[1].1.clone() });
+                        }
+                        continue;
+                    }
+                }
                 let inner = (l + 1e-9 * (1.0 + l.abs()), r - 1e-9 * (1.0 + r.abs()));
-                let (evs, flats, _) = find_events(&g, &dg, &[], inner.0, inner.1);
+                let (evs0, flats0, _) = find_events(&g, &dg, &[], inner.0, inner.1);
+                // (samples that are 0 in a row, from cancellation, are one zero; zeros closer than the tolerance are one)
+                let mut evs: Vec<Event> = evs0;
+                for (fl, fr) in &flats0 { evs.push(Event { x: 0.5 * (fl + fr), k: EvK::Zero }); }
+                evs.sort_by(|p, q| p.x.partial_cmp(&q.x).unwrap());
+                let mut merged: Vec<Event> = vec![];
+                for e in evs { if let Some(l) = merged.last_mut() { if (e.x - l.x).abs() < 1e-6 * span.max(1e-9) { if e.k == EvK::Undef { *l = e; } continue; } } merged.push(e); }
+                let evs = merged;
+                let flats: Vec<(f64, f64)> = vec![];
                 let exact_z = self.fexpr(pi, n).and_then(|e| exact::zeros(e, *l, *r));
                 let mut here: Vec<Mark> = vec![];
                 for e in evs.iter() {
@@ -663,6 +750,8 @@ impl Model {
                     _ => Some(EvK::Undef),
                 };
                 // (both sides constant, or straight, and joined smoothly: nothing happens there)
+                let flat_both = spans[n].iter().any(|q| q.sign == 0 && (q.b - x).abs() < 1e-9 * (1.0 + x.abs())) && spans[n].iter().any(|q| q.sign == 0 && (q.a - x).abs() < 1e-9 * (1.0 + x.abs()));
+                let k = if flat_both && k == Some(EvK::Zero) { None } else { k };
                 if n == 1 && k == Some(EvK::Undef) { no_fp = true; }
                 if let Some(k) = k { marks[n].push(Mark { x: *x, k, pv: pv.clone() }); }
             }
@@ -1006,8 +1095,8 @@ fn place(room: &Room, anchor: Pt, text: &str, size: f64, within: B4, prefer_up: 
         let (s, e) = ((ax + dx / l * 7.0, ay + dy / l * 7.0), (q.0 - dx / l * 2.0, q.1 - dy / l * 2.0));
         leader_ok(s, e).then_some((s, e))
     };
-    // (first only spots nearer its own point than any other mark, then any clear one)
-    for strict in [true, false] {
+    // (only spots nearer its own point than any other mark: a label must never read as another point's)
+    for strict in [true] {
         for rr in [28.0, 36.0, 46.0, 58.0, 72.0, 88.0, 106.0] {
             for k in 0..24 {
                 let ang = std::f64::consts::TAU * k as f64 / 24.0 - std::f64::consts::FRAC_PI_2;
@@ -1034,7 +1123,7 @@ fn place(room: &Room, anchor: Pt, text: &str, size: f64, within: B4, prefer_up: 
         yy += 6.0;
     }
     spots.sort_by(|p, q| p.0.partial_cmp(&q.0).unwrap());
-    for strict in [true, false] {
+    for strict in [true] {
         for (_, b) in &spots {
             PLACE_WORK.with(|c| c.set(c.get() + 1));
             if !clear(b) || (strict && !mine_nearest(b)) { continue; }
@@ -1254,7 +1343,9 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     let copy = copy_of(p);
     let key = copy == Copy::Key;
     let dec = decimals(p);
-    let model = model(p, (wa, wb));
+    // (f worked out from f′ covers the closed interval of the absolute extrema too, where it reaches past the window)
+    let span_m = match (p.b("absolute"), typed(p.s("abs_a")), typed(p.s("abs_b"))) { (true, Some(a), Some(b)) if b.v > a.v && (b.v - a.v) < 1e4 => (wa.min(a.v), wb.max(b.v)), _ => (wa, wb) };
+    let model = model(p, span_m);
     if let Err(e) = &model { notes.push(e.clone()); }
     let model = model.ok();
     let an = model.as_ref().map(|m| m.analyse(wa, wb, win_pv(p, "xmin"), win_pv(p, "xmax")));
@@ -1269,9 +1360,12 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     let kinds: Vec<PK> = if one { vec![PK::One] } else if fpp { vec![PK::F, PK::Fp, PK::Fpp] } else { vec![PK::F, PK::Fp] };
     let plot_h = (if one { 400.0 } else { 260.0 }) * tall;
     let row_h = 26.0 * ls.max(1.0);
-    // (one grid with both the closed interval and the tracer's readings: a header row for each)
-    let two_rows = one && key && p.b("absolute") && p.b("tracer");
-    let head_h = if two_rows { 2.0 * row_h } else { row_h };
+    // (one grid: a header row for the closed interval, and one for each graph's reading at the tracer, so a long exact
+    // reading never runs off the page)
+    let n_read = if one && key && p.b("tracer") { (0..3).filter(|&fi| (fi < 2 || fpp) && shows(p, fi)).count() } else { 0 };
+    let iv_row = one && key && p.b("absolute");
+    let two_rows = iv_row && n_read > 0;
+    let head_h = row_h * ((iv_row as usize + n_read).max(1) as f64);
     let mut y = 10.0;
     let title_on = match p.s("title_mode") { "Blank line" => true, "None" => false, _ => !p.s("title").trim().is_empty() };
     let title_y = 26.0;
@@ -1319,6 +1413,7 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
 
     // ── what labels keep clear of: every curve, axis, number and label ──
     let mut room = Room::default();
+    let mut row_boxes: Vec<B4> = vec![];
     for b in &grid_boxes { room.boxes.push(*b); }
     let mut strokes: Vec<(Pt, Pt, &'static str)> = vec![];
     let mut curves_of: Vec<(usize, usize, Vec<Vec<Pt>>)> = vec![];
@@ -1328,6 +1423,10 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
         for s in [((pr[0] - 20.0, ay), (pr[2] + 20.0, ay)), ((ax, pr[1] - 20.0), (ax, pr[3] + 20.0))] { room.segs.push(s); strokes.push((s.0, s.1, "axis")); }
         // the arrowheads
         for (hx, hy) in [(pr[0] - 20.0, ay), (pr[2] + 20.0, ay), (ax, pr[1] - 20.0), (ax, pr[3] + 20.0)] { room.boxes.push([hx - 8.0, hy - 8.0, hx + 8.0, hy + 8.0]); }
+        // the x-axis number row, the whole width: a label there would read as a number on the axis (lesson 23)
+        // (kept for a numbered callout: a lone numeral there would read as a number on the axis; a worded label keeps clear of
+        // the numbers themselves)
+        if p.b("numbers") { row_boxes.push([pr[0] - 20.0, ay - 2.0, pr[2] + 20.0, ay + 27.0 * ls.max(1.0)]); }
         if let Some(m) = &model {
             for fi in fis_of(pn.kind) {
                 if !shows(p, fi) { continue; }
@@ -1409,6 +1508,9 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
             match (ex(lp), ex(rp)) {
                 (Some(l), Some(r)) if l != r => (None, None),
                 (Some(l), Some(_)) => (Some(l.f()), Some(l)),
+                // (an end of the domain: the one side there is)
+                (Some(v), None) if rp.is_none() => (Some(v.f()), Some(v)),
+                (None, Some(v)) if lp.is_none() => (Some(v.f()), Some(v)),
                 _ => (deriv_at(m, fi, t.v), None),
             }
         };
@@ -1432,14 +1534,15 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
                 room.boxes.push(b);
             }
             if tracer_on && tx.is_some() {
-                let s = fis.iter().filter(|&&fi| shows(p, fi)).filter_map(|&fi| reading(fi)).collect::<Vec<_>>().join(",  ");
-                let w = adv(&s, 14.0 * ls);
-                let x = (pr[2] - w).max(4.0);
-                let hy = if two_rows { hy + row_h } else { hy };
-                over.push_str(&text_el(x, hy, 14.0 * ls, &s, ink, "start", "reading"));
-                let b = inkb(x, hy, &s, 14.0 * ls);
-                labels.push((s, b, "reading"));
-                room.boxes.push(b);
+                for (row, s) in fis.iter().filter(|&&fi| shows(p, fi)).filter_map(|&fi| reading(fi)).enumerate() {
+                    let w = adv(&s, 14.0 * ls);
+                    let x = (pr[2] - w).max(4.0);
+                    let hy = hy + row_h * (row + two_rows as usize) as f64;
+                    over.push_str(&text_el(x, hy, 14.0 * ls, &s, ink, "start", "reading"));
+                    let b = inkb(x, hy, &s, 14.0 * ls);
+                    labels.push((s, b, "reading"));
+                    room.boxes.push(b);
+                }
             }
             continue;
         }
@@ -1484,7 +1587,7 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     let mut callouts: Vec<String> = vec![];
     let panel_of = |fi: usize| panels.iter().position(|q| fis_of(q.kind).contains(&fi));
     let inside = |pn: &Panel, x: f64, y: f64| { let r = pn.plot(); let (a, b) = (pn.sx(x), pn.sy(y)); a >= r[0] - 0.5 && a <= r[2] + 0.5 && b >= r[1] - 0.5 && b <= r[3] + 0.5 };
-    let coord = |x: f64, xv: &Pv, y: f64, yv: &Pv| format!("({}, {})", val_text(x, xv, dec, false), val_text(y, yv, dec, false));
+    let coord = |x: f64, xv: &Pv, y: f64, yv: &Pv| { let di = xv.show.as_ref().is_some_and(|s| s.contains('.')); format!("({}, {})", val_text(x, xv, dec, false), val_text(y, yv, dec, di)) };
     let mut cut_out: Vec<String> = vec![];
     if let (Some(m), Some(an), true) = (&model, &an, key) {
         let kf = panel_of(0);
@@ -1548,7 +1651,11 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
                     let pf_ = &panels[kf];
                     for c in r.cands.iter().filter(|c| c.end) { if inside(pf_, c.x, c.y) { dots.push(((pf_.sx(c.x), pf_.sy(c.y)), "end")); } }
                     for c in r.cands.iter().filter(|c| c.hi || c.lo) {
-                        if !inside(pf_, c.x, c.y) { notes.push(format!("The absolute {} at {} is outside the window: widen the y-axis to show it", if c.hi { "maximum" } else { "minimum" }, eq_text("x", &val_text(c.x, &c.xv, dec, false)))); continue; }
+                        if !inside(pf_, c.x, c.y) {
+                            let which = if c.x < pf_.g.x0 - 1e-9 || c.x > pf_.g.x1 + 1e-9 { "x" } else { "y" };
+                            notes.push(format!("The absolute {} at {} is outside the window: widen the {which}-axis to show it", if c.hi { "maximum" } else { "minimum" }, eq_text("x", &val_text(c.x, &c.xv, dec, false))));
+                            continue;
+                        }
                         let local = an.crit.iter().any(|q| (q.x - c.x).abs() < 1e-9 && ((c.hi && q.ext == Ext::Max) || (c.lo && q.ext == Ext::Min)));
                         let word = if c.hi { "absolute max" } else { "absolute min" };
                         let txt = format!("{}{word}", if local && p.b("extrema") { "local and " } else { "" });
@@ -1683,7 +1790,9 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
                 // no room for the words even on a leader (a crowded one-grid figure): a number beside the point, its words
                 // listed under the graphs
                 let n = (callouts.len() + 1).to_string();
-                match place(&room, *q, &n, fs, within, *up) {
+                let mut room_n = room.clone();
+                room_n.boxes.extend(row_boxes.iter().copied());
+                match place(&room_n, *q, &n, fs, within, *up) {
                     Some(pl) => {
                         if let Some((s0, e)) = pl.leader {
                             over.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1" data-leader="1"/>"#, s0.0, s0.1, e.0, e.1));
@@ -1781,6 +1890,23 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
             "end" => format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="{ink}" stroke="#fff" stroke-width="1.2" data-mark="end"/>"##, q.0, q.1),
             _ => format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="{ink}" stroke="#fff" stroke-width="1.2" data-mark="crit"/>"##, q.0, q.1),
         });
+    }
+    // a hole (a removable point of a typed rational function): an open circle on each graph drawn, at the value the reduced
+    // function would have there (on every copy: it is part of the graph)
+    if let Some(m) = &model {
+        for (pi, pc) in m.pieces.iter().enumerate() {
+            for (hx, _) in &pc.holes {
+                for (k, pn) in panels.iter().enumerate() {
+                    for fi in fis_of(pn.kind) {
+                        if !shows(p, fi) { continue; }
+                        let Some(v) = m.rat_of(pi, fi).and_then(|r| r.f(*hx)) else { continue };
+                        if !inside(pn, *hx, v) { continue; }
+                        let _ = k;
+                        marks.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="hole"/>"##, pn.sx(*hx), pn.sy(v), if print { ink } else { cols[fi] }));
+                    }
+                }
+            }
+        }
     }
     // corners and jumps of f on the f′ panel are marked open above; a jump of f itself is drawn with its dots
     if let (Some(m), Some(an)) = (&model, &an) {
@@ -1919,6 +2045,10 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     d.raw(&extra);
     let svg = d.finish();
     let dots: Vec<Pt> = dots.iter().map(|d| d.0).chain(through).collect();
+    // (one fault never floods the panel: notes said once each, at most six, the rest counted)
+    let mut seen: Vec<String> = vec![];
+    for n in notes.drain(..) { if !seen.contains(&n) { seen.push(n); } }
+    let notes = if seen.len() > 6 { let more = seen.len() - 5; let mut v: Vec<String> = seen.into_iter().take(5).collect(); v.push(format!("and {more} more like these")); v } else { seen };
     let work = model.as_ref().map(|m| m.work.get()).unwrap_or(0);
     Built { svg, notes, panels, tracer_pts, through, stats, analysis: an, labels, anchors, dots, strokes, size: (page_w.ceil(), page_h), work }
 }
@@ -1959,8 +2089,14 @@ pub(crate) fn absolute(p: &Params, m: &Model, an: &Analysis) -> Result<AbsRes, S
         (Some(a), Some(b)) => return Err(format!("The closed interval's end ({}) must be above its start ({})", b.show, a.show)),
         _ => return Err("Type both ends of the closed interval, such as -2 and 2 or 0 and pi".into()),
     };
+    let _ = an;
+    // the closed interval analysed on its own (it may reach past the window): its critical points, its breaks
+    let (pa, pb) = (Pv { ex: exact::of_text(p.s("abs_a")), show: Some(a.show.clone()) }, Pv { ex: exact::of_text(p.s("abs_b")), show: Some(b.show.clone()) });
+    let an = &m.analyse(a.v, b.v, pa, pb);
     let span = b.v - a.v;
-    let cont = (0..=400).all(|i| m.f(a.v + span * i as f64 / 400.0).is_some()) && !an.breaks.iter().any(|x| *x >= a.v - 1e-9 && *x <= b.v + 1e-9);
+    // continuous on [a, b]: a value at every point, ends included, and no break inside (an end of the domain, as √(4 − x²)
+    // at ±2, is fine)
+    let cont = m.f(a.v).is_some() && m.f(b.v).is_some() && (1..400).all(|i| m.f(a.v + span * i as f64 / 400.0).is_some()) && !an.breaks.iter().any(|x| *x > a.v + 1e-9 && *x < b.v - 1e-9);
     if !cont { return Err(format!("{name} is not continuous on [{}, {}], so it need not have an absolute maximum and minimum there: choose an interval where it has no break", a.show, b.show)); }
     let end = |t: &Typed, text: &str| { let xe = exact::of_text(text); let ye = xe.as_ref().and_then(|x| m.exact_f(x)); AbsCand { x: t.v, xv: Pv { ex: xe, show: Some(t.show.clone()) }, y: ye.as_ref().map(|v| v.f()).unwrap_or_else(|| m.f(t.v).unwrap()), yv: Pv { ex: ye, show: None }, end: true, hi: false, lo: false } };
     let mut cands = vec![end(&a, p.s("abs_a")), end(&b, p.s("abs_b"))];
@@ -1987,10 +2123,13 @@ pub(crate) fn key_lines(p: &Params, m: &Model, an: &Analysis, win: (f64, f64)) -
     let name = fname(p);
     let nb = |s: String| s.replace(' ', "\u{a0}");
     let vt = |x: f64, pv: &Pv| val_text(x, pv, dec, false);
-    let coord = |x: f64, xv: &Pv, y: f64, yv: &Pv| nb(format!("({}, {})", vt(x, xv), vt(y, yv)));
+    let coord = |x: f64, xv: &Pv, y: f64, yv: &Pv| { let di = xv.show.as_ref().is_some_and(|s| s.contains('.')); nb(format!("({}, {})", vt(x, xv), val_text(y, yv, dec, di))) };
     let mut v = vec![];
     let list = |xs: Vec<String>| if xs.is_empty() { "none".to_string() } else { xs.join(", ") };
-    v.push(format!("Critical points of {name}: {}", list(an.crit.iter().map(|c| nb(format!("{}{}", eq_text("x", &vt(c.x, &c.xv)), if c.undef { format!(" ({name}{PRIME} does not exist)") } else { String::new() }))).collect())));
+    // (every x of a constant stretch is a critical point too)
+    let mut cps: Vec<String> = an.crit.iter().map(|c| nb(format!("{}{}", eq_text("x", &vt(c.x, &c.xv)), if c.undef { format!(" ({name}{PRIME} does not exist)") } else { String::new() }))).collect();
+    for q in an.mono.iter().filter(|q| q.sign == 0) { cps.push(nb(format!("every x in [{}, {}]", vt(q.a, &q.av), vt(q.b, &q.bv)))); }
+    v.push(format!("Critical points of {name}: {}", list(cps)));
     let maxs: Vec<String> = an.crit.iter().filter(|c| c.ext == Ext::Max).map(|c| coord(c.x, &c.xv, c.y, &c.yv)).collect();
     let mins: Vec<String> = an.crit.iter().filter(|c| c.ext == Ext::Min).map(|c| coord(c.x, &c.xv, c.y, &c.yv)).collect();
     // a constant stretch: every point of it is a local maximum and minimum by the definition (f(c) ≥ f(x) and f(c) ≤ f(x)
@@ -2013,9 +2152,11 @@ pub(crate) fn key_lines(p: &Params, m: &Model, an: &Analysis, win: (f64, f64)) -
     }
     v.push(format!("Inflection points: {}", list(an.infl.iter().map(|q| coord(q.x, &q.xv, q.y, &q.yv)).collect())));
     // open intervals; a constant (or straight) stretch is closed, [a, b]
-    let ivs = |sp: &[Span1], s: i8| { let x: Vec<String> = sp.iter().filter(|q| q.sign == s).map(|q| if s == 0 { nb(format!("[{}, {}]", vt(q.a, &q.av), vt(q.b, &q.bv))) } else { nb(format!("({}, {})", vt(q.a, &q.av), vt(q.b, &q.bv))) }).collect(); if x.is_empty() { "none".to_string() } else { x.join(" and ") } };
+    // (a constant or straight stretch is closed at an end where f has a value, open at a break or a hole)
+    let closed = |x: f64| m.f(x).is_some() && !an.breaks.iter().any(|b| (b - x).abs() < 1e-9 * (1.0 + x.abs()));
+    let ivs = |sp: &[Span1], s: i8| { let x: Vec<String> = sp.iter().filter(|q| q.sign == s).map(|q| if s == 0 { nb(format!("{}{}, {}{}", if closed(q.a) { "[" } else { "(" }, vt(q.a, &q.av), vt(q.b, &q.bv), if closed(q.b) { "]" } else { ")" })) } else { nb(format!("({}, {})", vt(q.a, &q.av), vt(q.b, &q.bv))) }).collect(); if x.is_empty() { "none".to_string() } else { x.join(" and ") } };
     let mut mono = format!("Increasing on {};  decreasing on {}", ivs(&an.mono, 1), ivs(&an.mono, -1));
-    if an.mono.iter().any(|q| q.sign == 0) { mono.push_str(&format!(";  constant on {} (every x there is a critical point)", ivs(&an.mono, 0))); }
+    if an.mono.iter().any(|q| q.sign == 0) { mono.push_str(&format!(";  constant on {}", ivs(&an.mono, 0))); }
     v.push(mono);
     let mut conc = format!("Concave up on {};  concave down on {}", ivs(&an.conc, 1), ivs(&an.conc, -1));
     if an.conc.iter().any(|q| q.sign == 0) { conc.push_str(&format!(";  neither (a straight line) on {}", ivs(&an.conc, 0))); }
@@ -2023,7 +2164,8 @@ pub(crate) fn key_lines(p: &Params, m: &Model, an: &Analysis, win: (f64, f64)) -
     if p.b("absolute") {
         if let Ok(r) = absolute(p, m, an) {
             if !r.constant {
-                let at = |f: &dyn Fn(&AbsCand) -> bool| { let c: Vec<&AbsCand> = r.cands.iter().filter(|c| f(c)).collect(); let val = vt(c[0].y, &c[0].yv); (val, c.iter().map(|c| nb(eq_text("x", &vt(c.x, &c.xv)))).collect::<Vec<_>>().join(" and ")) };
+                // (a value at a typed decimal end is written in decimals)
+                let at = |f: &dyn Fn(&AbsCand) -> bool| { let c: Vec<&AbsCand> = r.cands.iter().filter(|c| f(c)).collect(); let di = c[0].xv.show.as_ref().is_some_and(|s| s.contains('.')); let val = val_text(c[0].y, &c[0].yv, dec, di); (val, c.iter().map(|c| nb(eq_text("x", &vt(c.x, &c.xv)))).collect::<Vec<_>>().join(" and ")) };
                 let ((hv, hx), (lv, lx)) = (at(&|c| c.hi), at(&|c| c.lo));
                 v.push(format!("On [{}, {}]: absolute maximum {} at {};  absolute minimum {} at {}", r.a.show, r.b.show, nb(hv), hx, nb(lv), lx));
             }
