@@ -794,7 +794,11 @@ fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
             // (stretches too narrow to see, such as floor(1/x) near 0, are not drawn)
             let min_w = (x1 - x0) / 2000.0;
             cuts.windows(2).filter(|w| w[1] - w[0] >= min_w).take(1500).map(|w| {
-                let mid = 0.5 * (w[0] + w[1]);
+                // (the level of a stretch is its value at an interior point, never the middle alone: floor(4 - x²) between
+                // the cuts at ±1 is 4 only at the middle, x = 0, a single point; two points off the middle agree on 3)
+                let pt = |t: f64| w[0] + (w[1] - w[0]) * t;
+                let key_at = |t: f64| args.iter().map(|a| cas::ev(a, pt(t)).map(f64::floor)).collect::<Vec<_>>();
+                let mid = if key_at(0.3719) == key_at(0.6281) { pt(0.3719) } else { pt(0.5) };
                 let at = |arg: &X| cas::ev(arg, mid).map(f64::floor);
                 format!("y = {}{}", cas::grid_text(x, &at), dom(w[0], w[1]))
             }).collect()

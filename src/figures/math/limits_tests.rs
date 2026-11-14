@@ -1438,3 +1438,52 @@ fn small_things_of_the_fourth_check() {
         assert!(!warnings(&p).iter().any(|w| w.contains("cannot")), "{:?}", warnings(&p));
     }
 }
+
+/// Every flat stroke of a step function is drawn at the function's own value inside it, on narrow and wide windows alike
+/// (the fifth check: floor(4 - x²) was drawn at 4 on (-1, 1), where it is 3 except at the single point 0, because the
+/// level of a stretch was read at its middle).
+#[test]
+fn every_stretch_of_a_step_function_is_drawn_at_its_own_value() {
+    let fns = ["floor(4 - x^2)", "floor(1 - x^2)", "floor(-x^2)", "floor(2 - x^2/2)", "floor(6cos(x))", "floor(10sin(x))", "floor(sin(x))",
+        "floor(cos(x))", "floor(2sin(x))", "ceil(sin(x))", "floor(sin(x)) + 2", "floor(3cos(x/2))", "floor(5 - abs(x))", "ceil(x^2/4)",
+        "floor(x/3)", "floor(sqrt(abs(x)))", "floor(5sin(x))", "ceil(cos(x)) - 1", "floor(x)", "floor(2cos(x)) + floor(sin(x))"];
+    let mut fails = vec![];
+    let mut checked = 0;
+    for f in fns {
+        let e = super::limits::cas::parse(f).unwrap();
+        for (x0, x1) in [(-6.0, 10.0), (-15.0, 15.0), (-100.0, 100.0)] {
+            let p = with(json!({"pieces": format!("y = {f}"), "dots": "", "ask_at": "", "xmin": x0, "xmax": x1, "square": false}));
+            let s = svg(&p);
+            let (fx0, _, fy0, fy1, ml, mt, ux, uy) = last_drawn(&p).frame;
+            let to_x = |px: f64| fx0 + (px - ml) / ux;
+            let to_y = |py: f64| fy1 - (py - mt) / uy;
+            let g = group(&s, "curves");
+            for line in g.split("points=\"").skip(1) {
+                let pts: Vec<(f64, f64)> = line.split('"').next().unwrap().split(' ').filter_map(|q| { let (a, b) = q.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect();
+                // (runs of points at one height, 2 px long or more)
+                let mut runs: Vec<((f64, f64), (f64, f64))> = vec![];
+                let mut i = 0;
+                while i < pts.len() {
+                    let mut j = i;
+                    while j + 1 < pts.len() && (pts[j + 1].1 - pts[i].1).abs() < 0.01 { j += 1; }
+                    if pts[j].0 - pts[i].0 >= 2.0 { runs.push((pts[i], pts[j])); }
+                    i = j + 1;
+                }
+                for (a, b) in runs {
+                    let w = [a, b];
+                    let (xa, xb) = (to_x(w[0].0), to_x(w[1].0));
+                    let x = xa + (xb - xa) * 0.4137;
+                    let Some(v) = super::limits::cas::ev(&e, x) else { continue };
+                    let h = (x1 - x0) / 20000.0;
+                    if [-h, h].iter().any(|d| super::limits::cas::ev(&e, x + d) != Some(v)) { continue; }
+                    let drawn = to_y(w[0].1);
+                    if drawn < fy0 || drawn > fy1 { continue; }
+                    checked += 1;
+                    if (drawn - v).abs() > 0.05 * (fy1 - fy0).max(1.0) / 10.0 + 0.02 { fails.push(format!("{f} on {x0}..{x1}: at x = {x:.4} drawn at {drawn:.3}, value {v}")); break; }
+                }
+            }
+        }
+    }
+    assert!(checked > 500, "{checked} stretches checked");
+    assert!(fails.is_empty(), "{} wrong:\n{}", fails.len(), fails.join("\n"));
+}
