@@ -1216,7 +1216,18 @@ fn time_probe() {
     let t = std::time::Instant::now(); let d = md.discontinuities(); println!("discs {:?} ({})", t.elapsed(), d.0.len());
     let t = std::time::Instant::now(); let o = md.outside(); println!("outside {:?} ({})", t.elapsed(), o.len());
     let t = std::time::Instant::now(); let v = md.verticals(); println!("verticals {:?} ({})", t.elapsed(), v.len());
-    let t = std::time::Instant::now(); let pl = md.piles(); println!("piles {:?} ({})", t.elapsed(), pl.len());
+    let t = std::time::Instant::now(); let pl = md.piles(); println!("piles {:?} ({:?})", t.elapsed(), pl.iter().map(|k| k.show()).collect::<Vec<_>>());
+    for pc in &md.pieces { if let super::limits::Src::Formula { x } = &pc.src { for pl in super::limits::cas::piles_in(x, md.x0, md.x1) {
+        println!("pile at {} arg {:?} level {:?}", pl.at.show(), pl.arg, pl.level);
+        let w = md.x1 - md.x0;
+        for j in 2..=4 { let h = w * 10f64.powi(-j); let (u, v) = (pl.at.value() + h, pl.at.value() + 3.0 * h);
+            let vals: Vec<f64> = (0..=200).filter_map(|i| super::limits::cas::ev(&pl.arg, u + (v - u) * i as f64 / 200.0)).collect();
+            let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), y| (p.min(*y), q.max(*y)));
+            let lev = pl.level_near((mn + mx) / 2.0);
+            let (z, d) = super::limits::cas::zeros(&super::limits::cas::X::Add(vec![pl.arg.clone(), super::limits::cas::X::C(lev.neg())]), u, v);
+            println!("band {u}..{v} range {mn}..{mx} level {} zeros {:?} {d}", lev.show(), z.iter().map(|k| (k.show(), k.is_exact(), md.side(k, -1.0), md.side(k, 1.0))).collect::<Vec<_>>()); }
+    } } }
+    let (ds, done) = md.discontinuities(); println!("complete {done}: {}", ds.iter().take(12).map(|d| format!("{} {}", d.text, d.kind)).collect::<Vec<_>>().join(", "));
     let t = std::time::Instant::now(); let _ = svg(&p); println!("svg {:?}", t.elapsed());
 }
 
@@ -1307,4 +1318,64 @@ fn powers_of_zero_follow_one_rule() {
     assert!(warnings(&p).iter().any(|w| w.contains("no value anywhere")), "{:?}", warnings(&p));
     assert!(!svg(&p).contains("polyline"), "0^0 is drawn");
     assert!(fails.is_empty(), "{}", fails.join("\n"));
+}
+
+fn plain_text(svg: &str) -> String { let mut out = String::new(); let mut inside = false; for c in svg.chars() { if c == '<' { inside = true; } else if c == '>' { inside = false; } else if !inside { out.push(c); } } out }
+
+/// "Infinitely many" is a claim and is made only when established. A floor whose value does not matter (a constant in
+/// disguise built on an accumulating floor) has cuts that are no discontinuities, so its key never claims infinitely
+/// many: it gives the complete list when that is established, and otherwise leaves the line blank; its limits are right.
+#[test]
+fn constants_in_disguise_claim_no_pile_of_discontinuities() {
+    // (function, f(1/2) and its limit at 1/2)
+    let cases: &[(&str, &str)] = &[
+        ("y = sin(pi floor(1/x))", "0"), ("y = cos(2pi floor(1/x))", "1"), ("y = abs(cos(pi floor(1/x)))", "1"),
+        ("y = floor(1/x) - floor(1/x)", "0"), ("y = sin(pi ceil(1/x))", "0"), ("y = x + sin(pi floor(1/x))", "1/2"),
+        ("y = floor(1/x) + ceil(-1/x)", "0"), ("y = floor(1/x)^2 - floor(1/x)^2", "0"), ("y = sin(pi floor(ln(x)))", "0"),
+        ("y = sin(pi floor(tan(x)))", "0"), ("y = floor(1/x)/floor(1/x)", "1"), ("y = sin(2pi floor(1/x))", "0"),
+        ("y = cos(2pi ceil(1/x))", "1"), ("y = sin(pi floor(1/x))^2", "0"), ("y = abs(sin(pi floor(-ln(x))))", "0"),
+        ("y = sin(pi floor(x^(-2)))", "0"), ("y = cos(2pi floor(1/sin(x)))", "1"), ("y = sin(pi floor(exp(1/x)))", "0"),
+        ("y = x^2 + sin(pi floor(1/x))", "1/4"), ("y = floor(2/x) - floor(2/x)", "0"), ("y = sin(3pi floor(1/x))", "0"),
+        ("y = 1 + sin(pi floor(1/(x - 1)))", "1"), ("y = cos(2pi floor(ln(abs(x))))", "1"), ("y = abs(cos(pi floor(tan(x))))", "1"),
+        ("y = sin(pi floor(1/x)) + cos(2pi floor(1/x))", "1"), ("y = exp(sin(pi floor(1/x)))", "1"),
+    ];
+    let mut fails = vec![];
+    for (f, want) in cases {
+        let p = with(json!({"pieces": f, "dots": "", "ask_at": "1/2", "ask_disc": true, "kind_labels": true}));
+        let t = plain_text(&svg(&p));
+        if t.contains("infinitely many") { fails.push(format!("{f}: claims infinitely many: {t}")); }
+        let md = model_of(&p);
+        let k = Num::read("1/2").unwrap().k;
+        for (what, l) in [("limit", md.two(&k)), ("value", md.value(&k))] { if !matches!(&l, Lim::Val(_, t) if t == want) { fails.push(format!("{f}: {what} at 1/2 is {l:?}, want {want}")); } }
+        // what is listed is never a cut of the floor: only removable points where f has no value, or poles
+        let (ds, _) = md.discontinuities();
+        if ds.iter().any(|d| d.kind == "jump") { fails.push(format!("{f}: a jump listed: {:?}", ds.iter().map(|d| (&d.text, d.kind)).collect::<Vec<_>>())); }
+    }
+    // the first one, worked through: only the removable point at 0, and the list is complete
+    let md = model_of(&with(json!({"pieces": "y = sin(pi floor(1/x))", "dots": ""})));
+    let (ds, done) = md.discontinuities();
+    assert!(done && ds.len() == 1 && ds[0].text == "0" && ds[0].kind == "removable", "{:?} {done}", ds.iter().map(|d| (&d.text, d.kind)).collect::<Vec<_>>());
+    let md = model_of(&with(json!({"pieces": "y = sin(pi floor(tan(x)))", "dots": ""})));
+    let (ds, done) = md.discontinuities();
+    assert!(done && ds.iter().all(|d| d.kind == "removable") && ds.len() == 5, "{:?} {done}", ds.iter().map(|d| (&d.text, d.kind)).collect::<Vec<_>>());
+    assert!(fails.is_empty(), "{} wrong:\n{}", fails.len(), fails.join("\n"));
+}
+
+/// And where f does jump at cuts that pile up without end, the key still says so (established in three bands).
+#[test]
+fn true_piles_of_discontinuities_are_still_said() {
+    let cases: &[(&str, f64, f64, &str)] = &[
+        ("y = floor(1/x)", -6.0, 10.0, "0"), ("y = floor(ln(x))", 0.0, 10.0, "0"), ("y = 1/sin(1/x)", -1.0, 1.0, "0"),
+        ("y = x floor(1/x)", -2.0, 2.0, "0"), ("y = ceil(1/x)", -3.0, 3.0, "0"), ("y = floor(-ln(x))", 0.0, 10.0, "0"),
+        ("y = floor(2/x) + x", -3.0, 3.0, "0"), ("y = tan(1/x)", -1.0, 1.0, "0"), ("y = floor(exp(1/x))", -2.0, 2.0, "0"),
+        ("y = 1/cos(1/x)", -1.0, 1.0, "0"), ("y = floor(ln(x - 2))", -6.0, 10.0, "2"),
+    ];
+    let mut fails = vec![];
+    for (f, x0, x1, at) in cases {
+        let p = with(json!({"pieces": f, "dots": "", "ask_at": "", "ask_disc": true, "xmin": x0, "xmax": x1}));
+        let t = plain_text(&svg(&p));
+        // (the key may wrap between the two parts, and the comma goes with the wrap)
+        if !(t.contains("infinitely many") && t.contains(&format!("piling up near x = {at}"))) { fails.push(format!("{f}: {}", &t[t.find("Where is").unwrap_or(0)..])); }
+    }
+    assert!(fails.is_empty(), "{} wrong:\n{}", fails.len(), fails.join("\n"));
 }

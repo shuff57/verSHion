@@ -1474,7 +1474,9 @@ pub fn limit(e: &X, at: &At) -> L {
 fn confirm(e: &X, at: &At, l: &L) -> bool {
     let xs: Vec<f64> = match at {
         // (at offsets that are no round numbers, so a power such as x^(1/x) is not caught at a whole-number exponent)
-        At::Fin(a, s) => { let a = a.value(); [1e-1, 1e-2, 1e-3, 1e-4, 1e-5].iter().map(|h| a + *s as f64 * 1.37 * h * (1.0 + a.abs())).collect() }
+        // (an infinite limit is also looked at much nearer: next to a pole of 1/sin(1/x) at x = 1/(1000π) the other poles
+        // are a few millionths away, and only there do the values grow)
+        At::Fin(a, s) => { let a = a.value(); let hs: &[f64] = if matches!(l, L::PInf | L::NInf) { &[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8] } else { &[1e-1, 1e-2, 1e-3, 1e-4, 1e-5] }; hs.iter().map(|h| a + *s as f64 * 1.37 * h * (1.0 + a.abs())).collect() }
         At::Inf(s) => (1..=6).map(|k| *s as f64 * 1.37 * 10f64.powi(k)).collect(),
     };
     let ys: Vec<Option<f64>> = xs.iter().map(|x| ev_sure(e, *x)).collect();
@@ -1496,7 +1498,8 @@ fn confirm(e: &X, at: &At, l: &L) -> bool {
             let sg = if matches!(l, L::PInf) { 1.0 } else { -1.0 };
             let v: Vec<f64> = ys.iter().flatten().copied().collect();
             // (values that overflow past the largest number count as growing)
-            v.len() >= 2 && v[v.len() - 1] * sg > 0.0 && v[v.len() - 1].abs() > v[0].abs()
+            let n = v.len();
+            n >= 2 && v[n - 1] * sg > 0.0 && v[n - 1].abs() > v[0].abs() && (n < 3 || matches!(at, At::Inf(_)) || (v[n - 1].abs() >= v[n - 3].abs() && v[n - 2] * sg > 0.0))
         }
         L::NoVal => ys[2..].iter().all(|y| y.is_none()),
         // "does not exist": in each of three bands ever nearer (or further out) the values keep spreading apart by a
@@ -1854,11 +1857,27 @@ pub fn floor_piles(a: &X, lo: f64, hi: f64) -> Vec<K> {
     out
 }
 
-/// Every place in [lo, hi] where the cuts of some floor or ceiling in e pile up without end.
-pub fn piles_in(e: &X, lo: f64, hi: f64) -> Vec<K> {
-    let mut out: Vec<K> = vec![];
+/// A place where cuts pile up without end: `at`, the inner function `arg` whose levels make the cuts, and which levels
+/// (whole numbers for a floor, kπ for a sine under 1/(...), π/2 + kπ for a cosine).
+#[derive(Clone, Debug)]
+pub struct Pile { pub at: K, pub arg: X, pub level: Fun }
+impl Pile {
+    /// The level of this kind nearest v.
+    pub fn level_near(&self, v: f64) -> K {
+        match self.level {
+            Fun::Sin => K::pi().mulq(Q::i((v / PI).round() as i128)),
+            Fun::Cos => K::pi().mulq(Q::new(2 * ((v / PI - 0.5).round() as i128) + 1, 2).unwrap()),
+            _ => K::int(v.round() as i128),
+        }
+    }
+}
+
+/// Every place in [lo, hi] where the cuts of some floor or ceiling in e (or the zeros of a sine or cosine under
+/// 1/(...)) pile up without end, with what makes them.
+pub fn piles_in(e: &X, lo: f64, hi: f64) -> Vec<Pile> {
+    let mut out: Vec<Pile> = vec![];
     // (`zero`: a zero of e is a break, as under 1/(...): a sine of an unbounded curve then breaks without end)
-    fn walk(e: &X, lo: f64, hi: f64, zero: bool, out: &mut Vec<K>) {
+    fn walk(e: &X, lo: f64, hi: f64, zero: bool, out: &mut Vec<Pile>) {
         match e {
             X::C(_) | X::V => {}
             X::Add(v) => for a in v { walk(a, lo, hi, false, out) },
@@ -1868,15 +1887,79 @@ pub fn piles_in(e: &X, lo: f64, hi: f64) -> Vec<K> {
             X::Pow(b, p) => { walk(b, lo, hi, p.has_x() || const_q(p).is_none_or(|q| q < Q::ZERO), out); walk(p, lo, hi, false, out); }
             X::F(f, a) => {
                 if (*f == Fun::Floor || (zero && matches!(f, Fun::Sin | Fun::Cos))) && !poly(a).is_some_and(|c| c.len() <= 2) {
-                    for k in floor_piles(a, lo, hi) { if !out.iter().any(|o| (o.value() - k.value()).abs() < 1e-9 * (1.0 + k.value().abs())) { out.push(k); } }
+                    for k in floor_piles(a, lo, hi) { out.push(Pile { at: k, arg: (**a).clone(), level: *f }); }
                 }
                 walk(a, lo, hi, false, out);
             }
         }
     }
     walk(e, lo, hi, false, &mut out);
-    out.sort_by(|a, b| a.value().partial_cmp(&b.value()).unwrap_or(Ordering::Equal));
+    out.sort_by(|a, b| a.at.value().partial_cmp(&b.at.value()).unwrap_or(Ordering::Equal));
     out
+}
+
+/// e with each floor replaced as `by` says (None: kept).
+pub fn subst_floors(e: &X, by: &dyn Fn(&X) -> Option<X>) -> X {
+    match e {
+        X::C(_) | X::V => e.clone(),
+        X::Add(v) => X::Add(v.iter().map(|a| subst_floors(a, by)).collect()),
+        X::Mul(v) => X::Mul(v.iter().map(|a| subst_floors(a, by)).collect()),
+        X::Neg(a) => X::Neg(Box::new(subst_floors(a, by))),
+        X::Inv(a) => X::Inv(Box::new(subst_floors(a, by))),
+        X::Pow(b, p) => X::Pow(Box::new(subst_floors(b, by)), Box::new(subst_floors(p, by))),
+        X::F(Fun::Floor, a) => by(a).unwrap_or_else(|| X::F(Fun::Floor, Box::new(subst_floors(a, by)))),
+        X::F(f, a) => X::F(*f, Box::new(subst_floors(a, by))),
+    }
+}
+
+pub fn floor_args(e: &X, out: &mut Vec<X>) {
+    match e {
+        X::C(_) | X::V => {}
+        X::Add(v) | X::Mul(v) => for a in v { floor_args(a, out) },
+        X::Neg(a) | X::Inv(a) => floor_args(a, out),
+        X::Pow(b, p) => { floor_args(b, out); floor_args(p, out); }
+        X::F(f, a) => { if *f == Fun::Floor { out.push((**a).clone()); } floor_args(a, out); }
+    }
+}
+
+/// Whether e's value does not depend on the values of its floors at all, so a floor's cuts are no discontinuities of e
+/// (sin(π floor(1/x)) = 0, |cos(π floor(1/x))| = 1, floor(1/x) - floor(1/x) = 0, floor(1/x) + ceil(-1/x) = 0,
+/// x + sin(π floor(1/x)) = x, floor(1/x)/floor(1/x) = 1 where it has a value): each floor (floors of the same function
+/// together) is replaced by a whole number N, and e is worked out exactly at three x in [lo, hi] for N of both parities,
+/// small and large; it must come out the same for every N it has a value for. Also, with the floors so replaced, the
+/// formula left (for the breaks it has of its own).
+pub fn floors_inert(e: &X, lo: f64, hi: f64) -> Option<X> {
+    let mut args = vec![];
+    floor_args(e, &mut args);
+    if args.is_empty() { return None; }
+    // no floor inside a floor's argument (its own cuts would matter)
+    if args.iter().any(|a| { let mut v = vec![]; floor_args(a, &mut v); !v.is_empty() }) { return None; }
+    // three x where every argument has a value, as exact rationals
+    let xs: Vec<K> = [0.2137, 0.5179, 0.8263].iter().filter_map(|t| { let v = lo + (hi - lo) * t; let k = K::q(Q::new((v * 1000.0).round() as i128, 1000)?); args.iter().all(|a| ev(a, k.value()).is_some()).then_some(k) }).collect();
+    if xs.len() < 2 { return None; }
+    // the floors grouped by the function they take (ceil(-1/x) is -floor(1/x): the same one)
+    let sig = |a: &X| -> Vec<i64> { xs.iter().map(|x| (ev(a, x.value()).unwrap_or(f64::NAN) * 1e9).round() as i64).collect() };
+    let mut groups: Vec<Vec<i64>> = vec![];
+    for a in &args { let g = sig(a); if !groups.contains(&g) { groups.push(g); } }
+    if groups.len() > 2 { return None; }
+    let ns: Vec<i128> = if groups.len() == 1 { vec![-1001, -1000, -51, -50, -3, -2, -1, 0, 1, 2, 3, 50, 51, 1000, 1001] } else { vec![-51, -50, -1, 0, 1, 2, 50, 51] };
+    let combos: Vec<Vec<i128>> = if groups.len() == 1 { ns.iter().map(|n| vec![*n]).collect() } else { ns.iter().flat_map(|a| ns.iter().map(move |b| vec![*a, *b])).collect() };
+    let with = |c: &[i128]| subst_floors(e, &|a: &X| { let g = sig(a); groups.iter().position(|o| *o == g).map(|i| X::C(K::int(c[i]))) });
+    for x in &xs {
+        let mut first: Option<K> = None;
+        let mut defined = 0;
+        for c in &combos {
+            match exact(&with(c), x) {
+                EV::Val(k) => { defined += 1; match &first { None => first = Some(k), Some(f) => if f.sub(&k).sign() != Some(0) { return None; } } }
+                EV::Undef => {}
+                EV::Unk => return None,
+            }
+        }
+        if defined < combos.len() / 2 { return None; }
+    }
+    // (a whole number the formula has a value for, for the breaks of what is left)
+    let c = combos.iter().find(|c| xs.iter().all(|x| matches!(exact(&with(c), x), EV::Val(_))))?.clone();
+    Some(with(&c))
 }
 
 pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {

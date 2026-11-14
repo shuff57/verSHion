@@ -400,7 +400,7 @@ fn rows() -> Vec<Row> {
 /// Results the analysis is allowed to leave as "cannot be determined" (none: every row is an ordinary textbook function).
 const UNDETERMINED: &[&str] = &[];
 /// Rows whose list of discontinuities is not sure to be complete (and so is left as a line in the key), with why.
-const INCOMPLETE: &[(&str, &str)] = &[("C3", "floor(1/x) breaks at every 1/n, without end near 0"), ("D27", "floor(1/x) breaks at every 1/n, without end near 0"), ("F01", "at every e^n"), ("F02", "at every e^n"), ("F03", "at every e^n"), ("F04", "at every ±e^(n/2)... near 0"), ("F05", "at every e^(n/2)"), ("F06", "at every 2 + e^n"), ("F07", "at every e^n"), ("F08", "at every ±e^(n/2)"), ("F09", "at every 10^n")];
+const INCOMPLETE: &[(&str, &str)] = &[("D27", "floor(1/x) breaks at every 1/n, without end near 0"), ("F01", "at every e^n"), ("F02", "at every e^n"), ("F03", "at every e^n"), ("F04", "at every ±e^(n/2)... near 0"), ("F05", "at every e^(n/2)"), ("F06", "at every 2 + e^n"), ("F07", "at every e^n"), ("F08", "at every ±e^(n/2)"), ("F09", "at every 10^n")];
 
 #[test]
 fn the_table_of_hand_worked_functions() {

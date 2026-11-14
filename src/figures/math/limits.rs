@@ -561,7 +561,18 @@ impl Model {
             let Src::Formula { x } = &pc.src else { continue };
             let (a, b) = (pc.lo_x().max(lo), pc.hi_x().min(hi));
             if !(b > a) { continue; }
-            let (z, d) = cas::breaks(x, a, b);
+            let (mut z, mut d) = cas::breaks(x, a, b);
+            // floors whose values do not matter (sin(π floor(1/x)) = 0): their cuts are no discontinuities, so the breaks
+            // are those of the formula with the floors replaced by a whole number and those of the floors' arguments
+            if !d { if let Some(free) = cas::floors_inert(x, a, b) {
+                let (z1, d1) = cas::breaks(&free, a, b);
+                let mut args = vec![];
+                cas::floor_args(x, &mut args);
+                let mut dd = d1;
+                z = z1;
+                for arg in &args { let (z2, d2) = cas::breaks(arg, a, b); z.extend(z2); dd &= d2; }
+                d = dd;
+            } }
             done &= d;
             c.extend(z.into_iter().filter(|k| { let v = k.value(); v > a - 1e-12 && v < b + 1e-12 }));
         }
@@ -599,15 +610,56 @@ impl Model {
         (c.iter().filter_map(|k| self.classify(k)).collect(), done)
     }
     /// Where in the window discontinuities pile up without end (the cuts of floor(ln x) near 0), as the key writes them.
+    /// Only where that is established: f must jump at cuts in three bands ever nearer the point (from one side), each
+    /// cut found exactly and its kind worked out; cuts of floors whose values do not matter are no discontinuities.
     pub fn piles(&self) -> Vec<K> {
         let mut out: Vec<K> = vec![];
         for pc in &self.pieces {
             let Src::Formula { x } = &pc.src else { continue };
             let (a, b) = (pc.lo_x().max(self.x0), pc.hi_x().min(self.x1));
             if !(b > a) { continue; }
-            for k in cas::piles_in(x, a, b) { if !out.iter().any(|o| (o.value() - k.value()).abs() < 1e-9 * (1.0 + k.value().abs())) { out.push(k); } }
+            let inert = cas::floors_inert(x, a, b).is_some();
+            for pl in cas::piles_in(x, a, b) {
+                if inert && pl.level == cas::Fun::Floor { continue; }
+                let k = pl.at.clone();
+                if out.iter().any(|o| (o.value() - k.value()).abs() < 1e-9 * (1.0 + k.value().abs())) { continue; }
+                if self.pile_established(&pl, a, b) { out.push(k); }
+            }
         }
+        out.sort_by(|a, b| a.value().partial_cmp(&b.value()).unwrap_or(std::cmp::Ordering::Equal));
         out
+    }
+    /// In each of three bands ever nearer the pile (w/100 to 3w/100 away, then w/1000, w/10000) a cut is solved for
+    /// exactly (the argument equal to a level it passes there) and is a discontinuity whose kind is established.
+    fn pile_established(&self, pl: &cas::Pile, a: f64, b: f64) -> bool {
+        let p = pl.at.value();
+        let w = (b - a).max(1e-9);
+        for s in [-1.0, 1.0] {
+            if (s < 0.0 && p <= a + 1e-12) || (s > 0.0 && p >= b - 1e-12) { continue; }
+            // (bands: where a growing argument first passes 10, 100 and 1000 times its size far out, as e^(1/x) does
+            // near 0, found on a scan ever nearer; otherwise a factor of ten wide at w/100, w/1000, w/10000 away, so log x passes
+            // a whole number in each)
+            let scan: Vec<(f64, f64)> = (0..=600).filter_map(|i| { let d = 0.5 * w * 10f64.powf(-(i as f64) / 50.0); let x = p + s * d; (x > a && x < b).then(|| cas::ev(&pl.arg, x).map(|y| (d, y.abs()))).flatten() }).collect();
+            let base = scan.first().map_or(1.0, |q| q.1.max(1.0));
+            let grows = scan.iter().any(|q| q.1 > 1e4 * base);
+            let bands: Vec<(f64, f64)> = if grows {
+                [10.0, 100.0, 1000.0].iter().filter_map(|t| { let i = scan.iter().position(|q| q.1 >= t * base)?; let (d1, d0) = (scan[i].0, scan[i.saturating_sub(30)].0); Some((d1, d0)) }).collect()
+            } else { (2..=4).map(|j| { let h = w * 10f64.powi(-j); (1.37 * h, 13.7 * h) }).collect() };
+            let mut ok = 0;
+            for (d1, d2) in bands {
+                let (u, v) = { let (u, v) = (p + s * d1, p + s * d2); (u.min(v).max(a), u.max(v).min(b)) };
+                if !(v > u) { break; }
+                let vals: Vec<f64> = (0..=200).filter_map(|i| cas::ev(&pl.arg, u + (v - u) * i as f64 / 200.0)).filter(|y| y.is_finite() && y.abs() < 1e12).collect();
+                if vals.len() < 2 { break; }
+                let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), y| (p.min(*y), q.max(*y)));
+                let Some(level) = [0.5, 0.3, 0.7, 0.1, 0.9].iter().map(|t| pl.level_near(mn + (mx - mn) * t)).find(|l| l.value() > mn && l.value() < mx) else { break };
+                let (z, _) = cas::zeros(&X::Add(vec![pl.arg.clone(), X::C(level.neg())]), u, v);
+                let Some(c) = z.into_iter().find(|c| c.is_exact()) else { break };
+                match self.classify(&c) { Some(d) if d.kind != UNSURE => ok += 1, _ => break }
+            }
+            if ok == 3 { return true; }
+        }
+        false
     }
     /// Discontinuities outside the window (for the panel note): the near ones, and exactly found far ones.
     pub fn outside(&self) -> Vec<Disc> {
