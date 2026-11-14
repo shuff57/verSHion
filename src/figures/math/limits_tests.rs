@@ -1225,14 +1225,14 @@ fn time_probe() {
     let t = std::time::Instant::now(); let md = model_of(&p); println!("model {:?}", t.elapsed());
     if let super::limits::Src::Formula { x } = &md.pieces[0].src {
         let t = std::time::Instant::now(); let b = super::limits::cas::busy(x, md.x0, md.x1); println!("busy {:?} {b}", t.elapsed());
-        let t = std::time::Instant::now(); let n = super::limits::cas::piles_in(x, md.x0, md.x1).len(); println!("piles_in {:?} {n}", t.elapsed());
+        let t = std::time::Instant::now(); let n = super::limits::cas::piles_in(x, md.x0, md.x1).0.len(); println!("piles_in {:?} {n}", t.elapsed());
         let t = std::time::Instant::now(); let n = super::limits::cas::floors_inert(x, md.x0, md.x1).is_some(); println!("inert {:?} {n}", t.elapsed());
     }
     let t = std::time::Instant::now(); let d = md.discontinuities(); println!("discs {:?} ({})", t.elapsed(), d.0.len());
     let t = std::time::Instant::now(); let o = md.outside(); println!("outside {:?} ({})", t.elapsed(), o.0.len());
     let t = std::time::Instant::now(); let v = md.verticals(); println!("verticals {:?} ({})", t.elapsed(), v.len());
     let t = std::time::Instant::now(); let pl = md.piles(); println!("piles {:?} ({:?})", t.elapsed(), pl.iter().map(|k| k.show()).collect::<Vec<_>>());
-    for pc in &md.pieces { if let super::limits::Src::Formula { x } = &pc.src { for pl in super::limits::cas::piles_in(x, md.x0, md.x1) {
+    for pc in &md.pieces { if let super::limits::Src::Formula { x } = &pc.src { for pl in super::limits::cas::piles_in(x, md.x0, md.x1).0 {
         println!("pile at {} arg {:?} level {:?}", pl.at.show(), pl.arg, pl.level);
         let w = md.x1 - md.x0;
         for j in 2..=4 { let h = w * 10f64.powi(-j); let (u, v) = (pl.at.value() + h, pl.at.value() + 3.0 * h);
@@ -1243,7 +1243,8 @@ fn time_probe() {
             println!("band {u}..{v} range {mn}..{mx} level {} zeros {:?} {d}", lev.show(), z.iter().map(|k| (k.show(), k.is_exact(), md.side(k, -1.0), md.side(k, 1.0))).collect::<Vec<_>>()); }
     } } }
     let (ds, done) = md.discontinuities(); println!("complete {done}: {}", ds.iter().take(12).map(|d| format!("{} {}", d.text, d.kind)).collect::<Vec<_>>().join(", "));
-    let t = std::time::Instant::now(); let _ = svg(&p); println!("svg {:?}", t.elapsed());
+    println!("work so far {}", super::limits::cas::work());
+    let t = std::time::Instant::now(); let _ = svg(&p); println!("svg {:?} work {}", t.elapsed(), super::limits::cas::work());
 }
 
 /// The third check's labels that went under the graph with room on it: the hole of (x² - 1)/((x - 1)(x - 3)) at (1, -1)
@@ -1529,5 +1530,69 @@ fn every_zero_of_a_base_to_the_power_zero_is_a_hole() {
     let (fx0, _, _, fy1, ml, mt, ux, uy) = last_drawn(&p).frame;
     let pts: Vec<(f64, f64)> = group(&s, "curves").split("points=\"").skip(1).flat_map(|t| t.split('"').next().unwrap().split(' ').filter_map(|q| { let (a, b) = q.split_once(',')?; Some((fx0 + (a.parse::<f64>().ok()? - ml) / ux, fy1 - (b.parse::<f64>().ok()? - mt) / uy)) }).collect::<Vec<_>>()).collect();
     if pts.iter().any(|(x, y)| *x <= 2.0 + 1e-6 || *y > 0.01) { fails.push(format!("0^(x - 2) drawn at {:?}", pts.iter().filter(|(x, y)| *x <= 2.0 + 1e-6 || *y > 0.01).take(3).collect::<Vec<_>>())); }
+    assert!(fails.is_empty(), "{}", fails.join("\n"));
+}
+
+/// Sixty adversarial compositions of floor, ceil, tan and exp on three windows: each render finishes (a 5-second kill
+/// timer) and takes under half a second (measured again once if the machine was busy); the analysis stops at its work
+/// budget, counted in steps of exact arithmetic, and the key then leaves its lines to fill in.
+#[test]
+fn adversarial_compositions_finish_quickly() {
+    let fns = [
+        "floor(tan(x^2))", "floor(tan(exp(x)))", "1/(sin(x)sin(2x)sin(3x))", "floor(exp(x^2))", "floor(tan(x)) + floor(1/x)", "floor(1/sin(x))",
+        "floor(1/cos(x))", "floor(tan(1/x))", "ceil(tan(x^2))", "floor(exp(tan(x)))", "tan(floor(x^2))", "floor(sin(exp(x)))",
+        "floor(x^2 sin(1/x))", "floor(1/(x^2 - 1))", "floor(tan(x)^2)", "ceil(exp(1/x))", "floor(10tan(x))", "floor(exp(x))/floor(x)",
+        "tan(exp(x))", "tan(x^3)", "1/tan(x^2)", "floor(sin(1/x)/x)", "floor(x tan(x))", "floor(ln(abs(tan(x))))",
+        "floor(sqrt(abs(tan(x))))", "floor(1/x) floor(tan(x))", "ceil(cos(1/x))", "floor(exp(sin(x^2)))", "floor(tan(x/2) + tan(x))", "floor(1/sin(x^2))",
+        "floor(x/tan(x))", "floor(exp(-1/x^2)*10)", "floor(tan(sqrt(abs(x))))", "1/(sin(x^2)sin(x))", "floor(sin(x)^2*10)", "floor(cos(x^2)*10)",
+        "floor(1/(sin(x)+cos(x)))", "floor(tan(x)) - floor(tan(x))", "sin(pi floor(tan(x^2)))", "floor(x^3 - x)", "floor(exp(x)) + floor(exp(-x))", "floor(2^x)",
+        "ceil(log(abs(x)))", "floor(1/x^3)", "floor(tan(2x)) + ceil(tan(x))", "tan(1/x)/x", "floor(x)^floor(x)", "floor(abs(tan(x)))",
+        "floor(exp(x) sin(x))", "floor(tan(pi x))", "floor(1/tan(pi x))", "ceil(x tan(1/x))", "floor(exp(1/sin(x)))", "floor(sin(tan(x)))",
+        "floor(tan(sin(x)) * 5)", "floor(cos(tan(x)) * 3)", "1/(tan(x) - x)", "floor(1/(tan(x) - x))", "floor(exp(cos(1/x)))", "floor(tan(exp(-x)))",
+    ];
+    assert_eq!(fns.len(), 60);
+    let mut fails = vec![];
+    for f in fns {
+        for (x0, x1) in [(-6.0, 10.0), (-100.0, 100.0), (-10.0, 10.0)] {
+            let p = with(json!({"pieces": format!("y = {f}"), "dots": "", "ask_disc": true, "kind_labels": true, "xmin": x0, "xmax": x1}));
+            let time = |p: Params| -> Option<f64> {
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::thread::spawn(move || { let t = std::time::Instant::now(); let _ = svg(&p); let _ = tx.send(t.elapsed().as_secs_f64()); });
+                rx.recv_timeout(std::time::Duration::from_secs(5)).ok()
+            };
+            match time(p.clone()) {
+                None => fails.push(format!("{f} on {x0}..{x1}: still running after 5 s")),
+                Some(t) if t >= 0.5 => if time(p.clone()).is_none_or(|t2| t2 >= 0.5) { fails.push(format!("{f} on {x0}..{x1}: {t:.2} s")); },
+                _ => {}
+            }
+        }
+    }
+    assert!(fails.is_empty(), "{} slow:\n{}", fails.len(), fails.join("\n"));
+}
+
+/// "Piling up near" is written only for all of the places in the window where cuts pile up, each established, and only
+/// at points where they do pile up: floor(tan x) on -100..100 has 64 poles (more than are worked out), floor(e^(x²)) on
+/// -30..30 has finitely many cuts and nothing piles up at ±30. Otherwise the line is a blank or "too many".
+#[test]
+fn piles_are_written_only_when_all_are_established() {
+    let pi = "\u{3c0}";
+    let key = |f: &str, x0: f64, x1: f64| -> String { let t = plain_text(&svg(&with(json!({"pieces": f, "dots": "", "ask_at": "1/2", "ask_disc": true, "kind_labels": true, "xmin": x0, "xmax": x1, "square": false})))); t[t.find("Where is").unwrap_or(0)..].to_string() };
+    let mut fails = vec![];
+    for (f, x0, x1) in [("y = floor(tan(x))", -100.0, 100.0), ("y = floor(tan(x)) + floor(1/x)", -100.0, 100.0), ("y = floor(1/sin(x))", -100.0, 100.0),
+        ("y = floor(1/cos(x))", -50.0, 50.0), ("y = floor(exp(x^2))", -30.0, 30.0), ("y = floor(exp(x^2))", -100.0, 100.0)] {
+        let k = key(f, x0, x1);
+        if k.contains("piling up") { fails.push(format!("{f} on {x0}..{x1}: {k}")); }
+    }
+    // on -30..30 floor(tan x) has 19 poles: all of them, or none claimed
+    let k = key("y = floor(tan(x))", -30.0, 30.0);
+    if k.contains("piling up") {
+        for m in [-19i32, -17, -15, -13, -11, -1, 1, 13, 15, 17, 19] {
+            let t = if m == 1 { format!("{pi}/2") } else if m == -1 { format!("\u{2212}{pi}/2") } else if m < 0 { format!("\u{2212}{}{pi}/2", -m) } else { format!("{m}{pi}/2") };
+            if !k.contains(&format!("x = {t}")) { fails.push(format!("floor(tan x) on -30..30 leaves out {t}: {k}")); }
+        }
+    }
+    // and on the default window it is still said (five poles)
+    let k = key("y = floor(tan(x))", -6.0, 10.0);
+    if !k.contains("piling up") { fails.push(format!("floor(tan x): {k}")); }
     assert!(fails.is_empty(), "{}", fails.join("\n"));
 }

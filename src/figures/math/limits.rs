@@ -441,6 +441,7 @@ pub const MANY: usize = 60;
 
 impl Model {
     pub(super) fn new(p: &Params, g: &GridL) -> Model {
+        cas::budget_reset();
         let mut notes = vec![];
         let mut pieces = vec![];
         let mut n = 0;
@@ -611,7 +612,9 @@ impl Model {
     fn discontinuities_of(&self) -> (Vec<Disc>, bool) {
         let (c, done) = self.candidates(self.x0, self.x1);
         if self.too_many() { return (vec![], false); }
-        (c.iter().filter_map(|k| self.classify(k)).collect(), done)
+        // (past the work budget the list is not complete: what is left is not worked out)
+        let out: Vec<Disc> = c.iter().filter_map(|k| self.classify(k)).collect();
+        (out, done && !cas::spent())
     }
     /// Where in the window discontinuities pile up without end (the cuts of floor(ln x) near 0), as the key writes them.
     /// Only where that is established: f must jump at cuts in three bands ever nearer the point (from one side), each
@@ -623,11 +626,16 @@ impl Model {
             let (a, b) = (pc.lo_x().max(self.x0), pc.hi_x().min(self.x1));
             if !(b > a) { continue; }
             let inert = cas::floors_inert(x, a, b).is_some();
-            for pl in cas::piles_in(x, a, b) {
-                if inert && pl.level == cas::Fun::Floor { continue; }
+            // (a list is written only when it is all of them and each is established: otherwise none is claimed)
+            let (pls, all) = cas::piles_in(x, a, b);
+            let pls: Vec<cas::Pile> = pls.into_iter().filter(|pl| !(inert && pl.level == cas::Fun::Floor)).collect();
+            if !all && !(inert && pls.is_empty()) { return vec![]; }
+            if pls.len() > 24 { return vec![]; }
+            for pl in pls {
                 let k = pl.at.clone();
                 if out.iter().any(|o| (o.value() - k.value()).abs() < 1e-9 * (1.0 + k.value().abs())) { continue; }
-                if self.pile_established(&pl, a, b) { out.push(k); }
+                if !self.pile_established(&pl, a, b) { return vec![]; }
+                out.push(k);
             }
         }
         out.sort_by(|a, b| a.value().partial_cmp(&b.value()).unwrap_or(std::cmp::Ordering::Equal));
@@ -636,6 +644,7 @@ impl Model {
     /// In each of three bands ever nearer the pile (w/100 to 3w/100 away, then w/1000, w/10000) a cut is solved for
     /// exactly (the argument equal to a level it passes there) and is a discontinuity whose kind is established.
     fn pile_established(&self, pl: &cas::Pile, a: f64, b: f64) -> bool {
+        if cas::spent() { return false; }
         let p = pl.at.value();
         let w = (b - a).max(1e-9);
         for s in [-1.0, 1.0] {
@@ -1704,6 +1713,7 @@ fn block(p: &Params, m: &Model, discs: &[Disc], discs_complete: bool, stu: bool,
         } else if discs.is_empty() { "nowhere in the window".to_string() } else { discs.iter().map(|d| format!("{} ({})", eq_text("x", &d.text).replace('-', "\u{2212}"), d.kind)).collect::<Vec<_>>().join(", ") };
         rows.push(vec![Item::Ask { text: "Where is f not continuous? Give each x and its kind:".into(), ans: if stu { format!("{BLANK}{BLANK}{BLANK}") } else { key } }]);
     }
+    if cas::spent() { notes.push(format!("The app stopped working this function out where it had done as much as it does for one figure ({} steps), so answers it did not reach are left as lines to fill in", cas::BUDGET)); }
     if !unknown.is_empty() { notes.push(format!("The app cannot determine {} for this formula, so the key leaves {} as a line to fill in", unknown.join(", "), if unknown.len() > 1 { "them" } else { "it" })); }
     rows
 }

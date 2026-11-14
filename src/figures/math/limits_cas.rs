@@ -80,7 +80,8 @@ pub enum AK { Prime(u128), Pi, E, Ln(u128), Fun }
 /// One irreducible factor of a constant: a prime (its power a fraction in (0, 1): a root), π, e, ln of a prime, or a
 /// named value (cos 1, ln π, √(1 + √2)).
 #[derive(Clone, Debug)]
-pub struct Atom { pub key: String, pub val: f64, pub show: String, pub kind: AK, pub fun: Option<(String, Box<K>)> }
+/// (`fun`: a named value's name and argument, shared, so copying an atom is cheap)
+pub struct Atom { pub key: String, pub val: f64, pub show: String, pub kind: AK, pub fun: Option<std::sync::Arc<(String, K)>> }
 impl Atom {
     fn prime(p: u128) -> Atom { Atom { key: format!("a{p:030}"), val: p as f64, show: p.to_string(), kind: AK::Prime(p), fun: None } }
     fn pi() -> Atom { Atom { key: "b".into(), val: PI, show: "\u{3c0}".into(), kind: AK::Pi, fun: None } }
@@ -88,9 +89,10 @@ impl Atom {
     fn ln(p: u128) -> Atom { Atom { key: format!("d{p:030}"), val: (p as f64).ln(), show: format!("ln {p}"), kind: AK::Ln(p), fun: None } }
     fn fun(name: &str, arg: &K, val: f64) -> Atom {
         let a = arg.show();
+        tick(100 + 12 * a.len());
         let plain = !a.contains([' ', '+', '/', '\u{b7}']) && !a.starts_with('-');
         let show = match name { "sqrt" => format!("\u{221a}({a})"), "cbrt" => format!("\u{221b}({a})"), "exp" => format!("e^({a})"), "inv" => format!("1/({a})"), _ if plain && a.chars().all(|c| c.is_ascii_digit()) => format!("{name} {a}"), _ => format!("{name}({a})") };
-        Atom { key: format!("f{name}[{}]", arg.key()), val, show, kind: AK::Fun, fun: Some((name.to_string(), Box::new(arg.clone()))) }
+        Atom { key: format!("f{name}[{}]", arg.key()), val, show, kind: AK::Fun, fun: Some(std::sync::Arc::new((name.to_string(), arg.clone()))) }
     }
 }
 pub type Mono = Vec<(Atom, Q)>;
@@ -107,6 +109,7 @@ fn perfect_root(n: u128) -> (u128, u32) {
 }
 
 fn mono_mul(a: &Mono, b: &Mono) -> Option<(Q, Mono)> {
+    tick(1 + a.len() + b.len());
     let mut all: Vec<(Atom, Q)> = a.clone();
     for (at, q) in b {
         if let Some(e) = all.iter_mut().find(|e| e.0.key == at.key) { e.1 = e.1.add(*q)?; } else { all.push((at.clone(), *q)); }
@@ -166,6 +169,7 @@ impl K {
         match self.t.as_slice() { [] => Some(Q::ZERO), [(q, m)] if m.is_empty() => Some(*q), _ => None }
     }
     fn norm(mut t: Vec<(Q, Mono)>, dec: bool) -> K {
+        tick(t.iter().map(|(_, m)| 1 + m.len()).sum::<usize>() * 4);
         t.sort_by_key(|(_, m)| mono_key(m));
         let mut out: Vec<(Q, Mono)> = vec![];
         for (q, m) in t {
@@ -178,6 +182,7 @@ impl K {
     }
     fn fix(self, v: impl Fn() -> f64) -> K { if self.ap.is_some_and(|a| a.is_nan()) { K { ap: Some(v()), ..self } } else { self } }
     pub fn add(&self, o: &K) -> K {
+        tick(1 + self.t.len() + o.t.len());
         let dec = self.dec || o.dec;
         if self.ap.is_some() || o.ap.is_some() { return K { t: vec![], ap: Some(self.value() + o.value()), dec }; }
         let mut t = self.t.clone();
@@ -187,6 +192,7 @@ impl K {
     pub fn neg(&self) -> K { K { t: self.t.iter().map(|(q, m)| (q.neg(), m.clone())).collect(), ap: self.ap.map(|v| -v), dec: self.dec } }
     pub fn sub(&self, o: &K) -> K { self.add(&o.neg()) }
     pub fn mul(&self, o: &K) -> K {
+        tick(1 + self.t.len() * o.t.len());
         let dec = self.dec || o.dec;
         if self.ap.is_some() || o.ap.is_some() { return K { t: vec![], ap: Some(self.value() * o.value()), dec }; }
         let mut t = vec![];
@@ -346,7 +352,7 @@ impl K {
         for (q, m) in &self.t {
             match m.as_slice() {
                 [(a, e)] if a.kind == AK::Pi && *e == Q::ONE => p = *q,
-                [(a, e)] if *e == Q::ONE && a.fun.as_ref().is_some_and(|f| f.0 == "arcsin" || f.0 == "arctan") && (*q == Q::ONE || *q == Q::i(-1)) && rest.is_none() => rest = Some((*q, (*a.fun.as_ref().unwrap().1).clone(), a.fun.as_ref().unwrap().0 == "arctan")),
+                [(a, e)] if *e == Q::ONE && a.fun.as_ref().is_some_and(|f| f.0 == "arcsin" || f.0 == "arctan") && (*q == Q::ONE || *q == Q::i(-1)) && rest.is_none() => rest = Some((*q, a.fun.as_ref().unwrap().1.clone(), a.fun.as_ref().unwrap().0 == "arctan")),
                 _ => return None,
             }
         }
@@ -729,6 +735,7 @@ pub fn ev(e: &X, x: f64) -> Option<f64> {
 pub enum EV { Val(K), Undef, Unk }
 /// The formula's exact value at x = a.
 pub fn exact(e: &X, a: &K) -> EV {
+    if spent() { return EV::Unk; }
     macro_rules! get { ($x:expr) => { match exact($x, a) { EV::Val(k) => k, o => return o } } }
     match e {
         X::C(k) => EV::Val(k.clone()),
@@ -849,6 +856,8 @@ impl Sr {
     fn add(&self, o: &Sr) -> Sr { let mut t = self.t.clone(); t.extend(o.t.iter().cloned()); Sr::tidy(t, max_rem(self.rem, o.rem)) }
     fn neg(&self) -> Sr { Sr { t: self.t.iter().map(|x| T { e: x.e, c: x.c.neg() }).collect(), rem: self.rem } }
     fn mul(&self, o: &Sr) -> Option<Sr> {
+        // (past the work budget a product is not worked out: what needs it is not known)
+        if spent() { return None; }
         let mut rem = None;
         if let (Some(r), Some(l)) = (self.rem, o.lead_e()) { rem = max_rem(rem, Some(exp_add(r, l)?)); }
         if let (Some(r), Some(l)) = (o.rem, self.lead_e()) { rem = max_rem(rem, Some(exp_add(r, l)?)); }
@@ -861,6 +870,7 @@ impl Sr {
     fn taylor(z: &Sr, cs: &[K]) -> Option<Sr> {
         // (z exactly 0: just the constant)
         if z.t.is_empty() && z.rem.is_none() { return Some(Sr::c(cs[0].clone())); }
+        if spent() { return None; }
         let mut out = Sr::c(cs[0].clone());
         let mut zp = Sr::c(K::one());
         for c in &cs[1..] {
@@ -1373,7 +1383,24 @@ fn s_floor(a: S) -> S {
 #[derive(Clone, Debug)]
 pub enum At { Fin(K, i8), Inf(i8) }
 
+// ───────────────────────── the work budget ─────────────────────────
+
+thread_local! { static WORK: std::cell::Cell<u64> = const { std::cell::Cell::new(0) }; }
+/// The work the analysis of one figure may do, counted in steps of exact arithmetic (sums and products of exact
+/// constants, terms of series), not in time: past it, limits are not worked out (Unknown) and searches are not complete,
+/// so the key leaves its answers as lines to fill in. floor(tan(x²)) would otherwise work for minutes.
+pub const BUDGET: u64 = 2_000_000;
+fn tick(n: usize) { WORK.with(|w| w.set(w.get().saturating_add(n as u64))); }
+/// Start counting afresh (a new figure).
+pub fn budget_reset() { WORK.with(|w| w.set(0)); }
+/// Whether the budget is spent.
+pub fn spent() -> bool { WORK.with(|w| w.get()) > BUDGET }
+/// The work done so far.
+pub fn work() -> u64 { WORK.with(|w| w.get()) }
+
 fn ser_of(e: &X, at: &At, n: usize) -> S {
+    if spent() { return S::Unk; }
+    tick(n);
     use S::*;
     match e {
         X::C(k) => Ser(Sr::c(k.clone())),
@@ -1463,6 +1490,7 @@ pub enum L { Val(K), PInf, NInf, Dne, NoVal, Unknown }
 /// The limit of e as x → a from one side, or as x → ±∞: by series at rising precision; a numerical contradiction
 /// (values not closing in on the limit, or not growing toward ∞) makes it Unknown.
 pub fn limit(e: &X, at: &At) -> L {
+    if spent() { return L::Unknown; }
     let mut out = L::Unknown;
     for n in [6usize, 12, 20] {
         out = match coarse(&ser_of(e, at, n)) {
@@ -1578,6 +1606,7 @@ fn sure_pos(e: &X) -> bool {
 }
 
 pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
+    if spent() { return (vec![], false); }
     if sure_pos(e) { return (vec![], true); }
     let inside = |k: &K| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 };
     if let Some(mut c) = poly(e) {
@@ -1767,6 +1796,9 @@ fn solve_levels(u: &X, bases: &[K], period: K, lo: f64, hi: f64) -> Option<(Vec<
             let level = b.add(&period.mulq(Q::i(k)));
             let lv = level.value();
             if lv < mn - 1e-9 * (1.0 + lv.abs()) || lv > mx + 1e-9 * (1.0 + lv.abs()) { continue; }
+            // (each level solved for is work; past 400 solutions, or the budget, the list is not complete)
+            if out.len() > 400 || spent() { done = false; break; }
+            tick(200);
             let (z, d) = zeros(&X::Add(vec![u.clone(), X::C(level.neg())]), lo, hi);
             done &= d;
             for x in z { if !out.iter().any(|o| (o.value() - x.value()).abs() < 1e-12 * (1.0 + x.value().abs())) { out.push(x); } }
@@ -1853,7 +1885,7 @@ fn poly_roots(c: Vec<K>) -> (Vec<K>, bool) {
         }
     }
 }
-fn numeric_zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) { let (z, _) = scan(&|x| ev(e, x), lo, hi); (z.into_iter().map(K::approx).collect(), false) }
+fn numeric_zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) { if spent() { return (vec![], false); } tick(6000); let (z, _) = scan(&|x| ev(e, x), lo, hi); (z.into_iter().map(K::approx).collect(), false) }
 /// Sign changes and touching minima of f on [lo, hi], narrowed by halving.
 fn scan(f: &dyn Fn(f64) -> Option<f64>, lo: f64, hi: f64) -> (Vec<f64>, bool) {
     let n = 6000;
@@ -1892,16 +1924,18 @@ fn k_of(v: f64) -> K { let r = (v * 1000.0).round(); if (r / 1000.0 - v).abs() <
 /// which a is not established to have a finite limit (from the sides that lie in [lo, hi]). Empty only when a is
 /// established bounded there, so floor(a) has finitely many cuts. Found by structure: ln x tends to -∞ at its break 0,
 /// 1/x to ±∞ at 0, tan x at its poles, sin(1/x) oscillates at 0.
-pub fn floor_piles(a: &X, lo: f64, hi: f64) -> Vec<K> { piles_of(a, lo, hi, usize::MAX) }
-/// Whether a is unbounded somewhere on [lo, hi] (the first pile found is enough).
-pub fn unbounded(a: &X, lo: f64, hi: f64) -> bool { !piles_of(a, lo, hi, 1).is_empty() }
-fn piles_of(a: &X, lo: f64, hi: f64, enough: usize) -> Vec<K> {
+/// Whether a may be unbounded somewhere on [lo, hi] (a pile found, or not all known: the first is enough).
+pub fn unbounded(a: &X, lo: f64, hi: f64) -> bool { let (p, all) = piles_of(a, lo, hi, 1); !p.is_empty() || !all }
+/// The places of [lo, hi] where a is established to have no finite limit (tends to ±∞ or does not exist), with whether
+/// that is all of them: not when a's own breaks are not all found, are too many to look at (past 60), or a limit at one
+/// of them is not established (e^(x²) at x = 30 overflows: nothing piles up there, but that is not established either).
+fn piles_of(a: &X, lo: f64, hi: f64, enough: usize) -> (Vec<K>, bool) {
+    if spent() { return (vec![], false); }
     let (bk, done) = breaks(a, lo, hi);
     let mut pts: Vec<K> = bk.into_iter().filter(|k| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 }).collect();
     let mut out = vec![];
-    // (a break list not surely complete: its own piles are not known, so the middle of the window stands for them)
-    if !done { out.push(k_of((lo + hi) / 2.0)); if out.len() >= enough { return out; } }
-    if pts.len() > 60 { pts.truncate(60); out.push(k_of(lo)); }
+    let mut all = done;
+    if pts.len() > 60 { return (out, false); }
     // (an end of the window that is no break of a, where a has a value: a is continuous there, so bounded near it)
     for end in [lo, hi] {
         let at_break = pts.iter().any(|k| (k.value() - end).abs() < 1e-9 * (1.0 + end.abs()));
@@ -1913,12 +1947,13 @@ fn piles_of(a: &X, lo: f64, hi: f64, enough: usize) -> Vec<K> {
             if (s < 0 && v <= lo + 1e-9) || (s > 0 && v >= hi - 1e-9) { continue; }
             match limit(a, &At::Fin(p.clone(), s)) {
                 L::Val(_) | L::NoVal => {}
-                _ => { if !out.iter().any(|o: &K| (o.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { out.push(p.clone()); if out.len() >= enough { return out; } } }
+                L::Unknown => all = false,
+                _ => { if !out.iter().any(|o: &K| (o.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { out.push(p.clone()); if out.len() >= enough { return (out, all); } } }
             }
         }
     }
     out.sort_by(|a, b| a.value().partial_cmp(&b.value()).unwrap_or(Ordering::Equal));
-    out
+    (out, all)
 }
 
 /// A place where cuts pile up without end: `at`, the inner function `arg` whose levels make the cuts, and which levels
@@ -1938,32 +1973,36 @@ impl Pile {
 
 /// Every place in [lo, hi] where the cuts of some floor or ceiling in e (or the zeros of a sine or cosine under
 /// 1/(...)) pile up without end, with what makes them.
-pub fn piles_in(e: &X, lo: f64, hi: f64) -> Vec<Pile> { piles_walk(e, lo, hi, false) }
-/// Whether there is any (the first found is enough).
-pub fn any_pile(e: &X, lo: f64, hi: f64) -> bool { !piles_walk(e, lo, hi, true).is_empty() }
-fn piles_walk(e: &X, lo: f64, hi: f64, first: bool) -> Vec<Pile> {
+/// With whether that is all of them.
+pub fn piles_in(e: &X, lo: f64, hi: f64) -> (Vec<Pile>, bool) { piles_walk(e, lo, hi, false) }
+/// Whether there is any established one (the first found is enough).
+pub fn any_pile(e: &X, lo: f64, hi: f64) -> bool { !piles_walk(e, lo, hi, true).0.is_empty() }
+fn piles_walk(e: &X, lo: f64, hi: f64, first: bool) -> (Vec<Pile>, bool) {
     let mut out: Vec<Pile> = vec![];
+    let mut all = true;
     // (`zero`: a zero of e is a break, as under 1/(...): a sine of an unbounded curve then breaks without end)
-    fn walk(e: &X, lo: f64, hi: f64, zero: bool, first: bool, out: &mut Vec<Pile>) {
+    fn walk(e: &X, lo: f64, hi: f64, zero: bool, first: bool, out: &mut Vec<Pile>, all: &mut bool) {
         if first && !out.is_empty() { return; }
         match e {
             X::C(_) | X::V => {}
-            X::Add(v) => for a in v { walk(a, lo, hi, false, first, out) },
-            X::Mul(v) => for a in v { walk(a, lo, hi, zero, first, out) },
-            X::Neg(a) => walk(a, lo, hi, zero, first, out),
-            X::Inv(a) => walk(a, lo, hi, true, first, out),
-            X::Pow(b, p) => { walk(b, lo, hi, p.has_x() || const_q(p).is_none_or(|q| q <= Q::ZERO), first, out); walk(p, lo, hi, false, first, out); }
+            X::Add(v) => for a in v { walk(a, lo, hi, false, first, out, all) },
+            X::Mul(v) => for a in v { walk(a, lo, hi, zero, first, out, all) },
+            X::Neg(a) => walk(a, lo, hi, zero, first, out, all),
+            X::Inv(a) => walk(a, lo, hi, true, first, out, all),
+            X::Pow(b, p) => { walk(b, lo, hi, p.has_x() || const_q(p).is_none_or(|q| q <= Q::ZERO), first, out, all); walk(p, lo, hi, false, first, out, all); }
             X::F(f, a) => {
                 if (*f == Fun::Floor || (zero && matches!(f, Fun::Sin | Fun::Cos))) && !poly(a).is_some_and(|c| c.len() <= 2) {
-                    for k in piles_of(a, lo, hi, if first { 1 } else { usize::MAX }) { out.push(Pile { at: k, arg: (**a).clone(), level: *f }); }
+                    let (ks, known) = piles_of(a, lo, hi, if first { 1 } else { usize::MAX });
+                    *all &= known;
+                    for k in ks { out.push(Pile { at: k, arg: (**a).clone(), level: *f }); }
                 }
-                walk(a, lo, hi, false, first, out);
+                walk(a, lo, hi, false, first, out, all);
             }
         }
     }
-    walk(e, lo, hi, false, first, &mut out);
+    walk(e, lo, hi, false, first, &mut out, &mut all);
     out.sort_by(|a, b| a.at.value().partial_cmp(&b.at.value()).unwrap_or(Ordering::Equal));
-    out
+    (out, all)
 }
 
 /// e with each floor replaced as `by` says (None: kept).
@@ -1997,6 +2036,7 @@ pub fn floor_args(e: &X, out: &mut Vec<X>) {
 /// small and large; it must come out the same for every N it has a value for. Also, with the floors so replaced, the
 /// formula left (for the breaks it has of its own).
 pub fn floors_inert(e: &X, lo: f64, hi: f64) -> Option<X> {
+    if spent() { return None; }
     let mut args = vec![];
     floor_args(e, &mut args);
     if args.is_empty() { return None; }
@@ -2037,7 +2077,7 @@ pub fn has_ruled_power(e: &X) -> bool {
         X::C(_) | X::V => false,
         X::Add(v) | X::Mul(v) => v.iter().any(has_ruled_power),
         X::Neg(a) | X::Inv(a) | X::F(_, a) => has_ruled_power(a),
-        X::Pow(b, p) => (p.has_x() && (b.has_x() || matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)))) || has_ruled_power(b) || has_ruled_power(p),
+        X::Pow(b, p) => (p.has_x() && (b.has_x() || ev(b, 0.0) == Some(0.0))) || has_ruled_power(b) || has_ruled_power(p),
     }
 }
 
@@ -2068,6 +2108,7 @@ pub fn busy(e: &X, lo: f64, hi: f64) -> usize {
 }
 
 pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
+    if spent() { return (vec![], false); }
     let mut out = vec![];
     let mut done = true;
     let mut push = |(z, d): (Vec<K>, bool), out: &mut Vec<K>| { out.extend(z); done &= d; };
@@ -2105,7 +2146,8 @@ pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
                                 let vals: Vec<f64> = (0..=4000).filter_map(|i| ev(a, lo + (hi - lo) * i as f64 / 4000.0)).collect();
                                 let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));
                                 if vals.is_empty() || mx - mn > 400.0 { push((vec![], false), out); }
-                                else { for k in (mn.floor() as i128 - 1)..=(mx.ceil() as i128 + 1) { push(zeros(&X::Add(vec![(**a).clone(), X::C(K::int(-k))]), lo, hi), out); } }
+                                // (stopping past 400 cuts: tan(πx) passes each level once a period)
+                                else { let before = out.len(); for k in (mn.floor() as i128 - 1)..=(mx.ceil() as i128 + 1) { if out.len() - before > 400 || spent() { push((vec![], false), out); break; } push(zeros(&X::Add(vec![(**a).clone(), X::C(K::int(-k))]), lo, hi), out); } }
                             }
                         }
                     }
