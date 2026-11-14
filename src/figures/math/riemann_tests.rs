@@ -99,7 +99,7 @@ fn hand_worked_sums_integrals_and_errors() {
     // ∫₁⁴ dx/x = ln 4 = 2 ln 2; midpoint, n = 6: Δx = 1/2, c = 5/4, 7/4, …, 15/4, f = 4/5, 4/7, 4/9, 4/11, 4/13, 4/15
     let inv = lined(&[("f", s("1/x")), ("a", s("1")), ("b", s("4")), ("rule", s("Midpoint")), ("n", i(6)), ("xmin", fl(-0.5)), ("xmax", fl(5.0)), ("ymax", fl(1.5)), ("ymin", fl(-0.25)), ("ystep", fl(0.25)), ("xstep", fl(0.5))]);
     has_line(&inv, "(1/2)(4/5 + 4/7 + 4/9 + 4/11 + 4/13 + 4/15)");
-    has_line(&inv, "dx = 2 ln 2");
+    has_line(&inv, "dx = ln 4");
     // √x on [0, 4]: ∫ = (2/3)·8 = 16/3; trapezoid n = 4: (1/2)(0 + 2 + 2√2 + 2√3 + 2) = 2 + √2 + √3 ≈ 5.1463
     let sq = lined(&[("f", s("sqrt(x)")), ("b", s("4")), ("rule", s("Trapezoid")), ("xmax", fl(5.0)), ("ymax", fl(3.0))]);
     // (now exact, from exact heights: 2 + √2 + √3)
@@ -275,6 +275,8 @@ fn controls_show_exactly_when_they_change_the_drawing() {
         lined(&[("region", s("From a table of values")), ("rule", s("Trapezoid")), ("xmax", fl(8.0)), ("ymax", fl(7.0)), ("strip_labels", s("Heights"))]),
         with(&[("grid", s("None")), ("title_mode", s("Blank line"))]),
     ];
+    // (signed area is hidden on the curve-and-bounds copy and must change nothing there, the area-shaded blank included)
+    states.push(lined(&[("f", s("x^2 - 1")), ("show_answers", bo(false)), ("student", s("Curve and bounds only"))]));
     // every student copy with each line option on alone (the sums of x² + 1 are fractions, so Values always shows)
     for mode in STUDENT {
         for opt in ["sum_line", "show_dx", "exact_line", "integral_line", "error_line", "key_line", "strip_labels", "x_marks", "sample_pts"] {
@@ -462,7 +464,15 @@ fn label_faults(svg: &str) -> Vec<String> {
             labels.push((tag_attr(t, "data-rs").unwrap().to_string(), [v[0], v[1], v[2], v[3]], open.contains("blank")));
         }
     }
+    // the row of x-axis numbers (their boxes' height): no a or b label there, where it would read as a number
+    let row: Option<(f64, f64)> = tags(svg, "<text ").into_iter().filter(|t| t.contains(r#"data-axis="0""#)).filter_map(|t| {
+        let (y, fs) = (tag_attr(t, "y")?.parse::<f64>().ok()?, tag_attr(t, "font-size")?.parse::<f64>().ok()?);
+        Some((y - 0.8 * fs, y + 0.25 * fs))
+    }).fold(None, |acc: Option<(f64, f64)>, (a, b)| Some(acc.map_or((a, b), |(x, y)| (x.min(a), y.max(b)))));
     let mut out = vec![];
+    for (kind, bx, _) in &labels {
+        if kind == "bound" && let Some((r0, r1)) = row && bx[1] < r1 && bx[3] > r0 { out.push(format!("bound label {bx:?} in the row of axis numbers {r0:.1}..{r1:.1}")); }
+    }
     for (k, (kind, bx, blank)) in labels.iter().enumerate() {
         if bx[0] < 0.0 || bx[1] < 0.0 || bx[2] > w || bx[3] > h { out.push(format!("{kind} off the page {bx:?}")); }
         if !blank && let Some(sg) = segs.iter().find(|(a, c)| rect_seg(bx, *a, *c)) { out.push(format!("{kind} {bx:?} on a stroke {sg:?}")); }
@@ -564,18 +574,10 @@ fn option(p: &mut Params, o: &str) {
 /// (Strip labels where some strips are too short or narrow for any label at Large, and x₀ … xₙ under strips that
 /// straddle the axis: each left off with a note.)
 const LARGE_EXCEPTIONS: &[&str] = &[
-    "x^3 [0, 2] Trapezoid n=4 / all: strip labels",
     "cos(x) [0, pi/2] Right n=4 / student: strip labels",
     "cos(x) [0, pi/2] Lower n=4 / student: strip labels",
-    "ln(x) [1, 3] Left n=4 / strip_heights: strip labels",
     "ln(x) [1, 3] Left n=4 / strip_areas: strip labels",
-    "ln(x) [1, 3] Left n=4 / all: strip labels",
-    "ln(x) [1, 3] Trapezoid n=4 / strip_heights: strip labels",
-    "ln(x) [1, 3] Trapezoid n=4 / strip_areas: strip labels",
-    "ln(x) [1, 3] Trapezoid n=4 / all: strip labels",
-    "ln(x) [1, 3] Lower n=4 / strip_heights: strip labels",
     "ln(x) [1, 3] Lower n=4 / strip_areas: strip labels",
-    "ln(x) [1, 3] Lower n=4 / all: strip labels",
     "sqrt(x) [0, 4] Left n=8 / student: strip labels",
     "sqrt(x) [0, 4] Midpoint n=8 / student: strip labels",
     "x^3 [0, 1] Left n=5 / student: strip labels",
@@ -706,7 +708,7 @@ fn kinks_and_written_places() {
     assert!(lines(&e).iter().any(|l| l.contains("(1 + 0.9689 + 0.8776 + 0.7317)")), "{:?}", lines(&e));
     // eˣ at x = 1/4, 1/2, 3/4 is exact: e^(1/4) …
     let ex = with(&[("f", s("e^x")), ("b", s("1")), ("sum_line", bo(true))]);
-    has_line(&ex, "= (1/4)(1 + e1/4 + e1/2 + e3/4)");
+    has_line(&ex, "= (1/4)(1 + e1/4 + \u{221a}e + e3/4)");
     // book typesetting: √x, |x − 1|, no double brackets, a power in a power
     has_line(&with(&[("f", s("sqrt(x)")), ("b", s("4")), ("integral_line", bo(true))]), "\u{222b}04 \u{221a}x dx");
     has_line(&with(&[("f", s("1/(1 + x^2)")), ("b", s("1")), ("integral_line", bo(true))]), "\u{222b}01 1/(1 + x2) dx");
@@ -781,7 +783,7 @@ fn refusal_advice_works() {
             q.set_f("xmin", v[0]);
             q.set_f("xmax", v[1]);
             let after = warnings(&q);
-            assert!(!after.iter().any(|x| x.contains("have no room") || x.contains("do not fit")), "{note} -> {after:?}");
+            assert!(!after.iter().any(|x| x.contains("have no room") || x.contains("do not fit")), "{note} -> {after:?} at {v:?} for {:?}", p.0);
         } else {
             assert!(note.contains("fewer strips"), "{note}");
             let mut q = p.clone();
@@ -918,5 +920,117 @@ fn exact_values_are_derived_never_guessed() {
     // ∛: L₃ of x^(1/3) on [−8, 1] = 3(−2 − ∛5 − ∛2), exact
     let c = with(&[("f", s("x^(1/3)")), ("a", s("-8")), ("b", s("1")), ("rule", s("Left")), ("n", i(3)), ("sum_line", bo(true)), ("xmin", fl(-9.0)), ("ymin", fl(-3.0))]);
     has_line(&c, "= 3\u{b7}(\u{2212}2 \u{2212} 3\u{221a}5 \u{2212} 3\u{221a}2) = \u{2212}3\u{2009}3\u{221a}2 \u{2212} 3\u{2009}3\u{221a}5 \u{2212} 6");
+}
+
+
+/// Upper and lower sums take the true greatest and least value on each closed strip, near its ends and at kinks too,
+/// and write an exact form only where the extreme's place is exactly known. Checked against an independent dense search
+/// of every strip, and by hand on the fourth checker's cases.
+#[test]
+fn upper_and_lower_find_the_true_extreme_everywhere() {
+    // 4x − x² on [0, 4.01], 2 strips: the vertex x = 2 lies in the first strip [0, 2.005], so M₁ = 4, not f(2.005)
+    let p = with(&[("f", s("4x - x^2")), ("a", s("0")), ("b", s("4.01")), ("rule", s("Upper")), ("n", i(2)), ("xmax", fl(5.0))]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.strips[0].h.ex.as_ref().and_then(|e| e.text()).as_deref(), Some("4"));
+    // M₂ = f(2.005) = 159999/40000; sum = 2.005·(4 + 159999/40000) = 128319599/8000000
+    assert_eq!(m.sum.as_ref().unwrap().ex.as_ref().and_then(|e| e.text()).as_deref(), Some("128319599/8000000"));
+    // |x − π/3| on [0, 2], 21 strips: m₁₁ = 0 at the kink x = π/3 (in [20/21, 22/21]); the lower sum is 400/441
+    let p = with(&[("f", s("abs(x - pi/3)")), ("a", s("0")), ("b", s("2")), ("rule", s("Lower")), ("n", i(21))]);
+    let m = model(&p).unwrap();
+    assert!(m.strips[10].h.ex.as_ref().is_some_and(|e| e.is_zero()), "{:?}", m.strips[10].h);
+    assert_eq!(m.sum.as_ref().unwrap().ex.as_ref().and_then(|e| e.text()).as_deref(), Some("400/441"));
+    // |x² − 2| on [0, 3], 70 strips: m₃₃ = 0 at x = √2; the lower sum 451281/68600 has no exact form here? it does: the
+    // kink √2 is exact, the other minima are at strip ends
+    let p = with(&[("f", s("abs(x^2 - 2)")), ("a", s("0")), ("b", s("3")), ("rule", s("Lower")), ("n", i(70))]);
+    let m = model(&p).unwrap();
+    assert!((m.sum.as_ref().unwrap().v - 451281.0 / 68600.0).abs() < 1e-12, "{}", m.sum.as_ref().unwrap().v);
+    assert!(m.strips[32].h.v.abs() < 1e-12, "{:?}", m.strips[32].h);
+    // |sin x| on [0, 4], 14 strips: m₁₁ = 0 at π
+    let p = with(&[("f", s("abs(sin(x))")), ("a", s("0")), ("b", s("4")), ("rule", s("Lower")), ("n", i(14))]);
+    let m = model(&p).unwrap();
+    assert!(m.strips[10].h.v.abs() < 1e-12 && (m.sum.as_ref().unwrap().v - 1.9398).abs() < 5e-5, "{}", m.sum.as_ref().unwrap().v);
+    // the dense independent search: every strip of 14 functions × upper/lower × 1 … 48 strips
+    let fns = [("4x - x^2", "0", "4.01"), ("abs(x - pi/3)", "0", "2"), ("abs(x^2 - 2)", "0", "3"), ("abs(sin(x))", "0", "4"), ("sin(x)", "0", "3"), ("sin(2x)", "0", "3"),
+        ("x^3 - 3x", "-2", "2"), ("(x - 1.37)^2", "0", "3"), ("cos(3x) + x/2", "-1", "2"), ("x e^(-x)", "0", "4"), ("abs(x - 0.7) + abs(x - 2.2)", "0", "3"), ("1/(1 + (x - 0.51)^2)", "-1", "2"),
+        ("x^4 - 4x^2", "-2.3", "2.1"), ("sqrt(abs(x - 1))", "0", "2.5")];
+    let (mut heights, mut wrong) = (0, vec![]);
+    for (fx, a, b) in fns {
+        let f = |x: f64| ev(fx, x).unwrap();
+        for rule in ["Upper", "Lower"] {
+            for n in 1..=48 {
+                let p = with(&[("f", s(fx)), ("a", s(a)), ("b", s(b)), ("rule", s(rule)), ("n", i(n))]);
+                let Ok(m) = model(&p) else { continue };
+                let mx = rule == "Upper";
+                for st in &m.strips {
+                    heights += 1;
+                    // an independent search: 4,001 samples, then the best five refined by ternary search
+                    let k = 4000;
+                    let xs: Vec<f64> = (0..=k).map(|j| st.x0 + (st.x1 - st.x0) * j as f64 / k as f64).collect();
+                    let sgn = if mx { 1.0 } else { -1.0 };
+                    let mut idx: Vec<usize> = (0..=k).collect();
+                    idx.sort_by(|&p, &q| (f(xs[q]) * sgn).total_cmp(&(f(xs[p]) * sgn)));
+                    let mut best = f(xs[idx[0]]) * sgn;
+                    for &j in idx.iter().take(5) {
+                        let (mut lo, mut hi) = (xs[j.saturating_sub(1)], xs[(j + 1).min(k)]);
+                        for _ in 0..200 { let (c, d) = (lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0); if f(c) * sgn > f(d) * sgn { hi = d; } else { lo = c; } }
+                        best = best.max(f(0.5 * (lo + hi)) * sgn);
+                    }
+                    let want = best * sgn;
+                    if (st.h.v - want).abs() > 1e-9 * want.abs().max(1.0) { wrong.push(format!("{fx} {rule} n={n} strip [{}, {}]: {} vs {want}", st.x0, st.x1, st.h.v)); }
+                    if let Some(e) = &st.h.ex { assert!((e.approx() - want).abs() <= 1e-9 * want.abs().max(1.0), "{fx} {rule} n={n}: exact {} vs {want}", e.approx()); }
+                }
+            }
+        }
+    }
+    println!("strip heights checked: {heights}, wrong: {}", wrong.len());
+    assert!(heights > 10000 && wrong.is_empty(), "{} wrong:\n{}", wrong.len(), wrong.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// Forms as a textbook writes them: a root after the factors it multiplies, logs combined, √e, 1/(2e), (e − 1)/2, the
+/// typed function typeset; school rounding at a tie; an error written once; an exact value never with ≈.
+#[test]
+fn textbook_forms_rounding_and_lines() {
+    let ex = |f: &str, a: &str, b: &str| -> String { let p = with(&[("f", s(f)), ("a", s(a)), ("b", s(b)), ("exact_line", bo(true)), ("integral_line", bo(true))]); lines(&p).join(" | ") };
+    let has = |got: String, want: &str| assert!(got.contains(want), "want {want:?} in {got:?}");
+    // logs: ∫₁^1.5 dx/x = ln(3/2); ∫₁⁶ = ln 6; ∫₁⁴ = ln 4; ∫₁² π/x dx = π ln 2
+    has(ex("1/x", "1", "1.5"), "dx = ln(3/2)");
+    has(ex("1/x", "1", "6"), "dx = ln 6");
+    has(ex("1/x", "1", "4"), "dx = ln 4");
+    has(ex("pi/x", "1", "2"), "\u{222b}12 \u{3c0}/x dx = \u{3c0} ln 2");
+    // R₆ of ln x on [1, 7] = ln 2 + … + ln 7 = ln 5040
+    let r = with(&[("f", s("ln(x)")), ("a", s("1")), ("b", s("7")), ("rule", s("Right")), ("n", i(6)), ("sum_line", bo(true)), ("xmax", fl(8.0))]);
+    has(lines(&r).join(" | "), "= ln 5040");
+    // e: ∫₀^(1/2) eˣ dx = √e − 1; ∫₀¹ e^(−2x) dx = 1/2 − 1/(2e²); Δx = (e − 1)/2
+    has(ex("e^x", "0", "1/2"), "dx = \u{221a}e \u{2212} 1");
+    has(ex("e^(-2x)", "0", "1"), "/(2e2)");
+    let d = with(&[("f", s("1/x")), ("a", s("1")), ("b", s("e")), ("n", i(2)), ("show_dx", bo(true))]);
+    has(lines(&d).join(" | "), "= (e \u{2212} 1)/2");
+    // a root after its factors: x sin x, midpoint, 2 strips on [0, π]: heights (π/4)(√2/2) = π√2/8 and 3π√2/8
+    let xs = with(&[("f", s("x sin(x)")), ("a", s("0")), ("b", s("pi")), ("rule", s("Midpoint")), ("n", i(2)), ("strip_labels", s("Heights")), ("xunits", s("Multiples of \u{3c0}")), ("xmin", fl(-0.5)), ("xmax", fl(1.5)), ("xstep", fl(0.5)), ("ymax", fl(3.0)), ("ymin", fl(-0.5)), ("ystep", fl(0.5))]);
+    assert_eq!(texts(&render(&xs), "strip-label"), vec!["\u{3c0}\u{221a}2/8", "3\u{3c0}\u{221a}2/8"]);
+    has(ex("x sin(x)", "0", "pi"), "\u{222b}0\u{3c0} x sin(x) dx = \u{3c0}");
+    // typed text typeset: (√2)x, |x − π/3|, x + π, πx
+    has(ex("sqrt(2)x", "0", "2"), "\u{222b}02 (\u{221a}2)x dx = 2\u{221a}2");
+    has(ex("abs(x - pi/3)", "0", "2"), "|x \u{2212} \u{3c0}/3|");
+    has(ex("x + pi", "0", "1"), "(x + \u{3c0}) dx = \u{3c0} + 1/2");
+    has(ex("pi x", "0", "1"), "\u{3c0}x dx = \u{3c0}/2");
+    // school rounding from the exact value: x² on [0, 1], upper, 2 strips = 5/8 = 0.625 → 0.63 at 2 places
+    let r = with(&[("f", s("x^2")), ("a", s("0")), ("b", s("1")), ("rule", s("Upper")), ("n", i(2)), ("sum_line", bo(true)), ("values", s("Decimals")), ("dec", i(2))]);
+    has(lines(&r).join(" | "), "\u{2248} 0.63");
+    let mut r3 = r.clone(); r3.set_i("dec", 3); r3.set_s("rule", "Lower");
+    // lower: (1/2)(0 + 1/4) = 1/8 = 0.125; terms 0 and 0.25
+    has(lines(&r3).join(" | "), "= 0.125");
+    let m4 = with(&[("f", s("x^2")), ("a", s("0")), ("b", s("1")), ("rule", s("Midpoint")), ("n", i(2)), ("sum_line", bo(true)), ("values", s("Decimals")), ("dec", i(3))]);
+    // midpoint heights 1/16 = 0.0625 → 0.063 and 9/16 = 0.5625 → 0.563
+    has(lines(&m4).join(" | "), "0.063 + 0.563");
+    // the error written once, and exact when it is: x + π, left, 4 strips on [0, 1]: L₄ = π + 3/8, exact π + 1/2, error −1/8
+    let e = with(&[("f", s("x + pi")), ("a", s("0")), ("b", s("1")), ("error_line", bo(true)), ("exact_line", bo(true)), ("sum_line", bo(true))]);
+    has(lines(&e).join(" | "), "= \u{2212}1/8");
+    let l = with(&[("f", s("1/x")), ("a", s("1")), ("b", s("5")), ("rule", s("Left")), ("n", i(4)), ("error_line", bo(true)), ("xmax", fl(6.0))]);
+    let t = lines(&l).join(" | ");
+    assert!(t.contains("Error = L4 \u{2212} exact = 25/12 \u{2212} ln 5") && !t.contains("ln 5 = 25/12"), "{t}");
+    // log 10 is 1: the sum of log x at powers of ten is exact
+    let lg = with(&[("f", s("log(x)")), ("a", s("1")), ("b", s("10")), ("rule", s("Right")), ("n", i(1)), ("sum_line", bo(true)), ("xmax", fl(11.0)), ("ymax", fl(2.0))]);
+    has(lines(&lg).join(" | "), "= 9\u{b7}(1) = 9");
 }
 

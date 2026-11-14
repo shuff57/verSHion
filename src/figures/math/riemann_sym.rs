@@ -12,7 +12,7 @@ use std::f64::consts::{E as EULER, PI};
 // ───────────────────────── the tree ─────────────────────────
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Fun { Sqrt, Abs, Sin, Cos, Tan, Ln, Exp }
+pub enum Fun { Sqrt, Abs, Sin, Cos, Tan, Ln, Exp, Log }
 
 #[derive(Clone, Debug)]
 pub enum Node { Num(Rat), X, Pi, E, Neg(Box<Node>), Add(Box<Node>, Box<Node>), Sub(Box<Node>, Box<Node>), Mul(Box<Node>, Box<Node>), Div(Box<Node>, Box<Node>), Pow(Box<Node>, Box<Node>), F(Fun, Box<Node>) }
@@ -87,7 +87,9 @@ impl<'a> P<'a> {
                     "e" => return Some(E),
                     _ => {}
                 }
-                let f = match name.as_str() { "sqrt" => Fun::Sqrt, "abs" => Fun::Abs, "sin" => Fun::Sin, "cos" => Fun::Cos, "tan" => Fun::Tan, "ln" => Fun::Ln, "exp" => Fun::Exp, _ => {
+                // (log is base 10, as the reader takes it; log_b(…) has no exact reading here)
+                if name == "log" && self.peek() == Some('_') { return None; }
+                let f = match name.as_str() { "sqrt" => Fun::Sqrt, "abs" => Fun::Abs, "sin" => Fun::Sin, "cos" => Fun::Cos, "tan" => Fun::Tan, "ln" => Fun::Ln, "exp" => Fun::Exp, "log" => Fun::Log, _ => {
                     // (as the reader does: a run starting with x or e is x or e times the rest; any other name has no exact reading)
                     if name.starts_with('x') { self.i = st + 1; return Some(X); }
                     if name.starts_with('e') && !["exp"].contains(&name.as_str()) && !is_known(&name) { self.i = st + 1; return Some(E); }
@@ -138,7 +140,7 @@ pub fn num(n: &Node, x: f64) -> Option<f64> {
         }
         F(f, a) => {
             let u = num(a, x)?;
-            match f { Fun::Sqrt => u.sqrt(), Fun::Abs => u.abs(), Fun::Sin => u.sin(), Fun::Cos => u.cos(), Fun::Tan => u.tan(), Fun::Ln => u.ln(), Fun::Exp => u.exp() }
+            match f { Fun::Sqrt => u.sqrt(), Fun::Abs => u.abs(), Fun::Sin => u.sin(), Fun::Cos => u.cos(), Fun::Tan => u.tan(), Fun::Ln => u.ln(), Fun::Exp => u.exp(), Fun::Log => u.log10() }
         }
     };
     v.is_finite().then_some(v)
@@ -319,6 +321,18 @@ fn ln_ex(u: &Ex) -> Option<Ex> {
     out.add(&Ex::rat(m.erat()))
 }
 
+/// a/b when a is a rational multiple of b (the same monomials in the same proportion).
+fn ratio(a: &Ex, b: &Ex) -> Option<Rat> {
+    if a.0.len() != b.0.len() { return None; }
+    let mut r: Option<Rat> = None;
+    for (m, c) in &a.0 {
+        let q = c.div(*b.0.get(m)?)?;
+        if r.is_some_and(|x| x != q) { return None; }
+        r = Some(q);
+    }
+    r
+}
+
 /// sin(kπ/12) for the angles a textbook knows (multiples of π/6 and π/4).
 fn sin_pi(r: Rat) -> Option<Ex> {
     let t = r.mul(Rat::int(12))?;
@@ -360,6 +374,8 @@ pub fn eval(n: &Node, x: &Ex) -> Option<Ex> {
                 Fun::Sqrt => u.pow_rat(Rat::new(1, 2)?)?,
                 Fun::Abs => match u.sign()? { -1 => u.neg(), _ => u },
                 Fun::Ln => ln_ex(&u)?,
+                // log u exactly only where it is rational: ln u a rational multiple of ln 10 (log 1000 = 3, log 1 = 0)
+                Fun::Log => { let lu = ln_ex(&u)?; if lu.is_zero() { Ex::zero() } else { Ex::rat(ratio(&lu, &ln_ex(&Ex::int(10))?)?) } }
                 Fun::Exp => Ex::e_pow(u.as_rat()?),
                 Fun::Sin => sin_pi(pi_mult(&u)?)?,
                 Fun::Cos => sin_pi(pi_mult(&u)?.add(Rat::new(1, 2)?)?)?,
@@ -376,53 +392,147 @@ pub fn checked(e: Option<Ex>, v: f64) -> Option<Ex> {
     ((a - v).abs() <= 1e-9 * a.abs().max(v.abs()).max(1.0)).then_some(e)
 }
 
+// ───────────────────────── derivatives and candidates ─────────────────────────
+
+/// The derivative of the tree, by the usual rules (None where it has none here, such as a variable power of a variable).
+pub fn deriv(n: &Node) -> Option<Node> {
+    let c = |r: i128| Num(Rat::int(r));
+    Some(match n {
+        Num(_) | Pi | E => c(0),
+        X => c(1),
+        Neg(a) => Neg(bx(deriv(a)?)),
+        Add(a, b) => Add(bx(deriv(a)?), bx(deriv(b)?)),
+        Sub(a, b) => Sub(bx(deriv(a)?), bx(deriv(b)?)),
+        Mul(a, b) => Add(bx(Mul(bx(deriv(a)?), b.clone())), bx(Mul(a.clone(), bx(deriv(b)?)))),
+        Div(a, b) => Div(bx(Sub(bx(Mul(bx(deriv(a)?), b.clone())), bx(Mul(a.clone(), bx(deriv(b)?))))), bx(Pow(b.clone(), bx(c(2))))),
+        Pow(a, b) if !depends(b) => Mul(bx(Mul(b.clone(), bx(Pow(a.clone(), bx(Sub(b.clone(), bx(c(1)))))))), bx(deriv(a)?)),
+        Pow(a, b) if !depends(a) => Mul(bx(Mul(bx(n.clone()), bx(F(Fun::Ln, a.clone())))), bx(deriv(b)?)),
+        Pow(..) => return None,
+        F(f, a) => {
+            let da = deriv(a)?;
+            let outer = match f {
+                Fun::Sqrt => Div(bx(Num(Rat::new(1, 2)?)), bx(F(Fun::Sqrt, a.clone()))),
+                Fun::Abs => Div(a.clone(), bx(F(Fun::Abs, a.clone()))),
+                Fun::Sin => F(Fun::Cos, a.clone()),
+                Fun::Cos => Neg(bx(F(Fun::Sin, a.clone()))),
+                Fun::Tan => Div(bx(c(1)), bx(Pow(bx(F(Fun::Cos, a.clone())), bx(c(2))))),
+                Fun::Ln => Div(bx(c(1)), a.clone()),
+                Fun::Exp => F(Fun::Exp, a.clone()),
+                Fun::Log => Div(bx(c(1)), bx(Mul(a.clone(), bx(F(Fun::Ln, bx(c(10))))))),
+            };
+            Mul(bx(outer), bx(da))
+        }
+    })
+}
+
+/// The exact numbers near x worth trying: the simple fraction (denominator up to 1000) and the simple multiple of π
+/// (denominator up to 24) closest to it.
+pub fn candidates(x: f64) -> Vec<Ex> {
+    let tol = 1e-6 * x.abs().max(1.0);
+    let mut out = vec![];
+    if let Some(r) = Rat::near(x, 1000, tol) { out.push(Ex::rat(r)); }
+    if let Some(r) = Rat::near(x / PI, 24, tol / PI) && let Some(e) = Ex::pi().scale(r) { out.push(e); }
+    out
+}
+/// The insides of every |…| in the tree.
+pub fn abs_args_of(n: &Node, out: &mut Vec<Node>) { abs_args(n, out) }
+
 // ───────────────────────── print ─────────────────────────
 
 fn sup(k: i64) -> String { if k == 1 { String::new() } else { format!("^{k}") } }
-fn erat_text(q: Rat) -> String { if q.d == 1 { sup(q.n as i64) } else { format!("^({}/{})", q.n, q.d) } }
+/// e^q as a book writes it: e, e^2, √e, e√e, e^(2/3).
+fn e_text(q: Rat) -> String {
+    if q.d == 1 { return format!("e{}", sup(q.n as i64)); }
+    if q.d == 2 { let k = (q.n - 1) / 2; return format!("{}\u{221a}e", if k == 0 { String::new() } else { format!("e{}", sup(k as i64)) }); }
+    format!("e^({}/{})", q.n, q.d)
+}
+fn gcd_i(a: i128, b: i128) -> i128 { if b == 0 { a.abs() } else { gcd_i(b, a % b) } }
+
+/// One written term: its rational coefficient, the factors over it and the factors under it.
+struct Term { c: Rat, num: Vec<String>, den: Vec<String>, rational: bool }
+impl Term {
+    /// The term without its sign, with the coefficient scaled to `k` (for a shared denominator).
+    fn text(&self, c: Rat) -> String {
+        let (cn, cd) = (c.n.abs(), c.d);
+        // (roots last, so √2 never reads as the root of what follows; ln set off by a space)
+        let mut num = String::new();
+        for f in &self.num {
+            if !num.is_empty() && f.starts_with("ln") { num.push(' '); }
+            num.push_str(f);
+        }
+        let lead = if self.num.is_empty() { cn.to_string() } else if cn == 1 { String::new() } else { cn.to_string() };
+        let sep = if !lead.is_empty() && (num.starts_with("ln") || num.starts_with("(ln")) { " " } else if !lead.is_empty() && num.starts_with('^') { "\u{2009}" } else { "" };
+        let mut top = format!("{lead}{sep}{num}");
+        let mut bottom = String::new();
+        if cd != 1 { bottom.push_str(&cd.to_string()); }
+        for f in &self.den { bottom.push_str(f); }
+        if bottom.is_empty() { return top; }
+        if self.num.iter().any(|f| f.starts_with("ln")) && top.contains("ln") { top = format!("({top})"); }
+        let many = (cd != 1 && !self.den.is_empty()) || self.den.len() > 1;
+        if many { format!("{top}/({bottom})") } else { format!("{top}/{bottom}") }
+    }
+}
 
 impl Ex {
-    /// "14/3", "7√2/2 + 7/2", "e − 1", "2 ln 2", "π^2/2", "1 − √2/2" (the figure's markup: ^ raises the next token).
-    /// None when it would be too long to read (over 5 terms or 60 characters).
+    /// The value as a textbook writes it, in the figure's markup (^ raises the next token): 14/3, (e − 1)/2, π√2/8,
+    /// ln(3/2), 1 − √2/2, 1/(2e), −3 ³√2 − 6. None when it would be too long to read (over 5 terms or 60 characters).
     pub fn text(&self) -> Option<String> {
         if self.0.is_empty() { return Some("0".into()); }
-        if self.0.len() > 5 { return None; }
-        let mut terms: Vec<(bool, String, bool)> = vec![];
+        let mut terms: Vec<Term> = vec![];
+        // a sum of logarithms with rational coefficients, as one logarithm while its argument stays under a million
+        let mut logs: Vec<(i64, Rat)> = vec![];
         for (m, c) in &self.0 {
-            let (mut num, mut den): (Vec<String>, Vec<String>) = (vec![], vec![]);
-            if m.sq != 1 { num.push(format!("\u{221a}{}", m.sq)); }
-            // (a cube root as ³√n: a raised 3 before the root sign, which every face the figure uses has)
-            if m.cb != 1 { num.push(format!("^3\u{221a}{}", m.cb)); }
+            let pure_log = m.sq == 1 && m.cb == 1 && m.pi == 0 && m.e.0 == 0 && m.ln.len() == 1 && m.ln[0].1 == 1;
+            if pure_log { logs.push((m.ln[0].0, *c)); continue; }
+            let (mut num, mut den) = (vec![], vec![]);
             if m.pi > 0 { num.push(format!("\u{3c0}{}", sup(m.pi as i64))); } else if m.pi < 0 { den.push(format!("\u{3c0}{}", sup(-m.pi as i64))); }
             let e = m.erat();
-            if e.n > 0 { num.push(format!("e{}", erat_text(e))); } else if e.n < 0 { den.push(format!("e{}", erat_text(Rat { n: -e.n, d: e.d }))); }
+            if e.n > 0 { num.push(e_text(e)); } else if e.n < 0 { den.push(e_text(Rat { n: -e.n, d: e.d })); }
             for (p, k) in &m.ln {
-                let t = if *k == 1 || *k == -1 { format!("ln {p}") } else { format!("(ln {p})^{}", k.abs()) };
+                let t = if k.abs() == 1 { format!("ln {p}") } else { format!("(ln {p})^{}", k.abs()) };
                 if *k > 0 { num.push(t); } else { den.push(t); }
             }
-            let neg = c.n < 0;
-            let (cn, cd) = (c.n.abs(), c.d);
-            let has_ln_end = num.last().is_some_and(|t| t.starts_with("ln"));
-            let gap = if has_ln_end && num.len() == 1 { " " } else if num.first().is_some_and(|t| t.starts_with('^')) { "\u{2009}" } else { "" };
-            let mut top = if num.is_empty() { cn.to_string() } else if cn == 1 { num.join("") } else { format!("{cn}{gap}{}", num.join("")) };
-            if num.iter().any(|t| t.starts_with("ln")) && (cd != 1 || !den.is_empty()) { top = format!("({top})"); }
-            let mut bottom: Vec<String> = vec![];
-            if cd != 1 { bottom.push(cd.to_string()); }
-            bottom.extend(den);
-            let t = if bottom.is_empty() { top } else if bottom.len() == 1 && cd == 1 { format!("{top}/{}", bottom[0]) } else if cd != 1 && bottom.len() == 1 { format!("{top}/{cd}") } else { format!("{top}/({})", bottom.join("\u{b7}")) };
-            terms.push((neg, t, m.is_one()));
+            if m.sq != 1 { num.push(format!("\u{221a}{}", m.sq)); }
+            if m.cb != 1 { num.push(format!("^3\u{221a}{}", m.cb)); }
+            terms.push(Term { c: *c, num, den, rational: m.is_one() });
         }
-        // the irrational terms first, the rational one last (e − 1, 7√2/2 + 7/2); a negative first term after a positive
+        if !logs.is_empty() {
+            let d = logs.iter().fold(1i128, |acc, (_, c)| acc / gcd_i(acc, c.d) * c.d);
+            let (mut n, mut dd) = (1i128, 1i128);
+            let mut ok = true;
+            for (p, c) in &logs {
+                let e = c.n * (d / c.d);
+                let pw = (*p as i128).checked_pow(e.unsigned_abs() as u32);
+                match pw { Some(v) if e > 0 => { n = n.saturating_mul(v); } Some(v) => { dd = dd.saturating_mul(v); } None => ok = false }
+            }
+            if ok && n <= 1_000_000 && dd <= 1_000_000 && n != dd {
+                let (neg, a, b) = if n >= dd { (false, n, dd) } else { (true, dd, n) };
+                let g = gcd_i(a, b);
+                let (a, b) = (a / g, b / g);
+                let arg = if b == 1 { format!("ln {a}") } else { format!("ln({a}/{b})") };
+                terms.push(Term { c: Rat { n: if neg { -1 } else { 1 }, d }, num: vec![arg], den: vec![], rational: false });
+            } else if !ok || n != dd {
+                for (p, c) in &logs { terms.push(Term { c: *c, num: vec![format!("ln {p}")], den: vec![], rational: false }); }
+            }
+        }
+        if terms.is_empty() { return Some("0".into()); }
+        if terms.len() > 5 { return None; }
+        // the irrational terms first, a positive one leading (e − 1, ln 5 − 2 ln 2); a negative irrational after a positive
         // rational one (1 − √2/2)
-        let (mut irr, rat): (Vec<_>, Vec<_>) = terms.into_iter().partition(|t| !t.2);
-        // (a positive irrational term first where there is one: ln 5 − 2 ln 2)
-        irr.sort_by_key(|t| t.0);
-        let mut order: Vec<(bool, String, bool)> = vec![];
-        if irr.first().is_some_and(|t| t.0) && rat.first().is_some_and(|t| !t.0) { order.extend(rat.clone()); order.append(&mut irr); } else { order.append(&mut irr); order.extend(rat); }
+        let (mut irr, rat): (Vec<Term>, Vec<Term>) = terms.into_iter().partition(|t| !t.rational);
+        irr.sort_by_key(|t| t.c.n < 0);
+        let lead_neg_irr = irr.first().is_some_and(|t| t.c.n < 0) && rat.first().is_some_and(|t| t.c.n > 0);
+        let order: Vec<Term> = if lead_neg_irr { rat.into_iter().chain(irr).collect() } else { irr.into_iter().chain(rat).collect() };
+        // terms that all share one denominator over a common line: (e − 1)/2, (√2 + 1)/2
+        let d0 = order[0].c.d;
+        let shared = order.len() > 1 && d0 > 1 && order.iter().all(|t| t.c.d == d0 && t.den.is_empty());
         let mut out = String::new();
-        for (k, (neg, t, _)) in order.iter().enumerate() {
-            if k == 0 { if *neg { out.push('\u{2212}'); } out.push_str(t); } else { out.push_str(if *neg { " \u{2212} " } else { " + " }); out.push_str(t); }
+        for (k, t) in order.iter().enumerate() {
+            let c = if shared { Rat { n: t.c.n, d: 1 } } else { t.c };
+            let body = t.text(c);
+            if k == 0 { if t.c.n < 0 { out.push('\u{2212}'); } out.push_str(&body); } else { out.push_str(if t.c.n < 0 { " \u{2212} " } else { " + " }); out.push_str(&body); }
         }
+        if shared { out = format!("({out})/{d0}"); }
         (out.chars().count() <= 60).then_some(out)
     }
 }
@@ -558,7 +668,18 @@ pub fn integral(n: &Node, a: &Ex, b: &Ex) -> Option<Ex> {
         }
         return Some(acc);
     }
+    // a constant (π, e, √2 …): times b − a
+    if !depends(n) { return eval(n, &Ex::zero())?.mul(&b.sub(a)?); }
     let anti = |f: &dyn Fn(&Ex) -> Option<Ex>| -> Option<Ex> { f(b)?.sub(&f(a)?) };
+    // a polynomial times sin, cos or e of kx + m: by parts, as many times as the polynomial's degree
+    if let Mul(l, r) = n {
+        for (pn, tn) in [(l, r), (r, l)] {
+            let Some(pp) = poly(pn) else { continue };
+            let (kind, u) = match tn.as_ref() { F(Fun::Sin, u) => (0, u), F(Fun::Cos, u) => (1, u), F(Fun::Exp, u) => (2, u), Pow(base, u) if matches!(base.as_ref(), E) => (2, u), _ => continue };
+            let Some((k, m)) = linear(u) else { continue };
+            return parts(&pp, kind, k, m, a, b);
+        }
+    }
     match n {
         Add(x, y) => integral(x, a, b)?.add(&integral(y, a, b)?),
         Sub(x, y) => integral(x, a, b)?.sub(&integral(y, a, b)?),
@@ -582,6 +703,25 @@ pub fn integral(n: &Node, a: &Ex, b: &Ex) -> Option<Ex> {
         F(Fun::Cos, u) => { let (k, m) = linear(u)?; anti(&|x| sin_pi(pi_mult(&lin_at(k, m, x)?)?)?.scale(Rat::int(1).div(k)?)) }
         _ => None,
     }
+}
+/// ∫ₐᵇ P(x)·T(kx + m) dx for T = sin (0), cos (1) or exp (2), by parts: [P·G] − ∫P′·G with G the antiderivative of T.
+fn parts(p: &[Rat], kind: u8, k: Rat, m: Rat, a: &Ex, b: &Ex) -> Option<Ex> {
+    if p.iter().all(|c| c.is_zero()) { return Some(Ex::zero()); }
+    let inv_k = Rat::int(1).div(k)?;
+    // G at x: −cos(u)/k, sin(u)/k or e^u/k
+    let g = |x: &Ex| -> Option<Ex> {
+        let u = lin_at(k, m, x)?;
+        let v = match kind { 0 => sin_pi(pi_mult(&u)?.add(Rat::new(1, 2)?)?)?.neg(), 1 => sin_pi(pi_mult(&u)?)?, _ => Ex::e_pow(u.as_rat()?) };
+        v.scale(inv_k)
+    };
+    let bracket = poly_at(p, b)?.mul(&g(b)?)?.sub(&poly_at(p, a)?.mul(&g(a)?)?)?;
+    let dp: Vec<Rat> = p.iter().enumerate().skip(1).map(|(j, c)| c.mul(Rat::int(j as i128))).collect::<Option<_>>()?;
+    let rest = match kind {
+        0 => parts(&dp, 1, k, m, a, b)?.scale(inv_k)?,
+        1 => parts(&dp, 0, k, m, a, b)?.scale(inv_k)?.neg(),
+        _ => parts(&dp, 2, k, m, a, b)?.scale(inv_k)?.neg(),
+    };
+    bracket.add(&rest)
 }
 fn poly_pow(x: &Ex, k: i64) -> Option<Ex> { x.pow_int(k) }
 fn lin_at(k: Rat, m: Rat, x: &Ex) -> Option<Ex> { x.scale(k)?.add(&Ex::rat(m)) }
@@ -608,7 +748,11 @@ mod tests {
         assert_eq!(ex_of("sin(pi/4)").text().unwrap(), "\u{221a}2/2");
         assert_eq!(ex_of("1 - sin(pi/4)").text().unwrap(), "1 \u{2212} \u{221a}2/2");
         assert_eq!(ex_of("e - 1").text().unwrap(), "e \u{2212} 1");
-        assert_eq!(ex_of("ln(4)").text().unwrap(), "2 ln 2");
+        assert_eq!(ex_of("ln(4)").text().unwrap(), "ln 4");
+        assert_eq!(ex_of("ln(3) - ln(2)").text().unwrap(), "ln(3/2)");
+        assert_eq!(ex_of("e^(1/2)/2 + 1/2").text().unwrap(), "(\u{221a}e + 1)/2");
+        assert_eq!(ex_of("1/(2e)").text().unwrap(), "1/(2e)");
+        assert_eq!(ex_of("pi*sqrt(2)/8").text().unwrap(), "\u{3c0}\u{221a}2/8");
         assert_eq!(ex_of("(-8)^(1/3)").text().unwrap(), "\u{2212}2");
         assert_eq!(ex_of("5^(1/3)").text().unwrap(), "^3\u{221a}5");
         assert_eq!(ex_of("3*5^(1/3)").text().unwrap(), "3\u{2009}^3\u{221a}5");
@@ -624,14 +768,17 @@ mod tests {
         let i = |f: &str, a: &str, b: &str| { let z = Ex::zero(); integral(&parse(f).unwrap(), &eval(&parse(a).unwrap(), &z).unwrap(), &eval(&parse(b).unwrap(), &z).unwrap()).map(|e| e.text().unwrap()) };
         assert_eq!(i("x^2 + 1", "0", "2").unwrap(), "14/3");
         assert_eq!(i("abs(x - 1)", "0", "3").unwrap(), "5/2");
-        assert_eq!(i("1/x", "1", "4").unwrap(), "2 ln 2");
+        assert_eq!(i("1/x", "1", "4").unwrap(), "ln 4");
         assert_eq!(i("sin(x)", "0", "pi").unwrap(), "2");
         assert_eq!(i("e^x", "0", "1").unwrap(), "e \u{2212} 1");
         assert_eq!(i("sqrt(x)", "0", "4").unwrap(), "16/3");
         assert_eq!(i("x^(1/3)", "-8", "1").unwrap(), "\u{2212}45/4");
-        assert_eq!(i("1/(x + 1)", "0", "3").unwrap(), "2 ln 2");
+        assert_eq!(i("1/(x + 1)", "0", "3").unwrap(), "ln 4");
         assert_eq!(i("2^x", "0", "3"), None, "no antiderivative here for 2^x");
-        assert_eq!(i("x e^(-x)", "0", "3"), None);
+        // by parts: ∫₀^π x sin x dx = [sin x − x cos x] = π; ∫₀¹ x eˣ dx = 1; ∫₀³ x e^(−x) dx = 1 − 4/e³
+        assert_eq!(i("x sin(x)", "0", "pi").unwrap(), "\u{3c0}");
+        assert_eq!(i("x e^x", "0", "1").unwrap(), "1");
+        assert_eq!(i("x + pi", "0", "1").unwrap(), "\u{3c0} + 1/2");
         assert_eq!(i("1/(1 + x^2)", "0", "1"), None);
     }
 }

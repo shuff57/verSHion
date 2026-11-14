@@ -308,14 +308,10 @@ fn extra_cases() -> Vec<(String, String)> {
 /// wide (8 or 10 strips on a window 4 units wide); each left off with a note whose advice works, as
 /// `refusal_advice_works` checks.)
 const SMALL_MEDIUM_REFUSED: &[&str] = &[
-    "Medium x^2 - 2x [0,3] n=6 heights: strip labels",
-    "Medium x^2 - 2x [0,3] n=6 areas: strip labels",
     "Small x^4 [0,1] n=6 heights: strip labels",
     "Medium x^4 [0,1] n=6 heights: strip labels",
     "Small x^4 [0,1] n=6 areas: strip labels",
     "Medium x^4 [0,1] n=6 areas: strip labels",
-    "Small ln(x) [1/2,3] n=4 heights: strip labels",
-    "Medium ln(x) [1/2,3] n=4 heights: strip labels",
     "Small ln(x) [1/2,3] n=4 areas: strip labels",
     "Medium ln(x) [1/2,3] n=4 areas: strip labels",
     "Small ln(x) [1/2,3] n=6 areas: strip labels",
