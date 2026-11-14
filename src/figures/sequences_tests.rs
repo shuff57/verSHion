@@ -1386,3 +1386,47 @@ fn sequences_seed_key_and_precision_r1() {
     assert!(rows.contains("Seeds used: a₁ = 2; a₂ = 1"));
     assert_eq!(approximation(0.9999999998), "0.9999999998");
 }
+#[test]
+fn sequences_independent_textbook_oracles_r1() {
+    let cases: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("sequences_textbook_oracles.json")).unwrap();
+    for case in &cases {
+        let mut p = Params::defaults(&params());
+        p.set_s("mode", "Explicit");
+        p.set_s("formula", case["formula"].as_str().unwrap());
+        let d = data(&p).unwrap();
+        for (key, values) in [("terms", &d.a), ("sums", &d.s)] {
+            for (j, actual) in values.iter().enumerate() {
+                let expected = &case[key][j];
+                let value = expected["value"].as_f64().unwrap();
+                assert!(
+                    (actual.v - value).abs() <= 2e-14 * value.abs().max(1.0),
+                    "{} {key} {j}: {} vs {value}",
+                    p.s("formula"),
+                    actual.v
+                );
+                if let Some(exact) = expected["exact"].as_str() {
+                    assert_eq!(
+                        actual.q,
+                        number(exact).unwrap().q,
+                        "{} {key} {j}",
+                        p.s("formula")
+                    );
+                }
+            }
+        }
+    }
+    assert_eq!(cases.len(), 21);
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Geometric");
+    p.set_b("sum_n", true);
+    p.set_i("sum_count", 1000);
+    let rows = rows_for(&p, &data(&p).unwrap());
+    assert!(rows.iter().any(|r| r.starts_with("Exact requested sum:")));
+    p.set_b(SHOW_ANSWERS, false);
+    assert!(
+        !rows_for(&p, &data(&p).unwrap())
+            .iter()
+            .any(|r| r.starts_with("Exact requested sum:"))
+    );
+}

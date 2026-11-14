@@ -488,9 +488,13 @@ fn approximation(v: f64) -> String {
         format!("{v:.digits$}")
     };
     let s = if s.parse::<f64>().is_ok_and(|rounded| {
-        rounded == rounded.round() && rounded != v && (rounded - v).abs() < 1e-6 * v.abs().max(1.0)
+        rounded == rounded.round()
+            && rounded != v
+            && rounded.abs() <= 10.0
+            && (rounded - v).abs() > 1e-12
+            && (rounded - v).abs() < 1e-6
     }) {
-        format!("{v:.16}")
+        format!("{v:.12}")
     } else {
         s
     };
@@ -1858,6 +1862,19 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
                 "Sum to infinity: __________".into()
             })
         }
+    }
+    if ans
+        && p.b("sum_n")
+        && p.s("mode") == "Geometric"
+        && series_math::total(p, d).is_ok_and(|a| a.digits > 110)
+    {
+        let n = p.i("sum_count").clamp(1, 1000);
+        rows.push(format!(
+            "Exact requested sum: {}[1 − ({})^({n})]/[1 − ({})]",
+            coefficient(p, "first"),
+            coefficient(p, "ratio"),
+            coefficient(p, "ratio")
+        ));
     }
     if p.b("sum_n") {
         let n = p.i("sum_count").clamp(1, 1000);
