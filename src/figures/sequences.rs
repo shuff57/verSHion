@@ -3,6 +3,8 @@ use super::{
     svg::{self, Doc},
     *,
 };
+#[path = "sequences_limits.rs"]
+mod limit_math;
 pub const ID: &str = "sequences-series";
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -972,15 +974,7 @@ fn limits(p: &Params, d: &Data) -> (Option<N>, Option<N>, String) {
                 (None, None, "diverges".into())
             }
         }
-        "Explicit"
-            if matches!(
-                p.s("formula").replace(' ', "").as_str(),
-                "1/n" | "1/(n+1)" | "(-1)^n/n"
-            ) =>
-        {
-            (Some(zero), None, "converges".into())
-        }
-        _ => (None, None, "cannot determine from this formula".into()),
+        _ => limit_math::analyse(p, d),
     }
 }
 fn in_window(v: f64, lo: f64, hi: f64) -> bool {
