@@ -206,7 +206,8 @@ pub fn pick(hs: &[Handle], q: Pt, k: f64) -> Option<usize> {
 /// Handles for figure `id` given its current params and canvas size (w, h) in SVG units.
 /// Each subject module contributes via its own `handles(id, p, size) -> Option<Vec<Handle>>`.
 pub fn handles_for(id: &str, p: &Params, size: Pt) -> Vec<Handle> {
-    let mut hs = super::physics::handles(id, p, size)
+    let mut hs = super::complex::handles(id, p, size)
+        .or_else(|| super::physics::handles(id, p, size))
         .or_else(|| super::biology::handles(id, p, size))
         .or_else(|| super::chemistry::handles(id, p, size))
         .or_else(|| super::math::handles(id, p, size))

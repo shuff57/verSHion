@@ -85,6 +85,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
         "sine-cosine" => SINE_COSINE,
         "unit-circle" => UNIT_CIRCLE,
+        "complex-plane" => UNIT_CIRCLE,
         "transformations" => TRANSFORMATIONS,
         "fraction-models" => FRACTION_MODELS,
         "triangle-centres" => TRIANGLE_CENTRES,
