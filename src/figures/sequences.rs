@@ -123,47 +123,53 @@ impl N {
         }
     }
     fn op(self, b: Self, c: char) -> Self {
-        let q = (|| {
-            let (a, d) = self.q?;
-            let (e, f) = b.q?;
-            match c {
-                '+' | '-' => {
-                    let g = gcd(d, f);
-                    let x = a.checked_mul(f / g)?;
-                    let y = e.checked_mul(d / g)?;
-                    rat(
-                        if c == '+' {
-                            x.checked_add(y)?
+        let q = if (c == '*' && (self.q == Some((0, 1)) || b.q == Some((0, 1))))
+            || (c == '/' && self.q == Some((0, 1)) && b.v != 0.0)
+        {
+            Some((0, 1))
+        } else {
+            (|| {
+                let (a, d) = self.q?;
+                let (e, f) = b.q?;
+                match c {
+                    '+' | '-' => {
+                        let g = gcd(d, f);
+                        let x = a.checked_mul(f / g)?;
+                        let y = e.checked_mul(d / g)?;
+                        rat(
+                            if c == '+' {
+                                x.checked_add(y)?
+                            } else {
+                                x.checked_sub(y)?
+                            },
+                            (d / g).checked_mul(f)?,
+                        )
+                    }
+                    '*' => {
+                        let g = gcd(a.checked_abs()?, f);
+                        let h = gcd(e.checked_abs()?, d);
+                        rat((a / g).checked_mul(e / h)?, (d / h).checked_mul(f / g)?)
+                    }
+                    '/' => {
+                        let g = gcd(a.checked_abs()?, e.checked_abs()?);
+                        let h = gcd(d, f);
+                        rat((a / g).checked_mul(f / h)?, (d / h).checked_mul(e / g)?)
+                    }
+                    '^' => {
+                        if f != 1 || e.checked_abs().is_none_or(|v| v > 128) {
+                            return None;
+                        }
+                        let k = e.unsigned_abs() as u32;
+                        if e < 0 {
+                            rat(d.checked_pow(k)?, a.checked_pow(k)?)
                         } else {
-                            x.checked_sub(y)?
-                        },
-                        (d / g).checked_mul(f)?,
-                    )
-                }
-                '*' => {
-                    let g = gcd(a.checked_abs()?, f);
-                    let h = gcd(e.checked_abs()?, d);
-                    rat((a / g).checked_mul(e / h)?, (d / h).checked_mul(f / g)?)
-                }
-                '/' => {
-                    let g = gcd(a.checked_abs()?, e.checked_abs()?);
-                    let h = gcd(d, f);
-                    rat((a / g).checked_mul(f / h)?, (d / h).checked_mul(e / g)?)
-                }
-                '^' => {
-                    if f != 1 || e.checked_abs().is_none_or(|v| v > 128) {
-                        return None;
+                            rat(a.checked_pow(k)?, d.checked_pow(k)?)
+                        }
                     }
-                    let k = e.unsigned_abs() as u32;
-                    if e < 0 {
-                        rat(d.checked_pow(k)?, a.checked_pow(k)?)
-                    } else {
-                        rat(a.checked_pow(k)?, d.checked_pow(k)?)
-                    }
+                    _ => None,
                 }
-                _ => None,
-            }
-        })();
+            })()
+        };
         let mut value = q
             .map(|(a, b)| a as f64 / b as f64)
             .unwrap_or_else(|| match c {
@@ -175,8 +181,7 @@ impl N {
             });
         if q.is_none()
             && value == 0.0
-            && ((matches!(c, '*' | '/' | '^') && self.v != 0.0 && b.v != 0.0)
-                || (matches!(c, '+' | '-') && (self.v != 0.0 || b.v != 0.0)))
+            && (matches!(c, '*' | '/' | '^') && self.v != 0.0 && b.v != 0.0)
         {
             value = f64::NAN;
         }
@@ -258,7 +263,7 @@ impl P<'_> {
                 if self
                     .s
                     .get(self.i)
-                    .is_some_and(|c| matches!(*c, b'n' | b'u' | b'v' | b'('))
+                    .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'(')
                 {
                     a = a.op(self.unary()?, '*')
                 } else {
@@ -274,7 +279,17 @@ impl P<'_> {
         if self.eat(b'+') {
             return self.unary();
         }
-        let a = self.atom()?;
+        let mut a = self.atom()?;
+        while self.eat(b'!') {
+            let (k, d) = a.q?;
+            if d != 1 || !(0..=170).contains(&k) {
+                return None;
+            }
+            a = N::int(1);
+            for j in 2..=k {
+                a = a.op(N::int(j), '*');
+            }
+        }
         if self.eat(b'^') {
             Some(a.op(self.unary()?, '^'))
         } else {
@@ -286,6 +301,66 @@ impl P<'_> {
         if self.eat(b'(') {
             let a = self.expr()?;
             return if self.eat(b')') { Some(a) } else { None };
+        }
+        let begin = self.i;
+        if self.s.get(self.i).is_some_and(u8::is_ascii_alphabetic) {
+            while self.s.get(self.i).is_some_and(u8::is_ascii_alphabetic) {
+                self.i += 1;
+            }
+            let name = std::str::from_utf8(&self.s[begin..self.i]).ok()?;
+            match name {
+                "n" => return Some(self.n),
+                "u" => return Some(self.a),
+                "v" => return Some(self.b),
+                "pi" => {
+                    return Some(N {
+                        v: std::f64::consts::PI,
+                        q: None,
+                        dec: true,
+                    });
+                }
+                "e" => {
+                    return Some(N {
+                        v: std::f64::consts::E,
+                        q: None,
+                        dec: true,
+                    });
+                }
+                _ => (),
+            }
+            if !self.eat(b'(') {
+                return None;
+            }
+            let arg = self.expr()?;
+            if !self.eat(b')') {
+                return None;
+            }
+            let full = std::str::from_utf8(&self.s[begin..self.i]).ok()?;
+            if let Some(v) = proved_function(full, self.n, self.a, self.b) {
+                return v;
+            }
+            let v = match name {
+                "sin" => arg.v.sin(),
+                "cos" => arg.v.cos(),
+                "tan" => arg.v.tan(),
+                "sqrt" => arg.v.sqrt(),
+                "ln" => arg.v.ln(),
+                "log" => arg.v.log10(),
+                "exp" => arg.v.exp(),
+                "abs" => arg.v.abs(),
+                "floor" => arg.v.floor(),
+                "ceil" => arg.v.ceil(),
+                _ => return None,
+            };
+            return if v.is_finite() {
+                Some(N {
+                    v,
+                    q: None,
+                    dec: true,
+                })
+            } else {
+                None
+            };
         }
         for (name, v) in [("n", self.n), ("u", self.a), ("v", self.b)] {
             if self.s.get(self.i..self.i + name.len()) == Some(name.as_bytes()) {
@@ -353,23 +428,23 @@ fn subscript(n: usize) -> String {
         .collect()
 }
 fn exact_decimal(a: i128, b: i128) -> Option<String> {
-    for digits in 0..=18u32 {
+    for digits in 0..=37u32 {
         let scale = 10i128.checked_pow(digits)?;
         if scale % b == 0 {
             let scaled = a.checked_mul(scale / b)?;
             let abs = scaled.checked_abs()?.to_string();
             let sign = if scaled < 0 { "-" } else { "" };
             if digits == 0 {
-                return Some(format!("{sign}{abs}.0"));
+                return Some(format!("{sign}{abs}"));
             }
             let padded = format!("{:0>width$}", abs, width = digits as usize + 1);
             let k = padded.len() - digits as usize;
             let frac = padded[k..].trim_end_matches('0');
-            return Some(format!(
-                "{sign}{}.{}",
-                &padded[..k],
-                if frac.is_empty() { "0" } else { frac }
-            ));
+            return Some(if frac.is_empty() {
+                format!("{sign}{}", &padded[..k])
+            } else {
+                format!("{sign}{}.{}", &padded[..k], frac)
+            });
         }
     }
     None
@@ -424,33 +499,62 @@ fn top_addition(s: &str) -> bool {
     false
 }
 fn pi_coefficient(s: &str, n: N, a: N, b: N) -> Option<N> {
-    if s == "pi" {
-        return Some(N::int(1));
+    let t = s.replace("npi", "n*pi").replace("pin", "pi*n");
+    if t.matches("pi").count() != 1 {
+        return None;
     }
-    if matches!(s, "npi" | "pin") {
-        return Some(n);
+    let cs = t.as_bytes();
+    let i = t.find("pi")?;
+    if t[..i].contains('/') || t[i + 2..].contains('^') {
+        return None;
     }
-    if let Some(t) = s.strip_prefix("pi*") {
-        if !top_addition(t) {
-            return read(t, n, a, b);
-        }
+    // Only products, quotients and parentheses: addition would not be a pi multiple.
+    if cs.iter().enumerate().any(|(j, c)| {
+        matches!(c, b'+' | b'-')
+            && j > 0
+            && cs[j - 1] != b'('
+            && cs[j - 1] != b'*'
+            && cs[j - 1] != b'/'
+    }) {
+        return None;
     }
-    if let Some(t) = s.strip_suffix("*pi") {
-        if !top_addition(t) {
-            return read(t, n, a, b);
-        }
-    }
-    for divisor in ["2", "3", "4", "6", "12"] {
-        if let Some(t) = s.strip_suffix(&format!("/{divisor}")) {
-            if let Some(v) = pi_coefficient(t, n, a, b) {
-                return Some(v.op(N::int(divisor.parse().ok()?), '/'));
+    let t = t.replace("pi", "(1)");
+    let mut p = P {
+        s: t.as_bytes(),
+        i: 0,
+        n,
+        a,
+        b,
+    };
+    let v = p.expr()?;
+    p.ws();
+    if p.i == p.s.len() { Some(v) } else { None }
+}
+fn sqrt_spelling(s: &str) -> String {
+    let cs = s.chars().collect::<Vec<_>>();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < cs.len() {
+        if cs[i] == '√' {
+            out.push_str("sqrt");
+            i += 1;
+            if cs.get(i) != Some(&'(') {
+                out.push('(');
+                while i < cs.len() && (cs[i].is_alphanumeric() || cs[i] == '.') {
+                    out.push(cs[i]);
+                    i += 1;
+                }
+                out.push(')');
             }
+        } else {
+            out.push(cs[i]);
+            i += 1;
         }
     }
-    None
+    out
 }
 fn proved_function(s: &str, n: N, a: N, b: N) -> Option<Option<N>> {
-    let s = s
+    let s = sqrt_spelling(s)
         .chars()
         .filter(|c| !c.is_whitespace())
         .collect::<String>()
@@ -502,6 +606,20 @@ fn proved_function(s: &str, n: N, a: N, b: N) -> Option<Option<N>> {
                         "cos" => Some(N::int(0)),
                         _ => Some(N::int((parity * t.signum() as f64) as i128)),
                     });
+                }
+                let special = if name == "cos" && absolute.checked_mul(3) == Some(den) {
+                    Some((parity as i128, 2))
+                } else if name == "sin" && absolute.checked_mul(6) == Some(den) {
+                    Some(((parity * t.signum() as f64) as i128, 2))
+                } else {
+                    None
+                };
+                if let Some((x, y)) = special {
+                    return Some(Some(N {
+                        v: x as f64 / y as f64,
+                        q: rat(x, y),
+                        dec: false,
+                    }));
                 }
                 let angle;
                 if absolute <= den / 4 {
@@ -617,12 +735,16 @@ fn read(s: &str, n: N, a: N, b: N) -> Option<N> {
     if let Some(value) = proved_function(s, n, a, b) {
         return value;
     }
-    let s = recurrence_spelling(s)
+    let s = recurrence_spelling(&sqrt_spelling(s))
         .replace('×', "*")
         .replace('÷', "/")
         .replace('·', "*")
         .replace('²', "^2")
         .replace('³', "^3")
+        .replace('π', "pi")
+        .replace("npi", "n*pi")
+        .replace("pin", "pi*n")
+        .replace('√', "sqrt")
         .replace("a_(n-1)", "(u)")
         .replace("a_(n-2)", "(v)")
         .replace("aₙ₋₁", "(u)")
@@ -637,12 +759,11 @@ fn read(s: &str, n: N, a: N, b: N) -> Option<N> {
     if let Some(v) = p.expr() {
         p.ws();
         if p.i == p.s.len() {
-            return if v.v.is_finite() && (v.v != 0.0 || v.q.is_some()) {
-                Some(v)
-            } else {
-                None
-            };
+            return if v.v.is_finite() { Some(v) } else { None };
         }
+    }
+    if s.chars().all(|c| c.is_ascii()) {
+        return None;
     }
     let mut exp = String::new();
     let chars: Vec<char> = s.chars().collect();

@@ -1027,3 +1027,55 @@ fn sequences_ambiguous_fraction_r1() {
     p.set_s("formula", "(1/2)*n");
     assert_eq!(data(&p).unwrap().a[3].q, Some((2, 1)));
 }
+
+#[test]
+fn sequences_textbook_expressions_r1() {
+    let formulas = [
+        "ln(n)/n",
+        "n*sin(pi/n)",
+        "(-1)^n*n/(n+1)",
+        "cos(n*pi)",
+        "sin(n*pi/2)",
+        "2^n/n!",
+        "n!/n^n",
+        "sqrt(n+1)-sqrt(n)",
+        "n^(1/n)",
+        "(1+1/n)^n",
+        "1-1/2^n",
+        "cos(n*pi/3)",
+        "sin(n*pi/5)",
+        "cos(n*pi/3)+1/2",
+        "1/n^2",
+        "n/(n+1)",
+        "1/(n*(n+1))",
+        "exp(-n)",
+        "sqrt(n)",
+        "(2/3)^n",
+        "sin(n)",
+    ];
+    for formula in formulas {
+        let mut p = Params::defaults(&params());
+        p.set_s("mode", "Explicit");
+        p.set_s("formula", formula);
+        let d = data(&p).unwrap_or_else(|e| panic!("{formula}: {e}"));
+        assert_eq!(d.a.len(), 8);
+    }
+    for (formula, index, q) in [
+        ("ln(n)/n", 0, (0, 1)),
+        ("cos(n*pi/3)", 0, (1, 2)),
+        ("cos(n*pi/3)", 1, (-1, 2)),
+        ("sin(n*pi/5)", 4, (0, 1)),
+        ("sin(n*pi/2)", 3, (0, 1)),
+        ("2^n/n!", 3, (2, 3)),
+        ("n!/n^n", 3, (3, 32)),
+    ] {
+        let mut p = Params::defaults(&params());
+        p.set_s("mode", "Explicit");
+        p.set_s("formula", formula);
+        assert_eq!(data(&p).unwrap().a[index].q, Some(q), "{formula}");
+    }
+    assert_eq!(
+        number("0.9999999999").unwrap().op(N::int(2), '^').text(),
+        "0.99999999980000000001"
+    );
+}
