@@ -577,6 +577,10 @@ fn bases() -> Vec<J> {
         json!({"ask_at": "", "show_answers": false}),
         json!({"pieces": "y = sin(x)/x", "dots": "", "ask_at": "0", "eps_band": true, "show_answers": false, "title_mode": "Blank line"}),
         json!({"ask_at": "4", "show_answers": false, "eps_band": true}),
+        // (the second check's: many asymptotes, steps running off the plot, a floor with breaks it cannot all find)
+        json!({"pieces": "y = tan(x)", "dots": "", "ask_at": "", "xmin": -100.0, "xmax": 100.0, "xstep": 10.0, "ymin": -10.0, "ymax": 10.0, "kind_labels": true}),
+        json!({"pieces": "y = floor(x) + 1", "dots": "", "ask_at": "0", "kind_labels": true}),
+        json!({"pieces": "y = floor(1/x)", "dots": "", "ask_at": "1", "xmin": -4.0, "xmax": 4.0, "ymin": -4.0, "ymax": 4.0, "show_answers": false}),
     ]
 }
 

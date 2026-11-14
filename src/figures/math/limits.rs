@@ -953,6 +953,9 @@ pub struct Drawn {
     pub dne_answer: bool,
     pub eps_drawn: bool,
     pub inf_asked: bool,
+    /// Discontinuities that get a kind label when the labels are on (determined, on the plot, off the window's edge, and
+    /// not too many to label).
+    pub labelable_kinds: usize,
 }
 
 thread_local! { static CACHE: std::cell::RefCell<Vec<(String, String, Drawn)>> = const { std::cell::RefCell::new(Vec::new()) }; }
@@ -1211,7 +1214,15 @@ fn build(p0: &Params) -> (String, Drawn) {
     let lab_size = size;
     let show_kinds = p.b("kind_labels") && !(stu && p.b("stu_hide_kinds"));
     let mut unlabelled: Vec<String> = vec![];
-    if show_kinds {
+    // (more than a dozen of a kind on one graph (tan x over a wide window) is too many to label: the key lists them)
+    let many_kinds = discs.iter().filter(|d| d.kind != UNSURE).count() > 12;
+    let labelable = |d: &Disc| -> bool {
+        let ys: Vec<f64> = [d.left.num(), d.right.num(), d.value.num()].into_iter().flatten().collect();
+        d.kind != UNSURE && (d.kind == "infinite" || ys.iter().any(|y| inside_y(*y))) && (d.x - g.x0).abs() >= 1e-9 * (1.0 + d.x.abs()) && (d.x - g.x1).abs() >= 1e-9 * (1.0 + d.x.abs())
+    };
+    dr.labelable_kinds = if many_kinds { 0 } else { discs.iter().filter(|d| labelable(d)).count() };
+    if show_kinds && many_kinds { notes.push("Too many discontinuities to label each one on the graph: the key lists them".into()); }
+    if show_kinds && !many_kinds {
         for d in &discs {
             let x = sx(d.x);
             // (not one the analysis cannot determine; not one on the window's edge, where only one side shows; not one whose
@@ -1247,7 +1258,8 @@ fn build(p0: &Params) -> (String, Drawn) {
             reqs.push(('k', Req { text: d.kind.to_string(), own, tries, anchor: anchors[0], rivals: vec![], gap }));
         }
     }
-    let show_asym_eqs = p.b("show_asym") && p.b("asym_eqs") && !(stu && p.b("stu_hide_asym"));
+    let show_asym_eqs = p.b("show_asym") && p.b("asym_eqs") && !(stu && p.b("stu_hide_asym")) && asym_lines.len() <= 12;
+    if p.b("show_asym") && p.b("asym_eqs") && asym_lines.len() > 12 { notes.push("Too many asymptotes to label each one with its equation".into()); }
     if show_asym_eqs {
         for (k, t, a, b) in &asym_lines {
             let w = tw(t, lab_size);
@@ -1618,17 +1630,17 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "inf_answer" => !stu && dr.infinite_answer,
         "dne_word" => !stu && dr.dne_answer,
         "show_asym" => asym,
-        "asym_eqs" => asym && p.b("show_asym") && !(stu && p.b("stu_hide_asym")),
-        "kind_labels" => !dr.discs.is_empty() && !(stu && p.b("stu_hide_kinds")),
-        "stu_hide_kinds" => stu && p.b("kind_labels") && !dr.discs.is_empty(),
-        "stu_hide_asym" => stu && asym && p.b("show_asym") && p.b("asym_eqs"),
+        "asym_eqs" => asym && dr.asymptotes <= 12 && p.b("show_asym") && !(stu && p.b("stu_hide_asym")),
+        "kind_labels" => dr.labelable_kinds > 0 && !(stu && p.b("stu_hide_kinds")),
+        "stu_hide_kinds" => stu && p.b("kind_labels") && dr.labelable_kinds > 0,
+        "stu_hide_asym" => stu && asym && dr.asymptotes <= 12 && p.b("show_asym") && p.b("asym_eqs"),
         "arrows" => { let mut q = p.clone(); q.set_b("arrows", true); last_drawn(&q).heads > 0 }
         // (on a student copy that asks the limit at a, the band is left off)
         "eps_band" => dr.eps_possible && !(stu && (p.b("ask_two") || p.b("ask_left") || p.b("ask_right"))),
         "eps" => p.b("eps_band") && dr.eps_possible && !(stu && (p.b("ask_two") || p.b("ask_left") || p.b("ask_right"))),
         "title" => p.s("title_mode") == "Text",
         "square" => { let (x0, x1, y0, y1, ..) = dr.frame; ((x1 - x0) - (y1 - y0)).abs() > 1e-9 }
-        "show_answers" => any_q || (p.b("kind_labels") && p.b("stu_hide_kinds") && !dr.discs.is_empty()) || (asym && p.b("show_asym") && p.b("asym_eqs") && p.b("stu_hide_asym")),
+        "show_answers" => any_q || (p.b("kind_labels") && p.b("stu_hide_kinds") && dr.labelable_kinds > 0) || (asym && dr.asymptotes <= 12 && p.b("show_asym") && p.b("asym_eqs") && p.b("stu_hide_asym")),
         _ => true,
     }
 }
