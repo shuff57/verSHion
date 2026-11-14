@@ -826,3 +826,80 @@ fn sequences_aligned_graphs_have_separate_label_rows() {
         assert!(y > first_index_row + 2.0 * 14.0 * svg::label_factor(size));
     }
 }
+
+#[test]
+fn sequences_drag_decimal_sweep_r1() {
+    let mut checked = 0;
+    for state in 0..4 {
+        let mut p = Params::defaults(&params());
+        if state == 1 || state == 3 {
+            p.set_s("mode", "Geometric");
+        }
+        if state == 2 {
+            p.set_s("first", "0");
+            p.set_s("difference", "0.1");
+            p.set_f("from", -1.0);
+            p.set_f("to", 1.0);
+        }
+        if state == 3 {
+            p.set_s("first", "8");
+            p.set_f("from", 0.0);
+            p.set_f("to", 10.0);
+        }
+        let hs = handles(&p);
+        assert_eq!(hs.len(), 3);
+        let span = p.f("to") - p.f("from");
+        for (j, h) in hs.iter().enumerate() {
+            assert_eq!(interact::pick(&hs, h.pos, 1.0), Some(j));
+            for i in 0..1200 {
+                let mut q = p.clone();
+                let pt = if j == 2 {
+                    (185.0 + i as f64 * 2.0, h.pos.1)
+                } else {
+                    (h.pos.0, 160.0 + plot_height(&p) * i as f64 / 1199.0)
+                };
+                h.drag.as_ref().unwrap()(&mut q, pt);
+                if j == 2 {
+                    assert!((3..=24).contains(&q.i("count")));
+                } else {
+                    let key = if j == 0 {
+                        "first"
+                    } else if state == 1 || state == 3 {
+                        "ratio"
+                    } else {
+                        "difference"
+                    };
+                    let quantum = if key == "ratio" {
+                        0.0001
+                    } else {
+                        10f64.powi(span.log10().floor() as i32 - 3)
+                    };
+                    let places = (-quantum.log10().round()) as usize;
+                    let t = q.s(key);
+                    assert!(
+                        t.split('.').nth(1).map_or(0, str::len) <= places,
+                        "{state} {key} {t}"
+                    );
+                    let mut expected = (p.f("from")
+                        + (160.0 + plot_height(&p) - pt.1) / plot_height(&p) * span)
+                        .clamp(p.f("from"), p.f("to"));
+                    if j == 1 {
+                        let a = number(p.s("first")).unwrap().v;
+                        expected = if key == "ratio" {
+                            expected / a
+                        } else {
+                            expected - a
+                        };
+                    }
+                    let rounded = (expected / quantum).round();
+                    assert!((t.parse::<f64>().unwrap() / quantum - rounded).abs() < 1e-8);
+                    assert!(!t.contains("0000000000"));
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 14400);
+    assert_eq!(decimal_step(10.700000000000001, 0.01), "10.7");
+    assert_eq!(decimal_step(-0.35000000000000003, 0.01), "-0.35");
+}

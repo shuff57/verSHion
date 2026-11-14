@@ -2106,11 +2106,29 @@ pub fn handles(p: &Params) -> Vec<interact::Handle> {
                 } else {
                     10f64.powi((hi - lo).abs().log10().floor() as i32 - 3)
                 };
-                p.set_s(key, &format!("{}", (v / quantum).round() * quantum));
+                p.set_s(key, &decimal_step(v, quantum));
             },
         ));
     }
     out
+}
+// Quantize to integer decimal units, then insert the decimal point without a floating product.
+fn decimal_step(value: f64, quantum: f64) -> String {
+    let places = (-quantum.log10().round() as i32).clamp(0, 12) as usize;
+    let units = (value * 10f64.powi(places as i32)).round() as i128;
+    if places == 0 {
+        return units.to_string();
+    }
+    let digits = format!("{:0>width$}", units.unsigned_abs(), width = places + 1);
+    let k = digits.len() - places;
+    let frac = digits[k..].trim_end_matches('0');
+    format!(
+        "{}{}{}{}",
+        if units < 0 { "-" } else { "" },
+        &digits[..k],
+        if frac.is_empty() { "" } else { "." },
+        frac
+    )
 }
 fn py_value(v: f64, lo: f64, hi: f64, height: f64) -> f64 {
     160.0 + height - (v.clamp(lo, hi) - lo) / (hi - lo) * height
