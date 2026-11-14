@@ -235,7 +235,7 @@ fn minus_n(lhs: &str, n: &Num) -> String {
     if is_zero(n) { return lhs.to_string(); }
     // a sum subtracted is written with its terms negated where it is exact (x − (√2 − 1) is x − √2 + 1 … written x + 1 − √2)
     if compound(n) {
-        if n.exact { if let Some(t) = n.ex.as_ref().and_then(|x| ex::text(&x.neg(), true)) { return match t.strip_prefix('\u{2212}') { Some(r) => format!("{lhs} \u{2212} {r}"), None => format!("{lhs} + {t}") }; } }
+        if n.exact { if let Some(t) = n.ex.as_ref().and_then(|x| ex::text(&x.neg(), n.s.contains('.'))) { return match t.strip_prefix('\u{2212}') { Some(r) => format!("{lhs} \u{2212} {r}"), None => format!("{lhs} + {t}") }; } }
         return format!("{lhs} \u{2212} ({})", n.s);
     }
     if neg(n) { format!("{lhs} + {}", abs_s(n)) } else { format!("{lhs} \u{2212} {}", n.s) }

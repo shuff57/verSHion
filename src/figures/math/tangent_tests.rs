@@ -1287,3 +1287,92 @@ fn scientific_steps() {
     let n = tangent::warnings(&with(&[("a", s("1")), ("h", s("1")), ("more_h", s("1e-17"))])).join(" | ");
     assert!(n.contains("left out (Q would be P)"), "{n}");
 }
+
+/// Typed numbers in every spelling a class types: products, quotients, sums, scientific notation, spaces, unary minus,
+/// brackets, exact and decimal mixes. Each is typed as a, as h, in More tangents and in More secants, on x², and the panel and
+/// key are read back: the value written for a (in f′(…) and "Tangent at x = …") and for h ("Secant PQ, h = …", the worked
+/// line's denominator) is the typed value; every "=" equation passes through its point with its slope (by hand for x²:
+/// tangent 2a, secant 2a + h, normal −1/(2a)), checked at the point and one unit along; where nothing decimal was typed,
+/// no exact line carries a decimal. 3/4*2 is 3/2 (not 3/42), 2*3 is 6, 1e-5 is 0.00001 (not an expression in e), 1 000 is 1000.
+#[test]
+fn typed_numbers_in_every_spelling() {
+    use std::f64::consts::{E, PI};
+    let r2 = 2f64.sqrt();
+    let table: Vec<(&str, f64)> = vec![
+        ("3/4*2", 1.5), ("2*3", 6.0), ("sqrt(3)*2", 2.0 * 3f64.sqrt()), ("pi*2", 2.0 * PI), ("-2*-1", 2.0), ("2 * 3", 6.0),
+        ("3*1/2", 1.5), ("1/2*3", 1.5), ("(1/2)*3", 1.5), ("2*(1/2)", 1.0), ("-3/4*2", -1.5), ("2*-0.5", -1.0), ("0.5*3", 1.5),
+        ("sqrt(2)*sqrt(2)", 2.0), ("2*pi/8", PI / 4.0), ("1e-5", 1e-5), ("2e-1", 0.2), ("1E-3", 1e-3), ("1e-12", 1e-12),
+        ("1.5e0", 1.5), ("5e-1", 0.5), ("-2e-1", -0.2), ("2.5E-2", 0.025), ("1 000", 1000.0), ("1 / 2", 0.5), (" 1/2 ", 0.5),
+        ("- 1/2", -0.5), ("--1", 1.0), ("-(1/2)", -0.5), ("(1)", 1.0), ("((2))", 2.0), ("1.", 1.0), ("0.1+0.2", 0.3),
+        ("sqrt(2)/2+1/2", r2 / 2.0 + 0.5), ("sqrt(2)/2 + 0.5", r2 / 2.0 + 0.5), ("1/-2", -0.5), ("pi / 4", PI / 4.0),
+        ("e/2", E / 2.0), ("2e", 2.0 * E), ("sqrt(4)", 2.0), ("3/6", 0.5), ("0.25*4", 1.0), ("-1.25", -1.25), ("2^-1", 0.5),
+        ("2^(-1)", 0.5), ("sqrt(2) * 3/4", 0.75 * r2), ("1/2 - sqrt(2)/2", 0.5 - r2 / 2.0), ("-pi/6", -PI / 6.0),
+    ];
+    assert!(table.len() >= 40);
+    let back = |t: &str| ex::parse(&at_point(t.trim(), "", "", 0.0, 0.0).replace(' ', "")).map(|n| ex::eval(&n, 0.0));
+    let near = |a: f64, b: f64| (a - b).abs() <= 1e-9 * (1.0 + a.abs().max(b.abs()));
+    let mut bad = vec![];
+    let mut checked = 0;
+    for (sp, val) in &table {
+        let decimal_typed = sp.contains('.') || sp.to_lowercase().contains("e-") || sp.contains("e0");
+        for place in ["a", "h", "more_a", "more_h"] {
+            let (a, h) = match place { "a" => (*sp, "1"), "h" => ("1", *sp), _ => ("1", "1") };
+            let (av, hv) = match place { "a" => (*val, 1.0), "h" => (1.0, *val), _ => (1.0, 1.0) };
+            let mut o: Vec<(&str, Value)> = vec![("func", s("x^2")), ("a", s(a)), ("h", s(h)), ("tangent_eq", s("Point-slope")), ("secant_eq", s("Point-slope")), ("normal", s("With its equation")), ("worked", b(true)), ("table", b(true)), ("key_line", b(true))];
+            if place == "more_a" { o.push(("more_a", s(sp))); }
+            if place == "more_h" { o.push(("more_h", s(sp))); }
+            let p = with(&o);
+            let svg = build(&p).svg;
+            let notes = tangent::warnings(&p).join(" | ");
+            if notes.contains("Type a as") || notes.contains("Type h as") || notes.contains("cannot read") || notes.contains("cannot be 0") { bad.push(format!("{place}={sp}: refused: {notes}")); continue; }
+            let mut lines = texts(&svg, "panel^");
+            for k in texts(&svg, "key^") { for part in k.trim_start_matches("Key: ").trim_end_matches('.').split("; ") { lines.push(part.to_string()); } }
+            let mut cur: Option<(f64, f64)> = None;
+            let mut saw_h = false;
+            for l in &lines {
+                let l = l.trim();
+                if let Some(x) = l.strip_prefix("slope f\u{2032}(").and_then(|r| r.split(')').next()) {
+                    if !back(x).is_some_and(|v| near(v, av)) { bad.push(format!("{place}={sp}: a written {x}")); }
+                }
+                if l.starts_with("Tangent at P") { cur = Some((av, 2.0 * av)); continue; }
+                if l.starts_with("Normal at P") { cur = Some((av, -1.0 / (2.0 * av))); continue; }
+                if let Some(x) = l.strip_prefix("Secant PQ, h = ") {
+                    if !back(x).is_some_and(|v| near(v, hv)) { bad.push(format!("{place}={sp}: h written {x}")); }
+                    saw_h = true;
+                    cur = Some((av, 2.0 * av + hv)); continue;
+                }
+                if let Some(rest) = l.strip_prefix("Tangent at x = ") {
+                    let x = rest.split(':').next().unwrap();
+                    match back(x) { Some(c) => { if place == "more_a" && !near(c, *val) { bad.push(format!("{place}={sp}: more a written {x}")); } cur = Some((c, 2.0 * c)); } None => { bad.push(format!("{place}={sp}: cannot read {x}")); cur = None; } }
+                    continue;
+                }
+                if let Some(rest) = l.strip_prefix("Secant, h = ") {
+                    let x = rest.split(':').next().unwrap();
+                    match back(x) { Some(c) => { if place == "more_h" && !near(c, *val) { bad.push(format!("{place}={sp}: more h written {x}")); } cur = Some((av, 2.0 * av + c)); } None => { cur = None; } }
+                    continue;
+                }
+                if l.starts_with("Secant,") { cur = None; continue; }
+                if !decimal_typed && !l.contains('\u{2248}') {
+                    let cs: Vec<char> = l.chars().collect();
+                    if (1..cs.len().saturating_sub(1)).any(|k| cs[k] == '.' && cs[k - 1].is_ascii_digit() && cs[k + 1].is_ascii_digit()) { bad.push(format!("{place}={sp}: a decimal in an exact line: {l}")); }
+                }
+                let eq = l.strip_prefix("tangent ").map(|e| { cur = Some((av, 2.0 * av)); e }).unwrap_or(l);
+                if !(eq.starts_with("y ") && eq.contains(" = ")) { continue; }
+                let Some((x0, m)) = cur else { continue };
+                checked += 1;
+                let ok = holds(eq, "x", "y", x0, x0 * x0) == Some(true) && holds(eq, "x", "y", x0 + 1.0, x0 * x0 + m) == Some(true);
+                if !ok { bad.push(format!("{place}={sp}: {eq} (point {x0}, slope {m})")); }
+            }
+            if place == "h" && !saw_h { bad.push(format!("h={sp}: no secant written ({notes})")); }
+            if let Some(w) = lines.iter().find(|l| l.contains("= [") || l.trim_start().starts_with("\u{2248} (") || l.trim_start().starts_with("= (")) {
+                if let Some(den) = w.rsplit(")/").next().filter(|_| w.contains(")/")) {
+                    let den = den.split(' ').next().unwrap();
+                    if !back(den).is_some_and(|d| (d - hv).abs() <= 1e-9 * hv.abs().max(1e-300)) { bad.push(format!("{place}={sp}: worked denominator {den} is not {hv}")); }
+                }
+            }
+        }
+    }
+    println!("typed-number spellings: {}, equations checked: {checked}", table.len());
+    assert!(checked >= 600, "{checked}");
+    assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(50).cloned().collect::<Vec<_>>().join("\n"));
+}
