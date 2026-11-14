@@ -1,0 +1,95 @@
+//! Discrete sequences and finite series. Exact values are propagated, never inferred from floats.
+use super::{svg::{self, Doc}, *};
+pub const ID: &str = "sequences-series";
+pub fn defs() -> Vec<FigureDef> { vec![FigureDef { id: ID, subject: Subject::Math, title: "Sequences and series", blurb: "Discrete terms and partial sums, with formula and continuation tasks.", params, render }] }
+fn params() -> Vec<ParamDef> { vec![
+ ParamDef::choice("mode","Sequence", &["Arithmetic","Geometric","Explicit","Recursive"],"Arithmetic"),
+ ParamDef::text("first","First term","2"), ParamDef::text("difference","Common difference","1"), ParamDef::text("ratio","Common ratio","1/2"),
+ ParamDef::text("formula","Explicit f(n)","1/n"), ParamDef::text("recurrence","Recursive expression","a_(n-1)+a_(n-2)"), ParamDef::text("second","Second initial term","1"),
+ ParamDef::int("count","Number of terms",3,24,8), ParamDef::choice("start","First index", &["0","1"],"1"),
+ ParamDef::choice("display","Draw", &["Terms","Partial sums","Both"],"Terms"), ParamDef::choice("layout","Graphs", &["One grid","Two aligned graphs","Number line"],"One grid"),
+ ParamDef::bool("join","Join points",false), ParamDef::choice("marks","Term marks", &["Dots","Spikes"],"Dots"),
+ ParamDef::bool("point_values","Label point values",false), ParamDef::bool("terms","List terms",true), ParamDef::bool("sums","List partial sums",false),
+ ParamDef::bool("explicit","Write explicit formula",true), ParamDef::bool("recursive","Write recursive formula",false), ParamDef::bool("sum","Write series sum",false), ParamDef::bool("convergence","Write convergence",false),
+ ParamDef::bool("limit","Draw limit line",false), ParamDef::bool("band","Epsilon band",false), ParamDef::text("epsilon","Epsilon","1/4"),
+ ParamDef::float("from","Vertical axis: From",-100.0,99.0,1.0,-2.0), ParamDef::float("to","Vertical axis: To",-99.0,100.0,1.0,12.0), ParamDef::float("step","Vertical axis: Count by",0.25,20.0,0.25,2.0),
+ ParamDef::choice("grid","Gridlines", &["None","Light","Standard","Bold"],"Light"), ParamDef::text("xlabel","Index axis label","n"), ParamDef::text("ylabel","Value axis label","aₙ"),
+ ParamDef::text("title","Title","Sequences and series"), ParamDef::bool("blank_title","Blank title",false),
+ ParamDef::choice("task","Student task", &["Find formula","Missing terms","Continue"],"Find formula"), ParamDef::text("missing","Indices to blank","5,7"), ParamDef::int("given","Terms given",1,6,3),
+ answers_param(), svg::style_param(), svg::label_size_param(), ] }
+// Reduced checked rationals. Overflow drops exactness, never guesses a fraction.
+#[derive(Clone, Copy, Debug)]
+struct N { v:f64, q:Option<(i128,i128)>, dec:bool }
+fn rat(a:i128,b:i128)->Option<(i128,i128)> { if b==0 {return None} let (mut x,mut y)=(a.checked_abs()?,b.checked_abs()?); while y!=0 {(x,y)=(y,x%y)} let g=x.max(1); Some((a.checked_div(g)?.checked_mul(b.signum())?,b.checked_abs()?/g)) }
+impl N {
+ fn int(n:i128)->Self { Self {v:n as f64,q:Some((n,1)),dec:false} }
+ fn op(self,b:Self,c:char)->Self { let q=(|| {let (a,d)=self.q?;let(e,f)=b.q?; match c {'+'=>rat(a.checked_mul(f)?.checked_add(e.checked_mul(d)?)?,d.checked_mul(f)?), '-'=>rat(a.checked_mul(f)?.checked_sub(e.checked_mul(d)?)?,d.checked_mul(f)?), '*'=>rat(a.checked_mul(e)?,d.checked_mul(f)?), '/'=>rat(a.checked_mul(f)?,d.checked_mul(e)?), '^'=> {if f!=1 || e.abs()>128 {return None} let k=e.unsigned_abs() as u32; if e<0 {rat(d.checked_pow(k)?,a.checked_pow(k)?)} else {rat(a.checked_pow(k)?,d.checked_pow(k)?)}}, _=>None} })(); Self {v:match c {'+'=>self.v+b.v,'-'=>self.v-b.v,'*'=>self.v*b.v,'/'=>self.v/b.v,_=>self.v.powf(b.v)},q,dec:self.dec||b.dec} }
+ fn text(self)->String {if let Some((a,b))=self.q {if !self.dec {return if b==1 {a.to_string()} else {format!("{a}/{b}")}}} format!("≈ {}",self.v) }
+ fn eq(self)->String {if self.q.is_some() && !self.dec {format!("= {}",self.text())} else {self.text()} }
+}
+// Exact parser for arithmetic and recurrence expressions; transcendental functions use the existing reader.
+struct P<'a> {s:&'a [u8],i:usize,n:N,a:N,b:N}
+impl P<'_> {
+ fn ws(&mut self){while self.i<self.s.len()&&self.s[self.i].is_ascii_whitespace(){self.i+=1}}
+ fn eat(&mut self,c:u8)->bool{self.ws();if self.s.get(self.i)==Some(&c){self.i+=1;true}else{false}}
+ fn expr(&mut self)->Option<N>{let mut a=self.term()?;loop {if self.eat(b'+'){a=a.op(self.term()?,'+')}else if self.eat(b'-'){a=a.op(self.term()?,'-')}else{return Some(a)}}}
+ fn term(&mut self)->Option<N>{let mut a=self.unary()?;loop{if self.eat(b'*'){a=a.op(self.unary()?,'*')}else if self.eat(b'/'){a=a.op(self.unary()?,'/')}else{return Some(a)}}}
+ fn unary(&mut self)->Option<N>{if self.eat(b'-'){return Some(N::int(0).op(self.unary()?,'-'))}if self.eat(b'+'){return self.unary()}let a=self.atom()?;if self.eat(b'^'){Some(a.op(self.unary()?,'^'))}else{Some(a)}}
+ fn atom(&mut self)->Option<N>{self.ws();if self.eat(b'('){let a=self.expr()?;return if self.eat(b')'){Some(a)}else{None}}for (name,v) in [("n",self.n),("u",self.a),("v",self.b)] {if self.s.get(self.i..self.i+name.len())==Some(name.as_bytes()){self.i+=name.len();return Some(v)}}let start=self.i;while self.s.get(self.i).is_some_and(|c|c.is_ascii_digit()||*c==b'.'){self.i+=1}if self.s.get(self.i).is_some_and(|c|*c==b'e'||*c==b'E'){self.i+=1;if self.s.get(self.i).is_some_and(|c|*c==b'+'||*c==b'-'){self.i+=1}while self.s.get(self.i).is_some_and(u8::is_ascii_digit){self.i+=1}}
+ let t=std::str::from_utf8(&self.s[start..self.i]).ok()?;let v=t.parse::<f64>().ok()?;let dec=t.contains('.')||t.contains('e')||t.contains('E');let q=if dec {None}else{t.parse::<i128>().ok().map(|a|(a,1))};Some(N{v,q,dec})}
+}
+fn read(s:&str,n:N,a:N,b:N)->Option<N>{if s.len()>256{return None}let s=s.replace("a_(n-1)","u").replace("a_(n-2)","v").replace('−',"-");let mut p=P{s:s.as_bytes(),i:0,n,a,b};if let Some(v)=p.expr(){p.ws();if p.i==p.s.len()&&v.v.is_finite(){return Some(v)}}
+ let mut exp=String::new(); let chars:Vec<char>=s.chars().collect();let mut i=0;while i<chars.len(){if chars[i].is_ascii_alphabetic(){let begin=i;while i<chars.len()&&chars[i].is_ascii_alphabetic(){i+=1}let token: String=chars[begin..i].iter().collect();exp.push_str(&match token.as_str(){"n"=>"x".into(),"u"=>format!("({})",a.v),"v"=>format!("({})",b.v),_=>token});}else{exp.push(chars[i]);i+=1}} super::math::eval(&exp,n.v).filter(|v|v.is_finite()).map(|v|N{v,q:None,dec:true})}
+
+struct Data {a:Vec<N>,s:Vec<N>, first:N, k:N}
+fn data(p:&Params)->Result<Data,String>{let mode=p.s("mode");let first=if mode=="Explicit"{N::int(0)}else{number(p.s("first")).ok_or("First term is not a valid number")?};let k=match mode {"Arithmetic"=>number(p.s("difference")),"Geometric"=>number(p.s("ratio")),_=>Some(N::int(0))}.ok_or("Enter a valid difference or ratio")?;
+ let start=if p.s("start")=="0"{0}else{1};let mut a:Vec<N>=vec![];let mut sums=vec![];let mut total=N::int(0);
+ for j in 0..p.i("count").clamp(3,24) {let n=N::int((j+start) as i128);let x=match mode {"Explicit"=>read(p.s("formula"),n,N::int(0),N::int(0)),"Recursive"=>if j==0{Some(first)}else if j==1 {number(p.s("second"))}else{read(p.s("recurrence"),n,a[j as usize-1],a[j as usize-2])},"Geometric"=>Some(first.op(k.op(N::int(j as i128),'^'),'*')),_=>Some(first.op(k.op(N::int(j as i128),'*'),'+'))}.ok_or(format!("Cannot evaluate term at index {}. Check the expression and its domain.",j+start))?;
+ if x.v.abs()>1e9{return Err("A term is too large to draw; use fewer terms or a smaller value.".into())}total=total.op(x,'+');a.push(x);sums.push(total); }Ok(Data{a,s:sums,first,k})}
+fn limits(p:&Params,d:&Data)->(Option<N>,Option<N>,String){let zero=N::int(0);match p.s("mode") {"Arithmetic"=>if d.k.v==0.0 {(Some(d.first),if d.first.v==0.0{Some(zero)}else{None},"constant".into())}else{(None,None,"diverges".into())},"Geometric"=>if d.first.v==0.0 {(Some(zero),Some(zero),"converges".into())}else if d.k.v.abs()<1.0{(Some(zero),Some(d.first.op(N::int(1).op(d.k,'-'),'/')),"converges".into())}else if d.k.v==1.0{(Some(d.first),None,"constant; series diverges".into())}else{(None,None,"diverges".into())},"Explicit" if matches!(p.s("formula").replace(' ',"").as_str(),"1/n"|"1/(n+1)"|"(-1)^n/n") => (Some(zero),None,"converges".into()),_ => (None,None,"cannot determine from this formula".into())}}
+pub fn relevant(key:&str,p:&Params)->bool{match key {"first"=>p.s("mode")!="Explicit","difference"=>p.s("mode")=="Arithmetic","ratio"=>p.s("mode")=="Geometric","formula"=>p.s("mode")=="Explicit","recurrence"|"second"=>p.s("mode")=="Recursive","display"=>p.s("layout")!="Two aligned graphs","grid"|"step"=>p.s("layout")!="Number line","epsilon"=>p.b("band")&&p.b("limit"),"band"=>p.b("limit"),"missing"=>p.s("task")=="Missing terms","given"=>p.s("task")=="Continue",_=>true}}
+fn missing(p:&Params)->Vec<i64>{p.s("missing").split(',').filter_map(|s|s.trim().parse().ok()).collect()}
+fn hidden(p:&Params,j:usize)->bool{!p.b(SHOW_ANSWERS)&& match p.s("task"){"Missing terms"=>missing(p).contains(&(j as i64+if p.s("start")=="0"{0}else{1})),"Continue"=>j>=p.i("given").clamp(1,6) as usize,_=>false}}
+pub fn warnings(p:&Params)->Vec<String>{let mut w=vec![];if p.f("to")<=p.f("from"){w.push("Vertical To must be greater than From.".into())}match data(p){Err(e)=>w.push(e),Ok(d)=>{if d.a.iter().chain(if p.s("display")!="Terms"{d.s.iter()}else{d.a.iter()}).any(|x|x.v<p.f("from")||x.v>p.f("to")){w.push("Some terms or sums lie beyond the vertical window; change From and To.".into())}if p.b("limit") {let(l,s,_)=limits(p,&d);if (if p.s("display")=="Partial sums"{s}else{l}).is_none(){w.push("The limit cannot be established for this sequence or series; no limit line is drawn.".into())}}}}
+ if p.b("limit")&&p.b("band")&&number(p.s("epsilon")).is_none_or(|x|x.v<=0.0){w.push("Epsilon must be a positive number.".into())}for k in ["xlabel","ylabel","title"]{if p.s(k).chars().count()>48{w.push(format!("Shorten {k} to at most 48 characters."))}}w}
+fn coefficient(p:&Params,key:&str)->String { let t=p.s(key); match number(t) {Some(n) if n.q.is_some() && !n.dec => n.text(),Some(n) if t.parse::<f64>().is_ok()=>n.v.to_string(),_=>fmt_formula(t)} }
+fn fmt_formula(s:&str)->String{super::math::pretty(s)}
+fn render(p:&Params)->String {
+ let Ok(d)=data(p)else {let mut doc=Doc::new(650.0,100.0);doc.describe("Sequences and series","Invalid input; see the editor note");doc.text(25.0,50.0,16.0,"start","Check the sequence inputs; see the editor note.");return doc.finish()};
+ let ans=p.b(SHOW_ANSWERS);let start=if p.s("start")=="0"{0}else{1};let count=d.a.len();let fs=14.0*svg::label_factor(p.s("label_size"));let width=(count as f64*100.0+160.0).max(900.0);let left=85.0;let right=width-85.0;
+ let px=|j:usize|left+35.0+j as f64*(right-left-70.0)/(count-1) as f64;
+ let (lo,hi)=(p.f("from"),p.f("to"));if hi<=lo {let mut doc=Doc::new(650.0,90.0);doc.text(25.0,45.0,16.0,"start","Vertical To must exceed From.");return doc.finish()}
+ let split=p.s("layout")=="Two aligned graphs";let numberline=p.s("layout")=="Number line";let plot_bottom=if split{760.0}else{420.0};
+ let mut rows=vec![];let(lim,slim,state)=limits(p,&d);let idx=format!("{start}");
+ let formula=match p.s("mode"){"Arithmetic"=>format!("aₙ = ({}) + (n − {idx}) × ({})",coefficient(p,"first"),coefficient(p,"difference")),"Geometric"=>format!("aₙ = ({}) × ({})^(n − {idx})",coefficient(p,"first"),coefficient(p,"ratio")),"Explicit"=>format!("aₙ = {}",fmt_formula(p.s("formula"))),_=>"Explicit formula: cannot determine".into()};
+ if p.b("explicit"){rows.push(if ans{formula.clone()}else{"Formula: ________________________".into()})}
+ if p.b("recursive") {rows.push(if !ans{"Recurrence: ________________________".into()}else{match p.s("mode"){"Arithmetic"=>format!("aₙ = aₙ₋₁ + ({}); a{idx} {}",coefficient(p,"difference"),d.first.eq()),"Geometric"=>format!("aₙ = aₙ₋₁ × ({}); a{idx} {}",coefficient(p,"ratio"),d.first.eq()),"Recursive"=>format!("aₙ = {}; initial terms {}, {}",fmt_formula(p.s("recurrence")),d.a[0].text(),d.a[1].text()),_=>"Recurrence: cannot determine".into()}})}
+ if p.b("sum"){rows.push(if ans{format!("Sum of {count} terms {}",d.s[count-1].eq())}else{"Sum of terms = __________".into()});if p.s("mode")=="Geometric"{rows.push(if ans {slim.map(|l|format!("Sum to infinity {}",l.eq())).unwrap_or("Series diverges".into())}else{"Sum to infinity: __________".into()})}}
+ if p.b("convergence"){rows.push(if ans{format!("Sequence: {state}; limit {}",lim.map(N::eq).unwrap_or("cannot determine a finite limit".into()))}else{"Convergence and limit: ________________________".into()})}
+ if p.b("terms")||p.b("sums")||p.s("task")=="Missing terms" {for j in 0..count {let hide=hidden(p,j);let term=if hide {"= _____".into()}else{d.a[j].eq()};let sum=if !ans&&p.s("task")!="Find formula"{"= _____".into()}else{d.s[j].eq()};let mut row=String::new();if p.b("terms")||p.s("task")=="Missing terms"{row.push_str(&format!("a{} {term}",j+start))}if p.b("sums"){row.push_str(&format!("     S{} {sum}",j+start))}rows.push(row)}}
+ let height=plot_bottom+75.0+rows.len() as f64*fs*1.9;let mut doc=Doc::new(width,height);doc.describe("Sequences and series","Discrete points and worksheet prompts");
+ let fills=svg::Fills::new(p);doc.defs(&fills.defs());let colors=[fills.line(0),fills.line(1)];
+ doc.text(left,35.0,fs*1.2,"start",if p.b("blank_title")||!ans{"________________________________"}else{p.s("title")});
+ let graphs=if split{2}else{1};for g in 0..graphs {let top=100.0+g as f64*340.0;let bottom=top+250.0;let py=|v:f64|bottom-(v-lo)/(hi-lo)*250.0;
+ let nlx=|v:f64|left+(v-lo)/(hi-lo)*(right-left);let valid=|v:f64|v>=lo&&v<=hi;
+ if !numberline {let sw=match p.s("grid"){"None"=>0.0,"Light"=>0.5,"Bold"=>1.6,_=>1.0};if sw>0.0 {for j in 0..count{doc.line(px(j),top,px(j),bottom,"#cccccc",sw);}for k in 0..=400 {let v=lo+k as f64*p.f("step").max(0.25);if v>hi{break}doc.line(left,py(v),right,py(v),"#cccccc",sw);}}
+ doc.arrow(left,bottom+5.0,right+15.0,bottom+5.0,"#333333",1.3);doc.arrow(left,bottom+5.0,left,top-15.0,"#333333",1.3);
+ // Numbers have a dedicated gutter and row, away from every data label.
+ for j in 0..count {doc.text(px(j),bottom+30.0,fs,"middle",&(j+start).to_string());}for k in 0..=400 {let v=lo+k as f64*p.f("step").max(0.25);if v>hi{break}if p.f("step")/(hi-lo)*250.0>=fs*1.5{doc.text(left-10.0,py(v)+4.0,fs,"end",&format!("{v}"));}}
+ doc.text(right+20.0,bottom+10.0,fs,"start",p.s("xlabel"));doc.text(left,top-30.0,fs,"start",if split&&g==1{"Sₙ"}else{p.s("ylabel")});
+ }else{doc.arrow(left,bottom,right+15.0,bottom,"#333333",1.5);doc.text(left,bottom+30.0,fs,"start",&format!("{lo}"));doc.text(right,bottom+30.0,fs,"end",&format!("{hi}"));doc.text(right+20.0,bottom+5.0,fs,"start",p.s("ylabel"));doc.text(left,top-30.0,fs,"start",p.s("xlabel"));}
+ let which:Vec<usize>=if split{vec![g]}else{match p.s("display"){"Partial sums"=>vec![1],"Both"=>vec![0,1],_=>vec![0]}};
+ for series in which {let vals=if series==0{&d.a}else{&d.s};let color=colors[series];doc.raw(&format!(r#"<g data-series="{series}" stroke-dasharray="{}">"#,if series==1{"5 3"}else{"none"}));
+ if ans&&p.b("limit") {if let Some(l)=if series==0{lim}else{slim} {if valid(l.v){if numberline{doc.line(nlx(l.v),top,nlx(l.v),bottom,"#555555",1.5);}else{if p.b("band"){if let Some(e)=number(p.s("epsilon")).filter(|e|e.v>0.0){let a=(l.v-e.v).max(lo);let b=(l.v+e.v).min(hi);doc.rect(left,py(b),right-left,py(a)-py(b),"#eeeeee","none",0.0);}}doc.line(left,py(l.v),right,py(l.v),"#555555",1.5);doc.text(right,top-8.0-series as f64*fs*1.5,fs,"end",&format!("{} limit {}",if series==0{"Term"}else{"Sum"},l.eq()));}}}}
+ let mut prev=None;for (j,v) in vals.iter().enumerate(){if hidden(p,j)||(!ans&&p.s("task")!="Find formula"&&series==1)||!valid(v.v){prev=None;continue}let(x,y)=if numberline{(nlx(v.v),bottom-20.0-j as f64*7.0)}else{(px(j),py(v.v))};if p.b("join"){if let Some((a,b))=prev{doc.line(a,b,x,y,color,0.8);}}if p.s("marks")=="Spikes" {doc.line(x,if numberline{bottom}else{py(0.0f64.clamp(lo,hi))},x,y,color,1.5);}if series==0{doc.circle(x,y,3.5,color,color,1.0);}else{doc.rect(x-3.5,y-3.5,7.0,7.0,"#ffffff",color,1.5);}if p.b("point_values")&&!numberline{doc.raw(&format!(r#"<text x="{x}" y="{}" font-size="{fs}" text-anchor="middle" fill="{color}" stroke="#ffffff" stroke-width="4" paint-order="stroke">{}</text>"#,y-12.0,svg::esc(&v.text())));}prev=Some((x,y));}doc.raw("</g>");}
+ }
+ for(i,row)in rows.iter().enumerate(){// powers in generated equations are typeset with tspan; other expressions use the shared pretty reader.
+ let escaped=svg::esc(row);let text=if let Some(k)=escaped.find("^("){if escaped.ends_with(')'){format!("{}<tspan baseline-shift=\"super\" font-size=\"70%\">{}</tspan>",&escaped[..k],&escaped[k+2..escaped.len()-1])}else{escaped}}else{escaped};doc.raw(&format!(r#"<text x="{left}" y="{}" font-size="{fs}" font-family="sans-serif">{text}</text>"#,plot_bottom+50.0+i as f64*fs*1.9));}
+ doc.finish()
+}
+pub fn handles(p:&Params)->Vec<interact::Handle>{if !matches!(p.s("mode"),"Arithmetic"|"Geometric")||p.s("layout")!="One grid"||p.s("display")=="Partial sums"{return vec![]}let Ok(d)=data(p)else{return vec![]};let count=d.a.len();let width=(count as f64*100.0+160.0).max(900.0);let px=|j:usize|120.0+j as f64*(width-240.0)/(count-1)as f64;let(lo,hi)=(p.f("from"),p.f("to"));if hi<=lo{return vec![]}let py=|v:f64|350.0-(v-lo)/(hi-lo)*250.0;let mut out=vec![];for j in [0,1,count-1]{if hidden(p,j)||d.a[j].v<lo||d.a[j].v>hi{continue}let original=d.a[j].v;let mode=p.s("mode").to_string();let first=d.first.v;let spacing=(width-240.0)/(count-1)as f64;let tip=match j{0=>"Drag the first term up or down to change the first value",1=>"Drag the second term up or down to change the difference or ratio",_=>"Drag the last term left or right to change the number of terms"};out.push(interact::Handle::knob((px(j),py(d.a[j].v)),tip,move |p,pt|{if j==count-1{p.set_i("count",(((pt.0-120.0)/spacing).round()as i64+1).clamp(3,24));return}let v=(lo+(350.0-pt.1)/250.0*(hi-lo)).clamp(lo,hi);let key=if j==0{"first"}else if mode=="Geometric"{"ratio"}else{"difference"};let v=if j==0{v}else if mode=="Geometric"{if first==0.0{return}v/first}else{v-first};if (pt.1-py_value(original,lo,hi)).abs()<1e-8{return}p.set_s(key,&format!("{}",(v*1000.0).round()/1000.0));}));}out}
+fn py_value(v:f64,lo:f64,hi:f64)->f64{350.0-(v-lo)/(hi-lo)*250.0}
+pub fn examples(id:&str)->Option<Vec<Example>>{if id!=ID{return None}let s=|k,v:&str|(k,Value::S(v.into()));Some(vec![
+ Example{name:"Arithmetic",params:vec![s("mode","Arithmetic")]},Example{name:"Geometric halving",params:vec![s("mode","Geometric"),s("first","8"),s("ratio","1/2")]},Example{name:"Alternating halves",params:vec![s("mode","Geometric"),s("ratio","-1/2")]},Example{name:"Fibonacci",params:vec![s("mode","Recursive"),s("first","1"),s("second","1"),("to",Value::F(25.0))]},Example{name:"Reciprocals",params:vec![s("mode","Explicit"),s("formula","1/n")]},Example{name:"Geometric partial sums",params:vec![s("mode","Geometric"),s("first","1"),s("display","Partial sums"),("limit",Value::B(true))]},])}
+#[cfg(test)]
+#[path="sequences_tests.rs"] mod tests;

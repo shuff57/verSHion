@@ -89,6 +89,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "fraction-models" => FRACTION_MODELS,
         "triangle-centres" => TRIANGLE_CENTRES,
         "slope-triangle" => SLOPE_TRIANGLE,
+        "sequences-series" => SEQUENCES_SERIES,
         "protractor" => PROTRACTOR,
         "base-ten-blocks" => BASE_TEN_BLOCKS,
         "solid-net" => SOLID_NET,
@@ -4560,3 +4561,5 @@ const OSMOSIS: &[Faq] = &[
         a: "Each solute is drawn as particles in proportion to its concentration, as crowded as the number says; the key states how much one particle stands for (0.25 %, 0.05 M or 50 mM). Water appears as small discs filling the room the solutes leave. When water moves, the solute particles stay, so a cell that loses water has its solute more crowded. In the beaker and U-tube the level rises on the more concentrated side by an amount that grows with the difference. Shuffle particles picks a new layout without changing the science.",
     },
 ];
+
+const SEQUENCES_SERIES: &[Faq] = &[Faq {q:"How do I enter a recurrence?",a:"Use n, a_(n-1), and a_(n-2), with two initial terms. Indices may begin at zero or one."},Faq {q:"Which limits can the key establish?",a:"Arithmetic and geometric limits are derived from their parameters. Selected reciprocal formulas have established limits; other explicit or recursive formulas say cannot determine."},Faq {q:"How do student tasks work?",a:"Choose Find formula, Missing terms, or Continue, then turn Show answers off. Hidden terms and their sums are removed from the graph and list."}];
