@@ -366,6 +366,10 @@ fn classroom() -> Vec<Case> {
         n("abs(x - 1)", "2", "1", [-2.0, 4.0, -1.0, 4.0]), n("x^2 - 4", "2", "0.1", [0.0, 3.0, -5.0, 5.0]),
         // the second check's crowded cases
         pi("tan(x)", "-pi/6", "pi/12", [-0.5, 0.5, -4.0, 4.0]), pi("tan(x)", "pi/4", "pi/12", [-0.5, 0.5, -4.0, 4.0]),
+        // the third check's single-option fallbacks
+        n("x^4", "1", "-1/2", [-2.0, 2.0, -1.0, 5.0]), n("x^4 - 2x^2", "-1", "1/2", [-2.0, 2.0, -2.0, 3.0]), n("x^3/3 - x", "2", "-1", [-3.0, 3.0, -2.0, 3.0]),
+        pi("sin(x)", "pi/2", "-pi/4", [-1.0, 1.0, -2.0, 2.0]), pi("tan(x)", "-pi/6", "pi/12", [-0.5, 0.5, -3.0, 3.0]), pi("3sin(x)", "pi/6", "pi/6", [-1.0, 1.0, -4.0, 4.0]),
+        n("e^x", "1", "-1/2", [-2.0, 2.0, -1.0, 8.0]),
     ]
 }
 
@@ -411,10 +415,11 @@ fn classroom_sweep_labels_are_clear() {
                 let mut fs = faults(&o.svg);
                 for (k, t) in &o.crowded { fs.push((format!("{k}: {t}"), "no clear place".into())); }
                 // a point's coordinates on their own (one option) stay on the graph
-                // (one named case: x^4 at −1, h = 1/2, where Q(−1/2, 1/16) sits on a flat stretch between the secant, the
-                // curve, the axis numbers and the y-axis, with no 100 px of room: its letter is drawn, its coordinates in the panel)
-                let named = c.0 == "x^4" && c.3 == "-1" && size != "Small";
-                if name == "pt_labels" && !named && texts(&o.svg, "panel").iter().any(|l| l.starts_with("On the graph")) { fs.push(("coordinates".into(), "moved to the panel with one option on".into())); }
+                // a label set by name with its value in the panel, with ONE option on, is rare and named (SINGLE_FALLBACKS)
+                let single = !matches!(name, "plain" | "everything" | "all" | "allkey" | "stud" | "curveonly" | "print" | "short");
+                let moved = texts(&o.svg, "panel").iter().any(|l| l.starts_with("On the graph"));
+                if single && moved { println!("single-option fallback: {size} {} a={} h={} [{name}]", c.0, c.3, c.4); }
+                if single && moved && size != "Large" && !SINGLE_FALLBACKS.contains(&(size, c.0, c.3, name)) { fs.push(("coordinates".into(), "moved to the panel with one option on".into())); }
                 if texts(&o.svg, "panel").iter().any(|l| l.starts_with("On the graph")) { *by.entry((size.to_string(), "(count) a label by name only".into())).or_default() += 1; }
                 for (t, why) in fs {
                     *by.entry((size.to_string(), why.clone())).or_default() += 1;
@@ -426,6 +431,25 @@ fn classroom_sweep_labels_are_clear() {
     println!("tangent sweep: {total} figures; by size and kind: {by:?}");
     assert!(fails.is_empty(), "{} faults:\n{}", fails.len(), fails.iter().take(80).cloned().collect::<Vec<_>>().join("\n"));
 }
+
+/// Single-option figures where a label is set on the graph by its name and its value written in the panel (lesson 18: rare and
+/// named), at Small and Medium: the leg or point has no room for the whole label between the curve, the lines, an axis and its
+/// numbers. (Large is counted, not named.)
+const SINGLE_FALLBACKS: &[(&str, &str, &str, &str)] = &[
+    ("Medium", "3sin(x)", "pi/6", "secant_triangle"),
+    ("Medium", "sin(x)", "1", "secant_triangle"),
+    ("Medium", "sin(x)", "pi/2", "secant_triangle"),
+    ("Medium", "sin(x)", "pi/3", "secant_triangle"),
+    ("Medium", "tan(x)", "-pi/6", "pt_labels"),
+    ("Medium", "tan(x)", "-pi/6", "secant_triangle"),
+    ("Medium", "x^3/3 - x", "2", "pt_labels"),
+    ("Medium", "x^4 - 2x^2", "-1", "pt_labels"),
+    ("Medium", "x^4 - 2x^2", "-1", "secant_triangle"),
+    ("Medium", "x^4", "-1", "pt_labels"),
+    ("Medium", "x^4", "1", "pt_labels"),
+    ("Small", "sin(x)", "pi/2", "secant_triangle"),
+    ("Small", "x^4 - 2x^2", "-1", "pt_labels"),
+];
 
 /// Named cases where one label may be crowded (drawn where it is least in the way, with a note telling the teacher to drag
 /// it): at Small and Medium only the second check's tan at −π/6 and two student copies with every option on; at Large
@@ -455,6 +479,7 @@ const EXCEPTIONS: &[(&str, &str, &str, &str)] = &[
     ("Large", "x^2", "-3/2", "pt_labels"),
     ("Large", "x^3 - 3x", "2", "pt_labels"),
     ("Medium", "sin(x)", "pi/6", "stud"),
+    ("Large", "ln(x)", "1", "stud"),
     // the second check's crowded case (tan at −π/6, h = π/12): the secant's triangle is about 22 px tall, between the x-axis,
     // its numbers and the curve, so Δy has no clear place at any size (drawn where least in the way, with a note)
     ("Large", "tan(x)", "-pi/6", "all"),

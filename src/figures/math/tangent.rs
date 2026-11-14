@@ -1132,22 +1132,41 @@ pub(super) fn build(p0: &Params) -> Out {
             }
             _ => None,
         };
+        let mut sec_legs: Option<((Pt, Pt), (Pt, Pt))> = None;
         if let (true, Some(s), Some(pp)) = (draw_secant && p.b("secant_triangle"), m.secants.first(), p_px) {
             let c = (sx(t.a + s.h), pp.1);
             if q_px.is_some_and(|qq| (qq.1 - pp.1).abs() < 1.0) {
                 notes.push("The secant is horizontal (\u{394}y = 0), so its slope triangle has no rise".into());
             } else if let Some(qq) = q_px {
-                over += &leg_svg(pp, c, tri_col, "run");
-                over += &leg_svg(c, qq, tri_col, "rise");
-                sc.segs.push((pp, c));
-                sc.segs.push((c, qq));
                 let rise = s.ctx.make(ex_sub(&s.fb, &t.fan), s.fb.v - t.fan.v);
                 let rise_t = if answers { format!("\u{394}{} {} {}", m.dep, if rise.exact { "=" } else { "\u{2248}" }, rise.s) } else { format!("\u{394}{}", m.dep) };
                 let run_t = format!("{} = {}", m.step, s.hn.s);
-                let below = if qq.1 < pp.1 { 1.0 } else { -1.0 };
-                let away = if qq.0 > pp.0 { 1.0 } else { -1.0 };
-                reqs.push(Req { id: "run", kind: "secant run", text: run_t, anchor: ((pp.0 + c.0) / 2.0, pp.1), prefs: vec![(0.0, below)], size, along: along(pp, c), short: Some(m.step.clone()), full: String::new(), own: Own::Leg(pp, c) });
-                reqs.push(Req { id: "rise", kind: "secant rise", text: rise_t, anchor: (c.0, (c.1 + qq.1) / 2.0), prefs: vec![(away, 0.0)], size, along: along(c, qq), short: answers.then(|| format!("\u{394}{}", m.dep)), full: String::new(), own: Own::Leg(c, qq) });
+                let leg_reqs = |run: (Pt, Pt), up: (Pt, Pt)| -> [Req; 2] {
+                    // the run's label away from the rise, the rise's label away from the run
+                    let other_y = if (up.0 .1 - run.0 .1).abs() < 0.5 { up.1 .1 } else { up.0 .1 };
+                    let below = if other_y < run.0 .1 { 1.0 } else { -1.0 };
+                    let away = if (run.0 .0 + run.1 .0) / 2.0 < up.0 .0 { 1.0 } else { -1.0 };
+                    [Req { id: "run", kind: "secant run", text: run_t.clone(), anchor: ((run.0 .0 + run.1 .0) / 2.0, run.0 .1), prefs: vec![(0.0, below)], size, along: along(run.0, run.1), short: Some(m.step.clone()), full: String::new(), own: Own::Leg(run.0, run.1) },
+                     Req { id: "rise", kind: "secant rise", text: rise_t.clone(), anchor: (up.0 .0, (up.0 .1 + up.1 .1) / 2.0), prefs: vec![(away, 0.0)], size, along: along(up.0, up.1), short: answers.then(|| format!("\u{394}{}", m.dep)), full: String::new(), own: Own::Leg(up.0, up.1) }]
+                };
+                // the corner under Q (from P along, then up to Q) or under P (from Q along, then up to P): the first where both
+                // labels fit beside their legs, tried with P's and Q's labels in place
+                let cands = [((pp, c), (c, qq)), ((qq, (pp.0, qq.1)), ((pp.0, qq.1), pp))];
+                let fits = |run: (Pt, Pt), up: (Pt, Pt)| {
+                    let mut trial = sc.clone();
+                    trial.segs.extend([run, up]);
+                    trial.dots.extend([pp, qq]);
+                    let (mut cr, mut tp) = (vec![], vec![]);
+                    for r in point_reqs(q_px) { place(&mut trial, &r, &mut cr, &mut tp); }
+                    leg_reqs(run, up).iter().all(|r| place_one(&mut trial, r, &r.text, false).is_some())
+                };
+                let (run, up) = cands.iter().copied().find(|(r, u)| fits(*r, *u)).unwrap_or(cands[0]);
+                over += &leg_svg(run.0, run.1, tri_col, "run");
+                over += &leg_svg(up.0, up.1, tri_col, "rise");
+                sc.segs.push(run);
+                sc.segs.push(up);
+                sec_legs = Some((run, up));
+                reqs.extend(leg_reqs(run, up));
             } else { notes.push("The secant's slope triangle needs Q inside the window".into()); }
         }
         if let (true, Slope::Finite(..), Some(mn), Some(_)) = (draw_tangent && p.b("tangent_triangle"), &t.slope, t.m.as_ref(), p_px) {
@@ -1179,9 +1198,8 @@ pub(super) fn build(p0: &Params) -> Out {
                     // keep 14 px from the secant's triangle and from the h mark's band (its arrow and drop lines), so each
                     // label has room beside its own leg
                     let mut keep_off: Vec<Bx> = vec![];
-                    if let (true, Some(pp), Some(qq)) = (sec_tri, p_px, q_px) {
-                        let c2 = (qq.0, pp.1);
-                        for (a, b) in [(pp, c2), (c2, qq)] { keep_off.push((a.0.min(b.0) - 14.0, a.1.min(b.1) - 14.0, a.0.max(b.0) + 14.0, a.1.max(b.1) + 14.0)); }
+                    if let (true, Some((l1, l2))) = (sec_tri, sec_legs) {
+                        for (a, b) in [l1, l2] { keep_off.push((a.0.min(b.0) - 14.0, a.1.min(b.1) - 14.0, a.0.max(b.0) + 14.0, a.1.max(b.1) + 14.0)); }
                     }
                     if let (Some(y), Some(pp), Some(qq)) = (hm_y, p_px, q_px) {
                         keep_off.push((pp.0.min(qq.0) - 14.0, y - 28.0, pp.0.max(qq.0) + 14.0, y + 14.0));
