@@ -1634,8 +1634,8 @@ pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
                     let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));
                     let (k0, k1) = ((mn / PI - off).floor() as i128 - 1, (mx / PI - off).ceil() as i128 + 1);
                     if !unbounded && k1 - k0 > 400 { return numeric_zeros(e, lo, hi); }
-                    // (the 40 nearest k = 0 when there is no end to them)
-                    let mut ks: Vec<i128> = if unbounded { (-20..=20).map(|k: i128| k.clamp(k0, k1)).collect() } else { (k0..=k1).collect() };
+                    // (the 21 nearest k = 0 when there is no end to them)
+                    let mut ks: Vec<i128> = if unbounded { (-10..=10).map(|k: i128| k.clamp(k0, k1)).collect() } else { (k0..=k1).collect() };
                     ks.dedup();
                     let mut out = vec![];
                     let mut done = !unbounded;
@@ -1756,10 +1756,10 @@ fn solve_levels(u: &X, bases: &[K], period: K, lo: f64, hi: f64) -> Option<(Vec<
     let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));
     let pv = period.value();
     let (k0, k1) = ((mn / pv).floor() as i128 - 1, (mx / pv).ceil() as i128 + 1);
-    // (u unbounded on [lo, hi], as 1/x near 0: the 40 levels nearest 0 only, and the list is not complete)
-    // (more than 400 levels on a bounded stretch, as 1/x on 0.0003..0.003: the 40 nearest 0 likewise, exactly)
+    // (u unbounded on [lo, hi], as 1/x near 0: the 21 levels nearest 0 only, and the list is not complete)
+    // (more than 400 levels on a bounded stretch, as 1/x on 0.0003..0.003: the 21 nearest 0 likewise, exactly)
     let unbounded = unbounded(u, lo, hi) || (k1 - k0) * bases.len() as i128 > 400;
-    let ks: Vec<i128> = if unbounded { let mid = if k0 > 0 { k0 } else if k1 < 0 { k1 - 40 } else { -20 }; let mut v: Vec<i128> = (mid..=mid + 40).map(|k: i128| k.clamp(k0, k1)).collect(); v.dedup(); v } else { (k0..=k1).collect() };
+    let ks: Vec<i128> = if unbounded { let mid = if k0 > 0 { k0 } else if k1 < 0 { k1 - 20 } else { -10 }; let mut v: Vec<i128> = (mid..=mid + 20).map(|k: i128| k.clamp(k0, k1)).collect(); v.dedup(); v } else { (k0..=k1).collect() };
     let mut out: Vec<K> = vec![];
     let mut done = !unbounded;
     for b in bases {
