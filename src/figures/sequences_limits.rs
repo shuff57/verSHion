@@ -258,6 +258,34 @@ fn explicit(s: &str) -> (Option<N>, String) {
         "(-1)^n" | "sin(n)" | "cos(n)" => return (None, "diverges (oscillates)".into()),
         _ => (),
     }
+    for function in ["sin", "cos"] {
+        if let Some(inner) = s
+            .strip_prefix(&format!("{function}("))
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            if pi_coefficient(inner, N::int(1), N::int(0), N::int(0))
+                .and_then(|n| n.q)
+                .is_some()
+            {
+                if let Some(r) = rational(&inner.replace("pi", "1"), b'n') {
+                    if r.b.len() == 1 && r.a.len() <= 2 && r.a[0].q == Some((0, 1)) {
+                        let coefficient = r.a.get(1).copied().unwrap_or(N::int(0)).op(r.b[0], '/');
+                        if let Some((a, b)) = coefficient.q {
+                            if a == 0 || b == 1 {
+                                if function == "sin" {
+                                    return finite(N::int(0));
+                                }
+                                if a % 2 == 0 {
+                                    return finite(N::int(1));
+                                }
+                            }
+                            return (None, "diverges (periodic oscillation)".into());
+                        }
+                    }
+                }
+            }
+        }
+    }
     if let Some(base) = s.strip_suffix("^n").and_then(|b| number(peel(b))) {
         if base.q.is_some_and(|(a, b)| a == b) {
             return finite(N::int(1));
@@ -363,6 +391,9 @@ mod tests {
             ("(n^2+1)/(2n^2)", Some((1, 2)), "converges"),
             ("n^2", None, "diverges"),
             ("(-1)^n", None, "diverges"),
+            ("cos(n*pi)", None, "diverges"),
+            ("sin(n*pi/2)", None, "diverges"),
+            ("sin(n*pi)", Some((0, 1)), "converges"),
             ("(2/3)^n", Some((0, 1)), "converges"),
             ("n^(1/n)", Some((1, 1)), "converges"),
             ("sqrt(n+1)-sqrt(n)", Some((0, 1)), "converges"),

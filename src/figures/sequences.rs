@@ -823,6 +823,70 @@ fn number(s: &str) -> Option<N> {
         read(s, N::int(0), N::int(0), N::int(0))
     }
 }
+// Pair rational-angle trig terms by reflection identities, so complete periods sum exactly.
+// Keys represent the formal sin/cos of a reduced angle; no floating value is recognised.
+fn trig_sum(formula: &str, start: usize, count: usize) -> Option<N> {
+    let source = formula
+        .replace(' ', "")
+        .replace('π', "pi")
+        .replace("npi", "n*pi");
+    let (cos, inner) = if let Some(v) = source
+        .strip_prefix("sin(")
+        .and_then(|v| v.strip_suffix(')'))
+    {
+        (false, v)
+    } else if let Some(v) = source
+        .strip_prefix("cos(")
+        .and_then(|v| v.strip_suffix(')'))
+    {
+        (true, v)
+    } else {
+        return None;
+    };
+    let mut keys = std::collections::BTreeMap::<(i128, i128), i128>::new();
+    let mut rational = N::int(0);
+    for j in 0..count {
+        let n = N::int((start + j) as i128);
+        let angle = pi_coefficient(inner, n, N::int(0), N::int(0))?;
+        let (num, den) = angle.q?;
+        let value = read(formula, n, N::int(0), N::int(0))?;
+        if value.q.is_some() {
+            rational = rational.op(value, '+');
+            continue;
+        }
+        let period = den.checked_mul(2)?;
+        let mut r = num.rem_euclid(period);
+        let mut sign = 1;
+        if r > den {
+            r = period - r;
+            if !cos {
+                sign = -sign;
+            }
+        }
+        if r.checked_mul(2)? > den {
+            r = den - r;
+            if cos {
+                sign = -sign;
+            }
+        }
+        let key = rat(r, den)?;
+        *keys.entry(key).or_default() += sign;
+    }
+    keys.retain(|_, weight| *weight != 0);
+    if keys.is_empty() {
+        return Some(rational);
+    }
+    let mut value = rational.v;
+    for ((a, b), weight) in keys {
+        let angle = std::f64::consts::PI * (a as f64 / b as f64);
+        value += weight as f64 * if cos { angle.cos() } else { angle.sin() };
+    }
+    Some(N {
+        v: value,
+        q: None,
+        dec: true,
+    })
+}
 struct Data {
     a: Vec<N>,
     s: Vec<N>,
@@ -904,6 +968,11 @@ fn data(p: &Params) -> Result<Data, String> {
         } else {
             total.op(x, '+')
         };
+        if mode == "Explicit" {
+            if let Some(exact) = trig_sum(p.s("formula"), start as usize, j as usize + 1) {
+                total = exact;
+            }
+        }
         if !total.v.is_finite() || total.v.abs() > 1e9 {
             return Err(
                 "A partial sum cannot be displayed accurately; use fewer terms or less extreme values.".into(),

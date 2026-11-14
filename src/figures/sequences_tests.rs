@@ -917,6 +917,8 @@ fn sequences_student_toggle_exhaustion_r1() {
         "join",
         "terms",
         "band",
+        "sum_n",
+        "sigma",
     ];
     let mut count = 0;
     for mode in ["Arithmetic", "Geometric", "Explicit", "Recursive"] {
@@ -972,7 +974,7 @@ fn sequences_student_toggle_exhaustion_r1() {
             }
         }
     }
-    assert_eq!(count, 12288);
+    assert_eq!(count, 49152);
 }
 
 #[test]
@@ -1115,5 +1117,63 @@ fn sequences_numberline_and_axis_layout_r1() {
         assert!(!warnings(&p).is_empty());
         assert!(svg.contains("data-limit=\"true\""));
         assert!(svg.contains("stroke-dasharray=\"6 4\""));
+    }
+}
+
+#[test]
+fn sequences_trig_periods_r1() {
+    for formula in ["sin(n*pi/5)", "cos(n*pi/5)", "sin(n*pi/3)", "cos(n*pi/3)"] {
+        let mut p = Params::defaults(&params());
+        p.set_s("mode", "Explicit");
+        p.set_s("formula", formula);
+        p.set_i("count", if formula.contains("/5") { 10 } else { 6 });
+        let d = data(&p).unwrap();
+        assert_eq!(d.s.last().unwrap().q, Some((0, 1)), "{formula}");
+        p.set_i("sum_count", if formula.contains("/5") { 1000 } else { 996 });
+        assert_eq!(
+            series_math::total(&p, &d).unwrap().exact.as_deref(),
+            Some("0")
+        );
+    }
+}
+#[test]
+fn sequences_checker_point_label_cases_r1() {
+    let cases = [
+        ("Geometric", "sqrt(2)", "1/2", 8, 0.0, 2.0, 0.5),
+        ("Explicit", "(1+1/n)^n", "", 10, 0.0, 3.0, 0.5),
+        ("Explicit", "sin(n)", "", 8, -2.0, 2.0, 1.0),
+        ("Explicit", "exp(-n)", "", 8, 0.0, 1.0, 0.25),
+        ("Geometric", "2", "2/3", 24, 0.0, 3.0, 0.5),
+        ("Explicit", "1/n", "", 24, 0.0, 4.0, 1.0),
+        ("Explicit", "1/2^n", "", 8, 0.0, 1.0, 0.25),
+    ];
+    for (mode, first, k, count, lo, hi, step) in cases {
+        for size in ["Small", "Medium", "Large"] {
+            for layout in ["One grid", "Two aligned graphs"] {
+                let mut p = Params::defaults(&params());
+                p.set_s("mode", mode);
+                if mode == "Explicit" {
+                    p.set_s("formula", first);
+                } else {
+                    p.set_s("first", first);
+                    p.set_s("ratio", k);
+                }
+                p.set_i("count", count);
+                p.set_f("from", lo);
+                p.set_f("to", hi);
+                p.set_f("step", step);
+                p.set_s("label_size", size);
+                p.set_s("layout", layout);
+                p.set_b("point_values", true);
+                let d = data(&p).unwrap();
+                for g in 0..if layout == "One grid" { 1 } else { 2 } {
+                    let (labels, omitted) = point_labels(&p, &d, g);
+                    assert_eq!(omitted, 0, "{mode} {first} {size} {layout} {g}");
+                    for label in labels {
+                        assert!(label.rect.x0 >= 0.0);
+                    }
+                }
+            }
+        }
     }
 }

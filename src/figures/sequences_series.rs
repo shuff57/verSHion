@@ -114,6 +114,12 @@ pub(super) fn total(p: &Params, d: &Data) -> Result<Answer, String> {
                 last.push(v);
             }
             exact = bsum;
+            if p.s("mode") == "Explicit" {
+                if let Some(v) = trig_sum(p.s("formula"), start, count) {
+                    exact = big(v);
+                    sum = v;
+                }
+            }
             sum.v
         }
     };
