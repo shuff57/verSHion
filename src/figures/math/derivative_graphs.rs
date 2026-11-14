@@ -779,7 +779,10 @@ impl Model {
                 // stretch), and its sign between them evaluated exactly
                 if let Some(q) = srn.as_ref() {
                     if let Some(roots) = exact::roots_mult(&q.n) {
-                        let inside: Vec<&exact::Root> = roots.iter().filter(|z| z.x > l + tol && z.x < r - tol).collect();
+                        // (an exact root is inside unless it is the cut itself: x² + 10⁻¹⁰x's root at −5·10⁻¹¹ beside the cut at 0 is a
+                        // point of its own)
+                        let is_cut = |z: &exact::Root, c: f64, cv: &Pv| match (&z.ex, &cv.ex) { (Some(u), Some(w)) => u == w, _ => (z.x - c).abs() <= 1e-14 * (1.0 + c.abs()) };
+                        let inside: Vec<&exact::Root> = roots.iter().filter(|z| z.x > *l && z.x < *r && !is_cut(z, *l, lv) && !is_cut(z, *r, rv)).collect();
                         let mut ends: Vec<(f64, Pv)> = vec![(*l, lv.clone())];
                         for z in &inside {
                             let pv = Pv { ex: z.ex.clone(), show: None };
@@ -880,18 +883,19 @@ impl Model {
         }
         for n in 1..=2 { marks[n].sort_by(|p, q| p.x.partial_cmp(&q.x).unwrap()); }
         let is_break = |x: f64| breaks.iter().any(|q| (q - x).abs() < 1e-7 * (1.0 + x.abs()));
-        let is_mark = |n: usize, x: f64| marks[n].iter().any(|m| (m.x - x).abs() < 1e-7 * (1.0 + x.abs()));
+        // (marks and the ends of the stretches are the same numbers: matched to 1e−12, so a point 10⁻¹¹ from another is its own)
+        let is_mark = |n: usize, x: f64| marks[n].iter().any(|m| (m.x - x).abs() < 1e-12 * (1.0 + x.abs()));
         // ── intervals: neighbours of one sign joined where nothing happens between them (no mark, no break) ──
         let join = |n: usize| -> Vec<Span1> {
             let mut v: Vec<Span1> = vec![];
             for sp in spans[n].iter() {
-                if let Some(l) = v.last_mut() { if l.sign == sp.sign && (l.b - sp.a).abs() < 1e-7 * (1.0 + sp.a.abs()) && !is_mark(n, sp.a) && !is_break(sp.a) { l.b = sp.b; l.bv = sp.bv.clone(); continue; } }
+                if let Some(l) = v.last_mut() { if l.sign == sp.sign && (l.b - sp.a).abs() < 1e-12 * (1.0 + sp.a.abs()) && !is_mark(n, sp.a) && !is_break(sp.a) { l.b = sp.b; l.bv = sp.bv.clone(); continue; } }
                 v.push(sp.clone());
             }
             v
         };
         let (fp_signs, fpp_signs) = (join(1), join(2));
-        let sign_beside = |sp: &[Span1], x: f64, left: bool| sp.iter().find(|q| if left { (q.b - x).abs() < 1e-7 * (1.0 + x.abs()) } else { (q.a - x).abs() < 1e-7 * (1.0 + x.abs()) }).map(|q| q.sign);
+        let sign_beside = |sp: &[Span1], x: f64, left: bool| sp.iter().find(|q| if left { (q.b - x).abs() < 1e-12 * (1.0 + x.abs()) } else { (q.a - x).abs() < 1e-12 * (1.0 + x.abs()) }).map(|q| q.sign);
         // (concavity does not change at a zero of f″ with the same sign on both sides, where f is unbroken (sin x + sin²x/2
         // at 3π/2, x⁴ at 0): the intervals run on through it; the sign chart keeps its 0. Never through a point where f′ or
         // f″ has no value: a cusp or corner (x^(2/3) at 0, |sin x| at π) is where f′ jumps, and f is concave on each side only)
@@ -959,30 +963,50 @@ thread_local! {
     pub(crate) static DECIMAL_TYPED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 /// Whether the typed function has a decimal number in it.
-pub(crate) fn typed_in_decimals(p: &Params) -> bool { let t = if p.s("start") == STARTS[1] { p.s("fp") } else { p.s("f") }; t.as_bytes().windows(3).any(|w| w[0].is_ascii_digit() && w[1] == b'.' && w[2].is_ascii_digit()) || t.starts_with('.') }
+/// A rational written exactly with k decimals, when it has no more (−1/20000000000 is −0.00000000005), from its digits, never
+/// from a float.
+pub(crate) fn q_decimal(q: exact::Q, k: i64) -> Option<String> {
+    let p10 = 10i128.checked_pow(k as u32)?;
+    if p10 % q.d != 0 { return None; }
+    let n = q.n.checked_mul(p10 / q.d)?;
+    let (neg, m) = (n < 0, n.unsigned_abs());
+    let digits = format!("{:0>w$}", m, w = k as usize + 1);
+    let (ip, fp) = digits.split_at(digits.len() - k as usize);
+    let fp = fp.trim_end_matches('0');
+    let t = if fp.is_empty() { ip.to_string() } else { format!("{ip}.{fp}") };
+    Some(if neg && t != "0" { format!("{MINUS}{t}") } else { t })
+}
+pub(crate) fn typed_in_decimals(p: &Params) -> bool {
+    let t = if p.s("start") == STARTS[1] { p.s("fp") } else { p.s("f") };
+    // (0.1, .5, and the e form: 1e-6 and 2.5E3 are decimals too, never 1/1000000)
+    let b = t.as_bytes();
+    b.windows(3).any(|w| w[0].is_ascii_digit() && w[1] == b'.' && w[2].is_ascii_digit()) || t.starts_with('.')
+        || b.windows(3).any(|w| w[0].is_ascii_digit() && (w[1] == b'e' || w[1] == b'E') && w[2].is_ascii_digit())
+        || b.windows(4).any(|w| w[0].is_ascii_digit() && (w[1] == b'e' || w[1] == b'E') && (w[2] == b'-' || w[2] == b'+') && w[3].is_ascii_digit())
+}
 pub(crate) fn val_text(v: f64, pv: &Pv, dec: Option<i64>, decimal_input: bool) -> String {
     if let Some(sh) = &pv.show { return sh.clone(); }
     // (typed in decimals: an exact terminating decimal as one, anything else ≈ to 2 decimals)
     let decimal_input = decimal_input || DECIMAL_TYPED.with(|c| c.get());
     if decimal_input && dec.is_none() {
         let exact_q = pv.ex.as_ref().and_then(|e| e.rational());
-        if let Some(s) = exact_q.and_then(|q| (0..=6).find_map(|k| { let p10 = 10i128.checked_pow(k as u32)?; (p10 % q.d == 0).then(|| fmt_full(q.f(), k)) })) { return s; }
+        if let Some(s) = exact_q.and_then(|q| (0..=24).find_map(|k| q_decimal(q, k))) { return s; }
         if pv.ex.is_some() && DECIMAL_TYPED.with(|c| c.get()) { return val_text(v, &Pv { ex: None, show: None }, None, false); }
     }
     let exact_q = pv.ex.as_ref().and_then(|e| e.rational());
     // the exact decimal of a fraction whose denominator divides 10^k
-    let dec_exact = |q: exact::Q, k: i64| -> Option<String> { let p10 = 10i128.checked_pow(k as u32)?; if p10 % q.d != 0 { return None; } Some(fmt_full(q.f(), k)) };
+    let dec_exact = |q: exact::Q, k: i64| -> Option<String> { q_decimal(q, k) };
     let rounded = |d: i64| {
         // half away from zero, as a book rounds (-1.125 to 2 decimals is -1.13)
         let k = 10f64.powi(d as i32);
         let s = fmt((v * k + v.signum() * 1e-9).round() / k, d);
-        if s == "0" && v != 0.0 { let k = (-v.abs().log10()).ceil() as i64 + 1; fmt_full(v, k.min(12)) } else { s }
+        if s == "0" && v != 0.0 { let k = (-v.abs().log10()).ceil() as i64 + 1; fmt_full(v, k.min(30)) } else { s }
     };
     match dec {
         Some(d) => match exact_q.and_then(|q| (0..=d).find_map(|k| dec_exact(q, k))) { Some(s) => s, None => format!("\u{2248}{}", rounded(d)) },
         None => match &pv.ex {
             Some(e) => {
-                if decimal_input { if let Some(s) = exact_q.and_then(|q| (0..=6).find_map(|k| dec_exact(q, k))) { return s; } }
+                if decimal_input { if let Some(s) = exact_q.and_then(|q| (0..=24).find_map(|k| dec_exact(q, k))) { return s; } }
                 // (an exact form too long to read in a key, such as (988 + 56√10)/91125: the decimal, marked ≈)
                 let t = exact::text(e);
                 if t.chars().count() > 18 { format!("\u{2248}{}", rounded(2)) } else { t }

@@ -26,10 +26,11 @@ impl Q {
     pub(crate) fn int(n: i128) -> Q { Q { n, d: 1 } }
     pub(crate) fn zero(&self) -> bool { self.n == 0 }
     pub(crate) fn f(&self) -> f64 { self.n as f64 / self.d as f64 }
-    fn add(self, o: Q) -> Option<Q> { Q::new(self.n.checked_mul(o.d)?.checked_add(o.n.checked_mul(self.d)?)?, self.d.checked_mul(o.d)?) }
+    // (over the least common denominator, so 1/(4·10²⁰) − 1/(2·10²⁰) stays in range)
+    fn add(self, o: Q) -> Option<Q> { let g = gcd(self.d, o.d); let (a, b) = (self.d / g, o.d / g); Q::new(self.n.checked_mul(b)?.checked_add(o.n.checked_mul(a)?)?, a.checked_mul(o.d)?) }
     fn neg(self) -> Q { Q { n: -self.n, d: self.d } }
     fn sub(self, o: Q) -> Option<Q> { self.add(o.neg()) }
-    fn mul(self, o: Q) -> Option<Q> { Q::new(self.n.checked_mul(o.n)?, self.d.checked_mul(o.d)?) }
+    fn mul(self, o: Q) -> Option<Q> { let (g1, g2) = (gcd(self.n, o.d), gcd(o.n, self.d)); Q::new((self.n / g1).checked_mul(o.n / g2)?, (self.d / g2).checked_mul(o.d / g1)?) }
     fn div(self, o: Q) -> Option<Q> { if o.zero() { None } else { Q::new(self.n.checked_mul(o.d)?, self.d.checked_mul(o.n)?) } }
     fn powi(self, k: i64) -> Option<Q> {
         if k < 0 { return Q::int(1).div(self.powi(-k)?); }

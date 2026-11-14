@@ -133,3 +133,21 @@ fn a_point_where_f_has_no_value_is_never_marked() {
     // arctan x + arctan(1/x): its constant stretches never include 0
     has(&key(&pw("arctan(x) + arctan(1/x)", -3.0, 3.0, &[])), &[&format!("every x in [{M}3, 0), every x in (0, 3]")]);
 }
+
+// ───────────────────────── 4. a vertex a tiny distance from 0 ─────────────────────────
+
+#[test]
+fn a_vertex_a_tiny_distance_from_zero_is_found_and_written_in_decimals() {
+    // x² + bx: f′ = 2x + b = 0 at −b/2, a minimum −b²/4; (x − c)²: at c, 0. Typed in decimals or the e form: decimals
+    for (fx, x, y) in [
+        ("x^2 + 1e-10x", "\u{2212}0.00000000005", "\u{2212}0.0000000000000000000025"),
+        ("x^2 + 1e-6x", "\u{2212}0.0000005", "\u{2212}0.00000000000025"),
+        ("x^2 + 0.001x", "\u{2212}0.0005", "\u{2212}0.00000025"),
+        ("(x - 1e-9)^2", "0.000000001", "0"),
+        ("(x - 0.000001)^2", "0.000001", "0"),
+    ] {
+        let k = key(&pw(fx, -3.0, 3.0, &[]));
+        has(&k, &[&format!("Critical points of f: x = {x}"), &format!("local minimum: ({x}, {y})"), &format!("Increasing on ({x}, 3);  decreasing on ({M}3, {x})")]);
+        lacks(&k, &["/", "\u{2248}"]);
+    }
+}

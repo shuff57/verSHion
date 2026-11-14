@@ -402,4 +402,5 @@ fn show_events() {
     let (evs, flats, gaps) = find_events_e(&g, &ge, &dg, &[], v[0], v[1]);
     println!("events {:?}\nflats {flats:?}\ngaps {gaps:?}", evs.iter().map(|e| (e.x, e.k)).collect::<Vec<_>>());
     for x in [PI - 1e-3, PI, PI + 1e-3] { println!("  g({x}) = {:?} ± {}", g(x), ge(x)); }
+    if let Some(r) = exact::as_rat(&e) { let r1 = r.deriv().unwrap(); println!("rat f′ {:?} / {:?}", r1.n, r1.d); println!("roots {:?}", exact::roots_mult(&r1.n).map(|v| v.iter().map(|z| (z.x, z.ex.as_ref().map(exact::text))).collect::<Vec<_>>())); }
 }
