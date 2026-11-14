@@ -1042,6 +1042,16 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         }
     }
     let mut boxes: Vec<(f64, f64, f64, f64)> = vec![];
+    let aw = super::circle::tw(p.s("xlabel"), fs, false);
+    if !p.s("xlabel").is_empty() && aw <= 608. - end.0 - 12. {
+        boxes.push((
+            end.0 + 12.,
+            origin.1 - 8. - fs,
+            end.0 + 12. + aw,
+            origin.1 - 5.,
+        ));
+    }
+
     for (i, z) in zs.iter().take(visible).enumerate() {
         let (x, y) = z.xy();
         if !g.inside(x, y) || !x.is_finite() || !y.is_finite() || z.r() > 1e8 {
@@ -1097,27 +1107,40 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         if !label.is_empty() {
             let width = super::circle::tw(&label, fs, false);
             let mut found = None;
-            for dy in [-12., fs + 12., -fs - 18., 2. * fs + 18.] {
-                for dx in [10., -width - 10.] {
+            for dy in [-12., -20., -26., fs + 12., -fs - 18., 2. * fs + 18.] {
+                for dx in [
+                    10.,
+                    -width - 10.,
+                    -width / 2.,
+                    20.,
+                    -width - 20.,
+                    -width / 2. + 8.,
+                    -width / 2. - 8.,
+                ] {
                     let bx = pt.0 + dx;
                     let by = pt.1 + dy;
                     let b = (bx, by - fs, bx + width, by + 3.);
                     if b.0 < 65.
-                        || b.2 > 590.
+                        || b.2 > 610.
                         || b.1 < 65.
                         || b.3 > end.1 - 2.
                         || ((b.1 < origin.1 + 4.) && (b.3 > origin.1 - 4.))
+                        || ((b.0 < origin.0 + 4.) && (b.2 > origin.0 - 4.))
                         || boxes.iter().any(|q| {
                             b.0 < q.2 + 3. && b.2 > q.0 - 3. && b.1 < q.3 + 3. && b.3 > q.1 - 3.
                         })
                     {
                         continue;
                     }
-                    let centre = ((b.0 + b.2) / 2., (b.1 + b.3) / 2.);
-                    let own = (centre.0 - pt.0).hypot(centre.1 - pt.1);
+                    let distance = |q: (f64, f64)| {
+                        let dx = (b.0 - q.0).max(0.).max(q.0 - b.2);
+                        let dy = (b.1 - q.1).max(0.).max(q.1 - b.3);
+                        dx.hypot(dy)
+                    };
+                    let own = distance(pt);
                     if zs.iter().take(visible).any(|o| {
                         let q = g.pt(o.a.v, o.b.v);
-                        (centre.0 - q.0).hypot(centre.1 - q.1) + 0.1 < own
+                        distance(q) + 0.1 < own
                     }) {
                         continue;
                     }
@@ -1240,7 +1263,19 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         doc.raw(&text(
             620.,
             110. + visible as f64 * row * 4.,
-            &format!("{}: __________________", p.s("operation")),
+            &format!(
+                "{}: __________________",
+                match p.s("operation") {
+                    "Conjugate" => "Conjugate of z".to_string(),
+                    "Sum" => "z + w".to_string(),
+                    "Difference" => "z − w".to_string(),
+                    "Product" => "zw".to_string(),
+                    "Quotient" => "z/w".to_string(),
+                    "Roots" => format!("Roots of z (n = {})", p.i("n")),
+                    "Powers" => format!("Powers of z through z{}", sup(p.i("n"))),
+                    other => other.to_string(),
+                }
+            ),
         ));
     }
     (doc.finish(), notes)

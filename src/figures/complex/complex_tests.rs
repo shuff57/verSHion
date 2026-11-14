@@ -426,6 +426,12 @@ fn roots_clear_the_circle() {
                 p.set_f(k, 2.)
             }
             let s = render(&p);
+            assert_eq!(
+                labels::boxes(&s).len(),
+                n as usize + 2,
+                "all labels: {size} n={n}; {:?}",
+                warnings(&p)
+            );
             let doc = roxmltree::Document::parse(&s).unwrap();
             for node in doc.descendants().filter(|n| n.has_tag_name("circle")) {
                 let r: f64 = node.attribute("r").unwrap().parse().unwrap();
@@ -458,5 +464,19 @@ fn roots_clear_the_circle() {
                 }
             }
         }
+    }
+}
+#[test]
+fn ordinary_polar_labels_are_present() {
+    for size in ["Small", "Medium"] {
+        let mut p = base();
+        p.set_s("labels", "Polar");
+        p.set_s("label_size", size);
+        assert_eq!(
+            labels::boxes(&render(&p)).len(),
+            3,
+            "{size}: {:?}",
+            warnings(&p)
+        );
     }
 }
