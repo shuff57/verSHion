@@ -152,6 +152,11 @@ impl N {
     }
     fn text(self) -> String {
         if let Some((a, b)) = self.q {
+            if self.dec {
+                if let Some(s) = exact_decimal(a, b) {
+                    return s;
+                }
+            }
             if !self.dec {
                 return if b == 1 {
                     a.to_string()
@@ -160,10 +165,10 @@ impl N {
                 };
             }
         }
-        format!("≈ {}", self.v)
+        format!("≈ {}", approximation(self.v))
     }
     fn eq(self) -> String {
-        if self.q.is_some() && !self.dec {
+        if !self.text().starts_with('≈') {
             format!("= {}", self.text())
         } else {
             self.text()
@@ -264,11 +269,94 @@ impl P<'_> {
         let v = t.parse::<f64>().ok()?;
         let dec = t.contains('.') || t.contains('e') || t.contains('E');
         let q = if dec {
-            None
+            decimal_rational(t)
         } else {
             t.parse::<i128>().ok().map(|a| (a, 1))
         };
+        if v == 0.0
+            && t.chars()
+                .take_while(|c| *c != 'e' && *c != 'E')
+                .any(|c| matches!(c, '1'..='9'))
+        {
+            return None;
+        }
         Some(N { v, q, dec })
+    }
+}
+fn subscript(n: usize) -> String {
+    n.to_string()
+        .chars()
+        .map(|c| match c {
+            '0' => '₀',
+            '1' => '₁',
+            '2' => '₂',
+            '3' => '₃',
+            '4' => '₄',
+            '5' => '₅',
+            '6' => '₆',
+            '7' => '₇',
+            '8' => '₈',
+            _ => '₉',
+        })
+        .collect()
+}
+fn exact_decimal(a: i128, b: i128) -> Option<String> {
+    for digits in 0..=18u32 {
+        let scale = 10i128.checked_pow(digits)?;
+        if scale % b == 0 {
+            let scaled = a.checked_mul(scale / b)?;
+            let abs = scaled.checked_abs()?.to_string();
+            let sign = if scaled < 0 { "-" } else { "" };
+            if digits == 0 {
+                return Some(format!("{sign}{abs}.0"));
+            }
+            let padded = format!("{:0>width$}", abs, width = digits as usize + 1);
+            let k = padded.len() - digits as usize;
+            let frac = padded[k..].trim_end_matches('0');
+            return Some(format!(
+                "{sign}{}.{}",
+                &padded[..k],
+                if frac.is_empty() { "0" } else { frac }
+            ));
+        }
+    }
+    None
+}
+fn decimal_rational(t: &str) -> Option<(i128, i128)> {
+    let parts: Vec<&str> = t.split(['e', 'E']).collect();
+    let exp = if parts.len() == 2 {
+        parts[1].parse::<i32>().ok()?
+    } else {
+        0
+    };
+    let mant = parts[0];
+    let decimals = mant.split('.').nth(1).map_or(0, |s| s.len() as i32);
+    let num = mant.replace('.', "").parse::<i128>().ok()?;
+    let power = exp - decimals;
+    if power.unsigned_abs() > 37 {
+        return None;
+    }
+    if power >= 0 {
+        rat(num.checked_mul(10i128.checked_pow(power as u32)?)?, 1)
+    } else {
+        rat(num, 10i128.checked_pow((-power) as u32)?)
+    }
+}
+fn approximation(v: f64) -> String {
+    if v == 0.0 {
+        return "0".into();
+    }
+    let exp = v.abs().log10().floor() as i32;
+    let digits = (7 - exp).clamp(0, 15) as usize;
+    let s = if exp < -7 || exp > 8 {
+        format!("{v:.7e}")
+    } else {
+        format!("{v:.digits$}")
+    };
+    if s.contains('e') || !s.contains('.') {
+        s
+    } else {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
     }
 }
 fn read(s: &str, n: N, a: N, b: N) -> Option<N> {
@@ -397,12 +485,27 @@ fn data(p: &Params) -> Result<Data, String> {
 }
 fn limits(p: &Params, d: &Data) -> (Option<N>, Option<N>, String) {
     let zero = N::int(0);
+    if (d.first.q.is_none() && d.first.v.abs() < 1e-12 && p.s("mode") != "Explicit")
+        || (d.k.q.is_none()
+            && ((d.k.v.abs() - 1.0).abs() < 1e-12 || d.k.v.abs() < 1e-12)
+            && matches!(p.s("mode"), "Arithmetic" | "Geometric"))
+    {
+        return (
+            None,
+            None,
+            "cannot determine from the precision of this expression".into(),
+        );
+    }
     match p.s("mode") {
         "Arithmetic" => {
-            if d.k.v == 0.0 {
+            if d.k.q.is_some_and(|(a, _)| a == 0) {
                 (
                     Some(d.first),
-                    if d.first.v == 0.0 { Some(zero) } else { None },
+                    if d.first.q.is_some_and(|(a, _)| a == 0) {
+                        Some(zero)
+                    } else {
+                        None
+                    },
                     "constant".into(),
                 )
             } else {
@@ -410,15 +513,19 @@ fn limits(p: &Params, d: &Data) -> (Option<N>, Option<N>, String) {
             }
         }
         "Geometric" => {
-            if d.first.v == 0.0 {
+            if d.first.q.is_some_and(|(a, _)| a == 0) {
                 (Some(zero), Some(zero), "converges".into())
-            } else if d.k.v.abs() < 1.0 {
+            } else if d
+                .k
+                .q
+                .map_or(d.k.v.abs() < 1.0 - 1e-12, |(a, b)| a.abs() < b)
+            {
                 (
                     Some(zero),
                     Some(d.first.op(N::int(1).op(d.k, '-'), '/')),
                     "converges".into(),
                 )
-            } else if d.k.v == 1.0 {
+            } else if d.k.q.is_some_and(|(a, b)| a == b) {
                 (Some(d.first), None, "constant; series diverges".into())
             } else {
                 (None, None, "diverges".into())
@@ -443,13 +550,15 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "formula" => p.s("mode") == "Explicit",
         "recurrence" | "second" => p.s("mode") == "Recursive",
         "title" => !p.b("blank_title") && p.b(SHOW_ANSWERS),
+        "blank_title" | "limit" => p.b(SHOW_ANSWERS),
         "point_values" => p.s("layout") != "Number line",
         "display" => p.s("layout") != "Two aligned graphs",
         "grid" | "step" => p.s("layout") != "Number line",
-        "epsilon" => p.b("band") && p.b("limit"),
-        "band" => p.b("limit"),
-        "missing" => p.s("task") == "Missing terms",
-        "given" => p.s("task") == "Continue",
+        "epsilon" => p.b("band") && p.b("limit") && p.b(SHOW_ANSWERS),
+        "band" => p.b("limit") && p.b(SHOW_ANSWERS),
+        "task" => !p.b(SHOW_ANSWERS),
+        "missing" => !p.b(SHOW_ANSWERS) && p.s("task") == "Missing terms",
+        "given" => !p.b(SHOW_ANSWERS) && p.s("task") == "Continue",
         _ => true,
     }
 }
@@ -477,20 +586,34 @@ pub fn warnings(p: &Params) -> Vec<String> {
     match data(p) {
         Err(e) => w.push(e),
         Ok(d) => {
+            if (0..if p.s("layout") == "Two aligned graphs" {
+                2
+            } else {
+                1
+            })
+                .any(|g| point_labels(p, &d, g).1 > 0)
+            {
+                w.push(
+                    "Some point labels need more room; use fewer terms or two aligned graphs."
+                        .into(),
+                );
+            }
             if d.a
                 .iter()
-                .chain(if p.s("display") != "Terms" {
-                    d.s.iter()
-                } else {
-                    d.a.iter()
-                })
+                .chain(
+                    if p.s("display") != "Terms" || p.s("layout") == "Two aligned graphs" {
+                        d.s.iter()
+                    } else {
+                        d.a.iter()
+                    },
+                )
                 .any(|x| x.v < p.f("from") || x.v > p.f("to"))
             {
                 w.push(
                     "Some terms or sums lie beyond the vertical window; change From and To.".into(),
                 )
             }
-            if p.b("limit") {
+            if p.b("limit") && p.b(SHOW_ANSWERS) {
                 let (l, s, _) = limits(p, &d);
                 if (if p.s("display") == "Partial sums" {
                     s
@@ -504,11 +627,15 @@ pub fn warnings(p: &Params) -> Vec<String> {
             }
         }
     }
-    if p.b("limit") && p.b("band") && number(p.s("epsilon")).is_none_or(|x| x.v <= 0.0) {
+    if p.b(SHOW_ANSWERS)
+        && p.b("limit")
+        && p.b("band")
+        && number(p.s("epsilon")).is_none_or(|x| x.v <= 0.0)
+    {
         w.push("Epsilon must be a positive number.".into())
     }
     for k in ["xlabel", "ylabel", "title"] {
-        if p.s(k).chars().count() > 48 {
+        if relevant(k, p) && p.s(k).chars().count() > 48 {
             w.push(format!("Shorten {k} to at most 48 characters."))
         }
     }
@@ -549,7 +676,13 @@ fn coefficient(p: &Params, key: &str) -> String {
     let t = p.s(key);
     match number(t) {
         Some(n) if n.q.is_some() && !n.dec => n.text(),
-        Some(n) if t.parse::<f64>().is_ok() => n.v.to_string(),
+        Some(n) if t.parse::<f64>().is_ok() => {
+            if t.contains('e') || t.contains('E') {
+                n.v.to_string()
+            } else {
+                t.trim().to_string()
+            }
+        }
         _ => fmt_formula(t),
     }
 }
@@ -591,6 +724,178 @@ fn fmt_formula(s: &str) -> String {
     }
     out
 }
+struct PointLabel {
+    series: usize,
+    j: usize,
+    x: f64,
+    y: f64,
+    anchor: &'static str,
+    text: String,
+    rect: circle::Rect,
+}
+fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
+    if !p.b("point_values") || p.s("layout") == "Number line" {
+        return (vec![], 0);
+    }
+    let fs = 14.0 * svg::label_factor(p.s("label_size"));
+    let count = d.a.len();
+    let width = canvas_width(p, count);
+    let (left, right) = (85.0, width - 85.0);
+    let (top, bottom) = (160.0 + g as f64 * 340.0, 410.0 + g as f64 * 340.0);
+    let (lo, hi) = (p.f("from"), p.f("to"));
+    if hi <= lo {
+        return (vec![], 0);
+    }
+    let series: Vec<usize> = if p.s("layout") == "Two aligned graphs" {
+        vec![g]
+    } else {
+        match p.s("display") {
+            "Both" => vec![0, 1],
+            "Partial sums" => vec![1],
+            _ => vec![0],
+        }
+    };
+    let mut points = vec![];
+    let mut lines = vec![];
+    for s in series {
+        let values = if s == 0 { &d.a } else { &d.s };
+        let mut prev = None;
+        for (j, v) in values.iter().enumerate() {
+            if hidden(p, j)
+                || (!p.b(SHOW_ANSWERS) && p.s("task") != "Find formula" && s == 1)
+                || v.v < lo
+                || v.v > hi
+            {
+                prev = None;
+                continue;
+            }
+            let pos = (
+                120.0 + j as f64 * (width - 240.0) / (count - 1) as f64,
+                bottom - (v.v - lo) / (hi - lo) * 250.0,
+            );
+            points.push((s, j, pos, v.text()));
+            if p.b("join") {
+                if let Some(a) = prev {
+                    lines.push((a, pos));
+                }
+            }
+            if p.s("marks") == "Spikes" {
+                lines.push((
+                    (
+                        pos.0,
+                        bottom - (0.0f64.clamp(lo, hi) - lo) / (hi - lo) * 250.0,
+                    ),
+                    pos,
+                ));
+            }
+            prev = Some(pos);
+        }
+    }
+    let mut placed: Vec<PointLabel> = vec![];
+    let mut refused = 0;
+    for (s, j, pos, text) in &points {
+        let w = circle::tw(text, fs, false);
+        let mut found = None;
+        for (x, y, anchor) in [
+            (pos.0, pos.1 - 13.0, "middle"),
+            (pos.0, pos.1 + fs + 8.0, "middle"),
+            (pos.0 + 11.0, pos.1 + fs * 0.3, "start"),
+            (pos.0 - 11.0, pos.1 + fs * 0.3, "end"),
+        ] {
+            let x0 = match anchor {
+                "middle" => x - w / 2.0,
+                "end" => x - w,
+                _ => x,
+            };
+            let r = circle::Rect {
+                x0,
+                y0: y - fs,
+                x1: x0 + w,
+                y1: y + fs * 0.25,
+            };
+            let overlaps = |a: &circle::Rect, b: &circle::Rect| {
+                a.x0 < b.x1 + 2.0 && a.x1 + 2.0 > b.x0 && a.y0 < b.y1 + 2.0 && a.y1 + 2.0 > b.y0
+            };
+            if r.x0 < left + 8.0 || r.x1 > right || r.y0 < top - 20.0 || r.y1 > bottom - 8.0 {
+                continue;
+            }
+            let center = ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0);
+            let distance = |pt: (f64, f64)| (pt.0 - center.0).hypot(pt.1 - center.1);
+            if points
+                .iter()
+                .any(|(_, _, pt, _)| distance(*pt) + 0.01 < distance(*pos))
+            {
+                continue;
+            }
+            if lo <= 0.0
+                && hi >= 0.0
+                && circle::seg_hits(
+                    (left, bottom - (0.0 - lo) / (hi - lo) * 250.0),
+                    (right, bottom - (0.0 - lo) / (hi - lo) * 250.0),
+                    &r,
+                )
+            {
+                continue;
+            }
+            if p.b("limit") && p.b(SHOW_ANSWERS) {
+                let (a, b, _) = limits(p, d);
+                let limit = if *s == 0 { a } else { b };
+                if limit.is_some_and(|l| {
+                    circle::seg_hits(
+                        (left, bottom - (l.v - lo) / (hi - lo) * 250.0),
+                        (right, bottom - (l.v - lo) / (hi - lo) * 250.0),
+                        &r,
+                    )
+                }) {
+                    continue;
+                }
+            }
+            if placed.iter().any(|a| overlaps(&r, &a.rect))
+                || points.iter().any(|(_, _, pt, _)| {
+                    overlaps(
+                        &r,
+                        &circle::Rect {
+                            x0: pt.0 - 5.0,
+                            x1: pt.0 + 5.0,
+                            y0: pt.1 - 5.0,
+                            y1: pt.1 + 5.0,
+                        },
+                    )
+                })
+                || lines.iter().any(|(a, b)| circle::seg_hits(*a, *b, &r))
+            {
+                continue;
+            }
+            found = Some(PointLabel {
+                series: *s,
+                j: *j,
+                x,
+                y,
+                anchor,
+                text: text.clone(),
+                rect: r,
+            });
+            break;
+        }
+        if let Some(l) = found {
+            placed.push(l)
+        } else {
+            refused += 1
+        }
+    }
+    (placed, refused)
+}
+fn canvas_width(p: &Params, count: usize) -> f64 {
+    let fs = 14.0 * svg::label_factor(p.s("label_size"));
+    let base =
+        (count as f64 * 100.0 + 160.0).max(900.0) * svg::label_factor(p.s("label_size")).max(1.0);
+    let expr = match p.s("mode") {
+        "Explicit" => p.s("formula"),
+        "Recursive" => p.s("recurrence"),
+        _ => "",
+    };
+    base.max(expr.chars().count() as f64 * fs * 0.85 + 240.0)
+}
 fn render(p: &Params) -> String {
     let Ok(d) = data(p) else {
         let mut doc = Doc::new(650.0, 100.0);
@@ -608,7 +913,7 @@ fn render(p: &Params) -> String {
     let start = if p.s("start") == "0" { 0 } else { 1 };
     let count = d.a.len();
     let fs = 14.0 * svg::label_factor(p.s("label_size"));
-    let width = (count as f64 * 100.0 + 160.0).max(900.0);
+    let width = canvas_width(p, count);
     let left = 85.0;
     let right = width - 85.0;
     let px = |j: usize| left + 35.0 + j as f64 * (right - left - 70.0) / (count - 1) as f64;
@@ -623,15 +928,15 @@ fn render(p: &Params) -> String {
     let plot_bottom = if split { 820.0 } else { 480.0 };
     let mut rows = vec![];
     let (lim, slim, state) = limits(p, &d);
-    let idx = format!("{start}");
+    let idx = subscript(start);
     let formula = match p.s("mode") {
         "Arithmetic" => format!(
-            "aₙ = ({}) + (n − {idx}) × ({})",
+            "aₙ = ({}) + (n − {start}) × ({})",
             coefficient(p, "first"),
             coefficient(p, "difference")
         ),
         "Geometric" => format!(
-            "aₙ = ({}) × ({})^(n − {idx})",
+            "aₙ = ({}) × ({})^(n − {start})",
             coefficient(p, "first"),
             coefficient(p, "ratio")
         ),
@@ -671,6 +976,24 @@ fn render(p: &Params) -> String {
         })
     }
     if p.b("sum") {
+        if ans && matches!(p.s("mode"), "Arithmetic" | "Geometric") {
+            let a = coefficient(p, "first");
+            let k = coefficient(
+                p,
+                if p.s("mode") == "Arithmetic" {
+                    "difference"
+                } else {
+                    "ratio"
+                },
+            );
+            rows.push(if p.s("mode") == "Arithmetic" {
+                format!("For N terms: S = N[2 × ({a}) + (N − 1) × ({k})]/2")
+            } else if d.k.q.is_some_and(|(a, b)| a == b) {
+                format!("For N terms: S = N × ({a})")
+            } else {
+                format!("For N terms: S = ({a})[1 − ({k})^(N)]/[1 − ({k})]")
+            });
+        }
         rows.push(if ans {
             format!("Sum of {count} terms {}", d.s[count - 1].eq())
         } else {
@@ -678,19 +1001,57 @@ fn render(p: &Params) -> String {
         });
         if p.s("mode") == "Geometric" {
             rows.push(if ans {
-                slim.map(|l| format!("Sum to infinity {}", l.eq()))
-                    .unwrap_or("Series diverges".into())
+                slim.map(|l| {
+                    if d.k.q.is_some_and(|(a, b)| a == b) {
+                        format!("Sum to infinity {}", l.eq())
+                    } else {
+                        format!(
+                            "S∞ = ({})/(1 − ({})) {}",
+                            coefficient(p, "first"),
+                            coefficient(p, "ratio"),
+                            l.eq()
+                        )
+                    }
+                })
+                .unwrap_or(if state.contains("cannot determine") {
+                    "Sum to infinity: cannot determine".into()
+                } else {
+                    "Series diverges".into()
+                })
             } else {
                 "Sum to infinity: __________".into()
             })
         }
     }
     if p.b("convergence") {
+        let state = if p.s("display") == "Partial sums" {
+            if slim.is_some() {
+                "converges"
+            } else if matches!(p.s("mode"), "Arithmetic" | "Geometric")
+                && !state.contains("cannot determine")
+            {
+                "diverges"
+            } else {
+                "cannot determine"
+            }
+        } else {
+            state.as_str()
+        };
         rows.push(if ans {
             format!(
-                "Sequence: {state}; limit {}",
-                lim.map(N::eq)
-                    .unwrap_or("cannot determine a finite limit".into())
+                "{}: {state}; limit {}",
+                if p.s("display") == "Partial sums" {
+                    "Series"
+                } else {
+                    "Sequence"
+                },
+                (if p.s("display") == "Partial sums" {
+                    slim
+                } else {
+                    lim
+                })
+                .map(N::eq)
+                .unwrap_or("cannot determine a finite limit".into())
             )
         } else {
             "Convergence and limit: ________________________".into()
@@ -699,24 +1060,33 @@ fn render(p: &Params) -> String {
     if p.b("terms") || p.b("sums") || p.s("task") == "Missing terms" {
         for j in 0..count {
             let hide = hidden(p, j);
-            let term = if hide { "= _____".into() } else { d.a[j].eq() };
-            let sum = if !ans && p.s("task") != "Find formula" {
+            let term = if d.a[j].v < lo || d.a[j].v > hi {
+                "outside window".into()
+            } else if hide {
+                "= _____".into()
+            } else {
+                d.a[j].eq()
+            };
+            let sum = if d.s[j].v < lo || d.s[j].v > hi {
+                "outside window".into()
+            } else if !ans && p.s("task") != "Find formula" {
                 "= _____".into()
             } else {
                 d.s[j].eq()
             };
             let mut row = String::new();
             if p.b("terms") || p.s("task") == "Missing terms" {
-                row.push_str(&format!("a{} {term}", j + start))
+                row.push_str(&format!("a{} {term}", subscript(j + start)))
             }
             if p.b("sums") {
-                row.push_str(&format!("     S{} {sum}", j + start))
+                row.push_str(&format!("     S{} {sum}", subscript(j + start)))
             }
             rows.push(row)
         }
     }
     let height = plot_bottom + 75.0 + rows.len() as f64 * fs * 1.9;
     let mut doc = Doc::new(width, height);
+    doc.raw(&format!("<!--{}-->", " ".repeat(500)));
     doc.describe(
         "Sequences and series",
         "Discrete points and worksheet prompts",
@@ -783,6 +1153,9 @@ fn render(p: &Params) -> String {
                 1.3,
             );
             doc.arrow(left, bottom + 5.0, left, top - 15.0, "#333333", 1.3);
+            if lo <= 0.0 && hi >= 0.0 {
+                doc.line(left, py(0.0), right, py(0.0), "#777777", 1.0);
+            }
             // Numbers have a dedicated gutter and row, away from every data label.
             for j in 0..count {
                 doc.text(px(j), bottom + 30.0, fs, "middle", &(j + start).to_string());
@@ -912,12 +1285,12 @@ fn render(p: &Params) -> String {
                 } else {
                     doc.rect(x - 3.5, y - 3.5, 7.0, 7.0, "#ffffff", color, 1.5);
                 }
-                if p.b("point_values") && !numberline {
-                    doc.raw(&format!(r#"<text x="{x}" y="{}" font-size="{fs}" text-anchor="middle" fill="{color}" stroke="#ffffff" stroke-width="4" paint-order="stroke">{}</text>"#,y-12.0-series as f64*fs*1.4,svg::esc(&v.text())));
-                }
                 prev = Some((x, y));
             }
             doc.raw("</g>");
+        }
+        for l in point_labels(p, &d, g).0 {
+            doc.raw(&format!(r##"<text data-point-label="{}:{}" x="{}" y="{}" font-size="{fs}" text-anchor="{}" fill="{}" stroke="#ffffff" stroke-width="3" paint-order="stroke">{}</text>"##,l.series,l.j,l.x,l.y,l.anchor,colors[l.series],svg::esc(&l.text)));
         }
     }
     for (i, row) in rows.iter().enumerate() {
@@ -938,7 +1311,7 @@ fn render(p: &Params) -> String {
         }
         text.push_str(rest);
         doc.raw(&format!(
-            r#"<text x="{left}" y="{}" font-size="{fs}" font-family="sans-serif">{text}</text>"#,
+            r##"<text x="{left}" y="{}" font-size="{fs}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="#111111">{text}</text>"##,
             plot_bottom + 50.0 + i as f64 * fs * 1.9
         ));
     }
@@ -953,7 +1326,7 @@ pub fn handles(p: &Params) -> Vec<interact::Handle> {
     }
     let Ok(d) = data(p) else { return vec![] };
     let count = d.a.len();
-    let width = (count as f64 * 100.0 + 160.0).max(900.0);
+    let width = canvas_width(p, count);
     let px = |j: usize| 120.0 + j as f64 * (width - 240.0) / (count - 1) as f64;
     let (lo, hi) = (p.f("from"), p.f("to"));
     if hi <= lo {
@@ -962,7 +1335,11 @@ pub fn handles(p: &Params) -> Vec<interact::Handle> {
     let py = |v: f64| 410.0 - (v - lo) / (hi - lo) * 250.0;
     let mut out = vec![];
     for j in [0, 1, count - 1] {
-        if hidden(p, j) || d.a[j].v < lo || d.a[j].v > hi {
+        if (j == 1 && p.s("mode") == "Geometric" && d.first.v == 0.0)
+            || hidden(p, j)
+            || d.a[j].v < lo
+            || d.a[j].v > hi
+        {
             continue;
         }
         let original = d.a[j].v;
