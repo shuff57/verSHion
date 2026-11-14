@@ -196,3 +196,17 @@ fn the_reported_values_are_written_exactly() {
     // x² + 0.001x: the minimum −0.00000025, exactly
     has(&key(&pw("x^2 + 0.001x", -3.0, 3.0, &[])), &["(\u{2212}0.0005, \u{2212}0.00000025)"]);
 }
+
+// ───────────────────────── 6. roundabout forms; an extremum along a stretch ─────────────────────────
+
+#[test]
+fn a_roundabout_line_is_a_line_and_an_extremum_along_a_stretch_says_so() {
+    // (√x)² = x where it has a value: increasing and straight on [0, 3], no note
+    let p = pw("sqrt(x)^2", -3.0, 3.0, &[("show_fpp", b(true))]);
+    has(&key(&p), &["Critical points of f: none", "Increasing on (0, 3)", "neither (a straight line) on [0, 3]"]);
+    assert!(build(&p).notes.is_empty(), "{:?}", build(&p).notes);
+    // (|x| + x)/2 on [−2, 1]: 0 on [−2, 0], x after: the minimum 0 at every x in [−2, 0], the maximum 1 at 1
+    has(&key(&pw("(abs(x)+x)/2", -3.0, 3.0, &[("absolute", b(true)), ("abs_a", s("-2")), ("abs_b", s("1"))])), &[&format!("absolute maximum 1 at x = 1;  absolute minimum 0 at every x in [{M}2, 0]")]);
+    // |x + 2| − |x − 1| on [−2.5, 1.5]: 3 along [1, 1.5], −3 along [−2.5, −2]
+    has(&key(&pw("abs(x+2)-abs(x-1)", -4.0, 3.0, &[("absolute", b(true)), ("abs_a", s("-2.5")), ("abs_b", s("1.5"))])), &[&format!("absolute maximum 3 at every x in [1, 1.5];  absolute minimum {M}3 at every x in [{M}2.5, {M}2]")]);
+}

@@ -425,6 +425,8 @@ pub(crate) fn simplify(e: &Ex, deriv: bool) -> Ex {
         Pow(a, b) => {
             let (a, b) = (s(a), s(b));
             if deriv && a == E { if let Fun(F::Ln, u) = &b { return (**u).clone(); } }
+            // (√u to an even power, where √u has a value: (√x)² = x)
+            if deriv { if let (Fun(F::Sqrt, u), Some(k)) = (&a, val(&b)) { if k > 0.0 && k.fract() == 0.0 && (k as i64) % 2 == 0 { return if k == 2.0 { (**u).clone() } else { pow((**u).clone(), Num(k / 2.0)) }; } } }
             pow(a, b)
         }
         LogB(b, a) => LogB(bx(s(b)), bx(s(a))),

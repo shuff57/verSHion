@@ -323,12 +323,12 @@ fn absolute_extrema_on_a_closed_interval_worked_by_hand() {
     assert!(t.contains("absolute max (4, 17)") && t.contains("absolute min (2, \u{2212}3)"), "{t}");
     // the typed end stays as typed (−1/2), in the key too
     assert!(t.contains("On [\u{2212}1/2, 4]: absolute maximum 17 at x = 4;  absolute minimum \u{2212}3 at x = 2"), "{t}");
-    // a tie: x^3 - 3x on [-2, 2] has max 2 at x = -1 and at the end x = 2, min -2 at x = -2 and x = 1
+    // a tie: x^3 - 3x on [-2, 2] has max 2 at x = -1 and at the end x = 2, min -2 at x = -2 and x = 1 (listed left to right)
     let pt = with(&[("absolute", b(true)), ("key_list", b(true)), ("tracer", b(false))]);
     let k = key_lines(&pt, &model(&pt, (-3.0, 3.0)).unwrap(), &an_of(&pt), (-3.0, 3.0)).join("\n").replace('\u{a0}', " ");
     let bl = build(&pt);
     assert_eq!(bl.stats.left_off, 0, "{:?}", bl.notes);
-    assert!(k.contains("absolute maximum 2 at x = 2 and x = \u{2212}1;  absolute minimum \u{2212}2 at x = \u{2212}2 and x = 1"), "{k}");
+    assert!(k.contains("absolute maximum 2 at x = \u{2212}1 and x = 2;  absolute minimum \u{2212}2 at x = \u{2212}2 and x = 1"), "{k}");
     // not continuous on the interval: said, not drawn
     let w = warnings(&with(&[("f", s("1/x")), ("absolute", b(true)), ("abs_a", s("-1")), ("abs_b", s("1"))]));
     assert!(w.iter().any(|n| n.contains("not continuous on [\u{2212}1, 1]")), "{w:?}");

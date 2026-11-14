@@ -192,7 +192,8 @@ pub(crate) fn pieces(text: &str, name: &str, what: &str) -> Result<Vec<Piece>, S
         // (√(u²) is |u| and ln(e^u) is u: the same function, with its corner and its exact values; each derivative is put in its
         // plain form too (e^(ln x)/x is 1), so a derivative that is 0 or constant is not rounding noise)
         let e = sym::simplify(&e, false);
-        let (mut d1, mut d2, mut d3) = { let d1 = sym::simplify(&sym::deriv(&e), true); let d2 = sym::simplify(&sym::deriv(&d1), true); let d3 = sym::simplify(&sym::deriv(&d2), true); (d1, d2, d3) };
+        // (the derivatives from f's plain form where f has a value: (√x)² is x there, e^(ln x) is x)
+        let (mut d1, mut d2, mut d3) = { let d1 = sym::simplify(&sym::deriv(&sym::simplify(&e, true)), true); let d2 = sym::simplify(&sym::deriv(&d1), true); let d3 = sym::simplify(&sym::deriv(&d2), true); (d1, d2, d3) };
         // a rational function: its derivatives worked exactly in lowest terms (stable beside a hole, where the derivative of
         // the typed form cancels badly), and its holes
         let rat: Option<Vec<exact::Rat>> = exact::as_rat(&e).and_then(|r0| { let r1 = r0.deriv()?; let r2 = r1.deriv()?; let r3 = r2.deriv()?; Some(vec![r0, r1, r2, r3]) });
@@ -2332,7 +2333,8 @@ pub(crate) fn win_pv(p: &Params, key: &str) -> Pv {
 /// One candidate for an absolute extremum on the closed interval: an end or a critical point inside, with its value.
 #[derive(Clone, Debug)]
 pub(crate) struct AbsCand { pub x: f64, pub xv: Pv, pub y: f64, pub yv: Pv, pub end: bool, pub hi: bool, pub lo: bool }
-pub(crate) struct AbsRes { pub a: Typed, pub b: Typed, pub cands: Vec<AbsCand>, pub constant: bool }
+pub(crate) struct AbsRes { pub a: Typed, pub b: Typed, pub cands: Vec<AbsCand>, pub constant: bool,
+    /** the constant stretches inside [a, b] (from, to, their ends, f there): an extremum reached all along one is said so */ pub flats: Vec<(f64, f64, Pv, Pv, f64)> }
 /// The absolute maximum and minimum on [a, b]: the ends (as typed) and every critical point inside, compared exactly
 /// where their values are derived (ties are both marked), or why there are none.
 pub(crate) fn absolute(p: &Params, m: &Model, an: &Analysis) -> Result<AbsRes, String> {
@@ -2367,7 +2369,8 @@ pub(crate) fn absolute(p: &Params, m: &Model, an: &Analysis) -> Result<AbsRes, S
         cands[k].hi = !constant && same(&c, hi, &hb);
         cands[k].lo = !constant && same(&c, lo, &lb);
     }
-    Ok(AbsRes { a, b, cands, constant })
+    let flats = an.mono.iter().filter(|q| q.sign == 0).filter_map(|q| m.f(0.5 * (q.a + q.b)).map(|y| (q.a.max(a.v), q.b.min(b.v), q.av.clone(), q.bv.clone(), y))).collect();
+    Ok(AbsRes { a, b, cands, constant, flats })
 }
 
 /// The answer key's lines: critical points, extrema, inflection points and the intervals, over the window shown. (A value
@@ -2445,7 +2448,17 @@ pub(crate) fn key_lines(p: &Params, m: &Model, an: &Analysis, win: (f64, f64)) -
         if let Ok(r) = absolute(p, m, an) {
             if !r.constant {
                 // (a value at a typed decimal end is written in decimals)
-                let at = |f: &dyn Fn(&AbsCand) -> bool| { let c: Vec<&AbsCand> = r.cands.iter().filter(|c| f(c)).collect(); let di = c[0].xv.show.as_ref().is_some_and(|s| s.contains('.')); let val = val_text(c[0].y, &c[0].yv, dec, di); (val, c.iter().map(|c| nb(eq_text("x", &vt(c.x, &c.xv)))).collect::<Vec<_>>().join(" and ")) };
+                // (an extremum reached all along a constant stretch: "every x in [−2, 0]", the candidates in it not listed again)
+                let at = |f: &dyn Fn(&AbsCand) -> bool| {
+                    let c: Vec<&AbsCand> = r.cands.iter().filter(|c| f(c)).collect();
+                    let di = c[0].xv.show.as_ref().is_some_and(|s| s.contains('.'));
+                    let val = val_text(c[0].y, &c[0].yv, dec, di);
+                    let fl: Vec<&(f64, f64, Pv, Pv, f64)> = r.flats.iter().filter(|q| (q.4 - c[0].y).abs() <= 1e-9 * (1.0 + c[0].y.abs())).collect();
+                    let mut parts: Vec<(f64, String)> = fl.iter().map(|q| { let (av, bv) = (if (q.0 - r.a.v).abs() < 1e-12 { Pv { ex: exact::of_text(p.s("abs_a")), show: Some(r.a.show.clone()) } } else { q.2.clone() }, if (q.1 - r.b.v).abs() < 1e-12 { Pv { ex: exact::of_text(p.s("abs_b")), show: Some(r.b.show.clone()) } } else { q.3.clone() }); (q.0, nb(format!("every x in [{}, {}]", vt(q.0, &av), vt(q.1, &bv)))) }).collect();
+                    for c in &c { if !fl.iter().any(|q| c.x >= q.0 - 1e-9 && c.x <= q.1 + 1e-9) { parts.push((c.x, nb(eq_text("x", &vt(c.x, &c.xv))))); } }
+                    parts.sort_by(|p, q| p.0.partial_cmp(&q.0).unwrap());
+                    (val, parts.into_iter().map(|p| p.1).collect::<Vec<_>>().join(" and "))
+                };
                 let ((hv, hx), (lv, lx)) = (at(&|c| c.hi), at(&|c| c.lo));
                 v.push(format!("On [{}, {}]: absolute maximum {} at {};  absolute minimum {} at {}", r.a.show, r.b.show, nb(hv), hx, nb(lv), lx));
             }
