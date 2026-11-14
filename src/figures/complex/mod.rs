@@ -201,26 +201,37 @@ fn read(s: &str) -> Option<N> {
         return None;
     }
     let q = if let Ok(a) = t.parse::<i64>() {
-        (a.abs() <= 10000).then_some(Q(a, 1))
+        (a.unsigned_abs() <= 10000).then_some(Q(a, 1))
     } else if let Some((a, b)) = t.split_once('/') {
         match (a.parse::<i64>(), b.parse::<i64>()) {
-            (Ok(a), Ok(b)) if a.abs() <= 10000 && b > 0 && b <= 10000 => Some(Q::new(a, b)),
+            (Ok(a), Ok(b)) if a.unsigned_abs() <= 10000 && b > 0 && b <= 10000 => {
+                Some(Q::new(a, b))
+            }
             _ => None,
         }
     } else {
         None
     };
     let simple = t.parse::<f64>().is_ok();
-    let root = t
-        .strip_prefix("sqrt(")
-        .and_then(|x| x.strip_suffix(')'))
-        .and_then(|x| x.parse::<u32>().ok());
+    let root = radical(&t);
     let (s, exact) = if simple {
         (t.replace('-', "−"), true)
     } else if let Some(q) = q {
         (q.text(), true)
-    } else if let Some(r) = root {
-        (format!("√{r}"), true)
+    } else if let Some((sign, n, d)) = root {
+        (
+            format!(
+                "{}√{}{}",
+                if sign < 0 { "−" } else { "" },
+                n,
+                if d == 1 {
+                    String::new()
+                } else {
+                    format!("/{d}")
+                }
+            ),
+            true,
+        )
     } else {
         (rounded(v, 6), false)
     };
@@ -267,11 +278,18 @@ impl Z {
                 rounded(n.v, p.i("dec"))
             }
         };
+        let b = f(&self.b);
+        let b = b.trim_start_matches('−');
+        let b = if b.contains('/') {
+            format!("({b})")
+        } else {
+            b.to_string()
+        };
         format!(
             "{} {} {}i",
             f(&self.a),
             if self.b.v < 0. { "−" } else { "+" },
-            f(&self.b).trim_start_matches('−')
+            b
         )
     }
     fn exact(&self, p: &Params) -> bool {
@@ -281,11 +299,15 @@ impl Z {
 fn polar(z: &Z, p: &Params) -> String {
     let r = modtext(z, p);
     let a = angtext(z, p);
-    match p.s("polar_style") {
+    let approx = r.starts_with('≈') || a.starts_with('≈');
+    let r = r.trim_start_matches("≈ ");
+    let a = a.trim_start_matches("≈ ");
+    let form = match p.s("polar_style") {
         "Exponential" => format!("{r}e⟦i({a})⟧"),
         "Trigonometric" => format!("{r}(cos({a}) + i sin({a}))"),
         _ => format!("{r} cis({a})"),
-    }
+    };
+    format!("{} {form}", if approx { "≈" } else { "=" })
 }
 fn modtext(z: &Z, p: &Params) -> String {
     if z.name == "z" && p.s("input") != "Cartesian" && p.s("accuracy") == "Exact" {
@@ -296,17 +318,24 @@ fn modtext(z: &Z, p: &Params) -> String {
         }
     }
     if p.s("accuracy") == "Exact" {
-        if let (Some(a), Some(b)) = (z.a.q, z.b.q) {
-            let q = a.mul(a).add(b.mul(b));
+        if let (Some(a), Some(b)) = (square_exact(&z.a), square_exact(&z.b)) {
+            let Some(q) = safe_sum(a, b) else {
+                return format!("≈ {}", rounded(z.r(), p.i("dec")));
+            };
             let n = (q.0 as f64).sqrt() as i64;
             let d = (q.1 as f64).sqrt() as i64;
-            if n * n == q.0 && d * d == q.1 {
+            if (n as i128) * (n as i128) == q.0 as i128 && (d as i128) * (d as i128) == q.1 as i128
+            {
                 return Q::new(n, d).text();
             }
             return if q.1 == 1 {
                 format!("√{}", q.0)
             } else {
-                format!("√({})", q.text())
+                if d * d == q.1 {
+                    format!("√{}/{}", q.0, d)
+                } else {
+                    format!("√({})", q.text())
+                }
             };
         }
     }
@@ -323,7 +352,7 @@ fn angtext(z: &Z, p: &Params) -> String {
                 Some(if x < 0 { Q(1, 1) } else { Q(0, 1) })
             } else if x == 0 {
                 Some(Q(y.signum(), 2))
-            } else if a.mul(a) == b.mul(b) {
+            } else if a.0.unsigned_abs() == b.0.unsigned_abs() && a.1 == b.1 {
                 Some(Q(if x > 0 { y.signum() } else { 3 * y.signum() }, 4))
             } else {
                 None
@@ -331,10 +360,36 @@ fn angtext(z: &Z, p: &Params) -> String {
         }
         _ => None,
     };
-    let exact = if z.name == "z" && p.s("input") != "Cartesian" {
+    let exact = if p.s("operation") == "Roots" && z.name.starts_with('u') {
+        z.name[1..]
+            .parse::<i64>()
+            .ok()
+            .and_then(|k| root_angle(p, k - 1))
+    } else if z.name == "z" && p.s("input") != "Cartesian" {
         angle_fraction(p.s("theta"), p.s("unit"))
     } else {
-        cart_exact
+        cart_exact.or_else(|| {
+            let a = square_exact(&z.a)?;
+            let b = square_exact(&z.b)?;
+            if a.0 == 0 || b.0 == 0 {
+                return None;
+            }
+            let first = if b == a.mul(Q(3, 1)) {
+                Q(1, 3)
+            } else if a == b.mul(Q(3, 1)) {
+                Q(1, 6)
+            } else if a == b {
+                Q(1, 4)
+            } else {
+                return None;
+            };
+            let upper = if z.a.v < 0. {
+                Q(1, 1).add(first.neg())
+            } else {
+                first
+            };
+            Some(if z.b.v < 0. { upper.neg() } else { upper })
+        })
     };
     if p.s("accuracy") == "Exact" {
         if let Some(q) = exact {
@@ -369,6 +424,20 @@ fn angtext(z: &Z, p: &Params) -> String {
     )
 }
 fn op(z: &Z, w: &Z, mode: &str) -> Option<Z> {
+    if mode == "Conjugate" {
+        let mut t = z.clone();
+        t.name = "z̄".into();
+        t.b.v = -t.b.v;
+        t.b.q = t.b.q.map(Q::neg);
+        t.b.s = if let Some(s) = t.b.s.strip_prefix('−') {
+            s.to_string()
+        } else if t.b.v == 0. {
+            t.b.s.clone()
+        } else {
+            format!("−{}", t.b.s)
+        };
+        return Some(t);
+    }
     let (a, b, c, d) = (z.a.v, z.b.v, w.a.v, w.b.v);
     let xy = match mode {
         "Conjugate" => (a, -b),
@@ -458,7 +527,19 @@ fn numbers(p: &Params, notes: &mut Vec<String>) -> Vec<Z> {
                     } else {
                         t.v
                     };
-                    Some((approx(r.v * t.cos()), approx(r.v * t.sin())))
+                    let (x, y) = if let Some(q) =
+                        angle_fraction(p.s("theta"), p.s("unit")).filter(|q| (2 * q.0) % q.1 == 0)
+                    {
+                        match ((2 * q.0) / q.1).rem_euclid(4) {
+                            0 => (r.v, 0.),
+                            1 => (0., r.v),
+                            2 => (-r.v, 0.),
+                            _ => (0., -r.v),
+                        }
+                    } else {
+                        (r.v * t.cos(), r.v * t.sin())
+                    };
+                    Some((approx(x), approx(y)))
                 }
                 _ => None,
             }
@@ -509,7 +590,7 @@ fn numbers(p: &Params, notes: &mut Vec<String>) -> Vec<Z> {
 fn all(p: &Params, notes: &mut Vec<String>) -> (Vec<Z>, usize) {
     let mut zs = numbers(p, notes);
     let given = zs.len();
-    if zs.len() < 2 {
+    if zs.len() < 2 || zs[0].name != "z" || zs[1].name != "w" {
         return (zs, given);
     }
     let (z, w) = (zs[0].clone(), zs[1].clone());
@@ -525,9 +606,19 @@ fn all(p: &Params, notes: &mut Vec<String>) -> (Vec<Z>, usize) {
             for k in 0..p.i("n") {
                 let r = z.r().powf(1. / p.i("n") as f64);
                 let a = (z.angle() + 2. * PI * k as f64) / p.i("n") as f64;
+                let (x, y) = if let Some(q) = root_angle(p, k).filter(|q| (2 * q.0) % q.1 == 0) {
+                    match ((2 * q.0) / q.1).rem_euclid(4) {
+                        0 => (r, 0.),
+                        1 => (0., r),
+                        2 => (-r, 0.),
+                        _ => (0., -r),
+                    }
+                } else {
+                    (r * a.cos(), r * a.sin())
+                };
                 zs.push(Z {
-                    a: approx(r * a.cos()),
-                    b: approx(r * a.sin()),
+                    a: approx(x),
+                    b: approx(y),
                     name: format!("u{}", k + 1),
                 })
             }
@@ -560,6 +651,16 @@ fn sup(n: i64) -> String {
         .collect()
 }
 pub fn relevant(k: &str, p: &Params) -> bool {
+    let blanks =
+        !p.b(SHOW_ANSWERS) && matches!(p.s("question"), "Coordinates" | "Modulus and argument");
+    if blanks && matches!(k, "polar" | "circle" | "accuracy" | "dec" | "polar_style") {
+        return false;
+    }
+    if (blanks && k == "labels")
+        || (!p.b(SHOW_ANSWERS) && p.s("question") == "Coordinates" && k == "components")
+    {
+        return false;
+    }
     match k {
         "zr" | "zi" => p.s("input") == "Cartesian",
         "radius" | "theta" => p.s("input") != "Cartesian",
@@ -738,8 +839,13 @@ fn build(raw: &Params) -> (String, Vec<String>) {
     doc.raw("</g>");
     if !construct && p.s("operation") == "Roots" && zs.len() > given {
         let r = zs[given].r();
-        doc.circle(origin.0, origin.1, r * g.u, "none", color(2), 1.);
-        if p.b("polygon") {
+        let fits = g.inside(-r, -r) && g.inside(r, r);
+        if fits {
+            doc.circle(origin.0, origin.1, r * g.u, "none", color(2), 1.);
+        } else {
+            notes.push("The root circle extends outside the window; widen the axes.".into());
+        }
+        if p.b("polygon") && zs[given..].iter().all(|z| g.inside(z.a.v, z.b.v)) {
             let pts: Vec<_> = zs[given..].iter().map(|z| g.pt(z.a.v, z.b.v)).collect();
             doc.poly(&pts, "none", color(2), 1.4);
         }
@@ -774,7 +880,11 @@ fn build(raw: &Params) -> (String, Vec<String>) {
             let angle = if p.s("unit") == "Degrees" {
                 format!("{}°", t.s)
             } else {
-                p.s("theta").replace("pi", "π")
+                if angle_fraction(p.s("theta"), p.s("unit")).is_some() {
+                    p.s("theta").replace("pi", "π").replace('-', "−")
+                } else {
+                    t.s.clone()
+                }
             };
             let line = if p.s("input") == "Polar exponential" {
                 format!("Given z: {}e⟦i({angle})⟧", r.s)
@@ -833,7 +943,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                     if z.exact(p) { "=" } else { "≈" },
                     z.cart(p)
                 ),
-                "Polar" if !blank => format!("{}: {}", z.name, polar(z, p)),
+                "Polar" if !blank => format!("{} {}", z.name, polar(z, p)),
                 _ => z.name.clone(),
             }
         };
@@ -944,11 +1054,11 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                     &mut doc,
                     2.,
                     if coord || blank {
-                        format!("arg {} = _____", z.name)
+                        format!("arg({}) = _____", z.name)
                     } else {
                         let a = angtext(z, p);
                         format!(
-                            "arg {} {}{}",
+                            "arg({}) {}{}",
                             z.name,
                             if a.starts_with('≈') { "" } else { "= " },
                             a
@@ -958,15 +1068,20 @@ fn build(raw: &Params) -> (String, Vec<String>) {
             }
         }
         if p.b("polar") && !coord && !blank && z.r() > 0. {
-            write(&mut doc, 3., format!("{}: {}", z.name, polar(z, p)));
+            write(&mut doc, 3., format!("{} {}", z.name, polar(z, p)));
         }
     }
     if !construct && p.s("operation") == "Product" {
-        doc.raw(&text(
-            70.,
-            end.1 + 60.,
-            "|zw| = |z||w|; arg(zw) ≡ arg z + arg w (mod 2π)",
-        ));
+        let line = if zs.len() >= 2 && zs[0].r() > 0. && zs[1].r() > 0. {
+            if p.s("unit") == "Degrees" {
+                "|zw| = |z||w|; arg(zw) ≡ arg z + arg w (mod 360°)"
+            } else {
+                "|zw| = |z||w|; arg(zw) ≡ arg z + arg w (mod 2π)"
+            }
+        } else {
+            "|zw| = |z||w|"
+        };
+        doc.raw(&text(70., end.1 + 60., line));
     }
     if construct && p.s("operation") != "None" {
         doc.raw(&text(
@@ -987,7 +1102,8 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     let mut notes = vec![];
     let zs = numbers(p, &mut notes);
     let mut hs = vec![];
-    for (i, z) in zs.iter().take(2).enumerate() {
+    for z in zs.iter().filter(|z| z.name == "z" || z.name == "w") {
+        let i = if z.name == "z" { 0 } else { 1 };
         if !g.inside(z.a.v, z.b.v) {
             continue;
         }
@@ -1078,7 +1194,7 @@ fn angle_fraction(s: &str, unit: &str) -> Option<Q> {
         } else {
             b.strip_prefix('/')?.parse::<i64>().ok()?
         };
-        if b <= 0 || a.abs() > 10000 || b > 10000 {
+        if b <= 0 || a.unsigned_abs() > 10000 || b > 10000 {
             return None;
         }
         Q::new(a, b)
@@ -1116,4 +1232,69 @@ fn segment_hits(a: (f64, f64), b: (f64, f64), r: (f64, f64, f64, f64)) -> bool {
         }
     }
     lo <= hi
+}
+
+fn square_exact(n: &N) -> Option<Q> {
+    if let Some(q) = n.q {
+        if q.0.abs() > 10000 || q.1 > 10000 {
+            return None;
+        }
+        return Some(q.mul(q));
+    }
+    let (_, a, d) = radical(&n.s.replace('−', "-"))?;
+    Some(Q::new(a, d * d))
+}
+fn radical(s: &str) -> Option<(i64, i64, i64)> {
+    let (sign, s) = if let Some(s) = s.strip_prefix('-') {
+        (-1, s)
+    } else {
+        (1, s)
+    };
+    let (num, den) = s.split_once('/').unwrap_or((s, "1"));
+    let den = den.parse::<i64>().ok()?;
+    if den <= 0 || den > 10000 {
+        return None;
+    }
+    let a = num
+        .strip_prefix('√')
+        .or_else(|| num.strip_prefix("sqrt(").and_then(|s| s.strip_suffix(')')))?
+        .parse::<i64>()
+        .ok()?;
+    if a < 0 || a > 1000000 {
+        return None;
+    }
+    Some((sign, a, den))
+}
+
+fn safe_sum(a: Q, b: Q) -> Option<Q> {
+    let n = a.0 as i128 * b.1 as i128 + b.0 as i128 * a.1 as i128;
+    let d = a.1 as i128 * b.1 as i128;
+    fn gcd128(a: i128, b: i128) -> i128 {
+        if b == 0 {
+            a.abs().max(1)
+        } else {
+            gcd128(b, a % b)
+        }
+    }
+    let g = gcd128(n, d);
+    Some(Q(i64::try_from(n / g).ok()?, i64::try_from(d / g).ok()?))
+}
+
+fn root_angle(p: &Params, k: i64) -> Option<Q> {
+    let z = numbers(p, &mut vec![])
+        .into_iter()
+        .find(|z| z.name == "z")?;
+    let mut exact = p.clone();
+    exact.set_s("accuracy", "Exact");
+    let a = angtext(&z, &exact);
+    let q = angle_fraction(a.trim_end_matches('°'), p.s("unit"))?;
+    let q = q.add(Q(2 * k, 1)).div(Q(p.i("n"), 1));
+    let mut n = q.0 % (2 * q.1);
+    if n > q.1 {
+        n -= 2 * q.1
+    }
+    if n <= -q.1 {
+        n += 2 * q.1
+    }
+    Some(Q::new(n, q.1))
 }

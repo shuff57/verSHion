@@ -2180,6 +2180,7 @@ mod tests {
 }
 }
 
+pub(crate) use flat::{eval_typed, num_str};
 pub(super) use flat::{flat_skin_summary, quad_solve, quad_vals_of, regular_polygon_pts, tri_solve, write_givens, TRI_V, Q_V};
 mod parallel;
 pub(crate) use parallel::handles as parallel_handles;

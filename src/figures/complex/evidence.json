@@ -69,7 +69,8 @@
     "operation": "Roots",
     "zr": "1",
     "zi": "0",
-    "polygon": false
+    "n": 4,
+    "polygon": true
   },
   {
     "unit": "Degrees",

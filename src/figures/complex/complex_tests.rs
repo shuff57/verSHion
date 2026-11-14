@@ -210,7 +210,7 @@ fn checklist_evidence() {
 fn drawn_label_boxes() {
     let mut n = 0;
     for size in ["Small", "Medium", "Large"] {
-        for a in [-4, -2, 1, 3, 4] {
+        for a in [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4] {
             for b in [-4, -2, 1, 2, 3, 4] {
                 for mode in ["None", "Sum"] {
                     let mut p = base();
@@ -244,4 +244,108 @@ fn drawn_label_boxes() {
         }
     }
     eprintln!("{n} label layouts checked");
+}
+#[test]
+fn radicals_and_polar_angles() {
+    for (a, b, expect) in [
+        ("1", "sqrt(3)", "π/3"),
+        ("sqrt(3)", "1", "π/6"),
+        ("-1", "sqrt(3)", "2π/3"),
+    ] {
+        let z = Z {
+            a: read(a).unwrap(),
+            b: read(b).unwrap(),
+            name: "z".into(),
+        };
+        assert_eq!(angtext(&z, &base()), expect);
+    }
+    let mut p = base();
+    p.set_s("input", "Polar cis");
+    p.set_s("theta", "7pi/3");
+    assert_eq!(angle_fraction(p.s("theta"), "Radians"), Some(Q(1, 3)));
+    p.set_s("theta", "pi/3");
+    let zs = numbers(&p, &mut vec![]);
+    assert_eq!(angtext(&zs[0], &p), "π/3");
+    assert_eq!(modtext(&zs[0], &p), "2");
+}
+
+#[test]
+fn forty_fraction_checks() {
+    let cases: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("hand_checks.json")).unwrap();
+    assert_eq!(cases.len(), 40);
+    for case in cases {
+        let v = case["input"].as_array().unwrap();
+        let z = Z {
+            a: read(v[0].as_str().unwrap()).unwrap(),
+            b: read(v[1].as_str().unwrap()).unwrap(),
+            name: "z".into(),
+        };
+        let w = Z {
+            a: read(v[2].as_str().unwrap()).unwrap(),
+            b: read(v[3].as_str().unwrap()).unwrap(),
+            name: "w".into(),
+        };
+        let result = op(&z, &w, case["operation"].as_str().unwrap()).unwrap();
+        assert!((result.a.v - case["expected"][0].as_f64().unwrap()).abs() < 1e-12);
+        assert!((result.b.v - case["expected"][1].as_f64().unwrap()).abs() < 1e-12);
+    }
+}
+#[test]
+fn hidden_controls_do_nothing() {
+    for (key, change) in [
+        ("radius", "5"),
+        ("theta", "pi/2"),
+        ("cr", "4"),
+        ("ci", "-2"),
+        ("lr", "1"),
+        ("lo", "-1"),
+        ("hi", "2"),
+        ("question", "Coordinates"),
+        ("polar_style", "Exponential"),
+    ] {
+        let mut p = base();
+        assert!(!relevant(key, &p), "{key}");
+        let s = render(&p);
+        p.set_s(key, change);
+        assert_eq!(s, render(&p), "{key}");
+    }
+    let mut p = base();
+    p.set_s("input", "Polar cis");
+    let s = render(&p);
+    p.set_s("zr", "999");
+    p.set_s("zi", "garbage");
+    assert_eq!(s, render(&p));
+}
+#[test]
+fn drag_a_label_through_pick() {
+    let mut p = base();
+    let hs = handles(ID, &p, (1160., 640.)).unwrap();
+    let h = hs.iter().find(|h| h.label_drag).unwrap();
+    let i = interact::pick(&hs, h.pos, 1.).unwrap();
+    assert!(hs[i].label_drag);
+    let old = render(&p);
+    (hs[i].drag.as_ref().unwrap())(&mut p, (h.pos.0 + 5., h.pos.1 - 6.));
+    assert_ne!(render(&p), old);
+    assert!(labels::any_moved(&p));
+}
+#[test]
+fn print_is_grey() {
+    let mut p = base();
+    p.set_s("style", "Print");
+    p.set_s("locus", "Disc");
+    let s = render(&p);
+    let doc = roxmltree::Document::parse(&s).unwrap();
+    for node in doc.descendants() {
+        for a in node.attributes() {
+            if !matches!(a.name(), "fill" | "stroke") {
+                continue;
+            }
+            let t = a.value();
+            if t.len() == 7 && t.starts_with('#') {
+                assert_eq!(&t[1..3], &t[3..5]);
+                assert_eq!(&t[3..5], &t[5..7]);
+            }
+        }
+    }
 }
