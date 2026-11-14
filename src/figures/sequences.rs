@@ -1075,6 +1075,7 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "formula" => p.s("mode") == "Explicit",
         "recurrence" => p.s("mode") == "Recursive",
         "second" => p.s("mode") == "Recursive" && recurrence_order(p) == 2,
+        "explicit" => p.b(SHOW_ANSWERS) || p.s("task") != "Find formula" || p.b("recursive"),
         "title" => !p.b("blank_title") && p.b(SHOW_ANSWERS),
         "blank_title" => p.b(SHOW_ANSWERS),
         "limit" => p.b(SHOW_ANSWERS) && can_limit(p),
@@ -1297,6 +1298,15 @@ fn coefficient(p: &Params, key: &str) -> String {
         }
         Some(n) if n.q.is_some() && !n.text().starts_with('≈') => n.text(),
         _ => fmt_formula(t),
+    }
+}
+fn coefficient_atom(p: &Params, key: &str) -> String {
+    let t = coefficient(p, key);
+    let body = t.trim_start_matches(['-', '−']);
+    if t.contains('/') || body.contains(['+', '-', '−']) {
+        format!("({t})")
+    } else {
+        t
     }
 }
 fn fmt_formula(s: &str) -> String {
@@ -1829,13 +1839,9 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
                         format!("Sum to infinity {}", l.eq())
                     } else {
                         format!(
-                            "S∞ = ({})/(1 − ({})) {}",
-                            coefficient(p, "first"),
-                            if d.k.v < 0.0 {
-                                format!("({})", coefficient(p, "ratio"))
-                            } else {
-                                coefficient(p, "ratio")
-                            },
+                            "Sum to infinity = {}/(1 − {}) {}",
+                            coefficient_atom(p, "first"),
+                            coefficient_atom(p, "ratio"),
                             l.eq()
                         )
                     }
@@ -1858,7 +1864,7 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
         let n = p.i("sum_count").clamp(1, 1000);
         rows.push(format!(
             "Exact requested sum: {}[1 − ({})^({n})]/[1 − ({})]",
-            coefficient(p, "first"),
+            coefficient_atom(p, "first"),
             coefficient(p, "ratio"),
             coefficient(p, "ratio")
         ));
@@ -2075,7 +2081,10 @@ fn render(p: &Params) -> String {
     };
     let rows = rows_for(p, &d);
     let (lim, slim, _) = limits(p, &d);
-    let height = plot_bottom + 75.0 + rows.len() as f64 * fs * 1.9;
+    let height = plot_bottom
+        + 75.0
+        + rows.len() as f64 * fs * 1.9
+        + rows.iter().filter(|r| r.starts_with("Σ_(")).count() as f64 * fs * 2.0;
     let mut doc = Doc::new(width, height);
     doc.raw(&format!("<!--{}-->", " ".repeat(500)));
     doc.describe(
@@ -2344,33 +2353,47 @@ fn render(p: &Params) -> String {
             doc.raw(&format!(r##"<text data-point-label="{}:{}" x="{}" y="{}" font-size="{fs}" font-family="DejaVu Sans, Noto Sans, Liberation Sans, Arial, sans-serif" text-anchor="{}" fill="{}" stroke="#ffffff" stroke-width="3" paint-order="stroke">{}</text>"##,l.series,l.j,l.x,l.y,l.anchor,"#111111",svg::esc(&l.text.replace('-',"−"))));
         }
     }
+    let mut extra = 0.0;
     for (i, row) in rows.iter().enumerate() {
-        // powers in generated equations are typeset with tspan; other expressions use the shared pretty reader.
-        let escaped = svg::esc(&row.replace('-', "−"));
-        let mut rest = escaped.as_str();
-        let mut text = String::new();
-        while let Some((k, shift)) = [(rest.find("^("), "super"), (rest.find("_("), "sub")]
-            .into_iter()
-            .filter_map(|(k, s)| k.map(|k| (k, s)))
-            .min_by_key(|(k, _)| *k)
-        {
-            text.push_str(&rest[..k]);
-            let Some(end) = rest[k + 2..].find(')') else {
-                break;
-            };
-            text.push_str(&format!(
-                "<tspan baseline-shift=\"{shift}\" font-size=\"70%\">{}</tspan>",
-                &rest[k + 2..k + 2 + end]
-            ));
-            rest = &rest[k + 3 + end..];
+        let base = plot_bottom + 65.0 + i as f64 * fs * 1.9;
+        if let Some(tail) = row.strip_prefix("Σ_(") {
+            let (lower, tail) = tail.split_once(")^(").unwrap();
+            let (upper, expression) = tail.split_once(')').unwrap();
+            extra += fs * 1.1;
+            let y = base + extra;
+            let x = left + 12.0;
+            doc.raw(&format!(r##"<g data-sigma="true"><text x="{x}" y="{y}" font-size="{}" text-anchor="middle" font-family="STIX Two Math, serif" fill="#111111">∑</text>"##,fs*1.5));
+            for (which, value, at) in [
+                ("upper", upper, y - fs * 1.75),
+                ("lower", lower, y + fs * 1.1),
+            ] {
+                doc.raw(&format!(r##"<text data-sigma-bound="{which}" x="{x}" y="{at}" font-size="{}" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, sans-serif" fill="#111111">{}</text>"##,fs*0.65,svg::esc(value)));
+            }
+            doc.raw(&format!(r##"<text x="{}" y="{y}" font-size="{fs}" font-family="DejaVu Sans, Liberation Sans, sans-serif" fill="#111111">{}</text></g>"##,left+55.0,row_markup(expression.trim())));
+            extra += fs * 0.9;
+        } else {
+            doc.raw(&format!(r##"<text x="{left}" y="{}" font-size="{fs}" font-family="DejaVu Sans, Noto Sans, Liberation Sans, Arial, sans-serif" fill="#111111">{}</text>"##,base+extra,row_markup(row)));
         }
-        text.push_str(rest);
-        doc.raw(&format!(
-            r##"<text x="{left}" y="{}" font-size="{fs}" font-family="DejaVu Sans, Noto Sans, Liberation Sans, Arial, sans-serif" fill="#111111">{text}</text>"##,
-            plot_bottom + 65.0 + i as f64 * fs * 1.9
-        ));
     }
     doc.finish()
+}
+fn row_markup(row: &str) -> String {
+    let escaped = svg::esc(&row.replace('-', "−"));
+    let mut rest = escaped.as_str();
+    let mut out = String::new();
+    while let Some(k) = rest.find("^(") {
+        out.push_str(&rest[..k]);
+        let Some(end) = rest[k + 2..].find(')') else {
+            break;
+        };
+        out.push_str(&format!(
+            "<tspan baseline-shift=\"super\" font-size=\"70%\">{}</tspan>",
+            &rest[k + 2..k + 2 + end]
+        ));
+        rest = &rest[k + 3 + end..];
+    }
+    out.push_str(rest);
+    out
 }
 pub fn handles(p: &Params) -> Vec<interact::Handle> {
     if !matches!(p.s("mode"), "Arithmetic" | "Geometric")

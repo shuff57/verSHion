@@ -1494,3 +1494,107 @@ fn sequences_forced_missing_list_relevance_r1() {
         assert_eq!(render(&p), original);
     }
 }
+
+#[test]
+fn sequences_large_sum_share_and_spec_r1() {
+    let def = defs().remove(0);
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Geometric");
+    p.set_b("sum_n", true);
+    p.set_b("sigma", true);
+    p.set_i("sum_count", 1000);
+    p.set_b(SHOW_ANSWERS, false);
+    let original = render(&p);
+    let saved = spec::spec_for(ID, &p);
+    assert_eq!(render(&spec::params_from_spec(&def, &saved)), original);
+    let link = share::encode(ID, &p, &start_params(&def));
+    let (id, values) = share::decode(&link).unwrap();
+    assert_eq!(id, ID);
+    let loaded = share::link_params(&def, values, share::version(&link));
+    assert_eq!(render(&loaded), original);
+}
+
+#[test]
+fn sequences_compulsory_formula_blank_relevance_r1() {
+    let mut p = Params::defaults(&params());
+    p.set_b(SHOW_ANSWERS, false);
+    assert!(!relevant("explicit", &p));
+    let svg = render(&p);
+    p.set_b("explicit", false);
+    assert_eq!(render(&p), svg);
+    p.set_b("recursive", true);
+    assert!(relevant("explicit", &p));
+    let svg = render(&p);
+    p.set_b("explicit", true);
+    assert_ne!(render(&p), svg);
+}
+
+#[test]
+fn sequences_sigma_bounds_and_infinity_font_r1() {
+    for size in ["Small", "Medium", "Large"] {
+        for answers in [false, true] {
+            let mut p = Params::defaults(&params());
+            p.set_s("mode", "Geometric");
+            p.set_s("label_size", size);
+            p.set_b("sum", true);
+            p.set_b("sigma", true);
+            p.set_i("sum_count", 1000);
+            p.set_b(SHOW_ANSWERS, answers);
+            let svg = render(&p);
+            let doc = roxmltree::Document::parse(&svg).unwrap();
+            assert!(!svg.contains("S∞"));
+            let upper = doc
+                .descendants()
+                .find(|n| n.attribute("data-sigma-bound") == Some("upper"))
+                .unwrap();
+            let lower = doc
+                .descendants()
+                .find(|n| n.attribute("data-sigma-bound") == Some("lower"))
+                .unwrap();
+            assert_eq!(upper.text(), Some("1000"));
+            assert_eq!(lower.text(), Some("k = 1"));
+            let texts = doc
+                .descendants()
+                .filter(|n| n.has_tag_name("text"))
+                .collect::<Vec<_>>();
+            let (w, h) = svg_size(&svg);
+            for (i, t) in texts.iter().enumerate() {
+                let r = text_rect(*t);
+                assert!(r.x0 >= 0.0 && r.x1 <= w && r.y0 >= 0.0 && r.y1 <= h);
+                for u in &texts[i + 1..] {
+                    assert!(
+                        !r.hit(&text_rect(*u)),
+                        "{size} {:?} {:?}",
+                        t.text(),
+                        u.text()
+                    );
+                }
+            }
+        }
+    }
+}
+#[test]
+fn sequences_compound_coefficient_brackets_r1() {
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Geometric");
+    p.set_s("first", "sqrt(2)+pi");
+    p.set_s("ratio", "sqrt(2)-1");
+    p.set_b("sum", true);
+    let d = data(&p).unwrap();
+    let rows = rows_for(&p, &d);
+    let a = coefficient_atom(&p, "first");
+    let r = coefficient_atom(&p, "ratio");
+    assert!(a.starts_with('(') && a.ends_with(')'));
+    assert!(r.starts_with('(') && r.ends_with(')'));
+    assert!(
+        rows.iter()
+            .any(|s| s.starts_with(&format!("Sum to infinity = {a}/(1 − {r})")))
+    );
+    assert!(series_math::formula(&p, &d, "n").starts_with(&format!("{a} ×")));
+    p.set_s("mode", "Arithmetic");
+    p.set_s("difference", "sqrt(2)-1");
+    assert!(
+        series_math::formula(&p, &data(&p).unwrap(), "n")
+            .contains(&format!("× {}", coefficient_atom(&p, "difference")))
+    );
+}

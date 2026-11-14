@@ -177,6 +177,7 @@ pub(super) fn formula(p: &Params, d: &Data, var: &str) -> String {
                     Some((1, 1)) => var.into(),
                     Some((-1, 1)) => format!("−{var}"),
                     Some((_, 1)) => format!("{}{var}", k.text()),
+                    _ if k.dec && !k.text().contains('/') => format!("{}{var}", k.text()),
                     _ => format!("({}){var}", k.text()),
                 };
                 if b.q != Some((0, 1)) {
@@ -191,7 +192,7 @@ pub(super) fn formula(p: &Params, d: &Data, var: &str) -> String {
                 format!(
                     "{} + ({var} − {start}) × {}",
                     coefficient(p, "first"),
-                    coefficient(p, "difference")
+                    coefficient_atom(p, "difference")
                 )
             }
         }
@@ -223,7 +224,7 @@ pub(super) fn formula(p: &Params, d: &Data, var: &str) -> String {
             if d.first.q == Some((1, 1)) {
                 exponent
             } else {
-                format!("{} × {exponent}", coefficient(p, "first"))
+                format!("{} × {exponent}", coefficient_atom(p, "first"))
             }
         }
         "Explicit" => {
@@ -298,7 +299,7 @@ mod tests {
             assert!(student.contains("Sum of first 50 terms: __________"));
             assert!(student.contains("Σ_(k = 1)^(50) [__________]"));
             let svg = render(&p);
-            assert!(svg.contains("baseline-shift=\"sub\""));
+            assert!(svg.contains("data-sigma-bound=\"lower\""));
             p.set_b(SHOW_ANSWERS, true);
             p.set_i("sum_count", 1000);
             let now = std::time::Instant::now();
@@ -322,5 +323,10 @@ mod tests {
                 .any(|s| s == "Sum to infinity = 0")
         );
         assert_eq!(number("3.0").unwrap().text(), "3");
+        p.set_s("mode", "Arithmetic");
+        p.set_s("first", "2");
+        p.set_s("difference", "-0.35");
+        p.set_s("start", "1");
+        assert_eq!(formula(&p, &data(&p).unwrap(), "n"), "-0.35n + 2.35");
     }
 }

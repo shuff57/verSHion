@@ -4562,4 +4562,10 @@ const OSMOSIS: &[Faq] = &[
     },
 ];
 
-const SEQUENCES_SERIES: &[Faq] = &[Faq {q:"Can I drag the graph?",a:"In arithmetic and geometric mode, drag the first term for its value, the second for the difference or ratio, and the last horizontally for the term count."},Faq {q:"How do I enter a recurrence?",a:"Use n, a_(n-1), and a_(n-2), with two initial terms. Indices may begin at zero or one."},Faq {q:"Which limits can the key establish?",a:"Arithmetic and geometric limits are derived from their parameters. Selected reciprocal formulas have established limits; other explicit or recursive formulas say cannot determine."},Faq {q:"How do student tasks work?",a:"Choose Find formula, Missing terms, or Continue, then turn Show answers off. Hidden terms and their sums are removed from the graph and list."}];
+const SEQUENCES_SERIES: &[Faq] = &[
+    Faq {q:"Can I drag the graph?",a:"In arithmetic and geometric mode, drag the first term for its value, the second for the difference or ratio, and the last horizontally for the term count."},
+    Faq {q:"How do I enter a recurrence?",a:"Use a_(n-1) for the previous term. A first-order recurrence uses only First term. If the formula also uses a_(n-2), enter Second initial term. The forms a_{n-1}, a(n-1), and Unicode subscripts are also accepted. Indices may begin at zero or one."},
+    Faq {q:"Which limits can the key establish?",a:"Arithmetic and geometric limits, rational functions of n, supported standard limits, and first-order linear recurrence fixed points are derived from their expressions. Other cases say cannot determine; plotted terms alone are never used to guess a limit."},
+    Faq {q:"How do student tasks work?",a:"Choose Find formula, Missing terms, or Continue, then turn Show answers off. Requested sums are removed from partial-sum points, labels and lists. Missing terms are marked asked on the key."},
+    Faq {q:"Can I sum more terms than I draw?",a:"Turn on Sum first N terms and set N up to 1000. Write sigma notation shows the corresponding bounds and expression. Long exact results are marked approximate and a geometric sum keeps a compact exact form; student copies leave the requested answer blank."},
+];
