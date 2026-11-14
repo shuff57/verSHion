@@ -192,7 +192,11 @@ fn sincos(q: Q) -> Option<(Xv, Xv)> {
     let (s0, c0, quad) = if k12.is_int() {
         let k = k12.n as i64; // 0..24
         let (base, quad) = (k % 6, k / 6);
-        let (s, c) = match base { 0 => (z.clone(), o.clone()), 2 => (half.clone(), r3.clone()), 3 => (r2.clone(), r2.clone()), 4 => (r3.clone(), half.clone()), _ => return None };
+        // (15° and 75°: sin 15° = (√6 − √2)/4, cos 15° = (√6 + √2)/4)
+        let r6q = Xv::mono(Q::new(1, 4)?, B { s: 6, pi: 0, e: Q::int(0), l: NOLN });
+        let r2q = Xv::mono(Q::new(1, 4)?, B { s: 2, pi: 0, e: Q::int(0), l: NOLN });
+        let (s15, c15) = (r6q.sub(&r2q)?, r6q.add(&r2q)?);
+        let (s, c) = match base { 0 => (z.clone(), o.clone()), 1 => (s15, c15), 2 => (half.clone(), r3.clone()), 3 => (r2.clone(), r2.clone()), 4 => (r3.clone(), half.clone()), 5 => (c15, s15), _ => return None };
         (s, c, quad)
     } else { return None };
     // rotate by quad·π/2
@@ -218,8 +222,20 @@ pub(crate) fn ev(e: &Ex, x: &Xv) -> Option<Xv> {
         Neg(a) => ev(a, x)?.neg(),
         Add(a, b) => ev(a, x)?.add(&ev(b, x)?)?,
         Sub(a, b) => ev(a, x)?.sub(&ev(b, x)?)?,
-        Mul(a, b) => ev(a, x)?.mul(&ev(b, x)?)?,
-        Div(a, b) => { let d = ev(b, x)?; if d.is_zero() { return None; } ev(a, x)?.div(&d)? }
+        // (a factor that is exactly 0 makes the product 0 wherever the other has a value: (x − 1)² cos x at 1 is 0, though cos 1
+        // has no exact form)
+        Mul(a, b) => match (ev(a, x), ev(b, x)) {
+            (Some(u), Some(w)) => u.mul(&w)?,
+            (Some(z), None) if z.is_zero() && has_value_at(b, x) => Xv::default(),
+            (None, Some(z)) if z.is_zero() && has_value_at(a, x) => Xv::default(),
+            _ => return None,
+        },
+        Div(a, b) => match (ev(a, x), ev(b, x)) {
+            (_, Some(d)) if d.is_zero() => return None,
+            (Some(u), Some(d)) => u.div(&d)?,
+            (Some(z), None) if z.is_zero() && has_value_at(b, x) && super::sym::ev(b, x.f()).abs() > 1e-9 => Xv::default(),
+            _ => return None,
+        },
         Pow(a, b) => {
             let (u, c) = (ev(a, x)?, ev(b, x)?);
             if let Some(q) = c.rational() { if u.is_zero() && q.n <= 0 { return None; } u.powq(q)? }
@@ -244,7 +260,7 @@ pub(crate) fn ev(e: &Ex, x: &Xv) -> Option<Xv> {
                 F::Atan => {
                     // tan(qπ) = u at the table angles in (-π/2, π/2)
                     let mut got = None;
-                    for k in -5..=5i128 { let q = Q::new(k, 12)?; if let Some((s, c)) = sincos(q) { if !c.is_zero() && s.div(&c)? == u { got = Some(q); break; } } }
+                    for k in -5..=5i128 { let q = Q::new(k, 12)?; if let Some((s, c)) = sincos(q) { if !c.is_zero() && s.div(&c).is_some_and(|t| t == u) { got = Some(q); break; } } }
                     Xv::mono(got?, B { s: 1, pi: 1, e: Q::int(0), l: NOLN })
                 }
                 _ => return None,
@@ -532,6 +548,8 @@ pub(crate) fn zeros(e: &Ex, lo: f64, hi: f64) -> Option<Vec<Xv>> {
         Fun(F::Sqrt, a) => if let Some(za) = zeros(a, lo, hi) { return Some(za); },
         _ => {}
     }
+    // a line with an exact constant: x − π is 0 at π
+    if let Some((a, b)) = linear_x(e) { let x = lin_solve(a, &b, &Xv::default())?; return Some(if x.f() > lo && x.f() < hi { vec![x] } else { vec![] }); }
     let terms = expand(e)?;
     if terms.is_empty() { return None; } // zero everywhere: not a list of points
     // the atoms every term has, to their lowest power, taken out
@@ -986,16 +1004,92 @@ fn trig_degree(e: &Ex) -> Option<u32> {
         _ => if super::sym::has_x(e) { None } else { Some(0) },
     }
 }
-/// Whether an expression is 0 for every x, proved: a rational function whose numerator is the zero polynomial, or a
-/// trigonometric polynomial of degree d that is exactly 0 at 2d + 1 or more distinct angles of one period (it has at most 2d
-/// zeros there unless it is 0 throughout). The angles are the 16 multiples of π/6 and π/4 in [0, 2π), where every sin kx
-/// and cos kx has an exact value, so degree up to 7 is decided. 2 sin x cos x − sin 2x and cos²x − sin²x − cos 2x are 0;
-/// sin 8x is not decided (and not claimed).
+/// Bounds on the degrees of the numerator and denominator when e is a quotient of polynomials in x (with any exact
+/// coefficients), when it is one.
+fn poly_rat_degree(e: &Ex) -> Option<(u32, u32)> {
+    use Ex::*;
+    if !super::sym::has_x(e) { return Some((0, 0)); }
+    match e {
+        X => Some((1, 0)),
+        Neg(a) => poly_rat_degree(a),
+        Add(a, b) | Sub(a, b) => { let ((na, da), (nb, db)) = (poly_rat_degree(a)?, poly_rat_degree(b)?); Some(((na + db).max(nb + da), da + db)) }
+        Mul(a, b) => { let ((na, da), (nb, db)) = (poly_rat_degree(a)?, poly_rat_degree(b)?); Some((na + nb, da + db)) }
+        Div(a, b) => { let ((na, da), (nb, db)) = (poly_rat_degree(a)?, poly_rat_degree(b)?); Some((na + db, da + nb)) }
+        Pow(a, b) => { let k = super::sym::konst(b)?; (k.fract() == 0.0 && k.abs() <= 12.0).then_some(())?; let (n, d) = poly_rat_degree(a)?; let m = k.abs() as u32; Some(if k >= 0.0 { (n * m, d * m) } else { (d * m, n * m) }) }
+        _ => None,
+    }
+}
+/// Bounds on the degrees of the numerator and denominator when e is a quotient of trigonometric polynomials (sums and
+/// products of sin, cos, tan, sec, csc, cot of kx + c with k whole, and constants), when it is one.
+fn trig_rat_degree(e: &Ex) -> Option<(u32, u32)> {
+    use Ex::*;
+    use super::sym::F;
+    if !super::sym::has_x(e) { return Some((0, 0)); }
+    match e {
+        X => None,
+        Neg(a) => trig_rat_degree(a),
+        Add(a, b) | Sub(a, b) => { let ((na, da), (nb, db)) = (trig_rat_degree(a)?, trig_rat_degree(b)?); Some(((na + db).max(nb + da), da + db)) }
+        Mul(a, b) => { let ((na, da), (nb, db)) = (trig_rat_degree(a)?, trig_rat_degree(b)?); Some((na + nb, da + db)) }
+        Div(a, b) => { let ((na, da), (nb, db)) = (trig_rat_degree(a)?, trig_rat_degree(b)?); Some((na + db, da + nb)) }
+        Pow(a, b) => { let k = super::sym::konst(b)?; (k.fract() == 0.0 && k.abs() <= 12.0).then_some(())?; let (n, d) = trig_rat_degree(a)?; let k = k.abs() as u32; Some(if super::sym::konst(b)? >= 0.0 { (n * k, d * k) } else { (d * k, n * k) }) }
+        Fun(f, u) => {
+            let (k, _) = linear_x(u)?;
+            (k.d == 1 && k.n.abs() <= 12).then_some(())?;
+            let k = k.n.unsigned_abs() as u32;
+            match f { F::Sin | F::Cos => Some((k, 0)), F::Tan | F::Cot => Some((k, k)), F::Sec | F::Csc => Some((0, k)), _ => None }
+        }
+        _ => None,
+    }
+}
+/// Whether an expression is 0 for every x where it has a value, proved: a rational function whose numerator is the zero
+/// polynomial; a quotient whose numerator is; or a quotient N/D of trigonometric polynomials with N of degree at most d that
+/// is exactly 0 at 2d + 1 or more of the 24 multiples of π/12 in one period where it has a value (N has at most 2d zeros
+/// there unless it is 0 throughout). 2 sin x cos x − sin 2x, cos²x − sin²x − cos 2x and (tan x cos x / sin x)′ are 0;
+/// sin 12x is not decided (and not claimed).
 pub(crate) fn identically_zero(e: &Ex) -> bool {
     if let Some(r) = as_rat(e) { return r.n.zero_p(); }
-    let Some(d) = trig_degree(e) else { return false };
-    let mut angles: Vec<String> = (0..12).map(|k| format!("({k}/6)*pi")).collect();
-    angles.extend([1, 3, 5, 7].iter().map(|k| format!("({k}/4)*pi")));
-    if 2 * d as usize + 1 > angles.len() { return false; }
-    angles.iter().all(|t| of_text(t).and_then(|x| ev(e, &x)).is_some_and(|v| v.is_zero()))
+    match e { Ex::Div(a, _) if identically_zero(a) => return true, Ex::Mul(a, b) if identically_zero(a) || identically_zero(b) => return true, Ex::Neg(a) => return identically_zero(a), _ => {} }
+    // (a rational function with exact coefficients, π among them: N of degree at most d is 0 throughout when it is exactly 0 at
+    // d + 1 points where e has a value)
+    if let Some((n, _)) = poly_rat_degree(e) {
+        let mut seen = 0;
+        for k in -40..=40i128 {
+            let x = Xv::q(Q::new(k, 2).unwrap());
+            if undefined_at(e, &x) { continue; }
+            match ev(e, &x) { Some(v) if v.is_zero() => { seen += 1; if seen > n { return true; } } Some(_) => return false, None => {} }
+        }
+        return false;
+    }
+    let Some((n, _)) = trig_rat_degree(e) else { return false };
+    let mut zeros_seen = 0;
+    for k in 0..24 {
+        let Some(x) = of_text(&format!("({k}/12)*pi")) else { continue };
+        if undefined_at(e, &x) { continue; }
+        match ev(e, &x) { Some(v) if v.is_zero() => zeros_seen += 1, Some(_) => return false, None => {} }
+    }
+    zeros_seen >= 2 * n as usize + 1
+}
+/// Whether e has a value at the exact x as far as can be told: no part of it is shown to have none there by exact
+/// arithmetic, and its float value is finite.
+fn has_value_at(e: &Ex, x: &Xv) -> bool { super::sym::ev(e, x.f()).is_finite() && !undefined_at(e, x) }
+/// Whether e has no value at the exact x, shown by exact arithmetic: a denominator exactly 0 (sin x / sin x at π), tan or sec
+/// where the cosine is exactly 0 (tan at π/2, whatever the float of π/2 gives), csc or cot where the sine is, the logarithm
+/// of an exact 0 or negative, the square root of an exact negative, 0 to a power ≤ 0.
+pub(crate) fn undefined_at(e: &Ex, x: &Xv) -> bool {
+    use Ex::*;
+    let zero_at = |u: &Ex| ev(u, x).is_some_and(|v| v.is_zero());
+    let own = match e {
+        Div(_, b) => zero_at(b),
+        Fun(F::Tan | F::Sec, u) => zero_at(&Fun(F::Cos, u.clone())),
+        Fun(F::Csc | F::Cot, u) => zero_at(&Fun(F::Sin, u.clone())),
+        Fun(F::Ln | F::Log, u) => ev(u, x).is_some_and(|v| v.sign() <= 0),
+        Fun(F::Sqrt, u) => ev(u, x).is_some_and(|v| v.sign() < 0),
+        Pow(a, c) => match (ev(a, x), ev(c, x).and_then(|q| q.rational())) { (Some(u), Some(q)) => (u.is_zero() && q.n <= 0) || (u.sign() < 0 && q.d % 2 == 0), _ => false },
+        _ => false,
+    };
+    own || match e {
+        Neg(a) | Fun(_, a) => undefined_at(a, x),
+        Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) | LogB(a, b) => undefined_at(a, x) || undefined_at(b, x),
+        _ => false,
+    }
 }

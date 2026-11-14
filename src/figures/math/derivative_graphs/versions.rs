@@ -386,3 +386,20 @@ fn show_ident() {
         for k in 0..4 { let x = exact::of_text(&format!("({k}/12)*pi")).unwrap(); println!("  at {k}pi/12: {:?}", exact::ev(d, &x).map(|v| exact::text(&v))); }
     }
 }
+
+#[test]
+#[ignore]
+fn show_events() {
+    // VERSHION_DG_F=<f> VERSHION_DG_AB="a b": the events of f′ found on (a, b), with its rounding bounds
+    let (Ok(fx), Ok(ab)) = (crate::env_var("VERSHION_DG_F"), crate::env_var("VERSHION_DG_AB")) else { return };
+    let v: Vec<f64> = ab.split_whitespace().map(|t| t.parse().unwrap()).collect();
+    let e = sym::simplify(&sym::parse(&fx).unwrap(), false);
+    let d1 = sym::simplify(&sym::deriv(&e), true);
+    let d2 = sym::simplify(&sym::deriv(&d1), true);
+    let g = |x: f64| { let w = sym::ev(&d1, x); w.is_finite().then_some(w) };
+    let ge = |x: f64| sym::ev_err(&d1, x).1;
+    let dg = |x: f64| { let w = sym::ev(&d2, x); w.is_finite().then_some(w) };
+    let (evs, flats, gaps) = find_events_e(&g, &ge, &dg, &[], v[0], v[1]);
+    println!("events {:?}\nflats {flats:?}\ngaps {gaps:?}", evs.iter().map(|e| (e.x, e.k)).collect::<Vec<_>>());
+    for x in [PI - 1e-3, PI, PI + 1e-3] { println!("  g({x}) = {:?} ± {}", g(x), ge(x)); }
+}
