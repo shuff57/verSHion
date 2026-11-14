@@ -210,7 +210,7 @@ fn is_zero(n: &Num) -> bool { n.s == "0" }
 /// A number inside a difference or as a factor: bracketed when negative or a sum.
 fn paren_neg(n: &Num) -> String { if n.s.starts_with('\u{2212}') || compound(n) { format!("({})", n.s) } else { n.s.clone() } }
 /// A number as a denominator: bracketed when negative, a sum, or itself a fraction (/(π/2), /(−1)).
-fn paren_den(n: &Num) -> String { if n.s.starts_with('\u{2212}') || compound(n) || n.s.contains('/') { format!("({})", n.s) } else { n.s.clone() } }
+fn paren_den(n: &Num) -> String { if n.s.starts_with('\u{2212}') || compound(n) || n.s.contains('/') || n.s.contains('\u{d7}') { format!("({})", n.s) } else { n.s.clone() } }
 /// The same number rounded (an equation or a working line with one inexact number is written all in decimals).
 fn as_dec(n: &Num, dec: usize) -> Num {
     let plain = n.s.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '\u{2212}');

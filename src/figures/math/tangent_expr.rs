@@ -537,7 +537,14 @@ fn rat_text(r: R, dec_ok: bool, max_places: usize) -> String {
             let f = format!("{fp:0places$}");
             return format!("{sign}{ip}.{}", f.trim_end_matches('0'));
         }
-        // a terminating decimal with more places than are written (a typed 1e-12): in scientific form, 1×10^−12
+        // a terminating decimal with more places than are written: a value under 1 (a typed 1e-12) in scientific form,
+        // 1×10^−12; one of 1 or more (1 + 10^−12) in all its places, 1.000000000001
+        if d == 1 && places <= 30 && p >= q {
+            let scaled = p * 10i128.pow(places as u32) / q;
+            let (ip, fp) = (scaled / 10i128.pow(places as u32), scaled % 10i128.pow(places as u32));
+            let f = format!("{fp:0places$}");
+            return format!("{sign}{ip}.{}", f.trim_end_matches('0'));
+        }
         if d == 1 && places <= 30 {
             let scaled = p * 10i128.pow(places as u32) / q;
             let digits = scaled.to_string();

@@ -1282,6 +1282,9 @@ fn scientific_steps() {
     let n = tangent::warnings(&with(&[("h", s("1e-12"))])).join(" | ");
     assert!(!n.contains("cannot be 0") && !n.contains("too small"), "{n}");
     assert!(has(&texts(&build(&with(&[("h", s("1e-12"))])).svg, "panel^"), "h = 1\u{d7}10^\u{2212}12"));
+    // the worked line: Q's x in all its places, the step bracketed as a divisor
+    let l = texts(&build(&with(&[("h", s("1e-12")), ("worked", b(true))])).svg, "panel^");
+    assert!(has(&l, "= [f(1.000000000001) \u{2212} f(1)]/(1\u{d7}10^\u{2212}12)"), "{l:?}");
     let n = tangent::warnings(&with(&[("a", s("1")), ("h", s("1e-17"))])).join(" | ");
     assert!(n.contains("too small to tell Q from P"), "{n}");
     let n = tangent::warnings(&with(&[("a", s("1")), ("h", s("1")), ("more_h", s("1e-17"))])).join(" | ");
