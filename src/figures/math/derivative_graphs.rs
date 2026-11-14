@@ -1510,6 +1510,23 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
         if !any { notes.push(format!("{name}(x) has no value anywhere in this window ({} \u{2264} x \u{2264} {}): choose a window where it is defined", fmt(wa, 3), fmt(wb, 3))); }
         any
     });
+    // (f′ or f″ that overflows in the form typed where f has a value, as the quotient form of tanh past |x| ≈ 355: not drawn
+    // there, and said)
+    if let (Some(m), Some(_)) = (model.as_ref(), an.as_ref()) {
+        for fi in [1usize, 2] {
+            if fi == 2 && !fpp { continue; }
+            let lost: Vec<f64> = (0..=600).map(|i| wa + (wb - wa) * i as f64 / 600.0).filter(|&x| m.f(x).is_some() && m.d(fi, x).is_none() && m.piece_at(x).and_then(|pi| m.fexpr(pi, fi)).is_some_and(|e| { let v = sym::ev(e, x); v.is_nan() || v.is_infinite() }) && m.d(fi, x - 1e-6 * (1.0 + x.abs())).is_none()).collect();
+            if lost.len() >= 6 {
+                let nm = if fi == 1 { format!("{name}\u{2032}") } else { format!("{name}\u{2033}") };
+                // (the stretches, as runs of neighbouring samples)
+                let step = (wb - wa) / 600.0;
+                let mut runs: Vec<(f64, f64)> = vec![];
+                for &x in &lost { match runs.last_mut() { Some(r) if x - r.1 < 1.5 * step => r.1 = x, _ => runs.push((x, x)) } }
+                let txt: Vec<String> = runs.iter().take(3).map(|(l, r)| format!("x = {} to {}", fmt(*l, 3), fmt(*r, 3))).collect();
+                notes.push(format!("{nm} is too large to work out in the form typed for {} (its parts overflow): it is not drawn there; a simpler form of {name}, or a narrower window, draws it", txt.join(" and ")));
+            }
+        }
+    }
     // (sin(1/x) near 0: more points than can be marked; the figure says so and marks none)
     let an = an.filter(|a| {
         let many = a.crit.len() > MAX_MARKS || a.fpp_marks.len() > MAX_MARKS || a.fp_marks.len() > MAX_MARKS;

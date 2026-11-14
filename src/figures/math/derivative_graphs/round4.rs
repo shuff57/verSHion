@@ -170,6 +170,10 @@ fn overflow_is_no_break_and_no_false_interval() {
     let p = pw("(e^x - e^(-x))/(e^x + e^(-x))", -400.0, 400.0, &[]);
     has(&key(&p), &["Inflection points: (0, 0)", &format!("Concave up on ({M}400, 0);  concave down on (0, 400)")]);
     lacks(&key(&p), &["neither"]);
+    // (its f′ and f″ overflow in this form past |x| ≈ 355: not drawn there, and said; a function that does not overflow says nothing)
+    let notes = build(&pw("(e^x - e^(-x))/(e^x + e^(-x))", -400.0, 400.0, &[("show_fpp", b(true))])).notes;
+    assert!(notes.iter().any(|n| n.starts_with("f\u{2032} is too large to work out") && n.contains("356 to 400")), "{notes:?}");
+    assert!(!build(&pw("(e^x - e^(-x))/(e^x + e^(-x))", -4.0, 4.0, &[("show_fpp", b(true))])).notes.iter().any(|n| n.contains("too large")));
 }
 
 // ───────────────────────── 5. exact values of points found numerically ─────────────────────────
