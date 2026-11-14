@@ -172,9 +172,204 @@ fn sequences_evidence_renders() {
         return;
     };
     std::fs::create_dir_all(&dir).unwrap();
-    let tokens:Vec<serde_json::Value>=serde_json::from_str(r#"[
- {"first":"3"},{"mode":"Geometric","ratio":"-1/2"},{"mode":"Explicit","formula":"n^2","from":0,"to":70,"step":10},{"mode":"Recursive","first":"1","second":"1","recurrence":"a_(n-1)+a_(n-2)","recursive":true,"explicit":false,"from":0,"to":25,"step":5},{"start":"0","count":10},{"first":"4"},{"display":"Partial sums","to":50,"step":10},{"mode":"Geometric","limit":true},{"first":"1/3"},{"difference":"2","from":0,"to":20,"step":5},{"recursive":true},{"point_values":true},{"first":"5"},{"sums":true,"to":50,"step":10},{"mode":"Geometric","sum":true},{"mode":"Geometric","convergence":true},{"join":true},{"marks":"Spikes"},{"display":"Both","layout":"Two aligned graphs","to":50,"step":10},{"mode":"Geometric","limit":true,"band":true},{"mode":"Geometric","layout":"Number line","limit":true,"from":-1,"to":3},{"mode":"Geometric","first":"8"},{"from":-4,"to":16,"step":4},{"grid":"Bold"},{"xlabel":"Term","ylabel":"Value"},{"title":"A growing sequence"},{"blank_title":true},{"label_size":"Large"},{"style":"Print"},{"show_answers":false},{"show_answers":false,"task":"Missing terms"},{"show_answers":false,"task":"Continue"},{"mode":"Geometric","task":"Missing terms","sum":true,"convergence":true,"recursive":true},{"first":"4"},{"difference":"2","from":0,"to":20,"step":5},{"count":10}
- ]"#).unwrap();
+    let tokens: Vec<serde_json::Value> = serde_json::from_str(
+        r#"[
+ {
+  "first": "3"
+ },
+ {
+  "mode": "Geometric",
+  "ratio": "-1/2"
+ },
+ {
+  "mode": "Explicit",
+  "formula": "n^2",
+  "from": 0,
+  "to": 70,
+  "step": 10
+ },
+ {
+  "mode": "Recursive",
+  "first": "1",
+  "second": "1",
+  "recurrence": "a_(n-1)+a_(n-2)",
+  "recursive": true,
+  "explicit": false,
+  "from": 0,
+  "to": 25,
+  "step": 5
+ },
+ {
+  "start": "0",
+  "count": 10
+ },
+ {
+  "mode": "Explicit",
+  "formula": "(-1)^n*n/(n+1)",
+  "count": 12,
+  "terms": false,
+  "explicit": false,
+  "from": -1.2,
+  "to": 1.2,
+  "step": 0.4
+ },
+ {
+  "display": "Partial sums",
+  "to": 50,
+  "step": 10
+ },
+ {
+  "mode": "Geometric",
+  "first": "6",
+  "ratio": "1/2",
+  "display": "Partial sums",
+  "limit": true,
+  "terms": false,
+  "explicit": false,
+  "from": 0,
+  "to": 14,
+  "step": 2
+ },
+ {
+  "first": "1/3"
+ },
+ {
+  "mode": "Geometric",
+  "first": "3",
+  "ratio": "2/3",
+  "start": "0",
+  "terms": false,
+  "explicit": true,
+  "from": 0,
+  "to": 4,
+  "step": 1
+ },
+ {
+  "recursive": true
+ },
+ {
+  "point_values": true
+ },
+ {
+  "mode": "Explicit",
+  "formula": "(-1)^n/(n+1)",
+  "start": "0",
+  "count": 10,
+  "terms": true,
+  "explicit": false,
+  "from": -1,
+  "to": 1,
+  "step": 0.5
+ },
+ {
+  "sums": true,
+  "to": 50,
+  "step": 10
+ },
+ {
+  "mode": "Geometric",
+  "sum": true
+ },
+ {
+  "mode": "Geometric",
+  "convergence": true
+ },
+ {
+  "join": true
+ },
+ {
+  "marks": "Spikes"
+ },
+ {
+  "display": "Both",
+  "layout": "Two aligned graphs",
+  "to": 50,
+  "step": 10
+ },
+ {
+  "mode": "Geometric",
+  "limit": true,
+  "band": true
+ },
+ {
+  "mode": "Geometric",
+  "layout": "Number line",
+  "limit": true,
+  "from": -1,
+  "to": 3
+ },
+ {
+  "mode": "Geometric",
+  "first": "8"
+ },
+ {
+  "from": -4,
+  "to": 16,
+  "step": 4
+ },
+ {
+  "grid": "Bold"
+ },
+ {
+  "xlabel": "Term",
+  "ylabel": "Value"
+ },
+ {
+  "title": "A growing sequence"
+ },
+ {
+  "blank_title": true
+ },
+ {
+  "label_size": "Large"
+ },
+ {
+  "style": "Print"
+ },
+ {
+  "show_answers": false
+ },
+ {
+  "show_answers": false,
+  "task": "Missing terms"
+ },
+ {
+  "show_answers": false,
+  "task": "Continue"
+ },
+ {
+  "mode": "Geometric",
+  "first": "3",
+  "ratio": "-1/2",
+  "task": "Missing terms",
+  "missing": "4,6,8",
+  "show_answers": true,
+  "sum": true,
+  "convergence": true,
+  "recursive": true,
+  "point_values": true,
+  "from": -2,
+  "to": 4,
+  "step": 1
+ },
+ {
+  "first": "10.7",
+  "from": 0,
+  "to": 20,
+  "step": 5
+ },
+ {
+  "difference": "-0.35",
+  "from": -2,
+  "to": 4,
+  "step": 1
+ },
+ {
+  "count": 10
+ }
+]"#,
+    )
+    .unwrap();
     let base = Params::defaults(&params());
     let opening = render(&base);
     let mut manifest = vec![];
@@ -1176,4 +1371,18 @@ fn sequences_checker_point_label_cases_r1() {
             }
         }
     }
+}
+
+#[test]
+fn sequences_seed_key_and_precision_r1() {
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Recursive");
+    p.set_s("recurrence", "a_(n-1)/2+3");
+    let rows = rows_for(&p, &data(&p).unwrap()).join(" ");
+    assert!(rows.contains("Seeds used: a₁ = 2"));
+    assert!(!rows.contains("Seeds used: a₁ = 2; a₂"));
+    p.set_s("recurrence", "a_(n-1)+a_(n-2)");
+    let rows = rows_for(&p, &data(&p).unwrap()).join(" ");
+    assert!(rows.contains("Seeds used: a₁ = 2; a₂ = 1"));
+    assert_eq!(approximation(0.9999999998), "0.9999999998");
 }

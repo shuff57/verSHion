@@ -487,6 +487,13 @@ fn approximation(v: f64) -> String {
     } else {
         format!("{v:.digits$}")
     };
+    let s = if s.parse::<f64>().is_ok_and(|rounded| {
+        rounded == rounded.round() && rounded != v && (rounded - v).abs() < 1e-6 * v.abs().max(1.0)
+    }) {
+        format!("{v:.16}")
+    } else {
+        s
+    };
     if s.contains('e') || !s.contains('.') {
         s
     } else {
@@ -1743,6 +1750,13 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
     let mut rows = vec![format!("Task: {}", p.s("task"))];
     let (lim, slim, state) = limits(p, &d);
     let idx = subscript(start);
+    if ans && p.s("mode") == "Recursive" && !p.b("recursive") {
+        let mut seeds = format!("Seeds used: a{} {}", subscript(start), d.a[0].eq());
+        if recurrence_order(p) == 2 {
+            seeds.push_str(&format!("; a{} {}", subscript(start + 1), d.a[1].eq()));
+        }
+        rows.push(seeds);
+    }
     let formula = if p.s("mode") == "Recursive" {
         "Explicit formula: __________ (cannot determine)".into()
     } else {
