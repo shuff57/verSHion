@@ -406,6 +406,47 @@ fn rat_pow(r: R, p: i128, q: i128) -> Option<Ex> {
     Some(if neg && p % 2 != 0 { v.neg() } else { v })
 }
 
+/// A tree whose exact value is `x` (rational only), for re-entering `exact`.
+fn n_of(x: &Ex) -> Option<Node> { let (p, q) = x.rational()?; Some(Div(Box::new(Num(p as f64, Some(R(p, 1)))), Box::new(Num(q as f64, Some(R(q, 1)))))) }
+
+/// The value at x with every step finite: None where any part of the expression is infinite or undefined there, even if
+/// the whole comes out finite (arctan(1/x) and 1/(1/x) at 0, e^(−1/x²) at 0) — the textbook's "undefined at a".
+pub(crate) fn eval_strict(n: &Node, x: f64) -> Option<f64> {
+    let ok = |v: f64| v.is_finite().then_some(v);
+    let v = match n {
+        Num(..) | X | Pi | Euler => eval(n, x),
+        Neg(a) => -eval_strict(a, x)?,
+        Add(a, c) => eval_strict(a, x)? + eval_strict(c, x)?,
+        Sub(a, c) => eval_strict(a, x)? - eval_strict(c, x)?,
+        Mul(a, c) => eval_strict(a, x)? * eval_strict(c, x)?,
+        Div(a, c) => { let (p, q) = (eval_strict(a, x)?, eval_strict(c, x)?); if q == 0.0 { return None; } p / q }
+        Pow(a, e) => { eval_strict(a, x)?; eval_strict(e, x)?; eval(n, x) }
+        LogB(b, a) => { eval_strict(b, x)?; eval_strict(a, x)?; eval(n, x) }
+        Func(_, a) => { eval_strict(a, x)?; eval(n, x) }
+    };
+    ok(v)
+}
+
+/// Whether some part of the expression divides by an exact 0 (or is tan, sec at an odd multiple of π/2, csc, cot at a
+/// multiple of π, ln or log of 0) at an exact x: tan(π/2) is undefined even though π/2 rounded gives 1.6e16.
+pub(crate) fn zero_at(n: &Node, x: &Ex) -> bool {
+    let z = |c: &Node| exact(c, Some(x)).is_some_and(|v| v.is_zero());
+    match n {
+        Num(..) | X | Pi | Euler => false,
+        Neg(a) => zero_at(a, x),
+        Add(a, c) | Sub(a, c) | Mul(a, c) => zero_at(a, x) || zero_at(c, x),
+        Div(a, c) => zero_at(a, x) || zero_at(c, x) || z(c),
+        Pow(a, e) => zero_at(a, x) || zero_at(e, x) || (z(a) && exact(e, Some(x)).is_some_and(|v| v.value() < 0.0)),
+        LogB(b, a) => zero_at(b, x) || zero_at(a, x) || z(a),
+        Func(f, a) => zero_at(a, x) || match *f {
+            "tan" | "sec" => exact(&Func("cos", a.clone()), Some(x)).is_some_and(|v| v.is_zero()),
+            "csc" | "cot" => exact(&Func("sin", a.clone()), Some(x)).is_some_and(|v| v.is_zero()),
+            "ln" | "log" => z(a),
+            _ => false,
+        },
+    }
+}
+
 /// The exact value of a tree at an exact x (None for x: a constant tree), or None where it is not derived exactly.
 pub(crate) fn exact(n: &Node, x: Option<&Ex>) -> Option<Ex> {
     match n {

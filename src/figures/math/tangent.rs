@@ -570,15 +570,18 @@ pub(crate) struct Model {
 /// The function's tree and its derivative's.
 struct Fx { f: ex::Node, df: ex::Node }
 impl Fx {
-    fn f(&self, x: f64) -> Option<f64> { guarded(&|t| ex::eval(&self.f, t), x) }
-    fn df(&self, x: f64) -> Option<f64> { Some(ex::eval(&self.df, x)).filter(|v| v.is_finite()) }
+    // every part of the expression finite (arctan(1/x) has no value at 0), and huge values at exact poles undefined
+    fn f(&self, x: f64) -> Option<f64> { ex::eval_strict(&self.f, x)?; guarded(&|t| ex::eval(&self.f, t), x) }
+    fn df(&self, x: f64) -> Option<f64> { ex::eval_strict(&self.df, x) }
+    /// f at a point given exactly: also undefined where a part divides by an exact 0 there (cos x/cos x at π/2)
+    fn f_num(&self, n: &Num) -> Option<f64> { if n.ex.as_ref().is_some_and(|x| ex::zero_at(&self.f, x)) { return None; } self.f(n.v) }
     fn f_ex(&self, x: &Num) -> Option<Ex> { ex::exact(&self.f, Some(x.ex.as_ref()?)) }
     fn df_ex(&self, x: &Num) -> Option<Ex> { ex::exact(&self.df, Some(x.ex.as_ref()?)) }
 }
 
 fn tangent_at(fx: &Fx, an: Num, ctx: Ctx) -> Option<Tangent> {
     let a = an.v;
-    let fa = fx.f(a)?;
+    let fa = fx.f_num(&an)?;
     let slope = slope_at(&|x| fx.f(x), &|x| fx.df(x), a);
     // a is held to 16 figures: where f or f′ change fast (beside a pole) that rounding moves their later digits, so a value
     // not derived exactly is written only to the digits that rounding leaves standing
@@ -621,7 +624,47 @@ fn gap_between(f: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64) -> bool {
     let ends = v[0].abs().max(v[v.len() - 1].abs()).max(1.0);
     let flip = v.windows(2).any(|w| w[0].signum() != w[1].signum() && w[0].abs().min(w[1].abs()) > 10.0 * ends);
     let spike = (1..v.len() - 1).any(|k| v[k].abs() > 1000.0 * ends && v[k].abs() >= v[k - 1].abs() && v[k].abs() >= v[k + 1].abs());
-    flip || spike
+    flip || spike || jumps(f, x0, x1, &v)
+}
+
+/// A jump between samples (arctan(1/x) across 0): the widest step between neighbours is halved toward its wider half 50 times;
+/// on a continuous curve it shrinks to nothing, across a jump it stays.
+fn jumps(f: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, v: &[f64]) -> bool {
+    let n = v.len() - 1;
+    let steps: Vec<f64> = v.windows(2).map(|w| (w[1] - w[0]).abs()).collect();
+    let Some((k, &big)) = steps.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)) else { return false };
+    let mut sorted = steps.clone();
+    sorted.sort_by(f64::total_cmp);
+    let typical = sorted[n / 2];
+    let span = v.iter().cloned().fold(f64::NEG_INFINITY, f64::max) - v.iter().cloned().fold(f64::INFINITY, f64::min);
+    if big < 0.05 * span || big < 20.0 * typical { return false; }
+    let (mut lo, mut hi) = (x0 + (x1 - x0) * k as f64 / n as f64, x0 + (x1 - x0) * (k + 1) as f64 / n as f64);
+    let (Some(mut flo), Some(mut fhi)) = (f(lo), f(hi)) else { return true };
+    for _ in 0..50 {
+        let mid = 0.5 * (lo + hi);
+        if mid == lo || mid == hi { break; }
+        let Some(fm) = f(mid) else { return true };
+        if (fm - flo).abs() >= (fhi - fm).abs() { hi = mid; fhi = fm; } else { lo = mid; flo = fm; }
+    }
+    (fhi - flo).abs() > 0.25 * big
+}
+
+/// Why f has no value at a when its formula breaks only there (arctan(1/x), x²/x at 0): the curve either side is near a value
+/// (a hole) or near two (a jump).
+fn why_undefined(fx: &Fx, a: f64, fname: &str, var: char, at: &str) -> String {
+    let d = 1e-7 * a.abs().max(1.0);
+    // either side in the float arithmetic, where 1/(1 + e^(1/x)) just right of 0 is 1/∞ = 0
+    let g = |x: f64| guarded(&|t| ex::eval(&fx.f, t), x);
+    match (g(a - d), g(a + d), g(a - 10.0 * d), g(a + 10.0 * d)) {
+        (Some(l), Some(r), Some(l2), Some(r2)) if (l - l2).abs() < 1e-3 * (1.0 + l.abs()) && (r - r2).abs() < 1e-3 * (1.0 + r.abs()) => {
+            if (l - r).abs() < 1e-4 * (1.0 + l.abs()) {
+                format!(": the formula has no value at {var} = {at} (worked out there it needs a division by 0), though {fname} approaches {} from both sides, so the curve has a hole there and no tangent", decimal(0.5 * (l + r), 3))
+            } else {
+                format!(": the formula has no value at {var} = {at} (worked out there it needs a division by 0), and {fname} jumps there, from about {} on the left to about {} on the right, so there is no tangent", decimal(l, 3), decimal(r, 3))
+            }
+        }
+        _ => String::new(),
+    }
 }
 
 pub(crate) fn model(p: &Params) -> Model {
@@ -648,7 +691,7 @@ pub(crate) fn model(p: &Params) -> Model {
     match typed_num(a_raw) {
         None => notes.push((About::All, "Type a as a number, such as 1, -1/2, 2.5, sqrt(2), pi/4 or e".into())),
         Some(an) => match tangent_at(&fx, an.clone(), ctx_for(exact, dec, &[a_raw, p.s("func")])) {
-            None => notes.push((About::All, format!("{} is undefined: choose another a", fxs(&an)))),
+            None => notes.push((About::All, format!("{} is undefined{}: choose another a", fxs(&an), why_undefined(&fx, an.v, &fname, var, &an.s)))),
             Some(t) => {
                 match t.slope {
                     Slope::Corner(l, r) => notes.push((About::All, format!("{fname} has a corner at {var} = {}: its slope is {} from the left and {} from the right, so there is no tangent line there", t.an.s, decimal(l, 3), decimal(r, 3)))),
@@ -681,7 +724,7 @@ pub(crate) fn model(p: &Params) -> Model {
                     let h = hn.v;
                     let x = t.a + h;
                     let qx = ctx.given(t.an.ex.as_ref().zip(hn.ex.as_ref()).and_then(|(a, h)| a.add(h)), x);
-                    let Some(fb) = f(x) else { notes.push((About::Secant, format!("{} is undefined, so there is no secant for {step} = {}", fxs(&qx), hn.s))); continue };
+                    let Some(fb) = fx.f_num(&qx) else { notes.push((About::Secant, format!("{} is undefined, so there is no secant for {step} = {}", fxs(&qx), hn.s))); continue };
                     let fbn = ctx.make(fx.f_ex(&qx), fb);
                     let fa = t.fan.v;
                     let mn = ctx.make(ex_sub(&fbn, &t.fan).and_then(|d| d.div(hn.ex.as_ref()?)), (fb - fa) / h);
@@ -704,7 +747,7 @@ pub(crate) fn model(p: &Params) -> Model {
         if m.p.as_ref().is_some_and(|t| (t.a - v.v).abs() < 1e-12) || m.more.iter().any(|t| (t.a - v.v).abs() < 1e-12) { continue; }
         if m.more.len() == MAX_MORE_A { notes.push((About::More, format!("More tangents: only the first {MAX_MORE_A} are drawn"))); break; }
         match tangent_at(&fx, v.clone(), ctx_for(exact, dec, &[&raw, p.s("func")])) {
-            None => notes.push((About::More, format!("More tangents: {} is undefined", fxs(&v)))),
+            None => notes.push((About::More, format!("More tangents: {} is undefined{}", fxs(&v), why_undefined(&fx, v.v, &fname, var, &v.s)))),
             Some(t) if !matches!(t.slope, Slope::Finite(..) | Slope::Vertical) => notes.push((About::More, format!("More tangents: {fname} has no tangent line at {var} = {}", t.an.s))),
             Some(t) => m.more.push(t),
         }

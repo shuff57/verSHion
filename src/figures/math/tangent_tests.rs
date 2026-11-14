@@ -1376,3 +1376,39 @@ fn typed_numbers_in_every_spelling() {
     assert!(checked >= 600, "{checked}");
     assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(50).cloned().collect::<Vec<_>>().join("\n"));
 }
+
+/// Functions finite only through 1/0 = ∞ in the arithmetic (arctan(1/x), e^(−1/x) at 0), and removable gaps (x²/x at 0, 1/sec x
+/// at π/2) have no value at a: no tangent is drawn, the note says the formula has no value there and whether the curve has a
+/// hole or a jump, More tangents says so too, and a secant across arctan(1/x)'s jump is said to join separate pieces.
+#[test]
+fn removable_gaps_and_infinite_steps_are_undefined() {
+    let cases = [
+        ("arctan(1/x)", "0", "jumps"), ("1/(1+e^(1/x))", "0", "jumps"), ("e^(-1/x)", "0", ""), ("1/(1/x)", "0", "hole"),
+        ("1/(1+1/x)", "0", "hole"), ("(1/x)^(-1)", "0", "hole"), ("e^(-1/x^2)", "0", "hole"), ("x^2/x", "0", "hole"),
+        ("x^3/x", "0", "hole"), ("sin(x)/sin(x)", "0", "hole"), ("1/sec(x)", "pi/2", "hole"), ("cos(x)/cos(x)", "pi/2", "hole"),
+        ("(x^2-1)/(x-1)", "1", "hole"), ("x/abs(x)", "0", "jumps"), ("tan(x)/tan(x)", "0", "hole"),
+    ];
+    assert!(cases.len() >= 12);
+    let mut bad = vec![];
+    for (fx, a, kind) in cases {
+        let p = with(&[("func", s(fx)), ("a", s(a)), ("h", s("0.5")), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-3.0)), ("ymax", f(3.0))]);
+        let m = tangent::model(&p);
+        let n = tangent::warnings(&p).join(" | ");
+        if m.p.is_some() { bad.push(format!("{fx} at {a}: a tangent ({n})")); }
+        if !n.contains("is undefined") { bad.push(format!("{fx} at {a}: notes {n}")); }
+        if !kind.is_empty() && !n.contains(kind) { bad.push(format!("{fx} at {a}: not said to be a {kind}: {n}")); }
+        let p = with(&[("func", s(fx)), ("a", s("1.3")), ("h", s("0.5")), ("more_a", s(a)), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-3.0)), ("ymax", f(3.0))]);
+        let m = tangent::model(&p);
+        let n = tangent::warnings(&p).join(" | ");
+        if !m.more.is_empty() || !n.contains("More tangents:") || !n.contains("is undefined") { bad.push(format!("{fx}: more tangents at {a}: {n}")); }
+    }
+    for fx in ["arctan(1/x)", "1/(1+e^(1/x))", "x/abs(x)"] {
+        let n = tangent::warnings(&with(&[("func", s(fx)), ("a", s("-1")), ("h", s("2.3")), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-3.0)), ("ymax", f(3.0))])).join(" | ");
+        if !n.contains("jumps between P and Q") { bad.push(format!("{fx}: secant across the jump: {n}")); }
+    }
+    for fx in ["x^2", "sin(x)", "arctan(x)", "e^x"] {
+        let n = tangent::warnings(&with(&[("func", s(fx)), ("a", s("-1")), ("h", s("2.3")), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-3.0)), ("ymax", f(10.0))])).join(" | ");
+        if n.contains("jumps") { bad.push(format!("{fx}: a jump that is not there: {n}")); }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
