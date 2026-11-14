@@ -110,7 +110,8 @@ fn rational_and_invalid() {
     assert_eq!(read("0.50").unwrap().s, "0.50");
     assert_eq!(read("1e-5").unwrap().v, 0.00001);
     assert_eq!(read("sqrt(13)").unwrap().s, "√13");
-    assert!(!read("2*3").unwrap().exact);
+    assert!(read("2*3").unwrap().exact);
+    assert_eq!(read("2*3").unwrap().s, "6");
     let mut p = base();
     p.set_s("wr", "0");
     p.set_s("wi", "0");
@@ -530,4 +531,143 @@ fn points_mode_modulus_line_clears_product_label() {
     let (v, _) = all(&p, &mut vec![]);
     let names: std::collections::BTreeSet<_> = v.iter().map(|z| &z.name).collect();
     assert_eq!(names.len(), v.len());
+}
+
+#[test]
+fn certified_rational_expressions_and_refused_poles() {
+    // Fractions independently evaluated by hand: 1/10+1/5-3/10=0;
+    // (1/3+1/6)/(1/4)=2; -2^2=-4; 2^3^2=512.
+    for (s, want) in [
+        (".1+.2-.3", "0"),
+        ("(1/3+1/6)/(1/4)", "2"),
+        ("2*3", "6"),
+        ("-2^2", "−4"),
+        ("2^3^2", "512"),
+        ("1e-5+2e-5", "3/100000"),
+        ("10000000000000000+1-10000000000000000", "1"),
+        ("1/(.1+.2-.3)", "refused"),
+        ("0^0", "refused"),
+        ("pi-3.141592653589793", "refused"),
+        ("1/(sqrt(2)*sqrt(2)-2)", "refused"),
+    ] {
+        if want == "refused" {
+            assert!(read(s).is_none(), "{s}");
+        } else {
+            let n = read(s).unwrap();
+            assert!(n.exact, "{s}");
+            assert_eq!(n.s, want, "{s}");
+        }
+    }
+    let mut p = base();
+    p.set_s("zr", ".1+.2-.3");
+    p.set_s("zi", "0");
+    assert!(warnings(&p).iter().any(|n| n.contains("undefined at zero")));
+    p.set_s("labels", "Polar");
+    assert!(!render(&p).contains("cis(undefined)"));
+    p.set_s("zr", "pi");
+    p.set_s("wr", "3.141592653589793");
+    p.set_s("operation", "Difference");
+    p.set_s("wi", "0");
+    assert!(warnings(&p).iter().any(|n| n.contains("Cannot determine")));
+    assert!(render(&p).contains("cannot determine"));
+}
+#[test]
+fn principal_branch_and_near_axis_roots() {
+    let mut p = base();
+    p.set_s("zr", "-1");
+    p.set_s("zi", "-1e-20");
+    let z = numbers(&p, &mut vec![]).remove(0);
+    assert!(z.angle() < 0.);
+    p.set_s("operation", "Roots");
+    let (zs, n) = all(&p, &mut vec![]);
+    // One cube root of -1-i*epsilon is -1-i*epsilon/3 + O(epsilon^2).
+    let root = zs[n..]
+        .iter()
+        .min_by(|a, b| a.a.v.total_cmp(&b.a.v))
+        .unwrap();
+    assert_eq!(root.a.v, -1.);
+    assert!(
+        (root.b.v / (-1e-20 / 3.) - 1.).abs() < 1e-12,
+        "{}",
+        root.b.v
+    );
+    for z in &zs[n..] {
+        let a = z.a.v;
+        let b = z.b.v;
+        assert!(((a * a * a - 3. * a * b * b) + 1.).abs() < 1e-14);
+        assert!((3. * a * a * b - b * b * b + 1e-20).abs() < 1e-14);
+    }
+}
+#[test]
+fn region_layering_and_student_units() {
+    let mut p = base();
+    p.set_s("locus", "Disc");
+    let s = render(&p);
+    assert!(s.find("clip-path=\"url(#plot)\"").unwrap() < s.find("#dddddd").unwrap());
+    p.set_b(SHOW_ANSWERS, false);
+    p.set_s("question", "Coordinates");
+    assert!(!render(&p).contains("|z| ="));
+    for k in ["modulus", "argument"] {
+        assert!(!relevant(k, &p));
+        let a = render(&p);
+        p.set_b(k, false);
+        assert_eq!(a, render(&p));
+    }
+    p.set_s("question", "Modulus and argument");
+    p.set_b("argument", true);
+    p.set_s("unit", "Degrees");
+    assert!(render(&p).contains("_____ °"));
+    p.set_s("unit", "Radians");
+    assert!(render(&p).contains("_____ rad"));
+    p.set_f("xmin", -1.);
+    p.set_f("xmax", 1.);
+    p.set_f("xstep", 0.1);
+    assert!(
+        warnings(&p)
+            .iter()
+            .any(|n| n.contains("Axis numbers would overlap"))
+    );
+}
+
+#[test]
+fn finite_controls_and_large_locus() {
+    let mut p = base();
+    p.set_b(SHOW_ANSWERS, false);
+    p.set_s("question", "Construction");
+    p.set_s("operation", "Roots");
+    assert!(!relevant("polygon", &p));
+    let s = render(&p);
+    p.set_b("polygon", false);
+    assert_eq!(s, render(&p));
+    p.set_b(SHOW_ANSWERS, true);
+    p.set_s("zr", "0");
+    p.set_s("zi", "0");
+    p.set_s("wr", "0");
+    p.set_s("wi", "0");
+    p.set_s("operation", "None");
+    for k in ["argument", "circle", "marks", "components", "dec"] {
+        assert!(!relevant(k, &p), "{k}");
+    }
+    p.set_s("zr", "3");
+    p.set_s("zi", "2");
+    assert!(relevant("dec", &p));
+    p.set_s("locus", "Disc");
+    p.set_s("cr", "1000000");
+    p.set_s("ci", "0");
+    p.set_s("lr", "1000000");
+    let t = std::time::Instant::now();
+    let s = render(&p);
+    assert!(t.elapsed().as_secs_f64() < 0.5);
+    assert!(s.len() < 200000);
+    assert!(!s.contains("NaN"));
+    to_png(&s, 0.25).unwrap();
+    let g = Win::new(&p).unwrap();
+    let (regions, curves) = large_locus(g, 1e6, 0., 1e6);
+    assert!(!regions.is_empty());
+    assert!(!curves.is_empty());
+    // x = y²/(2*10^6) + O(y^4/10^18): the visible boundary hugs x=0.
+    for (x, y) in curves.iter().flatten() {
+        assert!(x.abs() < 0.000019, "{x} {y}");
+        assert!((x - y * y / 2e6).abs() < 1e-9);
+    }
 }
