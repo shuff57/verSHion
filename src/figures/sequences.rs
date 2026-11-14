@@ -359,6 +359,15 @@ impl P<'_> {
                 "ceil" => arg.v.ceil(),
                 _ => return None,
             };
+            if matches!(name, "sin" | "cos" | "tan") && arg.v.abs() > 1e9 {
+                return None;
+            }
+            if name == "tan" && arg.v.cos().abs() < 1e-12 {
+                return None;
+            }
+            if matches!(name, "sin" | "cos") && arg.v.abs() > 1.0 && v.abs() < 1e-12 {
+                return None;
+            }
             return if v.is_finite() {
                 Some(N {
                     v,
@@ -505,36 +514,7 @@ fn approximation(v: f64) -> String {
     }
 }
 fn pi_coefficient(s: &str, n: N, a: N, b: N) -> Option<N> {
-    let t = s.replace("npi", "n*pi").replace("pin", "pi*n");
-    if t.matches("pi").count() != 1 {
-        return None;
-    }
-    let cs = t.as_bytes();
-    let i = t.find("pi")?;
-    if t[..i].contains('/') || t[i + 2..].contains('^') {
-        return None;
-    }
-    // Only products, quotients and parentheses: addition would not be a pi multiple.
-    if cs.iter().enumerate().any(|(j, c)| {
-        matches!(c, b'+' | b'-')
-            && j > 0
-            && cs[j - 1] != b'('
-            && cs[j - 1] != b'*'
-            && cs[j - 1] != b'/'
-    }) {
-        return None;
-    }
-    let t = t.replace("pi", "(1)");
-    let mut p = P {
-        s: t.as_bytes(),
-        i: 0,
-        n,
-        a,
-        b,
-    };
-    let v = p.expr()?;
-    p.ws();
-    if p.i == p.s.len() { Some(v) } else { None }
+    limit_math::pi_factor(s, n, a, b)
 }
 fn sqrt_spelling(s: &str) -> String {
     let cs = s.chars().collect::<Vec<_>>();
@@ -1112,7 +1092,7 @@ pub fn relevant(key: &str, p: &Params) -> bool {
             can_limit(p) && p.b("limit") && p.b(SHOW_ANSWERS) && p.s("layout") != "Number line"
         }
         "missing" => p.s("task") == "Missing terms",
-        "terms" => p.b(SHOW_ANSWERS) || p.s("task") != "Missing terms",
+        "terms" => p.s("task") != "Missing terms",
         "given" => !p.b(SHOW_ANSWERS) && p.s("task") == "Continue",
         _ => true,
     }
@@ -1270,7 +1250,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
             w.push("The axis name is shortened to a fitting word, or omitted if no word fits. Use a short name without sequence symbols beside the arrow.".into());
         }
     }
-    if !p.b(SHOW_ANSWERS) && p.s("task") == "Missing terms" {
+    if p.s("task") == "Missing terms" {
         let start = if p.s("start") == "0" { 0 } else { 1 };
         if p.s("missing").split(',').any(|v| {
             v.trim()
@@ -1414,6 +1394,13 @@ fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
     if !p.b("point_values") || p.s("layout") == "Number line" {
         return (vec![], 0);
     }
+    let (term_limit, sum_limit, _) = limits(p, d);
+    let has_limit = match display(p) {
+        "Both" => term_limit.is_some() || sum_limit.is_some(),
+        "Partial sums" => sum_limit.is_some(),
+        _ => term_limit.is_some(),
+    };
+    let show_limit = p.b(SHOW_ANSWERS) && p.b("limit") && has_limit;
     let fs = 14.0 * svg::label_factor(p.s("label_size"));
     let count = d.a.len();
     let width = canvas_width(p, count);
@@ -1470,8 +1457,8 @@ fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
         let y = bottom - (0.0 - lo) / (hi - lo) * plot_height(p);
         lines.push(((left, y), (right, y)));
     }
-    if can_limit(p) && p.b("limit") && p.b(SHOW_ANSWERS) {
-        let (a, b, _) = limits(p, d);
+    if show_limit {
+        let (a, b) = (term_limit, sum_limit);
         for l in series
             .iter()
             .filter_map(|s| if *s == 0 { a } else { b })
@@ -1587,8 +1574,8 @@ fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
                 {
                     continue;
                 }
-                if can_limit(p) && p.b("limit") && p.b(SHOW_ANSWERS) {
-                    let (a, b, _) = limits(p, d);
+                if show_limit {
+                    let (a, b) = (term_limit, sum_limit);
                     if series
                         .iter()
                         .filter_map(|s| if *s == 0 { a } else { b })

@@ -1430,3 +1430,67 @@ fn sequences_independent_textbook_oracles_r1() {
             .any(|r| r.starts_with("Exact requested sum:"))
     );
 }
+
+#[test]
+fn sequences_pi_proof_scope_r1() {
+    for (expression, expected) in [
+        ("sin(n^pi)", 1f64.sin()),
+        ("sin(floor(pi))", 3f64.sin()),
+        ("sin(pi^2)", (std::f64::consts::PI.powi(2)).sin()),
+        (
+            "sin(pi/(pi+1))",
+            (std::f64::consts::PI / (std::f64::consts::PI + 1.0)).sin(),
+        ),
+    ] {
+        let v = read(expression, N::int(1), N::int(0), N::int(0)).unwrap();
+        assert!(v.q.is_none());
+        assert!((v.v - expected).abs() < 1e-14, "{expression}");
+    }
+    for expression in ["sin(pi*2^0)", "sin((pi-pi)+pi)", "cos((n+1)*pi/2)"] {
+        let v = read(expression, N::int(2), N::int(0), N::int(0)).unwrap();
+        assert_eq!(v.q, Some((0, 1)), "{expression}");
+    }
+    assert!(read("tan(pi/2)/1000000000000", N::int(1), N::int(0), N::int(0)).is_none());
+}
+
+#[test]
+fn sequences_exact_trig_render_bound_r1() {
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Explicit");
+    p.set_s("formula", "sin(n*pi/5)");
+    p.set_s("display", "Both");
+    p.set_i("count", 24);
+    p.set_f("from", -4.0);
+    p.set_f("to", 4.0);
+    p.set_f("step", 1.0);
+    for key in [
+        "point_values",
+        "limit",
+        "sum",
+        "join",
+        "convergence",
+        "sums",
+    ] {
+        p.set_b(key, true);
+    }
+    for layout in ["One grid", "Two aligned graphs"] {
+        p.set_s("layout", layout);
+        let start = std::time::Instant::now();
+        let svg = render(&p);
+        assert!(start.elapsed().as_secs_f64() < 0.5);
+        assert!(svg.len() < 150000);
+    }
+}
+
+#[test]
+fn sequences_forced_missing_list_relevance_r1() {
+    let mut p = Params::defaults(&params());
+    p.set_s("task", "Missing terms");
+    for answers in [false, true] {
+        p.set_b(SHOW_ANSWERS, answers);
+        assert!(!relevant("terms", &p));
+        let original = render(&p);
+        p.set_b("terms", !p.b("terms"));
+        assert_eq!(render(&p), original);
+    }
+}

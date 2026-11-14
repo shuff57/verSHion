@@ -176,6 +176,42 @@ impl L<'_> {
         Some(R::constant(n))
     }
 }
+// A rational function in a formal symbol p is a pi multiple only if its
+// reduced numerator is c*p and its denominator is constant. No numerical sampling.
+pub(super) fn pi_factor(s: &str, n: N, a: N, b: N) -> Option<N> {
+    let input = s.replace("npi", "n*pi").replace("pin", "pi*n");
+    let mut out = String::new();
+    let mut token = String::new();
+    for c in input.chars().chain(std::iter::once(' ')) {
+        if c.is_ascii_alphabetic() {
+            token.push(c);
+        } else {
+            let value = match token.as_str() {
+                "pi" => "p".into(),
+                "n" | "u" | "v" => {
+                    let value = match token.as_str() {
+                        "n" => n,
+                        "u" => a,
+                        _ => b,
+                    };
+                    let (x, y) = value.q?;
+                    format!("({x}/{y})")
+                }
+                _ => token.clone(),
+            };
+            out.push_str(&value);
+            token.clear();
+            if !c.is_whitespace() {
+                out.push(c);
+            }
+        }
+    }
+    let r = rational(&out, b'p')?;
+    if r.b.len() != 1 || r.a.len() > 2 || r.a[0].q != Some((0, 1)) {
+        return None;
+    }
+    Some(r.a.get(1).copied().unwrap_or(N::int(0)).op(r.b[0], '/'))
+}
 fn canonical(s: &str) -> String {
     recurrence_spelling(s)
         .replace(' ', "")
