@@ -480,3 +480,54 @@ fn ordinary_polar_labels_are_present() {
         );
     }
 }
+#[test]
+fn fractional_polar_input_and_refused_headers() {
+    let mut p = base();
+    p.set_s("input", "Polar exponential");
+    p.set_s("radius", "1/3");
+    p.set_s("theta", "pi/3");
+    let (v, _) = all(&p, &mut vec![]);
+    assert!((v[0].r() - 1. / 3.).abs() < 1e-12);
+    let s = render(&p);
+    assert!(s.contains("(1/3)e"));
+    for radius in ["100", "-1"] {
+        p.set_s("radius", radius);
+        assert!(!warnings(&p).is_empty());
+        assert!(!render(&p).contains("Given z"));
+    }
+}
+#[test]
+fn points_mode_modulus_line_clears_product_label() {
+    let mut p = base();
+    p.set_s("marks", "Points");
+    p.set_s("operation", "Product");
+    p.set_s("wr", "1/3");
+    p.set_s("wi", "0");
+    let s = render(&p);
+    let boxes = labels::boxes(&s);
+    assert_eq!(boxes.len(), 3);
+    let b = boxes.iter().find(|b| b.id == "p2").unwrap();
+    let c = b.centre();
+    assert!(!segment_hits(
+        (310., 310.),
+        (430., 230.),
+        (
+            c.0 - b.half.0,
+            c.1 - b.half.1,
+            c.0 + b.half.0,
+            c.1 + b.half.1
+        )
+    ));
+    let (v, n) = all(&p, &mut vec![]);
+    assert_eq!(v[n].a.v, 1.);
+    assert!((v[n].b.v - 2. / 3.).abs() < 1e-12);
+    p.set_s("extra", "zw, 1, 2");
+    assert!(warnings(&p).iter().any(|n| n.contains("reserved")));
+    p.set_s("operation", "Roots");
+    p.set_s("zr", "0");
+    p.set_s("zi", "0");
+    p.set_s("extra", "root, 1, 2");
+    let (v, _) = all(&p, &mut vec![]);
+    let names: std::collections::BTreeSet<_> = v.iter().map(|z| &z.name).collect();
+    assert_eq!(names.len(), v.len());
+}

@@ -307,7 +307,7 @@ fn polar(z: &Z, p: &Params) -> String {
     let r = modtext(z, p);
     let a = angtext(z, p);
     let approx = r.starts_with('≈') || a.starts_with('≈');
-    let r = r.trim_start_matches("≈ ");
+    let r = coefficient(r.trim_start_matches("≈ "));
     let a = a.trim_start_matches("≈ ");
     let form = match p.s("polar_style") {
         "Exponential" => format!("{r}e⟦i({a})⟧"),
@@ -578,7 +578,8 @@ fn numbers(p: &Params, notes: &mut Vec<String>) -> Vec<Z> {
         if v.len() != 3
             || v[0].len() > 8
             || !v[0].chars().all(|x| x.is_ascii_alphabetic())
-            || ["z", "w", "i", "e", "pi", "r", "theta"].contains(&v[0].to_lowercase().as_str())
+            || ["z", "w", "i", "e", "pi", "r", "theta", "zw"]
+                .contains(&v[0].to_lowercase().as_str())
             || out.iter().any(|z| z.name == v[0])
         {
             notes.push("Extra rows need unique names (up to eight letters), real, imaginary; reserved symbols are not names.".into());
@@ -624,7 +625,7 @@ fn all(p: &Params, notes: &mut Vec<String>) -> (Vec<Z>, usize) {
             zs.push(Z {
                 a: from_q(Q(0, 1)),
                 b: from_q(Q(0, 1)),
-                name: "root".into(),
+                name: "u1".into(),
             })
         } else {
             for k in 0..p.i("n") {
@@ -921,21 +922,30 @@ fn build(raw: &Params) -> (String, Vec<String>) {
             .collect();
         doc.polyline(&pts, color(1), 2.);
     }
-    if p.s("input") != "Cartesian" && !coord && !blank {
+    if p.s("input") != "Cartesian"
+        && !coord
+        && !blank
+        && zs.iter().any(|z| z.name == "z" && g.inside(z.a.v, z.b.v))
+    {
         if let (Some(r), Some(t)) = (read(p.s("radius")), read(p.s("theta"))) {
-            let angle = if p.s("unit") == "Degrees" {
+            let angle = if let Some(q) = angle_fraction(p.s("theta"), p.s("unit")) {
+                exact_angle(q, p.s("unit"))
+            } else if p.s("unit") == "Degrees" {
                 format!("{}°", t.s)
             } else {
-                if angle_fraction(p.s("theta"), p.s("unit")).is_some() {
-                    p.s("theta").replace("pi", "π").replace('-', "−")
-                } else {
-                    t.s.clone()
-                }
+                t.s.clone()
             };
-            let line = if p.s("input") == "Polar exponential" {
-                format!("Given z: {}e⟦i({angle})⟧", r.s)
+            let eq = if r.exact && (t.exact || angle_fraction(p.s("theta"), p.s("unit")).is_some())
+            {
+                "="
             } else {
-                format!("Given z: {}(cos({angle}) + i sin({angle}))", r.s)
+                "≈"
+            };
+            let r = coefficient(&r.s);
+            let line = if p.s("input") == "Polar exponential" {
+                format!("Given z {eq} {r}e⟦i({angle})⟧")
+            } else {
+                format!("Given z {eq} {r}(cos({angle}) + i sin({angle}))")
             };
             doc.raw(&text(620., 58., &line));
         }
@@ -1010,6 +1020,10 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         }
     }
     if let Some(z) = zs.first() {
+        if p.s("marks") == "Points" && p.b("modulus") && !coord && !blank && g.inside(z.a.v, z.b.v)
+        {
+            avoid.push((origin, g.pt(z.a.v, z.b.v)));
+        }
         if p.b("components") && !coord && g.inside(z.a.v, z.b.v) {
             let q = g.pt(z.a.v, z.b.v);
             avoid.push((q, (q.0, origin.1)));
@@ -1138,23 +1152,37 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                         dx.hypot(dy)
                     };
                     let own = distance(pt);
-                    if zs.iter().take(visible).any(|o| {
-                        let q = g.pt(o.a.v, o.b.v);
-                        distance(q) + 0.1 < own
-                    }) {
+                    if zs
+                        .iter()
+                        .take(visible)
+                        .filter(|o| g.inside(o.a.v, o.b.v))
+                        .any(|o| {
+                            let q = g.pt(o.a.v, o.b.v);
+                            distance(q) + 0.1 < own
+                        })
+                    {
                         continue;
                     }
-                    if zs.iter().take(visible).any(|o| {
-                        let q = g.pt(o.a.v, o.b.v);
-                        q.0 > b.0 - 5. && q.0 < b.2 + 5. && q.1 > b.1 - 5. && q.1 < b.3 + 5.
-                    }) {
+                    if zs
+                        .iter()
+                        .take(visible)
+                        .filter(|o| g.inside(o.a.v, o.b.v))
+                        .any(|o| {
+                            let q = g.pt(o.a.v, o.b.v);
+                            q.0 > b.0 - 5. && q.0 < b.2 + 5. && q.1 > b.1 - 5. && q.1 < b.3 + 5.
+                        })
+                    {
                         continue;
                     }
                     if p.s("marks") == "Vectors"
-                        && zs.iter().take(visible).any(|o| {
-                            let q = g.pt(o.a.v, o.b.v);
-                            segment_hits(origin, q, (b.0 - 2., b.1 - 2., b.2 + 2., b.3 + 2.))
-                        })
+                        && zs
+                            .iter()
+                            .take(visible)
+                            .filter(|o| g.inside(o.a.v, o.b.v))
+                            .any(|o| {
+                                let q = g.pt(o.a.v, o.b.v);
+                                segment_hits(origin, q, (b.0 - 2., b.1 - 2., b.2 + 2., b.3 + 2.))
+                            })
                     {
                         continue;
                     }
@@ -1511,4 +1539,27 @@ fn scientific(s: &str) -> String {
         a.trim_start_matches('+').replace('-', "−"),
         exponent
     )
+}
+
+fn coefficient(s: &str) -> String {
+    if s.contains('/') && !s.starts_with("√(") {
+        format!("({s})")
+    } else {
+        s.to_string()
+    }
+}
+
+fn exact_angle(q: Q, unit: &str) -> String {
+    if unit == "Degrees" {
+        format!("{}°", q.mul(Q(180, 1)).text())
+    } else {
+        match (q.0, q.1) {
+            (0, _) => "0".into(),
+            (1, 1) => "π".into(),
+            (-1, 1) => "−π".into(),
+            (1, d) => format!("π/{d}"),
+            (-1, d) => format!("−π/{d}"),
+            (n, d) => format!("{n}π/{d}").replace('-', "−"),
+        }
+    }
 }
