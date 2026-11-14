@@ -440,7 +440,7 @@ pub fn abs_args_of(n: &Node, out: &mut Vec<Node>) { abs_args(n, out) }
 // ───────────────────────── print ─────────────────────────
 
 fn sup(k: i64) -> String { if k == 1 { String::new() } else { format!("^{k}") } }
-/// e^q as a book writes it: e, e^2, √e, e√e, e^(2/3).
+/// e^q (q > 0) as a book writes it: e, e^2, √e, e√e, e^(2/3).
 fn e_text(q: Rat) -> String {
     if q.d == 1 { return format!("e{}", sup(q.n as i64)); }
     if q.d == 2 { let k = (q.n - 1) / 2; return format!("{}\u{221a}e", if k == 0 { String::new() } else { format!("e{}", sup(k as i64)) }); }
@@ -448,12 +448,17 @@ fn e_text(q: Rat) -> String {
 }
 fn gcd_i(a: i128, b: i128) -> i128 { if b == 0 { a.abs() } else { gcd_i(b, a % b) } }
 
-/// One written term: its rational coefficient, the factors over it and the factors under it.
-struct Term { c: Rat, num: Vec<String>, den: Vec<String>, rational: bool }
+/// One written term: its rational coefficient, the factors over it and under it, and its value (for the self-check).
+struct Term { c: Rat, num: Vec<String>, den: Vec<String>, rational: bool, val: f64, log: bool }
 impl Term {
-    /// The term without its sign, with the coefficient scaled to `k` (for a shared denominator).
+    /// The term without its sign, with the coefficient `c` (scaled for a shared denominator).
     fn text(&self, c: Rat) -> String {
         let (cn, cd) = (c.n.abs(), c.d);
+        // a rational multiple of one logarithm: (51/130) ln(51/130), 2 ln(3/2)
+        if self.log {
+            let arg = &self.num[0];
+            return if cn == 1 && cd == 1 { arg.clone() } else if cd == 1 { format!("{cn} {arg}") } else { format!("({cn}/{cd}) {arg}") };
+        }
         // (roots last, so √2 never reads as the root of what follows; ln set off by a space)
         let mut num = String::new();
         for f in &self.num {
@@ -473,13 +478,36 @@ impl Term {
     }
 }
 
+/// Σ cᵢ ln pᵢ as one term g·ln(N/D): g the largest rational all the cᵢ are whole multiples of, N/D the product of the
+/// primes to those multiples; an integer g taken into the argument while it stays under a million (ln 4, not 2 ln 2).
+/// None when the argument would be too large (or overflow).
+fn one_log(logs: &[(i64, Rat)]) -> Option<(Rat, i128, i128)> {
+    let l = logs.iter().try_fold(1i128, |acc, (_, c)| (acc / gcd_i(acc, c.d)).checked_mul(c.d))?;
+    let nums: Vec<i128> = logs.iter().map(|(_, c)| c.n.checked_mul(l / c.d)).collect::<Option<_>>()?;
+    let gn = nums.iter().fold(0i128, |acc, v| gcd_i(acc, *v));
+    if gn == 0 { return None; }
+    let g = Rat::new(gn, l)?;
+    let (mut n, mut d) = (1i128, 1i128);
+    for ((p, _), v) in logs.iter().zip(&nums) {
+        let e = v / gn;
+        let pw = (*p as i128).checked_pow(u32::try_from(e.unsigned_abs()).ok()?)?;
+        if e > 0 { n = n.checked_mul(pw)?; } else { d = d.checked_mul(pw)?; }
+        if n > 1_000_000 || d > 1_000_000 { return None; }
+    }
+    // (a whole-number multiple goes into the argument while it stays small)
+    if g.d == 1 && g.n > 1 && let (Some(nn), Some(dd)) = (n.checked_pow(g.n as u32), d.checked_pow(g.n as u32)) && nn <= 1_000_000 && dd <= 1_000_000 {
+        return Some((Rat::int(1), nn, dd));
+    }
+    Some((g, n, d))
+}
+
 impl Ex {
     /// The value as a textbook writes it, in the figure's markup (^ raises the next token): 14/3, (e − 1)/2, π√2/8,
-    /// ln(3/2), 1 − √2/2, 1/(2e), −3 ³√2 − 6. None when it would be too long to read (over 5 terms or 60 characters).
+    /// ln(3/2), (8/9) ln(3/2), 1 − √2/2, 1/(2e), e^(−3/2), −3 ³√2 − 6. None when it would be too long to read (over 5
+    /// terms or 60 characters), or when the written terms, evaluated, do not give the value (a self-check on every form).
     pub fn text(&self) -> Option<String> {
         if self.0.is_empty() { return Some("0".into()); }
         let mut terms: Vec<Term> = vec![];
-        // a sum of logarithms with rational coefficients, as one logarithm while its argument stays under a million
         let mut logs: Vec<(i64, Rat)> = vec![];
         for (m, c) in &self.0 {
             let pure_log = m.sq == 1 && m.cb == 1 && m.pi == 0 && m.e.0 == 0 && m.ln.len() == 1 && m.ln[0].1 == 1;
@@ -487,36 +515,38 @@ impl Ex {
             let (mut num, mut den) = (vec![], vec![]);
             if m.pi > 0 { num.push(format!("\u{3c0}{}", sup(m.pi as i64))); } else if m.pi < 0 { den.push(format!("\u{3c0}{}", sup(-m.pi as i64))); }
             let e = m.erat();
-            if e.n > 0 { num.push(e_text(e)); } else if e.n < 0 { den.push(e_text(Rat { n: -e.n, d: e.d })); }
+            // (e to a negative fraction raised as a power, e^(−3/2): never 1/e√e, which reads as √e/e)
+            if e.n > 0 { num.push(e_text(e)); } else if e.n < 0 && e.d == 1 { den.push(e_text(Rat { n: -e.n, d: e.d })); } else if e.n < 0 { num.push(format!("e^(\u{2212}{}/{})", -e.n, e.d)); }
             for (p, k) in &m.ln {
                 let t = if k.abs() == 1 { format!("ln {p}") } else { format!("(ln {p})^{}", k.abs()) };
                 if *k > 0 { num.push(t); } else { den.push(t); }
             }
             if m.sq != 1 { num.push(format!("\u{221a}{}", m.sq)); }
             if m.cb != 1 { num.push(format!("^3\u{221a}{}", m.cb)); }
-            terms.push(Term { c: *c, num, den, rational: m.is_one() });
+            terms.push(Term { c: *c, num, den, rational: m.is_one(), val: c.f() * m.approx(), log: false });
         }
         if !logs.is_empty() {
-            let d = logs.iter().fold(1i128, |acc, (_, c)| acc / gcd_i(acc, c.d) * c.d);
-            let (mut n, mut dd) = (1i128, 1i128);
-            let mut ok = true;
-            for (p, c) in &logs {
-                let e = c.n * (d / c.d);
-                let pw = (*p as i128).checked_pow(e.unsigned_abs() as u32);
-                match pw { Some(v) if e > 0 => { n = n.saturating_mul(v); } Some(v) => { dd = dd.saturating_mul(v); } None => ok = false }
-            }
-            if ok && n <= 1_000_000 && dd <= 1_000_000 && n != dd {
-                let (neg, a, b) = if n >= dd { (false, n, dd) } else { (true, dd, n) };
-                let g = gcd_i(a, b);
-                let (a, b) = (a / g, b / g);
-                let arg = if b == 1 { format!("ln {a}") } else { format!("ln({a}/{b})") };
-                terms.push(Term { c: Rat { n: if neg { -1 } else { 1 }, d }, num: vec![arg], den: vec![], rational: false });
-            } else if !ok || n != dd {
-                for (p, c) in &logs { terms.push(Term { c: *c, num: vec![format!("ln {p}")], den: vec![], rational: false }); }
+            match one_log(&logs) {
+                Some((g, n, d)) if n != d => {
+                    // (−ln 2 rather than ln(1/2) for a whole multiple; a fractional multiple keeps its argument as it falls,
+                    // (7/13) ln(7/13), as x ln x at 7/13 reads)
+                    let (neg, a, b) = if n >= d || g.d != 1 { (false, n, d) } else { (true, d, n) };
+                    let arg = if b == 1 { format!("ln {a}") } else { format!("ln({a}/{b})") };
+                    let c = Rat { n: if neg { -g.n } else { g.n }, d: g.d };
+                    terms.push(Term { c, num: vec![arg], den: vec![], rational: false, val: c.f() * (a as f64 / b as f64).ln(), log: true });
+                }
+                Some(_) => {}
+                // (an argument too large to write: each logarithm as its own term)
+                None => for (p, c) in &logs { terms.push(Term { c: *c, num: vec![format!("ln {p}")], den: vec![], rational: false, val: c.f() * (*p as f64).ln(), log: true }); },
             }
         }
         if terms.is_empty() { return Some("0".into()); }
         if terms.len() > 5 { return None; }
+        // the self-check: the terms as written must add up to the value
+        let total: f64 = terms.iter().map(|t| t.val).sum();
+        let v = self.approx();
+        let scale = terms.iter().map(|t| t.val.abs()).fold(v.abs(), f64::max).max(1e-300);
+        if !((total - v).abs() <= 1e-9 * scale) { return None; }
         // the irrational terms first, a positive one leading (e − 1, ln 5 − 2 ln 2); a negative irrational after a positive
         // rational one (1 − √2/2)
         let (mut irr, rat): (Vec<Term>, Vec<Term>) = terms.into_iter().partition(|t| !t.rational);
@@ -525,7 +555,7 @@ impl Ex {
         let order: Vec<Term> = if lead_neg_irr { rat.into_iter().chain(irr).collect() } else { irr.into_iter().chain(rat).collect() };
         // terms that all share one denominator over a common line: (e − 1)/2, (√2 + 1)/2
         let d0 = order[0].c.d;
-        let shared = order.len() > 1 && d0 > 1 && order.iter().all(|t| t.c.d == d0 && t.den.is_empty());
+        let shared = order.len() > 1 && d0 > 1 && order.iter().all(|t| t.c.d == d0 && t.den.is_empty() && !t.log);
         let mut out = String::new();
         for (k, t) in order.iter().enumerate() {
             let c = if shared { Rat { n: t.c.n, d: 1 } } else { t.c };

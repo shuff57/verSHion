@@ -264,6 +264,9 @@ impl Fmt {
             let t = if t.contains('.') { t.trim_end_matches('0').trim_end_matches('.').to_string() } else { t };
             return (t, true);
         }
+        // (a value that is not 0 is never written as 0: places enough for its first digit)
+        // (a value under 10⁻⁹ is float residue of a 0, such as a width at a curve's tip, and stays 0)
+        let dec = if x.v.abs() > 1e-9 && x.v.abs() < 0.5 * 10f64.powi(-(dec as i32)) { (-x.v.abs().log10()).ceil().clamp(0.0, 9.0) as usize } else { dec };
         let full = fixed(x.v, rat, dec);
         let full = if full.trim_start_matches('\u{2212}').chars().all(|c| c == '0' || c == '.') { "0".to_string() } else { full };
         (full, false)
@@ -475,12 +478,14 @@ fn extreme(h: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, max: bool) -> Optio
     let xs: Vec<f64> = (0..=K).map(|i| if i == K { x1 } else { x0 + (x1 - x0) * i as f64 / K as f64 }).collect();
     let ys: Vec<f64> = xs.iter().map(|x| h(*x).map(|y| y * s)).collect::<Option<_>>()?;
     let mut best = if ys[K] > ys[0] { (x1, ys[K]) } else { (x0, ys[0]) };
+    let eps = 1e-12 * ys.iter().fold(1.0f64, |m, v| m.max(v.abs()));
     let g = 0.5 * (5f64.sqrt() - 1.0);
     for i in 0..=K {
         let left = if i == 0 { f64::NEG_INFINITY } else { ys[i - 1] };
         let right = if i == K { f64::NEG_INFINITY } else { ys[i + 1] };
-        if !(ys[i] >= left && ys[i] >= right) { continue; }
-        if ys[i] > best.1 { best = (xs[i], ys[i]); }
+        // (a top: at least its neighbours, and the first of a flat run, so a flat strip is not refined at every sample)
+        if !(ys[i] >= left && ys[i] >= right && (i == 0 || ys[i] > left)) { continue; }
+        if ys[i] > best.1 + eps { best = (xs[i], ys[i]); }
         let (mut a, mut b) = (xs[i.saturating_sub(1)], xs[(i + 1).min(K)]);
         for _ in 0..100 {
             let (c, d) = (b - g * (b - a), a + g * (b - a));
@@ -488,7 +493,8 @@ fn extreme(h: &dyn Fn(f64) -> Option<f64>, x0: f64, x1: f64, max: bool) -> Optio
         }
         let x = 0.5 * (a + b);
         let y = h(x)? * s;
-        if y > best.1 { best = (x, y); }
+        // (only a real gain over what is found already: float noise never beats an exact end value)
+        if y > best.1 + eps { best = (x, y); }
     }
     Some((best.0, best.1 * s))
 }
@@ -602,7 +608,8 @@ fn stationary(tree: Option<&Node>, x: f64) -> Option<Ex> {
 pub(crate) fn model(p: &Params) -> Result<Model, String> {
     let reg = region(p);
     let kd = kind(p);
-    let ru = rule(p);
+    // (where the rule is hidden, on the student copy without strips that names no sum, it does nothing)
+    let ru = if kd != Kind::None && !strips_drawn(p) && !p.b("sum_line") { Rule::L } else { rule(p) };
     let n = p.i("n").clamp(1, MAX_N) as usize;
     let fm = fmt_of(p);
     let mut m = Model { var: if kd == Kind::H { 'y' } else { 'x' }, ..Default::default() };
@@ -1312,6 +1319,19 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
     notes.extend(gnotes);
     let (mut w, mut h) = crate::figures::svg_size(&svg);
     ob.boxes.extend(text_boxes(&svg));
+    // (the column of y-axis numbers as a whole: no a or b label between two of its numbers)
+    let mut ycol: Option<[f64; 4]> = None;
+    {
+        let mut rest = svg.as_str();
+        let (mut c0, mut c1) = (f64::INFINITY, f64::NEG_INFINITY);
+        while let Some(k) = rest.find("<text ") {
+            rest = &rest[k + 5..];
+            let tag = &rest[..rest.find('>').unwrap_or(rest.len())];
+            if !tag.contains(r#"data-axis="1""#) { continue; }
+            if let (Some(x), Some(fs)) = (attr(tag, "x").and_then(|v| v.parse::<f64>().ok()), attr(tag, "font-size").and_then(|v| v.parse::<f64>().ok())) { c0 = c0.min(x - 3.0 * fs); c1 = c1.max(x + 1.0); }
+        }
+        if c0 < c1 { ycol = Some([c0, mt - 4.0, c1, mt + ph + 4.0]); }
+    }
     // the axes and the curves as drawn (sampled across the window)
     ob.segs.push(((ml - 22.0, axy), (ml + pw + 22.0, axy)));
     ob.segs.push(((axx, mt - 22.0), (axx, mt + ph + 22.0)));
@@ -1500,6 +1520,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             }
         }
         // (a and b last: they have more places to go than the strip labels and x₀ … xₙ)
+        if let Some(c) = ycol { ob.boxes.push(c); }
         // a and b, each beside its own line
         if p.b("mark_bounds") {
             let crossing_blank = student && crossing(p);
@@ -1592,7 +1613,13 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             let n = m.strips.len();
             let form = if m.var == 'y' { format!("{d} = (d \u{2212} c)/n") } else { format!("{d} = (b \u{2212} a)/n") };
             if student { lines.push(vec![Piece::T(format!("{form} =")), Piece::Blank]); }
-            else { let (t, e) = fm.text(dx); lines.push(vec![Piece::T(format!("{form} = ({hi_t} \u{2212} {})/{n} {} {t}", neg_par(lo_t.clone()), eqs(e)))]); }
+            else {
+                let (t, e) = fm.text(dx);
+                let worked = format!("({hi_t} \u{2212} {})/{n}", neg_par(lo_t.clone()));
+                // (once: not "(e − 1)/2 = (e − 1)/2")
+                if e && worked == t { lines.push(vec![Piece::T(format!("{form} = {worked}"))]); }
+                else { lines.push(vec![Piece::T(format!("{form} = {worked} {} {t}", eqs(e)))]); }
+            }
         }
         let sum_txt = m.sum.as_ref().map(|s| fm.text(s));
         if p.b("sum_line") && strips_on && let Some((st, se)) = &sum_txt {
@@ -1638,7 +1665,9 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                 let (t, e) = fm.text(ev_);
                 // (the difference once: no "= 77/60 − ln 5 = 77/60 − ln 5")
                 let diff = format!("{st} \u{2212} {}", wrap(&neg_par(et.clone())));
-                if e && t.replace(['(', ')'], "") == diff.replace(['(', ')'], "") { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff}", m.sum_name))]); }
+                // (and not rewritten when nothing combines: the error's exact terms are just the sum's and the integral's)
+                let nothing_combines = match (&ev_.ex, m.sum.as_ref().and_then(|s| s.ex.as_ref()), m.exact.as_ref().and_then(|x| x.ex.as_ref())) { (Some(a), Some(b), Some(c)) => a.0.len() == b.0.len() + c.0.len(), _ => false };
+                if e && (nothing_combines || t.replace(['(', ')'], "") == diff.replace(['(', ')'], "")) { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff}", m.sum_name))]); }
                 else { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff} {} {t}", m.sum_name, eqs(e)))]); }
             }
         }

@@ -1034,3 +1034,119 @@ fn textbook_forms_rounding_and_lines() {
     has(lines(&lg).join(" | "), "= 9\u{b7}(1) = 9");
 }
 
+
+/// A written exact form, turned back into an expression for the app's reader (√n → sqrt(n), ³√n → n^(1/3), π → pi,
+/// ln n → ln(n), a minus sign → -), so it can be evaluated independently of the exact arithmetic that wrote it.
+fn form_expr(t: &str) -> String {
+    let t = t.replace('\u{2009}', "").replace('\u{2212}', "-").replace('\u{b7}', "*");
+    let ch: Vec<char> = t.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    let num_at = |i: usize| -> (String, usize) { let mut j = i; while j < ch.len() && (ch[j].is_ascii_digit() || ch[j] == '.') { j += 1; } (ch[i..j].iter().collect(), j) };
+    while i < ch.len() {
+        let c = ch[i];
+        if c == '^' && ch.get(i + 1) == Some(&'3') && ch.get(i + 2) == Some(&'\u{221a}') {
+            let (n, j) = num_at(i + 3);
+            out.push_str(&format!("(({n})^(1/3))"));
+            i = j;
+        } else if c == '\u{221a}' {
+            if ch.get(i + 1) == Some(&'e') { out.push_str("(sqrt(e))"); i += 2; } else { let (n, j) = num_at(i + 1); out.push_str(&format!("(sqrt({n}))")); i = j; }
+        } else if c == '\u{3c0}' { out.push_str("(pi)"); i += 1; }
+        else if c == 'l' && ch.get(i + 1) == Some(&'n') {
+            if ch.get(i + 2) == Some(&' ') { let (n, j) = num_at(i + 3); out.push_str(&format!("(ln({n}))")); i = j; } else { out.push_str("ln"); i += 2; }
+        } else if c == 'e' { out.push_str("(e)"); i += 1; }
+        else { out.push(c); i += 1; }
+    }
+    out
+}
+
+/// The self-check, tested: every exact form the figure writes (sums, heights, Δx, integrals, errors, areas) over logs, e,
+/// π, roots and rationals, every rule, n from 1 to 100, read back and evaluated, equals the value to 1e-9.
+#[test]
+fn every_exact_form_written_evaluates_to_its_value() {
+    let fns: Vec<(&str, &str, &str)> = vec![
+        ("ln(x)", "1", "2"), ("ln(x) + x", "1", "4"), ("ln(x)", "1", "7"), ("ln(x)", "1/2", "3"), ("ln(x^2 + 1)", "0", "2"), ("ln(x + 1)", "0", "3"), ("ln(2x)", "1", "3"),
+        ("x ln(x)", "1/10", "2"), ("2ln(x)", "1", "5"), ("ln(x)/x", "1", "4"), ("ln(3x)/x", "1", "3"), ("e^(-x)", "0", "3"), ("x^2 e^(-x)", "0", "2"), ("e^(x/2)", "0", "2"),
+        ("sin(x)", "0", "pi"), ("cos(x) + sin(x)", "0", "pi"), ("x sin(x)", "0", "pi"), ("sqrt(x)", "0", "4"), ("sqrt(1 - x^2)", "-1", "1"), ("x^(1/3)", "-8", "1"),
+        ("1/x", "1", "e"), ("x^2 + 1", "0", "2"), ("abs(x - 1) - abs(x - 2)", "0", "3"),
+    ];
+    let ns: Vec<i64> = (1..=20).chain([24, 30, 36, 40, 48, 60, 72, 80, 96, 100]).collect();
+    let (mut checked, mut bad) = (0, vec![]);
+    for (fx, a, b) in &fns {
+        for rule in RULES {
+            for &n in &ns {
+                let p = with(&[("f", s(fx)), ("a", s(a)), ("b", s(b)), ("rule", s(rule)), ("n", i(n))]);
+                let Ok(m) = model(&p) else { continue };
+                let mut vals: Vec<(&str, Val)> = vec![];
+                if let Some(v) = &m.sum { vals.push(("sum", v.clone())); }
+                if let Some(v) = &m.delta { vals.push(("dx", v.clone())); }
+                if let Some(v) = &m.exact { vals.push(("exact", v.clone())); if let Some(su) = &m.sum { vals.push(("error", su.sub(v))); } }
+                if let Some(v) = &m.abs_area { vals.push(("area", v.clone())); }
+                for st in &m.strips { vals.push(("height", st.h.clone())); vals.push(("strip area", st.area.clone())); }
+                for (what, v) in vals {
+                    let Some(t) = v.ex.as_ref().and_then(|e| e.text()) else { continue };
+                    checked += 1;
+                    let got = super::super::eval(&form_expr(&t), 0.0);
+                    let ok = got.is_some_and(|g| (g - v.v).abs() <= 1e-9 * v.v.abs().max(1.0));
+                    if !ok { bad.push(format!("{fx} {rule} n={n} {what}: {t:?} = {got:?}, value {}", v.v)); }
+                }
+            }
+        }
+    }
+    println!("exact forms checked: {checked}, false: {}", bad.len());
+    assert!(checked > 50_000 && bad.is_empty(), "{checked} checked, {} false:\n{}", bad.len(), bad.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// The fifth checker's cases: no false log value, logs as one rational multiple of one log, e^(−3/2) raised, piecewise
+/// sums of |…| fast, the hidden rule inert, Δx and errors written once, no value rounded to a bare 0.
+#[test]
+fn fifth_check_cases() {
+    let all = |p: &Params| lines(p).join(" | ");
+    // L₄₀ of ln x on [1, 2] ≈ 0.377604: never "= 0"
+    let p = with(&[("f", s("ln(x)")), ("a", s("1")), ("b", s("2")), ("rule", s("Left")), ("n", i(40)), ("sum_line", bo(true)), ("key_line", bo(true))]);
+    let t = all(&p);
+    assert!(!t.contains("= 0 |") && !t.contains("= 0;") && t.contains("\u{2248} 0.3776"), "{t}");
+    // L₂₀ of ln x + x on [1, 4] ≈ 9.7148, not 291/40
+    let p = with(&[("f", s("ln(x) + x")), ("a", s("1")), ("b", s("4")), ("rule", s("Left")), ("n", i(20)), ("sum_line", bo(true)), ("xmax", fl(5.0))]);
+    let t = all(&p);
+    assert!(!t.contains("291/40") && t.contains("9.7148"), "{t}");
+    // (51/130) ln(51/130), and x ln x at 33/26 is not 0
+    let p = with(&[("f", s("x ln(x)")), ("a", s("1/10")), ("b", s("2")), ("rule", s("Left")), ("n", i(13)), ("strip_labels", s("Heights")), ("sum_line", bo(true))]);
+    let m = model(&p).unwrap();
+    // (x₂ = 1/10 + 2·19/130 = 51/130)
+    assert_eq!(m.strips[2].h.ex.as_ref().and_then(|e| e.text()).as_deref(), Some("(51/130) ln(51/130)"));
+    assert_eq!(m.strips[1].h.ex.as_ref().and_then(|e| e.text()).as_deref(), Some("(16/65) ln(16/65)"));
+    // e^(−x) at 3/2: e^(−3/2) as a raised power
+    let p = with(&[("f", s("e^(-x)")), ("a", s("0")), ("b", s("3")), ("rule", s("Left")), ("n", i(2)), ("strip_labels", s("Heights")), ("xmax", fl(4.0)), ("ymax", fl(2.0))]);
+    assert_eq!(texts(&render(&p), "strip-label"), vec!["1", "e\u{2212}3/2"]);
+    // speed: sums of |…| with 96 and 100 strips well under half a second
+    for (f, rule, n) in [("abs(x - 1) - abs(x - 2)", "Lower", 96), ("abs(x - 1) - abs(x - 2)", "Upper", 100), ("(x + abs(x))/2 + abs(x - 1)", "Upper", 100)] {
+        let p = with(&[("f", s(f)), ("a", s("0")), ("b", s("3")), ("rule", s(rule)), ("n", i(n)), ("sum_line", bo(true)), ("key_line", bo(true))]);
+        let t0 = std::time::Instant::now();
+        let t = all(&p);
+        assert!(t0.elapsed().as_secs_f64() < 0.5, "{f} {rule} {n}: {:?}", t0.elapsed());
+        assert!(!t.contains("1.0000"), "a flat strip is written exactly: {t}");
+    }
+    // the hidden rule is inert on the curve-and-bounds copy
+    let base = [("region", s("Between f(x) and g(x)")), ("f", s("x^2")), ("g", s("x")), ("bounds", s("Where f and g cross")), ("strips", s("Horizontal")), ("show_answers", bo(false)), ("student", s("Curve and bounds only"))];
+    let mut t1 = base.to_vec(); t1.push(("rule", s("Trapezoid")));
+    assert_eq!(render(&with(&t1)), render(&with(&base)));
+    assert!(warnings(&with(&t1)).is_empty(), "{:?}", warnings(&with(&t1)));
+    // Δx = (e − 1)/2 once
+    let p = with(&[("f", s("1/x")), ("a", s("1")), ("b", s("e")), ("n", i(2)), ("show_dx", bo(true))]);
+    let t = all(&p);
+    assert!(t.contains("= (e \u{2212} 1)/2") && !t.contains("(e \u{2212} 1)/2 = (e \u{2212} 1)/2"), "{t}");
+    // at 0 places on [0, 1], nothing that is not 0 is written as 0
+    let p = with(&[("f", s("x^2")), ("a", s("0")), ("b", s("1")), ("values", s("Decimals")), ("dec", i(0)), ("show_dx", bo(true)), ("sum_line", bo(true)), ("exact_line", bo(true))]);
+    let t = all(&p);
+    assert!(!t.contains("\u{2248} 0 ") && !t.ends_with("\u{2248} 0") && !t.contains("\u{2248} 0 |"), "{t}");
+    // "a = 0" on the y-axis is not in the column of y-axis numbers (the opening state with 4 − x²)
+    let svg = render(&with(&[("f", s("4 - x^2"))]));
+    let col: Vec<[f64; 4]> = tags(&svg, "<text ").into_iter().filter(|t| t.contains(r#"data-axis="1""#)).filter_map(|t| { let (x, y) = (tag_attr(t, "x")?.parse::<f64>().ok()?, tag_attr(t, "y")?.parse::<f64>().ok()?); Some([x - 20.0, y - 12.0, x, y + 3.0]) }).collect();
+    let (c0, c1) = col.iter().fold((f64::MAX, f64::MIN), |a, b| (a.0.min(b[0]), a.1.max(b[2])));
+    let (y0, y1) = col.iter().fold((f64::MAX, f64::MIN), |a, b| (a.0.min(b[1]), a.1.max(b[3])));
+    for t in tags(&svg, r#"<text data-rs="bound""#) {
+        let b: Vec<f64> = nums_of(tag_attr(t, "data-box").unwrap());
+        assert!(!(b[0] < c1 && b[2] > c0 && b[1] < y1 && b[3] > y0), "a bound label in the y-number column: {b:?}");
+    }
+}
