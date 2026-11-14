@@ -1008,3 +1008,29 @@ fn the_widest_delta_worked_by_hand() {
     let w = words(&svg(&with(json!({"pieces": "y = x^2", "dots": "", "ask_at": "1", "eps_band": true, "eps": "1"}))));
     assert!(w.contains("δ = 0.41"), "{w}");
 }
+
+#[test]
+#[ignore]
+fn font_probe() {
+    let db = crate::figures::fontdb();
+    for f in db.faces() {
+        let fam = f.families.first().map(|x| x.0.clone()).unwrap_or_default();
+        if !(fam.contains("Liberation Serif") || fam.contains("DejaVu Serif") || fam.contains("Source Serif")) { continue; }
+        let has: Vec<String> = ['ε', 'δ', '≈', '≠', '→', '∞', 'π', '√', '−', '∛'].iter().map(|c| {
+            let ok = db.with_face_data(f.id, |data, i| ttf_parser::Face::parse(data, i).ok().and_then(|ff| ff.glyph_index(*c)).is_some()).unwrap_or(false);
+            format!("{c}{}", if ok { "+" } else { "-" })
+        }).collect();
+        println!("{fam} {:?}: {}", f.style, has.join(" "));
+    }
+}
+
+#[test]
+#[ignore]
+fn width_probe() {
+    let mut m = Meter::new();
+    for t in ["lim", "x\u{2192}1^(-)", " f(x) = ", "does not exist", "undefined", "Where is f not continuous? Give each x and its kind:", "x \u{2248} -4.712 (cannot be determined)", "\u{3b5} = 1/2, L = 1, a = -2: f stays within \u{3b5} of L for every x \u{2260} a within \u{3b4} of a", "removable", "jump", "infinite", "x = 4", "y = -\u{3c0}/2", "4 + e^3", "On the graph: x = 8 (jump); x = 9 (jump)"] {
+        let el = super::limits::text_probe(t, 15.0);
+        let ink = m.ink(&el).map(|b| b[2] - b[0]).unwrap_or(0.0);
+        println!("{t:60} est {:6.1} ink {:6.1} ratio {:.3}", super::limits::tw(t, 15.0), ink, ink / super::limits::tw(t, 15.0));
+    }
+}

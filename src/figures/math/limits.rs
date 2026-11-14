@@ -6,7 +6,10 @@
 //! circles, points, asymptotes, the x = a markers, the labels and the questions are drawn here. The limits are worked out
 //! from the typed pieces with the same expression reader (`eval`).
 use super::flat::eval_typed;
-use super::{coordinate_grid_build, coordinate_grid_params, eval, grid_layout, math_tspans, parse_row, split_domain, GridL, Row, SERIF};
+use super::{coordinate_grid_build, coordinate_grid_params, eval, grid_layout, math_tspans, parse_row, split_domain, GridL, Row};
+/// The figure's own text face: Source Serif 4 has every sign the key writes (≈, ≠, ∞, √, ε, δ), so a line never falls back
+/// to another face part way.
+const SERIF: &str = super::LABEL_SERIF;
 use crate::figures::interact::Handle;
 use crate::figures::{answers_param, svg, Example, FigureDef, ParamDef, Params, Subject, Value};
 use std::f64::consts::PI;
@@ -738,8 +741,9 @@ fn adv(c: char) -> f64 {
         '0'..='9' => 0.5, ' ' => 0.25, '.' | ',' | ':' | ';' => 0.25, '(' | ')' | '[' | ']' => 0.333, '/' => 0.278,
         '=' | '+' | '-' | '\u{2212}' | '<' | '>' | '\u{b1}' | '\u{2264}' | '\u{2265}' | '\u{2260}' | '\u{2248}' => 0.564,
         '\u{2192}' => 1.0, '\u{221e}' => 0.75, '\u{221a}' => 0.55, '\u{3c0}' | '\u{3b5}' | '\u{3b4}' => 0.55, '\u{207a}' | '\u{207b}' => 0.4,
-        'f' | 'i' | 'j' | 'l' | 't' | 'I' => 0.30, 'r' => 0.36, 's' => 0.39, 'm' | 'w' => 0.75, 'W' | 'M' => 0.9,
-        'a'..='z' => 0.5, 'A'..='Z' => 0.7,
+        // (Source Serif 4, measured: a little generous)
+        'f' | 'i' | 'j' | 'l' | 't' | 'I' => 0.34, 'r' => 0.42, 's' => 0.44, 'm' | 'w' => 0.86, 'W' | 'M' => 0.95,
+        'a'..='z' => 0.56, 'A'..='Z' => 0.72,
         // (a blank to write on)
         '\u{1}' => 3.67,
         _ => 0.6,
@@ -778,6 +782,8 @@ fn prose_tspans(s: &str) -> String {
 fn prose_el(x: f64, y: f64, size: f64, s: &str, fill: &str) -> String {
     format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" font-family="{SERIF}" fill="{fill}">{}</text>"##, prose_tspans(s))
 }
+#[cfg(test)]
+pub(super) fn text_probe(s: &str, size: f64) -> String { if s.contains(' ') && s.split(' ').any(|w| w.len() > 3) { prose_el(0.0, 100.0, size, s, "#000") } else { text_el(0.0, 100.0, size, s, "#000", false) } }
 fn text_el(x: f64, y: f64, size: f64, s: &str, fill: &str, halo: bool) -> String {
     let body = math_tspans(s);
     let h = if halo { format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" font-family="{SERIF}" fill="#fff" stroke="#fff" stroke-width="{:.1}" stroke-linejoin="round">{body}</text>"##, 0.3 * size) } else { String::new() };
@@ -811,7 +817,9 @@ fn box_pt(r: Bx, q: Pt) -> f64 { let dx = (r[0] - q.0).max(q.0 - r[2]).max(0.0);
 struct Board { segs: Vec<(Pt, Pt)>, dots: Vec<(Pt, f64)>, boxes: Vec<Bx>, bounds: Bx, markers: Vec<(Pt, f64)> }
 impl Board {
     fn free(&self, b: Bx) -> bool {
-        b[0] >= self.bounds[0] && b[1] >= self.bounds[1] && b[2] <= self.bounds[2] && b[3] <= self.bounds[3]
+        // (the page bounds are checked on the box itself: they are already inset; strokes and marks on the grown box)
+        let r = [b[0] + 1.5, b[1] + 1.5, b[2] - 1.5, b[3] - 1.5];
+        r[0] >= self.bounds[0] && r[1] >= self.bounds[1] && r[2] <= self.bounds[2] && r[3] <= self.bounds[3]
             && !self.segs.iter().any(|(a, c)| seg_hits(*a, *c, b))
             && !self.dots.iter().chain(self.markers.iter()).any(|(q, r)| box_pt(b, *q) < *r + 1.5)
             && !self.boxes.iter().any(|o| hit(*o, b))
@@ -820,7 +828,12 @@ impl Board {
 }
 
 /// A label's box: the text's width, and the ink from the cap height down to the descenders.
-fn label_box(c: Pt, w: f64, size: f64) -> Bx { [c.0 - w / 2.0, c.1 - 0.42 * size, c.0 + w / 2.0, c.1 + 0.58 * size] }
+/// The same, for a text with no descenders (removable, jump, infinite, x = 4): it ends at the baseline.
+fn label_box_for(c: Pt, text: &str, size: f64) -> Bx {
+    let w = tw(text, size);
+    let desc = text.chars().any(|ch| "gjpqy(),;".contains(ch));
+    [c.0 - w / 2.0, c.1 - 0.42 * size, c.0 + w / 2.0, c.1 + if desc { 0.58 } else { 0.38 } * size]
+}
 
 /// Where a label went: beside its thing, on a short leader, or nowhere on the graph.
 #[derive(Clone, Debug, PartialEq)]
@@ -836,7 +849,7 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
     let near_own = |b: Bx| -> f64 { r.own.iter().map(|(a, c)| seg_box_dist(*a, *c, b)).fold(f64::MAX, f64::min) };
     let own_pts: Vec<Pt> = r.own.iter().flat_map(|(a, c)| [*a, *c]).collect();
     for c in &r.tries {
-        let b = label_box(*c, w, size);
+        let b = label_box_for(*c, &r.text, size);
         let own_d = near_own(b);
         // (and clearly nearer its own thing than any other thing of its kind: another asymptote, another discontinuity)
         let rival_ok = r.rivals.iter().all(|(a, c)| seg_box_dist(*a, *c, b) >= (own_d + 8.0).max(1.5 * own_d));
@@ -846,14 +859,18 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
         }
     }
     // a short leader from the thing to a clear spot, crossing nothing drawn
-    for rad in [30.0, 38.0, 46.0, 56.0, 68.0, 82.0] {
-        for k in 0..36 {
-            let ang = k as f64 * PI / 18.0;
+    for rad in [30.0, 38.0, 46.0, 56.0, 68.0, 82.0, 100.0, 120.0] {
+        for k in 0..72 {
+            let ang = k as f64 * PI / 36.0;
             let c = (r.anchor.0 + rad * ang.cos() * 1.3, r.anchor.1 - rad * ang.sin());
-            let b = label_box(c, w, size);
+            let b = label_box_for(c, &r.text, size);
             if !board.free(grow(b, 2.0)) { continue; }
+            // (a label on a leader keeps clear of every other point and every other thing of its kind, too)
+            if board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 0.5 && (o.1 - q.1).abs() < 0.5)).any(|(q, _)| box_pt(b, *q) < 8.0) { continue; }
+            if r.rivals.iter().any(|(a, c2)| seg_box_dist(*a, *c2, b) < 8.0) { continue; }
             // from 7 px out of the anchor to the box's nearest edge point
-            let e = (r.anchor.0.clamp(b[0] + 3.0, b[2] - 3.0), r.anchor.1.clamp(b[1] + 1.0, b[3] - 1.0));
+            // (aimed within the ink: the width estimate is a little generous on the right)
+            let e = (r.anchor.0.clamp(b[0] + 3.0, b[0] + 0.9 * (b[2] - b[0]) - 3.0), r.anchor.1.clamp(b[1] + 1.0, b[3] - 1.0));
             let e = (e.0 + if r.anchor.0 < b[0] { -3.0 } else if r.anchor.0 > b[2] { 3.0 } else { 0.0 }, e.1 + if r.anchor.1 < b[1] { -2.0 } else if r.anchor.1 > b[3] { 2.0 } else { 0.0 });
             let (dx, dy) = (e.0 - r.anchor.0, e.1 - r.anchor.1);
             let l = dx.hypot(dy);
@@ -987,7 +1004,9 @@ fn build(p0: &Params) -> (String, Drawn) {
     // the curves, each piece drawn by the grid
     let mut curves = String::new();
     for (i, pc) in m.pieces.iter().enumerate() {
-        for (k, row) in rows_of(pc, g.x0, g.x1).iter().enumerate() {
+        let rows = rows_of(pc, g.x0, g.x1);
+        let mut rows_out = 0;
+        for (k, row) in rows.iter().enumerate() {
             let mut gp = grid_params(p, row, true);
             let mut rn = vec![];
             let mut s = coordinate_grid_build(&gp, &mut rn);
@@ -998,7 +1017,8 @@ fn build(p0: &Params) -> (String, Drawn) {
                 s = coordinate_grid_build(&gp, &mut rn);
             }
             for n in rn {
-                if n.contains("No part of this curve is inside the window") { let t = format!("Piece {} is outside the window: widen the axes to see it", pc.n); if !notes.contains(&t) { notes.push(t); } }
+                // (a floor drawn a stretch at a time is outside only when every stretch is)
+                if n.contains("No part of this curve is inside the window") { rows_out += 1; if rows_out == rows.len() { notes.push(format!("Piece {} is outside the window: widen the axes to see it", pc.n)); } }
                 else if n.contains("too long") || n.contains("Too detailed") { notes.push(format!("Piece {} is too long to draw", pc.n)); }
             }
             if let Some(grp) = curve_group(&s, &format!("lmar{i}_{k}")) {
@@ -1099,7 +1119,7 @@ fn build(p0: &Params) -> (String, Drawn) {
             if !inside_y(l) || fv.is_some_and(|f| (f - l).abs() < 1e-9 * (1.0 + l.abs())) || circles.iter().any(|c| (c.at.0 - cx).abs() < 0.5 && (c.at.1 - cy).abs() < 0.5) { continue; }
             circles.push(Circ { at: (cx, cy), closed: false, piece: i, which: 'g' });
         }
-        if d.kind == "jump" { if let Some(f) = fv.filter(|f| inside_y(*f)) { if !m.dots.iter().any(|dd| (dd.x.v - d.x).abs() < 1e-9) { circles.push(Circ { at: (cx, sy(f)), closed: true, piece: i, which: 'v' }); } } }
+        if matches!(d.kind, "jump" | "removable") { if let Some(f) = fv.filter(|f| inside_y(*f)) { if !m.dots.iter().any(|dd| (dd.x.v - d.x).abs() < 1e-9) { circles.push(Circ { at: (cx, sy(f)), closed: true, piece: i, which: 'v' }); } } }
     }
     // open circles first, closed over them (a filled end sitting on an open one shows the value)
     circles.sort_by_key(|c| c.closed);
@@ -1137,7 +1157,7 @@ fn build(p0: &Params) -> (String, Drawn) {
     // epsilon band at the first a
     let mut band_svg = String::new();
     let mut eps_line: Option<String> = None;
-    if p.b("eps_band") {
+    if p.b("eps_band") && !(m.pieces.is_empty() && m.dots.is_empty()) {
         match (m.asks.first(), Num::read(p.s("eps")).filter(|e| e.v > 0.0)) {
             (None, _) => notes.push("The epsilon band is drawn at the first value of a: type one in Ask the limits at x =".into()),
             (_, None) => notes.push("\u{3b5} has to be a number more than 0, such as 1/2".into()),
@@ -1145,7 +1165,8 @@ fn build(p0: &Params) -> (String, Drawn) {
             (Some(a), Some(_)) if stu && (p.b("ask_two") || p.b("ask_left") || p.b("ask_right")) => notes.push(format!("The \u{3b5} band shows the limit at x = {}, which the student copy asks for, so it is left off the student copy (turn off the limit questions to give students the band)", a.text.replace('-', "\u{2212}"))),
             (Some(a), Some(eps)) => match m.two(&a.k) {
                 Lim::Val(l, lt) => {
-                    let delta = widest_delta(&m, a.v, l, eps.v);
+                    let found = widest_delta(&m, a.v, l, eps.v);
+                    let delta = found.unwrap_or(g.x1 - g.x0);
                     let (yl, yh) = (l - eps.v, l + eps.v);
                     let (xl, xh) = (a.v - delta, a.v + delta);
                     let (py0, py1) = (sy(yh.min(g.y1)), sy(yl.max(g.y0)));
@@ -1156,8 +1177,11 @@ fn build(p0: &Params) -> (String, Drawn) {
                     for yv in [yl, yh] { if inside_y(yv) { let (a1, b1) = ((rect[0], sy(yv)), (rect[2], sy(yv))); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
                     for xv in [xl, xh] { if inside_x(xv) && !stu { let (a1, b1) = ((sx(xv), rect[1]), (sx(xv), rect[3])); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
                     dr.eps_drawn = true;
-                    let dt = if delta >= 0.01 { trim_dec(floor_to(delta + 1e-9, 2), 2) } else { format!("{:.1e}", delta) };
-                    eps_line = Some(format!("\u{3b5} = {}, L = {lt}, a = {}: f stays within \u{3b5} of L for every x \u{2260} a within \u{3b4} of a, the widest \u{3b4} (to the hundredth below) being \u{3b4} = {}", eps.text, a.text, if stu { BLANK.to_string() } else { dt }));
+                    eps_line = Some(match found {
+                        Some(d) => { let dt = trim_dec(d, delta_places(d)); format!("\u{3b5} = {}, L = {lt}, a = {}: f stays within \u{3b5} of L for every x \u{2260} a within \u{3b4} of a, the widest \u{3b4} (rounded down) being \u{3b4} = {}", eps.text, a.text, if stu { BLANK.to_string() } else { dt }) }
+                        // (no x in the window leaves the band: there is no widest δ)
+                        None => format!("\u{3b5} = {}, L = {lt}, a = {}: f stays within \u{3b5} of L for every x \u{2260} a in the window, so any \u{3b4} > 0 works{}", eps.text, a.text, if stu { format!(" (true or false: {BLANK})") } else { String::new() }),
+                    });
                 }
                 _ => notes.push(format!("The epsilon band needs a limit that is a number at x = {}: there is none there", a.text.replace('-', "\u{2212}"))),
             },
@@ -1168,27 +1192,37 @@ fn build(p0: &Params) -> (String, Drawn) {
     let mut reqs: Vec<(char, Req)> = vec![];
     let lab_size = size;
     let show_kinds = p.b("kind_labels") && !(stu && p.b("stu_hide_kinds"));
+    let mut unlabelled: Vec<String> = vec![];
     if show_kinds {
         for d in &discs {
             let x = sx(d.x);
+            // (not one the analysis cannot determine; not one on the window's edge, where only one side shows; not one whose
+            // ends are all off the plot: the key names those)
+            let ys: Vec<f64> = [d.left.num(), d.right.num(), d.value.num()].into_iter().flatten().collect();
+            let on_plot = d.kind == "infinite" || ys.iter().any(|y| inside_y(*y));
+            if d.kind == UNSURE { continue; }
+            if (d.x - g.x0).abs() < 1e-9 * (1.0 + d.x.abs()) || (d.x - g.x1).abs() < 1e-9 * (1.0 + d.x.abs()) || !on_plot { unlabelled.push(eq_text("x", &d.text)); continue; }
+            let clampy = |y: f64| y.clamp(g.y0, g.y1);
             let anchors: Vec<Pt> = match (d.left.num(), d.right.num()) {
                 _ if d.kind == "infinite" => vec![(x, rect[1] + 0.25 * g.ph), (x, rect[1] + 0.5 * g.ph), (x, rect[1] + 0.75 * g.ph)],
-                // (beside the gap, or beside either of its ends)
-                (Some(l), Some(r)) if d.kind == "jump" => vec![(x, sy(0.5 * (l + r))), (x, sy(l)), (x, sy(r))],
-                (Some(l), _) => vec![(x, sy(l))],
+                // (beside the gap, or beside either of its ends: the parts on the plot)
+                (Some(l), Some(r)) if d.kind == "jump" => { let mut v = vec![(x, sy(clampy(0.5 * (l + r))))]; for y in [l, r] { if inside_y(y) { v.push((x, sy(y))); } } v }
+                (Some(l), _) => vec![(x, sy(clampy(l)))],
                 _ => vec![(x, sy(0.5 * (g.y0 + g.y1)))],
             };
             let own: Vec<(Pt, Pt)> = match (d.left.num(), d.right.num()) {
-                (Some(l), Some(r)) => vec![((x, sy(l)), (x, sy(r)))],
+                (Some(l), Some(r)) => vec![((x, sy(clampy(l))), (x, sy(clampy(r))))],
                 _ if d.kind == "infinite" => vec![((x, rect[1]), (x, rect[3]))],
                 _ => anchors.iter().map(|q| (*q, *q)).collect(),
             };
             let w = tw(d.kind, lab_size);
             let mut tries = vec![];
             for an in &anchors {
-                for gap in [6.0, 10.0, 16.0, 24.0, 34.0] {
+                for gap in [3.0, 6.0, 10.0, 16.0, 24.0, 34.0] {
                     let (hx, hy) = (w / 2.0 + cr + gap, 0.5 * lab_size + cr + gap * 0.6);
                     for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (1.0, -1.0), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (0.0, -1.0), (0.0, 1.0)] { tries.push((an.0 + dx * hx, an.1 + dy * hy)); }
+                    // (above or below, slid along so its end is over the point)
+                    for (dx, dy) in [(1.0, -1.0), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] { tries.push((an.0 + dx * (w / 2.0 - 6.0), an.1 + dy * hy)); }
                 }
             }
             let gap = if d.kind == "removable" { cr + 2.0 } else { 1.5 };
@@ -1216,6 +1250,7 @@ fn build(p0: &Params) -> (String, Drawn) {
     }
     let kind_owns: Vec<Vec<(Pt, Pt)>> = reqs.iter().filter(|r| r.0 == 'k').map(|r| r.1.own.clone()).collect();
     for (i, r) in reqs.iter_mut().filter(|r| r.0 == 'k').enumerate() { r.1.rivals = kind_owns.iter().enumerate().filter(|(j, _)| *j != i).flat_map(|(_, o)| o.clone()).collect(); }
+    if !unlabelled.is_empty() { notes.push(format!("Not labelled on the graph (on the window's edge or off the plot; the key names them): {}", unlabelled.join(", ").replace('-', "\u{2212}"))); }
     let mut labels_svg = String::new();
     let mut beside: Vec<String> = vec![];
     for (kind, r) in &reqs {
@@ -1310,7 +1345,8 @@ fn build(p0: &Params) -> (String, Drawn) {
     out.push_str(&format!(r#"<g clip-path="url(#plot)" data-lim="band">{band_svg}</g>"#));
     out.push_str(&format!(r#"<g data-lim="lines">{asym_svg}{guide_svg}</g>"#));
     out.push_str(&format!(r#"<g data-lim="curves">{curves}</g>"#));
-    out.push_str(&format!(r#"<g data-lim="marks">{circ_svg}{marker_svg}</g>"#));
+    // (a marker at a jump or hole goes under its circles)
+    out.push_str(&format!(r#"<g data-lim="marks">{marker_svg}{circ_svg}</g>"#));
     out.push_str(&format!(r#"<g data-lim="texts">{texts_svg}</g>"#));
     out.push_str(&format!(r#"<g data-lim="labels">{labels_svg}</g>"#));
     out.push_str(&format!(r#"<g data-lim="block">{block_svg}</g>"#));
@@ -1329,34 +1365,36 @@ fn grey(svg: &str) -> String {
     s
 }
 
-fn floor_to(v: f64, places: i32) -> f64 { let k = 10f64.powi(places); (v * k).floor() / k }
+fn floor_to(v: f64, places: usize) -> f64 { let k = 10f64.powi(places as i32); (v * k).floor() / k }
 /// The widest δ (to the nearest hundredth below) for which every x within δ of a (other than a) has |f(x) - L| < ε.
-fn widest_delta(m: &Model, a: f64, l: f64, eps: f64) -> f64 {
+fn widest_delta(m: &Model, a: f64, l: f64, eps: f64) -> Option<f64> {
     let ok = |x: f64| -> bool {
         let f = m.pieces.iter().find(|pc| pc.includes(x)).and_then(|pc| pc.g(x));
         let f = m.dots.iter().find(|d| (d.x.v - x).abs() < 1e-12).map(|d| d.y.v).or(f);
         f.is_some_and(|v| (v - l).abs() < eps)
     };
     let span = (m.x1 - m.x0).max(1e-6);
-    let mut d = span;
+    let mut d: Option<f64> = None;
     for dir in [-1.0, 1.0] {
-        let n = 4000;
+        let n = 20000;
         for k in 1..=n {
             let t = span * k as f64 / n as f64;
-            if t >= d { break; }
+            if d.is_some_and(|d| t >= d) { break; }
             if !ok(a + dir * t) {
                 // narrow down where it first leaves the band
                 let (mut lo, mut hi) = (span * (k - 1) as f64 / n as f64, t);
-                for _ in 0..60 { let mid = 0.5 * (lo + hi); if (1..=8).all(|j| ok(a + dir * (lo + (mid - lo) * j as f64 / 8.0))) && ok(a + dir * mid) { lo = mid; } else { hi = mid; } }
-                d = d.min(lo);
+                for _ in 0..80 { let mid = 0.5 * (lo + hi); if (1..=8).all(|j| ok(a + dir * (lo + (mid - lo) * j as f64 / 8.0))) && ok(a + dir * mid) { lo = mid; } else { hi = mid; } }
+                d = Some(d.map_or(lo, |d: f64| d.min(lo)));
                 break;
             }
         }
     }
-    // (to the hundredth below; a δ that is exactly a hundredth, such as 1/2, is that hundredth)
-    let d = floor_to(d + 1e-9, 2);
-    if d <= 0.0 { 0.01 } else { d }
+    // rounded down to the places it needs (two significant figures under a hundredth), so the δ written always works; a δ
+    // that is exactly such a number, such as 1/2, is that number
+    d.map(|d| { let p = delta_places(d); let r = floor_to(d + 1e-9 * (1.0 + d), p); if r <= 0.0 { floor_to(d, p + 1) } else { r } })
 }
+/// Places for a δ: two, or enough for two significant figures.
+fn delta_places(d: f64) -> usize { if d >= 0.01 { 2 } else { ((-d.log10()).floor() as i32 + 2).clamp(2, 12) as usize } }
 
 // ───────────────────────── the questions ─────────────────────────
 
@@ -1454,7 +1492,8 @@ fn item_svg(it: &Item, x: f64, y: f64, size: f64, fill: &str) -> (String, f64) {
             let wl = tw("lim", size);
             let su = 0.75 * size;
             let wu = tw(under, su);
-            let wcol = wl.max(wu);
+            // (a little room after the column: the italic f of f(x) leans back)
+            let wcol = wl.max(wu) + 0.12 * size;
             let mut s = text_el(x + (wcol - wl) / 2.0, y, size, "lim", fill, false);
             s.push_str(&text_el(x + (wcol - wu) / 2.0, y + 0.8 * size, su, under, fill, false));
             let rest = " f(x) = ";
