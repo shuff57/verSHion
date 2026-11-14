@@ -903,3 +903,74 @@ fn sequences_drag_decimal_sweep_r1() {
     assert_eq!(decimal_step(10.700000000000001, 0.01), "10.7");
     assert_eq!(decimal_step(-0.35000000000000003, 0.01), "-0.35");
 }
+
+#[test]
+fn sequences_student_toggle_exhaustion_r1() {
+    let toggles = [
+        "sum",
+        "sums",
+        "point_values",
+        "explicit",
+        "recursive",
+        "convergence",
+        "limit",
+        "join",
+        "terms",
+        "band",
+    ];
+    let mut count = 0;
+    for mode in ["Arithmetic", "Geometric", "Explicit", "Recursive"] {
+        for task in ["Find formula", "Missing terms", "Continue"] {
+            for bits in 0..(1 << toggles.len()) {
+                let mut p = Params::defaults(&params());
+                p.set_s("mode", mode);
+                p.set_s("task", task);
+                p.set_s("first", "7");
+                p.set_s("second", "11");
+                p.set_s("difference", "2");
+                p.set_s("formula", "n^2");
+                p.set_s("display", "Both");
+                p.set_i("count", 4);
+                p.set_s("missing", "3");
+                p.set_f("from", -3.0);
+                p.set_f("to", 73.0);
+                p.set_f("step", 19.0);
+                for (i, k) in toggles.iter().enumerate() {
+                    p.set_b(k, bits & (1 << i) != 0);
+                }
+                let d = data(&p).unwrap();
+                p.set_b(SHOW_ANSWERS, true);
+                let key = rows_for(&p, &d).join("\n");
+                if p.b("sum") {
+                    assert!(key.contains(&format!("Sum of 4 terms {}", d.s[3].eq())));
+                }
+                p.set_b(SHOW_ANSWERS, false);
+                let svg = render(&p);
+                let xml = roxmltree::Document::parse(&svg).unwrap();
+                let text = xml
+                    .descendants()
+                    .filter(|n| n.is_text())
+                    .filter_map(|n| n.text())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if p.b("sum") {
+                    assert!(
+                        !text.contains(&d.s[3].text()),
+                        "{mode} {task} {bits}: {text}"
+                    );
+                    assert!(!svg.contains("data-point-label=\"1:"));
+                    assert!(!xml.descendants().any(|n|n.has_tag_name("rect")&&n.attribute("width")==Some("7.00")));
+                }
+                if task == "Find formula" {
+                    assert!(text.contains("Formula:") || text.contains("Recurrence:"));
+                }
+                if task == "Missing terms" {
+                    assert!(!relevant("terms", &p));
+                    assert!(!text.contains("a₃ = 18"));
+                }
+                count += 1;
+            }
+        }
+    }
+    assert_eq!(count, 12288);
+}

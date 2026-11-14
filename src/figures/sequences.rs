@@ -871,10 +871,14 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "band" => {
             can_limit(p) && p.b("limit") && p.b(SHOW_ANSWERS) && p.s("layout") != "Number line"
         }
-        "missing" => !p.b(SHOW_ANSWERS) && p.s("task") == "Missing terms",
+        "missing" => p.s("task") == "Missing terms",
+        "terms" => p.b(SHOW_ANSWERS) || p.s("task") != "Missing terms",
         "given" => !p.b(SHOW_ANSWERS) && p.s("task") == "Continue",
         _ => true,
     }
+}
+fn hide_partial_sums(p: &Params) -> bool {
+    !p.b(SHOW_ANSWERS) && (p.s("task") != "Find formula" || p.b("sum"))
 }
 fn missing(p: &Params) -> Vec<i64> {
     p.s("missing")
@@ -1170,10 +1174,7 @@ fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
         let values = if s == 0 { &d.a } else { &d.s };
         let mut prev = None;
         for (j, v) in values.iter().enumerate() {
-            if hidden(p, j)
-                || (!p.b(SHOW_ANSWERS) && p.s("task") != "Find formula" && s == 1)
-                || !in_window(v.v, lo, hi)
-            {
+            if hidden(p, j) || (hide_partial_sums(p) && s == 1) || !in_window(v.v, lo, hi) {
                 prev = None;
                 continue;
             }
@@ -1509,6 +1510,9 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
             "Formula: ________________________".into()
         })
     }
+    if !ans && p.s("task") == "Find formula" && !p.b("explicit") && !p.b("recursive") {
+        rows.push("Formula: ________________________".into());
+    }
     if p.b("recursive") {
         rows.push(if !ans {
             "Recurrence: ________________________".into()
@@ -1633,21 +1637,32 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
             let hide = hidden(p, j);
             let term = if hide {
                 "= _____".into()
-            } else if !in_window(d.a[j].v, lo, hi) {
+            } else if !ans && !in_window(d.a[j].v, lo, hi) {
                 "outside window".into()
             } else {
                 d.a[j].eq()
             };
-            let sum = if !ans && p.s("task") != "Find formula" {
+            let sum = if hide_partial_sums(p) {
                 "= _____".into()
-            } else if !in_window(d.s[j].v, lo, hi) {
+            } else if !ans && !in_window(d.s[j].v, lo, hi) {
                 "outside window".into()
             } else {
                 d.s[j].eq()
             };
             let mut row = String::new();
             if p.b("terms") || p.s("task") == "Missing terms" {
-                row.push_str(&format!("a{} {term}", subscript(j + start)))
+                row.push_str(&format!(
+                    "a{} {term}{}",
+                    subscript(j + start),
+                    if ans
+                        && p.s("task") == "Missing terms"
+                        && missing(p).contains(&((j + start) as i64))
+                    {
+                        " (asked)"
+                    } else {
+                        ""
+                    }
+                ))
             }
             if p.b("sums") {
                 row.push_str(&format!("     S{} {sum}", subscript(j + start)))
@@ -1957,10 +1972,7 @@ fn render(p: &Params) -> String {
             }
             let mut prev = None;
             for (j, v) in vals.iter().enumerate() {
-                if hidden(p, j)
-                    || (!ans && p.s("task") != "Find formula" && series == 1)
-                    || !valid(v.v)
-                {
+                if hidden(p, j) || (hide_partial_sums(p) && series == 1) || !valid(v.v) {
                     prev = None;
                     continue;
                 }
