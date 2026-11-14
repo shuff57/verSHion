@@ -1458,3 +1458,18 @@ fn names_do_not_clash() {
     let l = w(&[("fname", s("h")), ("var", s("t")), ("func", s("t^2"))]);
     assert!(has(&l, "\u{394}t"), "{l:?}");
 }
+
+/// Small values keep two significant figures, so the slope of x^((1/3)³) at 8, (1/27)·8^(−26/27) ≈ 0.00502, is 0.005 and not
+/// 0.01; arccot has its exact values (arccot 0 = π/2, arccot 1 = π/4, arccot √3 = π/6).
+#[test]
+fn small_values_and_arccot() {
+    assert_eq!(tangent::decimal(0.00502, 2), "0.005");
+    assert_eq!(tangent::decimal(0.0123, 2), "0.012");
+    assert_eq!(tangent::decimal(0.5, 2), "0.5");
+    assert_eq!(tangent::decimal(-0.0471, 2), "\u{2212}0.047");
+    let l = panel(&with(&[("func", s("x^((1/3)^3)")), ("a", s("8")), ("xmin", f(0.0)), ("xmax", f(10.0)), ("ymin", f(0.0)), ("ymax", f(2.0))]));
+    assert!(has(&l, "f\u{2032}(8) \u{2248} 0.005"), "{l:?}");
+    assert_eq!(fx_at("arccot(x)", "0").as_deref(), Some("\u{3c0}/2"));
+    assert_eq!(fx_at("arccot(x)", "1").as_deref(), Some("\u{3c0}/4"));
+    assert_eq!(fx_at("arccot(x)", "sqrt(3)").as_deref(), Some("\u{3c0}/6"));
+}

@@ -105,7 +105,8 @@ fn minus(s: &str) -> String { s.replace('-', "\u{2212}") }
 pub(crate) fn decimal(v: f64, dec: usize) -> String {
     let mut dec = dec;
     // (below 10^-6 a worked-out value is rounding noise of the arithmetic, not a value: it is written as 0)
-    if v != 0.0 && v.is_finite() && v.abs() >= 1e-6 && v.abs() < 0.5 * 10f64.powi(-(dec as i32)) { dec = ((-v.abs().log10()).ceil() as usize + 1).min(12); }
+    // a small value keeps two significant figures, so 0.0050 is not written 0.01
+    if v != 0.0 && v.is_finite() && v.abs() >= 1e-6 && v.abs() < 0.1 { dec = dec.max(((-v.abs().log10()).ceil() as usize + 1).min(12)); }
     let s = format!("{:.*}", dec, v);
     let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
     if s == "-0" { "0".into() } else { minus(&s) }

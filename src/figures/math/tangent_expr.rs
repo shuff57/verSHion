@@ -411,9 +411,6 @@ fn rat_pow(r: R, p: i128, q: i128) -> Option<Ex> {
     Some(if neg && p % 2 != 0 { v.neg() } else { v })
 }
 
-/// A tree whose exact value is `x` (rational only), for re-entering `exact`.
-fn n_of(x: &Ex) -> Option<Node> { let (p, q) = x.rational()?; Some(Div(Box::new(Num(p as f64, Some(R(p, 1)))), Box::new(Num(q as f64, Some(R(q, 1)))))) }
-
 /// The value at x with every step finite: None where any part of the expression is infinite or undefined there, even if
 /// the whole comes out finite (arctan(1/x) and 1/(1/x) at 0, e^(−1/x²) at 0) — the textbook's "undefined at a".
 pub(crate) fn eval_strict(n: &Node, x: f64) -> Option<f64> {
@@ -497,6 +494,14 @@ pub(crate) fn exact(n: &Node, x: Option<&Ex>) -> Option<Ex> {
                     (r == R(1, 1) && at.root == 1 && at.pi == 0).then(|| Ex::int(at.e as i128))
                 }
                 "log" => { let (p, q) = u.rational()?; let k = (p as f64).log10().round() as u32; (q == 1 && p > 0 && 10i128.checked_pow(k)? == p).then(|| Ex::int(k as i128)) }
+                // arccot u: the multiple of π/12 in (0, π) whose cotangent is exactly u (arccot 0 = π/2, arccot √3 = π/6)
+                "arccot" => {
+                    let target = u.value();
+                    (1..=11).find_map(|k| {
+                        let val = sin_k(k + 6)?.div(&sin_k(k)?)?;
+                        if (val.value() - target).abs() < 1e-12 && val == u { Some(Ex::atom(Atom { root: 1, pi: 1, e: 0 }, R::new(k, 12)?)) } else { None }
+                    })
+                }
                 "arcsin" | "arccos" | "arctan" => {
                     // the inverse of the table: the multiple of π/12 whose sine (or tangent) is exactly u
                     let target = u.value();
