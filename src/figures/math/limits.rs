@@ -437,7 +437,7 @@ pub struct Model { pub pieces: Vec<Piece>, pub dots: Vec<Dot>, pub asks: Vec<Num
 
 /// More places where something may happen in the window than are worked out one by one (tan(x²) on -100..100 has
 /// thousands of poles): past this the key says there are too many instead of listing them.
-pub const MANY: usize = 200;
+pub const MANY: usize = 60;
 
 impl Model {
     pub(super) fn new(p: &Params, g: &GridL) -> Model {
@@ -561,6 +561,8 @@ impl Model {
             let Src::Formula { x } = &pc.src else { continue };
             let (a, b) = (pc.lo_x().max(lo), pc.hi_x().min(hi));
             if !(b > a) { continue; }
+            // (too many cuts to work out one by one: none is solved for)
+            if too_busy(x, a, b) { return (vec![K::zero(); MANY + 1], false); }
             let (mut z, mut d) = cas::breaks(x, a, b);
             // floors whose values do not matter (sin(π floor(1/x)) = 0): their cuts are no discontinuities, so the breaks
             // are those of the formula with the floors replaced by a whole number and those of the floors' arguments
@@ -722,6 +724,11 @@ fn grid_params(p: &Params, eq: &str, for_curve: bool) -> Params {
 }
 
 /// The row the grid draws for a piece (or for one stretch of a curve through points).
+/// More cuts on [a, b] than are worked out one by one (floor(10 sin(x²)), tan(e^x) on -100..100), counted cheaply before
+/// any is solved for; cuts that pile up near a point, or floors whose value does not matter, are not counted so (only
+/// the levels nearest are solved for there).
+fn too_busy(x: &X, a: f64, b: f64) -> bool { cas::busy(x, a, b) > MANY && cas::piles_in(x, a, b).is_empty() && cas::floors_inert(x, a, b).is_none() }
+
 fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
     let num = |v: f64| format!("{v}");
     let dom = |lo: f64, hi: f64| -> String {
@@ -755,7 +762,8 @@ fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
                     prev = k;
                 }
             }
-            cuts.extend(cas::breaks(x, lo, hi).0.iter().map(|k| k.value()).filter(|v| *v > lo && *v < hi));
+            // (unless there are too many to work out one by one)
+            if !too_busy(x, lo, hi) { cuts.extend(cas::breaks(x, lo, hi).0.iter().map(|k| k.value()).filter(|v| *v > lo && *v < hi)); }
             cuts.push(hi);
             cuts.sort_by(|a, b| a.partial_cmp(b).unwrap());
             cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
@@ -1621,8 +1629,9 @@ fn block(p: &Params, m: &Model, discs: &[Disc], discs_complete: bool, stu: bool,
     if !row.is_empty() { rows.push(row); dr.inf_asked = true; }
     if p.b("ask_disc") {
         let sure = discs_complete && discs.iter().all(|d| d.kind != UNSURE);
-        let piles = if discs_complete || m.too_many() { vec![] } else { m.piles() };
-        let key = if m.too_many() {
+        // (cuts that pile up are said to before "too many": floor(sin(1/x)) has more than MANY near 0)
+        let piles = if discs_complete { vec![] } else { m.piles() };
+        let key = if m.too_many() && piles.is_empty() {
             notes.push(format!("f has more than {MANY} places in the window where it may not be continuous, too many to work out one by one: the key leaves that answer as a line to fill in (narrow the x-axis to list them)"));
             format!("{BLANK}{BLANK}{BLANK}")
         } else if !piles.is_empty() {

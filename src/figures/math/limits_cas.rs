@@ -338,27 +338,32 @@ impl K {
         let base = |d: i128| -> Option<K> { Some(match d { 0 => K::zero(), 30 => half.clone(), 45 => r2.clone(), 60 => r3.clone(), 90 => K::one(), _ => return None }) };
         Some(match deg { 0..=90 => base(deg)?, 91..=180 => base(180 - deg)?, 181..=270 => base(deg - 180)?.neg(), _ => base(360 - deg)?.neg() })
     }
-    /// self = pπ + c·arcsin(q) with c = ±1 and p a multiple of 1/2: (p, c, q).
-    fn pi_plus_arcsin(&self) -> Option<(Q, Q, K)> {
+    /// self = pπ + c·arcsin(q) (or arctan(q)) with c = ±1 and p a multiple of 1/2: (p, c, q, whether arctan).
+    fn pi_plus_arcsin(&self) -> Option<(Q, Q, K, bool)> {
         if self.ap.is_some() { return None; }
         let mut p = Q::ZERO;
-        let mut rest: Option<(Q, K)> = None;
+        let mut rest: Option<(Q, K, bool)> = None;
         for (q, m) in &self.t {
             match m.as_slice() {
                 [(a, e)] if a.kind == AK::Pi && *e == Q::ONE => p = *q,
-                [(a, e)] if *e == Q::ONE && a.fun.as_ref().is_some_and(|f| f.0 == "arcsin") && (*q == Q::ONE || *q == Q::i(-1)) && rest.is_none() => rest = Some((*q, (*a.fun.as_ref().unwrap().1).clone())),
+                [(a, e)] if *e == Q::ONE && a.fun.as_ref().is_some_and(|f| f.0 == "arcsin" || f.0 == "arctan") && (*q == Q::ONE || *q == Q::i(-1)) && rest.is_none() => rest = Some((*q, (*a.fun.as_ref().unwrap().1).clone(), a.fun.as_ref().unwrap().0 == "arctan")),
                 _ => return None,
             }
         }
-        let (c, q) = rest?;
-        p.mul(Q::i(2))?.is_int().then_some((p, c, q))
+        let (c, q, tan) = rest?;
+        p.mul(Q::i(2))?.is_int().then_some((p, c, q, tan))
     }
     /// sin and cos of pπ + c·arcsin(q), exactly: sin(arcsin q) = q, cos(arcsin q) = √(1 - q²).
     fn trig_arcsin(&self) -> Option<(K, K)> {
-        let (p, c, q) = self.pi_plus_arcsin()?;
+        let (p, c, q, tan) = self.pi_plus_arcsin()?;
         let (sp, cp) = (K::sin_table(p)?, K::sin_table(Q::new(1, 2)?.add(p)?)?);
-        let ca = match K::one().sub(&q.mul(&q)).powq(Q::new(1, 2)?) { KR::Ok(k) => k, _ => return None };
-        let sa = q.mulq(c);
+        // (arctan t: sin = t/√(1 + t²), cos = 1/√(1 + t²))
+        let (ca, sa) = if tan {
+            let r = match K::one().add(&q.mul(&q)).powq(Q::new(-1, 2)?) { KR::Ok(k) => k, _ => return None };
+            (r.clone(), q.mul(&r).mulq(c))
+        } else {
+            (match K::one().sub(&q.mul(&q)).powq(Q::new(1, 2)?) { KR::Ok(k) => k, _ => return None }, q.mulq(c))
+        };
         Some((sp.mul(&ca).add(&cp.mul(&sa)), cp.mul(&ca).sub(&sp.mul(&sa))))
     }
     pub fn sin(&self) -> K {
@@ -1669,6 +1674,13 @@ fn solve(t: &X, y: &K, lo: f64, hi: f64) -> Option<(Vec<K>, bool)> {
         X::V => Some((vec![y.clone()].into_iter().filter(|k| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 }).collect(), true)),
         X::Neg(u) => solve(u, &y.neg(), lo, hi),
         X::Mul(v) => {
+            // c·tan u = y: u = arctan(y/c) + kπ (c·cot u = y: u = π/2 - arctan(y/c) + kπ)
+            if let Some((u, c, cot)) = tan_form(t) {
+                if c.sign()? == 0 { return None; }
+                let a = y.div(&c)?.atan();
+                let base = if cot { K::pi().mulq(Q::new(1, 2)?).sub(&a) } else { a };
+                return solve_levels(&u, &[base], K::pi(), lo, hi);
+            }
             let xs: Vec<&X> = v.iter().filter(|f| f.has_x()).collect();
             if xs.len() != 1 { return None; }
             let mut c = K::one();
@@ -1711,12 +1723,12 @@ fn solve(t: &X, y: &K, lo: f64, hi: f64) -> Option<(Vec<K>, bool)> {
         X::F(Fun::Ln, u) => Some(sub(u, y.exp())),
         // sin u = y: u = asin y + 2kπ or π - asin y + 2kπ; cos u = y: u = ±(π/2 - asin y) + 2kπ (u linear in x)
         X::F(f @ (Fun::Sin | Fun::Cos), u) => {
-            let c = poly(u)?;
-            if c.len() != 2 || c[1].sign()? == 0 { return None; }
             match K::one().sub(&y.mul(y)).sign()? { -1 => return Some((vec![], true)), _ => {} }
             let KR::Ok(a0) = y.asin() else { return None };
             let half = K::pi().mulq(Q::new(1, 2)?);
             let bases = if *f == Fun::Sin { vec![a0.clone(), K::pi().sub(&a0)] } else { let b = half.sub(&a0); vec![b.clone(), b.neg()] };
+            // u a curve: u equal to each of those levels, plus 2kπ, that it reaches (sin(1/x) = 1 at 1/(π/2 + 2kπ))
+            let Some(c) = poly(u).filter(|c| c.len() == 2 && c[1].sign().is_some_and(|s| s != 0)) else { return solve_levels(u, &bases, K::pi().mulq(Q::i(2)), lo, hi) };
             let (beta, ai) = (&c[0], c[1].inv()?);
             let span = { let (u0, u1) = (c[1].value() * lo + c[0].value(), c[1].value() * hi + c[0].value()); (u0.min(u1), u0.max(u1)) };
             let (k0, k1) = ((span.0 / (2.0 * PI)).floor() as i128 - 1, (span.1 / (2.0 * PI)).ceil() as i128 + 1);
@@ -1735,6 +1747,50 @@ fn solve(t: &X, y: &K, lo: f64, hi: f64) -> Option<(Vec<K>, bool)> {
         _ => None,
     }
 }
+/// u = b + k·period for each base b and every whole k for which u reaches it on [lo, hi] (at most 400 levels).
+fn solve_levels(u: &X, bases: &[K], period: K, lo: f64, hi: f64) -> Option<(Vec<K>, bool)> {
+    let vals: Vec<f64> = (0..=4000).filter_map(|i| ev(u, lo + (hi - lo) * i as f64 / 4000.0)).filter(|v| v.is_finite() && v.abs() < 1e12).collect();
+    if vals.is_empty() { return None; }
+    let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));
+    let pv = period.value();
+    let (k0, k1) = ((mn / pv).floor() as i128 - 1, (mx / pv).ceil() as i128 + 1);
+    // (u unbounded on [lo, hi], as 1/x near 0: the 40 levels nearest 0 only, and the list is not complete)
+    // (more than 400 levels on a bounded stretch, as 1/x on 0.0003..0.003: the 40 nearest 0 likewise, exactly)
+    let unbounded = !floor_piles(u, lo, hi).is_empty() || (k1 - k0) * bases.len() as i128 > 400;
+    let ks: Vec<i128> = if unbounded { let mid = if k0 > 0 { k0 } else if k1 < 0 { k1 - 40 } else { -20 }; let mut v: Vec<i128> = (mid..=mid + 40).map(|k: i128| k.clamp(k0, k1)).collect(); v.dedup(); v } else { (k0..=k1).collect() };
+    let mut out: Vec<K> = vec![];
+    let mut done = !unbounded;
+    for b in bases {
+        for &k in &ks {
+            let level = b.add(&period.mulq(Q::i(k)));
+            let lv = level.value();
+            if lv < mn - 1e-9 * (1.0 + lv.abs()) || lv > mx + 1e-9 * (1.0 + lv.abs()) { continue; }
+            let (z, d) = zeros(&X::Add(vec![u.clone(), X::C(level.neg())]), lo, hi);
+            done &= d;
+            for x in z { if !out.iter().any(|o| (o.value() - x.value()).abs() < 1e-12 * (1.0 + x.value().abs())) { out.push(x); } }
+        }
+    }
+    Some((out, done))
+}
+
+/// tan u (or cot u) times a constant, as the parser writes it: (u, the constant, whether cot).
+fn tan_form(t: &X) -> Option<(X, K, bool)> {
+    let X::Mul(v) = t else { return None };
+    let mut c = K::one();
+    let (mut s, mut ci): (Option<(Fun, X)>, Option<(Fun, X)>) = (None, None);
+    for f in v {
+        match f {
+            X::F(g @ (Fun::Sin | Fun::Cos), u) if s.is_none() => s = Some((*g, (**u).clone())),
+            X::Inv(b) => match &**b { X::F(g @ (Fun::Sin | Fun::Cos), u) if ci.is_none() => ci = Some((*g, (**u).clone())), _ => return None },
+            o if !o.has_x() => match exact(o, &K::zero()) { EV::Val(k) => c = c.mul(&k), _ => return None },
+            _ => return None,
+        }
+    }
+    let ((g1, u1), (g2, u2)) = (s?, ci?);
+    if g1 == g2 || format!("{u1:?}") != format!("{u2:?}") { return None; }
+    Some((u1, c, g1 == Fun::Cos))
+}
+
 fn poly_roots(c: Vec<K>) -> (Vec<K>, bool) {
     let deg = c.len() - 1;
     let half = Q::new(1, 2).unwrap();
@@ -1841,8 +1897,11 @@ pub fn floor_piles(a: &X, lo: f64, hi: f64) -> Vec<K> {
     // (a break list not surely complete: its own piles are not known, so the middle of the window stands for them)
     if !done { out.push(k_of((lo + hi) / 2.0)); }
     if pts.len() > 60 { pts.truncate(60); out.push(k_of(lo)); }
-    pts.push(k_of(lo));
-    pts.push(k_of(hi));
+    // (an end of the window that is no break of a, where a has a value: a is continuous there, so bounded near it)
+    for end in [lo, hi] {
+        let at_break = pts.iter().any(|k| (k.value() - end).abs() < 1e-9 * (1.0 + end.abs()));
+        if at_break || !ev(a, end).is_some_and(|y| y.is_finite() && y.abs() < 1e300) { pts.push(k_of(end)); }
+    }
     for p in pts {
         let v = p.value();
         for s in [-1i8, 1] {
@@ -1960,6 +2019,32 @@ pub fn floors_inert(e: &X, lo: f64, hi: f64) -> Option<X> {
     // (a whole number the formula has a value for, for the breaks of what is left)
     let c = combos.iter().find(|c| xs.iter().all(|x| matches!(exact(&with(c), x), EV::Val(_))))?.clone();
     Some(with(&c))
+}
+
+/// A cheap count of the cuts e has on [lo, hi], before any is solved for: over 4000 samples, how often each floor's
+/// value changes and each denominator (and base of a power that is not a whole positive number) changes sign. A floor
+/// of 10 sin(x²) on -100..100, or tan(e^x), counts in the thousands.
+pub fn busy(e: &X, lo: f64, hi: f64) -> usize {
+    let xs: Vec<f64> = (0..=4000).map(|i| lo + (hi - lo) * i as f64 / 4000.0).collect();
+    let mut n = 0usize;
+    fn walk(e: &X, xs: &[f64], n: &mut usize) {
+        let changes = |a: &X, f: &dyn Fn(f64) -> f64| -> usize {
+            let mut prev: Option<f64> = None;
+            let mut c = 0.0;
+            for x in xs { if let Some(v) = ev(a, *x).map(f) { if let Some(p) = prev { c += (v - p).abs().min(1e6); } prev = Some(v); } else { prev = None; } }
+            c as usize
+        };
+        match e {
+            X::C(_) | X::V => {}
+            X::Add(v) | X::Mul(v) => for a in v { walk(a, xs, n) },
+            X::Neg(a) => walk(a, xs, n),
+            X::Inv(a) => { *n += changes(a, &|v| if v > 0.0 { 0.5 } else { -0.5 }); walk(a, xs, n); }
+            X::Pow(b, p) => { if p.has_x() || const_q(p).is_none_or(|q| !q.is_int() || q < Q::ZERO) { *n += changes(b, &|v| if v > 0.0 { 0.5 } else { -0.5 }); } walk(b, xs, n); walk(p, xs, n); }
+            X::F(f, a) => { if *f == Fun::Floor { *n += changes(a, &|v| v.floor()); } walk(a, xs, n); }
+        }
+    }
+    walk(e, &xs, &mut n);
+    n
 }
 
 pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {

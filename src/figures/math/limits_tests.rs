@@ -1171,6 +1171,14 @@ fn graphs_with_thousands_of_poles_draw_quickly_and_say_so() {
         ("y = 1/sin(x^2)", -100.0, 100.0, "too many to work out one by one"),
         ("y = tan(x^2)", -20.0, 20.0, "too many to work out one by one"),
         ("y = 1/sin(1/x)", -1.0, 1.0, "pile up without end near x = 0"),
+        // (the fourth check's: thousands of cuts, counted cheaply before any is solved for)
+        ("y = floor(10sin(x^2))", -6.0, 10.0, "too many to work out one by one"),
+        ("y = floor(10sin(x^2))", -10.0, 10.0, "too many to work out one by one"),
+        ("y = floor(10sin(x^2))", -100.0, 100.0, "too many to work out one by one"),
+        ("y = tan(exp(x))", -100.0, 100.0, "too many to work out one by one"),
+        ("y = 1/tan(x^2)", -10.0, 10.0, "too many to work out one by one"),
+        ("y = 1/tan(x^2)", -6.0, 10.0, "too many to work out one by one"),
+        ("y = floor(sin(1/x))", -1.0, 1.0, "pile up without end near x = 0"),
     ] {
         let p = with(json!({"pieces": pieces, "dots": "", "xmin": x0, "xmax": x1, "ask_disc": true, "kind_labels": true}));
         let t0 = std::time::Instant::now();
@@ -1213,6 +1221,11 @@ fn zero_to_the_zero_has_no_value_and_is_drawn_open() {
 fn time_probe() {
     let p = with(serde_json::from_str(&std::env::var("LIM_JSON").unwrap()).unwrap());
     let t = std::time::Instant::now(); let md = model_of(&p); println!("model {:?}", t.elapsed());
+    if let super::limits::Src::Formula { x } = &md.pieces[0].src {
+        let t = std::time::Instant::now(); let b = super::limits::cas::busy(x, md.x0, md.x1); println!("busy {:?} {b}", t.elapsed());
+        let t = std::time::Instant::now(); let n = super::limits::cas::piles_in(x, md.x0, md.x1).len(); println!("piles_in {:?} {n}", t.elapsed());
+        let t = std::time::Instant::now(); let n = super::limits::cas::floors_inert(x, md.x0, md.x1).is_some(); println!("inert {:?} {n}", t.elapsed());
+    }
     let t = std::time::Instant::now(); let d = md.discontinuities(); println!("discs {:?} ({})", t.elapsed(), d.0.len());
     let t = std::time::Instant::now(); let o = md.outside(); println!("outside {:?} ({})", t.elapsed(), o.len());
     let t = std::time::Instant::now(); let v = md.verticals(); println!("verticals {:?} ({})", t.elapsed(), v.len());
