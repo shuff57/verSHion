@@ -349,3 +349,114 @@ fn print_is_grey() {
         }
     }
 }
+#[test]
+fn exact_axis_roots() {
+    for accuracy in ["Exact", "Rounded"] {
+        let mut p = base();
+        p.set_s("accuracy", accuracy);
+        p.set_s("operation", "Roots");
+        p.set_s("zr", "1");
+        p.set_s("zi", "0");
+        p.set_i("n", 4);
+        let (v, n) = all(&p, &mut vec![]);
+        for (z, expected) in v[n..]
+            .iter()
+            .zip([(1., 0.), (0., 1.), (-1., 0.), (0., -1.)])
+        {
+            assert_eq!(z.xy(), expected);
+        }
+        if accuracy == "Exact" {
+            assert_eq!(angtext(&v[n + 1], &p), "π/2");
+            assert_eq!(angtext(&v[n + 3], &p), "−π/2");
+        }
+    }
+}
+#[test]
+fn stationary_drag_keeps_typed_input() {
+    let mut p = base();
+    p.set_s("input", "Polar cis");
+    let before = p.clone();
+    let hs = handles(ID, &p, (1160., 640.)).unwrap();
+    (hs[0].drag.as_ref().unwrap())(&mut p, hs[0].pos);
+    assert_eq!(p.0, before.0);
+}
+#[test]
+fn tiny_nonzero_divisor_is_not_zero() {
+    let mut p = base();
+    p.set_s("operation", "Quotient");
+    p.set_s("wr", "1e-300");
+    p.set_s("wi", "0");
+    let notes = warnings(&p);
+    assert!(!notes.iter().any(|n| n.contains("undefined")));
+    assert!(notes.iter().any(|n| n.contains("outside")));
+    p.set_s("zr", "0");
+    p.set_s("zi", "0");
+    let (v, n) = all(&p, &mut vec![]);
+    assert_eq!(v[n].xy(), (0., 0.));
+}
+#[test]
+fn tiny_products_are_not_reported_as_zero() {
+    for mode in ["Product", "Powers"] {
+        let mut p = base();
+        p.set_s("operation", mode);
+        p.set_s("zr", "1e-300");
+        p.set_s("zi", "0");
+        p.set_s("wr", "1e-300");
+        p.set_s("wi", "0");
+        let mut notes = vec![];
+        let (v, n) = all(&p, &mut notes);
+        assert_eq!(v.len(), n);
+        assert!(notes.iter().any(|n| n.contains("too small")));
+    }
+}
+#[test]
+fn roots_clear_the_circle() {
+    for size in ["Small", "Medium", "Large"] {
+        for n in 2..=12 {
+            let mut p = base();
+            p.set_s("operation", "Roots");
+            p.set_s("zr", "1");
+            p.set_s("zi", "0");
+            p.set_i("n", n);
+            p.set_s("label_size", size);
+            for k in ["xmin", "ymin"] {
+                p.set_f(k, -2.)
+            }
+            for k in ["xmax", "ymax"] {
+                p.set_f(k, 2.)
+            }
+            let s = render(&p);
+            let doc = roxmltree::Document::parse(&s).unwrap();
+            for node in doc.descendants().filter(|n| n.has_tag_name("circle")) {
+                let r: f64 = node.attribute("r").unwrap().parse().unwrap();
+                if r <= 5. {
+                    continue;
+                }
+                let x: f64 = node.attribute("cx").unwrap().parse().unwrap();
+                let y: f64 = node.attribute("cy").unwrap().parse().unwrap();
+                for b in labels::boxes(&s) {
+                    let c = b.centre();
+                    let rect = (
+                        c.0 - b.half.0,
+                        c.1 - b.half.1,
+                        c.0 + b.half.0,
+                        c.1 + b.half.1,
+                    );
+                    for k in 0..240 {
+                        let a = 2. * PI * k as f64 / 240.;
+                        let t = 2. * PI * (k + 1) as f64 / 240.;
+                        assert!(
+                            !segment_hits(
+                                (x + r * a.cos(), y - r * a.sin()),
+                                (x + r * t.cos(), y - r * t.sin()),
+                                rect
+                            ),
+                            "{size} n={n} {}",
+                            b.id
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

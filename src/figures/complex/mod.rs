@@ -173,7 +173,7 @@ struct N {
 }
 fn rounded(v: f64, d: i64) -> String {
     if v != 0. && v.abs() < 10f64.powi(-(d as i32)) {
-        format!("{v:.3e}").replace('-', "−")
+        scientific(&format!("{v:.3e}"))
     } else {
         math::num_str(v, d as usize).replace('-', "−")
     }
@@ -204,7 +204,7 @@ fn read(s: &str) -> Option<N> {
         (a.unsigned_abs() <= 10000).then_some(Q(a, 1))
     } else if let Some((a, b)) = t.split_once('/') {
         match (a.parse::<i64>(), b.parse::<i64>()) {
-            (Ok(a), Ok(b)) if a.unsigned_abs() <= 10000 && b > 0 && b <= 10000 => {
+            (Ok(a), Ok(b)) if a.unsigned_abs() <= 10000 && b != 0 && b.unsigned_abs() <= 10000 => {
                 Some(Q::new(a, b))
             }
             _ => None,
@@ -215,7 +215,14 @@ fn read(s: &str) -> Option<N> {
     let simple = t.parse::<f64>().is_ok();
     let root = radical(&t);
     let (s, exact) = if simple {
-        (t.replace('-', "−"), true)
+        (
+            if t.contains(['e', 'E']) {
+                scientific(&t)
+            } else {
+                t.replace('-', "−")
+            },
+            true,
+        )
     } else if let Some(q) = q {
         (q.text(), true)
     } else if let Some((sign, n, d)) = root {
@@ -445,11 +452,16 @@ fn op(z: &Z, w: &Z, mode: &str) -> Option<Z> {
         "Difference" => (a - c, b - d),
         "Product" => (a * c - b * d, a * d + b * c),
         "Quotient" => {
-            let den = c * c + d * d;
-            if den == 0. {
+            let scale = c.abs().max(d.abs());
+            if scale == 0. {
                 return None;
             }
-            ((a * c + b * d) / den, (b * c - a * d) / den)
+            let (c, d) = (c / scale, d / scale);
+            let den = c * c + d * d;
+            (
+                ((a / scale) * c + (b / scale) * d) / den,
+                ((b / scale) * c - (a / scale) * d) / den,
+            )
         }
         _ => return None,
     };
@@ -595,6 +607,18 @@ fn all(p: &Params, notes: &mut Vec<String>) -> (Vec<Z>, usize) {
     }
     let (z, w) = (zs[0].clone(), zs[1].clone());
     let m = p.s("operation");
+    if matches!(m, "Product" | "Quotient") && z.r() > 0. && w.r() > 0. {
+        let log = if m == "Product" {
+            z.r().ln() + w.r().ln()
+        } else {
+            z.r().ln() - w.r().ln()
+        };
+        if log < f64::MIN_POSITIVE.ln() {
+            notes
+                .push("The result is too small to calculate reliably; rescale the numbers.".into());
+            return (zs, given);
+        }
+    }
     if m == "Roots" {
         if z.r() == 0. {
             zs.push(Z {
@@ -626,6 +650,12 @@ fn all(p: &Params, notes: &mut Vec<String>) -> (Vec<Z>, usize) {
     } else if m == "Powers" {
         let mut t = z.clone();
         for k in 2..=p.i("n") {
+            if t.r() > 0. && z.r() > 0. && t.r().ln() + z.r().ln() < f64::MIN_POSITIVE.ln() {
+                notes.push(format!(
+                    "Power {k} is too small to calculate reliably; rescale z."
+                ));
+                break;
+            }
             t = op(&t, &z, "Product").unwrap();
             t.name = format!("z{}", sup(k));
             zs.push(t.clone())
@@ -671,7 +701,6 @@ pub fn relevant(k: &str, p: &Params) -> bool {
         "title" => p.s("title_mode") == "Text",
         "polar_style" => p.b("polar") || p.s("labels") == "Polar",
         "question" => !p.b(SHOW_ANSWERS),
-        labels::KEY => false,
         _ => true,
     }
 }
@@ -707,7 +736,15 @@ fn build(raw: &Params) -> (String, Vec<String>) {
     if p.s("title_mode") == "Blank line" {
         doc.line(70., 32., 550., 32., "#111111", 1.);
     } else if p.s("title_mode") == "Text" {
-        doc.raw(&text(70., 32., p.s("title")));
+        if super::circle::tw(p.s("title"), fs, false) > 1020. {
+            notes.push("Shorten the title so it fits on the page.".into());
+        } else {
+            doc.raw(&text(
+                70.,
+                if p.s("title").is_empty() { 32. } else { 26. },
+                p.s("title"),
+            ));
+        }
     }
     let Some(g) = Win::new(p) else {
         notes.push("Set increasing axis ranges containing zero.".into());
@@ -767,8 +804,16 @@ fn build(raw: &Params) -> (String, Vec<String>) {
     }
     doc.line(70., origin.1, end.0, origin.1, "#111111", 1.5);
     doc.line(origin.0, 70., origin.0, end.1, "#111111", 1.5);
-    doc.raw(&text(end.0 + 12., origin.1 - 8., p.s("xlabel")));
-    doc.raw(&text(origin.0 + 10., 56., p.s("ylabel")));
+    if super::circle::tw(p.s("xlabel"), fs, false) <= 608. - end.0 - 12. {
+        doc.raw(&text(end.0 + 12., origin.1 - 8., p.s("xlabel")));
+    } else {
+        notes.push("Shorten the real axis name to fit beside the plot.".into());
+    }
+    if super::circle::tw(p.s("ylabel"), fs, false) <= 598. - origin.0 - 10. {
+        doc.raw(&text(origin.0 + 10., 56., p.s("ylabel")));
+    } else {
+        notes.push("Shorten the imaginary axis name to fit above the plot.".into());
+    }
     // Clip region fills, never point labels. Shading is a teacher's given region.
     doc.defs(&format!(
         "<clipPath id=\"plot\"><rect x=\"70\" y=\"70\" width=\"{}\" height=\"{}\"/></clipPath>",
@@ -854,7 +899,8 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         let a = g.pt(zs[0].a.v, zs[0].b.v);
         let b = g.pt(zs[1].a.v, zs[1].b.v);
         let c = g.pt(zs[given].a.v, zs[given].b.v);
-        if g.inside(zs[given].a.v, zs[given].b.v) {
+        if g.inside(zs[given].a.v, zs[given].b.v) && zs[..2].iter().all(|z| g.inside(z.a.v, z.b.v))
+        {
             doc.arrow_with(a.0, a.1, c.0, c.1, color(1), 1.3, "5 4", false);
             doc.arrow_with(b.0, b.1, c.0, c.1, color(0), 1.3, "5 4", false);
         }
@@ -892,6 +938,107 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                 format!("Given z: {}(cos({angle}) + i sin({angle}))", r.s)
             };
             doc.raw(&text(620., 58., &line));
+        }
+    }
+    // Primary geometry blocks label boxes; light coordinate gridlines do not.
+    let mut avoid: Vec<((f64, f64), (f64, f64))> = vec![];
+    let mut add_circle = |centre: (f64, f64), radius: f64| {
+        for k in 0..240 {
+            let a = 2. * PI * k as f64 / 240.;
+            let b = 2. * PI * (k + 1) as f64 / 240.;
+            avoid.push((
+                (centre.0 + radius * a.cos(), centre.1 - radius * a.sin()),
+                (centre.0 + radius * b.cos(), centre.1 - radius * b.sin()),
+            ));
+        }
+    };
+    if !construct && p.s("operation") == "Roots" && zs.len() > given {
+        let r = zs[given].r();
+        if g.inside(-r, -r) && g.inside(r, r) {
+            add_circle(origin, r * g.u);
+        }
+    }
+    if p.b("circle") && !coord && !blank && !zs.is_empty() {
+        let r = zs[0].r();
+        if g.inside(-r, -r) && g.inside(r, r) {
+            add_circle(origin, r * g.u);
+        }
+    }
+    if matches!(p.s("locus"), "Circle" | "Disc") {
+        if let (Some(a), Some(b), Some(r)) = (read(p.s("cr")), read(p.s("ci")), read(p.s("lr"))) {
+            if r.v > 0. {
+                add_circle(g.pt(a.v, b.v), r.v * g.u);
+            }
+        }
+    }
+    if !construct && p.s("operation") == "Roots" && p.b("polygon") && zs.len() > given {
+        let pts: Vec<_> = zs[given..].iter().map(|z| g.pt(z.a.v, z.b.v)).collect();
+        for k in 0..pts.len() {
+            avoid.push((pts[k], pts[(k + 1) % pts.len()]));
+        }
+    }
+    if !construct
+        && p.s("operation") == "Sum"
+        && zs.len() > given
+        && zs
+            .iter()
+            .take(2)
+            .chain(zs.get(given))
+            .all(|z| g.inside(z.a.v, z.b.v))
+    {
+        let r = g.pt(zs[given].a.v, zs[given].b.v);
+        for z in &zs[..2] {
+            avoid.push((g.pt(z.a.v, z.b.v), r));
+        }
+    }
+    if p.s("locus") == "Argument sector" {
+        if let (Some(a), Some(b)) = (read(p.s("lo")), read(p.s("hi"))) {
+            let conv = |v: f64| {
+                if p.s("unit") == "Degrees" {
+                    v.to_radians()
+                } else {
+                    v
+                }
+            };
+            let (a, b) = (conv(a.v), conv(b.v));
+            if a >= -PI && b <= PI && a < b {
+                let radius = 3. * (g.b - g.a).hypot(g.d - g.c);
+                for t in [a, b] {
+                    avoid.push((origin, g.pt(radius * t.cos(), radius * t.sin())));
+                }
+            }
+        }
+    }
+    if let Some(z) = zs.first() {
+        if p.b("components") && !coord && g.inside(z.a.v, z.b.v) {
+            let q = g.pt(z.a.v, z.b.v);
+            avoid.push((q, (q.0, origin.1)));
+            avoid.push((q, (origin.0, q.1)));
+        }
+        if p.b("argument") && !coord && !blank && z.r() > 0. && g.inside(z.a.v, z.b.v) {
+            for k in 0..40 {
+                let a = z.angle() * k as f64 / 40.;
+                let b = z.angle() * (k + 1) as f64 / 40.;
+                avoid.push((
+                    (origin.0 + 24. * a.cos(), origin.1 - 24. * a.sin()),
+                    (origin.0 + 24. * b.cos(), origin.1 - 24. * b.sin()),
+                ));
+            }
+        }
+    }
+    if !construct
+        && p.s("operation") == "Product"
+        && zs.len() > given
+        && zs[0].r() > 0.
+        && zs[1].r() > 0.
+    {
+        for k in 0..50 {
+            let a = zs[0].angle() + zs[1].angle() * k as f64 / 50.;
+            let b = zs[0].angle() + zs[1].angle() * (k + 1) as f64 / 50.;
+            avoid.push((
+                (origin.0 + 36. * a.cos(), origin.1 - 36. * a.sin()),
+                (origin.0 + 36. * b.cos(), origin.1 - 36. * b.sin()),
+            ));
         }
     }
     let mut boxes: Vec<(f64, f64, f64, f64)> = vec![];
@@ -985,6 +1132,12 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                             let q = g.pt(o.a.v, o.b.v);
                             segment_hits(origin, q, (b.0 - 2., b.1 - 2., b.2 + 2., b.3 + 2.))
                         })
+                    {
+                        continue;
+                    }
+                    if avoid
+                        .iter()
+                        .any(|&(a, c)| segment_hits(a, c, (b.0 - 2., b.1 - 2., b.2 + 2., b.3 + 2.)))
                     {
                         continue;
                     }
@@ -1112,7 +1265,11 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
         } else {
             "Drag w to change its real and imaginary parts"
         };
-        hs.push(Handle::knob(g.pt(z.a.v, z.b.v), tip, move |p, q| {
+        let pos = g.pt(z.a.v, z.b.v);
+        hs.push(Handle::knob(pos, tip, move |p, q| {
+            if !q.0.is_finite() || !q.1.is_finite() || (q.0 - pos.0).hypot(q.1 - pos.1) < 1e-7 {
+                return;
+            }
             let x = (g.a + (q.0 - 70.) / g.u).clamp(g.a, g.b);
             let y = (g.d - (q.1 - 70.) / g.u).clamp(g.c, g.d);
             if i == 0 {
@@ -1297,4 +1454,26 @@ fn root_angle(p: &Params, k: i64) -> Option<Q> {
         n += 2 * q.1
     }
     Some(Q::new(n, q.1))
+}
+
+fn scientific(s: &str) -> String {
+    let Some((a, b)) = s.split_once(['e', 'E']) else {
+        return s.replace('-', "−");
+    };
+    let exponent = b.parse::<i32>().unwrap_or(0).to_string();
+    let exponent: String = exponent
+        .chars()
+        .map(|c| match c {
+            '-' => '⁻',
+            c => "⁰¹²³⁴⁵⁶⁷⁸⁹"
+                .chars()
+                .nth(c.to_digit(10).unwrap() as usize)
+                .unwrap(),
+        })
+        .collect();
+    format!(
+        "{} × 10{}",
+        a.trim_start_matches('+').replace('-', "−"),
+        exponent
+    )
 }
