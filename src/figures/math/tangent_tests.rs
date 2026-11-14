@@ -1412,3 +1412,23 @@ fn removable_gaps_and_infinite_steps_are_undefined() {
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
+
+/// Powers typed with spaces round ^ are one function for both readers: x ^ (1/3) is drawn for negative x as it is read.
+#[test]
+fn spaced_powers_read_alike() {
+    let exprs = ["x ^ (1/3)", "x^ (1/3)", "x ^(1/3)", "x ^ (2/3)", "(x - 1) ^ (1/3)", "x ^ (1/3) ^ 2", "x ^ ((1/3)^2)", "2 * x ^ (1/5)", "x ^ (1/3) + x ^ (1/5)", "x^((1/3)^3)"];
+    let mut bad = vec![];
+    for e in exprs {
+        let plain = tangent::expr_plain(e, "f", 'x').unwrap_or_else(|m| panic!("{e}: {m}"));
+        let grid_e = tangent::real_odd_roots(&plain);
+        let tree = ex::parse(&plain).unwrap_or_else(|| panic!("{e}"));
+        for x in [-8.0, -2.0, -0.5, 0.5, 2.0, 8.0] {
+            let g = super::eval(&grid_e, x).filter(|v| v.is_finite());
+            let t = Some(ex::eval(&tree, x)).filter(|v| v.is_finite());
+            if x < 0.0 && g.is_none() { bad.push(format!("{e} at {x}: not drawn")); }
+            let same = match (g, t) { (Some(a), Some(b)) => (a - b).abs() <= 1e-9 * (1.0 + a.abs()), (None, None) => true, _ => false };
+            if !same { bad.push(format!("{e} at {x}: drawn {g:?}, read {t:?}")); }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}

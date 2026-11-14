@@ -374,6 +374,18 @@ pub(crate) fn real_odd_roots(s: &str) -> String {
 /// The exponent just after a ^ when it is a fraction of integers or a decimal with an odd denominator once reduced — (1/3),
 /// (-2/5), 0.2, (-0.6) — and is not itself raised to a power (x^(1/3)^2 is x^((1/3)^2)): (p, q, characters used).
 pub(crate) fn odd_exponent(cs: &[char]) -> Option<(i64, i64, usize)> {
+    // a bracketed power of a fraction, ((1/3)^2): the inside, when it is all of the bracket
+    let lead: Vec<char> = cs.iter().copied().filter(|c| !c.is_whitespace()).take(2).collect();
+    if lead == ['(', '('] {
+        let mut depth = 0;
+        let close = cs.iter().position(|c| { if *c == '(' { depth += 1 } else if *c == ')' { depth -= 1 } depth == 0 && *c == ')' })?;
+        let open = cs.iter().position(|c| *c == '(')?;
+        let inner = &cs[open + 1..close];
+        let (p, q, used) = odd_exponent(inner)?;
+        if inner[used..].iter().any(|c| !c.is_whitespace()) { return None; }
+        if cs[close + 1..].iter().find(|c| !c.is_whitespace()) == Some(&'^') { return None; }
+        return Some((p, q, close + 1));
+    }
     let (text, len): (String, usize) = if cs.first() == Some(&'(') {
         let close = cs.iter().position(|c| *c == ')')?;
         (cs[1..close].iter().filter(|c| !c.is_whitespace()).collect(), close + 1)
@@ -383,7 +395,22 @@ pub(crate) fn odd_exponent(cs: &[char]) -> Option<(i64, i64, usize)> {
         while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
         (cs[..k].iter().collect(), k)
     };
-    if text.is_empty() || cs[len..].iter().find(|c| !c.is_whitespace()) == Some(&'^') { return None; }
+    if text.is_empty() { return None; }
+    // (p/q)^n with an integer n: the power of a fraction, (1/3)^2 = 1/9; any other power after it is left alone
+    let after: Vec<char> = cs[len..].iter().copied().filter(|c| !c.is_whitespace()).collect();
+    let mut len = len;
+    let mut times = 1u32;
+    if after.first() == Some(&'^') {
+        let k = after[1..].iter().take_while(|c| c.is_ascii_digit()).count();
+        if k == 0 || (len_rest_is_more(&after[1 + k..])) { return None; }
+        times = after[1..1 + k].iter().collect::<String>().parse().ok()?;
+        if !(1..=6).contains(&times) { return None; }
+        // characters used: through the digits of the power (spaces already counted out of `after`)
+        let mut used = 0;
+        let mut seen = 0;
+        for c in &cs[len..] { used += 1; if !c.is_whitespace() { seen += 1; if seen == 1 + k { break; } } }
+        len += used;
+    }
     let (p, q) = if let Some((a, b)) = text.split_once('/') { (a.parse::<i64>().ok()?, b.parse::<i64>().ok()?) } else {
         // a decimal exponent (a bare integer is no root)
         let (ip, fp) = text.split_once('.')?;
@@ -397,8 +424,11 @@ pub(crate) fn odd_exponent(cs: &[char]) -> Option<(i64, i64, usize)> {
     let g = gcd(p, q).max(1);
     let (p, q) = (p / g, q / g);
     let (p, q) = if q < 0 { (-p, -q) } else { (p, q) };
+    let (p, q) = (p.checked_pow(times)?, q.checked_pow(times)?);
     (q > 1 && q % 2 == 1).then_some((p, q, len))
 }
+/// Whether more power follows a stacked power's integer (x^(1/3)^2^2): then it is left to the reader.
+fn len_rest_is_more(rest: &[char]) -> bool { rest.first() == Some(&'^') || rest.first().is_some_and(|c| c.is_ascii_digit() || *c == '.') }
 fn gcd(a: i64, b: i64) -> i64 { let (mut a, mut b) = (a.abs(), b.abs()); while b != 0 { let t = a % b; a = b; b = t; } a }
 /// Where the base of a power ending `out` starts: a bracket (with its function's name), a number, x, e or pi.
 fn base_start(out: &[char]) -> Option<usize> {
@@ -427,7 +457,7 @@ fn base_start(out: &[char]) -> Option<usize> {
 /// The typed function in x (the variable renamed to x), in the reader's spelling, before the odd roots are rewritten for
 /// the grid. Err: what is wrong.
 pub(crate) fn expr_plain(typed: &str, fname: &str, var: char) -> Result<String, String> {
-    let mut t = plain_symbols(typed.trim()).to_lowercase();
+    let mut t = no_space_at_powers(&plain_symbols(typed.trim()).to_lowercase());
     if let Some(i) = t.find('=') {
         let left: String = t[..i].chars().filter(|c| !c.is_whitespace()).collect();
         let named = format!("{}({var})", fname.to_lowercase());
@@ -456,6 +486,20 @@ pub(crate) fn expr_plain(typed: &str, fname: &str, var: char) -> Result<String, 
     }
     if eval(&out, 0.37).is_none() || ex::parse(&out).is_none() { return Err("Cannot read the function: check its brackets, and write sin(x), sqrt(x), ln(x) with brackets".into()); }
     Ok(out)
+}
+/// Spaces either side of ^ taken out ("x ^ (1/3)" is "x^(1/3)"), so both readers see the same power.
+fn no_space_at_powers(s: &str) -> String {
+    let cs: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    for (i, c) in cs.iter().enumerate() {
+        if c.is_whitespace() {
+            let prev = cs[..i].iter().rev().find(|c| !c.is_whitespace());
+            let next = cs[i + 1..].iter().find(|c| !c.is_whitespace());
+            if prev == Some(&'^') || next == Some(&'^') { continue; }
+        }
+        out.push(*c);
+    }
+    out
 }
 /// The typed function for the grid's reader: as `expr_plain`, odd roots made real.
 pub(crate) fn expr_in_x(typed: &str, fname: &str, var: char) -> Result<String, String> { expr_plain(typed, fname, var).map(|e| real_odd_roots(&e)) }
