@@ -433,7 +433,11 @@ pub const UNSURE: &str = "cannot be determined";
 
 /// The function the params describe, with every answer about it.
 #[derive(Clone, Debug)]
-pub struct Model { pub pieces: Vec<Piece>, pub dots: Vec<Dot>, pub asks: Vec<Num>, pub notes: Vec<String>, pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64 }
+pub struct Model { pub pieces: Vec<Piece>, pub dots: Vec<Dot>, pub asks: Vec<Num>, pub notes: Vec<String>, pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64, cands: std::cell::OnceCell<(Vec<K>, bool)>, discs: std::cell::OnceCell<(Vec<Disc>, bool)>, sides: std::cell::RefCell<std::collections::HashMap<(u64, bool, bool), Lim>> }
+
+/// More places where something may happen in the window than are worked out one by one (tan(x²) on -100..100 has
+/// thousands of poles): past this the key says there are too many instead of listing them.
+pub const MANY: usize = 200;
 
 impl Model {
     pub(super) fn new(p: &Params, g: &GridL) -> Model {
@@ -456,7 +460,7 @@ impl Model {
         }
         let mut dots = read_dots(p.s("dots"), &mut notes);
         let asks = read_asks(p.s("ask_at"), &mut notes);
-        let mut m = Model { pieces, dots: vec![], asks, notes, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, xs: g.xs };
+        let mut m = Model { pieces, dots: vec![], asks, notes, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, xs: g.xs, cands: std::cell::OnceCell::new(), discs: std::cell::OnceCell::new(), sides: Default::default() };
         // a single point where a piece already has a different value would give f two values: it is not drawn
         dots.retain(|d| {
             match m.piece_value(&d.x.k) {
@@ -501,6 +505,14 @@ impl Model {
     }
     /// The one-sided limit at a.
     pub fn side(&self, a: &K, dir: f64) -> Lim {
+        // (each one-sided limit is worked out once: the key, the circles, the labels and the asymptotes all ask)
+        let key = (a.value().to_bits(), a.is_exact(), dir > 0.0);
+        if let Some(l) = self.sides.borrow().get(&key) { return l.clone(); }
+        let l = self.side_of(a, dir);
+        self.sides.borrow_mut().insert(key, l.clone());
+        l
+    }
+    fn side_of(&self, a: &K, dir: f64) -> Lim {
         let av = a.value();
         let Some(pc) = self.pieces.iter().find(|pc| pc.covers_side(av, dir)) else { return Lim::Undef };
         match &pc.src {
@@ -530,6 +542,12 @@ impl Model {
     /// Every x where something may happen in [lo, hi]: the typed ends, holes, points and values of a, and where a formula
     /// breaks (exactly where it can be found); and whether that list is surely complete.
     fn candidates(&self, lo: f64, hi: f64) -> (Vec<K>, bool) {
+        if lo == self.x0 && hi == self.x1 { return self.cands.get_or_init(|| self.candidates_in(lo, hi)).clone(); }
+        self.candidates_in(lo, hi)
+    }
+    /// Whether the window has too many places to work out one by one (more than MANY).
+    pub fn too_many(&self) -> bool { self.candidates(self.x0, self.x1).0.len() > MANY }
+    fn candidates_in(&self, lo: f64, hi: f64) -> (Vec<K>, bool) {
         let mut c: Vec<K> = self.typed().into_iter().filter(|k| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 }).collect();
         let mut done = true;
         for pc in &self.pieces {
@@ -567,8 +585,10 @@ impl Model {
         }
     }
     /// The discontinuities in the window, left to right, and whether the list is surely complete.
-    pub fn discontinuities(&self) -> (Vec<Disc>, bool) {
+    pub fn discontinuities(&self) -> (Vec<Disc>, bool) { self.discs.get_or_init(|| self.discontinuities_of()).clone() }
+    fn discontinuities_of(&self) -> (Vec<Disc>, bool) {
         let (c, done) = self.candidates(self.x0, self.x1);
+        if c.len() > MANY { return (vec![], false); }
         (c.iter().filter_map(|k| self.classify(k)).collect(), done)
     }
     /// Where in the window discontinuities pile up without end (the cuts of floor(ln x) near 0), as the key writes them.
@@ -587,7 +607,9 @@ impl Model {
         let w = self.x1 - self.x0;
         let mut seen: Vec<K> = vec![];
         for (lo, hi, exact_only) in [(self.x0 - 3.0 * w, self.x1 + 3.0 * w, false), (-1e6, 1e6, true)] {
-            for k in self.candidates(lo, hi).0 {
+            let (c, _) = self.candidates(lo, hi);
+            if c.len() > MANY { continue; }
+            for k in c {
                 let v = k.value();
                 if (v >= self.x0 - 1e-9 && v <= self.x1 + 1e-9) || (exact_only && !k.is_exact()) || seen.iter().any(|s| (s.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { continue; }
                 seen.push(k);
@@ -597,7 +619,9 @@ impl Model {
     }
     /// The vertical asymptotes in the window: where a one-sided limit is infinite.
     pub fn verticals(&self) -> Vec<(f64, String)> {
-        self.candidates(self.x0, self.x1).0.into_iter().filter(|c| c.value() > self.x0 + 1e-9 && c.value() < self.x1 - 1e-9).filter(|c| self.side(c, -1.0).infinite() || self.side(c, 1.0).infinite()).map(|c| (c.value(), c.show())).collect()
+        let (c, _) = self.candidates(self.x0, self.x1);
+        if c.len() > MANY { return vec![]; }
+        c.into_iter().filter(|c| c.value() > self.x0 + 1e-9 && c.value() < self.x1 - 1e-9).filter(|c| self.side(c, -1.0).infinite() || self.side(c, 1.0).infinite()).map(|c| (c.value(), c.show())).collect()
     }
     /// The horizontal asymptotes: the finite limits at ∞ and -∞ (one line if they agree).
     pub fn horizontals(&self) -> Vec<(f64, String)> {
@@ -805,7 +829,9 @@ fn prose_tspans(s: &str) -> String {
         let mathy = core.chars().count() == 1 && core.chars().all(|c| c.is_alphabetic())
             || core.contains('(') && core.chars().next().is_some_and(|c| c.is_alphabetic()) && core.chars().nth(1) == Some('(')
             || core.chars().any(|c| c.is_ascii_digit() || matches!(c, '\u{221e}' | '\u{221a}' | '\u{3c0}')) && !core.chars().filter(|c| c.is_alphabetic()).any(|c| !matches!(c, 'x' | 'e' | '\u{3c0}'));
-        if mathy { format!("{}{}", math_tspans(core), svg::esc(tail)) } else { svg::esc(w) }
+        // (a minus sign before a word, as in x = -ln 20 or x = -e, is a minus sign, not a hyphen)
+        let w = match w.strip_prefix('-') { Some(r) if r.chars().next().is_some_and(|c| c.is_alphanumeric() || matches!(c, '(' | '\u{221a}')) => format!("\u{2212}{r}"), _ => w.to_string() };
+        if mathy { format!("{}{}", math_tspans(core), svg::esc(tail)) } else { svg::esc(&w) }
     }).collect::<Vec<_>>().join(" ")
 }
 fn prose_el(x: f64, y: f64, size: f64, s: &str, fill: &str) -> String {
@@ -1153,6 +1179,23 @@ fn build(p0: &Params) -> (String, Drawn) {
         }
         if matches!(d.kind, "jump" | "removable") { if let Some(f) = fv.filter(|f| inside_y(*f)) { if !m.dots.iter().any(|dd| (dd.x.v - d.x).abs() < 1e-9) { circles.push(Circ { at: (cx, sy(f)), closed: true, piece: i, which: 'v' }); } } }
     }
+    // an end of a formula's own domain inside the window, where f has no value but a finite limit from the side it has
+    // values on (x^x at 0: no value, limit 1 from the right): an open circle there, as the key says
+    let (cands, _) = m.candidates(m.x0, m.x1);
+    if cands.len() <= MANY {
+        for c in &cands {
+            let v = c.value();
+            if !(v > m.x0 && v < m.x1) || m.value(c) != Lim::Undef || m.dots.iter().any(|dd| (dd.x.v - v).abs() < 1e-9) { continue; }
+            for s in [-1.0, 1.0] {
+                if m.side(c, -s) != Lim::Undef { continue; }
+                let Lim::Val(y, _) = m.side(c, s) else { continue };
+                let Some(i) = m.pieces.iter().position(|pc| pc.covers_side(v, s)) else { continue };
+                let (cx, cy) = (sx(v), sy(y));
+                if !inside_y(y) || circles.iter().any(|c| (c.at.0 - cx).abs() < 0.5 && (c.at.1 - cy).abs() < 0.5) { continue; }
+                circles.push(Circ { at: (cx, cy), closed: false, piece: i, which: 'g' });
+            }
+        }
+    }
     // open circles first, closed over them (a filled end sitting on an open one shows the value)
     circles.sort_by_key(|c| c.closed);
     for c in &circles {
@@ -1232,7 +1275,7 @@ fn build(p0: &Params) -> (String, Drawn) {
         d.kind != UNSURE && (d.kind == "infinite" || ys.iter().any(|y| inside_y(*y))) && (d.x - g.x0).abs() >= 1e-9 * (1.0 + d.x.abs()) && (d.x - g.x1).abs() >= 1e-9 * (1.0 + d.x.abs())
     };
     dr.labelable_kinds = if many_kinds { 0 } else { discs.iter().filter(|d| labelable(d)).count() };
-    if show_kinds && many_kinds { notes.push("Too many discontinuities to label each one on the graph: the key lists them".into()); }
+    if show_kinds && many_kinds { notes.push(format!("Too many discontinuities to label each one on the graph: the key {}", if discs_complete { "lists them" } else { "says where they are" })); }
     if show_kinds && !many_kinds {
         for d in &discs {
             let x = sx(d.x);
@@ -1507,8 +1550,11 @@ fn block(p: &Params, m: &Model, discs: &[Disc], discs_complete: bool, stu: bool,
     if !row.is_empty() { rows.push(row); dr.inf_asked = true; }
     if p.b("ask_disc") {
         let sure = discs_complete && discs.iter().all(|d| d.kind != UNSURE);
-        let piles = if discs_complete { vec![] } else { m.piles() };
-        let key = if !piles.is_empty() {
+        let piles = if discs_complete || m.too_many() { vec![] } else { m.piles() };
+        let key = if m.too_many() {
+            notes.push(format!("f has more than {MANY} places in the window where it may not be continuous, too many to work out one by one: the key leaves that answer as a line to fill in (narrow the x-axis to list them)"));
+            format!("{BLANK}{BLANK}{BLANK}")
+        } else if !piles.is_empty() {
             // the list cannot be complete: say where it runs on without end
             let at = piles.iter().map(|k| eq_text("x", &k.show())).collect::<Vec<_>>().join(", ");
             notes.push(format!("f's discontinuities pile up without end near {}, so the key says so instead of listing them", at.replace('-', "\u{2212}")));

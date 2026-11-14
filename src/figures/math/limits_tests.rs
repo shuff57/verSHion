@@ -20,8 +20,12 @@ fn dump_pngs() {
         cases.push((format!("ex{k}"), p));
     }
     if let Ok(extra) = std::env::var("LIM_CASE") { cases = vec![("case".into(), with(serde_json::from_str(&extra).unwrap()))]; }
+    // (a file of lines "name<TAB>params as JSON")
+    if let Ok(f) = std::env::var("LIM_CASES") { cases = std::fs::read_to_string(f).unwrap().lines().filter(|l| l.contains('\t')).map(|l| { let (n, j) = l.split_once('\t').unwrap(); (n.to_string(), with(serde_json::from_str(j).unwrap())) }).collect(); }
     for (name, p) in cases {
+        let t0 = std::time::Instant::now();
         let s = svg(&p);
+        println!("{name}: {} ms", t0.elapsed().as_millis());
         std::fs::write(format!("{dir}/{name}.svg"), &s).unwrap();
         std::fs::write(format!("{dir}/{name}.png"), crate::figures::to_png(&s, 1.0).unwrap()).unwrap();
         println!("{name}: {:?}", warnings(&p));
@@ -843,7 +847,7 @@ fn the_ends_of_every_range_draw_cleanly_and_quickly() {
         let ms = t.elapsed().as_millis();
         let _ = warnings(&p);
         let _ = handles(&p);
-        assert!(ms < 800, "{c}: {ms} ms");
+        assert!(ms < 500, "{c}: {ms} ms");
         assert!(s.len() < 3_000_000, "{c}: {} bytes", s.len());
         assert!(!s.contains("NaN") && !s.contains("inf\"") && !s.contains("e+") && !s.contains("e-1"), "{c}");
         assert!(!words(&s).contains("0000000") && !words(&s).contains("999999"), "{c}: float noise in {}", words(&s));
@@ -1126,4 +1130,87 @@ fn delta_is_written_only_as_it_is() {
     // an empty function with the band on: one note only
     let n = warnings(&with(json!({"pieces": "", "dots": "", "ask_at": "1", "eps_band": true})));
     assert_eq!(n.len(), 1, "{n:?}");
+}
+
+/// Exact values are written as a textbook writes them: quotients as fractions, sin/cos as tan, and true minus signs
+/// (the third check: "(cos 1)⁻¹ sin 1", "(sin 1)⁻¹", "π⁻¹", "2π⁻¹", "x = -ln 20").
+#[test]
+fn exact_values_are_written_in_textbook_form() {
+    let show = |t: &str| super::limits::Num::read(t).unwrap().text;
+    for (typed, want) in [("1/pi", "1/\u{3c0}"), ("2/pi", "2/\u{3c0}"), ("1/ln(3)", "1/ln 3"), ("1/sin(1)", "1/sin 1"), ("tan(1)", "tan 1"), ("1/tan(1)", "cot 1"), ("2tan(1)", "2 tan 1"), ("-pi/2", "-\u{3c0}/2"), ("exp(-1)", "1/e"), ("3/e^2", "3/e^2"), ("-2 + 1/pi", "-2 + 1/\u{3c0}"), ("ln(2)", "ln 2"), ("6 + cos(1)", "6 + cos 1")] {
+        assert_eq!(show(typed), want, "{typed}");
+    }
+    let md = |pieces: &str, at: &str| { let m = m(serde_json::json!({"pieces": pieces, "dots": "", "ask_at": at})); let k = super::limits::Num::read(at).unwrap().k; m.two(&k) };
+    assert!(matches!(md("y = tan(x)", "1"), Lim::Val(_, t) if t == "tan 1"));
+    assert!(matches!(md("y = 1/tan(x)", "1"), Lim::Val(_, t) if t == "cot 1"));
+    assert!(matches!(md("y = 1/sin(x)", "1"), Lim::Val(_, t) if t == "1/sin 1"));
+    assert!(matches!(md("y = 1/ln(x)", "3"), Lim::Val(_, t) if t == "1/ln 3"));
+    // the key and the graph write them so, with no ASCII hyphen before a word
+    for (pieces, x0, x1, want) in [("y = floor(exp(-x))", -3.5, 1.0, "\u{2212}ln 20"), ("y = 1/(x + e)", -4.0, 4.0, "x = \u{2212}e")] {
+        let svg = svg(&with(serde_json::json!({"pieces": pieces, "dots": "", "ask_at": "", "ask_disc": true, "asym_eqs": true, "xmin": x0, "xmax": x1})));
+        let text: String = { let mut out = String::new(); let mut inside = false; for c in svg.chars() { if c == '<' { inside = true; } else if c == '>' { inside = false; } else if !inside { out.push(c); } } out };
+        assert!(text.contains(want), "{pieces}: {want} not in {text}");
+        assert!(!text.contains(" -ln") && !text.contains("= -e"), "{pieces}: a hyphen for a minus sign: {text}");
+    }
+    let a = svg(&with(serde_json::json!({"pieces": "y = 1/(x - 1/pi)", "dots": "", "ask_at": "1/pi", "asym_eqs": true, "xmin": -2.0, "xmax": 2.0})));
+    assert!(!a.contains("\u{207b}") && !a.contains("^(-1)"), "a negative power is written: {a}");
+}
+
+/// The third check's slow graphs (thousands of poles, or poles piling up at 0) draw in well under half a second: past a
+/// few hundred places the key says there are too many, and poles piling up are said to pile up.
+#[test]
+fn graphs_with_thousands_of_poles_draw_quickly_and_say_so() {
+    for (pieces, x0, x1, says) in [
+        ("y = tan(x^2)", -100.0, 100.0, "too many to work out one by one"),
+        ("y = tan(x^3)", -10.0, 10.0, "too many to work out one by one"),
+        ("y = 1/sin(x^2)", -100.0, 100.0, "too many to work out one by one"),
+        ("y = tan(x^2)", -20.0, 20.0, "too many to work out one by one"),
+        ("y = 1/sin(1/x)", -1.0, 1.0, "pile up without end near x = 0"),
+    ] {
+        let p = with(json!({"pieces": pieces, "dots": "", "xmin": x0, "xmax": x1, "ask_disc": true, "kind_labels": true}));
+        let t0 = std::time::Instant::now();
+        let _ = svg(&p);
+        let ms = t0.elapsed().as_millis();
+        assert!(ms < 500, "{pieces} on {x0}..{x1} took {ms} ms");
+        let w = warnings(&p);
+        assert!(w.iter().any(|n| n.contains(says)), "{pieces}: {w:?}");
+    }
+}
+
+/// 0^0 has no value: x^x, |x|^x, (x²)^x have no value at 0 and the limit from the side with values is 1, drawn as an
+/// open circle at (0, 1) (never a filled one); 0^x is 0 for x > 0 only; x² at 0 is 0.
+#[test]
+fn zero_to_the_zero_has_no_value_and_is_drawn_open() {
+    for pieces in ["y = x^x", "y = abs(x)^x", "y = (x^2)^x", "y = sin(x)^x"] {
+        let p = with(json!({"pieces": pieces, "dots": "", "ask_at": "0"}));
+        let md = model_of(&p);
+        let z = Num::read("0").unwrap().k;
+        assert_eq!(md.value(&z), Lim::Undef, "{pieces}");
+        assert!(matches!(md.side(&z, 1.0), Lim::Val(v, _) if (v - 1.0).abs() < 1e-12), "{pieces}");
+        let s = svg(&p);
+        let circles: Vec<&str> = s.split("<circle").skip(1).filter(|c| c.contains("data-lim")).collect();
+        // (sin(x)^x also has open circles at (π, 0), (2π, 0), (3π, 0), where it tends to 0 and has no value: the first is at x = 0)
+        let opens: Vec<&&str> = circles.iter().filter(|c| c.contains("data-lim=\"open\"")).collect();
+        assert_eq!(opens.len(), if pieces.contains("sin") { 4 } else { 1 }, "{pieces}: open circles: {circles:?}");
+        assert!(opens[0].contains("cx=\"218.80\" cy=\"236.20\""), "{pieces}: the open circle is at (0, 1): {circles:?}");
+        assert!(!circles.iter().any(|c| c.contains("data-lim=\"closed\"")), "{pieces}: no filled circle: {circles:?}");
+    }
+    let md = model_of(&with(json!({"pieces": "y = 0^x", "dots": ""})));
+    assert_eq!(md.value(&Num::read("0").unwrap().k), Lim::Undef);
+    assert!(matches!(md.value(&Num::read("2").unwrap().k), Lim::Val(v, _) if v == 0.0));
+    assert_eq!(md.value(&Num::read("-1").unwrap().k), Lim::Undef);
+    let md = model_of(&with(json!({"pieces": "y = x^2", "dots": ""})));
+    assert!(matches!(md.value(&Num::read("0").unwrap().k), Lim::Val(v, _) if v == 0.0));
+}
+
+#[test]
+#[ignore]
+fn time_probe() {
+    let p = with(serde_json::from_str(&std::env::var("LIM_JSON").unwrap()).unwrap());
+    let t = std::time::Instant::now(); let md = model_of(&p); println!("model {:?}", t.elapsed());
+    let t = std::time::Instant::now(); let d = md.discontinuities(); println!("discs {:?} ({})", t.elapsed(), d.0.len());
+    let t = std::time::Instant::now(); let o = md.outside(); println!("outside {:?} ({})", t.elapsed(), o.len());
+    let t = std::time::Instant::now(); let v = md.verticals(); println!("verticals {:?} ({})", t.elapsed(), v.len());
+    let t = std::time::Instant::now(); let pl = md.piles(); println!("piles {:?} ({})", t.elapsed(), pl.len());
+    let t = std::time::Instant::now(); let _ = svg(&p); println!("svg {:?}", t.elapsed());
 }

@@ -397,23 +397,55 @@ impl K {
                 let rad: u128 = ps.iter().map(|(pr, n)| pr.pow(*n as u32)).product();
                 roots.push(match den { 2 => format!("\u{221a}{rad}"), 3 => format!("\u{221b}{rad}"), d => format!("{rad}^(1/{d})") });
             }
-            let mut others: Vec<String> = vec![];
+            // the factors over the line (positive powers) and under it (negative powers, and 1/(...) atoms), as a textbook
+            // writes them: 1/sin 1, 2/π, e^2/(1 + e^2), tan 1 for sin 1/cos 1
+            let mut top: Vec<String> = vec![];
+            let mut bot: Vec<String> = vec![];
+            let pw = |base: &str, p: Q, wrap: bool| -> String {
+                let b = if wrap && p != Q::ONE && base.contains(' ') { format!("({base})") } else { base.to_string() };
+                if p == Q::ONE { b } else if p.is_int() && p.n > 0 { format!("{b}^{}", p.n) } else { format!("{b}^({})", show_q(p, false)) }
+            };
             for (a, p) in m {
+                let under = p.n < 0;
+                let ap = if under { p.neg() } else { *p };
+                let side = if under { &mut bot } else { &mut top };
                 match a.kind {
                     AK::Prime(_) => {}
-                    AK::E => others.push(if *p == Q::ONE { "e".into() } else if p.is_int() && p.n > 0 { format!("e^{}", p.n) } else { format!("e^({})", show_q(*p, false)) }),
-                    AK::Pi => others.push(if *p == Q::ONE { "\u{3c0}".into() } else if p.is_int() && p.n > 0 { format!("\u{3c0}^{}", p.n) } else { format!("\u{3c0}^({})", show_q(*p, false)) }),
-                    _ => others.push(if *p == Q::ONE { a.show.clone() } else { format!("({})^({})", a.show, show_q(*p, false)) }),
+                    AK::E => side.push(pw("e", ap, false)),
+                    AK::Pi => side.push(pw("\u{3c0}", ap, false)),
+                    _ => match a.show.strip_prefix("1/(").and_then(|r| r.strip_suffix(')')).filter(|r| balanced(r)) {
+                        // 1/(1 + e^(-2)): its sum goes under the line
+                        Some(inner) => (if under { &mut top } else { &mut bot }).push(pw(&format!("({inner})"), ap, false)),
+                        None => side.push(pw(&a.show, ap, true)),
+                    },
                 }
             }
-            let has_fun = m.iter().any(|(a, _)| matches!(a.kind, AK::Fun | AK::Ln(_)));
-            let coef = if num == 1 && !m.is_empty() { String::new() } else { num.to_string() };
+            // sin u over cos u is tan u, cos u over sin u is cot u
+            for (s1, c1, t1) in [("sin ", "cos ", "tan "), ("cos ", "sin ", "cot ")] {
+                while let Some((i, j)) = top.iter().enumerate().find_map(|(i, t)| t.strip_prefix(s1).and_then(|u| bot.iter().position(|b| b.strip_prefix(c1) == Some(u)).map(|j| (i, j)))) {
+                    let u = top[i][s1.len()..].to_string();
+                    top[i] = format!("{t1}{u}");
+                    bot.remove(j);
+                }
+            }
+            let has_fun = top.iter().any(|t| t.contains(' ')) || m.iter().any(|(a, _)| matches!(a.kind, AK::Fun | AK::Ln(_)));
+            let coef = if num == 1 && (!top.is_empty() || !roots.is_empty()) { String::new() } else { num.to_string() };
             body.push_str(&coef);
-            if has_fun && !coef.is_empty() { body.push(' '); }
+            if has_fun && !coef.is_empty() && !top.is_empty() { body.push(' '); }
             body.push_str(&roots.join("\u{b7}"));
-            if !roots.is_empty() && !others.is_empty() { body.push('\u{b7}'); }
-            body.push_str(&others.join(" "));
-            if q.d != 1 { body = if has_fun && body.contains(' ') { format!("({body})/{}", q.d) } else { format!("{body}/{}", q.d) }; }
+            if !roots.is_empty() && !top.is_empty() { body.push('\u{b7}'); }
+            body.push_str(&top.join(" "));
+            if body.is_empty() { body.push('1'); }
+            let mut under: Vec<String> = vec![];
+            if q.d != 1 { under.push(q.d.to_string()); }
+            under.extend(bot);
+            if !under.is_empty() {
+                let top_s = if body.contains(' ') && body.contains(['+', '-']) { format!("({body})") } else { body.clone() };
+                let one = under.len() == 1 && !(under[0].contains(' ') && q.d != 1);
+                let bot_s = if one { under[0].clone() } else { format!("({})", under.join(" ")) };
+                // (a bare fraction of functions reads as (sin 1)/2 when the top has a space: write it so)
+                body = if under.len() == 1 && q.d != 1 && body.contains(' ') { format!("({body})/{bot_s}") } else { format!("{top_s}/{bot_s}") };
+            }
             parts.push((neg, body));
         }
         // the whole number first (4 + e^3), then the rest
@@ -426,6 +458,8 @@ impl K {
         s
     }
 }
+/// Whether brackets in s pair up ((1 + e)(2) is not one bracketed sum).
+fn balanced(s: &str) -> bool { let mut d = 0i32; for c in s.chars() { if c == '(' { d += 1; } if c == ')' { d -= 1; if d < 0 { return false; } } } d == 0 }
 /// A rational as written: whole, a fraction, or (typed as a decimal, or a power of ten in the bottom) a decimal.
 pub fn show_q(q: Q, dec: bool) -> String {
     if q.is_int() { return q.n.to_string(); }
@@ -1548,7 +1582,30 @@ pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
                     for k in k0..=k1 { let x = at(k); if inside(&x) { out.push(x); } }
                     (out, true)
                 }
-                _ => numeric_zeros(e, lo, hi),
+                _ => {
+                    // a curve inside: where it equals kπ (sin) or π/2 + kπ (cos), solved for each k it reaches
+                    // (sin(1/x) at x = 1/(kπ)); when it is unbounded on the window there are infinitely many, so only the
+                    // ones nearest k = 0 are given and the list is not complete
+                    let off = if sin { 0.0 } else { 0.5 };
+                    let level = |k: i128| K::pi().mulq(Q::i(k)).add(&if sin { K::zero() } else { K::pi().mulq(Q::new(1, 2).unwrap()) });
+                    let unbounded = !floor_piles(a, lo, hi).is_empty();
+                    let vals: Vec<f64> = (0..=4000).filter_map(|i| ev(a, lo + (hi - lo) * i as f64 / 4000.0)).filter(|v| v.abs() < 1e12).collect();
+                    if vals.is_empty() { return numeric_zeros(e, lo, hi); }
+                    let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));
+                    let (k0, k1) = ((mn / PI - off).floor() as i128 - 1, (mx / PI - off).ceil() as i128 + 1);
+                    if !unbounded && k1 - k0 > 400 { return numeric_zeros(e, lo, hi); }
+                    // (the 40 nearest k = 0 when there is no end to them)
+                    let mut ks: Vec<i128> = if unbounded { (-20..=20).map(|k: i128| k.clamp(k0, k1)).collect() } else { (k0..=k1).collect() };
+                    ks.dedup();
+                    let mut out = vec![];
+                    let mut done = !unbounded;
+                    for k in ks {
+                        let (z, d) = zeros(&X::Add(vec![(**a).clone(), X::C(level(k).neg())]), lo, hi);
+                        out.extend(z);
+                        done &= d;
+                    }
+                    (out, done)
+                }
             }
         }
         X::F(Fun::Ln, a) => zeros(&X::Add(vec![(**a).clone(), X::C(K::int(-1))]), lo, hi),
@@ -1770,21 +1827,24 @@ pub fn floor_piles(a: &X, lo: f64, hi: f64) -> Vec<K> {
 /// Every place in [lo, hi] where the cuts of some floor or ceiling in e pile up without end.
 pub fn piles_in(e: &X, lo: f64, hi: f64) -> Vec<K> {
     let mut out: Vec<K> = vec![];
-    fn walk(e: &X, lo: f64, hi: f64, out: &mut Vec<K>) {
+    // (`zero`: a zero of e is a break, as under 1/(...): a sine of an unbounded curve then breaks without end)
+    fn walk(e: &X, lo: f64, hi: f64, zero: bool, out: &mut Vec<K>) {
         match e {
             X::C(_) | X::V => {}
-            X::Add(v) | X::Mul(v) => for a in v { walk(a, lo, hi, out) },
-            X::Neg(a) | X::Inv(a) => walk(a, lo, hi, out),
-            X::Pow(b, p) => { walk(b, lo, hi, out); walk(p, lo, hi, out); }
+            X::Add(v) => for a in v { walk(a, lo, hi, false, out) },
+            X::Mul(v) => for a in v { walk(a, lo, hi, zero, out) },
+            X::Neg(a) => walk(a, lo, hi, zero, out),
+            X::Inv(a) => walk(a, lo, hi, true, out),
+            X::Pow(b, p) => { walk(b, lo, hi, p.has_x() || const_q(p).is_none_or(|q| q < Q::ZERO), out); walk(p, lo, hi, false, out); }
             X::F(f, a) => {
-                if *f == Fun::Floor && !poly(a).is_some_and(|c| c.len() <= 2) {
+                if (*f == Fun::Floor || (zero && matches!(f, Fun::Sin | Fun::Cos))) && !poly(a).is_some_and(|c| c.len() <= 2) {
                     for k in floor_piles(a, lo, hi) { if !out.iter().any(|o| (o.value() - k.value()).abs() < 1e-9 * (1.0 + k.value().abs())) { out.push(k); } }
                 }
-                walk(a, lo, hi, out);
+                walk(a, lo, hi, false, out);
             }
         }
     }
-    walk(e, lo, hi, &mut out);
+    walk(e, lo, hi, false, &mut out);
     out.sort_by(|a, b| a.value().partial_cmp(&b.value()).unwrap_or(Ordering::Equal));
     out
 }
