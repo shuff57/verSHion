@@ -433,7 +433,7 @@ pub const UNSURE: &str = "cannot be determined";
 
 /// The function the params describe, with every answer about it.
 #[derive(Clone, Debug)]
-pub struct Model { pub pieces: Vec<Piece>, pub dots: Vec<Dot>, pub asks: Vec<Num>, pub notes: Vec<String>, pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64, cands: std::cell::OnceCell<(Vec<K>, bool)>, discs: std::cell::OnceCell<(Vec<Disc>, bool)>, sides: std::cell::RefCell<std::collections::HashMap<(u64, bool, bool), Lim>> }
+pub struct Model { pub pieces: Vec<Piece>, pub dots: Vec<Dot>, pub asks: Vec<Num>, pub notes: Vec<String>, pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64, cands: std::cell::OnceCell<(Vec<K>, bool)>, discs: std::cell::OnceCell<(Vec<Disc>, bool)>, many: std::cell::OnceCell<bool>, sides: std::cell::RefCell<std::collections::HashMap<(u64, bool, bool), Lim>> }
 
 /// More places where something may happen in the window than are worked out one by one (tan(x²) on -100..100 has
 /// thousands of poles): past this the key says there are too many instead of listing them.
@@ -467,7 +467,7 @@ impl Model {
         }
         let mut dots = read_dots(p.s("dots"), &mut notes);
         let asks = read_asks(p.s("ask_at"), &mut notes);
-        let mut m = Model { pieces, dots: vec![], asks, notes, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, xs: g.xs, cands: std::cell::OnceCell::new(), discs: std::cell::OnceCell::new(), sides: Default::default() };
+        let mut m = Model { pieces, dots: vec![], asks, notes, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, xs: g.xs, cands: std::cell::OnceCell::new(), discs: std::cell::OnceCell::new(), many: std::cell::OnceCell::new(), sides: Default::default() };
         // a single point where a piece already has a different value would give f two values: it is not drawn
         dots.retain(|d| {
             match m.piece_value(&d.x.k) {
@@ -553,7 +553,9 @@ impl Model {
         self.candidates_in(lo, hi)
     }
     /// Whether the window has too many places to work out one by one (more than MANY).
-    pub fn too_many(&self) -> bool { self.candidates(self.x0, self.x1).0.len() > MANY }
+    pub fn too_many(&self) -> bool {
+        *self.many.get_or_init(|| self.candidates(self.x0, self.x1).0.len() > MANY || self.pieces.iter().any(|pc| { let Src::Formula { x } = &pc.src else { return false }; let (a, b) = (pc.lo_x().max(self.x0), pc.hi_x().min(self.x1)); b > a && too_busy(x, a, b) }))
+    }
     fn candidates_in(&self, lo: f64, hi: f64) -> (Vec<K>, bool) {
         let mut c: Vec<K> = self.typed().into_iter().filter(|k| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 }).collect();
         let mut done = true;
@@ -562,7 +564,7 @@ impl Model {
             let (a, b) = (pc.lo_x().max(lo), pc.hi_x().min(hi));
             if !(b > a) { continue; }
             // (too many cuts to work out one by one: none is solved for)
-            if too_busy(x, a, b) { return (vec![K::zero(); MANY + 1], false); }
+            if too_busy(x, a, b) { done = false; continue; }
             let (mut z, mut d) = cas::breaks(x, a, b);
             // floors whose values do not matter (sin(π floor(1/x)) = 0): their cuts are no discontinuities, so the breaks
             // are those of the formula with the floors replaced by a whole number and those of the floors' arguments
@@ -608,7 +610,7 @@ impl Model {
     pub fn discontinuities(&self) -> (Vec<Disc>, bool) { self.discs.get_or_init(|| self.discontinuities_of()).clone() }
     fn discontinuities_of(&self) -> (Vec<Disc>, bool) {
         let (c, done) = self.candidates(self.x0, self.x1);
-        if c.len() > MANY { return (vec![], false); }
+        if self.too_many() { return (vec![], false); }
         (c.iter().filter_map(|k| self.classify(k)).collect(), done)
     }
     /// Where in the window discontinuities pile up without end (the cuts of floor(ln x) near 0), as the key writes them.
@@ -664,24 +666,46 @@ impl Model {
         false
     }
     /// Discontinuities outside the window (for the panel note): the near ones, and exactly found far ones.
-    pub fn outside(&self) -> Vec<Disc> {
+    /// Nearest the window first, with whether that is all of them (every search complete, nothing left out).
+    pub fn outside(&self) -> (Vec<Disc>, bool) {
         let w = self.x1 - self.x0;
         let mut seen: Vec<K> = vec![];
-        for (lo, hi, exact_only) in [(self.x0 - 3.0 * w, self.x1 + 3.0 * w, false), (-1e6, 1e6, true)] {
-            let (c, _) = self.candidates(lo, hi);
-            if c.len() > MANY { continue; }
+        let mut all = true;
+        // (widening: a window too busy to work out is skipped, so floor(x) is still found just past the edges)
+        let mut wins: Vec<(f64, f64, bool)> = [0.5, 3.0, 30.0, 300.0, 3000.0].iter().map(|f| (self.x0 - f * w, self.x1 + f * w, *f > 3.0)).collect();
+        wins.push((-1e6, 1e6, true));
+        for (i, (lo, hi, exact_only)) in wins.into_iter().enumerate() {
+            // (past the first, a window with more cuts than are worked out one by one is not searched at all, piles or not:
+            // floor(tan x) has a pile at every pole)
+            if i > 0 && self.pieces.iter().any(|pc| { let Src::Formula { x } = &pc.src else { return false }; let (a, b) = (pc.lo_x().max(lo), pc.hi_x().min(hi)); b > a && cas::busy(x, a, b) > MANY }) { all = false; continue; }
+            let (c, done) = self.candidates(lo, hi);
+            all &= done;
             for k in c {
                 let v = k.value();
-                if (v >= self.x0 - 1e-9 && v <= self.x1 + 1e-9) || (exact_only && !k.is_exact()) || seen.iter().any(|s| (s.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { continue; }
+                if v >= self.x0 - 1e-9 && v <= self.x1 + 1e-9 { continue; }
+                if exact_only && !k.is_exact() { all = false; continue; }
+                if seen.iter().any(|s| (s.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { continue; }
                 seen.push(k);
             }
         }
-        seen.iter().filter_map(|k| self.classify(k)).collect()
+        // (only the nearest are worked out, enough for the note: two discontinuities on each side)
+        let dist = |v: f64| if v < self.x0 { self.x0 - v } else { v - self.x1 };
+        seen.sort_by(|a, b| dist(a.value()).partial_cmp(&dist(b.value())).unwrap_or(std::cmp::Ordering::Equal));
+        let mut out: Vec<Disc> = vec![];
+        let (mut l, mut r, mut looked) = (0, 0, 0);
+        for k in &seen {
+            if (l >= 2 && r >= 2) || looked >= 24 { all = false; break; }
+            looked += 1;
+            let left = k.value() < self.x0;
+            if (left && l >= 2) || (!left && r >= 2) { all = false; continue; }
+            if let Some(d) = self.classify(k) { if left { l += 1; } else { r += 1; } out.push(d); }
+        }
+        (out, all)
     }
     /// The vertical asymptotes in the window: where a one-sided limit is infinite.
     pub fn verticals(&self) -> Vec<(f64, String)> {
         let (c, _) = self.candidates(self.x0, self.x1);
-        if c.len() > MANY { return vec![]; }
+        if self.too_many() { return vec![]; }
         c.into_iter().filter(|c| c.value() > self.x0 + 1e-9 && c.value() < self.x1 - 1e-9).filter(|c| self.side(c, -1.0).infinite() || self.side(c, 1.0).infinite()).map(|c| (c.value(), c.show())).collect()
     }
     /// The horizontal asymptotes: the finite limits at ∞ and -∞ (one line if they agree).
@@ -727,7 +751,7 @@ fn grid_params(p: &Params, eq: &str, for_curve: bool) -> Params {
 /// More cuts on [a, b] than are worked out one by one (floor(10 sin(x²)), tan(e^x) on -100..100), counted cheaply before
 /// any is solved for; cuts that pile up near a point, or floors whose value does not matter, are not counted so (only
 /// the levels nearest are solved for there).
-fn too_busy(x: &X, a: f64, b: f64) -> bool { cas::busy(x, a, b) > MANY && cas::piles_in(x, a, b).is_empty() && cas::floors_inert(x, a, b).is_none() }
+fn too_busy(x: &X, a: f64, b: f64) -> bool { cas::busy(x, a, b) > MANY && !cas::any_pile(x, a, b) && cas::floors_inert(x, a, b).is_none() }
 
 fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
     let num = |v: f64| format!("{v}");
@@ -1297,14 +1321,16 @@ fn build(p0: &Params) -> (String, Drawn) {
     // two values at one x
     for x in m.typed() { if m.value(&x) == Lim::Two { let t = format!("f has two values at x = {}: a function has one, so make one of them an open circle or remove a point", x.show().replace('-', "\u{2212}")); if !notes.contains(&t) { notes.push(t); } } }
     {
-        let out = m.outside();
+        let (out, all) = m.outside();
         let say = |d: &Disc| if d.kind == UNSURE { format!("x {}", eq_text("", &d.text).trim_start().replace('-', "\u{2212}")) } else { format!("{} ({})", eq_text("x", &d.text).replace('-', "\u{2212}"), d.kind) };
         let (left, right): (Vec<&Disc>, Vec<&Disc>) = out.iter().partition(|d| d.x < g.x0);
-        let mut shown: Vec<String> = left.iter().rev().take(2).rev().map(|d| say(d)).collect();
+        // (the two nearest on each side, left to right; "and more" when there are others or the search was not complete:
+        // a count is never given, since floor(x) or tan x has infinitely many)
+        let mut shown: Vec<String> = left.iter().take(2).rev().map(|d| say(d)).collect();
         shown.extend(right.iter().take(2).map(|d| say(d)));
         if !shown.is_empty() {
-            let more = out.len() - shown.len();
-            notes.push(format!("f also has discontinuities outside the window: {}{}: widen the x-axis to show them", shown.join(", "), if more > 0 { format!(" and {more} more") } else { String::new() }));
+            let more = out.len() > shown.len() || !all;
+            notes.push(format!("f also has discontinuities outside the window: {}{}: widen the x-axis to show them", shown.join(", "), if more { " and more" } else { "" }));
         }
     }
 
@@ -1639,11 +1665,17 @@ fn block(p: &Params, m: &Model, discs: &[Disc], discs_complete: bool, stu: bool,
             let at = piles.iter().map(|k| eq_text("x", &k.show())).collect::<Vec<_>>().join(", ");
             notes.push(format!("f's discontinuities pile up without end near {}, so the key says so instead of listing them", at.replace('-', "\u{2212}")));
             format!("infinitely many, piling up near {at}")
+        } else if let Some(t) = m.typed().into_iter().find(|t| m.value(t) == Lim::Two) {
+            // (f has two values at a point: it is no function there, so where it is continuous is no question to answer)
+            notes.push(format!("f has two values at x = {}, so the key leaves where f is not continuous as a line to fill in", t.show().replace('-', "\u{2212}")));
+            format!("{BLANK}{BLANK}{BLANK}")
         } else if !sure {
             let which: Vec<String> = discs.iter().filter(|d| d.kind == UNSURE).map(|d| eq_text("x", &d.text)).collect();
-            notes.push(if which.is_empty() { "The app cannot be sure it has found every place where f is not continuous (a formula whose breaks it can only search for numerically), so the key leaves that answer as a line to fill in".into() } else { format!("The app cannot determine whether f is continuous at {} or what kind of discontinuity it has there, so the key leaves that answer as a line to fill in", which.join(", ").replace('-', "\u{2212}")) });
+            // (a few named, not every one)
+            let named = if which.len() > 6 { format!("{} and more", which[..6].join(", ")) } else { which.join(", ") };
+            notes.push(if which.is_empty() { "The app cannot be sure it has found every place where f is not continuous (a formula whose breaks it can only search for numerically), so the key leaves that answer as a line to fill in".into() } else { format!("The app cannot determine whether f is continuous at {} or what kind of discontinuity it has there, so the key leaves that answer as a line to fill in", named.replace('-', "\u{2212}")) });
             format!("{BLANK}{BLANK}{BLANK}")
-        } else if discs.is_empty() { "nowhere in the window".to_string() } else { discs.iter().map(|d| format!("{} ({})", eq_text("x", &d.text), d.kind)).collect::<Vec<_>>().join(", ") };
+        } else if discs.is_empty() { "nowhere in the window".to_string() } else { discs.iter().map(|d| format!("{} ({})", eq_text("x", &d.text).replace('-', "\u{2212}"), d.kind)).collect::<Vec<_>>().join(", ") };
         rows.push(vec![Item::Ask { text: "Where is f not continuous? Give each x and its kind:".into(), ans: if stu { format!("{BLANK}{BLANK}{BLANK}") } else { key } }]);
     }
     if !unknown.is_empty() { notes.push(format!("The app cannot determine {} for this formula, so the key leaves {} as a line to fill in", unknown.join(", "), if unknown.len() > 1 { "them" } else { "it" })); }

@@ -474,7 +474,9 @@ impl K {
             if !under.is_empty() {
                 let top_s = if body.contains(' ') && body.contains(['+', '-']) { format!("({body})") } else { body.clone() };
                 let one = under.len() == 1 && !(under[0].contains(' ') && q.d != 1);
-                let bot_s = if one { under[0].clone() } else { format!("({})", under.join(" ")) };
+                // (2π, not 2 π; a function keeps its space: 2 sin 1)
+                let joined = under.iter().fold(String::new(), |acc, f| if acc.is_empty() { f.clone() } else if acc.ends_with(|c: char| c.is_ascii_digit()) && !f.contains(' ') && !f.starts_with(|c: char| c.is_ascii_digit()) { format!("{acc}{f}") } else { format!("{acc} {f}") });
+                let bot_s = if one { under[0].clone() } else { format!("({joined})") };
                 // (a bare fraction of functions reads as (sin 1)/2 when the top has a space: write it so)
                 body = if under.len() == 1 && q.d != 1 && body.contains(' ') { format!("({body})/{bot_s}") } else { format!("{top_s}/{bot_s}") };
             }
@@ -1626,7 +1628,7 @@ pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
                     // ones nearest k = 0 are given and the list is not complete
                     let off = if sin { 0.0 } else { 0.5 };
                     let level = |k: i128| K::pi().mulq(Q::i(k)).add(&if sin { K::zero() } else { K::pi().mulq(Q::new(1, 2).unwrap()) });
-                    let unbounded = !floor_piles(a, lo, hi).is_empty();
+                    let unbounded = unbounded(a, lo, hi);
                     let vals: Vec<f64> = (0..=4000).filter_map(|i| ev(a, lo + (hi - lo) * i as f64 / 4000.0)).filter(|v| v.abs() < 1e12).collect();
                     if vals.is_empty() { return numeric_zeros(e, lo, hi); }
                     let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));
@@ -1756,7 +1758,7 @@ fn solve_levels(u: &X, bases: &[K], period: K, lo: f64, hi: f64) -> Option<(Vec<
     let (k0, k1) = ((mn / pv).floor() as i128 - 1, (mx / pv).ceil() as i128 + 1);
     // (u unbounded on [lo, hi], as 1/x near 0: the 40 levels nearest 0 only, and the list is not complete)
     // (more than 400 levels on a bounded stretch, as 1/x on 0.0003..0.003: the 40 nearest 0 likewise, exactly)
-    let unbounded = !floor_piles(u, lo, hi).is_empty() || (k1 - k0) * bases.len() as i128 > 400;
+    let unbounded = unbounded(u, lo, hi) || (k1 - k0) * bases.len() as i128 > 400;
     let ks: Vec<i128> = if unbounded { let mid = if k0 > 0 { k0 } else if k1 < 0 { k1 - 40 } else { -20 }; let mut v: Vec<i128> = (mid..=mid + 40).map(|k: i128| k.clamp(k0, k1)).collect(); v.dedup(); v } else { (k0..=k1).collect() };
     let mut out: Vec<K> = vec![];
     let mut done = !unbounded;
@@ -1890,12 +1892,15 @@ fn k_of(v: f64) -> K { let r = (v * 1000.0).round(); if (r / 1000.0 - v).abs() <
 /// which a is not established to have a finite limit (from the sides that lie in [lo, hi]). Empty only when a is
 /// established bounded there, so floor(a) has finitely many cuts. Found by structure: ln x tends to -∞ at its break 0,
 /// 1/x to ±∞ at 0, tan x at its poles, sin(1/x) oscillates at 0.
-pub fn floor_piles(a: &X, lo: f64, hi: f64) -> Vec<K> {
+pub fn floor_piles(a: &X, lo: f64, hi: f64) -> Vec<K> { piles_of(a, lo, hi, usize::MAX) }
+/// Whether a is unbounded somewhere on [lo, hi] (the first pile found is enough).
+pub fn unbounded(a: &X, lo: f64, hi: f64) -> bool { !piles_of(a, lo, hi, 1).is_empty() }
+fn piles_of(a: &X, lo: f64, hi: f64, enough: usize) -> Vec<K> {
     let (bk, done) = breaks(a, lo, hi);
     let mut pts: Vec<K> = bk.into_iter().filter(|k| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 }).collect();
     let mut out = vec![];
     // (a break list not surely complete: its own piles are not known, so the middle of the window stands for them)
-    if !done { out.push(k_of((lo + hi) / 2.0)); }
+    if !done { out.push(k_of((lo + hi) / 2.0)); if out.len() >= enough { return out; } }
     if pts.len() > 60 { pts.truncate(60); out.push(k_of(lo)); }
     // (an end of the window that is no break of a, where a has a value: a is continuous there, so bounded near it)
     for end in [lo, hi] {
@@ -1908,7 +1913,7 @@ pub fn floor_piles(a: &X, lo: f64, hi: f64) -> Vec<K> {
             if (s < 0 && v <= lo + 1e-9) || (s > 0 && v >= hi - 1e-9) { continue; }
             match limit(a, &At::Fin(p.clone(), s)) {
                 L::Val(_) | L::NoVal => {}
-                _ => { if !out.iter().any(|o: &K| (o.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { out.push(p.clone()); } }
+                _ => { if !out.iter().any(|o: &K| (o.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { out.push(p.clone()); if out.len() >= enough { return out; } } }
             }
         }
     }
@@ -1933,26 +1938,30 @@ impl Pile {
 
 /// Every place in [lo, hi] where the cuts of some floor or ceiling in e (or the zeros of a sine or cosine under
 /// 1/(...)) pile up without end, with what makes them.
-pub fn piles_in(e: &X, lo: f64, hi: f64) -> Vec<Pile> {
+pub fn piles_in(e: &X, lo: f64, hi: f64) -> Vec<Pile> { piles_walk(e, lo, hi, false) }
+/// Whether there is any (the first found is enough).
+pub fn any_pile(e: &X, lo: f64, hi: f64) -> bool { !piles_walk(e, lo, hi, true).is_empty() }
+fn piles_walk(e: &X, lo: f64, hi: f64, first: bool) -> Vec<Pile> {
     let mut out: Vec<Pile> = vec![];
     // (`zero`: a zero of e is a break, as under 1/(...): a sine of an unbounded curve then breaks without end)
-    fn walk(e: &X, lo: f64, hi: f64, zero: bool, out: &mut Vec<Pile>) {
+    fn walk(e: &X, lo: f64, hi: f64, zero: bool, first: bool, out: &mut Vec<Pile>) {
+        if first && !out.is_empty() { return; }
         match e {
             X::C(_) | X::V => {}
-            X::Add(v) => for a in v { walk(a, lo, hi, false, out) },
-            X::Mul(v) => for a in v { walk(a, lo, hi, zero, out) },
-            X::Neg(a) => walk(a, lo, hi, zero, out),
-            X::Inv(a) => walk(a, lo, hi, true, out),
-            X::Pow(b, p) => { walk(b, lo, hi, p.has_x() || const_q(p).is_none_or(|q| q < Q::ZERO), out); walk(p, lo, hi, false, out); }
+            X::Add(v) => for a in v { walk(a, lo, hi, false, first, out) },
+            X::Mul(v) => for a in v { walk(a, lo, hi, zero, first, out) },
+            X::Neg(a) => walk(a, lo, hi, zero, first, out),
+            X::Inv(a) => walk(a, lo, hi, true, first, out),
+            X::Pow(b, p) => { walk(b, lo, hi, p.has_x() || const_q(p).is_none_or(|q| q < Q::ZERO), first, out); walk(p, lo, hi, false, first, out); }
             X::F(f, a) => {
                 if (*f == Fun::Floor || (zero && matches!(f, Fun::Sin | Fun::Cos))) && !poly(a).is_some_and(|c| c.len() <= 2) {
-                    for k in floor_piles(a, lo, hi) { out.push(Pile { at: k, arg: (**a).clone(), level: *f }); }
+                    for k in piles_of(a, lo, hi, if first { 1 } else { usize::MAX }) { out.push(Pile { at: k, arg: (**a).clone(), level: *f }); }
                 }
-                walk(a, lo, hi, false, out);
+                walk(a, lo, hi, false, first, out);
             }
         }
     }
-    walk(e, lo, hi, false, &mut out);
+    walk(e, lo, hi, false, first, &mut out);
     out.sort_by(|a, b| a.at.value().partial_cmp(&b.at.value()).unwrap_or(Ordering::Equal));
     out
 }
@@ -2077,7 +2086,7 @@ pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
                             _ => {
                                 // (its cuts are all found only when the argument is established bounded on the closed window:
                                 // floor(ln x) on 0..10 cuts at every e^(-n), without end as x → 0)
-                                if !floor_piles(a, lo, hi).is_empty() { push((vec![], false), out); }
+                                if unbounded(a, lo, hi) { push((vec![], false), out); }
                                 // every whole number k the argument reaches on [lo, hi]: where it equals k
                                 let vals: Vec<f64> = (0..=4000).filter_map(|i| ev(a, lo + (hi - lo) * i as f64 / 4000.0)).collect();
                                 let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));

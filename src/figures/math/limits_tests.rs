@@ -1179,6 +1179,8 @@ fn graphs_with_thousands_of_poles_draw_quickly_and_say_so() {
         ("y = 1/tan(x^2)", -10.0, 10.0, "too many to work out one by one"),
         ("y = 1/tan(x^2)", -6.0, 10.0, "too many to work out one by one"),
         ("y = floor(sin(1/x))", -1.0, 1.0, "pile up without end near x = 0"),
+        // (a pile at every pole: the wider searches for the outside note are skipped)
+        ("y = floor(tan(x))", -6.0, 10.0, "pile up without end near x = \u{2212}3\u{3c0}/2"),
     ] {
         let p = with(json!({"pieces": pieces, "dots": "", "xmin": x0, "xmax": x1, "ask_disc": true, "kind_labels": true}));
         let t0 = std::time::Instant::now();
@@ -1227,7 +1229,7 @@ fn time_probe() {
         let t = std::time::Instant::now(); let n = super::limits::cas::floors_inert(x, md.x0, md.x1).is_some(); println!("inert {:?} {n}", t.elapsed());
     }
     let t = std::time::Instant::now(); let d = md.discontinuities(); println!("discs {:?} ({})", t.elapsed(), d.0.len());
-    let t = std::time::Instant::now(); let o = md.outside(); println!("outside {:?} ({})", t.elapsed(), o.len());
+    let t = std::time::Instant::now(); let o = md.outside(); println!("outside {:?} ({})", t.elapsed(), o.0.len());
     let t = std::time::Instant::now(); let v = md.verticals(); println!("verticals {:?} ({})", t.elapsed(), v.len());
     let t = std::time::Instant::now(); let pl = md.piles(); println!("piles {:?} ({:?})", t.elapsed(), pl.iter().map(|k| k.show()).collect::<Vec<_>>());
     for pc in &md.pieces { if let super::limits::Src::Formula { x } = &pc.src { for pl in super::limits::cas::piles_in(x, md.x0, md.x1) {
@@ -1391,4 +1393,48 @@ fn true_piles_of_discontinuities_are_still_said() {
         if !(t.contains("infinitely many") && t.contains(&format!("piling up near x = {at}"))) { fails.push(format!("{f}: {}", &t[t.find("Where is").unwrap_or(0)..])); }
     }
     assert!(fails.is_empty(), "{} wrong:\n{}", fails.len(), fails.join("\n"));
+}
+
+/// The note on discontinuities outside the window names the nearest ones and never counts what it did not enumerate
+/// (floor(x) and tan x have infinitely many; floor(ln x) on 2..10 has e^4 next after e^3, and infinitely many near 0).
+#[test]
+fn outside_notes_name_the_nearest_and_never_count() {
+    let note = |pieces: &str, x0: f64, x1: f64| -> String { warnings(&with(json!({"pieces": pieces, "dots": "", "ask_at": "", "xmin": x0, "xmax": x1}))).into_iter().find(|w| w.contains("outside the window: x")).unwrap_or_default() };
+    let counted = regex_free_count;
+    for (f, x0, x1, names) in [
+        ("y = floor(x)", -6.0, 10.0, vec!["x = \u{2212}8 (jump), x = \u{2212}7 (jump), x = 11 (jump), x = 12 (jump) and more"]),
+        ("y = floor(ln(x))", 2.0, 10.0, vec!["x = 1/e (jump), x = 1 (jump), x = e^3 (jump), x = e^4 (jump) and more"]),
+        ("y = floor(1/x)", 0.4, 10.0, vec!["x = 1/4 (jump), x = 1/3 (jump)", "and more"]),
+        ("y = tan(x)", -6.0, 10.0, vec!["x = \u{2212}5\u{3c0}/2 (infinite)", "x = 7\u{3c0}/2 (infinite)", "and more"]),
+    ] {
+        let n = note(f, x0, x1);
+        for want in names { assert!(n.contains(want), "{f}: {want:?} not in {n:?}"); }
+        assert!(!counted(&n), "{f}: a count: {n}");
+    }
+}
+/// " and 26 more": a number before "more".
+fn regex_free_count(s: &str) -> bool { s.split(" more").next().is_some_and(|h| h.rsplit(' ').next().is_some_and(|w| w.chars().all(|c| c.is_ascii_digit()) && !w.is_empty())) }
+
+/// The fourth check's small things: tan written as tan, a true minus sign at Small, no "nowhere" beside a point with
+/// two values, the cuts of floor(5 sin x) each established, and a note that names a few places, not eighty.
+#[test]
+fn small_things_of_the_fourth_check() {
+    let show = |t: &str| Num::read(t).unwrap().text;
+    assert_eq!(show("tan(1/2)"), "tan(1/2)");
+    assert_eq!(show("sin(1/8)/cos(1/8)"), "tan(1/8)");
+    assert_eq!(show("1/(2pi)"), "1/(2\u{3c0})");
+    let md = model_of(&with(json!({"pieces": "y = tan(x)", "dots": "", "ask_at": "1/2"})));
+    assert!(matches!(md.two(&Num::read("1/2").unwrap().k), Lim::Val(_, t) if t == "tan(1/2)"));
+    let t = plain_text(&svg(&with(json!({"pieces": "y = (x + 2)/(x^2 + 3x + 2)", "dots": "", "label_size": "Small", "ask_disc": true}))));
+    assert!(t.contains("x = \u{2212}1 (infinite)") && !t.contains("= -"), "{t}");
+    let p = with(json!({"pieces": "y = x, x <= 1\ny = 2, x >= 1", "dots": "", "ask_at": "1", "ask_disc": true}));
+    let t = plain_text(&svg(&p));
+    assert!(!t.contains("nowhere"), "{t}");
+    assert!(warnings(&p).iter().any(|w| w.contains("two values at x = 1, so the key leaves")), "{:?}", warnings(&p));
+    for f in ["y = floor(5sin(x))", "y = floor(3sin(x))"] {
+        let p = with(json!({"pieces": f, "dots": "", "ask_disc": true}));
+        let (ds, done) = model_of(&p).discontinuities();
+        assert!(done && ds.len() > 20 && ds.iter().all(|d| d.kind == "jump" || d.kind == "removable"), "{f}: {done} {:?}", ds.iter().map(|d| (&d.text, d.kind)).collect::<Vec<_>>());
+        assert!(!warnings(&p).iter().any(|w| w.contains("cannot")), "{:?}", warnings(&p));
+    }
 }
