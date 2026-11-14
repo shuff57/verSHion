@@ -356,13 +356,51 @@ fn rows() -> Vec<Row> {
         ("D29", "y = floor(sqrt(x))", "", "4", "1, 2, DNE, 2", "∞, none", "1 jump, 4 jump, 9 jump", "", "", w(0.0, 10.0, -1.0, 4.0)),
         // floor(e^x) is whole at x = ln k
         ("D30", "y = floor(exp(x))", "", "0", "0, 1, DNE, 1", "∞, 0", "0 jump, ln 2 jump, ln 3 jump, ln 4 jump, ln 5 jump, ln 6 jump, ln 7 jump", "", "0", w(-2.0, 2.0, -1.0, 8.0)),
+        // quotients of exponentials: the fastest-growing term rules at each end (the third check's list)
+        ("E01", "y = (exp(x) - exp(-x))/(exp(x) + exp(-x))", "", "0", "0, 0, 0, 0", "1, -1", "", "", "1, -1", n()),
+        ("E02", "y = (2exp(x) + 3)/(exp(x) + 1)", "", "0", "5/2, 5/2, 5/2, 5/2", "2, 3", "", "", "2, 3", n()),
+        ("E03", "y = exp(x)/(exp(x) - 1)", "", "0", "-∞, ∞, DNE, undef", "1, 0", "0 infinite", "0", "1, 0", n()),
+        // (e^(2x) - 1)/(e^x - 1) = e^x + 1 wherever e^x ≠ 1
+        ("E04", "y = (exp(2x) - 1)/(exp(x) - 1)", "", "0", "2, 2, 2, undef", "∞, 1", "0 removable", "", "1", n()),
+        ("E05", "y = (exp(x) - 1)/(exp(x) + 1)", "", "0", "0, 0, 0, 0", "1, -1", "", "", "1, -1", n()),
+        ("E06", "y = 2^x/(2^x + 3^x)", "", "0", "1/2, 1/2, 1/2, 1/2", "0, 1", "", "", "0, 1", n()),
+        // (3^x + 2^x)^(1/x): about 3 far right (3^x rules), 2 far left (2^x rules); near 0 the base is about 2, so 2^(1/x)
+        // is 0 from the left and ∞ from the right
+        ("E07", "y = (3^x + 2^x)^(1/x)", "", "0", "0, ∞, DNE, undef", "3, 2", "0 infinite", "0", "3, 2", n()),
+        // the next term of a series: cos x = 1 - x²/2 + x⁴/24, e^(x²) = 1 + x² + x⁴/2, asin x = x + x³/6, sin x = x - x³/6
+        ("E08", "y = (cos(x) - 1 + x^2/2)/x^4", "", "0", "1/24, 1/24, 1/24, undef", "0, 0", "0 removable", "", "0", n()),
+        ("E09", "y = (exp(x^2) - 1 - x^2)/x^4", "", "0", "1/2, 1/2, 1/2, undef", "∞, ∞", "0 removable", "", "", n()),
+        ("E10", "y = (asin(x) - x)/x^3", "", "0", "1/6, 1/6, 1/6, undef", "none, none", "0 removable", "", "", w(-1.0, 1.0, -1.0, 1.0)),
+        ("E11", "y = (sin(x) - x)/x^3", "", "0", "-1/6, -1/6, -1/6, undef", "0, 0", "0 removable", "", "0", n()),
+        // a variable base to a variable power has a value only where the base is positive: 0^0 is no value
+        ("P01", "y = x^x", "", "0", "DNE, 1, DNE, undef", "∞, none", "", "", "", n()),
+        ("P02", "y = 0^x", "", "0", "DNE, 0, DNE, undef", "0, none", "", "", "0", n()),
+        ("P03", "y = (x^2)^x", "", "0", "1, 1, 1, undef", "∞, 0", "0 removable", "", "0", n()),
+        ("P04", "y = abs(x)^x", "", "0", "1, 1, 1, undef", "∞, 0", "0 removable", "", "0", n()),
+        // (sin x)^x has values only where sin x > 0; near -π from the left sin x → 0⁺ with a negative power, so it rises without bound there; at ±∞ it keeps returning to 1 at the peaks (not established: named)
+        ("P05", "y = sin(x)^x", "", "0", "DNE, 1, DNE, undef", "?, ?", "", "-π", "", n()),
+        ("P06", "y = (x - 1)^(x - 1)", "", "1", "DNE, 1, DNE, undef", "∞, none", "", "", "", n()),
+        // a whole-number power stays as it is: 0² = 0, x³ at 0 is 0
+        ("P07", "y = x^2", "", "0", "0, 0, 0, 0", "∞, ∞", "", "", "", n()),
+        // a floor of something unbounded on the closed window: its cuts pile up without end, so the list is not complete
+        ("F01", "y = floor(ln(x))", "", "", "", "", "*", "", "", w(0.0, 10.0, -4.0, 4.0)),
+        ("F02", "y = ceil(ln(x))", "", "", "", "", "*", "", "", w(0.0, 10.0, -4.0, 4.0)),
+        ("F03", "y = floor(-ln(x))", "", "", "", "", "*", "", "", w(0.0, 10.0, -4.0, 4.0)),
+        ("F04", "y = floor(ln(abs(x)))", "", "", "", "", "*", "0", "", n()),
+        ("F05", "y = floor(2ln(x))", "", "", "", "", "*", "0", "", n()),
+        ("F06", "y = floor(ln(x - 2))", "", "", "", "", "*", "2", "", n()),
+        ("F07", "y = floor(ln(x)) + x", "", "", "", "", "*", "0", "", n()),
+        ("F08", "y = floor(ln(x^2))", "", "", "", "", "*", "0", "", n()),
+        ("F09", "y = floor(log(x))", "", "", "", "", "*", "", "", w(0.0, 10.0, -4.0, 4.0)),
+        // and bounded ones keep a complete list: ln x on 1..10 runs from 0 to ln 10
+        ("F10", "y = floor(ln(x))", "", "", "", "", "1 jump, e jump, e^2 jump", "", "", w(1.0, 10.0, -1.0, 4.0)),
     ]
 }
 
 /// Results the analysis is allowed to leave as "cannot be determined" (none: every row is an ordinary textbook function).
 const UNDETERMINED: &[&str] = &[];
 /// Rows whose list of discontinuities is not sure to be complete (and so is left as a line in the key), with why.
-const INCOMPLETE: &[(&str, &str)] = &[("C3", "floor(1/x) breaks at every 1/n, without end near 0"), ("D27", "floor(1/x) breaks at every 1/n, without end near 0")];
+const INCOMPLETE: &[(&str, &str)] = &[("C3", "floor(1/x) breaks at every 1/n, without end near 0"), ("D27", "floor(1/x) breaks at every 1/n, without end near 0"), ("F01", "at every e^n"), ("F02", "at every e^n"), ("F03", "at every e^n"), ("F04", "at every ±e^(n/2)... near 0"), ("F05", "at every e^(n/2)"), ("F06", "at every 2 + e^n"), ("F07", "at every e^n"), ("F08", "at every ±e^(n/2)"), ("F09", "at every 10^n")];
 
 #[test]
 fn the_table_of_hand_worked_functions() {
@@ -403,7 +441,9 @@ fn the_table_of_hand_worked_functions() {
         let (ds, complete) = md.discontinuities();
         let named_incomplete = INCOMPLETE.iter().any(|(n, _)| *n == name);
         if complete == named_incomplete { fails.push(format!("{name}: the list of discontinuities is {}sure to be complete", if complete { "" } else { "not " })); }
-        check!("discontinuities", ds.iter().map(|d| format!("{} {}", d.text, d.kind)).collect::<Vec<_>>().join(", "), discs);
+        // (a list that runs on without end: the key says where, and the ones found are not checked one by one)
+        if named_incomplete && !w.contains("infinitely many piling up near x =") && name.starts_with('F') { fails.push(format!("{name}: the key does not say the discontinuities pile up: {w}")); }
+        if discs != "*" { check!("discontinuities", ds.iter().map(|d| format!("{} {}", d.text, d.kind)).collect::<Vec<_>>().join(", "), discs); }
         if ds.iter().any(|d| d.kind == UNSURE) && !UNDETERMINED.contains(&name) { fails.push(format!("{name}: a discontinuity it cannot determine")); }
         check!("vertical asymptotes", md.verticals().iter().map(|v| v.1.clone()).collect::<Vec<_>>().join(", "), vas);
         check!("horizontal asymptotes", md.horizontals().iter().map(|v| v.1.clone()).collect::<Vec<_>>().join(", "), has);

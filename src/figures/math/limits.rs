@@ -571,6 +571,17 @@ impl Model {
         let (c, done) = self.candidates(self.x0, self.x1);
         (c.iter().filter_map(|k| self.classify(k)).collect(), done)
     }
+    /// Where in the window discontinuities pile up without end (the cuts of floor(ln x) near 0), as the key writes them.
+    pub fn piles(&self) -> Vec<K> {
+        let mut out: Vec<K> = vec![];
+        for pc in &self.pieces {
+            let Src::Formula { x } = &pc.src else { continue };
+            let (a, b) = (pc.lo_x().max(self.x0), pc.hi_x().min(self.x1));
+            if !(b > a) { continue; }
+            for k in cas::piles_in(x, a, b) { if !out.iter().any(|o| (o.value() - k.value()).abs() < 1e-9 * (1.0 + k.value().abs())) { out.push(k); } }
+        }
+        out
+    }
     /// Discontinuities outside the window (for the panel note): the near ones, and exactly found far ones.
     pub fn outside(&self) -> Vec<Disc> {
         let w = self.x1 - self.x0;
@@ -1496,7 +1507,13 @@ fn block(p: &Params, m: &Model, discs: &[Disc], discs_complete: bool, stu: bool,
     if !row.is_empty() { rows.push(row); dr.inf_asked = true; }
     if p.b("ask_disc") {
         let sure = discs_complete && discs.iter().all(|d| d.kind != UNSURE);
-        let key = if !sure {
+        let piles = if discs_complete { vec![] } else { m.piles() };
+        let key = if !piles.is_empty() {
+            // the list cannot be complete: say where it runs on without end
+            let at = piles.iter().map(|k| eq_text("x", &k.show())).collect::<Vec<_>>().join(", ");
+            notes.push(format!("f's discontinuities pile up without end near {}, so the key says so instead of listing them", at.replace('-', "\u{2212}")));
+            format!("infinitely many, piling up near {at}")
+        } else if !sure {
             let which: Vec<String> = discs.iter().filter(|d| d.kind == UNSURE).map(|d| eq_text("x", &d.text)).collect();
             notes.push(if which.is_empty() { "The app cannot be sure it has found every place where f is not continuous (a formula whose breaks it can only search for numerically), so the key leaves that answer as a line to fill in".into() } else { format!("The app cannot determine whether f is continuous at {} or what kind of discontinuity it has there, so the key leaves that answer as a line to fill in", which.join(", ").replace('-', "\u{2212}")) });
             format!("{BLANK}{BLANK}{BLANK}")

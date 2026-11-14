@@ -97,6 +97,15 @@ pub type Mono = Vec<(Atom, Q)>;
 fn mono_key(m: &Mono) -> String { m.iter().map(|(a, q)| format!("{}^{}/{}", a.key, q.n, q.d)).collect::<Vec<_>>().join("*") }
 fn mono_val(m: &Mono) -> f64 { m.iter().map(|(a, q)| if q.is_int() { a.val.powi(q.n as i32) } else { a.val.powf(q.f()) }).product() }
 /// a·b, with a prime's whole powers moved into the coefficient.
+/// n = r^m with r no perfect power itself (1000 = 10³, 8 = 2³, 12 = 12¹).
+fn perfect_root(n: u128) -> (u128, u32) {
+    for m in (2..=40u32).rev() {
+        let r = (n as f64).powf(1.0 / m as f64).round() as u128;
+        for r in [r.saturating_sub(1), r, r + 1] { if r >= 2 && r.checked_pow(m) == Some(n) { let (rr, mm) = perfect_root(r); return (rr, mm * m); } }
+    }
+    (n, 1)
+}
+
 fn mono_mul(a: &Mono, b: &Mono) -> Option<(Q, Mono)> {
     let mut all: Vec<(Atom, Q)> = a.clone();
     for (at, q) in b {
@@ -112,6 +121,25 @@ fn mono_mul(a: &Mono, b: &Mono) -> Option<(Q, Mono)> {
             if !fr.is_zero() { out.push((at, fr)); }
         } else if !q.is_zero() { out.push((at, q)); }
     }
+    // a quotient of logarithms of powers of one number is a rational: ln 1000/ln 10 = 3 (ln 1000 = 3 ln 10)
+    let lns: Vec<usize> = (0..out.len()).filter(|i| matches!(out[*i].0.kind, AK::Ln(_))).collect();
+    let mut gone = vec![false; out.len()];
+    for &i in &lns {
+        for &j in &lns {
+            if i >= j || gone[i] || gone[j] { continue; }
+            let (AK::Ln(a), AK::Ln(b)) = (&out[i].0.kind, &out[j].0.kind) else { continue };
+            let (qa, qb) = (out[i].1, out[j].1);
+            if !qa.add(qb).is_some_and(|z| z.is_zero()) || !qa.is_int() { continue; }
+            let ((ra, ma), (rb, mb)) = (perfect_root(*a as u128), perfect_root(*b as u128));
+            if ra != rb { continue; }
+            let Some(r) = Q::new(ma as i128, mb as i128).and_then(|r| r.powi(qa.n as i64)) else { continue };
+            c = c.mul(r)?;
+            gone[i] = true;
+            gone[j] = true;
+        }
+    }
+    let mut k = 0;
+    out.retain(|_| { k += 1; !gone[k - 1] });
     out.sort_by(|x, y| x.0.key.cmp(&y.0.key));
     Some((c, out))
 }
@@ -596,6 +624,15 @@ fn const_q(e: &X) -> Option<Q> { if let X::C(k) = e { return k.rational(); } if 
 
 /// The formula's value at x as a number (an odd root of a negative number is real: (-8)^(1/3) = -2); None where it has
 /// no value.
+thread_local! { static OVER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+/// The value at x, or None where a part of it overflowed on the way and the result is not itself an overflow
+/// (MAX/MAX in (2e^x + 3)/(e^x + 1) far out is no value at all).
+fn ev_sure(e: &X, x: f64) -> Option<f64> {
+    OVER.with(|o| o.set(false));
+    let v = ev(e, x);
+    if OVER.with(|o| o.get()) && v.is_some_and(|v| v.abs() < 1e200) { None } else { v }
+}
+
 pub fn ev(e: &X, x: f64) -> Option<f64> {
     let v = match e {
         X::C(k) => k.value(),
@@ -609,7 +646,7 @@ pub fn ev(e: &X, x: f64) -> Option<f64> {
             match const_q(p) {
                 Some(q) if bv < 0.0 => { if q.d % 2 == 0 { return None; } let m = (-bv).powf(q.f()); if q.n % 2 == 0 { m } else { -m } }
                 Some(q) if bv == 0.0 && q <= Q::ZERO => return None,
-                _ => { let pv = ev(p, x)?; if bv < 0.0 && pv.fract() != 0.0 { return None; } if bv == 0.0 && pv <= 0.0 { return None; } bv.powf(pv) }
+                _ => { let pv = ev(p, x)?; if p.has_x() && b.has_x() && bv <= 0.0 { return None; } if bv < 0.0 && pv.fract() != 0.0 { return None; } if bv == 0.0 && pv <= 0.0 { return None; } bv.powf(pv) }
             }
         }
         X::F(f, a) => {
@@ -618,7 +655,7 @@ pub fn ev(e: &X, x: f64) -> Option<f64> {
         }
     };
     // (a value past the largest number is that largest number: it is there, only huge)
-    if v.is_nan() { None } else if v.is_infinite() { Some(v.signum() * f64::MAX) } else { Some(v) }
+    if v.is_nan() { None } else if v.is_infinite() { OVER.with(|o| o.set(true)); Some(v.signum() * f64::MAX) } else { Some(v) }
 }
 
 pub enum EV { Val(K), Undef, Unk }
@@ -641,6 +678,10 @@ pub fn exact(e: &X, a: &K) -> EV {
         X::Pow(b, p) => {
             let bv = get!(b);
             let pv = get!(p);
+            // a base to a power with x in it (x^x, 0^x, sin(x)^x) has a value only where the base is positive: 0^0 is no value
+            if p.has_x() && b.has_x() { match bv.sign() { Some(s) if s > 0 => {} Some(_) => return EV::Undef, None => return EV::Unk } }
+            // 0 to a power with x in it: 0 where the power is positive, no value elsewhere (0^x at 0 is 0^0)
+            if p.has_x() && bv.sign() == Some(0) { return match pv.sign() { Some(1) => EV::Val(K::zero()), Some(_) => EV::Undef, None => EV::Unk }; }
             if let Some(q) = pv.rational() { return match bv.powq(q) { KR::Ok(k) => EV::Val(k), KR::NoVal => EV::Undef, KR::Unk => EV::Unk }; }
             // b^p = e^(p ln b) for b > 0 (e^x: b = e)
             if bv.rational().is_none() && bv.t.len() == 1 && bv.t[0].0 == Q::ONE && bv.t[0].1.len() == 1 && bv.t[0].1[0].0.kind == AK::E && bv.t[0].1[0].1 == Q::ONE { return EV::Val(pv.exp()); }
@@ -787,7 +828,9 @@ impl Sr {
 pub enum S {
     Ser(Sr),
     /// A series plus a part that keeps oscillating between the bounds (floor(x) = x - (part in [0, 1))).
-    SO(Sr, f64, f64),
+    SO(Sr, f64, f64, bool),
+    /// c · e^p with p running off to ±∞: two exponentials are compared by their exponents ((e^x - e^-x)/(e^x + e^-x) → 1).
+    ExpS(Sr, Box<S>),
     /// Tends to 0 faster than any power (e^(-1/t)), with this sign.
     Flat(i8),
     /// Grows faster than any power (e^(1/t)), with this sign.
@@ -826,7 +869,8 @@ fn coarse(s: &S) -> B {
                 (Ordering::Less, Some(s)) => B::Zero(s),
             },
         },
-        S::SO(x, lo, hi) => match coarse(&S::Ser(x.clone())) { B::Fin(k) => B::Osc(k.value() + lo, k.value() + hi), B::Zero(_) => B::Osc(*lo, *hi), B::PInf => B::PInf, B::NInf => B::NInf, _ => B::Unk },
+        S::ExpS(p, c) => coarse_exp(p, c),
+        S::SO(x, lo, hi, _) => match coarse(&S::Ser(x.clone())) { B::Fin(k) => B::Osc(k.value() + lo, k.value() + hi), B::Zero(_) => B::Osc(*lo, *hi), B::PInf => B::PInf, B::NInf => B::NInf, _ => B::Unk },
         S::Flat(s) | S::Z(s) => B::Zero(*s),
         S::Huge(s) | S::Inf(s) => if *s > 0 { B::PInf } else { B::NInf },
         S::Lim(k) => if k.sign() == Some(0) { B::Zero(0) } else { B::Fin(k.clone()) },
@@ -842,8 +886,38 @@ fn from_b(b: B) -> S { match b { B::Fin(k) => S::Lim(k), B::Zero(s) => S::Z(s), 
 fn bval(b: &B) -> Option<f64> { match b { B::Fin(k) => Some(k.value()), B::Zero(_) => Some(0.0), _ => None } }
 
 /// Built from a floor: its values jump, so what holds for a quantity that runs through every value does not hold for it.
-fn jumpy(s: &S) -> bool { matches!(s, S::SO(..) | S::InfJ(_) | S::OscJ(..)) }
-fn taint(s: S) -> S { match s { S::Inf(x) | S::Huge(x) => S::InfJ(x), S::Osc(l, h) => S::OscJ(l, h), o => o } }
+fn jumpy(s: &S) -> bool { matches!(s, S::SO(_, _, _, true) | S::InfJ(_) | S::OscJ(..)) }
+fn taint(s: S) -> S { match s { S::Inf(x) | S::Huge(x) => S::InfJ(x), S::Osc(l, h) => S::OscJ(l, h), S::SO(x, l, h, _) => S::SO(x, l, h, true), o => o } }
+/// Bounded, with a limit or oscillating between bounds, or growing like a power: what e^p swamps (a power, a bounded wave).
+fn tame(s: &S) -> bool { matches!(s, S::Ser(_) | S::Lim(_) | S::Z(_) | S::Osc(..) | S::SO(..) | S::Flat(_)) }
+/// c·e^p, kept as such while p runs off to ±∞; with a finite p, the product itself.
+fn exp_norm(p: Sr, c: S) -> S {
+    match coarse(&S::Ser(p.clone())) {
+        B::PInf | B::NInf => S::ExpS(p, Box::new(c)),
+        B::Fin(_) | B::Zero(_) => s_mul(s_exp(S::Ser(p), 12), c),
+        _ => S::Unk,
+    }
+}
+fn coarse_exp(p: &Sr, c: &S) -> B {
+    match coarse(&S::Ser(p.clone())) {
+        // growing: its sign is the coefficient's, which a power or a bounded wave away from 0 cannot stop
+        B::PInf => {
+            if !tame(c) && !matches!(c, S::Inf(_) | S::Huge(_)) { return B::Unk; }
+            match coarse(c) {
+                B::Fin(k) => match k.sign() { Some(s) if s > 0 => B::PInf, Some(s) if s < 0 => B::NInf, _ => B::Unk },
+                B::PInf => B::PInf,
+                B::NInf => B::NInf,
+                B::Zero(s) if s != 0 && matches!(c, S::Ser(_)) => if s > 0 { B::PInf } else { B::NInf },
+                B::Osc(l, h) => if l > 0.0 { B::PInf } else if h < 0.0 { B::NInf } else { B::OscU },
+                _ => B::Unk,
+            }
+        }
+        // dying away: it takes a power or a bounded wave with it
+        B::NInf => if tame(c) || matches!(c, S::Inf(_)) { match coarse(c) { B::Fin(k) => B::Zero(k.sign().unwrap_or(0)), B::Zero(s) => B::Zero(s), B::PInf => B::Zero(1), B::NInf => B::Zero(-1), _ => B::Zero(0) } } else { B::Unk },
+        _ => B::Unk,
+    }
+}
+fn ser_one() -> S { S::Ser(Sr::c(K::one())) }
 fn untaint(s: S) -> S { match s { S::InfJ(x) => S::Inf(x), S::OscJ(l, h) => S::Osc(l, h), o => o } }
 fn s_add(a: S, b: S) -> S { let j = jumpy(&a) || jumpy(&b); let r = s_add0(untaint(a), untaint(b)); if j { taint(r) } else { r } }
 fn s_mul(a: S, b: S) -> S { let j = jumpy(&a) || jumpy(&b); let r = s_mul0(untaint(a), untaint(b)); if j { taint(r) } else { r } }
@@ -858,7 +932,25 @@ fn s_add0(a: S, b: S) -> S {
         (Poles, Poles) => Unk,
         (Poles, o) | (o, Poles) => if matches!(o, OscU) { Unk } else { Poles },
         (Ser(x), Ser(y)) => Ser(x.add(&y)),
-        (Ser(x), SO(y, l, h)) | (SO(y, l, h), Ser(x)) => SO(x.add(&y), l, h),
+        (Ser(x), SO(y, l, h, j)) | (SO(y, l, h, j), Ser(x)) => SO(x.add(&y), l, h, j),
+        // a series plus a bounded wave: kept together, so dividing by a growing power later takes the wave away too
+        (Ser(x), Osc(l, h)) | (Osc(l, h), Ser(x)) => SO(x, l, h, false),
+        // two exponentials: the one with the larger exponent swamps the other
+        (ExpS(p1, c1), ExpS(p2, c2)) => {
+            let d = p1.add(&p2.neg());
+            match coarse(&Ser(d.clone())) {
+                B::PInf => exp_norm(p1, s_add(*c1, s_mul(*c2, exp_norm(d.neg(), ser_one())))),
+                B::NInf => exp_norm(p2, s_add(*c2, s_mul(*c1, exp_norm(d, ser_one())))),
+                B::Fin(_) | B::Zero(_) => exp_norm(p1, s_add(*c1, s_mul(*c2, s_exp(Ser(d.neg()), 12)))),
+                _ => Unk,
+            }
+        }
+        (ExpS(p, c), o) | (o, ExpS(p, c)) => match coarse(&Ser(p.clone())) {
+            B::PInf => exp_norm(p.clone(), s_add(*c, s_mul(o, exp_norm(p.neg(), ser_one())))),
+            // a dying exponential added to something tame: it only adds a remainder flatter than any power
+            B::NInf if tame(&c) => s_add(o, Flat(match coarse(&c) { B::Fin(k) => k.sign().unwrap_or(0), B::Zero(s) => s, _ => 0 })),
+            _ => Unk,
+        },
         (Ser(x), Flat(_)) | (Flat(_), Ser(x)) => Ser(x.add(&Sr { t: vec![], rem: Some(FLAT) })),
         (a, b) => {
             let huge = |s: &S| matches!(s, Huge(_));
@@ -887,7 +979,7 @@ fn s_add0(a: S, b: S) -> S {
 }
 fn s_neg(a: S) -> S {
     use S::*;
-    match a { Ser(x) => Ser(x.neg()), SO(x, l, h) => SO(x.neg(), -h, -l), Flat(s) => Flat(-s), Huge(s) => Huge(-s), Inf(s) => Inf(-s), InfJ(s) => InfJ(-s), Z(s) => Z(-s), Lim(k) => Lim(k.neg()), Osc(l, h) => Osc(-h, -l), OscJ(l, h) => OscJ(-h, -l), o => o }
+    match a { Ser(x) => Ser(x.neg()), SO(x, l, h, j) => SO(x.neg(), -h, -l, j), ExpS(p, c) => ExpS(p, Box::new(s_neg(*c))), Flat(s) => Flat(-s), Huge(s) => Huge(-s), Inf(s) => Inf(-s), InfJ(s) => InfJ(-s), Z(s) => Z(-s), Lim(k) => Lim(k.neg()), Osc(l, h) => Osc(-h, -l), OscJ(l, h) => OscJ(-h, -l), o => o }
 }
 fn s_mul0(a: S, b: S) -> S {
     use S::*;
@@ -897,10 +989,12 @@ fn s_mul0(a: S, b: S) -> S {
         // poles times something that is surely not 0 near them (a power series with a known nonzero leading term)
         (Poles, o) | (o, Poles) => match &o { Ser(x) if x.lead_sign().is_some() => Poles, Lim(k) if k.sign().is_some_and(|s| s != 0) => Poles, Inf(_) | Huge(_) => Poles, _ => Unk },
         (Ser(x), Ser(y)) => x.mul(&y).map_or(Unk, Ser),
-        (SO(x, l, h), Ser(m)) | (Ser(m), SO(x, l, h)) => match coarse(&Ser(m.clone())) {
-            B::Fin(k) => { let v = k.value(); x.mul(&m).map_or(Unk, |p| SO(p, (l * v).min(h * v), (l * v).max(h * v))) }
+        (ExpS(p1, c1), ExpS(p2, c2)) => exp_norm(p1.add(&p2), s_mul(*c1, *c2)),
+        (ExpS(p, c), o) | (o, ExpS(p, c)) => exp_norm(p, s_mul(*c, o)),
+        (SO(x, l, h, j), Ser(m)) | (Ser(m), SO(x, l, h, j)) => match coarse(&Ser(m.clone())) {
+            B::Fin(k) => { let v = k.value(); x.mul(&m).map_or(Unk, |p| SO(p, (l * v).min(h * v), (l * v).max(h * v), j)) }
             B::Zero(_) => match x.mul(&m) { Some(p) => from_b(coarse(&Ser(p))), None => Unk },
-            _ => s_mul(from_b(coarse(&SO(x, l, h))), Ser(m)),
+            _ => s_mul(from_b(coarse(&SO(x, l, h, j))), Ser(m)),
         },
         (a, b) => {
             let (ca, cb) = (coarse(&a), coarse(&b));
@@ -947,6 +1041,7 @@ fn s_mul0(a: S, b: S) -> S {
 fn s_inv(a: S, n: usize) -> S {
     use S::*;
     match a {
+        ExpS(p, c) => exp_norm(p.neg(), s_inv(*c, n)),
         Ser(x) => {
             let Some(sign) = x.lead_sign() else { return if x.t.is_empty() { Unk } else { Unk } };
             let _ = sign;
@@ -972,6 +1067,7 @@ fn s_powq(a: S, r: Q, n: usize) -> S {
     use S::*;
     if r.is_zero() { return Ser(Sr::c(K::one())); }
     match a {
+        ExpS(p, c) => exp_norm(p.scale(&K::q(r)), s_powq(*c, r, n)),
         Ser(x) => {
             // (exactly 0: 0 to a positive power is 0, to a negative one has no value)
             if x.t.is_empty() && x.rem.is_none() { return if r > Q::ZERO { Ser(Sr::c(K::zero())) } else { NoVal }; }
@@ -1006,6 +1102,7 @@ fn s_powq(a: S, r: Q, n: usize) -> S {
 fn s_exp(a: S, n: usize) -> S {
     use S::*;
     match a {
+        ExpS(..) => s_exp(from_b(coarse(&a)), n),
         Ser(x) => {
             let (p, c, z) = x.parts();
             if !p.is_empty() {
@@ -1016,7 +1113,8 @@ fn s_exp(a: S, n: usize) -> S {
                         return s_mul(rest, Ser(Sr { t: vec![T { e: (q, 0), c: K::one() }], rem: None }));
                     }
                 }
-                return match x.lead_sign() { Some(s) if s > 0 => Huge(1), Some(_) => Flat(1), None => Unk };
+                // e^x, e^(1/x), 2^x: kept with its exponent, so it can be compared with another
+                return exp_norm(x, ser_one());
             }
             if x.rem.is_some_and(|r| dom(r, UNIT) != Ordering::Less) { return Unk; }
             let mut cs = vec![K::one()];
@@ -1036,6 +1134,8 @@ fn s_exp(a: S, n: usize) -> S {
 fn s_ln(a: S, n: usize) -> S {
     use S::*;
     match a {
+        // ln(c e^p) = p + ln c
+        ExpS(p, c) => s_add(Ser(p), s_ln(*c, n)),
         Ser(x) => {
             match x.lead_sign() { None => return Unk, Some(s) if s < 0 => return NoVal, _ => {} }
             let Some((l, r)) = x.split_lead() else { return Unk };
@@ -1060,6 +1160,7 @@ fn s_ln(a: S, n: usize) -> S {
 fn s_trig(a: S, sin: bool, n: usize) -> S {
     use S::*;
     match a {
+        ExpS(..) => s_trig(from_b(coarse(&a)), sin, n),
         Ser(x) => {
             let (p, c, z) = x.parts();
             if !p.is_empty() { return Osc(-1.0, 1.0); }
@@ -1088,6 +1189,7 @@ fn s_trig(a: S, sin: bool, n: usize) -> S {
 fn s_atan(a: S, n: usize) -> S {
     use S::*;
     match a {
+        ExpS(..) => s_atan(from_b(coarse(&a)), n),
         Ser(x) => {
             let (p, c, z) = x.parts();
             if !p.is_empty() {
@@ -1101,7 +1203,11 @@ fn s_atan(a: S, n: usize) -> S {
             let c1 = di.clone();
             let c2 = c.neg().mul(&di).mul(&di);
             let c3 = K::int(3).mul(&c).mul(&c).sub(&K::one()).mul(&di).mul(&di).mul(&di).mulq(Q::new(1, 3).unwrap());
-            match Sr::taylor(&z, &[c.atan(), c1, c2, c3]) { Some(g) => Ser(g), None => Unk }
+            // two more terms: (c - c³)/(1+c²)⁴ and (1 - 10c² + 5c⁴)/(5(1+c²)⁵)
+            let c2s = c.mul(&c);
+            let k4 = c.sub(&c.mul(&c2s)).mul(&di).mul(&di).mul(&di).mul(&di);
+            let k5 = K::one().sub(&K::int(10).mul(&c2s)).add(&K::int(5).mul(&c2s).mul(&c2s)).mul(&di).mul(&di).mul(&di).mul(&di).mul(&di).mulq(Q::new(1, 5).unwrap());
+            match Sr::taylor(&z, &[c.atan(), c1, c2, c3, k4, k5]) { Some(g) => Ser(g), None => Unk }
         }
         SO(..) => s_atan(from_b(coarse(&a)), n),
         Huge(s) | Inf(s) => Lim(K::pi().mulq(Q::new(s as i128, 2).unwrap())),
@@ -1116,6 +1222,7 @@ fn s_atan(a: S, n: usize) -> S {
 fn s_asin(a: S, n: usize) -> S {
     use S::*;
     match a {
+        ExpS(..) => s_asin(from_b(coarse(&a)), n),
         Ser(x) => {
             let (p, c, z) = x.parts();
             if !p.is_empty() { return NoVal; }
@@ -1133,11 +1240,17 @@ fn s_asin(a: S, n: usize) -> S {
                     if s > 0 { r } else { s_neg(r) }
                 }
                 Some(_) => {
-                    let root = match one_minus.powq(Q::new(-1, 2).unwrap()) { KR::Ok(k) => k, _ => return Unk };
-                    let r3 = match one_minus.powq(Q::new(-3, 2).unwrap()) { KR::Ok(k) => k, _ => return Unk };
-                    let c2 = c.mul(&r3).mulq(Q::new(1, 2).unwrap());
+                    // asin's derivatives at c, over k!: (1-c²)^(-1/2), c(1-c²)^(-3/2)/2, (1+2c²)(1-c²)^(-5/2)/6,
+                    // (6c³+9c)(1-c²)^(-7/2)/24, (24c⁴+72c²+9)(1-c²)^(-9/2)/120
+                    let pw = |n: i128| match one_minus.powq(Q::new(-n, 2).unwrap()) { KR::Ok(k) => Some(k), _ => None };
+                    let (Some(r1), Some(r3), Some(r5), Some(r7), Some(r9)) = (pw(1), pw(3), pw(5), pw(7), pw(9)) else { return Unk };
+                    let c2s = c.mul(&c);
+                    let k2 = c.mul(&r3).mulq(Q::new(1, 2).unwrap());
+                    let k3 = K::one().add(&K::int(2).mul(&c2s)).mul(&r5).mulq(Q::new(1, 6).unwrap());
+                    let k4 = K::int(6).mul(&c2s).mul(&c).add(&K::int(9).mul(&c)).mul(&r7).mulq(Q::new(1, 24).unwrap());
+                    let k5 = K::int(24).mul(&c2s).mul(&c2s).add(&K::int(72).mul(&c2s)).add(&K::int(9)).mul(&r9).mulq(Q::new(1, 120).unwrap());
                     let a0 = match c.asin() { KR::Ok(k) => k, _ => return Unk };
-                    match Sr::taylor(&z, &[a0, root, c2]) { Some(g) => Ser(g), None => Unk }
+                    match Sr::taylor(&z, &[a0, r1, k2, k3, k4, k5]) { Some(g) => Ser(g), None => Unk }
                 }
             }
         }
@@ -1152,6 +1265,7 @@ fn s_asin(a: S, n: usize) -> S {
 fn s_abs(a: S) -> S {
     use S::*;
     match a {
+        ExpS(p, c) => ExpS(p, Box::new(s_abs(*c))),
         Ser(x) => if x.t.is_empty() { Ser(x) } else { match x.lead_sign() { Some(s) if s < 0 => Ser(x.neg()), Some(_) => Ser(x), None => Unk } },
         Flat(_) => Flat(1), Huge(_) => Huge(1), Inf(_) => Inf(1), Z(_) => Z(1),
         Lim(k) => match k.sign() { Some(s) if s < 0 => Lim(k.neg()), Some(_) => Lim(k), None => Unk },
@@ -1163,9 +1277,10 @@ fn s_abs(a: S) -> S {
 fn s_floor(a: S) -> S {
     use S::*;
     match a {
+        ExpS(..) => s_floor(from_b(coarse(&a))),
         Ser(x) => {
             let (p, c, z) = x.parts();
-            if !p.is_empty() { return SO(x, -1.0, 0.0); }
+            if !p.is_empty() { return SO(x, -1.0, 0.0, true); }
             if x.rem.is_some_and(|r| dom(r, UNIT) != Ordering::Less) { return Unk; }
             match c.rational() {
                 Some(q) if q.is_int() => {
@@ -1221,6 +1336,10 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
         X::Inv(a) => s_fun(ser_of(a, at, n), |s| s_inv(s, n), false),
         X::Pow(b, p) => {
             if let Some(q) = const_q(p) { return s_fun(ser_of(b, at, n), |s| s_powq(s, q, n), false); }
+            // 0 to a power with x in it: 0 near where the power is positive, no value where it is negative
+            if !b.has_x() && matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)) {
+                return match coarse(&ser_of(p, at, n)) { B::Fin(k) if k.sign() == Some(1) => Ser(Sr::c(K::zero())), B::PInf | B::Zero(1) => Ser(Sr::c(K::zero())), B::Fin(k) if k.sign() == Some(-1) => NoVal, B::NInf | B::Zero(-1) => NoVal, _ => Unk };
+            }
             // b^p = e^(p ln b)
             let l = s_fun(ser_of(b, at, n), |s| s_ln(s, n), false);
             s_fun(s_mul(ser_of(p, at, n), l), |s| s_exp(s, n), false)
@@ -1294,9 +1413,13 @@ fn confirm(e: &X, at: &At, l: &L) -> bool {
         At::Fin(a, s) => { let a = a.value(); [1e-1, 1e-2, 1e-3, 1e-4, 1e-5].iter().map(|h| a + *s as f64 * 1.37 * h * (1.0 + a.abs())).collect() }
         At::Inf(s) => (1..=6).map(|k| *s as f64 * 1.37 * 10f64.powi(k)).collect(),
     };
-    let ys: Vec<Option<f64>> = xs.iter().map(|x| ev(e, *x)).collect();
+    let ys: Vec<Option<f64>> = xs.iter().map(|x| ev_sure(e, *x)).collect();
     match l {
         L::Val(k) => {
+            // (a point where rounding swamps the value, as in (cos x - 1 + x²/2)/x⁴ very near 0, is no evidence either
+            // way: its value moves when x moves by a billionth of itself)
+            let v = k.value();
+            let ys: Vec<Option<f64>> = xs.iter().zip(&ys).map(|(x, y)| y.filter(|y| ev(e, x * (1.0 + 1e-9)).is_some_and(|w| (w - y).abs() <= 1e-5 * (1.0 + v.abs() + y.abs())))).collect();
             let v = k.value();
             let errs: Vec<f64> = ys.iter().flatten().map(|y| (y - v).abs()).collect();
             if errs.is_empty() { return false; }
@@ -1368,7 +1491,20 @@ pub fn poly(e: &X) -> Option<Vec<K>> {
     Some(p)
 }
 /// The real zeros of e in [lo, hi] (exactly where it can), and whether every zero there is surely found.
+/// Whether e is positive wherever it has a value, by structure: positive constants, a positive constant to any power
+/// (e^x, 2^x), and sums, products and reciprocals of such (e^x + e^(-x), 2^x + 3^x, e^x + 1).
+fn sure_pos(e: &X) -> bool {
+    match e {
+        X::C(k) => k.sign() == Some(1),
+        X::Pow(b, _) => matches!(&**b, X::C(k) if k.sign() == Some(1)),
+        X::Add(v) | X::Mul(v) => !v.is_empty() && v.iter().all(sure_pos),
+        X::Inv(a) => sure_pos(a),
+        _ => false,
+    }
+}
+
 pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
+    if sure_pos(e) { return (vec![], true); }
     let inside = |k: &K| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 };
     if let Some(mut c) = poly(e) {
         while c.len() > 1 && c.last().is_some_and(|k| k.sign() == Some(0)) { c.pop(); }
@@ -1601,6 +1737,58 @@ fn scan(f: &dyn Fn(f64) -> Option<f64>, lo: f64, hi: f64) -> (Vec<f64>, bool) {
 
 /// Where e may break: the zeros of every denominator, of every root's and logarithm's argument, of arcsin's argument ∓ 1,
 /// and where a floor's argument is a whole number; with whether that list is surely complete.
+/// A window end as an exact number where it is a short decimal (it is typed so).
+fn k_of(v: f64) -> K { let r = (v * 1000.0).round(); if (r / 1000.0 - v).abs() < 1e-12 && r.abs() < 1e15 { K::q(Q::new(r as i128, 1000).unwrap()) } else { K::approx(v) } }
+
+/// Where the cuts of floor(a) pile up without end on [lo, hi]: each of a's own breaks and each end of [lo, hi] from
+/// which a is not established to have a finite limit (from the sides that lie in [lo, hi]). Empty only when a is
+/// established bounded there, so floor(a) has finitely many cuts. Found by structure: ln x tends to -∞ at its break 0,
+/// 1/x to ±∞ at 0, tan x at its poles, sin(1/x) oscillates at 0.
+pub fn floor_piles(a: &X, lo: f64, hi: f64) -> Vec<K> {
+    let (bk, done) = breaks(a, lo, hi);
+    let mut pts: Vec<K> = bk.into_iter().filter(|k| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 }).collect();
+    let mut out = vec![];
+    // (a break list not surely complete: its own piles are not known, so the middle of the window stands for them)
+    if !done { out.push(k_of((lo + hi) / 2.0)); }
+    if pts.len() > 60 { pts.truncate(60); out.push(k_of(lo)); }
+    pts.push(k_of(lo));
+    pts.push(k_of(hi));
+    for p in pts {
+        let v = p.value();
+        for s in [-1i8, 1] {
+            if (s < 0 && v <= lo + 1e-9) || (s > 0 && v >= hi - 1e-9) { continue; }
+            match limit(a, &At::Fin(p.clone(), s)) {
+                L::Val(_) | L::NoVal => {}
+                _ => { if !out.iter().any(|o: &K| (o.value() - v).abs() < 1e-9 * (1.0 + v.abs())) { out.push(p.clone()); } }
+            }
+        }
+    }
+    out.sort_by(|a, b| a.value().partial_cmp(&b.value()).unwrap_or(Ordering::Equal));
+    out
+}
+
+/// Every place in [lo, hi] where the cuts of some floor or ceiling in e pile up without end.
+pub fn piles_in(e: &X, lo: f64, hi: f64) -> Vec<K> {
+    let mut out: Vec<K> = vec![];
+    fn walk(e: &X, lo: f64, hi: f64, out: &mut Vec<K>) {
+        match e {
+            X::C(_) | X::V => {}
+            X::Add(v) | X::Mul(v) => for a in v { walk(a, lo, hi, out) },
+            X::Neg(a) | X::Inv(a) => walk(a, lo, hi, out),
+            X::Pow(b, p) => { walk(b, lo, hi, out); walk(p, lo, hi, out); }
+            X::F(f, a) => {
+                if *f == Fun::Floor && !poly(a).is_some_and(|c| c.len() <= 2) {
+                    for k in floor_piles(a, lo, hi) { if !out.iter().any(|o| (o.value() - k.value()).abs() < 1e-9 * (1.0 + k.value().abs())) { out.push(k); } }
+                }
+                walk(a, lo, hi, out);
+            }
+        }
+    }
+    walk(e, lo, hi, &mut out);
+    out.sort_by(|a, b| a.value().partial_cmp(&b.value()).unwrap_or(Ordering::Equal));
+    out
+}
+
 pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
     let mut out = vec![];
     let mut done = true;
@@ -1629,6 +1817,9 @@ pub fn breaks(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
                                 if u1 - u0 <= 400 { let ai = c[1].inv().unwrap(); push(((u0..=u1).map(|k| K::int(k).sub(&c[0]).mul(&ai)).collect(), true), out); } else { push((vec![], false), out); }
                             }
                             _ => {
+                                // (its cuts are all found only when the argument is established bounded on the closed window:
+                                // floor(ln x) on 0..10 cuts at every e^(-n), without end as x → 0)
+                                if !floor_piles(a, lo, hi).is_empty() { push((vec![], false), out); }
                                 // every whole number k the argument reaches on [lo, hi]: where it equals k
                                 let vals: Vec<f64> = (0..=4000).filter_map(|i| ev(a, lo + (hi - lo) * i as f64 / 4000.0)).collect();
                                 let (mn, mx) = vals.iter().fold((f64::MAX, f64::MIN), |(p, q), v| (p.min(*v), q.max(*v)));

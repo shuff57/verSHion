@@ -938,7 +938,11 @@ fn like_labels_sit_on_their_own_thing() {
 #[test]
 #[ignore]
 fn debug_model() {
-    let md = super::limits::model_of(&start_params(&def()));
+    let mut p = start_params(&def());
+    if let Ok(j) = std::env::var("LIM_JSON") { p = crate::figures::params_from_json(&def(), &serde_json::from_str(&j).unwrap()); }
+    let md = super::limits::model_of(&p);
+    let (ds, done) = md.discontinuities();
+    println!("complete {done}: {}", ds.iter().map(|d| format!("{} {}", d.text, d.kind)).collect::<Vec<_>>().join(", "));
     for pc in &md.pieces { println!("piece {} lo {:?} hi {:?} holes {:?}", pc.n, pc.lo.as_ref().map(|e| e.x.v), pc.hi.as_ref().map(|e| e.x.v), pc.holes.iter().map(|h| h.0.v).collect::<Vec<_>>()); }
     println!("{:?}", md.notes);
 }
