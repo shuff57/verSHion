@@ -5,6 +5,8 @@ use super::{
 };
 #[path = "sequences_limits.rs"]
 mod limit_math;
+#[path = "sequences_series.rs"]
+mod series_math;
 pub const ID: &str = "sequences-series";
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -52,6 +54,9 @@ fn params() -> Vec<ParamDef> {
         ParamDef::bool("explicit", "Write explicit formula", true),
         ParamDef::bool("recursive", "Write recursive formula", false),
         ParamDef::bool("sum", "Write series sum", false),
+        ParamDef::bool("sum_n", "Sum first N terms", false),
+        ParamDef::int("sum_count", "N for requested sum", 1, 1000, 50),
+        ParamDef::bool("sigma", "Write sigma notation", false),
         ParamDef::bool("convergence", "Write convergence", false),
         ParamDef::bool("limit", "Draw limit line", false),
         ParamDef::bool("band", "Epsilon band", false),
@@ -487,18 +492,6 @@ fn approximation(v: f64) -> String {
     } else {
         s.trim_end_matches('0').trim_end_matches('.').to_string()
     }
-}
-fn top_addition(s: &str) -> bool {
-    let mut depth = 0i32;
-    for (i, c) in s.chars().enumerate() {
-        match c {
-            '(' => depth += 1,
-            ')' => depth -= 1,
-            '+' | '-' if depth == 0 && i > 0 => return true,
-            _ => (),
-        }
-    }
-    false
 }
 fn pi_coefficient(s: &str, n: N, a: N, b: N) -> Option<N> {
     let t = s.replace("npi", "n*pi").replace("pin", "pi*n");
@@ -1015,6 +1008,7 @@ fn can_limit(p: &Params) -> bool {
 }
 pub fn relevant(key: &str, p: &Params) -> bool {
     match key {
+        "sum_count" => p.b("sum_n") || p.b("sigma"),
         "first" => p.s("mode") != "Explicit",
         "difference" => p.s("mode") == "Arithmetic",
         "ratio" => p.s("mode") == "Geometric",
@@ -1044,7 +1038,7 @@ pub fn relevant(key: &str, p: &Params) -> bool {
     }
 }
 fn hide_partial_sums(p: &Params) -> bool {
-    !p.b(SHOW_ANSWERS) && (p.s("task") != "Find formula" || p.b("sum"))
+    !p.b(SHOW_ANSWERS) && (p.s("task") != "Find formula" || p.b("sum") || p.b("sum_n"))
 }
 fn missing(p: &Params) -> Vec<i64> {
     p.s("missing")
@@ -1176,6 +1170,16 @@ pub fn warnings(p: &Params) -> Vec<String> {
     if relevant("epsilon", p) && number(p.s("epsilon")).is_none_or(|x| x.v <= 0.0) {
         w.push("Epsilon must be a positive number.".into())
     }
+    if p.b("sum_n") {
+        if let Ok(d) = data(p) {
+            match series_math::total(p,&d){Err(e)=>w.push(e),Ok(a)if a.digits>110=>w.push("The exact requested sum is too long for a readable line; the result is marked approximate. Arithmetic/geometric general formulas remain exact.".into()),_=>()}
+        }
+    }
+    if p.b("point_values")
+        && data(p).is_ok_and(|d| d.a.iter().chain(d.s.iter()).any(|n| n.text().len() > 24))
+    {
+        w.push("Long point values are marked approximate for readability; the key lists exact values where available.".into());
+    }
     for k in ["xlabel", "ylabel", "title"] {
         if relevant(k, p) && p.s(k).chars().count() > 48 {
             w.push(format!("Shorten {k} to at most 48 characters."))
@@ -1228,7 +1232,7 @@ fn coefficient(p: &Params, key: &str) -> String {
             if t.contains('e') || t.contains('E') {
                 n.v.to_string()
             } else {
-                t.trim().to_string()
+                n.text()
             }
         }
         Some(n) if n.q.is_some() && !n.text().starts_with('≈') => n.text(),
@@ -1670,19 +1674,10 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
     let mut rows = vec![format!("Task: {}", p.s("task"))];
     let (lim, slim, state) = limits(p, &d);
     let idx = subscript(start);
-    let formula = match p.s("mode") {
-        "Arithmetic" => format!(
-            "aₙ = ({}) + (n − {start}) × ({})",
-            coefficient(p, "first"),
-            coefficient(p, "difference")
-        ),
-        "Geometric" => format!(
-            "aₙ = ({}) × ({})^(n − {start})",
-            coefficient(p, "first"),
-            coefficient(p, "ratio")
-        ),
-        "Explicit" => format!("aₙ = {}", fmt_formula(p.s("formula"))),
-        _ => "Explicit formula: __________ (cannot determine)".into(),
+    let formula = if p.s("mode") == "Recursive" {
+        "Explicit formula: __________ (cannot determine)".into()
+    } else {
+        format!("aₙ = {}", series_math::formula(p, d, "n"))
     };
     if p.b("explicit") {
         rows.push(if ans {
@@ -1756,13 +1751,17 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
                     if l.v.abs() > 1e9 {
                         return "Sum to infinity: __________ (beyond display range)".into();
                     }
-                    if d.k.q.is_some_and(|(a, b)| a == b) {
+                    if d.first.q == Some((0, 1)) || d.k.q.is_some_and(|(a, b)| a == b) {
                         format!("Sum to infinity {}", l.eq())
                     } else {
                         format!(
                             "S∞ = ({})/(1 − ({})) {}",
                             coefficient(p, "first"),
-                            coefficient(p, "ratio"),
+                            if d.k.v < 0.0 {
+                                format!("({})", coefficient(p, "ratio"))
+                            } else {
+                                coefficient(p, "ratio")
+                            },
                             l.eq()
                         )
                     }
@@ -1776,6 +1775,29 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
                 "Sum to infinity: __________".into()
             })
         }
+    }
+    if p.b("sum_n") {
+        let n = p.i("sum_count").clamp(1, 1000);
+        rows.push(if ans {
+            match series_math::total(p, d) {
+                Ok(a) => format!("Sum of first {n} terms {}", a.eq()),
+                Err(_) => format!("Sum of first {n} terms: __________ (cannot determine)"),
+            }
+        } else {
+            format!("Sum of first {n} terms: __________")
+        });
+    }
+    if p.b("sigma") {
+        let n = p.i("sum_count").clamp(1, 1000) as usize;
+        rows.push(format!(
+            "Σ_(k = {start})^({}) {}",
+            start + n - 1,
+            if ans {
+                format!("[{}]", series_math::formula(p, d, "k"))
+            } else {
+                "[__________]".into()
+            }
+        ));
     }
     if p.b("convergence") {
         let state = if display(p) == "Partial sums" {
@@ -2232,21 +2254,25 @@ fn render(p: &Params) -> String {
             if let Some((a, b)) = l.leader {
                 doc.line(a.0, a.1, b.0, b.1, "#444444", 1.0);
             }
-            doc.raw(&format!(r##"<text data-point-label="{}:{}" x="{}" y="{}" font-size="{fs}" font-family="DejaVu Sans, Noto Sans, Liberation Sans, Arial, sans-serif" text-anchor="{}" fill="{}" stroke="#ffffff" stroke-width="3" paint-order="stroke">{}</text>"##,l.series,l.j,l.x,l.y,l.anchor,"#111111",svg::esc(&l.text)));
+            doc.raw(&format!(r##"<text data-point-label="{}:{}" x="{}" y="{}" font-size="{fs}" font-family="DejaVu Sans, Noto Sans, Liberation Sans, Arial, sans-serif" text-anchor="{}" fill="{}" stroke="#ffffff" stroke-width="3" paint-order="stroke">{}</text>"##,l.series,l.j,l.x,l.y,l.anchor,"#111111",svg::esc(&l.text.replace('-',"−"))));
         }
     }
     for (i, row) in rows.iter().enumerate() {
         // powers in generated equations are typeset with tspan; other expressions use the shared pretty reader.
-        let escaped = svg::esc(row);
+        let escaped = svg::esc(&row.replace('-', "−"));
         let mut rest = escaped.as_str();
         let mut text = String::new();
-        while let Some(k) = rest.find("^(") {
+        while let Some((k, shift)) = [(rest.find("^("), "super"), (rest.find("_("), "sub")]
+            .into_iter()
+            .filter_map(|(k, s)| k.map(|k| (k, s)))
+            .min_by_key(|(k, _)| *k)
+        {
             text.push_str(&rest[..k]);
             let Some(end) = rest[k + 2..].find(')') else {
                 break;
             };
             text.push_str(&format!(
-                "<tspan baseline-shift=\"super\" font-size=\"70%\">{}</tspan>",
+                "<tspan baseline-shift=\"{shift}\" font-size=\"70%\">{}</tspan>",
                 &rest[k + 2..k + 2 + end]
             ));
             rest = &rest[k + 3 + end..];
