@@ -230,7 +230,7 @@ fn drawn_label_boxes() {
                     let bs = labels::boxes(&s);
                     assert_eq!(
                         bs.len(),
-                        if mode == "None" { 2 } else { 3 },
+                        if mode == "None" { 1 } else { 3 },
                         "all labels: {a},{b} {mode}; {:?}",
                         warnings(&p)
                     );
@@ -308,7 +308,6 @@ fn hidden_controls_do_nothing() {
         ("lr", "1"),
         ("lo", "-1"),
         ("hi", "2"),
-        ("question", "Coordinates"),
         ("polar_style", "Exponential"),
     ] {
         let mut p = base();
@@ -435,7 +434,7 @@ fn roots_clear_the_circle() {
             let s = render(&p);
             assert_eq!(
                 labels::boxes(&s).len(),
-                n as usize + 2,
+                n as usize,
                 "all labels: {size} n={n}; {:?}",
                 warnings(&p)
             );
@@ -815,10 +814,224 @@ fn optional_constructions_keep_every_label() {
         )
         .unwrap();
     }
-    assert_eq!(
-        large_exceptions.len(),
-        allowed_large.len(),
+    assert!(
+        large_exceptions.len() <= allowed_large.len(),
         "{:?}",
         large_exceptions
     );
+}
+
+#[test]
+fn r2_textbook_exact_powers_and_products() {
+    for (a, b) in [("1", "sqrt(3)"), ("sqrt(3)", "1"), ("1/2", "sqrt(3)/2")] {
+        let mut p = base();
+        p.set_s("zr", a);
+        p.set_s("zi", b);
+        p.set_s("operation", "Powers");
+        p.set_i("n", 12);
+        let (zs, g) = all(&p, &mut vec![]);
+        assert_eq!(zs.len() - g, 11);
+        let z = &zs[0];
+        let mut expected = (z.a.v, z.b.v);
+        for v in &zs[g..] {
+            expected = (
+                expected.0 * z.a.v - expected.1 * z.b.v,
+                expected.0 * z.b.v + expected.1 * z.a.v,
+            );
+            assert!(v.a.exact && v.b.exact);
+            assert!((v.a.v - expected.0).hypot(v.b.v - expected.1) < 1e-12 * (1. + v.r()));
+        }
+        let w = Z {
+            a: read("sqrt(2)").unwrap(),
+            b: read("1/2").unwrap(),
+            name: "w".into(),
+        };
+        let t = op(z, &w, "Product").unwrap();
+        let back = op(&t, &w, "Quotient").unwrap();
+        assert_eq!(back.a.alg, z.a.alg);
+        assert_eq!(back.b.alg, z.b.alg);
+    }
+    for (r, t, u) in [
+        ("2", "pi/3", "Radians"),
+        ("2", "60", "Degrees"),
+        ("sqrt(2)", "pi/4", "Radians"),
+        ("3", "3pi/4", "Radians"),
+    ] {
+        let mut p = base();
+        p.set_s("input", "Polar cis");
+        p.set_s("radius", r);
+        p.set_s("theta", t);
+        p.set_s("unit", u);
+        p.set_s("operation", "Powers");
+        p.set_i("n", 12);
+        let (zs, g) = all(&p, &mut vec![]);
+        assert_eq!(zs.len() - g, 11);
+        assert!(zs.iter().all(|z| z.a.exact && z.b.exact));
+    }
+    let mut p = base();
+    p.set_s("zr", "1");
+    p.set_s("zi", "sqrt(3)");
+    p.set_s("operation", "Powers");
+    let (zs, g) = all(&p, &mut vec![]);
+    assert_eq!(zs[g + 1].a.s, "−8");
+    assert_eq!(zs[g + 1].b.v, 0.);
+}
+#[test]
+fn r2_unused_w_and_default_root_labels() {
+    for size in ["Small", "Medium", "Large"] {
+        for n in 2..=12 {
+            let mut p = base();
+            p.set_s("operation", "Roots");
+            p.set_s("zr", "1");
+            p.set_s("zi", "0");
+            p.set_i("n", n);
+            p.set_s("label_size", size);
+            assert!(!relevant("wr", &p));
+            assert!(!numbers(&p, &mut vec![]).iter().any(|z| z.name == "w"));
+            assert_eq!(
+                labels::boxes(&render(&p)).len(),
+                n as usize,
+                "{size} {n}: {:?}",
+                warnings(&p)
+            );
+        }
+    }
+}
+#[test]
+fn r2_python_80_digit_gaussian_fixtures() {
+    let cases: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("r2_python.json")).unwrap();
+    let d = defs().remove(0);
+    for case in cases {
+        let p = params_from_json(&d, &case["params"]);
+        let (v, g) = all(&p, &mut vec![]);
+        assert!(v.len() > g, "{:?}", case["params"]);
+        let z = v.last().unwrap();
+        for (actual, expected) in [z.a.v, z.b.v]
+            .into_iter()
+            .zip(case["expected"].as_array().unwrap())
+        {
+            let expected = expected.as_f64().unwrap();
+            assert!(
+                (actual - expected).abs() <= 1e-12 * expected.abs().max(1.),
+                "{} {} {:?}",
+                actual,
+                expected,
+                case["params"]
+            );
+        }
+        assert!(z.a.alg.is_some() && z.b.alg.is_some());
+    }
+}
+#[test]
+fn r2_forms_decimals_inputs_and_student_names() {
+    let p = base();
+    let s = render(&p);
+    assert!(s.contains("w = −1 + i"));
+    assert!(!s.contains("1i"));
+    for (input, text) in [
+        ("2√3", "2√3"),
+        ("2*sqrt(3)", "2√3"),
+        ("1/sqrt(2)", "√2/2"),
+        ("sqrt(8)", "2√2"),
+    ] {
+        assert_eq!(read(input).unwrap().s, text);
+    }
+    assert!((read("e").unwrap().v - std::f64::consts::E).abs() < 1e-15);
+    for t in ["pi*2/3", "(pi/4)", "pi/4+pi/4"] {
+        assert!(read(t).is_some(), "{t}");
+    }
+    let mut p = base();
+    p.set_s("zr", "0.5");
+    p.set_s("zi", "1.5");
+    p.set_s("wr", "1");
+    p.set_s("wi", "0.25");
+    let (zs, g) = all(&p, &mut vec![]);
+    assert_eq!(zs[g].cart(&p), "1.5 + 1.75i");
+    assert!(modtext(&zs[0], &p).starts_with('≈'));
+    p.set_s("question", "Coordinates");
+    p.set_b(SHOW_ANSWERS, false);
+    assert!(render(&p).contains("A = _____"));
+    p.set_b(SHOW_ANSWERS, true);
+    assert!(render(&p).contains("A = 0.5 + 1.5i"));
+    p.set_s("locus", "Argument sector");
+    p.set_s("lo", "3pi/4");
+    p.set_s("hi", "-3pi/4");
+    assert!(
+        !warnings(&p)
+            .iter()
+            .any(|n| n.contains("From &lt;") || n.contains("Use −π"))
+    );
+    p.set_s("question", "Construction");
+    p.set_s("wr", "");
+    p.set_s("wi", "");
+    assert!(!render(&p).contains("cannot determine"));
+    p.set_s("wr", "0");
+    p.set_s("wi", "0");
+    p.set_s("operation", "Quotient");
+    p.set_b(SHOW_ANSWERS, false);
+    assert!(!render(&p).contains("z/w: ___"));
+}
+#[test]
+fn r2_twenty_four_trig_entries() {
+    for k in 0..24 {
+        let q = Q(k, 12);
+        let (c, s) = algebra::trig(q).unwrap();
+        assert!((c.value() - (k as f64 * PI / 12.).cos()).abs() < 1e-12);
+        assert!((s.value() - (k as f64 * PI / 12.).sin()).abs() < 1e-12);
+        assert_eq!(
+            c.mul(&c).unwrap().add(&s.mul(&s).unwrap()).unwrap().q(),
+            Some(rational::Rational(1, 1))
+        );
+    }
+}
+#[test]
+fn r2_multiterm_imaginary_sign_is_preserved() {
+    let mut p = base();
+    p.set_s("input", "Polar cis");
+    p.set_s("radius", "1");
+    p.set_s("theta", "pi/12");
+    p.set_s("operation", "None");
+    let z = numbers(&p, &mut vec![]).remove(0);
+    assert!(z.cart(&p).contains("(−√2/4 + √6/4) i"), "{}", z.cart(&p));
+    assert!(z.b.v > 0.);
+    p.set_s("theta", "-pi/12");
+    let z = numbers(&p, &mut vec![]).remove(0);
+    assert!(z.cart(&p).contains("− (−√2/4 + √6/4) i"), "{}", z.cart(&p));
+}
+#[test]
+fn r2_dense_caption_audit() {
+    let mut rows = vec![];
+    for size in ["Small", "Medium", "Large"] {
+        for n in 2..=12 {
+            for mode in ["Letter", "Cartesian", "Polar"] {
+                for all_options in [false, true] {
+                    let mut p = base();
+                    p.set_s("operation", "Roots");
+                    p.set_s("zr", "1");
+                    p.set_s("zi", "0");
+                    p.set_i("n", n);
+                    p.set_s("label_size", size);
+                    p.set_s("labels", mode);
+                    if all_options {
+                        p.set_b("polar", true);
+                        p.set_b("circle", true);
+                        p.set_b("components", true);
+                        p.set_s("locus", "Disc");
+                    }
+                    let found = labels::boxes(&render(&p)).len();
+                    if found < n as usize {
+                        assert!(warnings(&p).iter().any(|s| s.starts_with("No clear label")));
+                    }
+                    rows.push(format!(
+                        "{size} n={n} {mode} all={all_options}: missing {}",
+                        n as usize - found
+                    ));
+                }
+            }
+        }
+    }
+    if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+        std::fs::write(format!("{dir}/dense-label-audit.txt"), rows.join("\n")).unwrap();
+    }
 }

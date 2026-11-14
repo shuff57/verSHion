@@ -48,7 +48,15 @@
   {
     "operation": "Powers",
     "zr": "1",
-    "zi": "1"
+    "zi": "sqrt(3)",
+    "n": 3,
+    "polar": true,
+    "xmin": -10,
+    "xmax": 10,
+    "ymin": -10,
+    "ymax": 10,
+    "xstep": 2,
+    "ystep": 2
   },
   {
     "marks": "Points"
