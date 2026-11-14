@@ -436,6 +436,15 @@ impl X {
         match self { X::C(_) | X::V => false, X::Add(v) | X::Mul(v) => v.iter().any(|e| e.has_floor()), X::Neg(a) | X::Inv(a) => a.has_floor(), X::F(f, a) => *f == Fun::Floor || a.has_floor(), X::Pow(a, b) => a.has_floor() || b.has_floor() }
     }
     pub fn uses_floor(&self) -> bool { self.has_floor() }
+    /// The arguments of every floor in the formula.
+    pub fn floor_args(&self) -> Vec<&X> {
+        let mut out = vec![];
+        fn walk<'a>(e: &'a X, out: &mut Vec<&'a X>) {
+            match e { X::C(_) | X::V => {} X::Add(v) | X::Mul(v) => for a in v { walk(a, out) }, X::Neg(a) | X::Inv(a) => walk(a, out), X::Pow(a, b) => { walk(a, out); walk(b, out); } X::F(f, a) => { if *f == Fun::Floor { out.push(a); } walk(a, out); } }
+        }
+        walk(self, &mut out);
+        out
+    }
 }
 
 /// Reads a formula the way the app's reader does (implicit products, ^ binding right, -x^2 = -(x^2), a function name needs
@@ -964,6 +973,8 @@ fn s_powq(a: S, r: Q, n: usize) -> S {
     if r.is_zero() { return Ser(Sr::c(K::one())); }
     match a {
         Ser(x) => {
+            // (exactly 0: 0 to a positive power is 0, to a negative one has no value)
+            if x.t.is_empty() && x.rem.is_none() { return if r > Q::ZERO { Ser(Sr::c(K::zero())) } else { NoVal }; }
             if x.t.is_empty() { return if r > Q::ZERO && x.rem.is_some_and(|e| dom(e, UNIT) == Ordering::Less) { if r.d % 2 == 0 { Unk } else { Z(0) } } else { Unk }; }
             let Some((l, rr)) = x.split_lead() else { return Unk };
             if l.e.1 != 0 && !r.is_int() { return Unk; }
@@ -1165,6 +1176,8 @@ fn s_floor(a: S) -> S {
             }
         }
         Huge(s) | Inf(s) => Inf(s),
+        // (tending to 0 from above its floor is 0, from below -1)
+        Flat(s) | Z(s) => if s > 0 { Ser(Sr::c(K::zero())) } else if s < 0 { Ser(Sr::c(K::int(-1))) } else { Unk },
         Lim(k) => k.floor().map_or(Unk, Lim),
         Osc(l, h) => if h - l > 1.0 { Osc(l.floor(), h.floor()) } else { Unk },
         NoVal => NoVal,
@@ -1403,6 +1416,8 @@ pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
             }
         }
         X::F(Fun::Ln, a) => zeros(&X::Add(vec![(**a).clone(), X::C(K::int(-1))]), lo, hi),
+        // (a floor is 0 on a whole stretch, not at points: where it changes is found from its own cuts)
+        X::F(Fun::Floor, _) => (vec![], true),
         X::F(Fun::Abs | Fun::Atan | Fun::Asin, a) => zeros(a, lo, hi),
         X::Pow(b, _) if matches!(&**b, X::C(_)) => (vec![], true),
         _ => numeric_zeros(e, lo, hi),

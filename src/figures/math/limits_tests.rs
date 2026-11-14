@@ -478,6 +478,19 @@ fn classroom() -> Vec<(&'static str, J)> {
         ("arctan", json!({"pieces": "y = arctan(x)", "dots": "", "ask_at": "", "xmin": -8.0, "xmax": 8.0, "ymin": -3.0, "ymax": 3.0})),
         ("(4x^2-1)/(2x^2+3x-2)", f("y = (4x^2 - 1)/(2x^2 + 3x - 2)", "1/2, -2", [-6.0, 4.0, -6.0, 8.0])),
         ("opening state", json!({})),
+        // the second check's cases
+        ("R03 hole and pole", f("y = (x^2 - 1)/((x - 1)(x - 3))", "1, 3", std)),
+        ("R14 (x-1)sin(1/(x-1))", f("y = (x - 1)sin(1/(x - 1))", "1", [-6.0, 10.0, -6.0, 7.0])),
+        ("R57 two poles close", f("y = (5 - 2x^2)/(3x^2 + x)", "0, -1/3", [-6.0, 10.0, -6.0, 7.0])),
+        ("R86 hole and pole", f("y = (x^2 - 2x + 1)/(x^2 - 1)", "1, -1", [-6.0, 10.0, -6.0, 7.0])),
+        ("floor(x) + 1", f("y = floor(x) + 1", "0", [-6.0, 10.0, -6.0, 7.0])),
+        ("floor(x) on ±5", f("y = floor(x)", "2", [-5.0, 5.0, -5.0, 5.0])),
+        ("floor(sin x)", f("y = floor(sin(x))", "0, pi/2, pi", [-6.0, 10.0, -6.0, 7.0])),
+        ("floor(cos x)", f("y = floor(cos(x))", "0, pi", [-6.0, 10.0, -6.0, 7.0])),
+        ("floor(1/x)", f("y = floor(1/x)", "1", [-4.0, 4.0, -4.0, 4.0])),
+        ("x floor(x)", f("y = x floor(x)", "1", [-3.0, 3.0, -3.0, 6.0])),
+        ("tan 2x", f("y = tan(2x)", "", [-6.0, 10.0, -6.0, 7.0])),
+        ("sin(pi floor(1/x))", f("y = sin(pi floor(1/x))", "0", [-4.0, 4.0, -2.0, 2.0])),
     ]
 }
 fn merge(a: &J, b: &J) -> J { let mut o = a.as_object().unwrap().clone(); for (k, v) in b.as_object().unwrap() { o.insert(k.clone(), v.clone()); } J::Object(o) }
@@ -492,6 +505,18 @@ const LARGE_UNDER: &[&str] = &[
 /// With every option on at once (the guide, the epsilon band, both kinds of label, arrows), the crowded cases whose label is
 /// written under the graph, each named.
 const ALL_UNDER: &[&str] = &["hole (x^3-8)/(x-2)", "sin x / x", "ln x", "hole by x≠1", "points and a pole", "5x/(x^2+1)", "(4x^2-1)/(2x^2+3x-2)"];
+/// Cases whose labels may be written under the graph with any option and at any size, each with why there is no spot that
+/// touches no stroke and no leader that crosses nothing.
+const NAMED_UNDER: &[(&str, &str)] = &[
+    ("R03 hole and pole", "the hole at (1, -1) has the y-axis 30 px to its left, the curve below-right and the asymptote x = 3 beyond; every leader to open space crosses the y-axis or the asymptote"),
+    ("R57 two poles close", "the asymptotes x = -1/3 and x = 0 are 10 px apart"),
+    ("R86 hole and pole", "at Large the hole at (1, 0) sits on the x-axis between its numbers and the curve"),
+    ("R14 (x-1)sin(1/(x-1))", "at Large the hole at (1, 0) sits on the x-axis inside the oscillation"),
+    ("tan 2x", "ten asymptotes 47 px apart with a branch filling each gap"),
+    ("floor(x) + 1", "at Large the steps leave no gap the width of a label beside the jumps nearest the corners"),
+    ("floor(sin x)", "the steps lie along the x-axis and its numbers"),
+    ("floor(cos x)", "the steps lie along the x-axis and its numbers"),
+];
 
 #[test]
 fn every_label_on_the_classroom_list_is_clear_and_by_its_own_thing() {
@@ -506,6 +531,7 @@ fn every_label_on_the_classroom_list_is_clear_and_by_its_own_thing() {
         ("arrows", json!({"arrows": true})),
         ("epsilon band", json!({"eps_band": true})),
         ("questions", json!({"ask_inf": "Both", "ask_disc": true})),
+        ("kinds and equations", json!({"kind_labels": true, "asym_eqs": true})),
         ("all", json!({"asym_eqs": true, "kind_labels": true, "guide": true, "arrows": true, "eps_band": true, "ask_inf": "Both", "ask_disc": true})),
     ];
     let mut tally: std::collections::BTreeMap<String, Res> = Default::default();
@@ -520,7 +546,7 @@ fn every_label_on_the_classroom_list_is_clear_and_by_its_own_thing() {
                 let r = check(&mut m, &s, &p);
                 figs += 1;
                 for pr in &r.problems { problems.push(format!("{name} / {oname} / {size}: {pr}")); }
-                if r.under > 0 && !(*oname == "all" && ALL_UNDER.contains(name)) && (size != "Large" || !LARGE_UNDER.contains(name)) { problems.push(format!("{name} / {oname} / {size}: {} label(s) written under the graph: {:?}", r.under, last_drawn(&p).labels.iter().filter(|l| l.2 == Spot::Off).map(|l| l.1.clone()).collect::<Vec<_>>())); }
+                if r.under > 0 && !NAMED_UNDER.iter().any(|(n, _)| n == name) && !(*oname == "all" && ALL_UNDER.contains(name)) && (size != "Large" || !LARGE_UNDER.contains(name)) { problems.push(format!("{name} / {oname} / {size}: {} label(s) written under the graph: {:?}", r.under, last_drawn(&p).labels.iter().filter(|l| l.2 == Spot::Off).map(|l| l.1.clone()).collect::<Vec<_>>())); }
                 for kind in ['a', 'k'] {
                     let key = format!("{size} {}", if kind == 'a' { "asymptote equation" } else { "kind label" });
                     let t = tally.entry(key).or_default();
@@ -1033,4 +1059,63 @@ fn width_probe() {
         let ink = m.ink(&el).map(|b| b[2] - b[0]).unwrap_or(0.0);
         println!("{t:60} est {:6.1} ink {:6.1} ratio {:.3}", super::limits::tw(t, 15.0), ink, ink / super::limits::tw(t, 15.0));
     }
+}
+
+/// A floor of a curve is drawn, at every point inside a stretch, at the value it has there (worked by hand: floor(sin x) is 0
+/// on (-2π, -π) since sin x > 0 there, floor(cos x) is 0 on (-π/2, π/2) away from 0, …).
+#[test]
+fn a_floor_of_a_curve_is_drawn_at_its_value_inside_every_stretch() {
+    let cases: [(&str, fn(f64) -> f64, [f64; 4]); 4] = [
+        ("y = floor(sin(x))", |x| x.sin().floor(), [-6.0, 10.0, -6.0, 7.0]),
+        ("y = floor(cos(x))", |x| x.cos().floor(), [-6.0, 10.0, -6.0, 7.0]),
+        ("y = floor(2sin(x))", |x| (2.0 * x.sin()).floor(), [-4.0, 4.0, -3.0, 3.0]),
+        ("y = ceil(cos(x))", |x| x.cos().ceil(), [-4.0, 4.0, -2.0, 2.0]),
+    ];
+    for (e, f, win) in cases {
+        let p = with(json!({"pieces": e, "dots": "", "ask_at": "", "xmin": win[0], "xmax": win[1], "ymin": win[2], "ymax": win[3]}));
+        let s = svg(&p);
+        let (x0, _, y0, _, ml, mt, ux, uy) = last_drawn(&p).frame;
+        let ph = (win[3] - win[2]) * uy;
+        let pts: Vec<Pt> = { let g = group(&s, "curves"); g.split("points=\"").skip(1).flat_map(|t| t.split('"').next().unwrap().split(' ').filter_map(|q| { let (a, b) = q.split_once(',')?; Some((a.parse::<f64>().ok()?, b.parse::<f64>().ok()?)) }).collect::<Vec<_>>()).collect() };
+        let mut checked = 0;
+        for i in 1..400 {
+            let x = win[0] + (win[1] - win[0]) * i as f64 / 400.0;
+            // (away from where the value changes)
+            if [-0.04, 0.04].iter().any(|d| f(x + d) != f(x)) { continue; }
+            let px = ml + (x - x0) * ux;
+            let want = mt + ph - (f(x) - y0) * uy;
+            let near: Vec<&Pt> = pts.iter().filter(|q| (q.0 - px).abs() < 1.0).collect();
+            if near.is_empty() { continue; }
+            assert!(near.iter().all(|q| (q.1 - want).abs() < 1.5), "{e}: at x = {x:.3} drawn at {:?}, true value {}", near.iter().map(|q| y0 + (mt + ph - q.1) / uy).collect::<Vec<_>>(), f(x));
+            checked += 1;
+        }
+        assert!(checked > 100, "{e}: {checked}");
+        // and the single values: floor(sin x) = 1 at π/2 gets its filled dot over an open circle at 0
+        if e == "y = floor(sin(x))" {
+            let (cx, cy0, cy1) = (ml + (std::f64::consts::FRAC_PI_2 - x0) * ux, mt + ph - (0.0 - y0) * uy, mt + ph - (1.0 - y0) * uy);
+            let marks = group(&s, "marks");
+            assert!(marks.contains(&format!(r#"cx="{cx:.2}" cy="{cy1:.2}""#)) && marks.contains(&format!(r#"cx="{cx:.2}" cy="{cy0:.2}""#)), "{marks}");
+        }
+        // no false note that the piece is outside the window
+        assert!(!warnings(&p).iter().any(|n| n.contains("is outside the window")), "{e}: {:?}", warnings(&p));
+    }
+    for (e, win) in [("y = floor(x) + 1", [-6.0, 10.0, -6.0, 7.0]), ("y = floor(x)", [-6.0, 10.0, -6.0, 7.0]), ("y = x floor(x)", [-3.0, 3.0, -3.0, 3.0]), ("y = floor(x^2)", [-3.0, 3.0, -3.0, 3.0])] {
+        let p = with(json!({"pieces": e, "dots": "", "xmin": win[0], "xmax": win[1], "ymin": win[2], "ymax": win[3]}));
+        assert!(!warnings(&p).iter().any(|n| n.contains("is outside the window")), "{e}: {:?}", warnings(&p));
+    }
+}
+
+/// δ worked by hand: y = 10x at 1 with ε = 0.05 needs |10x - 10| < 0.05, |x - 1| < 0.005 (0.01 would fail at x = 1.009);
+/// y = 3 with a hole at 1, and (x - 3)/(x - 3), stay within any ε of their limit everywhere: there is no widest δ.
+#[test]
+fn delta_is_written_only_as_it_is() {
+    let w = words(&svg(&with(json!({"pieces": "y = 10x", "dots": "", "ask_at": "1", "eps_band": true, "eps": "0.05"}))));
+    assert!(w.contains("δ = 0.005") && !w.contains("δ = 0.01"), "{w}");
+    for kv in [json!({"pieces": "y = 3, x != 1", "dots": "", "ask_at": "1", "eps_band": true, "eps": "1/2"}), json!({"pieces": "y = (x - 3)/(x - 3)", "dots": "", "ask_at": "3", "eps_band": true, "eps": "1/2", "xmin": -2.0, "xmax": 8.0})] {
+        let w = words(&svg(&with(kv.clone())));
+        assert!(w.contains("so any δ &gt; 0 works") && !w.contains("δ = 16") && !w.contains("δ = 10"), "{kv}: {w}");
+    }
+    // an empty function with the band on: one note only
+    let n = warnings(&with(json!({"pieces": "", "dots": "", "ask_at": "1", "eps_band": true})));
+    assert_eq!(n.len(), 1, "{n:?}");
 }

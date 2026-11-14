@@ -644,12 +644,30 @@ fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
         Src::Formula { x } if x.uses_floor() => {
             let (lo, hi) = (pc.lo_x().max(x0 - 1.0), pc.hi_x().min(x1 + 1.0));
             if !(hi > lo) { return vec![]; }
+            // (for the drawing only: where any floor's value changes between close samples, narrowed down by halving;
+            // the exact cuts the key works from are added too)
+            let args = x.floor_args();
+            let key = |t: f64| -> Vec<Option<f64>> { args.iter().map(|a| cas::ev(a, t).map(f64::floor)).collect() };
+            let n = 20000;
             let mut cuts: Vec<f64> = vec![lo];
+            let mut prev = key(lo);
+            for i in 1..=n {
+                let t = lo + (hi - lo) * i as f64 / n as f64;
+                let k = key(t);
+                if k != prev {
+                    let (mut a, mut b) = (lo + (hi - lo) * (i - 1) as f64 / n as f64, t);
+                    for _ in 0..60 { let m = 0.5 * (a + b); if key(m) == prev { a = m; } else { b = m; } }
+                    cuts.push(0.5 * (a + b));
+                    prev = k;
+                }
+            }
             cuts.extend(cas::breaks(x, lo, hi).0.iter().map(|k| k.value()).filter(|v| *v > lo && *v < hi));
             cuts.push(hi);
+            cuts.sort_by(|a, b| a.partial_cmp(b).unwrap());
             cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
-            if cuts.len() > 400 { return vec![]; }
-            cuts.windows(2).map(|w| {
+            // (stretches too narrow to see, such as floor(1/x) near 0, are not drawn)
+            let min_w = (x1 - x0) / 2000.0;
+            cuts.windows(2).filter(|w| w[1] - w[0] >= min_w).take(1500).map(|w| {
                 let mid = 0.5 * (w[0] + w[1]);
                 let at = |arg: &X| cas::ev(arg, mid).map(f64::floor);
                 format!("y = {}{}", cas::grid_text(x, &at), dom(w[0], w[1]))

@@ -307,11 +307,62 @@ fn rows() -> Vec<Row> {
         ("B36", "y = 1/(1 + exp(-x))", "", "0", "1/2, 1/2, 1/2, 1/2", "1, 0", "", "", "1, 0", n()),
         ("B37", "y = (x^2 - 0.25)/(x - 0.5)", "", "0.5", "1, 1, 1, undef", "∞, -∞", "0.5 removable", "", "", n()),
         ("B38", "y = 0.5/(x - 1.5)", "", "1.5", "-∞, ∞, DNE, undef", "0, 0", "1.5 infinite", "1.5", "0", n()),
+        // ── floor, ceil, abs and periodic functions together (the second check) ──
+        // constant in disguise: sin(πn) = 0 and cos(2πn) = 1 for every whole n
+        ("C1", "y = sin(pi floor(x))", "", "1", "0, 0, 0, 0", "0, 0", "", "", "0", w(-3.0, 3.0, -2.0, 2.0)),
+        ("C2", "y = cos(2pi floor(x))", "", "1", "1, 1, 1, 1", "1, 1", "", "", "1", w(-3.0, 3.0, -2.0, 2.0)),
+        // 0 for every x ≠ 0 (floor(1/x) is whole), no value at 0: removable; its floor breaks at every 1/n near 0
+        ("C3", "y = sin(pi floor(1/x))", "", "0", "0, 0, 0, undef", "0, 0", "0 removable", "", "0", w(-3.0, 3.0, -2.0, 2.0)),
+        // ceil x - floor x: 0 at whole numbers, 1 between: a hole at each whole number (no limit at ±∞: named)
+        ("D02", "y = ceil(x) - floor(x)", "", "1", "1, 1, 1, 0", "?, ?", "-3 removable, -2 removable, -1 removable, 0 removable, 1 removable, 2 removable, 3 removable", "", "", w(-3.0, 3.0, -2.0, 2.0)),
+        // |floor x|: 1 then 0 at 0, 0 then 1 at 1, 2 then 1 at -1 …
+        ("D03", "y = abs(floor(x))", "", "0", "1, 0, DNE, 0", "∞, ∞", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -1.0, 5.0)),
+        // floor|x|: 0 on both sides of 0 (continuous there), jumps at ±1, ±2, ±3
+        ("D04", "y = floor(abs(x))", "", "0; 1; -1", "0, 0, 0, 0 | 0, 1, DNE, 1 | 1, 0, DNE, 1", "∞, ∞", "-3 jump, -2 jump, -1 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -1.0, 4.0)),
+        // floor(x)/x: -1/x → ∞ left of 0, 0 right of it; n-1 over n then 1 at each whole n; → 1 at ±∞
+        ("D05", "y = floor(x)/x", "", "1; 0", "0, 1, DNE, 1 | ∞, 0, DNE, undef", "1, 1", "-3 jump, -2 jump, -1 jump, 0 infinite, 1 jump, 2 jump, 3 jump", "0", "1", w(-3.0, 3.0, -2.0, 5.0)),
+        // x floor x: 0 from both sides of 0; n(n - 1) then n² at each whole n ≠ 0
+        ("D06", "y = x floor(x)", "", "0; 2", "0, 0, 0, 0 | 2, 4, DNE, 4", "∞, ∞", "-3 jump, -2 jump, -1 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -3.0, 12.0)),
+        // floor(x²): whole at x = ±√k
+        ("D07", "y = floor(x^2)", "", "1; 0", "0, 1, DNE, 1 | 0, 0, 0, 0", "∞, ∞", "-2 jump, -√3 jump, -√2 jump, -1 jump, 1 jump, √2 jump, √3 jump, 2 jump", "", "", w(-2.0, 2.0, -1.0, 5.0)),
+        // floor(sin x): -1 then 0 at 0, 0 then -1 at π; floor = 1 only at π/2 + 2kπ (holes, f = 1 there); continuous at -π/2, 3π/2
+        ("D08", "y = floor(sin(x))", "", "0; pi/2; pi", "-1, 0, DNE, 0 | 0, 0, 0, 1 | 0, -1, DNE, 0", "DNE, DNE", "-3π/2 removable, -π jump, 0 jump, π/2 removable, π jump, 2π jump, 5π/2 removable, 3π jump", "", "", n()),
+        // floor(cos x): 0 on both sides of 0 but 1 at 0; -1 on both sides of π and at π
+        ("D09", "y = floor(cos(x))", "", "0; pi", "0, 0, 0, 1 | -1, -1, -1, -1", "DNE, DNE", "-3π/2 jump, -π/2 jump, 0 removable, π/2 jump, 3π/2 jump, 2π removable, 5π/2 jump", "", "", n()),
+        // floor(2 sin x): 2 sin x whole at sin x = 0, ±1/2, ±1; at π/6 it rises through 1 (0 then 1, f = 1); at π/2 it touches 2
+        // (1 on both sides, f = 2); at -π/2 it touches -2 from above (-2 on both sides and at it: continuous)
+        ("D10", "y = floor(2sin(x))", "", "pi/6; pi/2; -pi/2", "0, 1, DNE, 1 | 1, 1, 1, 2 | -2, -2, -2, -2", "DNE, DNE", "-7π/6 jump, -π jump, -5π/6 jump, -π/6 jump, 0 jump, π/6 jump, π/2 removable, 5π/6 jump, π jump, 7π/6 jump", "", "", w(-4.0, 4.0, -3.0, 3.0)),
+        // ceil(cos x): 1 then 0 at π/2, 0 then 1 at -π/2; 0 on both sides of ±π but -1 at ±π; 1 round 0 and at 0
+        ("D11", "y = ceil(cos(x))", "", "pi/2; pi; 0", "1, 0, DNE, 0 | 0, 0, 0, -1 | 1, 1, 1, 1", "DNE, DNE", "-π removable, -π/2 jump, π/2 jump, π removable", "", "", w(-4.0, 4.0, -2.0, 2.0)),
+        // floor x + floor(-x): 0 at whole numbers, -1 between (no limit at ±∞: named)
+        ("D12", "y = floor(x) + floor(-x)", "", "1", "-1, -1, -1, 0", "?, ?", "-3 removable, -2 removable, -1 removable, 0 removable, 1 removable, 2 removable, 3 removable", "", "", w(-3.0, 3.0, -2.0, 2.0)),
+        ("D13", "y = floor(x)^2", "", "0; 1", "1, 0, DNE, 0 | 0, 1, DNE, 1", "∞, ∞", "-2 jump, -1 jump, 0 jump, 1 jump, 2 jump", "", "", w(-2.0, 2.0, -1.0, 5.0)),
+        // cos(π floor x) = (-1)^floor x: 1 then -1 at 1 (it alternates for ever at ±∞: named)
+        ("D14", "y = cos(pi floor(x))", "", "1", "1, -1, DNE, -1", "?, ?", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -2.0, 2.0)),
+        ("D15", "y = floor(x) - x", "", "2; 0.5", "-1, 0, DNE, 0 | -0.5, -0.5, -0.5, -0.5", "DNE, DNE", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -2.0, 2.0)),
+        ("D16", "y = abs(sin(x))", "", "0", "0, 0, 0, 0", "DNE, DNE", "", "", "", n()),
+        ("D17", "y = abs(x - 1) + abs(x + 1)", "", "1", "2, 2, 2, 2", "∞, ∞", "", "", "", n()),
+        ("D18", "y = sin(abs(x))/abs(x)", "", "0", "1, 1, 1, undef", "0, 0", "0 removable", "", "0", n()),
+        ("D21", "y = x - floor(x)", "", "0.5", "0.5, 0.5, 0.5, 0.5", "DNE, DNE", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -2.0, 2.0)),
+        ("D22", "y = sin(2pi x)", "", "1/4", "1, 1, 1, 1", "DNE, DNE", "", "", "", n()),
+        // (named: the sum of two oscillating squares is 1, which the analysis cannot see at ±∞)
+        ("D23", "y = cos(x)^2 + sin(x)^2", "", "0", "1, 1, 1, 1", "?, ?", "", "", "", n()),
+        // sin x/sin x: 1 wherever sin x ≠ 0, holes at kπ; 1 at ±∞ too (the function is 1 wherever it has a value)
+        ("D24", "y = sin(x)/sin(x)", "", "0", "1, 1, 1, undef", "1, 1", "-π removable, 0 removable, π removable, 2π removable, 3π removable", "", "1", n()),
+        ("D25", "y = 1/(2 + sin(x))", "", "0", "1/2, 1/2, 1/2, 1/2", "DNE, DNE", "", "", "", n()),
+        ("D26", "y = floor(x/3)", "", "3", "0, 1, DNE, 1", "∞, -∞", "-6 jump, -3 jump, 0 jump, 3 jump, 6 jump, 9 jump", "", "", n()),
+        // eventually constant: floor(1/x) is 0 for x > 1 and -1 for x < -1; its floor breaks at every 1/n near 0
+        ("D27", "y = floor(1/x)", "", "", "", "0, -1", "0 infinite", "0", "0, -1", w(-3.0, 3.0, -4.0, 4.0)),
+        ("D29", "y = floor(sqrt(x))", "", "4", "1, 2, DNE, 2", "∞, none", "1 jump, 4 jump, 9 jump", "", "", w(0.0, 10.0, -1.0, 4.0)),
+        // floor(e^x) is whole at x = ln k
+        ("D30", "y = floor(exp(x))", "", "0", "0, 1, DNE, 1", "∞, 0", "0 jump, ln 2 jump, ln 3 jump, ln 4 jump, ln 5 jump, ln 6 jump, ln 7 jump", "", "0", w(-2.0, 2.0, -1.0, 8.0)),
     ]
 }
 
 /// Results the analysis is allowed to leave as "cannot be determined" (none: every row is an ordinary textbook function).
 const UNDETERMINED: &[&str] = &[];
+/// Rows whose list of discontinuities is not sure to be complete (and so is left as a line in the key), with why.
+const INCOMPLETE: &[(&str, &str)] = &[("C3", "floor(1/x) breaks at every 1/n, without end near 0"), ("D27", "floor(1/x) breaks at every 1/n, without end near 0")];
 
 #[test]
 fn the_table_of_hand_worked_functions() {
@@ -350,13 +401,14 @@ fn the_table_of_hand_worked_functions() {
             }
         }
         let (ds, complete) = md.discontinuities();
-        if !complete { fails.push(format!("{name}: the list of discontinuities is not sure to be complete")); }
+        let named_incomplete = INCOMPLETE.iter().any(|(n, _)| *n == name);
+        if complete == named_incomplete { fails.push(format!("{name}: the list of discontinuities is {}sure to be complete", if complete { "" } else { "not " })); }
         check!("discontinuities", ds.iter().map(|d| format!("{} {}", d.text, d.kind)).collect::<Vec<_>>().join(", "), discs);
         if ds.iter().any(|d| d.kind == UNSURE) && !UNDETERMINED.contains(&name) { fails.push(format!("{name}: a discontinuity it cannot determine")); }
         check!("vertical asymptotes", md.verticals().iter().map(|v| v.1.clone()).collect::<Vec<_>>().join(", "), vas);
         check!("horizontal asymptotes", md.horizontals().iter().map(|v| v.1.clone()).collect::<Vec<_>>().join(", "), has);
         // "nowhere" only when established
-        if discs.is_empty() && !w.contains("nowhere in the window") { fails.push(format!("{name}: the key does not say nowhere: {w}")); }
+        if discs.is_empty() && !named_incomplete && !w.contains("nowhere in the window") { fails.push(format!("{name}: the key does not say nowhere: {w}")); }
     }
     println!("{checked} hand-worked values checked");
     assert!(fails.is_empty(), "{} differ:\n{}", fails.len(), fails.join("\n"));
