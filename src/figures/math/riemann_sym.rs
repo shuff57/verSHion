@@ -170,7 +170,7 @@ impl Mono {
     pub fn one() -> Mono { Mono { sq: 1, cb: 1, pi: 0, e: (0, 1), ln: vec![] } }
     fn is_one(&self) -> bool { *self == Mono::one() }
     fn erat(&self) -> Rat { Rat { n: self.e.0, d: self.e.1 } }
-    fn approx(&self) -> f64 {
+    pub fn approx(&self) -> f64 {
         (self.sq as f64).sqrt() * (self.cb as f64).cbrt() * PI.powi(self.pi) * EULER.powf(self.erat().f()) * self.ln.iter().map(|(p, k)| (*p as f64).ln().powi(*k)).product::<f64>()
     }
 }
@@ -432,6 +432,8 @@ pub fn candidates(x: f64) -> Vec<Ex> {
     let mut out = vec![];
     if let Some(r) = Rat::near(x, 1000, tol) { out.push(Ex::rat(r)); }
     if let Some(r) = Rat::near(x / PI, 24, tol / PI) && let Some(e) = Ex::pi().scale(r) { out.push(e); }
+    // (a simple power of e: e, 1/e, √e, e², the turning point of ln x / x and of x ln x)
+    if x > 0.0 && let Some(q) = Rat::near(x.ln(), 6, 1e-7) && !q.is_zero() { out.push(Ex::e_pow(q)); }
     out
 }
 /// The insides of every |…| in the tree.
@@ -448,35 +450,44 @@ fn e_text(q: Rat) -> String {
 }
 fn gcd_i(a: i128, b: i128) -> i128 { if b == 0 { a.abs() } else { gcd_i(b, a % b) } }
 
-/// One written term: its rational coefficient, the factors over it and under it, and its value (for the self-check).
-struct Term { c: Rat, num: Vec<String>, den: Vec<String>, rational: bool, val: f64, log: bool }
+/// One written term: its rational coefficient, the factors over it and under it (π, e, roots; roots last), the logarithms
+/// that follow it (always after every other factor, set off by a space), and its value (for the self-check).
+struct Term { c: Rat, num: Vec<String>, den: Vec<String>, rational: bool, val: f64, logs: String, log_den: String }
 impl Term {
     /// The term without its sign, with the coefficient `c` (scaled for a shared denominator).
     fn text(&self, c: Rat) -> String {
         let (cn, cd) = (c.n.abs(), c.d);
-        // a rational multiple of one logarithm: (51/130) ln(51/130), 2 ln(3/2)
-        if self.log {
-            let arg = &self.num[0];
-            return if cn == 1 && cd == 1 { arg.clone() } else if cd == 1 { format!("{cn} {arg}") } else { format!("({cn}/{cd}) {arg}") };
+        if !self.logs.is_empty() {
+            // a coefficient (rational, roots, π, e) before the logarithms: √2 ln 2, (√3/3) ln 3, (25/32) ln(5/4),
+            // π ln(3/2), (1/2)(ln(3/2))^2; a factor never follows a log's argument
+            let plain = Term { c, num: self.num.clone(), den: self.den.clone(), rational: false, val: 0.0, logs: String::new(), log_den: String::new() };
+            let coef = plain.text(c);
+            if self.logs == "1" {
+                let den = if self.log_den.contains(' ') { format!("({})", self.log_den) } else { self.log_den.clone() };
+                return if coef.contains('/') { format!("({coef})/{den}") } else { format!("{coef}/{den}") };
+            }
+            let mut s = if coef == "1" { self.logs.clone() } else if coef.contains('/') || coef.contains(' ') {
+                if self.logs.starts_with('(') { format!("({coef}){}", self.logs) } else { format!("({coef}) {}", self.logs) }
+            } else { format!("{coef} {}", self.logs) };
+            if !self.log_den.is_empty() { s = if self.log_den.contains(' ') { format!("{s}/({})", self.log_den) } else { format!("{s}/{}", self.log_den) }; }
+            return s;
         }
-        // (roots last, so √2 never reads as the root of what follows; ln set off by a space)
-        let mut num = String::new();
-        for f in &self.num {
-            if !num.is_empty() && f.starts_with("ln") { num.push(' '); }
-            num.push_str(f);
-        }
-        let lead = if self.num.is_empty() { cn.to_string() } else if cn == 1 { String::new() } else { cn.to_string() };
-        let sep = if !lead.is_empty() && (num.starts_with("ln") || num.starts_with("(ln")) { " " } else if !lead.is_empty() && num.starts_with('^') { "\u{2009}" } else { "" };
-        let mut top = format!("{lead}{sep}{num}");
+        // (roots last, so √2 never reads as the root of what follows)
+        let num: String = self.num.concat();
+        let lead = if num.is_empty() { cn.to_string() } else if cn == 1 { String::new() } else { cn.to_string() };
+        let sep = if !lead.is_empty() && num.starts_with('^') { "\u{2009}" } else { "" };
+        let top = format!("{lead}{sep}{num}");
         let mut bottom = String::new();
         if cd != 1 { bottom.push_str(&cd.to_string()); }
         for f in &self.den { bottom.push_str(f); }
         if bottom.is_empty() { return top; }
-        if self.num.iter().any(|f| f.starts_with("ln")) && top.contains("ln") { top = format!("({top})"); }
         let many = (cd != 1 && !self.den.is_empty()) || self.den.len() > 1;
         if many { format!("{top}/({bottom})") } else { format!("{top}/{bottom}") }
     }
 }
+
+/// ln(n/d) as written: ln 6, ln(3/2).
+fn ln_arg(n: i128, d: i128) -> String { if d == 1 { format!("ln {n}") } else { format!("ln({n}/{d})") } }
 
 /// Σ cᵢ ln pᵢ as one term g·ln(N/D): g the largest rational all the cᵢ are whole multiples of, N/D the product of the
 /// primes to those multiples; an integer g taken into the argument while it stays under a million (ln 4, not 2 ln 2).
@@ -494,51 +505,170 @@ fn one_log(logs: &[(i64, Rat)]) -> Option<(Rat, i128, i128)> {
         if e > 0 { n = n.checked_mul(pw)?; } else { d = d.checked_mul(pw)?; }
         if n > 1_000_000 || d > 1_000_000 { return None; }
     }
-    // (a whole-number multiple goes into the argument while it stays small)
-    if g.d == 1 && g.n > 1 && let (Some(nn), Some(dd)) = (n.checked_pow(g.n as u32), d.checked_pow(g.n as u32)) && nn <= 1_000_000 && dd <= 1_000_000 {
-        return Some((Rat::int(1), nn, dd));
+    Some(absorb(g, n, d))
+}
+/// A whole-number multiple goes into the argument while it stays small: 2 ln(3/2) = ln(9/4), 2 ln 2 = ln 4.
+fn absorb(g: Rat, n: i128, d: i128) -> (Rat, i128, i128) {
+    // (while the power stays a small number: ln 4 and ln(9/4), but 8 ln 2, not ln 256)
+    if g.d == 1 && g.n > 1 && g.n <= 3 && let (Some(nn), Some(dd)) = (n.checked_pow(g.n as u32), d.checked_pow(g.n as u32)) && nn <= 100 && dd <= 100 {
+        return (Rat::int(1), nn, dd);
     }
-    Some((g, n, d))
+    (g, n, d)
+}
+
+/// Σ cₚ ln p as the fewest terms gⱼ ln(Nⱼ/Dⱼ) (one or two, each ratio's parts at most 100), each gⱼ one of the |cₚ| and every prime's coefficient a
+/// small whole combination of them: (25/32) ln(5/4) + (49/32) ln(7/4), never split into the logs of primes. None when
+/// there is no such form.
+fn log_terms(logs: &[(i64, Rat)]) -> Option<Vec<(Rat, i128, i128)>> {
+    if let Some(t) = one_log(logs) { return Some(vec![t]); }
+    let mut gens: Vec<Rat> = vec![];
+    for (_, c) in logs { let a = Rat { n: c.n.abs(), d: c.d }; if !gens.contains(&a) { gens.push(a); } }
+    gens.truncate(6);
+    // the whole combination Σ gⱼ eⱼ = c with the least Σ|eⱼ| (|eⱼ| ≤ 6), solved for the last one
+    let solve = |g: &[Rat], c: Rat| -> Option<Vec<i128>> {
+        let m = g.len();
+        let mut best: Option<Vec<i128>> = None;
+        let mut e = vec![0i128; m];
+        let free = m - 1;
+        let total = 13usize.pow(free as u32);
+        for k in 0..total {
+            let mut r = c;
+            let mut kk = k;
+            for j in 0..free { e[j] = (kk % 13) as i128 - 6; kk /= 13; r = r.sub(g[j].mul(Rat::int(e[j]))?)?; }
+            let last = r.div(g[free])?;
+            if last.d != 1 || last.n.abs() > 6 { continue; }
+            e[free] = last.n;
+            let cost: i128 = e.iter().map(|x| x.abs()).sum();
+            if best.as_ref().is_none_or(|b| cost < b.iter().map(|x| x.abs()).sum()) { best = Some(e.clone()); }
+        }
+        best
+    };
+    // (two terms at most: three logs of made-up ratios, (5/4) ln(15/4) + (1/2) ln(7/20) + (1/4) ln 143, read as no book)
+    for m in 2..=2usize.min(gens.len()) {
+        let mut found: Option<(f64, Vec<(Rat, i128, i128)>)> = None;
+        let idx: Vec<usize> = (0..gens.len()).collect();
+        let mut subsets: Vec<Vec<usize>> = vec![];
+        for a in &idx { for b in &idx { if b <= a { continue; } if m == 2 { subsets.push(vec![*a, *b]); continue; } for c in &idx { if c > b { subsets.push(vec![*a, *b, *c]); } } } }
+        'sub: for sub in subsets {
+            let g: Vec<Rat> = sub.iter().map(|&k| gens[k]).collect();
+            let (mut ns, mut ds) = (vec![1i128; m], vec![1i128; m]);
+            for (p, c) in logs {
+                let Some(e) = solve(&g, *c) else { continue 'sub };
+                for j in 0..m {
+                    let Some(pw) = (*p as i128).checked_pow(e[j].unsigned_abs() as u32) else { continue 'sub };
+                    let slot = if e[j] > 0 { &mut ns[j] } else { &mut ds[j] };
+                    let Some(v) = slot.checked_mul(pw) else { continue 'sub };
+                    // (each a small ratio, as a book's terms are: 5/4, 7/4; else no form)
+                    if v > 100 { continue 'sub; }
+                    *slot = v;
+                }
+            }
+            if (0..m).any(|j| ns[j] == ds[j]) { continue; }
+            let cost: f64 = (0..m).map(|j| ((ns[j] * ds[j]) as f64).log10()).sum();
+            if found.as_ref().is_none_or(|f| cost < f.0) { found = Some((cost, (0..m).map(|j| absorb(g[j], ns[j], ds[j])).collect())); }
+        }
+        if let Some((_, t)) = found { return Some(t); }
+    }
+    None
+}
+
+/// Σ c ln p ln q (p ≤ q) as g·(ln(N/D))², when it is one squared logarithm: (ln 3)² + (ln 5)² − 2 ln 3 ln 5 = (ln(5/3))².
+fn square_log(q: &[((i64, i64), Rat)]) -> Option<(Rat, i128, i128)> {
+    let mut ps: Vec<i64> = q.iter().flat_map(|((p, r), _)| [*p, *r]).collect();
+    ps.sort(); ps.dedup();
+    let get = |p: i64, r: i64| -> Rat { let (a, b) = if p <= r { (p, r) } else { (r, p) }; q.iter().find(|(k, _)| *k == (a, b)).map(|x| x.1).unwrap_or(Rat::zero()) };
+    let p0 = *ps.iter().find(|p| !get(**p, **p).is_zero())?;
+    let d0 = get(p0, p0);
+    // eₚ/eₚ₀ = c(p₀, p) / (2 c(p₀, p₀))
+    let r: Vec<Rat> = ps.iter().map(|&p| if p == p0 { Some(Rat::int(1)) } else { get(p0, p).div(d0.mul(Rat::int(2))?) }).collect::<Option<_>>()?;
+    for (i, &p) in ps.iter().enumerate() {
+        for (j, &s) in ps.iter().enumerate() {
+            if j < i { continue; }
+            let want = d0.mul(r[i])?.mul(r[j])?.mul(Rat::int(if i == j { 1 } else { 2 }))?;
+            if want != get(p, s) { return None; }
+        }
+    }
+    let l = r.iter().try_fold(1i128, |acc, x| (acc / gcd_i(acc, x.d)).checked_mul(x.d))?;
+    let ints: Vec<i128> = r.iter().map(|x| x.n.checked_mul(l / x.d)).collect::<Option<_>>()?;
+    let gi = ints.iter().fold(0i128, |acc, v| gcd_i(acc, *v));
+    if gi == 0 { return None; }
+    let e: Vec<i128> = ints.iter().map(|v| v / gi).collect();
+    let e0 = e[ps.iter().position(|p| *p == p0)?];
+    let g = d0.div(Rat::int(e0.checked_mul(e0)?))?;
+    let (mut n, mut d) = (1i128, 1i128);
+    for (p, k) in ps.iter().zip(&e) {
+        let pw = (*p as i128).checked_pow(u32::try_from(k.unsigned_abs()).ok()?)?;
+        if *k > 0 { n = n.checked_mul(pw)?; } else { d = d.checked_mul(pw)?; }
+        if n > 1_000_000 || d > 1_000_000 { return None; }
+    }
+    Some(if n >= d { (g, n, d) } else { (g, d, n) })
 }
 
 impl Ex {
     /// The value as a textbook writes it, in the figure's markup (^ raises the next token): 14/3, (e − 1)/2, π√2/8,
-    /// ln(3/2), (8/9) ln(3/2), 1 − √2/2, 1/(2e), e^(−3/2), −3 ³√2 − 6. None when it would be too long to read (over 5
-    /// terms or 60 characters), or when the written terms, evaluated, do not give the value (a self-check on every form).
+    /// ln(3/2), (8/9) ln(3/2), √2 ln 2, (25/32) ln(5/4) + (49/32) ln(7/4), (1/2)(ln(3/2))^2, 1 − √2/2, 1/(2e), e^(−3/2),
+    /// −3 ³√2 − 6. A log's argument is one number or bracketed, and nothing multiplies it from after. None when it would
+    /// be too long to read (over 5 terms or 60 characters), when its logs have no such form, or when the written terms,
+    /// evaluated, do not give the value (a self-check on every form).
     pub fn text(&self) -> Option<String> {
         if self.0.is_empty() { return Some("0".into()); }
         let mut terms: Vec<Term> = vec![];
-        let mut logs: Vec<(i64, Rat)> = vec![];
-        for (m, c) in &self.0 {
-            let pure_log = m.sq == 1 && m.cb == 1 && m.pi == 0 && m.e.0 == 0 && m.ln.len() == 1 && m.ln[0].1 == 1;
-            if pure_log { logs.push((m.ln[0].0, *c)); continue; }
+        // the factors other than logs, over and under
+        let outer = |m: &Mono| -> (Vec<String>, Vec<String>) {
             let (mut num, mut den) = (vec![], vec![]);
             if m.pi > 0 { num.push(format!("\u{3c0}{}", sup(m.pi as i64))); } else if m.pi < 0 { den.push(format!("\u{3c0}{}", sup(-m.pi as i64))); }
             let e = m.erat();
             // (e to a negative fraction raised as a power, e^(−3/2): never 1/e√e, which reads as √e/e)
             if e.n > 0 { num.push(e_text(e)); } else if e.n < 0 && e.d == 1 { den.push(e_text(Rat { n: -e.n, d: e.d })); } else if e.n < 0 { num.push(format!("e^(\u{2212}{}/{})", -e.n, e.d)); }
-            for (p, k) in &m.ln {
-                let t = if k.abs() == 1 { format!("ln {p}") } else { format!("(ln {p})^{}", k.abs()) };
-                if *k > 0 { num.push(t); } else { den.push(t); }
-            }
             if m.sq != 1 { num.push(format!("\u{221a}{}", m.sq)); }
             if m.cb != 1 { num.push(format!("^3\u{221a}{}", m.cb)); }
-            terms.push(Term { c: *c, num, den, rational: m.is_one(), val: c.f() * m.approx(), log: false });
-        }
-        if !logs.is_empty() {
-            match one_log(&logs) {
-                Some((g, n, d)) if n != d => {
-                    // (−ln 2 rather than ln(1/2) for a whole multiple; a fractional multiple keeps its argument as it falls,
-                    // (7/13) ln(7/13), as x ln x at 7/13 reads)
-                    let (neg, a, b) = if n >= d || g.d != 1 { (false, n, d) } else { (true, d, n) };
-                    let arg = if b == 1 { format!("ln {a}") } else { format!("ln({a}/{b})") };
-                    let c = Rat { n: if neg { -g.n } else { g.n }, d: g.d };
-                    terms.push(Term { c, num: vec![arg], den: vec![], rational: false, val: c.f() * (a as f64 / b as f64).ln(), log: true });
-                }
-                Some(_) => {}
-                // (an argument too large to write: each logarithm as its own term)
-                None => for (p, c) in &logs { terms.push(Term { c: *c, num: vec![format!("ln {p}")], den: vec![], rational: false, val: c.f() * (*p as f64).ln(), log: true }); },
+            (num, den)
+        };
+        // logs grouped by the factor they multiply: the first power of one log (combined), products of two (one square),
+        // anything else as it stands
+        let mut lin: BTreeMap<Mono, Vec<(i64, Rat)>> = BTreeMap::new();
+        let mut quad: BTreeMap<Mono, Vec<((i64, i64), Rat)>> = BTreeMap::new();
+        for (m, c) in &self.0 {
+            if m.ln.is_empty() { continue; }
+            let o = Mono { ln: vec![], ..m.clone() };
+            if m.ln.len() == 1 && m.ln[0].1 == 1 { lin.entry(o).or_default().push((m.ln[0].0, *c)); continue; }
+            if m.ln.len() == 1 && m.ln[0].1 == 2 { quad.entry(o).or_default().push(((m.ln[0].0, m.ln[0].0), *c)); continue; }
+            if m.ln.len() == 2 && m.ln[0].1 == 1 && m.ln[1].1 == 1 { quad.entry(o).or_default().push(((m.ln[0].0, m.ln[1].0), *c)); continue; }
+            let (num, den) = outer(m);
+            let mut logs: Vec<String> = vec![];
+            let mut log_den: Vec<String> = vec![];
+            for (p, k) in &m.ln {
+                let t = if k.abs() == 1 { format!("ln {p}") } else { format!("(ln {p})^{}", k.abs()) };
+                if *k > 0 { logs.push(t); } else { log_den.push(t); }
             }
+            // (a log only under the line: 1/ln 2 written with a 1 over it)
+            let logs = if logs.is_empty() && !log_den.is_empty() { "1".to_string() } else { logs.join(" ") };
+            terms.push(Term { c: *c, num, den, rational: m.is_one(), val: c.f() * m.approx(), logs, log_den: log_den.join(" ") });
+        }
+        for (o, logs) in &lin {
+            let (num, den) = outer(o);
+            for (g, n, d) in log_terms(logs)? {
+                // (−ln 2 and −(3/2) ln 2, not ln(1/2) or (3/2) ln(1/2); a fraction's own log, (7/13) ln(7/13), as it falls)
+                let flip = n < d && (g.d == 1 || n == 1);
+                let (c, a, b) = if flip { (Rat { n: -g.n, d: g.d }, d, n) } else { (g, n, d) };
+                terms.push(Term { c, num: num.clone(), den: den.clone(), rational: false, val: c.f() * o.approx() * (a as f64 / b as f64).ln(), logs: ln_arg(a, b), log_den: String::new() });
+            }
+        }
+        for (o, q) in &quad {
+            let (num, den) = outer(o);
+            if q.len() == 1 && q[0].0.0 != q[0].0.1 {
+                let ((p, r), c) = q[0];
+                terms.push(Term { c, num, den, rational: false, val: c.f() * o.approx() * (p as f64).ln() * (r as f64).ln(), logs: format!("ln {p} ln {r}"), log_den: String::new() });
+                continue;
+            }
+            let (g, n, d) = square_log(q)?;
+            let arg = ln_arg(n, d);
+            terms.push(Term { c: g, num, den, rational: false, val: g.f() * o.approx() * (n as f64 / d as f64).ln().powi(2), logs: format!("({arg})^2"), log_den: String::new() });
+        }
+        for (m, c) in &self.0 {
+            if !m.ln.is_empty() { continue; }
+            let (num, den) = outer(m);
+            terms.push(Term { c: *c, num, den, rational: m.is_one(), val: c.f() * m.approx(), logs: String::new(), log_den: String::new() });
         }
         if terms.is_empty() { return Some("0".into()); }
         if terms.len() > 5 { return None; }
@@ -555,7 +685,7 @@ impl Ex {
         let order: Vec<Term> = if lead_neg_irr { rat.into_iter().chain(irr).collect() } else { irr.into_iter().chain(rat).collect() };
         // terms that all share one denominator over a common line: (e − 1)/2, (√2 + 1)/2
         let d0 = order[0].c.d;
-        let shared = order.len() > 1 && d0 > 1 && order.iter().all(|t| t.c.d == d0 && t.den.is_empty() && !t.log);
+        let shared = order.len() > 1 && d0 > 1 && order.iter().all(|t| t.c.d == d0 && t.den.is_empty() && t.logs.is_empty());
         let mut out = String::new();
         for (k, t) in order.iter().enumerate() {
             let c = if shared { Rat { n: t.c.n, d: 1 } } else { t.c };
@@ -717,6 +847,8 @@ pub fn integral(n: &Node, a: &Ex, b: &Ex) -> Option<Ex> {
         Mul(c, u) if !depends(c) => eval(c, &Ex::zero())?.mul(&integral(u, a, b)?),
         Mul(u, c) if !depends(c) => eval(c, &Ex::zero())?.mul(&integral(u, a, b)?),
         Div(u, c) if !depends(c) => integral(u, a, b)?.div(&eval(c, &Ex::zero())?),
+        // ln x / x: (ln x)²/2
+        Div(u, d) if matches!(d.as_ref(), X) && matches!(u.as_ref(), F(Fun::Ln, v) if matches!(v.as_ref(), X)) => anti(&|x| { let l = ln_ex(x)?; l.mul(&l)?.scale(Rat::new(1, 2)?) }),
         Div(c, d) if !depends(c) => {
             let c = eval(c, &Ex::zero())?;
             // c/u, c/u^r
@@ -731,6 +863,8 @@ pub fn integral(n: &Node, a: &Ex, b: &Ex) -> Option<Ex> {
         F(Fun::Sqrt, u) => { let (k, m) = linear(u)?; power_anti(k, m, Rat::new(1, 2)?, a, b) }
         F(Fun::Sin, u) => { let (k, m) = linear(u)?; anti(&|x| sin_pi(pi_mult(&lin_at(k, m, x)?)?.add(Rat::new(1, 2)?)?)?.scale(Rat::int(-1).div(k)?)) }
         F(Fun::Cos, u) => { let (k, m) = linear(u)?; anti(&|x| sin_pi(pi_mult(&lin_at(k, m, x)?)?)?.scale(Rat::int(1).div(k)?)) }
+        // ln(kx + m): (u ln u − u)/k, u = kx + m (4 ln 4 − 3 for ∫₁⁴ ln x dx)
+        F(Fun::Ln, u) => { let (k, m) = linear(u)?; anti(&|x| { let u = lin_at(k, m, x)?; u.mul(&ln_ex(&u)?)?.sub(&u)?.scale(Rat::int(1).div(k)?) }) }
         _ => None,
     }
 }
@@ -790,6 +924,22 @@ mod tests {
         assert_eq!(ex_of("1/sqrt(2)").text().unwrap(), "\u{221a}2/2");
         assert!(ex_of("sqrt(2)*sqrt(2) - 2").is_zero());
         assert_eq!(ex_of("e^2*e^(-1)").text().unwrap(), "e");
+        // a root or π times a log: the factor before the log, the log's argument one number or bracketed
+        assert_eq!(ex_of("sqrt(2) ln(2)").text().unwrap(), "\u{221a}2 ln 2");
+        assert_eq!(ex_of("sqrt(3) ln(3)/3").text().unwrap(), "(\u{221a}3/3) ln 3");
+        assert_eq!(ex_of("sqrt(2) ln(2) + sqrt(3) ln(3) + 4 ln(2)").text().unwrap(), "4 ln 2 + \u{221a}2 ln 2 + \u{221a}3 ln 3");
+        assert_eq!(ex_of("3 sqrt(10) ln(5/2)/4").text().unwrap(), "(3\u{221a}10/4) ln(5/2)");
+        assert_eq!(ex_of("pi ln(3) - pi ln(2)").text().unwrap(), "\u{3c0} ln(3/2)");
+        // two logs with different multiples stay two logs of the typed ratios, not logs of primes
+        assert_eq!(ex_of("(25/32) ln(5/4) + (49/32) ln(7/4)").text().unwrap(), "(25/32) ln(5/4) + (49/32) ln(7/4)");
+        // a squared log stays one squared log
+        assert_eq!(ex_of("ln(5/3)^2").text().unwrap(), "(ln(5/3))^2");
+        assert_eq!(ex_of("ln(3/2)^2/2").text().unwrap(), "(1/2)(ln(3/2))^2");
+        assert_eq!(ex_of("ln(2) ln(3)").text().unwrap(), "ln 2 ln 3");
+        // −(3/2) ln 2, not (3/2) ln(1/2); (7/13) ln(7/13) as it falls
+        assert_eq!(ex_of("(3/4) ln(1/4)").text().unwrap(), "\u{2212}(3/2) ln 2");
+        assert_eq!(ex_of("(1/2) ln(1/10)").text().unwrap(), "\u{2212}(1/2) ln 10");
+        assert_eq!(ex_of("(7/13) ln(7/13)").text().unwrap(), "(7/13) ln(7/13)");
         assert!(eval(&parse("sin(1)").unwrap(), &Ex::zero()).is_none(), "sin 1 has no exact form here");
         assert!(eval(&parse("1/(1 + sqrt(2))").unwrap(), &Ex::zero()).is_none(), "a sum is not inverted");
     }
@@ -810,5 +960,9 @@ mod tests {
         assert_eq!(i("x e^x", "0", "1").unwrap(), "1");
         assert_eq!(i("x + pi", "0", "1").unwrap(), "\u{3c0} + 1/2");
         assert_eq!(i("1/(1 + x^2)", "0", "1"), None);
+        // ∫ ln: x ln x − x at the bounds; ∫ ln x / x = (ln x)²/2
+        assert_eq!(i("ln(x)", "1", "4").unwrap(), "8 ln 2 \u{2212} 3");
+        assert_eq!(i("ln(x)", "1", "e").unwrap(), "1");
+        assert_eq!(i("ln(x)/x", "1", "e").unwrap(), "1/2");
     }
 }
