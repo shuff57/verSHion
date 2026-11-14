@@ -1432,3 +1432,29 @@ fn spaced_powers_read_alike() {
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
+
+/// One rule for names: a function cannot be named after something the reader knows (sin, ln, pi, e …) or a point (P, Q),
+/// and is refused with a note; when the function or variable is named h, a or m, the figure's own h, a and m give way to Δx,
+/// x₀ and m_PQ, in the worked line, the slope line and the student blank.
+#[test]
+fn names_do_not_clash() {
+    for name in ["sin", "cos", "ln", "log", "exp", "sqrt", "abs", "pi", "e", "P", "Q"] {
+        let p = with(&[("fname", s(name))]);
+        let n = tangent::warnings(&p).join(" | ");
+        assert!(n.contains(&format!("cannot be {name}")), "{name}: {n}");
+        assert!(panel(&p)[0].starts_with("f(x) = "), "{name}");
+    }
+    let w = |o: &[(&str, Value)]| { let mut v = vec![("worked", b(true)), ("secant_eq", s("None"))]; v.extend_from_slice(o); panel(&with(&v)) };
+    let l = w(&[("fname", s("a"))]);
+    assert!(has(&l, "[a(x0 + h) \u{2212} a(x0)]/h"), "{l:?}");
+    let l = w(&[("var", s("a")), ("func", s("a^2"))]);
+    assert!(has(&l, "[f(a0 + h) \u{2212} f(a0)]/h"), "{l:?}");
+    let l = w(&[("fname", s("m"))]);
+    assert!(has(&l, "mPQ = [m(a + h)"), "{l:?}");
+    let l = w(&[("var", s("m")), ("func", s("m^2"))]);
+    assert!(has(&l, "mPQ = [f(a + h)"), "{l:?}");
+    let l = w(&[("var", s("h")), ("func", s("h^2"))]);
+    assert!(has(&l, "[f(a + \u{394}h) \u{2212} f(a)]/\u{394}h"), "{l:?}");
+    let l = w(&[("fname", s("h")), ("var", s("t")), ("func", s("t^2"))]);
+    assert!(has(&l, "\u{394}t"), "{l:?}");
+}

@@ -602,8 +602,12 @@ pub(crate) struct Model {
     pub fname: String,
     pub var: String,
     pub dep: String,
-    /// The secant's step: h, or Δt (Δx) when the function itself is named h.
+    /// The secant's step: h, or Δt (Δx) when the function or the variable is named h.
     pub step: String,
+    /// The point's symbol in the worked formula: a, or x₀ when a is a name in use.
+    pub pa: String,
+    /// The secant's slope: m, or m_PQ when m is a name in use.
+    pub ms: String,
     pub dec: usize,
     pub p: Option<Tangent>,
     pub secants: Vec<Secant>,
@@ -719,14 +723,27 @@ pub(crate) fn model(p: &Params) -> Model {
         _ => { notes.push((About::All, "The variable must be one letter other than e, such as x or t: x is used".to_string())); 'x' }
     };
     let fname_t = p.s("fname").trim().to_string();
-    let fname = if (1..=3).contains(&fname_t.chars().count()) && fname_t.chars().all(|c| c.is_ascii_alphabetic()) && !fname_t.to_lowercase().contains(var) && fname_t != "e" { fname_t }
+    // names the reader or the figure already uses are not a function's name: sin, ln, pi, e …, and P and Q, the points
+    let reserved = ["sin", "cos", "tan", "sec", "csc", "cot", "ln", "log", "exp", "sqrt", "abs", "pi", "e", "arcsin", "arccos", "arctan", "asin", "acos", "atan"];
+    let fname = if reserved.contains(&fname_t.to_lowercase().as_str()) {
+        notes.push((About::All, format!("The function's name cannot be {fname_t}: the reader already knows {fname_t} as a function or a number, so f is used")));
+        "f".to_string()
+    } else if fname_t == "P" || fname_t == "Q" {
+        notes.push((About::All, format!("The function's name cannot be {fname_t}, the name of a point on the figure: f is used")));
+        "f".to_string()
+    } else if (1..=3).contains(&fname_t.chars().count()) && fname_t.chars().all(|c| c.is_ascii_alphabetic()) && !fname_t.to_lowercase().contains(var) { fname_t }
         else { notes.push((About::All, "The function's name must be one to three letters, without the variable: f is used".to_string())); "f".to_string() };
     let dep = if var == 'x' { "y".to_string() } else { fname.clone() };
     let exact = p.s("slope_form") != "Decimals";
     let dec = p.i("dec").clamp(0, 6) as usize;
     let plain = match expr_plain(p.s("func"), &fname, var) { Ok(e) => Some(e), Err(e) => { notes.push((About::All, e)); None } };
-    let step = if fname == "h" { format!("\u{394}{var}") } else { "h".to_string() };
-    let mut m = Model { expr: plain.as_ref().map(|e| real_odd_roots(e)), fname: fname.clone(), var: var.to_string(), dep, step: step.clone(), dec, p: None, secants: vec![], more: vec![], notes: vec![] };
+    // the figure's own symbols give way to the teacher's names: the step h is Δx, the point a is x₀, the slope m is m_PQ, when
+    // the function or the variable is named h, a or m
+    let clash = |c: &str| fname == c || var.to_string() == c;
+    let step = if clash("h") { format!("\u{394}{var}") } else { "h".to_string() };
+    let pa = if clash("a") { format!("{var}_0") } else { "a".to_string() };
+    let ms = if clash("m") { "m_(PQ)".to_string() } else { "m".to_string() };
+    let mut m = Model { expr: plain.as_ref().map(|e| real_odd_roots(e)), fname: fname.clone(), var: var.to_string(), dep, step: step.clone(), pa, ms, dec, p: None, secants: vec![], more: vec![], notes: vec![] };
     let Some(fnode) = plain.as_ref().and_then(|e| ex::parse(e)) else { m.notes = notes; return m };
     let fx = Fx { df: ex::deriv(&fnode), f: fnode };
     let f = |x: f64| fx.f(x);
@@ -1452,7 +1469,8 @@ pub(super) fn build(p0: &Params) -> Out {
                     if p.b("worked") {
                         let f = &m.fname;
                         let st = &m.step;
-                        lines.push(ind(vec![mt(&format!("m = [{f}(a + {st}) \u{2212} {f}(a)]/{st}"))]));
+                        let (pa, ms) = (&m.pa, &m.ms);
+                        lines.push(ind(vec![mt(&format!("{ms} = [{f}({pa} + {st}) \u{2212} {f}({pa})]/{st}"))]));
                         lines.push(ind(vec![mt(&format!("= [{} \u{2212} {}]/{}", fx(&s.qx), fx(&t.an), paren_den(&s.hn)))]));
                         if answers {
                             if s.fb.exact && t.fan.exact {
@@ -1468,7 +1486,7 @@ pub(super) fn build(p0: &Params) -> Out {
                             }
                         } else { lines.push(ind(vec![mt("= "), Part::Blank])); }
                     } else {
-                        lines.push(ind(if answers { vec![pr("slope "), mt(&format!("m {rel} {}", s.m.s))] } else { vec![pr("slope "), mt("m = "), Part::Blank] }));
+                        lines.push(ind(if answers { vec![pr("slope "), mt(&format!("{} {rel} {}", m.ms, s.m.s))] } else { vec![pr("slope "), mt(&format!("{} = ", m.ms)), Part::Blank] }));
                     }
                 }
                 if p.s("secant_eq") != "None" {
