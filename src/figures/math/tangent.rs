@@ -501,7 +501,8 @@ fn plain_typed(s: &str) -> bool { let t = s.trim(); !t.is_empty() && t.chars().a
 /// A typed number: its value, how it is written (a decimal as typed, anything else in √ and π), and its exact value.
 /// Numbers, fractions, roots, π and e are read (and ln(2) and the like, as the reader reads them).
 pub(crate) fn typed_num(raw: &str) -> Option<Num> {
-    let t = plain_symbols(raw.trim());
+    // (spaces inside a typed number are only spacing: "1 000" is 1000)
+    let t: String = plain_symbols(raw.trim()).chars().filter(|c| !c.is_whitespace()).collect();
     if t.is_empty() { return None; }
     let l = t.to_lowercase();
     let mut rest = l.clone();
@@ -510,12 +511,13 @@ pub(crate) fn typed_num(raw: &str) -> Option<Num> {
     let v = match parse_typed(&t) { Ok(Some(tv)) => tv.v, _ => eval(&l, 0.0).filter(|v| v.is_finite())? };
     if v.abs() > 1e6 { return None; }
     let ex = ex::typed_exact(&l);
-    let s = if plain_typed(&t) {
-        let mut s = t.trim_start_matches('+').to_string();
-        if s.starts_with('.') { s.insert(0, '0'); }
-        if s.starts_with("-.") { s.insert(1, '0'); }
-        minus(&s)
-    } else { spaced(&pretty(&t).replace('\u{b7}', "")) };
+    // written as the value it is (3/4*2 is 3/2, 2*3 is 6, sqrt(3)*2 is 2√3, pi*2 is 2π, 1e-5 is 0.00001, −−1 is 1), a
+    // decimal typed staying a decimal; a value with no exact form here (ln(2)) as typed, with its product signs
+    let typed_dec = has_decimal(&t);
+    let s = match ex.as_ref().and_then(|x| ex::text(x, typed_dec)) {
+        Some(s) => s,
+        None => spaced(&pretty(&t)),
+    };
     Some(Num { v, s, exact: true, ex })
 }
 
@@ -523,8 +525,15 @@ pub(crate) fn typed_num(raw: &str) -> Option<Num> {
 /// the exact value is a decimal of at most 6 places, else rounded with ≈; never a fraction or a root beside a decimal.
 /// Otherwise fractions, roots and π.
 fn ctx_for(exact: bool, dec: usize, typed: &[&str]) -> Ctx {
-    let has_dec = |t: &str| { let cs: Vec<char> = t.chars().collect(); cs.iter().enumerate().any(|(i, c)| *c == '.' && cs.get(i + 1).is_some_and(|d| d.is_ascii_digit())) };
-    Ctx { exact, dec, dec_ok: typed.iter().any(|t| has_dec(t)) }
+    Ctx { exact, dec, dec_ok: typed.iter().any(|t| has_decimal(t)) }
+}
+/// Whether text holds a typed decimal (0.5, 19.6) or a number in scientific notation (1e-5, 2.5E3).
+fn has_decimal(t: &str) -> bool {
+    let cs: Vec<char> = t.chars().collect();
+    cs.iter().enumerate().any(|(i, c)| {
+        (*c == '.' && cs.get(i + 1).is_some_and(|d| d.is_ascii_digit()))
+            || (matches!(c, 'e' | 'E') && i > 0 && cs[i - 1].is_ascii_digit() && { let mut j = i + 1; if matches!(cs.get(j), Some('-' | '+')) { j += 1; } cs.get(j).is_some_and(|d| d.is_ascii_digit()) })
+    })
 }
 
 fn typed_list(s: &str) -> (Vec<(Num, String)>, Vec<String>) {
@@ -651,7 +660,8 @@ pub(crate) fn model(p: &Params) -> Model {
                 }
                 let mut hs: Vec<(Num, String)> = vec![];
                 match typed_num(p.s("h")) {
-                    Some(h) if h.v.abs() < 1e-9 => notes.push((About::Secant, "h cannot be 0: Q would be P, and the secant needs two points".into())),
+                    Some(h) if h.v == 0.0 => notes.push((About::Secant, format!("{step} cannot be 0: Q would be P, and the secant needs two points"))),
+                    Some(h) if t.a + h.v == t.a => notes.push((About::Secant, format!("{step} = {} is too small to tell Q from P in this figure's arithmetic: choose a larger {step}", h.s))),
                     Some(h) => hs.push((h, p.s("h").to_string())),
                     None => notes.push((About::Secant, "Type h as a number, such as 1, -1, 1/2 or 0.1 (not 0)".into())),
                 }
@@ -659,7 +669,7 @@ pub(crate) fn model(p: &Params) -> Model {
                 for b in bad { notes.push((About::Secant, format!("More secants: cannot read \u{201c}{b}\u{201d} as a value of h"))); }
                 let mut extra = 0;
                 for (v, raw) in more {
-                    if v.v.abs() < 1e-9 { notes.push((About::Secant, "More secants: h = 0 is left out (Q would be P)".into())); continue; }
+                    if v.v == 0.0 || t.a + v.v == t.a { notes.push((About::Secant, format!("More secants: {step} = {} is left out (Q would be P)", v.s))); continue; }
                     if hs.iter().any(|(w, _)| (w.v - v.v).abs() < 1e-12) { continue; }
                     if extra == MAX_MORE_H { notes.push((About::Secant, format!("More secants: only the first {MAX_MORE_H} values of h are drawn"))); break; }
                     extra += 1;

@@ -1098,7 +1098,7 @@ fn at_point(text: &str, var: &str, dep: &str, x: f64, y: f64) -> String {
         }
         else if c == '\u{3c0}' { out.push_str("pi"); }
         else if c == '\u{2212}' { out.push('-'); }
-        else if c == '\u{b7}' { out.push('*'); }
+        else if c == '\u{b7}' || c == '\u{d7}' { out.push('*'); }
         else { out.push(c); }
         i += 1;
     }
@@ -1270,4 +1270,20 @@ fn no_interval_round_a_is_said() {
     assert!(n.contains("no slope and no tangent"), "{n}");
     let n = tangent::warnings(&with(&[("func", s("x^0.2")), ("a", s("0")), ("xmin", f(-2.0)), ("xmax", f(2.0)), ("ymin", f(-2.0)), ("ymax", f(2.0))])).join(" ");
     assert!(n.contains("vertical") && !n.contains("one side"), "{n}");
+}
+
+/// Scientific h: 1e-5 is written 0.00001 with a worked line in enough places to show the difference; 1e-12 is a step
+/// (1×10^−12), not "h cannot be 0"; an h so small that a + h is a in double precision is refused as too small.
+#[test]
+fn scientific_steps() {
+    let lines = panel(&with(&[("h", s("1e-5")), ("worked", b(true))]));
+    assert!(has(&lines, "h = 0.00001"), "{lines:?}");
+    assert!(lines.iter().any(|l| l.contains("1.00002") && l.contains("/0.00001")), "{lines:?}");
+    let n = tangent::warnings(&with(&[("h", s("1e-12"))])).join(" | ");
+    assert!(!n.contains("cannot be 0") && !n.contains("too small"), "{n}");
+    assert!(has(&texts(&build(&with(&[("h", s("1e-12"))])).svg, "panel^"), "h = 1\u{d7}10^\u{2212}12"));
+    let n = tangent::warnings(&with(&[("a", s("1")), ("h", s("1e-17"))])).join(" | ");
+    assert!(n.contains("too small to tell Q from P"), "{n}");
+    let n = tangent::warnings(&with(&[("a", s("1")), ("h", s("1")), ("more_h", s("1e-17"))])).join(" | ");
+    assert!(n.contains("left out (Q would be P)"), "{n}");
 }

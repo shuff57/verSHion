@@ -92,7 +92,14 @@ impl<'a> P<'a> {
                         while j < self.s.len() && self.s[j].is_ascii_digit() { j += 1; }
                         let t: String = self.s[st..j].iter().map(|c| if *c == '\u{2212}' { '-' } else { *c }).collect();
                         self.i = j;
-                        return Some(Num(t.parse().ok()?, None));
+                        // (exactly: 1e-5 is 1/100000, 2.5E3 is 2500)
+                        let (mant, ex10) = t.split_once(['e', 'E']).unwrap_or((&t, "0"));
+                        let r = decimal_rat(mant).zip(ex10.parse::<i32>().ok()).and_then(|(m, k)| {
+                            if k.abs() > 18 { return None; }
+                            let p = 10i128.pow(k.unsigned_abs());
+                            if k >= 0 { R::new(m.0.checked_mul(p)?, m.1) } else { R::new(m.0, m.1.checked_mul(p)?) }
+                        });
+                        return Some(Num(t.parse().ok()?, r));
                     }
                 }
                 let t: String = self.s[st..self.i].iter().collect();
@@ -478,6 +485,15 @@ fn rat_text(r: R, dec_ok: bool, max_places: usize) -> String {
             let fp = scaled % 10i128.pow(places as u32);
             let f = format!("{fp:0places$}");
             return format!("{sign}{ip}.{}", f.trim_end_matches('0'));
+        }
+        // a terminating decimal with more places than are written (a typed 1e-12): in scientific form, 1×10^−12
+        if d == 1 && places <= 30 {
+            let scaled = p * 10i128.pow(places as u32) / q;
+            let digits = scaled.to_string();
+            let digits = digits.trim_end_matches('0');
+            let k = digits.len() as i32 - 1 - (places as i32 - (scaled.to_string().len() - digits.len()) as i32);
+            let mant = if digits.len() == 1 { digits.to_string() } else { format!("{}.{}", &digits[..1], &digits[1..]) };
+            return format!("{sign}{mant}\u{d7}10^{}", if k < 0 { format!("\u{2212}{}", -k) } else { k.to_string() });
         }
     }
     format!("{sign}{p}/{q}")
