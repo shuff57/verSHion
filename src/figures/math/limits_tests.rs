@@ -310,8 +310,10 @@ fn texts(svg: &str) -> Vec<(String, String)> {
     out
 }
 /// The plot's strokes (curves, asymptotes, guides, band edges, leaders, the axes), arrowheads and point marks.
-fn scene(svg: &str) -> (Vec<(Pt, Pt)>, Vec<(Pt, f64)>, Vec<(Pt, Pt)>) {
+/// (and which of the strokes are dashed: asymptotes, guides, band edges)
+fn scene(svg: &str) -> (Vec<(Pt, Pt)>, Vec<(Pt, f64)>, Vec<(Pt, Pt)>, Vec<(Pt, Pt)>) {
     let mut segs = vec![];
+    let mut dashed = vec![];
     let mut dots = vec![];
     let mut leaders = vec![];
     let mut curves = group(svg, "curves").to_string();
@@ -326,7 +328,7 @@ fn scene(svg: &str) -> (Vec<(Pt, Pt)>, Vec<(Pt, f64)>, Vec<(Pt, Pt)>) {
     for name in ["lines", "band", "labels"] {
         for part in group(svg, name).split('<').filter(|p| p.starts_with("line ")) {
             let s = ((attr(part, "x1").unwrap(), attr(part, "y1").unwrap()), (attr(part, "x2").unwrap(), attr(part, "y2").unwrap()));
-            if name == "labels" { leaders.push(s); } else { segs.push(s); }
+            if name == "labels" { leaders.push(s); } else { segs.push(s); if part.contains("stroke-dasharray") { dashed.push(s); } }
         }
     }
     for part in group(svg, "marks").split('<') {
@@ -341,7 +343,7 @@ fn scene(svg: &str) -> (Vec<(Pt, Pt)>, Vec<(Pt, f64)>, Vec<(Pt, Pt)>) {
     for part in frame.split('<').filter(|p| p.starts_with("line ") && attr(p, "stroke-width").is_some_and(|w| w >= 2.0)) {
         segs.push(((attr(part, "x1").unwrap(), attr(part, "y1").unwrap()), (attr(part, "x2").unwrap(), attr(part, "y2").unwrap())));
     }
-    (segs, dots, leaders)
+    (segs, dots, leaders, dashed)
 }
 fn seg_box(a: Pt, b: Pt, r: Bx) -> bool {
     let n = (((b.0 - a.0).abs() + (b.1 - a.1).abs()) / 0.5).ceil().clamp(1.0, 4000.0) as usize;
@@ -363,7 +365,7 @@ struct Res { beside: usize, leader: usize, under: usize, hidden_numbers: usize, 
 fn check(m: &mut Meter, s: &str, p: &Params) -> Res {
     let dr = last_drawn(p);
     let (w, h) = crate::figures::svg_size(s);
-    let (segs, dots, leaders) = scene(s);
+    let (segs, dots, leaders, dashed) = scene(s);
     let all: Vec<(String, String, Bx)> = texts(s).into_iter().filter_map(|(g, el)| m.ink(&el).map(|b| (g, el, b))).collect();
     let mut r = Res { hidden_numbers: dr.hidden_numbers, dropped_numbers: dr.dropped_numbers, ..Default::default() };
     for (i, (g, el, b)) in all.iter().enumerate() {
@@ -386,7 +388,10 @@ fn check(m: &mut Meter, s: &str, p: &Params) -> Res {
             r.leader += 1;
             // a leader runs from its own thing to its own text and crosses no stroke
             if pt_box(*e0, grow(*b, 5.0)) > 0.0 { r.problems.push(format!("leader does not reach its label {}", l.1)); }
-            for (a, c) in &segs { if seg_cross(*s0, *e0, *a, *c) { r.problems.push(format!("leader of {} crosses a stroke", l.1)); } }
+            // (it may cross one dashed line at an angle to reach a clear spot beyond it, never a solid one)
+            let mut dash_crossed = 0;
+            for (a, c) in segs.iter() { if seg_cross(*s0, *e0, *a, *c) { if dashed.contains(&(*a, *c)) { dash_crossed += 1; } else { r.problems.push(format!("leader of {} crosses a stroke", l.1)); } } }
+            if dash_crossed > 1 { r.problems.push(format!("leader of {} crosses {dash_crossed} dashed lines", l.1)); }
             // and starts on (or at the edge of the circle of) its own thing
             let start = l.3.iter().map(|(a, c)| dist_pt_seg(*s0, *a, *c)).fold(f64::MAX, f64::min);
             if start > 8.0 { r.problems.push(format!("leader of {} starts {start:.1} px from its own thing", l.1)); }
@@ -1213,4 +1218,31 @@ fn time_probe() {
     let t = std::time::Instant::now(); let v = md.verticals(); println!("verticals {:?} ({})", t.elapsed(), v.len());
     let t = std::time::Instant::now(); let pl = md.piles(); println!("piles {:?} ({})", t.elapsed(), pl.len());
     let t = std::time::Instant::now(); let _ = svg(&p); println!("svg {:?}", t.elapsed());
+}
+
+/// The third check's labels that went under the graph with room on it: the hole of (x² - 1)/((x - 1)(x - 3)) at (1, -1)
+/// is labelled on a leader across the dashed x = 3 (the 55 px between the hole and x = 3 is narrower than "removable",
+/// and the axis numbers fill the band above it); the staircase's jump at x = 1 sits over its filled end (1, 3), 12 px
+/// from the dashed x = 2 (a label centred across its own gap needs only a plain margin from the next thing); 1/tan x
+/// labels its holes at π/2 and 3π/2 on the graph (those at -π/2 and -3π/2 have no room: the y-axis numbers and the
+/// curve leave 66 px for a 76 px label).
+#[test]
+fn labels_with_room_on_the_graph_are_drawn_there() {
+    let on_graph = |p: &Params, x: &str| -> bool {
+        let _ = svg(p);
+        let d = last_drawn(p);
+        let xs = super::limits::Num::read(x).unwrap().v;
+        let m = model_of(p);
+        let px = |v: f64| { let (ds, _) = m.discontinuities(); ds.iter().any(|dd| (dd.x - v).abs() < 1e-9) };
+        assert!(px(xs), "{x} is a discontinuity");
+        d.labels.iter().any(|(k, _, spot, own)| *k == 'k' && !matches!(spot, Spot::Off) && own.iter().any(|(a, b)| (a.0 - b.0).abs() < 0.5 && { let (x0, _, _, _, ml, _, ux, _) = d.frame; (x0 + (a.0 - ml) / ux - xs).abs() < 0.05 }))
+    };
+    let r03 = with(json!({"pieces": "y = (x^2 - 1)/((x - 1)(x - 3))", "dots": "", "ask_at": "1, 3", "ask_inf": "Both", "ask_disc": true, "asym_eqs": true, "kind_labels": true}));
+    assert!(on_graph(&r03, "1"), "R03: the removable label at x = 1 is on the graph: {:?}", warnings(&r03));
+    assert!(!warnings(&r03).iter().any(|w| w.contains("under the graph")), "{:?}", warnings(&r03));
+    let stair = with(json!({"pieces": "y = 1, x < 0\ny = 2, 0 <= x < 1\ny = 3, 1 <= x < 2\ny = 1/(x - 2), x > 2", "label_size": "Medium", "kind_labels": true}));
+    assert!(on_graph(&stair, "1"), "the staircase's jump at x = 1 is on the graph: {:?}", warnings(&stair));
+    assert!(!warnings(&stair).iter().any(|w| w.contains("under the graph")), "{:?}", warnings(&stair));
+    let cot = with(json!({"pieces": "y = 1/tan(x)", "dots": "", "kind_labels": true, "ask_disc": true}));
+    for x in ["pi/2", "3pi/2"] { assert!(on_graph(&cot, x), "1/tan x: the hole at {x} is labelled on the graph: {:?}", warnings(&cot)); }
 }

@@ -869,13 +869,15 @@ fn box_pt(r: Bx, q: Pt) -> f64 { let dx = (r[0] - q.0).max(q.0 - r[2]).max(0.0);
 
 /// What a label must keep clear of.
 #[derive(Default)]
-struct Board { segs: Vec<(Pt, Pt)>, dots: Vec<(Pt, f64)>, boxes: Vec<Bx>, bounds: Bx, markers: Vec<(Pt, f64)> }
+/// (`dashed`: asymptotes, guides and band edges: no label sits on one, but a leader may cross one at an angle to reach a
+/// clear spot beyond it, as the hole of (x² - 1)/((x - 1)(x - 3)) at (1, -1) is labelled past x = 3)
+struct Board { segs: Vec<(Pt, Pt)>, dashed: Vec<(Pt, Pt)>, dots: Vec<(Pt, f64)>, boxes: Vec<Bx>, bounds: Bx, markers: Vec<(Pt, f64)> }
 impl Board {
     fn free(&self, b: Bx) -> bool {
         // (the page bounds are checked on the box itself: they are already inset; strokes and marks on the grown box)
         let r = [b[0] + 1.5, b[1] + 1.5, b[2] - 1.5, b[3] - 1.5];
         r[0] >= self.bounds[0] && r[1] >= self.bounds[1] && r[2] <= self.bounds[2] && r[3] <= self.bounds[3]
-            && !self.segs.iter().any(|(a, c)| seg_hits(*a, *c, b))
+            && !self.segs.iter().chain(self.dashed.iter()).any(|(a, c)| seg_hits(*a, *c, b))
             && !self.dots.iter().chain(self.markers.iter()).any(|(q, r)| box_pt(b, *q) < *r + 1.5)
             && !self.boxes.iter().any(|o| hit(*o, b))
     }
@@ -906,17 +908,24 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
     for c in &r.tries {
         let b = label_box_for(*c, &r.text, size);
         let own_d = near_own(b);
-        // (and clearly nearer its own thing than any other thing of its kind: another asymptote, another discontinuity)
-        let rival_ok = r.rivals.iter().all(|(a, c)| seg_box_dist(*a, *c, b) >= (own_d + 8.0).max(1.5 * own_d));
-        if board.free(grow(b, 1.5)) && rival_ok && nearest_is_own(board, b, own_d, &own_pts) {
+        // (and clearly nearer its own thing than any other thing of its kind: another asymptote, another discontinuity;
+        // a label centred across its own upright thing, just above or below it, reads as its own with a plain margin:
+        // "jump" over the filled end of a step, 12 px from the next asymptote)
+        let across = r.own.iter().any(|(a, c)| (a.0 - c.0).abs() < 0.5 && b[0] + 4.0 < a.0 && a.0 < b[2] - 4.0 && (b[3] <= a.1.min(c.1) || b[1] >= a.1.max(c.1)));
+        let clear = |d: f64| if across { d >= (own_d + 2.0).max(8.0) } else { d >= (own_d + 8.0).max(1.5 * own_d) };
+        let rival_ok = r.rivals.iter().all(|(a, c)| clear(seg_box_dist(*a, *c, b)));
+        if board.free(grow(b, 1.5)) && rival_ok && nearest_is_own(board, b, &own_pts, clear) {
             board.boxes.push(grow(b, 1.0));
             return Spot::Beside(*c);
         }
     }
     // a short leader from the thing to a clear spot, crossing nothing drawn
-    for rad in [30.0, 38.0, 46.0, 56.0, 68.0, 82.0, 100.0, 120.0] {
-        for k in 0..72 {
-            let ang = k as f64 * PI / 36.0;
+    // (in fine steps: between the branches of 1/tan x a clear spot is only a few px wider than the label)
+    // (first crossing nothing at all; only then crossing one dashed line)
+    for dashes in [0usize, 1] {
+    for rad in [30.0, 38.0, 46.0, 56.0, 64.0, 72.0, 82.0, 92.0, 104.0, 118.0, 134.0, 150.0] {
+        for k in 0..144 {
+            let ang = k as f64 * PI / 72.0;
             let c = (r.anchor.0 + rad * ang.cos() * 1.3, r.anchor.1 - rad * ang.sin());
             let b = label_box_for(c, &r.text, size);
             if !board.free(grow(b, 2.0)) { continue; }
@@ -931,12 +940,15 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
             let l = dx.hypot(dy);
             if l < 10.0 { continue; }
             let s = (r.anchor.0 + dx / l * r.gap, r.anchor.1 + dy / l * r.gap);
-            let crosses = board.segs.iter().any(|(a, c2)| seg_cross(s, e, *a, *c2)) || board.dots.iter().chain(board.markers.iter()).any(|(q, rr)| dist_seg(*q, s, e) < *rr + 1.0) || board.boxes.iter().any(|o| seg_hits(s, e, *o));
+            let crosses = board.segs.iter().any(|(a, c2)| seg_cross(s, e, *a, *c2))
+                || board.dashed.iter().filter(|(a, c2)| seg_cross(s, e, *a, *c2)).count() > dashes
+                || r.own.iter().any(|(a, c2)| seg_cross(s, e, *a, *c2)) || board.dots.iter().chain(board.markers.iter()).any(|(q, rr)| dist_seg(*q, s, e) < *rr + 1.0) || board.boxes.iter().any(|o| seg_hits(s, e, *o));
             if crosses { continue; }
             board.boxes.push(grow(b, 1.0));
             board.segs.push((s, e));
             return Spot::Leader(c, s, e);
         }
+    }
     }
     Spot::Off
 }
@@ -948,8 +960,8 @@ fn seg_box_dist(a: Pt, c: Pt, b: Bx) -> f64 {
 }
 /// The label is no nearer any other point mark than its own thing (a label among several circles names the right one).
 /// (clearly nearer: any other mark at least 8 px and half as far again further off than its own thing)
-fn nearest_is_own(board: &Board, b: Bx, own: f64, own_pts: &[Pt]) -> bool {
-    board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 0.5 && (o.1 - q.1).abs() < 0.5)).all(|(q, _)| box_pt(b, *q) >= (own + 8.0).max(1.5 * own))
+fn nearest_is_own(board: &Board, b: Bx, own_pts: &[Pt], clear: impl Fn(f64) -> bool) -> bool {
+    board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 0.5 && (o.1 - q.1).abs() < 0.5)).all(|(q, _)| clear(box_pt(b, *q)))
 }
 
 // ───────────────────────── render ─────────────────────────
@@ -1107,7 +1119,7 @@ fn build(p0: &Params) -> (String, Drawn) {
         for (x, t) in &verts {
             let (a, b) = ((sx(*x), rect[1]), (sx(*x), rect[3]));
             asym_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{aw}" stroke-dasharray="{adash}" data-lim="asym"/>"#, a.0, a.1, b.0, b.1, ink.asym));
-            board.segs.push((a, b));
+            board.dashed.push((a, b));
             dr.things.push((a, b));
             asym_lines.push(('v', eq_text("x", t), a, b));
             dr.verticals += 1;
@@ -1116,7 +1128,7 @@ fn build(p0: &Params) -> (String, Drawn) {
             if !inside_y(*y) { notes.push(format!("The horizontal asymptote y = {} is outside the window: change the y-axis to show it", t.replace('-', "\u{2212}"))); continue; }
             let (a, b) = ((rect[0], sy(*y)), (rect[2], sy(*y)));
             asym_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{aw}" stroke-dasharray="{adash}" data-lim="asym"/>"#, a.0, a.1, b.0, b.1, ink.asym));
-            board.segs.push((a, b));
+            board.dashed.push((a, b));
             dr.things.push((a, b));
             asym_lines.push(('h', format!("y = {t}"), a, b));
             dr.horizontals += 1;
@@ -1133,7 +1145,7 @@ fn build(p0: &Params) -> (String, Drawn) {
         if p.b("guide") {
             let (t, b) = ((x, rect[1]), (x, rect[3]));
             guide_svg.push_str(&format!(r#"<line x1="{x:.2}" y1="{:.2}" x2="{x:.2}" y2="{:.2}" stroke="{}" stroke-width="1.4" stroke-dasharray="4 3" data-lim="guide"/>"#, t.1, b.1, ink.guide));
-            board.segs.push((t, b));
+            board.dashed.push((t, b));
             dr.things.push((t, b));
         }
         let r = 6.0;
@@ -1249,8 +1261,8 @@ fn build(p0: &Params) -> (String, Drawn) {
                     let (px0, px1) = (sx(xl.max(g.x0)), sx(xh.min(g.x1)));
                     // (δ is the answer: the student copy has the ε band only)
                     if !stu { band_svg.push_str(&format!(r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="{}" fill-opacity="0.45"/>"#, px0, rect[1], (px1 - px0).max(0.0), g.ph, ink.band)); }
-                    for yv in [yl, yh] { if inside_y(yv) { let (a1, b1) = ((rect[0], sy(yv)), (rect[2], sy(yv))); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
-                    for xv in [xl, xh] { if inside_x(xv) && !stu { let (a1, b1) = ((sx(xv), rect[1]), (sx(xv), rect[3])); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.segs.push((a1, b1)); dr.things.push((a1, b1)); } }
+                    for yv in [yl, yh] { if inside_y(yv) { let (a1, b1) = ((rect[0], sy(yv)), (rect[2], sy(yv))); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.dashed.push((a1, b1)); dr.things.push((a1, b1)); } }
+                    for xv in [xl, xh] { if inside_x(xv) && !stu { let (a1, b1) = ((sx(xv), rect[1]), (sx(xv), rect[3])); band_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" stroke-dasharray="3 3" data-lim="eps"/>"#, a1.0, a1.1, b1.0, b1.1, ink.band_edge)); board.dashed.push((a1, b1)); dr.things.push((a1, b1)); } }
                     dr.eps_drawn = true;
                     eps_line = Some(match found {
                         Some(d) => { let dt = trim_dec(d, delta_places(d)); format!("\u{3b5} = {}, L = {lt}, a = {}: f stays within \u{3b5} of L for every x \u{2260} a within \u{3b4} of a, the widest \u{3b4} (rounded down) being \u{3b4} = {}", eps.text, a.text, if stu { BLANK.to_string() } else { dt }) }
