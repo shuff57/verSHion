@@ -501,5 +501,30 @@ mod tests {
                 assert!((v - target.v).abs() < 1e-12);
             }
         }
+        for (mode, formula, expected) in [
+            ("Recursive", "a_(n-1)/2+3", "Series: diverges"),
+            ("Explicit", "n/(n+1)", "Series: diverges"),
+            ("Explicit", "(-1)^n", "Series: diverges"),
+            ("Explicit", "1/n", "cannot determine"),
+        ] {
+            let mut p = Params::defaults(&params());
+            p.set_s("mode", mode);
+            p.set_s(
+                if mode == "Recursive" {
+                    "recurrence"
+                } else {
+                    "formula"
+                },
+                formula,
+            );
+            p.set_s("display", "Partial sums");
+            p.set_b("convergence", true);
+            assert!(
+                rows_for(&p, &data(&p).unwrap())
+                    .join(" ")
+                    .contains(expected),
+                "{mode} {formula}"
+            );
+        }
     }
 }

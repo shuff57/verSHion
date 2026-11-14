@@ -1896,9 +1896,12 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
         let state = if display(p) == "Partial sums" {
             if slim.is_some() {
                 "converges"
-            } else if matches!(p.s("mode"), "Arithmetic" | "Geometric")
-                && !state.contains("cannot determine")
+            } else if !state.contains("cannot determine")
+                && (state.contains("diverges")
+                    || lim.is_some_and(|v| v.q.map_or(v.v.abs() > 1e-12, |(a, _)| a != 0)))
             {
+                // A convergent series must have terms tending to zero.
+
                 "diverges"
             } else {
                 "cannot determine"
