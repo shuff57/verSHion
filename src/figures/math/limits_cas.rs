@@ -1396,7 +1396,7 @@ thread_local! { static WORK: std::cell::Cell<u64> = const { std::cell::Cell::new
 /// The work the analysis of one figure may do, counted in steps of exact arithmetic (sums and products of exact
 /// constants, terms of series), not in time: past it, limits are not worked out (Unknown) and searches are not complete,
 /// so the key leaves its answers as lines to fill in. floor(tan(x²)) would otherwise work for minutes.
-pub const BUDGET: u64 = 2_000_000;
+pub const BUDGET: u64 = 800_000;
 fn tick(n: usize) { WORK.with(|w| w.set(w.get().saturating_add(n as u64))); }
 /// Start counting afresh (a new figure).
 pub fn budget_reset() { WORK.with(|w| w.set(0)); }

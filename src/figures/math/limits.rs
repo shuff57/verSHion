@@ -791,7 +791,8 @@ fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
                 let k = key(t);
                 if k != prev {
                     let (mut a, mut b) = (lo + (hi - lo) * (i - 1) as f64 / n as f64, t);
-                    for _ in 0..60 { let m = 0.5 * (a + b); if key(m) == prev { a = m; } else { b = m; } }
+                    // (30 halvings: a cut within a billionth of the window's width)
+                    for _ in 0..30 { let m = 0.5 * (a + b); if key(m) == prev { a = m; } else { b = m; } }
                     cuts.push(0.5 * (a + b));
                     prev = k;
                 }
@@ -802,8 +803,9 @@ fn rows_of(pc: &Piece, x0: f64, x1: f64) -> Vec<String> {
             cuts.sort_by(|a, b| a.partial_cmp(b).unwrap());
             cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
             // (stretches too narrow to see, such as floor(1/x) near 0, are not drawn)
-            let min_w = (x1 - x0) / 2000.0;
-            cuts.windows(2).filter(|w| w[1] - w[0] >= min_w).take(1500).map(|w| {
+            // (and none narrower than about a pixel: at most 600 stretches)
+            let min_w = (x1 - x0) / 600.0;
+            cuts.windows(2).filter(|w| w[1] - w[0] >= min_w).take(600).map(|w| {
                 // (the level of a stretch is its value at an interior point, never the middle alone: floor(4 - x²) between
                 // the cuts at ±1 is 4 only at the middle, x = 0, a single point; two points off the middle agree on 3)
                 let pt = |t: f64| w[0] + (w[1] - w[0]) * t;

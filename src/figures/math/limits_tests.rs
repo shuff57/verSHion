@@ -1183,9 +1183,10 @@ fn graphs_with_thousands_of_poles_draw_quickly_and_say_so() {
         ("y = floor(tan(x))", -6.0, 10.0, "pile up without end near x = \u{2212}3\u{3c0}/2"),
     ] {
         let p = with(json!({"pieces": pieces, "dots": "", "xmin": x0, "xmax": x1, "ask_disc": true, "kind_labels": true}));
-        let t0 = std::time::Instant::now();
+        // (the fastest of three fresh builds, each with its own title so none comes from the cache: the whole suite runs
+        // alongside and slows any one measurement)
+        let ms = (0..3).map(|i| { let q = with(json!({"pieces": pieces, "dots": "", "xmin": x0, "xmax": x1, "ask_disc": true, "kind_labels": true, "title": format!("timing {i}")})); let t0 = thread_cpu(); let _ = svg(&q); ((thread_cpu() - t0) * 1000.0) as u128 }).min().unwrap();
         let _ = svg(&p);
-        let ms = t0.elapsed().as_millis();
         assert!(ms < 500, "{pieces} on {x0}..{x1} took {ms} ms");
         let w = warnings(&p);
         assert!(w.iter().any(|n| n.contains(says)), "{pieces}: {w:?}");
@@ -1557,13 +1558,19 @@ fn adversarial_compositions_finish_quickly() {
         for (x0, x1) in [(-6.0, 10.0), (-100.0, 100.0), (-10.0, 10.0)] {
             let p = with(json!({"pieces": format!("y = {f}"), "dots": "", "ask_disc": true, "kind_labels": true, "xmin": x0, "xmax": x1}));
             let time = |p: Params| -> Option<f64> {
+                // (a fresh build each time: the cache keeps the last few)
+                let mut p = p;
+                static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                p.0.insert("title".into(), crate::figures::Value::S(format!("t{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed))));
                 let (tx, rx) = std::sync::mpsc::channel();
-                std::thread::spawn(move || { let t = std::time::Instant::now(); let _ = svg(&p); let _ = tx.send(t.elapsed().as_secs_f64()); });
+                // (the render thread's own CPU time: the rest of the suite runs alongside)
+                std::thread::spawn(move || { let t = thread_cpu(); let _ = svg(&p); let _ = tx.send(thread_cpu() - t); });
                 rx.recv_timeout(std::time::Duration::from_secs(5)).ok()
             };
             match time(p.clone()) {
                 None => fails.push(format!("{f} on {x0}..{x1}: still running after 5 s")),
-                Some(t) if t >= 0.5 => if time(p.clone()).is_none_or(|t2| t2 >= 0.5) { fails.push(format!("{f} on {x0}..{x1}: {t:.2} s")); },
+                // (the fastest of three: the whole suite runs alongside)
+                Some(t) if t >= 0.5 => if (0..2).all(|_| time(p.clone()).is_none_or(|t2| t2 >= 0.5)) { fails.push(format!("{f} on {x0}..{x1}: {t:.2} s")); },
                 _ => {}
             }
         }
@@ -1642,4 +1649,19 @@ fn small_things_of_the_fifth_check() {
     let md = model_of(&with(json!({"pieces": "y = sin(x)/ln(x)", "dots": ""})));
     if md.at_inf(1.0) == Some(Lim::Dne) { fails.push("sin(x)/ln(x) at ∞: does not exist".into()); }
     assert!(fails.is_empty(), "{}", fails.join("\n"));
+}
+
+/// Seconds of CPU this thread has used (from /proc on Linux, in 10 ms ticks): what a render costs, whatever else the
+/// machine is running; elsewhere, wall time.
+fn thread_cpu() -> f64 {
+    #[cfg(target_os = "linux")]
+    if let Ok(st) = std::fs::read_to_string("/proc/thread-self/stat") {
+        // (fields after the command's closing bracket: utime and stime are the 12th and 13th)
+        if let Some(rest) = st.rsplit_once(')').map(|r| r.1) {
+            let f: Vec<&str> = rest.split_whitespace().collect();
+            if let (Some(u), Some(k)) = (f.get(11).and_then(|v| v.parse::<f64>().ok()), f.get(12).and_then(|v| v.parse::<f64>().ok())) { return (u + k) / 100.0; }
+        }
+    }
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
 }
