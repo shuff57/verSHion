@@ -241,7 +241,7 @@ fn rows() -> Vec<Row> {
         ("A72", "y = sqrt(x^2)/x", "", "0", "-1, 1, DNE, undef", "1, -1", "0 jump", "", "1, -1", n()),
         // sin 2x/sin 3x: 2/3 at 0; sin 3x = 0 at ±π/3 where sin 2x ≠ 0
         // (named: the limits of sin 2x/sin 3x at ±∞ are not established by the analysis, so the key leaves lines for them)
-        ("A73", "y = sin(2x)/sin(3x)", "", "0", "2/3, 2/3, 2/3, undef", "?, ?", "-π/3 infinite, 0 removable, π/3 infinite", "-π/3, π/3", "", w(-2.0, 2.0, -6.0, 6.0)),
+        ("A73", "y = sin(2x)/sin(3x)", "", "0", "2/3, 2/3, 2/3, undef", "DNE, DNE", "-π/3 infinite, 0 removable, π/3 infinite", "-π/3, π/3", "", w(-2.0, 2.0, -6.0, 6.0)),
         ("A74", "y = x^3 - x", "", "0", "0, 0, 0, 0", "∞, -∞", "", "", "", n()),
         ("A75", "y = 4 - (x - 1)^2/3, x < 1, x ≠ -2\ny = 2 + 3/(x - 4), x >= 1", "(-2, 3)", "-2; 1; 4", "1, 1, 1, 3 | 4, 1, DNE, 1 | -∞, ∞, DNE, undef", "2, -∞", "-2 removable, 1 jump, 4 infinite", "4", "2", n()),
         ("A76", "y = 1/(x^2 + 2x - 3)", "", "1; -3", "-∞, ∞, DNE, undef | ∞, -∞, DNE, undef", "0, 0", "-3 infinite, 1 infinite", "-3, 1", "0", n()),
@@ -337,8 +337,8 @@ fn rows() -> Vec<Row> {
         // floor x + floor(-x): 0 at whole numbers, -1 between (no limit at ±∞: named)
         ("D12", "y = floor(x) + floor(-x)", "", "1", "-1, -1, -1, 0", "?, ?", "-3 removable, -2 removable, -1 removable, 0 removable, 1 removable, 2 removable, 3 removable", "", "", w(-3.0, 3.0, -2.0, 2.0)),
         ("D13", "y = floor(x)^2", "", "0; 1", "1, 0, DNE, 0 | 0, 1, DNE, 1", "∞, ∞", "-2 jump, -1 jump, 0 jump, 1 jump, 2 jump", "", "", w(-2.0, 2.0, -1.0, 5.0)),
-        // cos(π floor x) = (-1)^floor x: 1 then -1 at 1 (it alternates for ever at ±∞: named)
-        ("D14", "y = cos(pi floor(x))", "", "1", "1, -1, DNE, -1", "?, ?", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -2.0, 2.0)),
+        // cos(π floor x) = (-1)^floor x: 1 then -1 at 1 (it alternates for ever at ±∞: no limit)
+        ("D14", "y = cos(pi floor(x))", "", "1", "1, -1, DNE, -1", "DNE, DNE", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -2.0, 2.0)),
         ("D15", "y = floor(x) - x", "", "2; 0.5", "-1, 0, DNE, 0 | -0.5, -0.5, -0.5, -0.5", "DNE, DNE", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -2.0, 2.0)),
         ("D16", "y = abs(sin(x))", "", "0", "0, 0, 0, 0", "DNE, DNE", "", "", "", n()),
         ("D17", "y = abs(x - 1) + abs(x + 1)", "", "1", "2, 2, 2, 2", "∞, ∞", "", "", "", n()),

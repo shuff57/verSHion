@@ -1176,8 +1176,8 @@ fn graphs_with_thousands_of_poles_draw_quickly_and_say_so() {
         ("y = floor(10sin(x^2))", -10.0, 10.0, "too many to work out one by one"),
         ("y = floor(10sin(x^2))", -100.0, 100.0, "too many to work out one by one"),
         ("y = tan(exp(x))", -100.0, 100.0, "too many to work out one by one"),
-        ("y = 1/tan(x^2)", -10.0, 10.0, "too many to work out one by one"),
-        ("y = 1/tan(x^2)", -6.0, 10.0, "too many to work out one by one"),
+        ("y = 1/tan(x^2)", -10.0, 10.0, "line to fill in"),
+        ("y = 1/tan(x^2)", -6.0, 10.0, "line to fill in"),
         ("y = floor(sin(1/x))", -1.0, 1.0, "pile up without end near x = 0"),
         // (a pile at every pole: the wider searches for the outside note are skipped)
         ("y = floor(tan(x))", -6.0, 10.0, "pile up without end near x = \u{2212}3\u{3c0}/2"),
@@ -1225,9 +1225,10 @@ fn time_probe() {
     let t = std::time::Instant::now(); let md = model_of(&p); println!("model {:?}", t.elapsed());
     if let super::limits::Src::Formula { x } = &md.pieces[0].src {
         let t = std::time::Instant::now(); let b = super::limits::cas::busy(x, md.x0, md.x1); println!("busy {:?} {b}", t.elapsed());
-        let t = std::time::Instant::now(); let n = super::limits::cas::piles_in(x, md.x0, md.x1).0.len(); println!("piles_in {:?} {n}", t.elapsed());
+        let t = std::time::Instant::now(); let (pp, all) = super::limits::cas::piles_in(x, md.x0, md.x1); println!("piles_in {:?} {} all {all} work {}", t.elapsed(), pp.len(), super::limits::cas::work());
         let t = std::time::Instant::now(); let n = super::limits::cas::floors_inert(x, md.x0, md.x1).is_some(); println!("inert {:?} {n}", t.elapsed());
     }
+    let t = std::time::Instant::now(); let pl0 = md.piles(); println!("piles first {:?} ({:?}) work {}", t.elapsed(), pl0.iter().map(|k| k.show()).collect::<Vec<_>>(), super::limits::cas::work());
     let t = std::time::Instant::now(); let d = md.discontinuities(); println!("discs {:?} ({})", t.elapsed(), d.0.len());
     let t = std::time::Instant::now(); let o = md.outside(); println!("outside {:?} ({})", t.elapsed(), o.0.len());
     let t = std::time::Instant::now(); let v = md.verticals(); println!("verticals {:?} ({})", t.elapsed(), v.len());
@@ -1594,5 +1595,51 @@ fn piles_are_written_only_when_all_are_established() {
     // and on the default window it is still said (five poles)
     let k = key("y = floor(tan(x))", -6.0, 10.0);
     if !k.contains("piling up") { fails.push(format!("floor(tan x): {k}")); }
+    assert!(fails.is_empty(), "{}", fails.join("\n"));
+}
+
+/// The fifth check's small things and the answers it saw lost: floor(5 - |x|) cut exactly at whole numbers; roots
+/// written √(14π)/2, not √14·π^(1/2)/2; a squeezed column of y numbers thinned, not drawn over itself; open circles at every
+/// end of 0^sin(x)'s domain; floor(1 - x²)'s list of jumps, x e^(1/x) → ∞ at 0⁺, the piles of floor(1/x) - 1/x and
+/// x² floor(1/x²) restored; sin 5x/sin 2x and |sin x|/sin x have no limit at ±∞.
+#[test]
+fn small_things_of_the_fifth_check() {
+    let mut fails = vec![];
+    // floor(5 - |x|): every cut exact, the list complete
+    let p = with(json!({"pieces": "y = floor(5 - abs(x))", "dots": "", "ask_disc": true, "kind_labels": true}));
+    let (ds, done) = model_of(&p).discontinuities();
+    if !done || ds.len() != 17 || ds.iter().any(|d| d.text.contains('\u{2248}')) || !ds.iter().any(|d| d.text == "0" && d.kind == "removable") { fails.push(format!("floor(5 - |x|): {done} {:?}", ds.iter().map(|d| (&d.text, d.kind)).collect::<Vec<_>>())); }
+    if warnings(&p).iter().any(|w| w.contains('\u{2248}')) { fails.push(format!("floor(5 - |x|): {:?}", warnings(&p))); }
+    // roots of a multiple of π under one root
+    let n = warnings(&with(json!({"pieces": "y = tan(x^2)", "dots": "", "ask_disc": true, "xmin": -2.0, "xmax": 2.0}))).join(" ");
+    if n.contains("^(1/2)") || !n.contains("\u{221a}(6\u{3c0})/2") { fails.push(format!("root forms: {n}")); }
+    // a squeezed column of y numbers: no two drawn on each other
+    let s = svg(&with(json!({"pieces": "y = floor(sin(x))", "dots": "", "xmin": -100.0, "xmax": 100.0, "square": true})));
+    let mut ys: Vec<f64> = s.split("<text").filter(|t| t.contains(r#"text-anchor="end""#)).filter_map(|t| attr(t, "y")).collect();
+    ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    // (each number is drawn twice, a halo under it)
+    ys.dedup_by(|a, b| (*a - *b).abs() < 0.1);
+    if ys.windows(2).any(|w| w[1] - w[0] < 8.0) { fails.push(format!("y numbers on each other: {ys:?}")); }
+    // 0^sin(x): an open circle at each end of its domain in the window (-π, 0, π, 2π, 3π)
+    let p = with(json!({"pieces": "y = 0^sin(x)", "dots": "", "ask_at": "pi"}));
+    let _ = svg(&p);
+    let opens = last_drawn(&p).circles.iter().filter(|c| !c.closed).count();
+    if opens != 5 { fails.push(format!("0^sin(x): {opens} open circles")); }
+    // restored answers
+    let (ds, done) = model_of(&with(json!({"pieces": "y = floor(1 - x^2)", "dots": ""}))).discontinuities();
+    if !done || ds.len() < 60 || ds.iter().any(|d| d.kind == UNSURE) { fails.push(format!("floor(1 - x²): {done}, {} places", ds.len())); }
+    let md = model_of(&with(json!({"pieces": "y = x exp(1/x)", "dots": ""})));
+    if md.side(&Num::read("0").unwrap().k, 1.0) != Lim::PInf { fails.push(format!("x e^(1/x) at 0+: {:?}", md.side(&Num::read("0").unwrap().k, 1.0))); }
+    for f in ["y = floor(1/x) - 1/x", "y = x^2 floor(1/x^2)"] {
+        let t = plain_text(&svg(&with(json!({"pieces": f, "dots": "", "ask_at": "", "ask_disc": true, "xmin": -3.0, "xmax": 3.0}))));
+        if !(t.contains("infinitely many") && t.contains("piling up near x = 0")) { fails.push(format!("{f}: {}", &t[t.find("Where is").unwrap_or(0)..])); }
+    }
+    for f in ["y = sin(5x)/sin(2x)", "y = abs(sin(x))/sin(x)"] {
+        let md = model_of(&with(json!({"pieces": f, "dots": ""})));
+        for dir in [1.0, -1.0] { if md.at_inf(dir) != Some(Lim::Dne) { fails.push(format!("{f} at {dir}∞: {:?}", md.at_inf(dir))); } }
+    }
+    // and a slowly dying oscillation still has its limit, not "does not exist"
+    let md = model_of(&with(json!({"pieces": "y = sin(x)/ln(x)", "dots": ""})));
+    if md.at_inf(1.0) == Some(Lim::Dne) { fails.push("sin(x)/ln(x) at ∞: does not exist".into()); }
     assert!(fails.is_empty(), "{}", fails.join("\n"));
 }

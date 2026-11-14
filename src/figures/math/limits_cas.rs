@@ -429,10 +429,15 @@ impl K {
             let mut by_den: std::collections::BTreeMap<i128, Vec<(u128, i128)>> = Default::default();
             for (a, p) in m { if let AK::Prime(pr) = a.kind { by_den.entry(p.d).or_default().push((pr, p.n)); } }
             let mut roots: Vec<String> = vec![];
+            // (√π goes under one root with a square root: √(82π), not √82·π^(1/2))
+            let half = Q::new(1, 2).unwrap();
+            let pi_half = m.iter().any(|(a, p)| a.kind == AK::Pi && *p == half);
+            let mut pi_used = false;
             for (den, ps) in by_den {
                 let rad: u128 = ps.iter().map(|(pr, n)| pr.pow(*n as u32)).product();
-                roots.push(match den { 2 => format!("\u{221a}{rad}"), 3 => format!("\u{221b}{rad}"), d => format!("{rad}^(1/{d})") });
+                roots.push(match den { 2 if pi_half => { pi_used = true; format!("\u{221a}({rad}\u{3c0})") } 2 => format!("\u{221a}{rad}"), 3 => format!("\u{221b}{rad}"), d => format!("{rad}^(1/{d})") });
             }
+            if pi_half && !pi_used { roots.push("\u{221a}\u{3c0}".into()); }
             // the factors over the line (positive powers) and under it (negative powers, and 1/(...) atoms), as a textbook
             // writes them: 1/sin 1, 2/π, e^2/(1 + e^2), tan 1 for sin 1/cos 1
             let mut top: Vec<String> = vec![];
@@ -448,6 +453,8 @@ impl K {
                 match a.kind {
                     AK::Prime(_) => {}
                     AK::E => side.push(pw("e", ap, false)),
+                    AK::Pi if !under && ap == half => {}
+                    AK::Pi if ap == half => side.push("\u{221a}\u{3c0}".into()),
                     AK::Pi => side.push(pw("\u{3c0}", ap, false)),
                     _ => match a.show.strip_prefix("1/(").and_then(|r| r.strip_suffix(')')).filter(|r| balanced(r)) {
                         // 1/(1 + e^(-2)): its sum goes under the line
@@ -1504,8 +1511,25 @@ pub fn limit(e: &X, at: &At) -> L {
         };
         break;
     }
+    // (at ±∞, a formula of sines and cosines the series cannot settle, as |sin x|/sin x or sin 5x/sin 2x: no limit when a
+    // pole is in every band further out, or the values keep spreading by an amount that does not shrink at all)
+    if matches!(out, L::Unknown) && matches!(at, At::Inf(_)) && trig_only(e) && dne_strict(e, at) { return L::Dne; }
     if confirm(e, at, &out) { out } else { L::Unknown }
 }
+/// Built from sines, cosines and their arguments, with no logarithm or power with x in it.
+fn trig_only(e: &X) -> bool {
+    fn has_trig(e: &X) -> bool { match e { X::F(Fun::Sin | Fun::Cos, _) => true, X::Add(v) | X::Mul(v) => v.iter().any(has_trig), X::Neg(a) | X::Inv(a) | X::F(_, a) => has_trig(a), X::Pow(b, _) => has_trig(b), _ => false } }
+    fn ok(e: &X) -> bool { match e { X::C(_) | X::V => true, X::F(Fun::Ln, _) => false, X::Pow(b, p) => !p.has_x() && ok(b), X::Add(v) | X::Mul(v) => v.iter().all(ok), X::Neg(a) | X::Inv(a) | X::F(_, a) => ok(a) } }
+    has_trig(e) && ok(e)
+}
+/// No limit at ±∞, numerically and strictly: a pole in every band, or a spread that keeps at least 90% of its size.
+fn dne_strict(e: &X, at: &At) -> bool {
+    let At::Inf(s) = at else { return false };
+    let amp = |p: f64, q: f64| -> f64 { let v: Vec<f64> = (0..=600).filter_map(|i| ev(e, p + (q - p) * (i as f64 + 0.318) / 600.7)).filter(|y| y.abs() < 1e6).collect(); if v.len() < 20 { return 0.0; } let (lo, hi) = v.iter().fold((f64::MAX, f64::MIN), |(a, b), y| (a.min(*y), b.max(*y))); hi - lo };
+    let amps: Vec<f64> = [137.0, 1370.0, 13700.0].iter().map(|x| amp(*s as f64 * x, *s as f64 * 2.0 * x)).collect();
+    (amps[0] > 1e-6 && amps.iter().all(|a| *a >= 0.9 * amps[0])) || confirm(e, at, &L::Dne) && amps.iter().all(|a| *a > 1e-6) && amps[2] >= 0.9 * amps[0]
+}
+
 fn confirm(e: &X, at: &At, l: &L) -> bool {
     let xs: Vec<f64> = match at {
         // (at offsets that are no round numbers, so a power such as x^(1/x) is not caught at a whole-number exponent)
@@ -1531,7 +1555,9 @@ fn confirm(e: &X, at: &At, l: &L) -> bool {
         }
         L::PInf | L::NInf => {
             let sg = if matches!(l, L::PInf) { 1.0 } else { -1.0 };
-            let v: Vec<f64> = ys.iter().flatten().copied().collect();
+            // (a value past 1e200 has overflowed on the way, as x e^(1/x) near 0: it counts as infinite, not as smaller
+            // than its neighbour)
+            let v: Vec<f64> = ys.iter().flatten().map(|y| if y.abs() > 1e200 { y.signum() * f64::INFINITY } else { *y }).collect();
             // (values that overflow past the largest number count as growing)
             let n = v.len();
             n >= 2 && v[n - 1] * sg > 0.0 && v[n - 1].abs() > v[0].abs() && (n < 3 || matches!(at, At::Inf(_)) || (v[n - 1].abs() >= v[n - 3].abs() && v[n - 2] * sg > 0.0))
@@ -1607,6 +1633,8 @@ fn sure_pos(e: &X) -> bool {
 
 pub fn zeros(e: &X, lo: f64, hi: f64) -> (Vec<K>, bool) {
     if spent() { return (vec![], false); }
+    // (a sum inside a sum is one sum: (5 - |x|) - k is 5 - |x| - k, solved for |x|)
+    if let X::Add(v) = e { if v.iter().any(|t| matches!(t, X::Add(_))) { let flat: Vec<X> = v.iter().flat_map(|t| if let X::Add(w) = t { w.clone() } else { vec![t.clone()] }).collect(); return zeros(&X::Add(flat), lo, hi); } }
     if sure_pos(e) { return (vec![], true); }
     let inside = |k: &K| { let v = k.value(); v >= lo - 1e-9 && v <= hi + 1e-9 };
     if let Some(mut c) = poly(e) {

@@ -433,11 +433,11 @@ pub const UNSURE: &str = "cannot be determined";
 
 /// The function the params describe, with every answer about it.
 #[derive(Clone, Debug)]
-pub struct Model { pub pieces: Vec<Piece>, pub dots: Vec<Dot>, pub asks: Vec<Num>, pub notes: Vec<String>, pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64, cands: std::cell::OnceCell<(Vec<K>, bool)>, discs: std::cell::OnceCell<(Vec<Disc>, bool)>, many: std::cell::OnceCell<bool>, sides: std::cell::RefCell<std::collections::HashMap<(u64, bool, bool), Lim>> }
+pub struct Model { pub pieces: Vec<Piece>, pub dots: Vec<Dot>, pub asks: Vec<Num>, pub notes: Vec<String>, pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64, cands: std::cell::OnceCell<(Vec<K>, bool)>, discs: std::cell::OnceCell<(Vec<Disc>, bool)>, many: std::cell::OnceCell<bool>, piles: std::cell::OnceCell<Vec<K>>, sides: std::cell::RefCell<std::collections::HashMap<(u64, bool, bool), Lim>> }
 
 /// More places where something may happen in the window than are worked out one by one (tan(x²) on -100..100 has
 /// thousands of poles): past this the key says there are too many instead of listing them.
-pub const MANY: usize = 60;
+pub const MANY: usize = 200;
 
 impl Model {
     pub(super) fn new(p: &Params, g: &GridL) -> Model {
@@ -468,7 +468,7 @@ impl Model {
         }
         let mut dots = read_dots(p.s("dots"), &mut notes);
         let asks = read_asks(p.s("ask_at"), &mut notes);
-        let mut m = Model { pieces, dots: vec![], asks, notes, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, xs: g.xs, cands: std::cell::OnceCell::new(), discs: std::cell::OnceCell::new(), many: std::cell::OnceCell::new(), sides: Default::default() };
+        let mut m = Model { pieces, dots: vec![], asks, notes, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, xs: g.xs, cands: std::cell::OnceCell::new(), discs: std::cell::OnceCell::new(), many: std::cell::OnceCell::new(), piles: std::cell::OnceCell::new(), sides: Default::default() };
         // a single point where a piece already has a different value would give f two values: it is not drawn
         dots.retain(|d| {
             match m.piece_value(&d.x.k) {
@@ -619,7 +619,8 @@ impl Model {
     /// Where in the window discontinuities pile up without end (the cuts of floor(ln x) near 0), as the key writes them.
     /// Only where that is established: f must jump at cuts in three bands ever nearer the point (from one side), each
     /// cut found exactly and its kind worked out; cuts of floors whose values do not matter are no discontinuities.
-    pub fn piles(&self) -> Vec<K> {
+    pub fn piles(&self) -> Vec<K> { self.piles.get_or_init(|| self.piles_of()).clone() }
+    fn piles_of(&self) -> Vec<K> {
         let mut out: Vec<K> = vec![];
         for pc in &self.pieces {
             let Src::Formula { x } = &pc.src else { continue };
@@ -1189,6 +1190,8 @@ fn build(p0: &Params) -> (String, Drawn) {
     dr.frame = (g.x0, g.x1, g.y0, g.y1, g.ml, g.mt, g.ux, g.uy);
 
     let m = Model::new(p, &g);
+    // (where cuts pile up is worked out first, before the work budget goes on the points one by one)
+    let _ = m.piles();
     notes.extend(m.notes.iter().cloned());
 
     let mut board = Board { bounds: [rect[0] + 2.0, rect[1] + 2.0, rect[2] - 2.0, rect[3] - 2.0], ..Default::default() };
@@ -1537,6 +1540,14 @@ fn build(p0: &Params) -> (String, Drawn) {
                     break;
                 }
             }
+        }
+        // a column of y numbers squeezed together (Square cells on a wide window): from the bottom up, each kept only when
+        // clear of the last kept
+        let mut col: Vec<usize> = (0..gtexts.len()).filter(|&i| gtexts[i].number && !is_x(&gtexts[i]) && !gtexts[i].el.is_empty()).collect();
+        col.sort_by(|&a, &b| gtexts[b].bx[1].partial_cmp(&gtexts[a].bx[1]).unwrap_or(std::cmp::Ordering::Equal));
+        let mut last: Option<Bx> = None;
+        for i in col {
+            if last.is_some_and(|l| hit(grow(l, 1.0), gtexts[i].bx)) { gtexts[i].el.clear(); gtexts[i].number = false; dr.dropped_numbers += 1; } else { last = Some(gtexts[i].bx); }
         }
     }
     if dr.dropped_numbers > 0 { notes.push("Some axis numbers are left out where they would run into each other: a smaller label size or a larger count by keeps them all".into()); }
