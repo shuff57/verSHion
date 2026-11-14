@@ -357,3 +357,18 @@ fn show_cuts() {
     let d2 = sym::deriv(&sym::deriv(&e));
     println!("zeros f'' {:?}", exact::zeros(&d2, -5.0, 5.0).map(|v| v.iter().map(exact::text).collect::<Vec<_>>()));
 }
+
+#[test]
+#[ignore]
+fn render_list() {
+    // VERSHION_DG_LIST=<file of "name<TAB>params json" lines> VERSHION_DG_PNGS=<dir>: each case's PNG, for a look
+    let (Ok(list), Ok(dir)) = (crate::env_var("VERSHION_DG_LIST"), crate::env_var("VERSHION_DG_PNGS")) else { return };
+    let d = def();
+    for line in std::fs::read_to_string(list).unwrap().lines().filter(|l| !l.trim().is_empty()) {
+        let (name, j) = line.split_once('\t').unwrap();
+        let p = crate::figures::params_from_json(&d, &serde_json::from_str(j).unwrap());
+        let bl = build(&p);
+        println!("{name}: {:?}", bl.notes);
+        std::fs::write(format!("{dir}/{name}.png"), crate::figures::to_png(&bl.svg, 1.0).unwrap()).unwrap();
+    }
+}
