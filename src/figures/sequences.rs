@@ -1026,7 +1026,7 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "limit" => p.b(SHOW_ANSWERS) && can_limit(p),
         "point_values" => p.s("layout") != "Number line",
         "display" => p.s("layout") != "Two aligned graphs",
-        "grid" | "step" => p.s("layout") != "Number line",
+        "grid" | "step" | "xlabel" => p.s("layout") != "Number line",
         "epsilon" => {
             can_limit(p)
                 && p.b("band")
@@ -1182,8 +1182,8 @@ pub fn warnings(p: &Params) -> Vec<String> {
         }
     }
     for k in ["xlabel", "ylabel"] {
-        if axis_name(p, k).is_empty() && !p.s(k).is_empty() {
-            w.push("Choose an axis name without sequence symbols; shorten long names or choose smaller labels to fit beside the arrow.".into());
+        if relevant(k, p) && axis_name(p, k) != p.s(k) {
+            w.push("The axis name is shortened to a fitting word, or omitted if no word fits. Use a short name without sequence symbols beside the arrow.".into());
         }
     }
     if !p.b(SHOW_ANSWERS) && p.s("task") == "Missing terms" {
@@ -1207,13 +1207,17 @@ fn axis_name<'a>(p: &'a Params, key: &str) -> &'a str {
     if t == default {
         return t;
     }
-    if circle::tw(t, 14.0 * svg::label_factor(p.s("label_size")), false) > 60.0
-        || t.chars().count() > 6
-        || matches!(t.trim(), "n" | "a" | "r" | "d" | "S" | "e" | "pi" | "π")
-    {
-        ""
-    } else {
+    if matches!(t.trim(), "n" | "a" | "r" | "d" | "S" | "e" | "pi" | "π") {
+        return "";
+    }
+    let fits = |s: &str| {
+        circle::tw(s, 14.0 * svg::label_factor(p.s("label_size")), false) <= 60.0
+            && s.chars().count() <= 8
+    };
+    if fits(t) {
         t
+    } else {
+        t.split_whitespace().find(|word| fits(word)).unwrap_or("")
     }
 }
 fn coefficient(p: &Params, key: &str) -> String {
@@ -1308,7 +1312,19 @@ fn segments_cross(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) ->
     f > 0.04 && f <= 1.0 && g >= 0.0 && g <= 1.0
 }
 fn plot_height(p: &Params) -> f64 {
-    560.0 * svg::label_factor(p.s("label_size")).max(1.0)
+    (if p.s("layout") == "Number line" {
+        220.0
+    } else {
+        560.0
+    }) * svg::label_factor(p.s("label_size")).max(1.0)
+}
+fn point_text(n: N, fs: f64) -> String {
+    let text = n.text();
+    if circle::tw(&text, fs, false) > 115.0 {
+        format!("≈ {}", approximation(n.v))
+    } else {
+        text
+    }
 }
 fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
     if !p.b("point_values") || p.s("layout") == "Number line" {
@@ -1348,7 +1364,7 @@ fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
                 185.0 + j as f64 * (width - 305.0) / (count - 1) as f64,
                 bottom - (v.v.clamp(lo, hi) - lo) / (hi - lo) * plot_height(p),
             );
-            points.push((s, j, pos, v.text()));
+            points.push((s, j, pos, point_text(*v, fs)));
             if p.b("join") {
                 if let Some(a) = prev {
                     guides.push((a, pos));
@@ -1472,10 +1488,9 @@ fn point_labels(p: &Params, d: &Data, g: usize) -> (Vec<PointLabel>, usize) {
                 }
                 let center = ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0);
                 let distance = |pt: (f64, f64)| (pt.0 - center.0).hypot(pt.1 - center.1);
-                if points
-                    .iter()
-                    .any(|(_, _, pt, _)| distance(*pt) + 0.01 < distance(*pos))
-                {
+                if points.iter().any(|(_, _, pt, _)| {
+                    (pt.0 - pos.0).hypot(pt.1 - pos.1) > 0.1 && distance(*pt) < distance(*pos) + 2.0
+                }) {
                     continue;
                 }
                 if lo <= 0.0
@@ -1835,7 +1850,10 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
                 ))
             }
             if p.b("sums") {
-                row.push_str(&format!("     S{} {sum}", subscript(j + start)))
+                row.push_str(&format!(
+                    "\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}S{} {sum}",
+                    subscript(j + start)
+                ))
             }
             rows.push(row)
         }
@@ -1844,8 +1862,16 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
 }
 fn canvas_width(p: &Params, count: usize) -> f64 {
     let fs = 14.0 * svg::label_factor(p.s("label_size"));
+    let mut spacing: f64 = 100.0;
+    if p.b("point_values") && p.s("layout") != "Number line" {
+        if let Ok(d) = data(p) {
+            for n in d.a.iter().chain(d.s.iter()) {
+                spacing = spacing.max(circle::tw(&point_text(*n, fs), fs, false) + 45.0);
+            }
+        }
+    }
     let base =
-        (count as f64 * 100.0 + 225.0).max(965.0) * svg::label_factor(p.s("label_size")).max(1.0);
+        (count as f64 * spacing + 225.0).max(965.0) * svg::label_factor(p.s("label_size")).max(1.0);
     let expr = match p.s("mode") {
         "Explicit" => p.s("formula"),
         "Recursive" => p.s("recurrence"),
@@ -2016,7 +2042,14 @@ fn render(p: &Params) -> String {
                 1.3,
             );
             doc.arrow(left, bottom + 40.0, left, top - 15.0, "#333333", 1.3);
-            if lo <= 0.0 && hi >= 0.0 {
+            let zero_limit = ans
+                && p.b("limit")
+                && match display(p) {
+                    "Both" => [lim, slim].iter().flatten().any(|l| l.q == Some((0, 1))),
+                    "Partial sums" => slim.is_some_and(|l| l.q == Some((0, 1))),
+                    _ => lim.is_some_and(|l| l.q == Some((0, 1))),
+                };
+            if lo <= 0.0 && hi >= 0.0 && !zero_limit {
                 doc.line(left, py(0.0), right, py(0.0), "#777777", 1.0);
             }
             // Numbers have a dedicated gutter and row, away from every data label.
@@ -2033,7 +2066,13 @@ fn render(p: &Params) -> String {
                     doc.text(left - 10.0, py(v) + 4.0, fs, "end", &axis_text(v));
                 }
             }
-            doc.text(right + 20.0, bottom + 45.0, fs, "start", p.s("xlabel"));
+            doc.text(
+                right + 20.0,
+                bottom + 45.0,
+                fs,
+                "start",
+                axis_name(p, "xlabel"),
+            );
             doc.text(
                 left,
                 top - 30.0,
@@ -2058,7 +2097,6 @@ fn render(p: &Params) -> String {
                 "start",
                 axis_name(p, "ylabel"),
             );
-            doc.text(left, top - 30.0, fs, "start", p.s("xlabel"));
         }
         let which: Vec<usize> = if split {
             vec![g]
@@ -2113,14 +2151,18 @@ fn render(p: &Params) -> String {
                                 1.5,
                             );
                             doc.text(
-                                nlx(l.v),
-                                bottom + 75.0,
+                                right,
+                                top - 60.0 - series as f64 * fs * 1.5,
                                 fs,
-                                "middle",
-                                &format!("Limit {}", l.eq()),
+                                "end",
+                                &format!(
+                                    "{} limit {}",
+                                    if series == 0 { "Term" } else { "Sum" },
+                                    l.eq()
+                                ),
                             );
                         } else {
-                            doc.line(left, py(l.v), right, py(l.v), "#555555", 1.5);
+                            doc.raw(&format!(r##"<line data-limit="true" x1="{left}" y1="{}" x2="{right}" y2="{}" stroke="{}" stroke-width="2" stroke-dasharray="6 4"/>"##,py(l.v),py(l.v),if p.s("style")=="Print"{"#444444"}else{"#007d6a"}));
                             doc.text(
                                 right,
                                 top - 60.0
@@ -2190,7 +2232,7 @@ fn render(p: &Params) -> String {
             if let Some((a, b)) = l.leader {
                 doc.line(a.0, a.1, b.0, b.1, "#444444", 1.0);
             }
-            doc.raw(&format!(r##"<text data-point-label="{}:{}" x="{}" y="{}" font-size="{fs}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" text-anchor="{}" fill="{}" stroke="#ffffff" stroke-width="3" paint-order="stroke">{}</text>"##,l.series,l.j,l.x,l.y,l.anchor,"#111111",svg::esc(&l.text)));
+            doc.raw(&format!(r##"<text data-point-label="{}:{}" x="{}" y="{}" font-size="{fs}" font-family="DejaVu Sans, Noto Sans, Liberation Sans, Arial, sans-serif" text-anchor="{}" fill="{}" stroke="#ffffff" stroke-width="3" paint-order="stroke">{}</text>"##,l.series,l.j,l.x,l.y,l.anchor,"#111111",svg::esc(&l.text)));
         }
     }
     for (i, row) in rows.iter().enumerate() {
@@ -2211,7 +2253,7 @@ fn render(p: &Params) -> String {
         }
         text.push_str(rest);
         doc.raw(&format!(
-            r##"<text x="{left}" y="{}" font-size="{fs}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="#111111">{text}</text>"##,
+            r##"<text x="{left}" y="{}" font-size="{fs}" font-family="DejaVu Sans, Noto Sans, Liberation Sans, Arial, sans-serif" fill="#111111">{text}</text>"##,
             plot_bottom + 65.0 + i as f64 * fs * 1.9
         ));
     }

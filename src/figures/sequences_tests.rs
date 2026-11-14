@@ -1079,3 +1079,41 @@ fn sequences_textbook_expressions_r1() {
         "0.99999999980000000001"
     );
 }
+
+#[test]
+fn sequences_numberline_and_axis_layout_r1() {
+    for size in ["Small", "Medium", "Large"] {
+        let mut p = Params::defaults(&params());
+        p.set_s("mode", "Geometric");
+        p.set_s("layout", "Number line");
+        p.set_s("display", "Both");
+        p.set_s("label_size", size);
+        p.set_f("from", 0.0);
+        p.set_f("to", 5.0);
+        p.set_b("limit", true);
+        let svg = render(&p);
+        let xml = roxmltree::Document::parse(&svg).unwrap();
+        let texts = xml
+            .descendants()
+            .filter(|n| n.has_tag_name("text"))
+            .collect::<Vec<_>>();
+        assert!(texts.iter().any(|t| t.text() == Some("Term limit = 0")));
+        assert!(texts.iter().any(|t| t.text() == Some("Sum limit = 4")));
+        let (w, h) = svg_size(&svg);
+        for (i, t) in texts.iter().enumerate() {
+            let r = text_rect(*t);
+            assert!(r.x0 >= 0.0 && r.x1 <= w && r.y0 >= 0.0 && r.y1 <= h);
+            for u in &texts[i + 1..] {
+                assert!(!r.hit(&text_rect(*u)), "{:?} {:?}", t.text(), u.text());
+            }
+        }
+        p.set_s("layout", "One grid");
+        p.set_s("xlabel", "Term number");
+        let svg = render(&p);
+        assert!(!svg.contains(">Term number<"));
+        assert!(svg.contains(">Term<"));
+        assert!(!warnings(&p).is_empty());
+        assert!(svg.contains("data-limit=\"true\""));
+        assert!(svg.contains("stroke-dasharray=\"6 4\""));
+    }
+}
