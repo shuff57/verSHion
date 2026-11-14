@@ -173,7 +173,7 @@ fn sequences_evidence_renders() {
     };
     std::fs::create_dir_all(&dir).unwrap();
     let tokens:Vec<serde_json::Value>=serde_json::from_str(r#"[
- {"first":"3"},{"mode":"Geometric","ratio":"-1/2"},{"mode":"Explicit","formula":"n^2","from":0,"to":70,"step":10},{"mode":"Recursive","first":"1","from":0,"to":25,"step":5},{"start":"0","count":10},{"first":"4"},{"display":"Partial sums","to":50,"step":10},{"mode":"Geometric","limit":true},{"first":"1/3"},{"difference":"2","from":0,"to":20,"step":5},{"recursive":true},{"point_values":true},{"first":"5"},{"sums":true,"to":50,"step":10},{"mode":"Geometric","sum":true},{"mode":"Geometric","convergence":true},{"join":true},{"marks":"Spikes"},{"display":"Both","layout":"Two aligned graphs","to":50,"step":10},{"mode":"Geometric","limit":true,"band":true},{"mode":"Geometric","layout":"Number line","limit":true,"from":-1,"to":3},{"mode":"Geometric","first":"8"},{"from":-4,"to":16,"step":4},{"grid":"Bold"},{"xlabel":"k","ylabel":"uₖ"},{"title":"A growing sequence"},{"blank_title":true},{"label_size":"Large"},{"style":"Print"},{"show_answers":false},{"show_answers":false,"task":"Missing terms"},{"show_answers":false,"task":"Continue"},{"mode":"Geometric","task":"Missing terms","sum":true,"convergence":true,"recursive":true},{"first":"4"},{"difference":"2","from":0,"to":20,"step":5},{"count":10}
+ {"first":"3"},{"mode":"Geometric","ratio":"-1/2"},{"mode":"Explicit","formula":"n^2","from":0,"to":70,"step":10},{"mode":"Recursive","first":"1","second":"1","recurrence":"a_(n-1)+a_(n-2)","recursive":true,"explicit":false,"from":0,"to":25,"step":5},{"start":"0","count":10},{"first":"4"},{"display":"Partial sums","to":50,"step":10},{"mode":"Geometric","limit":true},{"first":"1/3"},{"difference":"2","from":0,"to":20,"step":5},{"recursive":true},{"point_values":true},{"first":"5"},{"sums":true,"to":50,"step":10},{"mode":"Geometric","sum":true},{"mode":"Geometric","convergence":true},{"join":true},{"marks":"Spikes"},{"display":"Both","layout":"Two aligned graphs","to":50,"step":10},{"mode":"Geometric","limit":true,"band":true},{"mode":"Geometric","layout":"Number line","limit":true,"from":-1,"to":3},{"mode":"Geometric","first":"8"},{"from":-4,"to":16,"step":4},{"grid":"Bold"},{"xlabel":"Term","ylabel":"Value"},{"title":"A growing sequence"},{"blank_title":true},{"label_size":"Large"},{"style":"Print"},{"show_answers":false},{"show_answers":false,"task":"Missing terms"},{"show_answers":false,"task":"Continue"},{"mode":"Geometric","task":"Missing terms","sum":true,"convergence":true,"recursive":true},{"first":"4"},{"difference":"2","from":0,"to":20,"step":5},{"count":10}
  ]"#).unwrap();
     let base = Params::defaults(&params());
     let opening = render(&base);
@@ -273,7 +273,7 @@ fn sequences_label_geometry() {
                 labels.len()
             );
             for (i, a) in labels.iter().enumerate() {
-                assert!(a.rect.y1 < 445.0);
+                assert!(a.rect.y1 < 160.0 + plot_height(&p) + 35.0);
                 for b in &labels[i + 1..] {
                     assert!(!a.rect.hit(&b.rect));
                 }
@@ -553,7 +553,12 @@ fn sequences_names_and_refusals() {
             let (w, h) = svg_size(&svg);
             for t in xml.descendants().filter(|n| n.has_tag_name("text")) {
                 let r = text_rect(t);
-                assert!(r.x0 >= 0.0 && r.x1 <= w && r.y0 >= 0.0 && r.y1 <= h);
+                assert!(
+                    r.x0 >= 0.0 && r.x1 <= w && r.y0 >= 0.0 && r.y1 <= h,
+                    "off page {:?}: {:?} {w}x{h}",
+                    t.text(),
+                    r
+                );
             }
         }
     }
@@ -563,4 +568,243 @@ fn sequences_names_and_refusals() {
         assert!(!warnings(&p).is_empty());
         assert!(!render(&p).contains("<text"));
     }
+}
+#[test]
+fn sequences_axis_ticks_and_large_infinite_sum() {
+    let mut p = Params::defaults(&params());
+    p.set_f("to", 50.0);
+    p.set_f("step", 10.0);
+    let svg = render(&p);
+    let xml = roxmltree::Document::parse(&svg).unwrap();
+    let ticks = xml
+        .descendants()
+        .filter(|n| {
+            n.has_tag_name("text")
+                && n.attribute("x") == Some("140.00")
+                && n.attribute("text-anchor") == Some("end")
+        })
+        .filter_map(|n| n.text())
+        .collect::<Vec<_>>();
+    assert_eq!(ticks, vec!["0", "10", "20", "30", "40", "50"]);
+    p.set_s("mode", "Geometric");
+    p.set_s("ratio", "1-1e-30");
+    p.set_b("sum", true);
+    p.set_b("convergence", true);
+    let d = data(&p).unwrap();
+    assert!(limits(&p, &d).1.unwrap().v.is_finite());
+    assert!(limits(&p, &d).1.unwrap().v > 1e9);
+    assert!(render(&p).contains("beyond display range"));
+    assert!(!warnings(&p).is_empty());
+}
+#[test]
+fn sequences_combined_limit_labels() {
+    let cases: Vec<(String, String, String, Vec<String>, String)> =
+        serde_json::from_str(include_str!("sequences_oracles.json")).unwrap();
+    let mut total = 0;
+    for (mode, first, k, _, _) in cases.into_iter().filter(|x| x.0 == "Geometric") {
+        for size in ["Small", "Medium", "Large"] {
+            for layout in ["One grid", "Two aligned graphs"] {
+                for marks in ["Dots", "Spikes"] {
+                    let mut p = Params::defaults(&params());
+                    p.set_s("mode", &mode);
+                    p.set_s("first", &first);
+                    p.set_s("ratio", &k);
+                    p.set_s("label_size", size);
+                    p.set_s("layout", layout);
+                    p.set_s("marks", marks);
+                    p.set_s("display", "Both");
+                    for key in ["limit", "band", "join", "point_values"] {
+                        p.set_b(key, true);
+                    }
+                    let d = data(&p).unwrap();
+                    for g in 0..if layout == "One grid" { 1 } else { 2 } {
+                        assert_eq!(
+                            point_labels(&p, &d, g).1,
+                            0,
+                            "{first} {k} {size} {layout} {marks}"
+                        );
+                    }
+                    let svg = render(&p);
+                    let xml = roxmltree::Document::parse(&svg).unwrap();
+                    let texts = xml
+                        .descendants()
+                        .filter(|n| n.has_tag_name("text"))
+                        .collect::<Vec<_>>();
+                    for (i, t) in texts.iter().enumerate() {
+                        let r = text_rect(*t);
+                        for other in &texts[i + 1..] {
+                            assert!(
+                                !r.hit(&text_rect(*other)),
+                                "text overlap {first} {k} {size} {layout} {marks}"
+                            );
+                        }
+                        if t.attribute("data-point-label").is_some() {
+                            for l in xml.descendants().filter(|n| {
+                                n.has_tag_name("line") && n.attribute("stroke") != Some("#cccccc")
+                            }) {
+                                let v = |k| l.attribute(k).unwrap().parse::<f64>().unwrap();
+                                assert!(
+                                    !circle::seg_hits((v("x1"), v("y1")), (v("x2"), v("y2")), &r),
+                                    "label on line {first} {k} {size} {layout} {marks}"
+                                );
+                            }
+                        }
+                    }
+                    total += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(total, 240);
+}
+#[test]
+fn sequences_typed_math_and_variable_scope() {
+    assert_eq!(number("−1/3").unwrap().q, Some((-1, 3)));
+    assert_eq!(number("2×3").unwrap().q, Some((6, 1)));
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Explicit");
+    p.set_s("formula", "2n+1");
+    assert_eq!(data(&p).unwrap().a[7].q, Some((17, 1)));
+    for bad in ["u+1", "v", "x", "a_(n-1)+1"] {
+        p.set_s("formula", bad);
+        assert!(data(&p).is_err(), "{bad}");
+    }
+    p.set_s("mode", "Recursive");
+    p.set_s("first", "1");
+    p.set_s("second", "1");
+    p.set_s("recurrence", "2a_(n−1)+aₙ₋₂");
+    let d = data(&p).unwrap();
+    assert_eq!(d.a[7].q, Some((239, 1)));
+    assert_eq!(d.s[7].q, Some((408, 1)));
+}
+#[test]
+fn sequences_long_exact_answers_and_zero_based_limits() {
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Geometric");
+    p.set_s("first", "1");
+    p.set_s("ratio", "19/20");
+    p.set_i("count", 24);
+    assert_eq!(
+        data(&p).unwrap().s[23].q,
+        Some((
+            11878453069039153182283704722079,
+            838860800000000000000000000000
+        ))
+    );
+    for ratio in ["1/2", "1/100000000000000000000000000000000000"] {
+        p.set_s("ratio", ratio);
+        p.set_i("count", 3);
+        p.set_s("display", "Both");
+        p.set_s("label_size", "Large");
+        p.set_f("from", 0.0);
+        p.set_b("limit", true);
+        p.set_b("point_values", true);
+        p.set_b("sum", true);
+        p.set_b("sums", true);
+        for layout in ["One grid", "Two aligned graphs"] {
+            p.set_s("layout", layout);
+            let svg = render(&p);
+            let xml = roxmltree::Document::parse(&svg).unwrap();
+            let (w, h) = svg_size(&svg);
+            let labels = xml
+                .descendants()
+                .filter(|n| n.has_tag_name("text"))
+                .collect::<Vec<_>>();
+            for (i, t) in labels.iter().enumerate() {
+                let r = text_rect(*t);
+                assert!(
+                    r.x0 >= 0.0 && r.x1 <= w && r.y0 >= 0.0 && r.y1 <= h,
+                    "off page {:?}: {:?} {w}x{h}",
+                    t.text(),
+                    r
+                );
+                for u in &labels[i + 1..] {
+                    assert!(
+                        !r.hit(&text_rect(*u)),
+                        "{ratio} {layout}: {:?} {:?}",
+                        t.text(),
+                        u.text()
+                    );
+                }
+            }
+        }
+    }
+    assert!(fmt_formula("1/2*sqrt(2)").contains(" × "));
+    p.set_s("first", "0.1+0.2");
+    assert_eq!(coefficient(&p, "first"), "0.3");
+}
+#[test]
+fn sequences_fractional_axis_drag_and_fine_ticks() {
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Geometric");
+    p.set_s("first", "0.1");
+    p.set_f("from", 0.0);
+    p.set_f("to", 0.1);
+    p.set_f("step", 0.01);
+    let svg = render(&p);
+    for h in handles(&p) {
+        let mut q = p.clone();
+        h.drag.as_ref().unwrap()(&mut q, h.pos);
+        q.normalize(&params(), true);
+        assert_eq!(render(&q), svg);
+    }
+    p.set_s("mode", "Arithmetic");
+    p.set_s("first", "1e-6");
+    p.set_s("difference", "1e-6");
+    p.set_f("to", 1e-5);
+    p.set_f("step", 1e-6);
+    let svg = render(&p);
+    let xml = roxmltree::Document::parse(&svg).unwrap();
+    let (w, h) = svg_size(&svg);
+    for t in xml.descendants().filter(|n| n.has_tag_name("text")) {
+        let r = text_rect(t);
+        assert!(
+            r.x0 >= 0.0 && r.x1 <= w && r.y0 >= 0.0 && r.y1 <= h,
+            "off page {:?}: {:?} {w}x{h}",
+            t.text(),
+            r
+        );
+    }
+    assert!(!svg.contains("a₁ = 0<"));
+}
+
+#[test]
+fn sequences_proven_zeros_and_precision_refusals() {
+    for (input, expected) in [
+        ("sin(pi)", 0),
+        ("cos(pi)", -1),
+        ("sin(pi/2)", 1),
+        ("cos(pi/2)", 0),
+        ("sin(3*pi/2)", -1),
+        ("cos(2*pi)", 1),
+        ("sqrt(4)", 2),
+        ("ln(1)", 0),
+        ("exp(0)", 1),
+        ("0e-300", 0),
+    ] {
+        assert_eq!(
+            number(input).unwrap_or_else(|| panic!("unread {input}")).q,
+            Some((expected, 1)),
+            "{input}"
+        );
+    }
+    for (input, expected) in [
+        ("sin(3*pi/4)", std::f64::consts::FRAC_1_SQRT_2),
+        ("cos(3*pi/4)", -std::f64::consts::FRAC_1_SQRT_2),
+        ("tan(-pi/4)", -1.0),
+    ] {
+        assert!(
+            (number(input).unwrap_or_else(|| panic!("unread {input}")).v - expected).abs() < 1e-14,
+            "{input}"
+        );
+    }
+    assert!(number("tan(pi/2)").is_none());
+    assert!(number("1e-999").is_none());
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Explicit");
+    p.set_s("formula", "sin(pi*n)");
+    assert!(data(&p).unwrap().a.iter().all(|v| v.q == Some((0, 1))));
+    p.set_s("mode", "Geometric");
+    p.set_s("ratio", "1e-300");
+    assert!(data(&p).is_err());
 }
