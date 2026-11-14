@@ -418,7 +418,8 @@ fn detach_cases() -> Vec<(String, String)> {
 
 
 /// The third checker's measures, ported: no strip label under the row of axis numbers, none more than 22 px from its
-/// own strip, on its 223 cases with heights or areas on, at every size.
+/// own strip, and (the fourth checker's) no a or b label in the row of x-axis numbers, on its 223 cases with heights or
+/// areas on, at every size.
 #[test]
 fn strip_labels_sit_on_their_strips() {
     let cases = detach_cases();
@@ -438,6 +439,9 @@ fn strip_labels_sit_on_their_strips() {
                 let sx = |x: f64| g.ml + (x - g.x0) * g.ux;
                 let sy = |y: f64| g.mt + g.ph - (y - g.y0) * g.uy;
                 let axy = sy(if g.y0 <= 0.0 && g.y1 >= 0.0 { 0.0 } else { g.y0 });
+                // (and no a or b label in the row of x-axis numbers)
+                let row = tags(&svg, "<text ").into_iter().filter(|t| t.contains(r#"data-axis="0""#)).filter_map(|t| { let (y, fs) = (attr(t, "y")?.parse::<f64>().ok()?, attr(t, "font-size")?.parse::<f64>().ok()?); Some((y - 0.8 * fs, y + 0.25 * fs)) }).fold(None, |acc: Option<(f64, f64)>, (a, b)| Some(acc.map_or((a, b), |(x, y)| (x.min(a), y.max(b)))));
+                if let Some((r0, r1)) = row { for l in labels(&svg).into_iter().filter(|l| l.0 == "bound") { if l.2[1] < r1 && l.2[3] > r0 { bad.push(format!("{size} {on} {name}: {:?} in the number row", l.1)); } } }
                 let labs: Vec<(String, String, [f64; 4])> = labels(&svg).into_iter().filter(|l| l.0 == "strip-label").collect();
                 if labs.is_empty() { continue; }
                 let inwin: Vec<usize> = (0..m.strips.len()).filter(|&i| { let c = 0.5 * (sx(m.strips[i].x0) + sx(m.strips[i].x1)); c >= g.ml && c <= g.ml + g.pw }).collect();
