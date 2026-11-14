@@ -566,6 +566,26 @@ fn proved_function(s: &str, n: N, a: N, b: N) -> Option<Option<N>> {
     }
     None
 }
+fn ambiguous_fraction(s: &str) -> bool {
+    let s = s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    let cs = s.chars().collect::<Vec<_>>();
+    for i in 0..cs.len() {
+        if cs[i] != '/' {
+            continue;
+        }
+        let mut j = i + 1;
+        while j < cs.len() && (cs[j].is_ascii_digit() || cs[j] == '.') {
+            j += 1;
+        }
+        if j > i + 1
+            && j < cs.len()
+            && (cs[j] == 'n' || cs[j] == 'x' || cs[j] == 'π' || cs[j] == '(')
+        {
+            return true;
+        }
+    }
+    false
+}
 fn recurrence_spelling(s: &str) -> String {
     s.replace('−', "-")
         .replace("a_{n-1}", "a_(n-1)")
@@ -586,7 +606,7 @@ fn recurrence_order(p: &Params) -> usize {
     }
 }
 fn read(s: &str, n: N, a: N, b: N) -> Option<N> {
-    if s.len() > 256 {
+    if s.len() > 256 || ambiguous_fraction(s) {
         return None;
     }
     if s.split(|c: char| !c.is_ascii_alphabetic())
@@ -695,6 +715,18 @@ struct Data {
 }
 fn data(p: &Params) -> Result<Data, String> {
     let mode = p.s("mode");
+    let expression = if mode == "Explicit" {
+        p.s("formula")
+    } else if mode == "Recursive" {
+        p.s("recurrence")
+    } else {
+        ""
+    };
+    if ambiguous_fraction(expression) {
+        return Err(
+            "Use brackets to make the fraction clear: 1/(2*n) or (1/2)*n, rather than 1/2n.".into(),
+        );
+    }
     if mode == "Explicit"
         && p.s("formula")
             .split(|c: char| !c.is_ascii_alphabetic())

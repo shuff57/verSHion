@@ -1012,3 +1012,18 @@ fn sequences_recurrence_order_r1() {
     assert!(relevant("second", &p));
     assert_eq!(data(&p).unwrap().a[7].q, Some((21, 1)));
 }
+
+#[test]
+fn sequences_ambiguous_fraction_r1() {
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Explicit");
+    for spelling in ["1/2n", "2/3n", "1/2n²", "3/4n + 1", "1/2x", "1/2(n+1)"] {
+        p.set_s("formula", spelling);
+        assert!(data(&p).err().unwrap().contains("brackets"));
+        assert!(!render(&p).contains("<text"));
+    }
+    p.set_s("formula", "1/(2n)");
+    assert_eq!(data(&p).unwrap().a[3].q, Some((1, 8)));
+    p.set_s("formula", "(1/2)*n");
+    assert_eq!(data(&p).unwrap().a[3].q, Some((2, 1)));
+}
