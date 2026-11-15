@@ -133,6 +133,11 @@ impl<'a> Slices<'a> {
         }).collect() } else { vec![] };
         Self { fns, curves, a, b, samples }
     }
+    fn eval(&self, g: bool, x: f64) -> Option<f64> {
+        let tree = if g { self.fns.ast_g.as_ref() } else { self.fns.ast_f.as_ref() };
+        match tree { Some(n) => sym::num(n, x), None => if g { self.fns.g(x) } else { self.fns.f(x) } }
+    }
+    pub(super) fn numerical(&self) -> bool { self.curves.is_none() }
     pub(super) fn intervals(&self, y: &Val) -> (Vec<(f64, f64)>, Val) {
         let mut cuts = vec![self.a.clone(), self.b.clone()];
         if let Some((f, g)) = &self.curves {
@@ -142,7 +147,7 @@ impl<'a> Slices<'a> {
             // Locate simple roots on the cached sample brackets, then refine
             // against the actual curve. No y allowance expands the region.
             for g in [false, true] {
-                let eval = |x| if g { self.fns.g(x) } else { self.fns.f(x) };
+                let eval = |x| self.eval(g, x);
                 for pair in self.samples.windows(2) {
                     let (x0, f0, g0) = pair[0];
                     let (x1, f1, g1) = pair[1];
@@ -169,9 +174,7 @@ impl<'a> Slices<'a> {
         for pair in cuts.windows(2) {
             let (a, b) = (&pair[0], &pair[1]);
             let x = a.v + (b.v - a.v) * 0.5;
-            let (f, g) = if self.curves.is_some() {
-                (self.fns.ast_f.as_ref().and_then(|n| sym::num(n, x)), match &self.fns.g { Some(_) => self.fns.ast_g.as_ref().and_then(|n| sym::num(n, x)), None => Some(0.0) })
-            } else { (self.fns.f(x), self.fns.g(x)) };
+            let (f, g) = (self.eval(false, x), self.eval(true, x));
             let (Some(f), Some(g)) = (f, g) else { continue };
             if f.min(g) <= y.v && y.v <= f.max(g) {
                 // A tangent cut can lie inside a continuous slice. Join its
@@ -195,7 +198,7 @@ impl<'a> Slices<'a> {
         for g in [false, true] {
             if self.curves.is_some() { break; }
             let tree = if g { self.fns.ast_g.as_ref() } else { self.fns.ast_f.as_ref() };
-            let eval = |x| if g { self.fns.g(x) } else { self.fns.f(x) };
+            let eval = |x| self.eval(g, x);
             for max in [false, true] {
                 if let Some(cs) = extreme_candidates(&eval, self.a.v, self.b.v, max) {
                     for (x, _) in cs.into_iter().skip(2) {

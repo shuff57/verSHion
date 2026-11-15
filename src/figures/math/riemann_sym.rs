@@ -781,14 +781,80 @@ pub fn exact_sign_changes(n: &Node, a: f64, b: f64) -> Option<Vec<(f64, Ex)>> {
     }
     Some(out)
 }
-/// The exact number near x the tree is exactly zero at (a fraction with denominator up to 1000, or a multiple of π with
-/// denominator up to 12).
+/// Algebraic zeros derived from polynomial coefficients, never from a float.
+/// Quadratics use the quadratic formula; zero/rational factors reduce higher
+/// degrees, and a translated pure cube gives a real cube root. Other roots
+/// remain numerical. Every returned value is checked by exact substitution.
+pub fn algebraic_zeros(n: &Node) -> Vec<Ex> {
+    fn solve(mut p: Vec<Rat>) -> Option<Vec<Ex>> {
+        while p.last().is_some_and(|c| c.is_zero()) { p.pop(); }
+        let deg = p.len().saturating_sub(1);
+        if deg == 0 { return Some(vec![]); }
+        if deg == 1 { return Some(vec![Ex::rat(p[0].mul(Rat::int(-1))?.div(p[1])?)]); }
+        if deg == 2 {
+            let disc = p[1].mul(p[1])?.sub(p[2].mul(p[0])?.mul(Rat::int(4))?)?;
+            if disc.n < 0 { return Some(vec![]); }
+            let root = Ex::rat(disc).pow_rat(Rat::new(1, 2)?)?;
+            let b = Ex::rat(p[1]).neg();
+            let den = Ex::rat(p[2].mul(Rat::int(2))?);
+            return Some(vec![b.sub(&root)?.div(&den)?, b.add(&root)?.div(&den)?]);
+        }
+        // Rational-root theorem after clearing the coefficient denominators.
+        // A bounded divisor list keeps arbitrary typed polynomials quick.
+        let mut candidates = vec![Rat::zero()];
+        let lcm = p.iter().try_fold(1i128, |a, c| (a / gcd_i(a, c.d)).checked_mul(c.d));
+        let divisors = |v: i128| -> Vec<i128> {
+            let Some(v) = v.checked_abs() else { return vec![] };
+            if v == 0 || v > 1_000_000 { return vec![]; }
+            let mut out = vec![];
+            let mut i = 1;
+            while i*i <= v { if v % i == 0 { out.push(i); if i*i != v { out.push(v/i); } } i += 1; }
+            out
+        };
+        if let Some(l) = lcm {
+            if let (Some(a), Some(b)) = (p[0].n.checked_mul(l / p[0].d), p[deg].n.checked_mul(l / p[deg].d)) {
+                for a in divisors(a) { for b in divisors(b) { for sign in [-1, 1] { candidates.push(Rat::new(sign*a, b)?); } } }
+            }
+        }
+        for r in candidates {
+            let mut q = vec![Rat::zero(); deg];
+            q[deg-1] = p[deg];
+            let mut valid = true;
+            for i in (1..deg).rev() { if let Some(v) = q[i].mul(r).and_then(|v| v.add(p[i])) { q[i-1] = v; } else { valid = false; break; } }
+            if valid && q[0].mul(r).and_then(|v| v.add(p[0])).is_some_and(|v| v.is_zero()) {
+                let mut out = vec![Ex::rat(r)];
+                out.extend(solve(q)?);
+                return Some(out);
+            }
+        }
+        if deg == 3 {
+            // x=u-b/(3a); when the depressed cubic has no u term,
+            // u³=-f(-b/(3a))/a. This includes (x-h)³=k.
+            let shift = p[2].mul(Rat::int(-1))?.div(p[3].mul(Rat::int(3))?)?;
+            let linear = p[1].add(p[2].mul(shift)?.mul(Rat::int(2))?)?.add(p[3].mul(shift.mul(shift)?)?.mul(Rat::int(3))?)?;
+            if linear.is_zero() {
+                let at = poly_at(&p, &Ex::rat(shift))?.as_rat()?;
+                let cube = Ex::rat(at.mul(Rat::int(-1))?.div(p[3])?).pow_rat(Rat::new(1, 3)?)?;
+                return Some(vec![cube.add(&Ex::rat(shift))?]);
+            }
+        }
+        Some(vec![])
+    }
+    let mut out = poly(n).and_then(solve).unwrap_or_default();
+    out.retain(|x| eval(n, x).is_some_and(|v| v.is_zero()));
+    out.sort_by(|a, b| a.approx().total_cmp(&b.approx()));
+    out.dedup_by(|a, b| a.sub(b).is_some_and(|v| v.is_zero()));
+    out
+}
+/// An exact zero near x: a verified rational or rational multiple of π, or a
+/// root derived algebraically from the polynomial coefficients.
 pub fn exact_zero(n: &Node, x: f64) -> Option<Ex> {
     let tol = 1e-7 * x.abs().max(1.0);
     let mut cands = vec![];
     if let Some(r) = Rat::near(x, 1000, tol) { cands.push(Ex::rat(r)); }
     if let Some(r) = Rat::near(x / PI, 12, tol / PI) { cands.push(Ex::pi().scale(r)?); }
     cands.into_iter().find(|c| eval(n, c).is_some_and(|v| v.is_zero()))
+        .or_else(|| algebraic_zeros(n).into_iter().find(|c| (c.approx() - x).abs() <= tol))
 }
 
 /// u as k·x + m with rational k ≠ 0, m.

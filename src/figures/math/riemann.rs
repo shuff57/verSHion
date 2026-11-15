@@ -715,14 +715,20 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
     let between = reg == Region::Between;
     let (xa, xb, a_ex, b_ex) = if crossing(p) {
         let gl = grid_layout(&grid_params(p));
-        let rs = roots(&|x| Some(fns.f(x)? - fns.g(x)?), gl.x0, gl.x1);
+        let ht = fns.h_tree();
+        let algebraic = ht.as_ref().map(sym::algebraic_zeros).unwrap_or_default();
+        let mut rs = roots(&|x| Some(fns.f(x)? - fns.g(x)?), gl.x0, gl.x1);
+        rs.extend(algebraic.iter().map(Ex::approx).filter(|x| *x >= gl.x0 && *x <= gl.x1));
+        rs.sort_by(f64::total_cmp);
+        rs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
         if rs.len() < 2 { return Err("f and g do not cross twice in the window: widen the x-axis to take in both crossings, or choose From a to b".into()); }
         // (a crossing is exact only when f − g is exactly 0 there, checked by exact arithmetic)
-        let ht = fns.h_tree();
-        m.crossings = rs.iter().map(|r| Val::of(ht.as_ref().and_then(|t| sym::exact_zero(t, *r)), *r)).collect();
+        m.crossings = rs.iter().map(|r| horizontal_levels::from_level(
+            algebraic.iter().min_by(|a, b| (a.approx() - r).abs().total_cmp(&(b.approx() - r).abs())).filter(|e| (e.approx() - r).abs() < 1e-8 * r.abs().max(1.0)).cloned()
+                .or_else(|| ht.as_ref().and_then(|t| sym::exact_zero(t, *r))), *r)).collect();
         m.a_txt = fm.t(&m.crossings[0]);
         m.b_txt = fm.t(m.crossings.last().unwrap());
-        (rs[0], *rs.last().unwrap(), m.crossings[0].ex.clone(), m.crossings.last().unwrap().ex.clone())
+        (m.crossings[0].v, m.crossings.last().unwrap().v, m.crossings[0].ex.clone(), m.crossings.last().unwrap().ex.clone())
     } else {
         let (a, at, ae) = read_bound(p.s("a"), "a")?;
         let (b, bt, be) = read_bound(p.s("b"), "b")?;
@@ -950,7 +956,8 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
                 }
                 for i in 1..k {
                     if ws[i] > bw { best = Val::num(ys[i]); bw = ws[i]; }
-                    if ws[i] <= ws[i - 1] || ws[i] < ws[i + 1] { continue; }
+                    let noise = if slices.numerical() { 64.0 * f64::EPSILON * ws[i].abs().max(1.0) } else { 0.0 };
+                    if ws[i] <= ws[i - 1] + noise || ws[i] < ws[i + 1] - noise { continue; }
                     let (mut a, mut b) = (ys[i - 1], ys[i + 1]);
                     let g = 0.5 * (5f64.sqrt() - 1.0);
                     for _ in 0..64 {
@@ -1599,7 +1606,8 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             let mut failed: Vec<&str> = vec![];
             for (k, &(xp, yt, yb)) in bound_lines.iter().enumerate() {
                 let (nm, val) = names[k];
-                let s = if crossing_blank { nm.to_string() } else { format!("{nm} = {val}") };
+                let exact = !crossing(p) || m.crossings.get(if k == 0 { 0 } else { m.crossings.len().saturating_sub(1) }).is_some_and(|v| fm.text(v).1);
+                let s = if crossing_blank { nm.to_string() } else { format!("{nm} {} {val}", if exact { "=" } else { "\u{2248}" }) };
                 let wd = mwidth(&s, size);
                 let left_first = k == 0;
                 let mut cands: Vec<(f64, f64)> = vec![];
@@ -1660,10 +1668,12 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                 }
             }
             // (the note names only the label that has no room)
+            let advice = if crossing(p) { "choose Small labels, or adjust the x-axis From and To to leave room around the crossings" } else { "move a or b, or choose Small labels" };
             match failed.as_slice() {
                 [] => {}
-                [one] => notes.push(format!("The label of {one} has no room beside its line: move {one}, or choose Small labels")),
-                _ => notes.push("The labels of a and b have no room beside their lines: move a or b, or choose Small labels".into()),
+                [one] if !crossing(p) => notes.push(format!("The label of {one} has no room beside its line: move {one}, or choose Small labels")),
+                [one] => notes.push(format!("The label of {one} has no room beside its line: {advice}")),
+                _ => notes.push(format!("The labels of a and b have no room beside their lines: {advice}")),
             }
         }
     }
@@ -1681,7 +1691,8 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             let mut v = vec![];
             let mut text = String::from("f and g cross at");
             for (i, c) in m.crossings.iter().enumerate() {
-                text.push_str(if i == 0 { " x =" } else if i + 1 == k { " and x =" } else { ", x =" });
+                text.push_str(if i == 0 { " x " } else if i + 1 == k { " and x " } else { ", x " });
+                text.push_str(eqs(student || fm.text(c).1));
                 if student { v.push(Piece::T(std::mem::take(&mut text))); v.push(Piece::Blank); text.clear(); }
                 else { text.push(' '); text.push_str(&fm.t(c)); }
             }
@@ -1691,6 +1702,22 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         // (on the student copy, bounds the figure found itself, the crossings or a horizontal slice's lowest and highest y,
         // are answers: written as letters there)
         let (lo_t, hi_t) = if student && m.var == 'y' { ("c".to_string(), "d".to_string()) } else if student && crossing(p) { ("a".to_string(), "b".to_string()) } else if m.var == 'y' { (m.y_lo.as_ref().map(|v| fm.t(v)).unwrap_or_default(), m.y_hi.as_ref().map(|v| fm.t(v)).unwrap_or_default()) } else { (m.a_txt.clone(), m.b_txt.clone()) };
+        if !student && m.var == 'y' {
+            let bindings: Vec<String> = [("c", &m.y_lo), ("d", &m.y_hi)].iter().filter_map(|(name, v)| {
+                let (t, exact) = fm.text(v.as_ref()?);
+                (!exact).then(|| format!("{name} \u{2248} {t}"))
+            }).collect();
+            if !bindings.is_empty() { lines.push(vec![Piece::T(bindings.join(";  "))]); }
+        }
+        // Rounded coordinates are bindings (a ≈ …), never exact limits or
+        // numbers substituted after an equals sign in the Δx calculation.
+        let (lo_t, hi_t) = if !student && m.var == 'y' {
+            (if m.y_lo.as_ref().is_some_and(|v| fm.text(v).1) { lo_t } else { "c".into() },
+             if m.y_hi.as_ref().is_some_and(|v| fm.text(v).1) { hi_t } else { "d".into() })
+        } else if !student && crossing(p) {
+            (if m.crossings.first().is_some_and(|v| fm.text(v).1) { lo_t } else { "a".into() },
+             if m.crossings.last().is_some_and(|v| fm.text(v).1) { hi_t } else { "b".into() })
+        } else { (lo_t, hi_t) };
         if p.b("show_dx") && strips_on && !table && let Some(dx) = &m.delta {
             let n = m.strips.len();
             let form = if m.var == 'y' { format!("{d} = (d \u{2212} c)/n") } else { format!("{d} = (b \u{2212} a)/n") };
@@ -1709,8 +1736,8 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             else {
                 let (worked, we) = sum_worked(m, fm, table, rule(p) == Rule::T);
                 let fin = format!("{worked} {} {st}", eqs(*se && we));
-                if m.sum_symbolic.is_empty() { lines.push(vec![Piece::T(format!("{} = {fin}", m.sum_name))]); }
-                else { lines.push(vec![Piece::T(format!("{} = {}", m.sum_name, m.sum_symbolic))]); lines.push(vec![Piece::T(format!("= {fin}"))]); }
+                if m.sum_symbolic.is_empty() { lines.push(vec![Piece::T(format!("{} {} {fin}", m.sum_name, eqs(!crossing(p) || we)))]); }
+                else { lines.push(vec![Piece::T(format!("{} = {}", m.sum_name, m.sum_symbolic))]); lines.push(vec![Piece::T(format!("{} {fin}", eqs(!crossing(p) || we)))]); }
                 // (rounded working said to be rounded: at 0 places "1·(1 + 1 + 1 + 1 + 2) ≈ 4" is worked from 0.6, 0.69 …)
                 if !fm.exact && !(*se && we) {
                     let places = if fm.dec == 1 { "1 decimal place".to_string() } else { format!("{} decimal places", fm.dec) };
@@ -1746,17 +1773,18 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             } else if p.b("integral_line") { lines.push(vec![Piece::T(integral.clone())]); }
         }
         let err = match (&m.sum, &m.exact) { (Some(s), Some(e)) if strips_on && !table => { Some(s.sub(e)) } _ => None };
-        if p.b("error_line") && let (Some(ev_), Some((st, _)), Some((et, _))) = (&err, &sum_txt, &ex_txt) {
+        if p.b("error_line") && let (Some(ev_), Some((st, se)), Some((et, ee))) = (&err, &sum_txt, &ex_txt) {
             if student { lines.push(vec![Piece::T("Error =".into()), Piece::Blank]); }
             else {
                 let (t, e) = fm.text(ev_);
                 // (the difference once: no "= 77/60 − ln 5 = 77/60 − ln 5")
                 let diff = format!("{st} \u{2212} {}", wrap(&neg_par(et.clone())));
+                let deq = eqs(!crossing(p) || (*se && *ee));
                 // (and not rewritten when nothing combines: the error's exact terms are just the sum's and the integral's, neither
                 // of them 0: "−1/2 − 0" and "0 − 9" go on to their value)
                 let nothing_combines = match (&ev_.ex, m.sum.as_ref().and_then(|s| s.ex.as_ref()), m.exact.as_ref().and_then(|x| x.ex.as_ref())) { (Some(a), Some(b), Some(c)) => !b.is_zero() && !c.is_zero() && a.0.len() == b.0.len() + c.0.len(), _ => false };
-                if e && (nothing_combines || t.replace(['(', ')'], "") == diff.replace(['(', ')'], "")) { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff}", m.sum_name))]); }
-                else { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff} {} {t}", m.sum_name, eqs(e)))]); }
+                if e && (nothing_combines || t.replace(['(', ')'], "") == diff.replace(['(', ')'], "")) { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact {deq} {diff}", m.sum_name))]); }
+                else { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact {deq} {diff} {} {t}", m.sum_name, eqs(e)))]); }
             }
         }
         if p.b("key_line") && answers {
@@ -1966,3 +1994,7 @@ mod checker_tests;
 #[cfg(test)]
 #[path = "riemann_horizontal_tests.rs"]
 mod horizontal_tests;
+
+#[cfg(test)]
+#[path = "riemann_crossing_tests.rs"]
+mod crossing_tests;
