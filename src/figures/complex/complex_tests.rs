@@ -1035,3 +1035,29 @@ fn r2_dense_caption_audit() {
         std::fs::write(format!("{dir}/dense-label-audit.txt"), rows.join("\n")).unwrap();
     }
 }
+#[test]
+fn r2_exponential_changes_display_unit_without_reinterpreting_input() {
+    let mut p = base();
+    p.set_s("input", "Polar exponential");
+    p.set_s("unit", "Degrees");
+    p.set_s("polar_style", "Exponential");
+    for (theta, want) in [("135", "3π/4"), ("390", "π/6")] {
+        p.set_s("theta", theta);
+        let z = numbers(&p, &mut vec![]).remove(0);
+        assert_eq!(polar(&z, &p), format!("= 2e⟦i({want})⟧"));
+    }
+}
+#[test]
+fn r2_literal_spelling_stays_in_its_number_category() {
+    for (raw, want) in [
+        ("+3", "3"),
+        (".5", "0.5"),
+        ("-.5", "−0.5"),
+        ("5.", "5.0"),
+        ("-0", "0"),
+        ("-0.00", "0.00"),
+        ("0.50", "0.50"),
+    ] {
+        assert_eq!(read(raw).unwrap().s, want);
+    }
+}

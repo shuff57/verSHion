@@ -230,7 +230,19 @@ fn read(s: &str) -> Option<N> {
             if t.contains(['e', 'E']) {
                 scientific(&t)
             } else {
-                t.replace('-', "−")
+                let mut literal = t.trim_start_matches('+').to_string();
+                if literal.starts_with("-.") {
+                    literal = literal.replacen("-.", "-0.", 1)
+                } else if literal.starts_with('.') {
+                    literal = format!("0{literal}");
+                }
+                if literal.ends_with('.') {
+                    literal.push('0');
+                }
+                if v == 0. {
+                    literal = literal.trim_start_matches('-').to_string();
+                }
+                literal.replace('-', "−")
             },
             true,
         )
@@ -394,6 +406,14 @@ fn polar(z: &Z, p: &Params) -> String {
     let r = modtext(z, p);
     let mut radians = p.clone();
     radians.set_s("unit", "Radians");
+    if p.s("input") != "Cartesian" && p.s("unit") == "Degrees" {
+        let theta = angle_fraction(p.s("theta"), "Degrees")
+            .map(|q| exact_angle(q, "Radians"))
+            .or_else(|| read(p.s("theta")).map(|t| format!("{:.16}", t.v.to_radians())));
+        if let Some(theta) = theta {
+            radians.set_s("theta", &theta);
+        }
+    }
     let a = angtext(
         z,
         if p.s("polar_style") == "Exponential" {
