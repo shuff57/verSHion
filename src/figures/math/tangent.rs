@@ -66,9 +66,9 @@ pub(crate) fn params() -> Vec<ParamDef> {
         ParamDef::float("xmin", "x-axis from", -1000.0, 1000.0, 1.0, -2.0),
         ParamDef::float("xmax", "x-axis to", -1000.0, 1000.0, 1.0, 4.0),
         ParamDef::float("xstep", "x-axis count by", 0.05, 180.0, 0.5, 1.0),
-        ParamDef::float("ymin", "y-axis from", -999.0, 999.0, 1.0, -2.0),
-        ParamDef::float("ymax", "y-axis to", -999.0, 999.0, 1.0, 10.0),
-        ParamDef::float("ystep", "y-axis count by", 0.05, 180.0, 0.5, 1.0),
+        ParamDef::float("ymin", "y-axis from", -1_000_000.0, 1_000_000.0, 1.0, -2.0).hint("Beyond ±999 the y-axis is numbered in thousands (or millions)."),
+        ParamDef::float("ymax", "y-axis to", -1_000_000.0, 1_000_000.0, 1.0, 10.0),
+        ParamDef::float("ystep", "y-axis count by", 0.05, 100_000.0, 0.5, 1.0).hint("A step that would draw more than 60 lines is widened."),
         ParamDef::int("minor", "Minor gridlines per step", 0, 10, 0).hint("0 = none."),
         ParamDef::bool("numbers", "Number the axes", true),
         ParamDef::choice("xunits", "x-axis units", &["Numbers", "Multiples of \u{3c0}"], "Numbers").hint("In multiples of π, the x range and step are typed in π: 2 is 2π."),
@@ -1082,18 +1082,51 @@ fn coords(name: &str, x: &Num, y: &Num, dec: usize) -> String {
 }
 
 /// The coordinate grid's params for this figure (the curve as its one equation, every axis control passed through).
+/// A step counting a window in at most 60 lines: the one typed, or else a "nice" one (1, 2, 2.5, 5 × 10ⁿ) giving 5 to 10 lines.
+fn sensible_step(lo: f64, hi: f64, typed: f64) -> f64 {
+    let span = (hi - lo).abs().max(1e-9);
+    if span / typed <= 60.0 { return typed; }
+    let raw = span / 10.0;
+    let mag = 10f64.powf(raw.log10().floor());
+    [1.0, 2.0, 2.5, 5.0, 10.0].iter().map(|k| k * mag).find(|s| *s >= raw).unwrap_or(10.0 * mag)
+}
+/// How the grid is asked to draw the y-axis: its values divided by k (1, 1000 or 10⁶, else a power of ten) so its numbers
+/// fit, with the steps actually used and the axis label's note ("in thousands").
+pub(crate) struct Axes { pub k: f64, pub xstep: f64, pub ystep: f64, pub unit: &'static str }
+pub(crate) fn axes(p: &Params) -> Axes {
+    let pi_mode = p.s("xunits") == "Multiples of \u{3c0}";
+    let xstep = if pi_mode { p.f("xstep") } else { sensible_step(p.f("xmin"), p.f("xmax"), p.f("xstep")) };
+    let ystep = sensible_step(p.f("ymin"), p.f("ymax"), p.f("ystep"));
+    let big = p.f("ymin").abs().max(p.f("ymax").abs());
+    let fits = |k: f64| big / k <= 999.0 && ystep / k >= 0.05 && ystep / k <= 180.0;
+    let (k, unit) = [(1.0, ""), (1000.0, "thousands"), (1e6, "millions")].into_iter().find(|(k, _)| fits(*k))
+        .or_else(|| [(10.0, "tens"), (100.0, "hundreds"), (1e4, "ten thousands"), (1e5, "hundred thousands")].into_iter().find(|(k, _)| fits(*k)))
+        .unwrap_or((1.0, ""));
+    Axes { k, xstep, ystep, unit }
+}
+/// The grid's layout in the figure's own units (the y-axis back from thousands when it is drawn in thousands).
+fn layout(gp: &Params, ax: &Axes) -> GridL {
+    let mut g = grid_layout(gp);
+    if ax.k != 1.0 { g.y0 *= ax.k; g.y1 *= ax.k; g.ys *= ax.k; g.uy /= ax.k; }
+    g
+}
 fn grid_params(p: &Params, m: &Model, ink: &Ink) -> Params {
     let gdefs = coordinate_grid_params();
     let mut gp = Params::defaults(&gdefs);
     for k in ["xmin", "xmax", "xstep", "ymin", "ymax", "ystep", "minor", "numbers", "grid", "square", "title_mode", "title", "label_size", "style"] {
         if let Some(v) = p.0.get(k) { gp.0.insert(k.to_string(), v.clone()); }
     }
+    let ax = axes(p);
+    gp.0.insert("xstep".into(), Value::F(ax.xstep));
+    gp.0.insert("ystep".into(), Value::F(ax.ystep / ax.k));
+    gp.0.insert("ymin".into(), Value::F(p.f("ymin") / ax.k));
+    gp.0.insert("ymax".into(), Value::F(p.f("ymax") / ax.k));
     gp.set_s("xunits", p.s("xunits"));
     let xl = if p.s("xlabel") == "x" { m.var.clone() } else { p.s("xlabel").to_string() };
     let yl = if p.s("ylabel") == "y" { m.dep.clone() } else { p.s("ylabel").to_string() };
     gp.set_s("xlabel", &xl);
-    gp.set_s("ylabel", &yl);
-    gp.set_s("equations", &m.expr.as_ref().map(|e| format!("y = {e}")).unwrap_or_default());
+    gp.set_s("ylabel", &if ax.unit.is_empty() || yl.is_empty() { yl.clone() } else { format!("{yl} ({})", ax.unit) });
+    gp.set_s("equations", &m.expr.as_ref().map(|e| if ax.k == 1.0 { format!("y = {e}") } else { format!("y = ({e})/{}", ax.k) }).unwrap_or_default());
     gp.set_s("points", "");
     gp.set_s("eq1_color", ink.curve);
     gp.set_b("show_answers", true);
@@ -1122,7 +1155,10 @@ pub(super) fn build(p0: &Params) -> Out {
     // ── the grid, drawn by the coordinate grid itself ──
     let gp = grid_params(p, &m, ink);
     let gsvg = coordinate_grid_build(&gp, &mut vec![]);
-    let g = grid_layout(&gp);
+    let ax = axes(p);
+    let g = layout(&gp, &ax);
+    if ax.ystep != p.f("ystep") { notes.push(format!("The y-axis counts by {}: a step of {} would draw {} lines over this window", decimal(ax.ystep, 3), decimal(p.f("ystep"), 3), ((p.f("ymax") - p.f("ymin")).abs() / p.f("ystep")).round())); }
+    if ax.xstep != p.f("xstep") { notes.push(format!("The x-axis counts by {}: a step of {} would draw {} lines over this window", decimal(ax.xstep, 3), decimal(p.f("xstep"), 3), ((p.f("xmax") - p.f("xmin")).abs() / p.f("xstep")).round())); }
     let (gw, gh) = super::super::svg_size(&gsvg);
     let body = {
         let start = gsvg.find(r##"fill="#fff"/>"##).map(|i| i + r##"fill="#fff"/>"##.len()).unwrap_or(0);
@@ -1181,8 +1217,8 @@ pub(super) fn build(p0: &Params) -> Out {
     let tan = m.p.as_ref();
     let p_px = tan.map(|t| (sx(t.a), sy(t.fan.v))).filter(|q| inside(*q));
     if let (Some(t), None) = (tan, p_px) {
-        notes.push(if t.fan.v.abs() > 999.0 {
-            format!("P is at {} = {}, {} = {}: values beyond \u{b1}999 are past the largest y-axis this figure draws; choose an a where |{}({})| \u{2264} 999, or rescale the function (for example in thousands)", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s, m.fname, m.var)
+        notes.push(if t.fan.v.abs() > 1e6 {
+            format!("P is at {} = {}, {} = {}: values beyond \u{b1}1000000 are past the largest y-axis this figure draws; choose an a where |{}({})| \u{2264} 1000000, or rescale the function (for example in thousands)", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s, m.fname, m.var)
         } else if t.a.abs() > 1000.0 || (pi_mode && t.a.abs() > 1000.0 * PI) {
             format!("P is at {} = {}, beyond the largest x-axis this figure draws (\u{b1}1000): choose another a", m.var, t.an.s)
         } else { format!("P is outside the window: set the axes so that {} = {} and {} = {} are inside them", m.var, t.an.s, m.dep, as_dec(&t.fan, dec).s) });
@@ -1232,8 +1268,8 @@ pub(super) fn build(p0: &Params) -> Out {
                 let qq = (sx(t.a + s.h), sy(s.fb.v));
                 if inside(qq) { if i == 0 { q_px = Some(qq); } else { sc.dots.push(qq); over += &format!(r##"<circle cx="{:.2}" cy="{:.2}" r="3.2" fill="{col}" stroke="#fff" stroke-width="1"/>"##, qq.0, qq.1); } }
                 else if i == 0 {
-                    notes.push(if s.qx.v.abs() > 1000.0 || s.fb.v.abs() > 999.0 {
-                        format!("Q is at {} = {}, {} = {}, beyond the largest axes this figure draws (x to \u{b1}1000, y to \u{b1}999): choose a smaller {}", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s, m.step)
+                    notes.push(if s.qx.v.abs() > 1000.0 || s.fb.v.abs() > 1e6 {
+                        format!("Q is at {} = {}, {} = {}, beyond the largest axes this figure draws (x to \u{b1}1000, y to \u{b1}1000000): choose a smaller {}", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s, m.step)
                     } else { format!("Q is outside the window: set the axes so that {} = {} and {} = {} are inside them, or choose another h", m.var, as_dec(&s.qx, dec).s, m.dep, as_dec(&s.fb, dec).s) });
                 }
             }
@@ -1720,7 +1756,7 @@ pub(crate) fn relevant(key: &str, p0: &Params) -> bool {
     let p_def = t.is_some();
     let tan_ok = t.is_some_and(|t| matches!(t.slope, Slope::Finite(..) | Slope::Vertical));
     let finite = t.is_some_and(|t| matches!(t.slope, Slope::Finite(..)));
-    let g = grid_layout(&grid_params(p, &m, &COLOUR));
+    let g = layout(&grid_params(p, &m, &COLOUR), &axes(p));
     let inside = |x: f64, y: f64| x >= g.x0 - 1e-9 && x <= g.x1 + 1e-9 && y >= g.y0 - 1e-9 && y <= g.y1 + 1e-9;
     let p_in = t.is_some_and(|t| inside(t.a, t.fan.v));
     let sec_ok = !m.secants.is_empty();

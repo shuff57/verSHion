@@ -1563,3 +1563,29 @@ fn worked_lines_keep_one_kind_of_number() {
     let l = w(&[("a", s("1")), ("h", s("0.0001"))]);
     assert!(l.iter().any(|x| x.ends_with("2.0001")), "{l:?}");
 }
+
+/// Compound interest with a principal of 1000 is drawn: 1000(1.05)^t at t = 5 (A = 1276.28) on a y-axis to 2000 is numbered
+/// in thousands and the curve, P and Q are on it; a y-step of 1 over 2000 is widened to a step giving 5–10 lines, with a
+/// note; a window to a million is drawn in millions; only beyond ±1000000 is P refused.
+#[test]
+fn large_values_are_drawn() {
+    let o = |ymax: f64, ystep: f64| with(&[("func", s("1000(1.05)^t")), ("fname", s("A")), ("var", s("t")), ("a", s("5")), ("h", s("1")), ("xmin", f(0.0)), ("xmax", f(10.0)), ("ymin", f(0.0)), ("ymax", f(ymax)), ("ystep", f(ystep))]);
+    let p = o(2000.0, 1.0);
+    let out = build(&p);
+    let n = out.notes.join(" | ");
+    assert!(!n.contains("past the largest") && !n.contains("outside the window"), "{n}");
+    assert!(n.contains("The y-axis counts by 200"), "{n}");
+    assert!(out.svg.contains("(thousands)"), "no thousands label");
+    let labs = my_labels(&out.svg);
+    assert!(labs.iter().any(|l| l.1 == "P") && labs.iter().any(|l| l.1 == "Q"), "{labs:?}");
+    // P's dot sits where the axis says 1276.28: between the gridlines for 1000 and 1500 (in thousands, 1 and 1.5)
+    let ax = tangent::axes(&p);
+    assert_eq!((ax.k, ax.ystep), (1000.0, 200.0));
+    let p2 = o(1_000_000.0, 100_000.0);
+    assert!(build(&p2).svg.contains("(millions)"));
+    let n = tangent::warnings(&with(&[("func", s("1000(1.05)^t")), ("var", s("t")), ("a", s("200")), ("xmin", f(0.0)), ("xmax", f(300.0)), ("ymin", f(0.0)), ("ymax", f(1_000_000.0))])).join(" | ");
+    assert!(n.contains("past the largest y-axis"), "{n}");
+    let n = tangent::warnings(&with(&[("ymin", f(0.0)), ("ymax", f(999.0)), ("ystep", f(1.0))])).join(" | ");
+    assert!(n.contains("counts by 100"), "{n}");
+}
+
