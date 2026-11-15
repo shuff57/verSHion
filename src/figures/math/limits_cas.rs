@@ -1523,9 +1523,9 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
             // A reciprocal tan/cot still has recurring poles (at the original
             // zeros). Preserve this structural fact rather than inverting the
             // coarse Poles class, whose reciprocal is not generally known.
-            if let X::Mul(v) = &**a { if let [X::F(f1, u), X::Inv(d)] = v.as_slice() {
+            if matches!(at, At::Inf(_)) { if let X::Mul(v) = &**a { if let [X::F(f1, u), X::Inv(d)] = v.as_slice() {
                 if let X::F(f2, w) = &**d { if matches!((f1, f2), (Fun::Sin, Fun::Cos) | (Fun::Cos, Fun::Sin)) && format!("{u:?}") == format!("{w:?}") && poly(u).is_some() && matches!(coarse(&ser_of(u, at, n)), B::PInf | B::NInf) { return Poles; } }
-            } }
+            } } }
             s_fun(ser_of(a, at, n), |s| s_inv(s, n), false)
         },
         X::Pow(b, p) => {

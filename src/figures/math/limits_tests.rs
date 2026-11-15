@@ -1799,3 +1799,13 @@ fn documented_ambiguous_readings_and_implicit_powers_are_explicit() {
     }
 }
 
+#[test]
+fn tangent_quotient_retains_its_complete_discontinuity_list() {
+    let p = with(json!({"pieces": "y = tan(x)/tan(3x)", "dots": "", "xmin": -10.0, "xmax": 10.0, "ask_at": "0", "ask_disc": true, "ask_inf": "Both", "kind_labels": true, "asym_eqs": true}));
+    let _ = svg(&p);
+    let d = last_drawn(&p);
+    // k*pi/6, k=-19..19: 20 original poles, 12 poles of the quotient,
+    // and 7 removable points (k divisible by 6), altogether 39.
+    assert_eq!(d.discs.len(), 39, "{:?}", warnings(&p));
+    assert!(!warnings(&p).iter().any(|n| n.contains("steps") || n.contains("says where they are")), "{:?}", warnings(&p));
+}

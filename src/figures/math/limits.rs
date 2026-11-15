@@ -1422,7 +1422,7 @@ fn build(p0: &Params) -> (String, Drawn) {
         d.kind != UNSURE && (d.kind == "infinite" || ys.iter().any(|y| inside_y(*y))) && (d.x - g.x0).abs() >= 1e-9 * (1.0 + d.x.abs()) && (d.x - g.x1).abs() >= 1e-9 * (1.0 + d.x.abs())
     };
     dr.labelable_kinds = if many_kinds { 0 } else { discs.iter().filter(|d| labelable(d)).count() };
-    if show_kinds && many_kinds { notes.push(format!("Too many discontinuities to label each one on the graph: the key {}", if discs_complete { "lists them" } else { "says where they are" })); }
+    if show_kinds && many_kinds { notes.push(format!("Too many discontinuities to label each one on the graph: the key {}", if discs_complete { "lists them" } else { "leaves the discontinuity answer as a line to fill in" })); }
     if show_kinds && !many_kinds {
         for d in &discs {
             let x = sx(d.x);
