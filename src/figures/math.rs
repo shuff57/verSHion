@@ -4084,6 +4084,10 @@ mod conics_r2_tests;
 pub(crate) mod limits;
 #[cfg(test)]
 mod limits_tests;
+pub(crate) mod tangent;
+pub(crate) mod tangent_expr;
+#[cfg(test)]
+mod tangent_tests;
 #[cfg(test)]
 mod number_line_b7_tests;
 
@@ -6588,7 +6592,7 @@ pub(super) fn render_for(id: &str) -> Option<fn(&Params) -> String> {
 /// "Start from an example" entries for this subject's figures. Solids and plots (math-b) live in
 /// `examples_b`; flat shapes (math-a) chain their own `examples_a` here with `.or_else`.
 pub fn examples(id: &str) -> Option<Vec<super::Example>> {
-    flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id)).or_else(|| limits::examples(id))
+    flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id)).or_else(|| limits::examples(id)).or_else(|| (id == tangent::ID).then(tangent::examples))
 }
 
 /// The Measures card of the figure (none yet): rows for the shape's sides/angles/dimensions.
@@ -6755,6 +6759,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::H
         .or_else(|| (id == super::stats::venn::ID).then(|| super::stats::venn::handles(p)))
         .or_else(|| (id == conics::ID).then(|| conics::handles(p)))
         .or_else(|| (id == limits::ID).then(|| limits::handles(p)))
+        .or_else(|| (id == tangent::ID).then(|| tangent::handles(p)))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's
@@ -6812,6 +6817,7 @@ pub fn defs() -> Vec<FigureDef> {
         f("box-plot", "Box Plot", "A box plot from a data list or five-number summary; compare two sets.", box_plot_params, box_plot_render),
         f("mapping-diagram", "Mapping Diagram", "Input and output sets joined by arrows, from ordered pairs.", mapping_diagram_params, mapping_diagram_render),
         f("ruler-reading", "Ruler Reading", "A metric or inch ruler with an object to measure at any position and length.", length_reading_params, length_reading_render),
+        f(tangent::ID, "Tangent and Secant Lines", "A typed function with the tangent at a point, secants for one or several h, the slopes worked out and the secants closing in on the tangent.", tangent::params, tangent::render),
     ]
 }
 

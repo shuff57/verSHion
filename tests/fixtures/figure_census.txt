@@ -344,6 +344,8 @@ swot__defaults b6fb63ab23735d12
 swot__start b6fb63ab23735d12
 t-account__defaults 0930021c1be63185
 t-account__start 0930021c1be63185
+tangent-secant-lines__defaults 4ff21d4bc6f6d6d4
+tangent-secant-lines__start 4ff21d4bc6f6d6d4
 temperature-reading__defaults 01d08d382c5bc6fb
 temperature-reading__start c03451ce808fd8f9
 time-value__defaults 00ca45c70e402807

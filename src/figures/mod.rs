@@ -828,6 +828,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "population-growth" => biology::popdyn::growth_b9_relevant(key, p) && cards::relevant(id, key, p),
         "conic-sections" => math::conics::relevant(key, p),
         "limits-discontinuities" => math::limits::relevant(key, p),
+        // the tangent and secant lines: only the controls of the lines drawn, the student copy's choice on a student copy
+        math::tangent::ID => math::tangent::relevant(key, p) && cards::relevant(id, key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -910,6 +912,7 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
         "pulley" => physics::pulley_warnings(p),
         "conic-sections" => math::conics::warnings(p),
         "limits-discontinuities" => math::limits::warnings(p),
+        math::tangent::ID => math::tangent::warnings(p),
         _ => vec![] }
 }
 

@@ -88,6 +88,16 @@ static LIMITS: [RefSection; 7] = [
     s("Grid and copies", &["minor", "grid", "square", "style", "show_answers", "stu_hide_kinds", "stu_hide_asym"], "Turn off Show answers for the student copy: each answer becomes a line to write on; Student + key exports both."),
 ];
 
+static TANGENT_SECANT: [RefSection; 7] = [
+    s("Function", &["func", "fname", "var", "a", "h", "more_h", "more_a"], "Drag P or Q along the curve on the figure; Q's drag changes h."),
+    s("Lines", &["show_tangent", "show_secant", "normal", "tangent_style", "secant_style", "normal_style", "extent"], ""),
+    s("Slopes", &["show_slopes", "worked", "tangent_eq", "secant_eq", "table", "slope_form", "dec"], ""),
+    s("Marks", &["pt_labels", "secant_triangle", "tangent_triangle", "h_mark", "label_offsets"], "Drag any label on the graph to move it."),
+    s("Axes", &["xmin", "xmax", "xstep", "ymin", "ymax", "ystep", "xunits", "square", "xlabel", "ylabel", "numbers", "minor", "grid"], ""),
+    s("Titles", &["title_mode", "title", "label_size", "style"], ""),
+    s("Student copy", &["show_answers", "student_copy", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
 static TRANSFORMATIONS: [RefSection; 7] = [
     s("Show", &["show_answers", "question", "show_pre", "show_between", "show_guides", "show_arrows", "pt_labels", "coord_list", "style", "label_size"], "Show answers off is the student copy, where the images are left to draw; with Question on as well, the images are drawn and the transformations left to name."),
     s("Pre-image", &["pre", "closed", "adding", "names", "pre_colour", "pre_line", "pre_weight"], "Click grid points on the figure to add vertices, or type them, one x, y pair per line. Drag a vertex to move it."),
@@ -1322,6 +1332,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "volume-by-displacement" => &FIG_47,
         "volume-reading" => &FIG_48,
         "waves" => &FIG_49,
+        "tangent-secant-lines" => &TANGENT_SECANT,
         _ => return None,
     })
 }
