@@ -314,7 +314,7 @@ fn rows() -> Vec<Row> {
         // 0 for every x ≠ 0 (floor(1/x) is whole), no value at 0: removable; its floor breaks at every 1/n near 0
         ("C3", "y = sin(pi floor(1/x))", "", "0", "0, 0, 0, undef", "0, 0", "0 removable", "", "0", w(-3.0, 3.0, -2.0, 2.0)),
         // ceil x - floor x: 0 at whole numbers, 1 between: a hole at each whole number (no limit at ±∞: named)
-        ("D02", "y = ceil(x) - floor(x)", "", "1", "1, 1, 1, 0", "?, ?", "-3 removable, -2 removable, -1 removable, 0 removable, 1 removable, 2 removable, 3 removable", "", "", w(-3.0, 3.0, -2.0, 2.0)),
+        ("D02", "y = ceil(x) - floor(x)", "", "1", "1, 1, 1, 0", "DNE, DNE", "-3 removable, -2 removable, -1 removable, 0 removable, 1 removable, 2 removable, 3 removable", "", "", w(-3.0, 3.0, -2.0, 2.0)),
         // |floor x|: 1 then 0 at 0, 0 then 1 at 1, 2 then 1 at -1 …
         ("D03", "y = abs(floor(x))", "", "0", "1, 0, DNE, 0", "∞, ∞", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -1.0, 5.0)),
         // floor|x|: 0 on both sides of 0 (continuous there), jumps at ±1, ±2, ±3
@@ -335,7 +335,7 @@ fn rows() -> Vec<Row> {
         // ceil(cos x): 1 then 0 at π/2, 0 then 1 at -π/2; 0 on both sides of ±π but -1 at ±π; 1 round 0 and at 0
         ("D11", "y = ceil(cos(x))", "", "pi/2; pi; 0", "1, 0, DNE, 0 | 0, 0, 0, -1 | 1, 1, 1, 1", "DNE, DNE", "-π removable, -π/2 jump, π/2 jump, π removable", "", "", w(-4.0, 4.0, -2.0, 2.0)),
         // floor x + floor(-x): 0 at whole numbers, -1 between (no limit at ±∞: named)
-        ("D12", "y = floor(x) + floor(-x)", "", "1", "-1, -1, -1, 0", "?, ?", "-3 removable, -2 removable, -1 removable, 0 removable, 1 removable, 2 removable, 3 removable", "", "", w(-3.0, 3.0, -2.0, 2.0)),
+        ("D12", "y = floor(x) + floor(-x)", "", "1", "-1, -1, -1, 0", "DNE, DNE", "-3 removable, -2 removable, -1 removable, 0 removable, 1 removable, 2 removable, 3 removable", "", "", w(-3.0, 3.0, -2.0, 2.0)),
         ("D13", "y = floor(x)^2", "", "0; 1", "1, 0, DNE, 0 | 0, 1, DNE, 1", "∞, ∞", "-2 jump, -1 jump, 0 jump, 1 jump, 2 jump", "", "", w(-2.0, 2.0, -1.0, 5.0)),
         // cos(π floor x) = (-1)^floor x: 1 then -1 at 1 (it alternates for ever at ±∞: no limit)
         ("D14", "y = cos(pi floor(x))", "", "1", "1, -1, DNE, -1", "DNE, DNE", "-3 jump, -2 jump, -1 jump, 0 jump, 1 jump, 2 jump, 3 jump", "", "", w(-3.0, 3.0, -2.0, 2.0)),

@@ -1665,3 +1665,11 @@ fn thread_cpu() -> f64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
 }
+
+#[test]
+fn bounded_wave_zero_limit_is_a_horizontal_asymptote() {
+    let p = with(json!({"pieces": "y = sin(x)^2/x", "dots": "", "ask_inf": "Both", "show_asym": true, "asym_eqs": true}));
+    let s = svg(&p);
+    let d = last_drawn(&p);
+    assert!(d.labels.iter().any(|(_, text, _, _)| text == "y = 0"), "{}", words(&s));
+}

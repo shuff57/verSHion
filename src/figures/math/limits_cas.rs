@@ -1181,7 +1181,13 @@ fn s_powq(a: S, r: Q, n: usize) -> S {
             if r > Q::ZERO { if matches!(a, Huge(_)) { Huge(v) } else { Inf(v) } } else if matches!(a, Huge(_)) { Flat(v) } else { Z(v) }
         }
         Lim(k) => match k.powq(r) { KR::Ok(x) => Lim(x), KR::NoVal => NoVal, KR::Unk => Unk },
-        Osc(l, h) => if l > 0.0 { Osc(l.powf(r.f()), h.powf(r.f())) } else { Unk },
+        Osc(l, h) => {
+            // A positive integer power maps the entire interval continuously, including across zero.
+            if r.is_int() && r.n > 0 {
+                let (a, b) = (l.powf(r.f()), h.powf(r.f()));
+                Osc(if r.n % 2 == 0 && l <= 0.0 && h >= 0.0 { 0.0 } else { a.min(b) }, a.max(b))
+            } else if l > 0.0 { let (a, b) = (l.powf(r.f()), h.powf(r.f())); Osc(a.min(b), a.max(b)) } else { Unk }
+        },
         o => if matches!(o, NoVal) { NoVal } else { Unk },
     }
 }
@@ -1363,7 +1369,7 @@ fn s_abs(a: S) -> S {
 fn s_floor(a: S) -> S {
     use S::*;
     match a {
-        ExpS(..) => s_floor(from_b(coarse(&a))),
+        ExpS(..) | SO(..) => s_floor(from_b(coarse(&a))),
         Ser(x) => {
             let (p, c, z) = x.parts();
             if !p.is_empty() { return SO(x, -1.0, 0.0, true); }
@@ -1415,7 +1421,19 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
             At::Fin(a, s) => { let mut t = vec![]; if a.sign() != Some(0) { t.push(T { e: UNIT, c: a.clone() }); } t.push(T { e: (Q::ONE, 0), c: K::int(*s as i128) }); Sr { t, rem: None } }
             At::Inf(s) => Sr { t: vec![T { e: (Q::i(-1), 0), c: K::int(*s as i128) }], rem: None },
         }),
-        X::Add(v) => v.iter().map(|a| ser_of(a, at, n)).reduce(s_add).unwrap_or(Unk),
+        X::Add(v) => {
+            // floor(u) + floor(-u) is -1 off the integers and 0 on them.
+            // Only a continuous unbounded polynomial argument establishes both sequences.
+            fn floor_term(e: &X, sign: i8) -> Option<(&X, i8)> {
+                match e { X::Neg(a) => floor_term(a, -sign), X::F(Fun::Floor, a) => Some((a, sign)), _ => None }
+            }
+            if v.len() == 2 { if let (Some((a, sa)), Some((b, sb))) = (floor_term(&v[0], 1), floor_term(&v[1], 1)) {
+                if sa == sb && poly(&X::Add(vec![a.clone(), b.clone()])).is_some_and(|p| p.iter().all(|k| k.sign() == Some(0))) && matches!(coarse(&ser_of(a, at, n)), B::PInf | B::NInf) {
+                    return OscJ(if sa > 0 { -1.0 } else { 0.0 }, if sa > 0 { 0.0 } else { 1.0 });
+                }
+            } }
+            v.iter().map(|a| ser_of(a, at, n)).reduce(s_add).unwrap_or(Unk)
+        },
         X::Mul(v) => {
             // the same factor above and below the line cancels (the limit ignores the one point it leaves out)
             let key = |e: &X| format!("{e:?}");
@@ -1429,6 +1447,16 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
                 i += 1;
             }
             if fs.is_empty() { return Ser(Sr::c(K::one())); }
+            // (1 - cos u)/sin u = tan(u/2) on its domain. The removable
+            // even multiples of π do not remove the poles at odd multiples.
+            if fs.len() == 2 {
+                for (num, den) in [(fs[0], fs[1]), (fs[1], fs[0])] {
+                    if let X::Inv(d) = den { if let X::F(Fun::Sin, u) = &**d {
+                        let want = fold(X::Add(vec![X::C(K::one()), X::Neg(Box::new(X::F(Fun::Cos, u.clone())))]));
+                        if key(num) == key(&want) && poly(u).is_some() && matches!(coarse(&ser_of(u, at, n)), B::PInf | B::NInf) { return Poles; }
+                    } }
+                }
+            }
             // tan and cot of an argument that runs off to ±∞: poles keep coming
             if let [X::F(f1, a1), X::Inv(d)] = fs.as_slice() {
                 if let X::F(f2, a2) = &**d { if matches!((f1, f2), (Fun::Sin, Fun::Cos) | (Fun::Cos, Fun::Sin)) && key(a1) == key(a2) && matches!(coarse(&ser_of(a1, at, n)), B::PInf | B::NInf) { return Poles; } }
@@ -1436,11 +1464,24 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
             fs.iter().map(|a| ser_of(a, at, n)).reduce(s_mul).unwrap_or(Unk)
         }
         X::Neg(a) => s_neg(ser_of(a, at, n)),
-        X::Inv(a) => s_fun(ser_of(a, at, n), |s| s_inv(s, n), false),
+        X::Inv(a) => {
+            // A reciprocal tan/cot still has recurring poles (at the original
+            // zeros). Preserve this structural fact rather than inverting the
+            // coarse Poles class, whose reciprocal is not generally known.
+            if let X::Mul(v) = &**a { if let [X::F(f1, u), X::Inv(d)] = v.as_slice() {
+                if let X::F(f2, w) = &**d { if matches!((f1, f2), (Fun::Sin, Fun::Cos) | (Fun::Cos, Fun::Sin)) && format!("{u:?}") == format!("{w:?}") && poly(u).is_some() && matches!(coarse(&ser_of(u, at, n)), B::PInf | B::NInf) { return Poles; } }
+            } }
+            s_fun(ser_of(a, at, n), |s| s_inv(s, n), false)
+        },
         X::Pow(b, p) => {
             // (the constant 0 to a constant power: 0 when the power is positive, no value at all otherwise: 0^0)
             if let Some(q) = const_q(p) { if !b.has_x() && matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)) { return if q > Q::ZERO { Ser(Sr::c(K::zero())) } else { NoVal }; } }
-            if let Some(q) = const_q(p) { return s_fun(ser_of(b, at, n), |s| s_powq(s, q, n), false); }
+            if let Some(q) = const_q(p) {
+                let s = ser_of(b, at, n);
+                // A jumpy wave may take only ±1: squaring it need not oscillate.
+                if jumpy(&s) && q.is_int() && q.n > 0 && q.n % 2 == 0 && matches!(coarse(&s), B::Osc(l, h) if l < 0.0 && h > 0.0) { return Unk; }
+                return s_fun(s, |s| s_powq(s, q, n), false);
+            }
             // 0 to a power with x in it: 0 near where the power is positive, no value where it is negative
             if !b.has_x() && matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)) {
                 return match coarse(&ser_of(p, at, n)) { B::Fin(k) if k.sign() == Some(1) => Ser(Sr::c(K::zero())), B::PInf | B::Zero(1) => Ser(Sr::c(K::zero())), B::Fin(k) if k.sign() == Some(-1) => NoVal, B::NInf | B::Zero(-1) => NoVal, _ => Unk };
@@ -1494,10 +1535,47 @@ fn whole_multiple_of_pi(a: &X, sin: bool) -> Option<K> {
 #[derive(Clone, Debug)]
 pub enum L { Val(K), PInf, NInf, Dne, NoVal, Unknown }
 
+/// Prove an exact translation law e(x + period) = e(x) + delta. Only linear
+/// combinations and floors with whole-number shifts are admitted; products of
+/// changing factors are deliberately left unknown.
+fn floor_shift(e: &X, period: &K) -> Option<K> {
+    match e {
+        X::C(_) => Some(K::zero()), X::V => Some(period.clone()),
+        X::Neg(a) => Some(floor_shift(a, period)?.neg()),
+        X::Add(v) => v.iter().try_fold(K::zero(), |d, a| Some(d.add(&floor_shift(a, period)?))),
+        X::F(Fun::Floor, a) => { let d = floor_shift(a, period)?; d.rational().filter(|q| q.is_int()).map(|_| d) }
+        X::Mul(v) => {
+            if v.iter().all(|a| floor_shift(a, period).is_some_and(|d| d.sign() == Some(0))) { return Some(K::zero()); }
+            let mut scale = K::one(); let mut moving = None;
+            for a in v { if a.has_x() { if moving.is_some() { return None; } moving = Some(a); }
+                else { let EV::Val(k) = exact(a, &K::zero()) else { return None }; scale = scale.mul(&k); } }
+            Some(moving.map_or(Some(K::zero()), |a| floor_shift(a, period))?.mul(&scale))
+        }
+        _ if !e.has_x() => Some(K::zero()),
+        _ => None,
+    }
+}
+fn periodic_steps_dne(e: &X) -> bool {
+    if !e.has_floor() { return false; }
+    for period in [1, 2, 4, 10, 100] {
+        let t = K::int(period);
+        if !floor_shift(e, &t).is_some_and(|d| d.sign() == Some(0)) { continue; }
+        let mut first: Option<K> = None;
+        for j in 0..=32 {
+            if let EV::Val(k) = exact(e, &K::q(Q::new(j * period, 32).unwrap())) {
+                if let Some(a) = &first { if k.sub(a).sign().is_some_and(|s| s != 0) { return true; } }
+                else { first = Some(k); }
+            }
+        }
+    }
+    false
+}
+
 /// The limit of e as x → a from one side, or as x → ±∞: by series at rising precision; a numerical contradiction
 /// (values not closing in on the limit, or not growing toward ∞) makes it Unknown.
 pub fn limit(e: &X, at: &At) -> L {
     if spent() { return L::Unknown; }
+    if matches!(at, At::Inf(_)) && periodic_steps_dne(e) { return L::Dne; }
     let mut out = L::Unknown;
     for n in [6usize, 12, 20] {
         out = match coarse(&ser_of(e, at, n)) {
@@ -1571,7 +1649,9 @@ fn confirm(e: &X, at: &At, l: &L) -> bool {
                 At::Inf(s) => [137.0, 1370.0, 13700.0].iter().map(|x| (*s as f64 * x, *s as f64 * 2.0 * x)).collect(),
             };
             let amps: Vec<f64> = bands.iter().map(|(p, q)| {
-                let v: Vec<f64> = (0..=600).filter_map(|i| ev(e, p + (q - p) * (i as f64 + 0.318) / 600.7)).collect();
+                let v: Vec<f64> = (0..=600).map(|i| p + (q - p) * (i as f64 + 0.318) / 600.7)
+                    .chain((0..=20).filter(|_| matches!(at, At::Inf(_))).map(|i| (p + (q - p) * i as f64 / 20.0).round()))
+                    .filter_map(|x| ev(e, x)).collect();
                 if v.len() < 20 { return 0.0; }
                 let (lo, hi) = v.iter().fold((f64::MAX, f64::MIN), |(a, b), y| (a.min(*y), b.max(*y)));
                 let scale = 1.0 + v.iter().map(|y| y.abs()).fold(0.0, f64::max).min(1e6) * 1e-3;

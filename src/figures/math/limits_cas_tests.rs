@@ -60,3 +60,30 @@ fn engine_probe2() {
     let (z, d) = breaks(&x("floor(sin(x))"), -6.0, 10.0);
     println!("breaks floor(sin x): {:?} {d}", z.iter().map(|k| k.show()).collect::<Vec<_>>());
 }
+
+#[test]
+fn ordinary_infinity_bounds_and_correlated_steps() {
+    for (f, want) in [("sin(x)^2/x", "0"), ("sin(x)^2/x^2", "0"), ("sin(x)^2", "DNE"),
+        ("ceil(x)-floor(x)", "DNE"), ("floor(x)-ceil(x)", "DNE"), ("floor(x)+floor(-x)", "DNE"), ("floor(x/2)-floor(x)/2", "DNE"), ("(x-floor(x))(1-x+floor(x))", "DNE"),
+        ("1/tan(x)", "DNE"), ("1/tan(x^2)", "DNE"), ("(1-cos(x))/sin(x)", "DNE")] {
+        for at in [At::Inf(1), At::Inf(-1)] { budget_reset(); assert_eq!(lim_text(f, at), want, "{f}"); }
+    }
+}
+
+#[test]
+fn ordinary_nested_steps_at_infinity() {
+    for f in ["floor(floor(x)/2)", "floor(x+floor(x))", "ceil(floor(x))"] {
+        budget_reset(); assert_eq!(pinf(f), "inf", "{f}");
+        budget_reset(); assert_eq!(ninf(f), "-inf", "{f}");
+    }
+}
+
+#[test]
+fn squaring_a_jumpy_wave_does_not_prove_oscillation() {
+    for at in [At::Inf(1), At::Inf(-1)] {
+        budget_reset();
+        // The base takes only -1 and 1, so its square is identically 1.
+        let got = lim_text("(2floor(x)-2floor(x+1/2)+1)^2", at);
+        assert!(got == "1" || got == "?", "{got}");
+    }
+}
