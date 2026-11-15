@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-15T17:33:21+00:00",
-  "src_mtime": 1794763571.547038,
-  "git": "dc17bd6",
-  "figures": 193
+  "built_at": "2026-11-15T22:06:35+00:00",
+  "src_mtime": 1794779878.6060915,
+  "git": "a889948",
+  "figures": 194
  },
  "figures": {
   "free-body-diagram": {
@@ -28216,6 +28216,356 @@
    ],
    "handle_list": [],
    "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "sequences-series": {
+   "id": "sequences-series",
+   "title": "Sequences and series",
+   "blurb": "Discrete terms and partial sums, with formula and continuation tasks.",
+   "params": [
+    {
+     "key": "mode",
+     "label": "Sequence",
+     "kind": "choice",
+     "options": [
+      "Arithmetic",
+      "Geometric",
+      "Explicit",
+      "Recursive"
+     ],
+     "default": "Arithmetic"
+    },
+    {
+     "key": "first",
+     "label": "First term",
+     "kind": "text",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "difference",
+     "label": "Common difference",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "ratio",
+     "label": "Common ratio",
+     "kind": "text",
+     "options": [],
+     "default": "1/2"
+    },
+    {
+     "key": "formula",
+     "label": "Explicit f(n)",
+     "kind": "text",
+     "options": [],
+     "default": "1/n"
+    },
+    {
+     "key": "recurrence",
+     "label": "Recursive expression",
+     "kind": "text",
+     "options": [],
+     "default": "a_(n-1)+a_(n-2)"
+    },
+    {
+     "key": "second",
+     "label": "Second initial term",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "count",
+     "label": "Number of terms",
+     "kind": "int",
+     "options": [],
+     "default": "8"
+    },
+    {
+     "key": "start",
+     "label": "First index",
+     "kind": "choice",
+     "options": [
+      "0",
+      "1"
+     ],
+     "default": "1"
+    },
+    {
+     "key": "display",
+     "label": "Draw",
+     "kind": "choice",
+     "options": [
+      "Terms",
+      "Partial sums",
+      "Both"
+     ],
+     "default": "Terms"
+    },
+    {
+     "key": "layout",
+     "label": "Graphs",
+     "kind": "choice",
+     "options": [
+      "One grid",
+      "Two aligned graphs",
+      "Number line"
+     ],
+     "default": "One grid"
+    },
+    {
+     "key": "join",
+     "label": "Join points",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "marks",
+     "label": "Term marks",
+     "kind": "choice",
+     "options": [
+      "Dots",
+      "Spikes"
+     ],
+     "default": "Dots"
+    },
+    {
+     "key": "point_values",
+     "label": "Label point values",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "terms",
+     "label": "List terms",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "sums",
+     "label": "List partial sums",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "explicit",
+     "label": "Write explicit formula",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "recursive",
+     "label": "Write recursive formula",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "sum",
+     "label": "Write series sum",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "sum_n",
+     "label": "Sum first N terms",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "sum_count",
+     "label": "N for requested sum",
+     "kind": "int",
+     "options": [],
+     "default": "50"
+    },
+    {
+     "key": "sigma",
+     "label": "Write sigma notation",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "convergence",
+     "label": "Write convergence",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "limit",
+     "label": "Draw limit line",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "band",
+     "label": "Epsilon band",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "epsilon",
+     "label": "Epsilon",
+     "kind": "text",
+     "options": [],
+     "default": "1/4"
+    },
+    {
+     "key": "from",
+     "label": "Vertical axis: From",
+     "kind": "float",
+     "options": [],
+     "default": "-2.0"
+    },
+    {
+     "key": "to",
+     "label": "Vertical axis: To",
+     "kind": "float",
+     "options": [],
+     "default": "12.0"
+    },
+    {
+     "key": "step",
+     "label": "Vertical axis: Count by",
+     "kind": "float",
+     "options": [],
+     "default": "2.0"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Light",
+      "Standard",
+      "Bold"
+     ],
+     "default": "Light"
+    },
+    {
+     "key": "xlabel",
+     "label": "Index axis label",
+     "kind": "text",
+     "options": [],
+     "default": "n"
+    },
+    {
+     "key": "ylabel",
+     "label": "Value axis label",
+     "kind": "text",
+     "options": [],
+     "default": "aₙ"
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": "Sequences and series"
+    },
+    {
+     "key": "blank_title",
+     "label": "Blank title",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "task",
+     "label": "Student task",
+     "kind": "choice",
+     "options": [
+      "Find formula",
+      "Missing terms",
+      "Continue"
+     ],
+     "default": "Find formula"
+    },
+    {
+     "key": "missing",
+     "label": "Indices to blank",
+     "kind": "text",
+     "options": [],
+     "default": "5,7"
+    },
+    {
+     "key": "given",
+     "label": "Terms given",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag the first term up or down to change the first value"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag the second term up or down to change the difference or ratio"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag the last term left or right to change the number of terms"
+    }
+   ],
+   "handles": true,
    "label_drag": false,
    "show_answers": true,
    "style": true,

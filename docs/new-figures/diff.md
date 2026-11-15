@@ -15,19 +15,19 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | limits-discontinuities | `limits-discontinuities` | 37 | 5 | 34 | — | 100 |
 | polar-parametric | **missing** | | | 33 | | |
 | riemann-sums | **missing** | | | 45 | | |
-| sequences-series | **missing** | | | 36 | | |
+| sequences-series | `sequences-series` | 40 | 3 | 36 | — | 100 |
 | slope-fields | **missing** | | | 32 | | |
 | tangent-secant-lines | **missing** | | | 38 | | |
 
 ## Reference figures we do not have
 
-`new/tangent-secant-lines`, `new/riemann-sums`, `new/derivative-graphs`, `new/sequences-series`, `new/complex-plane`, `new/polar-parametric`, `new/slope-fields`
+`new/tangent-secant-lines`, `new/riemann-sums`, `new/derivative-graphs`, `new/complex-plane`, `new/polar-parametric`, `new/slope-fields`
 
 Our figures with no reference page: 190
 
-Generated: 2026-11-15T17:33:22+00:00 · probe: 2026-11-15T09:33:22
+Generated: 2026-11-15T22:15:29+00:00 · probe: 2026-11-15T14:15:29
 
-**Pooled 22.7** · mean 20.0 over 10 figures · built 3 of 10 reference figures (missing: new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/sequences-series, new/complex-plane, new/polar-parametric, new/slope-fields)
+**Pooled 33.0** · mean 30.0 over 10 figures · built 4 of 10 reference figures (missing: new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/complex-plane, new/polar-parametric, new/slope-fields)
 
 Comparable with the frozen baseline: **yes**
 
@@ -66,13 +66,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [core 5] Draw a left Riemann sum — not built
   - cap-05 [core 5] Draw a right Riemann sum — not built
   - cap-06 [core 5] Draw a midpoint Riemann sum — not built
-- `sequences-series`: 0 (0/121)
-  - cap-01 [core 5] An arithmetic sequence from a_1 and d — not built
-  - cap-02 [core 5] A geometric sequence from a_1 and r, including negative and fractional r — not built
-  - cap-03 [core 5] A sequence from a typed explicit formula a_n = f(n) — not built
-  - cap-04 [core 5] A sequence from a typed recursive formula, using a_(n-1) and a_(n-2) — not built
-  - cap-05 [core 5] Set how many terms, and whether n starts at 0 or 1 — not built
-  - cap-06 [core 5] Draw the terms as discrete points (n, a_n) — not built
 - `slope-fields`: 0 (0/104)
   - cap-01 [core 5] Type the differential equation dy/dx = f(x, y) — not built
   - cap-02 [core 5] Draw the field's segments on a grid over a chosen range — not built
@@ -89,3 +82,4 @@ Comparable with the frozen baseline: **yes**
   - cap-06 [core 5] Draw several secants for shrinking h (such as 2, 1, 0.5, 0.1) approaching the tangent — not built
 - `conic-sections`: 100 (151/151)
 - `limits-discontinuities`: 100 (115/115)
+- `sequences-series`: 100 (121/121)
