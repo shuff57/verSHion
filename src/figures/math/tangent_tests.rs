@@ -1601,3 +1601,23 @@ fn echoed_functions_read_as_typed() {
     assert_eq!(title("arcsin(x)", "x"), "f(x) = arcsin(x)");
     assert_eq!(title("1/2x^2", "x"), "f(x) = (1/2)x^(2)");
 }
+
+/// A secant's slope triangle too small for its labels (x³ at −1 or 0 with h = 1/3, −4.9t² + 20t at 0 with h = 0.01, at
+/// Medium) is drawn with its labels in the panel and a note, not laid over the curve and the lines: those renders have no label
+/// faults by the sweep's rules, and the panel carries h and Δy.
+#[test]
+fn tiny_triangles_label_in_the_panel() {
+    let cases: [&[(&str, Value)]; 3] = [
+        &[("func", s("x^3")), ("a", s("-1")), ("h", s("1/3")), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-8.0)), ("ymax", f(8.0)), ("label_size", s("Medium")), ("secant_triangle", b(true))],
+        &[("func", s("x^3")), ("a", s("0")), ("h", s("1/3")), ("xmin", f(-3.0)), ("xmax", f(3.0)), ("ymin", f(-8.0)), ("ymax", f(8.0)), ("label_size", s("Medium")), ("secant_triangle", b(true))],
+        &[("func", s("-4.9t^2 + 20t")), ("fname", s("h")), ("var", s("t")), ("a", s("0")), ("h", s("0.01")), ("xmin", f(0.0)), ("xmax", f(4.5)), ("ymin", f(0.0)), ("ymax", f(25.0)), ("label_size", s("Medium")), ("secant_triangle", b(true))],
+    ];
+    for c in cases {
+        let out = build(&with(c));
+        let fl = faults(&out.svg);
+        assert!(fl.is_empty(), "{c:?}: {fl:?}");
+        let l = texts(&out.svg, "panel");
+        assert!(l.iter().any(|x| x.starts_with("Slope triangle: ") && x.contains("\u{394}")), "{l:?}");
+        assert!(out.notes.iter().any(|n| n.contains("too small for its labels")), "{:?}", out.notes);
+    }
+}

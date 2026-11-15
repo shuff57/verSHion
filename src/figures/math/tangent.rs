@@ -1199,6 +1199,8 @@ pub(super) fn build(p0: &Params) -> Out {
     let draw_secant = p.b("show_secant") && !curve_only;
     // a note about the secants is said only while they are drawn, one about the more tangents only while tangents are
     let mut notes: Vec<String> = m.notes.iter().filter(|(k, _)| match k { About::All => true, About::Secant => draw_secant, About::More => draw_tangent }).map(|(_, n)| n.clone()).collect();
+    // the secant's slope triangle's labels, when the triangle is too small to carry them
+    let mut tri_small: Option<String> = None;
 
     // ── the grid, drawn by the coordinate grid itself ──
     let gp = grid_params(p, &m, ink);
@@ -1347,6 +1349,7 @@ pub(super) fn build(p0: &Params) -> Out {
         let mut sec_legs: Option<((Pt, Pt), (Pt, Pt))> = None;
         if let (true, Some(s), Some(pp)) = (draw_secant && p.b("secant_triangle"), m.secants.first(), p_px) {
             let c = (sx(t.a + s.h), pp.1);
+
             if q_px.is_some_and(|qq| (qq.1 - pp.1).abs() < 1.0) {
                 notes.push("The secant is horizontal (\u{394}y = 0), so its slope triangle has no rise".into());
             } else if let Some(qq) = q_px {
@@ -1372,13 +1375,20 @@ pub(super) fn build(p0: &Params) -> Out {
                     for r in point_reqs(q_px) { place(&mut trial, &r, &mut cr, &mut tp); }
                     leg_reqs(run, up).iter().all(|r| place_one(&mut trial, r, &r.text, false).is_some())
                 };
-                let (run, up) = cands.iter().copied().find(|(r, u)| fits(*r, *u)).unwrap_or(cands[0]);
+                let found = cands.iter().copied().find(|(r, u)| fits(*r, *u));
+                let (run, up) = found.unwrap_or(cands[0]);
                 over += &leg_svg(run.0, run.1, tri_col, "run");
                 over += &leg_svg(up.0, up.1, tri_col, "rise");
                 sc.segs.push(run);
                 sc.segs.push(up);
                 sec_legs = Some((run, up));
-                reqs.extend(leg_reqs(run, up));
+                // a triangle too small for its labels (a leg under 30 px, and no corner where both fit) is drawn, and its
+                // labels are written in the panel, not laid over the curve and the lines
+                let leg = |s: (Pt, Pt)| ((s.1 .0 - s.0 .0).powi(2) + (s.1 .1 - s.0 .1).powi(2)).sqrt();
+                if found.is_none() && leg(run).min(leg(up)) < 30.0 {
+                    tri_small = Some(format!("{run_t}, {rise_t}"));
+                    notes.push("The secant's slope triangle is too small for its labels on the graph, so they are written in the panel: widen h or zoom in to label it on the graph".into());
+                } else { reqs.extend(leg_reqs(run, up)); }
             } else { notes.push("The secant's slope triangle needs Q inside the window".into()); }
         }
         if let (true, Slope::Finite(..), Some(mn), Some(_)) = (draw_tangent && p.b("tangent_triangle"), &t.slope, t.m.as_ref(), p_px) {
@@ -1622,6 +1632,7 @@ pub(super) fn build(p0: &Params) -> Out {
     }
     // the labels set on the graph by their name alone are written here in full
     if !to_panel.is_empty() { lines.push(pl(None, vec![pr("On the graph: "), mt(&to_panel.join(", "))])); }
+    if let Some(t) = &tri_small { lines.push(pl(None, vec![pr("Slope triangle: "), mt(t)])); }
     let lh = 1.55 * size;
     let sw = 24.0;
     let mut table: Vec<(Option<(String, &'static str)>, Vec<Part>, Vec<Part>)> = vec![];
