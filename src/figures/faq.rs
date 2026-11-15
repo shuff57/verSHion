@@ -231,6 +231,9 @@ const CONIC_SECTIONS: &[Faq] = &[
     Faq {
         q: "What can I drag on the figure?",
         a: "The centre (or a parabola's vertex) moves the conic, a vertex changes a, a co-vertex changes b, a parabola's focus changes p, and P slides along the curve with its focal radii and their lengths following it. Points snap to the grid. Any label can be dragged to a clearer spot.",
+    },
+];
+
 const LIMITS_DISCONTINUITIES: &[Faq] = &[
     Faq {
         q: "How do I type a piecewise function?",

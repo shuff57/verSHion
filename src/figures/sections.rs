@@ -76,6 +76,8 @@ static CONIC_SECTIONS: [RefSection; 6] = [
     s("x-axis", &["xmin", "xmax", "xstep", "numbers", "xlabel"], ""),
     s("y-axis", &["ymin", "ymax", "ystep", "ylabel"], ""),
     s("Grid and copies", &["minor", "grid", "style", "show_answers", "blank_labels", "blank_curve", "blank_equation", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
 static LIMITS: [RefSection; 7] = [
     s("Function", &["pieces", "dots"], "One piece a line: a formula with its domain, or points joined smoothly. Click a circle on the figure to switch it open or closed; drag a single point up or down."),
     s("Questions", &["ask_at", "ask_left", "ask_right", "ask_two", "ask_value", "ask_inf", "ask_disc", "inf_answer", "dne_word"], "Drag a marker along the x-axis to move x = a."),
