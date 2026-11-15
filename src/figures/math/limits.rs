@@ -1043,7 +1043,7 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
         let across = r.own.iter().any(|(a, c)| (a.0 - c.0).abs() < 0.5 && b[0] + 4.0 < a.0 && a.0 < b[2] - 4.0 && (b[3] <= a.1.min(c.1) || b[1] >= a.1.max(c.1)));
         let clear = |d: f64| if across { d >= (own_d + 2.0).max(8.0) } else { d >= (own_d + 8.0).max(1.5 * own_d) };
         let rival_ok = r.rivals.iter().all(|(a, c)| clear(seg_box_dist(*a, *c, b)));
-        if board.free(grow(b, 1.5)) && rival_ok && nearest_is_own(board, b, &own_pts, clear) {
+        if board.free(grow(b, if size >= 20.0 { 0.15 * size } else { 1.5 })) && rival_ok && nearest_is_own(board, b, &own_pts, clear) {
             board.boxes.push(grow(b, 1.0));
             return Spot::Beside(*c);
         }
@@ -1057,10 +1057,12 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
             let ang = k as f64 * PI / 72.0;
             let c = (r.anchor.0 + rad * ang.cos() * 1.3, r.anchor.1 - rad * ang.sin());
             let b = label_box_for(c, &r.text, size);
-            if !board.free(grow(b, 2.0)) { continue; }
+            if !board.free(grow(b, if size >= 20.0 { 0.15 * size } else { 2.0 })) { continue; }
             // (a label on a leader keeps clear of every other point and every other thing of its kind, too)
             if board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 0.5 && (o.1 - q.1).abs() < 0.5)).any(|(q, _)| box_pt(b, *q) < 8.0) { continue; }
-            if r.rivals.iter().any(|(a, c2)| seg_box_dist(*a, *c2, b) < 8.0) { continue; }
+            let own_d = near_own(b);
+            let own_c = r.own.iter().map(|(a, d)| dist_seg(c, *a, *d)).fold(f64::MAX, f64::min);
+            if r.rivals.iter().any(|(a, c2)| seg_box_dist(*a, *c2, b) < if size >= 20.0 { (own_d + 2.0).max(8.0) } else { 8.0 } || size >= 20.0 && dist_seg(c, *a, *c2) <= own_c + 2.0) { continue; }
             // from 7 px out of the anchor to the box's nearest edge point
             // (aimed within the ink: the width estimate is a little generous on the right)
             let e = (r.anchor.0.clamp(b[0] + 3.0, b[0] + 0.9 * (b[2] - b[0]) - 3.0), r.anchor.1.clamp(b[1] + 1.0, b[3] - 1.0));

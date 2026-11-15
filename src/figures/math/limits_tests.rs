@@ -1680,6 +1680,29 @@ fn ordinary_classroom_spellings_read_and_evaluate() {
     }
 }
 
+#[test]
+fn large_labels_stay_clear_and_belong_to_their_jump() {
+    let mut meter = Meter::new();
+    for f in ["floor(x/2)", "cos(x)/sin(x)", "x/sin(x)", "1/cos(x)", "1/tan(x)", "tan(x)/sin(x)", "(1-cos(x))/sin(x)"] {
+        for options in [json!({"kind_labels": true}), json!({"asym_eqs": true}), json!({"kind_labels": true, "asym_eqs": true, "guide": true, "arrows": true})] {
+            let p = with(merge(&json!({"pieces": format!("y = {f}"), "dots": "", "ask_at": "2, 3", "ask_inf": "Both", "ask_disc": true, "label_size": "Large"}), &options));
+            let s = svg(&p);
+            let r = check(&mut meter, &s, &p);
+            assert!(r.problems.is_empty(), "{f} {options}: {:?}", r.problems);
+            let dr = last_drawn(&p);
+            for (i, label) in dr.labels.iter().enumerate() {
+                let c = match label.2 { Spot::Beside(c) | Spot::Leader(c, _, _) => c, Spot::Off => continue };
+                let b = [c.0-0.1, c.1-0.1, c.0+0.1, c.1+0.1];
+                let own = label.3.iter().map(|(a,d)| seg_dist(*a,*d,b)).fold(f64::MAX,f64::min);
+                for (j, other) in dr.labels.iter().enumerate() {
+                    if i == j || label.0 != other.0 { continue; }
+                    let rival = other.3.iter().map(|(a,d)| seg_dist(*a,*d,b)).fold(f64::MAX,f64::min);
+                    assert!(own < rival, "{f}: {} at {c:?}, own {own}, rival {rival}", label.1);
+                }
+            }
+        }
+    }
+}
 
 #[test]
 fn bounded_wave_zero_limit_is_a_horizontal_asymptote() {
