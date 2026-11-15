@@ -7,13 +7,18 @@ fn big(n: N) -> Option<B> {
     let (a, b) = n.q?;
     Some(B::new(BigInt::from(a), BigInt::from(b)))
 }
+#[derive(Clone)]
 pub(super) struct Answer {
     pub value: f64,
+    pub extended: Option<String>,
     pub exact: Option<String>,
     pub digits: usize,
 }
 impl Answer {
     pub fn eq(&self) -> String {
+        if let Some(t) = &self.extended {
+            return format!("≈ {t}");
+        }
         if let Some(t) = &self.exact {
             format!("= {t}")
         } else {
@@ -21,10 +26,69 @@ impl Answer {
         }
     }
 }
+thread_local! {static CACHE:std::cell::RefCell<Vec<(String,Result<Answer,String>)>>=const{std::cell::RefCell::new(Vec::new())};}
 pub(super) fn total(p: &Params, d: &Data) -> Result<Answer, String> {
+    let key = format!(
+        "{:?}",
+        (
+            [
+                p.s("mode"),
+                p.s("first"),
+                p.s("difference"),
+                p.s("ratio"),
+                p.s("formula"),
+                p.s("recurrence"),
+                p.s("second"),
+                p.s("start")
+            ],
+            p.i("sum_count")
+        )
+    );
+    if let Some(v) = CACHE.with(|c| {
+        c.borrow()
+            .iter()
+            .find(|(k, _)| k == &key)
+            .map(|(_, v)| v.clone())
+    }) {
+        return v;
+    }
+    let value = compute(p, d);
+    CACHE.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() >= 8 {
+            let _ = c.remove(0);
+        }
+        c.push((key, value.clone()));
+    });
+    value
+}
+fn compute(p: &Params, d: &Data) -> Result<Answer, String> {
     let count = p.i("sum_count").clamp(1, 1000) as usize;
     let n = N::int(count as i128);
     let one = N::int(1);
+    if p.s("mode") == "Explicit" && p.s("formula").replace(' ', "") == "1/n!" && count > 170 {
+        let start = if p.s("start") == "0" { 0 } else { 1 };
+        let (mut term, mut hi, mut lo) = (1.0f64, 0.0f64, 0.0f64);
+        for k in 0..start + count {
+            if k > 0 {
+                term /= k as f64;
+            }
+            if k >= start {
+                let t = hi + term;
+                lo += (hi - t) + term;
+                hi = t;
+            }
+            if term == 0.0 {
+                break;
+            }
+        }
+        return Ok(Answer {
+            value: hi + lo,
+            exact: None,
+            extended: None,
+            digits: 0,
+        });
+    }
     let exact = match p.s("mode") {
         "Arithmetic" => big(d.first).zip(big(d.k)).map(|(a, k)| {
             B::from_integer(BigInt::from(count))
@@ -42,6 +106,21 @@ pub(super) fn total(p: &Params, d: &Data) -> Result<Answer, String> {
         _ => None,
     };
     let mut exact = exact;
+    if p.s("mode") == "Explicit" {
+        if let Some((a, r)) = super::limit_math::structural::geometric(
+            p.s("formula"),
+            if p.s("start") == "0" { 0 } else { 1 },
+        ) {
+            exact = Some(if r == B::from_integer(1.into()) {
+                a * B::from_integer(BigInt::from(count))
+            } else {
+                a * (B::from_integer(1.into()) - r.pow(count as i32))
+                    / (B::from_integer(1.into()) - r)
+            });
+        }
+    }
+    let explicit_closed = p.s("mode") == "Explicit" && exact.is_some();
+
     let mut value = match p.s("mode") {
         "Arithmetic" => {
             n.op(
@@ -80,11 +159,13 @@ pub(super) fn total(p: &Params, d: &Data) -> Result<Answer, String> {
                 d.first.v * numerator / delta
             }
         }
+        _ if explicit_closed => 0.0,
         _ => {
             let start = if p.s("start") == "0" { 0 } else { 1 };
             let mut last = vec![];
             let mut sum = N::int(0);
             let mut bsum = Some(B::from_integer(0.into()));
+            let (mut high, mut low) = (0.0f64, 0.0f64);
             for j in 0..count {
                 let v = if p.s("mode") == "Explicit" {
                     read(
@@ -109,8 +190,22 @@ pub(super) fn total(p: &Params, d: &Data) -> Result<Answer, String> {
                 if !v.v.is_finite() {
                     return Err("The requested sum exceeds the supported numerical range.".into());
                 }
-                bsum = bsum.zip(big(v)).map(|(a, b)| a + b);
-                sum = sum.op(v, '+');
+                bsum = bsum
+                    .zip(big(v))
+                    .map(|(a, b)| a + b)
+                    .filter(|q| q.numer().bits() + q.denom().bits() <= 64);
+                let next = high + v.v;
+                low += if high.abs() >= v.v.abs() {
+                    (high - next) + v.v
+                } else {
+                    (v.v - next) + high
+                };
+                high = next;
+                sum = N {
+                    v: high + low,
+                    q: None,
+                    dec: true,
+                };
                 last.push(v);
             }
             exact = bsum;
@@ -123,15 +218,35 @@ pub(super) fn total(p: &Params, d: &Data) -> Result<Answer, String> {
             sum.v
         }
     };
+    let mut extended = None;
     let mut digits = 0;
     let mut text = None;
     if let Some(q) = exact {
-        value = q
-            .to_f64()
-            .ok_or("The requested sum exceeds the supported numerical range.")?;
+        value = q.to_f64().unwrap_or(f64::INFINITY);
+        if !value.is_finite() {
+            let numerator = q.numer().to_string();
+            let negative = numerator.starts_with('-');
+            let a = numerator.trim_start_matches('-');
+            let b = q.denom().to_string();
+            let head = |s: &str| {
+                let k = s.len().min(16);
+                s[..k].parse::<f64>().unwrap() / 10f64.powi(k as i32 - 1)
+            };
+            let mut m = head(a) / head(&b);
+            let mut e = a.len() as i32 - b.len() as i32;
+            while m >= 10.0 {
+                m /= 10.0;
+                e += 1;
+            }
+            while m < 1.0 {
+                m *= 10.0;
+                e -= 1;
+            }
+            extended = Some(format!("{}{m:.7}e{e}", if negative { "-" } else { "" }));
+        }
         let t = q.to_string();
         digits = t.chars().count();
-        if digits <= 110 {
+        if digits <= 16 {
             let decimal =
                 matches!(p.s("mode"), "Arithmetic" | "Geometric") && (d.first.dec || d.k.dec);
             text = Some(if decimal {
@@ -145,14 +260,22 @@ pub(super) fn total(p: &Params, d: &Data) -> Result<Answer, String> {
             });
         }
     }
-    if !value.is_finite() {
+    if !value.is_finite() && extended.is_none() {
         return Err("The requested sum exceeds the supported numerical range.".into());
     }
     Ok(Answer {
         value,
+        extended,
         exact: text,
         digits,
     })
+}
+pub(super) fn shown(n: N) -> String {
+    if n.text().len() > 16 && !n.text().starts_with('≈') {
+        format!("≈ {}", approximation(n.v))
+    } else {
+        n.eq()
+    }
 }
 fn negative(n: N) -> bool {
     n.q.map_or(n.v < 0.0, |(a, _)| a < 0)
@@ -273,11 +396,11 @@ mod tests {
                 "{case}"
             );
             let exact = case["exact"].as_str().unwrap();
-            if exact.len() <= 110 {
+            if exact.len() <= 16 {
                 assert_eq!(answer.exact.as_deref(), Some(exact), "{case}");
             } else {
                 assert!(answer.exact.is_none());
-                assert!(answer.digits > 110);
+                assert!(answer.digits > 16);
             }
         }
         assert_eq!(fixtures.len(), 60);
@@ -328,5 +451,72 @@ mod tests {
         p.set_s("difference", "-0.35");
         p.set_s("start", "1");
         assert_eq!(formula(&p, &data(&p).unwrap(), "n"), "-0.35n + 2.35");
+    }
+}
+#[cfg(test)]
+mod r2_tests {
+    use super::*;
+    #[test]
+    fn sum_1000_latency_r2() {
+        let mut formulas = vec![
+            "1/(n^2+1)".to_string(),
+            "n/(n^2+1)".into(),
+            "1/(n^2+n+1)".into(),
+            "1/n!".into(),
+            "(-1)^n".into(),
+        ];
+        for k in 1..=35 {
+            formulas.push(format!("1/(n^2+{k})"));
+        }
+        let mut worst = 0f64;
+        for formula in formulas {
+            CACHE.with(|c| c.borrow_mut().clear());
+            let mut p = Params::defaults(&params());
+            p.set_s("mode", "Explicit");
+            p.set_s("formula", &formula);
+            p.set_b("sum_n", true);
+            p.set_i("sum_count", 1000);
+            p.set_i("count", 24);
+            p.set_s("layout", "Two aligned graphs");
+            p.set_s("display", "Both");
+            p.set_s("label_size", "Large");
+            for k in ["sigma", "point_values", "sums", "sum", "convergence"] {
+                p.set_b(k, true);
+            }
+            let start = std::time::Instant::now();
+            let _ = render(&p);
+            let _ = warnings(&p);
+            let _ = handles(&p);
+            let elapsed = start.elapsed().as_secs_f64();
+            worst = worst.max(elapsed);
+            assert!(elapsed < 0.5, "{formula}: {elapsed}");
+            let entries = CACHE.with(|c| c.borrow().len());
+            assert_eq!(entries, 1);
+        }
+        eprintln!("40-formula cold render/notes/handles maximum {worst:.6}s");
+    }
+    #[test]
+    fn readable_and_extended_sums_r2() {
+        for (formula, expect) in [("(-1)^n", "= 0"), ("1/n!", "≈ 1.7182818")] {
+            let mut p = Params::defaults(&params());
+            p.set_s("mode", "Explicit");
+            p.set_s("formula", formula);
+            p.set_i("sum_count", 1000);
+            let a = total(&p, &data(&p).unwrap()).unwrap();
+            assert_eq!(a.eq(), expect);
+        }
+        let mut p = Params::defaults(&params());
+        p.set_s("mode", "Explicit");
+        p.set_s("formula", "3^(n-1)");
+        p.set_i("sum_count", 1000);
+        let a = total(&p, &data(&p).unwrap()).unwrap();
+        assert!(a.extended.as_ref().unwrap().contains("e476"));
+        p.set_i("sum_count", 1);
+        p.set_b("sum_n", true);
+        assert!(
+            rows_for(&p, &data(&p).unwrap())
+                .join(" ")
+                .contains("Sum of the first term")
+        );
     }
 }

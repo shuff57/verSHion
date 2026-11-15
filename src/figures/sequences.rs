@@ -691,7 +691,10 @@ fn ambiguous_fraction(s: &str) -> bool {
     false
 }
 fn recurrence_spelling(s: &str) -> String {
-    s.replace('−', "-")
+    s.chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .replace('−', "-")
         .replace("a_{n-1}", "a_(n-1)")
         .replace("a_{n-2}", "a_(n-2)")
         .replace("a(n-1)", "a_(n-1)")
@@ -904,6 +907,35 @@ fn data(p: &Params) -> Result<Data, String> {
             .any(|s| s == "a")
     {
         return Err("Use n in an explicit formula; choose Recursive for previous terms.".into());
+    }
+    if mode == "Explicit" {
+        if let Some(name) = p
+            .s("formula")
+            .split(|c: char| !c.is_ascii_alphabetic())
+            .find(|t| {
+                !t.is_empty()
+                    && !matches!(
+                        *t,
+                        "n" | "pi"
+                            | "e"
+                            | "E"
+                            | "sin"
+                            | "cos"
+                            | "tan"
+                            | "sqrt"
+                            | "ln"
+                            | "log"
+                            | "exp"
+                            | "abs"
+                            | "floor"
+                            | "ceil"
+                    )
+            })
+        {
+            return Err(format!(
+                "Unknown name '{name}'. Use n in the explicit formula; sigma notation rewrites n as k."
+            ));
+        }
     }
     let first = if mode == "Explicit" {
         N::int(0)
@@ -1387,7 +1419,7 @@ fn segments_cross(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) ->
 }
 fn plot_height(p: &Params) -> f64 {
     (if p.s("layout") == "Number line" {
-        220.0
+        (40.0 + (p.i("count").clamp(3, 24) - 1) as f64 * 7.0).max(100.0)
     } else {
         560.0
     }) * svg::label_factor(p.s("label_size")).max(1.0)
@@ -1825,7 +1857,10 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
             });
         }
         rows.push(if ans {
-            format!("Sum of {count} terms {}", d.s[count - 1].eq())
+            format!(
+                "Sum of {count} terms {}",
+                series_math::shown(d.s[count - 1])
+            )
         } else {
             "Sum of terms = __________".into()
         });
@@ -1859,7 +1894,7 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
     if ans
         && p.b("sum_n")
         && p.s("mode") == "Geometric"
-        && series_math::total(p, d).is_ok_and(|a| a.digits > 110)
+        && series_math::total(p, d).is_ok_and(|a| a.digits > 16)
     {
         let n = p.i("sum_count").clamp(1, 1000);
         rows.push(format!(
@@ -1873,11 +1908,23 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
         let n = p.i("sum_count").clamp(1, 1000);
         rows.push(if ans {
             match series_math::total(p, d) {
-                Ok(a) => format!("Sum of first {n} terms {}", a.eq()),
+                Ok(a) => format!(
+                    "{} {}",
+                    if n == 1 {
+                        "Sum of the first term".into()
+                    } else {
+                        format!("Sum of first {n} terms")
+                    },
+                    a.eq()
+                ),
                 Err(_) => format!("Sum of first {n} terms: __________ (cannot determine)"),
             }
         } else {
-            format!("Sum of first {n} terms: __________")
+            if n == 1 {
+                "Sum of the first term: __________".into()
+            } else {
+                format!("Sum of first {n} terms: __________")
+            }
         });
     }
     if p.b("sigma") {
@@ -1950,7 +1997,7 @@ fn rows_for(p: &Params, d: &Data) -> Vec<String> {
             } else if !ans && !in_window(d.s[j].v, lo, hi) {
                 "outside window".into()
             } else {
-                d.s[j].eq()
+                series_math::shown(d.s[j])
             };
             let mut row = String::new();
             if p.b("terms") || p.s("task") == "Missing terms" {
@@ -2311,7 +2358,12 @@ fn render(p: &Params) -> String {
                     continue;
                 }
                 let (x, y) = if numberline {
-                    (nlx(v.v), bottom - 20.0 - j as f64 * 7.0)
+                    (
+                        nlx(v.v),
+                        bottom
+                            - 20.0
+                            - j as f64 * 7.0 * svg::label_factor(p.s("label_size")).max(1.0),
+                    )
                 } else {
                     (px(j), py(v.v))
                 };
@@ -2374,6 +2426,17 @@ fn render(p: &Params) -> String {
             }
             doc.raw(&format!(r##"<text x="{}" y="{y}" font-size="{fs}" font-family="DejaVu Sans, Liberation Sans, sans-serif" fill="#111111">{}</text></g>"##,left+55.0,row_markup(expression.trim())));
             extra += fs * 0.9;
+        } else if row.contains('≈') {
+            let y = base + extra;
+            let mut x = left;
+            for (i, chunk) in row.split('≈').enumerate() {
+                if i > 0 {
+                    doc.raw(&format!(r##"<text data-approx="true" x="{x}" y="{y}" font-size="{fs}" font-family="STIX Two Math, serif" fill="#111111">≈</text>"##));
+                    x += fs * 1.35;
+                }
+                doc.raw(&format!(r##"<text x="{x}" y="{y}" font-size="{fs}" font-family="DejaVu Sans, Liberation Sans, sans-serif" fill="#111111">{}</text>"##,row_markup(chunk)));
+                x += circle::tw(chunk, fs, false) + 3.0;
+            }
         } else {
             doc.raw(&format!(r##"<text x="{left}" y="{}" font-size="{fs}" font-family="DejaVu Sans, Noto Sans, Liberation Sans, Arial, sans-serif" fill="#111111">{}</text>"##,base+extra,row_markup(row)));
         }
