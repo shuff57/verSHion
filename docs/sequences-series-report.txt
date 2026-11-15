@@ -1,4 +1,6 @@
-Implementation report: sequences-series, independent-check revision R1
+Implementation report: sequences-series, independent-check revision R2
+Current R2 commits: 48469db (structural limits), 5f64a43 (bounded cached sums); final report commit is HEAD.
+The earlier R1 report and all 36 frozen evidence tokens follow; the R2 additions and verification are at the end.
 Branch: newfig-sequences
 Starting revision: fe8c8d8; original base new-figures-base adb6747.
 Only /home/shuff57/Documents/GitHub/verSHion-parity3 was modified. No push, browser or subagents.
@@ -153,7 +155,7 @@ Teacher task on the NAS (browser task intentionally skipped):
 Choose Sequences and series; select Geometric; type first=2 and ratio=-1/2; choose Both or Partial sums; turn on finite sum, convergence and limit. For a larger sum enable Sum first N terms, set N=1000 and optionally Write sigma notation. Choose a student task and turn Show answers off; export the student copy and key. In Recursive mode type a_(n-1)/2+3 with first=2; the second seed disappears and the key gives the one-seed recurrence and fixed point 6.
 
 Limits and precision boundaries:
-No frozen capability is intentionally skipped. Arbitrary symbolic limits remain cannot determine; unsupported domains are refused with panel notes. Per-term exact arithmetic is checked i128 rational arithmetic; requested arithmetic/geometric sums use arbitrary-size rational integers. Other requested sums accumulate exact term fractions where available and become approximate if a term needs numerical evaluation. A fully evaluated exact requested sum longer than 110 characters is shown approximately; a geometric request also retains a compact exact formula. This keeps large N useful without emitting pages of fraction digits. General symbolic irrational simplification is not claimed. The infinity row says Sum to infinity to avoid whole-line font fallback; its value and defining fraction are retained. Numeric overflow/underflow is never written as an exact value. The diagram remains capped at 24 visible terms; the independent requested sum reaches 1000. No separate free-form sigma-bound parser was added. The owner's independent checker has not been rerun by this builder; no independent acceptance is claimed.
+No frozen capability is intentionally skipped. Arbitrary symbolic limits remain cannot determine; unsupported domains are refused with panel notes. Per-term exact arithmetic is checked i128 rational arithmetic; requested arithmetic/geometric sums use arbitrary-size rational integers. Other requested sums accumulate exact term fractions where available and become approximate if a term needs numerical evaluation. A fully evaluated exact requested sum longer than 16 characters is shown approximately; a geometric request also retains a compact exact formula. This keeps large N useful without emitting pages of fraction digits. General symbolic irrational simplification is not claimed. The infinity row says Sum to infinity to avoid whole-line font fallback; its value and defining fraction are retained. Numeric overflow/underflow is never written as an exact value. Generic requested sums stop growing exact fractions once their bit budget is exceeded, and use compensated two-component accumulation. Results are cached by the mathematical parameters across rendering, notes and handles. The diagram remains capped at 24 visible terms; the independent requested sum reaches 1000. No separate free-form sigma-bound parser was added. The owner's independent checker has not been rerun by this builder; no independent acceptance is claimed.
 
 Final verification:
 Broad run: 1719 passed, 0 failed, 4 existing ignored, 191.99 seconds. Filters: sequences census frozen share figures::start figures::faq figures::interact. The ignored checks are the census dump, two external-rig share round trips, and the PNG-frame diagnostic. Log: /home/shuff57/newfig-out/sequences/r1/regression.log.
@@ -189,3 +191,59 @@ cap-33.png
 cap-34.png
 cap-35.png
 The last seven changed images were reopened after the final typography correction. The remaining inspected images retained identical bytes. The opening has a_n=n+1; the two student images contain sum/formula blanks and no partial-sum answers; keys mark requested terms; the first-order graph approaches 6; the logarithmic graph includes its exact zero; the cosine graph has exact half-integers and complete-period sums; number-line limits have separate named captions; the nonzero sum-limit evidence line is dashed; the large-N geometric key retains a compact exact expression, and the arithmetic key gives 501500. Sigma bounds and summands occupy separate clear text boxes at every label size.
+
+
+Second independent-check revision R2 (starting at 15eb6c6):
+The complete ~/checker-out/sequences-r2/report.md was read. The earlier four blockers remain covered by all their existing tests; no earlier test was removed. Exact-output display assertions were adjusted to the newly requested 16-character readability cutoff.
+
+Blocking limit analysis: the suffix-based base extraction is removed. An operator-precedence tree represents every sum, product, quotient, power, function and factorial separately, including implicit multiplication. Rational-function leading terms and standard identities are applied to individual tree nodes. Products/sums combine established finite limits; polynomial/exponential/factorial growth comparisons establish supported decay or divergence. A base tending to 1 is not treated as the constant base 1. Even powers of -1 and bounded-but-unestablished trigonometric sequences have explicit safeguards. Supported standard shifted powers, n/2^n, n²/3^n, exp-ratios, cosine over n, logarithms and square roots are included. Unsupported or indeterminate compositions remain cannot determine. Every reported finite explicit limit must also agree with the last evaluable large-index term, using the same reader as the plot, at indices through 10^12. The confirmation tolerance is 0.001 times max(1,|L|); this confirms an analytic proof and never invents one from samples.
+New independent hand-rule fixture: 229 ordinary formulas (160 offset/scaled decays, 40 shifted powers, 29 named examples). Expected finite limits are exact Fraction constants; divergent forms are marked explicitly. The test checks both written limits/classification and large-index term agreement. Cases include every false-limit family in the rejection.
+
+Blocking sum speed: the result is held in a bounded thread-local cache keyed by mathematical parameters, so render, notes, two graphs and labels reuse one computation. General sums use a bounded exact accumulator and compensated high/low floating accumulation once the exact result grows past the bit budget. Arithmetic/geometric sums still use closed BigRational formulas. The cold performance sweep covers 40 formulas at N=1000 with 24 plotted terms, Large labels, two graphs, sigma and all answer annotations; render + notes + handles must finish below 0.5 seconds for every case.
+
+Additional fixes: exact requested sums above 16 characters are displayed approximately; explicit geometric sums use a structurally derived constant ratio rather than sampled ratios, allowing 3^(n-1) through 1000 terms beyond f64 range to print a scientific decimal. Factorial reciprocal tails beyond term 170 use compensated recurrence accumulation instead of overflowing n!. Alternating (-1)^n sums remain exact. N=1 says Sum of the first term. Approximate-row text and the mathematical approximation glyph use separate SVG text runs to avoid whole-row serif fallback. Free explicit variable names such as k and r receive a note naming the offending identifier and directing the teacher to n. Spaced recurrence subscripts are accepted. Number-line height adapts to the number of visible terms.
+
+Additional review evidence (all earlier 36 frozen tokens are retained):
+changes:{"mode":"Explicit","formula":"1-(1/2)^n","convergence":true,"limit":true,"point_values":true,"from":0,"to":1.25,"step":0.25}
+changes:{"mode":"Explicit","formula":"5*(1/2)^n","convergence":true,"limit":true,"from":0,"to":3,"step":0.5}
+changes:{"mode":"Explicit","formula":"3-2^n","convergence":true,"limit":true,"from":-100,"to":5,"step":10}
+changes:{"mode":"Explicit","formula":"1/(n^2+1)","sum_n":true,"sum_count":1000,"sigma":true,"count":24,"point_values":true,"sums":true,"sum":true,"convergence":true,"label_size":"Large","display":"Both","layout":"Two aligned graphs"}
+changes:{"mode":"Explicit","formula":"3^(n-1)","sum_n":true,"sum_count":1000,"sigma":true}
+changes:{"mode":"Explicit","formula":"1/n!","sum_n":true,"sum_count":1000,"sigma":true}
+
+Remaining scope: general symbolic limits and arbitrary indeterminate forms still receive cannot determine; large phases/unsupported domains receive notes. The existing graceful refusal of some crowded all-options point labels remains; this revision preserves the clean placement rules rather than placing text on other marks. There is no separate sigma-bound expression parser. No independent acceptance is claimed. R2 final verification and inspected images are recorded below.
+
+
+R2 final verification:
+78 passed, 0 failed, 1 existing ignored (census dump), 10.75 seconds. Filters: figures::sequences census frozen figures::faq figures::start. Every earlier sequences test is retained, including the full worksheet/handle sweeps. Log: /home/shuff57/newfig-out/sequences/r2/final.log.
+Separate cold timing sweep: all 40 N=1000 formulas passed; maximum render + notes + handles time 0.007317 seconds. Each case clears the sum cache first and checks that only one result is cached. Log: /home/shuff57/newfig-out/sequences/r2/timing.log.
+Native executable build successful, 23.63 seconds; /home/shuff57/newfig-out/sequences/r2/build.log.
+54 executable PNGs rendered; all 36 frozen evidence cases differ from the opening render. Params and hashes: /home/shuff57/newfig-out/sequences/r2/executable-renders.json and png-hashes.json. Frozen evidence tokens: evidence.json in that directory, also individually retained above.
+Print: 1538 x 2937, all 4,517,106 pixels grey-only.
+R2 changes touch only this figure's implementation/tests/oracles and this report. No shared implementation, dependencies, census or frozen fixture files were changed in R2. Census/freeze tests pass. Relative to new-figures-base all pre-existing census rows remain byte-identical; the only added rows are sequences-series defaults/start, both 9240b785875bde18.
+
+R2 hand checks:
+1-(1/2)^n: first terms 1/2,3/4,7/8; limit 1.
+5*(1/2)^n: first terms 5/2,5/4,5/8; limit 0.
+2+3*(1/2)^n: 7/2,11/4,19/8; limit 2.
+3-2^n: 1,-1,-5,-13; tends to negative infinity (key says diverges).
+1+(-1)^n alternates 0,2; does not converge.
+(n+1)/n tends to 1; 2*n/(n+1) tends to 2; (n^2+1)/(2*n^2-3) tends to 1/2 by leading coefficients.
+n/2^n and n^2/3^n tend to 0 by exponential domination.
+Sum n=1..1000 of 3^(n-1) = (3^1000-1)/2, displayed approximately 6.6103541e476.
+Sum n=1..1000 of (-1)^n = 0 exactly. Sum of 1/n! through 1000 is approximately 1.7182818; the omitted positive tail beyond underflow is below displayed precision.
+The 229-case JSON fixture records hand-derived Fraction constants and explicit divergence classifications for each ordinary formula; tests also confirm the actual reader's large-index terms. Earlier Python Fraction term/partial-sum and large-N fixtures remain checked.
+
+R2 PNGs opened and inspected (all under /home/shuff57/newfig-out/sequences/r2/):
+colour.png
+student.png
+key.png
+print.png
+numberline-large.png
+offset-limit.png
+scaled-limit.png
+growth-limit.png
+slow-sum.png
+extended-sum.png
+factorial-sum.png
+The offset limit line is at 1, scaled decay limit at 0, growth has no false finite line, the slow rational sum is approximately 1.0756745, the huge geometric sum is a scientific approximation, and the factorial sum remains finite. Student sums remain blank; the key marks asked terms; colour and grey Print are clear; the number line uses less empty height. Some crowded all-options labels still receive a refusal note. Arbitrary symbolic limits and unsupported domains remain explicitly unresolved. No frozen capability was skipped; no independent acceptance or new full-share-suite run is claimed for R2.
