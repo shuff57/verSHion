@@ -1711,3 +1711,91 @@ fn bounded_wave_zero_limit_is_a_horizontal_asymptote() {
     let d = last_drawn(&p);
     assert!(d.labels.iter().any(|(_, text, _, _)| text == "y = 0"), "{}", words(&s));
 }
+
+/// Hand-derived check-7 regressions. sin(kx)/x -> k; tan(kx)/x -> k
+/// at zero, but at infinity the tangent quotient has recurring poles, not limit 0.
+/// The periodic sine/cosine functions have no limit at infinity. log_b(b^n) = n.
+#[test]
+fn classroom_function_arguments_bind_the_whole_implicit_product() {
+    let cases = [
+        // spelling, a, f(a) (None = undefined), limit at a, +infinity, -infinity,
+        // vertical asymptotes in -6..10, horizontal asymptote (if any).
+        ("sin 3x / x", "0", None, "3", "0", "0", 0, Some(0.0)),
+        ("sin 3x/x", "0", None, "3", "0", "0", 0, Some(0.0)),
+        ("sin3x/x", "0", None, "3", "0", "0", 0, Some(0.0)),
+        ("(sin 5x)/x", "0", None, "5", "0", "0", 0, Some(0.0)),
+        ("tan 3x/x", "0", None, "3", "Dne", "Dne", 16, None),
+        ("sin 2x", "pi/4", Some(1.0), "1", "Dne", "Dne", 0, None),
+        ("sin2x", "pi/4", Some(1.0), "1", "Dne", "Dne", 0, None),
+        ("sin 2 x", "pi/4", Some(1.0), "1", "Dne", "Dne", 0, None),
+        ("cos 2x", "pi/2", Some(-1.0), "-1", "Dne", "Dne", 0, None),
+        ("2cos 3x", "0", Some(2.0), "2", "Dne", "Dne", 0, None),
+        ("1 − cos 2x", "pi/2", Some(2.0), "2", "Dne", "Dne", 0, None),
+        ("5 sin 5x", "pi/10", Some(5.0), "5", "Dne", "Dne", 0, None),
+        ("sin πx", "1/2", Some(1.0), "1", "Dne", "Dne", 0, None),
+        ("cos πx", "1/2", Some(0.0), "0", "Dne", "Dne", 0, None),
+        ("sin 2x / sin 3x", "0", None, "2/3", "Dne", "Dne", 10, None),
+        ("log2(x)", "8", Some(3.0), "3", "PInf", "Undef", 1, None),
+        ("log2 x", "8", Some(3.0), "3", "PInf", "Undef", 1, None),
+        ("log2(x + 1)", "7", Some(3.0), "3", "PInf", "Undef", 1, None),
+        ("ln 2x", "1/2", Some(0.0), "0", "PInf", "Undef", 1, None),
+        ("ln5x", "1/5", Some(0.0), "0", "PInf", "Undef", 1, None),
+        ("log 2x", "1/2", Some(0.0), "0", "PInf", "Undef", 1, None),
+        ("ln|x|", "-1", Some(0.0), "0", "PInf", "PInf", 1, None),
+        ("sin x / x", "0", None, "1", "0", "0", 0, Some(0.0)),
+        ("sinx/x", "0", None, "1", "0", "0", 0, Some(0.0)),
+        ("ln x", "1", Some(0.0), "0", "PInf", "Undef", 1, None),
+        ("√(x+1)", "3", Some(2.0), "2", "PInf", "Undef", 0, None),
+        ("x²", "3", Some(9.0), "9", "PInf", "PInf", 0, None),
+        ("log10(x)", "100", Some(2.0), "2", "PInf", "Undef", 1, None),
+        ("log(x, 2)", "8", Some(3.0), "3", "PInf", "Undef", 1, None),
+        ("sin x cos x", "pi/4", Some(0.5), "1/2", "Dne", "Dne", 0, None),
+    ];
+    for (f, a, point, finite, plus, minus, verticals, horizontal) in cases {
+        let p = with(json!({"pieces": format!("y = {f}"), "dots": "", "ask_at": a, "ask_inf": "Both", "ask_disc": true, "asym_eqs": true}));
+        let md = model_of(&p);
+        assert_eq!(md.pieces.len(), 1, "{f}: {:?}", md.notes);
+        let a = Num::read(a).unwrap().k;
+        match point { Some(v) => assert!(close(&md.value(&a), v), "{f}: f(a) {:?}", md.value(&a)), None => assert_eq!(md.value(&a), Lim::Undef, "{f}") }
+        for dir in [-1.0, 1.0] { assert_eq!(val(&md.side(&a, dir)), finite, "{f}, side {dir}"); }
+        assert_eq!(val(&md.two(&a)), finite, "{f}");
+        assert_eq!(val(&md.at_inf(1.0).unwrap()), plus, "{f} at +infinity");
+        assert_eq!(val(&md.at_inf(-1.0).unwrap_or(Lim::Undef)), minus, "{f} at -infinity");
+        assert_eq!(md.verticals().len(), verticals, "{f}: {:?}", md.verticals());
+        if verticals == 1 {
+            let expected_x = if f == "log2(x + 1)" { -1.0 } else { 0.0 };
+            assert!((md.verticals()[0].0 - expected_x).abs() < 1e-12, "{f}");
+        }
+        let hs = md.horizontals();
+        if let Some(y) = horizontal { assert_eq!(hs.len(), 1, "{f}"); assert!((hs[0].0-y).abs() < 1e-12, "{f}: {hs:?}"); }
+        else { assert!(hs.is_empty(), "{f}: {hs:?}"); }
+        let _ = svg(&p);
+        assert!(!warnings(&p).iter().any(|n| n.contains("cannot be read")), "{f}");
+    }
+    // tan(2x) has a pole at pi/4: positive infinity from the left, negative from the right.
+    let md = m(json!({"pieces": "y = tan 2x", "dots": ""}));
+    let a = Num::read("pi/4").unwrap().k;
+    assert_eq!(md.value(&a), Lim::Undef);
+    assert_eq!(md.side(&a, -1.0), Lim::PInf);
+    assert_eq!(md.side(&a, 1.0), Lim::NInf);
+    assert_eq!(md.two(&a), Lim::Dne);
+    assert_eq!(md.verticals().len(), 10);
+    assert!(md.horizontals().is_empty());
+    for dir in [-1.0, 1.0] { assert_eq!(md.at_inf(dir), Some(Lim::Dne)); }
+}
+
+#[test]
+fn documented_ambiguous_readings_and_implicit_powers_are_explicit() {
+    // These are the readings stated in the Function panel help; brackets select others.
+    for (s, x, y) in [("sin 1/x", 2.0, 1.0f64.sin()/2.0), ("√2x", 8.0, 4.0),
+        ("e^2x", 3.0, 3.0*2.0f64.exp()), ("log(2, x)", 8.0, 1.0/3.0),
+        ("sin 5x²", 0.5, 1.25f64.sin()), ("cos 2e x", 0.5, std::f64::consts::E.cos()),
+        ("sin pi x", 0.5, 1.0), ("cos πx", 0.5, 0.0),
+        ("sin3x/x", std::f64::consts::PI/6.0, 6.0/std::f64::consts::PI),
+        ("tan 3x/x", std::f64::consts::PI/12.0, 12.0/std::f64::consts::PI),
+        ("sin 2ex", 0.5, std::f64::consts::E.sin())] {
+        let e = cas::parse(s).unwrap_or_else(|| panic!("{s}"));
+        assert!((cas::ev(&e, x).unwrap()-y).abs() < 1e-12, "{s}");
+    }
+}
+

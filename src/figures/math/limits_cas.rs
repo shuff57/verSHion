@@ -574,7 +574,7 @@ pub fn parse(text: &str) -> Option<X> {
     if superscript { expanded.push(')'); }
     let mut norm = String::new();
     let mut open = false;
-    for c in expanded.chars() { if c == '|' { norm.push_str(if open { ")" } else { "abs(" }); open = !open; } else { norm.push(c); } }
+    for c in expanded.chars() { if c == '|' { norm.push_str(if open { ")" } else { " abs(" }); open = !open; } else { norm.push(c); } }
     if open || norm.len() > 1000 { return None; }
     let cs: Vec<char> = norm.chars().collect();
     let mut p = P { s: &cs, i: 0, depth: 0 };
@@ -625,12 +625,28 @@ impl<'a> P<'a> {
         Some(b)
     }
     fn arg(&mut self) -> Option<X> {
-        if self.peek()? != '(' { return self.unary(); }
+        if self.peek()? != '(' {
+            // Bind the entire implicit product, but leave division and the next
+            // function to the enclosing term: sin 3x/x and sin x cos x.
+            let mut factors = vec![self.unary()?];
+            while self.implicit_arg_factor() { factors.push(self.power()?); }
+            return Some(if factors.len() == 1 { factors.pop().unwrap() } else { X::Mul(factors) });
+        }
         self.i += 1;
         let a = self.expr()?;
         if self.peek()? != ')' { return None; }
         self.i += 1;
         Some(a)
+    }
+    fn implicit_arg_factor(&mut self) -> bool {
+        match self.peek() {
+            Some(c) if c.is_ascii_digit() || c == '.' || c == '(' || c == 'π' => true,
+            Some('x' | 'e' | 'p') => {
+                let name: String = self.s[self.i..].iter().take_while(|c| c.is_ascii_alphabetic()).collect();
+                matches!(name.as_str(), "pi" | "pix") || name.starts_with('x') || name.starts_with('e') && name != "exp"
+            }
+            _ => false,
+        }
     }
     fn atom(&mut self) -> Option<X> {
         match self.peek()? {
@@ -670,15 +686,30 @@ impl<'a> P<'a> {
                 if let Some(prefix) = ["sqrt", "arcsin", "arccos", "arctan", "floor", "ceil", "sin", "cos", "tan", "sec", "csc", "cot", "abs", "ln", "log", "exp"].into_iter().find(|f| name.strip_prefix(f).is_some_and(|r| r == "x")) {
                     self.i = st + prefix.len(); name = prefix.to_string();
                 }
-                if name == "log" && self.s.get(self.i..self.i + 2) == Some(&['1', '0']) { self.i += 2; }
-                if name == "log" && self.peek() == Some('(') {
-                    self.i += 1;
-                    let a = self.expr()?;
-                    let base = if self.peek() == Some(',') { self.i += 1; self.expr()? } else { X::C(K::int(10)) };
-                    if self.peek()? != ')' { return None; } self.i += 1;
-                    return Some(X::Mul(vec![X::F(Fun::Ln, Box::new(a)), X::Inv(Box::new(X::F(Fun::Ln, Box::new(base))))]));
+                if name == "log" {
+                    // An attached numeric suffix denotes the base: log2 x.
+                    // A separated number belongs to the argument: log 2x.
+                    let base_start = self.i;
+                    while self.s.get(self.i).is_some_and(|c| c.is_ascii_digit()) { self.i += 1; }
+                    let base = if self.i > base_start {
+                        let digits: String = self.s[base_start..self.i].iter().collect();
+                        Some(X::C(K::int(digits.parse().ok()?)))
+                    } else { None };
+                    if base.is_some() || self.peek() == Some('(') {
+                        let (a, base) = if self.peek() == Some('(') {
+                            self.i += 1;
+                            let a = self.expr()?;
+                            let base = if self.peek() == Some(',') {
+                                if base.is_some() { return None; }
+                                self.i += 1; self.expr()?
+                            } else { base.unwrap_or(X::C(K::int(10))) };
+                            if self.peek()? != ')' { return None; } self.i += 1;
+                            (a, base)
+                        } else { (self.arg()?, base?) };
+                        return Some(X::Mul(vec![X::F(Fun::Ln, Box::new(a)), X::Inv(Box::new(X::F(Fun::Ln, Box::new(base))))]));
+                    }
                 }
-                match name.as_str() { "x" => return Some(X::V), "pi" => return Some(X::C(K::pi())), "e" => return Some(X::C(K::e_pow(Q::ONE))), _ => {} }
+                match name.as_str() { "x" => return Some(X::V), "pi" => return Some(X::C(K::pi())), "pix" => { self.i = st + 2; return Some(X::C(K::pi())); }, "e" => return Some(X::C(K::e_pow(Q::ONE))), _ => {} }
                 if name == "log" && self.peek() == Some('_') {
                     self.i += 1;
                     let base = self.atom()?;

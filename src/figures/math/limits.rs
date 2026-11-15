@@ -50,7 +50,7 @@ pub fn defs() -> Vec<FigureDef> {
 pub fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::long("pieces", "Function (one piece a line)", OPENING)
-            .hint("A formula with its domain, such as y = x + 1, x < 2 or y = 3/(x - 4), -1 <= x < 4 (< draws an open circle, <= a closed one; x \u{2260} 2 or x != 2 leaves a hole). Or points joined smoothly, such as (-5, 1) (-3, 2) (0, 1) open: open or closed before the first point or after the last puts a circle there."),
+            .hint("Reading: sin 3x = sin(3x); sin x cos x is a product. Without brackets, sin 1/x = sin(1)/x, √2x = √(2x), and e^2x = e² · x. In log(value, base), the base comes second; log2(x) means base 2. Use brackets to choose a different reading. A formula with its domain, such as y = x + 1, x < 2 or y = 3/(x - 4), -1 <= x < 4 (< draws an open circle, <= a closed one; x \u{2260} 2 or x != 2 leaves a hole). Or points joined smoothly, such as (-5, 1) (-3, 2) (0, 1) open: open or closed before the first point or after the last puts a circle there."),
         ParamDef::long("dots", "Single points", "(-2, 3)").hint("Filled points on their own, such as (-2, 3); f(a) is the point's height. Drag one up or down on the figure."),
         ParamDef::text("ask_at", "Ask the limits at x =", "1").hint("One or more values of a, such as 1 or -2, 1, 4 (fractions such as 1/2 too). Drag a marker along the x-axis to move it."),
         ParamDef::bool("ask_left", "Ask the left limit", true),
