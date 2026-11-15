@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-13T17:01:26+00:00",
+ "generated_at": "2026-11-15T01:45:07+00:00",
  "spec_generated_at": "2026-11-12T16:56:39+00:00",
  "figures": [
   {
@@ -385,9 +385,9 @@
   {
    "site": "new",
    "slug": "limits-discontinuities",
-   "status": "missing",
+   "status": "mapped",
    "title": "Limits and discontinuities",
-   "ours_id": null,
+   "ours_id": "limits-discontinuities",
    "fid": "limits-discontinuities",
    "cross_listed": false,
    "can_set": [
@@ -453,7 +453,52 @@
     "download": false,
     "direct_manipulation": true
    },
-   "text_sha256": "5bd2597756690b987508263231306f45d99941c87d87ec9ee6de53efdda45dbe"
+   "text_sha256": "5bd2597756690b987508263231306f45d99941c87d87ec9ee6de53efdda45dbe",
+   "params": [
+    "pieces",
+    "dots",
+    "ask_at",
+    "ask_left",
+    "ask_right",
+    "ask_two",
+    "ask_value",
+    "ask_inf",
+    "ask_disc",
+    "inf_answer",
+    "dne_word",
+    "guide",
+    "show_asym",
+    "asym_eqs",
+    "kind_labels",
+    "arrows",
+    "eps_band",
+    "eps",
+    "title_mode",
+    "title",
+    "xmin",
+    "xmax",
+    "xstep",
+    "ymin",
+    "ymax",
+    "ystep",
+    "minor",
+    "numbers",
+    "square",
+    "xlabel",
+    "ylabel",
+    "grid",
+    "label_size",
+    "style",
+    "show_answers",
+    "stu_hide_kinds",
+    "stu_hide_asym"
+   ],
+   "param_count": 37,
+   "handles": 5,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "interaction_gaps": []
   },
   {
    "site": "new",

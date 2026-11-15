@@ -1,17 +1,16 @@
 {
- "generated_at": "2026-11-13T17:01:26+00:00",
- "probe_checked_at": "2026-11-13T09:01:26",
+ "generated_at": "2026-11-15T01:45:07+00:00",
+ "probe_checked_at": "2026-11-14T17:45:07",
  "comparable": true,
  "drift": [],
- "pooled": 12.9,
- "mean": 10.0,
+ "pooled": 22.7,
+ "mean": 20.0,
  "figures_scored": 10,
- "figures_built": 2,
+ "figures_built": 3,
  "figures_missing": [
   "new/tangent-secant-lines",
   "new/riemann-sums",
   "new/derivative-graphs",
-  "new/limits-discontinuities",
   "new/sequences-series",
   "new/complex-plane",
   "new/polar-parametric",
@@ -624,250 +623,11 @@
    ]
   },
   "limits-discontinuities": {
-   "score": 0.0,
-   "got": 0.0,
+   "score": 100.0,
+   "got": 115.0,
    "total": 115.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Type the function as pieces with domains",
-     "why": "not built"
-    },
-    {
-     "id": "cap-02",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Build the graph from typed points joined smoothly, with no formula",
-     "why": "not built"
-    },
-    {
-     "id": "cap-03",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw a removable discontinuity (a hole), with or without a filled point at another height",
-     "why": "not built"
-    },
-    {
-     "id": "cap-04",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw a jump discontinuity with open and closed endpoints",
-     "why": "not built"
-    },
-    {
-     "id": "cap-05",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw a vertical asymptote with the branches running to ±∞",
-     "why": "not built"
-    },
-    {
-     "id": "cap-06",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw a horizontal asymptote that the curve approaches at ±∞",
-     "why": "not built"
-    },
-    {
-     "id": "cap-07",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a, the answers in the key",
-     "why": "not built"
-    },
-    {
-     "id": "cap-08",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Ask for the limits as x → ∞ and x → -∞",
-     "why": "not built"
-    },
-    {
-     "id": "cap-09",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose an open or closed circle at each endpoint",
-     "why": "not built"
-    },
-    {
-     "id": "cap-10",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Add a single filled point on its own",
-     "why": "not built"
-    },
-    {
-     "id": "cap-11",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw asymptotes dashed, labelled with their equations",
-     "why": "not built"
-    },
-    {
-     "id": "cap-12",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Put arrows on the curve's ends to show it goes on",
-     "why": "not built"
-    },
-    {
-     "id": "cap-13",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Mark x = a on the x-axis with a dashed guide",
-     "why": "not built"
-    },
-    {
-     "id": "cap-14",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Ask the questions at several values of a at once",
-     "why": "not built"
-    },
-    {
-     "id": "cap-15",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Write answers as numbers, ∞, -∞ or 'does not exist'",
-     "why": "not built"
-    },
-    {
-     "id": "cap-16",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label each discontinuity's kind (removable, jump, infinite) on the figure",
-     "why": "not built"
-    },
-    {
-     "id": "cap-17",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Ask where f is not continuous, the key listing each x and its kind",
-     "why": "not built"
-    },
-    {
-     "id": "cap-18",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Load a classic example (a moved hole, a jump, a vertical asymptote, a limit at infinity, an AP-style graph with every ki",
-     "why": "not built"
-    },
-    {
-     "id": "cap-19",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set each axis's From, To and Count by",
-     "why": "not built"
-    },
-    {
-     "id": "cap-20",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Make the gridlines light, standard, bold or none",
-     "why": "not built"
-    },
-    {
-     "id": "cap-21",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Add minor gridlines between the numbered lines",
-     "why": "not built"
-    },
-    {
-     "id": "cap-22",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Number the axes, or leave the numbers off",
-     "why": "not built"
-    },
-    {
-     "id": "cap-23",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
-     "why": "not built"
-    },
-    {
-     "id": "cap-24",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Write a title",
-     "why": "not built"
-    },
-    {
-     "id": "cap-25",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Put a blank line in place of the title for students",
-     "why": "not built"
-    },
-    {
-     "id": "cap-26",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Make the labels small, medium or large",
-     "why": "not built"
-    },
-    {
-     "id": "cap-27",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw it in black and white for photocopying (Print)",
-     "why": "not built"
-    },
-    {
-     "id": "cap-28",
-     "class": "version",
-     "weight": 3.0,
-     "text": "A student copy with blank lines for each limit asked",
-     "why": "not built"
-    },
-    {
-     "id": "cap-29",
-     "class": "version",
-     "weight": 3.0,
-     "text": "An answer key with each limit filled in",
-     "why": "not built"
-    },
-    {
-     "id": "cap-30",
-     "class": "version",
-     "weight": 3.0,
-     "text": "A student copy without the discontinuity-kind labels",
-     "why": "not built"
-    },
-    {
-     "id": "cap-31",
-     "class": "version",
-     "weight": 3.0,
-     "text": "A student copy without the asymptotes' equations",
-     "why": "not built"
-    },
-    {
-     "id": "cap-32",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click an endpoint circle on the figure to switch it open or closed",
-     "why": "not built"
-    },
-    {
-     "id": "cap-33",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Drag the filled point up or down on the figure to change f(a)",
-     "why": "not built"
-    },
-    {
-     "id": "cap-34",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Drag the x = a marker along the axis on the figure to change where the limit is asked",
-     "why": "not built"
-    }
-   ]
+   "gaps": []
   },
   "polar-parametric": {
    "score": 0.0,

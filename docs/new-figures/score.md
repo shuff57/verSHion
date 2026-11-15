@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-13T17:01:26+00:00 · probe: 2026-11-13T09:01:26
+Generated: 2026-11-15T01:45:07+00:00 · probe: 2026-11-14T17:45:07
 
-**Pooled 12.9** · mean 10.0 over 10 figures · built 2 of 10 reference figures (missing: new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/limits-discontinuities, new/sequences-series, new/complex-plane, new/polar-parametric, new/slope-fields)
+**Pooled 22.7** · mean 20.0 over 10 figures · built 3 of 10 reference figures (missing: new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/sequences-series, new/complex-plane, new/polar-parametric, new/slope-fields)
 
 Comparable with the frozen baseline: **yes**
 
@@ -27,13 +27,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [core 5] Draw f'' as a third aligned graph — not built
   - cap-05 [core 5] Draw f, f' and f'' on one grid in different line styles — not built
   - cap-06 [core 5] Give the graph of f' as the given one (AP 'graph of f'' questions), with f drawn in the key through a chosen point — not built
-- `limits-discontinuities`: 0 (0/115)
-  - cap-01 [core 5] Type the function as pieces with domains — not built
-  - cap-02 [core 5] Build the graph from typed points joined smoothly, with no formula — not built
-  - cap-03 [core 5] Draw a removable discontinuity (a hole), with or without a filled point at another height — not built
-  - cap-04 [core 5] Draw a jump discontinuity with open and closed endpoints — not built
-  - cap-05 [core 5] Draw a vertical asymptote with the branches running to ±∞ — not built
-  - cap-06 [core 5] Draw a horizontal asymptote that the curve approaches at ±∞ — not built
 - `polar-parametric`: 0 (0/109)
   - cap-01 [core 5] Type a polar curve r = f(θ) — not built
   - cap-02 [core 5] Set the θ range, such as 0 to 2π — not built
@@ -70,3 +63,4 @@ Comparable with the frozen baseline: **yes**
   - cap-05 [core 5] Set h, positive or negative — not built
   - cap-06 [core 5] Draw several secants for shrinking h (such as 2, 1, 0.5, 0.1) approaching the tangent — not built
 - `conic-sections`: 100 (151/151)
+- `limits-discontinuities`: 100 (115/115)

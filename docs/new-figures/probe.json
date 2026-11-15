@@ -1,8 +1,402 @@
 {
- "checked_at": "2026-11-13T09:01:26",
- "ours_built_at": "2026-11-13T17:01:25+00:00",
- "git": "e2da437",
+ "checked_at": "2026-11-14T17:45:07",
+ "ours_built_at": "2026-11-15T01:45:06+00:00",
+ "git": "514bc34",
  "figures": {
+  "limits-discontinuities": {
+   "caps": {
+    "cap-01": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"pieces\": \"y = -x - 1, x < -2\\ny = x^2/2 - 1, -2 <= x <= 2\\ny = 3, x > 2\", \"dots\": \"\", \"ask_at\": \"2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/4b8c11010c943fda.png"
+      }
+     ]
+    },
+    "cap-02": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"pieces\": \"(-5, 1) (-3, 3) (-1, 2) (1, 4) open\\nclosed (1, 1) (3, 0) (5, 2)\", \"dots\": \"\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/ad42f1fb631a550c.png"
+      }
+     ]
+    },
+    "cap-03": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"pieces\": \"y = (x^2 - 4)/(x - 2)\", \"dots\": \"(2, 1)\", \"ask_at\": \"2\", \"xmin\": -4.0, \"xmax\": 6.0, \"ymin\": -2.0, \"ymax\": 7.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/b2ec7453b1f4bc0d.png"
+      }
+     ]
+    },
+    "cap-04": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"pieces\": \"y = x + 2, x < 1\\ny = 4 - 2x, x >= 1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/e955645783dd031f.png"
+      }
+     ]
+    },
+    "cap-05": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"pieces\": \"y = 2/(x - 3)\", \"dots\": \"\", \"ask_at\": \"3\", \"xmin\": -4.0, \"xmax\": 8.0, \"ymin\": -7.0, \"ymax\": 7.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/b98e7307eff162d0.png"
+      }
+     ]
+    },
+    "cap-06": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"pieces\": \"y = (2x^2 + 1)/(x^2 + 1)\", \"dots\": \"\", \"ask_at\": \"\", \"ask_inf\": \"Both\", \"xmin\": -8.0, \"xmax\": 8.0, \"ymin\": -3.0, \"ymax\": 6.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/96513d9ed24dd45d.png"
+      }
+     ]
+    },
+    "cap-07": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"ask_at\": \"-2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/68b200de5319a6b6.png"
+      }
+     ]
+    },
+    "cap-08": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"ask_inf\": \"Both\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/d047c5f2831da4b7.png"
+      }
+     ]
+    },
+    "cap-09": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"pieces\": \"y = 4 - (x - 1)^2/3, x <= 1, x ≠ -2\\ny = 2 + 3/(x - 4), x > 1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/8587055d9fc03593.png"
+      }
+     ]
+    },
+    "cap-10": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"dots\": \"(-2, 3), (4, 5)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/2165b6356601a6f8.png"
+      }
+     ]
+    },
+    "cap-11": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"asym_eqs\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/e74d876bde4b847d.png"
+      }
+     ]
+    },
+    "cap-12": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"arrows\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/28872b17aaaf8ad5.png"
+      }
+     ]
+    },
+    "cap-13": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"guide\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/58fab966a2aceb76.png"
+      }
+     ]
+    },
+    "cap-14": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"ask_at\": \"-2, 1, 4\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/79c73534040aae31.png"
+      }
+     ]
+    },
+    "cap-15": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"ask_at\": \"1, 4\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/4c7073dcf25c93a4.png"
+      }
+     ]
+    },
+    "cap-16": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"kind_labels\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/c92e6b56fea4a073.png"
+      }
+     ]
+    },
+    "cap-17": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"ask_disc\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/eb5896059851279d.png"
+      }
+     ]
+    },
+    "cap-18": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"pieces\": \"y = x + 2, x < 1\\ny = 4 - 2x, x >= 1\", \"dots\": \"\", \"ask_at\": \"1\", \"guide\": true, \"kind_labels\": true, \"title\": \"A jump discontinuity\", \"xmin\": -5.0, \"xmax\": 5.0, \"ymin\": -3.0, \"ymax\": 6.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/da975637021e469c.png"
+      }
+     ]
+    },
+    "cap-19": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"xmin\": -8.0, \"xmax\": 12.0, \"xstep\": 2.0, \"ymin\": -8.0, \"ymax\": 8.0, \"ystep\": 2.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/45ab766eea7114fe.png"
+      }
+     ]
+    },
+    "cap-20": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"grid\": \"Bold\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/b0aa650a2463852e.png"
+      }
+     ]
+    },
+    "cap-21": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"minor\": 2}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/4b1899f4d665ca78.png"
+      }
+     ]
+    },
+    "cap-22": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"numbers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/ea00ef00336dad10.png"
+      }
+     ]
+    },
+    "cap-23": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"xlabel\": \"t\", \"ylabel\": \"f(t)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/118944d3ead03620.png"
+      }
+     ]
+    },
+    "cap-24": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"title\": \"Limits from a graph\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/064d7fc1906d0f75.png"
+      }
+     ]
+    },
+    "cap-25": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"title_mode\": \"Blank line\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/161bdfcf9650c12f.png"
+      }
+     ]
+    },
+    "cap-26": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"label_size\": \"Large\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/9697f2529d00f0c7.png"
+      }
+     ]
+    },
+    "cap-27": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"style\": \"Print\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/91cc418f083bb6a7.png"
+      }
+     ]
+    },
+    "cap-28": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/565dc306f2aa9ae7.png"
+      }
+     ]
+    },
+    "cap-29": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"ask_at\": \"-2, 1, 4\", \"ask_inf\": \"Both\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/83d9484df9a509bc.png"
+      }
+     ]
+    },
+    "cap-30": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"kind_labels\": true, \"ask_disc\": true, \"show_answers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/592997adfadf2655.png"
+      }
+     ]
+    },
+    "cap-31": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"asym_eqs\": true, \"ask_inf\": \"Both\", \"show_answers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/aa00c3a8ba600dca.png"
+      }
+     ]
+    },
+    "cap-32": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
   "conic-sections": {
    "caps": {
     "cap-01": {
@@ -13,7 +407,7 @@
       {
        "token": "changes:{\"conic\":\"Hyperbola\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/8641b2e9bfc8a82e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/16ebc3b9a9d4bac2.png"
       }
      ]
     },
@@ -25,7 +419,7 @@
       {
        "token": "changes:{\"h\":\"3\",\"k\":\"2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/5e7f4101f9ceadd8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/87e3666571db81ad.png"
       }
      ]
     },
@@ -37,7 +431,7 @@
       {
        "token": "changes:{\"conic\":\"Circle\",\"r\":\"6\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/7a23f942d71d8f31.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/d2dd2f96897913a8.png"
       }
      ]
     },
@@ -49,7 +443,7 @@
       {
        "token": "changes:{\"a\":\"6\",\"b\":\"2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/038690e346b240ba.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/b8f571f7f2179aa3.png"
       }
      ]
     },
@@ -61,7 +455,7 @@
       {
        "token": "changes:{\"conic\":\"Parabola\",\"pf\":\"3\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/423d06530ad5e074.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/577e875ccb9a8f98.png"
       }
      ]
     },
@@ -73,7 +467,7 @@
       {
        "token": "changes:{\"conic\":\"Parabola\",\"opens\":\"Left\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/5ecb4a7a89108403.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/3cc29e580af98952.png"
       }
      ]
     },
@@ -85,7 +479,7 @@
       {
        "token": "changes:{\"axis\":\"Vertical\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/f946e58fb9baa8f9.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/600f00c5e6a48d0e.png"
       }
      ]
     },
@@ -97,7 +491,7 @@
       {
        "token": "changes:{\"equation\":\"(x - 2)^2/9 + (y + 1)^2/4 = 1\",\"xmin\":-3.0,\"xmax\":7.0,\"ymin\":-5.0,\"ymax\":3.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/7580f068ce003218.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/be5debb99eefbe5e.png"
       }
      ]
     },
@@ -109,7 +503,7 @@
       {
        "token": "changes:{\"equation\":\"4x^2 + 9y^2 - 16x + 18y - 11 = 0\",\"xmin\":-3.0,\"xmax\":7.0,\"ymin\":-5.0,\"ymax\":3.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/20e106ded2332d41.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a90561c6fcd2e935.png"
       }
      ]
     },
@@ -121,7 +515,7 @@
       {
        "token": "changes:{\"b\":\"√5\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/98046b926df06c38.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a719421f172295ef.png"
       }
      ]
     },
@@ -133,7 +527,7 @@
       {
        "token": "changes:{\"show_centre\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/45737807651b657e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/439f758b868b1d7a.png"
       }
      ]
     },
@@ -145,7 +539,7 @@
       {
        "token": "changes:{\"show_vertices\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/293c22aa35870af8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/856b8865c8cbaa8b.png"
       }
      ]
     },
@@ -157,7 +551,7 @@
       {
        "token": "changes:{\"show_covertices\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/961860664546a11f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/c4f388a2e60a06cf.png"
       }
      ]
     },
@@ -169,7 +563,7 @@
       {
        "token": "changes:{\"show_foci\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/94ac4e096b1cc4b4.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/074b5aa200b17b30.png"
       }
      ]
     },
@@ -181,7 +575,7 @@
       {
        "token": "changes:{\"conic\":\"Parabola\",\"show_p\":false,\"show_directrix\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/fb4a7f1f1ffe42e0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/3221cfd3d2a263aa.png"
       }
      ]
     },
@@ -193,7 +587,7 @@
       {
        "token": "changes:{\"show_directrices\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/b6199e8d48985587.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/142361881020c886.png"
       }
      ]
     },
@@ -205,7 +599,7 @@
       {
        "token": "changes:{\"show_axes\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/445643767667f203.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/70b8db87c479760d.png"
       }
      ]
     },
@@ -217,7 +611,7 @@
       {
        "token": "changes:{\"conic\":\"Parabola\",\"show_sym\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/8fb0cb59a67fb6bf.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/f0a50f883200efe0.png"
       }
      ]
     },
@@ -229,7 +623,7 @@
       {
        "token": "changes:{\"conic\":\"Hyperbola\",\"h\":\"0\",\"k\":\"0\",\"a\":\"4\",\"b\":\"3\",\"show_p\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/96eb9b816946b254.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/372603f826a84edf.png"
       }
      ]
     },
@@ -241,7 +635,7 @@
       {
        "token": "changes:{\"conic\":\"Hyperbola\",\"h\":\"0\",\"k\":\"0\",\"a\":\"4\",\"b\":\"3\",\"show_p\":false,\"show_rect\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/8394b622666c8a3c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/9263d73805f5012d.png"
       }
      ]
     },
@@ -253,7 +647,7 @@
       {
        "token": "changes:{\"show_latus\":true,\"show_p\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/0c28afc61181a881.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/fc5ed299c499aab3.png"
       }
      ]
     },
@@ -265,7 +659,7 @@
       {
        "token": "changes:{\"p_at\":120.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/f9f0b3014fa02994.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/14dabae1d86c7446.png"
       }
      ]
     },
@@ -277,7 +671,7 @@
       {
        "token": "changes:{\"show_ecc\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/433fd676ae0a689f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/2125d6a70e21545f.png"
       }
      ]
     },
@@ -289,7 +683,7 @@
       {
        "token": "changes:{\"show_work\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/933defb0d61f91bd.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/6caaf20f07eb7456.png"
       }
      ]
     },
@@ -301,7 +695,7 @@
       {
        "token": "changes:{\"pt_labels\":\"Letters only\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/b1156ea1c3de32cc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/9361e1f85fd412a0.png"
       }
      ]
     },
@@ -313,7 +707,7 @@
       {
        "token": "changes:{\"b\":\"√5\",\"coords\":\"Decimals\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/ff6c0808f7e8187e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/aba228ffa90cfb36.png"
       }
      ]
     },
@@ -325,7 +719,7 @@
       {
        "token": "changes:{\"eq_form\":\"General form\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a5f8856751a5779d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/0328cf18513a7915.png"
       }
      ]
     },
@@ -337,7 +731,7 @@
       {
        "token": "changes:{\"xmin\":-8.0,\"xmax\":8.0,\"ymin\":-3.0,\"ymax\":9.0,\"conic\":\"Parabola\",\"h\":\"0\",\"k\":\"0\",\"pf\":\"2\",\"opens\":\"Up\",\"title\":\"A satellite dish: the receiver at the focus\",\"show_latus\":true,\"show_p\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/f20f6ee2e5107a6a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/e3c9cda86268d553.png"
       }
      ]
     },
@@ -349,7 +743,7 @@
       {
        "token": "changes:{\"xmin\":-6.0,\"xmax\":8.0,\"xstep\":2.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/d6fc66ded2eb6fb8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/c1c46352d5f37eac.png"
       }
      ]
     },
@@ -361,7 +755,7 @@
       {
        "token": "changes:{\"grid\":\"Bold\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/57580f8cfd482dfa.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/e5a8d18ed9a53f96.png"
       }
      ]
     },
@@ -373,7 +767,7 @@
       {
        "token": "changes:{\"minor\":2}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/246d151e30aa20b1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/503ab9067326d9ba.png"
       }
      ]
     },
@@ -385,7 +779,7 @@
       {
        "token": "changes:{\"numbers\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/21aa049ac6270477.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/899427a6830a799d.png"
       }
      ]
     },
@@ -397,7 +791,7 @@
       {
        "token": "changes:{\"xlabel\":\"t\",\"ylabel\":\"d\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/19c52b7f3d0ac4fb.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/920cf1b6a34e53d2.png"
       }
      ]
     },
@@ -409,7 +803,7 @@
       {
        "token": "changes:{\"title\":\"An ellipse\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/5f5013e2bb466074.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/c4e2f58e59d50216.png"
       }
      ]
     },
@@ -421,7 +815,7 @@
       {
        "token": "changes:{\"title\":\"An ellipse\",\"title_mode\":\"Blank line\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/1f451660db545f6a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/6ea48b7c92eeef47.png"
       }
      ]
     },
@@ -433,7 +827,7 @@
       {
        "token": "changes:{\"label_size\":\"Large\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/c80a4de57ec950ca.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/af668fb405f5f5f6.png"
       }
      ]
     },
@@ -445,7 +839,7 @@
       {
        "token": "changes:{\"style\":\"Print\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/14e805caea023054.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/c007bd4a2810fe3b.png"
       }
      ]
     },
@@ -457,7 +851,7 @@
       {
        "token": "changes:{\"show_answers\":false,\"blank_equation\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/d6ae15dfb118c542.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/c5a3850b41646801.png"
       }
      ]
     },
@@ -469,7 +863,7 @@
       {
        "token": "changes:{\"show_answers\":false,\"blank_curve\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/d4ea59d5e6df5430.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/b624e08ff711043d.png"
       }
      ]
     },
@@ -481,7 +875,7 @@
       {
        "token": "changes:{\"show_answers\":false,\"blank_labels\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a0161d356b7a79e1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/eb307f31a97e8063.png"
       }
      ]
     },
@@ -493,7 +887,7 @@
       {
        "token": "changes:{\"key_line\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/0d8b9d0cb0a046a3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/f93961904f1f6ef1.png"
       }
      ]
     },
@@ -529,7 +923,7 @@
     }
    }
   },
-  "derivative-graphs": {
+  "slope-fields": {
    "caps": {
     "cap-01": {
      "pass": false,
@@ -564,7 +958,7 @@
     "cap-06": {
      "pass": false,
      "why": "not built",
-     "class": "core",
+     "class": "control",
      "renders": []
     },
     "cap-07": {
@@ -666,7 +1060,7 @@
     "cap-23": {
      "pass": false,
      "why": "not built",
-     "class": "control",
+     "class": "version",
      "renders": []
     },
     "cap-24": {
@@ -684,7 +1078,7 @@
     "cap-26": {
      "pass": false,
      "why": "not built",
-     "class": "control",
+     "class": "version",
      "renders": []
     },
     "cap-27": {
@@ -696,13 +1090,13 @@
     "cap-28": {
      "pass": false,
      "why": "not built",
-     "class": "control",
+     "class": "version",
      "renders": []
     },
     "cap-29": {
      "pass": false,
      "why": "not built",
-     "class": "control",
+     "class": "version",
      "renders": []
     },
     "cap-30": {
@@ -714,28 +1108,10 @@
     "cap-31": {
      "pass": false,
      "why": "not built",
-     "class": "version",
+     "class": "interaction",
      "renders": []
     },
     "cap-32": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-33": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-34": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-35": {
      "pass": false,
      "why": "not built",
      "class": "interaction",
@@ -743,7 +1119,71 @@
     }
    }
   },
-  "sequences-series": {
+  "coordinate-grid": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "version",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "version",
+     "renders": []
+    }
+   }
+  },
+  "tangent-secant-lines": {
    "caps": {
     "cap-01": {
      "pass": false,
@@ -904,7 +1344,7 @@
     "cap-27": {
      "pass": false,
      "why": "not built",
-     "class": "version",
+     "class": "control",
      "renders": []
     },
     "cap-28": {
@@ -928,13 +1368,13 @@
     "cap-31": {
      "pass": false,
      "why": "not built",
-     "class": "version",
+     "class": "control",
      "renders": []
     },
     "cap-32": {
      "pass": false,
      "why": "not built",
-     "class": "version",
+     "class": "control",
      "renders": []
     },
     "cap-33": {
@@ -946,16 +1386,28 @@
     "cap-34": {
      "pass": false,
      "why": "not built",
-     "class": "interaction",
+     "class": "version",
      "renders": []
     },
     "cap-35": {
      "pass": false,
      "why": "not built",
-     "class": "interaction",
+     "class": "version",
      "renders": []
     },
     "cap-36": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-37": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-38": {
      "pass": false,
      "why": "not built",
      "class": "interaction",
@@ -1237,908 +1689,6 @@
     }
    }
   },
-  "tangent-secant-lines": {
-   "caps": {
-    "cap-01": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-02": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-03": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-04": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-05": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-06": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-07": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-08": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-09": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-10": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-11": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-12": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-13": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-14": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-15": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-16": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-17": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-18": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-19": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-20": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-21": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-22": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-23": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-24": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-25": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-26": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-27": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-28": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-29": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-30": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-31": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-32": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-33": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-34": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-35": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-36": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-37": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-38": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    }
-   }
-  },
-  "slope-fields": {
-   "caps": {
-    "cap-01": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-02": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-03": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-04": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-05": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-06": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-07": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-08": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-09": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-10": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-11": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-12": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-13": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-14": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-15": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-16": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-17": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-18": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-19": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-20": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-21": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-22": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-23": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-24": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-25": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-26": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-27": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-28": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-29": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-30": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-31": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-32": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    }
-   }
-  },
-  "polar-parametric": {
-   "caps": {
-    "cap-01": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-02": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-03": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-04": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-05": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-06": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-07": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-08": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-09": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-10": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-11": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-12": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-13": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-14": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-15": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-16": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-17": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-18": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-19": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-20": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-21": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-22": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-23": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-24": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-25": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-26": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-27": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-28": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-29": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-30": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-31": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-32": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-33": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    }
-   }
-  },
-  "limits-discontinuities": {
-   "caps": {
-    "cap-01": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-02": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-03": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-04": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-05": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-06": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-07": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-08": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-09": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-10": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-11": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-12": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-13": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-14": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-15": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-16": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-17": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-18": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-19": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-20": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-21": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-22": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-23": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-24": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-25": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-26": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-27": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-28": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-29": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-30": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-31": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-32": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-33": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-34": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    }
-   }
-  },
-  "coordinate-grid": {
-   "caps": {
-    "cap-01": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "core",
-     "renders": []
-    },
-    "cap-02": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "core",
-     "renders": []
-    },
-    "cap-03": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
-    },
-    "cap-04": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
-    },
-    "cap-05": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
-    },
-    "cap-06": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
-    },
-    "cap-07": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
-    },
-    "cap-08": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
-    },
-    "cap-09": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "version",
-     "renders": []
-    },
-    "cap-10": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "version",
-     "renders": []
-    }
-   }
-  },
   "complex-plane": {
    "caps": {
     "cap-01": {
@@ -2358,6 +1908,642 @@
      "renders": []
     },
     "cap-37": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "polar-parametric": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "sequences-series": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-35": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-36": {
+     "pass": false,
+     "why": "not built",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "derivative-graphs": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "not built",
+     "class": "core",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-11": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-12": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-13": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-14": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-15": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-16": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-17": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-18": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-19": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-20": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-21": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-22": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-23": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-24": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-25": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-26": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-27": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-28": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-29": {
+     "pass": false,
+     "why": "not built",
+     "class": "control",
+     "renders": []
+    },
+    "cap-30": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-31": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-32": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": false,
+     "why": "not built",
+     "class": "version",
+     "renders": []
+    },
+    "cap-35": {
      "pass": false,
      "why": "not built",
      "class": "interaction",

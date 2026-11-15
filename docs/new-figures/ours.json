@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-13T17:01:25+00:00",
-  "src_mtime": 1794589241.8502274,
-  "git": "e2da437",
-  "figures": 192
+  "built_at": "2026-11-15T01:45:06+00:00",
+  "src_mtime": 1794706629.552439,
+  "git": "514bc34",
+  "figures": 193
  },
  "figures": {
   "free-body-diagram": {
@@ -38498,6 +38498,341 @@
    ],
    "handles": true,
    "label_drag": true,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "limits-discontinuities": {
+   "id": "limits-discontinuities",
+   "title": "Limits and discontinuities",
+   "blurb": "A graph with holes, jumps, vertical and horizontal asymptotes and open and closed circles, for limit questions with a key.",
+   "params": [
+    {
+     "key": "pieces",
+     "label": "Function (one piece a line)",
+     "kind": "long",
+     "options": [],
+     "default": "y = 4"
+    },
+    {
+     "key": "dots",
+     "label": "Single points",
+     "kind": "long",
+     "options": [],
+     "default": "(-2, 3)"
+    },
+    {
+     "key": "ask_at",
+     "label": "Ask the limits at x =",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "ask_left",
+     "label": "Ask the left limit",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "ask_right",
+     "label": "Ask the right limit",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "ask_two",
+     "label": "Ask the limit",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "ask_value",
+     "label": "Ask f(a)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "ask_inf",
+     "label": "Ask the limits at infinity",
+     "kind": "choice",
+     "options": [
+      "None",
+      "x → ∞",
+      "x → −∞",
+      "Both"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "ask_disc",
+     "label": "Ask where f is not continuous",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "inf_answer",
+     "label": "An infinite limit is written",
+     "kind": "choice",
+     "options": [
+      "∞ or −∞",
+      "does not exist"
+     ],
+     "default": "∞ or −∞"
+    },
+    {
+     "key": "dne_word",
+     "label": "Does not exist is written",
+     "kind": "choice",
+     "options": [
+      "does not exist",
+      "DNE"
+     ],
+     "default": "does not exist"
+    },
+    {
+     "key": "guide",
+     "label": "Dashed guide up from x = a",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_asym",
+     "label": "Draw the asymptotes (dashed)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "asym_eqs",
+     "label": "Label the asymptotes with their equations",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "kind_labels",
+     "label": "Label each discontinuity's kind (removable, jump, infinite)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "arrows",
+     "label": "Arrows on the curve's ends where it leaves the grid",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "eps_band",
+     "label": "Epsilon band at the first x = a (ε and δ)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "eps",
+     "label": "ε (epsilon)",
+     "kind": "text",
+     "options": [],
+     "default": "1/2"
+    },
+    {
+     "key": "title_mode",
+     "label": "Title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-6.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "xstep",
+     "label": "x-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ymin",
+     "label": "y-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-6.0"
+    },
+    {
+     "key": "ymax",
+     "label": "y-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "7.0"
+    },
+    {
+     "key": "ystep",
+     "label": "y-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines per step",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "numbers",
+     "label": "Number the axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "square",
+     "label": "Square cells",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "xlabel",
+     "label": "x-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "ylabel",
+     "label": "y-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Light"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "stu_hide_kinds",
+     "label": "Student copy: leave off the kind labels",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "stu_hide_asym",
+     "label": "Student copy: leave off the asymptotes' equations",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click to switch this endpoint to closed"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click to fill this hole (takes out its x ≠ part)"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click to switch this endpoint to open"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag up or down to change f(−2)"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag along the x-axis to move x = a, where the limits are asked (a = 1)"
+    }
+   ],
+   "handles": true,
+   "label_drag": false,
    "show_answers": true,
    "style": true,
    "label_size": true
