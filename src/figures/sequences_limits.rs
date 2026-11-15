@@ -257,7 +257,7 @@ fn peel(mut s: &str) -> &str {
 fn finite(n: N) -> (Option<N>, String) {
     (Some(n), "converges".into())
 }
-fn explicit(s: &str) -> (Option<N>, String) {
+fn atomic_limit(s: &str) -> (Option<N>, String) {
     let source = canonical(s);
     let s = peel(&source);
     if let Some(r) = rational(s, b'n') {
@@ -281,6 +281,7 @@ fn explicit(s: &str) -> (Option<N>, String) {
             });
         }
         "n^(1/n)" => return finite(N::int(1)),
+        "n!/n^n" | "1/n!" | "2^n/n!" => return finite(N::int(0)),
         "sqrt(n+1)-sqrt(n)" | "√(n+1)-√n" | "ln(n)/n" | "exp(-n)" | "e^(-n)" | "1/2^n"
         | "n/2^n" | "(-1)^n/n" => return finite(N::int(0)),
         "n*sin(1/n)" | "1-1/2^n" => return finite(N::int(1)),
@@ -322,20 +323,6 @@ fn explicit(s: &str) -> (Option<N>, String) {
             }
         }
     }
-    if let Some(base) = s.strip_suffix("^n").and_then(|b| number(peel(b))) {
-        if base.q.is_some_and(|(a, b)| a == b) {
-            return finite(N::int(1));
-        }
-        if base
-            .q
-            .map_or(base.v.abs() < 1.0 - 1e-12, |(a, b)| a.abs() < b)
-        {
-            return finite(N::int(0));
-        }
-        if base.q.is_some() || base.v.abs() > 1.0 + 1e-12 {
-            return (None, "diverges".into());
-        }
-    }
     if !s
         .split(|c: char| !c.is_ascii_alphabetic())
         .any(|t| t == "n" || t == "npi")
@@ -345,6 +332,11 @@ fn explicit(s: &str) -> (Option<N>, String) {
         }
     }
     (None, "cannot determine from this formula".into())
+}
+#[path = "sequences_asymptotic.rs"]
+pub(super) mod structural;
+fn explicit(s: &str) -> (Option<N>, String) {
+    structural::analyse(s)
 }
 fn linear(p: &Params) -> Option<(N, N)> {
     if recurrence_order(p) != 1 {

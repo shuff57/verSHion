@@ -1598,3 +1598,62 @@ fn sequences_compound_coefficient_brackets_r1() {
             .contains(&format!("× {}", coefficient_atom(&p, "difference")))
     );
 }
+#[test]
+fn sequences_structural_limits_r2() {
+    let cases: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("sequences_limits_r2_oracles.json")).unwrap();
+    assert!(cases.len() >= 150);
+    for case in cases {
+        let formula = case["formula"].as_str().unwrap();
+        let mut p = Params::defaults(&params());
+        p.set_s("mode", "Explicit");
+        p.set_s("formula", formula);
+        p.set_b("convergence", true);
+        let d = data(&p).unwrap_or_else(|e| panic!("{formula}: {e}"));
+        let (l, _, state) = limits(&p, &d);
+        let rows = rows_for(&p, &d).join(" ");
+        if let Some(expected) = case["limit"].as_str() {
+            let target = number(expected).unwrap();
+            let l = l.unwrap_or_else(|| panic!("{formula}: {state}"));
+            assert!(
+                (l.v - target.v).abs() < 1e-12,
+                "{formula}: {} != {}",
+                l.v,
+                target.v
+            );
+            assert!(
+                rows.contains("limit =") || rows.contains("limit ≈"),
+                "{formula}: {rows}"
+            );
+            assert!(
+                [128, 512, 2048, 8192, 1_000_000].iter().any(|n| read(
+                    formula,
+                    N::int(*n),
+                    N::int(0),
+                    N::int(0)
+                )
+                .is_some_and(|v| (v.v - target.v).abs() <= 1e-3 * target.v.abs().max(1.0))),
+                "{formula}"
+            );
+        } else {
+            assert!(l.is_none(), "{formula}");
+            assert!(state.contains("diverges"), "{formula}: {state}");
+        }
+    }
+}
+
+#[test]
+fn sequences_structural_indeterminate_guards_r2() {
+    for f in ["(1+1/n)^(n/1000000000)", "sin(n^2*pi)"] {
+        let mut p = Params::defaults(&params());
+        p.set_s("mode", "Explicit");
+        p.set_s("formula", f);
+        let (l, _, s) = limits(&p, &data(&p).unwrap());
+        assert!(l.is_none(), "{f}: {s}");
+        assert!(s.contains("cannot determine"), "{f}: {s}");
+    }
+    let mut p = Params::defaults(&params());
+    p.set_s("mode", "Explicit");
+    p.set_s("formula", "(-1)^(2*n)");
+    assert_eq!(limits(&p, &data(&p).unwrap()).0.unwrap().q, Some((1, 1)));
+}
