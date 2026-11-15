@@ -227,6 +227,19 @@ fn times(m: &Num, what: &str) -> String {
     format!("{sign}{a}{what}")
 }
 /// `lhs` + `n` written as a sum: "x − 1", "x + 3", "x + √2 − 1".
+/// Texts written side by side in one worked line: when one is a decimal, the others that are fractions with a terminating
+/// decimal are written as decimals too (0.25, not 1/4, beside 0.2401); anything else is left as it is.
+fn dec_alike(texts: [&str; 3], exs: [Option<&Ex>; 3]) -> [String; 3] {
+    let is_dec = |t: &str| { let cs: Vec<char> = t.chars().collect(); (1..cs.len().saturating_sub(1)).any(|k| cs[k] == '.' && cs[k - 1].is_ascii_digit() && cs[k + 1].is_ascii_digit()) };
+    let any_dec = texts.iter().any(|t| is_dec(t));
+    let mut out = texts.map(|t| t.to_string());
+    if !any_dec { return out; }
+    for k in 0..3 {
+        if !out[k].contains('/') { continue; }
+        if let Some(d) = exs[k].filter(|x| x.rational().is_some()).and_then(|x| ex::text(x, true)).filter(|d| !d.contains('/')) { out[k] = d; }
+    }
+    out
+}
 fn plus(lhs: &str, n: &Num) -> String {
     if is_zero(n) { return lhs.to_string(); }
     match n.s.strip_prefix('\u{2212}') { Some(rest) => format!("{lhs} \u{2212} {rest}"), None => format!("{lhs} + {}", n.s) }
@@ -1472,17 +1485,25 @@ pub(super) fn build(p0: &Params) -> Out {
                         let st = &m.step;
                         let (pa, ms) = (&m.pa, &m.ms);
                         lines.push(ind(vec![mt(&format!("{ms} = [{f}({pa} + {st}) \u{2212} {f}({pa})]/{st}"))]));
-                        lines.push(ind(vec![mt(&format!("= [{} \u{2212} {}]/{}", fx(&s.qx), fx(&t.an), paren_den(&s.hn)))]));
+                        // Q's x as given: exact where a + h has an exact form, else a + h as typed (f(ln(2) + 0.01)), never a
+                        // rounded a + h under "="; and decimals throughout when a decimal was typed ([f(1.5) − f(1)]/0.5)
+                        let qarg = if s.qx.exact { s.qx.s.clone() } else { plus(&t.an.s, &s.hn) };
+                        let [qs, as_, hs] = dec_alike([&qarg, &t.an.s, &s.hn.s], [s.qx.ex.as_ref().filter(|_| s.qx.exact), t.an.ex.as_ref(), s.hn.ex.as_ref()]);
+                        let hden = if hs == s.hn.s { paren_den(&s.hn) } else { paren_den(&Num { s: hs.clone(), ..s.hn.clone() }) };
+                        lines.push(ind(vec![mt(&format!("= [{f}({qs}) \u{2212} {f}({as_})]/{hden}"))]));
                         if answers {
                             if s.fb.exact && t.fan.exact {
-                                lines.push(ind(vec![mt(&format!("= ({} \u{2212} {})/{} {rel} {}", s.fb.s, paren_neg(&t.fan), paren_den(&s.hn), s.m.s))]));
+                                let [fbs, fas, _] = dec_alike([&s.fb.s, &t.fan.s, &s.hn.s], [s.fb.ex.as_ref(), t.fan.ex.as_ref(), s.hn.ex.as_ref()]);
+                                let fa_n = Num { s: fas, ..t.fan.clone() };
+                                lines.push(ind(vec![mt(&format!("= ({} \u{2212} {})/{hden} {rel} {}", fbs, paren_neg(&fa_n), s.m.s))]));
                             } else {
                                 // one value is rounded: the whole line is in decimals, with places enough for the difference
                                 // to show (f(1.0001) − f(1) with h = 0.0001 needs 6 places, not 1 − 1)
                                 let diff = (s.fb.v - t.fan.v).abs();
                                 let d1 = if diff > 0.0 { (dec + 1).max(((-diff.log10()).ceil() as i64 + 2).max(0) as usize) } else { dec + 1 }.min(12);
                                 let (fb, fa, hd) = (as_dec(&s.fb, d1), as_dec(&t.fan, d1), as_dec(&s.hn, d1));
-                                let md = Num { v: s.m.v, s: decimal(s.m.v, dec), exact: false, ex: None };
+                                // the result to the places the table and the equation give it (2.0001 for h = 0.0001, not 2)
+                                let md = Num { v: s.m.v, s: if s.m.s.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '\u{2212}') { s.m.s.clone() } else { decimal(s.m.v, dec) }, exact: false, ex: None };
                                 lines.push(ind(vec![mt(&format!("\u{2248} ({} \u{2212} {})/{} \u{2248} {}", fb.s, paren_neg(&fa), paren_den(&hd), md.s))]));
                             }
                         } else { lines.push(ind(vec![mt("= "), Part::Blank])); }

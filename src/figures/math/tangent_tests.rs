@@ -1476,3 +1476,90 @@ fn small_values_and_arccot() {
     assert_eq!(fx_at("arccot(x)", "1").as_deref(), Some("\u{3c0}/4"));
     assert_eq!(fx_at("arccot(x)", "sqrt(3)").as_deref(), Some("\u{3c0}/6"));
 }
+
+/// No rounded argument under "=": with a or h in ln(2), ln(3), 2^(1/3), 3^(1/3) or sqrt 2 typed without brackets, a + h has
+/// no exact form here, so the worked line writes it as typed (f(ln(2) + 0.01)). Every "=" step of the worked line is
+/// evaluated: its arguments must be a + h and a to 12 digits, its denominator h, and an "= (A − B)/h = m" step must equal the
+/// slope; the "≈" result must agree with the true slope (f(a + h) − f(a))/h to the places shown. The same step is checked in
+/// the student copy, which asks for its value. By hand: e^x at ln 2 with h = 0.01 has slope 2(e^0.01 − 1)/0.01 = 2.0100…
+#[test]
+fn no_rounded_argument_under_equals() {
+    let typed = ["ln(2)", "ln(3)", "2^(1/3)", "3^(1/3)", "sqrt 2"];
+    let mut combos: Vec<(&str, &str, &str)> = vec![];
+    for a in typed { for h in ["0.01", "0.001", "1/2"] { combos.push(("e^x", a, h)); } }
+    for h in ["ln(2)", "2^(1/3)", "sqrt 2"] { combos.push(("x^2", "1", h)); combos.push(("e^x", "1", h)); }
+    assert!(combos.len() >= 21);
+    let val = |t: &str| ex::parse(&at_point(t.trim(), "", "", 0.0, 0.0).replace(' ', "").replace("sqrt2", "sqrt(2)")).map(|n| ex::eval(&n, 0.0));
+    let mut bad = vec![];
+    let mut steps = 0;
+    for (func, a, h) in &combos {
+        let fe = ex::parse(&func.replace("e^x", "e^(x)")).unwrap();
+        let fv = |x: f64| ex::eval(&fe, x);
+        let (av, hv) = (val(a).unwrap(), val(h).unwrap());
+        let true_m = (fv(av + hv) - fv(av)) / hv;
+        for answers in [true, false] {
+            let p = with(&[("func", s(func)), ("a", s(a)), ("h", s(h)), ("worked", b(true)), ("table", b(true)), ("more_h", s("0.1, 0.001")), ("show_answers", b(answers)), ("xmin", f(-2.0)), ("xmax", f(4.0)), ("ymin", f(-1.0)), ("ymax", f(30.0))]);
+            let lines = texts_sup(&build(&p).svg);
+            let Some(w) = lines.iter().find(|l| l.starts_with("= [")) else { bad.push(format!("{func} a={a} h={h}: no worked step ({lines:?})")); continue };
+            steps += 1;
+            let inner = w.trim_start_matches("= [");
+            let (args, den) = inner.rsplit_once("]/").unwrap();
+            let (q, pp) = args.split_once(" \u{2212} f(").unwrap();
+            let q = q.strip_prefix("f(").and_then(|q| q.strip_suffix(')')).unwrap_or(q);
+            let pp = pp.strip_suffix(')').unwrap_or(pp);
+            let close = |t: &str, want: f64| val(t).is_some_and(|v| (v - want).abs() <= 1e-12 * (1.0 + want.abs()));
+            if !close(q, av + hv) { bad.push(format!("{func} a={a} h={h} answers={answers}: f({q}) is not a + h = {}", av + hv)); }
+            if !close(pp, av) { bad.push(format!("{func} a={a} h={h}: f({pp}) is not a")); }
+            if !close(den, hv) { bad.push(format!("{func} a={a} h={h}: denominator {den}")); }
+            if answers {
+                let k = lines.iter().position(|l| l == w).unwrap();
+                let next = &lines[k + 1];
+                let last = next.rsplit(['=', '\u{2248}']).next().unwrap().trim();
+                let shown = val(last).unwrap_or(f64::NAN);
+                let places = last.split('.').nth(1).map(|d| d.len()).unwrap_or(0) as i32;
+                if (shown - true_m).abs() > 0.5 * 10f64.powi(-places) * 1.0001 + 1e-12 { bad.push(format!("{func} a={a} h={h}: result {next} is not {true_m}")); }
+                if next.starts_with("= (") && !next.contains('\u{2248}') {
+                    let (frac, _) = next.trim_start_matches("= ").rsplit_once(" = ").unwrap();
+                    if !close(frac, true_m) { bad.push(format!("{func} a={a} h={h}: {next} is not {true_m}")); }
+                }
+            } else if !lines.iter().any(|l| l.trim() == "=") { bad.push(format!("{func} a={a} h={h}: the student copy asks no value")); }
+        }
+    }
+    println!("worked steps checked: {steps}");
+    assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.join("\n"));
+}
+
+/// The panel's text with each superscript bracketed: 2<sup>1/3</sup> reads 2^(1/3).
+fn texts_sup(svg: &str) -> Vec<String> {
+    let pat = r#"data-tsl="panel">"#;
+    let open = r#"<tspan baseline-shift="super" font-size="70%">"#;
+    svg.match_indices(pat).map(|(i, _)| {
+        let rest = &svg[i + pat.len()..];
+        let mut body = &rest[..rest.find("</text>").unwrap_or(0)];
+        let mut out = String::new();
+        let mut depth: Vec<bool> = vec![];
+        while !body.is_empty() {
+            if body.starts_with(open) { out.push_str("^("); depth.push(true); body = &body[open.len()..]; continue; }
+            if body.starts_with("<tspan") { depth.push(false); body = &body[body.find('>').unwrap() + 1..]; continue; }
+            if body.starts_with("</tspan>") { if depth.pop() == Some(true) { out.push(')'); } body = &body[8..]; continue; }
+            if body.starts_with('<') { body = &body[body.find('>').unwrap() + 1..]; continue; }
+            let c = body.chars().next().unwrap();
+            out.push(c);
+            body = &body[c.len_utf8()..];
+        }
+        out.replace("&amp;", "&")
+    }).collect()
+}
+
+/// A worked line with a typed decimal is in decimals throughout: x^0.5 at 1 with h = 1/2 is [f(1.5) − f(1)]/0.5, x² at −1/2
+/// with h = 0.01 is (0.2401 − 0.25)/0.01; and with h = 0.0001 its result has the places the table gives (2.0001, not 2).
+#[test]
+fn worked_lines_keep_one_kind_of_number() {
+    let w = |o: &[(&str, Value)]| { let mut v = vec![("worked", b(true))]; v.extend_from_slice(o); texts_sup(&build(&with(&v)).svg) };
+    let l = w(&[("func", s("x^0.5")), ("a", s("1")), ("h", s("1/2"))]);
+    assert!(has(&l, "[f(1.5) \u{2212} f(1)]/0.5"), "{l:?}");
+    let l = w(&[("a", s("-1/2")), ("h", s("0.01"))]);
+    assert!(has(&l, "(0.2401 \u{2212} 0.25)/0.01"), "{l:?}");
+    let l = w(&[("a", s("1")), ("h", s("0.0001"))]);
+    assert!(l.iter().any(|x| x.ends_with("2.0001")), "{l:?}");
+}
