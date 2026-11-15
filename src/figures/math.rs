@@ -4078,6 +4078,10 @@ mod conics_tests;
 mod conics_r1_tests;
 #[cfg(test)]
 mod conics_r2_tests;
+/// Limits and discontinuities (new figure): pieces drawn by the grid's plotter, with limit questions and a key.
+pub(crate) mod limits;
+#[cfg(test)]
+mod limits_tests;
 #[cfg(test)]
 mod number_line_b7_tests;
 
@@ -6582,7 +6586,7 @@ pub(super) fn render_for(id: &str) -> Option<fn(&Params) -> String> {
 /// "Start from an example" entries for this subject's figures. Solids and plots (math-b) live in
 /// `examples_b`; flat shapes (math-a) chain their own `examples_a` here with `.or_else`.
 pub fn examples(id: &str) -> Option<Vec<super::Example>> {
-    flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id))
+    flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id)).or_else(|| limits::examples(id))
 }
 
 /// The Measures card of the figure (none yet): rows for the shape's sides/angles/dimensions.
@@ -6748,6 +6752,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::H
         .or_else(|| (id == super::stats::twoway::ID).then(|| super::stats::twoway::handles(p)))
         .or_else(|| (id == super::stats::venn::ID).then(|| super::stats::venn::handles(p)))
         .or_else(|| (id == conics::ID).then(|| conics::handles(p)))
+        .or_else(|| (id == limits::ID).then(|| limits::handles(p)))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's

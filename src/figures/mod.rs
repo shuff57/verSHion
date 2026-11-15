@@ -592,6 +592,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(health::defs());
     v.extend(art::defs());
     v.extend(math::conics::defs());
+    v.extend(math::limits::defs());
     v
 }
 
@@ -823,6 +824,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         // batch 9: the inflection point's and the phases' label modes only where they draw
         "population-growth" => biology::popdyn::growth_b9_relevant(key, p) && cards::relevant(id, key, p),
         "conic-sections" => math::conics::relevant(key, p),
+        "limits-discontinuities" => math::limits::relevant(key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -903,6 +905,7 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon" => math::flat_b9::warnings(id, p),
         "pulley" => physics::pulley_warnings(p),
         "conic-sections" => math::conics::warnings(p),
+        "limits-discontinuities" => math::limits::warnings(p),
         _ => vec![] }
 }
 
@@ -1002,7 +1005,7 @@ pub fn random_reading(id: &str, p: &mut Params, seed: u64) -> bool {
 /// The reference's "Classic setups" dropdown (population growth, Punnett square, pedigree):
 /// named starting points like `Example`, applied over the plain defaults.
 pub fn classic_setups(id: &str) -> Vec<Example> {
-    biology::classic_setups(id).or_else(|| math::conics::classic_setups(id)).unwrap_or_default()
+    biology::classic_setups(id).or_else(|| math::conics::classic_setups(id)).or_else(|| math::limits::classic_setups(id)).unwrap_or_default()
 }
 
 /// A named starting point for a figure ("Start from an example"): parameter overrides on top of

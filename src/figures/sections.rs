@@ -76,6 +76,14 @@ static CONIC_SECTIONS: [RefSection; 6] = [
     s("x-axis", &["xmin", "xmax", "xstep", "numbers", "xlabel"], ""),
     s("y-axis", &["ymin", "ymax", "ystep", "ylabel"], ""),
     s("Grid and copies", &["minor", "grid", "style", "show_answers", "blank_labels", "blank_curve", "blank_equation", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+static LIMITS: [RefSection; 7] = [
+    s("Function", &["pieces", "dots"], "One piece a line: a formula with its domain, or points joined smoothly. Click a circle on the figure to switch it open or closed; drag a single point up or down."),
+    s("Questions", &["ask_at", "ask_left", "ask_right", "ask_two", "ask_value", "ask_inf", "ask_disc", "inf_answer", "dne_word"], "Drag a marker along the x-axis to move x = a."),
+    s("On the graph", &["guide", "show_asym", "asym_eqs", "kind_labels", "arrows", "eps_band", "eps"], ""),
+    s("Title and labels", &["title_mode", "title", "label_size"], ""),
+    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "xlabel"], ""),
+    s("y-axis", &["ymin", "ymax", "ystep", "ylabel"], ""),
+    s("Grid and copies", &["minor", "grid", "square", "style", "show_answers", "stu_hide_kinds", "stu_hide_asym"], "Turn off Show answers for the student copy: each answer becomes a line to write on; Student + key exports both."),
 ];
 
 static TRANSFORMATIONS: [RefSection; 7] = [
@@ -1260,6 +1268,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "cone" => &FIG_5,
         "coordinate-grid" => &FIG_6,
         "conic-sections" => &CONIC_SECTIONS,
+        "limits-discontinuities" => &LIMITS,
         "transformations" => &TRANSFORMATIONS,
         "cylinder" => &FIG_7,
         "free-body-diagram" => &FIG_8,
