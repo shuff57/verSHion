@@ -13,6 +13,9 @@ use sym::Ex;
 
 pub(crate) mod sym;
 pub(crate) mod exact;
+mod holes;
+#[cfg(test)]
+mod round6;
 use exact::Xv as XV;
 #[cfg(test)]
 mod tests;
@@ -240,6 +243,7 @@ pub(crate) enum Mode { F, Fp { x0: f64, y0: f64, x0e: Option<XV>, y0e: Option<XV
 pub(crate) struct Model {
     pub pieces: Vec<Piece>,
     pub mode: Mode,
+    locals: Vec<holes::Local>,
     /// (x, F(x)) at the nodes of the integral (start from f′ only)
     table: Vec<(f64, f64)>,
     /// how many times a piece has been evaluated: the work a figure may do is bounded (see WORK_MAX)
@@ -249,12 +253,17 @@ pub(crate) struct Model {
 /// it, f is not drawn from f′ and the figure says why.
 pub(crate) const WORK_MAX: u64 = 1_500_000;
 impl Model {
-    fn piece(&self, x: f64) -> Option<&Piece> { self.pieces.iter().find(|p| in_dom(&p.dom, x)).filter(|p| !p.holes.iter().any(|h| (h.0 - x).abs() <= 1e-12 * (1.0 + x.abs()))) }
+    fn piece(&self, x: f64) -> Option<&Piece> {
+        let (pi, p) = self.pieces.iter().enumerate().find(|(_, p)| in_dom(&p.dom, x))?;
+        let hole = p.holes.iter().any(|h| (h.0 - x).abs() <= 1e-12 * (1.0 + x.abs()))
+            || self.locals.iter().any(|l| l.pi == pi && x == l.x);
+        (!hole).then_some(p)
+    }
     /// k-th derivative of the typed function (k = 0 is the typed one)
     pub(crate) fn g(&self, k: usize, x: f64) -> Option<f64> {
         self.work.set(self.work.get() + 1);
         let p = self.piece(x)?;
-        let v = sym::ev(if k == 0 { &p.e } else { &p.d[k - 1] }, x);
+        let v = self.local_value(self.piece_at(x)?, k, x).unwrap_or_else(|| sym::ev(if k == 0 { &p.e } else { &p.d[k - 1] }, x));
         v.is_finite().then_some(v)
     }
     /// the n-th derivative of f (n = 0 is f)
@@ -278,10 +287,14 @@ impl Model {
     /// The n-th derivative of f by piece `pi`'s own expression, whatever its domain (a one-sided value at a join).
     pub(crate) fn dp(&self, pi: usize, n: usize, x: f64) -> Option<f64> {
         self.work.set(self.work.get() + 1);
+        let k = match self.mode { Mode::F => Some(n), Mode::Fp { .. } => n.checked_sub(1) };
+        if let Some(v) = k.and_then(|k| self.local_value(pi, k, x)) { return Some(v); }
         match self.fexpr(pi, n) { Some(e) => { let v = sym::ev(e, x); v.is_finite().then_some(v) } None => self.integral(x) }
     }
     /// A bound on the rounding in dp(pi, n, x) (0 for f worked out from f′, whose error is the integral's own).
     pub(crate) fn dp_err(&self, pi: usize, n: usize, x: f64) -> f64 {
+        let k = match self.mode { Mode::F => Some(n), Mode::Fp { .. } => n.checked_sub(1) };
+        if let Some(v) = k.and_then(|k| self.local_value(pi, k, x)) { return 1e-14 * (1.0 + v.abs()); }
         match self.fexpr(pi, n) { Some(e) => sym::ev_err(e, x).1, None => 0.0 }
     }
     /// f at an exact x, derived exactly (None where it cannot be).
@@ -387,7 +400,8 @@ pub(crate) fn model(p: &Params, win: (f64, f64)) -> Result<Model, String> {
         let x0 = typed(p.s("pt_x")).ok_or_else(|| format!("Type the x of the point {name} passes through, such as 0"))?.v;
         let y0 = typed(p.s("pt_y")).ok_or_else(|| format!("Type the y of the point {name} passes through, such as 3"))?.v;
         let (x0e, y0e) = (exact::of_text(p.s("pt_x")), exact::of_text(p.s("pt_y")));
-        let mut m = Model { pieces: ps, mode: Mode::Fp { x0, y0, x0e, y0e }, table: vec![], work: Default::default() };
+        let locals = holes::find(&ps, win);
+        let mut m = Model { locals, pieces: ps, mode: Mode::Fp { x0, y0, x0e, y0e }, table: vec![], work: Default::default() };
         let (lo, hi) = (win.0.min(x0), win.1.max(x0));
         // f′ must have a value all the way from the point across the window: no gap and no pole
         let n = 3000;
@@ -433,7 +447,8 @@ pub(crate) fn model(p: &Params, win: (f64, f64)) -> Result<Model, String> {
         Ok(m)
     } else {
         let ps = pieces(p.s("f"), &name, &format!("{name}(x)"))?;
-        Ok(Model { pieces: ps, mode: Mode::F, table: vec![], work: Default::default() })
+        let locals = holes::find(&ps, win);
+        Ok(Model { locals, pieces: ps, mode: Mode::F, table: vec![], work: Default::default() })
     }
 }
 
@@ -1175,10 +1190,10 @@ fn rows_of(m: &Model, fi: usize, line: &str) -> Vec<String> {
     // which derivative of the typed pieces this is (f from f′ is not a row: it is drawn as a worked-out line)
     let k = match m.mode { Mode::F => fi, Mode::Fp { .. } => { if fi == 0 { return vec![]; } fi - 1 } };
     let word = match line { "Dashed" => " dashed", "Dotted" => " dotted", _ => "" };
-    m.pieces.iter().map(|pc| {
+    m.pieces.iter().enumerate().map(|(pi, pc)| {
         let e = if k == 0 { &pc.e } else { &pc.d[k - 1] };
         let body = sym::print(e);
-        match &pc.dom_text { Some(d) => format!("y = {body}, {d}{word}"), None => format!("y = {body}{word}") }
+        match holes::domain(m, pi) { Some(d) => format!("y = {body}, {d}{word}"), None => format!("y = {body}{word}") }
     }).collect()
 }
 fn place_rows(rows: &[(usize, Vec<String>)]) -> String {
@@ -1612,7 +1627,11 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
         let gp = grid_params(p, &place_rows(&rows), yr);
         let g = grid_layout_in(&gp, (480.0 * wide, plot_h));
         let mut gn = vec![];
-        let svg = coordinate_grid_build_in(&gp, &mut gn, (480.0 * wide, plot_h));
+        let mut svg = coordinate_grid_build_in(&gp, &mut gn, (480.0 * wide, plot_h));
+        if let Some(m) = &model {
+            let local = holes::draw(m, p, &fis, &g);
+            holes::insert(&mut svg, &local);
+        }
         grid_notes.extend(gn);
         let (w, h) = (svg_dim(&svg, "width"), svg_dim(&svg, "height"));
         let head_y = y;
@@ -2128,6 +2147,21 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
                         if !inside(pn, *hx, v) { continue; }
                         let _ = k;
                         marks.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="hole"/>"##, pn.sx(*hx), pn.sy(v), if print { ink } else { cols[fi] }));
+                    }
+                }
+            }
+        }
+    }
+    // Analytic continuations supply the true finite limits at non-rational removable holes.
+    if let Some(m) = &model {
+        for l in &m.locals {
+            for pn in &panels {
+                for fi in fis_of(pn.kind) {
+                    if !shows(p, fi) { continue; }
+                    let k = match m.mode { Mode::F => fi, Mode::Fp { .. } if fi > 0 => fi - 1, _ => continue };
+                    let v = l.at(k, l.x);
+                    if inside(pn, l.x, v) {
+                        marks.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="hole"/>"##, pn.sx(l.x), pn.sy(v), if print { ink } else { cols[fi] }));
                     }
                 }
             }
