@@ -621,16 +621,23 @@ impl<'a> P<'a> {
     }
     fn power(&mut self) -> Option<X> {
         let b = self.atom()?;
-        if self.peek() == Some('^') { self.i += 1; let e = self.unary()?; return Some(X::Pow(Box::new(b), Box::new(e))); }
+        if self.peek() == Some('^') {
+            self.i += 1;
+            let bracketed = self.peek() == Some('(');
+            let e = self.one_term()?;
+            if !bracketed && self.peek().is_some_and(|c| c.is_ascii_digit() || c == '.') { return None; }
+            return Some(X::Pow(Box::new(b), Box::new(e)));
+        }
         Some(b)
     }
     fn arg(&mut self) -> Option<X> {
         if self.peek()? != '(' {
-            // Bind the entire implicit product, but leave division and the next
-            // function to the enclosing term: sin 3x/x and sin x cos x.
-            let mut factors = vec![self.unary()?];
-            while self.implicit_arg_factor() { factors.push(self.power()?); }
-            return Some(if factors.len() == 1 { factors.pop().unwrap() } else { X::Mul(factors) });
+            let a = self.one_term()?;
+            // A trailing number has no clear reading (sin x 2). Do not guess.
+            if self.peek().is_some_and(|c| c.is_ascii_digit() || c == '.') { return None; }
+            // sin 2(x+1) could mean an argument or an outside product.
+            if !a.has_x() && self.peek() == Some('(') { return None; }
+            return Some(a);
         }
         self.i += 1;
         let a = self.expr()?;
@@ -638,15 +645,48 @@ impl<'a> P<'a> {
         self.i += 1;
         Some(a)
     }
-    fn implicit_arg_factor(&mut self) -> bool {
-        match self.peek() {
-            Some(c) if c.is_ascii_digit() || c == '.' || c == '(' || c == 'π' => true,
-            Some('x' | 'e' | 'p') => {
-                let name: String = self.s[self.i..].iter().take_while(|c| c.is_ascii_alphabetic()).collect();
-                matches!(name.as_str(), "pi" | "pix") || name.starts_with('x') || name.starts_with('e') && name != "exp"
-            }
-            _ => false,
+    /// One signed term. Only a plain numeric/π coefficient can bind a
+    /// following x; brackets and other atoms never grow into implicit products.
+    /// Tentative fraction/π reads are rolled back unless that x follows.
+    fn one_term(&mut self) -> Option<X> {
+        match self.peek()? {
+            '-' => { self.i += 1; return Some(X::Neg(Box::new(self.one_term()?))); }
+            '+' => { self.i += 1; return self.one_term(); }
+            _ => {}
         }
+        let start = self.peek()?;
+        let number = start.is_ascii_digit() || start == '.';
+        let coefficient = number || start == 'π' ||
+            self.s[self.i..].starts_with(&['p', 'i']);
+        // Keep existing single-atom powers and explicitly grouped expressions.
+        // Crucially, has_x is not the boundary: even a constant function or
+        // bracket must not absorb a later x.
+        let first = self.power()?;
+        if start == '(' || !matches!(first, X::C(_)) { return Some(first); }
+        let end = self.i;
+        let mut factors = vec![first];
+        if number && self.peek() == Some('/') {
+            self.i += 1;
+            if self.peek().is_some_and(|c| c.is_ascii_digit() || c == '.') {
+                factors.push(X::Inv(Box::new(self.atom()?)));
+            } else { self.i = end; return Some(factors.remove(0)); }
+        }
+        if number && (self.peek() == Some('π') ||
+            self.s[self.i..].starts_with(&['p', 'i'])) {
+            factors.push(self.atom()?);
+        }
+        if coefficient && self.peek() == Some('x') {
+            factors.push(self.power()?);
+            return Some(X::Mul(factors));
+        }
+        self.i = end;
+        // Unsupported constant coefficients need brackets: ln ex, sin 2e^x,
+        // sin 2π. Guessing a shorter constant argument changes their meaning.
+        let next = self.peek();
+        if matches!(next, Some('x' | 'π')) ||
+            next == Some('p') && self.s[self.i..].starts_with(&['p', 'i']) ||
+            next == Some('e') && !self.s[self.i..].starts_with(&['e', 'x', 'p']) { return None; }
+        Some(factors.remove(0))
     }
     fn atom(&mut self) -> Option<X> {
         match self.peek()? {

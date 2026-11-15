@@ -1716,7 +1716,7 @@ fn bounded_wave_zero_limit_is_a_horizontal_asymptote() {
 /// at zero, but at infinity the tangent quotient has recurring poles, not limit 0.
 /// The periodic sine/cosine functions have no limit at infinity. log_b(b^n) = n.
 #[test]
-fn classroom_function_arguments_bind_the_whole_implicit_product() {
+fn classroom_function_arguments_bind_one_coefficient_times_x_term() {
     let cases = [
         // spelling, a, f(a) (None = undefined), limit at a, +infinity, -infinity,
         // vertical asymptotes in -6..10, horizontal asymptote (if any).
@@ -1788,12 +1788,11 @@ fn classroom_function_arguments_bind_the_whole_implicit_product() {
 fn documented_ambiguous_readings_and_implicit_powers_are_explicit() {
     // These are the readings stated in the Function panel help; brackets select others.
     for (s, x, y) in [("sin 1/x", 2.0, 1.0f64.sin()/2.0), ("√2x", 8.0, 4.0),
-        ("e^2x", 3.0, 3.0*2.0f64.exp()), ("log(2, x)", 8.0, 1.0/3.0),
-        ("sin 5x²", 0.5, 1.25f64.sin()), ("cos 2e x", 0.5, std::f64::consts::E.cos()),
+        ("e^2x", 3.0, 6.0f64.exp()), ("log(2, x)", 8.0, 1.0/3.0),
+        ("sin 5x²", 0.5, 1.25f64.sin()),
         ("sin pi x", 0.5, 1.0), ("cos πx", 0.5, 0.0),
         ("sin3x/x", std::f64::consts::PI/6.0, 6.0/std::f64::consts::PI),
-        ("tan 3x/x", std::f64::consts::PI/12.0, 12.0/std::f64::consts::PI),
-        ("sin 2ex", 0.5, std::f64::consts::E.sin())] {
+        ("tan 3x/x", std::f64::consts::PI/12.0, 12.0/std::f64::consts::PI)] {
         let e = cas::parse(s).unwrap_or_else(|| panic!("{s}"));
         assert!((cas::ev(&e, x).unwrap()-y).abs() < 1e-12, "{s}");
     }
@@ -1808,4 +1807,307 @@ fn tangent_quotient_retains_its_complete_discontinuity_list() {
     // and 7 removable points (k divisible by 6), altogether 39.
     assert_eq!(d.discs.len(), 39, "{:?}", warnings(&p));
     assert!(!warnings(&p).iter().any(|n| n.contains("steps") || n.contains("says where they are")), "{:?}", warnings(&p));
+}
+
+/// Check 8's T01–T24 and all 72 V spellings, plus every blocking product.
+/// Hand working: sin(kx)/x -> k, (1-cos(kx))/x² -> k²/2;
+/// log_b(b^n)=n; trig poles at zeros of their denominators; exp decay
+/// dominates powers but exponential growth times sine/cosine has no limit.
+/// V09/V64 now use e^(±2x); V63 retains left-to-right division;
+/// V65 uses explicit multiplication outside sin(2); V66 is sin(1/2)*x.
+#[test]
+fn check_eight_spellings_and_products_match_hand_truths() {
+    let cases: J = serde_json::from_str(r###"[
+{"name":"T01","p":{"pieces":"y = sin 3x / x","dots":"","ask_at":"0, pi/6","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[3,3,3,"u"],"pi/6":[1.909859317102744,1.909859317102744,1.909859317102744,1.909859317102744]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"T02","p":{"pieces":"y = sin 3x/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[3,3,3,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"T03","p":{"pieces":"y = sin3x/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[3,3,3,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"T04","p":{"pieces":"y = (sin 5x)/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[5,5,5,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"T05","p":{"pieces":"y = tan 3x/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[3,3,3,"u"]},"inf":["d","d"],"discs":null,"va":[-5.759586531581287,-4.71238898038469,-3.665191429188092,-2.6179938779914944,-1.5707963267948966,-0.5235987755982988,0.5235987755982988,1.5707963267948966,2.6179938779914944,3.665191429188092,4.71238898038469,5.759586531581287,6.806784082777885,7.853981633974482,8.901179185171081,9.948376736367678],"ha":[]}},
+{"name":"T06","p":{"pieces":"y = sin 2x","dots":"","ask_at":"0, pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[0,0,0,0],"pi/4":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T07","p":{"pieces":"y = sin2x","dots":"","ask_at":"pi/4, pi/12","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[1,1,1,1],"pi/12":[0.5,0.5,0.5,0.5]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T08","p":{"pieces":"y = sin 2 x","dots":"","ask_at":"pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T09","p":{"pieces":"y = cos 2x","dots":"","ask_at":"0, pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1,1,1,1],"pi/2":[-1,-1,-1,-1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T10","p":{"pieces":"y = 2cos 3x","dots":"","ask_at":"0, pi/3","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[2,2,2,2],"pi/3":[-2,-2,-2,-2]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T11","p":{"pieces":"y = 1 − cos 2x","dots":"","ask_at":"0, pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[0,0,0,0],"pi/2":[2,2,2,2]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T12","p":{"pieces":"y = 5 sin 5x","dots":"","ask_at":"pi/10","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/10":[5,5,5,5]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T13","p":{"pieces":"y = tan 2x","dots":"","ask_at":"pi/4, 0, pi/8","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":["i","-i","d","u"],"0":[0,0,0,0],"pi/8":[1,1,1,1]},"inf":["d","d"],"discs":[[-5.497787143782138,"i"],[-3.9269908169872414,"i"],[-2.356194490192345,"i"],[-0.7853981633974483,"i"],[0.7853981633974483,"i"],[2.356194490192345,"i"],[3.9269908169872414,"i"],[5.497787143782138,"i"],[7.0685834705770345,"i"],[8.63937979737193,"i"]],"va":[-5.497787143782138,-3.9269908169872414,-2.356194490192345,-0.7853981633974483,0.7853981633974483,2.356194490192345,3.9269908169872414,5.497787143782138,7.0685834705770345,8.63937979737193],"ha":[]}},
+{"name":"T14","p":{"pieces":"y = sin πx","dots":"","ask_at":"1/2, 1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/2":[1,1,1,1],"1":[0,0,0,0]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T15","p":{"pieces":"y = cos πx","dots":"","ask_at":"1/2, 1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/2":[0,0,0,0],"1":[-1,-1,-1,-1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"T16","p":{"pieces":"y = sin 2x / sin 3x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[0.6666666666666666,0.6666666666666666,0.6666666666666666,"u"]},"inf":["d","d"],"discs":null,"va":[-5.235987755982989,-4.1887902047863905,-2.0943951023931953,-1.0471975511965976,1.0471975511965976,2.0943951023931953,4.1887902047863905,5.235987755982989,7.330382858376184,8.377580409572781],"ha":[]}},
+{"name":"T17","p":{"pieces":"y = sin 3x/sin 2x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1.5,1.5,1.5,"u"]},"inf":["d","d"],"discs":null,"va":[-4.71238898038469,-1.5707963267948966,1.5707963267948966,4.71238898038469,7.853981633974483],"ha":[]}},
+{"name":"T18","p":{"pieces":"y = log2(x)","dots":"","ask_at":"8, 1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"8":[3,3,3,3],"1":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"T19","p":{"pieces":"y = log2 x","dots":"","ask_at":"8, 1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"8":[3,3,3,3],"1/2":[-1,-1,-1,-1]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"T20","p":{"pieces":"y = log2(x + 1)","dots":"","ask_at":"1, 3","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[1,1,1,1],"3":[2,2,2,2]},"inf":["i","n"],"discs":null,"va":[-1],"ha":[]}},
+{"name":"T21","p":{"pieces":"y = ln 2x","dots":"","ask_at":"1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/2":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"T22","p":{"pieces":"y = ln5x","dots":"","ask_at":"1/5","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/5":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"T23","p":{"pieces":"y = log 2x","dots":"","ask_at":"5, 1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"5":[1,1,1,1],"1/2":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"T24","p":{"pieces":"y = 1 - cos 2x","dots":"","ask_at":"pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/2":[2,2,2,2]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V01","p":{"pieces":"y = sin 3x","dots":"","ask_at":"pi/6, pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/6":[1,1,1,1],"pi/2":[-1,-1,-1,-1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V02","p":{"pieces":"y = cos(2x)","dots":"","ask_at":"pi/3","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/3":[-0.5,-0.5,-0.5,-0.5]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V03","p":{"pieces":"y = sin πx / x","dots":"","ask_at":"0, 1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[3.141592653589793,3.141592653589793,3.141592653589793,"u"],"1/2":[2,2,2,2]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V04","p":{"pieces":"y = 2sin x","dots":"","ask_at":"pi/6","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/6":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V05","p":{"pieces":"y = 3 sin 2x","dots":"","ask_at":"pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[3,3,3,3]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V06","p":{"pieces":"y = sin 2x cos x","dots":"","ask_at":"pi/4, pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[0.7071067811865476,0.7071067811865476,0.7071067811865476,0.7071067811865476],"pi/2":[0,0,0,0]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V07","p":{"pieces":"y = ln 3x","dots":"","ask_at":"1/3, e/3","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/3":[0,0,0,0],"e/3":[1,1,1,1]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V08","p":{"pieces":"y = log2 8x","dots":"","ask_at":"1, 1/8","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[3,3,3,3],"1/8":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V09","p":{"pieces":"y = e^2x","dots":"","ask_at":"1, 0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[7.3890560989306495,7.3890560989306495,7.3890560989306495,7.3890560989306495],"0":[1,1,1,1]},"inf":["i",0],"discs":[],"va":[],"ha":[0]}},
+{"name":"V10","p":{"pieces":"y = tan 2x/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[2,2,2,"u"]},"inf":["d","d"],"discs":null,"va":[-5.497787143782138,-3.9269908169872414,-2.356194490192345,-0.7853981633974483,0.7853981633974483,2.356194490192345,3.9269908169872414,5.497787143782138,7.0685834705770345,8.63937979737193],"ha":[]}},
+{"name":"V11","p":{"pieces":"y = sin 4x/(2x)","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[2,2,2,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V12","p":{"pieces":"y = (1 - cos 2x)/x²","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[2,2,2,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V13","p":{"pieces":"y = (1 − cos 4x)/x^2","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[8,8,8,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V14","p":{"pieces":"y = (cos 3x - 1)/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[0,0,0,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V15","p":{"pieces":"y = sin 5x / sin 2x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[2.5,2.5,2.5,"u"]},"inf":["d","d"],"discs":null,"va":[-4.71238898038469,-1.5707963267948966,1.5707963267948966,4.71238898038469,7.853981633974483],"ha":[]}},
+{"name":"V16","p":{"pieces":"y = tan 3x / sin 2x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1.5,1.5,1.5,"u"]},"inf":["d","d"],"discs":null,"va":[-5.759586531581287,-4.71238898038469,-3.665191429188092,-2.6179938779914944,-1.5707963267948966,-0.5235987755982988,0.5235987755982988,1.5707963267948966,2.6179938779914944,3.665191429188092,4.71238898038469,5.759586531581287,6.806784082777885,7.853981633974482,8.901179185171081,9.948376736367678],"ha":[]}},
+{"name":"V17","p":{"pieces":"y = sin x²/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[0,0,0,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V18","p":{"pieces":"y = sin 0.5x","dots":"","ask_at":"pi","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V19","p":{"pieces":"y = sin 1.5x","dots":"","ask_at":"pi/3","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/3":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V20","p":{"pieces":"y = sin  3x","dots":"","ask_at":"pi/6","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/6":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V21","p":{"pieces":"y = -sin 2x","dots":"","ask_at":"pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[-1,-1,-1,-1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V22","p":{"pieces":"y = sin 2x + cos 2x","dots":"","ask_at":"0, pi/8","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1,1,1,1],"pi/8":[1.4142135623730951,1.4142135623730951,1.4142135623730951,1.4142135623730951]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V23","p":{"pieces":"y = sin 2x cos 2x","dots":"","ask_at":"pi/8","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/8":[0.5,0.5,0.5,0.5]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V24","p":{"pieces":"y = sin x cos 2x","dots":"","ask_at":"pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/2":[-1,-1,-1,-1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V25","p":{"pieces":"y = x sin 2x","dots":"","ask_at":"pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[0.7853981633974483,0.7853981633974483,0.7853981633974483,0.7853981633974483]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V26","p":{"pieces":"y = sin 2πx","dots":"","ask_at":"1/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/4":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V27","p":{"pieces":"y = tan πx","dots":"","ask_at":"1/4, 1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/4":[1,1,1,1],"1/2":["i","-i","d","u"]},"inf":["d","d"],"discs":[[-5.5,"i"],[-4.5,"i"],[-3.5,"i"],[-2.5,"i"],[-1.5,"i"],[-0.5,"i"],[0.5,"i"],[1.5,"i"],[2.5,"i"],[3.5,"i"],[4.5,"i"],[5.5,"i"],[6.5,"i"],[7.5,"i"],[8.5,"i"],[9.5,"i"]],"va":[-5.5,-4.5,-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5],"ha":[]}},
+{"name":"V28","p":{"pieces":"y = sin pi x","dots":"","ask_at":"1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/2":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V29","p":{"pieces":"y = cos(πx/2)","dots":"","ask_at":"1, 2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[0,0,0,0],"2":[-1,-1,-1,-1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V30","p":{"pieces":"y = 1/sin 2x","dots":"","ask_at":"pi/4, 0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[1,1,1,1],"0":["-i","i","d","u"]},"inf":["d","d"],"discs":[[-4.71238898038469,"i"],[-3.141592653589793,"i"],[-1.5707963267948966,"i"],[0.0,"i"],[1.5707963267948966,"i"],[3.141592653589793,"i"],[4.71238898038469,"i"],[6.283185307179586,"i"],[7.853981633974483,"i"],[9.42477796076938,"i"]],"va":[-4.71238898038469,-3.141592653589793,-1.5707963267948966,0.0,1.5707963267948966,3.141592653589793,4.71238898038469,6.283185307179586,7.853981633974483,9.42477796076938],"ha":[]}},
+{"name":"V31","p":{"pieces":"y = sec 2x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1,1,1,1]},"inf":["d","d"],"discs":[[-5.497787143782138,"i"],[-3.9269908169872414,"i"],[-2.356194490192345,"i"],[-0.7853981633974483,"i"],[0.7853981633974483,"i"],[2.356194490192345,"i"],[3.9269908169872414,"i"],[5.497787143782138,"i"],[7.0685834705770345,"i"],[8.63937979737193,"i"]],"va":[-5.497787143782138,-3.9269908169872414,-2.356194490192345,-0.7853981633974483,0.7853981633974483,2.356194490192345,3.9269908169872414,5.497787143782138,7.0685834705770345,8.63937979737193],"ha":[]}},
+{"name":"V32","p":{"pieces":"y = cot 2x","dots":"","ask_at":"pi/8","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/8":[1,1,1,1]},"inf":["d","d"],"discs":[[-4.71238898038469,"i"],[-3.141592653589793,"i"],[-1.5707963267948966,"i"],[0.0,"i"],[1.5707963267948966,"i"],[3.141592653589793,"i"],[4.71238898038469,"i"],[6.283185307179586,"i"],[7.853981633974483,"i"],[9.42477796076938,"i"]],"va":[-4.71238898038469,-3.141592653589793,-1.5707963267948966,0.0,1.5707963267948966,3.141592653589793,4.71238898038469,6.283185307179586,7.853981633974483,9.42477796076938],"ha":[]}},
+{"name":"V33","p":{"pieces":"y = csc 3x","dots":"","ask_at":"pi/6","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/6":[1,1,1,1]},"inf":["d","d"],"discs":[[-5.235987755982989,"i"],[-4.1887902047863905,"i"],[-3.141592653589793,"i"],[-2.0943951023931953,"i"],[-1.0471975511965976,"i"],[0.0,"i"],[1.0471975511965976,"i"],[2.0943951023931953,"i"],[3.141592653589793,"i"],[4.1887902047863905,"i"],[5.235987755982989,"i"],[6.283185307179586,"i"],[7.330382858376184,"i"],[8.377580409572781,"i"],[9.42477796076938,"i"]],"va":[-5.235987755982989,-4.1887902047863905,-3.141592653589793,-2.0943951023931953,-1.0471975511965976,0.0,1.0471975511965976,2.0943951023931953,3.141592653589793,4.1887902047863905,5.235987755982989,6.283185307179586,7.330382858376184,8.377580409572781,9.42477796076938],"ha":[]}},
+{"name":"V34","p":{"pieces":"y = arctan 2x","dots":"","ask_at":"1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/2":[0.7853981633974483,0.7853981633974483,0.7853981633974483,0.7853981633974483]},"inf":[1.5707963267948966,-1.5707963267948966],"discs":[],"va":[],"ha":[1.5707963267948966,-1.5707963267948966]}},
+{"name":"V35","p":{"pieces":"y = arcsin 2x","dots":"","ask_at":"1/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/4":[0.5235987755982988,0.5235987755982988,0.5235987755982988,0.5235987755982988]},"inf":["n","n"],"discs":null,"va":[],"ha":[]}},
+{"name":"V36","p":{"pieces":"y = √4x","dots":"","ask_at":"1, 4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[2,2,2,2],"4":[4,4,4,4]},"inf":["i","n"],"discs":null,"va":[],"ha":[]}},
+{"name":"V37","p":{"pieces":"y = √2x","dots":"","ask_at":"2, 8","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"2":[2,2,2,2],"8":[4,4,4,4]},"inf":["i","n"],"discs":null,"va":[],"ha":[]}},
+{"name":"V38","p":{"pieces":"y = e^(2x)","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1,1,1,1]},"inf":["i",0],"discs":[],"va":[],"ha":[0]}},
+{"name":"V39","p":{"pieces":"y = (e^(2x) - 1)/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[2,2,2,"u"]},"inf":["i",0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V40","p":{"pieces":"y = ln 2x + 1","dots":"","ask_at":"1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/2":[1,1,1,1]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V41","p":{"pieces":"y = log 100x","dots":"","ask_at":"1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[2,2,2,2]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V42","p":{"pieces":"y = log3 9x","dots":"","ask_at":"1, 1/9","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[2,2,2,2],"1/9":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V43","p":{"pieces":"y = log5 x","dots":"","ask_at":"25, 1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true,"xmax":30},"exp":{"at":{"25":[2,2,2,2],"1":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V44","p":{"pieces":"y = log2 x + 1","dots":"","ask_at":"2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"2":[2,2,2,2]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V45","p":{"pieces":"y = log2(8)","dots":"","ask_at":"1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[3,3,3,3]},"inf":[3,3],"discs":[],"va":[],"ha":[3]}},
+{"name":"V46","p":{"pieces":"y = ln 3x/x","dots":"","ask_at":"1/3","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/3":[0,0,0,0]},"inf":[0,"n"],"discs":null,"va":[0],"ha":[0]}},
+{"name":"V47","p":{"pieces":"y = ln|x|","dots":"","ask_at":"-1, e, 0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"-1":[0,0,0,0],"e":[1,1,1,1],"0":["-i","-i","-i","u"]},"inf":["i","i"],"discs":[[0,"i"]],"va":[0],"ha":[]}},
+{"name":"V48","p":{"pieces":"y = ln|2x|","dots":"","ask_at":"1/2, -1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1/2":[0,0,0,0],"-1/2":[0,0,0,0]},"inf":["i","i"],"discs":[[0,"i"]],"va":[0],"ha":[]}},
+{"name":"V49","p":{"pieces":"y = 2sin 3x / x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[6,6,6,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V50","p":{"pieces":"y = sin 3x / sin x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[3,3,3,"u"]},"inf":["d","d"],"discs":null,"va":[],"ha":[]}},
+{"name":"V51","p":{"pieces":"y = x / sin 2x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[0.5,0.5,0.5,"u"]},"inf":["d","d"],"discs":null,"va":[-4.71238898038469,-3.141592653589793,-1.5707963267948966,1.5707963267948966,3.141592653589793,4.71238898038469,6.283185307179586,7.853981633974483,9.42477796076938],"ha":[]}},
+{"name":"V52","p":{"pieces":"y = sin 3x/x - 1","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[2,2,2,"u"]},"inf":[-1,-1],"discs":[[0,"r"]],"va":[],"ha":[-1]}},
+{"name":"V53","p":{"pieces":"y = 2 × sin 3x","dots":"","ask_at":"pi/6","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/6":[2,2,2,2]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V54","p":{"pieces":"y = sin 3x / x","dots":"","ask_at":"-1/3, 2π/3, 0.25","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"-1/3":[2.5244129544236893,2.5244129544236893,2.5244129544236893,2.5244129544236893],"2π/3":[0,0,0,0],"0.25":[2.7265550400933365,2.7265550400933365,2.7265550400933365,2.7265550400933365]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V55","p":{"pieces":"y = cos 2x","dots":"","ask_at":"-π/4, 2π/3, 1/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"-π/4":[0,0,0,0],"2π/3":[-0.5,-0.5,-0.5,-0.5],"1/2":[0.5403023058681398,0.5403023058681398,0.5403023058681398,0.5403023058681398]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V56","p":{"pieces":"y = ln 2x","dots":"","ask_at":"e/2, 0.5","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"e/2":[1,1,1,1],"0.5":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V57","p":{"pieces":"y = sin 3x / x, x < 0\ny = cos 2x, x >= 0","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[3,1,"d",1]},"inf":["d",0],"discs":[[0,"j"]],"va":[],"ha":[0]}},
+{"name":"V58","p":{"pieces":"y = sin(3x)/x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[3,3,3,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V59","p":{"pieces":"y = 4 sin x cos x","dots":"","ask_at":"pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[2,2,2,2]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V60","p":{"pieces":"y = sin 2x²","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[0,0,0,0]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V61","p":{"pieces":"y = (sin 2x)²","dots":"","ask_at":"pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[1,1,1,1]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V62","p":{"pieces":"y = cos 3x/ cos x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1,1,1,1]},"inf":["d","d"],"discs":null,"va":[],"ha":[]}},
+{"name":"V63","p":{"pieces":"y = sin 3x / 3x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[0,0,0,0]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V64","p":{"pieces":"y = e^-2x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1,1,1,1]},"inf":[0,"i"],"discs":[],"va":[],"ha":[0]}},
+{"name":"V65","p":{"pieces":"y = sin 2·x","dots":"","ask_at":"pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[0.714160529010916,0.714160529010916,0.714160529010916,0.714160529010916]},"inf":["i","-i"],"discs":[],"va":[],"ha":[]}},
+{"name":"V66","p":{"pieces":"y = sin(1/2)x","dots":"","ask_at":"pi","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi":[1.5061597500222939,1.5061597500222939,1.5061597500222939,1.5061597500222939]},"inf":["i","-i"],"discs":[],"va":[],"ha":[]}},
+{"name":"V67","p":{"pieces":"y = 3cos πx + 1","dots":"","ask_at":"1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[-2,-2,-2,-2]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V68","p":{"pieces":"y = ln x²","dots":"","ask_at":"-1, e","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"-1":[0,0,0,0],"e":[2,2,2,2]},"inf":["i","i"],"discs":[[0,"i"]],"va":[0],"ha":[]}},
+{"name":"V69","p":{"pieces":"y = sin 4x / x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true,"xmin":-10,"xmax":10},"exp":{"at":{"0":[4,4,4,"u"]},"inf":[0,0],"discs":[[0,"r"]],"va":[],"ha":[0]}},
+{"name":"V70","p":{"pieces":"y = log2x","dots":"","ask_at":"8","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"8":[3,3,3,3]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"V71","p":{"pieces":"y = sin x/2","dots":"","ask_at":"pi, pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi":[0,0,0,0],"pi/2":[0.5,0.5,0.5,0.5]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"V72","p":{"pieces":"y = 1 - 2(sin x)^2","dots":"","ask_at":"pi/4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/4":[0,0,0,0]},"inf":["d","d"],"discs":[],"va":[],"ha":[]}},
+{"name":"B01","p":{"pieces":"y = cos x e^-x","dots":"","ask_at":"pi","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi":[-0.04321391826377226,-0.04321391826377226,-0.04321391826377226,-0.04321391826377226]},"inf":[0,"d"],"discs":null,"va":[],"ha":[0]}},
+{"name":"B02","p":{"pieces":"y = cos x e^(-x)","dots":"","ask_at":"pi","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi":[-0.04321391826377226,-0.04321391826377226,-0.04321391826377226,-0.04321391826377226]},"inf":[0,"d"],"discs":null,"va":[],"ha":[0]}},
+{"name":"B03","p":{"pieces":"y = sin x e^-x","dots":"","ask_at":"pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/2":[0.20787957635076193,0.20787957635076193,0.20787957635076193,0.20787957635076193]},"inf":[0,"d"],"discs":null,"va":[],"ha":[0]}},
+{"name":"B04","p":{"pieces":"y = sin x e^(-x)","dots":"","ask_at":"pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/2":[0.20787957635076193,0.20787957635076193,0.20787957635076193,0.20787957635076193]},"inf":[0,"d"],"discs":null,"va":[],"ha":[0]}},
+{"name":"B05","p":{"pieces":"y = sin x e^x","dots":"","ask_at":"pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/2":[4.810477380965351,4.810477380965351,4.810477380965351,4.810477380965351]},"inf":["d",0],"discs":null,"va":[],"ha":[0]}},
+{"name":"B06","p":{"pieces":"y = ln x e^x","dots":"","ask_at":"1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[0,0,0,0]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"B07","p":{"pieces":"y = sin x (x + 1)","dots":"","ask_at":"pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/2":[2.5707963267948966,2.5707963267948966,2.5707963267948966,2.5707963267948966]},"inf":["d","d"],"discs":null,"va":[],"ha":[]}},
+{"name":"B08","p":{"pieces":"y = cos x (x - 1)","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[-1,-1,-1,-1]},"inf":["d","d"],"discs":null,"va":[],"ha":[]}},
+{"name":"B09","p":{"pieces":"y = ln x (x + 1)","dots":"","ask_at":"e","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"e":[3.718281828459045,3.718281828459045,3.718281828459045,3.718281828459045]},"inf":["i","n"],"discs":null,"va":[0],"ha":[]}},
+{"name":"B10","p":{"pieces":"y = √x (x + 1)","dots":"","ask_at":"4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"4":[10,10,10,10]},"inf":["i","n"],"discs":null,"va":[],"ha":[]}},
+{"name":"B11","p":{"pieces":"y = sin x x²","dots":"","ask_at":"pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/2":[2.4674011002723395,2.4674011002723395,2.4674011002723395,2.4674011002723395]},"inf":["d","d"],"discs":null,"va":[],"ha":[]}},
+{"name":"B12","p":{"pieces":"y = sin x e","dots":"","ask_at":"pi/2","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi/2":[2.718281828459045,2.718281828459045,2.718281828459045,2.718281828459045]},"inf":["d","d"],"discs":null,"va":[],"ha":[]}},
+{"name":"B13","p":{"pieces":"y = cos 2x e^x","dots":"","ask_at":"0","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"0":[1,1,1,1]},"inf":["d",0],"discs":null,"va":[],"ha":[0]}},
+{"name":"B14","p":{"pieces":"y = e^-2x","dots":"","ask_at":"1","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"1":[0.1353352832366127,0.1353352832366127,0.1353352832366127,0.1353352832366127]},"inf":[0,"i"],"discs":null,"va":[],"ha":[0]}},
+{"name":"B15","p":{"pieces":"y = √3 x","dots":"","ask_at":"3","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"3":[3,3,3,3]},"inf":["i","n"],"discs":null,"va":[],"ha":[]}},
+{"name":"B16","p":{"pieces":"y = sin 1/2x","dots":"","ask_at":"pi","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi":[1,1,1,1]},"inf":["d","d"],"discs":null,"va":[],"ha":[]}},
+{"name":"B17","p":{"pieces":"y = cos 3/2x","dots":"","ask_at":"2pi/3","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"2pi/3":[-1,-1,-1,-1]},"inf":["d","d"],"discs":null,"va":[],"ha":[]}},
+{"name":"B18","p":{"pieces":"y = sin .5x e^-2x","dots":"","ask_at":"pi","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"pi":[0.0018674427317079893,0.0018674427317079893,0.0018674427317079893,0.0018674427317079893]},"inf":[0,"d"],"discs":null,"va":[],"ha":[0]}},
+{"name":"B19","p":{"pieces":"y = √x x²","dots":"","ask_at":"4","ask_inf":"Both","ask_disc":true,"asym_eqs":true,"kind_labels":true},"exp":{"at":{"4":[32,32,32,32]},"inf":["i","n"],"discs":null,"va":[],"ha":[]}}
+]"###).unwrap();
+    fn check(got: Option<Lim>, want: &J, context: &str) {
+        if want.is_null() { return; }
+        if let Some(v) = want.as_f64() {
+            assert!(got.as_ref().is_some_and(|l| matches!(l, Lim::Val(u, _) if (u-v).abs() < 1e-8*v.abs().max(1.0))), "{context}: got {got:?}, want {v}");
+        } else {
+            let expected = match want.as_str().unwrap() { "i" => Some(Lim::PInf), "-i" => Some(Lim::NInf), "d" => Some(Lim::Dne), "u" => Some(Lim::Undef), "n" => None, s => panic!("{s}") };
+            assert_eq!(got, expected, "{context}");
+        }
+    }
+    for c in cases.as_array().unwrap() {
+        let name = c["name"].as_str().unwrap();
+        let p = with(c["p"].clone());
+        let md = model_of(&p);
+        assert!(!md.pieces.is_empty(), "{name}: {:?}", md.notes);
+        let e = &c["exp"];
+        for (a, expected) in e["at"].as_object().unwrap() {
+            let k = Num::read(a).unwrap().k;
+            for (part, got, want) in [("left", md.side(&k, -1.0), &expected[0]), ("right", md.side(&k, 1.0), &expected[1]), ("two", md.two(&k), &expected[2]), ("f(a)", md.value(&k), &expected[3])] {
+                check(Some(got), want, &format!("{name} {} at {a} {part}", p.s("pieces")));
+            }
+        }
+        for (i, dir) in [1.0, -1.0].into_iter().enumerate() { check(md.at_inf(dir), &e["inf"][i], &format!("{name} infinity {dir}")); }
+        for (key, got) in [("va", md.verticals()), ("ha", md.horizontals())] {
+            if let Some(want) = e[key].as_array() {
+                let mut g: Vec<f64> = got.iter().map(|v| v.0).collect(); g.sort_by(f64::total_cmp);
+                let mut w: Vec<f64> = want.iter().map(|v| v.as_f64().unwrap()).collect(); w.sort_by(f64::total_cmp);
+                assert_eq!(g.len(), w.len(), "{name} {key}: {g:?} vs {w:?}");
+                assert!(g.iter().zip(&w).all(|(a,b)| (a-b).abs() < 1e-8), "{name} {key}: {g:?} vs {w:?}");
+            }
+        }
+        if let Some(want) = e["discs"].as_array() {
+            let (mut got, complete) = md.discontinuities();
+            got.retain(|d| d.x > p.f("xmin") + 1e-9 && d.x < p.f("xmax") - 1e-9);
+            assert!(complete, "{name}: discontinuities incomplete");
+            assert_eq!(got.len(), want.len(), "{name}: {got:?}");
+            for (g, w) in got.iter().zip(want) {
+                assert!((g.x-w[0].as_f64().unwrap()).abs() < 1e-8, "{name}");
+                let kind = match w[1].as_str().unwrap() { "r" => "removable", "i" => "infinite", "j" => "jump", s => panic!("{s}") };
+                assert_eq!(g.kind, kind, "{name}");
+            }
+        }
+        let s = svg(&p);
+        assert!(!warnings(&p).iter().any(|n| n.contains("cannot be read")), "{name}: {}", words(&s));
+    }
+}
+
+#[test]
+fn ambiguous_trailing_numbers_and_coefficients_before_brackets_are_refused() {
+    for f in ["sin x 2", "sin 2x 3", "sin 2(x + 1)", "cos 2(x - 1)", "√2(x+1)", "sin -2(x+1)", "√-2(x+1)", "e^x 2", "√x 2", "ln ex", "ln e x", "sin 2e^x", "sin 2ex", "cos 2e x", "sin 2π", "sin πe^x", "e^ex", "e^2π"] {
+        let p = with(json!({"pieces": format!("y = {f}"), "dots": ""}));
+        assert!(model_of(&p).pieces.is_empty(), "{f}");
+        let _ = svg(&p);
+        assert!(warnings(&p).iter().any(|n| n.contains("cannot be read")), "{f}: {:?}", warnings(&p));
+    }
+}
+
+/// Re-run an external checker corpus without changing any other figure or
+/// checking in machine-specific fixtures. JSONL fields match the independent
+/// checker so answers, all written text and sampled geometry can be compared.
+#[test]
+#[ignore]
+fn replay_external_limits_corpus() {
+    use std::io::Write;
+    let root = std::env::var("LIMITS_CORPUS").unwrap();
+    let dest = std::env::var("LIMITS_REPLAY_OUT").unwrap();
+    std::fs::create_dir_all(&dest).unwrap();
+    let mut paths: Vec<_> = std::fs::read_dir(format!("{root}/in")).unwrap().map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|s| s == "jsonl")).collect();
+    paths.sort();
+    let mut total = 0;
+    let mut max_time = 0.0f64;
+    let mut slowest = String::new();
+    let d = def();
+    let lim = |l: &Lim| match l { Lim::Val(v,t) => format!("{t} [{v:.12}]"), other => format!("{other:?}") };
+    for path in paths {
+        let tag = path.file_stem().unwrap().to_str().unwrap();
+        let mut out = std::fs::File::create(format!("{dest}/{tag}.out.jsonl")).unwrap();
+        for line in std::fs::read_to_string(&path).unwrap().lines().filter(|l| !l.trim().is_empty()) {
+            let c: J = serde_json::from_str(line).unwrap();
+            let name = c["name"].as_str().unwrap();
+            let p = with(c["p"].clone());
+            let start = std::time::Instant::now();
+            let s = d.svg(&p);
+            let elapsed = start.elapsed().as_secs_f64();
+            if elapsed > max_time { max_time = elapsed; slowest = format!("{tag}/{name}"); }
+            assert_eq!(s, d.svg(&p), "{tag}/{name}: impure");
+            let md = model_of(&p);
+            let asks: Vec<_> = md.asks.iter().map(|a| json!({"a":a.text, "l":lim(&md.side(&a.k,-1.0)), "r":lim(&md.side(&a.k,1.0)), "two":lim(&md.two(&a.k)), "f":lim(&md.value(&a.k))})).collect();
+            let discs: Vec<_> = md.discontinuities().0.iter().map(|d| format!("{} [{:.10}] {} L={} R={} f={}", d.text, d.x, d.kind, lim(&d.left), lim(&d.right), lim(&d.value))).collect();
+            let dr = last_drawn(&p);
+            let (x0, _, y0, y1, ml, mt, ux, uy) = dr.frame;
+            let inv = |q: (f64,f64)| (x0+(q.0-ml)/ux, y0+((y1-y0)*uy+mt-q.1)/uy);
+            let mut rec = json!({"name":name, "ms":elapsed*1000.0, "pure":true, "notes":warnings(&p), "asks":asks, "discs":discs,
+                "inf+":md.at_inf(1.0).map(|l|lim(&l)), "inf-":md.at_inf(-1.0).map(|l|lim(&l)), "complete":md.discontinuities().1,
+                "vert":md.verticals().iter().map(|v|v.1.clone()).collect::<Vec<_>>(), "horiz":md.horizontals().iter().map(|v|v.1.clone()).collect::<Vec<_>>(),
+                "grey":!s.contains("#1f5fbf") && !s.contains("#c0392b") && !s.contains("#fdecea"),
+                "circles":dr.circles.iter().map(|c| {let q=inv(c.at);json!([q.0,q.1,c.closed])}).collect::<Vec<_>>(),
+                "dotsd":dr.dots.iter().map(|c| {let q=inv(c.0);json!([q.0,q.1])}).collect::<Vec<_>>(),
+                "markers":dr.markers.iter().map(|c| {let q=inv(c.0);json!([q.0,q.1])}).collect::<Vec<_>>(), "notes_dr":dr.notes, "eps_drawn":dr.eps_drawn});
+            // Same group/text extraction as the independent checker.
+            let spans: Vec<_> = ["texts","labels","block"].into_iter().filter_map(|name| {
+                let i = s.find(&format!("data-lim=\"{name}\">"))?;
+                let mut depth = 0;
+                for (k,_) in s[i..].char_indices() {
+                    let tail = &s[i+k..];
+                    if tail.starts_with("<g") { depth += 1; }
+                    else if tail.starts_with("</g>") { if depth == 0 { return Some((name,i,i+k)); } depth -= 1; }
+                }
+                Some((name,i,s.len()))
+            }).collect();
+            let mut texts = vec![];
+            let mut at = 0;
+            while let Some(i) = s[at..].find("<text") {
+                let i = at+i; let end = i+s[i..].find("</text>").unwrap()+7;
+                let el = &s[i..end];
+                if !el.contains(r##"fill="#fff""##) {
+                    let g = spans.iter().find(|(_,a,b)| i>=*a && i<*b).map(|v|v.0).unwrap_or("frame");
+                    texts.push(json!([g,plain_text(el)]));
+                }
+                at = end;
+            }
+            rec["words"] = json!(texts);
+            if c["things"].as_bool() == Some(true) { rec["things"] = json!(dr.things.iter().map(|(a,b)| {let (p,q)=(inv(*a),inv(*b));json!([p.0,p.1,q.0,q.1])}).collect::<Vec<_>>()); }
+            writeln!(out,"{rec}").unwrap();
+            // Existing SVG files provide byte-for-byte drawing comparisons too.
+            if c["svg"].as_bool() == Some(true) && std::path::Path::new(&format!("{root}/out/{name}.svg")).exists() { std::fs::write(format!("{dest}/{name}.svg"),&s).unwrap(); }
+            total += 1;
+        }
+        println!("replayed {tag}; total {total}; max {max_time:.6}s ({slowest})");
+    }
+    assert!(max_time < 0.2, "{total} renders: maximum {max_time:.6}s at {slowest}");
+}
+
+#[test]
+fn one_term_boundaries_hold_away_from_special_trig_values() {
+    let x = 0.7f64;
+    let pi = std::f64::consts::PI;
+    for (f,y) in [
+        ("sin x e^-x", x.sin()*(-x).exp()),
+        ("cos x e^-x", x.cos()*(-x).exp()),
+        ("sin x (x+1)", x.sin()*(x+1.0)),
+        ("ln x e^x", x.ln()*x.exp()),
+        ("ln x (x+1)", x.ln()*(x+1.0)),
+        ("√x (x+1)", x.sqrt()*(x+1.0)),
+        ("sin x x²", x.sin()*x*x),
+        ("sin x² e^x", (x*x).sin()*x.exp()),
+        ("x² e^x", x*x*x.exp()),
+        ("x^(2)e^x", x*x*x.exp()),
+        ("sin 2x e^x", (2.0*x).sin()*x.exp()),
+        ("sin 2x cos x", (2.0*x).sin()*x.cos()),
+        ("sin x π", x.sin()*pi),
+        ("cos 2x pi", (2.0*x).cos()*pi),
+        ("sin 2πx", (2.0*pi*x).sin()),
+        ("sin 3/2x²", (1.5*x*x).sin()),
+        ("sin 1/2x", (0.5*x).sin()),
+        ("sin 1/2", 1.0f64.sin()/2.0),
+        ("sin 3x / 3x", (3.0*x).sin()/3.0*x),
+        ("sin x/3x", x.sin()/3.0*x),
+        ("1/2x", x/2.0),
+        ("sin 2·x", 2.0f64.sin()*x),
+        ("sin(2(x+1))", (2.0*(x+1.0)).sin()),
+        ("e^-2x", (-2.0*x).exp()),
+        ("e^2x²", (2.0*x*x).exp()),
+        ("e^-1/2x", (-0.5*x).exp()),
+        ("e^(-2)·x", (-2.0f64).exp()*x),
+        ("e^(2)x", 2.0f64.exp()*x),
+        ("e^x e^x", (2.0*x).exp()),
+        ("e^2x (x+1)", (2.0*x).exp()*(x+1.0)),
+        ("√2x", (2.0*x).sqrt()),
+        ("√3 x", (3.0*x).sqrt()),
+        ("√1/2x", (0.5*x).sqrt()),
+        ("√x x²", x.sqrt()*x*x),
+    ] {
+        let e = cas::parse(f).unwrap_or_else(|| panic!("{f}"));
+        let got = cas::ev(&e,x).unwrap();
+        assert!((got-y).abs() < 1e-12, "{f}: {got} vs {y}");
+    }
 }
