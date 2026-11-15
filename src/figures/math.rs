@@ -1,6 +1,8 @@
 //! Math figure generators (original line-art SVG, modelled on the controls of mathfigures.com).
 //! Entry point: `pub fn defs() -> Vec<FigureDef>`.
 use super::svg::Doc;
+// Expose the existing typed-measure reader and formatter to new math figures.
+pub(crate) use flat::{eval_typed, pretty};
 use super::*;
 use crate::figures::axes::{nice_step_with, Rule};
 use std::f64::consts::PI;

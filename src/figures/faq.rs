@@ -89,6 +89,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "fraction-models" => FRACTION_MODELS,
         "triangle-centres" => TRIANGLE_CENTRES,
         "slope-triangle" => SLOPE_TRIANGLE,
+        "sequences-series" => SEQUENCES_SERIES,
         "protractor" => PROTRACTOR,
         "base-ten-blocks" => BASE_TEN_BLOCKS,
         "solid-net" => SOLID_NET,
@@ -4607,4 +4608,12 @@ const OSMOSIS: &[Faq] = &[
         q: "How are the particles and the water level drawn?",
         a: "Each solute is drawn as particles in proportion to its concentration, as crowded as the number says; the key states how much one particle stands for (0.25 %, 0.05 M or 50 mM). Water appears as small discs filling the room the solutes leave. When water moves, the solute particles stay, so a cell that loses water has its solute more crowded. In the beaker and U-tube the level rises on the more concentrated side by an amount that grows with the difference. Shuffle particles picks a new layout without changing the science.",
     },
+];
+
+const SEQUENCES_SERIES: &[Faq] = &[
+    Faq {q:"Can I drag the graph?",a:"In arithmetic and geometric mode, drag the first term for its value, the second for the difference or ratio, and the last horizontally for the term count."},
+    Faq {q:"How do I enter a recurrence?",a:"Use a_(n-1) for the previous term. A first-order recurrence uses only First term. If the formula also uses a_(n-2), enter Second initial term. The forms a_{n-1}, a(n-1), and Unicode subscripts are also accepted. Indices may begin at zero or one."},
+    Faq {q:"Which limits can the key establish?",a:"Arithmetic and geometric limits, rational functions of n, supported standard limits, and first-order linear recurrence fixed points are derived from their expressions. Other cases say cannot determine; plotted terms alone are never used to guess a limit."},
+    Faq {q:"How do student tasks work?",a:"Choose Find formula, Missing terms, or Continue, then turn Show answers off. Requested sums are removed from partial-sum points, labels and lists. Missing terms are marked asked on the key."},
+    Faq {q:"Can I sum more terms than I draw?",a:"Turn on Sum first N terms and set N up to 1000. Write sigma notation shows the corresponding bounds and expression. Long exact results are marked approximate and a geometric sum keeps a compact exact form; student copies leave the requested answer blank."},
 ];

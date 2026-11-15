@@ -46,6 +46,7 @@ pub mod transform;
 pub mod fraction;
 pub mod triangle_centres;
 pub mod slope;
+pub mod sequences;
 pub mod protractor;
 pub mod baseten;
 pub mod nets;
@@ -569,6 +570,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(fraction::defs());
     v.extend(triangle_centres::defs());
     v.extend(slope::defs());
+    v.extend(sequences::defs());
     v.extend(protractor::defs());
     v.extend(baseten::defs());
     v.extend(nets::defs());
@@ -776,6 +778,7 @@ pub fn label_after_typing(value_key: &str, was_empty: bool, now: &str, mode: &st
 /// only the controls of the chosen setup (a pulley's Atwood setup has no ramp angle). Hidden
 /// params keep their values, so switching back restores them. Default: shown.
 pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
+    if id == sequences::ID { return sequences::relevant(key,p); }
     match id {
         "pulley" => physics::pulley_relevant(key, p),
         // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
@@ -898,6 +901,7 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
+    if id == sequences::ID { return sequences::warnings(p); }
     if id == stats::histogram::ID {
         return stats::histogram::warnings(p);
     }
@@ -1029,6 +1033,7 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| fraction::examples(id))
         .or_else(|| triangle_centres::examples(id))
         .or_else(|| slope::examples(id))
+        .or_else(|| sequences::examples(id))
         .or_else(|| protractor::examples(id))
         .or_else(|| baseten::examples(id))
         .or_else(|| nets::examples(id))
