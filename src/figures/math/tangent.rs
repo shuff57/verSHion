@@ -1173,7 +1173,12 @@ fn grid_params(p: &Params, m: &Model, ink: &Ink) -> Params {
     let xl = if p.s("xlabel") == "x" { m.var.clone() } else { p.s("xlabel").to_string() };
     let yl = if p.s("ylabel") == "y" { m.dep.clone() } else { p.s("ylabel").to_string() };
     gp.set_s("xlabel", &xl);
-    gp.set_s("ylabel", &if ax.unit.is_empty() || yl.is_empty() { yl.clone() } else { format!("{yl} ({})", ax.unit) });
+    gp.set_s("ylabel", &yl);
+    // the y-axis numbered in thousands says so in the grid's side title, which has its own margin ("A (thousands)")
+    if !ax.unit.is_empty() {
+        gp.set_s("ytitle_mode", "Text");
+        gp.set_s("ytitle", &if yl.is_empty() { format!("in {}", ax.unit) } else { format!("{yl} ({})", ax.unit) });
+    }
     gp.set_s("equations", &m.expr.as_ref().map(|e| if ax.k == 1.0 { format!("y = {e}") } else { format!("y = ({e})/{}", ax.k) }).unwrap_or_default());
     gp.set_s("points", "");
     gp.set_s("eq1_color", ink.curve);
