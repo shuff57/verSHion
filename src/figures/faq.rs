@@ -1311,7 +1311,7 @@ const TANGENT_SECANT_LINES: &[Faq] = &[
     },
     Faq {
         q: "Why is a slope written as a decimal with ≈?",
-        a: "Slopes are written exactly (fractions, roots, π and e) where the numbers allow, as with x² or sin x at π/3. Where no exact form exists, as for the secant of ln x from 1 to 2 (ln 2), the slope is rounded to the decimal places chosen and written with ≈. Choose Numbers: Decimals to round everything.",
+        a: "Slopes are written exactly (fractions, roots, π and e) where the numbers allow, as with x² or sin x at π/3. Where the figure cannot work a value out exactly, as with logarithms (the secant of ln x from 1 to 2 has slope ln 2, which it does not write in that form) or cube roots, the value is rounded to the decimal places chosen and written with ≈. Choose Numbers: Decimals to round everything.",
     },
     Faq {
         q: "Why is there no tangent at some points?",

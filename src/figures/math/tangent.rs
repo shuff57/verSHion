@@ -523,7 +523,8 @@ pub(crate) fn expr_in_x(typed: &str, fname: &str, var: char) -> Result<String, S
 fn shown_func(typed: &str) -> String {
     let t = typed.trim();
     let t = t.split_once('=').map(|(_, r)| r).unwrap_or(t).trim();
-    let s = pretty(&plain_symbols(t));
+    // (the reader reads X² as x², so it is echoed as read)
+    let s = pretty(&plain_symbols(&t.to_lowercase()));
     // ·: dropped after a number (2·x is 2x), kept between letters or brackets (x·x^(1/3))
     let cs: Vec<char> = s.chars().collect();
     let mut s = String::new();
@@ -549,6 +550,53 @@ fn shown_func(typed: &str) -> String {
     while i < cs.len() {
         if cs[i..].starts_with(&['a', 'b', 's', '(']) { out.push('|'); stack.push(true); i += 4; continue; }
         match cs[i] { '(' => { stack.push(false); out.push('('); } ')' => { out.push(if stack.pop() == Some(true) { '|' } else { ')' }); } c => out.push(c) }
+        i += 1;
+    }
+    fraction_brackets(&thin_before_functions(&out))
+}
+
+/// A thin space between a factor and a function's name: x ln(x), not xln(x).
+fn thin_before_functions(s: &str) -> String {
+    const NAMES: [&str; 13] = ["arcsin", "arccos", "arctan", "arccot", "sin", "cos", "tan", "sec", "csc", "cot", "log", "exp", "ln"];
+    let cs: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < cs.len() {
+        if let Some(n) = NAMES.iter().find(|n| cs[i..].starts_with(&n.chars().collect::<Vec<_>>())) {
+            if out.chars().last().is_some_and(|c| c.is_alphanumeric() || c == ')' || c == '|' || c == '\u{3c0}') { out.push('\u{2009}'); }
+            out.push_str(n);
+            i += n.len();
+            continue;
+        }
+        out.push(cs[i]);
+        i += 1;
+    }
+    out
+}
+
+/// A fraction of numbers written before a factor is bracketed: (4/3)πr³, not 4/3πr³, which reads as 4 over 3πr³.
+fn fraction_brackets(s: &str) -> String {
+    let cs: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < cs.len() {
+        let starts = cs[i].is_ascii_digit() && (i == 0 || matches!(cs[i - 1], ' ' | '(' | '+' | '\u{2212}' | '-' | '\u{b7}' | '*'));
+        if starts {
+            let mut j = i;
+            while j < cs.len() && (cs[j].is_ascii_digit() || cs[j] == '.') { j += 1; }
+            if cs.get(j) == Some(&'/') {
+                let mut k = j + 1;
+                while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+                if k > j + 1 && cs.get(k).is_some_and(|c| c.is_alphabetic() || *c == '\u{3c0}' || *c == '\u{221a}' || *c == '(') {
+                    out.push('(');
+                    out.extend(&cs[i..k]);
+                    out.push(')');
+                    i = k;
+                    continue;
+                }
+            }
+        }
+        out.push(cs[i]);
         i += 1;
     }
     out

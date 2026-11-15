@@ -1589,3 +1589,15 @@ fn large_values_are_drawn() {
     assert!(n.contains("counts by 100"), "{n}");
 }
 
+/// The function is echoed as it is read: x ln(x) with a thin space (not xln(x)), 4/3 pi r^3 as (4/3)πr³ (not 4/3πr³, which
+/// reads as 4 over 3πr³), X^2 as x² (the reader reads letters in lower case).
+#[test]
+fn echoed_functions_read_as_typed() {
+    let title = |func: &str, var: &str| texts_sup(&build(&with(&[("func", s(func)), ("var", s(var))])).svg)[0].clone();
+    assert_eq!(title("x ln(x)", "x"), "f(x) = x\u{2009}ln(x)");
+    assert_eq!(title("4/3 pi r^3", "r"), "f(r) = (4/3)\u{3c0}r^(3)");
+    assert_eq!(title("X^2", "x"), "f(x) = x^(2)");
+    assert_eq!(title("x sin(x)", "x"), "f(x) = x\u{2009}sin(x)");
+    assert_eq!(title("arcsin(x)", "x"), "f(x) = arcsin(x)");
+    assert_eq!(title("1/2x^2", "x"), "f(x) = (1/2)x^(2)");
+}
