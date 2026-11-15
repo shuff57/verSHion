@@ -13,6 +13,9 @@ use crate::figures::interact::Handle;
 use crate::figures::{Example, ParamDef, Params, Value};
 use std::f64::consts::PI;
 
+#[path = "riemann_horizontal.rs"]
+mod horizontal_levels;
+
 pub const ID: &str = "riemann-sums";
 pub const REGIONS: [&str; 3] = ["Under f(x)", "Between f(x) and g(x)", "From a table of values"];
 pub const BOUNDS: [&str; 2] = ["From a to b", "Where f and g cross"];
@@ -49,7 +52,7 @@ pub fn params() -> Vec<ParamDef> {
         ParamDef::bool("exact_line", "Write the exact value of the integral", false),
         ParamDef::bool("error_line", "Write the error (the sum minus the exact value)", false),
         ParamDef::choice("values", "Values", &VALUES, "Exact").hint("Exact writes fractions, roots and \u{3c0} where the value is one; any other value is rounded."),
-        ParamDef::int("dec", "Decimal places", 0, 6, 2),
+        ParamDef::int("dec", "Decimal places", 0, 8, 2),
         ParamDef::choice("shading", "Shading", &["Tint", "Hatching"], "Tint"),
         ParamDef::float("xmin", "x-axis from", -1000.0, 1000.0, 1.0, -1.0),
         ParamDef::float("xmax", "x-axis to", -1000.0, 1000.0, 1.0, 3.0),
@@ -348,7 +351,7 @@ fn book(s: &str) -> String {
     while i < ch.len() {
         let rest: String = ch[i..].iter().take(5).collect();
         let (name, len) = if rest.starts_with("sqrt(") { ("sqrt", 4) } else if rest.starts_with("abs(") { ("abs", 3) } else { ("", 0) };
-        let word_start = i == 0 || !ch[i - 1].is_ascii_alphabetic();
+        let word_start = i == 0 || !ch[i - 1].is_ascii_alphabetic() || matches!(ch[i - 1], 'x' | 'e');
         if len > 0 && word_start {
             let st = i + len;
             let mut depth = 0;
@@ -903,74 +906,66 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
         let xe = if (x - xa).abs() <= tol { a_ex.clone()? } else if (x - xb).abs() <= tol { b_ex.clone()? } else { stationary(Some(tree), x)? };
         sym::eval(tree, &xe)
     };
-    let (c_ex, d_ex) = (sym::checked(at_ex(xc, c), c), sym::checked(at_ex(xd, d), d));
+    let (mut c_ex, mut d_ex) = (sym::checked(at_ex(xc, c), c), sym::checked(at_ex(xd, d), d));
+    // Use the established extremum value itself, so a vertex level is the same
+    // level used by the inverse, rather than a nearby golden-section value.
+    let slices = horizontal_levels::Slices::new(fns, Val::of(a_ex, xa), Val::of(b_ex, xb));
+    let (mut c, mut d) = (c_ex.as_ref().map_or(c, Ex::approx), d_ex.as_ref().map_or(d, Ex::approx));
+    if let Some((cv, dv)) = slices.range() { c = cv.v; d = dv.v; c_ex = cv.ex; d_ex = dv.ex; }
     m.y_lo = Some(Val::of(c_ex.clone(), c));
     m.y_hi = Some(Val::of(d_ex.clone(), d));
     if d - c < 1e-9 * (d.abs() + c.abs()).max(1.0) { return Err("The region has no height to slice across: choose vertical strips".into()); }
     let _ = between;
-    const K: usize = 1200;
-    let xs: Vec<f64> = (0..=K).map(|i| xa + (xb - xa) * i as f64 / K as f64).collect();
-    let los: Vec<f64> = xs.iter().map(|x| lo(*x)).collect();
-    let his: Vec<f64> = xs.iter().map(|x| hi(*x)).collect();
-    // the stretches of x where the region reaches height y; `fine` refines each end by halving
-    let intervals = |y: f64, fine: bool| -> Vec<(f64, f64)> {
-        let inside = |k: usize| los[k] <= y + 1e-12 && y <= his[k] + 1e-12;
-        let inside_x = |x: f64| lo(x) <= y + 1e-12 && y <= hi(x) + 1e-12;
-        let edge = |a: f64, b: f64| -> f64 {
-            // a is inside, b outside
-            if !fine { return 0.5 * (a + b); }
-            let (mut a, mut b) = (a, b);
-            for _ in 0..50 { let mm = 0.5 * (a + b); if inside_x(mm) { a = mm; } else { b = mm; } }
-            0.5 * (a + b)
-        };
-        let mut out = vec![];
-        let mut start: Option<f64> = None;
-        for k in 0..=K {
-            match (inside(k), start) {
-                (true, None) => start = Some(if k == 0 { xa } else { edge(xs[k], xs[k - 1]) }),
-                (false, Some(s)) => { out.push((s, edge(xs[k - 1], xs[k]))); start = None; }
-                _ => {}
-            }
-        }
-        if let Some(s) = start { out.push((s, xb)); }
-        out.into_iter().filter(|(a, b)| b > a).collect()
-    };
-    let width = |y: f64, fine: bool| -> f64 { intervals(y, fine).iter().map(|(a, b)| b - a).sum() };
+    let events = if matches!(ru, Rule::U | Rule::Lo) { slices.events() } else { vec![] };
     let dy = Val::of((|| d_ex.as_ref()?.sub(c_ex.as_ref()?)?.scale(Rat::new(1, n as i128)?))(), (d - c) / n as f64);
     m.delta = Some(dy.clone());
     m.coef = Some(dy.clone());
     m.nodes = (0..=n).map(|j| if j == n { d } else { c + (d - c) * j as f64 / n as f64 }).collect();
     m.ylo = c;
     m.yhi = d;
+    let node_val = |j: usize| -> Val {
+        let ex = (|| c_ex.as_ref()?.add(&dy.ex.as_ref()?.scale(Rat::int(j as i128))?))();
+        horizontal_levels::from_level(ex, m.nodes[j])
+    };
+    let yvals: Vec<Val> = (0..=n).map(node_val).collect();
     let mut vals = vec![];
     for j in 0..n {
         let (y0, y1) = (m.nodes[j], m.nodes[j + 1]);
-        let ys = match ru {
-            Rule::L => y0,
-            Rule::R => y1,
-            Rule::M => snap_x(0.5 * (y0 + y1)),
+        let yv = match ru {
+            Rule::L => yvals[j].clone(),
+            Rule::R => yvals[j + 1].clone(),
+            Rule::M => Val::sum(&[yvals[j].clone(), yvals[j + 1].clone()], &[Rat::new(1, 2).unwrap(); 2]),
             _ => {
-                let mx = ru == Rule::U;
-                let s = if mx { 1.0 } else { -1.0 };
-                let k = 24;
-                let (mut by, mut bw) = (y0, width(y0, false) * s);
-                let mut bi = 0;
-                for i in 1..=k { let y = y0 + (y1 - y0) * i as f64 / k as f64; let w = width(y, false) * s; if w > bw { by = y; bw = w; bi = i; } }
-                if bi > 0 && bi < k {
-                    let (mut a, mut b) = (y0 + (y1 - y0) * (bi - 1) as f64 / k as f64, y0 + (y1 - y0) * (bi + 1) as f64 / k as f64);
-                    let g = 0.5 * (5f64.sqrt() - 1.0);
-                    // (the search reads the widths off the samples; only the height it settles on is refined)
-                    for _ in 0..30 { let (cc, dd) = (b - g * (b - a), a + g * (b - a)); if width(cc, false) * s > width(dd, false) * s { b = dd; } else { a = cc; } }
-                    let y = 0.5 * (a + b);
-                    if width(y, true) * s >= width(by, true) * s { by = y; }
+                // Refine the actual inverse widths, not a staircase of sampled
+                // x positions (whose flat steps used to hide interior extrema).
+                let s = if ru == Rule::U { 1.0 } else { -1.0 };
+                let k = 32;
+                let ys: Vec<f64> = (0..=k).map(|i| if i == k { y1 } else { y0 + (y1 - y0) * i as f64 / k as f64 }).collect();
+                let ws: Vec<f64> = ys.iter().map(|y| slices.width(*y) * s).collect();
+                let mut best = if ws[0] >= ws[k] { yvals[j].clone() } else { yvals[j + 1].clone() };
+                let mut bw = slices.intervals(&best).1.v * s;
+                for y in events.iter().filter(|y| y.v >= y0 && y.v <= y1) {
+                    let w = slices.intervals(y).1.v * s;
+                    if w > bw { best = y.clone(); bw = w; }
                 }
-                by
+                for i in 1..k {
+                    if ws[i] > bw { best = Val::num(ys[i]); bw = ws[i]; }
+                    if ws[i] <= ws[i - 1] || ws[i] < ws[i + 1] { continue; }
+                    let (mut a, mut b) = (ys[i - 1], ys[i + 1]);
+                    let g = 0.5 * (5f64.sqrt() - 1.0);
+                    for _ in 0..64 {
+                        let (cc, dd) = (b - g * (b - a), a + g * (b - a));
+                        if slices.width(cc) * s > slices.width(dd) * s { b = dd; } else { a = cc; }
+                    }
+                    let y = a + (b - a) * 0.5;
+                    let w = slices.width(y) * s;
+                    if w > bw { best = Val::num(y); bw = w; }
+                }
+                best
             }
         };
-        let ivs = intervals(ys, true);
-        let w: f64 = ivs.iter().map(|(a, b)| b - a).sum();
-        // (recognised as an exact form only if it is written)
-        let hv = Val::num(w);
+        let ys = yv.v;
+        let (ivs, hv) = slices.intervals(&yv);
         let parts: Vec<(Vec<(f64, f64)>, bool)> = ivs.iter().map(|(a, b)| (vec![(*a, y0), (*b, y0), (*b, y1), (*a, y1)], false)).collect();
         let area = hv.mul(&dy);
         let (x0, x1) = (ivs.first().map(|i| i.0).unwrap_or(xa), ivs.last().map(|i| i.1).unwrap_or(xa));
@@ -1061,7 +1056,7 @@ fn table_model(p: &Params, mut m: Model, rows: Vec<Cell>, ru: Rule, fm: Fmt) -> 
 }
 
 /// Values as fractions and exact forms (any other value to 4 places), or rounded to the chosen places.
-fn fmt_of(p: &Params) -> Fmt { let exact = p.s("values") != "Decimals"; Fmt { exact, dec: if exact { 4 } else { p.i("dec").clamp(0, 6) as usize } } }
+fn fmt_of(p: &Params) -> Fmt { let exact = p.s("values") != "Decimals"; Fmt { exact, dec: if exact { 4 } else { p.i("dec").clamp(0, 8) as usize } } }
 
 /// The worked sum after its symbolic form: "(1/2)(1 + 5/4 + 2 + 13/4)" or, for a table, "1·2 + 2·5 + …", and whether
 /// every value in it is exact.
@@ -1728,7 +1723,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         if table && p.b("integral_line") {
             match (&sum_txt, student) {
                 (Some(_), true) => lines.push(vec![Piece::T(format!("{integral} \u{2248}")), Piece::Blank]),
-                (Some((st, _)), false) => lines.push(vec![Piece::T(format!("{integral} \u{2248} {} = {st}", m.sum_name))]),
+                (Some((st, se)), false) => lines.push(vec![Piece::T(format!("{integral} \u{2248} {} {} {st}", m.sum_name, eqs(*se)))]),
                 _ => lines.push(vec![Piece::T(integral.clone())]),
             }
         } else if !table && (p.b("integral_line") || p.b("exact_line")) {
@@ -1967,3 +1962,7 @@ mod tests;
 #[cfg(test)]
 #[path = "riemann_checker_tests.rs"]
 mod checker_tests;
+
+#[cfg(test)]
+#[path = "riemann_horizontal_tests.rs"]
+mod horizontal_tests;

@@ -163,13 +163,13 @@ fn tables_and_horizontal_strips() {
     // ∫₀² (2y − y²) dy = 4 − 8/3 = 4/3; error 11/8 − 4/3 = 1/24
     let h = lined(&[("region", s("Between f(x) and g(x)")), ("f", s("sqrt(x)")), ("g", s("x/2")), ("bounds", s("Where f and g cross")), ("strips", s("Horizontal")), ("rule", s("Midpoint")), ("xmax", fl(5.0)), ("ymax", fl(3.0))]);
     has_line(&h, "\u{394}y = (d \u{2212} c)/n = (2 \u{2212} 0)/4 = 1/2");
-    // (a width across is found by search, so it has no exact form here: written rounded)
-    has_line(&h, "= (1/2)(0.4375 + 0.9375 + 0.9375 + 0.4375) \u{2248} 1.3750");
+    // Inverting the curves gives exact widths and an exact sum.
+    has_line(&h, "= (1/2)(7/16 + 15/16 + 15/16 + 7/16) = 11/8");
     has_line(&h, "\u{222b}02 (xR \u{2212} xL) dy = 4/3");
-    has_line(&h, "Error = M4 \u{2212} exact = 1.3750 \u{2212} 4/3 \u{2248} 0.0417");
+    has_line(&h, "Error = M4 \u{2212} exact = 11/8 \u{2212} 4/3 = 1/24");
     // bottom of each strip (Left): widths at 0, 1/2, 1, 3/2 = 0, 3/4, 1, 3/4: (1/2)(5/2) = 5/4
     let mut hl = h.clone(); hl.set_s("rule", "Left");
-    has_line(&hl, "= (1/2)(0 + 0.7500 + 1.0000 + 0.7500) \u{2248} 1.2500");
+    has_line(&hl, "= (1/2)(0 + 3/4 + 1 + 3/4) = 5/4");
 }
 
 #[test]
