@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-15T22:15:29+00:00 · probe: 2026-11-15T14:15:29
+Generated: 2026-11-15T22:58:12+00:00 · probe: 2026-11-15T14:58:12
 
-**Pooled 33.0** · mean 30.0 over 10 figures · built 4 of 10 reference figures (missing: new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/complex-plane, new/polar-parametric, new/slope-fields)
+**Pooled 43.9** · mean 40.0 over 10 figures · built 5 of 10 reference figures (missing: new/riemann-sums, new/derivative-graphs, new/complex-plane, new/polar-parametric, new/slope-fields)
 
 Comparable with the frozen baseline: **yes**
 
@@ -48,13 +48,7 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [core 5] Draw several solution curves, each through its own point — not built
   - cap-05 [core 5] Draw Euler's method from (x_0, y_0) with step h and n steps, as joined segments — not built
   - cap-06 [control 3] List the Euler steps' x and y values in a table — not built
-- `tangent-secant-lines`: 0 (0/127)
-  - cap-01 [core 5] Type the function f(x), with powers, roots, trig, e^x and ln — not built
-  - cap-02 [core 5] Set the point of tangency x = a — not built
-  - cap-03 [core 5] Draw the tangent line at x = a — not built
-  - cap-04 [core 5] Draw the secant line through x = a and x = a + h — not built
-  - cap-05 [core 5] Set h, positive or negative — not built
-  - cap-06 [core 5] Draw several secants for shrinking h (such as 2, 1, 0.5, 0.1) approaching the tangent — not built
 - `conic-sections`: 100 (151/151)
 - `limits-discontinuities`: 100 (115/115)
 - `sequences-series`: 100 (121/121)
+- `tangent-secant-lines`: 100 (127/127)

@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-15T22:06:35+00:00",
-  "src_mtime": 1794779878.6060915,
-  "git": "a889948",
-  "figures": 194
+  "built_at": "2026-11-15T22:58:10+00:00",
+  "src_mtime": 1794782879.9356835,
+  "git": "57ddd3a",
+  "figures": 195
  },
  "figures": {
   "free-body-diagram": {
@@ -26308,6 +26308,428 @@
    "show_answers": false,
    "style": false,
    "label_size": false
+  },
+  "tangent-secant-lines": {
+   "id": "tangent-secant-lines",
+   "title": "Tangent and Secant Lines",
+   "blurb": "A typed function with the tangent at a point, secants for one or several h, the slopes worked out and the secants closing in on the tangent.",
+   "params": [
+    {
+     "key": "func",
+     "label": "Function",
+     "kind": "text",
+     "options": [],
+     "default": "x^2"
+    },
+    {
+     "key": "fname",
+     "label": "Function name",
+     "kind": "text",
+     "options": [],
+     "default": "f"
+    },
+    {
+     "key": "var",
+     "label": "Variable",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "a",
+     "label": "Point of tangency x = a",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "h",
+     "label": "h (Q is at x = a + h)",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "more_h",
+     "label": "More secants, for h =",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "more_a",
+     "label": "More tangents, at x =",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_tangent",
+     "label": "Tangent line at P",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_secant",
+     "label": "Secant line PQ",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "normal",
+     "label": "Normal line at P",
+     "kind": "choice",
+     "options": [
+      "Off",
+      "With its slope",
+      "With its equation"
+     ],
+     "default": "Off"
+    },
+    {
+     "key": "show_slopes",
+     "label": "Write the slopes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "worked",
+     "label": "Work out the secant's slope [f(a + h) − f(a)]/h",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "tangent_eq",
+     "label": "Tangent's equation",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Point-slope",
+      "Slope-intercept"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "secant_eq",
+     "label": "Secant's equation",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Point-slope",
+      "Slope-intercept"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "table",
+     "label": "Table of secant slopes for each h",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "slope_form",
+     "label": "Numbers",
+     "kind": "choice",
+     "options": [
+      "Exact",
+      "Decimals"
+     ],
+     "default": "Exact"
+    },
+    {
+     "key": "dec",
+     "label": "Decimal places",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "pt_labels",
+     "label": "Points P and Q",
+     "kind": "choice",
+     "options": [
+      "Letters",
+      "Letters and coordinates",
+      "None"
+     ],
+     "default": "Letters"
+    },
+    {
+     "key": "secant_triangle",
+     "label": "Secant's slope triangle (Δy and h)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "tangent_triangle",
+     "label": "Tangent's slope triangle (rise over run)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "h_mark",
+     "label": "Mark h on the x-axis",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "tangent_style",
+     "label": "Tangent line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "secant_style",
+     "label": "Secant line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Dashed"
+    },
+    {
+     "key": "normal_style",
+     "label": "Normal line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Dotted"
+    },
+    {
+     "key": "extent",
+     "label": "Lines",
+     "kind": "choice",
+     "options": [
+      "Across the window",
+      "Short segment through the point"
+     ],
+     "default": "Across the window"
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-2.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "xstep",
+     "label": "x-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ymin",
+     "label": "y-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-2.0"
+    },
+    {
+     "key": "ymax",
+     "label": "y-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "ystep",
+     "label": "y-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines per step",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "numbers",
+     "label": "Number the axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "xunits",
+     "label": "x-axis units",
+     "kind": "choice",
+     "options": [
+      "Numbers",
+      "Multiples of π"
+     ],
+     "default": "Numbers"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Light"
+    },
+    {
+     "key": "square",
+     "label": "Same scale on both axes",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "xlabel",
+     "label": "x-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "ylabel",
+     "label": "y-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "title_mode",
+     "label": "Title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "student_copy",
+     "label": "Student copy",
+     "kind": "choice",
+     "options": [
+      "Blank lines for the slopes and equations",
+      "Curve and P only, to draw the tangent"
+     ],
+     "default": "Blank lines for the slopes and equations"
+    },
+    {
+     "key": "key_line",
+     "label": "Answer key line under the graph",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "label_offsets",
+     "label": "Label positions",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag P along the curve to move the point of tangency"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag Q along the curve to change h"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    }
+   ],
+   "handles": true,
+   "label_drag": true,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
   },
   "circle": {
    "id": "circle",
