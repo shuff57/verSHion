@@ -1,6 +1,6 @@
 # Figures parity score
 
-Generated: 2026-11-15T01:45:07+00:00 · probe: 2026-11-14T17:45:07
+Generated: 2026-11-15T17:33:22+00:00 · probe: 2026-11-15T09:33:22
 
 **Pooled 22.7** · mean 20.0 over 10 figures · built 3 of 10 reference figures (missing: new/tangent-secant-lines, new/riemann-sums, new/derivative-graphs, new/sequences-series, new/complex-plane, new/polar-parametric, new/slope-fields)
 

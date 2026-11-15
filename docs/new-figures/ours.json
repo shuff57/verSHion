@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-15T01:45:06+00:00",
-  "src_mtime": 1794706629.552439,
-  "git": "514bc34",
+  "built_at": "2026-11-15T17:33:21+00:00",
+  "src_mtime": 1794763571.547038,
+  "git": "dc17bd6",
   "figures": 193
  },
  "figures": {
@@ -38509,10 +38509,10 @@
    "params": [
     {
      "key": "pieces",
-     "label": "Function (one piece a line)",
-     "kind": "long",
+     "label": "Function (one piece a line)): multi-line text , default \"y = 4 - (x - 1)^2/3, x < 1, x ≠ -2\\ny = 2 + 3/(x - 4), x >= 1\" - Reading: an unbracketed argument is one signed term (x with an optional power and a numeric, simple numeric fraction, or π/pi coefficient; or one constant",
+     "kind": "text",
      "options": [],
-     "default": "y = 4"
+     "default": ""
     },
     {
      "key": "dots",
