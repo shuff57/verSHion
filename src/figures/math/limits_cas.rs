@@ -557,12 +557,24 @@ impl X {
 }
 
 /// Reads a formula the way the app's reader does (implicit products, ^ binding right, -x^2 = -(x^2), a function name needs
-/// its bracket, |a| for abs(a), log_b(a)), plus floor and ceil. None when it cannot be read.
+/// its bracket in old saved inputs; also accepts ordinary classroom spellings. None when it cannot be read.
 pub fn parse(text: &str) -> Option<X> {
     let s = text.replace('\u{2212}', "-").replace('\u{b7}', "*").replace('\u{d7}', "*").to_lowercase();
+    let mut expanded = String::new();
+    let mut superscript = false;
+    for c in s.chars() {
+        if let Some(d) = "⁰¹²³⁴⁵⁶⁷⁸⁹⁻".chars().position(|v| v == c) {
+            if !superscript { expanded.push_str("^("); superscript = true; }
+            expanded.push(if d == 10 { '-' } else { (b'0' + d as u8) as char });
+        } else {
+            if superscript { expanded.push(')'); superscript = false; }
+            if c == '√' { expanded.push_str("sqrt"); } else { expanded.push(c); }
+        }
+    }
+    if superscript { expanded.push(')'); }
     let mut norm = String::new();
     let mut open = false;
-    for c in s.chars() { if c == '|' { norm.push_str(if open { ")" } else { "abs(" }); open = !open; } else { norm.push(c); } }
+    for c in expanded.chars() { if c == '|' { norm.push_str(if open { ")" } else { " abs(" }); open = !open; } else { norm.push(c); } }
     if open || norm.len() > 1000 { return None; }
     let cs: Vec<char> = norm.chars().collect();
     let mut p = P { s: &cs, i: 0, depth: 0 };
@@ -609,16 +621,72 @@ impl<'a> P<'a> {
     }
     fn power(&mut self) -> Option<X> {
         let b = self.atom()?;
-        if self.peek() == Some('^') { self.i += 1; let e = self.unary()?; return Some(X::Pow(Box::new(b), Box::new(e))); }
+        if self.peek() == Some('^') {
+            self.i += 1;
+            let bracketed = self.peek() == Some('(');
+            let e = self.one_term()?;
+            if !bracketed && self.peek().is_some_and(|c| c.is_ascii_digit() || c == '.') { return None; }
+            return Some(X::Pow(Box::new(b), Box::new(e)));
+        }
         Some(b)
     }
     fn arg(&mut self) -> Option<X> {
-        if self.peek()? != '(' { return None; }
+        if self.peek()? != '(' {
+            let a = self.one_term()?;
+            // A trailing number has no clear reading (sin x 2). Do not guess.
+            if self.peek().is_some_and(|c| c.is_ascii_digit() || c == '.') { return None; }
+            // sin 2(x+1) could mean an argument or an outside product.
+            if !a.has_x() && self.peek() == Some('(') { return None; }
+            return Some(a);
+        }
         self.i += 1;
         let a = self.expr()?;
         if self.peek()? != ')' { return None; }
         self.i += 1;
         Some(a)
+    }
+    /// One signed term. Only a plain numeric/π coefficient can bind a
+    /// following x; brackets and other atoms never grow into implicit products.
+    /// Tentative fraction/π reads are rolled back unless that x follows.
+    fn one_term(&mut self) -> Option<X> {
+        match self.peek()? {
+            '-' => { self.i += 1; return Some(X::Neg(Box::new(self.one_term()?))); }
+            '+' => { self.i += 1; return self.one_term(); }
+            _ => {}
+        }
+        let start = self.peek()?;
+        let number = start.is_ascii_digit() || start == '.';
+        let coefficient = number || start == 'π' ||
+            self.s[self.i..].starts_with(&['p', 'i']);
+        // Keep existing single-atom powers and explicitly grouped expressions.
+        // Crucially, has_x is not the boundary: even a constant function or
+        // bracket must not absorb a later x.
+        let first = self.power()?;
+        if start == '(' || !matches!(first, X::C(_)) { return Some(first); }
+        let end = self.i;
+        let mut factors = vec![first];
+        if number && self.peek() == Some('/') {
+            self.i += 1;
+            if self.peek().is_some_and(|c| c.is_ascii_digit() || c == '.') {
+                factors.push(X::Inv(Box::new(self.atom()?)));
+            } else { self.i = end; return Some(factors.remove(0)); }
+        }
+        if number && (self.peek() == Some('π') ||
+            self.s[self.i..].starts_with(&['p', 'i'])) {
+            factors.push(self.atom()?);
+        }
+        if coefficient && self.peek() == Some('x') {
+            factors.push(self.power()?);
+            return Some(X::Mul(factors));
+        }
+        self.i = end;
+        // Unsupported constant coefficients need brackets: ln ex, sin 2e^x,
+        // sin 2π. Guessing a shorter constant argument changes their meaning.
+        let next = self.peek();
+        if matches!(next, Some('x' | 'π')) ||
+            next == Some('p') && self.s[self.i..].starts_with(&['p', 'i']) ||
+            next == Some('e') && !self.s[self.i..].starts_with(&['e', 'x', 'p']) { return None; }
+        Some(factors.remove(0))
     }
     fn atom(&mut self) -> Option<X> {
         match self.peek()? {
@@ -653,8 +721,35 @@ impl<'a> P<'a> {
             c if c.is_alphabetic() => {
                 let st = self.i;
                 while self.i < self.s.len() && self.s[self.i].is_ascii_alphabetic() { self.i += 1; }
-                let name: String = self.s[st..self.i].iter().collect();
-                match name.as_str() { "x" => return Some(X::V), "pi" => return Some(X::C(K::pi())), "e" => return Some(X::C(K::e_pow(Q::ONE))), _ => {} }
+                let mut name: String = self.s[st..self.i].iter().collect();
+                // A compact sinx is the same function application as sin x.
+                if let Some(prefix) = ["sqrt", "arcsin", "arccos", "arctan", "floor", "ceil", "sin", "cos", "tan", "sec", "csc", "cot", "abs", "ln", "log", "exp"].into_iter().find(|f| name.strip_prefix(f).is_some_and(|r| r == "x")) {
+                    self.i = st + prefix.len(); name = prefix.to_string();
+                }
+                if name == "log" {
+                    // An attached numeric suffix denotes the base: log2 x.
+                    // A separated number belongs to the argument: log 2x.
+                    let base_start = self.i;
+                    while self.s.get(self.i).is_some_and(|c| c.is_ascii_digit()) { self.i += 1; }
+                    let base = if self.i > base_start {
+                        let digits: String = self.s[base_start..self.i].iter().collect();
+                        Some(X::C(K::int(digits.parse().ok()?)))
+                    } else { None };
+                    if base.is_some() || self.peek() == Some('(') {
+                        let (a, base) = if self.peek() == Some('(') {
+                            self.i += 1;
+                            let a = self.expr()?;
+                            let base = if self.peek() == Some(',') {
+                                if base.is_some() { return None; }
+                                self.i += 1; self.expr()?
+                            } else { base.unwrap_or(X::C(K::int(10))) };
+                            if self.peek()? != ')' { return None; } self.i += 1;
+                            (a, base)
+                        } else { (self.arg()?, base?) };
+                        return Some(X::Mul(vec![X::F(Fun::Ln, Box::new(a)), X::Inv(Box::new(X::F(Fun::Ln, Box::new(base))))]));
+                    }
+                }
+                match name.as_str() { "x" => return Some(X::V), "pi" => return Some(X::C(K::pi())), "pix" => { self.i = st + 2; return Some(X::C(K::pi())); }, "e" => return Some(X::C(K::e_pow(Q::ONE))), _ => {} }
                 if name == "log" && self.peek() == Some('_') {
                     self.i += 1;
                     let base = self.atom()?;
@@ -1181,7 +1276,13 @@ fn s_powq(a: S, r: Q, n: usize) -> S {
             if r > Q::ZERO { if matches!(a, Huge(_)) { Huge(v) } else { Inf(v) } } else if matches!(a, Huge(_)) { Flat(v) } else { Z(v) }
         }
         Lim(k) => match k.powq(r) { KR::Ok(x) => Lim(x), KR::NoVal => NoVal, KR::Unk => Unk },
-        Osc(l, h) => if l > 0.0 { Osc(l.powf(r.f()), h.powf(r.f())) } else { Unk },
+        Osc(l, h) => {
+            // A positive integer power maps the entire interval continuously, including across zero.
+            if r.is_int() && r.n > 0 {
+                let (a, b) = (l.powf(r.f()), h.powf(r.f()));
+                Osc(if r.n % 2 == 0 && l <= 0.0 && h >= 0.0 { 0.0 } else { a.min(b) }, a.max(b))
+            } else if l > 0.0 { let (a, b) = (l.powf(r.f()), h.powf(r.f())); Osc(a.min(b), a.max(b)) } else { Unk }
+        },
         o => if matches!(o, NoVal) { NoVal } else { Unk },
     }
 }
@@ -1363,7 +1464,7 @@ fn s_abs(a: S) -> S {
 fn s_floor(a: S) -> S {
     use S::*;
     match a {
-        ExpS(..) => s_floor(from_b(coarse(&a))),
+        ExpS(..) | SO(..) => s_floor(from_b(coarse(&a))),
         Ser(x) => {
             let (p, c, z) = x.parts();
             if !p.is_empty() { return SO(x, -1.0, 0.0, true); }
@@ -1415,7 +1516,19 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
             At::Fin(a, s) => { let mut t = vec![]; if a.sign() != Some(0) { t.push(T { e: UNIT, c: a.clone() }); } t.push(T { e: (Q::ONE, 0), c: K::int(*s as i128) }); Sr { t, rem: None } }
             At::Inf(s) => Sr { t: vec![T { e: (Q::i(-1), 0), c: K::int(*s as i128) }], rem: None },
         }),
-        X::Add(v) => v.iter().map(|a| ser_of(a, at, n)).reduce(s_add).unwrap_or(Unk),
+        X::Add(v) => {
+            // floor(u) + floor(-u) is -1 off the integers and 0 on them.
+            // Only a continuous unbounded polynomial argument establishes both sequences.
+            fn floor_term(e: &X, sign: i8) -> Option<(&X, i8)> {
+                match e { X::Neg(a) => floor_term(a, -sign), X::F(Fun::Floor, a) => Some((a, sign)), _ => None }
+            }
+            if v.len() == 2 { if let (Some((a, sa)), Some((b, sb))) = (floor_term(&v[0], 1), floor_term(&v[1], 1)) {
+                if sa == sb && poly(&X::Add(vec![a.clone(), b.clone()])).is_some_and(|p| p.iter().all(|k| k.sign() == Some(0))) && matches!(coarse(&ser_of(a, at, n)), B::PInf | B::NInf) {
+                    return OscJ(if sa > 0 { -1.0 } else { 0.0 }, if sa > 0 { 0.0 } else { 1.0 });
+                }
+            } }
+            v.iter().map(|a| ser_of(a, at, n)).reduce(s_add).unwrap_or(Unk)
+        },
         X::Mul(v) => {
             // the same factor above and below the line cancels (the limit ignores the one point it leaves out)
             let key = |e: &X| format!("{e:?}");
@@ -1429,6 +1542,16 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
                 i += 1;
             }
             if fs.is_empty() { return Ser(Sr::c(K::one())); }
+            // (1 - cos u)/sin u = tan(u/2) on its domain. The removable
+            // even multiples of π do not remove the poles at odd multiples.
+            if fs.len() == 2 {
+                for (num, den) in [(fs[0], fs[1]), (fs[1], fs[0])] {
+                    if let X::Inv(d) = den { if let X::F(Fun::Sin, u) = &**d {
+                        let want = fold(X::Add(vec![X::C(K::one()), X::Neg(Box::new(X::F(Fun::Cos, u.clone())))]));
+                        if key(num) == key(&want) && poly(u).is_some() && matches!(coarse(&ser_of(u, at, n)), B::PInf | B::NInf) { return Poles; }
+                    } }
+                }
+            }
             // tan and cot of an argument that runs off to ±∞: poles keep coming
             if let [X::F(f1, a1), X::Inv(d)] = fs.as_slice() {
                 if let X::F(f2, a2) = &**d { if matches!((f1, f2), (Fun::Sin, Fun::Cos) | (Fun::Cos, Fun::Sin)) && key(a1) == key(a2) && matches!(coarse(&ser_of(a1, at, n)), B::PInf | B::NInf) { return Poles; } }
@@ -1436,11 +1559,24 @@ fn ser_of(e: &X, at: &At, n: usize) -> S {
             fs.iter().map(|a| ser_of(a, at, n)).reduce(s_mul).unwrap_or(Unk)
         }
         X::Neg(a) => s_neg(ser_of(a, at, n)),
-        X::Inv(a) => s_fun(ser_of(a, at, n), |s| s_inv(s, n), false),
+        X::Inv(a) => {
+            // A reciprocal tan/cot still has recurring poles (at the original
+            // zeros). Preserve this structural fact rather than inverting the
+            // coarse Poles class, whose reciprocal is not generally known.
+            if matches!(at, At::Inf(_)) { if let X::Mul(v) = &**a { if let [X::F(f1, u), X::Inv(d)] = v.as_slice() {
+                if let X::F(f2, w) = &**d { if matches!((f1, f2), (Fun::Sin, Fun::Cos) | (Fun::Cos, Fun::Sin)) && format!("{u:?}") == format!("{w:?}") && poly(u).is_some() && matches!(coarse(&ser_of(u, at, n)), B::PInf | B::NInf) { return Poles; } }
+            } } }
+            s_fun(ser_of(a, at, n), |s| s_inv(s, n), false)
+        },
         X::Pow(b, p) => {
             // (the constant 0 to a constant power: 0 when the power is positive, no value at all otherwise: 0^0)
             if let Some(q) = const_q(p) { if !b.has_x() && matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)) { return if q > Q::ZERO { Ser(Sr::c(K::zero())) } else { NoVal }; } }
-            if let Some(q) = const_q(p) { return s_fun(ser_of(b, at, n), |s| s_powq(s, q, n), false); }
+            if let Some(q) = const_q(p) {
+                let s = ser_of(b, at, n);
+                // A jumpy wave may take only ±1: squaring it need not oscillate.
+                if jumpy(&s) && q.is_int() && q.n > 0 && q.n % 2 == 0 && matches!(coarse(&s), B::Osc(l, h) if l < 0.0 && h > 0.0) { return Unk; }
+                return s_fun(s, |s| s_powq(s, q, n), false);
+            }
             // 0 to a power with x in it: 0 near where the power is positive, no value where it is negative
             if !b.has_x() && matches!(exact(b, &K::zero()), EV::Val(ref k) if k.sign() == Some(0)) {
                 return match coarse(&ser_of(p, at, n)) { B::Fin(k) if k.sign() == Some(1) => Ser(Sr::c(K::zero())), B::PInf | B::Zero(1) => Ser(Sr::c(K::zero())), B::Fin(k) if k.sign() == Some(-1) => NoVal, B::NInf | B::Zero(-1) => NoVal, _ => Unk };
@@ -1494,10 +1630,47 @@ fn whole_multiple_of_pi(a: &X, sin: bool) -> Option<K> {
 #[derive(Clone, Debug)]
 pub enum L { Val(K), PInf, NInf, Dne, NoVal, Unknown }
 
+/// Prove an exact translation law e(x + period) = e(x) + delta. Only linear
+/// combinations and floors with whole-number shifts are admitted; products of
+/// changing factors are deliberately left unknown.
+fn floor_shift(e: &X, period: &K) -> Option<K> {
+    match e {
+        X::C(_) => Some(K::zero()), X::V => Some(period.clone()),
+        X::Neg(a) => Some(floor_shift(a, period)?.neg()),
+        X::Add(v) => v.iter().try_fold(K::zero(), |d, a| Some(d.add(&floor_shift(a, period)?))),
+        X::F(Fun::Floor, a) => { let d = floor_shift(a, period)?; d.rational().filter(|q| q.is_int()).map(|_| d) }
+        X::Mul(v) => {
+            if v.iter().all(|a| floor_shift(a, period).is_some_and(|d| d.sign() == Some(0))) { return Some(K::zero()); }
+            let mut scale = K::one(); let mut moving = None;
+            for a in v { if a.has_x() { if moving.is_some() { return None; } moving = Some(a); }
+                else { let EV::Val(k) = exact(a, &K::zero()) else { return None }; scale = scale.mul(&k); } }
+            Some(moving.map_or(Some(K::zero()), |a| floor_shift(a, period))?.mul(&scale))
+        }
+        _ if !e.has_x() => Some(K::zero()),
+        _ => None,
+    }
+}
+fn periodic_steps_dne(e: &X) -> bool {
+    if !e.has_floor() { return false; }
+    for period in [1, 2, 4, 10, 100] {
+        let t = K::int(period);
+        if !floor_shift(e, &t).is_some_and(|d| d.sign() == Some(0)) { continue; }
+        let mut first: Option<K> = None;
+        for j in 0..=32 {
+            if let EV::Val(k) = exact(e, &K::q(Q::new(j * period, 32).unwrap())) {
+                if let Some(a) = &first { if k.sub(a).sign().is_some_and(|s| s != 0) { return true; } }
+                else { first = Some(k); }
+            }
+        }
+    }
+    false
+}
+
 /// The limit of e as x → a from one side, or as x → ±∞: by series at rising precision; a numerical contradiction
 /// (values not closing in on the limit, or not growing toward ∞) makes it Unknown.
 pub fn limit(e: &X, at: &At) -> L {
     if spent() { return L::Unknown; }
+    if matches!(at, At::Inf(_)) && periodic_steps_dne(e) { return L::Dne; }
     let mut out = L::Unknown;
     for n in [6usize, 12, 20] {
         out = match coarse(&ser_of(e, at, n)) {
@@ -1571,7 +1744,9 @@ fn confirm(e: &X, at: &At, l: &L) -> bool {
                 At::Inf(s) => [137.0, 1370.0, 13700.0].iter().map(|x| (*s as f64 * x, *s as f64 * 2.0 * x)).collect(),
             };
             let amps: Vec<f64> = bands.iter().map(|(p, q)| {
-                let v: Vec<f64> = (0..=600).filter_map(|i| ev(e, p + (q - p) * (i as f64 + 0.318) / 600.7)).collect();
+                let v: Vec<f64> = (0..=600).map(|i| p + (q - p) * (i as f64 + 0.318) / 600.7)
+                    .chain((0..=20).filter(|_| matches!(at, At::Inf(_))).map(|i| (p + (q - p) * i as f64 / 20.0).round()))
+                    .filter_map(|x| ev(e, x)).collect();
                 if v.len() < 20 { return 0.0; }
                 let (lo, hi) = v.iter().fold((f64::MAX, f64::MIN), |(a, b), y| (a.min(*y), b.max(*y)));
                 let scale = 1.0 + v.iter().map(|y| y.abs()).fold(0.0, f64::max).min(1e6) * 1e-3;

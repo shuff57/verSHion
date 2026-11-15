@@ -50,7 +50,7 @@ pub fn defs() -> Vec<FigureDef> {
 pub fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::long("pieces", "Function (one piece a line)", OPENING)
-            .hint("A formula with its domain, such as y = x + 1, x < 2 or y = 3/(x - 4), -1 <= x < 4 (< draws an open circle, <= a closed one; x \u{2260} 2 or x != 2 leaves a hole). Or points joined smoothly, such as (-5, 1) (-3, 2) (0, 1) open: open or closed before the first point or after the last puts a circle there."),
+            .hint("Reading: an unbracketed argument is one signed term (x with an optional power and a numeric, simple numeric fraction, or π/pi coefficient; or one constant): sin 2x² = sin(2·x²), sin x² = sin(x²), sin 1/2x = sin((1/2)·x), sin 2πx = sin(2π·x). Later factors multiply outside: sin x e^-x = sin(x)·e^(-x), sin x (x+1) = sin(x)·(x+1), sin 2x cos x = sin(2x)·cos(x). Use sin(2(x+1)) for that full argument; sin 2(x+1) and sin x 2 are refused. Unsupported constant coefficients need brackets: ln(ex), sin(2e^x), sin(2π). An exponent takes one signed term: e^-2x = e^(-2x), e^2x = e^(2x); e^(-2)·x uses brackets. Radicals follow the same rule: √2x = √(2x), √3 x = √(3x), √x (x+1) = √(x)·(x+1). Division outside that term is left-to-right: sin 1/x = sin(1)/x, sin 3x / 3x = (sin(3x)/3)·x, sin x/3x = (sin(x)/3)·x, 1/2x = x/2. Explicit · or * multiplies outside: sin 2·x = sin(2)·x. In log(value, base), the base comes second; log2(x) means base 2. A formula with its domain, such as y = x + 1, x < 2 or y = 3/(x - 4), -1 <= x < 4 (< draws an open circle, <= a closed one; x \u{2260} 2 or x != 2 leaves a hole). Or points joined smoothly, such as (-5, 1) (-3, 2) (0, 1) open: open or closed before the first point or after the last puts a circle there."),
         ParamDef::long("dots", "Single points", "(-2, 3)").hint("Filled points on their own, such as (-2, 3); f(a) is the point's height. Drag one up or down on the figure."),
         ParamDef::text("ask_at", "Ask the limits at x =", "1").hint("One or more values of a, such as 1 or -2, 1, 4 (fractions such as 1/2 too). Drag a marker along the x-axis to move it."),
         ParamDef::bool("ask_left", "Ask the left limit", true),
@@ -1043,7 +1043,7 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
         let across = r.own.iter().any(|(a, c)| (a.0 - c.0).abs() < 0.5 && b[0] + 4.0 < a.0 && a.0 < b[2] - 4.0 && (b[3] <= a.1.min(c.1) || b[1] >= a.1.max(c.1)));
         let clear = |d: f64| if across { d >= (own_d + 2.0).max(8.0) } else { d >= (own_d + 8.0).max(1.5 * own_d) };
         let rival_ok = r.rivals.iter().all(|(a, c)| clear(seg_box_dist(*a, *c, b)));
-        if board.free(grow(b, 1.5)) && rival_ok && nearest_is_own(board, b, &own_pts, clear) {
+        if board.free(grow(b, if size >= 20.0 { 0.15 * size } else { 1.5 })) && rival_ok && nearest_is_own(board, b, &own_pts, clear) {
             board.boxes.push(grow(b, 1.0));
             return Spot::Beside(*c);
         }
@@ -1057,10 +1057,12 @@ fn place(board: &mut Board, r: &Req, size: f64) -> Spot {
             let ang = k as f64 * PI / 72.0;
             let c = (r.anchor.0 + rad * ang.cos() * 1.3, r.anchor.1 - rad * ang.sin());
             let b = label_box_for(c, &r.text, size);
-            if !board.free(grow(b, 2.0)) { continue; }
+            if !board.free(grow(b, if size >= 20.0 { 0.15 * size } else { 2.0 })) { continue; }
             // (a label on a leader keeps clear of every other point and every other thing of its kind, too)
             if board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 0.5 && (o.1 - q.1).abs() < 0.5)).any(|(q, _)| box_pt(b, *q) < 8.0) { continue; }
-            if r.rivals.iter().any(|(a, c2)| seg_box_dist(*a, *c2, b) < 8.0) { continue; }
+            let own_d = near_own(b);
+            let own_c = r.own.iter().map(|(a, d)| dist_seg(c, *a, *d)).fold(f64::MAX, f64::min);
+            if r.rivals.iter().any(|(a, c2)| seg_box_dist(*a, *c2, b) < if size >= 20.0 { (own_d + 2.0).max(8.0) } else { 8.0 } || size >= 20.0 && dist_seg(c, *a, *c2) <= own_c + 2.0) { continue; }
             // from 7 px out of the anchor to the box's nearest edge point
             // (aimed within the ink: the width estimate is a little generous on the right)
             let e = (r.anchor.0.clamp(b[0] + 3.0, b[0] + 0.9 * (b[2] - b[0]) - 3.0), r.anchor.1.clamp(b[1] + 1.0, b[3] - 1.0));
@@ -1420,7 +1422,7 @@ fn build(p0: &Params) -> (String, Drawn) {
         d.kind != UNSURE && (d.kind == "infinite" || ys.iter().any(|y| inside_y(*y))) && (d.x - g.x0).abs() >= 1e-9 * (1.0 + d.x.abs()) && (d.x - g.x1).abs() >= 1e-9 * (1.0 + d.x.abs())
     };
     dr.labelable_kinds = if many_kinds { 0 } else { discs.iter().filter(|d| labelable(d)).count() };
-    if show_kinds && many_kinds { notes.push(format!("Too many discontinuities to label each one on the graph: the key {}", if discs_complete { "lists them" } else { "says where they are" })); }
+    if show_kinds && many_kinds { notes.push(format!("Too many discontinuities to label each one on the graph: the key {}", if discs_complete { "lists them" } else { "leaves the discontinuity answer as a line to fill in" })); }
     if show_kinds && !many_kinds {
         for d in &discs {
             let x = sx(d.x);
