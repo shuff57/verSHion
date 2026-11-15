@@ -557,12 +557,24 @@ impl X {
 }
 
 /// Reads a formula the way the app's reader does (implicit products, ^ binding right, -x^2 = -(x^2), a function name needs
-/// its bracket, |a| for abs(a), log_b(a)), plus floor and ceil. None when it cannot be read.
+/// its bracket in old saved inputs; also accepts ordinary classroom spellings. None when it cannot be read.
 pub fn parse(text: &str) -> Option<X> {
     let s = text.replace('\u{2212}', "-").replace('\u{b7}', "*").replace('\u{d7}', "*").to_lowercase();
+    let mut expanded = String::new();
+    let mut superscript = false;
+    for c in s.chars() {
+        if let Some(d) = "⁰¹²³⁴⁵⁶⁷⁸⁹⁻".chars().position(|v| v == c) {
+            if !superscript { expanded.push_str("^("); superscript = true; }
+            expanded.push(if d == 10 { '-' } else { (b'0' + d as u8) as char });
+        } else {
+            if superscript { expanded.push(')'); superscript = false; }
+            if c == '√' { expanded.push_str("sqrt"); } else { expanded.push(c); }
+        }
+    }
+    if superscript { expanded.push(')'); }
     let mut norm = String::new();
     let mut open = false;
-    for c in s.chars() { if c == '|' { norm.push_str(if open { ")" } else { "abs(" }); open = !open; } else { norm.push(c); } }
+    for c in expanded.chars() { if c == '|' { norm.push_str(if open { ")" } else { "abs(" }); open = !open; } else { norm.push(c); } }
     if open || norm.len() > 1000 { return None; }
     let cs: Vec<char> = norm.chars().collect();
     let mut p = P { s: &cs, i: 0, depth: 0 };
@@ -613,7 +625,7 @@ impl<'a> P<'a> {
         Some(b)
     }
     fn arg(&mut self) -> Option<X> {
-        if self.peek()? != '(' { return None; }
+        if self.peek()? != '(' { return self.unary(); }
         self.i += 1;
         let a = self.expr()?;
         if self.peek()? != ')' { return None; }
@@ -653,7 +665,19 @@ impl<'a> P<'a> {
             c if c.is_alphabetic() => {
                 let st = self.i;
                 while self.i < self.s.len() && self.s[self.i].is_ascii_alphabetic() { self.i += 1; }
-                let name: String = self.s[st..self.i].iter().collect();
+                let mut name: String = self.s[st..self.i].iter().collect();
+                // A compact sinx is the same function application as sin x.
+                if let Some(prefix) = ["sqrt", "arcsin", "arccos", "arctan", "floor", "ceil", "sin", "cos", "tan", "sec", "csc", "cot", "abs", "ln", "log", "exp"].into_iter().find(|f| name.strip_prefix(f).is_some_and(|r| r == "x")) {
+                    self.i = st + prefix.len(); name = prefix.to_string();
+                }
+                if name == "log" && self.s.get(self.i..self.i + 2) == Some(&['1', '0']) { self.i += 2; }
+                if name == "log" && self.peek() == Some('(') {
+                    self.i += 1;
+                    let a = self.expr()?;
+                    let base = if self.peek() == Some(',') { self.i += 1; self.expr()? } else { X::C(K::int(10)) };
+                    if self.peek()? != ')' { return None; } self.i += 1;
+                    return Some(X::Mul(vec![X::F(Fun::Ln, Box::new(a)), X::Inv(Box::new(X::F(Fun::Ln, Box::new(base))))]));
+                }
                 match name.as_str() { "x" => return Some(X::V), "pi" => return Some(X::C(K::pi())), "e" => return Some(X::C(K::e_pow(Q::ONE))), _ => {} }
                 if name == "log" && self.peek() == Some('_') {
                     self.i += 1;

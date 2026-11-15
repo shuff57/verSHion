@@ -1667,6 +1667,21 @@ fn thread_cpu() -> f64 {
 }
 
 #[test]
+fn ordinary_classroom_spellings_read_and_evaluate() {
+    for (f, at, expected) in [("ln x", "1", 0.0), ("sin x / x", "pi/2", 2.0/std::f64::consts::PI),
+        ("sinx/x", "pi/2", 2.0/std::f64::consts::PI), ("√(x + 1)", "3", 2.0),
+        ("x²", "3", 9.0), ("log10(x)", "100", 2.0), ("log(x, 2)", "8", 3.0)] {
+        let p = with(json!({"pieces": format!("y = {f}"), "dots": "", "ask_at": at}));
+        assert!(!warnings(&p).iter().any(|n| n.contains("cannot be read")), "{f}: {:?}", warnings(&p));
+        let e = cas::parse(f).unwrap();
+        let a = cas::ev(&cas::parse(at).unwrap(), 0.0).unwrap();
+        assert!((cas::ev(&e, a).unwrap() - expected).abs() < 1e-12, "{f}");
+        assert!(svg(&p).contains("data-lim"), "{f}");
+    }
+}
+
+
+#[test]
 fn bounded_wave_zero_limit_is_a_horizontal_asymptote() {
     let p = with(json!({"pieces": "y = sin(x)^2/x", "dots": "", "ask_inf": "Both", "show_asym": true, "asym_eqs": true}));
     let s = svg(&p);
