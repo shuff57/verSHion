@@ -91,7 +91,7 @@ fn hand_worked_sums_integrals_and_errors() {
     has_line(&sin, "\u{222b}0(2\u{3c0}) sin(x) dx = 2 \u{2212} 2 = 0".replace("(2\u{3c0})", "2\u{3c0}").as_str());
     // between y = x and y = x²: they cross at 0 and 1; ∫₀¹ (x − x²) dx = 1/2 − 1/3 = 1/6
     let bt = with(&[("region", s("Between f(x) and g(x)")), ("f", s("x")), ("g", s("x^2")), ("bounds", s("Where f and g cross")), ("strips", s("None (shade the exact area)")), ("integral_line", bo(true)), ("exact_line", bo(true)), ("xmin", fl(-0.5)), ("xmax", fl(1.5)), ("xstep", fl(0.5)), ("ymin", fl(-0.5)), ("ymax", fl(1.5)), ("ystep", fl(0.5))]);
-    has_line(&bt, "f and g cross at x = 0 and x = 1");
+    has_line(&bt, "f and g meet at x = 0 and x = 1");
     has_line(&bt, "\u{222b}01 (x \u{2212} x2) dx = 1/6");
     // vertical strips between them, left, n = 4: heights x − x² at 0, 1/4, 1/2, 3/4 = 0, 3/16, 1/4, 3/16; (1/4)(5/8) = 5/32
     let mut bv = bt.clone(); bv.set_s("strips", "Vertical"); bv.set_b("sum_line", true);
@@ -107,8 +107,8 @@ fn hand_worked_sums_integrals_and_errors() {
     has_line(&sq, "dx = 16/3");
     // the error 5.14626… − 5.33333… = −0.18707…, to 3 places
     let mut sqd = sq.clone(); sqd.set_s("values", "Decimals"); sqd.set_i("dec", 3);
-    has_line(&sqd, "Error = T4 \u{2212} exact = 5.146 \u{2212} 5.333 \u{2248} \u{2212}0.187");
-    has_line(&sqd, "= 0.5(0 + 2\u{b7}1 + 2\u{b7}1.414 + 2\u{b7}1.732 + 2) \u{2248} 5.146");
+    has_line(&sqd, "Error = T4 \u{2212} exact \u{2248} \u{2212}0.187");
+    has_line(&sqd, "\u{2248} 0.5(0 + 2\u{b7}1 + 2\u{b7}1.414 + 2\u{b7}1.732 + 2) \u{2248} 5.146");
     // ∫₀^{π/4} cos x dx = √2/2; ∫₀¹ eˣ dx = e − 1; ∫₀^π x dx = π²/2
     has_line(&with(&[("f", s("cos(x)")), ("b", s("pi/4")), ("exact_line", bo(true))]), "Exact value = \u{221a}2/2");
     has_line(&with(&[("f", s("e^x")), ("b", s("1")), ("exact_line", bo(true))]), "Exact value = e \u{2212} 1");
@@ -703,7 +703,7 @@ fn kinks_and_written_places() {
     // a value known only roughly is never written to more places than it is known, and an inexact value keeps its places
     // (sin 1/4 and the rest have no exact form: all the terms rounded alike, the exact 1 among them)
     let mut e = with(&[("f", s("sin(x) + 1")), ("b", s("1")), ("strip_labels", s("Heights")), ("sum_line", bo(true))]);
-    has_line(&e, "= (1/4)(1 + 1.2474 + 1.4794 + 1.6816) \u{2248} 1.3521");
+    has_line(&e, "\u{2248} (1/4)(1 + 1.2474 + 1.4794 + 1.6816) \u{2248} 1.3521");
     e.set_s("f", "cos(x)");
     assert!(lines(&e).iter().any(|l| l.contains("(1 + 0.9689 + 0.8776 + 0.7317)")), "{:?}", lines(&e));
     // eˣ at x = 1/4, 1/2, 3/4 is exact: e^(1/4) …

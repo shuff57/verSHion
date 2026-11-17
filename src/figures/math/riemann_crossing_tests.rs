@@ -72,7 +72,7 @@ fn riemann_crossing_textbook_pairs_never_equate_rounded_bounds() {
             assert_eq!(m.crossings.len(),want.len(),"{} {}",c.f,c.g);
             let svg = render(&p);
             let lines = texts(&svg,"line");
-            let cross = lines.iter().find(|t| t.starts_with("f and g cross")).unwrap();
+            let cross = lines.iter().find(|t| t.starts_with("f and g meet")).unwrap();
             let bounds = texts(&svg,"bound");
             for (i,(x,w)) in m.crossings.iter().zip(&want).enumerate() {
                 assert!((x.v-w).abs() < 1e-12,"{} {} root{i}: {} != {w}",c.f,c.g,x.v);
@@ -160,7 +160,7 @@ fn riemann_crossing_render_timing() {
         let p = params_for(&c,"Horizontal",rule,n);
         let start = std::time::Instant::now(); let svg = render(&p); let elapsed = start.elapsed();
         worst = worst.max(elapsed);
-        assert!(texts(&svg,"line").iter().any(|s| s.starts_with("f and g cross")));
+        assert!(texts(&svg,"line").iter().any(|s| s.starts_with("f and g meet")));
         assert!(elapsed.as_secs_f64() < 1.,"sin/cos {rule} n={n}: {elapsed:?}");
         eprintln!("sin/cos {rule} n={n}: {elapsed:?}");
     } }

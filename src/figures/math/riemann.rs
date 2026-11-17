@@ -381,9 +381,16 @@ fn wrap(t: &str) -> String {
     let mut top = false;
     let mut bars = false;
     for (k, c) in cs.iter().enumerate() {
-        match c { '(' | '[' => depth += 1, ')' | ']' => depth -= 1, '|' => { if bars { depth -= 1 } else { depth += 1 }; bars = !bars; } '+' | '-' | '\u{2212}' if depth == 0 && k > 0 && cs[k - 1] == ' ' => top = true, _ => {} }
+        match c { '(' | '[' => depth += 1, ')' | ']' => depth -= 1, '|' => { if bars { depth -= 1 } else { depth += 1 }; bars = !bars; } '+' | '-' | '\u{2212}' if depth == 0 && k > 0 => top = true, _ => {} }
     }
     if top { format!("({t})") } else { t.to_string() }
+}
+
+/// A substituted right operand of subtraction: preserve a whole sum/difference
+/// and bracket a leading sign too (a − (−b), not a − −b).
+fn subtrahend(t: &str) -> String {
+    let grouped = wrap(t);
+    if grouped == t && t.starts_with(['−', '-', '+']) { format!("({t})") } else { grouped }
 }
 
 /// Roots of h on [lo, hi] (sign changes on 2000 samples, refined by halving), with no pole among them.
@@ -612,7 +619,17 @@ fn signed_join(items: &[String]) -> String {
     out
 }
 /// A factor before a bracket: "2", "(1/2)", "(π/4)".
-fn factor(t: &str) -> String { if t.chars().all(|c| c.is_ascii_digit() || c == '.') { t.to_string() } else { format!("({t})") } }
+fn factor(t: &str) -> String {
+    if t.chars().all(|c| c.is_ascii_digit() || c == '.') { return t.to_string(); }
+    if t.starts_with('(') {
+        let mut depth = 0;
+        for (i, c) in t.char_indices() {
+            match c { '(' => depth += 1, ')' => depth -= 1, _ => {} }
+            if depth == 0 { if i + 1 == t.len() { return t.to_string(); } break; }
+        }
+    }
+    format!("({t})")
+}
 
 fn sum_name(ru: Rule, n: usize) -> String {
     match ru { Rule::L => format!("L_{n}"), Rule::R => format!("R_{n}"), Rule::M => format!("M_{n}"), Rule::T => format!("T_{n}"), Rule::U => "Upper sum".into(), Rule::Lo => "Lower sum".into() }
@@ -801,8 +818,8 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
     m.integrand = if between {
         let (ft, gt) = (integrand_text(&f), integrand_text(g.as_ref().unwrap()));
         let crosses = roots(&h, xa, xb).into_iter().any(|r| r > xa + 1e-9 && r < xb - 1e-9);
-        if crosses { format!("|{ft} \u{2212} {}|", wrap(&gt)) }
-        else if h(0.5 * (xa + xb)).unwrap_or(0.0) >= 0.0 { format!("({ft} \u{2212} {})", wrap(&gt)) } else { format!("({gt} \u{2212} {})", wrap(&ft)) }
+        if crosses { format!("|{ft} \u{2212} {}|", subtrahend(&gt)) }
+        else if h(0.5 * (xa + xb)).unwrap_or(0.0) >= 0.0 { format!("({ft} \u{2212} {})", subtrahend(&gt)) } else { format!("({gt} \u{2212} {})", subtrahend(&ft)) }
     } else { wrap(&integrand_text(&f)) };
     m.sum_name = sum_name(ru, n);
     if kd == Kind::None { return Ok(m); }
@@ -1079,6 +1096,7 @@ fn sum_worked(m: &Model, fm: Fmt, table: bool, trap: bool) -> (String, bool) {
             let ws = w.as_ref().map(|w| t(w)).unwrap_or_default();
             let hs = t(h);
             // a negative height keeps its minus at the front of the term: "−2·3/2" reads (width 2)·(−3/2) as a whole
+            let hs = wrap(&hs);
             let (sg, hs) = match hs.strip_prefix('\u{2212}') { Some(r) => ("\u{2212}", r.to_string()), None => ("", hs) };
             let hs = if trap { factor(&hs) } else { hs };
             format!("{sg}{}\u{b7}{hs}", factor(&ws))
@@ -1088,8 +1106,8 @@ fn sum_worked(m: &Model, fm: Fmt, table: bool, trap: bool) -> (String, bool) {
     let items: Vec<String> = m.terms.iter().map(|(h, w)| {
         let hs = t(h);
         // (a height with several terms, ln 5 − 2 ln 2, in brackets, so each height reads as one)
-        let hs = if hs.contains(" + ") || hs.contains(" \u{2212} ") { format!("({hs})") } else { hs };
-        match w { Some(w) => { let ws = t(w); match hs.strip_prefix('\u{2212}') { Some(r) => format!("\u{2212}{ws}\u{b7}{r}"), None => format!("{ws}\u{b7}{hs}") } } None => hs }
+        let hs = wrap(&hs);
+        match w { Some(w) => { let ws = factor(&t(w)); match hs.strip_prefix('\u{2212}') { Some(r) => format!("\u{2212}{ws}\u{b7}{r}"), None => format!("{ws}\u{b7}{hs}") } } None => hs }
     }).collect();
     let f = factor(&coef);
     (format!("{}{}({})", f, if f.chars().all(|c| c.is_ascii_digit()) { "\u{b7}" } else { "" }, signed_join(&items)), exact)
@@ -1684,12 +1702,11 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         let strips_on = kd != Kind::None;
         let d = if m.var == 'y' { "\u{394}y" } else { "\u{394}x" };
         let lim = |t: &str| if t.chars().count() > 1 { format!("({t})") } else { t.to_string() };
-        let neg_par = |t: String| if t.starts_with('\u{2212}') { format!("({t})") } else { t };
         let eqs = |exact: bool| if exact { "=" } else { "\u{2248}" };
         if crossing(p) && !m.crossings.is_empty() {
             let k = m.crossings.len();
             let mut v = vec![];
-            let mut text = String::from("f and g cross at");
+            let mut text = String::from("f and g meet at");
             for (i, c) in m.crossings.iter().enumerate() {
                 text.push_str(if i == 0 { " x " } else if i + 1 == k { " and x " } else { ", x " });
                 text.push_str(eqs(student || fm.text(c).1));
@@ -1724,7 +1741,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             if student { lines.push(vec![Piece::T(format!("{form} =")), Piece::Blank]); }
             else {
                 let (t, e) = fm.text(dx);
-                let worked = format!("({hi_t} \u{2212} {})/{n}", neg_par(lo_t.clone()));
+                let worked = format!("({hi_t} \u{2212} {})/{n}", subtrahend(&lo_t));
                 // (once: not "(e − 1)/2 = (e − 1)/2")
                 if e && worked == t { lines.push(vec![Piece::T(format!("{form} = {worked}"))]); }
                 else { lines.push(vec![Piece::T(format!("{form} = {worked} {} {t}", eqs(e)))]); }
@@ -1736,8 +1753,8 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             else {
                 let (worked, we) = sum_worked(m, fm, table, rule(p) == Rule::T);
                 let fin = format!("{worked} {} {st}", eqs(*se && we));
-                if m.sum_symbolic.is_empty() { lines.push(vec![Piece::T(format!("{} {} {fin}", m.sum_name, eqs(!crossing(p) || we)))]); }
-                else { lines.push(vec![Piece::T(format!("{} = {}", m.sum_name, m.sum_symbolic))]); lines.push(vec![Piece::T(format!("{} {fin}", eqs(!crossing(p) || we)))]); }
+                if m.sum_symbolic.is_empty() { lines.push(vec![Piece::T(format!("{} {} {fin}", m.sum_name, eqs(we)))]); }
+                else { lines.push(vec![Piece::T(format!("{} = {}", m.sum_name, m.sum_symbolic))]); lines.push(vec![Piece::T(format!("{} {fin}", eqs(we)))]); }
                 // (rounded working said to be rounded: at 0 places "1·(1 + 1 + 1 + 1 + 2) ≈ 4" is worked from 0.6, 0.69 …)
                 if !fm.exact && !(*se && we) {
                     let places = if fm.dec == 1 { "1 decimal place".to_string() } else { format!("{} decimal places", fm.dec) };
@@ -1761,8 +1778,8 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
                     if m.abs_area.is_some() && m.breakdown.is_none() { lines.push(vec![Piece::T("Area shaded =".into()), Piece::Blank]); }
                 }
                 else {
-                    let brk = m.breakdown.as_ref().map(|(a, b)| { let (at, ae) = fm.text(a); let (bt, be) = fm.text(&b.neg()); (format!("{} \u{2212} {} ", at, wrap(&bt)), ae && be) });
-                    match brk { Some((bt, be)) => lines.push(vec![Piece::T(format!("{lhs} {} {bt}{} {et}", eqs(be), eqs(*ee)))]), None => lines.push(vec![Piece::T(format!("{lhs} {} {et}", eqs(*ee)))]) }
+                    let brk = m.breakdown.as_ref().map(|(a, b)| { let (at, ae) = fm.text(a); let (bt, be) = fm.text(&b.neg()); (format!("{} \u{2212} {} ", at, subtrahend(&bt)), ae && be) });
+                    match brk { Some((bt, true)) => lines.push(vec![Piece::T(format!("{lhs} = {bt}{} {et}", eqs(*ee)))]), _ => lines.push(vec![Piece::T(format!("{lhs} {} {et}", eqs(*ee)))]) }
                     // (without signed area the part below the axis is shaded like the rest, but the integral counts it
                     // negative: the area shaded is written too, and said to be the area)
                     if let (Some(a), true) = (&m.abs_area, m.breakdown.is_none()) {
@@ -1778,13 +1795,17 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
             else {
                 let (t, e) = fm.text(ev_);
                 // (the difference once: no "= 77/60 − ln 5 = 77/60 − ln 5")
-                let diff = format!("{st} \u{2212} {}", wrap(&neg_par(et.clone())));
-                let deq = eqs(!crossing(p) || (*se && *ee));
+                let diff = format!("{st} \u{2212} {}", subtrahend(et));
                 // (and not rewritten when nothing combines: the error's exact terms are just the sum's and the integral's, neither
                 // of them 0: "−1/2 − 0" and "0 − 9" go on to their value)
                 let nothing_combines = match (&ev_.ex, m.sum.as_ref().and_then(|s| s.ex.as_ref()), m.exact.as_ref().and_then(|x| x.ex.as_ref())) { (Some(a), Some(b), Some(c)) => !b.is_zero() && !c.is_zero() && a.0.len() == b.0.len() + c.0.len(), _ => false };
-                if e && (nothing_combines || t.replace(['(', ')'], "") == diff.replace(['(', ')'], "")) { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact {deq} {diff}", m.sum_name))]); }
-                else { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact {deq} {diff} {} {t}", m.sum_name, eqs(e)))]); }
+                if !(*se && *ee) {
+                    // A difference of rounded operands need not equal the error,
+                    // even when the error itself has a short exact form.
+                    lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact {} {t}", m.sum_name, eqs(e)))]);
+                }
+                else if e && (nothing_combines || t.replace(['(', ')'], "") == diff.replace(['(', ')'], "")) { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff}", m.sum_name))]); }
+                else { lines.push(vec![Piece::T(format!("Error = {} \u{2212} exact = {diff} {} {t}", m.sum_name, eqs(e)))]); }
             }
         }
         if p.b("key_line") && answers {
@@ -1998,3 +2019,7 @@ mod horizontal_tests;
 #[cfg(test)]
 #[path = "riemann_crossing_tests.rs"]
 mod crossing_tests;
+
+#[cfg(test)]
+#[path = "riemann_substitution_tests.rs"]
+mod substitution_tests;
