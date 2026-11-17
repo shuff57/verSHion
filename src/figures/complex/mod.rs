@@ -174,13 +174,10 @@ struct N {
     exact: bool,
     alg: Option<algebra::A>,
     decimal: bool,
+    typed: bool,
 }
 fn rounded(v: f64, d: i64) -> String {
-    if v != 0. && v.abs() < 10f64.powi(-(d as i32)) {
-        scientific(&format!("{v:.3e}"))
-    } else {
-        math::num_str(v, d as usize).replace('-', "−")
-    }
+    math::num_str(v, d as usize).replace('-', "−")
 }
 fn read(s: &str) -> Option<N> {
     let s = s.trim();
@@ -274,6 +271,7 @@ fn read(s: &str) -> Option<N> {
         exact,
         alg,
         decimal: t.contains('.') || t.contains(['e', 'E']) && simple,
+        typed: true,
     })
 }
 fn from_q(q: Q) -> N {
@@ -287,6 +285,7 @@ fn from_q(q: Q) -> N {
         ))),
         decimal: false,
         exact: true,
+        typed: false,
     }
 }
 fn approx(v: f64) -> N {
@@ -297,6 +296,7 @@ fn approx(v: f64) -> N {
         alg: None,
         decimal: false,
         exact: false,
+        typed: false,
     }
 }
 fn from_alg(a: algebra::A, decimal: bool) -> N {
@@ -334,6 +334,7 @@ fn from_alg(a: algebra::A, decimal: bool) -> N {
         exact: true,
         alg: Some(a),
         decimal,
+        typed: false,
     }
 }
 #[derive(Clone, Debug)]
@@ -357,16 +358,20 @@ impl Z {
         let f = |n: &N| {
             if n.exact && p.s("accuracy") == "Exact" {
                 n.s.clone()
+            } else if n.typed && n.v != 0. && n.v.abs() < 0.001 && rounded(n.v, p.i("dec")) == "0" {
+                // Preserve the scale of a genuinely tiny given, but never invent
+                // significant figures for computed approximation residues.
+                scientific(&format!("{:.3e}", n.v))
             } else {
                 rounded(n.v, p.i("dec"))
             }
         };
         let positive = if self.b.v < 0. {
-            self.b
-                .alg
-                .as_ref()
-                .and_then(|a| a.neg())
-                .map(|a| from_alg(a, self.b.decimal))
+            self.b.alg.as_ref().and_then(|a| a.neg()).map(|a| {
+                let mut n = from_alg(a, self.b.decimal);
+                n.typed = self.b.typed;
+                n
+            })
         } else {
             None
         };
@@ -383,9 +388,9 @@ impl Z {
         } else {
             format!("{b}{}i", if b.contains('√') { " " } else { "" })
         };
-        if self.b.v == 0. {
+        if self.b.v == 0. || b == "0" {
             a
-        } else if self.a.v == 0. {
+        } else if self.a.v == 0. || a == "0" {
             format!("{}{imag}", if self.b.v < 0. { "−" } else { "" })
         } else {
             format!("{a} {} {imag}", if self.b.v < 0. { "−" } else { "+" })
@@ -496,20 +501,23 @@ fn angtext(z: &Z, p: &Params) -> String {
     if z.r() == 0. {
         return "undefined".into();
     }
-    let cart_exact = match (z.a.q, z.b.q) {
-        (Some(a), Some(b)) => {
-            let (x, y) = (a.0, b.0);
-            if y == 0 {
-                Some(if x < 0 { Q(1, 1) } else { Q(0, 1) })
-            } else if x == 0 {
-                Some(Q(y.signum(), 2))
-            } else if a.0.unsigned_abs() == b.0.unsigned_abs() && a.1 == b.1 {
-                Some(Q(if x > 0 { y.signum() } else { 3 * y.signum() }, 4))
-            } else {
-                None
+    // The nonzero component need not be rational to establish an axis angle.
+    let cart_exact = if z.b.q == Some(Q(0, 1)) {
+        Some(if z.a.v < 0. { Q(1, 1) } else { Q(0, 1) })
+    } else if z.a.q == Some(Q(0, 1)) {
+        Some(Q(if z.b.v < 0. { -1 } else { 1 }, 2))
+    } else {
+        match (z.a.q, z.b.q) {
+            (Some(a), Some(b)) => {
+                let (x, y) = (a.0, b.0);
+                if a.0.unsigned_abs() == b.0.unsigned_abs() && a.1 == b.1 {
+                    Some(Q(if x > 0 { y.signum() } else { 3 * y.signum() }, 4))
+                } else {
+                    None
+                }
             }
+            _ => None,
         }
-        _ => None,
     };
     let derived_phase =
         if (p.s("operation") == "Powers" && z.name != "z" && z.name.starts_with('z'))
@@ -625,6 +633,8 @@ fn angtext(z: &Z, p: &Params) -> String {
 fn op(z: &Z, w: &Z, mode: &str) -> Option<Z> {
     if mode == "Conjugate" {
         let mut t = z.clone();
+        t.a.typed = false;
+        t.b.typed = false;
         t.name = "z̄".into();
         if let Some(a) = &t.b.alg {
             t.b = from_alg(a.neg()?, t.b.decimal);
@@ -838,14 +848,16 @@ fn numbers(p: &Params, notes: &mut Vec<String>) -> Vec<Z> {
             notes.push(format!("Invalid {name}: use a number, rational arithmetic, a single square root, or a multiple of π (magnitude at most 1000000, no subnormal values); polar modulus must be nonnegative."))
         }
     }
-    for row in p
+    for (line, row) in p
         .s("extra")
         .lines()
-        .filter(|x| !x.trim().is_empty())
+        .enumerate()
+        .filter(|(_, x)| !x.trim().is_empty())
         .take(6)
     {
         let v: Vec<_> = row.split(',').map(str::trim).collect();
         if v.len() != 3
+            || v[0].is_empty()
             || v[0].len() > 8
             || !v[0].chars().all(|x| x.is_ascii_alphabetic())
             || [
@@ -854,7 +866,7 @@ fn numbers(p: &Params, notes: &mut Vec<String>) -> Vec<Z> {
             .contains(&v[0].to_lowercase().as_str())
             || out.iter().any(|z| z.name == v[0])
         {
-            notes.push("Extra rows need unique names (up to eight letters), real, imaginary; reserved symbols are not names.".into());
+            notes.push(format!("Extra row {} ({row}): use a unique name (up to eight letters), real, imaginary; reserved symbols are not names.", line + 1));
             continue;
         }
         if let Some((a, b)) = read(v[1]).zip(read(v[2])) {
@@ -864,10 +876,15 @@ fn numbers(p: &Params, notes: &mut Vec<String>) -> Vec<Z> {
                 name: v[0].into(),
             })
         } else {
-            notes.push(format!("Invalid number in row {row}"))
+            notes.push(format!("Invalid number in extra row {} ({row}).", line + 1))
         }
     }
-    if p.s("extra").lines().count() > 6 {
+    if p.s("extra")
+        .lines()
+        .filter(|row| !row.trim().is_empty())
+        .count()
+        > 6
+    {
         notes.push("Use at most six extra numbers.".into())
     }
     out
@@ -910,7 +927,9 @@ fn all(p: &Params, notes: &mut Vec<String>) -> (Vec<Z>, usize) {
             for k in 0..p.i("n") {
                 let r = z.r().powf(1. / p.i("n") as f64);
                 let a = (z.angle() + 2. * PI * k as f64) / p.i("n") as f64;
-                let (x, y) = if let Some(q) = root_angle(p, k).filter(|q| (2 * q.0) % q.1 == 0) {
+                let phase = root_angle(p, k);
+                let axis = phase.filter(|q| (2 * q.0) % q.1 == 0);
+                let (x, y) = if let Some(q) = axis {
                     match ((2 * q.0) / q.1).rem_euclid(4) {
                         0 => (r, 0.),
                         1 => (0., r),
@@ -920,10 +939,15 @@ fn all(p: &Params, notes: &mut Vec<String>) -> (Vec<Z>, usize) {
                 } else {
                     (r * a.cos(), r * a.sin())
                 };
-                // Correct near-axis trigonometric residues using Cartesian Newton
-                // steps. This retains tiny, meaningful components near the branch cut.
-                let (x, y) = refine_root((x, y), z.xy(), p.i("n"));
-                let exact_pair = root_angle(p, k).and_then(algebra::trig).and_then(|(c, s)| {
+                // Symmetry proves the zero component of an axis root. Newton
+                // correction must never move it off that axis. Off-axis roots
+                // still retain genuinely tiny components near the branch cut.
+                let (x, y) = if axis.is_some() {
+                    (x, y)
+                } else {
+                    refine_root((x, y), z.xy(), p.i("n"))
+                };
+                let exact_pair = phase.and_then(algebra::trig).and_then(|(c, s)| {
                     let norm =
                         z.a.alg
                             .as_ref()?
@@ -940,7 +964,8 @@ fn all(p: &Params, notes: &mut Vec<String>) -> (Vec<Z>, usize) {
                         .div(&algebra::A::rational(rational::Rational(den, 1)))?;
                     Some((from_alg(r.mul(&c)?, false), from_alg(r.mul(&s)?, false)))
                 });
-                let (a, b) = exact_pair.unwrap_or((approx(x), approx(y)));
+                let component = |v| if v == 0. { from_q(Q(0, 1)) } else { approx(v) };
+                let (a, b) = exact_pair.unwrap_or_else(|| (component(x), component(y)));
                 zs.push(Z {
                     a,
                     b,
@@ -1148,6 +1173,31 @@ pub fn warnings(p: &Params) -> Vec<String> {
 pub fn render(p: &Params) -> String {
     labels::rendering(p, || build(p).0)
 }
+fn coordinate_names(zs: &[Z], given: usize) -> Vec<String> {
+    let is_extra = |i: usize, z: &Z| i < given && !matches!(z.name.as_str(), "z" | "w");
+    let mut used: std::collections::BTreeSet<String> = zs
+        .iter()
+        .enumerate()
+        .filter(|(i, z)| is_extra(*i, z))
+        .map(|(_, z)| z.name.clone())
+        .collect();
+    let mut letters = 'A'..='Z';
+    zs.iter()
+        .enumerate()
+        .map(|(i, z)| {
+            if is_extra(i, z) {
+                z.name.clone()
+            } else {
+                let name = letters
+                    .find(|c| !used.contains(&c.to_string()))
+                    .unwrap()
+                    .to_string();
+                used.insert(name.clone());
+                name
+            }
+        })
+        .collect()
+}
 fn build(raw: &Params) -> (String, Vec<String>) {
     let mut p = raw.clone();
     p.normalize(&params(), false);
@@ -1158,6 +1208,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
     let student = !key;
     let coord_task = p.s("question") == "Coordinates";
     let coord = student && coord_task;
+    let coordinate_names = coordinate_names(&zs, given);
     let blank = student && p.s("question") == "Modulus and argument";
     let construct = student && p.s("question") == "Construction";
     let visible = if construct { given } else { zs.len() };
@@ -1628,7 +1679,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
         let original = &zs[i];
         let mut copy = original.clone();
         if coord_task {
-            copy.name = ((b'A' + i as u8) as char).to_string();
+            copy.name = coordinate_names[i].clone();
         }
         let z = &copy;
         let (x, y) = z.xy();
@@ -1667,7 +1718,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
             }
         }
         let label = if coord {
-            ((b'A' + i as u8) as char).to_string()
+            z.name.clone()
         } else {
             match p.s("labels") {
                 "Cartesian" if !blank => format!(
@@ -1906,7 +1957,7 @@ fn build(raw: &Params) -> (String, Vec<String>) {
             &mut doc,
             0.,
             if coord {
-                format!("{} = _____ + _____i", (b'A' + i as u8) as char)
+                format!("{} = _____ + _____i", z.name)
             } else if blank {
                 format!("{}", z.name)
             } else {
@@ -2098,6 +2149,8 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
 mod complex_tests;
 #[cfg(test)]
 mod format_tests;
+#[cfg(test)]
+mod precision_tests;
 
 fn pi_coefficient(s: &str) -> Option<Q> {
     let s = s.replace(' ', "");
