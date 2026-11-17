@@ -376,11 +376,7 @@ impl Z {
         } else {
             b.as_str()
         };
-        let b = if b.contains('/') || b.contains(" + ") || b.contains(" − ") {
-            format!("({b})")
-        } else {
-            b.to_string()
-        };
+        let b = coefficient(b);
         let a = f(&self.a);
         let imag = if b == "1" {
             "i".to_string()
@@ -1940,10 +1936,10 @@ fn build(raw: &Params) -> (String, Vec<String>) {
                 },
             );
         }
-        if p.b("argument") && !coord_task {
+        if !coord_task {
             if z.r() == 0. {
                 notes.push(format!("arg {} is undefined at zero.", z.name));
-            } else {
+            } else if p.b("argument") {
                 write(
                     &mut doc,
                     2.,
@@ -2100,6 +2096,8 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
 }
 #[cfg(test)]
 mod complex_tests;
+#[cfg(test)]
+mod format_tests;
 
 fn pi_coefficient(s: &str) -> Option<Q> {
     let s = s.replace(' ', "");
@@ -2301,11 +2299,28 @@ fn scientific(s: &str) -> String {
 }
 
 fn coefficient(s: &str) -> String {
-    if s.contains('/') && !s.starts_with("√(") {
-        format!("({s})")
-    } else {
-        s.to_string()
+    // A sum or fraction is one factor before i, cis, cos or exp. Inspect
+    // outer operators so a leading sign, an already grouped factor, or a
+    // quotient inside a square root does not acquire redundant brackets.
+    let mut depth = 0;
+    let mut previous = None;
+    for c in s.chars().filter(|c| !c.is_whitespace()) {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '/' if depth == 0 => return format!("({s})"),
+            '+' | '-' | '−'
+                if depth == 0
+                    && previous
+                        .is_some_and(|c| !matches!(c, '+' | '-' | '−' | '*' | '/' | '×')) =>
+            {
+                return format!("({s})");
+            }
+            _ => {}
+        }
+        previous = Some(c);
     }
+    s.to_string()
 }
 
 fn exact_angle(q: Q, unit: &str) -> String {

@@ -94,10 +94,14 @@ impl A {
         self.mul(&b.inv()?)
     }
     pub fn value(&self) -> f64 {
-        self.0
+        let value: f64 = self
+            .0
             .iter()
             .map(|(d, r)| (*d as f64).sqrt() * r.value())
-            .sum()
+            .sum();
+        // An empty floating-point sum is -0.0. Exact cancellation must have
+        // the same positive zero as a literal zero, including in angle text.
+        if value == 0. { 0. } else { value }
     }
     pub fn text(&self) -> String {
         if self.0.is_empty() {
