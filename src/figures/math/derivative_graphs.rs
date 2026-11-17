@@ -14,6 +14,9 @@ use sym::Ex;
 pub(crate) mod sym;
 pub(crate) mod exact;
 mod holes;
+mod hole_cuts;
+#[cfg(test)]
+mod round7;
 #[cfg(test)]
 mod round6;
 use exact::Xv as XV;
@@ -196,7 +199,7 @@ pub(crate) fn pieces(text: &str, name: &str, what: &str) -> Result<Vec<Piece>, S
         // plain form too (e^(ln x)/x is 1), so a derivative that is 0 or constant is not rounding noise)
         let e = sym::simplify(&e, false);
         // (the derivatives from f's plain form where f has a value: (√x)² is x there, e^(ln x) is x)
-        let (mut d1, mut d2, mut d3) = { let d1 = sym::simplify(&sym::deriv(&sym::simplify(&e, true)), true); let d2 = sym::simplify(&sym::deriv(&d1), true); let d3 = sym::simplify(&sym::deriv(&d2), true); (d1, d2, d3) };
+        let (mut d1, mut d2, mut d3) = { let d1 = sym::simplify(&sym::deriv(&holes::smooth_form(&sym::simplify(&e, true))), true); let d2 = sym::simplify(&sym::deriv(&d1), true); let d3 = sym::simplify(&sym::deriv(&d2), true); (d1, d2, d3) };
         // a rational function: its derivatives worked exactly in lowest terms (stable beside a hole, where the derivative of
         // the typed form cancels badly), and its holes
         let rat: Option<Vec<exact::Rat>> = exact::as_rat(&e).and_then(|r0| { let r1 = r0.deriv()?; let r2 = r1.deriv()?; let r3 = r2.deriv()?; Some(vec![r0, r1, r2, r3]) });
@@ -239,7 +242,9 @@ fn in_dom(dom: &[Interval], v: f64) -> bool { dom.is_empty() || dom.iter().any(|
 
 // ───────────────────────── the model: f, f′, f″, f‴ ─────────────────────────
 
+#[derive(Clone)]
 pub(crate) enum Mode { F, Fp { x0: f64, y0: f64, x0e: Option<XV>, y0e: Option<XV> } }
+#[derive(Clone)]
 pub(crate) struct Model {
     pub pieces: Vec<Piece>,
     pub mode: Mode,
@@ -256,13 +261,15 @@ impl Model {
     fn piece(&self, x: f64) -> Option<&Piece> {
         let (pi, p) = self.pieces.iter().enumerate().find(|(_, p)| in_dom(&p.dom, x))?;
         let hole = p.holes.iter().any(|h| (h.0 - x).abs() <= 1e-12 * (1.0 + x.abs()))
-            || self.locals.iter().any(|l| l.pi == pi && x == l.x);
+            || self.locals.iter().any(|l| l.pi == pi && (x - l.x).abs() <= 4.0 * f64::EPSILON * (1.0 + x.abs()));
         (!hole).then_some(p)
     }
     /// k-th derivative of the typed function (k = 0 is the typed one)
     pub(crate) fn g(&self, k: usize, x: f64) -> Option<f64> {
         self.work.set(self.work.get() + 1);
         let p = self.piece(x)?;
+        if k > 0 && self.is_isolated(x) { return self.extension_derivative(k, x); }
+        if k > 0 && !sym::ev(&p.e, x).is_finite() { return None; }
         let v = self.local_value(self.piece_at(x)?, k, x).unwrap_or_else(|| sym::ev(if k == 0 { &p.e } else { &p.d[k - 1] }, x));
         v.is_finite().then_some(v)
     }
@@ -744,6 +751,9 @@ impl Model {
                 for root in exact::roots_mult(&r.d).unwrap_or_default() { if root.x > a + tol && root.x < b - tol && in_dom(&p.dom, root.x) { cuts.push((root.x, Pv { ex: root.ex, show: None })); } }
             }
             for h in &p.holes { if h.0 > a + tol && h.0 < b - tol { cuts.push(h.clone()); } }
+        }
+        for l in &self.locals {
+            if l.x > a + tol && l.x < b - tol { cuts.push((l.x, Pv { ex: l.xe.clone(), show: None })); }
         }
         // poles, jumps and gaps of f found numerically (those the structure does not give), and the corners of kinks
         if matches!(self.mode, Mode::F) && self.pieces.iter().enumerate().any(|(pi, _)| self.rat_of(pi, 0).is_none()) {
@@ -1520,9 +1530,10 @@ pub(crate) fn build(p: &Params) -> Built {
     PLACE_WORK.with(|c| c.set(0));
     let mut best: Option<Built> = None;
     let mut work = 0u64;
+    let mut math_cache = None;
     let done = |mut b: Built, work: u64| { b.work = work + PLACE_WORK.with(|c| c.get()); b };
     for (k, wide) in [(1.0, 1.0), (1.3, 1.0), (1.6, 1.0), (1.6, 1.25), (2.0, 1.5)] {
-        let b = build_at(p, k, wide);
+        let b = build_at_cached(p, k, wide, &mut math_cache);
         work += b.work;
         // (a label numbered for want of room counts against a drawing too, less than one left off)
         let cost = |b: &Built| 1000 * b.stats.left_off + b.stats.numbered;
@@ -1534,6 +1545,10 @@ pub(crate) fn build(p: &Params) -> Built {
     done(best.unwrap(), work)
 }
 pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
+    build_at_cached(p,tall,wide,&mut None)
+}
+// Label-layout retries share only this render's pure mathematical preparation; no persistent/global cache.
+fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<Model,String>,Option<Analysis>)>) -> Built {
     let p = &sanitize(p);
     DECIMAL_TYPED.with(|c| c.set(typed_in_decimals(p)));
     NID.with(|c| c.set(0));
@@ -1554,10 +1569,14 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     let dec = decimals(p);
     // (f worked out from f′ covers the closed interval of the absolute extrema too, where it reaches past the window)
     let span_m = match (p.b("absolute"), typed(p.s("abs_a")), typed(p.s("abs_b"))) { (true, Some(a), Some(b)) if b.v > a.v && (b.v - a.v) < 1e4 => (wa.min(a.v), wb.max(b.v)), _ => (wa, wb) };
-    let model = model(p, span_m);
+    if cache.is_none() {
+        let m=model(p,span_m);
+        let an=m.as_ref().ok().map(|m|m.analyse(wa,wb,win_pv(p,"xmin"),win_pv(p,"xmax")));
+        *cache=Some((m,an));
+    }
+    let (model,an)=cache.as_ref().unwrap().clone();
     if let Err(e) = &model { notes.push(e.clone()); }
     let model = model.ok();
-    let an = model.as_ref().map(|m| m.analyse(wa, wb, win_pv(p, "xmin"), win_pv(p, "xmax")));
     // (an axis whose To is not above its From: drawn from the From one step on, as the coordinate grid does, and said)
     for (axis, lo, hi) in [("x", "xmin", "xmax"), ("y (f)", "ymin", "ymax"), ("y (f\u{2032})", "ymin1", "ymax1"), ("y (f\u{2033})", "ymin2", "ymax2")] {
         if (axis.contains('\u{2032}') && one) || (axis.contains('\u{2033}') && (!fpp || one)) { continue; }
@@ -1629,6 +1648,7 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
         let mut gn = vec![];
         let mut svg = coordinate_grid_build_in(&gp, &mut gn, (480.0 * wide, plot_h));
         if let Some(m) = &model {
+            if holes::guard(&mut svg, m, p, &fis, &g) { notes.push("A derivative cannot be determined reliably beside a cut: narrow the window or simplify the function to draw that neighbourhood".into()); }
             let local = holes::draw(m, p, &fis, &g);
             holes::insert(&mut svg, &local);
         }
@@ -1741,10 +1761,15 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
     let te = exact::of_text(p.s("tracer_x"));
     let reading = |fi: usize| -> Option<String> {
         let (m, t) = (model.as_ref()?, tx.as_ref()?);
+        if fi > 0 && !m.has_value(t.v, te.as_ref()) {
+            return Some(format!("{}({}) does not exist", names[fi], t.show));
+        }
         // the value, and its exact form where it can be derived: f at the typed x; a derivative from the pieces on both
         // sides, which must agree (at a join they may not: then it does not exist)
         let (v, ve) = if fi == 0 {
             (m.f(t.v), te.as_ref().and_then(|x| m.exact_f(x)))
+        } else if m.is_isolated(t.v) {
+            (deriv_at(m, fi, t.v), None)
         } else {
             let h = 1e-9 * (1.0 + t.v.abs());
             let (lp, rp) = (m.piece_at(t.v - h), m.piece_at(t.v + h));
@@ -2143,6 +2168,7 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
                 for (k, pn) in panels.iter().enumerate() {
                     for fi in fis_of(pn.kind) {
                         if !shows(p, fi) { continue; }
+                        if m.is_isolated(*hx) && m.d(fi, *hx).is_some() { continue; }
                         let Some(v) = m.rat_of(pi, fi).and_then(|r| r.f(*hx)) else { continue };
                         if !inside(pn, *hx, v) { continue; }
                         let _ = k;
@@ -2159,6 +2185,7 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
                 for fi in fis_of(pn.kind) {
                     if !shows(p, fi) { continue; }
                     let k = match m.mode { Mode::F => fi, Mode::Fp { .. } if fi > 0 => fi - 1, _ => continue };
+                    if m.is_isolated(l.x) && m.d(fi, l.x).is_some() { continue; }
                     let v = l.at(k, l.x);
                     if inside(pn, l.x, v) {
                         marks.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="hole"/>"##, pn.sx(l.x), pn.sy(v), if print { ink } else { cols[fi] }));
@@ -2179,6 +2206,7 @@ pub(crate) fn build_at(p: &Params, tall: f64, wide: f64) -> Built {
                 // (on f: a break where f has no value though its sides meet, as sin x / sin x at ±π, where the floats give 1)
                 let xs: Vec<f64> = if fi == 0 { an.breaks.clone() } else { (if fi == 1 { &an.fp_marks } else { &an.fpp_marks }).iter().filter(|mk| mk.k == EvK::Undef).map(|mk| mk.x).collect() };
                 for x in xs {
+                    if m.is_isolated(x) && m.d(fi, x).is_some() { continue; }
                     if fi == 0 { let xe = an.fp_marks.iter().find(|mk| (mk.x - x).abs() < 1e-7 * (1.0 + x.abs())).and_then(|mk| mk.pv.ex.clone()); if m.has_value(x, xe.as_ref()) { continue; } }
                     let h = 1e-7 * (1.0 + x.abs());
                     let (Some(l), Some(r)) = (m.d(fi, x - h), m.d(fi, x + h)) else { continue };
