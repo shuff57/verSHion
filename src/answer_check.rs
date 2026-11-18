@@ -387,6 +387,10 @@ pub fn judge_all(its: &[Item], solved: &[Solved]) -> Vec<Check> {
 /// not JSON. On the hosted AI, call `begin_service(cfg, "answer_key", 0)` first.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run(questions: &[Question], cfg: &crate::ai::AiCfg, cache: Option<&std::path::Path>) -> Result<Vec<Check>, String> {
+    crate::ai::block_on(run_cached_async(questions,cfg,cache))
+}
+
+async fn run_cached_async(questions: &[Question], cfg: &crate::ai::AiCfg, cache: Option<&std::path::Path>) -> Result<Vec<Check>, String> {
     let its = items(questions);
     let mut solved = Vec::new();
     for (n, chunk) in its.chunks(CHUNK).enumerate() {
@@ -395,7 +399,7 @@ pub fn run(questions: &[Question], cfg: &crate::ai::AiCfg, cache: Option<&std::p
         let mut reply = match file.as_ref().and_then(|f| std::fs::read_to_string(f).ok()) {
             Some(r) => r,
             None => {
-                let r = crate::ai::chat_turns(cfg, &[crate::ai::Turn::new("user", prompt.clone())], 0.0)?;
+                let r = crate::ai::chat_turns_async(cfg, &[crate::ai::Turn::new("user", prompt.clone())], 0.0).await?;
                 if let Some(f) = &file {
                     let _ = std::fs::write(f, &r);
                 }
@@ -404,7 +408,7 @@ pub fn run(questions: &[Question], cfg: &crate::ai::AiCfg, cache: Option<&std::p
         };
         if parse_reply(&reply, chunk).is_empty() {
             let again = format!("{prompt}\n\nYour previous reply could not be read. Reply with only the JSON object {{\"answers\": [...]}}.");
-            if let Ok(r) = crate::ai::chat_turns(cfg, &[crate::ai::Turn::new("user", again)], 0.0) {
+            if let Ok(r) = crate::ai::chat_turns_async(cfg, &[crate::ai::Turn::new("user", again)], 0.0).await {
                 reply = r;
             }
         }
@@ -478,14 +482,14 @@ impl Job {
         self.rx = Some(rx);
         #[cfg(not(target_arch = "wasm32"))]
         std::thread::spawn(move || {
-            let r = crate::ai::begin_service(&cfg, "answer_key", 0).and_then(|_| run(&questions, &cfg, None));
+            let r = crate::ai::begin_service(&cfg, "answer_key", 0).and_then(|started| run(&questions, &started.cfg, None));
             let _ = tx.send(r);
             ctx.request_repaint();
         });
         #[cfg(target_arch = "wasm32")]
         wasm_bindgen_futures::spawn_local(async move {
             let r = match crate::ai::begin_service_async(&cfg, "answer_key", 0).await {
-                Ok(_) => run_async(&questions, &cfg).await,
+                Ok(started) => run_async(&questions, &started.cfg).await,
                 Err(e) => Err(e),
             };
             let _ = tx.send(r);
@@ -510,23 +514,8 @@ impl Job {
     }
 }
 
-/// The browser version of [`run`].
-#[cfg(target_arch = "wasm32")]
 pub async fn run_async(questions: &[Question], cfg: &crate::ai::AiCfg) -> Result<Vec<Check>, String> {
-    let its = items(questions);
-    let mut solved = Vec::new();
-    for chunk in its.chunks(CHUNK) {
-        let prompt = prompt_for(chunk);
-        let mut reply = crate::ai::ask_images_async(&[], cfg, &prompt, 0.0).await?;
-        if parse_reply(&reply, chunk).is_empty() {
-            let again = format!("{prompt}\n\nYour previous reply could not be read. Reply with only the JSON object {{\"answers\": [...]}}.");
-            if let Ok(r) = crate::ai::ask_images_async(&[], cfg, &again, 0.0).await {
-                reply = r;
-            }
-        }
-        solved.extend(parse_reply(&reply, chunk));
-    }
-    Ok(judge_all(&its, &solved))
+    run_cached_async(questions,cfg,None).await
 }
 
 /// Writes the prompt of each chunk of `questions` as `chunk-N.prompt.txt` in `dir` (for a tool that holds the sign-in),

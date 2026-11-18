@@ -26,6 +26,8 @@ pub(crate) const ARROW_KEYS: [&str; STYLED_ROWS] = ["eq1_arrows", "eq2_arrows", 
 /// Every per-row style key (drawn in each row's style menu in the Equations card, not in a section).
 pub(crate) const ROW_STYLE_KEYS: [&str; 3 * STYLED_ROWS] = ["eq1_line", "eq2_line", "eq3_line", "eq4_line", "eq1_weight", "eq2_weight", "eq3_weight", "eq4_weight", "eq1_arrows", "eq2_arrows", "eq3_arrows", "eq4_arrows"];
 pub(crate) const END_KEYS: [&str; 4] = ["x_left_end", "x_right_end", "y_bottom_end", "y_top_end"];
+pub(crate) const EXTENSION_KEYS: [&str; 4] = ["x_left_extension", "x_right_extension", "y_bottom_extension", "y_top_extension"];
+const AXIS_END_HINT: &str = "Automatic uses a filled triangle when Arrowheads on axes is on and no arrow when off. Triangle arrow is filled; Line arrow is an open two-stroke chevron. Choose the visibly printed source style; these choices do not move the grid or add labels.";
 
 /// The params batch 7 adds; each default draws exactly what the figure drew before.
 pub(crate) fn params() -> Vec<ParamDef> {
@@ -35,12 +37,15 @@ pub(crate) fn params() -> Vec<ParamDef> {
         v.push(ParamDef::choice(WEIGHT_KEYS[k], ["Equation 1 thickness", "Equation 2 thickness", "Equation 3 thickness", "Equation 4 thickness"][k], &ROW_WEIGHTS, "Automatic"));
         v.push(ParamDef::choice(ARROW_KEYS[k], ["Equation 1 arrows", "Equation 2 arrows", "Equation 3 arrows", "Equation 4 arrows"][k], &ROW_ARROWS, "None"));
     }
-    v.push(ParamDef::choice("x_left_end", "Left end", &AXIS_ENDS, "Automatic").hint("Automatic follows Arrowheads on axes."));
-    v.push(ParamDef::choice("x_right_end", "Right end", &AXIS_ENDS, "Automatic").hint("Automatic follows Arrowheads on axes."));
+    v.push(ParamDef::choice("x_left_end", "Left end", &AXIS_ENDS, "Automatic").hint(AXIS_END_HINT));
+    v.push(ParamDef::choice("x_right_end", "Right end", &AXIS_ENDS, "Automatic").hint(AXIS_END_HINT));
     v.push(ParamDef::bool("x_fractions", "Number the x-axis in fractions", false).hint("Turned on when a range is typed as a fraction, such as -7/2."));
-    v.push(ParamDef::choice("y_bottom_end", "Bottom end", &AXIS_ENDS, "Automatic").hint("Automatic follows Arrowheads on axes."));
-    v.push(ParamDef::choice("y_top_end", "Top end", &AXIS_ENDS, "Automatic").hint("Automatic follows Arrowheads on axes."));
+    v.push(ParamDef::choice("y_bottom_end", "Bottom end", &AXIS_ENDS, "Automatic").hint(AXIS_END_HINT));
+    v.push(ParamDef::choice("y_top_end", "Top end", &AXIS_ENDS, "Automatic").hint(AXIS_END_HINT));
     v.push(ParamDef::bool("y_fractions", "Number the y-axis in fractions", false).hint("Turned on when a range is typed as a fraction, such as -7/2."));
+    for (key,label) in EXTENSION_KEYS.into_iter().zip(["Left axis extra length (grid steps)","Right axis extra length (grid steps)","Bottom axis extra length (grid steps)","Top axis extra length (grid steps)"]) {
+        v.push(ParamDef::float(key,label,-1.0,20.0,0.05,-1.0).hint("-1 uses the standard endpoint length. 0 stops the shaft at the window edge; positive values extend only this axis shaft by grid steps, even with endpoint None. Grid strokes, ticks, curves and data stay fixed relative to the window; canvas margins grow. Excessive canvas sizes are explicitly rejected."));
+    }
     v
 }
 
@@ -198,7 +203,7 @@ pub(crate) fn mask_open(ci: usize) -> String { format!(r#"<g mask="url(#rowar{ci
 /// drawn exactly as before batch 7).
 pub(crate) fn axis_ends(p: &Params) -> Option<[&'static str; 4]> {
     let raw: Vec<&str> = END_KEYS.iter().map(|k| p.s(k)).collect();
-    if raw.iter().all(|v| *v == "Automatic" || v.is_empty()) { return None; }
+    if raw.iter().all(|v| *v == "Automatic" || v.is_empty()) && !uses_extensions(p) { return None; }
     let auto = if p.b("arrows") { "Triangle arrow" } else { "None" };
     let mut out = ["None"; 4];
     for (k, v) in raw.iter().enumerate() { out[k] = match pick(&AXIS_ENDS, v) { Some("Automatic") | None => auto, Some(c) => c }; }
@@ -206,9 +211,19 @@ pub(crate) fn axis_ends(p: &Params) -> Option<[&'static str; 4]> {
 }
 /// How far each axis runs past the grid at an end that is finished (20 px, as the triangle arrows always have).
 pub(crate) fn end_ext(kind: &str) -> f64 { if kind == "None" { 0.0 } else { 20.0 } }
+pub(crate) fn uses_extensions(p:&Params)->bool { EXTENSION_KEYS.iter().any(|k|matches!(p.0.get(*k),Some(crate::figures::Value::F(v)) if *v>=0.0)||matches!(p.0.get(*k),Some(crate::figures::Value::I(v)) if *v>=0)) }
+pub(crate) fn extensions_px(p:&Params,step_px:(f64,f64))->[f64;4] {
+    let ends=axis_ends(p).unwrap_or([if p.b("arrows"){"Triangle arrow"}else{"None"};4]);
+    std::array::from_fn(|i|{let value=match p.0.get(EXTENSION_KEYS[i]){Some(crate::figures::Value::F(v))=>*v,Some(crate::figures::Value::I(v))=>*v as f64,_=>-1.0};if value>=0.0{value*if i<2{step_px.0}else{step_px.1}}else{end_ext(ends[i])}})
+}
+pub(crate) fn extra_margins(p:&Params,step_px:(f64,f64))->[f64;4] {
+    let ends=axis_ends(p).unwrap_or([if p.b("arrows"){"Triangle arrow"}else{"None"};4]);let ext=extensions_px(p,step_px);
+    std::array::from_fn(|i|(ext[i]-end_ext(ends[i])).max(0.0))
+}
 /// (x-axis right end, y-axis top end) offsets of the x and y labels from the grid: what the arrows gave before
 /// batch 7, and past a circle its whole width.
 pub(crate) fn label_ext(p: &Params) -> (f64, f64) {
+    if uses_extensions(p) { let g=super::grid_layout(p);let e=extensions_px(p,(g.xs*g.ux,g.ys*g.uy));let ends=axis_ends(p).unwrap();return (e[1]+if ends[1]=="Circle"{10.0}else{0.0},e[3]+if ends[3]=="Circle"{10.0}else{0.0}); }
     match axis_ends(p) {
         None => { let e = if p.b("arrows") { 20.0 } else { 0.0 }; (e, e) }
         Some(e) => (end_ext(e[1]) + if e[1] == "Circle" { 10.0 } else { 0.0 }, end_ext(e[3]) + if e[3] == "Circle" { 10.0 } else { 0.0 }),
@@ -217,13 +232,17 @@ pub(crate) fn label_ext(p: &Params) -> (f64, f64) {
 /// The extra page (right, top) a circle at the x-axis's right end or the y-axis's top end takes, so the x and y labels
 /// past it keep the room they had beside an arrow; 0 for every other end (and for every figure before batch 7).
 pub(crate) fn circle_room(p: &Params) -> (f64, f64) {
+    if uses_extensions(p) { let g=super::grid_layout(p);let old=legacy_circle_room(p);return (old.0+g.axis_extra_margins[1],old.1+g.axis_extra_margins[3]); }
+    legacy_circle_room(p)
+}
+pub(crate) fn legacy_circle_room(p: &Params) -> (f64, f64) {
     match axis_ends(p) { Some(e) => (if e[1] == "Circle" { 10.0 } else { 0.0 }, if e[3] == "Circle" { 10.0 } else { 0.0 }), None => (0.0, 0.0) }
 }
 /// The axes with each end finished on its own: (ml, mt, pw, ph) the grid, (axx, axy) where the axes cross it.
-pub(crate) fn draw_axes(d: &mut Doc, ends: [&str; 4], g: (f64, f64, f64, f64), axx: f64, axy: f64, axw: f64) {
+pub(crate) fn draw_axes(d: &mut Doc, ends: [&str; 4], g: (f64, f64, f64, f64), axx: f64, axy: f64, axw: f64, extensions:[f64;4]) {
     let (ml, mt, pw, ph) = g;
     let ink = "#111827";
-    let (xl, xr, yb, yt) = (ml - end_ext(ends[0]), ml + pw + end_ext(ends[1]), mt + ph + end_ext(ends[2]), mt - end_ext(ends[3]));
+    let (xl, xr, yb, yt) = (ml - extensions[0], ml + pw + extensions[1], mt + ph + extensions[2], mt - extensions[3]);
     d.raw(&format!(r##"<line x1="{xl:.2}" y1="{axy:.2}" x2="{xr:.2}" y2="{axy:.2}" stroke="{ink}" stroke-width="{axw}"/>"##));
     d.raw(&format!(r##"<line x1="{axx:.2}" y1="{yb:.2}" x2="{axx:.2}" y2="{yt:.2}" stroke="{ink}" stroke-width="{axw}"/>"##));
     for (kind, (x, y), (dx, dy)) in [(ends[0], (xl, axy), (-1.0, 0.0)), (ends[1], (xr, axy), (1.0, 0.0)), (ends[2], (axx, yb), (0.0, 1.0)), (ends[3], (axx, yt), (0.0, -1.0))] {
@@ -898,6 +917,34 @@ mod tests {
     }
 
     // ── cap-06b, cap-06c, cap-06d ──
+
+    #[test]
+    fn axis_end_hints_describe_filled_and_open_rendered_styles_without_changing_defaults() {
+        for end in END_KEYS {
+            let defs = params();
+            let d = defs.iter().find(|p| p.key == end).unwrap();
+            assert_eq!(d.default, Value::S("Automatic".into()));
+            assert!(d.hint.contains("filled triangle"));
+            assert!(d.hint.contains("open two-stroke chevron"));
+        }
+        let base = vec![s("equations", ""), f("xmin", -5.0), f("xmax", 5.0), f("ymin", -5.0), f("ymax", 5.0)];
+        let p = with(&base);
+        assert_eq!(axis_ends(&p), None);
+        let before = def().svg(&p);
+        let png = crate::figures::to_png(&before, 1.0).unwrap();
+        let _ = params();
+        assert_eq!(def().svg(&p), before);
+        assert_eq!(crate::figures::to_png(&def().svg(&p), 1.0).unwrap(), png);
+        for (kind, tag, fill) in [("Triangle arrow", "polygon", "#111827"), ("Line arrow", "polyline", "none")] {
+            let mut values = base.clone();
+            for end in END_KEYS { values.push(s(end, kind)); }
+            let svg = svg_of(&values);
+            let markers: Vec<_> = tags(&svg, tag).into_iter()
+                .filter(|t| attr(t, "data-end").is_some()).collect();
+            assert_eq!(markers.len(), 4);
+            assert!(markers.iter().all(|t| attr(t, "fill").as_deref() == Some(fill)));
+        }
+    }
 
     /// Each end of each axis takes each finish on its own: the four Automatic ends draw as before, every kind at every
     /// end differs from every other, the right number of each mark is drawn, and the x and y labels stay clear of them.

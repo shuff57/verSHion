@@ -2,24 +2,50 @@
 """verSHion import test battery: PDF -> pages -> live AI -> app parser -> score vs gold.
 
   python3 tests/import_battery/battery.py --pdf ~/Downloads/Ch4QuizKey.pdf --runs 3
-Needs: pdftoppm, ImageMagick `convert`, a saved AI key (Settings), target/release/vershion.
-Never reads or prints the key; the app binary does the network call itself.
+Defaults to an isolated local Ollama profile. Remote calls require --allow-remote.
+Needs Poppler, ImageMagick and a built verSHion binary. Keys stay in process memory.
 """
 import argparse, concurrent.futures as cf, difflib, json, os, re, subprocess, sys, time
 from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent.parent
+RUN_STORE = None
+RUN_ENV = {}
+REMOTE_ALLOWED = False
 
 
 def sh(cmd, env=None, timeout=360):
-    e = dict(os.environ); e.update(env or {})
+    e = {k:v for k,v in os.environ.items() if not k.startswith("VERSHION_")}
+    if not REMOTE_ALLOWED:
+        e = {k:v for k,v in e.items() if not k.endswith("API_KEY")}
+    e.update(RUN_ENV)
+    if RUN_STORE is not None:
+        e["VERSHION_STORE_DIR"] = str(RUN_STORE)
+    e.update(env or {})
     return subprocess.run(cmd, capture_output=True, text=True, env=e, timeout=timeout)
 
 
 def norm(s):
     s = re.sub(r"^\s*\d+[.)]\s*", "", s or "")
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9. ]", " ", s.lower())).strip()
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9.+\-=\/^<> ]", " ", s.lower().replace("−", "-"))).strip()
+
+
+def check_provider(provider, base, model, allow_remote):
+    if allow_remote:
+        return
+    if provider != "ollama" or urlsplit(base).hostname not in {"localhost", "127.0.0.1", "::1"}:
+        raise ValueError("Remote model calls require --allow-remote.")
+    if ":cloud" in model or model.endswith("-cloud"):
+        raise ValueError("An Ollama cloud alias is not a local model.")
+    req = Request(base.rstrip("/") + "/api/show", data=json.dumps({"model":model}).encode(),
+                  headers={"Content-Type":"application/json"})
+    with urlopen(req, timeout=10) as response:
+        metadata = json.load(response)
+    if metadata.get("remote_host") or metadata.get("remote_model"):
+        raise ValueError("This model forwards to a remote host; use a locally installed model.")
 
 
 def sim(a, b):
@@ -151,7 +177,7 @@ def score_control(name, res):
     exp = {"blank": 0, "photo_no_text": 0}
     if name in exp:
         # No quiz here: ideal is a clean refusal/empty result, never invented questions.
-        return [(f"{name}: no invented questions", "HARD", len(qs) == 0 and True, f"{len(qs)} questions; convert_ok={res['convert_ok']} parse_ok={res.get('parse_ok')}")]
+        return [(f"{name}: no invented questions", "HARD", res["convert_ok"] and res.get("parse_ok") and len(qs) == 0, f"{len(qs)} questions; convert_ok={res['convert_ok']} parse_ok={res.get('parse_ok')}")]
     # Degraded copies of real pages: still extract something sensible.
     return [(f"{name}: parser accepts", "HARD", res.get("parse_ok"), res.get("parse_err", res.get("err", ""))),
             (f"{name}: ≥1 question", "SOFT", len(qs) >= 1, f"{len(qs)} questions")]
@@ -186,6 +212,7 @@ def fit_stage(binary, out, runs, results):
 
 
 def main():
+    global RUN_STORE, RUN_ENV, REMOTE_ALLOWED
     ap = argparse.ArgumentParser()
     ap.add_argument("--pdf", required=True)
     ap.add_argument("--runs", type=int, default=3)
@@ -194,8 +221,29 @@ def main():
     ap.add_argument("--gold", default=str(HERE / "gold_ch4.json"))
     ap.add_argument("--no-controls", action="store_true")
     ap.add_argument("--fit", action="store_true", help="also run the figure-fitting stage (extra model calls)")
+    ap.add_argument("--provider", choices=["ollama","openrouter"], default="ollama")
+    ap.add_argument("--base", default="http://127.0.0.1:11434")
+    ap.add_argument("--model")
+    ap.add_argument("--allow-remote", action="store_true", help="explicitly allow remote provider calls")
     a = ap.parse_args()
+    if a.provider == "openrouter" and not a.model:
+        ap.error("--model is required when selecting OpenRouter")
+    a.model = a.model or "gemma4:31b"
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    try:
+        check_provider(a.provider, a.base, a.model, a.allow_remote)
+    except (ValueError, OSError) as e:
+        ap.error(str(e))
+    RUN_STORE = out / "profile"; RUN_STORE.mkdir(exist_ok=True)
+    (RUN_STORE / "settings.json").write_text(json.dumps({"ai_provider":a.provider, "ai_base":a.base if a.provider=="ollama" else "", "ai_model":a.model}))
+    REMOTE_ALLOWED = a.allow_remote
+    RUN_ENV = {}
+    if a.provider == "openrouter" and a.allow_remote:
+        keys = Path.home()/".local/share/vershion/ai-keys.json"
+        if keys.exists():
+            key = json.loads(keys.read_text()).get("openrouter")
+            if key:
+                RUN_ENV["OPENROUTER_API_KEY"] = key
     gold = json.load(open(a.gold))["pages"]
     report, allchecks = [], []
 
@@ -229,15 +277,7 @@ def main():
         allchecks.append((f"page{pg}: same question kinds across {len(sigs)} runs", "SOFT", len(set(sigs)) == 1, str(sigs)))
 
     if not a.no_controls and a.fit:
-        key_dir = out / "fit_store" / "vershion"; key_dir.mkdir(parents=True, exist_ok=True)
-        src = Path.home() / ".local/share/vershion"
-        for f in ("settings.json", "ai-keys.json"):
-            if (src / f).exists():
-                (key_dir / f).write_bytes((src / f).read_bytes()); (key_dir / f).chmod(0o600)
-        try:
-            fc = fit_stage(a.binary, out, a.runs, results)
-        finally:
-            (key_dir / "ai-keys.json").unlink(missing_ok=True)  # never leave a key copy behind
+        fc = fit_stage(a.binary, out, a.runs, results)
         report.append(("figure fitting", None, fc)); allchecks += [(f"fitting: {n}", t, ok, d) for n, t, ok, d in fc]
 
     lines = ["# verSHion import battery", f"PDF: {a.pdf}  ·  runs per page: {a.runs}", ""]

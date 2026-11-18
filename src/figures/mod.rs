@@ -33,6 +33,9 @@ pub mod data;
 pub mod electric;
 pub mod faq;
 pub mod graph;
+pub mod geometry_diagram;
+pub mod polar;
+pub mod direction_field;
 pub mod interact;
 pub mod items;
 pub mod labels;
@@ -561,6 +564,9 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(biology::defs());
     v.extend(chemistry::defs());
     v.extend(math::defs());
+    v.push(geometry_diagram::def());
+    v.push(polar::def());
+    v.push(direction_field::def());
     v.extend(circle::defs());
     v.extend(trig::defs());
     v.extend(sincos::defs());
@@ -890,6 +896,12 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
+    match id {
+        "geometry-diagram" => return geometry_diagram::warnings(p),
+        "polar-grid" => return polar::warnings(p),
+        "direction-field" => return direction_field::warnings(p),
+        _ => {}
+    }
     if id == stats::histogram::ID {
         return stats::histogram::warnings(p);
     }
@@ -1158,12 +1170,47 @@ pub fn svg_size(svg: &str) -> (f64, f64) {
 pub fn to_png(svg: &str, scale: f32) -> Result<Vec<u8>, String> {
     let mut opt = resvg::usvg::Options::default();
     opt.fontdb = fontdb();
-    let tree = resvg::usvg::Tree::from_str(&serif_stack(svg), &opt).map_err(|e| e.to_string())?;
+    let continuous = continuous_crisp_gridlines(svg, scale);
+    let tree = resvg::usvg::Tree::from_str(&serif_stack(&continuous), &opt).map_err(|e| e.to_string())?;
     let size = tree.size();
     let (w, h) = ((size.width() * scale).ceil() as u32, (size.height() * scale).ceil() as u32);
     let mut pm = resvg::tiny_skia::Pixmap::new(w.max(1), h.max(1)).ok_or("bad size")?;
     resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(scale, scale), &mut pm.as_mut());
     pm.encode_png().map_err(|e| e.to_string())
+}
+
+/// A subpixel stroke in a crispEdges group can round to zero covered pixels at some phases.
+/// Preserve its actual width and coordinates, but antialias that line so it remains visible.
+/// Strokes at least one device pixel wide keep the exact previous rendering. This is shared
+/// by agent PNGs and the live RGBA preview; the source SVG and saved parameters stay unchanged.
+fn continuous_crisp_gridlines(svg: &str, scale: f32) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    if !scale.is_finite() || scale <= 0.0 || !svg.contains("crispEdges") { return Cow::Borrowed(svg); }
+    let Ok(doc) = roxmltree::Document::parse(svg) else { return Cow::Borrowed(svg); };
+    let mut edits = Vec::new();
+    for line in doc.descendants().filter(|n| n.is_element() && n.tag_name().name() == "line") {
+        if line.ancestors().find_map(|n| n.attribute("shape-rendering")) != Some("crispEdges") { continue; }
+        // Generated grid coordinates are absolute. Leave transformed/CSS-controlled artwork
+        // alone rather than guessing its device-space width or overriding a CSS declaration.
+        if line.ancestors().any(|n| n.attribute("transform").is_some() || n.attribute("style").is_some()) { continue; }
+        let number = |key: &str| line.attribute(key).unwrap_or("0").trim_end_matches("px").parse::<f64>().ok();
+        let (Some(x1), Some(y1), Some(x2), Some(y2)) = (number("x1"), number("y1"), number("x2"), number("y2")) else { continue; };
+        if x1 != x2 && y1 != y2 { continue; }
+        let Some(width) = line.ancestors().find_map(|n| n.attribute("stroke-width")).unwrap_or("1").trim_end_matches("px").parse::<f64>().ok() else { continue; };
+        if !width.is_finite() || width <= 0.0 || width * scale as f64 >= 1.0 - 1e-6 { continue; }
+        if let Some(attr) = line.attributes().find(|a| a.name() == "shape-rendering") {
+            edits.push((attr.range_value(), "geometricPrecision".to_string()));
+        } else {
+            let start = line.range().start;
+            let Some(end) = svg[start..].find('>') else { continue; };
+            let at = if svg.as_bytes()[start + end - 1] == b'/' { start + end - 1 } else { start + end };
+            edits.push((at..at, " shape-rendering=\"geometricPrecision\"".into()));
+        }
+    }
+    if edits.is_empty() { return Cow::Borrowed(svg); }
+    let mut out = svg.to_string();
+    for (range, replacement) in edits.into_iter().rev() { out.replace_range(range, &replacement); }
+    Cow::Owned(out)
 }
 
 /// Marker of the biology charts' one-unit grid lines (see `biology::plot`).
@@ -1228,13 +1275,96 @@ pub fn to_rgba_at(svg: &str, scale: f32, phase: (f32, f32)) -> Result<(u32, u32,
     } else {
         svg
     };
-    let tree = resvg::usvg::Tree::from_str(&serif_stack(svg), &opt).map_err(|e| e.to_string())?;
+    let continuous = continuous_crisp_gridlines(svg, scale);
+    let tree = resvg::usvg::Tree::from_str(&serif_stack(&continuous), &opt).map_err(|e| e.to_string())?;
     let size = tree.size();
     let extra = if phase.0 > 0.0 || phase.1 > 0.0 { 1.0 } else { 0.0 };
     let (w, h) = ((size.width() * scale + extra).ceil().max(1.0) as u32, (size.height() * scale + extra).ceil().max(1.0) as u32);
     let mut pm = resvg::tiny_skia::Pixmap::new(w, h).ok_or("bad size")?;
     resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(scale, scale).post_translate(phase.0, phase.1), &mut pm.as_mut());
     Ok((w, h, pm.take()))
+}
+
+#[cfg(test)]
+mod crisp_grid_raster_tests {
+    use super::*;
+
+    fn png_pixels(svg: &str, scale: f32) -> (u32, u32, Vec<u8>) {
+        let image = image::load_from_memory(&to_png(svg, scale).unwrap()).unwrap().to_rgba8();
+        (image.width(), image.height(), image.into_raw())
+    }
+
+    fn assert_visible(pixels: &(u32, u32, Vec<u8>), x: f64, from: f64, to: f64, scale: f32, phase: (f32, f32), vertical: bool) {
+        let (w, h, px) = pixels;
+        let sc = scale as f64;
+        let across = x * sc + if vertical { phase.0 } else { phase.1 } as f64;
+        let along_phase = if vertical { phase.1 } else { phase.0 } as f64;
+        let start = (from * sc + along_phase).ceil() as usize + 1;
+        let end = (to * sc + along_phase).floor() as usize - 1;
+        for along in start..=end {
+            let dark = (-2..=2).any(|offset| {
+                let cross = across.floor() as i64 + offset;
+                let (cx, cy) = if vertical { (cross, along as i64) } else { (along as i64, cross) };
+                if cx < 0 || cy < 0 || cx >= *w as i64 || cy >= *h as i64 { return false; }
+                let at = (cy as usize * *w as usize + cx as usize) * 4;
+                px[at..at + 3].iter().any(|v| *v < 250)
+            });
+            assert!(dark, "stroke vanished: scale={scale}, phase={phase:?}, across={x}, along={along}, vertical={vertical}");
+        }
+    }
+
+    #[test]
+    fn fractional_crisp_grid_strokes_survive_pixel_phases_in_png_and_rgba() {
+        for scale in [0.5, 1.0, 1.5, 2.0] {
+            for phase in [0.0, 0.2, 0.45, 0.8] {
+                let xs = [8.0 + phase, 17.3 + phase, 26.6 + phase, 35.9 + phase];
+                let mut svg = String::from(r##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#fff"/><g shape-rendering="crispEdges" stroke="#777777" stroke-width="0.8">"##);
+                for x in xs { svg += &format!(r#"<line x1="{x}" y1="6" x2="{x}" y2="45"/>"#); }
+                svg += &format!(r#"<line x1="6" y1="{}" x2="50" y2="{}"/></g></svg>"#, 70.0 + phase, 70.0 + phase);
+                let png = png_pixels(&svg, scale);
+                let rgba = to_rgba_at(&svg, scale, (0.3, 0.4)).unwrap();
+                for x in xs {
+                    assert_visible(&png, x, 10.0, 40.0, scale, (0.0, 0.0), true);
+                    assert_visible(&rgba, x, 10.0, 40.0, scale, (0.3, 0.4), true);
+                }
+                assert_visible(&png, 70.0 + phase, 10.0, 40.0, scale, (0.0, 0.0), false);
+                assert_visible(&rgba, 70.0 + phase, 10.0, 40.0, scale, (0.3, 0.4), false);
+            }
+        }
+    }
+
+    #[test]
+    fn coordinate_standard_grid_with_light_verticals_retains_every_column() {
+        let def = registry().into_iter().find(|d| d.id == "coordinate-grid").unwrap();
+        for xmin in [-0.37, -0.33, -0.29] {
+            let p = params_from_json(&def, &serde_json::json!({"xmin":xmin,"xmax":4.19,"xstep":0.2,"xunits":"Multiples of π","ymin":-3.4,"ymax":4.6,"ystep":1,"square":false,"equations":"","grid":"Standard","vertical_grid":"Light","horizontal_grid":"Standard","origin_zero":false}));
+            let svg = def.svg(&p);
+            let doc = roxmltree::Document::parse(&svg).unwrap();
+            let verticals: Vec<_> = doc.descendants().filter(|n| n.has_tag_name("line") && n.attribute("stroke") == Some("#bdbdbd") && n.attribute("x1") == n.attribute("x2"))
+                .map(|n| (n.attribute("x1").unwrap().parse::<f64>().unwrap(), n.attribute("y1").unwrap().parse::<f64>().unwrap())).collect();
+            assert!(verticals.len() > 20);
+            for scale in [0.5, 1.0, 1.5, 2.0] {
+                let png = png_pixels(&svg, scale);
+                let rgba = to_rgba(&svg, scale).unwrap();
+                for (x, top) in &verticals {
+                    assert_visible(&png, *x, top + 8.0, top + 24.0, scale, (0.0, 0.0), true);
+                    assert_visible(&rgba, *x, top + 8.0, top + 24.0, scale, (0.0, 0.0), true);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn precision_override_preserves_geometry_and_leaves_full_pixel_strokes_untouched() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg"><g shape-rendering="crispEdges"><line x1="5.4" y1="1" x2="5.4" y2="20" stroke="#bdbdbd" stroke-width="0.8"/><line x1="9" y1="1" x2="9" y2="20" stroke-width="1"/><line x1="1" y1="1" x2="8" y2="20" stroke-width="0.8"/><g shape-rendering="geometricPrecision"><line x1="13" y1="1" x2="13" y2="20" stroke-width="0.8"/></g></g></svg>"##;
+        assert!(matches!(continuous_crisp_gridlines(svg, 1.5), std::borrow::Cow::Borrowed(_)));
+        let corrected = continuous_crisp_gridlines(svg, 1.0);
+        let a = roxmltree::Document::parse(svg).unwrap();
+        let b = roxmltree::Document::parse(&corrected).unwrap();
+        let lines = |doc: &roxmltree::Document| doc.descendants().filter(|n| n.has_tag_name("line")).map(|n| ["x1","y1","x2","y2","stroke","stroke-width"].map(|key| n.attribute(key).unwrap_or("").to_string())).collect::<Vec<_>>();
+        assert_eq!(lines(&a), lines(&b), "no coordinate, count, width or colour changes");
+        assert_eq!(b.descendants().filter(|n| n.has_tag_name("line") && n.attribute("shape-rendering") == Some("geometricPrecision")).count(), 1);
+    }
 }
 
 /// Import path for the hybrid mode: accept pasted/loaded SVG text from anywhere.

@@ -57,7 +57,8 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("a", "Lower bound", -10000.0, 10000.0, 0.5, 85.0),
         ParamDef::float("b", "Upper bound", -10000.0, 10000.0, 0.5, 115.0),
         ParamDef::bool("show_prob", "Write the area as a probability", true),
-        ParamDef::choice("ticks", "Axis labels", &["Values", "z-scores", "Values and z-scores"], "Values"),
+        ParamDef::choice("ticks", "Axis labels", &["Values", "z-scores", "Values and z-scores", "None"], "Values"),
+        ParamDef::choice("tick_direction", "Tick direction", &["Below", "Above"], "Below"),
         ParamDef::text("title", "Title", ""),
         ParamDef::text("x_title", "Horizontal axis title", ""),
         svg::style_param(),
@@ -169,6 +170,12 @@ pub fn prob_text(p: f64) -> String {
 
 const RANGE_SD: f64 = 4.0;
 
+#[cfg(test)]
+#[test]
+fn unlabelled_source_bell_curve_keeps_seven_upward_ticks_without_answers() {
+    let mut p=Params::defaults(&params());p.set_s("region","None");p.set_s("ticks","None");p.set_s("tick_direction","Above");p.set_b("show_prob",false);let s=render(&p);let xml=roxmltree::Document::parse(&s).unwrap();assert_eq!(xml.descendants().filter(|n|n.has_tag_name("text")).count(),0);assert_eq!(xml.descendants().filter(|n|n.has_tag_name("polyline")).count(),1);let ticks:Vec<_>=xml.descendants().filter(|n|n.has_tag_name("line")&&n.attribute("stroke-width")==Some("1.8")).collect();assert_eq!(ticks.len(),7);for t in ticks{assert!(t.attribute("y2").unwrap().parse::<f64>().unwrap()<t.attribute("y1").unwrap().parse::<f64>().unwrap());}
+}
+
 fn render(p: &Params) -> String {
     let (mean, sd) = (p.f("mean"), p.f("sd"));
     if !(mean.is_finite() && sd.is_finite() && sd > 0.0) {
@@ -248,7 +255,8 @@ fn render(p: &Params) -> String {
     // axis ticks at the mean and each standard deviation
     for kk in -3..=3 {
         let x = f.px(kk as f64);
-        d.line(x, f.bottom(), x, f.bottom() + 7.0, INK, 1.8);
+        d.line(x, f.bottom(), x, f.bottom() + if p.s("tick_direction")=="Above"{-7.0}else{7.0}, INK, 1.8);
+        if p.s("ticks")=="None" {continue;}
         let value = chart::fmt(mean + kk as f64 * sd);
         let zed = chart::fmt(kk as f64);
         let (line1, line2) = match p.s("ticks") {

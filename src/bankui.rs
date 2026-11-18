@@ -3289,6 +3289,14 @@ fn card_choices(ui: &mut Ui, app: &mut App, answers: &[crate::model::Answer], si
     }
 }
 
+/// A promoted child figure uses the parent's one image slot but is consumed at its own
+/// part marker, rather than once above the parts and again as a false missing-picture box.
+fn multipart_has_picture_marker(q: &Question) -> bool {
+    matches!(&q.kind, crate::model::Kind::Multipart { parts } if parts.iter().any(|p| {
+        crate::bankops::split_pictures(&p.stem).iter().any(|s| matches!(s, crate::bankops::StemPart::Picture(_)))
+    }))
+}
+
 /// The whole question on a collapsed bank card (Test Parrot's bank list): the stem as it
 /// prints (rich, pictures), choices with the correct ones marked, the fill-in answers, the
 /// suggested answer, matching pairs, every multipart part with its own answers, and the
@@ -3303,8 +3311,8 @@ fn card_full_question(ui: &mut Ui, app: &mut App, q: &Question, size: f32) {
         ui.label(theme::muted("(no question text)").size(size));
     }
     card_rich(ui, app, &q.stem, &rich, &mut picture);
-    if let Some(img) = picture.take() {
-        card_image(ui, app, &img);
+    if !multipart_has_picture_marker(q) {
+        if let Some(img) = picture.take() { card_image(ui, app, &img); }
     }
     let small = size - 1.0;
     let keyless = crate::model::is_keyless(q);
@@ -3366,8 +3374,7 @@ fn card_full_question(ui: &mut Ui, app: &mut App, q: &Question, size: f32) {
                 ui.horizontal_top(|ui| {
                     ui.add_space(4.0);
                     ui.vertical(|ui| {
-                        let mut none = None;
-                        card_rich(ui, app, &p.stem, &r, &mut none);
+                        card_rich(ui, app, &p.stem, &r, &mut picture);
                         match &p.kind {
                             PartKind::Mc { answers } => card_choices(ui, app, answers, small, 14.0),
                             PartKind::Tf { correct } => tf(ui, *correct, 14.0),
@@ -5401,4 +5408,41 @@ mod tests {
         assert!(span < 218.0, "the strip is shorter than round 27's 218 pt: {span}");
     }
 
+}
+
+#[cfg(test)]
+mod child_figure_card_tests {
+    use super::*;
+    #[test]
+    fn child_figure_card_renders_one_attached_image_at_its_part_without_false_missing_box() {
+        crate::store::init(Box::new(crate::store::FsBackend::new(std::env::temp_dir().join(format!("vershion-child-card-{}",std::process::id())))));
+        let mut png=Vec::new();image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(100,40,image::Rgb([0,0,0])))
+            .write_to(&mut std::io::Cursor::new(&mut png),image::ImageFormat::Png).unwrap();
+        let image=crate::store::put_image(&png).unwrap();
+        let q=Question {id:"source-child".into(),stem:"Shared givens.".into(),kind:crate::model::Kind::Multipart {parts:vec![
+            crate::model::Part {stem:"a) Owning part.\n[picture]".into(),kind:crate::model::PartKind::Short {sample:"".into()}},
+            crate::model::Part {stem:"b) Later part.".into(),kind:crate::model::PartKind::Short {sample:"".into()}}
+        ]},points:None,difficulty:None,topics:Vec::new(),image:Some(image),explanation:None,figure:None,created:0,modified:0};
+        let ctx=egui::Context::default();let mut app=App::new_from(&ctx);theme::setup(&ctx);
+        fn inspect(shape:&egui::Shape,text:&mut Vec<(String,egui::Rect)>,images:&mut Vec<egui::Rect>) {
+            match shape {
+                egui::Shape::Text(t)=>text.push((t.galley.text().to_string(),t.galley.rect.translate(t.pos.to_vec2()))),
+                egui::Shape::Vec(shapes)=>for s in shapes {inspect(s,text,images)},
+                egui::Shape::Mesh(mesh) if mesh.texture_id!=egui::TextureId::Managed(0)=>images.push(mesh.vertices.iter().fold(egui::Rect::NOTHING,|r,v|r.union(egui::Rect::from_min_max(v.pos,v.pos)))),
+                egui::Shape::Rect(rect) if rect.fill_texture_id()!=egui::TextureId::Managed(0)=>images.push(rect.rect),
+                _=>{}
+            }
+        }
+        for _ in 0..3 {
+            let mut input=egui::RawInput::default();input.screen_rect=Some(egui::Rect::from_min_size(egui::Pos2::ZERO,egui::vec2(600.0,900.0)));
+            let frame=ctx.run_ui(input,|ui|card_full_question(ui,&mut app,&q,14.0));
+            let mut text=Vec::new();let mut images=Vec::new();for s in &frame.shapes {inspect(&s.shape,&mut text,&mut images)}
+            frame.drop_without_applying_deltas();
+            assert!(!text.iter().any(|t|t.0.contains("Picture needed")),"attached parent image must satisfy its owning part marker");
+            assert_eq!(images.len(),1,"show the attached image once");
+            let owner=text.iter().find(|t|t.0.contains("Owning")).unwrap_or_else(|| panic!("owner text missing: {text:?}")).1;
+            let later=text.iter().find(|t|t.0.contains("Later")).unwrap_or_else(|| panic!("later text missing: {text:?}")).1;
+            assert!(owner.max.y<=images[0].min.y+0.1 && images[0].max.y<=later.min.y+0.1,"image stays between owning part text and later part text");
+        }
+    }
 }

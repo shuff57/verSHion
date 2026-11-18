@@ -217,11 +217,13 @@ fn main() -> Result<(), eframe::Error> {
         if let Ok(m) = vershion::env_var("VERSHION_EVAL_MODEL") {
             cfg.model = m;
         }
+        let started=ai::begin_service(&cfg,"figure",0).unwrap_or_else(|e|panic!("cannot start figure evaluation: {e}"));
+        let cfg=started.cfg;
         let mut judge_cfg = cfg.clone();
         if let Ok(m) = vershion::env_var("VERSHION_JUDGE_MODEL") {
             judge_cfg.model = m;
         }
-        let mut judge = figure_eval::ModelJudge { cfg: &judge_cfg };
+        let mut judge = figure_eval::ModelJudge::new(&judge_cfg);
         let judging = vershion::env_var("VERSHION_EVAL_JUDGE").as_deref() == Ok("1");
         // VERSHION_EVAL_TRIES=<n> lets each run take up to n reviewed attempts (needs the judge).
         let tries = vershion::env_var("VERSHION_EVAL_TRIES").ok().and_then(|n| n.parse().ok()).unwrap_or(1);
@@ -229,7 +231,7 @@ fn main() -> Result<(), eframe::Error> {
             &cases,
             repeats,
             &base,
-            &mut figure_agent::ModelChat { cfg: &cfg },
+            &mut figure_agent::ModelChat::new(&cfg),
             if judging || tries > 1 { Some(&mut judge) } else { None },
             tries,
             |m| eprintln!("running {m}"),
@@ -259,14 +261,15 @@ fn main() -> Result<(), eframe::Error> {
     #[cfg(not(target_arch = "wasm32"))]
     if let Ok(request) = vershion::env_var("VERSHION_FIGURE_AGENT") {
         let settings: Settings = store::load_json("settings.json").unwrap_or_default();
-        let cfg = ai::AiCfg::from(&settings);
+        let started=ai::begin_service(&ai::AiCfg::from(&settings),"figure",0).unwrap_or_else(|e|panic!("cannot start figure operation: {e}"));
+        let cfg=started.cfg;
         let reference = vershion::env_var("VERSHION_FIGURE_IMAGE").ok().map(|p| std::fs::read(&p).unwrap_or_else(|e| panic!("cannot read {p}: {e}")));
         // With a picture, a reviewer checks each figure against it and the agent gets up to 3 tries.
-        let mut judge = figure_agent::ModelJudge { cfg: &cfg };
+        let mut judge = figure_agent::ModelJudge::new(&cfg);
         let run = figure_agent::run_with_retries(
             &request,
             reference.as_deref(),
-            &mut figure_agent::ModelChat { cfg: &cfg },
+            &mut figure_agent::ModelChat::new(&cfg),
             Some(&mut judge),
             figure_agent::MAX_TRIES,
         );
@@ -307,7 +310,8 @@ fn main() -> Result<(), eframe::Error> {
     if let Ok(png) = vershion::env_var("VERSHION_FIT") {
         let bytes = std::fs::read(&png).unwrap_or_else(|e| panic!("cannot read {png}: {e}"));
         let settings: Settings = store::load_json("settings.json").unwrap_or_default();
-        let cfg = ai::AiCfg::from(&settings);
+        let started=ai::begin_service(&ai::AiCfg::from(&settings),"figure",0).unwrap_or_else(|e|panic!("cannot start figure fitting: {e}"));
+        let cfg=started.cfg;
         match figfit::fit(&bytes, "Give the number of bonding and nonbonding electrons for the structure below:", &cfg) {
             Ok(Some(f)) => println!("fit: {} {:?}", f.spec.id, f.spec.params.iter().filter(|(k, _)| *k == "formula" || *k == "preset").collect::<Vec<_>>()),
             Ok(None) => println!("no fit"),
@@ -322,6 +326,22 @@ fn main() -> Result<(), eframe::Error> {
         import_pdf_headless(&pdf);
         return Ok(());
     }
+    // One source document of several already rasterized pages: VERSHION_IMPORT_DOCUMENT=<file listing one page
+    // image path per line, in page order> [VERSHION_DOCUMENT_ID=<name>]. Pages are read in order, each with the
+    // directions the earlier pages of this document printed; nothing carries into another run.
+    if let Ok(list) = vershion::env_var("VERSHION_IMPORT_DOCUMENT") {
+        let listing = std::fs::read_to_string(&list).unwrap_or_else(|e| panic!("cannot read {list}: {e}"));
+        let pages: Vec<Vec<u8>> = listing.lines().map(str::trim).filter(|l| !l.is_empty()).map(|p| std::fs::read(p).unwrap_or_else(|e| panic!("cannot read {p}: {e}"))).collect();
+        let document = vershion::env_var("VERSHION_DOCUMENT_ID").unwrap_or_else(|_| "document".into());
+        import_document_headless(&document, &pages);
+        return Ok(());
+    }
+    // The same bank creation path for an already rasterized worksheet page.
+    if let Ok(image) = vershion::env_var("VERSHION_IMPORT_IMAGE") {
+        let bytes = std::fs::read(&image).unwrap_or_else(|e| panic!("cannot read {image}: {e}"));
+        import_pages_headless(&[bytes]);
+        return Ok(());
+    }
     // Headless one-shot: VERSHION_PARSE=<reply text> [VERSHION_PAGE=<page.png> VERSHION_PAGE_NO=<n>]
     // runs the AI-import parser (figures cropped from the page image) and prints
     // {questions, warnings, figures} as JSON; the import test battery scores this.
@@ -333,12 +353,12 @@ fn main() -> Result<(), eframe::Error> {
         let res = if ditto::is_ditto(&text) {
             ditto::import_text(&text, page.as_deref(), page_no, "converted")
         } else {
-            formats::detect_and_parse(&bytes, &path).map(|doc| ditto::DittoImport { doc, warnings: Vec::new(), figures: 0 })
+            formats::detect_and_parse(&bytes, &path).map(|doc| ditto::DittoImport { doc, warnings: Vec::new(), figures: 0, items: Vec::new() })
         };
         match res {
             Ok(r) => println!(
                 "{}",
-                serde_json::json!({"questions": r.doc.questions, "warnings": r.warnings, "figures": r.figures, "store": store::store_dir_string()})
+                serde_json::json!({"questions": r.doc.questions, "warnings": r.warnings, "figures": r.figures, "items": r.items, "store": store::store_dir_string()})
             ),
             Err(e) => {
                 eprintln!("parse failed: {e}");
@@ -360,7 +380,8 @@ fn main() -> Result<(), eframe::Error> {
             _ => "",
         };
         let settings: Settings = store::load_json("settings.json").unwrap_or_default();
-        let cfg = ai::AiCfg::from(&settings);
+        let started=ai::begin_service(&ai::AiCfg::from(&settings),"import",1).unwrap_or_else(|e|panic!("cannot start conversion: {e}"));
+        let cfg=started.cfg;
         let hint = vershion::env_var("VERSHION_HINT").unwrap_or_default();
         let text = ai::transcribe_checked(&bytes, mime, &cfg, &ai::prompt_for(&hint))
             .map(|raw| ai::extract_import_text(&raw));
@@ -398,14 +419,41 @@ fn main() -> Result<(), eframe::Error> {
 fn import_pdf_headless(pdf: &str) {
     let bytes = std::fs::read(pdf).unwrap_or_else(|e| panic!("cannot read {pdf}: {e}"));
     let pages = platform::render_pdf_pages(&bytes).unwrap_or_else(|e| panic!("{e}"));
+    import_pages_headless(&pages);
+}
+
+fn import_pages_headless(pages: &[Vec<u8>]) {
     let settings: Settings = store::load_json("settings.json").unwrap_or_default();
     let cfg = ai::AiCfg::from(&settings);
     let hint = vershion::env_var("VERSHION_IMPORT_HINT").unwrap_or_default();
-    let converted = ai::convert_pages(&pages, &hint, &cfg, &|done, total| eprintln!("job: {done}/{total} pages read"));
+    let converted = ai::convert_pages(pages, &hint, &cfg, &|done, total| eprintln!("job: {done}/{total} pages read"));
+    save_converted(converted, None);
+}
+
+fn import_document_headless(document: &str, pages: &[Vec<u8>]) {
+    let settings: Settings = store::load_json("settings.json").unwrap_or_default();
+    let cfg = ai::AiCfg::from(&settings);
+    let hint = vershion::env_var("VERSHION_IMPORT_HINT").unwrap_or_default();
+    let mut read = ai::convert_documents(&[(document.to_string(), pages.to_vec())], &hint, &cfg, &|done, total| eprintln!("job: {done}/{total} pages read"));
+    save_converted(read.pop().unwrap_or_default(), Some(document));
+}
+
+fn save_converted(converted: Vec<Result<ai::Converted, String>>, document: Option<&str>) {
     let mut questions = Vec::new();
+    let mut trace = Vec::new();
     for (i, c) in converted.into_iter().enumerate() {
-        let c = c.unwrap_or_else(|e| panic!("page {} failed: {e}", i + 1));
+        let c = match c {
+            Ok(c) => c,
+            // A document keeps the pages it did read; the failed page is recorded and stays unscored work.
+            Err(e) if document.is_some() => {
+                eprintln!("page {} failed: {e}", i + 1);
+                trace.push(serde_json::json!({"page":i+1,"questions":[],"warnings":[],"document":document,"error":e}));
+                continue;
+            }
+            Err(e) => panic!("page {} failed: {e}", i + 1),
+        };
         eprintln!("page {}: {} questions, {} cropped, {} redrawn, notes {:?}", i + 1, c.doc.questions.len(), c.cropped, c.redrawn, c.warnings);
+        trace.push(serde_json::json!({"page":i+1,"questions":c.doc.questions,"warnings":c.warnings,"cropped":c.cropped,"redrawn":c.redrawn,"raw_reply":c.raw_reply,"figure_runs":c.figure_runs,"document":document,"items":c.items,"context":c.context,"source_box_review":c.source_box_review,"direction_review":c.direction_review}));
         questions.extend(c.doc.questions);
     }
     for q in &mut questions {
@@ -417,5 +465,8 @@ fn import_pdf_headless(pdf: &str) {
     let n = questions.len();
     st.banks.push(model::QuestionBank { id: model::new_id(), name: name.clone(), questions, created: now, modified: now, details: Default::default() });
     st.save_banks();
+    if let Ok(path) = vershion::env_var("VERSHION_IMPORT_TRACE") {
+        std::fs::write(path, serde_json::to_vec_pretty(&serde_json::json!({"pages":trace,"bank_name":name,"questions":n})).expect("serialize import trace")).expect("write import trace");
+    }
     println!("saved bank \"{name}\" with {n} questions to {}", store::store_dir_string());
 }

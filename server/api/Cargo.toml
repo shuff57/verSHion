@@ -7,6 +7,7 @@ description = "The verSHion pool, AI relay and billing server: the Rust successo
 rust-version = "1.92"
 
 [dependencies]
+vershion-ai-core = { path = "../ai-core" }
 # The same crate the app and the Worker's wasm use, called natively: one set of rules everywhere.
 share-core = { path = "../share-core" }
 axum = "0.8"

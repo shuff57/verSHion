@@ -117,7 +117,7 @@ async fn run_job<T: Transport + Send + Sync + 'static>(st: Arc<AiState<T>>, id: 
 }
 
 async fn run_pages<T: Transport + Send + Sync + 'static>(st: &Arc<AiState<T>>, id: &str, principal: &str, hint: &str, images: Vec<String>) -> Result<(), ()> {
-    let Some(or) = st.openrouter.as_ref() else { return Err(()) };
+    let Some(or) = st.upstream.as_ref() else { return Err(()) };
     let mut out: Vec<(i64, Result<String, &'static str>)> = Vec::new();
     let mut ok = 0;
     let prompt = page_prompt(hint);

@@ -70,6 +70,17 @@ pub(crate) fn angles_params() -> Vec<ParamDef> {
         ParamDef::list("hide", "Sector numbers left unlabelled", ""),
         ParamDef::long("sector_text", "Text labels for sectors, e.g. 1 = 2x + 10; 3 = y", ""),
         ParamDef::bool("right", "Right-angle squares", true),
+        ParamDef::bool("show_arcs", "Draw ordinary angle arcs", true)
+            .hint("Off keeps labels and explicit congruence arcs; use it when the source labels angles without arc marks."),
+        ParamDef::bool("vertex_dot", "Dot at the vertex", true),
+        ParamDef::bool("measure_labels", "Label otherwise unlabelled sectors with their measures", true)
+            .hint("Off prints only sector_text or unknown labels, without adding solved angle measures."),
+        ParamDef::float("label_radius", "Angle label distance from vertex", 0.0, 150.0, 1.0, 0.0)
+            .hint("0 follows the angle arcs; a positive value is the preferred minimum radius. A label moves outward if needed to keep its text/halo from erasing a ray or the vertex."),
+        ParamDef::choice("label_font", "Angle label font", &["Math", "Serif", "Sans"], "Math"),
+        ParamDef::color("right_color", "Right-angle mark colour", &["#111827", "#000000", "#ff0000", "#0000ff"], INK),
+        ParamDef::long("right_marks", "Extra right-angle marks between directions", "")
+            .hint("One direction pair per semicolon, degrees counterclockwise from the baseline, for example 0, 90. Draws a square across intervening rays without adding a ray or a measure."),
         ParamDef::bool("letters", "Point letters on the rays", true),
         ParamDef::int("dec", "Round measures to", 0, 3, 1)
             .hint("Decimal places."),
@@ -596,7 +607,7 @@ fn label_texts(p: &Params, l: &Lay) -> Vec<String> {
         let idx = i + 1;
         if hide.contains(&idx) { String::new() }
         else if let Some((_, t)) = texts.iter().find(|(k, _)| *k == idx) { t.clone() }
-        else if unk.contains(&idx) { "x".into() } else { format!("{}\u{b0}", fmt(s.a1 - s.a0, p.i("dec"))) }
+        else if unk.contains(&idx) { "x".into() } else if !p.b("measure_labels") { String::new() } else { format!("{}\u{b0}", fmt(s.a1 - s.a0, p.i("dec"))) }
     }).collect()
 }
 
@@ -612,8 +623,15 @@ pub(crate) fn label_boxes(p: &Params, l: &Lay, scene: &mut Scene) -> Vec<Option<
         let hb = half_box(&texts[i], size);
         let mid = ((s.a0 + s.a1) / 2.0 + l.turn).to_radians();
         let m = (mid.cos(), -mid.sin());
-        let r0 = s.rad + MARK_GAP * k.saturating_sub(1) as f64 + 8.0 + hb.0 * m.0.abs() + hb.1 * m.1.abs();
-        let spot = Spot { b: ((C.0 + m.0 * r0, C.1 + m.1 * r0), hb), leader: None };
+        let r0 = if p.f("label_radius") > 0.0 { p.f("label_radius") } else { s.rad + MARK_GAP * k.saturating_sub(1) as f64 + 8.0 + hb.0 * m.0.abs() + hb.1 * m.1.abs() };
+        let at=|r:f64|((C.0+m.0*r,C.1+m.1*r),hb);
+        let b=if p.f("label_radius")>0.0 {
+            // A small requested radius must not put the label's white halo over a ray.
+            // Keep legacy automatic placement byte-for-byte; only the explicit-radius path
+            // searches outward along this same sector's bisector.
+            (0..=200).map(|i|at(r0+i as f64)).find(|b|scene.clear(*b)&&scene.rays.iter().all(|(a,e)|!seg_meets_box(*a,*e,*b,size*0.1+1.0))).unwrap_or_else(||at(r0))
+        }else{at(r0)};
+        let spot = Spot { b, leader: None };
         scene.taken.push(spot.b);
         out.push(Some(spot));
     }
@@ -840,7 +858,7 @@ pub(crate) fn angles_render(p: &Params) -> String {
             mlabel(&mut d, c.0 + (len + 16.0) * t.cos(), c.1 - (len + 16.0) * t.sin(), 17.0 * fs, &name, "");
         }
     }
-    d.circle(c.0, c.1, 3.0, INK, INK, 1.0);
+    if p.b("vertex_dot") { d.circle(c.0, c.1, 3.0, INK, INK, 1.0); }
     let vname = pt_at(Place::Vertex);
     // (on a crowded figure the rays can run behind the vertex: there A is placed clear of them, with the point names below)
     if p.b("letters") && !wrap && vname.is_none() && !l.crowded {
@@ -863,18 +881,35 @@ pub(crate) fn angles_render(p: &Params) -> String {
         let rad = l.secs[i].rad;
         let k = marks_of(p, i + 1).0;
         let (a0t, a1t) = (turn + a0, turn + a1);
-        if !l.crowded && k == 0 {
+        if !l.crowded && k == 0 && p.b("show_arcs") && p.f("label_radius") == 0.0 && p.s("right_color") == INK && p.s("label_font")=="Math" {
             sector(&mut d, c, a0t, a1t, rad, txt, p.b("right"), lsz);
             continue;
         }
         // the mark: the right-angle square or thin arc, or k heavier congruence arcs in its place (rad, rad + MARK_GAP, ...), then
         // the label where it was placed (with its leader line when it went out past the rays' ends)
-        if k == 0 { sector(&mut d, c, a0t, a1t, rad, "", p.b("right"), lsz); }
+        if k == 0 {
+            if p.b("right") && (a1t - a0t - 90.0).abs() < 0.3 {
+                let dir = |a: f64| (a.to_radians().cos(), -a.to_radians().sin());
+                d.right_angle(c, dir(a0t), dir(a1t), rad * 0.55, p.s("right_color"), 1.3);
+            } else if p.b("show_arcs") { sector(&mut d, c, a0t, a1t, rad, "", false, lsz); }
+        }
         for j in 0..k { d.polyline(&arc_pts(c, a0t, a1t, rad + MARK_GAP * j as f64), INK, MARK_W); }
         if let Some(sp) = boxes[i] {
             if let Some((from, to)) = sp.leader { d.polyline(&[from, to], INK, 0.8); }
-            mlabel(&mut d, sp.b.0 .0, sp.b.0 .1, lsz, txt, "");
+            match p.s("label_font") {
+                "Sans"=>{d.text(sp.b.0.0,sp.b.0.1+lsz*0.34,lsz,"middle",txt);}
+                "Serif"=>{d.raw(&format!(r#"<text x="{:.2}" y="{:.2}" font-size="{lsz}" text-anchor="middle" font-family="Liberation Serif, DejaVu Serif, serif">{}</text>"#,sp.b.0.0,sp.b.0.1+lsz*0.34,crate::figures::svg::esc(txt)));}
+                _=>mlabel(&mut d, sp.b.0 .0, sp.b.0 .1, lsz, txt, ""),
+            }
         }
+    }
+    for pair in p.s("right_marks").split([';', '\n']) {
+        let v = nums(pair);
+        if v.len() != 2 { continue; }
+        let (a,b)=(v[0]+turn,v[1]+turn);
+        if ((b-a).rem_euclid(180.0)-90.0).abs()>0.3 { continue; }
+        let dir=|a:f64|(a.to_radians().cos(),-a.to_radians().sin());
+        d.right_angle(c,dir(a),dir(b),14.0,p.s("right_color"),1.3);
     }
     // named points' names (and a crowded figure's letters) on top (their dots are drawn with the rays and the vertex)
     for (name, (bc, _), named) in &ends {

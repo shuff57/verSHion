@@ -81,6 +81,15 @@ Per type:
 - verSHion crops the picture from its own raster of the page and attaches it to the question.
   A figure whose box cannot be cropped (off-page, degenerate) is dropped with a warning; the
   question is still imported.
+- The single attachment may be on the parent **or exactly one immediate multipart part**.
+  A child attachment retains its owner path in the import trace and is placed at that part in
+  previews and exports. Parent-plus-child or multiple child attachments require explicit review;
+  they are never combined into an arbitrary rectangle or silently certified as supported.
+- Before figure fitting, the source-scope check compares the untouched page with a labeled contact
+  sheet of its current crops (two images, within the desktop/web API limit). A correction may change
+  only source bounds/page, not question identities, wording, answers, tasks or figure ownership.
+  An incomplete check retains source evidence with a visible review topic and skips redraws. This
+  model-assisted check is not independent source-fidelity certification.
 
 ## Exam (when the source is a test)
 
@@ -92,6 +101,12 @@ Per type:
 
 One position per converted question, in printed order, `question` = that question's `id`,
 `section` = index into `sections`. No exam when the source is a question pool.
+
+Printed worksheet directions also use this section mapping when no test title is
+present; `bank.name` can supply the exam name. On import, explicitly mapped
+directions are preserved on each standalone bank item's stem unless already
+present. Unknown mappings and conflicting directions require review; directions
+are never inferred from a document title or a different page.
 
 ## Report
 
@@ -117,3 +132,25 @@ One position per converted question, in printed order, `question` = that questio
 - Stems never contain the question number, a `[n]` mark, or directions printed above a group.
 - Multi-page sources are converted one page per request and merged in page order.
 - File extension `.ditto.json`; MIME `application/json`.
+
+## Figure-only problems and inherited directions (importer behaviour)
+
+- `stem` may be `""` only for a numbered problem whose whole content is a printed figure. The importer keeps it
+  when its figure box is valid, giving it the mapped section directions as its task. With no visible directions
+  it keeps the figure with a placeholder task and the topic `needs review: source task not visible`; it never
+  writes a task or answer. Without a valid figure box an empty item is dropped.
+- A page read as part of a multi-page document may carry `exams[].sections[].instructions` copied from an earlier
+  page of the same document, with `"inheritedFromPage": <page>` on that section. The importer accepts it only
+  when the text exactly matches a direction the supplied document context lists; otherwise it is not applied.
+  `inheritedFromPage: null` (or an omitted field) denotes directions printed on the current page. Strict
+  structured output includes this nullable field and a nullable printed question `label`.
+- When a document page omits direction mappings, one bounded metadata check may select directions already
+  printed earlier in that same document, or explicitly leave the task unresolved. Only unique original item
+  identities can receive mappings. The app preserves source text, figures, answers, existing mappings and
+  named tests; recovery metadata never creates extra tests. Decisions and failures are recorded in
+  `direction_review`. Known section qualifiers travel with their task and retain their source page; a
+  current-page heading wins. An existing inherited task also retains its known qualifier if the model omits it.
+- Literal mapped section titles are also retained on standalone bank items, including titles with empty
+  instructions. They supply context, never a guessed mathematical task. A real figure-only problem wrapped
+  as `multipart` with an explicitly empty `parts` array is repaired to one written-response item; populated
+  parts and other supplied fields are never discarded to perform that repair.

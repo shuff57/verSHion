@@ -1,5 +1,5 @@
-//! LLM conversion of a test photo/scan/screenshot into Blackboard import text (see
-//! `formats::parse_blackboard` for the exact grammar the model must produce).
+//! Shared AI entry points for native and browser builds: Ditto conversion, figure tools,
+//! handwriting and answer checks. Platform HTTP sits behind the common async engine.
 //!
 //! One conversion job at a time: `send_image` spawns a `std::thread` (egui never blocks)
 //! and keeps the result channel in [`Ai`]; the Imports screen calls `poll` each frame and
@@ -15,18 +15,32 @@ use serde_json::{Value, json};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::Duration;
 
+mod engine;
+mod operation;
+mod source_scope;
+mod directions;
+mod figure_failure;
+pub(crate) mod figure_observation;
+pub use figure_failure::FigureFailure;
+pub use directions::DirectionReviewTrace;
+pub use source_scope::SourceBoxReviewTrace;
+use source_scope::review_source_figure_boxes;
+pub use operation::{OperationContext, Started};
+pub use vershion_ai_core::{OutputMode, OutputSchema};
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use pollster::block_on;
+
 const OLLAMA_DEFAULT_BASE: &str = "http://127.0.0.1:11434";
 const OPENROUTER_BASE: &str = "https://openrouter.ai/api/v1";
 /// Small local vision model that a laptop GPU can carry through a slow image round trip.
 const OLLAMA_DEFAULT_MODEL: &str = "gemma4:31b";
 /// OpenRouter default mirrors the local Ollama model on the free tier; set `ai_model` to override.
-const OPENROUTER_DEFAULT_MODEL: &str = "qwen/qwen3-vl-8b-instruct:free";
+const OPENROUTER_DEFAULT_MODEL: &str = "google/gemma-4-26b-a4b-it:free";
 /// Custom OpenAI-compatible endpoints default to the same model as local Ollama unless
 /// `ai_model` says otherwise (the base URL decides what that model id actually means).
 const CUSTOM_DEFAULT_MODEL: &str = "gemma4:31b";
-/// The verSHion AI relay: a Cloudflare Worker that calls Workers AI on its own account. The base
-/// is the worker's `/ai` path, the key is the relay's key (`AI_RELAY_KEY`), and the worker picks
-/// the model (a client's model id is ignored there, so this one is only for display).
+/// Display model for legacy private Worker relays. Account AI is server-managed and
+/// negotiates the current Rust relay protocol at service creation.
 const WORKERS_DEFAULT_MODEL: &str = "@cf/google/gemma-4-26b-a4b-it";
 const WORKERS_KEY_ENV: &str = "VERSHION_RELAY_KEY";
 /// Images are slow, on small local GPUs especially.
@@ -61,6 +75,15 @@ fn transcription_prompt(hint: &str) -> String {
         return TRANSCRIBE_PROMPT.to_string();
     }
     format!("{TRANSCRIBE_PROMPT}\n\nUser note about this source:\n{hint}")
+}
+
+/// The conversion prompt for one page, with the directions earlier pages of the same document printed.
+fn page_prompt(hint: &str, context: Option<&crate::ditto::DocContext>, page_no: usize) -> String {
+    let base = transcription_prompt(hint);
+    match context.map(|c| c.prompt_block(page_no)).filter(|b| !b.is_empty()) {
+        Some(block) => format!("{base}\n\n{block}"),
+        None => base,
+    }
 }
 
 /// Ollama Cloud's base for this target: direct on the desktop, through the local relay in the
@@ -100,9 +123,22 @@ pub struct AiCfg {
     pub provider: String,
     pub base: String,
     pub model: String,
+    pub output_mode: OutputMode,
+    pub output: Option<OutputSchema>,
+    pub native_tools: bool,
+    pub operation: Option<std::sync::Arc<OperationContext>>,
+}
+
+impl Default for AiCfg {
+    fn default() -> Self {
+        Self { provider: "ollama".into(), base: OLLAMA_DEFAULT_BASE.into(), model: OLLAMA_DEFAULT_MODEL.into(), output_mode: OutputMode::Json, output: None, native_tools: false, operation: None }
+    }
 }
 
 impl AiCfg {
+    pub fn with_output(&self, output: OutputSchema) -> Self {
+        Self { output: Some(output), ..self.clone() }
+    }
     pub fn from(s: &Settings) -> AiCfg {
         let provider = match s.ai_provider.trim().to_ascii_lowercase().as_str() {
             "openrouter" => "openrouter",
@@ -117,7 +153,8 @@ impl AiCfg {
             match provider {
                 "openrouter" => OPENROUTER_DEFAULT_MODEL.to_string(),
                 "custom" => CUSTOM_DEFAULT_MODEL.to_string(),
-                "workers" | "account" => WORKERS_DEFAULT_MODEL.to_string(),
+                "workers" => WORKERS_DEFAULT_MODEL.to_string(),
+                "account" => "server-managed".to_string(),
                 "cloud" => OLLAMA_CLOUD_DEFAULT_MODEL.to_string(),
                 _ => OLLAMA_DEFAULT_MODEL.to_string(),
             }
@@ -136,7 +173,11 @@ impl AiCfg {
                 if own.starts_with("http://") || own.starts_with("https://") { own.to_string() } else { OLLAMA_DEFAULT_BASE.to_string() }
             }
         };
-        AiCfg { provider: provider.to_string(), base, model }
+        AiCfg {
+            output_mode: match s.ai_output_mode.as_str() { "schema" => OutputMode::Schema, "tool" => OutputMode::Tool, _ => OutputMode::Json },
+            native_tools: s.ai_native_tools,
+            provider: provider.to_string(), base, model, output: None, operation: None,
+        }
     }
 
     /// The built-in relay, whether it is the one a person typed in or the account server's own.
@@ -158,7 +199,7 @@ impl AiCfg {
             ),
             "account" => "The hosted AI runs on the verSHion server you signed in to. Each conversion costs credits from your account: 40 are free every week, and you can buy more on the Account screen.".to_string(),
             "workers" => format!(
-                "The verSHion relay calls Workers AI on its Cloudflare account, so there is no provider key: the binding is the credential. A relay key is needed only when the relay is reachable publicly, and is then the same key the relay was deployed with (saved here first, otherwise the {WORKERS_KEY_ENV} environment variable). A relay running on this machine needs none."
+                "A private relay keeps its AI provider key on the server. Use the relay key issued by its administrator (saved here first, otherwise {WORKERS_KEY_ENV}). The relay chooses the provider and model."
             ),
             _ => "Ollama runs on the local machine and needs no API key.".to_string(),
         }
@@ -367,6 +408,7 @@ fn account_token() -> Option<String> {
 
 /// The API key for a request, resolved at request time. Never logged or echoed.
 fn request_key(cfg: &AiCfg) -> Option<String> {
+    if let Some(op) = &cfg.operation { return op.key(); }
     // The hosted AI is charged to the signed-in account, so it carries that account's access token.
     if cfg.provider == "account" {
         return account_token();
@@ -426,9 +468,8 @@ pub async fn test_connection_async(cfg: &AiCfg) -> Result<(), String> {
 }
 
 /// Adds the relay instruction when a browser cannot reach Ollama Cloud.
-#[cfg(target_arch = "wasm32")]
 fn cloud_error_hint(cfg: &AiCfg, err: String) -> String {
-    if cfg.provider == "cloud" {
+    if cfg!(target_arch = "wasm32") && cfg.provider == "cloud" {
         format!(
             "{err} If the relay is not running, start it once with `node tools/relay.js`; if the \
              browser asked for local-network access, choose Allow."
@@ -552,47 +593,79 @@ async fn get_json_async(url: &str, key: Option<&str>) -> Result<Value, String> {
     serde_json::from_str(&text).map_err(|e| format!("{url} did not answer with JSON ({e})"))
 }
 
-/// One pending conversion job; `Default` starts with none.
+/// Pending work and a single batch session. Neither is persisted with the app's settings.
 #[derive(Default)]
 pub struct Ai {
-    job: Option<Receiver<Result<Converted, String>>>,
+    job: Option<Receiver<(AiCfg, Result<Converted,String>)>>,
+    batch: Option<AiCfg>,
+    batch_pages: usize,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// The source document the next page belongs to, and what its earlier pages printed (document key, last page read).
+    document: Option<String>,
+    context: Option<(String, usize, crate::ditto::DocContext)>,
+    reading: Option<(String, usize)>,
 }
-
 impl Ai {
-    /// Starts converting one image in the background. The channel delivers the model's
-    /// reply with [`extract_import_text`] already applied, so `poll` returns import-ready
-    /// text; the thread asks egui to repaint the moment it is done.
-    pub fn send_image(&mut self, bytes: Vec<u8>, mime: &str, hint: String, page_no: usize, cfg: &AiCfg, ctx: &egui::Context) {
-        let (tx, rx) = channel();
-        self.job = Some(rx);
-        let cfg = cfg.clone();
-        let mime = mime.to_string();
-        let ctx = ctx.clone();
-        #[cfg(not(target_arch = "wasm32"))]
-        std::thread::spawn(move || {
-            let _ = tx.send(convert_page(&bytes, &mime, &hint, &cfg, page_no));
-            ctx.request_repaint();
-        });
-        #[cfg(target_arch = "wasm32")]
-        wasm_bindgen_futures::spawn_local(async move {
-            let _ = tx.send(convert_page_async(&bytes, &mime, &hint, &cfg, page_no).await);
-            ctx.request_repaint();
-        });
+    /// Names the source document of the next page (a PDF's pages share one), or `None` for a stand-alone photo.
+    pub fn set_document(&mut self, document: Option<String>) { self.document = document; }
+    pub fn start_batch(&mut self, pages: usize) {
+        self.batch=None;
+        self.batch_pages=pages;
     }
-
-    /// Picks up a finished job, if any. Called every frame from the Imports screen.
-    pub fn poll(&mut self) -> Option<Result<Converted, String>> {
-        let Some(rx) = self.job.as_mut() else { return None };
+    pub fn end_batch(&mut self) { self.batch=None; self.batch_pages=0; self.context=None; self.reading=None; }
+    pub fn cancel(&mut self) {
+        if let Some(c)=self.cancel.take() { c.store(true,std::sync::atomic::Ordering::Relaxed); }
+        if let Some(op)=self.batch.as_ref().and_then(|c|c.operation.as_ref()) { op.cancel(); }
+        self.job=None;
+        self.end_batch();
+    }
+    pub fn send_image(&mut self, bytes: Vec<u8>, mime: &str, hint: String, page_no: usize, cfg: &AiCfg, ctx: &egui::Context) {
+        let (tx,rx)=channel(); self.job=Some(rx);
+        let cfg=self.batch.clone().unwrap_or_else(||cfg.clone());
+        let pages=self.batch_pages.max(1);
+        let control=std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.cancel=Some(control.clone());
+        let mime=mime.to_string(); let ctx=ctx.clone();
+        // Directions carry only from the immediately preceding page of the SAME document, never across documents.
+        let document=self.document.clone();
+        let context=document.as_ref().map(|key| match &self.context {
+            Some((k,last,c)) if k==key && last+1==page_no => c.clone(),
+            _ => crate::ditto::DocContext { document: key.clone(), directions: Vec::new() },
+        });
+        self.reading=document.map(|key|(key,page_no));
+        let work=async move {
+            let cfg=if cfg.operation.is_none() {
+                match operation::start_controlled(&cfg,"import",pages,control).await {
+                    Ok(s)=>s.cfg,
+                    Err(e)=> { let _=tx.send((cfg,Err(e))); ctx.request_repaint(); return; }
+                }
+            } else { cfg };
+            let result=convert_page_in_async(&bytes,&mime,&hint,&cfg,page_no,context.as_ref()).await;
+            let _=tx.send((cfg,result)); ctx.request_repaint();
+        };
+        #[cfg(not(target_arch="wasm32"))]
+        std::thread::spawn(move || block_on(work));
+        #[cfg(target_arch="wasm32")]
+        wasm_bindgen_futures::spawn_local(work);
+    }
+    pub fn poll(&mut self) -> Option<Result<Converted,String>> {
+        let rx=self.job.as_ref()?;
         match rx.try_recv() {
-            Ok(r) => {
-                self.job = None;
-                Some(r)
-            }
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => {
-                self.job = None;
-                Some(Err("the AI job ended without sending a result".to_string()))
-            }
+            Ok((cfg,result))=> {
+                self.job=None; self.cancel=None;
+                match (&result,self.reading.take()) {
+                    (Ok(c),Some((key,page)))=> {
+                        let before=match &self.context { Some((k,last,c0)) if *k==key && last+1==page => c0.clone(), _=>crate::ditto::DocContext{document:key.clone(),directions:Vec::new()} };
+                        self.context=Some((key,page,before.after_page(page,&c.items)));
+                    },
+                    // A page that failed leaves the document's earlier context where it was.
+                    _=> {},
+                }
+                if self.batch_pages>0 && cfg.operation.is_some() { self.batch=Some(cfg); }
+                Some(result)
+            },
+            Err(TryRecvError::Empty)=>None,
+            Err(TryRecvError::Disconnected)=> {self.job=None; Some(Err("The AI job ended without a result.".into()))},
         }
     }
 }
@@ -905,57 +978,43 @@ pub struct Turn {
     pub role: &'static str,
     pub text: String,
     pub images: Vec<Vec<u8>>,
+    pub mime: String,
 }
 
 impl Turn {
     pub fn new(role: &'static str, text: impl Into<String>) -> Turn {
-        Turn { role, text: text.into(), images: Vec::new() }
+        Turn { role, text: text.into(), images: Vec::new(), mime: "image/png".into() }
     }
 }
 
 /// A whole conversation in, the model's JSON reply out. Same providers and keys as [`transcribe`].
 pub fn chat_turns(cfg: &AiCfg, turns: &[Turn], temp: f64) -> Result<String, String> {
-    match cfg.provider.as_str() {
-        "ollama" => {
-            let url = format!("{}/api/chat", cfg.base.trim_end_matches('/'));
-            let messages: Vec<Value> = turns
-                .iter()
-                .map(|t| json!({"role": t.role, "content": t.text, "images": t.images.iter().map(|b| base64_encode(b)).collect::<Vec<_>>()}))
-                .collect();
-            let body = json!({"model": cfg.model, "messages": messages, "stream": false, "format": "json", "options": {"temperature": temp}});
-            let reply = post_json(&url, body, None)?;
-            reply
-                .pointer("/message/content")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .ok_or_else(|| "The Ollama reply had no message content.".to_string())
-        }
-        _ => {
-            let base = cfg.base.trim_end_matches('/');
-            if base.is_empty() {
-                return Err("Set a base URL for the custom AI endpoint in Settings.".to_string());
-            }
-            let url = format!("{base}/chat/completions");
-            let messages: Vec<Value> = turns
-                .iter()
-                .map(|t| {
-                    let mut content = vec![json!({"type": "text", "text": t.text})];
-                    for b in &t.images {
-                        content.push(json!({"type": "image_url", "image_url": {"url": format!("data:image/png;base64,{}", base64_encode(b))}}));
-                    }
-                    json!({"role": t.role, "content": content})
-                })
-                .collect();
-            let body = json!({"model": cfg.model, "stream": false, "temperature": temp, "response_format": {"type": "json_object"}, "messages": messages});
-            let key = request_key(cfg);
-            let reply = post_json(&url, body, key.as_deref())?;
-            reply
-                .pointer("/choices/0/message/content")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .ok_or_else(|| "The reply had no message content.".to_string())
-        }
-    }
+    #[cfg(not(target_arch = "wasm32"))]
+    { block_on(chat_turns_async(cfg, turns, temp)) }
+    #[cfg(target_arch = "wasm32")]
+    { let _ = (cfg, turns, temp); Err("Use the async AI API in the browser.".into()) }
+}
+
+pub(crate) async fn figure_turn_async(cfg: &AiCfg, turns: &[Turn], saved: &mut std::collections::BTreeMap<usize,Value>) -> Result<String,String> {
+    engine::figure(cfg,turns,saved).await
+}
+
+pub(crate) async fn figure_turn_traced_async(cfg: &AiCfg, turns: &[Turn], saved: &mut std::collections::BTreeMap<usize,Value>, provider_reply: &mut Option<Value>) -> Result<String,String> {
+    engine::figure_traced(cfg,turns,saved,provider_reply).await
+}
+
+/// The selected model reply is captured before output-envelope or schema validation.
+/// This trace excludes HTTP headers, credentials and image data.
+pub(crate) async fn chat_message_traced_async(cfg: &AiCfg, turns: &[Turn], temp: f64, provider_reply: &mut Option<Value>) -> Result<Value,String> {
+    engine::chat_message_traced(cfg,turns,temp,provider_reply).await
+}
+
+pub(crate) async fn chat_turns_traced_async(cfg: &AiCfg, turns: &[Turn], temp: f64, provider_reply: &mut Option<Value>) -> Result<String,String> {
+    engine::chat_traced(cfg,turns,temp,provider_reply).await
+}
+
+pub async fn chat_turns_async(cfg: &AiCfg, turns: &[Turn], temp: f64) -> Result<String, String> {
+    engine::chat(cfg, turns, temp).await
 }
 
 /// What one converted page yields.
@@ -967,60 +1026,85 @@ pub struct Converted {
     /// Pictures cropped from the page, and how many of those became editable Figures-tab figures.
     pub cropped: usize,
     pub redrawn: usize,
+    /// Source reply and figure execution evidence for isolated import evaluations.
+    pub raw_reply: String,
+    pub figure_runs: Vec<FigureImportTrace>,
+    /// One entry per raw item of the reply (dropped ones included), keyed to this page's `doc.questions`.
+    pub items: Vec<crate::ditto::SourceItem>,
+    /// The earlier-page directions this page was read with; none when it was read on its own.
+    pub context: Option<crate::ditto::DocContext>,
+    /// The full-page/crop scope check, separate from a figure model judging its own redraw.
+    pub source_box_review: Option<SourceBoxReviewTrace>,
+    pub direction_review: Option<DirectionReviewTrace>,
 }
 
-/// The whole Import path for one page image: model reply -> Ditto parse (figures cropped) ->
-/// figure fitting (crops become editable Figures-tab figures when a generator matches).
-/// One chat turn per page (the relay's import jobs are not used: see `convert_pages`).
+fn source_review_contact_sheet(previews: &[(usize, String, Vec<u8>)]) -> Result<Vec<u8>, String> {
+    if previews.is_empty() { return Err("No readable source crops for a contact sheet.".into()); }
+    let columns = previews.len().min(3);
+    let rows = previews.len().div_ceil(columns);
+    let (cell_w, cell_h) = (420.0, 360.0);
+    let mut doc = crate::figures::svg::Doc::new(columns as f64 * cell_w, rows as f64 * cell_h);
+    doc.rect(0.0, 0.0, columns as f64 * cell_w, rows as f64 * cell_h, "#fff", "none", 0.0);
+    let mut tiles = Vec::new();
+    for (tile, (_, label, png)) in previews.iter().enumerate() {
+        let image = image::load_from_memory(png).map_err(|e| format!("Source crop could not be decoded: {e}"))?;
+        let scale = (400.0 / image.width().max(1) as f64).min(310.0 / image.height().max(1) as f64);
+        let (w, h) = (image.width() as f64 * scale, image.height() as f64 * scale);
+        let (left, top) = ((tile % columns) as f64 * cell_w, (tile / columns) as f64 * cell_h);
+        doc.text(left + 10.0, top + 25.0, 18.0, "start", &format!("{}. Source question {label}", tile + 1));
+        tiles.push((image, w.round().max(1.0) as u32, h.round().max(1.0) as u32,
+            (left + (cell_w - w) / 2.0).round() as i64, (top + 40.0 + (310.0 - h) / 2.0).round() as i64));
+    }
+    let captions = crate::figures::to_png(&doc.finish(), 1.0).map_err(|e| format!("Source crop captions could not be rendered: {e}"))?;
+    let mut canvas = image::load_from_memory(&captions).map_err(|e| format!("Source crop canvas could not be decoded: {e}"))?.to_rgba8();
+    // The SVG rasterizer intentionally does not resolve embedded raster hrefs. Compose the
+    // actual source pixels directly, so the model never receives an apparently valid blank sheet.
+    for (image, w, h, x, y) in tiles {
+        let tile = image.resize_exact(w, h, image::imageops::FilterType::Lanczos3).to_rgba8();
+        image::imageops::overlay(&mut canvas, &tile, x, y);
+    }
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(canvas).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .map_err(|e| format!("Source crop contact sheet could not be encoded: {e}"))?;
+    Ok(png)
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct FigureImportTrace {
+    pub executions:Vec<crate::figure_agent::ExecutionTrace>,
+    pub question_index: usize,
+    pub sees: Option<String>,
+    pub steps: Vec<crate::figure_agent::StepLog>,
+    pub spec: Option<crate::model::FigureSpec>,
+    pub review: Option<crate::figure_agent::Verdict>,
+    pub accepted: bool,
+    pub note: String,
+    pub error: Option<String>,
+    pub failure: Option<FigureFailure>,
+}
+
+fn figure_import_verified(run: &crate::figure_agent::AgentRun) -> bool {
+    run.error.is_none()
+        && run.declined.is_none()
+        && run.spec.is_some()
+        && run.png.is_some()
+        && run.review.as_ref().is_some_and(|v| v.matches)
+        && run.steps.iter().any(|s| s.tool == "render_figure")
+}
+
+/// Blocking wrapper around the common page workflow; the UI calls it on a worker thread.
 pub fn convert_page(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
     #[cfg(not(target_arch = "wasm32"))]
-    begin_service(cfg, "import", 1)?;
-    convert_page_chat(bytes, mime, hint, cfg, page_no)
+    { block_on(convert_page_async(bytes, mime, hint, cfg, page_no)) }
+    #[cfg(target_arch = "wasm32")]
+    { let _ = (bytes,mime,hint,cfg,page_no); Err("Use the async conversion API in the browser.".into()) }
 }
 
-/// [`convert_page`] without the job route: the model answers one chat turn (retried on bad JSON).
 pub fn convert_page_chat(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
-    let raw = transcribe_checked(bytes, mime, cfg, &transcription_prompt(hint))?;
-    let first = finish_page(&raw, bytes, cfg, page_no)?;
-    Ok(redo_for_box(first, bytes, mime, hint, cfg, page_no))
-}
-
-/// After this long without an answer a relay call is sent again in parallel and the first answer wins.
-/// A call normally answers in 1 to 12 s on the relay, but now and then one hangs for minutes.
-#[cfg(not(target_arch = "wasm32"))]
-const HEDGE_AFTER: Duration = Duration::from_secs(25);
-
-/// `VERSHION_AI_HEDGE_SECS` overrides [`HEDGE_AFTER`] (used to test the race).
-#[cfg(not(target_arch = "wasm32"))]
-fn hedge_after() -> Duration {
-    crate::env_var("VERSHION_AI_HEDGE_SECS").ok().and_then(|v| v.trim().parse::<u64>().ok()).map(Duration::from_secs).unwrap_or(HEDGE_AFTER)
-}
-
-/// Pictures dropped because their box was wrong (blank paper, off the page).
-fn boxes_dropped(c: &Converted) -> usize {
-    c.warnings.iter().filter(|w| w.contains("figure dropped")).count()
-}
-
-/// The model's picture box is the least stable part of a page read (on a real worksheet it was right
-/// on one run and over the empty bottom of the page on the next three). When a figure was dropped for
-/// its box, the page is asked once more, at a little temperature so the answer differs, with a note
-/// about what went wrong; the answer that keeps more pictures wins. Never worse than the first read.
-fn redo_for_box(first: Converted, bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Converted {
-    if boxes_dropped(&first) == 0 {
-        return first;
-    }
-    let prompt = format!(
-        "{}\n\nYour earlier answer for this page gave a picture box over a blank part of the page. Look at the page again and put the box tightly around the printed picture itself (the drawing and its labels), not around empty paper.",
-        transcription_prompt(hint)
-    );
-    let second = transcribe_at(bytes, mime, cfg, &prompt, 0.3)
-        .ok()
-        .filter(|raw| crate::ditto::json_error(raw).is_none())
-        .and_then(|raw| finish_page(&raw, bytes, cfg, page_no).ok());
-    match second {
-        Some(c) if c.cropped > first.cropped || (c.cropped == first.cropped && boxes_dropped(&c) < boxes_dropped(&first)) => c,
-        _ => first,
-    }
+    #[cfg(not(target_arch = "wasm32"))]
+    { block_on(convert_page_chat_async(bytes, mime, hint, cfg, page_no)) }
+    #[cfg(target_arch = "wasm32")]
+    { let _ = (bytes,mime,hint,cfg,page_no); Err("Use the async conversion API in the browser.".into()) }
 }
 
 /// Pages read at the same time. Each page is its own chat request (about 20 s on the relay), so a
@@ -1042,9 +1126,11 @@ const PAGE_PARALLEL: usize = 12;
 pub fn convert_pages(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, progress: &(dyn Fn(usize, usize) + Sync)) -> Vec<Result<Converted, String>> {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let total = pages.len();
-    if let Err(e) = begin_service(cfg, "import", total) {
-        return (0..total).map(|_| Err(e.clone())).collect();
-    }
+    let started = match begin_service(cfg, "import", total) {
+        Ok(s) => s,
+        Err(e) => return (0..total).map(|_| Err(e.clone())).collect(),
+    };
+    let cfg = &started.cfg;
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
     let slots: Vec<std::sync::Mutex<Option<Result<Converted, String>>>> = (0..total).map(|_| std::sync::Mutex::new(None)).collect();
@@ -1064,25 +1150,149 @@ pub fn convert_pages(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, progress: &(dyn
     slots.into_iter().map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()).unwrap_or_else(|| Err("page was not read".into()))).collect()
 }
 
+/// The request that asks the figure agent to redraw one cropped picture. The question text is context only.
+fn figure_request(stem: &str, rejected: &str) -> String {
+    let context = if stem.trim().is_empty() || stem == crate::ditto::UNRESOLVED_TASK { "(the task is not visible on the page)".to_string() } else { stem.to_string() };
+    let mut s = format!("Recreate only the printed figure in this worksheet crop. The question text below is context only and is NOT part of the picture: never use any of it as a title, label or caption unless that exact text is visibly printed inside the crop. Question context: {context}\n\nPreserve every given label, value, curve, point and scale exactly as printed, and keep blank graph axes blank. Do not solve the question or add answers, solution shading, highlights or a title the crop does not show; leave any answer, solution or title option off unless the crop shows it. Use a registered figure generator and render it before finishing; decline if it cannot faithfully represent the source.");
+    if !rejected.is_empty() {
+        s.push_str(&format!("\n\nYour previous figure was rejected: {rejected}. Redraw it from what is printed in the crop."));
+    }
+    s
+}
+
+fn figure_request_for_item(stem: &str, rejected: &str, printed_label: Option<&str>) -> String {
+    let mut request = figure_request(stem, rejected);
+    if let Some(marker) = source_item_marker(printed_label) {
+        request.push_str(&format!("\nApplication-owned source identification: {marker} is the external worksheet item number, not a diagram label. A padded crop or unverified source observation may include it; do not print that item marker in the recreated figure. Preserve actual dimensions, variables and point names."));
+    }
+    request.push_str("\nFor supplied scatter plots preserve marker size relative to grid spacing and visible mark-to-mark and mark-to-axis touching/overlap, as well as plotted positions. Do not move data points to compensate for marker sizes or frame proportions.");
+    request.push_str("\nWhen source scale numbers are printed directly over gridlines without white backing, coordinate-grid's number_halo=false can preserve that grid/label contact. Read each sign literally; a nearby grid stub is not an extra minus sign. Use the option only to match the source, not to change supplied tick values.");
+    request
+}
+
+fn source_item_marker(label: Option<&str>) -> Option<String> {
+    let number = label?.trim().trim_matches(|c: char| c == '(' || c == ')' || c == '.');
+    if number.is_empty() || !number.chars().all(|c| c.is_ascii_digit()) { return None; }
+    Some(format!("{})", number.parse::<u64>().ok()?))
+}
+
+/// A whole external item token in displayed text, not an internal node ID or dimension.
+fn copied_source_item_marker(spec: &crate::model::FigureSpec, printed_label: Option<&str>) -> Option<String> {
+    fn visit(value: &Value, marker: &str) -> bool {
+        match value {
+            Value::Array(values) => values.iter().any(|v| visit(v, marker)),
+            Value::Object(fields) => fields.iter().any(|(key, value)| {
+                let visible = !fields.get(&format!("{key}_mode")).is_some_and(|m| m == "None");
+                let text_field = matches!(key.as_str(), "text" | "label" | "title" | "caption")
+                    || key.starts_with("name_") || key.ends_with("label");
+                if visible && text_field && value.as_str().is_some_and(|s| plain(s) == marker) { return true; }
+                if key == "diagram" && let Some(s) = value.as_str()
+                    && let Ok(diagram) = serde_json::from_str::<Value>(s) { return visit(&diagram, marker); }
+                (value.is_object() || value.is_array()) && visit(value, marker)
+            }),
+            _ => false,
+        }
+    }
+    let marker = source_item_marker(printed_label)?;
+    visit(&json!(spec.params), &marker).then(|| format!("a printed label {marker:?} copies the external worksheet item number rather than a figure given"))
+}
+
+fn plain(s: &str) -> String {
+    s.chars().filter(|c| !c.is_whitespace() && *c != '$').map(|c| if c == '\u{2212}' || c == '\u{2013}' { '-' } else { c }).collect::<String>().to_lowercase()
+}
+
+/// A visible figure title or caption that repeats a line of the question's own text, which a crop that
+/// reached into the question produces. A legitimate printed title is unlikely to equal a stem line.
+pub(crate) fn copied_question_text(spec: &crate::model::FigureSpec, stem: &str) -> Option<String> {
+    let lines: Vec<String> = stem.lines().map(plain).filter(|l| l.chars().count() >= 3).collect();
+    for (key, value) in &spec.params {
+        let lower = key.to_lowercase();
+        if !(lower.contains("title") || lower.contains("caption")) || lower.ends_with("_mode") {
+            continue;
+        }
+        if spec.params.get(&format!("{key}_mode")).and_then(Value::as_str).is_some_and(|m| m == "None") {
+            continue;
+        }
+        let Some(text) = value.as_str().map(str::trim).filter(|t| !t.is_empty()) else { continue };
+        if lines.contains(&plain(text)) {
+            return Some(format!("its {key} \"{text}\" copies a line of the question text, which is not printed in the picture"));
+        }
+    }
+    None
+}
+
+fn record_figure_execution(run: &mut crate::figure_agent::AgentRun, stem: &str, printed_label: Option<&str>, executions: &mut Vec<crate::figure_agent::ExecutionTrace>) -> Option<String> {
+    let rejection = run.spec.as_ref().and_then(|spec| copied_question_text(spec, stem).or_else(|| copied_source_item_marker(spec, printed_label)));
+    let mut execution = run.take_execution_trace();
+    execution.rejection_reason = rejection.clone();
+    executions.push(execution);
+    rejection
+}
+
 /// Parses one page's model reply into questions, crops its pictures and fits them to generators.
-fn finish_page(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
+async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize, context: Option<&crate::ditto::DocContext>, source_box_review: Option<SourceBoxReviewTrace>) -> Result<Converted, String> {
     let text = extract_import_text(raw);
     if text.is_empty() {
         return Err("The model returned no text.".to_string());
     }
     if !crate::ditto::is_ditto(&text) {
         let doc = crate::formats::detect_and_parse(text.as_bytes(), "converted")?;
-        return Ok(Converted { doc, warnings: Vec::new(), cropped: 0, redrawn: 0 });
+        return Ok(Converted { doc, warnings: Vec::new(), cropped: 0, redrawn: 0, raw_reply: raw.into(), figure_runs: Vec::new(), items: Vec::new(), context: context.cloned(), source_box_review, direction_review:None });
     }
-    let mut r = crate::ditto::import_text(&text, Some(bytes), page_no, "converted")?;
+    let mut r = crate::ditto::import_text_in(&text, Some(bytes), page_no, "converted", context)?;
+    if let Some(review) = &source_box_review { source_scope::mark_unconfirmed(&mut r, review); }
     let mut redrawn = 0;
+    let mut figure_runs = Vec::new();
     for (i, q) in r.doc.questions.iter_mut().enumerate() {
         if q.image.is_none() || q.figure.is_some() {
             continue;
         }
+        let printed_label = r.items.iter().find(|item| item.question_index == Some(i))
+            .and_then(|item| item.label.clone());
+        let label = printed_label.clone().unwrap_or_else(|| (i + 1).to_string());
+        if let Some(item) = r.items.iter().find(|item| item.question_index == Some(i) && item.status == "saved_figure_box_unresolved") {
+            // Retain visible source evidence for review, but do not spend figure-tool calls fitting
+            // a picture whose scope may include the next problem. A plausible redraw cannot certify it.
+            figure_runs.push(FigureImportTrace { executions:Vec::new(), question_index: i, sees: None, steps: Vec::new(), spec: None, review: None, accepted: false,
+                note: "Source figure box remains unresolved; figure recreation was not attempted.".into(), error: item.reason.clone(),
+                failure: Some(FigureFailure::new("source_scope_unconfirmed", item.reason.as_deref().unwrap_or("The source crop has not been confirmed complete; drawing was not attempted."), None)) });
+            continue;
+        }
         let crop = crate::store::read_media(&q.image.as_ref().expect("checked").file).unwrap_or_default();
+        if cfg.native_tools {
+            let request = figure_request_for_item(&q.stem, "", printed_label.as_deref());
+            let mut run = crate::figure_agent::run_model_async(&request, Some(&crop), cfg).await;
+            let mut executions=Vec::new();
+            let mut earlier_steps = Vec::new();
+            // A title that copies a line of the question text is how a crop that reached into the question
+            // used to look: ask once for the figure as printed, and do not accept it if the text stays.
+            let mut leak = record_figure_execution(&mut run, &q.stem, printed_label.as_deref(), &mut executions);
+            if let Some(problem) = leak.clone() {
+                earlier_steps = std::mem::take(&mut run.steps);
+                run = crate::figure_agent::run_model_async(&figure_request_for_item(&q.stem, &problem, printed_label.as_deref()), Some(&crop), cfg).await;
+                leak = record_figure_execution(&mut run, &q.stem, printed_label.as_deref(), &mut executions);
+            }
+            earlier_steps.append(&mut run.steps);
+            run.steps = earlier_steps;
+            // A known mismatch must never replace the source crop. An unavailable review
+            // also stays unresolved rather than becoming an apparently verified redraw.
+            let mut accepted = false;
+            let mut failure = None;
+            if leak.is_none() && figure_import_verified(&run) && let (Some(spec), Some(png)) = (&run.spec, &run.png) {
+                match crate::store::put_image(png) {
+                    Ok(img) => { q.image = Some(img); q.figure = Some(spec.clone()); redrawn += 1; accepted = true; }
+                    Err(e) => failure = Some(FigureFailure::new("storage_error", format!("The rendered figure could not be saved: {e}"), Some(&spec.id))),
+                }
+            }
+            if !accepted {
+                let reason = failure.get_or_insert_with(|| figure_failure::from_run(&run, &executions, leak.as_deref()));
+                r.warnings.push(reason.warning(&label));
+            }
+            figure_runs.push(FigureImportTrace { executions, question_index: i, sees: run.sees, steps: run.steps, spec: run.spec, review: run.review, accepted, note: run.note, error: run.error.or(leak), failure });
+            continue;
+        }
         // Up to 3 attempts: a picture the first generator misses gets another generator.
-        match crate::figfit::fit_with_retries(&crop, &q.stem, cfg, 3) {
+        match crate::figfit::fit_async_with_retries(&crop, &q.stem, cfg, 3).await {
             Ok(Some(f)) => match crate::store::put_image(&f.png) {
                 Ok(img) => {
                     q.image = Some(img);
@@ -1095,27 +1305,16 @@ fn finish_page(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize) -> Result<C
             Err(e) => r.warnings.push(format!("Question {}: figure fitting failed ({e}), kept the cropped image.", i + 1)),
         }
     }
-    Ok(Converted { doc: r.doc, warnings: r.warnings, cropped: r.figures, redrawn })
+    Ok(Converted { doc: r.doc, warnings: r.warnings, cropped: r.figures, redrawn, raw_reply: raw.into(), figure_runs, items: r.items, context: context.cloned(), source_box_review, direction_review:None })
 }
 
 /// `transcribe`, then up to two retries when the reply isn't valid JSON: the error is quoted
 /// back to the model and the temperature nudged up so it doesn't repeat the same slip.
 pub fn transcribe_checked(bytes: &[u8], mime: &str, cfg: &AiCfg, prompt: &str) -> Result<String, String> {
-    let mut reply = transcribe_at(bytes, mime, cfg, prompt, 0.0)?;
-    for attempt in 1..=2 {
-        // An empty reply is retried like a bad one: a burst of pages can come back empty.
-        let problem = match crate::ditto::json_error(&reply) {
-            Some(e) => format!("Your previous reply was not valid JSON ({e})."),
-            None if reply.trim().is_empty() => "Your previous reply was empty.".to_string(),
-            None => break,
-        };
-        let again = format!("{prompt}\n\n{problem} Output the complete package again as strictly valid JSON: commas between members, no trailing commas, no comments.");
-        match transcribe_at(bytes, mime, cfg, &again, 0.2 * attempt as f64) {
-            Ok(r) => reply = r,
-            Err(_) => break,
-        }
-    }
-    Ok(reply)
+    #[cfg(not(target_arch = "wasm32"))]
+    { block_on(transcribe_checked_async(bytes, mime, cfg, prompt)) }
+    #[cfg(target_arch = "wasm32")]
+    { let _ = (bytes,mime,cfg,prompt); Err("Use the async transcription API in the browser.".into()) }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1123,70 +1322,18 @@ fn agent() -> ureq::Agent {
     ureq::Agent::config_builder().timeout_global(Some(TIMEOUT)).http_status_as_error(false).build().into()
 }
 
-/// Ollama's native chat API: images ride in the message's `images` array as raw base64.
-fn ollama_chat(cfg: &AiCfg, prompt: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
-    let url = format!("{}/api/chat", cfg.base.trim_end_matches('/'));
-    let body = json!({
-        "model": cfg.model,
-        "messages": [{"role": "user", "content": prompt, "images": images.iter().map(|b| base64_encode(b)).collect::<Vec<_>>()}],
-        "stream": false,
-        "format": "json",
-        "options": {"temperature": temp},
-    });
-    let reply = post_json(&url, body, None)?;
-    reply
-        .pointer("/message/content")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| "The Ollama reply had no message content.".to_string())
+fn single_turn(prompt: &str, mime: &str, images: &[&[u8]]) -> Turn {
+    Turn { role: "user", text: prompt.into(), images: images.iter().map(|b| b.to_vec()).collect(), mime: mime.into() }
 }
 
-/// OpenRouter and any custom OpenAI-compatible endpoint, with the image as a data URI.
+fn ollama_chat(cfg: &AiCfg, prompt: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
+    chat_turns(cfg, &[single_turn(prompt, "image/png", images)], temp)
+}
 fn openai_chat(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
-    #[cfg(not(target_arch = "wasm32"))]
-    if cfg.is_relay() {
-        return hedged(cfg, prompt, mime, images, temp);
-    }
     openai_chat_once(cfg, prompt, mime, images, temp)
 }
 
-/// The relay call, raced against a second identical call once it has been slow for [`hedge_after`].
-/// The first usable answer wins; the slower call is left to finish on its own thread.
-#[cfg(not(target_arch = "wasm32"))]
-fn hedged(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
-    let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
-    let launch = |tx: std::sync::mpsc::Sender<Result<String, String>>| {
-        let (c, p, m) = (cfg.clone(), prompt.to_string(), mime.to_string());
-        let imgs: Vec<Vec<u8>> = images.iter().map(|b| b.to_vec()).collect();
-        std::thread::spawn(move || {
-            let refs: Vec<&[u8]> = imgs.iter().map(Vec::as_slice).collect();
-            let _ = tx.send(openai_chat_once(&c, &p, &m, &refs, temp));
-        });
-    };
-    launch(tx.clone());
-    let (mut running, mut hedge_sent, mut last) = (1, false, Err("no reply".to_string()));
-    loop {
-        let got = if hedge_sent { rx.recv().ok() } else { rx.recv_timeout(hedge_after()).ok() };
-        match got {
-            Some(Ok(reply)) if !reply.trim().is_empty() => return Ok(reply),
-            Some(other) => {
-                running -= 1;
-                last = other;
-                if running == 0 {
-                    return last;
-                }
-            }
-            None if !hedge_sent => {
-                hedge_sent = true;
-                running += 1;
-                launch(tx.clone());
-            }
-            None => return last,
-        }
-    }
-}
-
-/// Bases that answered 400 to `response_format`, for the life of the process.
+/// Compatibility targets that rejected JSON mode, for the life of the process.
 fn refused_json_mode() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
     static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
     SET.get_or_init(Default::default)
@@ -1202,53 +1349,14 @@ fn note_json_mode_refused(base: &str) {
     }
 }
 
-/// The credit session the relay opened for the service now running (None: the relay does not meter this caller).
-static SERVICE_SESSION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
-
-/// What a started service left in the account's weekly allowance.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Charged {
-    pub credits: u32,
-    pub left: Option<u32>,
-}
-
-/// Asks the relay to price and start a service (`import`, `figure`, `handwriting`, ...) before its model
-/// calls. A relay that does not meter this caller answers without a session and the calls go through as
-/// before; a metered one charges the credits, and every later relay call carries the session. Only the
-/// built-in relay is metered, so any other provider returns at once.
+/// Opens an isolated operation. Callers must use `started.cfg` for every subsequent model call.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn begin_service(cfg: &AiCfg, service: &str, pages: usize) -> Result<Charged, String> {
-    if !cfg.is_relay() {
-        return Ok(Charged { credits: 0, left: None });
-    }
-    account_signed_in_check(cfg)?;
-    let url = format!("{}/service", cfg.base.trim_end_matches('/'));
-    let key = request_key(cfg);
-    let reply = post_json(&url, json!({"service": service, "pages": pages}), key.as_deref()).map_err(|e| credit_message(&e))?;
-    let session = reply.get("session").and_then(Value::as_str).map(str::to_string);
-    if let Ok(mut s) = SERVICE_SESSION.lock() {
-        *s = session;
-    }
-    let n = |k: &str| reply.get(k).and_then(Value::as_u64).map(|v| v as u32);
-    Ok(Charged { credits: n("credits").unwrap_or(0), left: n("left") })
+pub fn begin_service(cfg: &AiCfg, service: &str, pages: usize) -> Result<Started, String> {
+    block_on(begin_service_async(cfg, service, pages))
 }
 
-/// The browser version of [`begin_service`]: the same call, awaited.
-#[cfg(target_arch = "wasm32")]
-pub async fn begin_service_async(cfg: &AiCfg, service: &str, pages: usize) -> Result<Charged, String> {
-    if !cfg.is_relay() {
-        return Ok(Charged { credits: 0, left: None });
-    }
-    account_signed_in_check(cfg)?;
-    let url = format!("{}/service", cfg.base.trim_end_matches('/'));
-    let key = request_key(cfg);
-    let reply = post_json_async(&url, &json!({"service": service, "pages": pages}), key.as_deref()).await.map_err(|e| credit_message(&e))?;
-    let session = reply.get("session").and_then(Value::as_str).map(str::to_string);
-    if let Ok(mut s) = SERVICE_SESSION.lock() {
-        *s = session;
-    }
-    let n = |k: &str| reply.get(k).and_then(Value::as_u64).map(|v| v as u32);
-    Ok(Charged { credits: n("credits").unwrap_or(0), left: n("left") })
+pub async fn begin_service_async(cfg: &AiCfg, service: &str, pages: usize) -> Result<Started, String> {
+    operation::start(cfg, service, pages).await
 }
 
 /// The hosted AI has no address until the account is signed in: say so, instead of posting to a relative `/service`.
@@ -1267,57 +1375,8 @@ fn credit_message(err: &str) -> String {
     err.to_string()
 }
 
-fn current_session() -> Option<String> {
-    SERVICE_SESSION.lock().ok().and_then(|s| s.clone())
-}
-
 fn openai_chat_once(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
-    let base = cfg.base.trim_end_matches('/');
-    if base.is_empty() {
-        return Err("Set a base URL for the custom AI endpoint in Settings.".to_string());
-    }
-    let url = format!("{base}/chat/completions");
-    let mut content = vec![json!({"type": "text", "text": prompt})];
-    for b in images {
-        content.push(json!({"type": "image_url", "image_url": {"url": format!("data:{mime};base64,{}", base64_encode(b))}}));
-    }
-    let mut body = json!({
-        "model": cfg.model,
-        "stream": false,
-        "temperature": temp,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "user", "content": content}],
-    });
-    if cfg.provider == "openrouter" {
-        // Answer at once instead of reasoning first, and report what the call cost.
-        body["reasoning"] = json!({"enabled": false});
-        body["usage"] = json!({"include": true});
-    }
-    if cfg.is_relay() {
-        if let Some(s) = current_session() {
-            body["session"] = json!(s);
-        }
-    }
-    // Some local servers refuse JSON mode (LM Studio answers 400 "'response_format.type' must be
-    // 'json_schema' or 'text'"). Once one has, it is asked without it; the prompt already says JSON only.
-    let custom = cfg.provider == "custom";
-    if custom && json_mode_refused(base) {
-        body.as_object_mut().map(|o| o.remove("response_format"));
-    }
-    let key = request_key(cfg);
-    let reply = match post_json(&url, body.clone(), key.as_deref()) {
-        Err(e) if custom && body.get("response_format").is_some() && e.contains("answered 400") && e.contains("response_format") => {
-            note_json_mode_refused(base);
-            body.as_object_mut().map(|o| o.remove("response_format"));
-            post_json(&url, body, key.as_deref())?
-        }
-        other => other?,
-    };
-    reply
-        .pointer("/choices/0/message/content")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| "The reply had no message content.".to_string())
+    chat_turns(cfg, &[single_turn(prompt, mime, images)], temp)
 }
 
 /// How long a job may run, polled every JOB_POLL, before the app stops waiting.
@@ -1420,6 +1479,11 @@ fn post_json(url: &str, _body: Value, _key: Option<&str>) -> Result<Value, Strin
     Err(format!("This build uses the async browser transport (cannot reach {url})"))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+async fn post_json_async(url: &str, body: &Value, key: Option<&str>) -> Result<Value, String> {
+    post_json(url, body.clone(), key)
+}
+
 /// Browser transport: one JSON POST with CORS and a 300 s timeout.
 #[cfg(target_arch = "wasm32")]
 async fn post_json_async(url: &str, body: &Value, key: Option<&str>) -> Result<Value, String> {
@@ -1455,148 +1519,114 @@ async fn post_json_async(url: &str, body: &Value, key: Option<&str>) -> Result<V
     Ok(v)
 }
 
-#[cfg(target_arch = "wasm32")]
-async fn ollama_chat_async(cfg: &AiCfg, prompt: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
-    let url = format!("{}/api/chat", cfg.base.trim_end_matches('/'));
-    let body = json!({
-        "model": cfg.model,
-        "messages": [{"role": "user", "content": prompt, "images": images.iter().map(|b| base64_encode(b)).collect::<Vec<_>>()}],
-        "stream": false,
-        "format": "json",
-        "options": {"temperature": temp},
-    });
-    let reply = post_json_async(&url, &body, None).await?;
-    reply
-        .pointer("/message/content")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| "The Ollama reply had no message content.".to_string())
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn openai_chat_async(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
-    let base = cfg.base.trim_end_matches('/');
-    if base.is_empty() {
-        return Err("Set a base URL for the custom AI endpoint in Settings.".to_string());
-    }
-    let url = format!("{base}/chat/completions");
-    let mut content = vec![json!({"type": "text", "text": prompt})];
-    for b in images {
-        content.push(json!({"type": "image_url", "image_url": {"url": format!("data:{mime};base64,{}", base64_encode(b))}}));
-    }
-    let mut body = json!({
-        "model": cfg.model,
-        "stream": false,
-        "temperature": temp,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "user", "content": content}],
-    });
-    if cfg.provider == "openrouter" {
-        body["reasoning"] = json!({"enabled": false});
-        body["usage"] = json!({"include": true});
-    }
-    if cfg.is_relay() {
-        if let Some(s) = current_session() {
-            body["session"] = json!(s);
-        }
-    }
-    // A local server that refuses JSON mode is asked without it (see `openai_chat_once`).
-    let custom = cfg.provider == "custom";
-    if custom && json_mode_refused(base) {
-        body.as_object_mut().map(|o| o.remove("response_format"));
-    }
-    let key = request_key(cfg);
-    let first = post_json_async(&url, &body, key.as_deref()).await;
-    let reply = match first {
-        Err(e) if custom && body.get("response_format").is_some() && e.contains("answered 400") && e.contains("response_format") => {
-            note_json_mode_refused(base);
-            body.as_object_mut().map(|o| o.remove("response_format"));
-            post_json_async(&url, &body, key.as_deref()).await
-        }
-        other => other,
-    }
-    .map_err(|e| cloud_error_hint(cfg, e))?;
-    reply
-        .pointer("/choices/0/message/content")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| "The reply had no message content.".to_string())
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn transcribe_at_async(bytes: &[u8], mime: &str, cfg: &AiCfg, prompt: &str, temp: f64) -> Result<String, String> {
-    match cfg.provider.as_str() {
-        "ollama" => ollama_chat_async(cfg, prompt, &[bytes], temp).await,
-        _ => openai_chat_async(cfg, prompt, mime, &[bytes], temp).await,
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-pub async fn transcribe_checked_async(bytes: &[u8], mime: &str, cfg: &AiCfg, prompt: &str) -> Result<String, String> {
-    let mut reply = transcribe_at_async(bytes, mime, cfg, prompt, 0.0).await?;
-    if crate::ditto::json_error(&reply).is_none() {
-        return Ok(reply);
-    }
-    for attempt in 1..=2 {
-        let again = format!(
-            "{prompt}\n\nYour previous reply could not be used: {}. Answer again with ONLY the JSON object.",
-            crate::ditto::json_error(&reply).unwrap_or_default()
-        );
-        match transcribe_at_async(bytes, mime, cfg, &again, 0.2 * attempt as f64).await {
-            Ok(r) => {
-                reply = r;
-                if crate::ditto::json_error(&reply).is_none() {
-                    break;
-                }
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    Ok(reply)
-}
-
-#[cfg(target_arch = "wasm32")]
 pub async fn ask_images_async(images: &[&[u8]], cfg: &AiCfg, prompt: &str, temp: f64) -> Result<String, String> {
-    match cfg.provider.as_str() {
-        "ollama" => ollama_chat_async(cfg, prompt, images, temp).await,
-        _ => openai_chat_async(cfg, prompt, "image/png", images, temp).await,
-    }
+    chat_turns_async(cfg, &[single_turn(prompt, "image/png", images)], temp).await
 }
 
-/// The browser version of [`convert_page`]: same parse and crop path, awaited transport.
-#[cfg(target_arch = "wasm32")]
-pub async fn convert_page_async(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
-    begin_service_async(cfg, "import", 1).await?;
-    let raw = transcribe_checked_async(bytes, mime, cfg, &transcription_prompt(hint)).await?;
-    let text = extract_import_text(&raw);
-    if text.is_empty() {
-        return Err("The model returned no text.".to_string());
-    }
-    if !crate::ditto::is_ditto(&text) {
-        let doc = crate::formats::detect_and_parse(text.as_bytes(), "converted")?;
-        return Ok(Converted { doc, warnings: Vec::new(), cropped: 0, redrawn: 0 });
-    }
-    let mut r = crate::ditto::import_text(&text, Some(bytes), page_no, "converted")?;
-    let mut redrawn = 0;
-    for (i, q) in r.doc.questions.iter_mut().enumerate() {
-        if q.image.is_none() || q.figure.is_some() {
-            continue;
-        }
-        let crop = crate::store::read_media(&q.image.as_ref().expect("checked").file).unwrap_or_default();
-        match crate::figfit::fit_async_with_retries(&crop, &q.stem, cfg, 3).await {
-            Ok(Some(f)) => match crate::store::put_image(&f.png) {
-                Ok(img) => {
-                    q.image = Some(img);
-                    q.figure = Some(f.spec);
-                    redrawn += 1;
-                }
-                Err(e) => r.warnings.push(format!("Question {}: couldn't save the redrawn figure ({e}).", i + 1)),
+async fn transcribe_at_async(bytes: &[u8], mime: &str, cfg: &AiCfg, prompt: &str, temp: f64) -> Result<String, String> {
+    chat_turns_async(cfg, &[single_turn(prompt, mime, &[bytes])], temp).await
+}
+
+pub async fn transcribe_checked_async(bytes: &[u8], mime: &str, cfg: &AiCfg, prompt: &str) -> Result<String, String> {
+    let mut last = Err("The AI returned no usable answer.".to_string());
+    let mut instruction = prompt.to_string();
+    for attempt in 0..=2 {
+        match transcribe_at_async(bytes, mime, cfg, &instruction, 0.2 * attempt as f64).await {
+            Ok(reply) => match crate::ditto::json_error(&reply) {
+                None if !reply.trim().is_empty() => return Ok(reply),
+                problem => last = Err(problem.unwrap_or_else(|| "The reply was empty.".into())),
             },
-            Ok(None) => r.warnings.push(format!("Question {}: no Figures-tab generator matched its picture, kept the cropped image.", i + 1)),
-            Err(e) => r.warnings.push(format!("Question {}: figure fitting failed ({e}), kept the cropped image.", i + 1)),
+            Err(e) => {
+                // Authentication, credit, connectivity and unsupported capability errors need user action.
+                if !e.starts_with("Invalid AI result:") { return Err(e); }
+                last = Err(e);
+            }
         }
+        instruction = format!("{prompt}\n\nYour previous reply could not be used. Return the complete valid JSON result, without commentary.");
     }
-    Ok(Converted { doc: r.doc, warnings: r.warnings, cropped: r.figures, redrawn })
+    last
+}
+
+/// Shared conversion workflow; desktop calls this on a worker, browser awaits it.
+pub async fn convert_page_async(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
+    let started;
+    let cfg = if cfg.operation.is_none() {
+        started = begin_service_async(cfg, "import", 1).await?;
+        &started.cfg
+    } else { cfg };
+    convert_page_chat_async(bytes, mime, hint, cfg, page_no).await
+}
+
+pub async fn convert_page_chat_async(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
+    convert_page_in_async(bytes, mime, hint, cfg, page_no, None).await
+}
+
+/// One page read together with the directions earlier pages of the same document printed. `None` reads the
+/// page on its own (a single photo, or the page-only ablation).
+pub async fn convert_page_in_async(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize, context: Option<&crate::ditto::DocContext>) -> Result<Converted, String> {
+    let prompt = page_prompt(hint, context, page_no);
+    let raw = transcribe_checked_async(bytes, mime, cfg, &prompt).await?;
+    let (raw, direction_review) = directions::review(raw,bytes,mime,cfg,page_no,context).await;
+    let (raw, review) = review_source_figure_boxes(raw, bytes, mime, cfg, page_no).await;
+    let mut converted=finish_page_async(&raw, bytes, cfg, page_no, context, review).await?;
+    if let Some(task)=direction_review.as_ref().and_then(|r|r.page_task_recovery.as_ref()).filter(|r|!r.blocked_indices.is_empty()) {
+        let source=crate::ditto::json_object(&raw);
+        let labels=task.blocked_indices.iter().map(|index|{
+            source.as_ref().and_then(|v|v["bank"]["questions"].get(*index))
+                .and_then(|q|q.get("label")).and_then(Value::as_str)
+                .map(str::to_string).unwrap_or_else(||(index+1).to_string())
+        }).collect::<Vec<_>>().join(", ");
+        let reason=task.error.as_deref().unwrap_or("The current page's task wording or applicability is uncertain.");
+        converted.warnings.push(format!("Task directions need review for questions {labels} on source page {page_no}: {reason}"));
+    }
+    converted.direction_review=direction_review;
+    Ok(converted)
+}
+
+/// Every page of ONE source document, in page order, each read with the directions the earlier pages of
+/// that document printed. The context starts empty and exists only inside this call, so nothing carries
+/// into another document. A page that fails leaves the context as it was.
+pub async fn convert_document_async(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, document: &str, progress: &(dyn Fn(usize, usize) + Sync)) -> Vec<Result<Converted, String>> {
+    let mut context = crate::ditto::DocContext { document: document.to_string(), directions: Vec::new() };
+    let mut out = Vec::with_capacity(pages.len());
+    for (i, png) in pages.iter().enumerate() {
+        let r = convert_page_in_async(png, "image/png", hint, cfg, i + 1, Some(&context)).await;
+        if let Ok(c) = &r {
+            context = context.after_page(i + 1, &c.items);
+        }
+        out.push(r);
+        progress(i + 1, pages.len());
+    }
+    out
+}
+
+/// Several documents, each read in page order, up to `VERSHION_AI_PARALLEL` documents at the same time.
+/// Results come back per document, in the order given.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn convert_documents(documents: &[(String, Vec<Vec<u8>>)], hint: &str, cfg: &AiCfg, progress: &(dyn Fn(usize, usize) + Sync)) -> Vec<Vec<Result<Converted, String>>> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let total: usize = documents.iter().map(|d| d.1.len()).sum();
+    let started = match begin_service(cfg, "import", total) {
+        Ok(s) => s,
+        Err(e) => return documents.iter().map(|d| d.1.iter().map(|_| Err(e.clone())).collect()).collect(),
+    };
+    let cfg = &started.cfg;
+    let next = AtomicUsize::new(0);
+    let done = AtomicUsize::new(0);
+    let slots: Vec<std::sync::Mutex<Option<Vec<Result<Converted, String>>>>> = documents.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    std::thread::scope(|sc| {
+        for _ in 0..page_parallel().min(documents.len()) {
+            sc.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::SeqCst);
+                let Some((name, pages)) = documents.get(i) else { break };
+                let results = block_on(convert_document_async(pages, hint, cfg, name, &|_, _| {
+                    progress(done.fetch_add(1, Ordering::SeqCst) + 1, total);
+                }));
+                *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(results);
+            });
+        }
+    });
+    slots.into_iter().zip(documents).map(|(m, d)| m.into_inner().unwrap_or_else(|e| e.into_inner()).unwrap_or_else(|| d.1.iter().map(|_| Err("page was not read".to_string())).collect())).collect()
 }
 
 /// Strips an accidental markdown fence (with its language tag) and outer whitespace; the
@@ -1631,11 +1661,20 @@ fn base64_encode(data: &[u8]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn settings(provider: &str, model: &str, base: &str) -> Settings {
         Settings { ai_provider: provider.into(), ai_model: model.into(), ai_base: base.into(), dark: bool::default(), ..Default::default() }
+    }
+
+    #[test]
+    fn legacy_settings_keep_provider_model_and_compatible_output() {
+        let settings:Settings=serde_json::from_value(json!({"ai_provider":"custom","ai_base":"https://my.example/v1","ai_model":"own-model"})).unwrap();
+        let cfg=AiCfg::from(&settings);
+        assert_eq!((cfg.provider.as_str(),cfg.base.as_str(),cfg.model.as_str()),("custom","https://my.example/v1","own-model"));
+        assert_eq!(cfg.output_mode,OutputMode::Json); assert!(!cfg.native_tools); assert!(cfg.operation.is_none());
+        assert_eq!(AiCfg::from(&Settings::default()).provider,"ollama");
     }
 
     #[test]
@@ -1666,9 +1705,41 @@ mod tests {
         assert_eq!(extract_import_text("```junk"), "```junk");
     }
 
+    #[test]
+    #[ignore = "requires VERSHION_SOURCE_SCOPE_FIXTURES with pinned local source replies and output paths"]
+    fn write_source_scope_contact_sheets() {
+        let path=std::env::var("VERSHION_SOURCE_SCOPE_FIXTURES").unwrap();
+        let fixtures:Vec<Value>=serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        for fixture in fixtures {
+            let page=std::fs::read(fixture["source_png"].as_str().unwrap()).unwrap();
+            let previews=crate::ditto::source_figure_previews(fixture["raw_reply"].as_str().unwrap(),&page,fixture["page_no"].as_u64().unwrap() as usize);
+            assert_eq!(previews.len(),fixture["expected_crops"].as_u64().unwrap() as usize);
+            let sheet=source_review_contact_sheet(&previews).unwrap();
+            let output=std::path::Path::new(fixture["output"].as_str().unwrap());
+            std::fs::create_dir_all(output.parent().unwrap()).unwrap();std::fs::write(output,sheet).unwrap();
+        }
+    }
+
+    #[test]
+    fn many_source_crops_stay_in_one_readable_sheet_with_their_original_pixels() {
+        let previews:Vec<_>=(0..12).map(|i|{
+            let color=if i%2==0 {image::Rgb([255,0,0])} else {image::Rgb([0,0,255])};
+            let image=image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(80,60,color));
+            let mut png=Vec::new();image.write_to(&mut std::io::Cursor::new(&mut png),image::ImageFormat::Png).unwrap();
+            (i,(i+1).to_string(),png)
+        }).collect();
+        let png=source_review_contact_sheet(&previews).unwrap();
+        let image=image::load_from_memory(&png).unwrap().to_rgb8();
+        assert_eq!(image.dimensions(),(1260,1440));
+        for i in 0..12 {
+            let color=image.get_pixel((i%3)*420+210,(i/3)*360+190).0;
+            assert_eq!(color,if i%2==0 {[255,0,0]} else {[0,0,255]},"source crop {i} must remain visible in its own labeled tile");
+        }
+    }
+
     /// A one-connection-per-request stub relay: answers `replies` in order, records each request line
     /// and body, and stops when they run out.
-    fn stub_relay(replies: Vec<(u16, String)>) -> (String, std::thread::JoinHandle<Vec<(String, String)>>) {
+    pub(crate) fn stub_relay(replies: Vec<(u16, String)>) -> (String, std::thread::JoinHandle<Vec<(String, String)>>) {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}/ai", listener.local_addr().unwrap());
@@ -1702,7 +1773,7 @@ mod tests {
     }
 
     fn relay_cfg(base: &str) -> AiCfg {
-        AiCfg { provider: "workers".into(), base: base.into(), model: String::new() }
+        AiCfg { provider: "workers".into(), base: base.into(), model: String::new(), ..AiCfg::default() }
     }
 
     #[test]
@@ -1798,7 +1869,7 @@ mod tests {
         let refusal = r#"{"error":"'response_format.type' must be 'json_schema' or 'text'"}"#;
         let ok = r#"{"choices":[{"message":{"content":"{\"ok\":true}"}}]}"#;
         let (base, h) = stub_relay(vec![(400, refusal.into()), (200, ok.into()), (200, ok.into())]);
-        let cfg = AiCfg { provider: "custom".into(), base: base.clone(), model: "m".into() };
+        let cfg = AiCfg { provider: "custom".into(), base: base.clone(), model: "m".into(), ..AiCfg::default() };
         assert_eq!(openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap(), "{\"ok\":true}");
         assert_eq!(openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap(), "{\"ok\":true}");
         let seen = h.join().unwrap();
@@ -1811,7 +1882,7 @@ mod tests {
     #[test]
     fn json_mode_is_only_dropped_for_a_400_that_names_it() {
         let (base, h) = stub_relay(vec![(400, r#"{"error":"model not found"}"#.into())]);
-        let cfg = AiCfg { provider: "custom".into(), base, model: "m".into() };
+        let cfg = AiCfg { provider: "custom".into(), base, model: "m".into(), ..AiCfg::default() };
         assert!(openai_chat_once(&cfg, "p", "image/png", &[], 0.0).is_err());
         assert_eq!(h.join().unwrap().len(), 1, "no retry for an unrelated 400");
     }
@@ -1820,7 +1891,7 @@ mod tests {
     fn openrouter_is_asked_not_to_reason_and_to_report_cost() {
         let ok = r#"{"choices":[{"message":{"content":"{}"}}]}"#;
         let (base, h) = stub_relay(vec![(200, ok.into())]);
-        let cfg = AiCfg { provider: "openrouter".into(), base, model: "m".into() };
+        let cfg = AiCfg { provider: "openrouter".into(), base, model: "m".into(), ..AiCfg::default() };
         openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap();
         let body = &h.join().unwrap()[0].1;
         assert!(body.contains(r#""reasoning":{"enabled":false}"#) && body.contains(r#""usage":{"include":true}"#));
@@ -1829,7 +1900,7 @@ mod tests {
     #[test]
     fn the_hosted_ai_with_nobody_signed_in_says_so_and_sends_nothing() {
         // The address comes from the signed-in account; without it the old code posted to a relative "/service".
-        let cfg = AiCfg { provider: "account".into(), base: String::new(), model: "m".into() };
+        let cfg = AiCfg { provider: "account".into(), base: String::new(), model: "m".into(), ..AiCfg::default() };
         let err = begin_service(&cfg, "import", 1).unwrap_err();
         assert!(err.starts_with("Sign in on the Account screen"), "{err}");
     }
@@ -1839,18 +1910,18 @@ mod tests {
         let ok = r#"{"choices":[{"message":{"content":"{}"}}]}"#;
         let started = r#"{"session":"abc123","credits":2,"left":38}"#;
         let (base, h) = stub_relay(vec![(200, started.into()), (200, ok.into())]);
-        let cfg = AiCfg { provider: "workers".into(), base, model: String::new() };
+        let cfg = AiCfg { provider: "workers".into(), base, model: String::new(), ..AiCfg::default() };
         let c = begin_service(&cfg, "import", 4).unwrap();
-        assert_eq!(c, Charged { credits: 2, left: Some(38) });
-        openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap();
+        assert_eq!((c.credits,c.left), (2,Some(38)));
+        chat_turns(&c.cfg, &[Turn::new("user","p")],0.0).unwrap();
         let seen = h.join().unwrap();
         assert!(seen[0].0.contains("/ai/service"));
         assert!(seen[0].1.contains(r#""service":"import""#) && seen[0].1.contains(r#""pages":4"#));
         assert!(seen[1].1.contains(r#""session":"abc123""#));
         let (base, h) = stub_relay(vec![(200, r#"{"session":null,"credits":0,"unlimited":true}"#.into()), (200, ok.into())]);
-        let cfg = AiCfg { provider: "workers".into(), base, model: String::new() };
-        begin_service(&cfg, "import", 1).unwrap();
-        openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap();
+        let cfg = AiCfg { provider: "workers".into(), base, model: String::new(), ..AiCfg::default() };
+        let started=begin_service(&cfg, "import", 1).unwrap();
+        openai_chat_once(&started.cfg, "p", "image/png", &[], 0.0).unwrap();
         assert!(!h.join().unwrap()[1].1.contains("session"));
     }
 
@@ -1858,10 +1929,137 @@ mod tests {
     fn a_refused_service_says_what_the_relay_said() {
         let body = r#"{"error":{"code":"insufficient_credits","message":"This needs 2 credits and you have 0 left this week."}}"#;
         let (base, h) = stub_relay(vec![(402, body.into())]);
-        let cfg = AiCfg { provider: "workers".into(), base, model: String::new() };
+        let cfg = AiCfg { provider: "workers".into(), base, model: String::new(), ..AiCfg::default() };
         assert_eq!(begin_service(&cfg, "import", 1).unwrap_err(), "This needs 2 credits and you have 0 left this week.");
         h.join().unwrap();
-        assert_eq!(begin_service(&AiCfg { provider: "ollama".into(), base: String::new(), model: String::new() }, "import", 1).unwrap().credits, 0);
+        assert_eq!(begin_service(&AiCfg { provider: "ollama".into(), base: String::new(), model: String::new(), ..AiCfg::default() }, "import", 1).unwrap().credits, 0);
+    }
+
+    fn chat_reply(text: &str) -> (u16, String) {
+        (200, json!({"choices":[{"message":{"content":text},"finish_reason":"stop"}]}).to_string())
+    }
+
+    fn ditto_page(first: &str, instruction: &str, inherited: Option<u64>) -> String {
+        let mut section = json!({"title":"","instructions":instruction});
+        if let Some(p) = inherited { section["inheritedFromPage"] = json!(p); }
+        json!({"format":"queshion/ditto","formatVersion":"0.1.0","bank":{"name":"Fractions","questions":[{"id":"q1","label":first,"type":"short-answer","stem":format!("$({first})/(5)$")}]},
+            "exams":[{"name":"Fractions","sections":[section],"positions":[{"question":"q1","section":0}]}]}).to_string()
+    }
+
+    #[test]
+    fn a_document_reads_each_page_with_the_earlier_directions_and_the_next_document_starts_clean() {
+        let (base, h) = stub_relay(vec![
+            chat_reply(&ditto_page("1", "Evaluate each expression.", None)),
+            chat_reply(&ditto_page("2", "Evaluate each expression.", Some(1))),
+            chat_reply(&ditto_page("1", "Find the volume of each figure.", None)),
+        ]);
+        let cfg = AiCfg { provider: "custom".into(), base, ..AiCfg::default() };
+        let a = block_on(convert_document_async(&[vec![1], vec![2]], "", &cfg, "doc-a", &|_, _| {}));
+        let b = block_on(convert_document_async(&[vec![3]], "", &cfg, "doc-b", &|_, _| {}));
+        let sent = h.join().unwrap();
+        assert!(!sent[0].1.contains("Earlier pages of THIS document"), "the first page of a document is read on its own");
+        assert!(sent[1].1.contains("Earlier pages of THIS document") && sent[1].1.contains("printed on page 1") && sent[1].1.contains("Evaluate each expression."));
+        assert!(!sent[2].1.contains("Earlier pages of THIS document") && !sent[2].1.contains("Evaluate each expression."), "nothing crosses into another document");
+        let second = a[1].as_ref().unwrap();
+        assert_eq!(second.doc.questions[0].stem, "Evaluate each expression.\n\n$(2)/(5)$");
+        let d = second.items[0].directions.as_ref().unwrap();
+        assert_eq!((d.origin.as_str(), d.from_page, d.document.as_deref()), ("inherited_from_document_context", Some(1), Some("doc-a")));
+        assert!(second.context.as_ref().is_some_and(|c| c.document == "doc-a"));
+        assert!(b[0].as_ref().unwrap().context.as_ref().is_some_and(|c| c.is_empty()));
+    }
+
+    #[test]
+    fn a_title_that_copies_the_question_text_is_a_leaked_title_but_a_real_one_is_not() {
+        let spec = |title: &str, mode: &str| crate::model::FigureSpec { id: "coordinate-grid".into(), params: [("title".to_string(), json!(title)), ("title_mode".to_string(), json!(mode)), ("xtitle".to_string(), json!("Time (s)"))].into() };
+        let stem = "$y > 4x - 3$\n$y \u{2265} \u{2212}2x + 3$";
+        assert!(copied_question_text(&spec("y \u{2265} \u{2212}2x + 3", "Text"), stem).is_some());
+        assert!(copied_question_text(&spec("y>4x-3", "Text"), stem).is_some(), "spacing and the minus sign do not hide a copy");
+        assert!(copied_question_text(&spec("y \u{2265} \u{2212}2x + 3", "None"), stem).is_none(), "a title that is switched off is not drawn");
+        assert!(copied_question_text(&spec("Projectile height", "Text"), stem).is_none(), "an unrelated printed title is kept");
+        assert!(copied_question_text(&spec("", "Text"), stem).is_none());
+    }
+
+    #[test]
+    fn external_item_number_is_rejected_even_after_a_positive_model_review() {
+        let fixture: Value = serde_json::from_str(include_str!("../tests/worksheet_banks/fixtures/figure_item_marker.json")).unwrap();
+        let spec: crate::model::FigureSpec = serde_json::from_value(fixture["spec"].clone()).unwrap();
+        let label = fixture["source_printed_label"].as_str();
+        let mut run = crate::figure_agent::AgentRun { spec:Some(spec), png:Some(vec![1]),
+            review:Some(crate::figure_agent::Verdict {matches:true,problems:Vec::new()}),..Default::default() };
+        let mut executions = Vec::new();
+        let rejection = record_figure_execution(&mut run,"Find the volume.",label,&mut executions).unwrap();
+        assert!(rejection.contains("5)"));
+        assert_eq!(executions[0].rejection_reason.as_deref(),Some(rejection.as_str()));
+        let failure = figure_failure::from_run(&run,&executions,Some(&rejection));
+        assert!(failure.warning("5").contains("external worksheet item number"));
+        assert!(figure_request_for_item("Find the volume.",&rejection,label).contains("do not print that item marker"));
+    }
+
+    #[test]
+    fn item_guard_preserves_dimensions_variables_hidden_titles_and_internal_ids() {
+        let diagram=json!({"nodes":{"5)":[20,20],"B":[80,20]},"segments":[{"from":"5)","to":"B","label":"5"}],"labels":[{"at":[40,40],"text":"5 cm"},{"at":[40,60],"text":"(5)"},{"at":[40,80],"text":"x + 5"}]});
+        let spec=crate::model::FigureSpec {id:"geometry-diagram".into(),params:[("diagram".into(),json!(diagram.to_string())),("title".into(),json!("5)")),("title_mode".into(),json!("None"))].into()};
+        assert!(copied_source_item_marker(&spec,Some("5")).is_none());
+        assert!(copied_source_item_marker(&spec,None).is_none(),"an unknown source label is never guessed from a bank offset");
+        assert!(copied_source_item_marker(&spec,Some("Puzzle #5")).is_none());
+    }
+
+    #[test]
+    fn title_retry_keeps_the_discarded_execution_when_the_next_run_fails_before_making() {
+        struct Maker(Vec<String>);
+        impl crate::figure_agent::Chat for Maker {
+            fn chat(&mut self,_:&[Turn])->Result<String,String>{Ok(self.0.remove(0))}
+        }
+        let stem="Read the printed figure.";
+        let params=json!({"title_mode":"Text","title":stem});
+        let mut maker=Maker(vec![
+            json!({"tool":"get_figure","args":{"id":"coordinate-grid"}}).to_string(),
+            json!({"tool":"render_figure","args":{"id":"coordinate-grid","params":params}}).to_string(),
+            json!({"final":{"id":"coordinate-grid","params":params,"note":"Copied a figure."}}).to_string(),
+        ]);
+        let mut run=crate::figure_agent::run_with_retries(&figure_request(stem,""),Some(b"source"),&mut maker,None,3);
+        assert!(run.spec.is_some());
+        let mut executions=Vec::new();
+        let rejection=record_figure_execution(&mut run,stem,None,&mut executions).expect("copied title rejected");
+        let first_turns=executions[0].attempts[0].turns.len();
+        let mut failed=crate::figure_agent::AgentRun{error:Some("service start failed before source observation".into()),..Default::default()};
+        assert!(record_figure_execution(&mut failed,stem,None,&mut executions).is_none());
+        assert_eq!(executions.len(),2);
+        assert_eq!(executions[0].rejection_reason.as_deref(),Some(rejection.as_str()));
+        assert_eq!((executions[0].selected_attempt,first_turns),(1,3));
+        assert!(executions[0].attempts[0].spec.is_some());
+        assert_eq!(executions[1].selected_attempt,0);
+        assert!(executions[1].attempts.is_empty());
+        assert_eq!(executions[1].error,failed.error);
+        if let Ok(dir)=std::env::var("VERSHION_TRACE_FIXTURES_OUT") {
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(std::path::Path::new(&dir).join("title-retry-startup-failure.json"),serde_json::to_vec_pretty(&executions).unwrap()).unwrap();
+        }
+    }
+
+    #[test]
+    fn the_figure_request_marks_the_question_text_as_context_and_forbids_added_answers() {
+        let r = figure_request("$y > 4x - 3$", "");
+        assert!(r.contains("NOT part of the picture") && r.contains("keep blank graph axes blank") && r.contains("solution shading"));
+        assert!(figure_request(crate::ditto::UNRESOLVED_TASK, "").contains("not visible on the page"));
+        assert!(figure_request("x", "its title copies the stem").contains("previous figure was rejected: its title copies the stem"));
+    }
+
+    #[test]
+    fn import_figures_need_render_execution_and_a_positive_review() {
+        let mut run = crate::figure_agent::AgentRun::default();
+        run.spec = Some(crate::model::FigureSpec { id: "coordinate-grid".into(), params: Default::default() });
+        run.png = Some(vec![1]);
+        assert!(!figure_import_verified(&run));
+        run.review = Some(crate::figure_agent::Verdict { matches: true, problems: Vec::new() });
+        assert!(!figure_import_verified(&run));
+        run.steps.push(crate::figure_agent::StepLog { tool: "render_figure".into(), summary: "rendered".into() });
+        assert!(figure_import_verified(&run));
+        run.review.as_mut().unwrap().matches = false;
+        assert!(!figure_import_verified(&run));
+        run.review.as_mut().unwrap().matches = true;
+        run.error = Some("renderer failed".into());
+        assert!(!figure_import_verified(&run));
     }
 
     #[test]
@@ -1905,21 +2103,21 @@ mod tests {
 
     #[test]
     fn poll_reports_a_job_that_ended_without_a_result() {
-        let (tx, rx) = channel::<Result<Converted, String>>();
+        let (tx, rx) = channel::<(AiCfg,Result<Converted, String>)>();
         drop(tx);
-        let mut ai = Ai { job: Some(rx) };
+        let mut ai = Ai { job: Some(rx), ..Ai::default() };
         assert!(matches!(ai.poll(), Some(Err(_))), "a dropped sender is an error, not silence");
         assert!(ai.poll().is_none(), "the ended job must not stick");
     }
 
     #[test]
     fn poll_silently_waits_for_a_running_job() {
-        let (tx, rx) = channel::<Result<Converted, String>>();
-        let mut ai = Ai { job: Some(rx) };
+        let (tx, rx) = channel::<(AiCfg,Result<Converted, String>)>();
+        let mut ai = Ai { job: Some(rx), ..Ai::default() };
         assert!(ai.poll().is_none());
         assert!(ai.job.is_some());
         let doc = crate::formats::detect_and_parse(b"MC\nQ?\n*a. 1\nb. 2\n", "x").unwrap();
-        tx.send(Ok(Converted { doc, warnings: Vec::new(), cropped: 0, redrawn: 0 })).unwrap();
+        tx.send((AiCfg::default(),Ok(Converted { doc, warnings: Vec::new(), cropped: 0, redrawn: 0, raw_reply: String::new(), figure_runs: Vec::new(), items: Vec::new(), context: None, source_box_review:None, direction_review:None }))).unwrap();
         let _ = tx; // keep the channel alive until the reply is read
         assert_eq!(ai.poll().unwrap().unwrap().doc.questions.len(), 1);
         assert!(ai.poll().is_none(), "the job is consumed once read");
@@ -2067,13 +2265,13 @@ mod tests {
 
     #[test]
     fn the_ping_is_one_tiny_picture_and_a_short_reply() {
-        let cloud = AiCfg { provider: "cloud".into(), base: "https://ollama.com/v1/".into(), model: "x".into() };
+        let cloud = AiCfg { provider: "cloud".into(), base: "https://ollama.com/v1/".into(), model: "x".into(), ..AiCfg::default() };
         let (url, body) = probe_request(&cloud, "gemma4:31b");
         assert_eq!(url, "https://ollama.com/v1/chat/completions");
         assert_eq!(body["model"], "gemma4:31b");
         assert_eq!(body["max_tokens"], 8);
         assert!(body.pointer("/messages/0/content/1/image_url/url").and_then(Value::as_str).is_some_and(|u| u.starts_with("data:image/png;base64,")));
-        let local = AiCfg { provider: "ollama".into(), base: "http://127.0.0.1:11434".into(), model: "x".into() };
+        let local = AiCfg { provider: "ollama".into(), base: "http://127.0.0.1:11434".into(), model: "x".into(), ..AiCfg::default() };
         let (url, body) = probe_request(&local, "m");
         assert_eq!(url, "http://127.0.0.1:11434/api/chat");
         assert_eq!(body["options"]["num_predict"], 8);

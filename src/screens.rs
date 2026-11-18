@@ -1933,7 +1933,9 @@ impl crate::App {
     }
 
     fn settings_changed(&self, before: &crate::Settings) -> bool {
-        before.ai_provider != self.settings.ai_provider
+        before.ai_output_mode != self.settings.ai_output_mode
+            || before.ai_native_tools != self.settings.ai_native_tools
+            || before.ai_provider != self.settings.ai_provider
             || before.ai_model != self.settings.ai_model
             || before.ai_base != self.settings.ai_base
             || before.ollama_base != self.settings.ollama_base
@@ -2522,26 +2524,29 @@ impl crate::App {
                     pageshell::heading(ui, "AI conversion");
                     ui.add_space(4.0);
                     ui.label(theme::muted(
-                        "Used when a test is converted for you. Runs where you point it, by \
-                         default entirely on your machine.",
+                        "Choose where AI conversion, figures, handwriting and answer checking run.",
                     ));
                     ui.add_space(10.0);
                     let before = app.settings.clone();
+                    let provider=crate::ai::AiCfg::from(&app.settings).provider;
+                    let mode=match provider.as_str() { "account"=>0, "ollama"=>2, _=>1 };
                     ui.horizontal_wrapped(|ui| {
-                        for (val, label) in [
-                            ("account", "verSHion AI (credits)"),
-                            ("cloud", "Ollama Cloud"),
-                            ("workers", "verSHion relay"),
-                            ("ollama", "Ollama (local)"),
-                            ("openrouter", "OpenRouter"),
-                            ("custom", "Custom endpoint"),
-                        ] {
-                            let on = app.settings.ai_provider == val;
-                            if kit::chip_toggle(ui, label, on).clicked() {
-                                app.settings.ai_provider = val.to_string();
+                        for (value,label) in [(0,"verSHion AI (credits)"),(1,"Use my own key"),(2,"Run locally")] {
+                            if kit::chip_toggle(ui,label,mode==value).clicked() {
+                                app.settings.ai_provider=match value {0=>"account",1=>"openrouter",_=>"ollama"}.into();
+                                app.settings.ai_model.clear();
                             }
                         }
                     });
+                    if mode==1 {
+                        ui.horizontal_wrapped(|ui| {
+                            for (value,label) in [("openrouter","OpenRouter"),("cloud","Ollama Cloud"),("custom","Custom endpoint"),("workers","Private relay")] {
+                                if kit::chip_toggle(ui,label,provider==value).clicked() {
+                                    app.settings.ai_provider=value.into(); app.settings.ai_model.clear();
+                                }
+                            }
+                        });
+                    }
                     ui.add_space(6.0);
                     if app.settings.ai_provider == "custom" || app.settings.ai_provider == "workers" {
                         ui.horizontal(|ui| {
@@ -2606,6 +2611,21 @@ impl crate::App {
                         app.draw_ai_key_ui(ui, ctx);
                     }
                     ui.add_space(6.0);
+                    ui.collapsing("Output compatibility", |ui| {
+                        ui.label(theme::muted("Use a format supported by your selected model. Strict formats are validated before use.").size(12.0));
+                        ui.horizontal_wrapped(|ui| {
+                            for (value,label) in [("json","JSON (compatible)"),("schema","JSON Schema"),("tool","Result tool")] {
+                                let active=app.settings.ai_output_mode==value || (value=="json" && app.settings.ai_output_mode.is_empty());
+                                if kit::chip_toggle(ui,label,active).clicked() { app.settings.ai_output_mode=value.into(); }
+                            }
+                        });
+                        ui.checkbox(&mut app.settings.ai_native_tools,"Native figure tools (requires model support)");
+                        if app.settings.ai_provider=="account" || app.settings.ai_provider=="workers" {
+                            ui.label(theme::muted("The relay advertises available formats. Older servers use compatible JSON.").size(12.0));
+                        }
+                        #[cfg(target_arch="wasm32")]
+                        ui.label(theme::muted("Your key is kept in memory for this tab only. Local endpoints must allow this page to connect.").size(12.0));
+                    });
                     ui.label(theme::muted(app.ai_help_line()).size(11.5));
                     if app.settings_changed(&before) {
                         app.save_settings();

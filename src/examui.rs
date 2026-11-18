@@ -6536,14 +6536,8 @@ fn map_question(number: u32, q: &model::Question) -> Mapped {
 
 /// [`map_question`] in a paper style (multipart labels follow the style).
 fn map_question_style(number: u32, q: &model::Question, style: model::PaperStyle) -> Mapped {
-    let mut m = map_question_raw_style(number, q, style);
-    // Exports have no typesetter yet: degrade `$latex$` to its Unicode approximation.
-    let plain = |s: &mut String| *s = crate::equation_text::stem_to_plain(s);
-    m.dq.text.iter_mut().for_each(plain);
-    m.pieces.iter_mut().for_each(plain);
-    m.dq.choices.iter_mut().for_each(plain);
-    plain(&mut m.dq.key_text);
-    m
+    // Keep the original inline math for PDF equation layout and editable DOCX OMML.
+    map_question_raw_style(number, q, style)
 }
 
 #[cfg(test)]
@@ -7454,7 +7448,22 @@ fn export_preview(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, key: 
             (pv, files)
         }
     };
-    let texs = files.iter().map(|f| app.image_texture(ctx, f).map(|t| t.id())).collect();
+    let mut texs: Vec<Option<egui::TextureId>> = files.iter().map(|f| app.image_texture(ctx, f).map(|t| t.id())).collect();
+    texs.resize(pv.images.len(), None);
+    // Equation XObjects follow the question pictures, with the same indices as the PDF.
+    for (k, bytes) in pv.equation_images.iter().enumerate() {
+        let Some(bytes) = bytes else { continue };
+        let id = egui::Id::new(("qs_export_equation", fnv1a(bytes)));
+        let cached: Option<egui::TextureHandle> = ctx.data(|d| d.get_temp(id));
+        let tex = cached.or_else(|| {
+            let rgba = image::load_from_memory(bytes).ok()?.to_rgba8();
+            let image = egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw());
+            let tex = ctx.load_texture(format!("qs_export_equation_{id:?}"), image, egui::TextureOptions::LINEAR);
+            ctx.data_mut(|d| d.insert_temp(id, tex.clone()));
+            Some(tex)
+        });
+        texs[k] = tex.map(|t| t.id());
+    }
     Some((pv, texs))
 }
 
@@ -7488,6 +7497,9 @@ fn page_thumb_texture(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, p
     for f in &files {
         sig = sig.rotate_left(5) ^ fnv1a(f.as_bytes());
     }
+    for bytes in pv.equation_images.iter().flatten() {
+        sig = sig.rotate_left(5) ^ fnv1a(bytes);
+    }
     let key = egui::Id::new(("qs_thumb_tex", exam_id));
     if let Some((s, tex)) = ctx.data(|d| d.get_temp::<(u64, Option<egui::TextureHandle>)>(key))
         && s == sig
@@ -7495,7 +7507,7 @@ fn page_thumb_texture(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, p
         return tex;
     }
     let _ = app;
-    let (svg, placed) = page_svg(pv.page_w, pv.page_h, ops, &pv.fallback);
+    let (svg, placed) = page_svg_with_equations(pv.page_w, pv.page_h, ops, &pv.fallback, &pv.equation_images);
     // QA hook: VERSHION_THUMB_SVG=<file> writes the thumbnail's SVG (and the page ops beside it).
     if let Ok(path) = crate::env_var("VERSHION_THUMB_SVG") {
         let _ = std::fs::write(&path, &svg);
@@ -7505,8 +7517,10 @@ fn page_thumb_texture(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, p
     let tex = crate::figures::to_rgba(&svg, scale).ok().map(|(w, h, mut px)| {
         // pictures: decoded and downscaled into their boxes (smooth, not nearest-pixel)
         for (k, [x, y, bw, bh]) in placed {
-            let Some(file) = files.get(k).filter(|f| !f.is_empty()) else { continue };
-            let Some(img) = crate::store::read_media(file).and_then(|b| image::load_from_memory(&b).ok()) else { continue };
+            let bytes = pv.equation_images.get(k).and_then(|b| b.clone()).or_else(|| {
+                files.get(k).filter(|f| !f.is_empty()).and_then(|file| crate::store::read_media(file))
+            });
+            let Some(img) = bytes.and_then(|b| image::load_from_memory(&b).ok()) else { continue };
             let (pw, ph) = (((bw as f32) * scale).round().max(1.0) as u32, ((bh as f32) * scale).round().max(1.0) as u32);
             let small = image::imageops::resize(&img.to_rgba8(), pw, ph, image::imageops::FilterType::Triangle);
             let (x0, y0) = ((x as f32 * scale).round() as i64, (y as f32 * scale).round() as i64);
@@ -7544,6 +7558,12 @@ fn xml_text(s: &str) -> String {
 /// too). Pictures are left to the caller: their (image index, [x, y, w, h] in points) come back
 /// beside the SVG (which shows a pale box there).
 pub(crate) fn page_svg(page_w: f64, page_h: f64, ops: &[u8], fallback: &[char]) -> (String, Vec<(usize, [f64; 4])>) {
+    page_svg_with_equations(page_w, page_h, ops, fallback, &[])
+}
+
+/// Equation images have transparent backgrounds: their preview must retain the page/table
+/// backdrop rather than the grey placeholder used for an unresolved question picture.
+fn page_svg_with_equations(page_w: f64, page_h: f64, ops: &[u8], fallback: &[char], equations: &[Option<Vec<u8>>]) -> (String, Vec<(usize, [f64; 4])>) {
     let mut placed = Vec::new();
     let mut out = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{page_w}\" height=\"{page_h}\" viewBox=\"0 0 {page_w} {page_h}\"><rect width=\"{page_w}\" height=\"{page_h}\" fill=\"#fff\"/>"
@@ -7632,7 +7652,9 @@ pub(crate) fn page_svg(page_w: f64, page_h: f64, ops: &[u8], fallback: &[char]) 
                 if let Some(PdfTok::Name(n)) = stack.last() {
                     let k: usize = n.trim_start_matches("Im").parse().unwrap_or(1);
                     let (x, y, w, h) = (cm[4], fy(cm[5] + cm[3]), cm[0], cm[3]);
+                    if equations.get(k.saturating_sub(1)).and_then(Option::as_ref).is_none() {
                     out.push_str(&format!("<rect x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"#efefef\"/>"));
+                    }
                     placed.push((k.saturating_sub(1), [x, y, w, h]));
                 }
             }
@@ -8652,14 +8674,12 @@ mod tests {
     }
 
     #[test]
-    fn math_degrades_to_unicode_in_exports() {
+    fn math_source_survives_export_mapping() {
         let stem = r"Evaluate $\frac{1}{2}+\sqrt{x}$ now.";
         let ans = &[(r"$\frac{1}{2}$", true, false), ("2", false, false)];
         let m = map_question(1, &q("q1", stem, mc(ans)));
-        let joined = format!("{:?} {:?}", m.dq.text, m.dq.choices);
-        assert!(!joined.contains('$'), "dollar signs leaked: {joined}");
-        assert!(!joined.contains("frac") && !joined.contains("sqrt"), "latex leaked: {joined}");
-        assert!(joined.contains('\u{221a}'), "expected a square-root sign: {joined}");
+        assert_eq!(m.dq.text[0], stem);
+        assert!(m.dq.choices[0].contains(r"$\frac{1}{2}$"));
         // And the real renderers accept it.
         let e = exam(vec![item("b", "q1")]);
         let snap = SnapDoc::from_parts(&e, &[m], None, false, "x.pdf".to_string());
@@ -11264,5 +11284,130 @@ mod review_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod equation_export_preview_tests {
+    use super::*;
+
+    #[test]
+    fn thumbnail_equation_xobjects_keep_question_picture_indices_stable() {
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(12, 8, image::Rgba([200, 0, 0, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        let doc = ExamDoc { body_pt: 11.0, heading_pt: 16.0, margin_mm: 18.0,
+            questions: vec![DocQ { number: 1, text: vec!["Before $[■(1&2@3&4)]$ after.".into()],
+                image: Some(crate::layout::DocImage { bytes: png, width_px: 12, height_px: 8 }), ..Default::default() }], ..Default::default() };
+        let pv = crate::export::preview_pages(&doc).unwrap();
+        assert_eq!(pv.images.len(), 2);
+        assert!(pv.equation_images[0].is_none(), "question image remains /Im1");
+        let eq = pv.equation_images[1].as_ref().expect("equation /Im2 has preview pixels");
+        let rgba = image::load_from_memory(eq).unwrap().to_rgba8();
+        assert_eq!((rgba.width(), rgba.height()), pv.images[1]);
+        assert!(rgba.pixels().any(|p| p[3] > 0), "equation preview has visible ink");
+        let (svg, placed) = page_svg_with_equations(pv.page_w, pv.page_h, &pv.pages[0], &pv.fallback, &pv.equation_images);
+        assert!(svg.contains("Before") && svg.contains("after."));
+        assert_eq!(svg.matches("#efefef").count(), 1, "only the question picture gets a placeholder; transparent equations retain the page backdrop");
+        assert!(placed.iter().any(|(idx, _)| *idx == 0));
+        assert!(placed.iter().any(|(idx, _)| *idx == 1), "raster preview resolves the same equation XObject");
+    }
+
+    /// Offline visual-QA fixture runner. Inputs are explicit isolated bank copies; it never
+    /// opens a user store or performs inference. Run with a manifest path when reviewing exports.
+    #[test]
+    #[ignore = "requires an explicit isolated export review manifest"]
+    fn render_isolated_stored_candidate_math_exports() {
+        let path = crate::env_var("VERSHION_EXPORT_REVIEW_MANIFEST").expect("isolated manifest path");
+        let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let output = std::path::PathBuf::from(manifest["output"].as_str().unwrap());
+        std::fs::create_dir_all(&output).unwrap();
+        for input in manifest["banks"].as_array().unwrap() {
+            let name = input["name"].as_str().unwrap();
+            assert!(name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
+            let bank: serde_json::Value = serde_json::from_slice(&std::fs::read(input["path"].as_str().unwrap()).unwrap()).unwrap();
+            let questions: Vec<model::Question> = serde_json::from_value(bank[0]["questions"].clone()).unwrap();
+            assert!(questions.iter().all(|q| q.image.is_none()), "fixture must not resolve any real-store media");
+            let mapped: Vec<_> = questions.iter().enumerate().map(|(i,q)| map_question_style(i as u32 + 1, q, model::PaperStyle::Standard)).collect();
+            let dqs = mapped.into_iter().map(|mut m| { m.dq.no_answer_space = true; m.dq }).collect();
+            let doc = ExamDoc { title: input["title"].as_str().unwrap_or(name).into(), header_line: "Name: ____________________  Date: __________".into(),
+                body_pt: 11.0, heading_pt: 16.0, margin_mm: 18.0, questions: dqs, ..Default::default() };
+            std::fs::write(output.join(format!("{name}.pdf")), crate::export::render_pdf(&doc).unwrap()).unwrap();
+            std::fs::write(output.join(format!("{name}.docx")), crate::export::render_docx(&doc).unwrap()).unwrap();
+            let pv = crate::export::preview_pages(&doc).unwrap();
+            let (svg, placed) = page_svg_with_equations(pv.page_w, pv.page_h, &pv.pages[0], &pv.fallback, &pv.equation_images);
+            let scale = 2.0;
+            let (w,h,mut pixels) = crate::figures::to_rgba(&svg, scale).unwrap();
+            for (k,[x,y,bw,bh]) in placed {
+                let bytes = pv.equation_images[k].as_ref().expect("all fixture images are math");
+                let rgba = image::load_from_memory(bytes).unwrap().to_rgba8();
+                let small = image::imageops::resize(&rgba, (bw as f32 * scale).round().max(1.0) as u32, (bh as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle);
+                blend_premul(&mut pixels,w,h,&small,(x as f32*scale).round() as i64,(y as f32*scale).round() as i64);
+            }
+            // The SVG page has an opaque white backdrop, so premultiplied output is straight.
+            image::RgbaImage::from_raw(w,h,pixels).unwrap().save(output.join(format!("{name}-preview.png"))).unwrap();
+            println!("{name}: {} questions, {} pages, {} equation images",doc.questions.len(),pv.pages.len(),pv.equation_images.iter().flatten().count());
+        }
+    }
+}
+
+#[cfg(test)]
+mod child_figure_mapping_tests {
+    use super::*;
+    #[test]
+    fn owning_part_picture_marker_survives_mapping_choices_and_part_work_splitting() {
+        let q=model::Question { id:"child-picture".into(),stem:"Shared givens.".into(),kind:Kind::Multipart {parts:vec![
+            model::Part {stem:"a) Earlier part.".into(),kind:model::PartKind::Short {sample:"".into()}},
+            model::Part {stem:"b) Owning part.\n[picture]".into(),kind:model::PartKind::Mc {answers:vec![model::Answer {text:"First choice".into(),correct:false,locked:false},model::Answer {text:"Second choice".into(),correct:false,locked:false}]}},
+            model::Part {stem:"c) Later part.".into(),kind:model::PartKind::Short {sample:"".into()}}
+        ]},points:None,difficulty:None,topics:Vec::new(),image:None,explanation:None,figure:None,created:0,modified:0};
+        let mut mapped=map_question_style(1,&q,model::PaperStyle::Standard);
+        let joined=mapped.dq.text.join("\n");let image=joined.find("[picture]").unwrap();
+        assert!(joined.find("Owning part.").unwrap()<image && image<joined.find("First choice").unwrap());
+        assert!(image<joined.find("Later part.").unwrap());assert_eq!(mapped.dq.key_text,"Key not provided");
+        apply_part_work(&mut mapped,&[1,2,3]);assert_eq!(mapped.dq.space_after,[1,2,3]);assert_eq!(mapped.dq.text.len(),3);
+        assert!(mapped.dq.text[1].contains("[picture]") && mapped.dq.text[1].contains("Second choice"));
+        assert!(!mapped.dq.text[0].contains("[picture]") && !mapped.dq.text[2].contains("[picture]"));
+    }
+
+    /// Read-only source replay against an explicit isolated manifest. It performs no fitting,
+    /// inference or candidate certification: the retained source crop is exported for visual QA.
+    #[test]
+    #[ignore="requires an explicit isolated child-figure source-replay manifest"]
+    fn replay_real_ci_child_figure_into_student_pdf_and_editable_docx() {
+        use std::io::Read;
+        let manifest_path=crate::env_var("VERSHION_CHILD_FIGURE_REPLAY").expect("isolated replay manifest");
+        let manifest:serde_json::Value=serde_json::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
+        let root=std::path::PathBuf::from(manifest["store"].as_str().unwrap());std::fs::create_dir_all(&root).unwrap();
+        crate::store::init(Box::new(crate::store::FsBackend::new(&root)));
+        let raw=std::fs::read_to_string(manifest["raw_reply"].as_str().unwrap()).unwrap();
+        let page=std::fs::read(manifest["source_png"].as_str().unwrap()).unwrap();
+        assert!(crate::ditto::figure_box_issues(&raw,Some(&page),1).is_empty());
+        let got=crate::ditto::import_text(&raw,Some(&page),1,"Source worksheet").unwrap();
+        assert_eq!(got.doc.questions.len(),1);assert_eq!(got.figures,1);
+        assert_eq!(got.items[0].figure_source.as_ref().unwrap().path,"/parts/0/figure");
+        let source=&got.doc.questions[0];let Kind::Multipart {parts}=&source.kind else {panic!("source parts retained")};
+        assert_eq!(parts.len(),3);assert!(parts[0].stem.ends_with("[picture]"));
+        assert!(matches!(&parts[0].kind,model::PartKind::Short {sample} if sample.is_empty()));
+        assert!(matches!(&parts[1].kind,model::PartKind::Short {sample} if sample.is_empty()));
+        assert!(matches!(&parts[2].kind,model::PartKind::Mc {answers} if answers.len()==3 && answers.iter().all(|a| !a.correct)));
+        assert!(source.stem.contains("A sample is ONLY representative") && source.stem.contains("no subgroups or wider populations"));
+        assert!(source.image.is_some() && source.figure.is_none(),"source crop retained, not falsely promoted to accepted editable recreation");
+        let persisted=serde_json::to_vec_pretty(source).unwrap();let restored:model::Question=serde_json::from_slice(&persisted).unwrap();
+        let mut mapped=map_question_style(1,&restored,model::PaperStyle::Standard);assert_eq!(mapped.dq.key_text,"Key not provided");
+        mapped.dq.no_answer_space=true;
+        let doc=ExamDoc {title:got.doc.name.clone(),header_line:"Name: ____________________  Date: __________".into(),body_pt:11.0,heading_pt:16.0,margin_mm:18.0,questions:vec![mapped.dq],..Default::default()};
+        let pv=crate::export::preview_pages(&doc).unwrap();let ops=pv.pages.iter().map(|p|String::from_utf8_lossy(p).into_owned()).collect::<Vec<_>>().join("\n");
+        let image=ops.find("/Im1 Do").unwrap();assert!(ops.find("This means:").unwrap()<image && image<ops.find("Find the following").unwrap(),"source image must follow part a and precede part b");
+        let word=crate::export::render_docx(&doc).unwrap();let mut zip=zip::ZipArchive::new(std::io::Cursor::new(&word)).unwrap();let mut xml=String::new();zip.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();
+        let image=xml.find("<w:drawing").unwrap();assert!(xml.find("This means:").unwrap()<image && image<xml.find("Find the following").unwrap());assert!(!xml.contains("[picture]"));
+        let output=std::path::PathBuf::from(manifest["output"].as_str().unwrap());std::fs::create_dir_all(&output).unwrap();
+        std::fs::write(output.join("ci-student.pdf"),crate::export::render_pdf(&doc).unwrap()).unwrap();
+        std::fs::write(output.join("ci-student.docx"),&word).unwrap();
+        std::fs::write(output.join("persisted-question.json"),persisted).unwrap();
+        std::fs::write(output.join("source-items.json"),serde_json::to_vec_pretty(&got.items).unwrap()).unwrap();
+        std::fs::write(output.join("warnings.json"),serde_json::to_vec_pretty(&got.warnings).unwrap()).unwrap();
+        let previews=crate::ditto::source_figure_previews(&raw,&page,1);assert_eq!(previews.len(),1);std::fs::write(output.join("supplied-source-crop.png"),&previews[0].2).unwrap();
+        println!("offline replay: {} question, {} original parts, {} supplied source crop, {} student PDF pages; no API or fitting call, no fresh-bank acceptance claim",got.doc.questions.len(),parts.len(),got.figures,pv.pages.len());
     }
 }

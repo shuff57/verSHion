@@ -718,9 +718,26 @@ pub fn inline_runs(s: &str) -> Vec<Run> {
             text_start = i;
             continue;
         }
-        // $math$
+        // Escaped currency and literal emphasis marks are text. Keep an escape marker so
+        // source ranges cover the line, while exports/previews show only the literal symbol.
+        // Code spans above remain entirely literal, including their backslashes.
+        if c == '\\' && ch.get(i + 1).is_some_and(|c| matches!(c, '$' | '*')) {
+            flush(&mut out, text_start, i, bold, italic, strike, link);
+            out.push(run(i, i + 1, RunKind::Marker, bold, italic, false, false, strike, link));
+            out.push(run(i + 1, i + 2, RunKind::Text, bold, italic, false, false, strike, link));
+            i += 2;
+            text_start = i;
+            continue;
+        }
+        // $math$: an escaped dollar inside the equation cannot close it.
         if c == '$'
-            && let Some(end) = (i + 1..ch.len()).find(|&j| ch[j] == '$')
+            && let Some(end) = {
+                let mut j = i + 1;
+                while j < ch.len() && ch[j] != '$' {
+                    j += if ch[j] == '\\' { 2 } else { 1 };
+                }
+                (j < ch.len()).then_some(j)
+            }
             && end > i + 1
         {
             flush(&mut out, text_start, i, bold, italic, strike, link);
@@ -1533,6 +1550,44 @@ mod tests {
         assert!(line_text(&l).ends_with("2 * 3"), "a spaced * stays literal: {}", line_text(&l));
         // Blanks and unmatched markers are literal.
         assert_eq!(line_text(&inline("fill ___ and ** open")), "fill ___ and ** open");
+    }
+
+    #[test]
+    fn escaped_literal_asterisks_do_not_turn_a_source_note_into_markup_or_backslashes() {
+        let line=inline(r"**\*\*\*A printed note** beside $x^2$ and `\*literal code`.");
+        assert!(line.iter().filter(|s|s.bold).map(|s|s.text.as_str()).collect::<String>().starts_with("***A printed note"));
+        assert!(line.iter().any(|s|s.math&&s.text=="x^2"));
+        assert!(line.iter().any(|s|s.code&&s.text==r"\*literal code"));
+        assert!(!line.iter().any(|s|!s.code&&s.text.contains('\\')));
+    }
+
+    #[test]
+    fn escaped_currency_does_not_consume_later_fraction_or_mixed_number() {
+        for (source, math, visible) in [
+            (r"\$7,400 at 10.5% for $(1)/(4)$ years", "(1)/(4)", "$7,400 at 10.5% for "),
+            (r"\$1,900 at 5.9% for $2 (3)/(4)$ years", "2 (3)/(4)", "$1,900 at 5.9% for "),
+            // An actual extra backslash is literal source text, not a JSON decoding hint.
+            (r"\\$1,900 at 5.9% for $2 (3)/(4)$ years", "2 (3)/(4)", r"\$1,900 at 5.9% for "),
+        ] {
+            let line = inline(source);
+            assert_eq!(line.iter().filter(|s| s.math).map(|s| s.text.as_str()).collect::<Vec<_>>(), [math]);
+            assert_eq!(line.iter().filter(|s| !s.math).map(|s| s.text.as_str()).collect::<String>(), format!("{visible} years"));
+            let runs = inline_runs(source);
+            assert_eq!(runs.first().unwrap().start, 0);
+            assert_eq!(runs.last().unwrap().end, source.chars().count());
+            assert!(runs.windows(2).all(|r| r[0].end == r[1].start));
+        }
+        let json_decoded: String = serde_json::from_str(r#""\\$1,900 at 5.9% for $2 (3)/(4)$ years""#).unwrap();
+        assert_eq!(inline(&json_decoded), inline(r"\$1,900 at 5.9% for $2 (3)/(4)$ years"));
+    }
+
+    #[test]
+    fn dollar_escape_preserves_code_paths_styles_and_equation_commands() {
+        let line = inline(r"`C:\cash\$file` **\$5** C:\work\notes $x+\$5$");
+        assert!(line.iter().any(|s| s.code && s.text == r"C:\cash\$file"));
+        assert!(line.iter().any(|s| s.bold && s.text == "$" && !s.math));
+        assert!(line.iter().any(|s| s.text.contains(r"C:\work\notes")));
+        assert_eq!(line.iter().filter(|s| s.math).map(|s| s.text.as_str()).collect::<Vec<_>>(), [r"x+\$5"]);
     }
 
     #[test]

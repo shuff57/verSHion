@@ -24,8 +24,9 @@ or a screenshot.
 - [ ] **Stripe, test mode:** access to the dashboard. You need three things from it, all test-mode: a secret key
       (`sk_test_...`), a publishable key (`pk_test_...`), and, after the endpoint exists, the endpoint's signing
       secret (`whsec_...`). Not live keys.
-- [ ] **OpenRouter:** an API key for staging (a separate key from production's, with a spending limit set in
-      OpenRouter), and the model name if it is not the default.
+- [ ] **AI provider:** an API key for staging (a separate key from production's, with a spending limit set at the
+      provider), and the model name if it is not the default. `CHEAPERINFERENCE_API_KEY` for the default upstream;
+      `OPENROUTER_API_KEY` plus `AI_UPSTREAM=openrouter` for OpenRouter.
 - [ ] **A sending mailbox** the server can log in to over SMTP: host, port, username, password, whether the port uses
       implicit TLS (`SMTP_SECURE`), and the From address. `HANDOFF.md` mentions a planned Stalwart mailbox
       (`vershion@lefthanddev.com`) with DMARC `p=reject`: check the domain's SPF and DKIM first or the first mails

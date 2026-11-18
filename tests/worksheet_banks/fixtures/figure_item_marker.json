@@ -1,0 +1,13 @@
+{
+  "source_printed_label": "5",
+  "spec": {
+    "id": "geometry-diagram",
+    "params": {
+      "diagram": "{\"angles\":[{\"arcs\":0,\"color\":\"#ff0000\",\"from\":\"B\",\"radius\":48,\"right\":true,\"to\":\"F\",\"vertex\":\"C\"}],\"labels\":[{\"at\":[58,55],\"size\":64,\"text\":\"5)\"},{\"at\":[296,118],\"size\":48,\"text\":\"3 ft\"},{\"at\":[574,145],\"size\":48,\"text\":\"3 ft\"},{\"at\":[196,488],\"size\":48,\"text\":\"5 ft\"},{\"at\":[712,488],\"size\":48,\"text\":\"4 ft\"}],\"nodes\":{\"A\":[185,185],\"B\":[432,150],\"C\":[680,248],\"D\":[432,283],\"E\":[363,725],\"F\":[610,692]},\"segments\":[{\"from\":\"A\",\"to\":\"B\",\"width\":2.5},{\"from\":\"B\",\"to\":\"C\",\"width\":2.5},{\"from\":\"A\",\"to\":\"D\",\"width\":2.5},{\"from\":\"D\",\"to\":\"C\",\"width\":2.5},{\"from\":\"A\",\"to\":\"E\",\"width\":2.5},{\"from\":\"D\",\"to\":\"E\",\"width\":2.5},{\"from\":\"C\",\"to\":\"F\",\"width\":2.5},{\"from\":\"E\",\"to\":\"F\",\"width\":2.5},{\"color\":\"#888888\",\"from\":\"B\",\"style\":\"dashed\",\"to\":\"F\",\"width\":1.2}]}",
+      "font": "Sans",
+      "height": 800.0,
+      "width": 1240.0
+    }
+  },
+  "problem": "Standalone external worksheet item marker is not part of the source diagram."
+}

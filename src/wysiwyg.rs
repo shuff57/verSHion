@@ -673,6 +673,9 @@ impl Item {
     }
     fn raw_len(&self) -> usize {
         match self {
+            // Plain literal markup is escaped by encode_line; script bodies are already
+            // inside their own markers and do not pass through the math-dollar scanner.
+            Item::Ch { c: '$' | '*', sub: false, sup: false, .. } => 2,
             Item::Ch { .. } => 1,
             Item::Atom(r) => clen(r),
         }
@@ -801,6 +804,7 @@ pub fn encode_line(items: &[Item]) -> (String, Vec<usize>) {
                     k = j;
                 } else {
                     starts[k] = out.len();
+                    if matches!(*c, '$' | '*') { out.push('\\'); }
                     out.push(*c);
                     last = k;
                     k += 1;

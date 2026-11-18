@@ -1,8 +1,19 @@
 # Buying credits
 
 Teachers get a free weekly allowance (`AI_WEEKLY_CREDITS`). Purchased credits are spent after it, never expire,
-and are deleted with the account. Server code: `server/worker/src/billing`, ledger and charging:
-`server/worker/src/ai/store.ts`. Buy page: `server/web/account/credits.html`.
+and are deleted with the account. Current server code: `server/api/src/billing`, ledger and charging:
+`server/api/src/ai/store.rs`. The legacy Worker equivalents remain until cutover. Buy page:
+`server/web/account/credits.html`.
+
+## Desktop and web AI sessions
+
+Both builds open one service session per user operation. A Convert action containing multiple photos/PDF
+pages shares one import session, including its retries and figure fitting, rather than charging per page.
+The existing price is 2 credits for up to 20 pages; local/BYOK execution spends no verSHion credits.
+Handwriting remains 1 credit per page and answer checking 1 credit per operation. The Rust API accepts an
+account-scoped operation id for idempotent session creation, so replaying the same creation request does
+not charge again. Cancellation stops further work but does not reverse an already answered call; existing
+expiry refunds still apply to sessions with no answered calls. Browser and desktop use the same rules.
 
 ## Flow
 
@@ -34,10 +45,13 @@ in `credits.html` and the API origin in `server/web/_headers`, and add the page'
 
 - Prices: 25 credits per dollar (a credit is 4 cents), with packs $5 = 125, $15 = 400, $40 = 1,100 and a custom
   whole-dollar amount from $5 to $200 at the base rate. At those prices a handwriting page is 4 cents and a test
-  import 8 cents. The model cost is a fraction of that (Gemma 4 26B is about $0.07 per million input tokens and
-  $0.34 per million output tokens on OpenRouter, roughly a tenth of a cent per quiz page), so the margin is large
-  even after Stripe's 2.9% + 30 cents. Those costs are estimates: check them on real tests before launch:
-  every chat turn's `usage.cost` is now stored in `ai_usage.cost_usd` with its session, and
+  import 8 cents. The model cost is a fraction of that. Measured on 2026-11-02 (`docs/hosting-port.md`, G7), one
+  import call costs about $0.00051 on the Rust API's default upstream (CheaperInference, `deepseek-v4.1-flash-1017`,
+  reasoning off, zero data retention) and about $0.00045 on OpenRouter (`google/gemma-4-26b-a4b-it`), so the
+  margin is large even after Stripe's 2.9% + 30 cents. Earlier per-token estimates for Gemma 4 26B on OpenRouter
+  (about $0.07 per million input tokens, $0.34 per million output) were for the Worker's default model, not this
+  one. Check the costs on real tests before launch:
+  every chat turn's cost (OpenRouter `usage.cost`, CheaperInference `billing.billed_cost_usd`) is stored in `ai_usage.cost_usd` with its session, and
   `AiStore.costByService(since)` reports sessions, calls, total and average dollars per service. The free weekly allowance stays at 40 credits, about $1.60 of value.
 - Limits: 10 payments started per account per hour; the body reader requires Content-Length and caps sizes.
 - Terms and refund wording (`server/web/legal`), and a stored-value check with counsel.

@@ -6,11 +6,11 @@ use super::policy::{self, Caller, CallerInput, Limits, Outcome};
 use crate::blobs::BlobStore;
 use super::request::{self, MAX_BODY_BYTES};
 use super::store::{AiStore, Usage};
-use super::upstream::{self, ModelOut, OpenRouter, Transport};
+use super::upstream::{self, ModelOut, Upstream, Transport};
 use axum::{
     Router,
     body::Bytes,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
     routing::any,
@@ -21,6 +21,8 @@ use std::sync::{Arc, Mutex};
 
 pub const AI_PATH: &str = "/ai/chat/completions";
 pub const AI_HEALTH_PATH: &str = "/ai/health";
+/// The 503 text when no upstream key is configured (which provider is named at startup, not here).
+const NO_UPSTREAM: &str = "This deployment has no AI provider key.";
 pub const AI_SERVICE_PATH: &str = "/ai/service";
 pub const AI_CREDITS_PATH: &str = "/ai/credits";
 pub const AI_IMPORT_PATH: &str = "/ai/import";
@@ -42,7 +44,7 @@ pub struct AiState<T: Transport> {
     pub conn: Mutex<Connection>,
     pub limits: Limits,
     /// Absent: every model call answers 503 ai_not_configured.
-    pub openrouter: Option<OpenRouter>,
+    pub upstream: Option<Upstream>,
     pub transport: T,
     pub auth: Box<dyn Authenticator>,
     pub relay_key: Option<String>,
@@ -136,7 +138,7 @@ async fn health<T: Transport + Send + Sync + 'static>(State(st): State<Arc<AiSta
         r.headers_mut().insert(header::ALLOW, HeaderValue::from_static("GET"));
         return r;
     }
-    respond(Outcome::json(200, json!({ "ok": true, "model": st.openrouter.as_ref().map(|o| &o.model), "ai": st.openrouter.is_some(), "upstream": "openrouter" })))
+    respond(Outcome::json(200, json!({ "ok": true, "model": st.upstream.as_ref().map(|o| &o.model), "ai": st.upstream.is_some(), "upstream": st.upstream.as_ref().map_or("openrouter", |u| u.name) })))
 }
 
 async fn credits<T: Transport + Send + Sync + 'static>(State(st): State<Arc<AiState<T>>>, method: Method, headers: HeaderMap) -> Response {
@@ -153,15 +155,20 @@ async fn service<T: Transport + Send + Sync + 'static>(State(st): State<Arc<AiSt
         Ok(w) => w,
         Err(r) => return r,
     };
-    if st.openrouter.is_none() {
-        return err(503, "ai_not_configured", "This deployment has no OpenRouter key.");
+    if st.upstream.is_none() {
+        return err(503, "ai_not_configured", NO_UPSTREAM);
     }
     let body = match read_object(&body) {
         Ok(b) => Value::Object(b),
         Err(r) => return r,
     };
     let now = st.now();
-    respond(st.store(|s| policy::start_service(s, &st.limits, &body, &who, st.credits, now)))
+    let mut outcome=st.store(|s| policy::start_service(s, &st.limits, &body, &who, st.credits, now));
+    if outcome.status==200 && body.get("protocol_version").and_then(Value::as_u64)==Some(vershion_ai_core::VERSION as u64) {
+        outcome.body["protocol_version"]=json!(vershion_ai_core::VERSION);
+        outcome.body["capabilities"]=json!({"structured_outputs":st.upstream.as_ref().is_some_and(|o|o.structured_outputs),"tools":st.upstream.as_ref().is_some_and(|o|o.tools),"idempotent_service":true});
+    }
+    respond(outcome)
 }
 
 async fn chat<T: Transport + Send + Sync + 'static>(State(st): State<Arc<AiState<T>>>, method: Method, headers: HeaderMap, body: Bytes) -> Response {
@@ -169,14 +176,17 @@ async fn chat<T: Transport + Send + Sync + 'static>(State(st): State<Arc<AiState
         Ok(w) => w,
         Err(r) => return r,
     };
-    let Some(or) = st.openrouter.as_ref() else {
-        return err(503, "ai_not_configured", "This deployment has no OpenRouter key.");
+    let Some(or) = st.upstream.as_ref() else {
+        return err(503, "ai_not_configured", NO_UPSTREAM);
     };
     let body = match read_object(&body) {
         Ok(b) => b,
         Err(r) => return r,
     };
-    let messages = match request::read_messages(body.get("messages").unwrap_or(&Value::Null), st.limits.max_image_bytes) {
+    let options=match request::read_options(&body,or.structured_outputs,or.tools) {
+        Ok(o)=>o, Err(e)=>return err(400,"unsupported_ai_options",&e),
+    };
+    let messages = match request::read_messages_with_tools(body.get("messages").unwrap_or(&Value::Null), st.limits.max_image_bytes, options.tools.is_some()) {
         Ok(m) => m,
         Err(e) => return err(400, "bad_request", &e),
     };
@@ -196,7 +206,7 @@ async fn chat<T: Transport + Send + Sync + 'static>(State(st): State<Arc<AiState
     let max_tokens = request::clamp_max_tokens(body.get("max_tokens"), st.limits.max_out_tokens);
     let temperature = request::clamp_temperature(body.get("temperature"));
 
-    let out = upstream::call_model(&st.transport, or, &messages, max_tokens, temperature).await;
+    let out = upstream::call_model_with_options(&st.transport, or, &messages, max_tokens, temperature, &options).await;
     let reply = match out {
         ModelOut::Ok(r) => r,
         ModelOut::Failed => return err(502, "model_failed", "The model call failed. Try again."),
@@ -221,8 +231,8 @@ async fn import_start<T: Transport + Send + Sync + 'static>(State(st): State<Arc
         Ok(w) => w,
         Err(r) => return r,
     };
-    if st.openrouter.is_none() {
-        return err(503, "ai_not_configured", "This deployment has no OpenRouter key.");
+    if st.upstream.is_none() {
+        return err(503, "ai_not_configured", NO_UPSTREAM);
     }
     if who.credited && st.credits {
         return err(403, "use_service_session", "Start an AI service session instead of an import job.");
@@ -245,8 +255,8 @@ async fn import_read<T: Transport + Send + Sync + 'static>(State(st): State<Arc<
         Ok(w) => w,
         Err(r) => return r,
     };
-    if st.openrouter.is_none() {
-        return err(503, "ai_not_configured", "This deployment has no OpenRouter key.");
+    if st.upstream.is_none() {
+        return err(503, "ai_not_configured", NO_UPSTREAM);
     }
     if who.credited && st.credits {
         return err(403, "use_service_session", "Start an AI service session instead of an import job.");
@@ -262,6 +272,9 @@ pub fn router<T: Transport + Send + Sync + 'static>(state: Arc<AiState<T>>) -> R
         .route(AI_CREDITS_PATH, any(credits::<T>))
         .route(AI_SERVICE_PATH, any(service::<T>))
         .route(AI_PATH, any(chat::<T>))
+        // Scan payloads include base64 images and legitimately exceed Axum's
+        // default 2 MiB. The request parser still enforces each image's own cap.
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
 }
 
@@ -321,7 +334,7 @@ mod tests {
         let mut st = AiState {
             conn: Mutex::new(c),
             limits: Limits { weekly_credits: 10, ..Limits::default() },
-            openrouter: Some(OpenRouter { model: "or/test-model".into(), ..OpenRouter::new("or-secret-key") }),
+            upstream: Some(Upstream { model: "or/test-model".into(), ..Upstream::openrouter("or-secret-key") }),
             transport: Fake { script: Mutex::new(script.into()), seen: Mutex::new(vec![]) },
             auth: Box::new(HeaderAuth),
             relay_key: Some("k".repeat(32)),
@@ -376,6 +389,54 @@ mod tests {
         json!({ "messages": [{ "role": "user", "content": "hi" }] })
     }
     const KEY: &[(&str, &str)] = &[("authorization", "Bearer kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk")];
+
+    #[tokio::test]
+    async fn scan_requests_above_two_megabytes_reach_the_model_within_image_limits() {
+        // Pad the PNG with zero bytes (base64 A's) to represent a 3 MiB scan.
+        let mut b64 = PNG.trim_end_matches('=').to_string();
+        b64.push_str(&"A".repeat(4 * 1024 * 1024 - b64.len()));
+        let body = json!({"messages":[{"role":"user","content":[
+            {"type":"text","text":"Read this scan."},
+            {"type":"image_url","image_url":{"url":format!("data:image/png;base64,{b64}")}}
+        ]}]});
+        let allowed = world(vec![], |_| {});
+        assert_eq!(allowed.chat(body.clone(), KEY).await.0, 200);
+        assert_eq!(allowed.upstream_calls(), 1);
+        let too_large = world(vec![], |s| s.limits.max_image_bytes = 2 * 1024 * 1024);
+        assert_eq!(too_large.chat(body, KEY).await.0, 400);
+        assert_eq!(too_large.upstream_calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn requests_above_the_ai_body_limit_are_rejected_before_the_model() {
+        let w = world(vec![], |_| {});
+        let req = Request::post(AI_PATH)
+            .header("authorization", KEY[0].1)
+            .body(Body::from(" ".repeat(MAX_BODY_BYTES + 1)))
+            .unwrap();
+        let res = router(w.st.clone()).oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(w.upstream_calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn versioned_services_negotiate_features_and_reuse_credit_sessions() {
+        let w=world(vec![],|s| { let o=s.upstream.as_mut().unwrap(); o.structured_outputs=true; o.tools=true; });
+        let user=&[("x-user","u1")];
+        let body=json!({"service":"import","pages":3,"operation":"0123456789abcdef0123456789abcdef","protocol_version":1});
+        let (status,first,_)=w.send("POST",AI_SERVICE_PATH,Some(body.clone()),user).await;
+        assert_eq!(status,200); assert_eq!(first["capabilities"]["structured_outputs"],true); assert_eq!(first["capabilities"]["tools"],true);
+        let (_,again,_)=w.send("POST",AI_SERVICE_PATH,Some(body),user).await;
+        assert_eq!(first["session"],again["session"]); assert_eq!(again["left"],8);
+        let mut chat=say(); chat["session"]=first["session"].clone(); chat["response_format"]=vershion_ai_core::figure_pick().response_format();
+        chat["model"]=json!("client-cannot-select"); chat["provider"]=json!({"data_collection":"allow"});
+        assert_eq!(w.chat(chat,user).await.0,200);
+        let sent=w.st.transport.seen.lock().unwrap()[0].clone();
+        assert_eq!(sent["response_format"]["type"],"json_schema"); assert_eq!(sent["model"],"or/test-model");
+        assert_eq!(sent["provider"]["data_collection"],"deny"); assert_eq!(sent["provider"]["require_parameters"],true);
+        let disabled=world(vec![],|_|{}); let mut invalid=say(); invalid["response_format"]=vershion_ai_core::figure_pick().response_format();
+        assert_eq!(disabled.chat(invalid,KEY).await.0,400); assert_eq!(disabled.upstream_calls(),0);
+    }
 
     #[tokio::test]
     async fn a_valid_request_returns_the_content_with_reasoning_and_cost_stripped() {
@@ -449,7 +510,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_openrouter_key_is_503_and_health_says_so() {
-        let w = world(vec![], |s| s.openrouter = None);
+        let w = world(vec![], |s| s.upstream = None);
         let (s, b, _) = w.chat(say(), KEY).await;
         assert_eq!((s, b["error"]["code"].as_str()), (503, Some("ai_not_configured")));
         let (s, b, _) = w.send("GET", AI_HEALTH_PATH, None, &[]).await;
@@ -457,6 +518,9 @@ mod tests {
         let ok = world(vec![], |_| {});
         assert_eq!(ok.send("GET", AI_HEALTH_PATH, None, &[]).await.1, json!({ "ok": true, "model": "or/test-model", "ai": true, "upstream": "openrouter" }));
         assert_eq!(ok.send("POST", AI_HEALTH_PATH, None, &[]).await.0, 405);
+        // Health names the provider actually serving, not a hardcoded one.
+        let ci = world(vec![], |s| s.upstream.as_mut().unwrap().name = "cheaperinference");
+        assert_eq!(ci.send("GET", AI_HEALTH_PATH, None, &[]).await.1["upstream"], json!("cheaperinference"));
     }
 
     #[tokio::test]
@@ -695,7 +759,7 @@ mod tests {
         assert_eq!(b["error"]["message"], "Use POST /ai/import.");
         let (s, b, h) = w.send("POST", &format!("{AI_IMPORT_PATH}/{}", "a".repeat(32)), Some(json!({})), KEY).await;
         assert_eq!((s, h["allow"].to_str().unwrap(), b["error"]["message"].as_str()), (405, "GET, OPTIONS", Some("Use GET /ai/import/:id.")));
-        let off = world(vec![], |s| s.openrouter = None);
+        let off = world(vec![], |s| s.upstream = None);
         assert_eq!(off.start(json!({ "pages": [page()] }), KEY).await.0, 503);
     }
 

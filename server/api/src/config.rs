@@ -1,7 +1,7 @@
 //! Configuration: environment variables only, the same names the Worker used for its vars and secrets.
 //! Secrets are read here and nowhere else, never printed, and never put in argv.
 use crate::ai::policy::Limits;
-use crate::ai::upstream::{CHEAPERINFERENCE_DEFAULT_MODEL, CHEAPERINFERENCE_URL, DEFAULT_MODEL, OpenRouter};
+use crate::ai::upstream::{CHEAPERINFERENCE_DEFAULT_MODEL, CHEAPERINFERENCE_URL, DEFAULT_MODEL, Upstream};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -14,7 +14,9 @@ pub struct Config {
     pub allowed_origins: Vec<String>,
     pub limits: Limits,
     pub job_ttl_ms: i64,
-    pub openrouter: Option<OpenRouter>,
+    pub upstream: Option<Upstream>,
+    /// Set when no upstream is configured but the OTHER provider's key is present (a mismatched `AI_UPSTREAM`).
+    pub upstream_note: Option<&'static str>,
     /// "1" turns buying credits on; the webhook works whenever its secret is set.
     pub billing_enabled: bool,
     pub stripe_key: Option<String>,
@@ -70,11 +72,14 @@ impl Config {
         }
         // CheaperInference is the default upstream (its own key, URL and model names). AI_UPSTREAM=openrouter picks OpenRouter instead.
         let cheaper = get("AI_UPSTREAM").as_deref().map(|s| s.trim().to_ascii_lowercase()).as_deref() != Some("openrouter");
-        let openrouter = if cheaper {
-            nonempty(get("CHEAPERINFERENCE_API_KEY")).map(|key| OpenRouter {
+        let upstream = if cheaper {
+            nonempty(get("CHEAPERINFERENCE_API_KEY")).map(|key| Upstream {
+                name: "cheaperinference",
                 key,
                 url: CHEAPERINFERENCE_URL.to_string(),
                 plain: true,
+                structured_outputs: get("AI_STRUCTURED_OUTPUTS").as_deref()==Some("1"),
+                tools: get("AI_NATIVE_TOOLS").as_deref()==Some("1"),
                 // Reasoning off by default (measured: same quality, far fewer tokens); CHEAPERINFERENCE_EXTRA overrides.
                 extra: get("CHEAPERINFERENCE_EXTRA")
                     .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
@@ -86,15 +91,27 @@ impl Config {
                 timeout: Duration::from_secs(60),
             })
         } else {
-            nonempty(get("OPENROUTER_API_KEY")).map(|key| OpenRouter {
+            nonempty(get("OPENROUTER_API_KEY")).map(|key| Upstream {
                 key,
+                structured_outputs: get("AI_STRUCTURED_OUTPUTS").as_deref()==Some("1"),
+                tools: get("AI_NATIVE_TOOLS").as_deref()==Some("1"),
                 model: nonempty(get("OPENROUTER_MODEL")).unwrap_or_else(|| DEFAULT_MODEL.to_string()),
                 fallback_model: nonempty(get("OPENROUTER_FALLBACK_MODEL")),
                 // Providers that may keep prompts are only allowed when the deployment says so.
                 privacy: get("OPENROUTER_PRIVACY").as_deref() != Some("0"),
                 timeout: Duration::from_secs(60),
-                ..OpenRouter::new("")
+                ..Upstream::openrouter("")
             })
+        };
+        // The easy mistake: only the other provider's key is set, so the relay would answer 503 with no clue why.
+        let upstream_note = match (&upstream, cheaper) {
+            (None, true) if nonempty(get("OPENROUTER_API_KEY")).is_some() => {
+                Some("OPENROUTER_API_KEY is set but AI_UPSTREAM is not \"openrouter\": set AI_UPSTREAM=openrouter, or set CHEAPERINFERENCE_API_KEY")
+            }
+            (None, false) if nonempty(get("CHEAPERINFERENCE_API_KEY")).is_some() => {
+                Some("CHEAPERINFERENCE_API_KEY is set but AI_UPSTREAM=openrouter: remove AI_UPSTREAM, or set OPENROUTER_API_KEY")
+            }
+            _ => None,
         };
         Config {
             db: or_default("VERSHION_DB", "./data/pool.db").into(),
@@ -105,7 +122,8 @@ impl Config {
             allowed_origins: get("ALLOWED_ORIGINS").unwrap_or_default().split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
             limits,
             job_ttl_ms: pos_int(get("AI_JOB_TTL_HOURS")).unwrap_or(72) * 3_600_000,
-            openrouter,
+            upstream,
+            upstream_note,
             billing_enabled: get("BILLING_ENABLED").as_deref().map(str::trim) == Some("1"),
             stripe_key: nonempty(get("STRIPE_SECRET_KEY")),
             stripe_webhook_secret: nonempty(get("STRIPE_WEBHOOK_SECRET")),
@@ -133,30 +151,50 @@ mod tests {
     fn defaults_when_nothing_is_set() {
         let c = cfg(&[]);
         assert_eq!((c.listen.as_str(), c.db.to_str().unwrap(), c.job_ttl_ms), ("127.0.0.1:8787", "./data/pool.db", 72 * 3_600_000));
-        assert!(c.openrouter.is_none() && c.relay_key.is_none() && c.allowed_origins.is_empty());
+        assert!(c.upstream.is_none() && c.relay_key.is_none() && c.allowed_origins.is_empty());
         let d = Limits::default();
         assert_eq!((c.limits.chat_per_hour, c.limits.weekly_credits, c.limits.daily_usd), (d.chat_per_hour, d.weekly_credits, d.daily_usd));
     }
 
     #[test]
     fn cheaperinference_is_chosen_by_name_and_uses_its_own_key_url_and_model() {
-        let c = cfg(&[("AI_UPSTREAM", "cheaperinference"), ("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci"), ("CHEAPERINFERENCE_MODEL", "deepseek-v4.1-flash")]).openrouter.unwrap();
+        let c = cfg(&[("AI_UPSTREAM", "cheaperinference"), ("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci"), ("CHEAPERINFERENCE_MODEL", "deepseek-v4.1-flash")]).upstream.unwrap();
         assert_eq!((c.key.as_str(), c.url.as_str(), c.model.as_str(), c.plain), ("ci", CHEAPERINFERENCE_URL, "deepseek-v4.1-flash", true));
-        assert_eq!(cfg(&[("OPENROUTER_API_KEY", "or")]).openrouter.is_none(), true, "the OpenRouter key is not borrowed");
-        assert_eq!(cfg(&[("AI_UPSTREAM", "cheaperinference"), ("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap().model, CHEAPERINFERENCE_DEFAULT_MODEL);
-        let d = cfg(&[("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap();
+        assert_eq!(cfg(&[("OPENROUTER_API_KEY", "or")]).upstream.is_none(), true, "the OpenRouter key is not borrowed");
+        assert_eq!(cfg(&[("AI_UPSTREAM", "cheaperinference"), ("CHEAPERINFERENCE_API_KEY", "ci")]).upstream.unwrap().model, CHEAPERINFERENCE_DEFAULT_MODEL);
+        let d = cfg(&[("CHEAPERINFERENCE_API_KEY", "ci")]).upstream.unwrap();
         assert_eq!((d.plain, d.model.as_str(), d.extra.as_ref().and_then(|e| e.get("reasoning_effort")).and_then(|v| v.as_str())), (true, "deepseek-v4.1-flash-1017", Some("none")), "CheaperInference is the default, reasoning off");
-        assert!(!cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap().plain, "AI_UPSTREAM=openrouter picks OpenRouter");
+        assert!(!cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci")]).upstream.unwrap().plain, "AI_UPSTREAM=openrouter picks OpenRouter");
+    }
+
+    #[test]
+    fn each_upstream_carries_its_real_name() {
+        assert_eq!(cfg(&[("CHEAPERINFERENCE_API_KEY", "ci")]).upstream.unwrap().name, "cheaperinference");
+        assert_eq!(cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "or")]).upstream.unwrap().name, "openrouter");
+    }
+
+    #[test]
+    fn only_the_other_providers_key_set_is_named_not_left_as_a_silent_503() {
+        // Default is CheaperInference: an OpenRouter key alone configures nothing, and says why.
+        let c = cfg(&[("OPENROUTER_API_KEY", "or")]);
+        assert!(c.upstream.is_none() && c.upstream_note.unwrap().contains("AI_UPSTREAM=openrouter"));
+        // The reverse: AI_UPSTREAM=openrouter with only a CheaperInference key.
+        let c = cfg(&[("AI_UPSTREAM", "openrouter"), ("CHEAPERINFERENCE_API_KEY", "ci")]);
+        assert!(c.upstream.is_none() && c.upstream_note.unwrap().contains("remove AI_UPSTREAM"));
+        // No key at all, a blank key, or a working configuration: no note.
+        assert!(cfg(&[]).upstream_note.is_none());
+        assert!(cfg(&[("OPENROUTER_API_KEY", "  ")]).upstream_note.is_none());
+        assert!(cfg(&[("CHEAPERINFERENCE_API_KEY", "ci"), ("OPENROUTER_API_KEY", "or")]).upstream_note.is_none());
     }
 
     #[test]
     fn openrouter_needs_a_key_and_keeps_privacy_on_unless_told_otherwise() {
-        assert!(cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "   ")]).openrouter.is_none());
-        let o = cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", " or-key ")]).openrouter.unwrap();
+        assert!(cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "   ")]).upstream.is_none());
+        let o = cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", " or-key ")]).upstream.unwrap();
         assert_eq!((o.key.as_str(), o.model.as_str(), o.privacy, o.fallback_model), ("or-key", DEFAULT_MODEL, true, None));
-        let o = cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "k"), ("OPENROUTER_MODEL", "m/one"), ("OPENROUTER_FALLBACK_MODEL", "m/two"), ("OPENROUTER_PRIVACY", "0")]).openrouter.unwrap();
+        let o = cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "k"), ("OPENROUTER_MODEL", "m/one"), ("OPENROUTER_FALLBACK_MODEL", "m/two"), ("OPENROUTER_PRIVACY", "0")]).upstream.unwrap();
         assert_eq!((o.model.as_str(), o.fallback_model.as_deref(), o.privacy), ("m/one", Some("m/two"), false));
-        assert!(cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "k"), ("OPENROUTER_PRIVACY", "false")]).openrouter.unwrap().privacy, "only the exact value 0 relaxes it");
+        assert!(cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "k"), ("OPENROUTER_PRIVACY", "false")]).upstream.unwrap().privacy, "only the exact value 0 relaxes it");
     }
 
     #[test]

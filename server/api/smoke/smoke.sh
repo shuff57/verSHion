@@ -2,7 +2,7 @@
 # First-run smoke test for vershion-api against a LOCAL server (never point it at production).
 #
 # What it does: health, sign-up, verify (token read from the server's dev-mail log), approve (local database only),
-# native login, /me, credits, one chat call, one import job, the billing packs and a PaymentIntent, a circle, the export.
+# native login, /me, credits, a priced AI session, idempotency, one chat call and the legacy-import credit guard, the billing packs and a PaymentIntent, a circle, the export.
 # Each step prints PASS, FAIL or SKIP with the reason. Nothing is deleted. Passwords and tokens are never printed.
 #
 # Needs: bash, curl, jq, and sqlite3 or python3 (to approve the test account in the local database file).
@@ -74,7 +74,7 @@ req GET /health
 [ "$STATUS" = 200 ] && [ "$(jq -r .ok <<<"$BODY")" = true ] && ok "health" || { bad "health ($STATUS)"; echo "server not reachable; stopping"; exit 1; }
 
 # 1. sign up (always 202, whatever the address) -------------------------------------------------------------------
-req POST /auth/signup "$(jq -n --arg e "$EMAIL" --arg p "$PASSWORD" '{email:$e,password:$p,display_name:"Smoke Test",school:"Smoke School",adult_school_employee:true}')"
+req POST /auth/signup "$(jq -n --arg e "$EMAIL" --arg p "$PASSWORD" '{email:$e,password:$p,display_name:"Smoke Test",school:"Smoke School",staff_page:"https://school.example.org/staff/smoke",adult_school_employee:true}')"
 [ "$STATUS" = 202 ] && ok "sign-up accepted" || bad "sign-up ($STATUS) $BODY"
 
 # 2. verify: the token is in the dev-mail log as ...#token=<token> ---------------------------------------------------
@@ -88,7 +88,7 @@ if [ -z "$TOKEN" ]; then
 else
   # Confirming an address discards the sign-up password and profile (whoever registered may not own the mailbox), so the
   # person who clicks the link sends the password and profile again with the token. That activates the account.
-  req POST /auth/verify "$(jq -n --arg t "$TOKEN" --arg p "$PASSWORD" '{token:$t,password:$p,display_name:"Smoke Test",school:"Smoke School",adult_school_employee:true}')"
+  req POST /auth/verify "$(jq -n --arg t "$TOKEN" --arg p "$PASSWORD" '{token:$t,password:$p,display_name:"Smoke Test",school:"Smoke School",staff_page:"https://school.example.org/staff/smoke",adult_school_employee:true}')"
   { [ "$STATUS" = 200 ] || [ "$STATUS" = 204 ]; } && ok "address verified" || bad "verify ($STATUS) $BODY"
 fi
 
@@ -130,35 +130,38 @@ if [ -n "$AUTH" ]; then
   else
     bad "credits ($STATUS) $BODY"
   fi
-  req POST /ai/chat/completions '{"messages":[{"role":"user","content":"Reply with the single word OK."}]}'
-  case "$STATUS" in
-    200) ok "chat answered by the upstream" ;;
-    503) no "chat: the AI upstream key (CHEAPERINFERENCE_API_KEY, or OPENROUTER_API_KEY with AI_UPSTREAM=openrouter) is not set in the server's environment" ;;
-    *) bad "chat ($STATUS) $BODY" ;;
-  esac
-  # A 1x1 PNG, enough to start an import job.
-  PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
-  req POST /ai/import "$(jq -n --arg b "$PNG" '{hint:"smoke",pages:[{mime:"image/png",b64:$b}]}')"
-  case "$STATUS" in
-    202 | 200)
-      JOB="$(jq -r '.job_id // empty' <<<"$BODY")"
-      ok "import job started ($JOB)"
-      S=""
-      for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-        sleep 2
-        req GET "/ai/import/$JOB"
-        S="$(jq -r '.status // empty' <<<"$BODY")"
-        if [ "$S" = done ] || [ "$S" = failed ]; then break; fi
-      done
-      if [ "$S" = done ]; then
-        ok "import job finished"
+  # The signed-in client pays once for an operation, then every model turn carries its session.
+  OPERATION="$(head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  SERVICE_BODY="$(jq -n --arg op "$OPERATION" '{service:"import",pages:1,operation:$op,protocol_version:1}')"
+  req POST /ai/service "$SERVICE_BODY"
+  if [ "$STATUS" = 503 ]; then
+    no "AI service: no upstream key is configured"
+  elif [ "$STATUS" != 200 ]; then
+    bad "AI service ($STATUS) $BODY"
+  else
+    SESSION="$(jq -r '.session // empty' <<<"$BODY")"
+    LEFT="$(jq -r '.left // empty' <<<"$BODY")"
+    ok "AI import session opened"
+    # Only repeat creation on a relay that explicitly promises idempotency.
+    if [ "$(jq -r '.capabilities.idempotent_service // false' <<<"$BODY")" = true ]; then
+      req POST /ai/service "$SERVICE_BODY"
+      if [ "$STATUS" = 200 ] && [ "$(jq -r '.session // empty' <<<"$BODY")" = "$SESSION" ] && [ "$(jq -r '.left // empty' <<<"$BODY")" = "$LEFT" ]; then
+        ok "repeating service creation does not charge twice"
       else
-        no "import job ended as '${S:-unknown}': $(jq -r '.error // empty' <<<"$BODY") (a 1x1 image yields no text, so 'failed: No page could be read' is expected)"
+        bad "service creation was not idempotent ($STATUS)"
       fi
-      ;;
-    503) no "import: the AI upstream key is not set" ;;
-    *) bad "import ($STATUS) $BODY" ;;
-  esac
+    fi
+    req POST /ai/chat/completions "$(jq -n --arg s "$SESSION" '{session:$s,messages:[{role:"user",content:"Reply with the JSON object {\"ok\":true}."}]}')"
+    [ "$STATUS" = 200 ] && ok "session chat answered by the upstream" || bad "session chat ($STATUS) $BODY"
+    # Signed-in accounts must use the metered client pipeline, never the legacy unpriced job.
+    PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+    req POST /ai/import "$(jq -n --arg b "$PNG" '{hint:"smoke",pages:[{mime:"image/png",b64:$b}]}')"
+    if [ "$STATUS" = 403 ] && [ "$(jq -r '.error.code // empty' <<<"$BODY")" = use_service_session ]; then
+      ok "unpriced legacy import is blocked for signed-in accounts"
+    else
+      bad "legacy import credit guard ($STATUS) $BODY"
+    fi
+  fi
 fi
 
 # 6. paid tier: packs, then a PaymentIntent (needs BILLING_ENABLED=1 and Stripe TEST keys) -----------------------------

@@ -18,6 +18,8 @@ impl Doc {
     pub fn raw(&mut self, s: &str) -> &mut Self { self.body.push_str(s); self }
     /// Length of the body so far; with [`Doc::cut`] it lifts a stretch of drawing out to be placed elsewhere.
     pub fn len(&self) -> usize { self.body.len() }
+    /// Actual emitted markup since a previously captured body position, without changing draw order.
+    pub(crate) fn fragment(&self, from: usize) -> &str { &self.body[from..] }
     /// Removes and returns everything drawn since `from`.
     pub fn cut(&mut self, from: usize) -> String { self.body.split_off(from) }
     /// Shared `<defs>` (the print patterns of [`Fills`]); drawn before everything that uses them.
