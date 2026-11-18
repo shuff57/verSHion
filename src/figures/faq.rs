@@ -85,6 +85,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
         "sine-cosine" => SINE_COSINE,
         "unit-circle" => UNIT_CIRCLE,
+        "complex-plane" => COMPLEX_PLANE,
         "transformations" => TRANSFORMATIONS,
         "fraction-models" => FRACTION_MODELS,
         "triangle-centres" => TRIANGLE_CENTRES,
@@ -4640,4 +4641,11 @@ const SEQUENCES_SERIES: &[Faq] = &[
     Faq {q:"Which limits can the key establish?",a:"Arithmetic and geometric limits, rational functions of n, supported standard limits, and first-order linear recurrence fixed points are derived from their expressions. Other cases say cannot determine; plotted terms alone are never used to guess a limit."},
     Faq {q:"How do student tasks work?",a:"Choose Find formula, Missing terms, or Continue, then turn Show answers off. Requested sums are removed from partial-sum points, labels and lists. Missing terms are marked asked on the key."},
     Faq {q:"Can I sum more terms than I draw?",a:"Turn on Sum first N terms and set N up to 1000. Write sigma notation shows the corresponding bounds and expression. Long exact results are marked approximate and a geometric sum keeps a compact exact form; student copies leave the requested answer blank."},
+];
+
+const COMPLEX_PLANE: &[Faq] = &[
+ Faq {q:"How do I enter complex numbers?",a:"Type the real and imaginary coefficients separately, using fractions or sqrt where needed. More numbers accepts one name, real, imaginary row per line. Polar input accepts a modulus and an angle, in the selected unit."},
+ Faq {q:"What does the construction show?",a:"Choose conjugate, sum, difference, product, quotient, roots or powers. The sum uses a parallelogram. Products rotate by the second argument and stretch by its modulus. Roots lie on a circle; Join roots adds their regular polygon."},
+ Faq {q:"How do I make a student copy?",a:"Select Coordinates, Modulus and argument, or Construction, then turn Show answers off. Student + key exports the matching pair. Print gives neutral greys."},
+ Faq {q:"Why are some values approximate?",a:"Exact rational results and directly derived special arguments are written with equals. Other calculated values use the approximation sign. The principal argument is in (−π, π]; zero has no argument. Notes explain invalid values and items outside the axis window."},
 ];

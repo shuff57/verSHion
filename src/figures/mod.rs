@@ -62,6 +62,7 @@ pub mod math;
 pub mod math_geo;
 pub mod math_plot;
 pub mod implicit;
+pub mod complex;
 pub mod physics;
 pub mod sections;
 pub mod share;
@@ -566,6 +567,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(trig::defs());
     v.extend(sincos::defs());
     v.extend(unitcircle::defs());
+    v.extend(complex::defs());
     v.extend(transform::defs());
     v.extend(fraction::defs());
     v.extend(triangle_centres::defs());
@@ -779,6 +781,7 @@ pub fn label_after_typing(value_key: &str, was_empty: bool, now: &str, mode: &st
 /// params keep their values, so switching back restores them. Default: shown.
 pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
     if id == sequences::ID { return sequences::relevant(key,p); }
+    if id == complex::ID { return complex::relevant(key, p); }
     match id {
         "pulley" => physics::pulley_relevant(key, p),
         // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
@@ -904,6 +907,7 @@ pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
     if id == sequences::ID { return sequences::warnings(p); }
+    if id == complex::ID { return complex::warnings(p); }
     if id == stats::histogram::ID {
         return stats::histogram::warnings(p);
     }
@@ -1032,6 +1036,7 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| trig::examples(id))
         .or_else(|| sincos::examples(id))
         .or_else(|| unitcircle::examples(id))
+        .or_else(|| complex::examples(id))
         .or_else(|| transform::examples(id))
         .or_else(|| fraction::examples(id))
         .or_else(|| triangle_centres::examples(id))
