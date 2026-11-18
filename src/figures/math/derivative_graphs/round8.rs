@@ -96,7 +96,7 @@ fn cases() -> Vec<(&'static str, f64, f64, Fx)> {
 }
 
 /// Each drawn polyline of colour `col` in panel k, in the panel's own coordinates.
-fn polylines(svg: &str, k: usize, col: &str) -> Vec<Vec<Pt>> {
+pub(super) fn polylines(svg: &str, k: usize, col: &str) -> Vec<Vec<Pt>> {
     let Some(i) = svg.find(&format!("data-panel=\"{k}\"")) else { return vec![] };
     let rest = &svg[i..];
     let end = rest[1..].find("data-panel=\"").map(|e| e + 1).unwrap_or(rest.len());
@@ -111,7 +111,7 @@ fn polylines(svg: &str, k: usize, col: &str) -> Vec<Vec<Pt>> {
     }
     out
 }
-fn seg_d(p: Pt, a: Pt, b: Pt) -> f64 {
+pub(super) fn seg_d(p: Pt, a: Pt, b: Pt) -> f64 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let l2 = dx * dx + dy * dy;
     let t = if l2 == 0.0 { 0.0 } else { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
@@ -168,7 +168,7 @@ fn derivatives_are_drawn_exactly_where_the_typed_function_has_a_value() {
     assert!(present > 10000);
 }
 
-fn texts(svg: &str) -> String {
+pub(super) fn texts(svg: &str) -> String {
     let mut text = String::new(); let mut tag = false;
     for c in svg.chars() { match c { '<' => tag = true, '>' => tag = false, _ if !tag => text.push(c), _ => {} } }
     text.replace('\u{a0}', " ")
