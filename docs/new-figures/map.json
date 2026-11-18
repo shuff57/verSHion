@@ -20,7 +20,7 @@
    "ours": "sequences-series"
   },
   "new/complex-plane": {
-   "ours": null
+   "ours": "complex-plane"
   },
   "new/polar-parametric": {
    "ours": null

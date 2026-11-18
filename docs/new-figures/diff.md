@@ -8,7 +8,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
-| complex-plane | **missing** | | | 37 | | |
+| complex-plane | `complex-plane` | 45 | 8 | 37 | — | 100 |
 | conic-sections | `conic-sections` | 52 | 16 | 46 | — | 100 |
 | coordinate-grid-limits | `coordinate-grid` | 59 | 2 | 10 | — | 0 |
 | derivative-graphs | **missing** | | | 35 | | |
@@ -21,23 +21,16 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 ## Reference figures we do not have
 
-`new/riemann-sums`, `new/derivative-graphs`, `new/complex-plane`, `new/polar-parametric`, `new/slope-fields`
+`new/riemann-sums`, `new/derivative-graphs`, `new/polar-parametric`, `new/slope-fields`
 
 Our figures with no reference page: 190
 
-Generated: 2026-11-15T22:58:12+00:00 · probe: 2026-11-15T14:58:12
+Generated: 2026-11-18T04:46:03+00:00 · probe: 2026-11-17T20:46:03
 
-**Pooled 43.9** · mean 40.0 over 10 figures · built 5 of 10 reference figures (missing: new/riemann-sums, new/derivative-graphs, new/complex-plane, new/polar-parametric, new/slope-fields)
+**Pooled 55.0** · mean 50.0 over 10 figures · built 6 of 10 reference figures (missing: new/riemann-sums, new/derivative-graphs, new/polar-parametric, new/slope-fields)
 
 Comparable with the frozen baseline: **yes**
 
-- `complex-plane`: 0 (0/130)
-  - cap-01 [core 5] Plot z = a + bi typed exactly (fractions, roots) — not built
-  - cap-02 [core 5] Plot several numbers, each named — not built
-  - cap-03 [core 5] Type a number in polar form, r(cos θ + i sin θ) or re^(iθ), in degrees or radians — not built
-  - cap-04 [core 5] Draw and write the modulus |z| — not built
-  - cap-05 [core 5] Mark the argument with an arc and write it (principal value) — not built
-  - cap-06 [core 5] Draw the conjugate, reflected in the real axis — not built
 - `coordinate-grid`: 0 (0/34)
   - cap-01 [core 5] Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a on a graphed row, the answers in the key — no evidence
   - cap-02 [core 5] Ask for the limits as x → ∞ and x → -∞ of a graphed row — no evidence
@@ -73,6 +66,7 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [core 5] Draw several solution curves, each through its own point — not built
   - cap-05 [core 5] Draw Euler's method from (x_0, y_0) with step h and n steps, as joined segments — not built
   - cap-06 [control 3] List the Euler steps' x and y values in a table — not built
+- `complex-plane`: 100 (130/130)
 - `conic-sections`: 100 (151/151)
 - `limits-discontinuities`: 100 (115/115)
 - `sequences-series`: 100 (121/121)

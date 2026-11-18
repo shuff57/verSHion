@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-15T22:58:10+00:00",
-  "src_mtime": 1794782879.9356835,
-  "git": "57ddd3a",
-  "figures": 195
+  "built_at": "2026-11-18T04:46:00+00:00",
+  "src_mtime": 1794976790.298301,
+  "git": "5bd7fee+dirty",
+  "figures": 196
  },
  "figures": {
   "free-body-diagram": {
@@ -27901,6 +27901,452 @@
    ],
    "handles": true,
    "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "complex-plane": {
+   "id": "complex-plane",
+   "title": "Complex plane",
+   "blurb": "Complex numbers and constructions on an Argand diagram.",
+   "params": [
+    {
+     "key": "zr",
+     "label": "z: real part",
+     "kind": "text",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "zi",
+     "label": "z: imaginary part",
+     "kind": "text",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "wr",
+     "label": "w: real part",
+     "kind": "text",
+     "options": [],
+     "default": "-1"
+    },
+    {
+     "key": "wi",
+     "label": "w: imaginary part",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "input",
+     "label": "z input",
+     "kind": "choice",
+     "options": [
+      "Cartesian",
+      "Polar cis",
+      "Polar exponential"
+     ],
+     "default": "Cartesian"
+    },
+    {
+     "key": "radius",
+     "label": "Polar modulus",
+     "kind": "text",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "theta",
+     "label": "Polar angle",
+     "kind": "text",
+     "options": [],
+     "default": "pi/3"
+    },
+    {
+     "key": "unit",
+     "label": "Angles",
+     "kind": "choice",
+     "options": [
+      "Radians",
+      "Degrees"
+     ],
+     "default": "Radians"
+    },
+    {
+     "key": "extra",
+     "label": "More numbers: name, real, imaginary; one per line",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "operation",
+     "label": "Construction",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Conjugate",
+      "Sum",
+      "Difference",
+      "Product",
+      "Quotient",
+      "Roots",
+      "Powers"
+     ],
+     "default": "Sum"
+    },
+    {
+     "key": "n",
+     "label": "n",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "polygon",
+     "label": "Join roots",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "marks",
+     "label": "Draw numbers as",
+     "kind": "choice",
+     "options": [
+      "Vectors",
+      "Points"
+     ],
+     "default": "Vectors"
+    },
+    {
+     "key": "labels",
+     "label": "Point labels",
+     "kind": "choice",
+     "options": [
+      "Letter",
+      "Cartesian",
+      "Polar"
+     ],
+     "default": "Letter"
+    },
+    {
+     "key": "modulus",
+     "label": "Show modulus",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "argument",
+     "label": "Show principal argument",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "polar",
+     "label": "Write polar form",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "polar_style",
+     "label": "Polar notation",
+     "kind": "choice",
+     "options": [
+      "cis",
+      "Trigonometric",
+      "Exponential"
+     ],
+     "default": "cis"
+    },
+    {
+     "key": "circle",
+     "label": "Modulus circle",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "components",
+     "label": "Components to axes",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "accuracy",
+     "label": "Values",
+     "kind": "choice",
+     "options": [
+      "Exact",
+      "Rounded"
+     ],
+     "default": "Exact"
+    },
+    {
+     "key": "dec",
+     "label": "Decimal places",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "locus",
+     "label": "Locus",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Circle",
+      "Disc",
+      "Argument sector"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "cr",
+     "label": "Centre: real",
+     "kind": "text",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "ci",
+     "label": "Centre: imaginary",
+     "kind": "text",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "lr",
+     "label": "Locus radius",
+     "kind": "text",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "lo",
+     "label": "Argument from",
+     "kind": "text",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "hi",
+     "label": "Argument to",
+     "kind": "text",
+     "options": [],
+     "default": "pi/3"
+    },
+    {
+     "key": "xlabel",
+     "label": "Real axis name",
+     "kind": "text",
+     "options": [],
+     "default": "Re"
+    },
+    {
+     "key": "ylabel",
+     "label": "Imaginary axis name",
+     "kind": "text",
+     "options": [],
+     "default": "Im"
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "title_mode",
+     "label": "Title style",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Standard"
+    },
+    {
+     "key": "numbers",
+     "label": "Number axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "question",
+     "label": "Student task",
+     "kind": "choice",
+     "options": [
+      "Coordinates",
+      "Modulus and argument",
+      "Construction"
+     ],
+     "default": "Construction"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "label_offsets",
+     "label": "Label positions",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "xmin",
+     "label": "Real axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-6.0"
+    },
+    {
+     "key": "xmax",
+     "label": "Real axis to",
+     "kind": "float",
+     "options": [],
+     "default": "6.0"
+    },
+    {
+     "key": "ymin",
+     "label": "Imaginary axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-6.0"
+    },
+    {
+     "key": "ymax",
+     "label": "Imaginary axis to",
+     "kind": "float",
+     "options": [],
+     "default": "6.0"
+    },
+    {
+     "key": "xstep",
+     "label": "Real axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ystep",
+     "label": "Imaginary axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag z to change its real and imaginary parts and update the construction"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag w to change its real and imaginary parts"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    }
+   ],
+   "handles": true,
+   "label_drag": true,
    "show_answers": true,
    "style": true,
    "label_size": true

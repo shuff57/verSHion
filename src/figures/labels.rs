@@ -19,10 +19,10 @@ use super::{ParamDef, Params};
 pub const KEY: &str = "label_offsets";
 
 /// Figures whose labels can be dragged (the 11 reference geometry pages that offer it, the conic sections, and the tangent and secant lines).
-pub const FIGURES: [&str; 13] = [
+pub const FIGURES: [&str; 14] = [
     "triangle", "rectangle", "parallelogram", "trapezoid", "kite", "regular-polygon",
     "prism", "pyramid", "cylinder", "cone", "sphere",
-    "conic-sections", "tangent-secant-lines",
+    "conic-sections", "tangent-secant-lines", "complex-plane",
 ];
 
 /// Figures with the reference's Turn slider (+ Straighten): the flat shapes.
