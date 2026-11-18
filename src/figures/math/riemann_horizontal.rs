@@ -44,11 +44,12 @@ impl Curve {
     fn level(&self, y: &Val, a: &Val, b: &Val) -> Vec<Val> {
         match self {
             Self::Poly(p) => polynomial_level(p, y, a, b),
-            Self::Sqrt(c) => if y.v < 0.0 { vec![] } else { c.level(&y.mul(y), a, b) },
+            Self::Sqrt(c) => if cmp_val(y, &Val::exact(Ex::zero())) < 0 { vec![] } else { c.level(&y.mul(y), a, b) },
             Self::Abs(c) => {
-                if y.v < 0.0 { return vec![]; }
+                let s = cmp_val(y, &Val::exact(Ex::zero()));
+                if s < 0 { return vec![]; }
                 let mut r = c.level(y, a, b);
-                if y.v != 0.0 { r.extend(c.level(&y.neg(), a, b)); }
+                if s != 0 { r.extend(c.level(&y.neg(), a, b)); }
                 r
             }
             Self::Affine(c, scale, shift) => {
@@ -68,10 +69,9 @@ pub(super) fn from_level(ex: Option<Ex>, v: f64) -> Val { from_exact(ex, v) }
 fn from_exact(ex: Option<Ex>, v: f64) -> Val {
     match ex { Some(e) => Val::exact(e), None => Val::num(v) }
 }
-fn sign(v: &Val) -> i32 { v.ex.as_ref().and_then(Ex::sign).unwrap_or(if v.v > 0.0 { 1 } else if v.v < 0.0 { -1 } else { 0 }) }
 fn polynomial_level(p: &[Rat], y: &Val, a: &Val, b: &Val) -> Vec<Val> {
     let deg = p.iter().rposition(|r| !r.is_zero()).unwrap_or(0);
-    let bounded = |x: &Val| sign(&x.sub(a)) >= 0 && sign(&b.sub(x)) >= 0;
+    let bounded = |x: &Val| cmp_val(x, a) >= 0 && cmp_val(b, x) >= 0;
     if deg == 0 { return vec![]; }
     if deg == 1 {
         let x = y.sub(&Val::rat(p[0])).mul(&Val::rat(Rat::int(1).div(p[1]).unwrap()));
@@ -81,10 +81,13 @@ fn polynomial_level(p: &[Rat], y: &Val, a: &Val, b: &Val) -> Vec<Val> {
         // Vertex form avoids subtracting two nearly equal roots/discriminants at a double root.
         let vx = from_exact(p[1].mul(Rat::int(-1)).and_then(|v| v.div(p[2].mul(Rat::int(2))?)).map(Ex::rat), -p[1].f() / (2.0 * p[2].f()));
         let vy = value(p, &vx);
+        // (the level against the vertex value: the one shared comparison, so a level a rounding
+        // off the vertex is the vertex)
+        let side = cmp_val(y, &vy) * if p[2].n > 0 { 1 } else { -1 };
+        if side < 0 { return vec![]; }
+        if side == 0 { return if bounded(&vx) { vec![vx] } else { vec![] }; }
         let q = y.sub(&vy).mul(&Val::rat(Rat::int(1).div(p[2]).unwrap()));
-        let q = from_exact(q.ex, q.v);
-        if sign(&q) < 0 { return vec![]; }
-        if sign(&q) == 0 { return if bounded(&vx) { vec![vx] } else { vec![] }; }
+        let q = from_exact(q.ex, q.v.max(0.0));
         let ex = q.ex.as_ref().and_then(|q| q.pow_rat(Rat::new(1, 2).unwrap()));
         let r = from_exact(ex, q.v.sqrt());
         return [vx.sub(&r), from_exact(vx.ex.as_ref().and_then(|x| x.add(r.ex.as_ref()?)), vx.v + r.v)]
@@ -99,15 +102,15 @@ fn polynomial_level(p: &[Rat], y: &Val, a: &Val, b: &Val) -> Vec<Val> {
     cuts.sort_by(|x, y| x.v.total_cmp(&y.v));
     cuts.dedup_by(|x, y| x.v == y.v);
     let mut out = vec![];
-    for x in &cuts { if sign(&value(p, x).sub(y)) == 0 { out.push(x.clone()); } }
+    for x in &cuts { if cmp_val(&value(p, x), y) == 0 { out.push(x.clone()); } }
     for ends in cuts.windows(2) {
         let (mut l, mut r) = (ends[0].v, ends[1].v);
-        let (sl, sr) = (sign(&value(p, &ends[0]).sub(y)), sign(&value(p, &ends[1]).sub(y)));
+        let (sl, sr) = (cmp_val(&value(p, &ends[0]), y), cmp_val(&value(p, &ends[1]), y));
         if sl == 0 || sr == 0 || sl == sr { continue; }
         for _ in 0..64 {
             let m = l + (r - l) * 0.5;
             if m == l || m == r { break; }
-            let s = sign(&value(p, &Val::num(m)).sub(y));
+            let s = cmp_val(&value(p, &Val::num(m)), y);
             if s == 0 { l = m; r = m; break; }
             if s == sl { l = m; } else { r = m; }
         }
@@ -116,14 +119,189 @@ fn polynomial_level(p: &[Rat], y: &Val, a: &Val, b: &Val) -> Vec<Val> {
     out
 }
 
+/// A curve sampled once, in order (a sample with no value breaks the runs), split into monotone runs,
+/// with each sampled top or bottom refined once by golden section. The cuts at any level then come by
+/// binary search along each run and a bisection of the crossing, and a dip or peak through the level
+/// narrower than the samples (√|x| near 0) is found at its refined extreme.
+pub(super) struct Sampled {
+    pts: Vec<(f64, Option<f64>)>,
+    runs: Vec<(usize, usize)>,
+    /// (sample, refined x, refined value, +1 top / −1 bottom)
+    tops: Vec<(usize, f64, Option<f64>, f64)>,
+}
+impl Sampled {
+    pub(super) fn new(pts: Vec<(f64, Option<f64>)>, u: &dyn Fn(f64) -> Option<f64>) -> Self {
+        let mut runs = vec![];
+        let mut tops = vec![];
+        let mut i = 0;
+        while i < pts.len() {
+            if pts[i].1.is_none() { i += 1; continue; }
+            let mut j = i;
+            while j + 1 < pts.len() && pts[j + 1].1.is_some() { j += 1; }
+            // defined from i to j: monotone runs, broken where the direction turns (equal steps go either way)
+            let v = |k: usize| pts[k].1.unwrap();
+            let (mut start, mut dir) = (i, 0.0f64);
+            for k in i + 1..=j {
+                let step = v(k) - v(k - 1);
+                let d = if step > 0.0 { 1.0 } else if step < 0.0 { -1.0 } else { 0.0 };
+                if d == 0.0 || dir == 0.0 || d == dir { if dir == 0.0 { dir = d; } continue; }
+                runs.push((start, k - 1));
+                tops.push((k - 1, dir));
+                start = k - 1;
+                dir = d;
+            }
+            runs.push((start, j));
+            i = j + 1;
+        }
+        let g = 0.5 * (5f64.sqrt() - 1.0);
+        let tops = tops.into_iter().map(|(k, dir): (usize, f64)| {
+            let (mut a, mut b) = (pts[k - 1].0, pts[(k + 1).min(pts.len() - 1)].0);
+            for _ in 0..80 {
+                let (c, d) = (b - g * (b - a), a + g * (b - a));
+                let (Some(uc), Some(ud)) = (u(c), u(d)) else { break };
+                if dir * uc > dir * ud { b = d; } else { a = c; }
+            }
+            let x = a + (b - a) * 0.5;
+            (k, x, u(x), dir)
+        }).collect();
+        Sampled { pts, runs, tops }
+    }
+    /// Where u − y changes side: each crossing bisected against u, the ends of a stretch of samples on
+    /// the level (by `near`) as cuts, and a refined top or bottom that reaches the level.
+    pub(super) fn cuts(&self, y: f64, u: &dyn Fn(f64) -> Option<f64>) -> Vec<f64> {
+        let side = |v: f64| cmp_f(v, y);
+        let at = |k: usize| side(self.pts[k].1.unwrap());
+        let bisect = |mut a: f64, mut b: f64, sa: i32| -> f64 {
+            for _ in 0..60 {
+                let m = a + (b - a) * 0.5;
+                if m == a || m == b { break; }
+                match u(m).map(side) { Some(0) => return m, Some(s) if s == sa => a = m, _ => b = m }
+            }
+            a + (b - a) * 0.5
+        };
+        let mut out = vec![];
+        for &(i, j) in &self.runs {
+            let (si, sj) = (at(i), at(j));
+            if si == 0 { out.push(self.pts[i].0); }
+            if sj == 0 { out.push(self.pts[j].0); }
+            if si == sj { continue; }
+            // (along a monotone run the side goes from si to sj once, through any samples on the level)
+            let first = |from: usize, to: usize, s: i32| -> usize { let (mut lo, mut hi) = (from, to); while hi - lo > 1 { let m = (lo + hi) / 2; if at(m) == s { lo = m; } else { hi = m; } } hi };
+            if si != 0 && sj != 0 {
+                let k = first(i, j, si);
+                if at(k) == -si { out.push(bisect(self.pts[k - 1].0, self.pts[k].0, si)); continue; }
+                out.push(self.pts[k].0);
+                // the last sample still on the level, before the far side
+                let (mut lo, mut hi) = (k, j);
+                while hi - lo > 1 { let m = (lo + hi) / 2; if at(m) == 0 { lo = m; } else { hi = m; } }
+                out.push(self.pts[lo].0);
+            } else if si == 0 {
+                let (mut lo, mut hi) = (i, j);
+                while hi - lo > 1 { let m = (lo + hi) / 2; if at(m) == 0 { lo = m; } else { hi = m; } }
+                out.push(self.pts[lo].0);
+            } else {
+                out.push(self.pts[first(i, j, si)].0);
+            }
+        }
+        for &(k, xe, ue, dir) in &self.tops {
+            let s = at(k);
+            if s == 0 || at(k - 1) != s || (k + 1 < self.pts.len() && self.pts[k + 1].1.is_some() && at(k + 1) != s) { continue; }
+            // (a sampled bottom above the level, or top below it: does the curve reach the level between?)
+            if !((dir < 0.0 && s > 0) || (dir > 0.0 && s < 0)) { continue; }
+            match ue.map(side) {
+                Some(0) => out.push(xe),
+                Some(t) if t == -s => { out.push(bisect(self.pts[k - 1].0, xe, s)); out.push(bisect(xe, self.pts[(k + 1).min(self.pts.len() - 1)].0, -s)); }
+                _ => {}
+            }
+        }
+        out
+    }
+}
+
+/// Which pieces between cuts are in the region at level y (min(f, g) ≤ y ≤ max(f, g)). On each
+/// piece f − y and g − y keep one sign; each is read where the curve is farthest from y, with
+/// `near` counting as on the level. A constant side is compared by its exact value: on the level,
+/// it puts every piece in. A curve that is not constant cannot lie on the level along a piece, so
+/// a piece where it reads as on the level (rounding about a vertex or a touching point) takes the
+/// side of its neighbouring pieces. So a level a rounding off a flat edge, a vertex or a crossing
+/// level gives that level's width, never zero or a phantom sliver.
+pub(super) fn inside(spans: &[(f64, f64)], y: &Val, konst: [Option<&Ex>; 2], eval: &dyn Fn(bool, f64) -> Option<f64>) -> Vec<bool> {
+    let mut defined = vec![true; spans.len()];
+    let mut sides = [vec![0i32; spans.len()], vec![0i32; spans.len()]];
+    for g in [false, true] {
+        let s = &mut sides[g as usize];
+        if let Some(k) = konst[g as usize] {
+            let c = cmp_val(&Val::exact(k.clone()), y);
+            s.iter_mut().for_each(|v| *v = c);
+            continue;
+        }
+        for (i, &(l, r)) in spans.iter().enumerate() {
+            let mut best = (-1.0f64, 0);
+            for t in [0.5, 0.3, 0.7, 0.12, 0.88] {
+                match eval(g, l + (r - l) * t) {
+                    Some(v) => { let d = (v - y.v).abs(); if d > best.0 { best = (d, cmp_f(v, y.v)); } }
+                    None => if t == 0.5 { defined[i] = false; },
+                }
+            }
+            s[i] = best.1;
+        }
+        let read = s.clone();
+        for i in 0..s.len() {
+            if read[i] != 0 { continue; }
+            let left = read[..i].iter().rev().find(|v| **v != 0);
+            let right = read[i + 1..].iter().find(|v| **v != 0);
+            s[i] = match (left, right) { (Some(l), Some(r)) if l == r => *l, (Some(l), None) => *l, (None, Some(r)) => *r, _ => 0 };
+        }
+    }
+    (0..spans.len()).map(|i| defined[i] && sides[0][i] * sides[1][i] <= 0).collect()
+}
+
+/// The widths again, independently of the level solver: f and g on a dense grid, every change of
+/// side bisected, the pieces decided by `inside`. Two grids (4000 and 2999 steps) that must agree.
+pub(super) struct Dense<'a> {
+    fns: &'a Fns,
+    a: f64,
+    b: f64,
+    konst: [Option<Ex>; 2],
+    /// [grid][curve]
+    grids: [[Sampled; 2]; 2],
+}
+impl<'a> Dense<'a> {
+    pub(super) fn new(fns: &'a Fns, a: f64, b: f64) -> Self {
+        let mk = |k: usize| [false, true].map(|g| Sampled::new((0..=k).map(|i| { let x = if i == k { b } else { a + (b - a) * i as f64 / k as f64 }; (x, fns.num(g, x)) }).collect(), &|x| fns.num(g, x)));
+        Dense { fns, a, b, konst: [fns.konst(false), fns.konst(true)], grids: [mk(4000), mk(2999)] }
+    }
+    /// The width at y on grid 0 or 1, and its intervals.
+    pub(super) fn width(&self, grid: usize, y: &Val) -> (f64, Vec<(f64, f64)>) {
+        let mut cuts = vec![self.a, self.b];
+        for g in [false, true] {
+            if self.konst[g as usize].is_some() { continue; }
+            cuts.extend(self.grids[grid][g as usize].cuts(y.v, &|x| self.fns.num(g, x)));
+        }
+        cuts.sort_by(f64::total_cmp);
+        cuts.dedup();
+        let spans: Vec<(f64, f64)> = cuts.windows(2).map(|p| (p[0], p[1])).collect();
+        let ins = inside(&spans, y, [self.konst[0].as_ref(), self.konst[1].as_ref()], &|g, x| self.fns.num(g, x));
+        let mut ivs: Vec<(f64, f64)> = vec![];
+        for (&(l, r), ok) in spans.iter().zip(ins) {
+            if !ok { continue; }
+            if let Some(last) = ivs.last_mut().filter(|last| last.1 == l) { last.1 = r; } else { ivs.push((l, r)); }
+        }
+        (ivs.iter().map(|(l, r)| r - l).sum(), ivs)
+    }
+}
+
 pub(super) struct Slices<'a> {
     fns: &'a Fns,
     curves: Option<(Curve, Curve)>,
     a: Val,
     b: Val,
-    samples: Vec<(f64, f64, f64)>,
     /// a and b are crossings of f and g (Where f and g cross): f = g there.
     cross_ends: bool,
+    /// f and g where each is a constant, exactly
+    konst: [Option<Ex>; 2],
+    /// f and g sampled, where the level solver does not take them
+    sampled: Option<[Sampled; 2]>,
 }
 impl<'a> Slices<'a> {
     pub(super) fn new(fns: &'a Fns, a: Val, b: Val) -> Self {
@@ -133,7 +311,8 @@ impl<'a> Slices<'a> {
             let x = if i == 1200 { b.v } else { a.v + (b.v - a.v) * i as f64 / 1200.0 };
             (x, fns.f(x).unwrap_or(0.0), fns.g(x).unwrap_or(0.0))
         }).collect() } else { vec![] };
-        Self { fns, curves, a, b, samples, cross_ends: false }
+        let sampled = curves.is_none().then(|| [false, true].map(|g| Sampled::new(samples.iter().map(|&(x, f, gv)| (x, Some(if g { gv } else { f }))).collect(), &|x| fns.num(g, x))));
+        Self { fns, curves, a, b, cross_ends: false, konst: [fns.konst(false), fns.konst(true)], sampled }
     }
     pub(super) fn crossing_ends(mut self, yes: bool) -> Self { self.cross_ends = yes; self }
     fn eval(&self, g: bool, x: f64) -> Option<f64> {
@@ -148,25 +327,12 @@ impl<'a> Slices<'a> {
             cuts.extend(g.level(y, &self.a, &self.b));
         } else {
             // Locate simple roots on the cached sample brackets, then refine
-            // against the actual curve. No y allowance expands the region.
+            // against the actual curve. A constant side has no cut: it is on
+            // the level everywhere or nowhere.
             for g in [false, true] {
+                if self.konst[g as usize].is_some() { continue; }
                 let eval = |x| self.eval(g, x);
-                for pair in self.samples.windows(2) {
-                    let (x0, f0, g0) = pair[0];
-                    let (x1, f1, g1) = pair[1];
-                    let (v0, v1) = if g { (g0, g1) } else { (f0, f1) };
-                    if v0 == v1 { continue; }
-                    if v0 == y.v { cuts.push(Val::num(x0)); }
-                    if v1 == y.v { cuts.push(Val::num(x1)); }
-                    if (v0 < y.v && v1 > y.v) || (v0 > y.v && v1 < y.v) {
-                        let (mut a, mut b) = (x0, x1);
-                        for _ in 0..54 {
-                            let m = a + (b - a) * 0.5;
-                            if eval(m).is_some_and(|v| (v < y.v) == (v0 < y.v)) { a = m; } else { b = m; }
-                        }
-                        cuts.push(Val::num(a + (b - a) * 0.5));
-                    }
-                }
+                if let Some(sm) = &self.sampled { cuts.extend(sm[g as usize].cuts(y.v, &eval).into_iter().map(Val::num)); }
             }
         }
         for x in &mut cuts { if let Some(e) = &x.ex { x.v = e.approx(); } }
@@ -174,12 +340,11 @@ impl<'a> Slices<'a> {
         cuts.dedup_by(|a, b| a.v == b.v);
         let mut ivs: Vec<(f64, f64)> = vec![];
         let mut widths = vec![];
-        for pair in cuts.windows(2) {
+        let spans: Vec<(f64, f64)> = cuts.windows(2).map(|p| (p[0].v, p[1].v)).collect();
+        let ins = inside(&spans, y, [self.konst[0].as_ref(), self.konst[1].as_ref()], &|g, x| self.eval(g, x));
+        for (pair, ok) in cuts.windows(2).zip(ins) {
             let (a, b) = (&pair[0], &pair[1]);
-            let x = a.v + (b.v - a.v) * 0.5;
-            let (f, g) = (self.eval(false, x), self.eval(true, x));
-            let (Some(f), Some(g)) = (f, g) else { continue };
-            if f.min(g) <= y.v && y.v <= f.max(g) {
+            if ok {
                 // A tangent cut can lie inside a continuous slice. Join its
                 // neighbours so it does not draw an artificial strip edge.
                 if let Some(last) = ivs.last_mut().filter(|last| last.1 == a.v) { last.1 = b.v; }

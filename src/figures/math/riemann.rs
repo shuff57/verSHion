@@ -533,6 +533,22 @@ fn exact_cmp(a: &Ex, b: &Ex) -> Option<std::cmp::Ordering> {
     (v.abs() > 1e-12 * scale).then(|| if v > 0.0 { Greater } else { Less })
 }
 
+/// THE comparison of a strip level with a value a curve attains (a constant side, a vertex, an end
+/// value, a crossing level): two computed numbers are the same level when they agree to within a few
+/// dozen roundings of the larger, |a − b| ≤ 64ε·max(1, |a|, |b|). 1/sqrt(2) and √2/2 differ by an ulp
+/// in floating point; they are one level.
+pub(crate) fn near(a: f64, b: f64) -> bool { (a - b).abs() <= 64.0 * f64::EPSILON * 1f64.max(a.abs()).max(b.abs()) }
+/// The side of b that a is on (−1, 0 or 1), by `near`.
+fn cmp_f(a: f64, b: f64) -> i32 { if near(a, b) { 0 } else if a > b { 1 } else { -1 } }
+/// The side of b that a is on: by exact arithmetic where both are exact and it decides, else by `near`.
+fn cmp_val(a: &Val, b: &Val) -> i32 {
+    if let (Some(x), Some(y)) = (&a.ex, &b.ex) && let Some(d) = x.sub(y) {
+        if d.is_zero() { return 0; }
+        if let Some(s) = d.sign() { return s; }
+    }
+    cmp_f(a.v, b.v)
+}
+
 struct Fns { f: Option<String>, g: Option<String>, ast_f: Option<Node>, ast_g: Option<Node> }
 impl Fns {
     fn f(&self, x: f64) -> Option<f64> { ev(self.f.as_ref()?, x) }
@@ -541,6 +557,11 @@ impl Fns {
     fn h_tree(&self) -> Option<Node> {
         let f = self.ast_f.clone()?;
         match (&self.g, &self.ast_g) { (None, _) => Some(f), (Some(_), Some(g)) => Some(Node::Sub(Box::new(f), Box::new(g.clone()))), _ => None }
+    }
+    /// f (or g) at x by its tree where the tree is trusted, else by the reader.
+    fn num(&self, g: bool, x: f64) -> Option<f64> {
+        let tree = if g { self.ast_g.as_ref() } else { self.ast_f.as_ref() };
+        match (g, &self.g, tree) { (true, None, _) => Some(0.0), (_, _, Some(n)) => sym::num(n, x), _ => if g { self.g(x) } else { self.f(x) } }
     }
     /// f (or g, which is 0 under f) when it is a constant: its exact value, the same at every x.
     fn konst(&self, g: bool) -> Option<Ex> {
@@ -975,6 +996,7 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
         horizontal_levels::from_level(ex, m.nodes[j])
     };
     let yvals: Vec<Val> = (0..=n).map(node_val).collect();
+    let dense = horizontal_levels::Dense::new(fns, xa, xb);
     let mut vals = vec![];
     for j in 0..n {
         let (y0, y1) = (m.nodes[j], m.nodes[j + 1]);
@@ -1012,8 +1034,10 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
                 best
             }
         };
+        let (mut ivs, mut hv) = slices.intervals(&yv);
+        let mut yv = yv;
+        if let Some((w, iv, y)) = safety_net(&dense, ru, &yv, &hv, y0, y1, xb - xa)? { hv = Val::num(w); ivs = iv; yv = y; }
         let ys = yv.v;
-        let (ivs, hv) = slices.intervals(&yv);
         let parts: Vec<(Vec<(f64, f64)>, bool)> = ivs.iter().map(|(a, b)| (vec![(*a, y0), (*b, y0), (*b, y1), (*a, y1)], false)).collect();
         let area = hv.mul(&dy);
         let (x0, x1) = (ivs.first().map(|i| i.0).unwrap_or(xa), ivs.last().map(|i| i.1).unwrap_or(xa));
@@ -1034,6 +1058,53 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
     m.integrand = "(x_R \u{2212} x_L)".into();
     m.var = 'y';
     Ok(m)
+}
+
+/// The safety net under every horizontal strip: its width worked again by `Dense` on two grids,
+/// independently of the level solver, at the strip's level (and, for upper and lower sums, across the
+/// strip). Where the figure's value (or its exact form) disagrees, the dense value is used, written
+/// with ≈, never "="; where the two grids disagree with each other the strips are refused, rather than
+/// a wrong number written. None when the figure's value stands.
+fn safety_net(dense: &horizontal_levels::Dense, ru: Rule, yv: &Val, hv: &Val, y0: f64, y1: f64, span: f64) -> Result<Option<(f64, Vec<(f64, f64)>, Val)>, String> {
+    let tol = 1e-7 * span.max(1.0);
+    let w = |y: &Val| -> Result<(f64, Vec<(f64, f64)>), String> {
+        let (a, ivs) = dense.width(0, y);
+        let (b, _) = dense.width(1, y);
+        if (a - b).abs() > tol {
+            return Err(format!("The width of the region at y \u{2248} {} cannot be worked out reliably (the curves run along that level): choose vertical strips", rounded(y.v, 4)));
+        }
+        Ok((a, ivs))
+    };
+    let (at, ivs) = w(yv)?;
+    let off = |v: f64| (v - at).abs() > tol;
+    let mut bad = off(hv.v) || hv.ex.as_ref().is_some_and(|e| off(e.approx()));
+    let ext = matches!(ru, Rule::U | Rule::Lo);
+    let s = if ru == Rule::U { 1.0 } else { -1.0 };
+    let levels = |k: usize| -> Vec<f64> { (0..=k).map(|i| if i == k { y1 } else { y0 + (y1 - y0) * i as f64 / k as f64 }).collect() };
+    if ext && !bad {
+        for y in levels(5) { if (w(&Val::num(y))?.0 - hv.v) * s > tol { bad = true; break; } }
+    }
+    if !bad { return Ok(None); }
+    if !ext { return Ok(Some((at, ivs, yv.clone()))); }
+    // (an upper or lower width found again on the dense grid: 33 levels, the best refined)
+    let ys = levels(32);
+    let ws: Vec<f64> = ys.iter().map(|y| dense.width(0, &Val::num(*y)).0 * s).collect();
+    let (mut best, mut bw) = (yv.clone(), at * s);
+    for (i, (y, wv)) in ys.iter().zip(&ws).enumerate() {
+        if *wv > bw { best = Val::num(*y); bw = *wv; }
+        if i == 0 || i == 32 || ws[i] < ws[i - 1] || ws[i] < ws[i + 1] { continue; }
+        let (mut a, mut b) = (ys[i - 1], ys[i + 1]);
+        let g = 0.5 * (5f64.sqrt() - 1.0);
+        for _ in 0..60 {
+            let (c, d) = (b - g * (b - a), a + g * (b - a));
+            if dense.width(0, &Val::num(c)).0 * s > dense.width(0, &Val::num(d)).0 * s { b = d; } else { a = c; }
+        }
+        let y = Val::num(0.5 * (a + b));
+        let v = dense.width(0, &y).0 * s;
+        if v > bw { best = y; bw = v; }
+    }
+    let (v, ivs) = w(&best)?;
+    Ok(Some((v, ivs, best)))
 }
 
 /// Strips from a typed table: widths as the table's x values fall (AP style), heights the table's values.
@@ -2051,3 +2122,7 @@ mod substitution_tests;
 #[cfg(test)]
 #[path = "riemann_edge_tests.rs"]
 mod edge_tests;
+
+#[cfg(test)]
+#[path = "riemann_class_tests.rs"]
+mod class_tests;
