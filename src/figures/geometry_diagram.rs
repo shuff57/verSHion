@@ -1474,6 +1474,30 @@ mod hidden_edge_tests {
         assert!(w[0].contains("\"M\"") && w[0].contains("Nothing is joined automatically"));
     }
     #[test]
+    fn a_few_solid_gray_edges_are_flagged_and_grid_lines_and_dashed_edges_are_not() {
+        let d = crate::figures::registry().into_iter().find(|d| d.id == "geometry-diagram").unwrap();
+        let warns = |diagram: serde_json::Value| -> Vec<String> {
+            let p = crate::figures::params_from_json(&d, &serde_json::json!({"width":400,"height":400,"diagram":diagram.to_string()}));
+            super::semantic_report(&p).unwrap().warnings.into_iter().filter(|w| w.contains("SOLID gray line")).collect()
+        };
+        let prism = |style: &str| serde_json::json!({"nodes":{"A":[100,300],"B":[300,300],"C":[200,100],"H":[180,260]},
+            "segments":[{"from":"A","to":"B"},{"from":"B","to":"C"},{"from":"C","to":"A"},
+                {"from":"A","to":"H","color":"#777777","style":style},{"from":"H","to":"C","color":"#888888","style":style}]});
+        assert_eq!(warns(prism("solid")).len(), 2, "two solid gray back edges are flagged");
+        assert!(warns(prism("dashed")).is_empty(), "dashed gray hidden edges are fine");
+        // A grid of many gray lines is not a solid's hidden edges.
+        let mut nodes = serde_json::Map::new();
+        let mut segs = Vec::new();
+        for i in 0..10 {
+            nodes.insert(format!("a{i}"), serde_json::json!([20 + 30 * i, 20]));
+            nodes.insert(format!("b{i}"), serde_json::json!([20 + 30 * i, 300]));
+            segs.push(serde_json::json!({"from":format!("a{i}"),"to":format!("b{i}"),"color":"#777777"}));
+        }
+        assert!(warns(serde_json::json!({"nodes":nodes,"segments":segs})).is_empty());
+        // Blue or red solid strokes are colour annotations, not gray edges.
+        assert!(warns(serde_json::json!({"nodes":{"A":[10,10],"B":[90,90]},"segments":[{"from":"A","to":"B","color":"#0000ff"}]})).is_empty());
+    }
+    #[test]
     fn marks_radii_rays_and_t_junctions_are_not_hidden_edge_stubs() {
         let d = serde_json::json!({"nodes":{"O":[200,300],"R":[300,300],"T1":[50,50],"T2":[60,60],"P":[120,200],"Q":[120,120],"S":[200,100],"U":[200,200]},
             "ellipses":[{"center":"O","rx":100,"ry":30}],

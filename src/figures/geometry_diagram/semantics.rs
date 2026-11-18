@@ -358,6 +358,30 @@ fn free_ends(g: &Diagram, edges: &[Edge]) -> Vec<String> {
     }
     out
 }
+/// A neutral mid-gray colour (#606060 to #b0b0b0, all channels equal within a few steps).
+fn mid_gray(c: &str) -> bool {
+    let h = c.trim_start_matches('#');
+    if h.len() != 6 {
+        return false;
+    }
+    let ch: Vec<u8> = (0..3).filter_map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).ok()).collect();
+    ch.len() == 3 && ch.iter().max().unwrap() - ch.iter().min().unwrap() <= 8 && (0x60..=0xb0).contains(&ch[0])
+}
+
+/// Printed solids mark hidden (back) edges with gray DASHED strokes; a few solid gray edges usually
+/// mean a hidden edge lost its dash pattern. A grid's many gray lines are not edges and are skipped
+/// (more than six solid gray segments). Advisory only; no style is changed.
+fn solid_gray_edges(g: &Diagram) -> Vec<String> {
+    let gray: Vec<_> = g.segments.iter().filter(|s| matches!(s.style, LineStyle::Solid) && mid_gray(&s.color)).collect();
+    if gray.is_empty() || gray.len() > 6 {
+        return Vec::new();
+    }
+    gray.iter().map(|s| format!(
+        "Segment {:?}→{:?} is a SOLID gray line ({}). In printed solids gray marks a hidden (back) edge, and hidden edges are dashed: check this edge in the source and set style \"dashed\" if it has gaps there. Keep it solid only if the source line is continuous. Nothing is changed automatically.",
+        s.from, s.to, s.color
+    )).collect()
+}
+
 fn point_to_segment(q: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let len2 = dx * dx + dy * dy;
@@ -571,6 +595,9 @@ pub(super) fn report(g: &Diagram, p: &Params) -> SemanticReport {
         }
     }
     for w in free_ends(g, &edges) {
+        warn(&mut warnings, w);
+    }
+    for w in solid_gray_edges(g) {
         warn(&mut warnings, w);
     }
     for l in &g.labels {

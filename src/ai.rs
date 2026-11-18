@@ -1454,14 +1454,32 @@ fn get_json(url: &str, key: Option<&str>) -> Result<Value, String> {
     Ok(v)
 }
 
+/// Pause before the single retry of a refused connection.
+#[cfg(not(target_arch = "wasm32"))]
+const REFUSED_RETRY_MS: u64 = 2000;
+
 /// One JSON POST, with the same error shapes for both providers; answers with the body.
 #[cfg(not(target_arch = "wasm32"))]
 fn post_json(url: &str, body: Value, key: Option<&str>) -> Result<Value, String> {
-    let mut req = agent().post(url).header("Content-Type", "application/json");
-    if let Some(k) = key {
-        req = req.header("Authorization", &format!("Bearer {k}"));
-    }
-    let mut resp = req.send(body.to_string()).map_err(|e| format!("Can't reach {url}: {e}"))?;
+    let send = || {
+        let mut req = agent().post(url).header("Content-Type", "application/json");
+        if let Some(k) = key {
+            req = req.header("Authorization", &format!("Bearer {k}"));
+        }
+        req.send(body.to_string())
+    };
+    // A refused connection never reached the server, so one retry after a short pause cannot
+    // repeat or double-bill work. Every other failure is reported at once.
+    let refused = |e: &ureq::Error| matches!(e, ureq::Error::Io(io) if io.kind() == std::io::ErrorKind::ConnectionRefused);
+    let first = send();
+    let sent = match first {
+        Err(e) if refused(&e) => {
+            std::thread::sleep(std::time::Duration::from_millis(REFUSED_RETRY_MS));
+            send()
+        }
+        other => other,
+    };
+    let mut resp = sent.map_err(|e| format!("Can't reach {url}: {e}"))?;
     let status = resp.status().as_u16();
     let text = resp.body_mut().read_to_string().map_err(|e| format!("Bad reply from {url}: {e}"))?;
     let v: Value = serde_json::from_str(&text)
@@ -1739,6 +1757,29 @@ pub(crate) mod tests {
 
     /// A one-connection-per-request stub relay: answers `replies` in order, records each request line
     /// and body, and stops when they run out.
+    #[test]
+    fn a_refused_connection_is_retried_once_and_then_reaches_the_server() {
+        use std::io::{Read, Write};
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        // Nothing listens for the first attempt; a server starts during the retry pause.
+        let server = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let listener = std::net::TcpListener::bind(("127.0.0.1", port)).unwrap();
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = sock.read(&mut buf);
+            let body = r#"{"ok":true}"#;
+            write!(sock, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+        });
+        let got = super::post_json(&format!("http://127.0.0.1:{port}/v1/chat/completions"), serde_json::json!({}), None);
+        server.join().unwrap();
+        assert_eq!(got.unwrap(), serde_json::json!({"ok":true}));
+        // Still refused after the retry: one honest error, not a loop.
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let started = std::time::Instant::now();
+        let err = super::post_json(&format!("http://127.0.0.1:{closed}/x"), serde_json::json!({}), None).unwrap_err();
+        assert!(err.contains("Can't reach") && started.elapsed() < std::time::Duration::from_secs(10), "{err}");
+    }
     pub(crate) fn stub_relay(replies: Vec<(u16, String)>) -> (String, std::thread::JoinHandle<Vec<(String, String)>>) {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
