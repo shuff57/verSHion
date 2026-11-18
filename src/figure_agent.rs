@@ -864,6 +864,7 @@ Image 1 is the figure that was made."#
             r#" Judge only what you can see. Does the figure show everything the request asks for, with the right quantities, labels and orientation, and nothing misleading? When a reference is given, anything visible in image 1 but absent from image 2 is a mismatch: an added title or caption, extra text, answer or solution marks, shading, a plotted curve or point. Every printed label, number, scale and arrow in image 2 must be present in image 1. Reply with one JSON object: {"matches": true or false, "problems": ["short problem", ...]}. Use an empty list when it matches."#,
         );
         if reference.is_some() {
+            prompt.push_str(" Arrowhead STYLE is never a changed given: open (chevron or barbed) versus filled (solid triangle) heads, and their size, are cosmetic, while a missing, extra or reversed arrowhead remains a mismatch. For line-and-angle diagrams, endpoints, slopes and label offsets need not be pixel-exact: the redraw keeps the source when every line and ray, every vertex, join and crossing, each label inside the same angle sector it names in the source, and every supplied measure are present and uncontradicted. Small shifts that change none of these (a few percent of the figure size) are cosmetic and alone do not justify matches=false. A label moved into a different sector, a changed crossing or join, an added kink or curvature, or an angle that visibly contradicts its printed measure remain mismatches.");
             prompt.push_str(" Apply the established source-fidelity criterion, not pixel-identical typography: minor font, stroke-weight or arrowhead styling, and small changes to the unlabelled tail of an arrowed axis, alone are not changed givens. Do not claim a changed numeric range merely from an unlabelled axis tail when every source gridline and tick value is retained. Missing arrows, extra/missing gridlines, changed ranges, labels, units, supplied-curve endpoints, given marks, connectivity or meaningful contacts remain mismatches. Read signs literally from the images, including small minus strokes; nearby grid stubs and white text backing can be misleading. Do not infer a sign from axis position or conventional expectations. If essential evidence remains unreadable, report that uncertainty and reject; never invent a confident difference. List concrete material differences, not cosmetic differences alone, in problems.");
         }
         let mut turn=Turn::new("user",prompt);
@@ -1826,6 +1827,8 @@ mod tests {
         assert_eq!(body["messages"][0]["content"][0]["text"],input.text,"persist exact reviewer prompt");
         assert!(input.text.contains("Image 1")&&input.text.contains("Image 2"));
         assert!(input.text.contains("not pixel-identical typography")&&input.text.contains("Missing arrows"));
+        assert!(input.text.contains("Arrowhead STYLE is never a changed given")&&input.text.contains("missing, extra or reversed arrowhead remains a mismatch"),"arrowhead style is cosmetic, presence is not");
+        assert!(input.text.contains("same angle sector")&&input.text.contains("A label moved into a different sector"),"small shifts are cosmetic, sector and join changes are not");
         assert!(input.text.contains(PROVIDED_FIELD_BORDERS));
         write_trace_fixture("judge-parse-failure",&mut run);
     }

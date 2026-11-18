@@ -202,6 +202,7 @@ async fn check(
     cfg: &AiCfg,
     page_no: usize,
     proposal: bool,
+    followup: Option<&str>,
     trace: &mut SourceBoxReviewTrace,
 ) -> Result<Value, String> {
     let mut previews = crate::ditto::source_figure_previews(&v.to_string(), bytes, page_no);
@@ -274,6 +275,10 @@ async fn check(
         schema.schema
     );
     let instruction = format!("{CONTEXT_POLICY}\n\n{instruction}\n\n{coordinate_instruction}");
+    let instruction = match followup {
+        Some(note) => format!("{instruction}\n\n{note}"),
+        None => instruction,
+    };
     let cfg = cfg.with_output(schema);
     let mut images = vec![bytes];
     if let Some(png) = &sheet {
@@ -329,7 +334,7 @@ async fn check(
             stage.reconsideration_error = Some(error.clone());
             break Ok(first.clone());
         }
-        if proposal && stage.replies.len() == 1 {
+        if proposal && followup.is_none() && stage.replies.len() == 1 {
             if let Ok(reply) = &result {
                 let repeated = unchanged_clipped_proposals(v, ts, reply);
                 if !repeated.is_empty() {
@@ -359,52 +364,19 @@ async fn check(
     result
 }
 
-pub(super) async fn review_source_figure_boxes(
-    raw: String,
-    bytes: &[u8],
-    mime: &str,
-    cfg: &AiCfg,
+/// Apply each proposed box to `candidate`. A box equal to the one in `reference` is not a change.
+/// Returns the owners with usable bounds and the indices whose bounds or page changed.
+fn apply_bounds(
+    candidate: &mut Value,
+    reference: &Value,
+    proposal: &Value,
+    ts: &[Target],
     page_no: usize,
-) -> (String, Option<SourceBoxReviewTrace>) {
-    let Some(original) = crate::ditto::json_object(&raw) else {
-        return (raw, None);
-    };
-    let ts = targets(&original);
-    let issues = crate::ditto::figure_box_issues(&raw, Some(bytes), page_no);
-    if ts.is_empty() && issues.is_empty() {
-        return (raw, None);
-    }
-    let mut affected: BTreeSet<_> = ts.iter().map(|t| t.index).collect();
-    affected.extend(issues.iter().flat_map(|i| i.indices.iter().copied()));
-    let mut trace = SourceBoxReviewTrace {
-        protocol: "per_figure_scope_v4",
-        attempts: 0,
-        declared_complete: false,
-        applied: false,
-        confirmed_indices: Vec::new(),
-        original_boxes: records(&original, &ts),
-        proposed_boxes: None,
-        issues_before: issues.clone(),
-        issues_after: issues,
-        stages: Vec::new(),
-        error: None,
-    };
-    if ts.is_empty() {
-        trace.error = Some("Source figure ownership is ambiguous; no owner was guessed.".into());
-        return (raw, Some(trace));
-    }
-    let proposal = match check(&original, &ts, bytes, mime, cfg, page_no, true, &mut trace).await {
-        Ok(v) => v,
-        Err(e) => {
-            trace.error = Some(e);
-            return (raw, Some(trace));
-        }
-    };
-    let mut candidate = original.clone();
+) -> (Vec<Target>, BTreeSet<usize>) {
     let mut usable = Vec::new();
     let mut changed = BTreeSet::new();
-    for t in &ts {
-        let d = decision(&proposal, t);
+    for t in ts {
+        let d = decision(proposal, t);
         let Some(a) = d["box"].as_array() else {
             continue;
         };
@@ -417,7 +389,7 @@ pub(super) async fn review_source_figure_boxes(
         if bounds[0] >= bounds[2] || bounds[1] >= bounds[3] {
             continue;
         }
-        let old = figure(&original, t);
+        let old = figure(reference, t);
         let same = grid_box(old).is_some_and(|b| {
             b.iter()
                 .zip(bounds)
@@ -447,7 +419,90 @@ pub(super) async fn review_source_figure_boxes(
         }
         usable.push(t.clone());
     }
+    (usable, changed)
+}
+
+/// A verified crop that still reports clipped or uncertain outer ink or axis ends is a crop
+/// problem, not a judgment the figure cannot be drawn: it earns the one bounded re-crop cycle.
+fn needs_recrop(d: &Value) -> bool {
+    let b = &d["boundary_evidence"];
+    matches!(b["outer_ink"]["status"].as_str(), Some("clipped" | "uncertain"))
+        || b["endpoints"].as_array().into_iter().flatten().any(|e| e["crop_endpoint"] == "clipped")
+}
+
+const RECROP_NOTE: &str = "RECROP FOLLOW-UP (one bounded cycle, after a rendered-crop verification). The verification still reported clipped or uncertain outer figure ink for these keys: {report}. These are unverified model reports, not application source facts. Reinspect the SAME FULL PAGE. If any given figure label, value, leader, arrow, tick or mark lies outside or on the edge of the current box, propose bounds that contain ALL of it with a small clear margin; the earlier expansion was not enough, so measure the outermost glyphs on the full page and the coordinate guide. If the only uncertain ink is this item's own known external_item_marker (or a fragment of it), either propose bounds that leave that marker out while keeping every figure given, or, under the context policy above, judge it as harmless context. Never add neighboring questions' text or figures. Return null when reliable bounds cannot be found and invent no ink. Changed bounds are rendered and verified once more; no further re-crop follows.";
+
+pub(super) async fn review_source_figure_boxes(
+    raw: String,
+    bytes: &[u8],
+    mime: &str,
+    cfg: &AiCfg,
+    page_no: usize,
+) -> (String, Option<SourceBoxReviewTrace>) {
+    let Some(original) = crate::ditto::json_object(&raw) else {
+        return (raw, None);
+    };
+    let ts = targets(&original);
+    let issues = crate::ditto::figure_box_issues(&raw, Some(bytes), page_no);
+    if ts.is_empty() && issues.is_empty() {
+        return (raw, None);
+    }
+    let mut affected: BTreeSet<_> = ts.iter().map(|t| t.index).collect();
+    affected.extend(issues.iter().flat_map(|i| i.indices.iter().copied()));
+    let mut trace = SourceBoxReviewTrace {
+        protocol: "per_figure_scope_v5",
+        attempts: 0,
+        declared_complete: false,
+        applied: false,
+        confirmed_indices: Vec::new(),
+        original_boxes: records(&original, &ts),
+        proposed_boxes: None,
+        issues_before: issues.clone(),
+        issues_after: issues,
+        stages: Vec::new(),
+        error: None,
+    };
+    if ts.is_empty() {
+        trace.error = Some("Source figure ownership is ambiguous; no owner was guessed.".into());
+        return (raw, Some(trace));
+    }
+    let proposal = match check(&original, &ts, bytes, mime, cfg, page_no, true, None, &mut trace).await {
+        Ok(v) => v,
+        Err(e) => {
+            trace.error = Some(e);
+            return (raw, Some(trace));
+        }
+    };
+    let mut candidate = original.clone();
+    let (mut usable, changed) = apply_bounds(&mut candidate, &original, &proposal, &ts, page_no);
     trace.proposed_boxes = Some(records(&candidate, &ts));
+    // A changed box that fails the local checks (for example it overlaps another owner's box)
+    // falls back to its original box, which is then verified like any unconfirmed crop. One bad
+    // proposal must not also knock out a neighbour whose own correction was sound.
+    let mut reverted = BTreeSet::new();
+    loop {
+        let bad: Vec<usize> = crate::ditto::figure_box_issues(&candidate.to_string(), Some(bytes), page_no)
+            .iter()
+            .flat_map(|i| i.indices.iter().copied())
+            .filter(|i| changed.contains(i) && !reverted.contains(i))
+            .collect();
+        // Undo first the box in the most conflicts; on a tie, a change to a crop the model itself
+        // called complete (an unsupported change), then the larger change of area.
+        let rank = |i: usize| {
+            let t = ts.iter().find(|t| t.index == i).expect("changed owner");
+            let area = |b: Option<[f64; 4]>| b.map_or(0.0, |b| (b[2] - b[0]) * (b[3] - b[1]));
+            let growth = (area(grid_box(figure(&candidate, t))) - area(grid_box(figure(&original, t)))).abs();
+            (bad.iter().filter(|j| **j == i).count(), decision(&proposal, t)["complete"] == true, (growth * 1000.0) as i64, std::cmp::Reverse(i))
+        };
+        let Some(worst) = bad.iter().copied().max_by_key(|i| rank(*i)) else { break };
+        let t = ts.iter().find(|t| t.index == worst).expect("changed owner");
+        *candidate["bank"]["questions"][t.index].pointer_mut(&t.path).expect("original owner") = figure(&original, t).clone();
+        reverted.insert(worst);
+    }
+    let changed: BTreeSet<_> = changed.difference(&reverted).copied().collect();
+    if !reverted.is_empty() {
+        trace.proposed_boxes = Some(records(&candidate, &ts));
+    }
     let invalid: BTreeSet<_> =
         crate::ditto::figure_box_issues(&candidate.to_string(), Some(bytes), page_no)
             .iter()
@@ -463,19 +518,22 @@ pub(super) async fn review_source_figure_boxes(
         .filter(|t| {
             !changed.contains(&t.index)
                 && !originally_invalid.contains(&t.index)
+                && !reverted.contains(&t.index)
                 && positive(decision(&proposal, t))
                 && trace.stages[0].shown_keys.contains(&t.key)
         })
         .map(|t| t.index)
         .collect();
     usable.retain(|t| !invalid.contains(&t.index));
+    let mut last_verification: Option<Value> = None;
     if usable.iter().any(|t| !confirmed.contains(&t.index)) {
         match check(
-            &candidate, &usable, bytes, mime, cfg, page_no, false, &mut trace,
+            &candidate, &usable, bytes, mime, cfg, page_no, false, None, &mut trace,
         )
         .await
         {
             Ok(v) => {
+                last_verification = Some(v.clone());
                 confirmed.retain(|index| !usable.iter().any(|t| t.index == *index));
                 confirmed.extend(
                     usable
@@ -491,6 +549,55 @@ pub(super) async fn review_source_figure_boxes(
                 );
             }
             Err(e) => trace.error = Some(e),
+        }
+    }
+    if let Some(v) = &last_verification {
+        let recrop: Vec<Target> = usable
+            .iter()
+            .filter(|t| !confirmed.contains(&t.index) && needs_recrop(decision(v, t)))
+            .cloned()
+            .collect();
+        if !recrop.is_empty() && trace.error.is_none() {
+            let report: Vec<Value> = recrop.iter().map(|t| {
+                let d = decision(v, t);
+                json!({"key":t.key,"current_box_ymin_xmin_ymax_xmax_1000":grid_box(figure(&candidate,t)),"reported_outer_ink":d["boundary_evidence"]["outer_ink"],"reported_endpoints":d["boundary_evidence"]["endpoints"],"reported_problems":d["problems"]})
+            }).collect();
+            let note = RECROP_NOTE.replace("{report}", &json!(report).to_string());
+            let reply = check(&candidate, &recrop, bytes, mime, cfg, page_no, true, Some(&note), &mut trace).await;
+            trace.stages.last_mut().expect("stage pushed").stage = "recrop_proposal";
+            match reply {
+                Ok(p) => {
+                    let before = candidate.clone();
+                    let (again, moved) = apply_bounds(&mut candidate, &before, &p, &recrop, page_no);
+                    trace.proposed_boxes = Some(records(&candidate, &ts));
+                    let invalid: BTreeSet<_> =
+                        crate::ditto::figure_box_issues(&candidate.to_string(), Some(bytes), page_no)
+                            .iter()
+                            .flat_map(|i| i.indices.iter().copied())
+                            .collect();
+                    let shown = trace.stages.last().expect("stage pushed").shown_keys.clone();
+                    // Unchanged bounds judged complete now (for example own-marker context) need no re-render.
+                    confirmed.extend(again.iter().filter(|t| {
+                        !moved.contains(&t.index) && !invalid.contains(&t.index) && positive(decision(&p, t)) && shown.contains(&t.key)
+                    }).map(|t| t.index));
+                    let reverify: Vec<Target> = again
+                        .into_iter()
+                        .filter(|t| moved.contains(&t.index) && !invalid.contains(&t.index))
+                        .collect();
+                    if !reverify.is_empty() {
+                        let reply = check(&candidate, &reverify, bytes, mime, cfg, page_no, false, None, &mut trace).await;
+                        trace.stages.last_mut().expect("stage pushed").stage = "recrop_verification";
+                        match reply {
+                            Ok(v) => {
+                                let shown = &trace.stages.last().expect("stage pushed").shown_keys;
+                                confirmed.extend(reverify.iter().filter(|t| positive(decision(&v, t)) && shown.contains(&t.key)).map(|t| t.index));
+                            }
+                            Err(e) => trace.error = Some(e),
+                        }
+                    }
+                }
+                Err(e) => trace.error = Some(e),
+            }
         }
     }
     // A valid correction must also be valid beside ORIGINAL crops kept for review. Removing a
@@ -772,7 +879,7 @@ mod tests {
         assert!(text.contains("[ymin,xmin,ymax,xmax]"));
         assert!(text.contains("SOURCE PAGE FRAME, excluding guide margins"));
         let trace = trace.unwrap();
-        assert_eq!(trace.protocol, "per_figure_scope_v4");
+        assert_eq!(trace.protocol, "per_figure_scope_v5");
         let evidence = &trace.stages[0].image_evidence;
         assert_eq!(
             evidence["original_image"]["byte_sha256"],
@@ -1008,6 +1115,8 @@ mod tests {
                 replies.push(response(json!({"figures":[p.clone()]})));
             }
             replies.push(response(json!({"figures":[v.clone()]})));
+            // The bounded re-crop cycle asks once more; an unchanged negative reply stays negative.
+            replies.push(response(json!({"figures":[p.clone()]})));
             let (base, server) = stub_relay(replies);
             let (raw, trace) = block_on(review_source_figure_boxes(
                 original.to_string(),
@@ -1018,7 +1127,7 @@ mod tests {
             ));
             assert_eq!(
                 server.join().unwrap().len(),
-                if ink_status == "clipped" { 3 } else { 2 }
+                if ink_status == "clipped" { 4 } else { 3 }
             );
             assert_eq!(crate::ditto::json_object(&raw).unwrap(), original);
             let trace = trace.unwrap();
@@ -1028,6 +1137,8 @@ mod tests {
                 "No application-side classification may erase a negative model problem."
             );
             assert_eq!(trace.stages[1].replies[0]["result"]["figures"][0], v);
+            assert_eq!(trace.stages.len(), 3, "one re-crop proposal, no re-render of unchanged bounds");
+            assert_eq!(trace.stages[2].stage, "recrop_proposal");
         }
     }
     #[test]
@@ -1135,8 +1246,9 @@ mod tests {
             };
             let (base, server) = stub_relay(vec![
                 response(first),
-                response(json!({"figures":[p]})),
+                response(json!({"figures":[p.clone()]})),
                 response(json!({"figures":[v]})),
+                response(json!({"figures":[p]})),
             ]);
             let (raw, trace) = block_on(review_source_figure_boxes(
                 original.to_string(),
@@ -1145,11 +1257,13 @@ mod tests {
                 &cfg(base),
                 1,
             ));
-            assert_eq!(server.join().unwrap().len(), 3);
+            assert_eq!(server.join().unwrap().len(), 4, "exactly one bounded re-crop request, then stop");
             assert_eq!(crate::ditto::json_object(&raw).unwrap(), original);
             let trace = trace.unwrap();
             assert!(!trace.applied && trace.confirmed_indices.is_empty());
-            assert_eq!(trace.attempts, 3);
+            assert_eq!(trace.attempts, 4);
+            assert_eq!(trace.stages.len(), 3);
+            assert_eq!(trace.stages[2].stage, "recrop_proposal");
             assert_eq!(trace.stages[0].replies.len(), 2);
             assert_eq!(trace.stages[1].replies.len(), 1);
             assert_eq!(
@@ -1158,6 +1272,97 @@ mod tests {
                 "A format retry consumes the same single extra proposal reply."
             );
         }
+    }
+    #[test]
+    fn verified_clipping_gets_one_recrop_that_can_widen_or_accept_own_marker_context() {
+        // (a) under-expanded crop: verification still reports a clipped label, the re-crop widens it,
+        // and only the re-rendered, re-verified crop is applied.
+        let original = original();
+        let first = proposal("figure0", json!([90, 100, 400, 400]), false);
+        let mut still = clipped_label_proposal(json!([90, 100, 400, 400]));
+        still.as_object_mut().unwrap().remove("box");
+        let wider = clipped_label_proposal(json!([60, 90, 410, 420]));
+        let (base, server) = stub_relay(vec![
+            response(json!({"figures":[first]})),
+            response(json!({"figures":[still]})),
+            response(json!({"figures":[wider]})),
+            response(json!({"figures":[verify("figure0", true)]})),
+        ]);
+        let (raw, trace) = block_on(review_source_figure_boxes(original.to_string(), &page(), "image/png", &cfg(base), 1));
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 4);
+        assert!(request_text(&requests[2].1).contains("RECROP FOLLOW-UP"));
+        assert!(request_text(&requests[2].1).contains("12 kg"), "the verification's own report is passed back");
+        assert_ne!(image_urls(&requests[1].1)[1], image_urls(&requests[3].1)[1], "the widened crop is rendered again");
+        let trace = trace.unwrap();
+        assert!(trace.applied);
+        let stages: Vec<_> = trace.stages.iter().map(|s| s.stage).collect();
+        assert_eq!(stages, ["proposal", "verification", "recrop_proposal", "recrop_verification"]);
+        let mut expected = original.clone();
+        expected["bank"]["questions"][0]["figure"]["box"] = json!([0.09, 0.06, 0.42, 0.41]);
+        expected["bank"]["questions"][0]["figure"]["page"] = json!(1);
+        assert_eq!(crate::ditto::json_object(&raw).unwrap(), expected);
+
+        // (b) only the own marker was uncertain: an unchanged box judged complete under the context
+        // policy is confirmed without another render, and the bank keeps its original box.
+        let mut marker = proposal("figure0", json!([100, 100, 400, 400]), false);
+        marker["boundary_evidence"]["outer_ink"] = json!({"status":"uncertain","evidence":"All figure labels present; only a fragment 3) of the own number 13) is in the corner."});
+        let mut v = marker.clone();
+        v.as_object_mut().unwrap().remove("box");
+        let context = proposal("figure0", json!([100, 100, 400, 400]), true);
+        let (base, server) = stub_relay(vec![
+            response(json!({"figures":[marker]})),
+            response(json!({"figures":[v]})),
+            response(json!({"figures":[context]})),
+        ]);
+        let (raw, trace) = block_on(review_source_figure_boxes(original.to_string(), &page(), "image/png", &cfg(base), 1));
+        assert_eq!(server.join().unwrap().len(), 3);
+        let trace = trace.unwrap();
+        assert!(trace.applied && trace.confirmed_indices == vec![0]);
+        assert_eq!(crate::ditto::json_object(&raw).unwrap(), original);
+
+        // (c) a re-crop whose re-render still fails is not retried again.
+        let first = proposal("figure0", json!([90, 100, 400, 400]), false);
+        let mut still = clipped_label_proposal(json!([90, 100, 400, 400]));
+        still.as_object_mut().unwrap().remove("box");
+        let wider = clipped_label_proposal(json!([60, 90, 410, 420]));
+        let mut fails = clipped_label_proposal(json!([60, 90, 410, 420]));
+        fails.as_object_mut().unwrap().remove("box");
+        let (base, server) = stub_relay(vec![
+            response(json!({"figures":[first]})),
+            response(json!({"figures":[still]})),
+            response(json!({"figures":[wider]})),
+            response(json!({"figures":[fails]})),
+        ]);
+        let (raw, trace) = block_on(review_source_figure_boxes(original.to_string(), &page(), "image/png", &cfg(base), 1));
+        assert_eq!(server.join().unwrap().len(), 4, "no second re-crop cycle");
+        let trace = trace.unwrap();
+        assert!(!trace.applied && trace.confirmed_indices.is_empty());
+        assert_eq!(crate::ditto::json_object(&raw).unwrap(), original);
+        assert!(trace.error.as_deref().unwrap().contains("12 kg"));
+    }
+    #[test]
+    fn an_overlapping_unsupported_change_is_reverted_so_the_neighbours_correction_survives() {
+        let mut original = original();
+        original["bank"]["questions"].as_array_mut().unwrap().push(json!({"id":"q2","label":"14","type":"short-answer","stem":"Second source","figure":{"box":[600,100,900,400],"alt":"Second source diagram"}}));
+        // figure0 is widened upward (sound); figure1 says its crop is complete yet proposes a box
+        // that swallows figure0's area. Both changed boxes overlap, so the local check rejects both.
+        let widened = clipped_label_proposal(json!([80, 100, 400, 400]));
+        let contradictory = proposal("figure1", json!([50, 90, 900, 420]), true);
+        let (base, server) = stub_relay(vec![
+            response(json!({"figures":[widened, contradictory]})),
+            response(json!({"figures":[verify("figure0", true), verify("figure1", true)]})),
+        ]);
+        let (raw, trace) = block_on(review_source_figure_boxes(original.to_string(), &page(), "image/png", &cfg(base), 1));
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 2);
+        let trace = trace.unwrap();
+        assert!(trace.applied, "{:?}", trace.error);
+        assert_eq!(trace.confirmed_indices, vec![0, 1]);
+        assert_eq!(trace.stages[1].shown_keys, vec!["figure0", "figure1"], "both are verified, figure1 on its original crop");
+        let got = crate::ditto::json_object(&raw).unwrap();
+        assert_eq!(got["bank"]["questions"][0]["figure"]["box"], json!([0.1, 0.08, 0.4, 0.4]), "figure0's widened box is kept");
+        assert_eq!(got["bank"]["questions"][1]["figure"], original["bank"]["questions"][1]["figure"], "figure1 keeps its original box");
     }
     #[test]
     fn failed_optional_reconsideration_preserves_first_negative_and_positive_sibling() {
@@ -1313,8 +1518,9 @@ mod tests {
         let mut v = verify("figure0", true);
         v["boundary_evidence"] = p["boundary_evidence"].clone();
         let (base, server) = stub_relay(vec![
-            response(json!({"figures":[p]})),
+            response(json!({"figures":[p.clone()]})),
             response(json!({"figures":[v]})),
+            response(json!({"figures":[p]})),
         ]);
         let (raw, trace) = block_on(review_source_figure_boxes(
             original.to_string(),
@@ -1325,8 +1531,8 @@ mod tests {
         ));
         assert_eq!(
             server.join().unwrap().len(),
-            2,
-            "Only the existing proposal/verification phases are used."
+            3,
+            "Proposal, verification and one bounded re-crop proposal; unchanged bounds are not re-rendered."
         );
         assert_eq!(crate::ditto::json_object(&raw).unwrap(), original);
         let trace = trace.unwrap();

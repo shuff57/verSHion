@@ -9124,8 +9124,9 @@ mod examed_tests {
         assert_eq!(ex.items[0].part_work, vec![2, 0, 5]);
         let m = map_placed(&resolve_items(&st, &ex), ex.paper_style);
         assert_eq!(m[0].dq.text.len(), 3, "{:?}", m[0].dq.text);
-        assert!(m[0].dq.text[0].starts_with("Answer the parts") && m[0].dq.text[0].ends_with("a. What is f(3)?"), "{:?}", m[0].dq.text[0]);
-        assert!(m[0].dq.text[1].starts_with("b. f is even.") && m[0].dq.text[2].starts_with("c. Which is f'(x)?"), "{:?}", m[0].dq.text);
+        // Exports keep the inline math source (PDF equation layout, DOCX OMML), so the parts carry it.
+        assert!(m[0].dq.text[0].starts_with("Answer the parts") && m[0].dq.text[0].ends_with("a. What is $f(3)$?"), "{:?}", m[0].dq.text[0]);
+        assert!(m[0].dq.text[1].starts_with("b. $f$ is even.") && m[0].dq.text[2].starts_with("c. Which is $f'(x)$?"), "{:?}", m[0].dq.text);
         assert_eq!(m[0].dq.space_after, vec![2, 0, 5]);
         assert_eq!(m[0].dq.text.join("\n"), plain[0].dq.text[0], "same printed text, cut at the parts");
         // Removing the space again leaves nothing stored.

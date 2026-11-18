@@ -132,11 +132,11 @@ pub fn source_scope(proposal: bool) -> OutputSchema {
                 "key":{"type":"string","enum":["x_negative","x_positive","y_negative","y_positive","polar_positive"]},
                 "page_endpoint":{"type":"string","enum":["arrow","line","uncertain"]},
                 "crop_endpoint":{"type":"string","enum":["same","clipped","uncertain"]},
-                "evidence":{"type":"string","minLength":1,"maxLength":180}
+                "evidence":{"type":"string","minLength":1,"maxLength":400}
             }))},
             "outer_ink":object(json!({
                 "status":{"type":"string","enum":["included","clipped","uncertain"]},
-                "evidence":{"type":"string","minLength":1,"maxLength":180}
+                "evidence":{"type":"string","minLength":1,"maxLength":400}
             }))
         }))
     });
@@ -147,9 +147,9 @@ pub fn source_scope(proposal: bool) -> OutputSchema {
     }
     OutputSchema::new(
         if proposal {
-            "source_scope_proposal_v2"
+            "source_scope_proposal_v3"
         } else {
-            "source_scope_verification_v2"
+            "source_scope_verification_v3"
         },
         object(json!({"figures":array(object(fields))})),
     )

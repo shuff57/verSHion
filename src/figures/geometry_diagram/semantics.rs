@@ -219,6 +219,25 @@ pub(super) fn text_box(at: (f64, f64), text: &str, size: f64) -> [f64; 4] {
     let hw = crate::figures::circle::tw(text, size, false) / 2.0 + 0.7;
     [at.0 - hw, at.1 - size * 0.85, at.0 + hw, at.1 + size * 0.22]
 }
+/// Where a free label is drawn: its authored position, moved inward only by the amount its
+/// conservative text box would leave the canvas (2 px clear). A label wider or taller than the
+/// canvas keeps its authored position on that axis. A label already on the canvas is unchanged.
+pub(super) fn keep_on_canvas(at: (f64, f64), text: &str, size: f64, width: f64, height: f64) -> (f64, f64) {
+    let b = text_box(at, text, size);
+    let shift = |lo: f64, hi: f64, max: f64| -> f64 {
+        const CLEAR: f64 = 2.0;
+        if hi - lo > max - 2.0 * CLEAR {
+            0.0
+        } else if lo < CLEAR {
+            CLEAR - lo
+        } else if hi > max - CLEAR {
+            max - CLEAR - hi
+        } else {
+            0.0
+        }
+    };
+    (at.0 + shift(b[0], b[2], width), at.1 + shift(b[1], b[3], height))
+}
 pub(super) fn segment_meets_box(a: (f64, f64), b: (f64, f64), r: [f64; 4], margin: f64) -> bool {
     let (mut lo, mut hi) = (0.0f64, 1.0f64);
     for (p, d, mn, mx) in [
@@ -277,6 +296,75 @@ fn quadrant(a: (f64, f64), b: (f64, f64)) -> &'static str {
         _ => "up-left",
     }
 }
+/// A dashed or dotted (hidden) edge with exactly one end that meets no other stroke, ellipse rim,
+/// point marker, arrowhead or label. A solid's hidden edges run between vertices, so such an end
+/// usually means a hidden edge was left out or stopped short. Solid strokes (rays, leaders) and
+/// isolated strokes (marks, dimension bars) are not checked. Advisory only; nothing is joined.
+fn free_ends(g: &Diagram, edges: &[Edge]) -> Vec<String> {
+    let mut degree: BTreeMap<&str, usize> = BTreeMap::new();
+    for s in &g.segments {
+        *degree.entry(s.from.as_str()).or_default() += 1;
+        *degree.entry(s.to.as_str()).or_default() += 1;
+    }
+    for path in &g.paths {
+        for n in &path.nodes {
+            *degree.entry(n.as_str()).or_default() += 2;
+        }
+    }
+    for l in &g.lines {
+        *degree.entry(l.through.as_str()).or_default() += 2;
+    }
+    let mut out = Vec::new();
+    let attached = |i: usize, s: &Segment, node: &String| -> bool {
+        if degree.get(node.as_str()).copied().unwrap_or(0) != 1 || g.points.iter().any(|p| &p.node == node) {
+            return true;
+        }
+        let Ok(q) = g.node(node) else { return true };
+        let reach = s.width / 2.0 + 1.5;
+        let on_edge = edges.iter().any(|e| {
+            e.owner != EdgeOwner::Segment(i) && point_to_segment(q, e.a, e.b) <= reach + e.width / 2.0
+        });
+        let on_rim = g.ellipses.iter().any(|el| {
+            g.node(&el.center).is_ok_and(|c| {
+                let r = (((q.0 - c.0) / el.rx.max(1e-9)).powi(2) + ((q.1 - c.1) / el.ry.max(1e-9)).powi(2)).sqrt();
+                // On the rim, or at the centre a radius or diameter starts from.
+                (r - 1.0).abs() * el.rx.min(el.ry) <= reach + el.width / 2.0 || distance(q, c) <= reach.max(0.03 * el.rx.min(el.ry))
+            })
+        });
+        let near_label = g.labels.iter().any(|l| {
+            let anchor = l.node.as_ref().and_then(|n| g.node(n).ok()).or(l.at.map(|a| (a[0], a[1])));
+            anchor.is_some_and(|a| {
+                let b = text_box((a.0 + l.offset[0], a.1 + l.offset[1]), &l.text, l.size);
+                q.0 >= b[0] - 12.0 && q.0 <= b[2] + 12.0 && q.1 >= b[1] - 12.0 && q.1 <= b[3] + 12.0
+            })
+        });
+        on_edge || on_rim || near_label
+    };
+    for (i, s) in g.segments.iter().enumerate() {
+        if matches!(s.style, LineStyle::Solid) || !matches!(s.arrows, Arrows::None) {
+            continue;
+        }
+        let (from_ok, to_ok) = (attached(i, s, &s.from), attached(i, s, &s.to));
+        if from_ok == to_ok {
+            // Both ends attached is an ordinary edge; both free is an isolated mark or bar.
+            continue;
+        }
+        let node = if from_ok { &s.to } else { &s.from };
+        let Ok(q) = g.node(node) else { continue };
+        out.push(format!(
+            "Hidden-edge end {node:?} at ({:.0}, {:.0}) of dashed/dotted segment {:?}→{:?} meets no other stroke, ellipse rim, point marker or label. A solid's hidden edges run between vertices: check the source for a missing or shortened hidden edge there. Keep it only if the source really shows a free end. Nothing is joined automatically.",
+            q.0, q.1, s.from, s.to
+        ));
+    }
+    out
+}
+fn point_to_segment(q: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 < 1e-12 { 0.0 } else { (((q.0 - a.0) * dx + (q.1 - a.1) * dy) / len2).clamp(0.0, 1.0) };
+    distance(q, (a.0 + t * dx, a.1 + t * dy))
+}
+
 fn warn(out: &mut Vec<String>, s: String) {
     if out.len() < 12 && !out.contains(&s) {
         out.push(s);
@@ -482,6 +570,9 @@ pub(super) fn report(g: &Diagram, p: &Params) -> SemanticReport {
             }
         }
     }
+    for w in free_ends(g, &edges) {
+        warn(&mut warnings, w);
+    }
     for l in &g.labels {
         let q = l
             .node
@@ -491,7 +582,14 @@ pub(super) fn report(g: &Diagram, p: &Params) -> SemanticReport {
                 let q = l.at.unwrap();
                 (q[0], q[1])
             });
-        let at = (q.0 + l.offset[0], q.1 + l.offset[1]);
+        let authored = (q.0 + l.offset[0], q.1 + l.offset[1]);
+        let at = keep_on_canvas(authored, &l.text, l.size, p.f("width"), p.f("height"));
+        if at != authored {
+            warn(
+                &mut warnings,
+                format!("Free text {:?} would leave the canvas, so it is drawn {:.1} px right and {:.1} px down from its authored position to stay whole. Check that it still sits where the source places it.", l.text, at.0 - authored.0, at.1 - authored.1),
+            );
+        }
         let b = text_box(at, &l.text, l.size);
         if let Some(e) = edges
             .iter()

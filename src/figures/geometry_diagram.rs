@@ -961,7 +961,7 @@ fn render(p: &Params) -> String {
         label(
             &mut d,
             p,
-            (q.0 + l.offset[0], q.1 + l.offset[1]),
+            semantics::keep_on_canvas((q.0 + l.offset[0], q.1 + l.offset[1]), &l.text, l.size, p.f("width"), p.f("height")),
             l.size,
             &l.text,
             &l.color,
@@ -1449,5 +1449,40 @@ mod tests {
             let (p, _) = draw(j);
             assert!(validate(&p).is_err());
         }
+    }
+}
+#[cfg(test)]
+mod hidden_edge_tests {
+    fn hidden(diagram: serde_json::Value) -> Vec<String> {
+        let d = crate::figures::registry().into_iter().find(|d| d.id == "geometry-diagram").unwrap();
+        let p = crate::figures::params_from_json(&d, &serde_json::json!({"width":400,"height":400,"diagram":diagram.to_string()}));
+        super::semantic_report(&p).unwrap().warnings.into_iter().filter(|w| w.starts_with("Hidden-edge end")).collect()
+    }
+    #[test]
+    fn a_hidden_edge_stopping_in_empty_space_is_reported_and_closed_or_anchored_ones_are_not() {
+        // Hidden back corner H joins three dashed edges: closed, nothing reported.
+        let mut d = serde_json::json!({"nodes":{"A":[100,300],"B":[300,300],"C":[300,100],"H":[150,250],"G":[350,250],"K":[150,50]},
+            "segments":[{"from":"A","to":"B"},{"from":"B","to":"C"},
+                {"from":"A","to":"H","style":"dashed"},{"from":"H","to":"G","style":"dashed"},{"from":"H","to":"K","style":"dashed"},
+                {"from":"G","to":"B"},{"from":"K","to":"C"}]});
+        assert!(hidden(d.clone()).is_empty());
+        // The hidden edge H->G stops at M, short of G: reported once, at M.
+        d["nodes"]["M"] = serde_json::json!([250, 250]);
+        d["segments"][3] = serde_json::json!({"from":"H","to":"M","style":"dashed"});
+        let w = hidden(d);
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(w[0].contains("\"M\"") && w[0].contains("Nothing is joined automatically"));
+    }
+    #[test]
+    fn marks_radii_rays_and_t_junctions_are_not_hidden_edge_stubs() {
+        let d = serde_json::json!({"nodes":{"O":[200,300],"R":[300,300],"T1":[50,50],"T2":[60,60],"P":[120,200],"Q":[120,120],"S":[200,100],"U":[200,200]},
+            "ellipses":[{"center":"O","rx":100,"ry":30}],
+            "segments":[
+                {"from":"O","to":"R","style":"dashed","color":"#ff0000"},
+                {"from":"T1","to":"T2","style":"dashed"},
+                {"from":"P","to":"Q","style":"dashed","arrows":"end"},
+                {"from":"S","to":"U"},{"from":"Q","to":"U","style":"dashed"}],
+            "labels":[{"text":"5 in","at":[125,105]}]});
+        assert!(hidden(d).is_empty(), "radius from the centre, an isolated mark, an arrowed stroke, a label and a T-junction are not stubs");
     }
 }
