@@ -15,6 +15,9 @@ pub(crate) mod sym;
 pub(crate) mod exact;
 mod holes;
 mod hole_cuts;
+mod domain;
+#[cfg(test)]
+mod round8;
 #[cfg(test)]
 mod round7;
 #[cfg(test)]
@@ -1196,13 +1199,13 @@ fn yrange(p: &Params, n: usize) -> (f64, f64, f64) {
 }
 
 /// The grid rows of function fi (0 f, 1 f′, 2 f″) of the model, each with its domain and line word.
-fn rows_of(m: &Model, fi: usize, line: &str) -> Vec<String> {
+fn rows_of(m: &Model, fi: usize, line: &str, win: (f64, f64)) -> Vec<String> {
     // which derivative of the typed pieces this is (f from f′ is not a row: it is drawn as a worked-out line)
     let k = match m.mode { Mode::F => fi, Mode::Fp { .. } => { if fi == 0 { return vec![]; } fi - 1 } };
     let word = match line { "Dashed" => " dashed", "Dotted" => " dotted", _ => "" };
-    m.pieces.iter().enumerate().map(|(pi, pc)| {
-        let e = if k == 0 { &pc.e } else { &pc.d[k - 1] };
-        let body = sym::print(e);
+    m.pieces.iter().enumerate().map(|(pi, _)| {
+        // (a derivative has a value only where the typed function has one: ln x's 1/x is not drawn for x < 0)
+        let body = domain::row_body(m, pi, k, win);
         match holes::domain(m, pi) { Some(d) => format!("y = {body}, {d}{word}"), None => format!("y = {body}{word}") }
     }).collect()
 }
@@ -1607,6 +1610,20 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             }
         }
     }
+    // (a graph with values in the window's x range but none inside its y range is not drawn at all: said, with its range)
+    if let (Some(m), Some(_)) = (model.as_ref(), an.as_ref()) {
+        for fi in 0..3usize {
+            if (fi == 2 && !fpp) || !shows(p, fi) { continue; }
+            let (y0, y1, _) = yrange(p, if one { 0 } else { fi });
+            let vals: Vec<f64> = (0..=600).filter_map(|i| m.d(fi, wa + (wb - wa) * i as f64 / 600.0)).filter(|v| v.is_finite()).collect();
+            if vals.len() < 6 || vals.iter().any(|v| *v >= y0 && *v <= y1) { continue; }
+            let (lo, hi) = vals.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
+            let nm = &names[fi];
+            let axis = if one || fi == 0 { "f: y".to_string() } else { format!("f{}: y", if fi == 1 { PRIME } else { DPRIME }) };
+            let side = if lo > y1 { "above" } else if hi < y0 { "below" } else { "above and below" };
+            notes.push(format!("{nm}(x) is outside the window: its values here run from about {} to {}, all {side} the y-axis range; change {axis} from and to to show it", fmt(lo, 3), fmt(hi, 3)));
+        }
+    }
     // (sin(1/x) near 0: more points than can be marked; the figure says so and marks none)
     let an = an.filter(|a| {
         let many = a.crit.len() > MAX_MARKS || a.fpp_marks.len() > MAX_MARKS || a.fp_marks.len() > MAX_MARKS;
@@ -1642,7 +1659,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         let fis = fis_of(*kind);
         let yr = if *kind == PK::One { yrange(p, 0) } else { yrange(p, fis[0]) };
         let mut rows: Vec<(usize, Vec<String>)> = vec![];
-        if let Some(m) = &model { for &fi in &fis { if shows(p, fi) { rows.push((fi, rows_of(m, fi, line_of(p, fi, one)))); } } }
+        if let Some(m) = &model { for &fi in &fis { if shows(p, fi) { rows.push((fi, rows_of(m, fi, line_of(p, fi, one), (wa, wb)))); } } }
         let gp = grid_params(p, &place_rows(&rows), yr);
         let g = grid_layout_in(&gp, (480.0 * wide, plot_h));
         let mut gn = vec![];
@@ -1759,11 +1776,13 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         Some(v)
     };
     let te = exact::of_text(p.s("tracer_x"));
-    let reading = |fi: usize| -> Option<String> {
+    // the value of f, f′ or f″ at the tracer, and its exact form: none where f has no value (a pole typed exactly, tan x at
+    // π/2, whose float is huge; ln(cos x) at π/2, whose float is a finite residue), none for a derivative whose exact
+    // expression has no value there unless both sides have it and agree (√(x² − 2) at √2: the slope runs off), and no f″
+    // where f′ does not exist (|sin x| at π)
+    let tval_one = |fi: usize| -> Option<(f64, Option<XV>)> {
         let (m, t) = (model.as_ref()?, tx.as_ref()?);
-        if fi > 0 && !m.has_value(t.v, te.as_ref()) {
-            return Some(format!("{}({}) does not exist", names[fi], t.show));
-        }
+        if !m.has_value(t.v, te.as_ref()) { return None; }
         // the value, and its exact form where it can be derived: f at the typed x; a derivative from the pieces on both
         // sides, which must agree (at a join they may not: then it does not exist)
         let (v, ve) = if fi == 0 {
@@ -1780,12 +1799,26 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                 // (an end of the domain: the one side there is)
                 (Some(v), None) if rp.is_none() => (Some(v.f()), Some(v)),
                 (None, Some(v)) if lp.is_none() => (Some(v.f()), Some(v)),
-                _ => (deriv_at(m, fi, t.v), None),
+                _ => {
+                    // (the expression of the derivative has no value at the exact x, and f has values on one side only: the
+                    // slope there is the one side's, which must settle; √(x² − 2) at √2 runs off)
+                    let undefined = te.as_ref().is_some_and(|x| [lp, rp].iter().flatten().any(|&pi| m.fexpr(pi, fi).is_some_and(|e| exact::undefined_at(e, x))));
+                    let h = 1e-7 * (1.0 + t.v.abs());
+                    let (l, r) = (m.d(fi, t.v - h).is_some(), m.d(fi, t.v + h).is_some());
+                    let runs_off = undefined && l != r && domain::one_sided(m, fi, t.v, if l { -1.0 } else { 1.0 }).is_none();
+                    if runs_off || (undefined && !l && !r) { (None, None) } else { (deriv_at(m, fi, t.v), None) }
+                }
             }
         };
+        v.filter(|v| v.is_finite()).map(|v| (v, ve))
+    };
+    let tval = |fi: usize| -> Option<(f64, Option<XV>)> { if fi == 2 && tval_one(1).is_none() { return None; } tval_one(fi) };
+    let reading = |fi: usize| -> Option<String> {
+        let t = tx.as_ref()?;
+        model.as_ref()?;
         let nm = &names[fi];
-        Some(match v {
-            Some(v) => eq_text(&format!("{nm}({})", t.show), &val_text(v, &Pv { ex: ve, show: None }, dec, t.decimal)),
+        Some(match tval(fi) {
+            Some((v, ve)) => eq_text(&format!("{nm}({})", t.show), &val_text(v, &Pv { ex: ve, show: None }, dec, t.decimal)),
             None if fi == 0 => format!("{nm}({}) has no value", t.show),
             None => format!("{nm}({}) does not exist", t.show),
         })
@@ -1950,10 +1983,10 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         for (k, pn) in panels.iter().enumerate() {
             for fi in fis_of(pn.kind) {
                 if !shows(p, fi) { continue; }
-                let v = if fi == 0 { m.f(t.v) } else { deriv_at(m, fi, t.v) };
+                let v = if fi == 0 { tval(0).map(|v| v.0) } else { tval(fi).and(deriv_at(m, fi, t.v)) };
                 if let Some(v) = v { if inside(pn, t.v, v) { let q = (pn.sx(t.v), pn.sy(v)); dots.push((q, "tracer")); let _ = k; tracer_pts.push(q); } }
                 if fi == 0 {
-                    if let (Some(v), Some(s)) = (m.f(t.v), deriv_at(m, 1, t.v)) {
+                    if let (Some(v), Some(s)) = (tval(0).map(|v| v.0), tval(1).and(deriv_at(m, 1, t.v))) {
                         if inside(pn, t.v, v) {
                             // the tangent: 75 px each way along it, cut at the plot's edge
                             let (cx, cy) = (pn.sx(t.v), pn.sy(v));
@@ -2168,8 +2201,9 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                 for (k, pn) in panels.iter().enumerate() {
                     for fi in fis_of(pn.kind) {
                         if !shows(p, fi) { continue; }
-                        if m.is_isolated(*hx) && m.d(fi, *hx).is_some() { continue; }
                         let Some(v) = m.rat_of(pi, fi).and_then(|r| r.f(*hx)) else { continue };
+                        // (a point typed on its own fills the hole only with the limit's own value: 3 at x = 1 beside x + 1 leaves (1, 2) open)
+                        if m.is_isolated(*hx) && m.d(fi, *hx).is_some_and(|w| fi > 0 || (w - v).abs() <= 1e-9 * (1.0 + v.abs())) { continue; }
                         if !inside(pn, *hx, v) { continue; }
                         let _ = k;
                         marks.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="hole"/>"##, pn.sx(*hx), pn.sy(v), if print { ink } else { cols[fi] }));
@@ -2185,8 +2219,8 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                 for fi in fis_of(pn.kind) {
                     if !shows(p, fi) { continue; }
                     let k = match m.mode { Mode::F => fi, Mode::Fp { .. } if fi > 0 => fi - 1, _ => continue };
-                    if m.is_isolated(l.x) && m.d(fi, l.x).is_some() { continue; }
                     let v = l.at(k, l.x);
+                    if m.is_isolated(l.x) && m.d(fi, l.x).is_some_and(|w| fi > 0 || (w - v).abs() <= 1e-9 * (1.0 + v.abs())) { continue; }
                     if inside(pn, l.x, v) {
                         marks.push_str(&format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="hole"/>"##, pn.sx(l.x), pn.sy(v), if print { ink } else { cols[fi] }));
                     }
@@ -2206,16 +2240,37 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                 // (on f: a break where f has no value though its sides meet, as sin x / sin x at ±π, where the floats give 1)
                 let xs: Vec<f64> = if fi == 0 { an.breaks.clone() } else { (if fi == 1 { &an.fp_marks } else { &an.fpp_marks }).iter().filter(|mk| mk.k == EvK::Undef).map(|mk| mk.x).collect() };
                 for x in xs {
-                    if m.is_isolated(x) && m.d(fi, x).is_some() { continue; }
-                    if fi == 0 { let xe = an.fp_marks.iter().find(|mk| (mk.x - x).abs() < 1e-7 * (1.0 + x.abs())).and_then(|mk| mk.pv.ex.clone()); if m.has_value(x, xe.as_ref()) { continue; } }
                     let h = 1e-7 * (1.0 + x.abs());
                     let (Some(l), Some(r)) = (m.d(fi, x - h), m.d(fi, x + h)) else { continue };
                     if (l - r).abs() > 1e-5 * (1.0 + l.abs()) { continue; }
                     let v = 0.5 * (l + r);
+                    // (f's own value there, when it is the limit, closes the hole; a different one leaves it open: x² with 1 at x = 2)
+                    let fills = |w: f64| (w - v).abs() <= 1e-6 * (1.0 + v.abs());
+                    if m.is_isolated(x) && m.d(fi, x).is_some_and(|w| fi > 0 || fills(w)) { continue; }
+                    if fi == 0 { let xe = an.fp_marks.iter().find(|mk| (mk.x - x).abs() < 1e-7 * (1.0 + x.abs())).and_then(|mk| mk.pv.ex.clone()); if m.has_value(x, xe.as_ref()) && m.f(x).is_some_and(fills) { continue; } }
                     if !inside(pn, x, v) { continue; }
                     let (cx, cy) = (pn.sx(x), pn.sy(v));
                     if have.iter().any(|(hx, hy)| (hx - (cx - pn.ox)).abs() < 3.0 && (hy - (cy - pn.oy)).abs() < 3.0) || mine.iter().any(|(hx, hy)| (hx - cx).abs() < 3.0 && (hy - cy).abs() < 3.0) { continue; }
                     marks.push_str(&format!(r##"<circle cx="{cx:.2}" cy="{cy:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="hole"/>"##, if print { ink } else { cols[fi] }));
+                }
+            }
+        }
+    }
+    // an open end of f's domain (e^(ln x) at 0, x ln x at 0): an open circle on each graph that runs into it with a finite
+    // limit; f′ and f″ end there too, since they have no value where f has none
+    if let (Some(m), Some(an)) = (&model, &an) {
+        let circles_in = |svg: &str| -> Vec<(f64, f64)> { svg.split("<circle").skip(1).filter_map(|c| { let num = |k: &str| c.split(&format!("{k}=\"")).nth(1)?.split('"').next()?.parse::<f64>().ok(); Some((num("cx")?, num("cy")?)) }).collect() };
+        for (x, side) in domain::open_ends(m, an, (wa, wb)) {
+            for (k, pn) in panels.iter().enumerate() {
+                let have = circles_in(&panel_svgs[k]);
+                let mine = circles_in(&marks);
+                for fi in fis_of(pn.kind) {
+                    if !shows(p, fi) { continue; }
+                    let Some(v) = domain::one_sided(m, fi, x, side) else { continue };
+                    if !inside(pn, x, v) { continue; }
+                    let (cx, cy) = (pn.sx(x), pn.sy(v));
+                    if have.iter().any(|(hx, hy)| (hx - (cx - pn.ox)).abs() < 3.0 && (hy - (cy - pn.oy)).abs() < 3.0) || mine.iter().any(|(hx, hy)| (hx - cx).abs() < 3.0 && (hy - cy).abs() < 3.0) { continue; }
+                    marks.push_str(&format!(r##"<circle cx="{cx:.2}" cy="{cy:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="end-open"/>"##, if print { ink } else { cols[fi] }));
                 }
             }
         }

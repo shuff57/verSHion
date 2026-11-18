@@ -162,7 +162,7 @@ fn render_guard_preserves_real_discontinuities_and_removes_uncertified_stacks() 
     for fx in ["1/x","1/x^2","tan(x)","abs(x)","sin(x)/x^2","(e^x-1)/x^2","abs(x)/x","sin(abs(x))/x","x, x<0; x+1, x>=0","e^(1/x)","x*ln(x)"] {
         let pp=p(fx,-3.0,3.0); let m=model(&pp,window(&pp)).unwrap();
         for fi in 1..3 {
-            let gp=grid_params(&pp,&place_rows(&[(fi,rows_of(&m,fi,"Solid"))]),yrange(&pp,fi));
+            let gp=grid_params(&pp,&place_rows(&[(fi,rows_of(&m,fi,"Solid",window(&pp)))]),yrange(&pp,fi));
             let g=grid_layout_in(&gp,(480.0,260.0));
             let mut svg=coordinate_grid_build_in(&gp,&mut vec![],(480.0,260.0));
             let before=svg.clone();
@@ -173,7 +173,7 @@ fn render_guard_preserves_real_discontinuities_and_removes_uncertified_stacks() 
     // Exercise the safety net independently of discovery, using exactly the old noisy grid rows.
     let pp=p("(x-9)/(sqrt(x)-3)",0.0,12.0);
     let mut m=model(&pp,window(&pp)).unwrap(); m.locals.clear();
-    let gp=grid_params(&pp,&place_rows(&[(1,rows_of(&m,1,"Solid"))]),yrange(&pp,1));
+    let gp=grid_params(&pp,&place_rows(&[(1,rows_of(&m,1,"Solid",window(&pp)))]),yrange(&pp,1));
     let g=grid_layout_in(&gp,(480.0,260.0));
     let mut svg=coordinate_grid_build_in(&gp,&mut vec![],(480.0,260.0));
     assert!(holes::guard(&mut svg,&m,&pp,&[1],&g),"unrecognized noisy stack was not refused");

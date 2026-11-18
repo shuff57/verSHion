@@ -59,7 +59,7 @@ fn removable_hole_limits_are_derived_without_differencing_nearby_floats() {
 }
 
 fn panel_svg(m: &Model, p: &Params, fi: usize, tall: f64) -> (String, Panel) {
-    let gp = grid_params(p, &place_rows(&[(fi, rows_of(m, fi, "Solid"))]), yrange(p, fi));
+    let gp = grid_params(p, &place_rows(&[(fi, rows_of(m, fi, "Solid", window(p)))]), yrange(p, fi));
     let g = grid_layout_in(&gp, (480.0, 260.0 * tall));
     let mut notes = vec![];
     let mut svg = coordinate_grid_build_in(&gp, &mut notes, (480.0, 260.0 * tall));
@@ -168,7 +168,7 @@ fn holes_with_options_styles_copies_and_multiple_pieces_stay_pure() {
     let p = params("sin(x)/x, x<1; (e^(x-2)-1)/(x-2), x>=1", -3.0, 5.0);
     let m = model(&p, window(&p)).unwrap();
     assert_eq!(m.locals.len(), 2);
-    let rows = rows_of(&m, 2, "Solid");
+    let rows = rows_of(&m, 2, "Solid", window(&p));
     assert_eq!(rows.len(), 2, "continuations must not consume piece slots");
     assert!(render(&p).contains("data-curve=\"continuation\""));
 }

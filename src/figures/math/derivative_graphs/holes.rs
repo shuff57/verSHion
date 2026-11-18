@@ -124,7 +124,7 @@ fn series(e: &Ex, x: &XV, zero: Option<&Ex>) -> Option<Series> {
 /// Put outer arithmetic over a common denominator for Taylor construction only. This makes sin(x)*x⁻¹
 /// and sin(x)/x the same local calculation, while retaining the *typed* expression for its domain.
 fn fraction(e: &Ex) -> (Ex,Ex) {
-    use sym::Ex::*;
+    use sym::{Ex::*, F};
     match e {
         Neg(a) => { let (n,d)=fraction(a); (sym::neg(n),d) }
         Add(a,b) | Sub(a,b) => {
@@ -135,6 +135,14 @@ fn fraction(e: &Ex) -> (Ex,Ex) {
         Mul(a,b) => { let (an,ad)=fraction(a); let (bn,bd)=fraction(b); (sym::mul(an,bn),sym::mul(ad,bd)) }
         Div(a,b) => { let (an,ad)=fraction(a); let (bn,bd)=fraction(b); (sym::mul(an,bd),sym::mul(ad,bn)) }
         Pow(a,b) if sym::konst(b).is_some_and(|k|k<0.0 && k.fract()==0.0 && k>=-32.0) => (Num(1.0),sym::pow((**a).clone(),sym::neg((**b).clone()))),
+        // (the reciprocal trig functions as quotients, and their whole powers: x cot x, x² csc² x cancel as x cos x / sin x)
+        Pow(a,b) if sym::konst(b).is_some_and(|k|k>1.0 && k.fract()==0.0 && k<=32.0) && matches!(**a, Fun(F::Tan|F::Cot|F::Sec|F::Csc,_)) => {
+            let (n,d)=fraction(a); (sym::pow(n,(**b).clone()),sym::pow(d,(**b).clone()))
+        }
+        Fun(F::Cot,u) => (Fun(F::Cos,u.clone()),Fun(F::Sin,u.clone())),
+        Fun(F::Csc,u) => (Num(1.0),Fun(F::Sin,u.clone())),
+        Fun(F::Tan,u) => (Fun(F::Sin,u.clone()),Fun(F::Cos,u.clone())),
+        Fun(F::Sec,u) => (Num(1.0),Fun(F::Cos,u.clone())),
         _ => (e.clone(),Num(1.0)),
     }
 }
