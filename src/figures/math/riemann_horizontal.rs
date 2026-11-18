@@ -122,6 +122,8 @@ pub(super) struct Slices<'a> {
     a: Val,
     b: Val,
     samples: Vec<(f64, f64, f64)>,
+    /// a and b are crossings of f and g (Where f and g cross): f = g there.
+    cross_ends: bool,
 }
 impl<'a> Slices<'a> {
     pub(super) fn new(fns: &'a Fns, a: Val, b: Val) -> Self {
@@ -131,8 +133,9 @@ impl<'a> Slices<'a> {
             let x = if i == 1200 { b.v } else { a.v + (b.v - a.v) * i as f64 / 1200.0 };
             (x, fns.f(x).unwrap_or(0.0), fns.g(x).unwrap_or(0.0))
         }).collect() } else { vec![] };
-        Self { fns, curves, a, b, samples }
+        Self { fns, curves, a, b, samples, cross_ends: false }
     }
+    pub(super) fn crossing_ends(mut self, yes: bool) -> Self { self.cross_ends = yes; self }
     fn eval(&self, g: bool, x: f64) -> Option<f64> {
         let tree = if g { self.fns.ast_g.as_ref() } else { self.fns.ast_f.as_ref() };
         match tree { Some(n) => sym::num(n, x), None => if g { self.fns.g(x) } else { self.fns.f(x) } }
@@ -207,6 +210,7 @@ impl<'a> Slices<'a> {
                 }
             }
         }
+        let ncross = xs.len();
         if let Some(tree) = self.fns.h_tree() {
             if let Some(c) = Curve::new(&tree) {
                 xs.extend(c.level(&Val::exact(Ex::zero()), &self.a, &self.b));
@@ -214,14 +218,44 @@ impl<'a> Slices<'a> {
                 xs.extend(roots(&|x| Some(self.fns.f(x)? - self.fns.g(x)?), self.a.v, self.b.v).into_iter().map(|x| from_exact(sym::exact_zero(&tree, x), x)));
             }
         }
+        // A constant side has its exact value at every x, and where f and g cross the
+        // level is often exact though the crossing is not: (2^(1/4))⁴ in floating point
+        // is not 2, and a top level a rounding above the line y = 2 would leave the
+        // whole top strip outside the region.
+        let (kf, kg) = (self.fns.konst(false), self.fns.konst(true));
+        let level = self.crossing_level();
         let mut ys = vec![];
-        for x in xs {
-            if let Some(v) = self.fns.fval(x.v, x.ex.as_ref()) { ys.push(from_exact(v.ex, v.v)); }
-            if let Some(v) = self.fns.g(x.v) { ys.push(from_exact(x.ex.as_ref().and_then(|x| self.fns.g_ex(x)), v)); }
+        for (i, x) in xs.into_iter().enumerate() {
+            let crossing = if i < 2 { self.cross_ends } else { i >= ncross };
+            if crossing && let Some(k) = level.clone() { ys.push(Val::exact(k)); continue; }
+            if let Some(v) = self.fns.fval(x.v, x.ex.as_ref()) { ys.push(match &kf { Some(k) => Val::exact(k.clone()), None => from_exact(v.ex, v.v) }); }
+            if let Some(v) = self.fns.g(x.v) { ys.push(match &kg { Some(k) => Val::exact(k.clone()), None => from_exact(x.ex.as_ref().and_then(|x| self.fns.g_ex(x)), v) }); }
         }
         ys.sort_by(|a, b| a.v.total_cmp(&b.v));
         ys.dedup_by(|a, b| a.v == b.v);
         ys
+    }
+    /// The level at every crossing, exactly, where it is the same at each: f = g there, so a
+    /// constant side gives it, and for polynomials so does the remainder of f on division by
+    /// f − g when it is a constant (x⁴ against x⁴/2 + 1: x⁴ = 2 at each crossing).
+    fn crossing_level(&self) -> Option<Ex> {
+        if let Some(k) = self.fns.konst(false).or_else(|| self.fns.konst(true)) { return Some(k); }
+        let f = sym::poly(self.fns.ast_f.as_ref()?)?;
+        let g = match &self.fns.g { None => vec![Rat::zero()], Some(_) => sym::poly(self.fns.ast_g.as_ref()?)? };
+        let at = |p: &[Rat], i: usize| p.get(i).copied().unwrap_or(Rat::zero());
+        let mut h = (0..f.len().max(g.len())).map(|i| at(&f, i).sub(at(&g, i))).collect::<Option<Vec<Rat>>>()?;
+        while h.last().is_some_and(|c| c.is_zero()) { h.pop(); }
+        if h.len() < 2 { return None; }
+        let mut r = f;
+        while r.last().is_some_and(|c| c.is_zero()) { r.pop(); }
+        while r.len() >= h.len() {
+            let lead = r.last()?.div(*h.last()?)?;
+            let shift = r.len() - h.len();
+            for (i, c) in h.iter().enumerate() { r[shift + i] = r[shift + i].sub(c.mul(lead)?)?; }
+            r.pop();
+            while r.last().is_some_and(|c| c.is_zero()) { r.pop(); }
+        }
+        match r.len() { 0 => Some(Ex::zero()), 1 => Some(Ex::rat(r[0])), _ => None }
     }
     pub(super) fn range(&self) -> Option<(Val, Val)> {
         self.curves.as_ref()?;

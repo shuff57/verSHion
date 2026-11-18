@@ -321,6 +321,18 @@ fn ln_ex(u: &Ex) -> Option<Ex> {
     out.add(&Ex::rat(m.erat()))
 }
 
+/// e^u, for u a rational plus rational multiples of ln p: e^(r + k ln p) = e^r · p^k (e^(ln 2) = 2).
+fn exp_ex(u: &Ex) -> Option<Ex> {
+    let mut out = Ex::int(1);
+    for (m, c) in &u.0 {
+        let factor = if m.is_one() { Ex::e_pow(*c) }
+            else if m.sq == 1 && m.cb == 1 && m.pi == 0 && m.e == (0, 1) && m.ln.len() == 1 && m.ln[0].1 == 1 { Ex::int(m.ln[0].0 as i128).pow_rat(*c)? }
+            else { return None };
+        out = out.mul(&factor)?;
+    }
+    Some(out)
+}
+
 /// a/b when a is a rational multiple of b (the same monomials in the same proportion).
 fn ratio(a: &Ex, b: &Ex) -> Option<Rat> {
     if a.0.len() != b.0.len() { return None; }
@@ -364,6 +376,7 @@ pub fn eval(n: &Node, x: &Ex) -> Option<Ex> {
         Sub(a, b) => eval(a, x)?.sub(&eval(b, x)?)?,
         Mul(a, b) => eval(a, x)?.mul(&eval(b, x)?)?,
         Div(a, b) => eval(a, x)?.div(&eval(b, x)?)?,
+        Pow(a, b) if matches!(**a, E) => exp_ex(&eval(b, x)?)?,
         Pow(a, b) => {
             let e = eval(b, x)?.as_rat()?;
             eval(a, x)?.pow_rat(e)?
@@ -376,7 +389,7 @@ pub fn eval(n: &Node, x: &Ex) -> Option<Ex> {
                 Fun::Ln => ln_ex(&u)?,
                 // log u exactly only where it is rational: ln u a rational multiple of ln 10 (log 1000 = 3, log 1 = 0)
                 Fun::Log => { let lu = ln_ex(&u)?; if lu.is_zero() { Ex::zero() } else { Ex::rat(ratio(&lu, &ln_ex(&Ex::int(10))?)?) } }
-                Fun::Exp => Ex::e_pow(u.as_rat()?),
+                Fun::Exp => exp_ex(&u)?,
                 Fun::Sin => sin_pi(pi_mult(&u)?)?,
                 Fun::Cos => sin_pi(pi_mult(&u)?.add(Rat::new(1, 2)?)?)?,
                 Fun::Tan => { let r = pi_mult(&u)?; let c = sin_pi(r.add(Rat::new(1, 2)?)?)?; if c.is_zero() { return None; } sin_pi(r)?.div(&c)? }
@@ -731,7 +744,8 @@ pub fn poly_at(p: &[Rat], x: &Ex) -> Option<Ex> {
     for c in p.iter().rev() { r = r.mul(x)?.add(&Ex::rat(*c))?; }
     Some(r)
 }
-fn depends(n: &Node) -> bool {
+/// Whether the tree has x in it (a tree without is a constant).
+pub fn depends(n: &Node) -> bool {
     match n { X => true, Num(_) | Pi | E => false, Neg(a) | F(_, a) => depends(a), Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) => depends(a) || depends(b) }
 }
 fn has_abs(n: &Node) -> bool {

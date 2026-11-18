@@ -542,6 +542,13 @@ impl Fns {
         let f = self.ast_f.clone()?;
         match (&self.g, &self.ast_g) { (None, _) => Some(f), (Some(_), Some(g)) => Some(Node::Sub(Box::new(f), Box::new(g.clone()))), _ => None }
     }
+    /// f (or g, which is 0 under f) when it is a constant: its exact value, the same at every x.
+    fn konst(&self, g: bool) -> Option<Ex> {
+        if g && self.g.is_none() { return Some(Ex::zero()); }
+        let t = if g { self.ast_g.as_ref()? } else { self.ast_f.as_ref()? };
+        if sym::depends(t) { return None; }
+        sym::checked(sym::eval(t, &Ex::zero()), if g { self.g(0.0)? } else { self.f(0.0)? })
+    }
     fn g_ex(&self, xe: &Ex) -> Option<Ex> { match &self.g { None => Some(Ex::zero()), Some(_) => sym::eval(self.ast_g.as_ref()?, xe) } }
     /// f at x as a value: exact when x is exact and f's tree evaluates there exactly.
     fn fval(&self, x: f64, xe: Option<&Ex>) -> Option<Val> {
@@ -926,15 +933,32 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
         let tol = 1e-9 * (xb - xa);
         let use_f = fns.f(x).is_some_and(|f| (f - y).abs() <= 1e-9 * y.abs().max(1.0));
         let tree = if use_f { fns.ast_f.as_ref()? } else if fns.g.is_some() { fns.ast_g.as_ref()? } else { return (y == 0.0).then(Ex::zero) };
+        // (a constant has its value everywhere: the top of a flat edge such as y = 2 is 2 at any x on it)
+        if !sym::depends(tree) { return sym::eval(tree, &Ex::zero()); }
         let xe = if (x - xa).abs() <= tol { a_ex.clone()? } else if (x - xb).abs() <= tol { b_ex.clone()? } else { stationary(Some(tree), x)? };
         sym::eval(tree, &xe)
     };
     let (mut c_ex, mut d_ex) = (sym::checked(at_ex(xc, c), c), sym::checked(at_ex(xd, d), d));
     // Use the established extremum value itself, so a vertex level is the same
     // level used by the inverse, rather than a nearby golden-section value.
-    let slices = horizontal_levels::Slices::new(fns, Val::of(a_ex, xa), Val::of(b_ex, xb));
+    let crossed = !m.crossings.is_empty();
+    let slices = horizontal_levels::Slices::new(fns, Val::of(a_ex, xa), Val::of(b_ex, xb)).crossing_ends(crossed);
     let (mut c, mut d) = (c_ex.as_ref().map_or(c, Ex::approx), d_ex.as_ref().map_or(d, Ex::approx));
     if let Some((cv, dv)) = slices.range() { c = cv.v; d = dv.v; c_ex = cv.ex; d_ex = dv.ex; }
+    else if crossed {
+        // Between crossings, a constant side k and the other curve keep one order on each piece
+        // (decided at its middle, far from any crossing). Where the other is never above k, the
+        // top is k itself, exactly (met at the crossings, where f = g = k); never below, the bottom.
+        for (side, k) in [(true, fns.konst(true)), (false, fns.konst(false))] {
+            let Some(k) = k else { continue };
+            let other = |x: f64| if side { fns.f(x) } else { fns.g(x) };
+            let mids: Vec<f64> = m.crossings.windows(2).map(|w| 0.5 * (w[0].v + w[1].v)).collect();
+            let order: Option<Vec<f64>> = mids.iter().map(|x| Some(other(*x)? - k.approx())).collect();
+            let Some(order) = order else { continue };
+            if order.iter().all(|v| *v < 0.0) { d = k.approx(); d_ex = Some(k.clone()); }
+            if order.iter().all(|v| *v > 0.0) { c = k.approx(); c_ex = Some(k.clone()); }
+        }
+    }
     m.y_lo = Some(Val::of(c_ex.clone(), c));
     m.y_hi = Some(Val::of(d_ex.clone(), d));
     if d - c < 1e-9 * (d.abs() + c.abs()).max(1.0) { return Err("The region has no height to slice across: choose vertical strips".into()); }
@@ -2023,3 +2047,7 @@ mod crossing_tests;
 #[cfg(test)]
 #[path = "riemann_substitution_tests.rs"]
 mod substitution_tests;
+
+#[cfg(test)]
+#[path = "riemann_edge_tests.rs"]
+mod edge_tests;
