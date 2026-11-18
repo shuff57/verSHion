@@ -92,6 +92,9 @@ pub struct ExecutionTrace {
     pub selected_attempt: usize,
     pub attempts: Vec<AttemptTrace>,
     pub observation: Option<crate::ai::figure_observation::SourceObservation>,
+    /// The first, uncertain source reading when a fresh second reading was made.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_observation: Option<crate::ai::figure_observation::SourceObservation>,
     pub rejection_reason: Option<String>,
     pub error: Option<String>,
     pub declined: Option<String>,
@@ -103,6 +106,7 @@ impl AgentRun {
             selected_attempt: self.selected_attempt,
             attempts: std::mem::take(&mut self.attempts),
             observation: self.observation.take(),
+            first_observation: self.first_observation.take(),
             rejection_reason: None,
             error: self.error.clone(),
             declined: self.declined.clone(),

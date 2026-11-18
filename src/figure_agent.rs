@@ -101,13 +101,19 @@ pub async fn run_model_async(request: &str, reference: Option<&[u8]>, cfg: &AiCf
     let mut judge=ModelJudge::new(&started.cfg);
     let (vision,observation)=if let Some(source)=reference {
         let (vision,observation)=crate::ai::figure_observation::observe(source,&started.cfg).await;
-        if let Some(error)=&observation.error {return AgentRun{error:Some(format!("Source-only figure reading failed: {error}")),observation:Some(observation),..AgentRun::default()};}
-        (Some(vision),Some(observation))
+        // An uncertain reading (the model could not settle a detail) gets one fresh read; any other
+        // failure, and a second uncertain reading, stop the figure as before.
+        let (vision,observation,first)=if observation.error_stage==Some(crate::ai::figure_observation::ObservationErrorStage::UncertainSource){
+            let (v2,o2)=crate::ai::figure_observation::observe(source,&started.cfg).await;(v2,o2,Some(observation))
+        }else{(vision,observation,None)};
+        if let Some(error)=&observation.error {return AgentRun{error:Some(format!("Source-only figure reading failed: {error}")),observation:Some(observation),first_observation:first,..AgentRun::default()};}
+        (Some(vision),Some((observation,first)))
     }else{(None,None)};
-    let evidence=observation.as_ref().and_then(|o|o.facts.as_ref()).map(|facts|format!("Separate source-only observation, made before a candidate existed (unverified model evidence, not a gold reference): {facts}. Recheck it against the actual source pixels; correct any contradictory observation rather than obeying it. Never infer missing marks or answers."));
-    let source_plot=observation.as_ref().and_then(|o|o.facts.as_ref()).and_then(|facts|facts.get("plot")).filter(|p|!p.is_null());
+    let evidence=observation.as_ref().and_then(|o|o.0.facts.as_ref()).map(|facts|format!("Separate source-only observation, made before a candidate existed (unverified model evidence, not a gold reference): {facts}. Recheck it against the actual source pixels; correct any contradictory observation rather than obeying it. Never infer missing marks or answers."));
+    let source_plot=observation.as_ref().and_then(|o|o.0.facts.as_ref()).and_then(|facts|facts.get("plot")).filter(|p|!p.is_null());
     let mut run=run_with_retries_context_async(request,vision.as_deref(),&mut chat,Some(&mut judge),if reference.is_some(){MAX_TRIES}else{1},evidence.as_deref(),source_plot).await;
-    run.observation=observation;run
+    if let Some((observation,first))=observation {run.observation=Some(observation);run.first_observation=first;}
+    run
 }
 
 /// One line of the run log shown to the user (and printed by the headless hook).
@@ -123,6 +129,8 @@ pub struct AgentRun {
     pub attempts:Vec<AttemptTrace>,
     pub selected_attempt:usize,
     pub observation:Option<crate::ai::figure_observation::SourceObservation>,
+    /// A first source reading that ended uncertain and was read once more from scratch.
+    pub first_observation:Option<crate::ai::figure_observation::SourceObservation>,
     /// Application comparison with unverified source assertions, never a source-fidelity certificate.
     pub source_plot_check:Option<Json>,
     /// The figure the model settled on, ready to store on a question.
@@ -400,7 +408,7 @@ fn render_args_context(args: &Json, has_reference: bool) -> Result<Rendered, Str
 
 const PROVIDED_FIELD_BORDERS: &str = "For a supplied short-segment field, preserve each whole provided segment, its endpoints and the gaps between marks, including the outer rows and columns at all four borders (left, right, top and bottom). Half-segments, clipped field marks, missing outer rows or changed endpoints are material mismatches, not cosmetic styling of an unlabelled axis tail. Inspect the full source and candidate at every border; do not infer an equation or complete unreadable marks.";
 
-const GEOMETRY_STROKE_CHECK: &str = "Inspect the actual stroke pattern of EVERY internal and outer geometry edge, including faint gray edges. Gray or thin is a color/weight, not a dash pattern: a source stroke with visible gaps must stay dashed/dotted, and a continuous gray line is not an equivalent hidden edge. Trace each interior branch all the way to its source junction. A small visible gap between a branch endpoint and its host side changes connectivity. Candidate proximity and stroke inventories describe only the candidate; independently check the source before deciding whether a close endpoint should join or stay separate. Never snap a source nonjoining crossing or fill an unseen edge.";
+const GEOMETRY_STROKE_CHECK: &str = "Inspect the actual stroke pattern of EVERY internal and outer geometry edge, including faint gray edges. Gray or thin is a color/weight, not a dash pattern: a source stroke with visible gaps must stay dashed/dotted, and a continuous gray line is not an equivalent hidden edge. Trace each interior branch all the way to its source junction. A small visible gap between a branch endpoint and its host side changes connectivity. Candidate proximity and stroke inventories describe only the candidate; independently check the source before deciding whether a close endpoint should join or stay separate. Never snap a source nonjoining crossing or fill an unseen edge. Edge by edge: for every source edge drawn dashed or dotted, find the same edge in image 1 and confirm it is dashed or dotted there too; a source-hidden edge drawn solid, even in gray, or a solid source edge drawn dashed, is a mismatch. For every arrowhead and every parallel-mark chevron, compare the direction it points with the source: a reversed arrow or chevron is a mismatch even when the count is right.";
 
 fn system_prompt(has_reference: bool, native_tools: bool) -> String {
     let mut catalog = String::new();
@@ -864,7 +872,7 @@ Image 1 is the figure that was made."#
             r#" Judge only what you can see. Does the figure show everything the request asks for, with the right quantities, labels and orientation, and nothing misleading? When a reference is given, anything visible in image 1 but absent from image 2 is a mismatch: an added title or caption, extra text, answer or solution marks, shading, a plotted curve or point. Every printed label, number, scale and arrow in image 2 must be present in image 1. Reply with one JSON object: {"matches": true or false, "problems": ["short problem", ...]}. Use an empty list when it matches."#,
         );
         if reference.is_some() {
-            prompt.push_str(" Arrowhead STYLE is never a changed given: open (chevron or barbed) versus filled (solid triangle) heads, and their size, are cosmetic, while a missing, extra or reversed arrowhead remains a mismatch. For line-and-angle diagrams, endpoints, slopes and label offsets need not be pixel-exact: the redraw keeps the source when every line and ray, every vertex, join and crossing, each label inside the same angle sector it names in the source, and every supplied measure are present and uncontradicted. Small shifts that change none of these (a few percent of the figure size) are cosmetic and alone do not justify matches=false. A label moved into a different sector, a changed crossing or join, an added kink or curvature, or an angle that visibly contradicts its printed measure remain mismatches.");
+            prompt.push_str(" Unless the request states that arrowhead style is selectable for this figure, arrowhead STYLE is not a changed given: open (chevron or barbed) versus filled (solid triangle) heads, and their size, are cosmetic, while a missing, extra or reversed arrowhead remains a mismatch. For line-and-angle diagrams, endpoints, slopes and label offsets need not be pixel-exact: the redraw keeps the source when every line and ray, every vertex, join and crossing, each label inside the same angle sector it names in the source, and every supplied measure are present and uncontradicted. Small shifts that change none of these (a few percent of the figure size) are cosmetic and alone do not justify matches=false. A label moved into a different sector, a changed crossing or join, an added kink or curvature, or an angle that visibly contradicts its printed measure remain mismatches.");
             prompt.push_str(" Apply the established source-fidelity criterion, not pixel-identical typography: minor font, stroke-weight or arrowhead styling, and small changes to the unlabelled tail of an arrowed axis, alone are not changed givens. Do not claim a changed numeric range merely from an unlabelled axis tail when every source gridline and tick value is retained. Missing arrows, extra/missing gridlines, changed ranges, labels, units, supplied-curve endpoints, given marks, connectivity or meaningful contacts remain mismatches. Read signs literally from the images, including small minus strokes; nearby grid stubs and white text backing can be misleading. Do not infer a sign from axis position or conventional expectations. If essential evidence remains unreadable, report that uncertainty and reject; never invent a confident difference. List concrete material differences, not cosmetic differences alone, in problems.");
         }
         let mut turn=Turn::new("user",prompt);
@@ -919,7 +927,14 @@ fn describe(spec: &FigureSpec) -> String {
     format!("{} {}", spec.id, serde_json::to_string(&spec.params).unwrap_or_default())
 }
 
+/// Figures whose generator can draw either a filled or an open arrowhead must match the source's.
+const SELECTABLE_ARROWHEADS: &str = "ARROWHEAD STYLE IS SELECTABLE for this figure (Triangle arrow = filled head, Line arrow = unfilled two-stroke V, plus Circle and None). A head with a dark filled interior is a Triangle arrow even when its back edge is swept back, notched or barbed; only a head made of two separate strokes with white between them is a Line arrow. Treat a missing or extra end, or a CLEAR filled-versus-unfilled difference, as a mismatch, naming the end. If the fill cannot be read at this resolution, do not reject for arrowhead style.";
+fn selectable_arrowheads(id:&str)->bool{
+    find(id).is_some_and(|d|(d.params)().iter().any(|p|matches!(&p.kind,crate::figures::Kind::Choice(options) if options.contains(&"Triangle arrow")&&options.contains(&"Line arrow"))))
+}
 fn judge_request(request:&str,spec:&FigureSpec)->String{
+    let request=if selectable_arrowheads(&spec.id){format!("{request}\n{SELECTABLE_ARROWHEADS}")}else{request.to_string()};
+    let request=request.as_str();
     if spec.id!="geometry-diagram"{return request.into();}
     let Some(d)=find(&spec.id)else{return request.into()};let p=crate::figures::spec::params_from_spec(d,spec);
     match figures::geometry_diagram::semantic_report(&p){Ok(g)=>format!("{request}\nRendered structure for IMAGE 1 ONLY, not the source or expected givens: {}. Compare these named incidences, marker leg pairs/counts and any conditional warnings with the source image. Do not accept them as source facts or automatically repair a genuine source triangle.",serde_json::to_string(&g).unwrap_or_default()),Err(_)=>request.into()}
@@ -1701,13 +1716,16 @@ mod tests {
         unsafe { std::env::set_var("VERSHION_STORE_DIR",std::env::temp_dir().join(format!("vershion-source-topology-hold-tests-{}",std::process::id()))); }
         let facts=json!({"plot":null,"focus_box_xyxy_1000":null,"structure":"Faint structural strokes.","labels":[],"marks":[],"connections":[],"uncertain":["The endpoint is too faint to distinguish a crossing from a join."],"topology":{"status":"uncertain","reason":"The endpoint is too faint to distinguish a crossing from a join.","nodes":[],"edges":[],"crossings":[]}});
         let reply=(200,json!({"choices":[{"message":{"content":facts.to_string()}}]}).to_string());
-        let(base,server)=crate::ai::tests::stub_relay(vec![reply.clone(),reply]);
+        // Two readings of two calls each: the first ends uncertain, one fresh reading follows.
+        let(base,server)=crate::ai::tests::stub_relay(vec![reply.clone(),reply.clone(),reply.clone(),reply]);
         let cfg=AiCfg{provider:"custom".into(),base,native_tools:true,..AiCfg::default()};
         let mut source=Vec::new();image::DynamicImage::ImageRgb8(image::RgbImage::new(16,16)).write_to(&mut std::io::Cursor::new(&mut source),image::ImageFormat::Png).unwrap();
         let run=crate::ai::block_on(run_model_async("Copy these source strokes.",Some(&source),&cfg));
         assert!(run.error.as_deref().unwrap().contains("crossing from a join"),"{:?}",run.error);
         let seen=server.join().unwrap();
-        assert_eq!(seen.len(),2,"Only the bounded source-only reading and reinspection are allowed for unresolved topology.");
+        assert_eq!(seen.len(),4,"Two bounded readings (reading plus reinspection each), then the figure is held; no maker or judge.");
+        let first=run.first_observation.as_ref().expect("the first uncertain reading is kept");
+        assert_eq!(first.error_stage,Some(crate::ai::figure_observation::ObservationErrorStage::UncertainSource));
         assert!(run.spec.is_none()&&run.png.is_none()&&run.attempts.is_empty()&&run.steps.is_empty());
         let observation=run.observation.unwrap();
         assert_eq!(observation.facts,Some(facts));
@@ -1801,6 +1819,15 @@ mod tests {
     }
 
     #[test]
+    fn arrowhead_style_is_strict_only_where_the_figure_can_draw_both() {
+        let spec=|id:&str|FigureSpec{id:id.into(),params:Default::default()};
+        assert!(selectable_arrowheads("coordinate-grid"),"the grid offers Triangle and Line arrows");
+        assert!(judge_request("copy",&spec("coordinate-grid")).contains("ARROWHEAD STYLE IS SELECTABLE"));
+        assert!(judge_request("copy",&spec("coordinate-grid")).contains("even when its back edge is swept back, notched or barbed"),"a notched filled head is a Triangle arrow");
+        assert!(!selectable_arrowheads("geometry-diagram"),"geometry arrows have one style");
+        assert!(!judge_request("copy",&spec("geometry-diagram")).contains("ARROWHEAD STYLE IS SELECTABLE"));
+    }
+    #[test]
     fn trace_records_judge_input_order_raw_reply_and_parse_failure() {
         unsafe { std::env::set_var("VERSHION_STORE_DIR",std::env::temp_dir().join(format!("vershion-judge-trace-tests-{}",std::process::id()))); }
         let bad_reply="a malformed reviewer reply";
@@ -1827,8 +1854,9 @@ mod tests {
         assert_eq!(body["messages"][0]["content"][0]["text"],input.text,"persist exact reviewer prompt");
         assert!(input.text.contains("Image 1")&&input.text.contains("Image 2"));
         assert!(input.text.contains("not pixel-identical typography")&&input.text.contains("Missing arrows"));
-        assert!(input.text.contains("Arrowhead STYLE is never a changed given")&&input.text.contains("missing, extra or reversed arrowhead remains a mismatch"),"arrowhead style is cosmetic, presence is not");
+        assert!(input.text.contains("Unless the request states that arrowhead style is selectable")&&input.text.contains("missing, extra or reversed arrowhead remains a mismatch"),"arrowhead style is cosmetic, presence is not");
         assert!(input.text.contains("same angle sector")&&input.text.contains("A label moved into a different sector"),"small shifts are cosmetic, sector and join changes are not");
+        assert!(input.text.contains("confirm it is dashed or dotted there too")&&input.text.contains("a reversed arrow or chevron is a mismatch"),"hidden-edge style and arrow direction are checked edge by edge");
         assert!(input.text.contains(PROVIDED_FIELD_BORDERS));
         write_trace_fixture("judge-parse-failure",&mut run);
     }

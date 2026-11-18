@@ -18,6 +18,11 @@ pub struct SourceBoxReviewTrace {
     pub issues_after: Vec<crate::ditto::FigureBoxIssue>,
     pub stages: Vec<ScopeStage>,
     pub error: Option<String>,
+    /// Source items the review had to confirm (owners plus items in local box issues).
+    pub affected: BTreeSet<usize>,
+    /// Owners the fresh second pass reviewed again because the first left them unconfirmed.
+    pub second_pass_indices: Vec<usize>,
+    pub second_proposed_boxes: Option<Value>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -432,6 +437,15 @@ fn needs_recrop(d: &Value) -> bool {
 
 const RECROP_NOTE: &str = "RECROP FOLLOW-UP (one bounded cycle, after a rendered-crop verification). The verification still reported clipped or uncertain outer figure ink for these keys: {report}. These are unverified model reports, not application source facts. Reinspect the SAME FULL PAGE. If any given figure label, value, leader, arrow, tick or mark lies outside or on the edge of the current box, propose bounds that contain ALL of it with a small clear margin; the earlier expansion was not enough, so measure the outermost glyphs on the full page and the coordinate guide. If the only uncertain ink is this item's own known external_item_marker (or a fragment of it), either propose bounds that leave that marker out while keeping every figure given, or, under the context policy above, judge it as harmless context. Never add neighboring questions' text or figures. Return null when reliable bounds cannot be found and invent no ink. Changed bounds are rendered and verified once more; no further re-crop follows.";
 
+/// A reply the model sent but that could not be read as the required decisions. Anything else
+/// (network, authorization, provider errors) is not retried.
+fn format_error(e: &str) -> bool {
+    e.starts_with("result.") || e.starts_with("Invalid AI result") || e.starts_with("The scope reply") || e.starts_with("Scope decisions") || e == "The AI returned no answer."
+}
+
+/// The crop review: one pass, then, when some owner is still unconfirmed, one fresh second pass
+/// over just those owners, starting from the first pass's result. Owners confirmed in the first
+/// pass are not reviewed again, so a second pass can only add confirmations. It is the only retry.
 pub(super) async fn review_source_figure_boxes(
     raw: String,
     bytes: &[u8],
@@ -439,19 +453,79 @@ pub(super) async fn review_source_figure_boxes(
     cfg: &AiCfg,
     page_no: usize,
 ) -> (String, Option<SourceBoxReviewTrace>) {
+    let (raw, first) = review_pass(raw, bytes, mime, cfg, page_no, None).await;
+    let Some(mut trace) = first else { return (raw, None) };
+    // Retry only a review that ran and whose replies were readable but not positive: never an
+    // ambiguous-owner page, and never a network or authorization failure.
+    if trace.applied || trace.stages.is_empty() || trace.stages.iter().any(|st| st.error.as_deref().is_some_and(|e| !format_error(e))) {
+        return (raw, Some(trace));
+    }
+    let pending: BTreeSet<usize> = trace.affected.difference(&trace.confirmed_indices.iter().copied().collect()).copied().collect();
+    if pending.is_empty() {
+        return (raw, Some(trace));
+    }
+    let (raw, second) = review_pass(raw, bytes, mime, cfg, page_no, Some(&pending)).await;
+    let Some(second) = second else { return (raw, Some(trace)) };
+    trace.second_pass_indices = pending.iter().copied().collect();
+    trace.attempts += second.attempts;
+    trace.stages.extend(second.stages.into_iter().map(|mut st| {
+        st.stage = match st.stage {
+            "proposal" => "second_proposal",
+            "verification" => "second_verification",
+            "recrop_proposal" => "second_recrop_proposal",
+            "recrop_verification" => "second_recrop_verification",
+            other => other,
+        };
+        st
+    }));
+    let mut confirmed: BTreeSet<usize> = trace.confirmed_indices.iter().copied().collect();
+    confirmed.extend(second.confirmed_indices.iter().copied());
+    trace.confirmed_indices = confirmed.iter().copied().collect();
+    if second.proposed_boxes.is_some() {
+        trace.second_proposed_boxes = second.proposed_boxes;
+    }
+    trace.issues_after = second.issues_after;
+    trace.applied = trace.affected.iter().all(|i| confirmed.contains(i));
+    trace.declared_complete = trace.applied;
+    trace.error = if trace.applied {
+        None
+    } else {
+        match (trace.error.take(), second.error) {
+            (Some(a), Some(b)) if a != b => Some(format!("{a} Second pass: {b}")),
+            (a, b) => a.or(b),
+        }
+    };
+    (raw, Some(trace))
+}
+
+async fn review_pass(
+    raw: String,
+    bytes: &[u8],
+    mime: &str,
+    cfg: &AiCfg,
+    page_no: usize,
+    only: Option<&BTreeSet<usize>>,
+) -> (String, Option<SourceBoxReviewTrace>) {
     let Some(original) = crate::ditto::json_object(&raw) else {
         return (raw, None);
     };
-    let ts = targets(&original);
-    let issues = crate::ditto::figure_box_issues(&raw, Some(bytes), page_no);
+    let mut ts = targets(&original);
+    let mut issues = crate::ditto::figure_box_issues(&raw, Some(bytes), page_no);
+    if let Some(only) = only {
+        ts.retain(|t| only.contains(&t.index));
+        issues.retain(|i| i.indices.iter().any(|x| only.contains(x)));
+    }
     if ts.is_empty() && issues.is_empty() {
         return (raw, None);
     }
     let mut affected: BTreeSet<_> = ts.iter().map(|t| t.index).collect();
-    affected.extend(issues.iter().flat_map(|i| i.indices.iter().copied()));
+    affected.extend(issues.iter().flat_map(|i| i.indices.iter().copied()).filter(|x| only.is_none_or(|o| o.contains(x))));
     let mut trace = SourceBoxReviewTrace {
-        protocol: "per_figure_scope_v5",
+        protocol: "per_figure_scope_v6",
         attempts: 0,
+        affected: affected.clone(),
+        second_pass_indices: Vec::new(),
+        second_proposed_boxes: None,
         declared_complete: false,
         applied: false,
         confirmed_indices: Vec::new(),
@@ -660,6 +734,11 @@ fn owner_scope_reason(review: &SourceBoxReviewTrace, index: usize) -> Option<Str
     }
     let key = format!("figure{index}");
     for stage in review.stages.iter().rev() {
+        // A second pass that failed before any decision adds nothing; the first pass's own
+        // reason stays the current evidence for this owner.
+        if stage.stage.starts_with("second_") && stage.error.is_some() && stage.replies.iter().all(|r| r.get("result").is_none_or(Value::is_null)) {
+            continue;
+        }
         let mut own = Vec::new();
         let mut has_owner_evidence = false;
         for issue in stage.completion_issues.iter().filter(|v| v["key"] == key) {
@@ -831,6 +910,10 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n")
     }
+    /// Stages of the first review pass only (the second pass is tested on its own).
+    fn first_pass(trace: &SourceBoxReviewTrace) -> usize {
+        trace.stages.iter().filter(|s| !s.stage.starts_with("second_")).count()
+    }
     fn clipped_label_proposal(bounds: Value) -> Value {
         let mut d = proposal("figure0", bounds, false);
         d["problems"] = json!(["The upper dimension 12 kg is clipped."]);
@@ -879,7 +962,7 @@ mod tests {
         assert!(text.contains("[ymin,xmin,ymax,xmax]"));
         assert!(text.contains("SOURCE PAGE FRAME, excluding guide margins"));
         let trace = trace.unwrap();
-        assert_eq!(trace.protocol, "per_figure_scope_v5");
+        assert_eq!(trace.protocol, "per_figure_scope_v6");
         let evidence = &trace.stages[0].image_evidence;
         assert_eq!(
             evidence["original_image"]["byte_sha256"],
@@ -1137,7 +1220,7 @@ mod tests {
                 "No application-side classification may erase a negative model problem."
             );
             assert_eq!(trace.stages[1].replies[0]["result"]["figures"][0], v);
-            assert_eq!(trace.stages.len(), 3, "one re-crop proposal, no re-render of unchanged bounds");
+            assert_eq!(first_pass(&trace), 3, "one re-crop proposal, no re-render of unchanged bounds");
             assert_eq!(trace.stages[2].stage, "recrop_proposal");
         }
     }
@@ -1197,7 +1280,7 @@ mod tests {
                 "At most two proposal replies plus two verification replies, sharing format budgets."
             );
             let trace = trace.unwrap();
-            assert_eq!(trace.stages.len(), 2);
+            assert_eq!(first_pass(&trace), 2);
             assert_eq!(trace.stages[0].replies.len(), 2);
             assert_eq!(trace.stages[0].reconsideration_requests.len(), 1);
             assert_eq!(trace.stages[0].replies[0]["result"]["figures"][0], old);
@@ -1261,8 +1344,8 @@ mod tests {
             assert_eq!(crate::ditto::json_object(&raw).unwrap(), original);
             let trace = trace.unwrap();
             assert!(!trace.applied && trace.confirmed_indices.is_empty());
-            assert_eq!(trace.attempts, 4);
-            assert_eq!(trace.stages.len(), 3);
+            assert_eq!(trace.stages.iter().filter(|s| !s.stage.starts_with("second_")).map(|s| s.replies.len()).sum::<usize>(), 4);
+            assert_eq!(first_pass(&trace), 3);
             assert_eq!(trace.stages[2].stage, "recrop_proposal");
             assert_eq!(trace.stages[0].replies.len(), 2);
             assert_eq!(trace.stages[1].replies.len(), 1);
@@ -1363,6 +1446,34 @@ mod tests {
         let got = crate::ditto::json_object(&raw).unwrap();
         assert_eq!(got["bank"]["questions"][0]["figure"]["box"], json!([0.1, 0.08, 0.4, 0.4]), "figure0's widened box is kept");
         assert_eq!(got["bank"]["questions"][1]["figure"], original["bank"]["questions"][1]["figure"], "figure1 keeps its original box");
+    }
+    #[test]
+    fn an_unconfirmed_owner_gets_one_fresh_second_pass_and_confirmed_siblings_are_left_alone() {
+        let mut original = original();
+        original["bank"]["questions"].as_array_mut().unwrap().push(json!({"id":"q2","label":"14","type":"short-answer","stem":"Second source","figure":{"box":[600,600,900,900],"alt":"Second source diagram"}}));
+        // Pass 1: figure0 negative and unchanged (held), figure1 confirmed; verification re-checks both.
+        let mut held = proposal("figure0", json!([100, 100, 400, 400]), false);
+        held["problems"] = json!(["The axis end is uncertain."]);
+        let mut held_v = held.clone();
+        held_v.as_object_mut().unwrap().remove("box");
+        let (base, server) = stub_relay(vec![
+            response(json!({"figures":[held, proposal("figure1", json!([600, 600, 900, 900]), true)]})),
+            response(json!({"figures":[held_v, verify("figure1", true)]})),
+            // Pass 2, figure0 only: a fresh look confirms the unchanged crop.
+            response(json!({"figures":[proposal("figure0", json!([100, 100, 400, 400]), true)]})),
+        ]);
+        let (raw, trace) = block_on(review_source_figure_boxes(original.to_string(), &page(), "image/png", &cfg(base), 1));
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 3);
+        let asked = request_text(&requests[2].1);
+        assert!(asked.contains("figure0") && !asked.contains("figure1"), "the second pass asks only about the unconfirmed owner: {}", &asked[asked.find("figure1").unwrap_or(0).saturating_sub(300)..asked.find("figure1").map_or(0, |i| i + 100).min(asked.len())]);
+        let trace = trace.unwrap();
+        assert!(trace.applied, "{:?}", trace.error);
+        assert_eq!(trace.confirmed_indices, vec![0, 1]);
+        assert_eq!(trace.second_pass_indices, vec![0]);
+        let stages: Vec<_> = trace.stages.iter().map(|s| s.stage).collect();
+        assert_eq!(stages, ["proposal", "verification", "second_proposal"]);
+        assert_eq!(crate::ditto::json_object(&raw).unwrap(), original);
     }
     #[test]
     fn failed_optional_reconsideration_preserves_first_negative_and_positive_sibling() {

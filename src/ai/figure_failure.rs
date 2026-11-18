@@ -207,7 +207,7 @@ mod tests {
         let cutoff = "the model call failed: The AI reply was cut off. Try a smaller input or a larger output limit.";
         let executions = vec![ExecutionTrace { protocol:"figure_execution_v1", selected_attempt:1,
             attempts:vec![attempt(2,cutoff),attempt(3,cutoff)],
-            observation:None, rejection_reason:None, error:None, declined:None }];
+            observation:None, first_observation:None, rejection_reason:None, error:None, declined:None }];
         let failure = from_run(&run,&executions,None);
         assert_eq!(failure.kind,"comparison_rejected");
         assert_eq!(failure.generator_registered,Some(true));
