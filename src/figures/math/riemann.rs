@@ -463,13 +463,59 @@ fn touches(fns: &Fns, lo: f64, hi: f64) -> Vec<f64> {
     out
 }
 /// Whether f and g come within 10⁻⁶ of each other (relative) at a sample of either touch grid that is
-/// not beside a listed meet: then the list of meets may not be complete.
+/// not joined to a listed meet by a stretch where they stay that close (the flat contact of x⁴ + 1
+/// and 1 about 0): then the list of meets may not be complete.
 fn meets_open(fns: &Fns, lo: f64, hi: f64, meets: &[f64]) -> bool {
-    let far = 1e-3 * (hi - lo);
+    let close = |x: f64| matches!((fns.f(x), fns.g(x)), (Some(f), Some(g)) if (f - g).abs() <= 1e-6 * f.abs().max(g.abs()).max(1.0));
     touch_grids(lo, hi).iter().flatten().any(|&x| {
-        let (Some(f), Some(g)) = (fns.f(x), fns.g(x)) else { return false };
-        (f - g).abs() <= 1e-6 * f.abs().max(g.abs()).max(1.0) && meets.iter().all(|m| (m - x).abs() > far)
+        if !close(x) { return false; }
+        let Some(m) = meets.iter().min_by(|a, b| (*a - x).abs().total_cmp(&(*b - x).abs())) else { return true };
+        !(1..=16).all(|i| close(x + (m - x) * i as f64 / 16.0))
     })
+}
+
+/// A meet of f and g: where, whether f − g keeps its sign through it (a touch), and whether its
+/// place is established (exactly, or to 10⁻⁶).
+struct Meet { x: f64, touch: bool, sure: bool }
+/// The candidate meets (sign changes, exact zeros, touches) made into meets. Near a flat contact
+/// f − g is 0 in floating point all along a band (|x| < 1.2·10⁻⁴ for x⁴ + 1 against 1), so samples
+/// and refinements in it are one meet: each candidate's band (|f − g| ≤ 64ε·max(1, |f|, |g|)) is
+/// measured, and candidates in one band are one meet, a crossing when f − g changes sign across the
+/// band (read just outside it) and a touch when it does not. Its place is an exact zero of f − g in
+/// the band where there is one, else the band's middle, established only when the band is under
+/// 10⁻⁶ wide. A band running on for 5% of the window is f = g along a stretch: left as it was found.
+fn settle_meets(fns: &Fns, cands: &[f64], algebraic: &[Ex], tree: Option<&Node>, width: f64) -> Vec<Meet> {
+    let h = |x: f64| Some(fns.f(x)? - fns.g(x)?);
+    let in_band = |x: f64| matches!((fns.f(x), fns.g(x)), (Some(f), Some(g)) if (f - g).abs() <= 64.0 * f64::EPSILON * 1f64.max(f.abs()).max(g.abs()));
+    let cap = 0.05 * width;
+    // the band's end on one side of c (dir ±1): None when it runs past the cap
+    let end = |c: f64, dir: f64| -> Option<f64> {
+        if !in_band(c) { return Some(c); }
+        let (mut inner, mut d) = (0.0, 1e-13 * c.abs().max(1.0));
+        while in_band(c + dir * d) { inner = d; d *= 2.0; if d > cap { return None; } }
+        for _ in 0..50 { let m = 0.5 * (inner + d); if in_band(c + dir * m) { inner = m; } else { d = m; } }
+        Some(c + dir * inner)
+    };
+    let mut out: Vec<Meet> = vec![];
+    let mut i = 0;
+    while i < cands.len() {
+        let c = cands[i];
+        let (Some(l), Some(r)) = (end(c, -1.0), end(c, 1.0)) else { out.push(Meet { x: c, touch: false, sure: true }); i += 1; continue };
+        // every candidate in the band is this one meet
+        let mut j = i + 1;
+        while j < cands.len() && cands[j] <= r + 1e-12 * r.abs().max(1.0) { j += 1; }
+        let (r, w) = (r, r - l);
+        let e = (1e-3 * w).max(1e-7 * c.abs().max(1.0));
+        let touch = matches!((h(l - e), h(r + e)), (Some(u), Some(v)) if u * v > 0.0);
+        let mid = 0.5 * (l + r);
+        let tiny = 1e-12 * mid.abs().max(1.0);
+        let exact = algebraic.iter().map(Ex::approx).find(|x| *x >= l - tiny && *x <= r + tiny)
+            .or_else(|| tree.and_then(|t| sym::exact_zero(t, mid)).map(|e| e.approx()).filter(|x| *x >= l - tiny && *x <= r + tiny));
+        let (x, sure) = match exact { Some(x) => (x, true), None if w <= 1e-6 * mid.abs().max(1.0) => (if j - i == 1 { c } else { mid }, true), None => (mid, false) };
+        out.push(Meet { x, touch, sure });
+        i = j;
+    }
+    out
 }
 
 /// A computed x that is a rational or a multiple of π to within the reader's error is that exact number.
@@ -813,15 +859,19 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
         rs.extend(touches(&fns, gl.x0, gl.x1).into_iter().filter(|t| near_found.iter().all(|r| (r - t).abs() > 1e-6 * t.abs().max(1.0))));
         rs.sort_by(f64::total_cmp);
         rs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+        let meets = settle_meets(&fns, &rs, &algebraic, ht.as_ref(), gl.x1 - gl.x0);
+        let rs: Vec<f64> = meets.iter().map(|m| m.x).collect();
         if rs.len() < 2 {
             // (a single touch cannot be widened into two crossings; no meet at all might be outside the window)
-            let d = 1e-4 * (gl.x1 - gl.x0);
-            let h = |x: f64| Some(fns.f(x)? - fns.g(x)?);
-            return Err(match rs.first() {
-                Some(r) if matches!((h(r - d), h(r + d)), (Some(u), Some(v)) if u * v > 0.0) => format!("f and g only touch at x \u{2248} {}, without crossing: choose From a to b", rounded(*r, 4)),
+            return Err(match meets.first() {
+                Some(t) if t.touch => format!("f and g only touch at x \u{2248} {}, without crossing: choose From a to b", rounded(t.x, 4)),
                 Some(_) => "f and g cross only once in the window: widen the x-axis to take in a second crossing, or choose From a to b".into(),
                 None => "f and g do not meet in the window: widen the x-axis if they meet outside it, or choose From a to b".into(),
             });
+        }
+        // (a bound is set only at a meet whose place is established)
+        if let Some(t) = [&meets[0], &meets[meets.len() - 1]].into_iter().find(|t| !t.sure) {
+            return Err(format!("f and g touch near x \u{2248} {} too flatly for the figure to place the touch exactly: choose From a to b", rounded(t.x, 4)));
         }
         m.meet_open = meets_open(&fns, gl.x0, gl.x1, &rs);
         // (a crossing is exact only when f − g is exactly 0 there, checked by exact arithmetic)

@@ -159,3 +159,69 @@ fn riemann_check13_evidence() {
         std::fs::write(format!("{dir}/{name}.png"), bytes).unwrap();
     }
 }
+
+#[test]
+fn riemann_flat_contacts_are_one_meet() {
+    let p = |f: &str, g: &str, w: f64| with(&[("region", s("Between f(x) and g(x)")), ("f", s(f)), ("g", s(g)), ("bounds", s("Where f and g cross")), ("xmin", Value::F(-w)), ("xmax", Value::F(w)), ("ymin", Value::F(-2.)), ("ymax", Value::F(6.)), ("strips", s("Vertical")), ("rule", s("Left")), ("n", Value::I(4))]);
+    // f − g keeps one sign and is 0 only at r (an even-order contact): a single touch, said as such, no region
+    let touches: Vec<(&str, &str, f64)> = vec![
+        ("x^4+1", "1", 0.), ("x^4+2", "2", 0.), ("x^4+3", "3", 0.), ("x^4+5", "5", 0.), ("x^4+1/2", "1/2", 0.), ("x^4+0.5", "0.5", 0.),
+        ("2x^4+1", "1", 0.), ("x^4/4+1", "1", 0.), ("x^4-1", "-1", 0.), ("2-x^4", "2", 0.), ("4-x^4", "4", 0.), ("x^4+1", "1-x^4", 0.),
+        ("3-(x-1)^4", "3", 1.), ("(x+1)^4+2", "2", -1.), ("x^6+1", "1", 0.), ("x^6+2", "2", 0.), ("x^8+1", "1", 0.),
+        // cos x ≥ 1 − x²/2, e^(−t) ≥ 1 − t, 1 − cos x ≤ x²/2, eˣ ≥ 1 + x + x²/2 + x³/6 (Taylor remainders of one sign)
+        ("cos(x)", "1-x^2/2", 0.), ("e^(-x^2)", "1-x^2", 0.), ("1-cos(x)", "x^2/2", 0.), ("e^x", "1+x+x^2/2+x^3/6", 0.),
+    ];
+    for (f, g, r) in &touches { for w in [2., 3., 4., 5., 10.] {
+        let e = model(&p(f, g, w)).err().unwrap_or_else(|| panic!("{f} vs {g} on [−{w}, {w}]: a region was built"));
+        let want = format!("only touch at x \u{2248} {}", rounded(*r, 4));
+        assert!(e.contains(&want), "{f} vs {g} on [−{w}, {w}]: {e}");
+    } }
+    // odd-order contacts cross once at 0: one meet there, never a cluster of phantoms
+    for (f, g, ws) in [("x^7+3", "3", vec![2., 3., 4., 5., 10.]), ("x^5+1", "1-x^5", vec![2., 3., 4., 5., 10.]), ("sin(x)", "x-x^3/6", vec![2., 3., 4., 5., 10.]), ("tan(x)", "x+x^3/3", vec![1.])] {
+        for w in ws {
+            match model(&p(f, g, w)) {
+                Ok(m) => { let near0 = m.crossings.iter().filter(|c| c.v.abs() < 0.01).count(); assert_eq!(near0, 1, "{f} vs {g} on [−{w}, {w}]: {:?}", m.crossings.iter().map(|c| c.v).collect::<Vec<_>>()); }
+                Err(e) => assert!(e.contains("cross only once"), "{f} vs {g} on [−{w}, {w}]: {e}"),
+            }
+        }
+    }
+    // the meet lists of the earlier checks are unchanged
+    let pm = |f: &str, g: &str, x0: f64, x1: f64| with(&[("region", s("Between f(x) and g(x)")), ("f", s(f)), ("g", s(g)), ("bounds", s("Where f and g cross")), ("xmin", Value::F(x0)), ("xmax", Value::F(x1)), ("ymin", Value::F(-2.)), ("ymax", Value::F(3.))]);
+    let text = |f: &str, g: &str, x0: f64, x1: f64| lines(&pm(f, g, x0, x1)).lines().find(|l| l.starts_with("f and g meet")).unwrap_or_default().to_string();
+    assert_eq!(text("sin(x)", "sin(x)^2", 0., 3.3), "f and g meet at x = 0, x = π/2 and x = π");
+    assert_eq!(text("cos(x)", "cos(x)^2", -2., 2.), "f and g meet at x = −π/2, x = 0 and x = π/2");
+    assert_eq!(text("x^3-3x", "-2", -3., 3.), "f and g meet at x = −2 and x = 1");
+    assert_eq!(model(&pm("sin(pi x)", "sin(pi x)^2", -8., 8.)).unwrap().crossings.len(), 23);
+}
+
+#[test]
+fn riemann_scientific_constant_reads_as_its_value() {
+    // 2.5e-1 is 1/4. Between |x| (or x²) and y = 1/4 on [−1, 1], y runs 0 to 1, and at y = 1/4 every x is in
+    // (closed: 1/4 lies between min and max everywhere), width 2. |x| Upper₂: (1/2)(2 + 1) = 3/2; x² Upper₁: 1·2 = 2.
+    let p = |f: &str, g: &str, n: i64| with(&[("region", s("Between f(x) and g(x)")), ("f", s(f)), ("g", s(g)), ("bounds", s("From a to b")), ("a", s("-1")), ("b", s("1")), ("strips", s("Horizontal")), ("rule", s("Upper")), ("n", Value::I(n))]);
+    for g in ["2.5e-1", "0.25", "1/4", "25e-2"] {
+        assert!((model(&p("abs(x)", g, 2)).unwrap().sum.unwrap().v - 1.5).abs() < 1e-12, "{g}");
+        assert!((model(&p("x^2", g, 1)).unwrap().sum.unwrap().v - 2.).abs() < 1e-12, "{g}");
+    }
+}
+
+#[test]
+fn riemann_check14_evidence() {
+    let Ok(dir) = std::env::var("RIEMANN_R15_EVIDENCE_DIR") else { return };
+    std::fs::create_dir_all(&dir).unwrap();
+    let base = serde_json::json!({"region":"Between f(x) and g(x)","bounds":"Where f and g cross","f":"x^4+1","g":"1","xmin":-3,"xmax":3,"ymin":-2,"ymax":6,"strips":"Vertical","rule":"Left","n":4,"sum_line":true,"integral_line":true,"exact_line":true,"error_line":true,"show_dx":true,"key_line":true,"strip_labels":"Heights"});
+    for (name, ch) in [("x4p1_V", serde_json::json!({})), ("x4p1_H", serde_json::json!({"strips":"Horizontal"})), ("cos_taylor_V", serde_json::json!({"f":"cos(x)","g":"1-x^2/2","ymin":-3,"ymax":2})),
+                       ("abs_sci_U2", serde_json::json!({"f":"abs(x)","g":"2.5e-1","bounds":"From a to b","a":"-1","b":"1","xmin":-2,"xmax":2,"ymin":-1,"ymax":2,"strips":"Horizontal","rule":"Upper","n":2}))] {
+        let mut q = base.clone(); for (k, v) in ch.as_object().unwrap() { q[k] = v.clone(); }
+        let set: Vec<(&str, Value)> = q.as_object().unwrap().iter().map(|(k, v)| (k.as_str(), match v {
+            serde_json::Value::Bool(b) => Value::B(*b), serde_json::Value::String(t) => s(t),
+            serde_json::Value::Number(n) if n.is_i64() && !["xmin", "xmax", "ymin", "ymax"].contains(&k.as_str()) => Value::I(n.as_i64().unwrap()),
+            serde_json::Value::Number(n) => Value::F(n.as_f64().unwrap()), _ => s(""),
+        })).collect();
+        let notes = warnings(&with(&set));
+        let t = std::time::Instant::now();
+        let (_, bytes) = crate::figure_agent::render_png(ID, &q).unwrap();
+        eprintln!("{name}: {:?} notes {notes:?}", t.elapsed());
+        std::fs::write(format!("{dir}/{name}.png"), bytes).unwrap();
+    }
+}

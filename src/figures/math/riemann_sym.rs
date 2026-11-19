@@ -71,10 +71,23 @@ impl<'a> P<'a> {
             c if c.is_ascii_digit() || c == '.' => {
                 let st = self.i;
                 while self.i < self.s.len() && (self.s[self.i].is_ascii_digit() || self.s[self.i] == '.') { self.i += 1; }
-                // (scientific notation is not read exactly: no exact value for such a function)
-                if self.i < self.s.len() && (self.s[self.i] == 'e' || self.s[self.i] == 'E') && self.s.get(self.i + 1).is_some_and(|c| c.is_ascii_digit() || *c == '-' || *c == '+') { return None; }
                 let t: String = self.s[st..self.i].iter().collect();
-                Some(Num(dec_rat(&t)?))
+                let mut r = dec_rat(&t)?;
+                // (scientific notation, as the reader takes it: 2.5e-1 is 1/4 exactly; the tree is trusted only
+                // where it agrees with the reader, so no other reading of "e" can slip through)
+                if self.i < self.s.len() && (self.s[self.i] == 'e' || self.s[self.i] == 'E') && self.s.get(self.i + 1).is_some_and(|c| c.is_ascii_digit() || *c == '-' || *c == '+') {
+                    let mut j = self.i + 1;
+                    let neg = self.s[j] == '-';
+                    if self.s[j] == '-' || self.s[j] == '+' { j += 1; }
+                    let ds = j;
+                    while j < self.s.len() && self.s[j].is_ascii_digit() { j += 1; }
+                    if j == ds { return None; }
+                    let k: u32 = self.s[ds..j].iter().collect::<String>().parse().ok().filter(|k| *k <= 30)?;
+                    let p = Rat::new(10i128.checked_pow(k)?, 1)?;
+                    r = if neg { r.div(p)? } else { r.mul(p)? };
+                    self.i = j;
+                }
+                Some(Num(r))
             }
             '\u{3c0}' => { self.i += 1; Some(Pi) }
             c if c.is_alphabetic() => {
