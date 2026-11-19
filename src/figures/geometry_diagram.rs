@@ -573,6 +573,46 @@ pub fn semantic_report(p: &Params) -> Result<SemanticReport, String> {
     Ok(semantics::report(&g, p))
 }
 
+/// Negative labels whose minus sign is drawn on top of a horizontal stroke, where it cannot be
+/// seen ("-3" on a grid line reads as "3"). Each message names the label and the stroke. These
+/// are defects of the drawing itself, whatever the source shows.
+pub fn hidden_minus_signs(p: &Params) -> Result<Vec<String>, String> {
+    let g = parse(p)?;
+    let mut out = Vec::new();
+    for l in &g.labels {
+        let Some(first) = l.text.trim_start().chars().next().filter(|c| *c == '-' || *c == '\u{2212}') else { continue };
+        let base = match &l.node {
+            Some(n) => g.node(n)?,
+            None => l.at.map(|q| (q[0], q[1])).unwrap_or_default(),
+        };
+        let at = semantics::keep_on_canvas((base.0 + l.offset[0], base.1 + l.offset[1]), &l.text, l.size, p.f("width"), p.f("height"));
+        let b = semantics::text_box(at, &l.text, l.size);
+        // The minus is the first glyph. Its bar sits about 0.34 em above the baseline for U+2212 and
+        // 0.27 em for a hyphen (measured on rendered labels: a 2 px grid line 0.34 em up hid "−1",
+        // one 0.24 em up left it readable).
+        let glyph = (b[2] - b[0]) / l.text.chars().count().max(1) as f64;
+        let height = if first == '-' { 0.27 } else { 0.34 };
+        let (x0, x1, y) = (b[0] + glyph * 0.15, b[0] + glyph * 0.85, at.1 - height * l.size);
+        for s in &g.segments {
+            let (Ok(a), Ok(c)) = (g.node(&s.from), g.node(&s.to)) else { continue };
+            let (dx, dy) = (c.0 - a.0, c.1 - a.1);
+            if dx.abs() < 1e-9 || dy.abs() > 0.05 * dx.abs() || a.0.min(c.0) > x1 || a.0.max(c.0) < x0 {
+                continue;
+            }
+            let at_x = a.1 + dy * (((x0 + x1) / 2.0 - a.0) / dx);
+            // Hidden means the line covers the bar, not merely touches it.
+            if (at_x - y).abs() <= 0.05 * l.size + s.width / 2.0 {
+                out.push(format!(
+                    "Label {:?} at ({:.0}, {:.0}): its minus sign {first} is drawn on segment {:?}→{:?}, so it cannot be seen and the value reads as positive. Place the label clear of that line, as printed labels sit beside their grid line rather than on it.",
+                    l.text, at.0, at.1, s.from, s.to
+                ));
+                break;
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn unit(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
     let l = (b.0 - a.0).hypot(b.1 - a.1).max(1e-9);
     ((b.0 - a.0) / l, (b.1 - a.1) / l)
@@ -980,6 +1020,21 @@ mod tests {
         p.0.insert("diagram".into(), Value::S(j.to_string()));
         let s = d.svg(&p);
         (p, s)
+    }
+    #[test]
+    fn a_minus_sign_drawn_on_a_grid_line_is_found_and_one_beside_it_is_not() {
+        // Round 24, trig graphs: "-3" centred on its grid line reads as "3".
+        let on = |dy: f64| {
+            let (p, _) = draw(serde_json::json!({"nodes":{"L":[0,200],"R":[380,200]},"segments":[{"from":"L","to":"R","color":"#999999"}],
+                "labels":[{"text":"\u{2212}3","at":[40.0, 200.0 + 0.3 * 18.0 + dy],"size":18}]}));
+            hidden_minus_signs(&p).unwrap()
+        };
+        assert_eq!(on(0.0).len(), 1, "{:?}", on(0.0));
+        assert!(on(0.0)[0].contains("cannot be seen"));
+        assert!(on(-12.0).is_empty(), "a label beside its line keeps its sign");
+        assert!(on(-2.5).is_empty(), "a bar just above its line stays readable (round 22)");
+        let (p, _) = draw(serde_json::json!({"nodes":{"L":[0,200],"R":[380,200]},"segments":[{"from":"L","to":"R"}],"labels":[{"text":"3","at":[40.0,205.4]}]}));
+        assert!(hidden_minus_signs(&p).unwrap().is_empty(), "no minus, nothing to hide");
     }
     #[test]
     fn separate_and_shared_triangles_keep_edges_and_literal_labels_without_solving() {

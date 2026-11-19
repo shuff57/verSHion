@@ -28,6 +28,7 @@ use crate::model::FigureSpec;
 mod trace;
 mod judge_detail;
 mod plot_contract;
+mod dash_check;
 pub use judge_detail::{ImageDerivation,TileDerivation};
 pub use trace::{TurnTrace,AttemptTrace,ExecutionTrace};
 
@@ -359,6 +360,18 @@ fn source_plot_check(id:&str,r:&Rendered,source:Option<&Json>)->Option<Json>{
     Some(check)
 }
 
+/// Defects measured on a final geometry diagram that no note can excuse: a solid gray edge over
+/// source dashes, and a minus sign drawn on a line.
+fn binding_conflicts(r: &Rendered, reference: Option<&[u8]>) -> Vec<String> {
+    if r.spec.id != "geometry-diagram" {
+        return Vec::new();
+    }
+    let mut out = reference.map(|src| dash_check::solid_gray_over_dashes(&r.spec.params, src)).unwrap_or_default();
+    let p = figures::params_from_json(&figures::geometry_diagram::def(), &serde_json::to_value(&r.spec.params).unwrap_or_default());
+    out.extend(figures::geometry_diagram::hidden_minus_signs(&p).unwrap_or_default());
+    out
+}
+
 fn source_plot_conflict(check:&Json)->Option<String>{
     let issues=check.get("issues")?.as_array()?;
     if issues.is_empty(){return None}
@@ -551,6 +564,8 @@ async fn run_with_reference_contract_async<C:AsyncChat+?Sized>(request:&str,refe
     let mut turns = vec![Turn::new("system", system_prompt(has_reference, native_tools)), first];
     let mut bad = 0;
     let mut asked_note = false;
+    // A hand-drawn coordinate graph is sent back once with the suggestion to use coordinate-grid.
+    let mut grid_suggested = false;
     let mut last: Option<Rendered> = None;
     let mut shown = Vec::new();
     let mut inspected = BTreeSet::new();
@@ -690,6 +705,19 @@ If anything the request asked for is not in the figure (a value beyond the gener
                             continue;
                         }
                     }
+                    // Measured defects bind: such a final cannot stand, at any turn.
+                    let blocking = binding_conflicts(&r, reference);
+                    if !blocking.is_empty() {
+                        out.steps.push(StepLog { tool: "final".into(), summary: format!("rejected: {}", brief(&blocking.join(" "), 160)) });
+                        turns.push(Turn::new("user", format!("{} This final cannot be accepted while these measured defects remain. Correct them and render again, or decline with cannot_make_figure and the specific reason. Existing turn limits still apply.", blocking.join(" "))));
+                        continue;
+                    }
+                    if id == "geometry-diagram" && !grid_suggested && let Some(hint) = dash_check::hand_drawn_grid(&r.spec.params) {
+                        grid_suggested = true;
+                        out.steps.push(StepLog { tool: "final".into(), summary: "returned once: hand-drawn coordinate graph".into() });
+                        turns.push(Turn::new("user", format!("{hint} Existing turn limits still apply.")));
+                        continue;
+                    }
                     // Clamped or ignored values are always flagged, whether or not the model said so.
                     let note = if r.notes.is_empty() {
                         note
@@ -775,6 +803,10 @@ If anything the request asked for is not in the figure (a value beyond the gener
             if let Some(check)=source_plot_check(&r.spec.id,&r,source_plot) {
                 out.error=source_plot_conflict(&check);
                 out.source_plot_check=Some(check);
+            }
+            let blocking = binding_conflicts(&r, reference);
+            if !blocking.is_empty() && out.error.is_none() {
+                out.error = Some(blocking.join(" "));
             }
             out.note = format!("Stopped at the turn limit; this is the last figure rendered.{}",geometry_warnings(&r));
             out.spec = Some(r.spec);
