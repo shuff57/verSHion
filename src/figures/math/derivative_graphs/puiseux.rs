@@ -18,7 +18,10 @@ fn tidy(mut t: Terms) -> Terms {
         if a > A_MAX + 1e-9 { continue; }
         match out.last_mut() { Some(l) if same(l.1, a) => l.0 += c, _ => out.push((c, a)) }
     }
-    let scale = out.iter().map(|q| q.0.abs()).fold(0.0, f64::max);
+    // (a rounding residue is small beside the terms of its own and nearby orders; beside a pole the coefficients grow
+    // fast with the order, as tan's near π/2, and a leading term is never small beside the far ones)
+    let lo = out.iter().map(|q| q.1).fold(f64::INFINITY, f64::min);
+    let scale = out.iter().filter(|q| q.1 <= lo + 2.0 + 1e-9).map(|q| q.0.abs()).fold(0.0, f64::max);
     out.retain(|q| q.0 != 0.0 && q.0.abs() > 1e-14 * scale);
     out.truncate(MAX_TERMS);
     out
@@ -28,6 +31,10 @@ fn mul(a: &Terms, b: &Terms) -> Terms { tidy(a.iter().flat_map(|p| b.iter().map(
 /// (Σ c t^α)^k: the leading term to the k (a real odd root of a negative coefficient; none for an even one), times the
 /// binomial series of the rest.
 fn power(t: &Terms, k: f64) -> Option<Terms> {
+    // (a base whose constant term is a float residue of 0 beside its first true term, as e^x − 2 at the float of ln 2: the
+    // point is its zero, as typed; only where the power is fractional, where the zero changes everything)
+    let t: Terms = if k.fract() != 0.0 && t.len() > 1 && same(t[0].1, 0.0) && t[0].0.abs() <= 1e-13 * t[1].0.abs() { t[1..].to_vec() } else { t.to_vec() };
+    let t = &t;
     let Some(&(c0, a0)) = t.first() else { return (k > 0.0).then(Vec::new) };
     let lead = if c0 > 0.0 { c0.powf(k) } else if k.fract() == 0.0 { c0.powf(k) } else {
         let (p, q) = sym::ratio(k, 15)?;
@@ -116,6 +123,9 @@ pub(super) fn expand(e: &Ex, x0: &XV, s: f64) -> Option<Terms> {
 pub(super) fn deriv_limit(e: &Ex, x0: f64, xe: Option<&XV>, k: usize, s: f64) -> Option<Option<(f64, bool)>> {
     let own = xe.cloned().or_else(|| exact::of_text(&format!("{x0:?}")))?;
     let t = expand(e, &own, s)?;
+    // (at a point known only as a float, a 0 is claimed exact only for a fractional order, where the structure gives it, as
+    // (e^x − 2)^(4/3) at ln 2; a whole-power Taylor term lost to rounding there is ≈ 0, never = 0)
+    let structural = xe.is_some() || t.iter().any(|q| q.1.fract().abs() > 1e-9);
     // (the terms of order up to k must all be there: those beyond A_MAX are not)
     if k as f64 > A_MAX - 1.0 { return None; }
     let ff = |a: f64| (0..k).map(|j| a - j as f64).product::<f64>();
@@ -131,5 +141,5 @@ pub(super) fn deriv_limit(e: &Ex, x0: f64, xe: Option<&XV>, k: usize, s: f64) ->
     }
     // (terms that meet and cancel in floats cannot be told from 0: undecided)
     if any && v.abs() <= 1e-12 * t.iter().map(|q| q.0.abs()).fold(1.0, f64::max) { return None; }
-    Some(Some((v, !any)))
+    Some(Some((v, !any && structural)))
 }

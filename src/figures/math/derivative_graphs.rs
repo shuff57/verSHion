@@ -24,6 +24,8 @@ mod round9;
 #[cfg(test)]
 mod round10;
 #[cfg(test)]
+mod round11;
+#[cfg(test)]
 mod round7;
 #[cfg(test)]
 mod round6;
@@ -1051,8 +1053,9 @@ pub(crate) fn val_text(v: f64, pv: &Pv, dec: Option<i64>, decimal_input: bool) -
     // the exact decimal of a fraction whose denominator divides 10^k
     let dec_exact = |q: exact::Q, k: i64| -> Option<String> { q_decimal(q, k) };
     let rounded = |d: i64| {
-        // (past 10¹², a float has no true digits after the point: five significant figures and a power of ten)
-        if v.abs() >= 1e12 && v.is_finite() { return sci(v); }
+        // (past 10¹², a float has no true digits after the point; below 10⁻⁴, a decimal shows few: five significant figures
+        // and a power of ten, −1.4317 × 10⁻⁸)
+        if (v.abs() >= 1e12 || (v != 0.0 && v.abs() < 1e-4)) && v.is_finite() { return sci(v); }
         // half away from zero, as a book rounds (-1.125 to 2 decimals is -1.13)
         let k = 10f64.powi(d as i32);
         let s = fmt((v * k + v.signum() * 1e-9).round() / k, d);
@@ -1844,7 +1847,24 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         // (a zero of f′ or f″ the analysis proved exactly there, as x^(2/3)(x − 5) at 2, where the floats leave a residue)
         let proven_zero = fi > 0 && te.is_some() && an.as_ref().is_some_and(|a| (if fi == 1 { &a.fp_marks } else { &a.fpp_marks }).iter().any(|mk| mk.k == EvK::Zero && mk.pv.ex.is_some() && mk.pv.ex == te));
         let (v, ve) = if fi == 0 {
-            (m.f_at(t.v, te.as_ref()), te.as_ref().and_then(|x| m.exact_f(x)))
+            let ve = te.as_ref().and_then(|x| m.exact_f(x));
+            // (at a zero of a root's base the exact layer cannot reach, as e^x − 2 at ln 2, the float is a residue's root,
+            // (4·10⁻¹⁶)^(1/3) ≈ 7.6·10⁻⁶: f is its expansion's value there, exactly 0)
+            let pi = m.piece_at(t.v);
+            let singular = ve.is_none() && pi.is_some_and(|pi| domain::singular_at(&m.pieces[pi].e, t.v, te.as_ref()));
+            match pi.filter(|_| singular).and_then(|pi| m.expansion_limit(pi, 0, t.v, te.as_ref(), 1.0)).flatten() {
+                Some((_, true)) => (Some(0.0), Some(XV::default())),
+                Some((w, false)) => (Some(w), None),
+                // (0 to within its rounding, counting the float of the typed x: sin(x²) at √π is ≈ 0, not 5.7·10⁻¹⁶)
+                None => match (m.f_at(t.v, te.as_ref()), &ve) {
+                    (Some(w), None) if pi.is_some() && matches!(m.mode, Mode::F) => {
+                        let e = &m.pieces[pi.unwrap()].e;
+                        let sens = [t.v.next_down(), t.v.next_up()].iter().map(|&y| (sym::ev(e, y) - w).abs()).filter(|d| d.is_finite()).fold(0.0, f64::max);
+                        (Some(if w.abs() <= 16.0 * (sym::ev_err(e, t.v).1 + sens) { 0.0 } else { w }), None)
+                    }
+                    (w, _) => (w, ve),
+                },
+            }
         } else if proven_zero {
             (Some(0.0), Some(XV::default()))
         } else if m.is_isolated(t.v) {
@@ -1867,10 +1887,10 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                 // (an end of the domain: the one side there is)
                 (Some(v), None) if rp.is_none() => (Some(v.f()), Some(v)),
                 (None, Some(v)) if lp.is_none() => (Some(v.f()), Some(v)),
-                _ if domain::side_limit(m, fi, t.v, te.as_ref(), -1.0).is_some() && domain::side_limit(m, fi, t.v, te.as_ref(), 1.0).is_some() => {
-                    // (where the derivative's expression has no value at x, as at a zero inside |u| or of a root's base: its two
-                    // sides, in their plain forms or by their expansions, which must meet, as must f's: x|x| has f′(0) = 0 (2|x|
-                    // both ways) and no f″(0) (−2 and 2); (x − 2)^(1/3)(x − 2) has f′(2) = 0)
+                _ if [lp, rp].iter().flatten().any(|&pi| domain::singular_at(&m.pieces[pi].e, t.v, te.as_ref())) => {
+                    // (at a zero of the base of a root, an |u| or a fractional power: the derivative's two sides, exactly or by
+                    // their expansions, which must meet, as must f's: x|x| has f′(0) = 0 and no f″(0); (x − 2)^(1/3)(x − 2) has
+                    // f′(2) = 0; (x² − 3)^(2/3) has no f′(√3), its sides running off)
                     let sides = |n: usize| -> Option<(f64, Option<XV>)> {
                         let (l, r) = (domain::side_limit(m, n, t.v, te.as_ref(), -1.0)?, domain::side_limit(m, n, t.v, te.as_ref(), 1.0)?);
                         let meet = match (&l.1, &r.1) { (Some(a), Some(b)) => a == b, _ => (l.0 - r.0).abs() <= 1e-9 * (1.0 + l.0.abs()) };
@@ -1878,32 +1898,49 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                     };
                     let f_meets = !matches!(m.mode, Mode::F) || sides(0).is_some_and(|(v, _)| m.f_at(t.v, te.as_ref()).is_some_and(|w| (w - v).abs() <= 1e-9 * (1.0 + v.abs())));
                     match sides(fi).filter(|_| f_meets) {
-                        // (a float residue beside 0, not settled exactly: undecided)
+                        // (a float beside 0 that neither exact algebra nor the expansions settle: undecided)
                         Some((v, None)) if v.abs() < 1e-6 => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
                         Some((v, e)) => (Some(v), e),
                         None => (None, None),
                     }
                 }
                 _ => {
-                    // (the expression of the derivative has no value at the exact x, and f has values on one side only: the
-                    // slope there is the one side's, which must settle; √(x² − 2) at √2 runs off)
+                    // (an ordinary point: the derivative's own value. Where its exact expression has no value and f has values
+                    // on one side only, the slope there is the one side's, which must settle)
                     let undefined = te.as_ref().is_some_and(|x| [lp, rp].iter().flatten().any(|&pi| m.fexpr(pi, fi).is_some_and(|e| exact::undefined_at(e, x))));
                     let h = 1e-7 * (1.0 + t.v.abs());
                     let (l, r) = (m.d(fi, t.v - h).is_some(), m.d(fi, t.v + h).is_some());
                     let runs_off = undefined && l != r && domain::one_sided(m, fi, t.v, if l { -1.0 } else { 1.0 }).is_none();
                     if runs_off || (undefined && !l && !r) { (None, None) } else {
                         match deriv_at(m, fi, t.v) {
-                            Some(v) if undefined && v.abs() < 1e-6 => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
-                            v => (v, None),
+                            // (0 to within the rounding of its own expression, as 2 sin x cos x − sin 2x: ≈ 0; a small true value,
+                            // as e^(−x²)′ at 9/2 ≈ −1.43·10⁻⁸, is written as it is)
+                            Some(v) => {
+                                let err = [lp, rp].iter().flatten().filter_map(|&pi| m.fexpr(pi, fi)).map(|e| {
+                                    let sens = [t.v.next_down(), t.v.next_up()].iter().map(|&y| (sym::ev(e, y) - v).abs()).filter(|d| d.is_finite()).fold(0.0, f64::max);
+                                    sym::ev_err(e, t.v).1 + sens
+                                }).fold(0.0, f64::max);
+                                (Some(if v.abs() <= 16.0 * err { 0.0 } else { v }), None)
+                            }
+                            None => (None, None),
                         }
                     }
                 }
             }
         };
+        // (never a huge float as a value: far above its neighbours on either side, or with a neighbour of the other sign, it
+        // is a blow-up of rounding beside a point where the derivative runs off)
+        let v = v.filter(|v| {
+            if fi == 0 || ve.is_some() || v.abs() <= 100.0 { return true; }
+            let h = 1e-9 * (1.0 + t.v.abs());
+            let nb: Vec<Option<f64>> = [-1.0, 1.0].iter().map(|sd| m.d(fi, t.v + sd * h)).collect();
+            nb.iter().all(|w| w.is_some_and(|w| w.signum() == v.signum() && v.abs() <= 4.0 * w.abs()))
+        });
         v.filter(|v| v.is_finite()).map(|v| (v, ve))
     };
+    // (f″ where f′ does not exist does not exist either; where f′ is only undecided, f″ is worked out on its own)
     let tval = |fi: usize| -> Option<(f64, Option<XV>)> {
-        if fi == 2 && tval_one(1).is_none() { if undecided.get()[1] { let mut u = undecided.get(); u[2] = true; undecided.set(u); } return None; }
+        if fi == 2 && tval_one(1).is_none() && !undecided.get()[1] { return None; }
         tval_one(fi)
     };
     let reading = |fi: usize| -> Option<String> {
@@ -2258,7 +2295,12 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
     }
 
     if let Some(t) = tx.as_ref() {
-        if undecided.get().iter().any(|u| *u) { notes.push(format!("{name}{PRIME} at x = {} cannot be decided exactly (the value worked out there is a rounding residue beside 0), so it is not written: a single power, such as x^(4/3) for x\u{b7}x^(1/3), can be decided", t.show)); }
+        let u = undecided.get();
+        if u.iter().any(|u| *u) {
+            let which = if u[1] && u[2] { format!("{name}{PRIME} and {name}{DPRIME}") } else if u[1] { format!("{name}{PRIME}") } else { format!("{name}{DPRIME}") };
+            let advice = if model.as_ref().is_some_and(|m| m.pieces.iter().any(|pc| domain::root_product(&pc.e))) { ": typed as a single power (x^(4/3) for x\u{b7}x^(1/3)) it can be decided" } else { "" };
+            notes.push(format!("{which} at x = {} cannot be decided exactly where the root's base is 0, so it is not written{advice}", t.show));
+        }
     }
     // ── draw the marks (guides under the dots) ──
     let mut text_boxes: Vec<B4> = labels.iter().map(|l| l.1).collect();

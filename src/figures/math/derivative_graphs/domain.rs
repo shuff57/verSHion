@@ -109,14 +109,21 @@ pub(super) fn side_form(m: &Model, n: usize, x: f64, s: f64) -> Option<Ex> {
 pub(super) fn side_limit(m: &Model, n: usize, x: f64, xe: Option<&XV>, s: f64) -> Option<(f64, Option<XV>)> {
     let lives = |t: f64| match m.mode { Mode::F => m.f(t).is_some(), Mode::Fp { .. } => m.d(1, t).is_some() };
     if ![1e-9, 1e-6].iter().all(|k| lives(x + s * k * (1.0 + x.abs()))) { return None; }
-    if let Some(e) = side_form(m, n, x, s) {
-        if let Some(v) = xe.and_then(|xe| exact::ev(&e, xe)) { return Some((v.f(), Some(v))); }
-        let v = sym::ev(&e, x);
-        if v.is_finite() { return Some((v, None)); }
-    }
-    // (no value in the plain form at x: the expansion of f there decides, exactly 0 where no term of that order exists)
-    if let Some(pi) = m.piece_at(x + s * 1e-9 * (1.0 + x.abs())) {
+    let form = side_form(m, n, x, s);
+    if let Some(v) = form.as_ref().and_then(|e| xe.and_then(|xe| exact::ev(e, xe))) { return Some((v.f(), Some(v))); }
+    // (the expansion of f there, before any float: exactly 0 where no term of that order exists, as (x³ − 2)^(5/3) at ∛2,
+    // whose plain form the floats make 0.0 by rounding; or it runs off)
+    // (only where a root, an |u| or a fractional power has its base 0 there: elsewhere the plain form is analytic)
+    if let Some(pi) = m.piece_at(x + s * 1e-9 * (1.0 + x.abs())).filter(|&pi| singular_at(&m.pieces[pi].e, x, xe)) {
         if let Some(lim) = m.expansion_limit(pi, n, x, xe, s) { return lim.map(|(v, z)| if z { (0.0, Some(XV::default())) } else { (v, None) }); }
+    }
+    if let Some(e) = form {
+        // (the plain form's float at x is its limit only where that float is trustworthy, counting the typed x itself, which
+        // a float only approximates: the neighbouring floats must give the same value, as they do at an ordinary point and
+        // do not beside (x² − 3)^(−1/3) at the float of √3)
+        let (v, err) = sym::ev_err(&e, x);
+        let near = [x.next_down(), x.next_up()].iter().all(|&y| { let w = sym::ev(&e, y); w.is_finite() && (w - v).abs() <= 1e-8 * (1.0 + v.abs()) });
+        if v.is_finite() && err <= 1e-8 * (1.0 + v.abs()) && near { return Some((v, None)); }
     }
     one_sided(m, n, x, s).map(|v| (v, None))
 }
@@ -231,4 +238,36 @@ pub(super) fn bridge(svg: &mut String, m: &Model, p: &Params, fis: &[usize], g: 
         }
     }
     holes::insert(svg, &add);
+}
+
+/// Whether e has a root, an |u| or a fractional power whose base u vanishes at x (exactly at an exact x, else to within
+/// its rounding): the points where a derivative must be decided by the two sides' expansions, not by a float.
+pub(super) fn singular_at(e: &Ex, x: f64, xe: Option<&XV>) -> bool {
+    use sym::{Ex::*, F};
+    let vanishes = |u: &Ex| -> bool {
+        if !sym::has_x(u) { return false; }
+        if let Some(v) = xe.and_then(|xe| exact::ev(u, xe)) { return v.is_zero(); }
+        let (v, err) = sym::ev_err(u, x);
+        let slope = sym::ev(&sym::deriv(u), x).abs();
+        v.is_finite() && v.abs() <= 16.0 * err + 1e-13 * (1.0 + x.abs()) * slope.max(1e-300)
+    };
+    match e {
+        Fun(F::Abs | F::Sqrt, u) => vanishes(u) || singular_at(u, x, xe),
+        Pow(u, k) => (sym::konst(k).is_some_and(|k| k.fract() != 0.0) && vanishes(u)) || singular_at(u, x, xe) || singular_at(k, x, xe),
+        Neg(a) | Fun(_, a) => singular_at(a, x, xe),
+        Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | LogB(a, b) => singular_at(a, x, xe) || singular_at(b, x, xe),
+        _ => false,
+    }
+}
+/// Whether e multiplies a root or fractional power by another power of something (x·x^(1/3), x·√|x|): where advice to
+/// type one power helps.
+pub(super) fn root_product(e: &Ex) -> bool {
+    use sym::{Ex::*, F};
+    let rootish = |f: &Ex| matches!(f, Fun(F::Sqrt, _)) || matches!(f, Pow(_, k) if sym::konst(k).is_some_and(|k| k.fract() != 0.0));
+    match e {
+        Mul(a, b) => (rootish(a) && sym::has_x(b)) || (rootish(b) && sym::has_x(a)) || root_product(a) || root_product(b),
+        Neg(a) | Fun(_, a) => root_product(a),
+        Add(a, b) | Sub(a, b) | Div(a, b) | Pow(a, b) | LogB(a, b) => root_product(a) || root_product(b),
+        _ => false,
+    }
 }
