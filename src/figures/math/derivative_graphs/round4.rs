@@ -149,11 +149,14 @@ fn a_derivative_that_is_zero_or_constant_in_a_noisy_form_gives_no_noise_points()
     let p = pw("ln(e^x) - x", -3.0, 3.0, &[]);
     has(&key(&p), &[&format!("constant on [{M}3, 3]"), "f(x) = 0"]);
     lacks(&key(&p), &["\u{2248}"]);
-    // √(x⁴) − x² is 0 too, but not in a form this figure can prove: no noise points, and a note naming the true reason
+    // √(x⁴) − x² is 0 too: √(x⁴) is x² (check 10), so it is proved constant, with no note
     let p = pw("sqrt(x^4) - x^2", -3.0, 3.0, &[]);
     let bl = build(&p);
-    assert!(!too_many(&p), "{:?}", bl.notes);
-    assert!(bl.notes.iter().any(|n| n.contains("0 to within rounding") && n.contains("could not be shown")), "{:?}", bl.notes);
+    assert!(!too_many(&p) && bl.notes.is_empty(), "{:?}", bl.notes);
+    has(&key(&p), &[&format!("constant on [{M}3, 3]"), "f(x) = 0"]);
+    // and a 0 hidden in a sum of identities ((√(x² + 1))² − x² − 1 + sin²x + cos²x − 1) still draws no noise points
+    let p = pw("sqrt(x^2+1)^2 - x^2 - 1 + sin(x)^2 + cos(x)^2 - 1", -3.0, 3.0, &[]);
+    assert!(!too_many(&p), "{:?}", build(&p).notes);
 }
 fn svg_has_label(p: &Params, t: &str) -> bool { build(p).labels.iter().any(|l| l.0.replace('\u{a0}', " ").contains(t)) }
 

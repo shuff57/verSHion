@@ -114,6 +114,10 @@ pub(super) fn side_limit(m: &Model, n: usize, x: f64, xe: Option<&XV>, s: f64) -
         let v = sym::ev(&e, x);
         if v.is_finite() { return Some((v, None)); }
     }
+    // (no value in the plain form at x: the expansion of f there decides, exactly 0 where no term of that order exists)
+    if let Some(pi) = m.piece_at(x + s * 1e-9 * (1.0 + x.abs())) {
+        if let Some(lim) = m.expansion_limit(pi, n, x, xe, s) { return lim.map(|(v, z)| if z { (0.0, Some(XV::default())) } else { (v, None) }); }
+    }
     one_sided(m, n, x, s).map(|v| (v, None))
 }
 
@@ -155,4 +159,76 @@ pub(super) fn kink_rows(m: &Model, pi: usize, fi: usize, k: usize, win: (f64, f6
         rows.push(format!("y = {body}, {dom}{word}"));
     }
     Some(rows)
+}
+
+// ───────────────────────── a derivative that exists where its expression has none ─────────────────────────
+// x^(1/3)·sin x has f′(0) = 0, but its derivative's expression, (1/3)x^(−2/3) sin x + x^(1/3) cos x, has no value at 0:
+// the grid would leave a gap there, and an open circle where a sample falls on it. Where f is continuous and the
+// derivative's two sides meet, the grid's circle there is taken out and the curve is drawn on through the point.
+
+/// The value of the n-th derivative of f at x where it exists by its two sides (f continuous there, each derivative up to
+/// n with sides that meet).
+pub(super) fn exists_at(m: &Model, n: usize, x: f64, xe: Option<&XV>) -> Option<f64> {
+    if !matches!(m.mode, Mode::F) { return None; }
+    let fv = m.f_at(x, xe)?;
+    let mut v = fv;
+    for k in 0..=n {
+        let (l, r) = (side_limit(m, k, x, xe, -1.0)?, side_limit(m, k, x, xe, 1.0)?);
+        let meet = match (&l.1, &r.1) { (Some(a), Some(b)) => a == b, _ => (l.0 - r.0).abs() <= 1e-9 * (1.0 + l.0.abs()) };
+        if !meet { return None; }
+        v = if l.1.is_some() { l.0 } else { 0.5 * (l.0 + r.0) };
+        if k == 0 && (v - fv).abs() > 1e-9 * (1.0 + fv.abs()) { return None; }
+    }
+    Some(v)
+}
+
+/// Bridge f′ and f″ in a panel through every special point where they exist but their expressions have no value.
+pub(super) fn bridge(svg: &mut String, m: &Model, p: &Params, fis: &[usize], g: &GridL) {
+    if !matches!(m.mode, Mode::F) { return; }
+    let (wa, wb) = (g.x0, g.x1);
+    let mut cands: Vec<(f64, Option<XV>)> = vec![];
+    for pc in &m.pieces { for c in exact::special_points(&pc.e, wa, wb) { cands.push((c.f(), Some(c))); } }
+    for c in m.kinks(wa, wb) { if !cands.iter().any(|q| (q.0 - c).abs() < 1e-9 * (1.0 + c.abs())) { cands.push((c, None)); } }
+    cands.retain(|q| q.0 > wa && q.0 < wb);
+    if cands.is_empty() { return; }
+    let print = p.s("style") == "Print";
+    let one = p.s("layout") == LAYOUTS[1];
+    let colors = if print { ["#000000", "#444444", "#1c1c1c"] } else { COL };
+    let gw = match p.s("grid") { "Light" | "None" => 1.0, "Bold" => 1.8, _ => 1.4 };
+    let step = (wb - wa) / 900.0;
+    let mut add = String::new();
+    for &fi in fis {
+        if fi == 0 || !shows(p, fi) { continue; }
+        let lw = if print { 1.8 * gw * [1.0, 1.12, 1.4][fi] } else { 2.6 };
+        let dash = dash_of(line_of(p, fi, one));
+        let da = if dash.is_empty() { String::new() } else { format!(r#" stroke-dasharray="{dash}""#) };
+        for (c, ce) in &cands {
+            // (only where the expression itself has no value: elsewhere the grid draws it already)
+            if m.d(fi, *c).is_some() { continue; }
+            let Some(v) = exists_at(m, fi, *c, ce.as_ref()) else { continue };
+            let (lx, ly) = (g.ml + (c - g.x0) * g.ux, g.mt + (g.y1 - v) * g.uy);
+            // the grid's open circle there
+            let mut out = String::with_capacity(svg.len());
+            let mut rest = svg.as_str();
+            while let Some(i) = rest.find("<circle ") {
+                let end = rest[i..].find("/>").map(|e| i + e + 2).unwrap_or(rest.len());
+                let tag = &rest[i..end];
+                let num = |k: &str| tag.split(&format!(" {k}=\"")).nth(1).and_then(|t| t.split('"').next()).and_then(|t| t.parse::<f64>().ok());
+                let ours = tag.contains("fill=\"#fff\"") && tag.contains(&format!("stroke=\"{}\"", colors[fi])) && num("cx").is_some_and(|x| (x - lx).abs() < 1.5) && num("cy").is_some_and(|y| (y - ly).abs() < 1.5);
+                out.push_str(&rest[..i]);
+                if !ours { out.push_str(tag); }
+                rest = &rest[end..];
+            }
+            out.push_str(rest);
+            *svg = out;
+            // the curve on through the point: three samples each side, the value at it
+            let pts: Vec<String> = (-3..=3).filter_map(|j| {
+                let t = c + j as f64 * step;
+                let y = if j == 0 { Some(v) } else { m.d(fi, t) };
+                y.filter(|y| y.is_finite()).map(|y| format!("{:.2},{:.2}", g.ml + (t - g.x0) * g.ux, g.mt + (g.y1 - y.clamp(g.y0 - (g.y1 - g.y0), g.y1 + (g.y1 - g.y0))) * g.uy))
+            }).collect();
+            if pts.len() >= 3 { add.push_str(&format!(r#"<g clip-path="url(#plot)"><polyline points="{}" fill="none" stroke="{}" stroke-width="{lw}" stroke-linejoin="round"{da} data-curve="bridge"/></g>"#, pts.join(" "), colors[fi])); }
+        }
+    }
+    holes::insert(svg, &add);
 }

@@ -420,13 +420,15 @@ pub(crate) fn simplify(e: &Ex, deriv: bool) -> Ex {
         Neg(a) => neg(s(a)),
         Add(a, b) => add(s(a), s(b)),
         Sub(a, b) => { let (a, b) = (s(a), s(b)); if deriv && a == b { Num(0.0) } else { sub(a, b) } }
-        Mul(a, b) => mul(s(a), s(b)),
+        Mul(a, b) => merge_powers(mul(s(a), s(b)), deriv),
         Div(a, b) => { let (a, b) = (s(a), s(b)); if deriv && a == b && has_x(&a) { Num(1.0) } else { div(a, b) } }
         Pow(a, b) => {
             let (a, b) = (s(a), s(b));
             if deriv && a == E { if let Fun(F::Ln, u) = &b { return (**u).clone(); } }
             // (√u to an even power, where √u has a value: (√x)² = x)
             if deriv { if let (Fun(F::Sqrt, u), Some(k)) = (&a, val(&b)) { if k > 0.0 && k.fract() == 0.0 && (k as i64) % 2 == 0 { return if k == 2.0 { (**u).clone() } else { pow((**u).clone(), Num(k / 2.0)) }; } } }
+            // (|u| to an even power is u to it: |x|² = x²)
+            if let (Fun(F::Abs, u), Some(k)) = (&a, val(&b)) { if k > 0.0 && k.fract() == 0.0 && (k as i64) % 2 == 0 { return pow((**u).clone(), b.clone()); } }
             pow(a, b)
         }
         LogB(b, a) => LogB(bx(s(b)), bx(s(a))),
@@ -434,6 +436,11 @@ pub(crate) fn simplify(e: &Ex, deriv: bool) -> Ex {
             let a = s(a);
             match (f, &a) {
                 (F::Sqrt, Pow(u, k)) if val(k) == Some(2.0) => Fun(F::Abs, u.clone()),
+                // (√(u⁴) = u², √(u⁶) = |u|³: an even power under the root, defined everywhere either way)
+                (F::Sqrt, Pow(u, k)) if val(k).is_some_and(|k| k > 2.0 && k.fract() == 0.0 && (k as i64) % 2 == 0) => {
+                    let h = val(k).unwrap() / 2.0;
+                    if (h as i64) % 2 == 0 { pow((**u).clone(), Num(h)) } else { pow(Fun(F::Abs, u.clone()), Num(h)) }
+                }
                 (F::Ln, Fun(F::Exp, u)) => (**u).clone(),
                 (F::Ln, Pow(base, u)) if **base == E => (**u).clone(),
                 (F::Exp, Fun(F::Ln, u)) if deriv => (**u).clone(),
@@ -441,6 +448,54 @@ pub(crate) fn simplify(e: &Ex, deriv: bool) -> Ex {
             }
         }
     }
+}
+
+/// A product's factors with one base gathered into one power: x·x^(1/3) is x^(4/3), (x − 2)^(1/3)(x − 2) is
+/// (x − 2)^(4/3), x²·x^(1/3) is x^(7/3), with the exponent kept as a ratio. Only where the domain is the same: both
+/// powers' denominators odd (real odd roots), or the sum's still even (√x·x = x^(3/2), both for x ≥ 0); for a derivative
+/// (whose domain is f's own) always. Positive powers only. Unchanged when nothing gathers.
+fn merge_powers(e: Ex, deriv: bool) -> Ex {
+    fn factors(e: &Ex, out: &mut Vec<Ex>) { match e { Mul(a, b) => { factors(a, out); factors(b, out); } _ => out.push(e.clone()) } }
+    let mut fs = vec![];
+    factors(&e, &mut fs);
+    if fs.len() < 2 { return e; }
+    // (base, exponent as p/q)
+    let split = |f: &Ex| -> Option<(Ex, i64, i64)> {
+        if !has_x(f) { return None; }
+        match f {
+            Pow(u, k) => { let (p, q) = ratio(konst(k)?, 60)?; (p > 0).then(|| ((**u).clone(), p, q)) }
+            Fun(F::Sqrt, u) => Some(((**u).clone(), 1, 2)),
+            _ => Some((f.clone(), 1, 1)),
+        }
+    };
+    fn gcd(a: i64, b: i64) -> i64 { if b == 0 { a.abs() } else { gcd(b, a % b) } }
+    let mut done = vec![false; fs.len()];
+    let mut out: Vec<Ex> = vec![];
+    let mut merged = false;
+    for i in 0..fs.len() {
+        if done[i] { continue; }
+        let Some((base, mut p, mut q)) = split(&fs[i]) else { out.push(fs[i].clone()); continue };
+        let mut any = false;
+        for j in i + 1..fs.len() {
+            if done[j] { continue; }
+            let Some((b2, p2, q2)) = split(&fs[j]) else { continue };
+            if b2 != base { continue; }
+            let (np, nq) = (p * q2 + p2 * q, q * q2);
+            let g = gcd(np, nq);
+            let (np, nq) = (np / g, nq / g);
+            let ok = deriv || (q % 2 == 1 && q2 % 2 == 1) || nq % 2 == 0;
+            if !ok || nq > 60 { continue; }
+            p = np; q = nq; done[j] = true; any = true;
+        }
+        if any {
+            merged = true;
+            out.push(if q == 1 { pow(base, Num(p as f64)) } else { Pow(bx(base), bx(Div(bx(Num(p as f64)), bx(Num(q as f64))))) });
+        } else { out.push(fs[i].clone()); }
+    }
+    if !merged { return e; }
+    // (numbers first, as mul writes them)
+    out.sort_by_key(|f| has_x(f));
+    out.into_iter().reduce(mul).unwrap_or(e)
 }
 
 /// The value as the figure evaluates it, with a bound on the rounding in it: each operation's own rounding (half a unit

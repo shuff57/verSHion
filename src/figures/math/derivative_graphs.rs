@@ -16,10 +16,13 @@ pub(crate) mod exact;
 mod holes;
 mod hole_cuts;
 mod domain;
+mod puiseux;
 #[cfg(test)]
 mod round8;
 #[cfg(test)]
 mod round9;
+#[cfg(test)]
+mod round10;
 #[cfg(test)]
 mod round7;
 #[cfg(test)]
@@ -740,6 +743,8 @@ impl Model {
             // the expression's own value there, when it has one, is its limit (each piece is continuous where defined)
             if let Some(v) = exact::ev(e, xe) { return Some((v.f(), Some(v))); }
         }
+        // (the expression has no value there: its one-sided expansion decides, (x − 2)^(1/3)(x − 2) has f′ → 0 exactly)
+        if let Some(lim) = self.expansion_limit(pi, n, x, xe, side) { return lim.map(|(v, z)| (v, z.then(XV::default))); }
         let at = |h: f64| self.dp(pi, n, x + side * h);
         let (h1, h2, h3) = (1e-4 * (1.0 + x.abs()), 1e-7 * (1.0 + x.abs()), 1e-10 * (1.0 + x.abs()));
         let (v1, v2, v3) = (at(h1)?, at(h2)?, at(h3)?);
@@ -748,6 +753,12 @@ impl Model {
         (d23 <= 1e-6 * (1.0 + v3.abs()) || d23 < 0.2 * d12).then_some((v3, None))
     }
 
+    /// The one-sided limit of the n-th derivative of f at x from piece `pi`'s expression by its expansion there:
+    /// Some(Some((value, exactly 0))), Some(None) where it runs off, None where the expansion cannot tell.
+    pub(crate) fn expansion_limit(&self, pi: usize, n: usize, x: f64, xe: Option<&XV>, side: f64) -> Option<Option<(f64, bool)>> {
+        let k = match self.mode { Mode::F => n, Mode::Fp { .. } => n.checked_sub(1)? };
+        puiseux::deriv_limit(&self.pieces.get(pi)?.e, x, xe, k, side)
+    }
     /// The analysis, piece by piece. The window is cut at the typed pieces' ends and at the points the expressions make
     /// special (a root's base, a denominator, |u|): between the cuts each piece is smooth, so its zeros are found there
     /// (exactly where they can be derived), a piece whose derivative is 0 is constant on exactly that piece, and at each
@@ -1697,6 +1708,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             if holes::guard(&mut svg, m, p, &fis, &g) { notes.push("A derivative cannot be determined reliably beside a cut: narrow the window or simplify the function to draw that neighbourhood".into()); }
             let local = holes::draw(m, p, &fis, &g);
             holes::insert(&mut svg, &local);
+            domain::bridge(&mut svg, m, p, &fis, &g);
         }
         grid_notes.extend(gn);
         let (w, h) = (svg_dim(&svg, "width"), svg_dim(&svg, "height"));
@@ -1809,15 +1821,42 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
     // π/2, whose float is huge; ln(cos x) at π/2, whose float is a finite residue), none for a derivative whose exact
     // expression has no value there unless both sides have it and agree (√(x² − 2) at √2: the slope runs off), and no f″
     // where f′ does not exist (|sin x| at π)
+    // (a derivative at the tracer that neither exact algebra nor the expansions can settle, and whose float is a residue
+    // near 0: not written as a value, and said)
+    let undecided: std::cell::Cell<[bool; 3]> = std::cell::Cell::new([false; 3]);
     let tval_one = |fi: usize| -> Option<(f64, Option<XV>)> {
         let (m, t) = (model.as_ref()?, tx.as_ref()?);
         if !m.has_value(t.v, te.as_ref()) { return None; }
+        // (f′ and f″ exist only where f is continuous: at a jump, whatever the slopes on its two sides, they do not; x for
+        // x < 1 and x + 1 after has no f′(1), though both pieces have slope 1)
+        if fi > 0 && matches!(m.mode, Mode::F) && !m.is_isolated(t.v) {
+            let fv = m.f_at(t.v, te.as_ref())?;
+            let fve = te.as_ref().and_then(|x| m.exact_f(x));
+            for sd in [-1.0, 1.0] {
+                if let Some((v, ve)) = domain::side_limit(m, 0, t.v, te.as_ref(), sd) {
+                    let meets = match (&ve, &fve) { (Some(a), Some(b)) => a == b, _ => (v - fv).abs() <= 1e-9 * (1.0 + fv.abs()) };
+                    if !meets { return None; }
+                }
+            }
+        }
         // the value, and its exact form where it can be derived: f at the typed x; a derivative from the pieces on both
         // sides, which must agree (at a join they may not: then it does not exist)
+        // (a zero of f′ or f″ the analysis proved exactly there, as x^(2/3)(x − 5) at 2, where the floats leave a residue)
+        let proven_zero = fi > 0 && te.is_some() && an.as_ref().is_some_and(|a| (if fi == 1 { &a.fp_marks } else { &a.fpp_marks }).iter().any(|mk| mk.k == EvK::Zero && mk.pv.ex.is_some() && mk.pv.ex == te));
         let (v, ve) = if fi == 0 {
             (m.f_at(t.v, te.as_ref()), te.as_ref().and_then(|x| m.exact_f(x)))
+        } else if proven_zero {
+            (Some(0.0), Some(XV::default()))
         } else if m.is_isolated(t.v) {
-            (deriv_at(m, fi, t.v), None)
+            // (a point typed on its own that continues its neighbours: the derivative is their common value, exact where both
+            // sides give it exactly)
+            match deriv_at(m, fi, t.v) {
+                Some(v) => match (domain::side_limit(m, fi, t.v, te.as_ref(), -1.0), domain::side_limit(m, fi, t.v, te.as_ref(), 1.0)) {
+                    (Some((_, Some(a))), Some((_, Some(b)))) if a == b => (Some(a.f()), Some(a)),
+                    _ => (Some(v), None),
+                },
+                None => (None, None),
+            }
         } else {
             let h = 1e-9 * (1.0 + t.v.abs());
             let (lp, rp) = (m.piece_at(t.v - h), m.piece_at(t.v + h));
@@ -1828,16 +1867,22 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                 // (an end of the domain: the one side there is)
                 (Some(v), None) if rp.is_none() => (Some(v.f()), Some(v)),
                 (None, Some(v)) if lp.is_none() => (Some(v.f()), Some(v)),
-                _ if [lp, rp].iter().flatten().any(|&pi| sym::print(&m.pieces[pi].e).contains("abs(")) && domain::side_limit(m, fi, t.v, te.as_ref(), -1.0).is_some() && domain::side_limit(m, fi, t.v, te.as_ref(), 1.0).is_some() => {
-                    // (at a zero inside |u|: the derivative's two sides in their plain forms, ±u, which must meet, as must f's:
-                    // x|x| has f′(0) = 0 (2|x| both ways) and no f″(0) (−2 and 2))
+                _ if domain::side_limit(m, fi, t.v, te.as_ref(), -1.0).is_some() && domain::side_limit(m, fi, t.v, te.as_ref(), 1.0).is_some() => {
+                    // (where the derivative's expression has no value at x, as at a zero inside |u| or of a root's base: its two
+                    // sides, in their plain forms or by their expansions, which must meet, as must f's: x|x| has f′(0) = 0 (2|x|
+                    // both ways) and no f″(0) (−2 and 2); (x − 2)^(1/3)(x − 2) has f′(2) = 0)
                     let sides = |n: usize| -> Option<(f64, Option<XV>)> {
                         let (l, r) = (domain::side_limit(m, n, t.v, te.as_ref(), -1.0)?, domain::side_limit(m, n, t.v, te.as_ref(), 1.0)?);
                         let meet = match (&l.1, &r.1) { (Some(a), Some(b)) => a == b, _ => (l.0 - r.0).abs() <= 1e-9 * (1.0 + l.0.abs()) };
                         meet.then(|| if l.1.is_some() && r.1.is_some() { l } else { (0.5 * (l.0 + r.0), None) })
                     };
                     let f_meets = !matches!(m.mode, Mode::F) || sides(0).is_some_and(|(v, _)| m.f_at(t.v, te.as_ref()).is_some_and(|w| (w - v).abs() <= 1e-9 * (1.0 + v.abs())));
-                    match sides(fi).filter(|_| f_meets) { Some((v, e)) => (Some(v), e), None => (None, None) }
+                    match sides(fi).filter(|_| f_meets) {
+                        // (a float residue beside 0, not settled exactly: undecided)
+                        Some((v, None)) if v.abs() < 1e-6 => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
+                        Some((v, e)) => (Some(v), e),
+                        None => (None, None),
+                    }
                 }
                 _ => {
                     // (the expression of the derivative has no value at the exact x, and f has values on one side only: the
@@ -1846,13 +1891,21 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                     let h = 1e-7 * (1.0 + t.v.abs());
                     let (l, r) = (m.d(fi, t.v - h).is_some(), m.d(fi, t.v + h).is_some());
                     let runs_off = undefined && l != r && domain::one_sided(m, fi, t.v, if l { -1.0 } else { 1.0 }).is_none();
-                    if runs_off || (undefined && !l && !r) { (None, None) } else { (deriv_at(m, fi, t.v), None) }
+                    if runs_off || (undefined && !l && !r) { (None, None) } else {
+                        match deriv_at(m, fi, t.v) {
+                            Some(v) if undefined && v.abs() < 1e-6 => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
+                            v => (v, None),
+                        }
+                    }
                 }
             }
         };
         v.filter(|v| v.is_finite()).map(|v| (v, ve))
     };
-    let tval = |fi: usize| -> Option<(f64, Option<XV>)> { if fi == 2 && tval_one(1).is_none() { return None; } tval_one(fi) };
+    let tval = |fi: usize| -> Option<(f64, Option<XV>)> {
+        if fi == 2 && tval_one(1).is_none() { if undecided.get()[1] { let mut u = undecided.get(); u[2] = true; undecided.set(u); } return None; }
+        tval_one(fi)
+    };
     let reading = |fi: usize| -> Option<String> {
         let t = tx.as_ref()?;
         model.as_ref()?;
@@ -1860,6 +1913,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         Some(match tval(fi) {
             Some((v, ve)) => eq_text(&format!("{nm}({})", t.show), &val_text(v, &Pv { ex: ve, show: None }, dec, t.decimal)),
             None if fi == 0 => format!("{nm}({}) has no value", t.show),
+            None if undecided.get()[fi] => format!("{nm}({}) cannot be decided here", t.show),
             None => format!("{nm}({}) does not exist", t.show),
         })
     };
@@ -2203,6 +2257,9 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         }
     }
 
+    if let Some(t) = tx.as_ref() {
+        if undecided.get().iter().any(|u| *u) { notes.push(format!("{name}{PRIME} at x = {} cannot be decided exactly (the value worked out there is a rounding residue beside 0), so it is not written: a single power, such as x^(4/3) for x\u{b7}x^(1/3), can be decided", t.show)); }
+    }
     // ── draw the marks (guides under the dots) ──
     let mut text_boxes: Vec<B4> = labels.iter().map(|l| l.1).collect();
     text_boxes.extend(grid_boxes.iter().copied());
@@ -2283,6 +2340,17 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                     let h = 1e-7 * (1.0 + x.abs());
                     // (a derivative's sides from its plain form on each side: (x² − 1)/|x − 1| has f′ = −1 and 1, f″ = 0 and 0)
                     let (l, r) = if fi == 0 { (m.d(fi, x - h), m.d(fi, x + h)) } else { (domain::side_limit(m, fi, x, xe.as_ref(), -1.0).map(|v| v.0), domain::side_limit(m, fi, x, xe.as_ref(), 1.0).map(|v| v.0)) };
+                    // (one side settles, the other runs off, f with values on both sides: an open circle at the side that settles,
+                    // −x then √x has f′ → −1 from the left)
+                    if fi > 0 && l.is_some() != r.is_some() && [-1.0, 1.0].iter().all(|sd| domain::side_limit(m, 0, x, xe.as_ref(), *sd).is_some()) {
+                        let v = l.or(r).unwrap();
+                        let (cx, cy) = (pn.sx(x), pn.sy(v));
+                        let mine = circles_in(&marks);
+                        if inside(pn, x, v) && !have.iter().any(|(hx, hy)| (hx - (cx - pn.ox)).abs() < 3.0 && (hy - (cy - pn.oy)).abs() < 3.0) && !mine.iter().any(|(hx, hy)| (hx - cx).abs() < 3.0 && (hy - cy).abs() < 3.0) {
+                            marks.push_str(&format!(r##"<circle cx="{cx:.2}" cy="{cy:.2}" r="4.5" fill="#fff" stroke="{}" stroke-width="2" data-mark="jump-open"/>"##, if print { ink } else { cols[fi] }));
+                        }
+                        continue;
+                    }
                     let (Some(l), Some(r)) = (l, r) else { continue };
                     if (l - r).abs() > 1e-5 * (1.0 + l.abs()) {
                         // a jump of f′ or f″ (a corner of f, x|x|″ at 0): an open circle at each side's value

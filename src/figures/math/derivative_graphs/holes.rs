@@ -64,7 +64,7 @@ fn fractional_power(a: &[f64], k: f64, value: f64) -> Option<Series> {
     }
     Some(c)
 }
-fn series(e: &Ex, x: &XV, zero: Option<&Ex>) -> Option<Series> {
+pub(super) fn series(e: &Ex, x: &XV, zero: Option<&Ex>) -> Option<Series> {
     use sym::{Ex::*, F};
     const N: usize = 22;
     if !sym::has_x(e) {
