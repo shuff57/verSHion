@@ -851,7 +851,7 @@ fn question(item: &Value) -> Result<Question, String> {
     let stem = if ty == "fill-in-the-blank" { stem } else { normalize_tables(&stem, &[]).stem };
     let (stem, kind) = match ty {
         "multiple-choice" => (stem, Kind::Mc { answers: choices(item)? }),
-        "true-false" => (stem, Kind::Tf { correct: item.get("answer").and_then(Value::as_bool).unwrap_or(true) }),
+        "true-false" => (stem, Kind::Tf { correct: item.get("answer").and_then(Value::as_bool).unwrap_or(false) }),
         "matching" => {
             let pairs: Vec<Pair> = item
                 .get("pairs")
@@ -885,6 +885,12 @@ fn question(item: &Value) -> Result<Question, String> {
     };
     q.topics = strings(item.get("topics"));
     q.explanation = Some(text(item, "explanation").to_string()).filter(|e| !e.is_empty());
+    // A true/false item the page prints no answer for has no key: it keeps the placeholder `false`
+    // and the keyless marker, never an invented True.
+    let unkeyed = |v: &Value| text(v, "type") == "true-false" && v.get("answer").and_then(Value::as_bool).is_none();
+    if q.explanation.is_none() && (unkeyed(item) || item.get("parts").and_then(Value::as_array).is_some_and(|ps| ps.iter().any(unkeyed))) {
+        q.explanation = Some(crate::model::KEYLESS_SENTINEL.to_string());
+    }
     Ok(q)
 }
 
@@ -1172,7 +1178,7 @@ fn part(p: &Value) -> Option<Part> {
     }
     let kind = match text(p, "type") {
         "multiple-choice" => PartKind::Mc { answers: choices(p).ok()? },
-        "true-false" => PartKind::Tf { correct: p.get("answer").and_then(Value::as_bool).unwrap_or(true) },
+        "true-false" => PartKind::Tf { correct: p.get("answer").and_then(Value::as_bool).unwrap_or(false) },
         // A part can't hold blanks; keep the key as its sample answer.
         "fill-in-the-blank" => {
             let key: Vec<String> = p.get("blanks").and_then(Value::as_array).map(|a| a.iter().map(|b| match b {
@@ -1495,6 +1501,20 @@ mod tests {
         assert!(crate::qcheck::check(&q1.stem, &q1.kind).iter().all(|i| i.at != crate::qcheck::Where::Stem));
         // The plain-text restatement is the typeset stem again, not a direction.
         assert!(got.doc.questions[1].stem.starts_with("Find $A^{-1}$"), "{}", got.doc.questions[1].stem);
+    }
+
+    #[test]
+    fn true_false_without_a_printed_answer_stays_keyless_instead_of_true() {
+        // Holdout v3, MSU statistics practice: "Answer the question True or False." with no key.
+        let reply = serde_json::json!({"format":FORMAT,"bank":{"name":"Stats","questions":[
+            {"id":"q1","label":"12","type":"true-false","stem":"A pie chart shows parts of a whole.","answer":null},
+            {"id":"q2","label":"13","type":"true-false","stem":"Bars in a histogram touch.","answer":false},
+            {"id":"q3","label":"14","type":"multipart","stem":"True or false.","parts":[{"type":"true-false","stem":"(a) One."}]}]}}).to_string();
+        let got = import_text(&reply,None,1,"w").unwrap();
+        let keyless = |q: &Question| crate::model::is_keyless(q);
+        assert!(matches!(got.doc.questions[0].kind, Kind::Tf { correct: false }) && keyless(&got.doc.questions[0]));
+        assert!(matches!(got.doc.questions[1].kind, Kind::Tf { correct: false }) && !keyless(&got.doc.questions[1]), "a printed key is kept");
+        assert!(keyless(&got.doc.questions[2]));
     }
 
     #[test]

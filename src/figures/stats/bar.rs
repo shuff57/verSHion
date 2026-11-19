@@ -80,6 +80,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("measure", "Bar height", &[COUNT, PERCENT], COUNT).hint("Relative frequency is each category's percent of its group's total, so each group's bars add to 100%"),
         ParamDef::choice("order", "Order", &ORDERS, "As typed").hint("Categories have no natural order unless they are ordered words (like Never, Sometimes, Often): keep those as typed"),
         ParamDef::choice("gap", "Gap between bars", &["Narrow", "Medium", "Wide"], "Medium").hint("Bars of a bar chart never touch: the categories are separate"),
+        ParamDef::bool("cat_ticks", "Tick marks at the categories", false).hint("A short mark on the category axis at the middle of each category, as many printed charts have"),
         ParamDef::bool("values", "Write the value on each bar", true),
         ParamDef::choice("values_at", "Values sit", &VALUES_AT, VALUES_AT[0]).hint("Inside writes each value in its bar, on a white chip; a bar too short for it keeps its value at the end"),
         ParamDef::int("decimals", "Decimals in percents", 0, 2, 0),
@@ -1244,6 +1245,8 @@ struct Opts {
     percent: bool,
     order: usize,
     gap: f64,
+    /// A short tick on the category axis at each category's middle.
+    cat_ticks: bool,
     values: bool,
     decimals: u32,
     grid: bool,
@@ -1346,6 +1349,7 @@ fn opts(p: &Params, t: &Table) -> Opts {
             "Wide" => 0.6,
             _ => 0.4,
         },
+        cat_ticks: p.b("cat_ticks"),
         values: p.b("values"),
         decimals: p.i("decimals").clamp(0, 2) as u32,
         grid: p.b("grid"),
@@ -2371,6 +2375,12 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
     // axes over the bars' feet
     d.line(l, bottom, w - r, bottom, ink, 2.0);
     d.line(l, top, l, bottom, ink, 2.0);
+    if o.cat_ticks {
+        for j in 0..n {
+            let c = (j as f64 + 0.5) * slot;
+            if o.horizontal { d.line(l - 6.0, top + c, l, top + c, ink, 1.6) } else { d.line(l + c, bottom, l + c, bottom + 6.0, ink, 1.6) };
+        }
+    }
     for (ti, (v, label)) in ticks.iter().enumerate() {
         let p = vpos(*v);
         if o.horizontal {

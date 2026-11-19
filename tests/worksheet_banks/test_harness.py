@@ -26,6 +26,21 @@ class RunTimingTests(unittest.TestCase):
         self.assertIsNone(timing['suspend_seconds'])
         self.assertIsNone(timing['host_suspend_detected'])
 
+class KeyTests(unittest.TestCase):
+    def test_true_false_is_an_invented_key_unless_marked_keyless(self):
+        self.assertTrue(h.has_invented_key({'kind':{'Tf':{'correct':True}}}))
+        self.assertFalse(h.has_invented_key({'kind':{'Tf':{'correct':False}},'explanation':h.KEYLESS_SENTINEL}))
+        part={'stem':'(a)','kind':{'Tf':{'correct':False}}}
+        self.assertTrue(h.has_invented_key({'kind':{'Multipart':{'parts':[part]}}}))
+        self.assertFalse(h.has_invented_key({'kind':{'Multipart':{'parts':[part]}},'explanation':h.KEYLESS_SENTINEL}))
+
+class SourceMapTests(unittest.TestCase):
+    def test_a_declared_single_unnumbered_item_maps_to_its_case_number(self):
+        page={'items':[{'number':None,'question_index':0,'status':'saved'}]};qs=[{'stem':'Activity 1.2.9'}]
+        case={'source_id':'linear-algebra','question_numbers':[9],'single_unnumbered_item':True}
+        self.assertEqual(h.parsed_source_map(case,page,qs)['by_number'],{9:qs[0]})
+        self.assertEqual(h.parsed_source_map(dict(case,single_unnumbered_item=False),page,qs)['by_number'],{})
+
 class ExecutionEvidenceTests(unittest.TestCase):
     def test_source_focus_and_app_conflicts_are_counted_without_fabricating_judge_calls(self):
         reply={'original_input_sha256':'original','input_image_sha256':['vision','focus'],

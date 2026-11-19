@@ -2437,3 +2437,13 @@ fn a_group_called_errors_or_sd_is_still_a_group() {
     assert!(parse("Treatment, Height, \u{b1} SD\nNone, 12.4, 1.1").unwrap().has_err);
     assert!(parse("Treatment, Height, SEM\nNone, 12.4, 1.1").unwrap().has_err);
 }
+
+#[test]
+fn category_ticks_add_one_short_mark_per_category_on_either_orientation() {
+    // Holdout v3, MSU statistics: the printed bar graph marks each category under the axis.
+    for orient in ["Vertical", "Horizontal"] {
+        let lines = |ticks: &str| render(&with(&[("orient", orient), ("cat_ticks", ticks)])).matches("<line").count();
+        assert_eq!(lines("true") - lines("false"), 4, "{orient}: the default data has four categories");
+    }
+    assert_eq!(render(&defaults()), render(&with(&[("cat_ticks", "false")])), "off by default: old charts are unchanged");
+}

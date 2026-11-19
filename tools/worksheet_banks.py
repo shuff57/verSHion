@@ -149,13 +149,17 @@ def content_reference(case,by_number,threshold=DEFAULT_THRESHOLD):
     ratio=sum(x['content_pass'] for x in checks.values())/len(checks) if checks else 0
     return ('independently_passed' if ratio>=threshold else 'independently_failed'),ratio
 
+# The app's marker on a question saved without its key (src/model.rs KEYLESS_SENTINEL).
+KEYLESS_SENTINEL='No answer key: this question was imported without its key. Add the correct answers before printing a key.'
+
 def has_invented_key(q):
     kind=q.get('kind',{})
     if 'Short' in kind:return bool(kind['Short'].get('sample','').strip())
     if 'Blank' in kind:return any(any(str(x).strip() for x in accepts) for accepts in kind['Blank'].get('accept',[]))
-    if 'Multipart' in kind:return any(has_invented_key({'kind':p.get('kind',{})}) for p in kind['Multipart'].get('parts',[]))
-    # A newly invented MC/Tf answer is also a source-key failure on these keyless pages.
-    return ('Mc' in kind and any(a.get('correct') for a in kind['Mc'].get('answers',[]))) or 'Tf' in kind
+    if 'Multipart' in kind:return any(has_invented_key({'kind':p.get('kind',{}),'explanation':q.get('explanation')}) for p in kind['Multipart'].get('parts',[]))
+    # A newly invented MC/Tf answer is also a source-key failure on these keyless pages. A True/False
+    # always holds a value, so only the keyless marker shows that value is a placeholder, not a key.
+    return ('Mc' in kind and any(a.get('correct') for a in kind['Mc'].get('answers',[]))) or ('Tf' in kind and q.get('explanation')!=KEYLESS_SENTINEL)
 
 def parsed_source_map(case,page,questions):
     """Source number -> saved question, from the importer's own per-raw-item provenance.
@@ -167,12 +171,12 @@ def parsed_source_map(case,page,questions):
     items=page.get('items')
     if items is None:
         raw=raw_questions(page);numbers=[source_number(q) for q in raw]
-        if case['source_id']=='statistics-confidence-intervals' and len(numbers)==1 and numbers[0] is None:numbers=[1]
+        if len(numbers)==1 and numbers[0] is None and (case['source_id']=='statistics-confidence-intervals' or (case.get('single_unnumbered_item') and len(case['question_numbers'])==1)):numbers=[1 if case['source_id']=='statistics-confidence-intervals' else case['question_numbers'][0]]
         by_number={n:q for n,q in zip(numbers,questions) if n is not None}
         return {'numbers':numbers,'by_number':by_number,'index':{n:i for i,n in enumerate(numbers) if n is not None},
                 'all_saved':len(raw)==len(questions),'unresolved':[],'status':{},'provenance':'legacy_zip'}
     numbers=[i.get('number') for i in items]
-    if case['source_id']=='statistics-confidence-intervals' and len(numbers)==1 and numbers[0] is None:numbers=[1]
+    if len(numbers)==1 and numbers[0] is None and (case['source_id']=='statistics-confidence-intervals' or (case.get('single_unnumbered_item') and len(case['question_numbers'])==1)):numbers=[1 if case['source_id']=='statistics-confidence-intervals' else case['question_numbers'][0]]
     by_number={};index={};status={};unresolved=[]
     for number,item in zip(numbers,items):
         if number is None:continue
