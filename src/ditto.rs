@@ -129,7 +129,7 @@ pub struct SourceItem {
     /// The printed question number when the label is a plain number.
     pub number: Option<u32>,
     /// `saved`, `saved_figure_only`, `saved_figure_only_unresolved`,
-    /// `saved_figure_box_unresolved`, `saved_figure_ownership_unresolved` or `dropped`.
+    /// `saved_figure_box_unresolved`, `saved_figure_ownership_unresolved`, `saved_part_picture_missing` or `dropped`.
     pub status: String,
     /// Index into the parsed question list of this page when it was saved.
     pub question_index: Option<usize>,
@@ -199,6 +199,112 @@ pub fn source_figure(item: &Value) -> Result<Option<SelectedFigure<'_>>, String>
         return Err(format!("source figure ownership requires review: a picture marker outside the sole owning part {index}, or multiple markers in that part, conflicts with {path}"));
     }
     Ok(Some(SelectedFigure { figure, source: FigureSource { origin: "multipart_part".into(), path, part_index: Some(index) } }))
+}
+
+/// Parts that print nothing but their own letter ("(a)"). On a page such a part stands beside a
+/// picture, so without an attached figure the question cannot be complete.
+fn bare_parts(q: &Question) -> Vec<String> {
+    let Kind::Multipart { parts } = &q.kind else { return Vec::new() };
+    parts
+        .iter()
+        .filter_map(|p| {
+            let s = p.stem.replace("[picture]", "");
+            let letter = part_letter(&s)?;
+            let rest = s.trim_start();
+            let rest = rest.strip_prefix('(').unwrap_or(rest).trim_start();
+            rest.get(letter.len()..)?.trim_start_matches([')', '.']).trim().is_empty().then_some(letter)
+        })
+        .collect()
+}
+
+/// The letter a part prints for itself: "(a) ..." gives "a", "b. ..." gives "b", "(1a) ..." gives "1a".
+fn part_letter(stem: &str) -> Option<String> {
+    let s = stem.trim_start();
+    let s = s.strip_prefix('(').unwrap_or(s);
+    let end = s.find([')', '.'])?;
+    let token = s[..end].trim();
+    (!token.is_empty() && token.len() <= 4 && token.chars().all(|c| c.is_ascii_alphanumeric())).then(|| token.to_string())
+}
+
+/// A multipart question whose parts each print their own figure ("2) (a) [triangle] (b) [triangle]")
+/// becomes one question per part, since a question stores one figure. Each child keeps the shared
+/// stem, its own printed text and figure, and `splitFrom` (the parent's id and label); exam positions
+/// follow. Only an unambiguous case is split: no parent figure, no nested parts, every part valid.
+/// Anything else is left for [`source_figure`] to send to review. Idempotent.
+fn split_part_figures_in(v: &mut Value) -> bool {
+    let Some(questions) = v.pointer("/bank/questions").and_then(Value::as_array).cloned() else { return false };
+    let has_figure = |p: &Value| p.get("figure").is_some_and(|f| !f.is_null());
+    let mut out = Vec::with_capacity(questions.len());
+    let mut children: HashMap<String, Vec<String>> = HashMap::new();
+    for q in questions {
+        let parts = q.get("parts").and_then(Value::as_array).cloned().unwrap_or_default();
+        let id = text(&q, "id").to_string();
+        // The same box on two parts is one shared picture claimed twice: ownership stays in review.
+        let boxes: Vec<_> = parts.iter().filter_map(|p| p.get("figure").and_then(|f| f.get("box"))).collect();
+        let distinct = boxes.iter().enumerate().all(|(i, b)| !boxes[..i].contains(b));
+        let splittable = text(&q, "type") == "multipart"
+            && distinct
+            && !id.is_empty()
+            && parts.iter().filter(|p| has_figure(p)).count() >= 2
+            && !has_figure(&q)
+            && parts.len() <= 26
+            && parts.iter().all(|p| p.get("parts").and_then(Value::as_array).is_none_or(Vec::is_empty) && part(p).is_some());
+        if !splittable {
+            out.push(q);
+            continue;
+        }
+        let label = match q.get("label") {
+            Some(Value::String(s)) if !s.trim().is_empty() => s.trim().to_string(),
+            Some(Value::Number(n)) => n.to_string(),
+            _ => id.clone(),
+        };
+        let stem = text(&q, "stem");
+        for (k, p) in parts.iter().enumerate() {
+            let own = text(p, "stem");
+            let letter = part_letter(own).unwrap_or_else(|| char::from(b'a' + k as u8).to_string());
+            let child_label = if letter.starts_with(&label) { letter.clone() } else { format!("{label}{letter}") };
+            let child_id = format!("{id}.{letter}");
+            let mut child = p.clone();
+            if text(p, "type").is_empty() {
+                child["type"] = Value::String("short-answer".into());
+            }
+            child["id"] = Value::String(child_id.clone());
+            child["label"] = Value::String(child_label);
+            child["stem"] = Value::String(if stem.is_empty() { own.to_string() } else { format!("{stem}\n\n{own}") });
+            child["splitFrom"] = serde_json::json!({"id": id, "label": label});
+            out.push(child);
+            children.entry(id.clone()).or_default().push(child_id);
+        }
+    }
+    if children.is_empty() {
+        return false;
+    }
+    v["bank"]["questions"] = Value::Array(out);
+    for pointer in ["/exams", "/bank/exams"] {
+        for exam in v.pointer_mut(pointer).and_then(Value::as_array_mut).into_iter().flatten() {
+            let Some(positions) = exam.get_mut("positions").and_then(Value::as_array_mut) else { continue };
+            let mut next = Vec::with_capacity(positions.len());
+            for position in positions.drain(..) {
+                match position.get("question").and_then(Value::as_str).and_then(|q| children.get(q)) {
+                    Some(ids) => next.extend(ids.iter().map(|c| {
+                        let mut p = position.clone();
+                        p["question"] = Value::String(c.clone());
+                        p
+                    })),
+                    None => next.push(position),
+                }
+            }
+            *positions = next;
+        }
+    }
+    true
+}
+
+/// [`split_part_figures_in`] on a reply's text, before any review reads its figure boxes; any
+/// other reply is returned unchanged.
+pub fn split_part_figures(reply: &str) -> String {
+    let Some(mut v) = json_object(reply) else { return reply.to_string() };
+    if split_part_figures_in(&mut v) { v.to_string() } else { reply.to_string() }
 }
 
 /// Normalize only the uniquely owned child's figure into the parent's existing image slot.
@@ -419,6 +525,7 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
             v[key] = inner;
         }
     }
+    split_part_figures_in(&mut v);
     let bank = v.get("bank").ok_or("The file has no \"bank\".")?;
     let name = bank.get("name").and_then(Value::as_str).filter(|n| !n.trim().is_empty()).unwrap_or(fallback_name).to_string();
     let raw = bank.get("questions").and_then(Value::as_array).ok_or("The bank has no \"questions\" list.")?;
@@ -434,7 +541,12 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
     for (i, item) in raw.iter().enumerate() {
         let (label, printed) = raw_label(item, i);
         let source_id = item.get("id").and_then(Value::as_str).map(str::to_string);
-        let mut info = SourceItem { index: i, id: source_id.clone(), number: printed.as_deref().and_then(label_number), label: printed, figure: "none".into(), status: "dropped".into(), ..Default::default() };
+        // A part split out for its own figure ("2a") still answers to its printed problem number.
+        let number = printed.as_deref().and_then(label_number).or_else(|| item.pointer("/splitFrom/label").and_then(Value::as_str).and_then(label_number));
+        if let Some(parent) = item.pointer("/splitFrom/label").and_then(Value::as_str) {
+            warnings.push(format!("Question {label}: saved as its own question, split from question {parent}, because each of that question's parts prints its own figure."));
+        }
+        let mut info = SourceItem { index: i, id: source_id.clone(), number, label: printed, figure: "none".into(), status: "dropped".into(), ..Default::default() };
         let selection = source_figure(item);
         let ownership_review = selection.as_ref().err().cloned();
         let selected = selection.as_ref().ok().and_then(Option::as_ref);
@@ -494,10 +606,18 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
         if text(item, "stem").is_empty() && !matches!(&cropped, Some(Ok(_))) && built.is_err() {
             built = Err("it has no stem and no valid source figure.".into());
         }
+        let has_picture = matches!(&cropped, Some(Ok(_)));
         match built {
             Ok(mut q) => {
                 if unresolved {
                     q.topics.push(UNRESOLVED_TOPIC.to_string());
+                }
+                let bare = if has_picture { Vec::new() } else { bare_parts(&q) };
+                if !bare.is_empty() {
+                    let reason = format!("part {} prints nothing but its letter and no figure came with the question; its picture was likely not captured, so review it against the page", bare.join(", "));
+                    warnings.push(format!("Question {label}: {reason}."));
+                    info.reason = Some(reason);
+                    q.topics.push("needs review: part picture missing".into());
                 }
                 if ownership_review.is_some() {
                     q.topics.push("needs review: source figure ownership".into());
@@ -520,6 +640,8 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                 }
                 info.status = if ownership_review.is_some() {
                     "saved_figure_ownership_unresolved"
+                } else if !bare.is_empty() {
+                    "saved_part_picture_missing"
                 } else if !box_review.is_empty() && q.image.is_some() {
                     let reason = box_review.iter().map(|issue| issue.message.as_str()).collect::<Vec<_>>().join("; ");
                     warnings.push(format!("Question {label}: source figure box requires review ({reason}); kept the source crop without certifying its scope."));
@@ -556,7 +678,8 @@ fn instruction_key(s: &str) -> String {
 }
 
 /// The words of a text with math markup set aside: LaTeX command names (`\begin`, `\frac`) and
-/// single letters are not words, so a plain-text and a typeset copy of one sentence read alike.
+/// one- or two-letter tokens are not words, so a plain-text and a typeset copy of one sentence
+/// read alike ("Rx" against `R\mathbf{x}`, "uv^T" against `\mathbf{u}\mathbf{v}^T`).
 fn prose_words(s: &str) -> Vec<String> {
     let (mut out, mut word, mut command) = (Vec::new(), String::new(), false);
     for c in s.chars().chain(std::iter::once(' ')) {
@@ -564,7 +687,7 @@ fn prose_words(s: &str) -> Vec<String> {
             word.extend(c.to_lowercase());
             continue;
         }
-        if word.chars().count() > 1 && !command {
+        if word.chars().count() > 2 && !command {
             out.push(std::mem::take(&mut word));
         }
         word.clear();
@@ -1390,6 +1513,8 @@ mod tests {
         let got = import_text(&package.to_string(),None,1,"worksheet").unwrap();
         assert!(got.doc.questions[1].stem.starts_with("Find each inverse with Gauss-Jordan.\n\nFind $A^{-1}$"));
         assert!(prose_words("\\frac{a}{b} Find $A^{-1}$ x").eq(&["find".to_string()]));
+        // Holdout v2, MIT PS4: plain "Rx" and "uv^T" against typeset R\mathbf{x} and \mathbf{u}\mathbf{v}^T.
+        assert!(prose_words("so Rx = 0 and A = uv^T = column").eq(&["and".to_string(), "column".to_string()]));
     }
 
     #[test]
@@ -1932,6 +2057,48 @@ mod tests {
     fn store() {
         let dir = std::env::temp_dir().join(format!("ditto-test-{}", std::process::id()));
         unsafe { std::env::set_var("XDG_DATA_HOME", dir) };
+    }
+
+    /// Holdout v2, Corbettmaths Pythagoras: "2) Calculate x (a) [triangle] (b) [triangle]".
+    fn part_figures_reply(with_boxes: bool) -> String {
+        let fig = |b: [u32; 4]| if with_boxes { serde_json::json!({"box":b,"alt":"right triangle"}) } else { Value::Null };
+        serde_json::json!({"format":FORMAT,"bank":{"name":"Pythagoras","questions":[
+            {"id":"q2","label":"2","type":"multipart","stem":"Calculate x","parts":[
+                {"stem":"(a)","type":"short-answer","suggestedAnswer":"","figure":fig([150, 200, 450, 800])},
+                {"stem":"(b)","suggestedAnswer":"","figure":fig([550, 200, 850, 800])}]}]},
+            "exams":[{"name":"Pythagoras","sections":[{"title":"","instructions":"Give each answer to 2 decimal places."}],"positions":[{"question":"q2","section":0}]}]}).to_string()
+    }
+
+    #[test]
+    fn parts_that_each_print_a_figure_become_one_question_each() {
+        store();
+        let reply = part_figures_reply(true);
+        let split = split_part_figures(&reply);
+        assert_eq!(split_part_figures(&split), split, "splitting is idempotent");
+        let got = import_text(&split, Some(&page()), 1, "w").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "{:?}", got.warnings);
+        for (q, letter) in got.doc.questions.iter().zip(["a", "b"]) {
+            assert!(q.stem.starts_with("Give each answer to 2 decimal places.\n\nCalculate x\n\n("), "{}", q.stem);
+            assert!(q.stem.ends_with(&format!("({letter})")), "{}", q.stem);
+            assert!(q.image.is_some());
+        }
+        let seen: Vec<_> = got.items.iter().map(|i| (i.label.clone(), i.number, i.status.as_str())).collect();
+        assert_eq!(seen, [(Some("2a".into()), Some(2), "saved"), (Some("2b".into()), Some(2), "saved")]);
+        assert!(got.warnings.iter().any(|w| w.contains("split from question 2")));
+        // import_text splits on its own too, so every path agrees.
+        assert_eq!(import_text(&reply, Some(&page()), 1, "w").unwrap().doc.questions.len(), 2);
+    }
+
+    #[test]
+    fn letter_only_parts_without_a_figure_are_held_for_review_not_saved_complete() {
+        store();
+        let got = import_text(&part_figures_reply(false), Some(&page()), 1, "w").unwrap();
+        assert_eq!(got.doc.questions.len(), 1);
+        assert_eq!(got.items[0].status, "saved_part_picture_missing");
+        assert!(got.items[0].reason.as_deref().is_some_and(|r| r.contains("part a, b")), "{:?}", got.items[0].reason);
+        assert!(got.doc.questions[0].topics.iter().any(|t| t.contains("part picture missing")));
+        assert_eq!(part_letter("(1a) Find A"), Some("1a".into()));
+        assert_eq!(part_letter("Find each value."), None);
     }
 
     #[test]

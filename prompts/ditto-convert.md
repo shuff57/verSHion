@@ -136,12 +136,14 @@ structure or circuit drawing) add `"figure": {"box": [ymin,xmin,ymax,xmax], "alt
   Blank grids, axes and curves provided as student workspaces ARE figures, including an
   unlabeled curve with tick marks. Keep supplied plotted curves; colored ink alone does not
   mean handwriting. Distinguish printed drawings from handwritten additions by their form.
-- One figure attachment per question. A single supplied diagram containing several panels belongs
-  in one box, with every panel and its labels included. For a multipart question with exactly one
-  supplied picture, put its `figure` on the part that owns it and do not duplicate it on the parent.
-  Multiple independent part pictures, or both a parent and part picture, cannot currently be stored
-  on one item: preserve the printed text, report the unsupported pictures for review, and never
-  silently omit one or join boxes across intervening text.
+- One figure attachment per question or part. A single supplied diagram containing several panels belongs
+  in one box, with every panel and its labels included. In a multipart question, a picture shared by
+  the whole question goes on the parent `figure`; a picture printed for one part goes on that part's
+  `figure`, and when several parts each print their own picture (a triangle for (a), another for
+  (b)), give EVERY such part its own `figure` box. Never omit a part's picture, never duplicate one
+  on the parent, and never join boxes across intervening text. A question with both a shared
+  picture and part pictures cannot be stored: preserve the printed text and report the pictures
+  for review.
 - `alt`: a short neutral description of what is drawn.
 - Do NOT write `[picture ...]` placeholders in stems.
 

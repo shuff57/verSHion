@@ -1583,7 +1583,7 @@ pub async fn convert_page_chat_async(bytes: &[u8], mime: &str, hint: &str, cfg: 
 /// page on its own (a single photo, or the page-only ablation).
 pub async fn convert_page_in_async(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize, context: Option<&crate::ditto::DocContext>) -> Result<Converted, String> {
     let prompt = page_prompt(hint, context, page_no);
-    let raw = transcribe_checked_async(bytes, mime, cfg, &prompt).await?;
+    let raw = crate::ditto::split_part_figures(&transcribe_checked_async(bytes, mime, cfg, &prompt).await?);
     let (raw, direction_review) = directions::review(raw,bytes,mime,cfg,page_no,context).await;
     let (raw, review) = review_source_figure_boxes(raw, bytes, mime, cfg, page_no).await;
     let mut converted=finish_page_async(&raw, bytes, cfg, page_no, context, review).await?;
