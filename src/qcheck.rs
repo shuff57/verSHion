@@ -79,11 +79,16 @@ fn empty_rows(answers: &[model::Answer]) -> Vec<Issue> {
         .collect()
 }
 
+/// A multipart problem printed as "1) (a) ... (b) ..." needs no shared stem when every part has its own.
+pub fn parts_carry_task(kind: &Kind) -> bool {
+    matches!(kind, Kind::Multipart { parts } if !parts.is_empty() && parts.iter().all(|p| filled(&p.stem)))
+}
+
 /// Everything missing from a stem and kind. Works on a draft as the editor holds it (empty rows and
 /// half-filled pairs still present) and on a stored question alike.
 pub fn check(stem: &str, kind: &Kind) -> Vec<Issue> {
     let mut v = Vec::new();
-    if !filled(stem) {
+    if !filled(stem) && !parts_carry_task(kind) {
         v.push(fix(Where::Stem, "Add a question stem", false));
     }
     match kind {
@@ -304,6 +309,16 @@ mod tests {
             let v = check("  ", &k);
             assert_eq!(v.first().map(|i| (i.at, i.msg.as_str())), Some((Where::Stem, "Add a question stem")), "{k:?}");
         }
+    }
+
+    #[test]
+    fn multipart_parts_can_carry_the_task_without_a_shared_stem() {
+        let p = |s: &str| Part { stem: s.into(), kind: PartKind::Short { sample: String::new() } };
+        let ok = check("", &Kind::Multipart { parts: vec![p("(a) Find x."), p("(b) Find y.")] });
+        assert!(ok.iter().all(|i| i.at != Where::Stem), "{ok:?}");
+        let gap = check("", &Kind::Multipart { parts: vec![p("(a) Find x."), p(" ")] });
+        assert!(gap.iter().any(|i| i.at == Where::Stem));
+        assert!(check("", &Kind::Multipart { parts: vec![] }).iter().any(|i| i.at == Where::Stem));
     }
 
     #[test]

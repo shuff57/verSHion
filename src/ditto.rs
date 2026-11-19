@@ -555,6 +555,43 @@ fn instruction_key(s: &str) -> String {
     s.replace("**", "").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
+/// The words of a text with math markup set aside: LaTeX command names (`\begin`, `\frac`) and
+/// single letters are not words, so a plain-text and a typeset copy of one sentence read alike.
+fn prose_words(s: &str) -> Vec<String> {
+    let (mut out, mut word, mut command) = (Vec::new(), String::new(), false);
+    for c in s.chars().chain(std::iter::once(' ')) {
+        if c.is_alphabetic() {
+            word.extend(c.to_lowercase());
+            continue;
+        }
+        if word.chars().count() > 1 && !command {
+            out.push(std::mem::take(&mut word));
+        }
+        word.clear();
+        command = c == '\\';
+    }
+    out
+}
+
+/// The direction is already in the question (its stem or a part): an exact copy, or, for a
+/// direction of at least four words, every one of its words in order. The second catches a reader
+/// that returns a question's own sentence, in plain text, as the page's direction for it.
+fn already_stated(instruction: &str, q: &Question) -> bool {
+    let mut text = q.stem.clone();
+    if let Kind::Multipart { parts } = &q.kind {
+        for p in parts {
+            text.push('\n');
+            text.push_str(&p.stem);
+        }
+    }
+    if instruction_key(&text).contains(&instruction_key(instruction)) {
+        return true;
+    }
+    let want = prose_words(instruction);
+    let mut have = prose_words(&text).into_iter();
+    want.len() >= 4 && want.iter().all(|w| have.any(|h| &h == w))
+}
+
 /// The task directions a reply maps to its questions through `exams[].sections[].instructions` and
 /// `positions`. Only explicit source section mappings supply directions; a title or a neighboring
 /// question is never used to guess an instruction.
@@ -656,7 +693,7 @@ impl Directions {
                     warnings.push("A question has conflicting source section directions; review it before reusing it in a bank.".into());
                 } else {
                     let instruction = &choices[0].text;
-                    if !instruction_key(&q.stem).contains(&instruction_key(instruction)) {
+                    if !already_stated(instruction, q) {
                         if matches!(q.kind, Kind::Blank { .. }) && instruction.contains("___") {
                             warnings.push("A source direction contains an example blank; review its context before reusing this fill-in question in a bank.".into());
                         } else {
@@ -683,10 +720,10 @@ fn text<'a>(v: &'a Value, key: &str) -> &'a str {
 
 fn question(item: &Value) -> Result<Question, String> {
     let stem = text(item, "stem").to_string();
-    if stem.is_empty() {
+    let ty = text(item, "type");
+    if stem.is_empty() && !(ty == "multipart" && parts_carry_task(item)) {
         return Err("it has no stem.".into());
     }
-    let ty = text(item, "type");
     // Tables of blanks are cleaned for every type (blank questions also realign their answers).
     let stem = if ty == "fill-in-the-blank" { stem } else { normalize_tables(&stem, &[]).stem };
     let (stem, kind) = match ty {
@@ -726,6 +763,12 @@ fn question(item: &Value) -> Result<Question, String> {
     q.topics = strings(item.get("topics"));
     q.explanation = Some(text(item, "explanation").to_string()).filter(|e| !e.is_empty());
     Ok(q)
+}
+
+/// A problem printed as "1) (a) ... (b) ..." has no shared stem: its parts carry the whole task.
+/// That holds only when every raw part survives, so an empty stem never hides a lost part.
+fn parts_carry_task(item: &Value) -> bool {
+    item.get("parts").and_then(Value::as_array).is_some_and(|raw| !raw.is_empty() && raw.iter().all(|p| part(p).is_some()))
 }
 
 fn strings(v: Option<&Value>) -> Vec<String> {
@@ -1303,6 +1346,50 @@ mod tests {
         package["exams"][0]["sections"][0]["instructions"] = Value::String("**Evaluate each expression.**".into());
         let got = import_text(&package.to_string(),None,1,"worksheet").unwrap();
         assert_eq!(got.doc.questions[0].stem,"A\n\nEvaluate  each expression.\n$5/4-3/4$");
+    }
+
+    /// Holdout v1, MIT 18.06 PS2: "1) (1a) ... (1b) ..." has no shared stem, and the reader
+    /// returned each question's own sentence, in plain text, as its page direction.
+    fn inline_parts_package() -> Value {
+        serde_json::json!({"format":FORMAT,"formatVersion":"0.1.0","bank":{"name":"PS2","questions":[
+            {"id":"q1","label":"1","type":"multipart","stem":"","parts":[
+                {"type":"short-answer","stem":"(1a) Find a nonzero matrix $A$ for which $A^2 = 0$.","suggestedAnswer":""},
+                {"type":"short-answer","stem":"(1b) Find a 2-by-2 matrix (of real numbers) such that $A^2 = -I$.","suggestedAnswer":""}]},
+            {"id":"q2","label":"2","type":"short-answer","stem":"Find $A^{-1}$ with Gauss-Jordan for $A = \\begin{bmatrix}0&2\\\\2&2\\end{bmatrix}$. (Of course, you have to start with a row exchange.)","suggestedAnswer":""}]},
+            "exams":[{"name":"PS2","sections":[
+                {"title":"","instructions":"(1a) Find a nonzero matrix A for which A^2 = 0. (1b) Find a 2-by-2 matrix (of real numbers) such that A^2 = -I."},
+                {"title":"","instructions":"Find A^{-1} with Gauss-Jordan for A = [[0, 2], [2, 2]]. (Of course, you have to start with a row exchange.)"}],
+                "positions":[{"question":"q1","section":0},{"question":"q2","section":1}]}]})
+    }
+
+    #[test]
+    fn inline_lettered_parts_are_kept_without_a_shared_stem_or_a_restated_copy() {
+        let got = import_text(&inline_parts_package().to_string(),None,1,"worksheet").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "{:?}", got.warnings);
+        let q1 = &got.doc.questions[0];
+        assert_eq!(q1.stem, "");
+        assert!(matches!(&q1.kind, Kind::Multipart { parts } if parts.len() == 2 && parts[1].stem.starts_with("(1b)")));
+        assert!(crate::qcheck::check(&q1.stem, &q1.kind).iter().all(|i| i.at != crate::qcheck::Where::Stem));
+        // The plain-text restatement is the typeset stem again, not a direction.
+        assert!(got.doc.questions[1].stem.starts_with("Find $A^{-1}$"), "{}", got.doc.questions[1].stem);
+    }
+
+    #[test]
+    fn an_empty_stem_with_a_lost_part_is_still_dropped() {
+        let mut package = inline_parts_package();
+        package["bank"]["questions"][0]["parts"][1]["stem"] = Value::String(String::new());
+        let got = import_text(&package.to_string(),None,1,"worksheet").unwrap();
+        assert_eq!(got.doc.questions.len(), 1);
+        assert!(got.doc.questions[0].stem.starts_with("Find $A^{-1}$"));
+    }
+
+    #[test]
+    fn a_short_direction_or_new_words_are_still_prepended() {
+        let mut package = inline_parts_package();
+        package["exams"][0]["sections"][1]["instructions"] = Value::String("Find each inverse with Gauss-Jordan.".into());
+        let got = import_text(&package.to_string(),None,1,"worksheet").unwrap();
+        assert!(got.doc.questions[1].stem.starts_with("Find each inverse with Gauss-Jordan.\n\nFind $A^{-1}$"));
+        assert!(prose_words("\\frac{a}{b} Find $A^{-1}$ x").eq(&["find".to_string()]));
     }
 
     #[test]

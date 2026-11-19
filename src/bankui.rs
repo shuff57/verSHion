@@ -3306,7 +3306,7 @@ fn card_full_question(ui: &mut Ui, app: &mut App, q: &Question, size: f32) {
     use crate::model::{Kind, PartKind};
     let rich = Rich::new(size, theme::ink());
     let mut picture = q.image.clone();
-    if q.stem.trim().is_empty() {
+    if q.stem.trim().is_empty() && !crate::qcheck::parts_carry_task(&q.kind) {
         // a draft saved before its question was written
         ui.label(theme::muted("(no question text)").size(size));
     }
