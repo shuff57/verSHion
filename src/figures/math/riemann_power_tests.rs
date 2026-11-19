@@ -196,13 +196,15 @@ fn riemann_flat_contacts_are_one_meet() {
 
 #[test]
 fn riemann_scientific_constant_reads_as_its_value() {
-    // 2.5e-1 is 1/4. Between |x| (or x²) and y = 1/4 on [−1, 1], y runs 0 to 1, and at y = 1/4 every x is in
+    // 0.25 and 1/4 are 1/4. Between |x| (or x²) and y = 1/4 on [−1, 1], y runs 0 to 1, and at y = 1/4 every x is in
     // (closed: 1/4 lies between min and max everywhere), width 2. |x| Upper₂: (1/2)(2 + 1) = 3/2; x² Upper₁: 1·2 = 2.
+    // 2.5e-1 and 25e-2 are scientific notation, which reads like Euler's e: refused (check 15 B3).
     let p = |f: &str, g: &str, n: i64| with(&[("region", s("Between f(x) and g(x)")), ("f", s(f)), ("g", s(g)), ("bounds", s("From a to b")), ("a", s("-1")), ("b", s("1")), ("strips", s("Horizontal")), ("rule", s("Upper")), ("n", Value::I(n))]);
-    for g in ["2.5e-1", "0.25", "1/4", "25e-2"] {
+    for g in ["0.25", "1/4"] {
         assert!((model(&p("abs(x)", g, 2)).unwrap().sum.unwrap().v - 1.5).abs() < 1e-12, "{g}");
         assert!((model(&p("x^2", g, 1)).unwrap().sum.unwrap().v - 2.).abs() < 1e-12, "{g}");
     }
+    for g in ["2.5e-1", "25e-2"] { assert!(model(&p("abs(x)", g, 2)).err().unwrap_or_default().contains("scientific notation"), "{g}"); }
 }
 
 #[test]
@@ -211,7 +213,7 @@ fn riemann_check14_evidence() {
     std::fs::create_dir_all(&dir).unwrap();
     let base = serde_json::json!({"region":"Between f(x) and g(x)","bounds":"Where f and g cross","f":"x^4+1","g":"1","xmin":-3,"xmax":3,"ymin":-2,"ymax":6,"strips":"Vertical","rule":"Left","n":4,"sum_line":true,"integral_line":true,"exact_line":true,"error_line":true,"show_dx":true,"key_line":true,"strip_labels":"Heights"});
     for (name, ch) in [("x4p1_V", serde_json::json!({})), ("x4p1_H", serde_json::json!({"strips":"Horizontal"})), ("cos_taylor_V", serde_json::json!({"f":"cos(x)","g":"1-x^2/2","ymin":-3,"ymax":2})),
-                       ("abs_sci_U2", serde_json::json!({"f":"abs(x)","g":"2.5e-1","bounds":"From a to b","a":"-1","b":"1","xmin":-2,"xmax":2,"ymin":-1,"ymax":2,"strips":"Horizontal","rule":"Upper","n":2}))] {
+                       ("abs_quarter_U2", serde_json::json!({"f":"abs(x)","g":"0.25","bounds":"From a to b","a":"-1","b":"1","xmin":-2,"xmax":2,"ymin":-1,"ymax":2,"strips":"Horizontal","rule":"Upper","n":2}))] {
         let mut q = base.clone(); for (k, v) in ch.as_object().unwrap() { q[k] = v.clone(); }
         let set: Vec<(&str, Value)> = q.as_object().unwrap().iter().map(|(k, v)| (k.as_str(), match v {
             serde_json::Value::Bool(b) => Value::B(*b), serde_json::Value::String(t) => s(t),

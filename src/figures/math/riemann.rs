@@ -91,7 +91,32 @@ fn rule(p: &Params) -> Rule { match p.s("rule") { "Right" => Rule::R, "Midpoint"
 fn crossing(p: &Params) -> bool { region(p) == Region::Between && p.s("bounds") == "Where f and g cross" }
 
 /// A typed function: "x^2 + 1" (or "y = …", "f(x) = …"), read by the coordinate grid's own expression reader.
+/// A number typed in scientific notation (a digit, then e or E, then an optional sign and a digit:
+/// 2e-1, 1E6, 2.5e-1): the reader takes it as 0.2, but a class using Euler's e reads 2e-1 as 2e − 1.
+/// It is refused with a note naming it, in every typed field, so nothing is drawn or written from an
+/// ambiguous reading. (2e^x, 2e-x, 2 e-1 and 2*e-1 are not this: e follows no digit, or no digit follows.)
+fn sci_notation(t: &str, name: &str) -> Result<(), String> {
+    let c: Vec<char> = t.chars().collect();
+    for i in 1..c.len() {
+        if !(c[i] == 'e' || c[i] == 'E') || !c[i - 1].is_ascii_digit() { continue; }
+        let j = if matches!(c.get(i + 1), Some('-' | '+')) { i + 2 } else { i + 1 };
+        if !c.get(j).is_some_and(|d| d.is_ascii_digit()) { continue; }
+        // the whole token: the number before the e, the exponent after it
+        let mut st = i;
+        while st > 0 && (c[st - 1].is_ascii_digit() || c[st - 1] == '.') { st -= 1; }
+        let mut en = j;
+        while en < c.len() && c[en].is_ascii_digit() { en += 1; }
+        let tok: String = c[st..en].iter().collect();
+        let mant: String = c[st..i].iter().collect();
+        let v = tok.parse::<f64>().map(|v| format!("{v}")).unwrap_or_default();
+        let euler = match c.get(i + 1) { Some('-') => format!("{mant}*e - {}", c[j..en].iter().collect::<String>()), Some('+') => format!("{mant}*e + {}", c[j..en].iter().collect::<String>()), _ => format!("{mant}*e") };
+        return Err(format!("{name} has \u{201c}{tok}\u{201d}, scientific notation for {v}, which reads like Euler's e: type {v} for the number, or {euler} for e"));
+    }
+    Ok(())
+}
+
 fn read_fn(t: &str, name: &str) -> Result<String, String> {
+    sci_notation(t, &format!("{name}(x)"))?;
     let mut s = t.trim().to_string();
     for pre in ["y=", "f(x)=", "g(x)="] {
         let compact: String = s.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_lowercase();
@@ -163,6 +188,7 @@ fn odd_power(src: &str) -> Option<(usize, usize, usize, i64, i64)> {
 
 /// A typed bound: its value and how it prints (as typed: 1/2, π/2, 2π, √2).
 fn read_bound(t: &str, name: &str) -> Result<(f64, String, Option<Ex>), String> {
+    sci_notation(t, name)?;
     // (the typed-measure reader takes numbers, fractions, roots and π; e, e^2 and ln 3 are read by the grid's expression reader)
     let alt = || { let low = t.trim().to_lowercase(); (!low.contains('x') && !low.contains('y')).then(|| super::eval_full(&low, 0.0, None, false)).flatten().filter(|v| v.is_finite()) };
     let v = eval_typed(t).or_else(alt).ok_or_else(|| format!("{name} cannot be read: type a number such as 2, 1/2, -3, pi/2, 2pi or e"))?;
@@ -484,38 +510,94 @@ struct Meet { x: f64, touch: bool, sure: bool }
 /// band (read just outside it) and a touch when it does not. Its place is an exact zero of f − g in
 /// the band where there is one, else the band's middle, established only when the band is under
 /// 10⁻⁶ wide. A band running on for 5% of the window is f = g along a stretch: left as it was found.
-fn settle_meets(fns: &Fns, cands: &[f64], algebraic: &[Ex], tree: Option<&Node>, width: f64) -> Vec<Meet> {
+fn settle_meets(fns: &Fns, cands: &[f64], algebraic: &[Ex], tree: Option<&Node>, width: f64) -> Result<Vec<Meet>, String> {
     let h = |x: f64| Some(fns.f(x)? - fns.g(x)?);
     let in_band = |x: f64| matches!((fns.f(x), fns.g(x)), (Some(f), Some(g)) if (f - g).abs() <= 64.0 * f64::EPSILON * 1f64.max(f.abs()).max(g.abs()));
-    let cap = 0.05 * width;
-    // the band's end on one side of c (dir ±1): None when it runs past the cap
-    let end = |c: f64, dir: f64| -> Option<f64> {
+    // the band's end on one side of c (dir ±1): None when it runs past `cap`
+    let end = |c: f64, dir: f64, cap: f64| -> Option<f64> {
         if !in_band(c) { return Some(c); }
         let (mut inner, mut d) = (0.0, 1e-13 * c.abs().max(1.0));
         while in_band(c + dir * d) { inner = d; d *= 2.0; if d > cap { return None; } }
         for _ in 0..50 { let m = 0.5 * (inner + d); if in_band(c + dir * m) { inner = m; } else { d = m; } }
         Some(c + dir * inner)
     };
+    // an exact zero of f − g in [l, r]: a known algebraic one, the exact zero near the middle, or the
+    // simplest rational (or rational multiple of π) in the band, each checked exactly
+    let exact_in = |l: f64, r: f64| -> Option<f64> {
+        let tiny = 1e-12 * l.abs().max(r.abs()).max(1.0);
+        if let Some(x) = algebraic.iter().map(Ex::approx).find(|x| *x >= l - tiny && *x <= r + tiny) { return Some(x); }
+        let t = tree?;
+        if let Some(e) = sym::exact_zero(t, 0.5 * (l + r)).filter(|e| { let x = e.approx(); x >= l - tiny && x <= r + tiny }) { return Some(e.approx()); }
+        let zero = |e: Ex| sym::eval(t, &e).is_some_and(|v| v.is_zero()).then(|| e.approx());
+        simplest_between(l, r).and_then(|(n, d)| zero(Ex::rat(Rat::new(n, d)?)))
+            .or_else(|| simplest_between(l / PI, r / PI).and_then(|(n, d)| zero(Ex::pi().scale(Rat::new(n, d)?)?)))
+    };
+    let unsettled = |x: f64| format!("f and g agree to within rounding all along a stretch near x \u{2248} {}, so where they meet cannot be listed: choose From a to b", rounded(x, 4));
     let mut out: Vec<Meet> = vec![];
     let mut i = 0;
     while i < cands.len() {
         let c = cands[i];
-        let (Some(l), Some(r)) = (end(c, -1.0), end(c, 1.0)) else { out.push(Meet { x: c, touch: false, sure: true }); i += 1; continue };
+        let cap = 0.05 * width;
+        let (Some(l), Some(r)) = (end(c, -1.0, cap), end(c, 1.0, cap)) else {
+            // a wide band (f − g flat to rounding over 5% of the window): settled only where f − g is a
+            // polynomial with one rational root there, whose multiplicity says touch or crossing and whose
+            // quotient keeps away from 0 over the whole band; else refused, never listed sample by sample
+            let poly = tree.and_then(sym::poly).ok_or_else(|| unsettled(c))?;
+            let root = algebraic.iter().filter_map(|e| e.as_rat()).filter(|q| (q.f() - c).abs() <= 2.0 * cap)
+                .min_by(|a, b| (a.f() - c).abs().total_cmp(&(b.f() - c).abs())).ok_or_else(|| unsettled(c))?;
+            let (mut q, mut mult) = (poly.clone(), 0);
+            loop {
+                // q ÷ (x − root): synthetic division, exact
+                let n = q.len();
+                if n < 2 { break; }
+                let mut div = vec![Rat::zero(); n - 1];
+                let mut carry = Rat::zero();
+                for k in (1..n).rev() { carry = q[k].add(carry.mul(root).ok_or_else(|| unsettled(c))?).ok_or_else(|| unsettled(c))?; div[k - 1] = carry; }
+                let rem = q[0].add(carry.mul(root).ok_or_else(|| unsettled(c))?).ok_or_else(|| unsettled(c))?;
+                if !rem.is_zero() { break; }
+                q = div; mult += 1;
+            }
+            if mult == 0 { return Err(unsettled(c)); }
+            // the band about the root, out to the whole window at most
+            let rf = root.f();
+            let (bl, br) = (end(rf, -1.0, width).unwrap_or(rf - width), end(rf, 1.0, width).unwrap_or(rf + width));
+            let qv = |x: f64| q.iter().rev().fold(0.0, |acc, k| acc * x + k.f());
+            let vals: Vec<f64> = (0..=200).map(|k| qv(bl + (br - bl) * k as f64 / 200.0)).collect();
+            let big = vals.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+            if !(vals.iter().all(|v| *v > 1e-9 * big) || vals.iter().all(|v| *v < -1e-9 * big)) { return Err(unsettled(c)); }
+            out.push(Meet { x: rf, touch: mult % 2 == 0, sure: true });
+            while i < cands.len() && cands[i] <= br + 1e-12 * br.abs().max(1.0) { i += 1; }
+            continue;
+        };
         // every candidate in the band is this one meet
         let mut j = i + 1;
         while j < cands.len() && cands[j] <= r + 1e-12 * r.abs().max(1.0) { j += 1; }
-        let (r, w) = (r, r - l);
+        let w = r - l;
         let e = (1e-3 * w).max(1e-7 * c.abs().max(1.0));
         let touch = matches!((h(l - e), h(r + e)), (Some(u), Some(v)) if u * v > 0.0);
         let mid = 0.5 * (l + r);
-        let tiny = 1e-12 * mid.abs().max(1.0);
-        let exact = algebraic.iter().map(Ex::approx).find(|x| *x >= l - tiny && *x <= r + tiny)
-            .or_else(|| tree.and_then(|t| sym::exact_zero(t, mid)).map(|e| e.approx()).filter(|x| *x >= l - tiny && *x <= r + tiny));
-        let (x, sure) = match exact { Some(x) => (x, true), None if w <= 1e-6 * mid.abs().max(1.0) => (if j - i == 1 { c } else { mid }, true), None => (mid, false) };
+        let (x, sure) = match exact_in(l, r) { Some(x) => (x, true), None if w <= 1e-6 * mid.abs().max(1.0) => (if j - i == 1 { c } else { mid }, true), None => (mid, false) };
         out.push(Meet { x, touch, sure });
         i = j;
     }
-    out
+    Ok(out)
+}
+
+/// The rational with the smallest denominator in [lo, hi] (denominators up to 10⁶), by continued fractions.
+fn simplest_between(lo: f64, hi: f64) -> Option<(i128, i128)> {
+    fn go(lo: f64, hi: f64, depth: u32) -> Option<(i128, i128)> {
+        if depth > 40 || !lo.is_finite() || !hi.is_finite() || lo > hi { return None; }
+        if lo <= 0.0 && hi >= 0.0 { return Some((0, 1)); }
+        if hi < 0.0 { return go(-hi, -lo, depth + 1).map(|(n, d)| (-n, d)); }
+        let fl = lo.floor();
+        if fl == lo { return Some((fl as i128, 1)); }
+        if fl + 1.0 <= hi { return Some((fl as i128 + 1, 1)); }
+        // lo, hi in (fl, fl + 1): x = fl + 1/y with y in [1/(hi − fl), 1/(lo − fl)]
+        let (n, d) = go(1.0 / (hi - fl), 1.0 / (lo - fl), depth + 1)?;
+        let (num, den) = ((fl as i128).checked_mul(n)?.checked_add(d)?, n);
+        (den > 0 && den <= 1_000_000).then_some((num, den))
+    }
+    go(lo, hi, 0)
 }
 
 /// A computed x that is a rational or a multiple of π to within the reader's error is that exact number.
@@ -701,6 +783,7 @@ fn exact_integral(tree: Option<&Node>, h: &dyn Fn(f64) -> Option<f64>, a: f64, b
 /// A table row: x and f(x), their typed forms and exact values.
 struct Cell { x: f64, y: f64, xs: String, ys: String, xe: Option<Ex>, ye: Option<Ex> }
 fn read_table(t: &str) -> Result<Vec<Cell>, String> {
+    sci_notation(t, "The table")?;
     let mut out: Vec<Cell> = vec![];
     for row in t.split([';', '\n']).map(|r| r.trim()).filter(|r| !r.is_empty()) {
         if out.len() >= MAX_TABLE { return Err(format!("The table has more than {MAX_TABLE} rows: type {MAX_TABLE} or fewer")); }
@@ -859,8 +942,12 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
         rs.extend(touches(&fns, gl.x0, gl.x1).into_iter().filter(|t| near_found.iter().all(|r| (r - t).abs() > 1e-6 * t.abs().max(1.0))));
         rs.sort_by(f64::total_cmp);
         rs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
-        let meets = settle_meets(&fns, &rs, &algebraic, ht.as_ref(), gl.x1 - gl.x0);
+        let meets = settle_meets(&fns, &rs, &algebraic, ht.as_ref(), gl.x1 - gl.x0)?;
         let rs: Vec<f64> = meets.iter().map(|m| m.x).collect();
+        // (every meet written is established: exact, or placed to 10⁻⁶)
+        if let Some(t) = meets.iter().find(|t| !t.sure) {
+            return Err(format!("f and g touch near x \u{2248} {} too flatly for the figure to place the touch exactly: choose From a to b", rounded(t.x, 4)));
+        }
         if rs.len() < 2 {
             // (a single touch cannot be widened into two crossings; no meet at all might be outside the window)
             return Err(match meets.first() {
@@ -868,10 +955,6 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
                 Some(_) => "f and g cross only once in the window: widen the x-axis to take in a second crossing, or choose From a to b".into(),
                 None => "f and g do not meet in the window: widen the x-axis if they meet outside it, or choose From a to b".into(),
             });
-        }
-        // (a bound is set only at a meet whose place is established)
-        if let Some(t) = [&meets[0], &meets[meets.len() - 1]].into_iter().find(|t| !t.sure) {
-            return Err(format!("f and g touch near x \u{2248} {} too flatly for the figure to place the touch exactly: choose From a to b", rounded(t.x, 4)));
         }
         m.meet_open = meets_open(&fns, gl.x0, gl.x1, &rs);
         // (a crossing is exact only when f − g is exactly 0 there, checked by exact arithmetic)
@@ -2252,3 +2335,7 @@ mod flat_tests;
 #[cfg(test)]
 #[path = "riemann_power_tests.rs"]
 mod power_tests;
+
+#[cfg(test)]
+#[path = "riemann_contact_tests.rs"]
+mod contact_tests;
