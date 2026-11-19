@@ -5,14 +5,16 @@
 //! model judge can then agree. This check does not trust either: it registers the candidate's
 //! solid dark edges onto the reference image's ink, then samples the reference along each solid
 //! gray segment and asks whether the ink there comes in separate runs with gaps between them.
-//! Nothing in the drawing is changed; the agent refuses to finalize over a measured contradiction.
-//! An unclear reading (no registration, no stroke under the edge) reports nothing.
+//! Where it measures dashes under a solid gray edge (a segment, a polyline path or a line), the
+//! agent sets that edge dashed itself and records why: the measurement decides, not the model.
+//! An unclear reading (no registration, no stroke under the edge) changes and reports nothing.
 
 use std::collections::BTreeMap;
 
 use serde_json::Value as Json;
 
-/// One drawn segment in canvas coordinates.
+/// One drawn straight stroke in canvas coordinates, and the diagram element it belongs to
+/// (`segments`, `paths` or `lines`, with its index): a polyline path is one stroke per leg.
 struct Seg {
     a: (f64, f64),
     b: (f64, f64),
@@ -20,6 +22,7 @@ struct Seg {
     to: String,
     solid: bool,
     color: String,
+    owner: (&'static str, usize),
 }
 
 fn channels(c: &str) -> Option<[u8; 3]> {
@@ -41,25 +44,53 @@ fn mid_gray(c: &str) -> bool {
     channels(c).is_some_and(|v| v.iter().max().unwrap() - v.iter().min().unwrap() <= 8 && (0x60..=0xb0).contains(&v[0]))
 }
 
+fn diagram_of(params: &BTreeMap<String, Json>) -> Option<Json> {
+    match params.get("diagram")? {
+        Json::String(s) => serde_json::from_str(s).ok(),
+        other => Some(other.clone()),
+    }
+}
+
 fn segments(params: &BTreeMap<String, Json>) -> Option<((f64, f64), Vec<Seg>)> {
     let size = (params.get("width")?.as_f64()?, params.get("height")?.as_f64()?);
-    let diagram: Json = match params.get("diagram")? {
-        Json::String(s) => serde_json::from_str(s).ok()?,
-        other => other.clone(),
-    };
+    let diagram = diagram_of(params)?;
     let nodes = diagram.get("nodes")?.as_object()?;
     let at = |name: &str| -> Option<(f64, f64)> {
         let v = nodes.get(name)?.as_array()?;
         Some((v.first()?.as_f64()?, v.get(1)?.as_f64()?))
     };
+    let style_of = |e: &Json| e.get("style").and_then(Json::as_str).unwrap_or("solid") == "solid";
+    let color_of = |e: &Json| e.get("color").and_then(Json::as_str).unwrap_or("#000000").to_string();
     let mut out = Vec::new();
-    for s in diagram.get("segments").and_then(Json::as_array).into_iter().flatten() {
+    for (i, s) in diagram.get("segments").and_then(Json::as_array).into_iter().flatten().enumerate() {
         let (Some(from), Some(to)) = (s.get("from").and_then(Json::as_str), s.get("to").and_then(Json::as_str)) else { continue };
         // Ports such as rim:top are derived positions; only literal nodes are sampled.
         let (Some(a), Some(b)) = (at(from), at(to)) else { continue };
-        let style = s.get("style").and_then(Json::as_str).unwrap_or("solid");
-        let color = s.get("color").and_then(Json::as_str).unwrap_or("#000000").to_string();
-        out.push(Seg { a, b, from: from.into(), to: to.into(), solid: style == "solid", color });
+        out.push(Seg { a, b, from: from.into(), to: to.into(), solid: style_of(s), color: color_of(s), owner: ("segments", i) });
+    }
+    // A polyline is straight legs between its nodes; curved paths are not sampled.
+    for (i, p) in diagram.get("paths").and_then(Json::as_array).into_iter().flatten().enumerate() {
+        if p.get("kind").and_then(Json::as_str).unwrap_or("polyline") != "polyline" {
+            continue;
+        }
+        let names: Vec<&str> = p.get("nodes").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str).collect();
+        for w in names.windows(2) {
+            let (Some(a), Some(b)) = (at(w[0]), at(w[1])) else { continue };
+            out.push(Seg { a, b, from: w[0].into(), to: w[1].into(), solid: style_of(p), color: color_of(p), owner: ("paths", i) });
+        }
+    }
+    for (i, l) in diagram.get("lines").and_then(Json::as_array).into_iter().flatten().enumerate() {
+        let (Some(through), Some(toward)) = (l.get("through").and_then(Json::as_str), l.get("toward").and_then(Json::as_str)) else { continue };
+        let (Some(o), Some(t)) = (at(through), at(toward)) else { continue };
+        let len = ((t.0 - o.0).powi(2) + (t.1 - o.1).powi(2)).sqrt();
+        if len < 1e-9 {
+            continue;
+        }
+        let (ux, uy) = ((t.0 - o.0) / len, (t.1 - o.1) / len);
+        let back = l.get("back").and_then(Json::as_f64).unwrap_or(0.0);
+        let forward = l.get("forward").and_then(Json::as_f64).unwrap_or(0.0);
+        let id = l.get("id").and_then(Json::as_str).unwrap_or("line");
+        out.push(Seg { a: (o.0 - ux * back, o.1 - uy * back), b: (o.0 + ux * forward, o.1 + uy * forward), from: format!("{id}:back"), to: format!("{id}:forward"), solid: style_of(l), color: color_of(l), owner: ("lines", i) });
     }
     Some((size, out))
 }
@@ -175,9 +206,28 @@ fn profile(page: &Page, fit: &Fit, s: &Seg) -> Option<(usize, f64)> {
     Some((runs, share))
 }
 
-/// Solid gray segments the reference draws dashed. Each message names the segment and the
-/// measured pattern; an empty list means no contradiction was measured (not a source match).
-pub fn solid_gray_over_dashes(params: &BTreeMap<String, Json>, reference: &[u8]) -> Vec<String> {
+/// What the reference shows under one solid gray stroke.
+struct Finding {
+    owner: (&'static str, usize),
+    from: String,
+    to: String,
+    color: String,
+    runs: usize,
+    share: f64,
+}
+
+impl Finding {
+    /// A dashed stroke breaks into several separate runs with ink on part of the line.
+    fn dashed(&self) -> bool {
+        self.runs >= 4 && (0.15..=0.85).contains(&self.share)
+    }
+    /// A continuous stroke, even faint or antialiased, stays one run over nearly all of it.
+    fn continuous(&self) -> bool {
+        self.runs <= 2 && self.share >= 0.9
+    }
+}
+
+fn measure(params: &BTreeMap<String, Json>, reference: &[u8]) -> Vec<Finding> {
     let Some((size, segs)) = segments(params) else { return Vec::new() };
     let gray: Vec<&Seg> = segs.iter().filter(|s| s.solid && mid_gray(&s.color)).collect();
     // Many gray lines are a grid, not hidden edges.
@@ -193,16 +243,73 @@ pub fn solid_gray_over_dashes(params: &BTreeMap<String, Json>, reference: &[u8])
     gray.iter()
         .filter_map(|s| {
             let (runs, share) = profile(&page, &fit, s)?;
-            // A dashed stroke breaks into several separate runs with ink on part of the line; a
-            // continuous stroke, even faint or antialiased, stays one run over nearly all of it.
-            (runs >= 4 && (0.15..=0.85).contains(&share)).then(|| {
-                format!(
-                    "Source dash check: along segment {:?}→{:?} (solid {}), the reference image's stroke breaks into {runs} separate runs, ink on {:.0}% of its middle: the source line is dashed there, so this hidden edge needs style \"dashed\".",
-                    s.from, s.to, s.color, share * 100.0
-                )
-            })
+            Some(Finding { owner: s.owner, from: s.from.clone(), to: s.to.clone(), color: s.color.clone(), runs, share })
         })
         .collect()
+}
+
+/// What the check measured, for the trace: why an edge was or was not corrected. None when the
+/// drawing has no solid gray stroke to check.
+pub fn diagnosis(params: &BTreeMap<String, Json>, reference: &[u8]) -> Option<String> {
+    let (size, segs) = segments(params)?;
+    let gray = segs.iter().filter(|s| s.solid && mid_gray(&s.color)).count();
+    if gray == 0 {
+        return None;
+    }
+    let anchors: Vec<&Seg> = segs.iter().filter(|s| s.solid && dark(&s.color)).collect();
+    let Some(page) = Page::new(reference) else { return Some(format!("dash check: {gray} solid gray strokes; reference image unreadable")) };
+    if gray > 6 || anchors.len() < 2 {
+        return Some(format!("dash check: {gray} solid gray strokes, {} dark anchors; not measured (grid or too few anchors)", anchors.len()));
+    }
+    let base = Fit { sx: page.luma.width() as f64 / size.0, sy: page.luma.height() as f64 / size.1, tx: 0.0, ty: 0.0 };
+    let Some(fit) = register(&page, size, &anchors) else {
+        return Some(format!("dash check: {gray} solid gray strokes; registration failed (anchor ink coverage {:.0}% at the canvas scale, 85% needed)", coverage(&page, &base, &anchors) * 100.0));
+    };
+    let found: Vec<String> = segs.iter().filter(|s| s.solid && mid_gray(&s.color)).map(|s| match profile(&page, &fit, s) {
+        Some((runs, share)) => format!("{}→{} {runs} runs {:.0}% ink", s.from, s.to, share * 100.0),
+        None => format!("{}→{} no stroke under it", s.from, s.to),
+    }).collect();
+    Some(format!("dash check: registered (anchor coverage {:.0}%); {}", coverage(&page, &fit, &anchors) * 100.0, found.join("; ")))
+}
+
+fn describe(f: &Finding) -> String {
+    let kind = match f.owner.0 { "paths" => "path", "lines" => "line", _ => "segment" };
+    format!("{kind} {:?}→{:?} (solid {}: the reference's stroke there breaks into {} separate runs, ink on {:.0}% of its middle)", f.from, f.to, f.color, f.runs, f.share * 100.0)
+}
+
+/// Solid gray strokes the reference draws dashed, described; empty means no contradiction was
+/// measured (not a source match).
+pub fn solid_gray_over_dashes(params: &BTreeMap<String, Json>, reference: &[u8]) -> Vec<String> {
+    measure(params, reference).iter().filter(|f| f.dashed()).map(|f| format!("Source dash check: {}.", describe(f))).collect()
+}
+
+/// The same parameters with every solid gray element measured dashed set to style "dashed", and
+/// one note per element; None when nothing was measured dashed. A polyline path is changed only
+/// when one of its legs measures dashed and none measures continuous.
+pub fn dashed_corrections(params: &BTreeMap<String, Json>, reference: &[u8]) -> Option<(BTreeMap<String, Json>, Vec<String>)> {
+    let found = measure(params, reference);
+    let mut owners: Vec<(&'static str, usize)> = found.iter().filter(|f| f.dashed()).map(|f| f.owner).collect();
+    owners.retain(|o| !found.iter().any(|f| f.owner == *o && f.continuous()));
+    owners.sort();
+    owners.dedup();
+    if owners.is_empty() {
+        return None;
+    }
+    let mut diagram = diagram_of(params)?;
+    let mut notes = Vec::new();
+    for (kind, i) in &owners {
+        let element = diagram.get_mut(*kind)?.as_array_mut()?.get_mut(*i)?;
+        element["style"] = Json::String("dashed".into());
+        if let Some(f) = found.iter().find(|f| f.owner == (*kind, *i) && f.dashed()) {
+            notes.push(format!("Set dashed by the source dash check: {}.", describe(f)));
+        }
+    }
+    let mut out = params.clone();
+    out.insert("diagram".into(), match params.get("diagram")? {
+        Json::String(_) => Json::String(diagram.to_string()),
+        _ => diagram,
+    });
+    Some((out, notes))
 }
 
 #[cfg(test)]
@@ -244,7 +351,24 @@ mod tests {
     fn a_solid_gray_edge_over_source_dashes_is_reported() {
         let found = solid_gray_over_dashes(&params(), &reference(true));
         assert_eq!(found.len(), 1, "{found:?}");
-        assert!(found[0].contains("\"C\"→\"D\"") && found[0].contains("dashed"));
+        assert!(found[0].contains("\"C\"→\"D\"") && found[0].contains("separate runs"));
+    }
+
+    #[test]
+    fn a_measured_dashed_edge_is_set_dashed_in_segments_and_in_paths() {
+        let (fixed, notes) = dashed_corrections(&params(), &reference(true)).expect("corrected");
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        let d = diagram_of(&fixed).unwrap();
+        assert_eq!(d["segments"][2]["style"], "dashed");
+        assert!(dashed_corrections(&fixed, &reference(true)).is_none(), "nothing left to correct");
+        assert!(dashed_corrections(&params(), &reference(false)).is_none(), "a continuous source line stays solid");
+        // Round 25: the same edge moved into a polyline path is measured too.
+        let mut moved = params();
+        moved.insert("diagram".into(), Json::String(serde_json::json!({"nodes":{"A":[20,20],"B":[180,20],"C":[20,130],"D":[180,130]},
+            "segments":[{"from":"A","to":"B","color":"#000000"},{"from":"A","to":"C","color":"#000000"}],
+            "paths":[{"nodes":["C","D"],"kind":"polyline","color":"#888888","style":"solid"}]}).to_string()));
+        let (fixed, _) = dashed_corrections(&moved, &reference(true)).expect("path corrected");
+        assert_eq!(diagram_of(&fixed).unwrap()["paths"][0]["style"], "dashed");
     }
 
     #[test]

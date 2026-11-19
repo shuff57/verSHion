@@ -360,16 +360,28 @@ fn source_plot_check(id:&str,r:&Rendered,source:Option<&Json>)->Option<Json>{
     Some(check)
 }
 
-/// Defects measured on a final geometry diagram that no note can excuse: a solid gray edge over
-/// source dashes, and a minus sign drawn on a line.
+/// Defects measured on a final geometry diagram that no note can excuse: a minus sign drawn on a
+/// line. (A solid gray edge over source dashes is corrected instead, by [`with_measured_dashes`].)
 fn binding_conflicts(r: &Rendered, reference: Option<&[u8]>) -> Vec<String> {
     if r.spec.id != "geometry-diagram" {
         return Vec::new();
     }
-    let mut out = reference.map(|src| dash_check::solid_gray_over_dashes(&r.spec.params, src)).unwrap_or_default();
+    let _ = reference;
     let p = figures::params_from_json(&figures::geometry_diagram::def(), &serde_json::to_value(&r.spec.params).unwrap_or_default());
-    out.extend(figures::geometry_diagram::hidden_minus_signs(&p).unwrap_or_default());
-    out
+    figures::geometry_diagram::hidden_minus_signs(&p).unwrap_or_default()
+}
+
+/// A geometry diagram with every solid gray edge the reference measures dashed set dashed and
+/// rendered again, with a note per edge. Unchanged (and no notes) when nothing is measured.
+fn with_measured_dashes(r: Rendered, reference: Option<&[u8]>, has_reference: bool) -> (Rendered, Vec<String>) {
+    if r.spec.id != "geometry-diagram" {
+        return (r, Vec::new());
+    }
+    let Some((params, notes)) = reference.and_then(|src| dash_check::dashed_corrections(&r.spec.params, src)) else { return (r, Vec::new()) };
+    match render_context("geometry-diagram", &Json::Object(params.into_iter().collect()), has_reference) {
+        Ok(fixed) => (fixed, notes),
+        Err(_) => (r, Vec::new()),
+    }
 }
 
 fn source_plot_conflict(check:&Json)->Option<String>{
@@ -705,6 +717,13 @@ If anything the request asked for is not in the figure (a value beyond the gener
                             continue;
                         }
                     }
+                    if id == "geometry-diagram" && let Some(why) = reference.and_then(|src| dash_check::diagnosis(&r.spec.params, src)) {
+                        out.steps.push(StepLog { tool: "dash_check".into(), summary: why });
+                    }
+                    let (r, dash_notes) = with_measured_dashes(r, reference, has_reference);
+                    if !dash_notes.is_empty() {
+                        out.steps.push(StepLog { tool: "final".into(), summary: brief(&dash_notes.join(" "), 160) });
+                    }
                     // Measured defects bind: such a final cannot stand, at any turn.
                     let blocking = binding_conflicts(&r, reference);
                     if !blocking.is_empty() {
@@ -726,6 +745,7 @@ If anything the request asked for is not in the figure (a value beyond the gener
                     } else {
                         format!("{note} Adjusted: {}.", r.notes.join("; "))
                     };
+                    let note = if dash_notes.is_empty() { note } else { format!("{note} {}", dash_notes.join(" ")) };
                     let note=format!("{note}{}",geometry_warnings(&r));
                     out.steps.push(StepLog { tool: "final".into(), summary: format!("{id}: {}", brief(&note, 120)) });
                     out.note = note;
@@ -800,6 +820,7 @@ If anything the request asked for is not in the figure (a value beyond the gener
     // Out of turns: keep the last figure the model rendered, so the work is not thrown away.
     match last {
         Some(r) => {
+            let (r, dash_notes) = with_measured_dashes(r, reference, has_reference);
             if let Some(check)=source_plot_check(&r.spec.id,&r,source_plot) {
                 out.error=source_plot_conflict(&check);
                 out.source_plot_check=Some(check);
@@ -808,7 +829,7 @@ If anything the request asked for is not in the figure (a value beyond the gener
             if !blocking.is_empty() && out.error.is_none() {
                 out.error = Some(blocking.join(" "));
             }
-            out.note = format!("Stopped at the turn limit; this is the last figure rendered.{}",geometry_warnings(&r));
+            out.note = format!("Stopped at the turn limit; this is the last figure rendered.{}{}",dash_notes.iter().map(|n|format!(" {n}")).collect::<String>(),geometry_warnings(&r));
             out.spec = Some(r.spec);
             out.png = Some(r.png);
         }
