@@ -428,6 +428,31 @@ fn roots(h: &dyn Fn(f64) -> Option<f64>, lo: f64, hi: f64) -> Vec<f64> {
     out.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
     out
 }
+/// Where f and g meet without crossing (sin x against sin²x at π/2): each strict dip of |f − g| among
+/// 2000 samples with f − g on one side around it, refined by golden section, where f and g are then
+/// the same by `near`. Sign changes are `roots`'.
+fn touches(fns: &Fns, lo: f64, hi: f64) -> Vec<f64> {
+    let k = 2000;
+    let h = |x: f64| Some(fns.f(x)? - fns.g(x)?);
+    let xs: Vec<f64> = (0..=k).map(|i| lo + (hi - lo) * i as f64 / k as f64).collect();
+    let hs: Vec<Option<f64>> = xs.iter().map(|x| h(*x)).collect();
+    let mut out = vec![];
+    for i in 1..k {
+        let (Some(a), Some(m), Some(b)) = (hs[i - 1], hs[i], hs[i + 1]) else { continue };
+        if !(m.abs() < a.abs() && m.abs() < b.abs()) || a.signum() != b.signum() || m == 0.0 || m.signum() != a.signum() { continue; }
+        let (mut l, mut r) = (xs[i - 1], xs[i + 1]);
+        let g = 0.5 * (5f64.sqrt() - 1.0);
+        for _ in 0..90 {
+            let (c, d) = (r - g * (r - l), l + g * (r - l));
+            let (Some(hc), Some(hd)) = (h(c), h(d)) else { break };
+            if hc.abs() < hd.abs() { r = d; } else { l = c; }
+        }
+        let x = 0.5 * (l + r);
+        if let (Some(f), Some(gv)) = (fns.f(x), fns.g(x)) && near(f, gv) { out.push(x); }
+    }
+    out
+}
+
 /// A computed x that is a rational or a multiple of π to within the reader's error is that exact number.
 fn snap_x(x: f64) -> f64 { x }
 
@@ -764,6 +789,9 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
         let algebraic = ht.as_ref().map(sym::algebraic_zeros).unwrap_or_default();
         let mut rs = roots(&|x| Some(fns.f(x)? - fns.g(x)?), gl.x0, gl.x1);
         rs.extend(algebraic.iter().map(Ex::approx).filter(|x| *x >= gl.x0 && *x <= gl.x1));
+        // (a touch refined by golden section is good to about 10⁻⁸: one already found is not found again)
+        let near_found: Vec<f64> = rs.clone();
+        rs.extend(touches(&fns, gl.x0, gl.x1).into_iter().filter(|t| near_found.iter().all(|r| (r - t).abs() > 1e-6 * t.abs().max(1.0))));
         rs.sort_by(f64::total_cmp);
         rs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
         if rs.len() < 2 { return Err("f and g do not cross twice in the window: widen the x-axis to take in both crossings, or choose From a to b".into()); }
@@ -2126,3 +2154,7 @@ mod edge_tests;
 #[cfg(test)]
 #[path = "riemann_class_tests.rs"]
 mod class_tests;
+
+#[cfg(test)]
+#[path = "riemann_flat_tests.rs"]
+mod flat_tests;

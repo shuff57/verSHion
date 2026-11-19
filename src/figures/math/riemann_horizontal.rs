@@ -171,11 +171,22 @@ impl Sampled {
     pub(super) fn cuts(&self, y: f64, u: &dyn Fn(f64) -> Option<f64>) -> Vec<f64> {
         let side = |v: f64| cmp_f(v, y);
         let at = |k: usize| side(self.pts[k].1.unwrap());
+        // (a crossing from side sa: followed by the sign of u − y itself down to the last bit, so x³
+        // crossing 0 is cut at 0, not anywhere in the stretch where x³ rounds to the level)
         let bisect = |mut a: f64, mut b: f64, sa: i32| -> f64 {
+            for _ in 0..1100 {
+                let m = a + (b - a) * 0.5;
+                if m == a || m == b { break; }
+                match u(m) { Some(v) if (v - y) * sa as f64 > 0.0 => a = m, _ => b = m }
+            }
+            a + (b - a) * 0.5
+        };
+        // where the side stops being sa between a (on side sa) and b: the end of a stretch on the level
+        let edge = |mut a: f64, mut b: f64, sa: i32| -> f64 {
             for _ in 0..60 {
                 let m = a + (b - a) * 0.5;
                 if m == a || m == b { break; }
-                match u(m).map(side) { Some(0) => return m, Some(s) if s == sa => a = m, _ => b = m }
+                if u(m).map(side) == Some(sa) { a = m; } else { b = m; }
             }
             a + (b - a) * 0.5
         };
@@ -185,22 +196,27 @@ impl Sampled {
             if si == 0 { out.push(self.pts[i].0); }
             if sj == 0 { out.push(self.pts[j].0); }
             if si == sj { continue; }
-            // (along a monotone run the side goes from si to sj once, through any samples on the level)
+            // (along a monotone run the side goes from si to sj once, through any samples on the level;
+            // a stretch on the level has its ends found between samples, so every grid gives the same ends)
             let first = |from: usize, to: usize, s: i32| -> usize { let (mut lo, mut hi) = (from, to); while hi - lo > 1 { let m = (lo + hi) / 2; if at(m) == s { lo = m; } else { hi = m; } } hi };
+            let x = |k: usize| self.pts[k].0;
             if si != 0 && sj != 0 {
                 let k = first(i, j, si);
-                if at(k) == -si { out.push(bisect(self.pts[k - 1].0, self.pts[k].0, si)); continue; }
-                out.push(self.pts[k].0);
+                if at(k) == -si { out.push(bisect(x(k - 1), x(k), si)); continue; }
+                out.push(edge(x(k - 1), x(k), si));
                 // the last sample still on the level, before the far side
                 let (mut lo, mut hi) = (k, j);
                 while hi - lo > 1 { let m = (lo + hi) / 2; if at(m) == 0 { lo = m; } else { hi = m; } }
-                out.push(self.pts[lo].0);
+                out.push(edge(x(hi), x(lo), sj));
+                // and where u passes the level within that stretch (x³ through 0), by its own sign
+                out.push(bisect(x(k - 1), x(hi), si));
             } else if si == 0 {
                 let (mut lo, mut hi) = (i, j);
                 while hi - lo > 1 { let m = (lo + hi) / 2; if at(m) == 0 { lo = m; } else { hi = m; } }
-                out.push(self.pts[lo].0);
+                out.push(edge(x(hi), x(lo), sj));
             } else {
-                out.push(self.pts[first(i, j, si)].0);
+                let k = first(i, j, si);
+                out.push(edge(x(k - 1), x(k), si));
             }
         }
         for &(k, xe, ue, dir) in &self.tops {
@@ -218,14 +234,49 @@ impl Sampled {
     }
 }
 
-/// Which pieces between cuts are in the region at level y (min(f, g) ≤ y ≤ max(f, g)). On each
-/// piece f − y and g − y keep one sign; each is read where the curve is farthest from y, with
+/// Where f and g are flat: their slopes as trees (by the usual rules; d|u| = u/|u|, so the slope of
+/// |x − 1| + |x + 1| between −1 and 1 is exactly 0), a constant flat everywhere.
+pub(super) struct Slopes { d: [Option<Node>; 2], k: [bool; 2] }
+impl Slopes {
+    pub(super) fn new(fns: &Fns) -> Self {
+        let k = [fns.konst(false).is_some(), fns.konst(true).is_some()];
+        let d = [fns.ast_f.as_ref().and_then(sym::deriv), fns.ast_g.as_ref().and_then(sym::deriv)];
+        Slopes { d, k }
+    }
+    /// f (or g) has slope 0 at x (by `near`): it runs level there.
+    pub(super) fn flat(&self, g: bool, x: f64) -> bool {
+        self.k[g as usize] || self.d[g as usize].as_ref().and_then(|d| sym::num(d, x)).is_some_and(|v| near(v, 0.0))
+    }
+}
+
+/// A stretch of consecutive pieces that all read as on the level is flat when the curve's slope is 0
+/// along (nearly) all of it, by length: a flat piece of |x − 1| + |x + 1| reads as on the level a
+/// rounding past its corners too, where the slope is 2, but that is 10⁻¹⁴ of it; next to a vertex
+/// touching the level (x⁴ at 0) the slope is tiny only on a small middle part of the stretch.
+fn flat_stretches(spans: &[(f64, f64)], read: &[i32], flat: &mut [bool]) {
+    let mut i = 0;
+    while i < read.len() {
+        if read[i] != 0 { i += 1; continue; }
+        let mut j = i;
+        while j + 1 < read.len() && read[j + 1] == 0 { j += 1; }
+        let total: f64 = spans[i..=j].iter().map(|(l, r)| r - l).sum();
+        let level: f64 = spans[i..=j].iter().zip(&flat[i..=j]).filter(|(_, f)| **f).map(|((l, r), _)| r - l).sum();
+        let all = level >= 0.9 * total && level > 0.0;
+        flat[i..=j].iter_mut().for_each(|f| *f = all);
+        i = j + 1;
+    }
+}
+
+/// Which pieces between cuts are in the region at level y (min(f, g) ≤ y ≤ max(f, g), closed). On
+/// each piece f − y and g − y keep one sign; each is read where the curve is farthest from y, with
 /// `near` counting as on the level. A constant side is compared by its exact value: on the level,
-/// it puts every piece in. A curve that is not constant cannot lie on the level along a piece, so
-/// a piece where it reads as on the level (rounding about a vertex or a touching point) takes the
-/// side of its neighbouring pieces. So a level a rounding off a flat edge, a vertex or a crossing
+/// it puts every piece in. A curve that reads as on the level along a whole piece either runs
+/// level there (slope 0 at every point read: a flat piece of |x − 1| + |x + 1| on the level y = 2),
+/// and is on the level, so the piece is in; or it only touches the level (rounding about a vertex
+/// of k − x⁶, where its slope is not 0 off the vertex), and the piece takes the side of its
+/// neighbouring pieces. So a level a rounding off a flat edge, a flat piece, a vertex or a crossing
 /// level gives that level's width, never zero or a phantom sliver.
-pub(super) fn inside(spans: &[(f64, f64)], y: &Val, konst: [Option<&Ex>; 2], eval: &dyn Fn(bool, f64) -> Option<f64>) -> Vec<bool> {
+pub(super) fn inside(spans: &[(f64, f64)], y: &Val, konst: [Option<&Ex>; 2], eval: &dyn Fn(bool, f64) -> Option<f64>, flat: &dyn Fn(bool, f64) -> bool) -> Vec<bool> {
     let mut defined = vec![true; spans.len()];
     let mut sides = [vec![0i32; spans.len()], vec![0i32; spans.len()]];
     for g in [false, true] {
@@ -235,19 +286,23 @@ pub(super) fn inside(spans: &[(f64, f64)], y: &Val, konst: [Option<&Ex>; 2], eva
             s.iter_mut().for_each(|v| *v = c);
             continue;
         }
+        let mut level = vec![false; spans.len()];
         for (i, &(l, r)) in spans.iter().enumerate() {
             let mut best = (-1.0f64, 0);
-            for t in [0.5, 0.3, 0.7, 0.12, 0.88] {
+            let ts = [0.5, 0.3, 0.7, 0.12, 0.88];
+            for t in ts {
                 match eval(g, l + (r - l) * t) {
                     Some(v) => { let d = (v - y.v).abs(); if d > best.0 { best = (d, cmp_f(v, y.v)); } }
                     None => if t == 0.5 { defined[i] = false; },
                 }
             }
             s[i] = best.1;
+            level[i] = best.1 == 0 && ts.iter().all(|t| flat(g, l + (r - l) * t));
         }
+        flat_stretches(&spans[..], s, &mut level);
         let read = s.clone();
         for i in 0..s.len() {
-            if read[i] != 0 { continue; }
+            if read[i] != 0 || level[i] { continue; }
             let left = read[..i].iter().rev().find(|v| **v != 0);
             let right = read[i + 1..].iter().find(|v| **v != 0);
             s[i] = match (left, right) { (Some(l), Some(r)) if l == r => *l, (Some(l), None) => *l, (None, Some(r)) => *r, _ => 0 };
@@ -256,35 +311,74 @@ pub(super) fn inside(spans: &[(f64, f64)], y: &Val, konst: [Option<&Ex>; 2], eva
     (0..spans.len()).map(|i| defined[i] && sides[0][i] * sides[1][i] <= 0).collect()
 }
 
-/// The widths again, independently of the level solver: f and g on a dense grid, every change of
-/// side bisected, the pieces decided by `inside`. Two grids (4000 and 2999 steps) that must agree.
+/// The widths again, by a route of its own: the region's lower and upper edges lo = min(f, g) and
+/// hi = max(f, g) sampled on a dense grid (no level solver, no `inside`), the width at y the length
+/// of {x in [a, b] : lo(x) ≤ y ≤ hi(x)}, closed. Each edge on each piece between its crossings of
+/// the level is read where it is farthest from y; an edge reading as on the level along a piece is
+/// on it when the curve forming it runs level there (slope 0), else it takes its neighbours' side
+/// (a vertex touching the level). Two grids (4000 and 2999 steps) that must agree.
 pub(super) struct Dense<'a> {
     fns: &'a Fns,
     a: f64,
     b: f64,
-    konst: [Option<Ex>; 2],
-    /// [grid][curve]
+    slopes: Slopes,
+    /// [grid][lo, hi]
     grids: [[Sampled; 2]; 2],
 }
 impl<'a> Dense<'a> {
     pub(super) fn new(fns: &'a Fns, a: f64, b: f64) -> Self {
-        let mk = |k: usize| [false, true].map(|g| Sampled::new((0..=k).map(|i| { let x = if i == k { b } else { a + (b - a) * i as f64 / k as f64 }; (x, fns.num(g, x)) }).collect(), &|x| fns.num(g, x)));
-        Dense { fns, a, b, konst: [fns.konst(false), fns.konst(true)], grids: [mk(4000), mk(2999)] }
+        let mk = |k: usize| [false, true].map(|up| {
+            let e = |x: f64| Self::edge(fns, up, x).map(|v| v.0);
+            Sampled::new((0..=k).map(|i| { let x = if i == k { b } else { a + (b - a) * i as f64 / k as f64 }; (x, e(x)) }).collect(), &e)
+        });
+        Dense { fns, a, b, slopes: Slopes::new(fns), grids: [mk(4000), mk(2999)] }
+    }
+    /// The lower (or upper) edge at x, and whether g forms it there.
+    fn edge(fns: &Fns, up: bool, x: f64) -> Option<(f64, bool)> {
+        let (f, g) = (fns.num(false, x)?, fns.num(true, x)?);
+        Some(if (g < f) != up { (g, true) } else { (f, false) })
     }
     /// The width at y on grid 0 or 1, and its intervals.
     pub(super) fn width(&self, grid: usize, y: &Val) -> (f64, Vec<(f64, f64)>) {
         let mut cuts = vec![self.a, self.b];
-        for g in [false, true] {
-            if self.konst[g as usize].is_some() { continue; }
-            cuts.extend(self.grids[grid][g as usize].cuts(y.v, &|x| self.fns.num(g, x)));
-        }
+        for up in [false, true] { cuts.extend(self.grids[grid][up as usize].cuts(y.v, &|x| Self::edge(self.fns, up, x).map(|v| v.0))); }
         cuts.sort_by(f64::total_cmp);
         cuts.dedup();
         let spans: Vec<(f64, f64)> = cuts.windows(2).map(|p| (p[0], p[1])).collect();
-        let ins = inside(&spans, y, [self.konst[0].as_ref(), self.konst[1].as_ref()], &|g, x| self.fns.num(g, x));
+        let mut defined = vec![true; spans.len()];
+        let mut sides = [vec![0i32; spans.len()], vec![0i32; spans.len()]];
+        for up in [false, true] {
+            let s = &mut sides[up as usize];
+            let mut level = vec![false; spans.len()];
+            for (i, &(l, r)) in spans.iter().enumerate() {
+                let (mut far, mut on_level) = (-1.0f64, true);
+                for t in [0.5, 0.25, 0.75, 0.1, 0.9] {
+                    let x = l + (r - l) * t;
+                    let Some((v, by_g)) = Self::edge(self.fns, up, x) else { if t == 0.5 { defined[i] = false; } continue };
+                    let d = (v - y.v).abs();
+                    if d > far { far = d; s[i] = cmp_f(v, y.v); }
+                    on_level &= self.slopes.flat(by_g, x);
+                }
+                level[i] = s[i] == 0 && on_level;
+            }
+            flat_stretches(&spans[..], s, &mut level);
+            let read = s.clone();
+            for i in 0..s.len() {
+                if read[i] != 0 || level[i] { continue; }
+                let left = read[..i].iter().rev().find(|v| **v != 0);
+                let right = read[i + 1..].iter().find(|v| **v != 0);
+                s[i] = match (left, right) {
+                    (Some(l), Some(r)) if l == r => *l, (Some(l), None) => *l, (None, Some(r)) => *r,
+                    // (the edge passes the level within the stretch: which side this piece of it is on, by its own sign)
+                    (Some(_), Some(_)) => { let (l, r) = spans[i]; Self::edge(self.fns, up, 0.5 * (l + r)).map_or(0, |(v, _)| if v > y.v { 1 } else if v < y.v { -1 } else { 0 }) }
+                    // (on the level all the way: on it)
+                    _ => 0,
+                };
+            }
+        }
         let mut ivs: Vec<(f64, f64)> = vec![];
-        for (&(l, r), ok) in spans.iter().zip(ins) {
-            if !ok { continue; }
+        for (i, &(l, r)) in spans.iter().enumerate() {
+            if !(defined[i] && sides[0][i] <= 0 && sides[1][i] >= 0) { continue; }
             if let Some(last) = ivs.last_mut().filter(|last| last.1 == l) { last.1 = r; } else { ivs.push((l, r)); }
         }
         (ivs.iter().map(|(l, r)| r - l).sum(), ivs)
@@ -302,6 +396,7 @@ pub(super) struct Slices<'a> {
     konst: [Option<Ex>; 2],
     /// f and g sampled, where the level solver does not take them
     sampled: Option<[Sampled; 2]>,
+    slopes: Slopes,
 }
 impl<'a> Slices<'a> {
     pub(super) fn new(fns: &'a Fns, a: Val, b: Val) -> Self {
@@ -312,7 +407,7 @@ impl<'a> Slices<'a> {
             (x, fns.f(x).unwrap_or(0.0), fns.g(x).unwrap_or(0.0))
         }).collect() } else { vec![] };
         let sampled = curves.is_none().then(|| [false, true].map(|g| Sampled::new(samples.iter().map(|&(x, f, gv)| (x, Some(if g { gv } else { f }))).collect(), &|x| fns.num(g, x))));
-        Self { fns, curves, a, b, cross_ends: false, konst: [fns.konst(false), fns.konst(true)], sampled }
+        Self { fns, curves, a, b, cross_ends: false, konst: [fns.konst(false), fns.konst(true)], sampled, slopes: Slopes::new(fns) }
     }
     pub(super) fn crossing_ends(mut self, yes: bool) -> Self { self.cross_ends = yes; self }
     fn eval(&self, g: bool, x: f64) -> Option<f64> {
@@ -341,7 +436,7 @@ impl<'a> Slices<'a> {
         let mut ivs: Vec<(f64, f64)> = vec![];
         let mut widths = vec![];
         let spans: Vec<(f64, f64)> = cuts.windows(2).map(|p| (p[0].v, p[1].v)).collect();
-        let ins = inside(&spans, y, [self.konst[0].as_ref(), self.konst[1].as_ref()], &|g, x| self.eval(g, x));
+        let ins = inside(&spans, y, [self.konst[0].as_ref(), self.konst[1].as_ref()], &|g, x| self.eval(g, x), &|g, x| self.slopes.flat(g, x));
         for (pair, ok) in cuts.windows(2).zip(ins) {
             let (a, b) = (&pair[0], &pair[1]);
             if ok {
