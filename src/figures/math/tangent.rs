@@ -520,7 +520,7 @@ pub(crate) fn expr_in_x(typed: &str, fname: &str, var: char) -> Result<String, S
 
 /// The function as the panel writes it: √ and π for sqrt and pi, |x| for abs(x), a binary + or − between spaces and no
 /// other spaces, a product of two letters or brackets kept with ·.
-fn shown_func(typed: &str) -> String {
+pub(crate) fn shown_func(typed: &str) -> String {
     let t = typed.trim();
     let t = t.split_once('=').map(|(_, r)| r).unwrap_or(t).trim();
     // (the reader reads X² as x², so it is echoed as read)

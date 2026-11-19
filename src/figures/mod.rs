@@ -833,6 +833,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "limits-discontinuities" => math::limits::relevant(key, p),
         // the tangent and secant lines: only the controls of the lines drawn, the student copy's choice on a student copy
         math::tangent::ID => math::tangent::relevant(key, p) && cards::relevant(id, key, p),
+        math::polar::ID => math::polar::relevant(key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -917,6 +918,7 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
         "conic-sections" => math::conics::warnings(p),
         "limits-discontinuities" => math::limits::warnings(p),
         math::tangent::ID => math::tangent::warnings(p),
+        math::polar::ID => math::polar::warnings(p),
         _ => vec![] }
 }
 
