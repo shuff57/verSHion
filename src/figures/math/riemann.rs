@@ -313,6 +313,9 @@ pub(crate) struct Model {
     /// the area shaded under f when part of it lies below the axis (the integral counts that part negative)
     pub abs_area: Option<Val>,
     pub crossings: Vec<Val>,
+    /// f and g come within a hair of each other somewhere in the window away from every listed meet:
+    /// the list may not be complete, and is written "at least at"
+    pub meet_open: bool,
     /// exact-area polygons (graph units) and whether each counts negative
     pub shade: Vec<(Vec<(f64, f64)>, bool)>,
     pub integrand: String,
@@ -428,29 +431,45 @@ fn roots(h: &dyn Fn(f64) -> Option<f64>, lo: f64, hi: f64) -> Vec<f64> {
     out.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
     out
 }
-/// Where f and g meet without crossing (sin x against sin²x at π/2): each strict dip of |f − g| among
-/// 2000 samples with f − g on one side around it, refined by golden section, where f and g are then
-/// the same by `near`. Sign changes are `roots`'.
+/// The two sample grids the touch search reads f − g on: 2000 and 1999 steps, set off from the window's
+/// ends by 0.382 and 0.618 of a step, so no point that sits halfway between the samples of one grid
+/// (a touch at x = 1/2 on a window of width 16) does so on the other.
+fn touch_grids(lo: f64, hi: f64) -> [Vec<f64>; 2] {
+    [(2000usize, 0.381966011250105), (1999, 0.618033988749895)].map(|(k, off)| (0..k).map(|i| lo + (hi - lo) * (i as f64 + off) / k as f64).collect())
+}
+/// Where f and g meet without crossing (sin x against sin²x at π/2): each dip of |f − g| on either
+/// grid (no larger than its neighbours) with f − g on one side around it, refined by golden section,
+/// where f and g are then the same by `near`. Sign changes are `roots`'.
 fn touches(fns: &Fns, lo: f64, hi: f64) -> Vec<f64> {
-    let k = 2000;
     let h = |x: f64| Some(fns.f(x)? - fns.g(x)?);
-    let xs: Vec<f64> = (0..=k).map(|i| lo + (hi - lo) * i as f64 / k as f64).collect();
-    let hs: Vec<Option<f64>> = xs.iter().map(|x| h(*x)).collect();
-    let mut out = vec![];
-    for i in 1..k {
-        let (Some(a), Some(m), Some(b)) = (hs[i - 1], hs[i], hs[i + 1]) else { continue };
-        if !(m.abs() < a.abs() && m.abs() < b.abs()) || a.signum() != b.signum() || m == 0.0 || m.signum() != a.signum() { continue; }
-        let (mut l, mut r) = (xs[i - 1], xs[i + 1]);
-        let g = 0.5 * (5f64.sqrt() - 1.0);
-        for _ in 0..90 {
-            let (c, d) = (r - g * (r - l), l + g * (r - l));
-            let (Some(hc), Some(hd)) = (h(c), h(d)) else { break };
-            if hc.abs() < hd.abs() { r = d; } else { l = c; }
+    let mut out: Vec<f64> = vec![];
+    for xs in touch_grids(lo, hi) {
+        let hs: Vec<Option<f64>> = xs.iter().map(|x| h(*x)).collect();
+        for i in 1..xs.len() - 1 {
+            let (Some(a), Some(m), Some(b)) = (hs[i - 1], hs[i], hs[i + 1]) else { continue };
+            if m == 0.0 { out.push(xs[i]); continue; }
+            if !(m.abs() <= a.abs() && m.abs() <= b.abs()) || (m.abs() == a.abs() && m.abs() == b.abs()) || a.signum() != b.signum() || m.signum() != a.signum() { continue; }
+            let (mut l, mut r) = (xs[i - 1], xs[i + 1]);
+            let g = 0.5 * (5f64.sqrt() - 1.0);
+            for _ in 0..90 {
+                let (c, d) = (r - g * (r - l), l + g * (r - l));
+                let (Some(hc), Some(hd)) = (h(c), h(d)) else { break };
+                if hc.abs() < hd.abs() { r = d; } else { l = c; }
+            }
+            let x = 0.5 * (l + r);
+            if let (Some(f), Some(gv)) = (fns.f(x), fns.g(x)) && near(f, gv) && out.iter().all(|o| (o - x).abs() > 1e-6 * x.abs().max(1.0)) { out.push(x); }
         }
-        let x = 0.5 * (l + r);
-        if let (Some(f), Some(gv)) = (fns.f(x), fns.g(x)) && near(f, gv) { out.push(x); }
     }
     out
+}
+/// Whether f and g come within 10⁻⁶ of each other (relative) at a sample of either touch grid that is
+/// not beside a listed meet: then the list of meets may not be complete.
+fn meets_open(fns: &Fns, lo: f64, hi: f64, meets: &[f64]) -> bool {
+    let far = 1e-3 * (hi - lo);
+    touch_grids(lo, hi).iter().flatten().any(|&x| {
+        let (Some(f), Some(g)) = (fns.f(x), fns.g(x)) else { return false };
+        (f - g).abs() <= 1e-6 * f.abs().max(g.abs()).max(1.0) && meets.iter().all(|m| (m - x).abs() > far)
+    })
 }
 
 /// A computed x that is a rational or a multiple of π to within the reader's error is that exact number.
@@ -794,7 +813,17 @@ pub(crate) fn model(p: &Params) -> Result<Model, String> {
         rs.extend(touches(&fns, gl.x0, gl.x1).into_iter().filter(|t| near_found.iter().all(|r| (r - t).abs() > 1e-6 * t.abs().max(1.0))));
         rs.sort_by(f64::total_cmp);
         rs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
-        if rs.len() < 2 { return Err("f and g do not cross twice in the window: widen the x-axis to take in both crossings, or choose From a to b".into()); }
+        if rs.len() < 2 {
+            // (a single touch cannot be widened into two crossings; no meet at all might be outside the window)
+            let d = 1e-4 * (gl.x1 - gl.x0);
+            let h = |x: f64| Some(fns.f(x)? - fns.g(x)?);
+            return Err(match rs.first() {
+                Some(r) if matches!((h(r - d), h(r + d)), (Some(u), Some(v)) if u * v > 0.0) => format!("f and g only touch at x \u{2248} {}, without crossing: choose From a to b", rounded(*r, 4)),
+                Some(_) => "f and g cross only once in the window: widen the x-axis to take in a second crossing, or choose From a to b".into(),
+                None => "f and g do not meet in the window: widen the x-axis if they meet outside it, or choose From a to b".into(),
+            });
+        }
+        m.meet_open = meets_open(&fns, gl.x0, gl.x1, &rs);
         // (a crossing is exact only when f − g is exactly 0 there, checked by exact arithmetic)
         m.crossings = rs.iter().map(|r| horizontal_levels::from_level(
             algebraic.iter().min_by(|a, b| (a.approx() - r).abs().total_cmp(&(b.approx() - r).abs())).filter(|e| (e.approx() - r).abs() < 1e-8 * r.abs().max(1.0)).cloned()
@@ -1062,9 +1091,9 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
                 best
             }
         };
-        let (mut ivs, mut hv) = slices.intervals(&yv);
+        let (mut ivs, mut hv, proven) = slices.intervals_proven(&yv);
         let mut yv = yv;
-        if let Some((w, iv, y)) = safety_net(&dense, ru, &yv, &hv, y0, y1, xb - xa)? { hv = Val::num(w); ivs = iv; yv = y; }
+        if let Some((w, iv, y)) = safety_net(&dense, ru, &yv, &hv, proven, y0, y1, xb - xa)? { hv = Val::num(w); ivs = iv; yv = y; }
         let ys = yv.v;
         let parts: Vec<(Vec<(f64, f64)>, bool)> = ivs.iter().map(|(a, b)| (vec![(*a, y0), (*b, y0), (*b, y1), (*a, y1)], false)).collect();
         let area = hv.mul(&dy);
@@ -1088,51 +1117,62 @@ fn horizontal(mut m: Model, fns: &Fns, between: bool, ru: Rule, n: usize, _fm: F
     Ok(m)
 }
 
-/// The safety net under every horizontal strip: its width worked again by `Dense` on two grids,
-/// independently of the level solver, at the strip's level (and, for upper and lower sums, across the
-/// strip). Where the figure's value (or its exact form) disagrees, the dense value is used, written
-/// with ≈, never "="; where the two grids disagree with each other the strips are refused, rather than
-/// a wrong number written. None when the figure's value stands.
-fn safety_net(dense: &horizontal_levels::Dense, ru: Rule, yv: &Val, hv: &Val, y0: f64, y1: f64, span: f64) -> Result<Option<(f64, Vec<(f64, f64)>, Val)>, String> {
+/// The safety net under every horizontal strip: its width measured again by `Dense` on two grids,
+/// independently of the level solver, as a bracket (what is surely in the region at that level, and
+/// what may be), at the strip's level and, for upper and lower sums, across the strip.
+/// - The figure's value (and its exact form) stands when it lies in both brackets, and either it was
+///   decided without a guess or the brackets are narrow.
+/// - Otherwise, where the brackets are narrow and agree, the dense value is used, written with ≈.
+/// - Otherwise the strips are refused: nothing is written that is not established.
+/// None when the figure's value stands.
+fn safety_net(dense: &horizontal_levels::Dense, ru: Rule, yv: &Val, hv: &Val, proven: bool, y0: f64, y1: f64, span: f64) -> Result<Option<(f64, Vec<(f64, f64)>, Val)>, String> {
     let tol = 1e-7 * span.max(1.0);
-    let w = |y: &Val| -> Result<(f64, Vec<(f64, f64)>), String> {
-        let (a, ivs) = dense.width(0, y);
-        let (b, _) = dense.width(1, y);
-        if (a - b).abs() > tol {
-            return Err(format!("The width of the region at y \u{2248} {} cannot be worked out reliably (the curves run along that level): choose vertical strips", rounded(y.v, 4)));
-        }
-        Ok((a, ivs))
-    };
-    let (at, ivs) = w(yv)?;
-    let off = |v: f64| (v - at).abs() > tol;
-    let mut bad = off(hv.v) || hv.ex.as_ref().is_some_and(|e| off(e.approx()));
+    let refuse = |y: f64| format!("The width of the region at y \u{2248} {} cannot be found for certain (a curve runs too close to that level to measure): choose vertical strips", rounded(y, 4));
+    let both = |y: &Val| [dense.width(0, y), dense.width(1, y)];
+    let narrow = |b: &[horizontal_levels::Bracket; 2]| b.iter().all(|b| b.may - b.sure <= tol) && (b[0].sure - b[1].sure).abs() <= tol;
+    let holds = |b: &[horizontal_levels::Bracket; 2], v: f64| b.iter().all(|b| v >= b.sure - tol && v <= b.may + tol);
+    let at = both(yv);
+    let fits = |v: f64| holds(&at, v) && (proven || narrow(&at));
+    let mut bad = !fits(hv.v) || hv.ex.as_ref().is_some_and(|e| !fits(e.approx()));
     let ext = matches!(ru, Rule::U | Rule::Lo);
-    let s = if ru == Rule::U { 1.0 } else { -1.0 };
     let levels = |k: usize| -> Vec<f64> { (0..=k).map(|i| if i == k { y1 } else { y0 + (y1 - y0) * i as f64 / k as f64 }).collect() };
     if ext && !bad {
-        for y in levels(5) { if (w(&Val::num(y))?.0 - hv.v) * s > tol { bad = true; break; } }
+        // (no level of the strip surely wider (upper) or surely narrower (lower) than the value)
+        for y in levels(5) {
+            let b = both(&Val::num(y));
+            let beyond = if ru == Rule::U { b.iter().any(|b| b.sure > hv.v + tol) } else { b.iter().any(|b| b.may < hv.v - tol) };
+            if beyond { bad = true; break; }
+        }
     }
     if !bad { return Ok(None); }
-    if !ext { return Ok(Some((at, ivs, yv.clone()))); }
-    // (an upper or lower width found again on the dense grid: 33 levels, the best refined)
+    if !ext {
+        if !narrow(&at) { return Err(refuse(yv.v)); }
+        let [b0, _] = at;
+        return Ok(Some((b0.sure, b0.ivs, yv.clone())));
+    }
+    // (an upper or lower width found again on the dense grid: 33 levels, the best refined, and used
+    // only where it is measured for certain)
+    let s = if ru == Rule::U { 1.0 } else { -1.0 };
+    let mid = |y: f64| { let b = dense.width(0, &Val::num(y)); 0.5 * (b.sure + b.may) * s };
     let ys = levels(32);
-    let ws: Vec<f64> = ys.iter().map(|y| dense.width(0, &Val::num(*y)).0 * s).collect();
-    let (mut best, mut bw) = (yv.clone(), at * s);
+    let ws: Vec<f64> = ys.iter().map(|y| mid(*y)).collect();
+    let (mut best, mut bw) = (y0, ws[0]);
     for (i, (y, wv)) in ys.iter().zip(&ws).enumerate() {
-        if *wv > bw { best = Val::num(*y); bw = *wv; }
+        if *wv > bw { best = *y; bw = *wv; }
         if i == 0 || i == 32 || ws[i] < ws[i - 1] || ws[i] < ws[i + 1] { continue; }
         let (mut a, mut b) = (ys[i - 1], ys[i + 1]);
         let g = 0.5 * (5f64.sqrt() - 1.0);
         for _ in 0..60 {
             let (c, d) = (b - g * (b - a), a + g * (b - a));
-            if dense.width(0, &Val::num(c)).0 * s > dense.width(0, &Val::num(d)).0 * s { b = d; } else { a = c; }
+            if mid(c) > mid(d) { b = d; } else { a = c; }
         }
-        let y = Val::num(0.5 * (a + b));
-        let v = dense.width(0, &y).0 * s;
-        if v > bw { best = y; bw = v; }
+        let y = 0.5 * (a + b);
+        if mid(y) > bw { best = y; bw = mid(y); }
     }
-    let (v, ivs) = w(&best)?;
-    Ok(Some((v, ivs, best)))
+    let b = both(&Val::num(best));
+    if !narrow(&b) { return Err(refuse(best)); }
+    let [b0, _] = b;
+    Ok(Some((b0.sure, b0.ivs, Val::num(best))))
 }
 
 /// Strips from a typed table: widths as the table's x values fall (AP style), heights the table's values.
@@ -1829,7 +1869,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
         if crossing(p) && !m.crossings.is_empty() {
             let k = m.crossings.len();
             let mut v = vec![];
-            let mut text = String::from("f and g meet at");
+            let mut text = String::from(if m.meet_open { "f and g meet at least at" } else { "f and g meet at" });
             for (i, c) in m.crossings.iter().enumerate() {
                 text.push_str(if i == 0 { " x " } else if i + 1 == k { " and x " } else { ", x " });
                 text.push_str(eqs(student || fm.text(c).1));
@@ -2158,3 +2198,7 @@ mod class_tests;
 #[cfg(test)]
 #[path = "riemann_flat_tests.rs"]
 mod flat_tests;
+
+#[cfg(test)]
+#[path = "riemann_power_tests.rs"]
+mod power_tests;

@@ -189,7 +189,7 @@ fn refusals_are_said_and_never_drawn_wrong() {
         (with(&[("region", s("From a table of values")), ("rule", s("Midpoint")), ("table", s("0, 1; 1, 2; 2, 2; 3, 4"))]), "odd number of rows"),
         (with(&[("region", s("From a table of values")), ("rule", s("Midpoint")), ("table", s("0, 1; 1, 2; 3, 2"))]), "halfway"),
         (with(&[("region", s("Between f(x) and g(x)")), ("f", s("x")), ("g", s("x^2")), ("strips", s("Horizontal")), ("rule", s("Trapezoid"))]), "Horizontal strips use"),
-        (with(&[("region", s("Between f(x) and g(x)")), ("g", s("x - 5")), ("bounds", s("Where f and g cross"))]), "do not cross twice"),
+        (with(&[("region", s("Between f(x) and g(x)")), ("g", s("x - 5")), ("bounds", s("Where f and g cross"))]), "do not meet in the window"),
     ];
     for (p, want) in cases {
         let n = warnings(&p);

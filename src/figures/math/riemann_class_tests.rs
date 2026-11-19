@@ -11,16 +11,17 @@ use super::*;
 use super::tests::{s, with};
 use std::sync::Mutex;
 
-type Fx = Box<dyn Fn(f64) -> f64 + Send + Sync>;
-struct Case {
-    name: String,
-    f: String,
-    g: String,
-    typed: Option<(String, String)>,
+pub(super) type Fx = Box<dyn Fn(f64) -> f64 + Send + Sync>;
+/// One region: f against g (g empty: under f, from typed bounds), with everything worked by hand.
+pub(super) struct Case {
+    pub name: String,
+    pub f: String,
+    pub g: String,
+    pub typed: Option<(String, String)>,
     /// x-limits and y-limits, by hand
-    a: f64, b: f64, c: f64, d: f64,
+    pub a: f64, pub b: f64, pub c: f64, pub d: f64,
     /// width at a level (closed form), and f, g in x
-    w: Fx, ff: Fx, gf: Fx,
+    pub w: Fx, pub ff: Fx, pub gf: Fx,
 }
 
 /// (spelling, value worked by hand)
@@ -91,14 +92,15 @@ fn moved(ulps: i64) -> Vec<(String, f64)> {
     constants().into_iter().map(|(_, k)| { let k2 = f64::from_bits((k.to_bits() as i64 + ulps) as u64); (format!("{k2}"), k2) }).collect()
 }
 
-fn params_for(c: &Case, strips: &str, rule: &str, n: i64) -> Params {
+pub(super) fn params_for(c: &Case, strips: &str, rule: &str, n: i64) -> Params {
     let mut set = vec![
-        ("region", s("Between f(x) and g(x)")), ("f", s(&c.f)), ("g", s(&c.g)), ("strips", s(strips)), ("rule", s(rule)), ("n", Value::I(n)),
+        ("f", s(&c.f)), ("strips", s(strips)), ("rule", s(rule)), ("n", Value::I(n)),
         ("xmin", Value::F((c.a - 1.).floor())), ("xmax", Value::F((c.b + 1.).ceil())), ("xstep", Value::F(0.5)),
         ("ymin", Value::F((c.c - 1.).floor())), ("ymax", Value::F((c.d + 1.).ceil())), ("ystep", Value::F(0.5)),
         ("sum_line", Value::B(true)), ("integral_line", Value::B(true)), ("exact_line", Value::B(true)),
         ("error_line", Value::B(true)), ("show_dx", Value::B(true)), ("key_line", Value::B(true)),
     ];
+    if c.g.is_empty() { set.push(("region", s("Under f(x)"))); } else { set.push(("region", s("Between f(x) and g(x)"))); set.push(("g", s(&c.g))); }
     match &c.typed {
         Some((ta, tb)) => { set.push(("bounds", s("From a to b"))); set.push(("a", s(ta))); set.push(("b", s(tb))); }
         None => set.push(("bounds", s("Where f and g cross"))),
@@ -135,7 +137,7 @@ fn truth(c: &Case, vertical: bool, rule: &str, n: usize) -> (Vec<f64>, f64) {
     (vals, (r - l) / n as f64)
 }
 /// The exact area: ∫ |f − g| dx, composite Simpson on 2·10⁴ steps, split at 0 (the corner of |x|).
-fn area(c: &Case) -> f64 {
+pub(super) fn area(c: &Case) -> f64 {
     let h = |x: f64| ((c.ff)(x) - (c.gf)(x)).abs();
     let simpson = |a: f64, b: f64| { let m = 20000; let d = (b - a) / m as f64; (0..=m).map(|i| h(a + d * i as f64) * if i == 0 || i == m { 1. } else if i % 2 == 1 { 4. } else { 2. }).sum::<f64>() * d / 3. };
     if c.a < 0. && c.b > 0. { simpson(c.a, 0.) + simpson(0., c.b) } else { simpson(c.a, c.b) }
@@ -157,7 +159,9 @@ fn line_texts(svg: &str) -> Vec<String> {
 }
 
 /// One state: the model (Exact) and the written key (4 places). Each problem found, as text.
-fn check(c: &Case, strips: &str, rule: &str, n: usize, area: f64) -> Vec<String> {
+/// One state checked: the model in Exact (every strip, the sum and its exact form) and the key as
+/// written at each of `decs` places (sum and error).
+pub(super) fn check(c: &Case, strips: &str, rule: &str, n: usize, area: f64, decs: &[i64]) -> Vec<String> {
     let ctx = format!("{} ({:?}) {strips} {rule} n{n}", c.name, c.typed);
     let vertical = strips == "Vertical";
     let (want, d) = truth(c, vertical, rule, n);
@@ -180,7 +184,8 @@ fn check(c: &Case, strips: &str, rule: &str, n: usize, area: f64) -> Vec<String>
     let sum = m.sum.as_ref().unwrap();
     if (sum.v - total).abs() > slack { bad.push(format!("{ctx}: sum {} not {total}", sum.v)); }
     if let Some(e) = &sum.ex && (e.approx() - total).abs() > slack { bad.push(format!("{ctx}: the exact sum is {} not {total}", e.approx())); }
-    p.set_s("values", "Decimals"); p.set_i("dec", 4);
+    for &dec in decs {
+    p.set_s("values", "Decimals"); p.set_i("dec", dec);
     let lines = line_texts(&render(&p));
     let Some(key) = lines.iter().find(|l| l.starts_with("Key: ")) else { bad.push(format!("{ctx}: no key: {lines:?}")); return bad };
     for (part, truth) in key["Key: ".len()..].split(";  ").zip([Some(total), None, Some(total - area)]) {
@@ -191,7 +196,8 @@ fn check(c: &Case, strips: &str, rule: &str, n: usize, area: f64) -> Vec<String>
         let Ok(v) = shown.replace('\u{2212}', "-").parse::<f64>() else { bad.push(format!("{ctx}: key part {part}")); continue };
         let places = shown.split_once('.').map_or(0, |(_, t)| t.len());
         let room = if eq { 1e-9 * truth.abs().max(1.) } else { 0.5 * 10f64.powi(-(places as i32)) * (1. + 1e-9) };
-        if (v - truth).abs() > room + slack + 1e-6 { bad.push(format!("{ctx}: key writes {part}, true {truth}")); }
+        if (v - truth).abs() > room + slack + 1e-6 { bad.push(format!("{ctx} dec{dec}: key writes {part}, true {truth}")); }
+    }
     }
     bad
 }
@@ -211,7 +217,7 @@ fn sweep(sets: Vec<(i64, Vec<Case>)>, rules_n: &[(&'static str, &'static str, us
                 for &(si, ci, ri) in jobs.iter().skip(t).step_by(threads) {
                     let (strips, rule, n) = rules_n[ri];
                     let start = std::time::Instant::now();
-                    let b = check(&sets[si].1[ci], strips, rule, n, areas[si][ci]);
+                    let b = check(&sets[si].1[ci], strips, rule, n, areas[si][ci], &[4]);
                     slow.lock().unwrap().push((start.elapsed(), si, ci, ri));
                     if !b.is_empty() { fails.lock().unwrap().extend(b); }
                 }
