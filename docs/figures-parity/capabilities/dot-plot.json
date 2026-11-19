@@ -1,0 +1,105 @@
+{
+ "figure": "dot-plot",
+ "site": "math",
+ "slug": "dot-plot",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type or paste the data as a list of values, one dot per value with equal values stacked",
+   "class": "core",
+   "evidence": "changes:data=3, 4, 4, 5, 7, 7, 7, 9",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Give the data as a frequency table: each value once with how many of it there are",
+   "class": "core",
+   "evidence": "",
+   "note": "the data box takes a list of values only"
+  },
+  {
+   "id": "cap-01c",
+   "text": "Use fractions and mixed numbers such as 3/4 and 1 1/2 as values, with the number line numbered in fractions",
+   "class": "core",
+   "evidence": "",
+   "note": "data::numbers reads decimals only; 3/4 and 1 1/2 are skipped as words"
+  },
+  {
+   "id": "cap-01d",
+   "text": "Give students a blank number line to plot the data on",
+   "class": "version",
+   "evidence": "",
+   "note": "the reference leaves the data empty; ours keeps the data and the student copy (Show answers off) hides the dots and marks, keeping the number line. Empty data shows 'Enter some data' instead of a number line; evidence cleared at round-0 review (owner: strict, credit only a full match): was changes:show_answers=false"
+  },
+  {
+   "id": "cap-02",
+   "text": "Draw X's instead of dots as the marks",
+   "class": "control",
+   "evidence": "",
+   "note": "dots only (dot_size changes their size)"
+  },
+  {
+   "id": "cap-03a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Shoe sizes in our class",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Write an axis title under the number line",
+   "class": "control",
+   "evidence": "changes:x_title=Shoe size",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Put a blank line in place of the chart or axis title for students",
+   "class": "version",
+   "evidence": "",
+   "note": "titles are text only; no blank-line mode"
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type the number line's range",
+   "class": "control",
+   "evidence": "changes:{\"axis_auto\": false, \"axis_min\": 0.0, \"axis_max\": 20.0, \"axis_step\": 1.0}",
+   "note": "turning the automatic line off is part of typing a range"
+  },
+  {
+   "id": "cap-04b",
+   "text": "Type the number line's count-by",
+   "class": "control",
+   "evidence": "changes:{\"axis_auto\": false, \"axis_min\": 4.0, \"axis_max\": 13.0, \"axis_step\": 0.5}",
+   "note": "4 to 13 is the automatic line for the opening data, so only the step differs"
+  },
+  {
+   "id": "cap-04c",
+   "text": "Have the number line's range and count-by worked out from the data",
+   "class": "control",
+   "evidence": "changes:data=20, 25, 25, 30, 41",
+   "note": "the opening already has data, so the render differs because the data changes; the checker confirms the axis is re-fitted"
+  },
+  {
+   "id": "cap-04d",
+   "text": "Choose which ticks are numbered (every tick, every 2nd, 4th, 5th or 10th, or none)",
+   "class": "control",
+   "evidence": "",
+   "note": "every tick is always numbered"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Finish an end of the number line with an arrow",
+   "class": "control",
+   "evidence": "",
+   "note": "the line has plain ends; the two ends are set separately on the reference"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Finish an end of the number line with a circle",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

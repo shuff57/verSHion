@@ -1,0 +1,161 @@
+{
+ "figure": "probability-tree",
+ "site": "math",
+ "slug": "tree-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type a stage's outcomes and their probabilities",
+   "class": "core",
+   "evidence": "changes:first=H 1/2, T 1/2",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Add a second and a third stage after the first",
+   "class": "core",
+   "evidence": "changes:third=Win 0.2, Lose 0.8",
+   "note": "three stages at most; the fourth is cap-01c"
+  },
+  {
+   "id": "cap-01c",
+   "text": "Add a fourth stage",
+   "class": "control",
+   "evidence": "",
+   "note": "MAX three stages"
+  },
+  {
+   "id": "cap-01d",
+   "text": "Give a stage six outcomes (a die roll), up to 36 paths in all",
+   "class": "control",
+   "evidence": "",
+   "note": "MAX_BRANCHES is 5 and MAX_LEAVES 30, so a die cannot be drawn"
+  },
+  {
+   "id": "cap-02a",
+   "text": "Use the same probabilities on every branch of a stage",
+   "class": "core",
+   "evidence": "changes:second=Late 0.2, On time 0.8",
+   "note": "one second-stage line is used after every first-stage outcome"
+  },
+  {
+   "id": "cap-02b",
+   "text": "Type each branch's probabilities separately, for dependent events",
+   "class": "core",
+   "evidence": "changes:{\"second\": \"Late 0.5, On time 0.5\\nLate 0.2, On time 0.8\"}",
+   "note": "one line per first-stage outcome; the third stage is always the same on every branch"
+  },
+  {
+   "id": "cap-02c",
+   "text": "Write probabilities as typed: fractions, decimals or percents",
+   "class": "control",
+   "evidence": "changes:first=Rain 3/10, Dry 7/10",
+   "note": "the branch keeps the text as typed"
+  },
+  {
+   "id": "cap-02d",
+   "text": "Write a probability as a letter such as x",
+   "class": "control",
+   "evidence": "",
+   "note": "a letter is rejected as not a probability"
+  },
+  {
+   "id": "cap-02e",
+   "text": "Leave a single probability empty for students to fill in",
+   "class": "version",
+   "evidence": "",
+   "note": "blank_probs blanks every branch probability at once (cap-04b)"
+  },
+  {
+   "id": "cap-03a",
+   "text": "List each path's name in an outcome column",
+   "class": "control",
+   "evidence": "changes:products=false",
+   "note": "the opening lists 'Rain, Late = 0.12' per path; the token shows the column switch is live. Names are written comma-separated (H, T)"
+  },
+  {
+   "id": "cap-03b",
+   "text": "Write path names run together (HT)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Write each path's probability, multiplied out",
+   "class": "core",
+   "evidence": "changes:products=false",
+   "note": "the same switch shows names and products together"
+  },
+  {
+   "id": "cap-03d",
+   "text": "Multiply fraction branches out to a fraction in lowest terms",
+   "class": "control",
+   "evidence": "",
+   "note": "products are written as decimals (fmt4)"
+  },
+  {
+   "id": "cap-04a",
+   "text": "Show, blank (for students) or hide the outcomes, set on its own",
+   "class": "version",
+   "evidence": "",
+   "note": "merged at round-0 review with cap-04e (owner: one capability per label kind)"
+  },
+  {
+   "id": "cap-04b",
+   "text": "Show, blank (for students) or hide the branch probabilities, set on its own",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\": false, \"blank_probs\": true}",
+   "note": "drawn as empty outlined boxes; merged at round-0 review with cap-04f (owner: one capability per label kind)"
+  },
+  {
+   "id": "cap-04c",
+   "text": "Show, blank (for students) or hide the path names, set on its own",
+   "class": "version",
+   "evidence": "",
+   "note": "merged at round-0 review with cap-04g (owner: one capability per label kind)"
+  },
+  {
+   "id": "cap-04d",
+   "text": "Show, blank (for students) or hide the path probabilities, set on its own",
+   "class": "version",
+   "evidence": "changes:show_answers=false",
+   "note": "merged at round-0 review with cap-04h (owner: one capability per label kind)"
+  },
+  {
+   "id": "cap-04i",
+   "text": "Click any single label on the figure to make it a blank",
+   "class": "interaction",
+   "evidence": "",
+   "note": "no handles"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Grow the tree top to bottom instead of left to right",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write a label at the start of the tree",
+   "class": "control",
+   "evidence": "",
+   "note": "the root is a dot"
+  },
+  {
+   "id": "cap-05c",
+   "text": "Write a title over each stage",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Choose small, medium or large labels",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

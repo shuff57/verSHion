@@ -1,0 +1,224 @@
+{
+ "figure": "normal-curve",
+ "site": "math",
+ "slug": "normal-curve",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type the mean and standard deviation, with ticks at each standard deviation from the mean",
+   "class": "core",
+   "evidence": "changes:mean=50 + changes:sd=5",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Tick the axis out to 4 standard deviations either side instead of 3",
+   "class": "control",
+   "evidence": "",
+   "note": "ticks at -3 to 3 SD only"
+  },
+  {
+   "id": "cap-02a",
+   "text": "Number the ticks with z-scores instead of values",
+   "class": "control",
+   "evidence": "changes:ticks=z-scores",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Number the ticks as mu, mu ± sigma, mu ± 2 sigma …",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Put blank lines under the ticks for students to fill in",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "Leave the ticks unnumbered",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02e",
+   "text": "Add a second row of numbers under the first",
+   "class": "control",
+   "evidence": "",
+   "note": "only values over z-scores; the reference's second row can also be mu ± sigma or blank lines; evidence cleared at round-0 review (owner: strict, credit only a full match): was changes:ticks=Values and z-scores"
+  },
+  {
+   "id": "cap-02f",
+   "text": "Add more ticks at values you type",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw a line up to the curve at each standard deviation",
+   "class": "control",
+   "evidence": "",
+   "note": "the only vertical lines are the shading-bound markers"
+  },
+  {
+   "id": "cap-03b",
+   "text": "Make the standard-deviation lines solid rather than dashed",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Write the percent in each section by the empirical rule (34%, 13.5%, 2.35% …)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Write the exact percent in each section",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Shade the area left of a value",
+   "class": "core",
+   "evidence": "changes:region=Below",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Shade the area right of a value",
+   "class": "core",
+   "evidence": "changes:region=Above",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Shade the area between two values",
+   "class": "core",
+   "evidence": "changes:a=70",
+   "note": "Between is the opening; the token moves its lower bound"
+  },
+  {
+   "id": "cap-04d",
+   "text": "Shade the area outside two values (both tails)",
+   "class": "core",
+   "evidence": "changes:region=Outside",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Give the region's bounds as z-scores",
+   "class": "control",
+   "evidence": "changes:{\"by\": \"z-scores\", \"a\": -2.0, \"b\": 1.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-04f",
+   "text": "Find a region's bound from its area, as invNorm does",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04g",
+   "text": "Shade up to four regions on one curve",
+   "class": "control",
+   "evidence": "",
+   "note": "one region (Outside is one two-tailed region)"
+  },
+  {
+   "id": "cap-04h",
+   "text": "Write a region's area as a probability",
+   "class": "core",
+   "evidence": "changes:show_prob=false",
+   "note": "the opening writes P(85 < X < 115) = 0.6827; the token shows the switch is live"
+  },
+  {
+   "id": "cap-04i",
+   "text": "Write a region's area as a percent",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04j",
+   "text": "Leave a region's area as a blank line for students",
+   "class": "version",
+   "evidence": "",
+   "note": "the student copy (show_answers off) drops the whole P(...) line rather than writing it with a blank; left empty for the checker/owner to judge"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Mark a value with a dotted line up to the curve, labelled with the value",
+   "class": "control",
+   "evidence": "",
+   "note": "dashed markers are drawn only at the shading bounds, not at a free marked value"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Label a marked value with its z-score",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Label a marked value with its percentile rank",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Label a marked value with your own text",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Draw in black and white with hatching for printing",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": "Print fills the region with the hatch pattern (Fills)"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Show a density axis",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=IQ scores",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write an axis title",
+   "class": "control",
+   "evidence": "changes:x_title=IQ score",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Put a blank line in place of the chart or axis title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

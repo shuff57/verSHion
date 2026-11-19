@@ -1,0 +1,175 @@
+{
+ "figure": "scatterplot",
+ "site": "math",
+ "slug": "scatter-plot",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type the points' x and y values, one point a line",
+   "class": "core",
+   "evidence": "changes:{\"pts\": \"1, 20\\n3, 35\\n4, 33\\n6, 50\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Type the points into a two-column x / y table",
+   "class": "control",
+   "evidence": "",
+   "note": "the data box is a multiline text box, not a table"
+  },
+  {
+   "id": "cap-01c",
+   "text": "Paste two columns from a spreadsheet",
+   "class": "control",
+   "evidence": "changes:{\"pts\": \"1\\t20\\n3\\t35\\n4\\t33\\n6\\t50\"}",
+   "note": "tab-separated rows are read by data::read"
+  },
+  {
+   "id": "cap-01d",
+   "text": "Write the points as (3, 72), (5, 80)",
+   "class": "control",
+   "evidence": "",
+   "note": "parenthesised pairs are skipped as words"
+  },
+  {
+   "id": "cap-01e",
+   "text": "Leave the data empty for blank axes for students to plot on",
+   "class": "version",
+   "evidence": "",
+   "note": "empty data shows 'Enter some (x, y) pairs'; the student copy keeps the points"
+  },
+  {
+   "id": "cap-02",
+   "text": "Draw the points as crosses instead of dots",
+   "class": "control",
+   "evidence": "",
+   "note": "dots only (point_size changes their size)"
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw the least-squares line of best fit",
+   "class": "core",
+   "evidence": "changes:fit=false",
+   "note": "the opening draws the line; the token shows the switch is live"
+  },
+  {
+   "id": "cap-03b",
+   "text": "Draw your own line, typed as y = mx + b",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Write the line's equation",
+   "class": "control",
+   "evidence": "",
+   "note": "written in a plate inside the plot's top corner, not below the graph; evidence cleared at round-0 review (owner: strict, credit only a full match): was changes:eq=true"
+  },
+  {
+   "id": "cap-04b",
+   "text": "Leave the line's equation as a blank line for students",
+   "class": "version",
+   "evidence": "",
+   "note": "the student copy hides the line, equation and r rather than writing a blank"
+  },
+  {
+   "id": "cap-04c",
+   "text": "Write the correlation coefficient r",
+   "class": "control",
+   "evidence": "",
+   "note": "written in the plot's top corner, not below the graph; evidence cleared at round-0 review (owner: strict, credit only a full match): was changes:rval=true"
+  },
+  {
+   "id": "cap-04d",
+   "text": "Write r squared instead of r",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Choose how many places the equation and r are rounded to",
+   "class": "control",
+   "evidence": "",
+   "note": "fixed at three places"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Study time and test scores",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write an x-axis title",
+   "class": "control",
+   "evidence": "changes:x_title=Hours of sleep",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Write a y-axis title",
+   "class": "control",
+   "evidence": "changes:y_title=Marks",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Put a blank line in place of a title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Type each axis's range",
+   "class": "control",
+   "evidence": "",
+   "note": "axes are always fitted to the data"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Type each axis's count-by",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Have each axis's range and count-by worked out from the data",
+   "class": "control",
+   "evidence": "changes:{\"pts\": \"10, 200\\n20, 400\\n30, 500\"}",
+   "note": "the opening already has data, so the render differs because the data changes; the checker confirms the axis is re-fitted"
+  },
+  {
+   "id": "cap-06d",
+   "text": "Choose which gridlines are numbered on each axis",
+   "class": "control",
+   "evidence": "",
+   "note": "every gridline is numbered"
+  },
+  {
+   "id": "cap-07a",
+   "text": "Turn the gridlines off",
+   "class": "control",
+   "evidence": "changes:grid=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Choose light, standard or bold gridlines",
+   "class": "control",
+   "evidence": "",
+   "note": "one weight"
+  },
+  {
+   "id": "cap-07c",
+   "text": "Add minor gridlines (2, 4 or 5 per block)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

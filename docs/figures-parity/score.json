@@ -1,13 +1,16 @@
 {
- "generated_at": "2026-11-13T04:03:45+00:00",
- "probe_checked_at": "2026-11-12T20:03:45",
+ "generated_at": "2026-11-19T03:18:31+00:00",
+ "probe_checked_at": "2026-11-18T19:18:30",
  "comparable": true,
  "drift": [],
- "pooled": 99.9,
- "mean": 99.9,
- "figures_scored": 70,
- "figures_built": 71,
- "figures_missing": [],
+ "pooled": 95.3,
+ "mean": 95.8,
+ "figures_scored": 75,
+ "figures_built": 76,
+ "figures_missing": [
+  "math/segment-addition",
+  "math/table-of-values"
+ ],
  "figures": {
   "angles": {
    "score": 100.0,
@@ -100,6 +103,70 @@
    "total": 56.0,
    "unclassified": 0,
    "gaps": []
+  },
+  "dot-plot": {
+   "score": 41.7,
+   "got": 20.0,
+   "total": 48.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Give the data as a frequency table: each value once with how many of it there are",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Use fractions and mixed numbers such as 3/4 and 1 1/2 as values, with the number line numbered in fractions",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01d",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Give students a blank number line to plot the data on",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw X's instead of dots as the marks",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of the chart or axis title for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose which ticks are numbered (every tick, every 2nd, 4th, 5th or 10th, or none)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Finish an end of the number line with an arrow",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Finish an end of the number line with a circle",
+     "why": "no evidence"
+    }
+   ]
   },
   "enzyme-kinetics": {
    "score": 100.0,
@@ -226,6 +293,154 @@
    "total": 87.0,
    "unclassified": 0,
    "gaps": []
+  },
+  "normal-curve": {
+   "score": 42.1,
+   "got": 45.0,
+   "total": 107.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-04f",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Find a region's bound from its area, as invNorm does",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Tick the axis out to 4 standard deviations either side instead of 3",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Number the ticks as mu, mu ± sigma, mu ± 2 sigma …",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put blank lines under the ticks for students to fill in",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Leave the ticks unnumbered",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add a second row of numbers under the first",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add more ticks at values you type",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a line up to the curve at each standard deviation",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the standard-deviation lines solid rather than dashed",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write the percent in each section by the empirical rule (34%, 13.5%, 2.35% …)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write the exact percent in each section",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04g",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Shade up to four regions on one curve",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04i",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write a region's area as a percent",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04j",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Leave a region's area as a blank line for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark a value with a dotted line up to the curve, labelled with the value",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label a marked value with its z-score",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label a marked value with its percentile rank",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label a marked value with your own text",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Show a density axis",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of the chart or axis title for students",
+     "why": "no evidence"
+    }
+   ]
   },
   "nuclide-notation": {
    "score": 100.0,
@@ -354,6 +569,98 @@
    "unclassified": 0,
    "gaps": []
   },
+  "probability-tree": {
+   "score": 53.3,
+   "got": 40.0,
+   "total": 75.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add a fourth stage",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give a stage six outcomes (a die roll), up to 36 paths in all",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write a probability as a letter such as x",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02e",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Leave a single probability empty for students to fill in",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write path names run together (HT)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Multiply fraction branches out to a fraction in lowest terms",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Show, blank (for students) or hide the outcomes, set on its own",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Show, blank (for students) or hide the path names, set on its own",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Grow the tree top to bottom instead of left to right",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write a label at the start of the tree",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write a title over each stage",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04i",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click any single label on the figure to make it a blank",
+     "why": "no evidence"
+    }
+   ]
+  },
   "projectile-motion": {
    "score": 100.0,
    "got": 74.0,
@@ -416,6 +723,330 @@
    "total": 62.0,
    "unclassified": 0,
    "gaps": []
+  },
+  "scatterplot": {
+   "score": 36.8,
+   "got": 28.0,
+   "total": 76.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type the points into a two-column x / y table",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write the points as (3, 72), (5, 80)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01e",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Leave the data empty for blank axes for students to plot on",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the points as crosses instead of dots",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw your own line, typed as y = mx + b",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write the line's equation",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Leave the line's equation as a blank line for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write the correlation coefficient r",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write r squared instead of r",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose how many places the equation and r are rounded to",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of a title for students",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type each axis's range",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type each axis's count-by",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose which gridlines are numbered on each axis",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose light, standard or bold gridlines",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add minor gridlines (2, 4 or 5 per block)",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "solid-net": {
+   "score": 14.4,
+   "got": 15.0,
+   "total": 104.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01c",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw the net of a pyramid",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01d",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw the net of a cylinder",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01e",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw the net of a cone",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose any of the 11 nets of a cube",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give a prism a right-triangle base",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give a prism an isosceles-triangle base",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give a prism a regular-polygon base of 3 to 8 sides",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give a pyramid a rectangular base",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give a pyramid a regular-polygon base",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Type a measure as a fraction, with a square root or with pi",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label an edge on the net with its measure",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label a measure with text such as x",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Leave a measure without a label",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give a pyramid's height or its slant height and have the other worked out",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give a cone's height or its slant height and have the other worked out",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Work out and label a rectangular pyramid's second slant height",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Work out and label a cylinder's circumference on its net",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Work out and label a cone's sector angle on its net",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the fold lines dashed or solid",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add glue tabs for cutting the net out",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark right angles with squares",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Name the faces A, B, C … inside them",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write each face's area inside it",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Tint matching faces (same shape and size) the same colour",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the 3D shape beside its net",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-09a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose a unit (cm, m, mm, in, ft, yd, units) or type your own",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-09b",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Choose the rounding for worked-out measures",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-09c",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag any label on the figure to move it, and reset the positions",
+     "why": "no evidence"
+    }
+   ]
   },
   "sphere": {
    "score": 100.0,

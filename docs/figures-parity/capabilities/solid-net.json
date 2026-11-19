@@ -1,0 +1,224 @@
+{
+ "figure": "solid-net",
+ "site": "math",
+ "slug": "net",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw the net of a cube",
+   "class": "core",
+   "evidence": "changes:solid=Cube",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw the net of a prism (with a rectangular base)",
+   "class": "core",
+   "evidence": "changes:b=5",
+   "note": "only the rectangular prism (Cuboid, the opening); the other bases are cap-03a to cap-03c"
+  },
+  {
+   "id": "cap-01c",
+   "text": "Draw the net of a pyramid",
+   "class": "core",
+   "evidence": "",
+   "note": "solids are Cube and Cuboid only"
+  },
+  {
+   "id": "cap-01d",
+   "text": "Draw the net of a cylinder",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Draw the net of a cone",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Choose any of the 11 nets of a cube",
+   "class": "control",
+   "evidence": "",
+   "note": "one layout (a row of four with a face above and below the first)"
+  },
+  {
+   "id": "cap-03a",
+   "text": "Give a prism a right-triangle base",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Give a prism an isosceles-triangle base",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Give a prism a regular-polygon base of 3 to 8 sides",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Give a pyramid a rectangular base",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "Give a pyramid a regular-polygon base",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Type each measure (length, width, height) as a number",
+   "class": "core",
+   "evidence": "changes:a=6",
+   "note": "the edges are listed in the readout under the net, not written on its edges"
+  },
+  {
+   "id": "cap-04b",
+   "text": "Type a measure as a fraction, with a square root or with pi",
+   "class": "control",
+   "evidence": "",
+   "note": "the edges are float spinners"
+  },
+  {
+   "id": "cap-04c",
+   "text": "Label an edge on the net with its measure",
+   "class": "control",
+   "evidence": "",
+   "note": "faces say 'a x b'; edge values appear only in the 'Edges' readout row"
+  },
+  {
+   "id": "cap-04d",
+   "text": "Label a measure with text such as x",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04e",
+   "text": "Leave a measure without a label",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Give a pyramid's height or its slant height and have the other worked out",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Give a cone's height or its slant height and have the other worked out",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Work out and label a rectangular pyramid's second slant height",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Work out and label a cylinder's circumference on its net",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "Work out and label a cone's sector angle on its net",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Draw the fold lines dashed or solid",
+   "class": "control",
+   "evidence": "",
+   "note": "fold lines are the shared face edges, always solid"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Add glue tabs for cutting the net out",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Mark right angles with squares",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Name the faces A, B, C … inside them",
+   "class": "control",
+   "evidence": "",
+   "note": "faces carry 'a x b' / 'a x c' / 'b x c', which say which edges make them, not names"
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write each face's area inside it",
+   "class": "control",
+   "evidence": "",
+   "note": "only the total surface area is written, in the readout"
+  },
+  {
+   "id": "cap-07c",
+   "text": "Tint matching faces (same shape and size) the same colour",
+   "class": "control",
+   "evidence": "",
+   "note": "all faces share one fill"
+  },
+  {
+   "id": "cap-08",
+   "text": "Draw the 3D shape beside its net",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09a",
+   "text": "Choose a unit (cm, m, mm, in, ft, yd, units) or type your own",
+   "class": "control",
+   "evidence": "",
+   "note": "no unit"
+  },
+  {
+   "id": "cap-09b",
+   "text": "Choose the rounding for worked-out measures",
+   "class": "control",
+   "evidence": "",
+   "note": "dec rounds the worked-out surface area and volume (21.82, 6.41); the render also differs because the edges change. The reference rounds worked-out net measures (slant heights, circumference), which we do not draw; evidence cleared at round-0 review (owner: strict, credit only a full match): was changes:{\"a\": 1.3, \"b\": 1.7, \"c\": 2.9, \"dec\": 2}"
+  },
+  {
+   "id": "cap-09c",
+   "text": "Drag any label on the figure to move it, and reset the positions",
+   "class": "interaction",
+   "evidence": "",
+   "note": "no handles, not in labels::FIGURES"
+  }
+ ]
+}

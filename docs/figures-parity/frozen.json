@@ -1,8 +1,11 @@
 {
- "frozen_at": "2026-11-11T15:13:33+00:00",
- "map_sha256": "9a4c3be020f08b79676c68f613a36c37374576473ef3d81604ea49c480c01a89",
+ "frozen_at": "2026-11-19T03:18:31+00:00",
+ "map_sha256": "dc4ea6f48a358cd2d41d93c5b128f97aa497d7b440b2e54eb1db98b467633815",
  "not_doing_sha256": "0d4d68bef94ec157aa39e4048a440fc3b2f491bb3ec66ce38d39b83dfef34a60",
- "missing_figures": [],
+ "missing_figures": [
+  "math/segment-addition",
+  "math/table-of-values"
+ ],
  "figures": {
   "angles": {
    "page": "math/angles",
@@ -49,6 +52,11 @@
    "text_sha256": "37b3e7245c5a2131e0ed51470f581292042d951a81694af60053d391dca4c2e1",
    "shape": "7f0a020887862aae6bbd7743792487f5148e0d167af855927dc307b2b77e5d05"
   },
+  "dot-plot": {
+   "page": "math/dot-plot",
+   "text_sha256": "5862b9940cfec7c5656c817c68b902abdecca7abbeca3a6b909ff1369cd73240",
+   "shape": "44d360dc86b11685cd3cb105168fb76c41c4a097365262c2325c6c98446653ce"
+  },
   "histogram": {
    "page": "math/histogram",
    "text_sha256": "1d134eef29120d3f5ecaa2b64e5818290bc1a5814135dba5aa9ddcd41b9e2122",
@@ -68,6 +76,16 @@
    "page": "math/mapping-diagram",
    "text_sha256": "372bc895e51e603ff8d174e4e0dc27e061ddf9243cdc2f9a8b2633b8a4984f2b",
    "shape": "275555f05bdfed37e1b93c104ba8c3e18ec756b9e798c142280f34d9b1044553"
+  },
+  "solid-net": {
+   "page": "math/net",
+   "text_sha256": "98b6b86700a2850d7e761bcfbb67e5f877cf5c93ee77877f3731a862a493c7f4",
+   "shape": "88e37a9489e3b67ea397488ab0384c8d42c19273740062a23c8c4234a5a51b23"
+  },
+  "normal-curve": {
+   "page": "math/normal-curve",
+   "text_sha256": "9f16375df956dcd2a1a8b9dc01f5e754a19cd57ac38c1fcfb0b1e2e1c84e8a4e",
+   "shape": "316940974f893adf5e07b30e323a24769f3b52a77c1a790278844cf1074c103d"
   },
   "number-line": {
    "page": "math/number-line",
@@ -109,6 +127,11 @@
    "text_sha256": "016380fec1cc357d1ef64c30fd6fd92971d32ca2d9f36c056393136f72711c1e",
    "shape": "41d68de1da08f4e3b62b1102bd7b1ad5b6d56a63333fdcbf8ee23679b6874601"
   },
+  "scatterplot": {
+   "page": "math/scatter-plot",
+   "text_sha256": "282d4dcc8801c239ceabd3fde5ece7fbfcd18cf12f209eae300eb039c8c3a1b2",
+   "shape": "ed93edc8c89af48442850ecd0236bb4735b88237ffe5c724e0793eb170037e51"
+  },
   "sphere": {
    "page": "math/sphere",
    "text_sha256": "61b1d58347235096062048f007d7b36dc46d581609f02ab180e4262ae6a34b03",
@@ -128,6 +151,11 @@
    "page": "math/trapezoid",
    "text_sha256": "6d8c75cbaff3d02bbac1ec5a33a5d09255ac443aff1b693dd29cb12503d42fcf",
    "shape": "cad22546ba6c433238a740c824ca8fa93a5740c36fff2f7255571fe527199230"
+  },
+  "probability-tree": {
+   "page": "math/tree-diagram",
+   "text_sha256": "c1480355298c3d73975fe0b36f2e9c26e22b8731e474e11ce825c8dfc1d6232a",
+   "shape": "b8faecc068e5491880de3801bc28bed9b0a7f3031c607eeb5ec7b22310932403"
   },
   "triangle": {
    "page": "math/triangle",
