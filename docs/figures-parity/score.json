@@ -1,15 +1,14 @@
 {
- "generated_at": "2026-11-19T03:18:31+00:00",
- "probe_checked_at": "2026-11-18T19:18:30",
+ "generated_at": "2026-11-19T07:13:10+00:00",
+ "probe_checked_at": "2026-11-18T23:13:10",
  "comparable": true,
  "drift": [],
- "pooled": 95.3,
+ "pooled": 95.5,
  "mean": 95.8,
- "figures_scored": 75,
- "figures_built": 76,
+ "figures_scored": 76,
+ "figures_built": 77,
  "figures_missing": [
-  "math/segment-addition",
-  "math/table-of-values"
+  "math/segment-addition"
  ],
  "figures": {
   "angles": {
@@ -1066,6 +1065,13 @@
    "score": 100.0,
    "got": 67.0,
    "total": 67.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "table-of-values": {
+   "score": 100.0,
+   "got": 146.0,
+   "total": 146.0,
    "unclassified": 0,
    "gaps": []
   },

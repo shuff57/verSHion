@@ -524,6 +524,14 @@ static BAR_CHART: [RefSection; 7] = [
     s("Student copy and appearance", &["blank", "questions", "show_answers", "style", "label_size"], "Turn off Show answers for a student copy: it leaves out the values, the bars (students draw them from a table) or the scale numbers, and the answers to the questions."),
 ];
 
+static TABLE_OF_VALUES: [RefSection; 5] = [
+    s("Values", &["source", "rule", "xs", "from", "to", "step", "list", "typed", "blanks", "blank_y"], "Type a rule like y = 2x + 1 and the x-values as a range or a list; each y is worked out for you. Type the range in fractions, \u{3c0} or degrees and the x-values are written that way. Or pick Typed and type the pairs yourself, words too. Click any value on the figure to make it a blank for students."),
+    s("Headings and titles", &["heads", "head1", "head2", "title_kind", "title", "show_rule"], "Leave a heading empty for a blank heading. A blank line for the rule leaves it for students to find."),
+    s("Numbers", &["as", "round"], "Fractions keeps exact values exact; the rest are rounded to the places you choose."),
+    s("Layout", &["runs", "head_look"], ""),
+    s("Student copy and appearance", &["show_answers", "style", "label_size"], "Turn off Show answers for a student copy: the blanks are left empty and the answers under the table are left out."),
+];
+
 static PIE_CHART: [RefSection; 5] = [
     s("Data", &["data", "values", "total", "order", "dot"], "One category per line: a name, a comma and its value, typed or pasted from a spreadsheet. Leave a value out and that sector is empty, for students to draw; with counts, type the total so there is room for it. Leave every value out for a blank circle. Sectors run clockwise from 12 o'clock."),
     s("Labels", &["labels", "decimals", "own"], "A sector can carry its own text: a letter (x°), _ for a blank line to write on, or - for nothing."),
@@ -1237,6 +1245,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "stem-and-leaf" => &STEM_AND_LEAF,
         "bar-chart" => &BAR_CHART,
         "pie-chart" => &PIE_CHART,
+        "table-of-values" => &TABLE_OF_VALUES,
         "dot-plot" => &DOT_PLOT,
         "ogive" => &OGIVE,
         "normal-curve" => &NORMAL_CURVE,

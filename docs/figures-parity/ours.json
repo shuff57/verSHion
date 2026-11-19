@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-19T03:16:06+00:00",
-  "src_mtime": 1795058110.501255,
-  "git": "4515485",
-  "figures": 191
+  "built_at": "2026-11-19T07:12:54+00:00",
+  "src_mtime": 1795071607.440888,
+  "git": "9591516+dirty",
+  "figures": 192
  },
  "figures": {
   "free-body-diagram": {
@@ -31242,6 +31242,293 @@
    ],
    "handle_list": [],
    "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "table-of-values": {
+   "id": "table-of-values",
+   "title": "Table of Values",
+   "blurb": "A table of x and y values worked out from a rule, or typed: exact fractions, π and degrees, undefined where the rule has no value, any value a blank for students, and the answers listed on the key.",
+   "params": [
+    {
+     "key": "source",
+     "label": "Values",
+     "kind": "choice",
+     "options": [
+      "From a rule",
+      "Typed"
+     ],
+     "default": "From a rule"
+    },
+    {
+     "key": "rule",
+     "label": "Rule",
+     "kind": "text",
+     "options": [],
+     "default": "y = 2x + 1"
+    },
+    {
+     "key": "xs",
+     "label": "x-values from",
+     "kind": "choice",
+     "options": [
+      "A range",
+      "A list"
+     ],
+     "default": "A range"
+    },
+    {
+     "key": "from",
+     "label": "From",
+     "kind": "text",
+     "options": [],
+     "default": "-2"
+    },
+    {
+     "key": "to",
+     "label": "To",
+     "kind": "text",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "step",
+     "label": "Step",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "list",
+     "label": "x-values",
+     "kind": "text",
+     "options": [],
+     "default": "-2, 0, 1/2, 3"
+    },
+    {
+     "key": "typed",
+     "label": "Pairs",
+     "kind": "long",
+     "options": [],
+     "default": "1, 5\\n2, 8\\n3, 11\\n4, 14"
+    },
+    {
+     "key": "blanks",
+     "label": "Blanks",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "blank_y",
+     "label": "Blank every y",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "heads",
+     "label": "Headings",
+     "kind": "choice",
+     "options": [
+      "x and y",
+      "Input / Output",
+      "x / f(x)",
+      "n / aₙ",
+      "Your own"
+     ],
+     "default": "x and y"
+    },
+    {
+     "key": "head1",
+     "label": "First heading",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "head2",
+     "label": "Second heading",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "title_kind",
+     "label": "Table title",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Text",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_rule",
+     "label": "The rule, above the table",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Written",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "as",
+     "label": "Worked-out values as",
+     "kind": "choice",
+     "options": [
+      "Fractions",
+      "Decimals"
+     ],
+     "default": "Fractions"
+    },
+    {
+     "key": "round",
+     "label": "Round the rest to",
+     "kind": "choice",
+     "options": [
+      "Whole numbers",
+      "1 decimal place",
+      "2 decimal places",
+      "3 decimal places",
+      "4 decimal places"
+     ],
+     "default": "2 decimal places"
+    },
+    {
+     "key": "runs",
+     "label": "The table runs",
+     "kind": "choice",
+     "options": [
+      "Across",
+      "Down"
+     ],
+     "default": "Across"
+    },
+    {
+     "key": "head_look",
+     "label": "Headings",
+     "kind": "choice",
+     "options": [
+      "Gray",
+      "Plain"
+     ],
+     "default": "Gray"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 1: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = −2: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 2: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = −1: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 3: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = 0: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 4: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = 1: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 5: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = 2: click to make a blank"
+    }
+   ],
+   "handles": true,
    "label_drag": false,
    "show_answers": true,
    "style": true,

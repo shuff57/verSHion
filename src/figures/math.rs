@@ -6747,6 +6747,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::H
         .or_else(|| (id == super::transform::ID).then(|| super::transform::handles(p)))
         .or_else(|| (id == super::stats::twoway::ID).then(|| super::stats::twoway::handles(p)))
         .or_else(|| (id == super::stats::venn::ID).then(|| super::stats::venn::handles(p)))
+        .or_else(|| (id == super::stats::tov::ID).then(|| super::stats::tov::handles(p)))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's

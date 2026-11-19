@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-19T03:18:31+00:00 · probe: 2026-11-18T19:18:30
+Generated: 2026-11-19T07:13:10+00:00 · probe: 2026-11-18T23:13:10
 
-**Pooled 95.3** · mean 95.8 over 75 figures · built 76 of 78 reference figures (missing: math/segment-addition, math/table-of-values)
+**Pooled 95.5** · mean 95.8 over 76 figures · built 77 of 78 reference figures (missing: math/segment-addition)
 
 Comparable with the frozen baseline: **yes**
 
@@ -104,6 +104,7 @@ Comparable with the frozen baseline: **yes**
 - `sphere`: 100 (35/35)
 - `spring-scale`: 100 (51/51)
 - `stem-and-leaf`: 100 (67/67)
+- `table-of-values`: 100 (146/146)
 - `temperature-reading`: 100 (48/48)
 - `titration-curve`: 100 (64/64)
 - `trapezoid`: 100 (85/85)

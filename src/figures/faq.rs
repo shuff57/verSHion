@@ -197,6 +197,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "ogive" => OGIVE,
         "bar-chart" => BAR_CHART,
         "pie-chart" => PIE_CHART,
+        "table-of-values" => TABLE_OF_VALUES,
         "frequency-table" => FREQUENCY_TABLE,
         "normal-curve" => NORMAL_CURVE,
         "sampling-distribution" => SAMPLING_DISTRIBUTION,
@@ -2755,6 +2756,33 @@ const BAR_CHART: &[Faq] = &[
     Faq {
         q: "Why does the editor warn when the scale does not start at 0?",
         a: "A bar's length stands for its value, so the axis must start at 0. Starting higher makes small differences look large: a bar twice as long no longer means twice as many. The warning stays while Scale start is above 0, which is useful for teaching how graphs mislead.",
+    },
+];
+
+const TABLE_OF_VALUES: &[Faq] = &[
+    Faq {
+        q: "How do I make a table from a rule?",
+        a: "Type the rule in x, like y = 2x + 1, y = x^2 \u{2212} 3, y = 3(2)^x, y = sin x or y = 1/x, and the x-values as a range (From, To and Step) or a list. Each y is worked out for you. Type ^ for a power, sqrt for \u{221a} and pi for \u{3c0}. Where the rule has no value, like 1/x at x = 0, the cell says undefined.",
+    },
+    Faq {
+        q: "Can the x-values be fractions, \u{3c0} or degrees?",
+        a: "Yes. Type them the way you want them written: a step of 1/2 writes fractions, 0.5 writes decimals, pi/6 writes multiples of \u{3c0} and 30\u{b0} writes degrees. With degrees, sin, cos and tan read degrees, so sin 30\u{b0} = 1/2.",
+    },
+    Faq {
+        q: "Are the y-values fractions or decimals?",
+        a: "Worked-out values as Fractions keeps whole numbers, fractions in lowest terms and multiples of \u{3c0} exact (and sin 30\u{b0} = 1/2); values that are not fractions, like the square root of 2, are rounded to the places you choose. Decimals rounds every value. A rule or x-values typed with decimals, like y = 0.1x or a step of 0.5, are worked out in decimals.",
+    },
+    Faq {
+        q: "How do I leave values for students to fill in?",
+        a: "Click any value on the figure to make it a blank, and click it again to show it. Blank every y blanks the whole y row at once. In a typed table, leave a cell empty. Turn off Show answers for the student copy: the blanks are empty. The key copy writes each blank's value in bold and lists them under the table, worded with your headings, with whether the table is linear and its rate of change.",
+    },
+    Faq {
+        q: "Can students find the rule?",
+        a: "Set The rule, above the table, to Blank line: the student copy shows y = and a line to write on, and the key copy writes the rule on the line and under the table. With typed pairs that are linear, the key gives the line they follow, like y = 3x + 2.",
+    },
+    Faq {
+        q: "Can I type the table myself?",
+        a: "Pick Typed and type one pair per line, x, a comma, then y, or paste two columns from a spreadsheet. Words work too, for a pattern or a table with no rule. A value left out prints as a blank.",
     },
 ];
 

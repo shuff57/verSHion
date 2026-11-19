@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-19T03:18:31+00:00",
+ "generated_at": "2026-11-19T07:13:10+00:00",
  "spec_generated_at": "2026-11-19T01:39:54+00:00",
  "figures": [
   {
@@ -2397,9 +2397,9 @@
   {
    "site": "math",
    "slug": "table-of-values",
-   "status": "missing",
+   "status": "mapped",
    "title": "Table of Values Generator | Math Figures",
-   "ours_id": null,
+   "ours_id": "table-of-values",
    "cross_listed": false,
    "can_set": [
     "A rule in x, like y = 2x + 1, y = x^2, y = 3(2)^x or y = sin x, or pairs typed or pasted one per row, words too",
@@ -2436,7 +2436,38 @@
     "download": false,
     "direct_manipulation": true
    },
-   "text_sha256": "25342def25b9c62f9fad432f9397457ec290fd635661076c4fb7134e5a307c64"
+   "text_sha256": "25342def25b9c62f9fad432f9397457ec290fd635661076c4fb7134e5a307c64",
+   "params": [
+    "source",
+    "rule",
+    "xs",
+    "from",
+    "to",
+    "step",
+    "list",
+    "typed",
+    "blanks",
+    "blank_y",
+    "heads",
+    "head1",
+    "head2",
+    "title_kind",
+    "title",
+    "show_rule",
+    "as",
+    "round",
+    "runs",
+    "head_look",
+    "style",
+    "label_size",
+    "show_answers"
+   ],
+   "param_count": 23,
+   "handles": 10,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "interaction_gaps": []
   },
   {
    "site": "math",

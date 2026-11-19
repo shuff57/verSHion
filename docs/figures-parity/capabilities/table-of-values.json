@@ -1,0 +1,322 @@
+{
+ "figure": "table-of-values",
+ "site": "math",
+ "slug": "table-of-values",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type a linear rule in x, such as y = 2x + 1, and every y is worked out for the x-values",
+   "class": "core",
+   "evidence": "changes:rule=y = 3x - 2",
+   "note": "The opening state is y = 2x + 1."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Type a rule with powers of x, such as y = x^2 or y = x^2 − 3",
+   "class": "core",
+   "evidence": "changes:rule=y = x^2 - 3",
+   "note": "From the bullet and the Values help."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Type an exponential rule, such as y = 3(2)^x or y = 2^x",
+   "class": "core",
+   "evidence": "changes:rule=y = 3(2)^x",
+   "note": "Bullet; example 'Table of values for the exponential function y = 2ˣ'."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Type a trigonometric rule, such as y = sin x",
+   "class": "control",
+   "evidence": "changes:rule=y = sin x",
+   "note": "Bullet. Pairs with the π and degree x-values in cap-02e/02f.; control, not core (owner, scope review 2026-11-19)"
+  },
+  {
+   "id": "cap-01e",
+   "text": "Type a rule with x in the denominator, such as y = 1/x",
+   "class": "control",
+   "evidence": "changes:rule=y = 1/x",
+   "note": "From the About text, not the bullets. Where it has no value see cap-04f.; control, not core (owner, scope review 2026-11-19)"
+  },
+  {
+   "id": "cap-01f",
+   "text": "Pick Typed and type the x and y pairs yourself, one pair per row, with no rule",
+   "class": "core",
+   "evidence": "changes:{\"source\":\"Typed\"}",
+   "note": "Example 'Pattern table' uses source=typed with one row per pair."
+  },
+  {
+   "id": "cap-01g",
+   "text": "Type words, not only numbers, in a typed table's cells",
+   "class": "control",
+   "evidence": "changes:{\"source\":\"Typed\",\"typed\":\"Mon, sunny\\nTue, rain\"}",
+   "note": "Bullet: 'words too'; About: 'numbers or words, for a pattern or a table with no rule'."
+  },
+  {
+   "id": "cap-01h",
+   "text": "Paste the pairs from a spreadsheet, one pair per row",
+   "class": "control",
+   "evidence": "changes:{\"source\":\"Typed\",\"typed\":\"1\\t4\\n2\\t7\\n3\\t10\"}",
+   "note": "Bullet: 'typed or pasted one per row'."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Set the x-values as a range with From, To and Step",
+   "class": "core",
+   "evidence": "changes:{\"from\":\"0\",\"to\":\"6\",\"step\":\"2\"}",
+   "note": "Opening state: From −2, To 2, Step 1 (five columns)."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Set the x-values as a list, such as −2, 0, 1/2, 3, with uneven gaps",
+   "class": "core",
+   "evidence": "changes:{\"xs\":\"A list\",\"list\":\"-2, 0, 1/2, 3\"}",
+   "note": "Example 'Input-output table' uses the list 1, 2, 3, 5, 10."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Type the range or list with fractions (a step of 1/2) and the x-values are written as fractions",
+   "class": "control",
+   "evidence": "changes:{\"from\":\"0\",\"to\":\"2\",\"step\":\"1/2\"}",
+   "note": "Example 'y = x/2 + 1': x is 0, 1/2, 1, 3/2, 2 written as stacked fractions."
+  },
+  {
+   "id": "cap-02d",
+   "text": "Type a decimal step such as 0.5 and the x-values are written as decimals",
+   "class": "control",
+   "evidence": "changes:{\"from\":\"0\",\"to\":\"2\",\"step\":\"0.5\"}",
+   "note": "FAQ: 'Type x-values like 1/2 or a step of 0.5'. That the x-values are then written as decimals is inferred, not seen."
+  },
+  {
+   "id": "cap-02e",
+   "text": "Type the range or list in multiples of π and the x-values are written with π",
+   "class": "control",
+   "evidence": "changes:{\"rule\":\"y = sin x\",\"from\":\"0\",\"to\":\"pi\",\"step\":\"pi/4\"}",
+   "note": "Bullet and Values help. A trig rule then reads x in radians (inferred)."
+  },
+  {
+   "id": "cap-02f",
+   "text": "Type the range or list in degrees (0, 30°, 90°) and the x-values are written with °, the rule reading them as degrees",
+   "class": "control",
+   "evidence": "changes:{\"rule\":\"y = sin x\",\"from\":\"0°\",\"to\":\"180°\",\"step\":\"30°\"}",
+   "note": "Values help: 'Type the range in fractions, π or degrees (0, 30°, 90°) and the x-values are written that way.'"
+  },
+  {
+   "id": "cap-03a",
+   "text": "Leave a chosen y value blank for students",
+   "class": "version",
+   "evidence": "changes:{\"blanks\":\"y4\",\"show_answers\":false}",
+   "note": "Example 'Complete the table for y = 2x + 1' blanks y for x = 1 and x = 3 (blank=y3,y5). On the figure the action is cap-i01."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Leave a chosen x value blank for students, so they find the input",
+   "class": "version",
+   "evidence": "changes:{\"blanks\":\"x2\",\"show_answers\":false}",
+   "note": "The opening state has a click handle on every x cell: 'x in column 1: click to make a blank'. On the figure the action is cap-i02."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Blank every y at once with one button",
+   "class": "version",
+   "evidence": "changes:{\"blank_y\":true,\"show_answers\":false}",
+   "note": "Button 'Blank every y' under Values. Example 'y = x/2 + 1' blanks y0 to y4."
+  },
+  {
+   "id": "cap-03d",
+   "text": "Leave a cell empty in a typed table and it prints as a blank",
+   "class": "version",
+   "evidence": "changes:{\"source\":\"Typed\",\"typed\":\"1, 5\\n2,\\n3, 11\",\"show_answers\":false}",
+   "note": "Example 'Pattern table': figures 4 and 10 have no tile count."
+  },
+  {
+   "id": "cap-03e",
+   "text": "List each blank with its value as the answer key, worded with the headings (\"y when x = 1: 3\", \"Output when Input = 5: 13\")",
+   "class": "version",
+   "evidence": "changes:blanks=y4",
+   "note": "From the About text and the FAQ: 'Each blank and its value is listed under the table for your answer key.' Wording seen on the example pages.; counts when drawn on the figure's key copy (Show answers on) (owner, scope review 2026-11-19)"
+  },
+  {
+   "id": "cap-03f",
+   "text": "Say whether a table from a rule is linear and give its rate of change (\"Linear: the rate of change is 2.\")",
+   "class": "version",
+   "evidence": "changes:rule=y = x^2",
+   "note": "About: 'says whether the table is linear and its rate of change, so the answer key is ready too'. The wording for a table that is not linear was not seen.; counts when drawn on the figure's key copy (Show answers on) (owner, scope review 2026-11-19); covers saying \"not linear\" too"
+  },
+  {
+   "id": "cap-03g",
+   "text": "For typed pairs that are linear, give the line they follow and its rate of change (\"Linear: y = 3x + 2, a rate of change of 3.\")",
+   "class": "version",
+   "evidence": "changes:{\"source\":\"Typed\",\"typed\":\"1, 5\\n2, 8\\n3, 11\"}",
+   "note": "FAQ: 'the settings panel says whether they are linear and gives the line they follow'. Seen on the 'Pattern table' example.; counts when drawn on the figure's key copy (Show answers on) (owner, scope review 2026-11-19)"
+  },
+  {
+   "id": "cap-03h",
+   "text": "When the rule above the table is a blank line, give the rule in the answer key (\"The rule: y = 3x − 2\")",
+   "class": "version",
+   "evidence": "changes:show_rule=Blank line",
+   "note": "Seen on the 'Input-output table: find the rule' example.; counts when drawn on the figure's key copy (Show answers on) (owner, scope review 2026-11-19)"
+  },
+  {
+   "id": "cap-04a",
+   "text": "Write worked-out values that are whole numbers or fractions exactly, fractions in lowest terms",
+   "class": "control",
+   "evidence": "changes:rule=y = x/3",
+   "note": "'Worked-out values as' defaults to Fractions. The examples write fractions stacked (5/4, 3/2)."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Write worked-out values as decimals instead of fractions",
+   "class": "control",
+   "evidence": "changes:{\"rule\":\"y = x/3\",\"as\":\"Decimals\"}",
+   "note": "'Worked-out values as: Decimals'."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Round values to whole numbers",
+   "class": "control",
+   "evidence": "changes:{\"rule\":\"y = sqrt(x + 3)\",\"round\":\"Whole numbers\"}",
+   "note": "'Round the rest to' option 0, 'Whole numbers'."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Round values to 1, 2, 3 or 4 decimal places",
+   "class": "control",
+   "evidence": "changes:{\"rule\":\"y = sqrt(x + 3)\",\"round\":\"4 decimal places\"}",
+   "note": "'Round the rest to' options 1 to 4; 2 decimal places is the opening state."
+  },
+  {
+   "id": "cap-04e",
+   "text": "With Fractions chosen, round values that are not fractions (such as √2 or sin 1) to the chosen places and keep the fractions exact",
+   "class": "control",
+   "evidence": "changes:rule=y = sqrt(x + 3)",
+   "note": "The Numbers summary at the opening state reads 'Fractions, else 2 decimal places'. FAQ: 'Values that are not fractions, like the square root of 2, are rounded to the places you choose.'"
+  },
+  {
+   "id": "cap-04f",
+   "text": "Write \"undefined\" where the rule has no value (1/x at x = 0)",
+   "class": "core",
+   "evidence": "changes:rule=y = 1/x",
+   "note": "Bullet: 'where the rule has no value, undefined'."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Use the headings Input and Output",
+   "class": "control",
+   "evidence": "changes:heads=Input / Output",
+   "note": "Heading pairs: x / y (opening state), Input / Output, x / f(x), n / aₙ."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Use the headings x and f(x)",
+   "class": "control",
+   "evidence": "changes:heads=x / f(x)",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Use the headings n and aₙ for a sequence",
+   "class": "control",
+   "evidence": "changes:heads=n / aₙ",
+   "note": "From the page's Heading pairs, not the bullets."
+  },
+  {
+   "id": "cap-05d",
+   "text": "Type your own first heading (for x), such as Figure number",
+   "class": "control",
+   "evidence": "changes:{\"heads\":\"Your own\",\"head1\":\"Figure number\"}",
+   "note": "Example 'Pattern table': xHeading=Figure number."
+  },
+  {
+   "id": "cap-05e",
+   "text": "Type your own second heading (for y), such as Number of tiles",
+   "class": "control",
+   "evidence": "changes:{\"heads\":\"Your own\",\"head2\":\"Number of tiles\"}",
+   "note": "Example 'Pattern table': yHeading=Number of tiles."
+  },
+  {
+   "id": "cap-05f",
+   "text": "Leave a heading empty so it prints as a blank for students",
+   "class": "version",
+   "evidence": "changes:{\"heads\":\"Your own\",\"head1\":\"\"}",
+   "note": "The heading boxes' placeholder: 'Leave empty for a blank'. From the controls, not the bullets."
+  },
+  {
+   "id": "cap-05g",
+   "text": "Write a table title as text",
+   "class": "control",
+   "evidence": "changes:{\"title_kind\":\"Text\",\"title\":\"Savings plan\"}",
+   "note": "Table title: Text / Blank line / None; None is the opening state."
+  },
+  {
+   "id": "cap-05h",
+   "text": "Put a blank line in place of the table title for students",
+   "class": "version",
+   "evidence": "changes:title_kind=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-05i",
+   "text": "Write the rule above the table",
+   "class": "control",
+   "evidence": "changes:show_rule=Written",
+   "note": "'The rule, above the table': None (opening state) / Written / Blank line."
+  },
+  {
+   "id": "cap-05j",
+   "text": "Put a blank line in place of the rule above the table, so students find the rule",
+   "class": "version",
+   "evidence": "changes:{\"show_rule\":\"Blank line\",\"show_answers\":false}",
+   "note": "Example 'Input-output table': 'under a blank line after y = for the rule'. FAQ: find-the-rule question."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Run the table down in two columns (a T-chart) instead of across in two rows",
+   "class": "control",
+   "evidence": "changes:runs=Down",
+   "note": "'The table runs': Across (opening state) / Down."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Use plain headings instead of gray ones",
+   "class": "control",
+   "evidence": "changes:head_look=Plain",
+   "note": "'Headings': Gray (opening state) / Plain."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Make the labels large",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": "Label size buttons on the figure toolbar: Large / Medium (opening state) / Small."
+  },
+  {
+   "id": "cap-06d",
+   "text": "Make the labels small",
+   "class": "control",
+   "evidence": "changes:label_size=Small",
+   "note": ""
+  },
+  {
+   "id": "cap-i01",
+   "text": "Click a y value on the figure to make it a blank",
+   "class": "interaction",
+   "evidence": "handle:click:y for x = ",
+   "note": "From the Values help and the opening state's handles: 'y for x = −2: click to make a blank'."
+  },
+  {
+   "id": "cap-i02",
+   "text": "Click an x value on the figure to make it a blank",
+   "class": "interaction",
+   "evidence": "handle:click:x in column",
+   "note": "From the opening state's handles: 'x in column 1: click to make a blank'. The bullets name only 'any value'."
+  },
+  {
+   "id": "cap-i03",
+   "text": "Click a blank on the figure to fill its value back in",
+   "class": "interaction",
+   "evidence": "ui-test:figures::stats::tov::tests::clicking_a_value_blanks_it_and_clicking_again_fills_it_in",
+   "note": "Inferred, not seen: a toggle is the likely reading, but the browser here could not run the page to confirm it."
+  }
+ ]
+}
