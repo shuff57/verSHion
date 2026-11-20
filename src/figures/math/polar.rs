@@ -1173,6 +1173,8 @@ fn place(sc: &mut Scene, r: &Req, out: &mut String, to_panel: &mut Vec<String>, 
     }
     let base = b.1 + 0.72 * r.size;
     let at = match r.own { Own::Dot(c, _) => format!(r#" data-at="{:.2},{:.2}""#, c.0, c.1), _ => String::new() };
+    // a label that has to cross a gridline sits on a white plate: a line through "(4, 2)" would read as "(4, −2)"
+    if sc.soft.any_hits(b, 0.0) { out.push_str(&format!(r##"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="#fff" data-pp="plate"/>"##, b.0 - 1.5, b.1 - 1.0, b.2 - b.0 + 3.0, b.3 - b.1 + 2.0)); }
     // (a blank to write on is set as it is: the typesetter would read its underscores as subscripts)
     let body = signs(&text.split("____").map(math_tspans).collect::<Vec<_>>().join("____"));
     out.push_str(&format!(r##"<g data-lbl="{}"{at}><text x="{:.2}" y="{:.2}" font-size="{:.2}" text-anchor="start" font-family="{SERIF}" fill="#000" stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">{}</text></g>"##, esc(&r.id), b.0, base, r.size, body));
