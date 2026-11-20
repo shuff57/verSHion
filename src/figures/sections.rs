@@ -88,6 +88,16 @@ static LIMITS: [RefSection; 7] = [
     s("Grid and copies", &["minor", "grid", "square", "style", "show_answers", "stu_hide_kinds", "stu_hide_asym"], "Turn off Show answers for the student copy: each answer becomes a line to write on; Student + key exports both."),
 ];
 
+static POLAR_PARAMETRIC: [RefSection; 7] = [
+    s("Curves", &["curves", "theta_from", "theta_to", "t_from", "t_to", "style1", "style2", "style3", "style4", "eq_labels", "arrows"], "One curve a line; drag T along curve 1 on the figure."),
+    s("Points", &["points", "marks_at", "mark_curve", "pt_labels", "values", "dec"], "Drag a point on the grid to set its r and \u{3b8}."),
+    s("Tracer and tangent", &["tracer", "trace_at", "tangent", "tangent_at", "tangent_curve"], ""),
+    s("Shading", &["shade", "shade_in", "shade_out", "shade_from", "shade_to", "show_area"], ""),
+    s("Grid", &["grid_kind", "rays", "ray_labels", "rmax", "rstep", "xmin", "xmax", "xstep", "ymin", "ymax", "ystep", "grid", "numbers"], ""),
+    s("Titles", &["title_mode", "title", "label_size", "style"], ""),
+    s("Student copy", &["show_answers", "student_copy", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
 static TANGENT_SECANT: [RefSection; 7] = [
     s("Function", &["func", "fname", "var", "a", "h", "more_h", "more_a"], "Drag P or Q along the curve on the figure; Q's drag changes h."),
     s("Lines", &["show_tangent", "show_secant", "normal", "tangent_style", "secant_style", "normal_style", "extent"], ""),
@@ -1333,6 +1343,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "volume-reading" => &FIG_48,
         "waves" => &FIG_49,
         "tangent-secant-lines" => &TANGENT_SECANT,
+        "polar-parametric" => &POLAR_PARAMETRIC,
         _ => return None,
     })
 }

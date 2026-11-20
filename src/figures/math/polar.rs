@@ -144,7 +144,22 @@ fn rat_decimal(p: i128, q: i128, dec: usize) -> Option<String> {
 pub(crate) fn vtext(v: &Val, c: &Ctx) -> (String, bool) {
     if let Some(e) = &v.ex {
         if c.exact { if let Some(s) = ex::text(e, v.dec_ok) { return (s, true); } }
-        if let Some((p, q)) = e.rational() { if let Some(s) = rat_decimal(p, q, c.dec) { return (s, true); } }
+        if let Some((p, q)) = e.rational() {
+            if let Some(s) = rat_decimal(p, q, c.dec) { return (s, true); }
+            // a rational rounded exactly (half away from zero, so 1/160 is 0.0063), to the places `decimal` shows
+            let av = v.v.abs();
+            let places = if av != 0.0 && av >= 1e-6 && av < 0.1 { c.dec.max(((-av.log10()).ceil() as usize + 1).min(12)) } else { c.dec };
+            if let Some(k) = 10i128.checked_pow(places as u32) {
+                if let Some(twice) = p.checked_mul(k).and_then(|n| n.checked_mul(2)) {
+                    let scaled = (twice + q * twice.signum()) / (2 * q);
+                    let (ip, fp) = (scaled.abs() / k, scaled.abs() % k);
+                    let f = format!("{fp:0places$}");
+                    let f = f.trim_end_matches('0');
+                    let sign = if scaled < 0 { "\u{2212}" } else { "" };
+                    return (if f.is_empty() { if ip == 0 { "0".into() } else { format!("{sign}{ip}") } } else { format!("{sign}{ip}.{f}") }, false);
+                }
+            }
+        }
     }
     (tangent::decimal(v.v, c.dec), false)
 }
@@ -526,6 +541,8 @@ fn exact_at(n: &Node, s: &Val) -> Option<Ex> {
 /// A tree's value at s: exact where derived, else the float (None where undefined or at a pole).
 pub(crate) fn value_at(n: &Node, s: &Val, dec_ok: bool) -> Option<Val> {
     if let Some(e) = s.ex.as_ref() { if ex::zero_at(n, e) { return None; } }
+    // an exact value is taken as it is (√(cos 2θ) at 3π/4 is 0, where the float cos gives −1.8·10⁻¹⁶ and no root)
+    if let Some(e) = exact_at(n, s) { return Some(Val::exact(e, dec_ok || s.dec_ok)); }
     let v = ex::eval_strict(n, s.v).filter(|v| v.abs() < 1e9)?;
     // an enormous value at an exact pole (tan(π/2) = 1.6e16 from rounding π) is undefined: the values either side are far smaller
     if v.abs() > 1e7 { let d = 1e-6 * s.v.abs().max(1.0); let near = [s.v - d, s.v + d].map(|w| ex::eval(n, w).abs()); if near.iter().any(|w| !w.is_finite() || v.abs() > 1e4 * w) { return None; } }
@@ -606,14 +623,14 @@ pub(crate) fn region(p: &Params, cs: &[Curve], notes: &mut Vec<String>) -> Optio
     let n = 2000;
     let th = |k: usize| a.v + (b.v - a.v) * k as f64 / n as f64;
     let vals = |c: &Curve| -> Option<Vec<f64>> { (0..=n).map(|k| { let t = th(k); c.r(t).or_else(|| c.r(t + if k == 0 { 1e-12 } else { -1e-12 })) }).collect() };
-    let Some(fv) = vals(f) else { notes.push(format!("Shading: r = \u{2026} of curve {i} is undefined for some \u{3b8} between the angles; choose angles where it is defined.")); return None; };
+    let Some(fv) = vals(f) else { notes.push(format!("Shading: r of curve {i} is undefined or grows without bound for some \u{3b8} between the angles; choose angles where it is defined.")); return None; };
     let fmax = fv.iter().fold(0.0f64, |m, v| m.max(v.abs())).max(1e-300);
     let tol = 1e-9 * fmax;
     let nonneg = fv.iter().all(|v| *v >= -tol);
     let nonpos = fv.iter().all(|v| *v <= tol);
     let changes = |v: &[f64]| v.iter().enumerate().find(|(_, x)| **x < -tol).map(|(k, _)| th(k));
     if let Some(g) = g {
-        let Some(gv) = vals(g) else { notes.push(format!("Shading: r of curve {o} is undefined for some \u{3b8} between the angles; choose angles where it is defined.")); return None; };
+        let Some(gv) = vals(g) else { notes.push(format!("Shading: r of curve {o} is undefined or grows without bound for some \u{3b8} between the angles; choose angles where it is defined.")); return None; };
         let gtol = 1e-9 * gv.iter().fold(0.0f64, |m, v| m.max(v.abs())).max(1e-300);
         if !nonneg || gv.iter().any(|v| *v < -gtol) {
             let which = if !nonneg { i } else { o };

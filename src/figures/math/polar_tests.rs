@@ -378,3 +378,92 @@ fn exact_polar_form_is_derived() {
     assert_eq!(ex::text(&r.unwrap(), false).unwrap(), "\u{221a}5");
     assert!(t.is_none());
 }
+
+// ───────────────────────── the independent sweep ─────────────────────────
+
+/// A written exact value read back by the grid's own reader (independent of the exact arithmetic that wrote it).
+fn read_back(t: &str) -> f64 {
+    let mut s = t.replace('\u{2212}', "-").replace('\u{3c0}', "(pi)").replace(' ', "");
+    while let Some(i) = s.find('\u{221a}') {
+        let rest = &s[i + '\u{221a}'.len_utf8()..];
+        let n: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        s = format!("{}sqrt({n}){}", &s[..i], &rest[n.len()..]);
+    }
+    super::eval(&s, 0.0).unwrap_or_else(|| panic!("cannot read back {t} ({s})"))
+}
+/// A written value: when it says "=" (exact), it must be the true value; otherwise it must be the true value rounded.
+fn written_ok(v: &polar::Val, truth: f64, c: &polar::Ctx) -> Result<bool, String> {
+    let (t, exact) = polar::vtext(v, c);
+    if exact {
+        let back = read_back(&t);
+        if (back - truth).abs() > 1e-9 * (1.0 + truth.abs()) { return Err(format!("{t} = {back}, true {truth}")); }
+    } else {
+        // every digit shown is right: the true value is within half a unit of the last place written
+        // (trailing zeros are not written: 0.540 is 0.54, so the bound is at the places asked for, or more where shown)
+        let places = (t.split('.').nth(1).map(|x| x.len()).unwrap_or(0) as i32).max(c.dec as i32);
+        let back = read_back(&t);
+        if (back - truth).abs() > 0.5 * 10f64.powi(-places) * (1.0 + 1e-9) + 1e-12 * truth.abs() { return Err(format!("{t} \u{2248}, true {truth}")); }
+    }
+    Ok(exact)
+}
+fn close(a: f64, b: f64) -> bool { (a - b).abs() <= 1e-9 * (1.0 + b.abs()) }
+
+/// Every point, slope and area the sympy/mpmath sweep worked out (111 curves), compared with the figure's values and with
+/// what it writes, exact and rounded.
+#[test]
+fn the_sweep_agrees_with_sympy() {
+    let data: serde_json::Value = serde_json::from_str(include_str!("polar_oracles.json")).unwrap();
+    let curve = |row: &str| { let p = with(&[("curves", s(row))]); polar::curves_of(&p, &mut vec![]).into_iter().next().unwrap_or_else(|| panic!("{row}")) };
+    let (ce, cr) = (polar::Ctx { exact: true, dec: 2, deg: false }, polar::Ctx { exact: false, dec: 3, deg: false });
+    let mut bad: Vec<String> = vec![];
+    let (mut n_pts, mut n_exact, mut n_sl, mut n_ar, mut n_ar_exact, mut n_near) = (0, 0, 0, 0, 0, 0);
+    for e in data["points"].as_array().unwrap() {
+        let c = curve(e["curve"].as_str().unwrap());
+        let at = e["at"].as_str().unwrap();
+        let sv = polar::read_val(at, c.polar).unwrap();
+        let got = polar::point_on(&c, &sv);
+        n_pts += 1;
+        if !e["defined"].as_bool().unwrap() { if got.is_some() { bad.push(format!("{} at {at}: defined", c.shown)); } continue; }
+        let Some((x, y, r)) = got else { bad.push(format!("{} at {at}: undefined", c.shown)); continue };
+        for (name, v, key) in [("x", Some(x), "x"), ("y", Some(y), "y"), ("r", r, "r")] {
+            let (Some(v), Some(truth)) = (v, e[key].as_f64()) else { continue };
+            if !close(v.v, truth) { bad.push(format!("{} at {at}: {name} = {}, true {truth}", c.shown, v.v)); }
+            for c2 in [&ce, &cr] { match written_ok(&v, truth, c2) { Ok(true) => n_exact += 1, Ok(false) => {}, Err(m) => bad.push(format!("{} at {at}: {name} written {m}", c.shown)) } }
+        }
+    }
+    for e in data["slopes"].as_array().unwrap() {
+        let c = curve(e["curve"].as_str().unwrap());
+        let at = e["at"].as_str().unwrap();
+        let t = polar::tangent_at(&c, &polar::read_val(at, c.polar).unwrap());
+        n_sl += 1;
+        let ok = match (e["kind"].as_str().unwrap(), &t.slope) {
+            ("finite", Slope::Finite(m)) => {
+                let truth = e["slope"].as_f64().unwrap();
+                if !close(m.v, truth) { bad.push(format!("{} at {at}: slope {} true {truth}", c.shown, m.v)); }
+                for c2 in [&ce, &cr] { if let Err(msg) = written_ok(m, truth, c2) { bad.push(format!("{} at {at}: slope written {msg}", c.shown)); } }
+                true
+            }
+            ("vertical", Slope::Vertical) | ("zero_over_zero", Slope::ZeroOverZero) | ("undefined", Slope::Undefined(_)) => true,
+            // at an angle with no exact form (θ = 1) a zero dx/dθ is only zero to within rounding: the figure says it
+            // cannot write the slope, which is honest
+            ("vertical", Slope::NearlyVertical) => { n_near += 1; true }
+            _ => false,
+        };
+        if !ok { bad.push(format!("{} at {at}: {} but the figure says {:?}", c.shown, e["kind"], t.slope)); }
+    }
+    for e in data["areas"].as_array().unwrap() {
+        let rows = e["curves"].as_str().unwrap();
+        let two = rows.contains('\n');
+        let p = with(&[("curves", s(rows)), ("points", s("")), ("tracer", b(false)), ("shade", s(polar::SHADE[if two { 2 } else { 1 }])), ("shade_from", s(e["from"].as_str().unwrap())), ("shade_to", s(e["to"].as_str().unwrap())), ("rmax", f(10.0))]);
+        let o = build(&p);
+        n_ar += 1;
+        let truth = e["area"].as_f64().unwrap();
+        let Some(ar) = o.region.as_ref().and_then(|r| r.area.clone()) else { bad.push(format!("{rows:?} {}..{}: no area ({:?})", e["from"], e["to"], o.notes)); continue };
+        if !close(ar.v, truth) { bad.push(format!("{rows:?} {}..{}: area {} true {truth}", e["from"], e["to"], ar.v)); }
+        for c2 in [&ce, &cr] { match written_ok(&ar, truth, c2) { Ok(true) => if c2.exact { n_ar_exact += 1 }, Ok(false) => {}, Err(m) => bad.push(format!("{rows:?} {}..{}: area written {m}", e["from"], e["to"])) } }
+        // the inside/outside cases sympy integrated exactly are written exactly
+        if e.get("exact").is_some() && !polar::vtext(&ar, &ce).1 { bad.push(format!("{rows:?}: {} not written exactly ({})", e["exact"], polar::vtext(&ar, &ce).0)); }
+    }
+    println!("sweep: {} curves, {n_pts} points ({n_exact} values written exactly), {n_sl} slopes ({n_near} nearly vertical, said so), {n_ar} areas ({n_ar_exact} exact); {} faults", data["curves"], bad.len());
+    assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+}
