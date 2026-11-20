@@ -312,3 +312,121 @@ fn a_graph_wholly_outside_its_y_window_is_said() {
     let p = with(&[("f", s("(x-8)/(x^(1/3)-2)")), ("xmin", f(1.0)), ("xmax", f(12.0)), ("ymin", f(0.0)), ("ymax", f(20.0)), ("tracer", b(false))]);
     assert!(!warnings(&p).iter().any(|t| t.contains("outside the window: its values")));
 }
+
+
+#[test]
+fn derivative_domain_guards_do_not_depend_on_a_sampling_window() {
+    // Neither invalid stretch lands on the old 1500-step domain-discovery grid. Domain masks must
+    // nevertheless survive differentiation, including for a window wholly inside the valid domain.
+    for fx in ["ln((x-0.0001)^2-0.0000000001)","ln(cos(750*pi*x))","sqrt(x)^2","e^(ln(x))","ln(ln(x))"] {
+        let p=with(&[("f",s(fx)),("show_fpp",b(true)),("tracer",b(false))]);
+        let m=model(&p,(-2.0,2.0)).unwrap();
+        for k in 1..=2 {
+            assert!(domain::needs_guard(&m,0,k,(-2.0,2.0)),"{fx}, derivative {k}: lost typed domain");
+            let row=domain::row_body(&m,0,k,(-2.0,2.0));
+            assert!(row.contains("+0*"),"{fx}: {row}");
+            assert_eq!(row,domain::row_body(&m,0,k,(2.0,3.0)),"{fx}: a window-dependent domain mask");
+        }
+    }
+    // Independent ordinary samples of each typed domain, evaluated through the row the plotter reads.
+    for (fx,bad,good) in [("ln(x)",-1.0,2.0),("ln(4-x^2)",3.0,1.0),("x*ln(x)",-1.0,2.0),
+        ("sqrt(x)^2",-1.0,2.0),("e^(ln(x))",-1.0,2.0),("ln(ln(x))",0.5,2.0)] {
+        let p=with(&[("f",s(fx))]); let m=model(&p,(-3.0,5.0)).unwrap();
+        for k in 1..=2 {
+            let row=domain::row_body(&m,0,k,(-3.0,5.0));
+            assert!(eval(&row,bad).is_none_or(|v|!v.is_finite()),"{fx}: derivative {k} outside domain");
+            assert!(eval(&row,good).is_some_and(|v|v.is_finite()),"{fx}: derivative {k} disappeared");
+        }
+    }
+}
+
+#[test]
+fn simplifying_zero_products_or_powers_cannot_erase_the_typed_domain() {
+    for fx in ["0*ln(x)","(ln(x)^2+1)^0","0*sqrt(x)","e^(0*ln(x))","1^ln(x)"] {
+        let p=with(&[("f",s(fx)),("show_fpp",b(true)),("tracer",b(false))]);
+        let m=model(&p,(-3.0,3.0)).unwrap();
+        for k in 0..=2 {
+            assert!(m.d(k,-1.0).is_none(),"{fx}: derivative {k} outside typed domain");
+            assert!(m.d(k,1.0).is_some(),"{fx}: derivative {k} missing inside typed domain");
+            let row=domain::row_body(&m,0,k,(-3.0,3.0));
+            assert!(eval(&row,-1.0).is_none_or(|v|!v.is_finite()),"{fx}: unguarded row {row}");
+            assert!(eval(&row,1.0).is_some_and(|v|v.is_finite()),"{fx}: lost row {row}");
+        }
+    }
+}
+
+#[test]
+#[ignore = "foreground check-8 PNG evidence and timing"]
+fn check8_png_evidence_and_timing() {
+    let Ok(dir)=std::env::var("DG_PNG") else { return };
+    std::fs::create_dir_all(&dir).unwrap();
+    let examples=[
+        ("ln-x","ln(x)",-3.0,5.0,"1"),
+        ("ln-quadratic","ln(4-x^2)",-3.0,3.0,"1"),
+        ("x-ln-x","x*ln(x)",-2.0,3.0,"1"),
+        ("tan-pole","tan(x)",-3.0,3.0,"pi/2"),
+        ("rational-piece","(x^2-1)/(x-1), x<1; 3, x=1; (x^2-1)/(x-1), x>1",-3.0,3.0,"1"),
+        ("polynomial-piece","x^2, x<2; 1, x=2; x^2, x>2",-1.0,3.0,"2"),
+        ("linear-piece","x+1, x<1; 3, x=1; x+1, x>1",-3.0,3.0,"1"),
+        ("sinc-piece","sin(x)/x, x<0; 0, x=0; sin(x)/x, x>0",-3.0,3.0,"0"),
+    ];
+    let mut max=std::time::Duration::ZERO;
+    for (name,fx,a,z,tx) in examples {
+        for (suffix,answers,print) in [("key",true,false),("student",false,false),("print",true,true)] {
+            let p=with(&[("f",s(fx)),("xmin",f(a)),("xmax",f(z)),("ymin",f(-2.0)),("ymax",f(10.0)),
+                ("show_fpp",b(true)),("tracer",b(true)),("tracer_x",s(tx)),("key_list",b(true)),
+                (crate::figures::SHOW_ANSWERS,b(answers)),("style",s(if print {"Print"}else{"Colour"}))]);
+            let t=std::time::Instant::now(); let svg=render(&p); let elapsed=t.elapsed(); max=max.max(elapsed);
+            assert!(elapsed.as_secs_f64()<0.5,"{name}-{suffix}: {elapsed:?}");
+            std::fs::write(format!("{dir}/{name}-{suffix}.svg"),&svg).unwrap();
+            std::fs::write(format!("{dir}/{name}-{suffix}.png"),crate::figures::to_png(&svg,1.0).unwrap()).unwrap();
+        }
+    }
+    eprintln!("check 8: 24 evidence renders; maximum {max:?}");
+}
+
+
+#[test]
+fn domain_masks_do_not_confuse_overflow_with_an_unrestricted_positive_argument() {
+    // exp(x²)>0 everywhere, so sqrt(exp(x²)) is real everywhere, including where its float overflows.
+    // Its zeroth power is 1 and its derivatives are 0; no domain mask may remove the large-x branches.
+    let p=with(&[("f",s("sqrt(e^(x^2))^0"))]); let m=model(&p,(-40.0,40.0)).unwrap();
+    for k in 0..=2 {
+        let row=domain::row_body(&m,0,k,(-40.0,40.0));
+        assert!(m.d(k,30.0).is_some());
+        assert!(eval(&row,30.0).is_some_and(|v|v.is_finite()),"{row}");
+    }
+}
+
+#[test]
+#[ignore = "foreground worst-case check-8 render timing"]
+fn check8_stress_render_time() {
+    let mut max=std::time::Duration::ZERO;
+    for layout in LAYOUTS {
+        for size in ["Small","Medium","Large"] {
+            for print in [false,true] {
+                let p=with(&[("f",s("sin(x)/tan(x)")),("xmin",f(-4.0)),("xmax",f(4.0)),
+                    ("show_fpp",b(true)),("tracer",b(true)),("tracer_x",s("pi/4")),("key_list",b(true)),
+                    ("extrema",b(true)),("inflect",b(true)),("crit",b(true)),("incdec",b(true)),("concavity",b(true)),
+                    ("sign_fp",b(true)),("sign_fpp",b(true)),("absolute",b(true)),("abs_a",s("-4")),("abs_b",s("4")),
+                    ("layout",s(layout)),("label_size",s(size)),("style",s(if print {"Print"}else{"Colour"}))]);
+                let t=std::time::Instant::now(); let _=build(&p); let time=t.elapsed(); max=max.max(time);
+                assert!(time.as_secs_f64()<0.5,"{layout}, {size}, Print={print}: {time:?}");
+            }
+        }
+    }
+    eprintln!("check 8: 12 all-option sin(x)/tan(x) renders; maximum {max:?}");
+}
+
+
+#[test]
+fn an_isolated_given_value_is_kept_on_the_student_function_graph() {
+    let fx="x^2, x<2; 1, x=2; x^2, x>2";
+    for copy in [STUDENT[0],STUDENT[1]] {
+        let p=with(&[("f",s(fx)),("xmin",f(-1.0)),("xmax",f(3.0)),("ymin",f(-1.0)),("ymax",f(10.0)),
+            (crate::figures::SHOW_ANSWERS,b(false)),("student_copy",s(copy)),("tracer",b(false))]);
+        let bl=build(&p); let pn=&bl.panels[0];
+        assert!(bl.dots.iter().any(|q|(q.0-pn.sx(2.0)).abs()<0.01 && (q.1-pn.sy(1.0)).abs()<0.01),"{copy}: given value vanished");
+        assert!(bl.svg.contains("given-point"),"{copy}: supplied value was not drawn");
+    }
+}

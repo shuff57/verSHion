@@ -2202,6 +2202,22 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             }
         }
     }
+    // A value supplied by a single-point piece belongs to the given function, not the answer overlay.
+    // Keep it on student copies too; otherwise the open limit circle would describe a different function.
+    if let (Some(m),Some(kf))=(&model,panel_of(0)) {
+        if matches!(m.mode,Mode::F) && shows(p,0) {
+            let pn=&panels[kf];
+            for pc in &m.pieces { for iv in &pc.dom {
+                if iv.lo!=iv.hi || !iv.lo.is_finite() { continue; }
+                let x=iv.lo;
+                let xe=pc.bounds.iter().find(|(v,_)|*v==x).and_then(|(_,pv)|pv.ex.as_ref());
+                let Some(y)=m.f_at(x,xe) else { continue; };
+                if !inside(pn,x,y) { continue; }
+                let q=(pn.sx(x),pn.sy(y));
+                if !dots.iter().any(|(at,_)|(at.0-q.0).abs()<0.01 && (at.1-q.1).abs()<0.01) { dots.push((q,"given-point")); }
+            } }
+        }
+    }
     // dots and guides are obstacles for the labels
     for (q, _) in &dots { room.boxes.push([q.0 - 6.5, q.1 - 6.5, q.0 + 6.5, q.1 + 6.5]); room.pts.push(*q); }
     if let Some(q) = through { room.pts.push(q); }
@@ -2391,6 +2407,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             "infl" => format!(r##"<rect x="{:.2}" y="{:.2}" width="8.5" height="8.5" fill="{ink}" stroke="#fff" stroke-width="1.2" transform="rotate(45 {:.2} {:.2})" data-mark="infl"/>"##, q.0 - 4.25, q.1 - 4.25, q.0, q.1),
             "open" => format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="#fff" stroke="{ink}" stroke-width="2" data-mark="open"/>"##, q.0, q.1),
             "tracer" => format!(r##"<circle cx="{:.2}" cy="{:.2}" r="5" fill="{trace_col}" stroke="#fff" stroke-width="1.5" data-mark="tracer"/>"##, q.0, q.1),
+            "given-point" => format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="{ink}" stroke="#fff" stroke-width="1.2" data-mark="given-point"/>"##, q.0, q.1),
             "end" => format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="{ink}" stroke="#fff" stroke-width="1.2" data-mark="end"/>"##, q.0, q.1),
             _ => format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="{ink}" stroke="#fff" stroke-width="1.2" data-mark="crit"/>"##, q.0, q.1),
         });

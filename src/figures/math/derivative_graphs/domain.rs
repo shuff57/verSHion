@@ -3,33 +3,98 @@
 //! grid's own reader has no value wherever f has none and every drawn point of f′ and f″ lies over a point of f.
 use super::*;
 
-/// Whether the k-th derivative row of piece `pi` has a value on a stretch of the window where the typed expression has
-/// none (an isolated point, such as a removable hole, is not a stretch: the holes are drawn by their own code).
-pub(super) fn needs_guard(m: &Model, pi: usize, k: usize, win: (f64, f64)) -> bool {
-    let pc = &m.pieces[pi];
-    if k == 0 { return false; }
-    let d = &pc.d[k - 1];
-    let n = 1500;
-    let step = (win.1 - win.0) / n as f64;
-    let e_ok = |x: f64| sym::ev(&pc.e, x).is_finite();
-    (0..=n).any(|i| {
-        let x = win.0 + step * i as f64;
-        in_dom(&pc.dom, x) && !e_ok(x) && sym::ev(d, x).is_finite()
-            && !(e_ok(x - 0.3 * step) && e_ok(x + 0.3 * step))
-    })
+/// The typed expression's real-domain obligations, retained even when differentiation or algebra removes
+/// the corresponding operation. This is structural: narrow gaps and periodic aliasing cannot hide a constraint.
+fn positive(e: &Ex) -> bool {
+    use sym::{Ex::*,F};
+    match e {
+        Num(n)=>*n>0.0, E|Pi|Fun(F::Exp,_)=>true,
+        Pow(a,_)=>positive(a),
+        Add(a,b)=>(positive(a)&&nonnegative(b))||(positive(b)&&nonnegative(a)),
+        Mul(a,b)|Div(a,b)=>positive(a)&&positive(b),
+        _=>false,
+    }
 }
-
-/// The grid row's body for the k-th derivative of piece `pi`: the derivative, with no value wherever the typed f has
-/// none (0·f is 0 where f has a value and has none where f has none, as the grid reads it).
-pub(super) fn row_body(m: &Model, pi: usize, k: usize, win: (f64, f64)) -> String {
-    let pc = &m.pieces[pi];
-    let e = if k == 0 { &pc.e } else { &pc.d[k - 1] };
-    let body = sym::print(e);
-    if !needs_guard(m, pi, k, win) { return body; }
-    let guard = sym::print(&pc.e);
-    let row = format!("({body})+0*({guard})");
-    // (the grid reads at most 4000 characters a row)
-    if row.len() < 3500 { row } else { body }
+fn nonnegative(e: &Ex) -> bool {
+    use sym::{Ex::*,F};
+    match e {
+        Num(n)=>*n>=0.0, Fun(F::Abs|F::Sqrt,_)=>true,
+        Pow(_,b) if sym::konst(b).is_some_and(|k| k>0.0 && k.fract()==0.0 && k%2.0==0.0)=>true,
+        Add(a,b)|Mul(a,b)=>nonnegative(a)&&nonnegative(b),
+        _=>positive(e),
+    }
+}
+fn nonzero(e: &Ex) -> bool {
+    match e { Ex::Num(n)=>*n!=0.0, Ex::Neg(a)=>positive(a), _=>positive(e) }
+}
+fn constraints(e: &Ex, out: &mut Vec<Ex>) {
+    use sym::{Ex::*,F};
+    let mut add=|guard:Ex| { if !out.contains(&guard) { out.push(guard); } };
+    match e {
+        Div(_,b) if !nonzero(b)=>add(sym::div(Num(1.0),(**b).clone())),
+        Fun(F::Ln|F::Log,a) if !positive(a)=>add(Fun(F::Ln,a.clone())),
+        Fun(F::Sqrt,a) if !nonnegative(a)=>add(Fun(F::Sqrt,a.clone())),
+        Fun(F::Tan|F::Sec,a)=>add(sym::div(Num(1.0),Fun(F::Cos,a.clone()))),
+        Fun(F::Cot|F::Csc,a)=>add(sym::div(Num(1.0),Fun(F::Sin,a.clone()))),
+        Fun(F::Asin|F::Acos,a)=>add(Fun(F::Sqrt,Box::new(sym::sub(Num(1.0),sym::pow((**a).clone(),Num(2.0)))))),
+        Fun(F::Asec|F::Acsc,a)=>add(Fun(F::Sqrt,Box::new(sym::sub(sym::pow((**a).clone(),Num(2.0)),Num(1.0))))),
+        Pow(a,b)=> {
+            if let Some(k)=sym::konst(b) {
+                // Use the same real odd-root convention as the typed evaluator, without recognising output values.
+                if !nonnegative(a) && k.fract()!=0.0 && !sym::ratio(k,15).is_some_and(|(_,q)| q%2==1) { add(Fun(F::Sqrt,a.clone())); }
+                if k<0.0 && !nonzero(a) { add(sym::div(Num(1.0),(**a).clone())); }
+            } else if !sym::konst(a).is_some_and(|a|a>0.0) { add(e.clone()); }
+        }
+        LogB(base,arg)=> {
+            if !positive(base) { add(Fun(F::Ln,base.clone())); }
+            if !positive(arg) { add(Fun(F::Ln,arg.clone())); }
+            add(sym::div(Num(1.0),Fun(F::Ln,base.clone())));
+        }
+        _=>{}
+    }
+    match e {
+        Neg(a)|Fun(_,a)=>constraints(a,out),
+        Add(a,b)|Sub(a,b)|Mul(a,b)|Div(a,b)|Pow(a,b)|LogB(a,b)=> { constraints(a,out); constraints(b,out); }
+        _=>{}
+    }
+}
+pub(super) fn has_constraints(e: &Ex) -> bool {
+    let mut guards=vec![]; constraints(e,&mut guards); !guards.is_empty()
+}
+fn guarded_body(typed: &Ex, derived: &Ex) -> String {
+    let mut body=sym::print(derived);
+    let mut guards=vec![]; constraints(typed,&mut guards);
+    // Always enforce the source domain explicitly, even when the derived tree contains the same
+    // operations. IEEE rules such as 1^NaN=1 can erase an undefined operand during grid evaluation.
+    for guard in guards { body=format!("({body})+0*({})",sym::print(&guard)); }
+    // Never fall back to an unguarded derivative if a row exceeds the reader's length limit. The grid refuses
+    // an overlong row with its existing panel note, rather than drawing an expression on the wrong domain.
+    body
+}
+pub(super) fn needs_guard(m: &Model, pi: usize, k: usize, _win: (f64,f64)) -> bool {
+    k>0 && has_constraints(&m.pieces[pi].e)
+}
+pub(super) fn row_body(m: &Model, pi: usize, k: usize, _win: (f64,f64)) -> String {
+    let pc=&m.pieces[pi];
+    if k==0 {
+        // IEEE powers such as NaN^0 or 1^NaN can hide a missing inner value in the grid evaluator.
+        // Keep the typed domain explicit on f itself when one of these operators occurs.
+        fn masks_missing(e: &Ex) -> bool {
+            use sym::Ex::*;
+            match e {
+                Pow(a,b) if sym::konst(b)==Some(0.0) || sym::konst(a)==Some(1.0)=>true,
+                Neg(a)|Fun(_,a)=>masks_missing(a),
+                Add(a,b)|Sub(a,b)|Mul(a,b)|Div(a,b)|Pow(a,b)|LogB(a,b)=>masks_missing(a)||masks_missing(b),
+                _=>false,
+            }
+        }
+        let mut body=sym::print(&pc.e);
+        if masks_missing(&pc.e) {
+            let mut guards=vec![]; constraints(&pc.e,&mut guards);
+            for g in guards { body=format!("({body})+0*({})",sym::print(&g)); }
+        }
+        body
+    } else { guarded_body(&pc.e,&pc.d[k-1]) }
 }
 
 /// The open ends of f's domain inside the window (f has a value on one side only, and none at the end itself), with the
@@ -149,14 +214,13 @@ pub(super) fn kink_rows(m: &Model, pi: usize, fi: usize, k: usize, win: (f64, f6
         let from = if matches!(m.mode, Mode::F) { 0 } else { 1 };
         m.f(c).is_some() && (from..=fi).all(|n| match (value(i, n, c), value(i + 1, n, c)) { (Some(l), Some(r)) => (l - r).abs() <= 1e-9 * (1.0 + l.abs()), _ => false })
     }).collect();
-    let guard = needs_guard(m, pi, k, win).then(|| sym::print(&pc.e));
     let base = holes::domain(m, pi);
     let mut rows = vec![];
     for j in 0..ends.len() - 1 {
         let (f, r) = &forms[j];
         let e = r.as_ref().and_then(|r| r.get(fi).map(|q| q.ex())).or_else(|| f.get(fi).cloned().flatten())?;
-        let body = sym::print(&e);
-        let body = match &guard { Some(g) => format!("({body})+0*({g})"), None => body };
+        // Specialising an absolute-value piece may remove additional domain-bearing terms.
+        let body = guarded_body(&pc.e,&e);
         if body.len() > 3500 { return None; }
         let mut seg = vec![];
         if j > 0 { seg.push(format!("x {} {:?}", if joined[j - 1] { ">=" } else { ">" }, ends[j])); }

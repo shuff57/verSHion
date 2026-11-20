@@ -198,6 +198,9 @@ fn ev_with(e: &Ex, x: f64, odd: bool) -> f64 {
         Div(a, b) => { let d = r(b); if odd && d == 0.0 { f64::NAN } else { r(a) / d } }
         Pow(a, b) => {
             let (u, c) = (r(a), r(b));
+            // A typed partial expression must have a value before applying a power. IEEE NaN^0=1 and
+            // 0^negative=∞ must not turn an undefined logarithm/reciprocal into a real function value.
+            if odd && (u.is_nan() || c.is_nan() || (u == 0.0 && c < 0.0)) { return f64::NAN; }
             if odd && u < 0.0 && !has_x(b) {
                 if let Some((p, _)) = odd_root(c) { let m = (-u).powf(c); return if p % 2 == 0 { m } else { -m }; }
             }
@@ -420,10 +423,18 @@ pub(crate) fn simplify(e: &Ex, deriv: bool) -> Ex {
         Neg(a) => neg(s(a)),
         Add(a, b) => add(s(a), s(b)),
         Sub(a, b) => { let (a, b) = (s(a), s(b)); if deriv && a == b { Num(0.0) } else { sub(a, b) } }
-        Mul(a, b) => merge_powers(mul(s(a), s(b)), deriv),
+        Mul(a, b) => {
+            let (a,b)=(s(a),s(b));
+            // 0·ln x is zero only where ln x exists. Preserve this obligation in the typed function;
+            // derivatives may simplify it, since their rows retain the typed domain separately.
+            if !deriv && ((val(&a)==Some(0.0) && super::domain::has_constraints(&b)) || (val(&b)==Some(0.0) && super::domain::has_constraints(&a))) {
+                Mul(bx(a),bx(b))
+            } else { merge_powers(mul(a,b),deriv) }
+        },
         Div(a, b) => { let (a, b) = (s(a), s(b)); if deriv && a == b && has_x(&a) { Num(1.0) } else { div(a, b) } }
         Pow(a, b) => {
             let (a, b) = (s(a), s(b));
+            if !deriv && val(&b)==Some(0.0) && super::domain::has_constraints(&a) { return Pow(bx(a),bx(b)); }
             if deriv && a == E { if let Fun(F::Ln, u) = &b { return (**u).clone(); } }
             // (√u to an even power, where √u has a value: (√x)² = x)
             if deriv { if let (Fun(F::Sqrt, u), Some(k)) = (&a, val(&b)) { if k > 0.0 && k.fract() == 0.0 && (k as i64) % 2 == 0 { return if k == 2.0 { (**u).clone() } else { pow((**u).clone(), Num(k / 2.0)) }; } } }
