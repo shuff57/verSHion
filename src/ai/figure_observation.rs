@@ -198,17 +198,38 @@ fn format_retry(prompt: &str, error: &str) -> String {
     )
 }
 
+/// A mark kind outside the schema's list (holdout v6: "arrowheads") is a mark the list has no
+/// name for, which is what "other" means: it becomes "other" with the reader's word kept at the
+/// front of its locations. Counts and locations are untouched, and nothing else is repaired.
+fn other_mark_kinds(facts: &mut Value, schema: &OutputSchema) {
+    let Some(allowed) = schema.schema.pointer("/properties/marks/items/properties/kind/enum").and_then(Value::as_array) else { return };
+    if !allowed.iter().any(|k| k == "other") {
+        return;
+    }
+    for mark in facts.get_mut("marks").and_then(Value::as_array_mut).into_iter().flatten() {
+        let Some(kind) = mark.get("kind").and_then(Value::as_str).map(str::to_string) else { continue };
+        if allowed.iter().any(|k| k == kind.as_str()) {
+            continue;
+        }
+        mark["kind"] = Value::String("other".into());
+        if let Some(at) = mark.get("locations").and_then(Value::as_str).map(str::to_string) {
+            mark["locations"] = Value::String(format!("{kind}: {at}"));
+        }
+    }
+}
+
 fn read_description(
     text: &str,
     schema: &OutputSchema,
 ) -> Result<Value, (String, ObservationErrorStage)> {
     // A lone backslash meant literally in prose is escaped; nothing else is repaired.
-    let (facts, _) = vershion_ai_core::parse_model_json(text).ok_or_else(|| {
+    let (mut facts, _) = vershion_ai_core::parse_model_json(text).ok_or_else(|| {
         (
             "Source observations were not valid JSON.".to_string(),
             ObservationErrorStage::DescriptionFormat,
         )
     })?;
+    other_mark_kinds(&mut facts, schema);
     schema
         .validate(&facts)
         .map_err(|e| (e, ObservationErrorStage::DescriptionSchema))?;
@@ -460,6 +481,20 @@ mod tests {
         }
         facts
     }
+    #[test]
+    fn an_unlisted_mark_kind_is_read_as_other_with_the_readers_word_kept() {
+        // Holdout v6 (Corral #5): "arrowheads" invalidated the whole description on both attempts.
+        let schema = vershion_ai_core::figure_observation();
+        let mut facts = plot_facts();
+        facts["marks"] = json!([{"kind":"arrowheads","count":2,"locations":"both ends of the dimension line"},{"kind":"right_angle","count":1,"locations":"base"}]);
+        let parsed = read_description(&facts.to_string(), &schema).expect("valid after mapping");
+        assert_eq!(parsed["marks"][0], json!({"kind":"other","count":2,"locations":"arrowheads: both ends of the dimension line"}));
+        assert_eq!(parsed["marks"][1], facts["marks"][1], "listed kinds are untouched");
+        // Anything else wrong with a mark is still an error.
+        facts["marks"] = json!([{"kind":"arrowheads","count":-1,"locations":"x"}]);
+        assert!(read_description(&facts.to_string(), &schema).is_err());
+    }
+
     #[test]
     fn observed_t_junction_needs_split_host_and_updated_ids_without_guessing_joins() {
         let schema = vershion_ai_core::figure_observation();

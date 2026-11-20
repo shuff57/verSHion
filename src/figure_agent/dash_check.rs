@@ -195,21 +195,66 @@ fn coverage(page: &Page, fit: &Fit, anchors: &[&Seg]) -> f64 {
 /// canvas-to-image scale. None unless the edges really land on ink.
 fn register(page: &Page, size: (f64, f64), anchors: &[&Seg]) -> Option<Fit> {
     let base = Fit { sx: page.luma.width() as f64 / size.0, sy: page.luma.height() as f64 / size.1, tx: 0.0, ty: 0.0 };
-    let mut best = (coverage(page, &base, anchors), base);
     let (w, h) = (page.luma.width() as f64, page.luma.height() as f64);
-    for scale in [0.94, 0.97, 1.0, 1.03, 1.06] {
-        for ox in (-6..=6).map(|i| i as f64 * w * 0.01) {
-            for oy in (-6..=6).map(|i| i as f64 * h * 0.01) {
-                let fit = Fit { sx: base.sx * scale, sy: base.sy * scale, tx: ox + w * (1.0 - scale) / 2.0, ty: oy + h * (1.0 - scale) / 2.0 };
-                let c = coverage(page, &fit, anchors);
-                if c > best.0 {
-                    best = (c, fit);
+    // A fit as scale factors on x and y around the canvas-to-image scale and an offset, both as
+    // fractions of the image, centred so a scale change keeps the middle in place.
+    let fit = |kx: f64, ky: f64, ox: f64, oy: f64| Fit { sx: base.sx * kx, sy: base.sy * ky, tx: ox * w + w * (1.0 - kx) / 2.0, ty: oy * h + h * (1.0 - ky) / 2.0 };
+    let mut best = (coverage(page, &base, anchors), (1.0, 1.0, 0.0, 0.0));
+    let mut try_fit = |kx: f64, ky: f64, ox: f64, oy: f64, best: &mut (f64, (f64, f64, f64, f64))| {
+        let c = coverage(page, &fit(kx, ky, ox, oy), anchors);
+        if c > best.0 {
+            *best = (c, (kx, ky, ox, oy));
+        }
+    };
+    // First the near search: one scale for both axes, 0.94-1.06, offsets up to 6% in 1% steps.
+    for k in [0.94, 0.97, 1.0, 1.03, 1.06] {
+        for ox in (-6..=6).map(|i| i as f64 * 0.01) {
+            for oy in (-6..=6).map(|i| i as f64 * 0.01) {
+                try_fit(k, k, ox, oy, &mut best);
+            }
+        }
+    }
+    if best.0 >= 0.85 {
+        let (kx, ky, ox, oy) = best.1;
+        return Some(fit(kx, ky, ox, oy));
+    }
+    // Only when that finds no convincing fit (R30: 79%), a wider one: scales 0.88-1.12 on each
+    // axis (a redraw need not keep the crop's proportions) and offsets up to 10%. Many fits can
+    // cover the anchors equally well when no anchor pins an axis (no dark edge along the bottom:
+    // squashing y still covers them), so a fit within half a point of the best coverage that sits
+    // nearer the plain canvas mapping wins.
+    let away = |f: (f64, f64, f64, f64)| (f.0 - 1.0).abs() + (f.1 - 1.0).abs() + f.2.abs() + f.3.abs();
+    let mut wide = (0.0f64, (1.0, 1.0, 0.0, 0.0));
+    let mut consider = |f: (f64, f64, f64, f64), wide: &mut (f64, (f64, f64, f64, f64))| {
+        let c = coverage(page, &fit(f.0, f.1, f.2, f.3), anchors);
+        if c > wide.0 + 0.005 || (c >= wide.0 - 0.005 && away(f) < away(wide.1)) {
+            *wide = (c.max(wide.0), f);
+        }
+    };
+    // Coarse: 3% scale and 2% offset steps.
+    for kx in (0..=8).map(|i| 0.88 + 0.03 * i as f64) {
+        for ky in (0..=8).map(|i| 0.88 + 0.03 * i as f64) {
+            for ox in (-5..=5).map(|i| i as f64 * 0.02) {
+                for oy in (-5..=5).map(|i| i as f64 * 0.02) {
+                    consider((kx, ky, ox, oy), &mut wide);
+                }
+            }
+        }
+    }
+    // Fine: around the chosen coarse fit, 1% scale and 0.5% offset steps.
+    let (kx0, ky0, ox0, oy0) = wide.1;
+    for dkx in -2..=2 {
+        for dky in -2..=2 {
+            for dox in -2..=2 {
+                for doy in -2..=2 {
+                    consider((kx0 + 0.01 * dkx as f64, ky0 + 0.01 * dky as f64, ox0 + 0.005 * dox as f64, oy0 + 0.005 * doy as f64), &mut wide);
                 }
             }
         }
     }
     // Without a convincing fit the source position of an edge is unknown: say nothing.
-    (best.0 >= 0.85).then_some(best.1)
+    let (kx, ky, ox, oy) = wide.1;
+    (coverage(page, &fit(kx, ky, ox, oy), anchors) >= 0.85).then(|| fit(kx, ky, ox, oy))
 }
 
 /// The stroke along the middle of a segment: (ink runs, share of samples on ink), with ink meaning
@@ -442,6 +487,18 @@ mod tests {
             "paths":[{"nodes":["C","D"],"kind":"polyline","color":"#888888","style":"solid"}]}).to_string()));
         let (fixed, _) = dashed_corrections(&moved, &reference(true)).expect("path corrected");
         assert_eq!(diagram_of(&fixed).unwrap()["paths"][0]["style"], "dashed");
+    }
+
+    #[test]
+    fn a_redraw_with_other_proportions_registers_through_the_wider_search() {
+        // R30 volume #10: the near search reached 79%; here a redraw 10% narrower than the crop.
+        let squeeze = |x: f64| 100.0 + (x - 100.0) * 0.9;
+        let diagram = serde_json::json!({"nodes":{"A":[squeeze(20.0),20],"B":[squeeze(180.0),20],"C":[squeeze(20.0),130],"D":[squeeze(180.0),130]},
+            "segments":[{"from":"A","to":"B","color":"#000000"},{"from":"A","to":"C","color":"#000000"},{"from":"B","to":"D","color":"#000000"},{"from":"C","to":"D","color":"#888888"}]});
+        let p = BTreeMap::from([("width".into(), serde_json::json!(200.0)), ("height".into(), serde_json::json!(150.0)), ("diagram".into(), Json::String(diagram.to_string()))]);
+        let found = solid_gray_over_dashes(&p, &reference(true));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(solid_gray_over_dashes(&p, &reference(false)).is_empty(), "a continuous source line stays solid");
     }
 
     #[test]

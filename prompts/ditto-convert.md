@@ -10,6 +10,11 @@ Output ONLY the JSON object. No markdown fences, no commentary before or after.
   even when it is the last thing on the page. Never drop a complete question, and never describe
   a question in `report.notes` instead of converting it: a handwritten answer is part of its
   question, not a reason to skip it.
+- Printed content at the TOP of the page that continues a question begun on an earlier page
+  (more parts, expressions or matrices, with that question's number and task not printed on
+  this page) is still printed content: convert it as ONE question, first in order, with `label`
+  exactly "continued", its printed text in `stem` (or its printed lettered parts in `parts`),
+  and add a `report.notes` entry. Do not guess its number or its task from an unseen page.
 - Handwriting that supplies an answer (an answer key filled in, a circled choice, a starred
   choice, a worked solution) is the SOURCE'S ANSWER: use it. Handwriting that is only a
   student's scratch work or a demonstration drawing, not an answer to a printed prompt, is not

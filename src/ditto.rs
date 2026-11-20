@@ -31,7 +31,30 @@ pub fn json_object(text: &str) -> Option<Value> {
     if let Ok(v) = serde_json::from_str(&text[a..=b]) {
         return Some(v);
     }
-    first_value(&text[a..]).or_else(|| salvage(&text[a..]))
+    // A reply that sends a package, then "Correction — the object above was malformed" and a
+    // second whole package: the last whole package is the one the reader stands by.
+    last_package(&text[a..]).or_else(|| first_value(&text[a..])).or_else(|| salvage(&text[a..]))
+}
+
+/// The last complete top-level JSON object in the text that is a Ditto package (has `format`),
+/// when the text holds more than one; None otherwise.
+fn last_package(text: &str) -> Option<Value> {
+    let mut found = Vec::new();
+    let mut at = 0;
+    while let Some(i) = text[at..].find('{').map(|i| at + i) {
+        let mut stream = serde_json::Deserializer::from_str(&text[i..]).into_iter::<Value>();
+        match stream.next() {
+            Some(Ok(v)) if v.is_object() => {
+                at = i + stream.byte_offset();
+                if v.get("format").is_some() {
+                    found.push(v);
+                }
+            }
+            // Not a whole value from here: skip only this brace, so a whole object later still counts.
+            _ => at = i + 1,
+        }
+    }
+    (found.len() > 1).then(|| found.pop()).flatten()
 }
 
 /// A reply that starts well and then breaks (a repetition loop until the token limit, a cut-off): the root object's members
@@ -116,6 +139,14 @@ pub fn is_ditto(text: &str) -> bool {
 pub const UNRESOLVED_TASK: &str = "[Source task not visible on this page. Review before using this question.]";
 /// Topic tag that marks a question imported with [`UNRESOLVED_TASK`].
 pub const UNRESOLVED_TOPIC: &str = "needs review: source task not visible";
+/// Topic on content that continues a question from an earlier page (its number and task are not
+/// on this page), saved so nothing printed is lost.
+pub const CONTINUED_TOPIC: &str = "needs review: continued from an earlier page";
+
+/// The label a reply gives printed content that continues a question begun on an earlier page.
+fn continued_label(label: Option<&str>) -> bool {
+    label.is_some_and(|l| l.trim().trim_matches(['(', ')', '[', ']']).trim().eq_ignore_ascii_case("continued"))
+}
 
 /// What the importer knows about one raw item of the model's reply: stable provenance that survives the
 /// items that were dropped, so a source number is never inferred by zipping lists of different lengths.
@@ -684,6 +715,13 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                 if ownership_review.is_some() {
                     q.topics.push("needs review: source figure ownership".into());
                 }
+                let continued = continued_label(info.label.as_deref());
+                if continued {
+                    let reason = "continues a question begun on an earlier page; its number and task are not printed here, so review it with that page".to_string();
+                    warnings.push(format!("Question {label}: {reason}."));
+                    info.reason = Some(reason);
+                    q.topics.push(CONTINUED_TOPIC.into());
+                }
                 if let Some(Ok(png)) = cropped {
                     match crate::store::put_image(&png) {
                         Ok(img) => {
@@ -702,6 +740,8 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                 }
                 info.status = if ownership_review.is_some() {
                     "saved_figure_ownership_unresolved"
+                } else if continued {
+                    "saved_continued"
                 } else if !bare.is_empty() {
                     "saved_part_picture_missing"
                 } else if !box_review.is_empty() && q.image.is_some() {
@@ -1577,6 +1617,33 @@ mod tests {
         assert!(matches!(got.doc.questions[0].kind, Kind::Tf { correct: false }) && keyless(&got.doc.questions[0]));
         assert!(matches!(got.doc.questions[1].kind, Kind::Tf { correct: false }) && !keyless(&got.doc.questions[1]), "a printed key is kept");
         assert!(keyless(&got.doc.questions[2]));
+    }
+
+    #[test]
+    fn a_corrected_second_package_replaces_the_malformed_first() {
+        // R30, confidence intervals: a package with an empty multipart, then the reader's correction.
+        let bad = serde_json::json!({"format":FORMAT,"bank":{"name":"CI","questions":[{"id":"q1","type":"multipart","label":"Puzzle #1","stem":"A poll.","parts":[]}]}});
+        let good = serde_json::json!({"format":FORMAT,"bank":{"name":"CI","questions":[{"id":"q1","type":"multipart","label":"Puzzle #1","stem":"A poll.","parts":[{"type":"short-answer","stem":"a) How many SEs?"}]}]}});
+        let reply = format!("{bad}\n\nCorrection \u{2014} the object above was malformed, so here is the complete valid JSON:\n\n{good}");
+        assert_eq!(json_object(&reply), Some(good.clone()));
+        // One package with chatter around it is read as before.
+        assert_eq!(json_object(&format!("Here you go: {good} Done.")), Some(good));
+    }
+
+    #[test]
+    fn content_continued_from_an_earlier_page_is_saved_unnumbered_and_flagged() {
+        // Holdout v6, UC Davis: the page opens with the end of problem 1 (three matrix products).
+        let reply = serde_json::json!({"format":FORMAT,"bank":{"name":"LA","questions":[
+            {"id":"q0","label":"continued","type":"short-answer","stem":"$\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}\\begin{pmatrix}0&1\\\\1&0\\end{pmatrix}$"},
+            {"id":"q2","label":"2","type":"short-answer","stem":"Show that $(AB)^T = B^T A^T$."}]}}).to_string();
+        let got = import_text(&reply,None,2,"w").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "nothing printed is dropped");
+        let (first, second) = (&got.items[0], &got.items[1]);
+        assert_eq!((first.status.as_str(), first.number, first.question_index), ("saved_continued", None, Some(0)));
+        assert!(got.doc.questions[0].topics.iter().any(|t| t == CONTINUED_TOPIC));
+        assert!(got.warnings.iter().any(|w| w.contains("earlier page")));
+        assert_eq!((second.status.as_str(), second.number), ("saved", Some(2)));
+        assert!(continued_label(Some("(Continued)")) && !continued_label(Some("1")) && !continued_label(None));
     }
 
     #[test]

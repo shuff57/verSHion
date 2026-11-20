@@ -40,6 +40,16 @@ class SourceMapTests(unittest.TestCase):
         case={'source_id':'linear-algebra','question_numbers':[15,16],'dotted_labels':True}
         self.assertEqual(h.parsed_source_map(case,page,qs)['by_number'],{15:qs[0],16:qs[1]})
         self.assertEqual(h.parsed_source_map(dict(case,dotted_labels=False),page,qs)['by_number'],{})
+    def test_a_leading_continuation_takes_the_one_missing_earlier_number(self):
+        # Holdout v6, UC Davis: the page opens mid-problem 1, then prints problems 2 and 3.
+        items=[{'number':None,'label':'continued','question_index':0,'status':'saved_continued'},{'number':2,'label':'2','question_index':1,'status':'saved'},{'number':3,'label':'3','question_index':2,'status':'saved'}]
+        qs=[{'stem':'x'},{'stem':'y'},{'stem':'z'}];case={'source_id':'la','question_numbers':[1,2,3]}
+        got=h.parsed_source_map(case,{'items':items},qs)
+        self.assertEqual(got['by_number'],{1:qs[0],2:qs[1],3:qs[2]})
+        self.assertEqual(got['unresolved'],[1],'a flagged continuation is never silently complete')
+        # Not leading, not labelled continued, or the missing number is later: nothing is guessed.
+        self.assertNotIn(1,h.parsed_source_map(case,{'items':[dict(items[0],label=None),*items[1:]]},qs)['by_number'])
+        self.assertNotIn(4,h.parsed_source_map(dict(case,question_numbers=[2,3,4]),{'items':items},qs)['by_number'])
     def test_a_declared_single_unnumbered_item_maps_to_its_case_number(self):
         page={'items':[{'number':None,'question_index':0,'status':'saved'}]};qs=[{'stem':'Activity 1.2.9'}]
         case={'source_id':'linear-algebra','question_numbers':[9],'single_unnumbered_item':True}
@@ -158,6 +168,18 @@ class AcceptanceTests(unittest.TestCase):
         self.trace['pages'][0]['figure_runs']=[{'question_index':0,'accepted':True,'spec':copy.deepcopy(self.q['figure']),'review':{'matches':True},'steps':[{'tool':'render_figure'}]}]
         self.save()
     def test_real_bank_round_trip(self):self.assertTrue(self.score()['structural_pass'])
+    def test_printed_points_survive_and_only_a_missing_point_value_may_take_the_default(self):
+        # Holdout v6, SQA: printed marks on some questions, none on another.
+        self.case['question_numbers']=[1,2]
+        two=dict(copy.deepcopy(self.q),id='q2')
+        self.trace['pages'][0]['questions']=[dict(copy.deepcopy(self.q),points=4.0),two]
+        self.trace['pages'][0]['raw_reply']=json.dumps({'bank':{'questions':[{'label':'1'},{'label':'2'}]}})
+        (self.store/'banks.json').write_text(json.dumps([{'questions':[dict(copy.deepcopy(self.q),points=4.0),dict(two,points=1.0)]}]))
+        (self.store/'trace.json').write_text(json.dumps(self.trace))
+        self.assertTrue(self.score()['bank_integrity_ok'])
+        # A printed value that changed in the bank is still a persistence failure.
+        (self.store/'banks.json').write_text(json.dumps([{'questions':[dict(copy.deepcopy(self.q),points=3.0),dict(two,points=1.0)]}]))
+        self.assertFalse(self.score()['bank_integrity_ok'])
     def test_webp_media_is_valid(self):
         self.figure();s=self.score();self.assertTrue(s['bank_integrity_ok']);self.assertEqual(s['figures_recreated'],1)
     def test_plain_crop_does_not_pass_recreation(self):

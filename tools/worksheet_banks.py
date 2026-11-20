@@ -161,6 +161,17 @@ def has_invented_key(q):
     # always holds a value, so only the keyless marker shows that value is a placeholder, not a key.
     return ('Mc' in kind and any(a.get('correct') for a in kind['Mc'].get('answers',[]))) or ('Tf' in kind and q.get('explanation')!=KEYLESS_SENTINEL)
 
+def leading_continuation(case,items,numbers):
+    """A page that opens mid-problem: the importer saves the printed continuation first, labelled
+    "continued" and unnumbered. It answers to the one expected number nothing else claims, and only
+    when that number comes before every number the page does print."""
+    if not items or numbers[0] is not None:return numbers
+    if re.sub(r'[\s()\[\]]','',str(items[0].get('label') or '')).lower()!='continued':return numbers
+    printed=[n for n in numbers if n is not None]
+    missing=[n for n in case['question_numbers'] if n not in printed]
+    if len(missing)==1 and all(missing[0]<n for n in printed):return [missing[0],*numbers[1:]]
+    return numbers
+
 def parsed_source_map(case,page,questions):
     """Source number -> saved question, from the importer's own per-raw-item provenance.
 
@@ -180,6 +191,7 @@ def parsed_source_map(case,page,questions):
     if case.get('dotted_labels'):
         numbers=[n if n is not None else (int(m.group(1)) if (m:=re.fullmatch(r'\s*\d+(?:\.\d+)*\.(\d+)\s*',str(i.get('label') or ''))) else None) for n,i in zip(numbers,items)]
     if len(numbers)==1 and numbers[0] is None and (case['source_id']=='statistics-confidence-intervals' or (case.get('single_unnumbered_item') and len(case['question_numbers'])==1)):numbers=[1 if case['source_id']=='statistics-confidence-intervals' else case['question_numbers'][0]]
+    numbers=leading_continuation(case,items,numbers)
     by_number={};index={};status={};unresolved=[]
     for number,item in zip(numbers,items):
         if number is None:continue
@@ -378,7 +390,9 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
     count_ok=len(questions)==len(expected)
     order_ok=numbers==expected and source['all_saved']
     key_ok=not any(has_invented_key(q) for q in questions)
-    persisted_ok=len(questions)==len(page['questions']) and (questions==page['questions'] or all(dict(q,points=None)==t for q,t in zip(questions,page['questions'])))
+    # The bank gives a question with no printed points the default; that is the only allowed
+    # difference, judged per question (holdout v6: printed marks on four questions, none on one).
+    persisted_ok=len(questions)==len(page['questions']) and all(q==t or (t.get('points') is None and dict(q,points=None)==t) for q,t in zip(questions,page['questions']))
     whole_bank_ok=len(banks[0]['questions'])==sum(len(p['questions']) for p in pages)
     integrity_ok=bool(questions) and persisted_ok and whole_bank_ok and not broken_media and len({q['id'] for q in questions})==len(questions)
     no_fake_figures=not invented_figures
