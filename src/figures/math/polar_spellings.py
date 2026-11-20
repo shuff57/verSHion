@@ -121,6 +121,54 @@ for typed, X, Y in [
     ("x = sin(t)(e^cos t - 2cos 4t), y = cos(t)(e^cos t - 2cos 4t)", sp.sin(t) * (sp.exp(sp.cos(t)) - 2 * sp.cos(4 * t)), sp.cos(t) * (sp.exp(sp.cos(t)) - 2 * sp.cos(4 * t))),
 ]:
     cases.append({"kind": "spelling", "typed": typed, "values": vals(X, t), "y": vals(Y, t)})
+# check 3: a division by an unbracketed run of factors is refused (θ/2π: θ/(2π) or (θ/2)π?); a plain number over a plain
+# number before a factor is the coefficient (1/2 cos θ = (1/2)cos θ); one factor after / is the whole denominator
+NUMS = [('θ', lambda v: v, False), ('3θ', lambda v: 3 * v, False), ('sin θ', lambda v: sp.sin(v), False), ('cos(θ)', lambda v: sp.cos(v), False),
+        ('1', lambda v: sp.Integer(1), True), ('2', lambda v: sp.Integer(2), True), ('e^θ', lambda v: sp.exp(v), False),
+        ('(θ+1)', lambda v: v + 1, False), ('cos 2θ', lambda v: sp.cos(2 * v), False)]
+# (spelling, value of the denominator alone or None, the coefficient reading n/d0 · rest for a plain number n, or None)
+DENS = [('2', lambda v: 2, None), ('2π', None, lambda n, v: n / 2 * sp.pi), ('2θ', None, lambda n, v: n / 2 * v), ('π', lambda v: sp.pi, None),
+        ('θ', lambda v: v, None), ('2 θ', None, lambda n, v: n / 2 * v), ('(2π)', lambda v: 2 * sp.pi, None), ('2cosθ', None, lambda n, v: n / 2 * sp.cos(v)),
+        ('cosθ', lambda v: sp.cos(v), None), ('2 sin θ', None, lambda n, v: n / 2 * sp.sin(v)), ('πθ', None, None), ('4', lambda v: 4, None),
+        ('(θ+2)', lambda v: v + 2, None), ('2(θ+1)', None, None), ('3t', None, lambda n, v: n / 3 * v)]
+for polar in [True, False]:
+    v = th if polar else t
+    for n_txt, n_f, plain in NUMS:
+        for d_txt, d_f, coef in DENS:
+            if d_txt == '3t' and polar:
+                continue
+            num, den = n_txt, d_txt
+            if not polar:
+                num, den = num.replace('θ', 't'), den.replace('θ', 't')
+            for pre, pre_f in [('', 0), ('1 + ', 1)]:
+                typed = f"r = {pre}{num}/{den}" if polar else f"x = {pre}{num}/{den}, y = t"
+                if d_f is not None:
+                    expr = pre_f + n_f(v) / d_f(v)
+                elif plain and coef is not None:
+                    expr = pre_f + coef(n_f(v), v)
+                else:
+                    cases.append({"kind": "refused", "typed": typed})
+                    continue
+                if polar:
+                    add("spelling", typed, expr)
+                else:
+                    cases.append({"kind": "spelling", "typed": typed, "values": vals(expr, t), "y": vals(t, t)})
+for typed in ["r = e^(θ/2π)", "x = cos(t/2π), y = sin(t/2π)", "r = sin θ/2π", "r = θ/2π + 1", "r = θ / 2π"]:
+    cases.append({"kind": "refused", "typed": typed})
+# check 3: √2θ with nothing between is √(2θ) or √2·θ: refused; √2·θ prints so, apart from √(2θ)
+for typed in ["r = √2θ", "r = √3θ", "r = 2√2θ", "r = √2θ cos θ", "r = √2cos θ", "x = √2t, y = t", "r = √2(θ+1)"]:
+    cases.append({"kind": "refused", "typed": typed})
+for typed, expr in [("r = √(2θ)", sp.sqrt(2 * th)), ("r = sqrt(2)θ", sp.sqrt(2) * th), ("r = √2 θ", sp.sqrt(2) * th), ("r = √(2)θ", sp.sqrt(2) * th),
+                    ("r = 2√2 θ", 2 * sp.sqrt(2) * th), ("r = sqrt(2θ)", sp.sqrt(2 * th)), ("r = √θ", sp.sqrt(th)), ("r = √2·θ", sp.sqrt(2) * th),
+                    ("r = √3 cos θ", sp.sqrt(3) * sp.cos(th)), ("r = sqrt(3)cos(θ)", sp.sqrt(3) * sp.cos(th)), ("r = √(2θ)cos θ", sp.sqrt(2 * th) * sp.cos(th))]:
+    add("spelling", typed, expr)
+# check 3, cheap: asin is arcsin; Pi is pi; θ^1/2 and sin(θ)^2 θ are refused; | sin θ| prints |sin θ|
+for typed, expr in [("r = asin(θ/7)", sp.asin(th / 7)), ("r = acos(θ/7)", sp.acos(th / 7)), ("r = atan(θ)", sp.atan(th)), ("r = 2 + atan θ", 2 + sp.atan(th)),
+                    ("r = sin 2Pi θ", sp.sin(2 * sp.pi * th)), ("r = SIN 2PI θ", sp.sin(2 * sp.pi * th)), ("r = cos Pi θ", sp.cos(sp.pi * th)),
+                    ("r = | sin θ|", sp.Abs(sp.sin(th))), ("r = θ^2/4", th ** 2 / 4), ("r = θ^3/6 + 1", th ** 3 / 6 + 1), ("r = θ^(1/2)", sp.sqrt(th)), ("r = sin(θ)^2", sp.sin(th) ** 2)]:
+    add("spelling", typed, expr)
+for typed in ["r = θ^1/2", "r = 2θ^1/3", "r = sin(θ)^2 θ", "r = e^2 θ"]:
+    cases.append({"kind": "refused", "typed": typed})
 # what can be read two ways is refused (no values)
 for typed in ["r = cos θ^2", "r = sin θ(1 + θ)", "r = sin -θ", "r = 2cos", "x = cos t^2, y = t",
               "x = sin t(e^cos t - 2cos 4t), y = t", "r = sin θ²", "r = cos θ²", "r = 1 - sin θ²", "r = sin θ^2", "r = sin 1/2θ", "x = sin t², y = t"]:

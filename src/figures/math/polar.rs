@@ -240,7 +240,24 @@ const FN_NAMES: [&str; 13] = ["arcsin", "arccos", "arctan", "sqrt", "sin", "cos"
 /// cos θ/2 is (cos θ)/2, as the figure prints them. What could be read two ways (cos θ^2, sin θ(1 + θ), sin −θ) is
 /// refused with a note saying which brackets to write.
 pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
-    let cs: Vec<char> = rhs.replace('\u{2009}', " ").replace('\u{3c0}', "pi").replace('\u{2212}', "-").chars().collect();
+    // (one case throughout: Pi and PI are pi, SIN is sin; the shared reader lower-cases too)
+    let low = rhs.replace('\u{2009}', " ").replace('\u{3c0}', "pi").replace('\u{2212}', "-").to_lowercase();
+    // asin, acos, atan are arcsin, arccos, arctan (and print so)
+    let mut cs: Vec<char> = vec![];
+    let lc: Vec<char> = low.chars().collect();
+    let mut k = 0;
+    while k < lc.len() {
+        let word_start = k == 0 || !lc[k - 1].is_ascii_alphabetic();
+        if word_start && ["asin", "acos", "atan"].iter().any(|w| lc[k..].starts_with(&w.chars().collect::<Vec<_>>()) && !lc.get(k + 4).is_some_and(|c| c.is_ascii_alphabetic() && *c != var)) {
+            cs.extend("arc".chars());
+            cs.extend(&lc[k + 1..k + 4]);
+            k += 4;
+            continue;
+        }
+        cs.push(lc[k]);
+        k += 1;
+    }
+    let show = |t: &[char]| t.iter().collect::<String>().trim().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
     let mut out = String::new();
     let mut i = 0;
     while i < cs.len() {
@@ -257,10 +274,67 @@ pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
             i = next;
             continue;
         }
+        // √2θ: √(2θ) or √2·θ?
+        if cs[i] == '\u{221a}' {
+            let mut k = i + 1;
+            while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+            if k > i + 1 && cs.get(k).is_some_and(|c| c.is_alphabetic() || *c == '(' || *c == '\u{221a}') {
+                let d = show(&cs[i + 1..k]);
+                let more = show(&cs[k..k + 1]);
+                return Err(format!("write brackets: is \u{221a}{d}{more} meant as \u{221a}({d}{more}) or \u{221a}{d}\u{b7}{more}? Type sqrt({d}{more}) or sqrt({d}){more}"));
+            }
+        }
+        if cs[i] == '/' { division(&cs, i, &out, var)?; }
         out.push(cs[i]);
         i += 1;
     }
     Ok(out)
+}
+/// A division whose denominator is an unbracketed run of factors (θ/2π, 3θ/2θ, θ/2 cos θ, θ/πθ) can be read two ways:
+/// refused, naming both. A plain number over a plain number before a factor is a coefficient (1/2 cos θ is (1/2)cos θ,
+/// printed so).
+fn division(cs: &[char], i: usize, out: &str, var: char) -> Result<(), String> {
+    let skip = |k: usize| { let mut k = k; while k < cs.len() && cs[k] == ' ' { k += 1; } k };
+    let j = skip(i + 1);
+    if j >= cs.len() { return Ok(()); }
+    // the denominator's first factor, and whether it is a plain number
+    let (end, number) = if cs[j] == '(' {
+        let mut depth = 0;
+        let mut close = None;
+        for (m, c) in cs.iter().enumerate().skip(j) { if *c == '(' { depth += 1 } else if *c == ')' { depth -= 1; if depth == 0 { close = Some(m); break; } } }
+        match close { Some(c) => (c + 1, false), None => return Ok(()) }
+    } else if cs[j].is_ascii_digit() || cs[j] == '.' {
+        let mut k = j;
+        while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+        (k, true)
+    } else if let Some(name) = fn_at(cs, j) {
+        match apply_fn(cs, j, name, var) { Ok((_, e)) => (e, false), Err(_) => return Ok(()) }
+    } else if cs[j..].starts_with(&['p', 'i']) { (j + 2, false) }
+    else if cs[j] == var || cs[j] == 'e' { (j + 1, false) }
+    else { return Ok(()); };
+    // what follows it: another factor, multiplied by being written next to it, makes two readings (a power binds to it)
+    if cs.get(end) == Some(&'^') { return Ok(()); }
+    let spaced = cs.get(end) == Some(&' ');
+    let k = skip(end);
+    let more = cs.get(k).is_some_and(|c| *c == var || *c == '\u{221a}' || (*c == '(' && !spaced) || (c.is_ascii_digit() && !number) || (*c == 'e' && !cs.get(k + 1).is_some_and(|d| d.is_ascii_alphabetic())))
+        || cs[k..].starts_with(&['p', 'i']) || fn_at(cs, k).is_some();
+    if !more { return Ok(()); }
+    // a plain number over a plain number: the coefficient (1/2)
+    let o: Vec<char> = out.chars().collect();
+    let mut a = o.len();
+    while a > 0 && (o[a - 1].is_ascii_digit() || o[a - 1] == '.') { a -= 1; }
+    let plain_num = a < o.len() && (a == 0 || matches!(o[a - 1], ' ' | '+' | '-' | '*' | '('));
+    // (but not before a bracket: 1/2(θ + 1) is the old 6/2(1 + 2) puzzle)
+    if number && plain_num && cs.get(k) != Some(&'(') { return Ok(()); }
+    let show = |t: &[char]| t.iter().collect::<String>().trim().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+    let den = show(&cs[j..end]);
+    let m = match fn_at(cs, k) {
+        Some(name) => apply_fn(cs, k, name, var).map(|(_, e)| e).unwrap_or(k + name.len()),
+        None => { let mut m = k; while m < cs.len() && !matches!(cs[m], ' ' | '+' | '-' | ')' | '/' | '*' | '^') { m += 1; } m.max(k + 1) }
+    };
+    let rest = show(&cs[k..m.min(cs.len())]);
+    let gap = if spaced { " " } else { "" };
+    Err(format!("write brackets: \u{201c}/{den}{gap}{rest}\u{201d} can be read two ways; type /({den}{gap}{rest}) to divide by {den}{gap}{rest}, or (\u{2026}/{den}){rest} to divide by {den} and multiply by {rest}"))
 }
 const SUPERSCRIPTS: [char; 10] = ['\u{2070}', '\u{b9}', '\u{b2}', '\u{b3}', '\u{2074}', '\u{2075}', '\u{2076}', '\u{2077}', '\u{2078}', '\u{2079}'];
 fn shown_var(var: char) -> String { if var == 'q' { "\u{3b8}".into() } else { var.to_string() } }
@@ -346,7 +420,18 @@ fn exponent(cs: &[char], j: usize, var: char) -> Result<(String, usize), String>
         return Ok((format!("({sign}{text})"), next));
     }
     match bare_factor(cs, k0, var) {
+        // θ^1/2: θ^(1/2) or (θ^1)/2?
+        // (θ^2/4 is (θ²)/4, printed with only the 2 raised; a power of 1 is never meant, so θ^1/2 means θ^(1/2) or θ/2)
+        Some((f, end)) if f == "1" && cs.get(end) == Some(&'/') => Err(format!("write brackets: is ^{f}/\u{2026} meant as ^({f}/\u{2026}) or as the power {f} then divided? Type ^({f}/2) or ^{f}*\u{2026}")),
+        // sin(θ)^2 θ: a power 2θ, or the power 2 times θ?
+        Some((f, end)) if cs[k0..end].contains(&' ') => {
+            let typed: String = cs[k0..end].iter().collect::<String>().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+            let first: String = cs[k0..end].iter().take_while(|c| **c != ' ').collect::<String>().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+            let f = f.replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+            Err(format!("write brackets: is ^{typed} meant as ^({f}) or as the power {first} times the rest? Type ^({f}), or put * after the power"))
+        }
         Some((f, end)) => {
+
             // a bare power stays bare (θ^2, e^θ); a signed one, or a number times the variable or π, is bracketed
             let plain = !neg && (f.chars().all(|c| c.is_ascii_digit() || c == '.') || f.chars().count() == 1 || f == "pi");
             Ok((if plain { f } else { format!("({sign}{f})") }, end))
@@ -373,6 +458,52 @@ fn read_fn(rhs: &str, polar: bool, what: &str) -> Result<(Node, String), String>
 /// The typed function typeset: √, π, |x|, powers, and cos θ for cos(θ), sin 2θ for sin(2θ). The bracket is dropped only
 /// where nothing after it could be read as part of the argument: the end, a + or −, a closing bracket, a comma, or a space
 /// before another function (sin θ cos θ). So cos(θ)/2 stays cos(θ)/2 (never cos θ/2), sin(θ)^2 and 2^sin(θ) keep theirs.
+/// The printed equation tidied: a root of a number written before a letter or a bracket is set apart from it, √2·θ (so it
+/// is never read as √(2θ)), and no space stands just inside an absolute-value bar.
+fn tidy(s: &str) -> String {
+    let cs: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut bars = 0;
+    let mut i = 0;
+    while i < cs.len() {
+        let c = cs[i];
+        if c == '\u{221a}' {
+            let mut k = i + 1;
+            while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+            out.extend(&cs[i..k]);
+            if k > i + 1 && cs.get(k).is_some_and(|d| d.is_alphabetic() || *d == '(' || *d == '\u{221a}') { out.push('\u{b7}'); }
+            i = k;
+            continue;
+        }
+        // a number over a number at the start of a term, then a space and a factor: (1/2) cos θ, never 1/2 cos θ
+        if c.is_ascii_digit() && (i == 0 || matches!(cs[i - 1], ' ' | '(' | '+' | '-' | '\u{2212}')) {
+            let mut k = i;
+            while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+            if cs.get(k) == Some(&'/') {
+                let mut m = k + 1;
+                while m < cs.len() && (cs[m].is_ascii_digit() || cs[m] == '.') { m += 1; }
+                if m > k + 1 && cs.get(m) == Some(&' ') && cs.get(m + 1).is_some_and(|d| d.is_alphabetic() || *d == '\u{221a}' || *d == '(') {
+                    out.push('(');
+                    out.extend(&cs[i..m]);
+                    out.push(')');
+                    i = m;
+                    continue;
+                }
+            }
+        }
+        if c == '|' {
+            bars += 1;
+            if bars % 2 == 0 { while out.ends_with(' ') { out.pop(); } }
+            out.push(c);
+            i += 1;
+            if bars % 2 == 1 { while i < cs.len() && cs[i] == ' ' { i += 1; } }
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
 pub(crate) fn shown_fn(typed: &str) -> String {
     // (an ordinary space before a function's name: the serif has no thin space)
     let s = tangent::shown_func(typed).replace('\u{2009}', " ");
@@ -405,7 +536,7 @@ pub(crate) fn shown_fn(typed: &str) -> String {
         out.push(cs[i]);
         i += 1;
     }
-    out
+    tidy(&out)
 }
 /// "a <= θ <= b", "a ≤ t ≤ b", "a < θ < b", "θ in [a, b]", "[a, b]" or "a to b": the two ends' texts.
 fn read_domain(s: &str, var: &str) -> Option<(String, String)> {
@@ -1439,7 +1570,8 @@ pub(crate) fn build(p0: &Params) -> Out {
     // ── points and marks ──
     let lbl = p.s("pt_labels");
     let coord_text = |name: &str, r: Option<&Val>, th: Option<&Val>, x: &Val, y: &Val| -> (String, Option<String>) {
-        let polar_form = lbl == LBL[0] || lbl == LBL[3];
+        // (a point of a parametric curve has (x, y) only: r and θ belong to polar curves and points)
+        let polar_form = (lbl == LBL[0] || lbl == LBL[3]) && r.is_some();
         let with_name = lbl == LBL[0] || lbl == LBL[1] || lbl == LBL[2];
         let coords = if lbl == LBL[2] || lbl == LBL[5] { None } else if co_blank { Some("(____, ____)".to_string()) } else if polar_form {
             match (r, th) {
@@ -1474,6 +1606,7 @@ pub(crate) fn build(p0: &Params) -> Out {
         let (text, short) = coord_text(&q.name, Some(&q.r), Some(&q.th), &q.x, &q.y);
         if !text.is_empty() { reqs.push(Req { id: q.name.clone(), text, alt: None, short, own: Own::Dot(at, 4.5), size }); }
     }
+    if (lbl == LBL[0] || lbl == LBL[3]) && marks.iter().any(|m| m.r.is_none()) { notes.push("Marks on a parametric curve are labelled with (x, y): r and \u{3b8} belong to polar curves.".into()); }
     for m in &marks {
         let at = fr.to(m.x.v, m.y.v);
         if !fr.inside(at) { notes.push(format!("Marks: {} is outside the window.", m.name)); continue; }

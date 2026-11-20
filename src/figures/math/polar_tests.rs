@@ -914,6 +914,9 @@ fn spellings_and_printing_agree_with_sympy() {
         n_printed += 1;
         check(b, e, &format!("printed {:?} for", c.shown), &mut bad);
         if c.shown.contains('q') || c.shown.contains("sqrt") || c.shown.contains("pi") { bad.push(format!("{typed:?} prints {:?}", c.shown)); }
+        // a root of a number is never printed against a letter or bracket (√2θ would read as √(2θ)), nor a space inside a bar
+        { let ch: Vec<char> = c.shown.chars().collect(); for (k, x) in ch.iter().enumerate() { if *x == '\u{221a}' { let mut m = k + 1; while m < ch.len() && ch[m].is_ascii_digit() { m += 1; } if m > k + 1 && ch.get(m).is_some_and(|d| d.is_alphabetic() || *d == '(') { bad.push(format!("{typed:?} prints {:?}: a root against what follows", c.shown)); } } } }
+        if c.shown.contains("| ") && c.shown.matches('|').count() % 2 == 0 && c.shown.find("| ") == c.shown.find('|') { bad.push(format!("{typed:?} prints {:?}: a space inside a bar", c.shown)); }
         // every power is raised whole: the printed exponent is a bracket, a signed number, a number or one letter, and
         // nothing after it could be read as more of it; the SVG raises exactly those runs
         let ops = exponents(&c.shown);
@@ -1143,4 +1146,85 @@ fn rounded_angles_ranges_and_advice() {
     let o = build(&with(&[("curves", s("r = 5sin(2θ)")), ("rmax", f(3.0)), ("shade", s(polar::SHADE[1])), ("points", s("")), ("tracer", b(false))]));
     let n = o.notes.join(" | ");
     assert!(n.contains("at least 5 to see all of it") && !n.contains("at least 6"), "{n}");
+}
+
+/// Check 3: a division by an unbracketed run of factors is refused naming both readings; one factor or a bracket is read
+/// and printed so the print reads as drawn; a plain-number fraction before a factor is the coefficient.
+#[test]
+fn divisions_read_one_way_or_are_refused() {
+    use std::f64::consts::PI;
+    let one = |t: &str| { let (c, n) = read_row(t); assert!(n.is_empty(), "{t}: {n:?}"); c.into_iter().next().unwrap() };
+    for t in ["r = θ/2π", "r = 3θ/2π", "r = sin θ/2π", "r = e^(θ/2π)", "x = t/2π, y = t", "x = cos(t/2π), y = sin(t/2π)", "r = θ/2 cos θ", "r = θ/πθ", "r = 1/2(θ+1)"] {
+        let n = read_row(t).1;
+        assert!(n.iter().any(|x| x.contains("can be read two ways")), "{t}: {n:?}");
+    }
+    let n = read_row("r = θ/2π").1.join(" ");
+    assert!(n.contains("/(2\u{3c0})") && n.contains("(\u{2026}/2)\u{3c0}"), "{n}");
+    // θ/(2π) at 2π is 1; printed with its bracket
+    let c = one("r = θ/(2π)");
+    assert!((c.r(2.0 * PI).unwrap() - 1.0).abs() < 1e-12 && c.shown == "r = \u{3b8}/(2\u{3c0})", "{}", c.shown);
+    // θ/π, θ/2, 3θ/2, cos θ/2 = (cos θ)/2, 2π/θ = (2π)/θ
+    assert!((one("r = θ/π").r(PI).unwrap() - 1.0).abs() < 1e-12);
+    assert!((one("r = 3θ/2").r(2.0).unwrap() - 3.0).abs() < 1e-12);
+    assert!((one("r = cos θ/2").r(0.0).unwrap() - 0.5).abs() < 1e-12);
+    assert!((one("r = 2π/θ").r(PI).unwrap() - 2.0).abs() < 1e-12);
+    // 1/2 cos θ and 1/2cosθ are (1/2)cos θ: at 0, 1/2; printed with the fraction bracketed
+    let c = one("r = 1/2 cos θ");
+    assert!((c.r(0.0).unwrap() - 0.5).abs() < 1e-12 && c.shown.starts_with("r = (1/2)"), "{}", c.shown);
+    assert!((one("r = 1/2cosθ").r(0.0).unwrap() - 0.5).abs() < 1e-12);
+    // 1/2π θ is (1/2)πθ: at 1, π/2
+    assert!((one("r = 1/2π θ").r(1.0).unwrap() - PI / 2.0).abs() < 1e-12);
+}
+
+/// Check 3: √2θ is refused; √(2θ) and √2·θ read and print visibly apart.
+#[test]
+fn roots_print_apart() {
+    for t in ["r = √2θ", "r = 2√2θ", "r = √3θ", "r = √2θ cos θ"] { assert!(read_row(t).1.iter().any(|n| n.contains("\u{221a}(") && n.contains("sqrt(")), "{t}: {:?}", read_row(t).1); }
+    let (a, sb) = (read_row("r = √(2θ)").0.remove(0), read_row("r = sqrt(2)θ").0.remove(0));
+    // at θ = 2: √(2·2) = 2 and √2·2 = 2.828…
+    assert!((a.r(2.0).unwrap() - 2.0).abs() < 1e-12 && (sb.r(2.0).unwrap() - 2.0 * 2f64.sqrt()).abs() < 1e-12);
+    assert_eq!(a.shown, "r = \u{221a}(2\u{3b8})");
+    assert_eq!(sb.shown, "r = \u{221a}2\u{b7}\u{3b8}");
+    for t in ["r = √2 θ", "r = √(2)θ"] { assert_eq!(read_row(t).0[0].shown, sb.shown, "{t}"); }
+    // both on one figure: two legends that differ
+    let o = build(&with(&[("curves", s("r = √(2θ)\nr = sqrt(2)θ")), ("points", s("")), ("tracer", b(false)), ("key_line", b(true)), ("rmax", f(6.0))]));
+    let k = texts(&o.svg, "key").join(" ");
+    assert!(k.contains("r = \u{221a}(2\u{3b8})") && k.contains("r = \u{221a}2\u{b7}\u{3b8}"), "{k}");
+}
+
+/// Check 3: marks on a parametric curve are labelled (x, y) on the figure, as the key gives them, whatever the label
+/// setting; a note says why when an (r, θ) setting is chosen. x = t², y = t³ − 3t at t = 1 is (1, −2), at t = 2 (4, 2).
+#[test]
+fn parametric_marks_show_x_and_y() {
+    let base = |lbl: &str| with(&[("curves", s("x = t^2, y = t^3 - 3t")), ("grid_kind", s("Rectangular")), ("t_from", s("-2")), ("t_to", s("2")), ("marks_at", s("1, 2")), ("points", s("")), ("tracer", b(false)), ("key_line", b(true)), ("pt_labels", s(lbl))]);
+    for lbl in polar::LBL {
+        let o = build(&base(lbl));
+        let l: Vec<String> = labels(&o.svg).into_iter().map(|x| x.1).collect::<Vec<_>>();
+        let all = format!("{} {}", l.join(" "), o.to_panel.join(" "));
+        if lbl.contains('(') { assert!(all.contains("(1, \u{2212}2)") && all.contains("(4, 2)") && !all.contains("2.24"), "{lbl}: {all}"); }
+        assert_eq!(o.notes.iter().any(|n| n.contains("labelled with (x, y)")), lbl.contains("(r, \u{3b8})"), "{lbl}: {:?}", o.notes);
+        let k = texts(&o.svg, "key").join(" ");
+        assert!(k.contains("A(t = 1): (x, y) = (1, \u{2212}2)") && k.contains("B(t = 2): (x, y) = (4, 2)"), "{k}");
+    }
+    // a polar curve's marks keep (r, θ) beside a parametric one's (x, y)
+    let o = build(&with(&[("curves", s("r = 2\nx = t, y = t")), ("marks_at", s("pi/2")), ("mark_curve", i(1)), ("points", s("")), ("tracer", b(false))]));
+    assert!(labels(&o.svg).iter().any(|x| x.1 == "A(2, \u{3c0}/2)"));
+}
+
+/// Check 3, cheap ones: asin prints arcsin; Pi reads as pi; θ^1/2 and sin(θ)^2 θ are refused; no space inside a bar.
+#[test]
+fn small_spellings_of_check_3() {
+    use std::f64::consts::PI;
+    let one = |t: &str| { let (c, n) = read_row(t); assert!(n.is_empty(), "{t}: {n:?}"); c.into_iter().next().unwrap() };
+    assert_eq!(one("r = asin(θ/7)").shown, "r = arcsin(\u{3b8}/7)");
+    assert_eq!(one("r = acos(θ/7)").shown, "r = arccos(\u{3b8}/7)");
+    assert!(one("r = atan(θ)").shown.contains("arctan"));
+    // sin 2Pi θ = sin(2πθ): at 1/4, 1
+    assert!((one("r = sin 2Pi θ").r(0.25).unwrap() - 1.0).abs() < 1e-12);
+    assert!((one("r = SIN 2PI θ").r(0.25).unwrap() - 1.0).abs() < 1e-12);
+    for t in ["r = θ^1/2", "r = sin(θ)^2 θ"] { assert!(read_row(t).1.iter().any(|n| n.contains("write brackets")), "{t}"); }
+    // θ^2/4 is (θ²)/4: at 2, 1
+    assert!((one("r = θ^2/4").r(2.0).unwrap() - 1.0).abs() < 1e-12);
+    assert_eq!(one("r = | sin θ|").shown, "r = |sin \u{3b8}|");
+    let _ = PI;
 }
