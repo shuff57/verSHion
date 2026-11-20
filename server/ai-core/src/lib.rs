@@ -540,16 +540,82 @@ pub fn result_text(message: &Value, output: Option<&OutputSchema>) -> Result<Str
             .ok_or("The AI returned no text.")?
     };
     if let Some(output) = output {
-        let v: Value = serde_json::from_str(text)
-            .map_err(|_| "The AI did not return valid JSON.".to_string())?;
+        let (v, text) = parse_model_json(text)
+            .ok_or_else(|| "The AI did not return valid JSON.".to_string())?;
         output.validate(&v)?;
+        return Ok(text);
     }
     Ok(text.into())
+}
+
+/// A model writing prose inside a JSON string sometimes means a backslash literally ("the
+/// segments lean \ at 45 degrees"); a lone backslash there is invalid JSON. This escapes every
+/// backslash that does not begin a valid JSON escape. None when there was nothing to escape.
+pub fn escape_stray_backslashes(text: &str) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len() + 8);
+    let mut changed = false;
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] != '\\' {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+        let valid = match chars.get(i + 1) {
+            Some('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't') => true,
+            Some('u') => chars.get(i + 2..i + 6).is_some_and(|h| h.iter().all(char::is_ascii_hexdigit)),
+            _ => false,
+        };
+        if valid {
+            out.push('\\');
+            out.push(chars[i + 1]);
+            i += 2;
+        } else {
+            out.push_str("\\\\");
+            changed = true;
+            i += 1;
+        }
+    }
+    changed.then_some(out)
+}
+
+/// A model's JSON reply as a value and the text it was read from: the reply itself when it is
+/// valid, else the reply with stray backslashes escaped when that is valid. Nothing else is
+/// repaired.
+pub fn parse_model_json(text: &str) -> Option<(Value, String)> {
+    if let Ok(v) = serde_json::from_str::<Value>(text) {
+        return Some((v, text.to_string()));
+    }
+    let fixed = escape_stray_backslashes(text)?;
+    let v = serde_json::from_str::<Value>(&fixed).ok()?;
+    Some((v, fixed))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_lone_backslash_in_prose_is_read_literally_and_valid_escapes_are_kept() {
+        // Seen live: a slope-field description wrote the direction of a lean as a backslash.
+        let raw = r#"{"structure":"Right of the axis the segments lean \ at about 45 degrees; left they lean like '\'.","note":"a \"quote\", a \\ pair, a tab\t and é"}"#;
+        assert!(serde_json::from_str::<Value>(raw).is_err());
+        let (v, text) = parse_model_json(raw).unwrap();
+        assert_eq!(v["structure"], "Right of the axis the segments lean \\ at about 45 degrees; left they lean like '\\'.");
+        assert_eq!(v["note"], "a \"quote\", a \\ pair, a tab\t and \u{e9}");
+        assert_eq!(serde_json::from_str::<Value>(&text).unwrap(), v);
+        // Valid JSON is returned unchanged, and other damage is not repaired.
+        assert_eq!(parse_model_json(r#"{"a":"b\\c"}"#).unwrap().1, r#"{"a":"b\\c"}"#);
+        assert!(escape_stray_backslashes(r#"{"a":"\u12"}"#).is_some());
+        assert!(parse_model_json(r#"{"a": "unterminated}"#).is_none());
+        // A schema-bound result goes through the same reading.
+        let schema = judge();
+        let message = json!({"content": r#"{"matches": false, "problems": ["the edge leans \ not /"]}"#});
+        let text = result_text(&message, Some(&schema)).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&text).unwrap()["problems"][0], "the edge leans \\ not /");
+    }
+
     fn plain_origin_source_facts() -> Value {
         json!({"structure":"Finite plain axes meet at an origin corner without negative arms.","labels":[],"marks":[],"connections":[],"uncertain":[],"plot":{"axis_ends":{"x_negative":"line","x_positive":"line","y_negative":"line","y_positive":"line"},"axis_overhang":{"x_negative":"no","x_positive":"yes","y_negative":"no","y_positive":"yes"},"grid_spill":{"left":"not_applicable","right":"no","bottom":"not_applicable","top":"no"},"points_present":"not_applicable","point_axis_contact":{"x":"not_applicable","y":"not_applicable"},"evidence":["The two visible plain shafts meet at their finite origin endpoints."]},"focus_box_xyxy_1000":null,"topology":{"status":"not_applicable","reason":"Only axes and grid strokes.","nodes":[],"edges":[],"crossings":[]}})
     }

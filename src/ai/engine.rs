@@ -287,12 +287,12 @@ pub(super) async fn figure_traced(
         .iter()
         .find(|d| d["function"]["name"] == name)
         .ok_or("The figure AI requested an unknown tool.")?;
-    let args: Value = serde_json::from_str(
+    let (args, _) = vershion_ai_core::parse_model_json(
         function["arguments"]
             .as_str()
             .ok_or("Tool arguments must be a JSON string.")?,
     )
-    .map_err(|_| "The tool arguments were not valid JSON.")?;
+    .ok_or("The tool arguments were not valid JSON.")?;
     if matches!(name, "render_figure" | "finish_figure") {
         if let Some(params) = args.get("params").filter(|p| !p.is_object()) {
             let kind = match params {

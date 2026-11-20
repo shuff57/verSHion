@@ -229,6 +229,18 @@ fn profile(page: &Page, fit: &Fit, s: &Seg) -> Option<(usize, f64)> {
     Some((runs, share))
 }
 
+/// The stroke along the middle of a segment with ink meaning darker than `level`: (ink runs,
+/// share of samples on ink). None when nothing under it reaches that level.
+fn runs_at(page: &Page, fit: &Fit, s: &Seg, level: u8) -> Option<(usize, f64)> {
+    let (pts, normal) = samples(fit, s, 0.15, 0.85);
+    let on: Vec<bool> = pts.iter().map(|p| page.across(p.0, p.1, normal) < level).collect();
+    if !on.iter().any(|x| *x) {
+        return None;
+    }
+    let runs = on.iter().enumerate().filter(|(i, x)| **x && (*i == 0 || !on[i - 1])).count();
+    Some((runs, on.iter().filter(|x| **x).count() as f64 / on.len().max(1) as f64))
+}
+
 /// What the reference shows under one solid gray stroke.
 struct Finding {
     owner: (&'static str, usize),
@@ -269,6 +281,43 @@ fn measure(params: &BTreeMap<String, Json>, reference: &[u8]) -> Vec<Finding> {
             Some(Finding { owner: s.owner, from: s.from.clone(), to: s.to.clone(), color: s.color.clone(), runs, share })
         })
         .collect()
+}
+
+/// Whether the source pixels settle the drawing's line styles: Some(evidence) only when the
+/// drawing registers on the reference and every dashed stroke measures dashed there and no solid
+/// stroke does. Any stroke the check cannot read, or any disagreement, gives None. This is the
+/// measurement a judge's claim about dash style is weighed against.
+pub fn strokes_confirmed(params: &BTreeMap<String, Json>, reference: &[u8]) -> Option<String> {
+    let (size, segs) = segments(params)?;
+    let dashed: Vec<&Seg> = segs.iter().filter(|s| !s.solid).collect();
+    if dashed.is_empty() || dashed.len() > 12 {
+        return None;
+    }
+    let anchors: Vec<&Seg> = segs.iter().filter(|s| s.solid && dark(&s.color)).collect();
+    if anchors.len() < 2 {
+        return None;
+    }
+    let page = Page::new(reference)?;
+    let fit = register(&page, size, &anchors)?;
+    // Gaps are read at two levels: half way to the stroke's darkest ink, and the registration's
+    // clear-ink level. A thin antialiased diagonal falls under the first in places but stays above
+    // the second; only a real gap, where the paper shows, breaks a stroke at both.
+    let clear_ink = page.paper.saturating_sub(55);
+    let gapped = |s: &Seg| runs_at(&page, &fit, s, clear_ink).is_some_and(|(runs, share)| runs >= 4 && share < 0.95);
+    let mut evidence = Vec::new();
+    for s in &dashed {
+        let (runs, share) = profile(&page, &fit, s)?;
+        let f = Finding { owner: s.owner, from: s.from.clone(), to: s.to.clone(), color: s.color.clone(), runs, share };
+        if !f.dashed() || !gapped(s) {
+            return None;
+        }
+        evidence.push(format!("{}→{} {} runs {:.0}% ink", f.from, f.to, f.runs, f.share * 100.0));
+    }
+    // A solid stroke the source draws dashed would be a style error the other way.
+    if segs.iter().filter(|s| s.solid).any(|s| gapped(s)) {
+        return None;
+    }
+    Some(format!("every dashed stroke measures dashed in the source and no solid stroke does ({})", evidence.join("; ")))
 }
 
 /// What the check measured, for the trace: why an edge was or was not corrected. None when the
@@ -358,6 +407,7 @@ mod tests {
         line((40.0, 40.0), (360.0, 40.0), 0, false);
         line((40.0, 40.0), (40.0, 260.0), 0, false);
         line((40.0, 260.0), (360.0, 260.0), 140, dashed);
+        line((360.0, 40.0), (360.0, 260.0), 0, false);
         let mut out = Vec::new();
         image::DynamicImage::ImageLuma8(img).write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
         out
@@ -392,6 +442,26 @@ mod tests {
             "paths":[{"nodes":["C","D"],"kind":"polyline","color":"#888888","style":"solid"}]}).to_string()));
         let (fixed, _) = dashed_corrections(&moved, &reference(true)).expect("path corrected");
         assert_eq!(diagram_of(&fixed).unwrap()["paths"][0]["style"], "dashed");
+    }
+
+    #[test]
+    fn line_styles_are_confirmed_only_when_every_stroke_agrees_with_the_source() {
+        let styled = |dash_cd: bool, dash_ab: bool| {
+            let style = |d: bool| if d { "dashed" } else { "solid" };
+            let diagram = serde_json::json!({"nodes":{"A":[20,20],"B":[180,20],"C":[20,130],"D":[180,130]},
+                "segments":[{"from":"A","to":"B","color":"#000000","style":style(dash_ab)},{"from":"A","to":"C","color":"#000000"},{"from":"B","to":"D","color":"#000000"},{"from":"C","to":"D","color":"#888888","style":style(dash_cd)}]});
+            BTreeMap::from([("width".into(), serde_json::json!(200.0)), ("height".into(), serde_json::json!(150.0)), ("diagram".into(), Json::String(diagram.to_string()))])
+        };
+        // Rounds 26-27: the hidden edge is dashed in the source and in the redraw.
+        let ok = strokes_confirmed(&styled(true, false), &reference(true)).expect("confirmed");
+        assert!(ok.contains("C→D"), "{ok}");
+        // A dashed redraw over a continuous source line is not confirmed.
+        assert!(strokes_confirmed(&styled(true, false), &reference(false)).is_none());
+        // Round 27 hexagon: a visible edge drawn dashed is not confirmed.
+        assert!(strokes_confirmed(&styled(true, true), &reference(true)).is_none());
+        // No dashed stroke, or no reference: nothing to confirm.
+        assert!(strokes_confirmed(&styled(false, false), &reference(true)).is_none());
+        assert!(strokes_confirmed(&styled(true, false), &[]).is_none());
     }
 
     #[test]
@@ -456,6 +526,16 @@ fn dash_check_over_saved_cases() {
         let image_bytes = live;
         let p = crate::figures::params_from_json(&crate::figures::geometry_diagram::def(), &serde_json::to_value(&params).unwrap());
         if std::env::var("DASH_DIAG").is_ok() { println!("{spec}: {:?}", diagnosis(&params, &image_bytes)); }
+        if std::env::var("DASH_CONFIRM").is_ok() { println!("{spec}: confirmed={:?}", strokes_confirmed(&params, &image_bytes)); }
+        if std::env::var("DASH_STROKES").is_ok() && let Some((size, segs)) = segments(&params) && let Some(page) = Page::new(&image_bytes) {
+            let anchors: Vec<&Seg> = segs.iter().filter(|s| s.solid && dark(&s.color)).collect();
+            match register(&page, size, &anchors) {
+                None => println!("{spec}: no registration"),
+                Some(fit) => for s in &segs {
+                    println!("{spec}: {}→{} {} {} {:?} clear={:?}", s.from, s.to, if s.solid { "solid" } else { "dashed" }, s.color, profile(&page, &fit, s), runs_at(&page, &fit, s, page.paper.saturating_sub(55)));
+                },
+            }
+        }
         println!("{spec}: dash={:?} minus={:?} grid={}", solid_gray_over_dashes(&params, &image_bytes).len(),
             crate::figures::geometry_diagram::hidden_minus_signs(&p).unwrap_or_default().len(), hand_drawn_grid(&params).is_some());
     }

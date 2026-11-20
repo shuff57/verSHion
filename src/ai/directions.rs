@@ -22,8 +22,8 @@ fn parse(
     context: &crate::ditto::DocContext,
     page_no: usize,
 ) -> Result<(Value, Vec<(usize, usize)>), String> {
-    let v: Value =
-        serde_json::from_str(text).map_err(|_| "Direction decisions were not valid JSON.")?;
+    let (v, _) =
+        vershion_ai_core::parse_model_json(text).ok_or("Direction decisions were not valid JSON.")?;
     vershion_ai_core::continuation_directions().validate(&v)?;
     let mut mappings = Vec::new();
     let mut seen = Vec::new();

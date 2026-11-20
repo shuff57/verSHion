@@ -384,6 +384,27 @@ fn with_measured_dashes(r: Rendered, reference: Option<&[u8]>, has_reference: bo
     }
 }
 
+/// A judge problem that is about dash style alone: it names dashes and a continuous/solid line,
+/// and nothing else a figure can get wrong (labels, values, marks, positions, missing or extra
+/// parts).
+fn dash_style_only(problem: &str) -> bool {
+    let p = problem.to_lowercase();
+    let about_dashes = p.contains("dash") && ["continuous", "solid", "no visible gap", "no gaps", "unbroken"].iter().any(|w| p.contains(w));
+    let other = ["label", "missing", "extra", "absent", "omit", "arc", "tick", "arrow", "value", "number", "measure", "misplac", "moved", "shift", "position", "length", "angle", "orientation", "rotat", "mirror", "curve", "color", "colour", "text", "caption", "title", "unit", "scale"]
+        .iter()
+        .any(|w| p.contains(w));
+    about_dashes && !other
+}
+
+/// Evidence for overruling a source-comparison rejection: a geometry diagram whose every judge
+/// problem is about dash style, and whose line styles the source pixels confirm stroke by stroke.
+fn measured_styles_overrule(spec: &FigureSpec, verdict: &Verdict, reference: Option<&[u8]>) -> Option<String> {
+    if spec.id != "geometry-diagram" || verdict.problems.is_empty() || !verdict.problems.iter().all(|p| dash_style_only(p)) {
+        return None;
+    }
+    dash_check::strokes_confirmed(&spec.params, reference?)
+}
+
 fn source_plot_conflict(check:&Json)->Option<String>{
     let issues=check.get("issues")?.as_array()?;
     if issues.is_empty(){return None}
@@ -1042,6 +1063,19 @@ async fn run_with_retries_context_async<C:AsyncChat+?Sized,J:AsyncJudge+?Sized>(
             _=>(None,None)
         };
         run.judge_turn=judge.as_mut().and_then(|j|j.take_turn_trace());
+        // A rejection only about dash style yields to the pixel measurement of the source when
+        // that measurement confirms every dashed and every solid stroke (rounds 26-27: the judge
+        // read measured dashes as continuous lines). The judge's own reply stays in judge_turn.
+        let verdict=match verdict {
+            Some(v) if !v.matches => match measured_styles_overrule(&spec,&v,reference) {
+                Some(evidence)=>{
+                    run.steps.push(StepLog{tool:"dash_check".into(),summary:format!("source comparison objected only to dash style ({}); overruled by measurement: {evidence}",brief(&v.problems.join("; "),200))});
+                    Some(Verdict{matches:true,problems:Vec::new()})
+                }
+                None=>Some(v),
+            },
+            other=>other,
+        };
         run.review=verdict.clone();history.push(AttemptTrace::capture(n,&run,judge_error));
         match verdict {
             None=>{run.attempts=history;return run;},
@@ -1059,6 +1093,22 @@ async fn run_with_retries_context_async<C:AsyncChat+?Sized,J:AsyncJudge+?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_pure_dash_style_objection_can_be_weighed_against_the_measurement() {
+        // Round 27, volume p2 #10 and #8, word for word.
+        assert!(dash_style_only("The two hidden edges from the interior vertex H to the bottom-left and bottom-right corners are drawn dashed in image 1. In the source (image 2 and its detail panel) they look like continuous thin gray lines with no visible gaps. Only the vertical edge from the apex down to H is dashed in the source. The stroke pattern of these two edges therefore differs."));
+        assert!(dash_style_only("The two slanted gray edges from the interior apex point down to the bottom-left and bottom-right corners are dashed in image 1. In the reference (image 2 and detail panel 4) they are continuous thin gray lines with no visible gaps, so a solid source edge has been drawn dashed."));
+        assert!(!dash_style_only("The hidden edge is dashed but solid in the source, and the label 4 mi is missing."));
+        assert!(!dash_style_only("The back-right edge is missing."));
+        assert!(!dash_style_only("The rose has a narrower upper-left petal."));
+        let spec=FigureSpec{id:"geometry-diagram".into(),params:BTreeMap::new()};
+        let mixed=Verdict{matches:false,problems:vec!["Edges are dashed, the source shows continuous lines.".into(),"The angle arc at B is missing.".into()]};
+        assert!(measured_styles_overrule(&spec,&mixed,Some(&[])).is_none(),"any other objection keeps the rejection");
+        let pure=Verdict{matches:false,problems:vec!["Edges are dashed, the source shows continuous lines.".into()]};
+        assert!(measured_styles_overrule(&spec,&pure,None).is_none(),"no reference, no measurement");
+        assert!(measured_styles_overrule(&spec,&pure,Some(&[])).is_none(),"an unreadable reference settles nothing");
+    }
 
     fn source_requiring_right_shaft_overhang()->Json{
         json!({"axis_ends":{"x_negative":"line","x_positive":"line","y_negative":"line","y_positive":"line"},"axis_overhang":{"x_negative":"not_applicable","x_positive":"yes","y_negative":"not_applicable","y_positive":"not_applicable"},"grid_spill":{"left":"not_applicable","right":"not_applicable","bottom":"not_applicable","top":"not_applicable"},"points_present":"not_applicable","point_axis_contact":{"x":"not_applicable","y":"not_applicable"},"evidence":["PRIVATE_PLOT_ASSERTION"]})

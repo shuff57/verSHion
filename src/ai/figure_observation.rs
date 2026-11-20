@@ -202,9 +202,10 @@ fn read_description(
     text: &str,
     schema: &OutputSchema,
 ) -> Result<Value, (String, ObservationErrorStage)> {
-    let facts = serde_json::from_str::<Value>(text).map_err(|_| {
+    // A lone backslash meant literally in prose is escaped; nothing else is repaired.
+    let (facts, _) = vershion_ai_core::parse_model_json(text).ok_or_else(|| {
         (
-            "Source observations were not valid JSON.".into(),
+            "Source observations were not valid JSON.".to_string(),
             ObservationErrorStage::DescriptionFormat,
         )
     })?;
