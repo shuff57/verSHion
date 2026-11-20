@@ -18,6 +18,52 @@ use super::super::{ParamDef, Params, Value};
 use super::polar_num as pn;
 use super::tangent::{self, typed_num};
 use super::tangent_expr::{self as ex, Ex, Node, R};
+#[path = "polar_print.rs"]
+mod print;
+
+#[cfg(test)]
+thread_local! {
+    /// Test hook: 1 spoils the textbook print (the tree's prints must take over), 2 spoils every print.
+    pub(crate) static SPOIL: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+fn spoil(level: u8, s: String) -> String { if SPOIL.with(|c| c.get()) >= level { format!("{s} + 1") } else { s } }
+#[cfg(not(test))]
+fn spoil(_: u8, s: String) -> String { s }
+
+/// Brackets and bars nest (a bar closes only the bar it opened, never across a bracket), and nothing of the reader's own
+/// spelling shows (q, sqrt, pi), and no sign follows a product or quotient sign (θ/2·−θ).
+fn well_formed(s: &str) -> bool {
+    let mut stack: Vec<char> = vec![];
+    for c in s.chars() {
+        match c {
+            '(' => stack.push('('),
+            ')' => { if stack.pop() != Some('(') { return false; } }
+            '|' => { if stack.last() == Some(&'|') { stack.pop(); } else { stack.push('|'); } }
+            _ => {}
+        }
+    }
+    let t = s.replace("sqrt", "\u{1}");
+    stack.is_empty() && !t.contains('q') && !t.contains('\u{1}') && !s.contains("pi") && !["\u{b7}\u{2212}", "\u{b7}-", "/\u{2212}", "/-", "*-"].iter().any(|p| s.contains(p))
+}
+/// Whether `text`, typed back as this curve's function, is read as the same function: the same values (to 10⁻⁹,
+/// relative) and the same undefined points at 18 places across the range.
+fn reads_same(text: &str, node: &Node, polar: bool, lo: f64, hi: f64) -> bool {
+    if !well_formed(text) { return false; }
+    let Ok((back, _)) = read_fn(text, polar, "") else { return false };
+    (0..18).all(|k| {
+        let s = if k == 0 { lo } else if k == 17 { hi } else { lo + (hi - lo) * (k as f64 - 0.5 + 0.137 * ((k * 7) % 5) as f64) / 16.0 };
+        let (a, b) = (ex::eval(node, s), ex::eval(&back, s));
+        match (a.is_finite(), b.is_finite()) { (true, true) => (a - b).abs() <= 1e-9 * (1.0 + a.abs()), (false, false) => true, _ => false }
+    })
+}
+/// The equation printed for a function: the textbook print when it reads back as the same function, else the tree's
+/// bracketed print, else the fully bracketed one; None when none does (then no equation is written).
+pub(crate) fn verified_print(textbook: &str, node: &Node, polar: bool, lo: f64, hi: f64) -> Option<String> {
+    let var = if polar { "\u{3b8}" } else { "t" };
+    [spoil(1, textbook.to_string()), spoil(2, print::tree(node, var, false)), spoil(2, print::tree(node, var, true))]
+        .into_iter().find(|t| reads_same(t, node, polar, lo, hi))
+}
 use super::{coordinate_grid_build, coordinate_grid_params, grid_layout, math_text, math_tspans, GridL, SERIF};
 use std::f64::consts::PI;
 
@@ -248,7 +294,7 @@ pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
     let lc: Vec<char> = low.chars().collect();
     let mut k = 0;
     while k < lc.len() {
-        let word_start = k == 0 || !lc[k - 1].is_ascii_alphabetic();
+        let word_start = k == 0 || !lc[k - 1].is_ascii_alphabetic() || lc[k - 1] == var;
         if word_start && ["asin", "acos", "atan"].iter().any(|w| lc[k..].starts_with(&w.chars().collect::<Vec<_>>()) && !lc.get(k + 4).is_some_and(|c| c.is_ascii_alphabetic() && *c != var)) {
             cs.extend("arc".chars());
             cs.extend(&lc[k + 1..k + 4]);
@@ -258,7 +304,7 @@ pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
         cs.push(lc[k]);
         k += 1;
     }
-    let show = |t: &[char]| t.iter().collect::<String>().trim().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+    let show = |t: &[char]| t.iter().collect::<String>().trim().replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}");
     let mut out = String::new();
     let mut i = 0;
     while i < cs.len() {
@@ -285,13 +331,26 @@ pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
                 return Err(format!("write brackets: is \u{221a}{d}{more} meant as \u{221a}({d}{more}) or \u{221a}{d}\u{b7}{more}? Type sqrt({d}{more}) or sqrt({d}){more}"));
             }
         }
+        // a bar that would close straight after an operator is a bar inside bars, which cannot be read
+        if cs[i] == '|' && out.chars().filter(|c| *c == '|').count() % 2 == 1 && out.trim_end().chars().last().is_some_and(|c| matches!(c, '/' | '*' | '+' | '-' | '(' | '^')) {
+            return Err("bars inside bars cannot be read: write abs(\u{2026}) for the inner one, such as |\u{3b8}/abs(\u{3b8})\u{b7}cos \u{3b8}|".into());
+        }
+        // a bar opening after a factor is a product: π|θ|, 2|cos θ|
+        if cs[i] == '|' && out.chars().filter(|c| *c == '|').count() % 2 == 0 && out.trim_end().chars().last().is_some_and(|c| c.is_alphanumeric() || c == ')') && !out.ends_with(' ') {
+            out.push('*');
+        }
+        if cs[i] == '|' && out.chars().filter(|c| *c == '|').count() % 2 == 0 && out.ends_with(' ') && out.trim_end().chars().last().is_some_and(|c| c.is_alphanumeric() || c == ')') {
+            out.push('*');
+        }
         if cs[i] == '/' {
             // a quotient followed by more of the same product (θ/2·θ, t/2 cos t, 1/2|cos θ|) is written in brackets, so the
             // print can never read as a division by the rest: (θ/2)·θ, (t/2) cos t, (1/2)|cos θ|
             if let Some(end) = division(&cs, i, &out, var)? {
                 let mut k = end;
                 while k < cs.len() && cs[k] == ' ' { k += 1; }
-                let product = cs.get(k).is_some_and(|c| *c == '*' || *c == '|' || *c == '(' || c.is_alphabetic() || *c == '\u{221a}' || (c.is_ascii_digit() && k > end));
+                // (a bar after it is a product only when it opens one: the bar closing |θ/2| is not)
+                let opening_bar = out.chars().filter(|c| *c == '|').count() % 2 == 0;
+                let product = cs.get(k).is_some_and(|c| *c == '*' || (*c == '|' && opening_bar) || *c == '(' || c.is_alphabetic() || *c == '\u{221a}' || (c.is_ascii_digit() && k > end));
                 if product && k < cs.len() {
                     let st = term_start(&out);
                     let den = textbook(&cs[i + 1..end].iter().collect::<String>(), var)?;
@@ -322,6 +381,11 @@ fn term_start(out: &str) -> usize {
         match c {
             ')' => depth += 1,
             '(' => { if depth == 0 { return bi + 1; } depth -= 1; }
+            // a bar opens or closes by how many bars come before it
+            '|' => {
+                let opening = o[..k - 1].iter().filter(|x| x.1 == '|').count() % 2 == 0;
+                if opening { if depth == 0 { return bi + 1; } depth -= 1; } else { depth += 1; }
+            }
             '+' | '-' | ',' if depth == 0 => {
                 // a sign right after ^ or at the start belongs to the term
                 let prev = o[..k - 1].iter().rev().find(|x| x.1 != ' ').map(|x| x.1);
@@ -375,7 +439,8 @@ fn division(cs: &[char], i: usize, out: &str, var: char) -> Result<Option<usize>
     else if cs[j] == var || cs[j] == 'e' { (j + 1, false) }
     else { return Ok(None); };
     // what follows it: another factor, multiplied by being written next to it, makes two readings (a power binds to it)
-    if cs.get(end) == Some(&'^') { return Ok(None); }
+    // a power on the denominator is part of it (1/θ^2 cos θ: 1/(θ²cos θ) or (1/θ²)cos θ?)
+    let (end, number) = if cs.get(end) == Some(&'^') { match exponent(cs, end + 1, var) { Ok((_, e)) => (e, false), Err(_) => return Ok(None) } } else { (end, number) };
     let spaced = cs.get(end) == Some(&' ');
     let k = skip(end);
     let more = cs.get(k).is_some_and(|c| *c == var || *c == '\u{221a}' || (*c == '(' && !spaced) || (c.is_ascii_digit() && !number) || (*c == 'e' && !cs.get(k + 1).is_some_and(|d| d.is_ascii_alphabetic())))
@@ -388,10 +453,10 @@ fn division(cs: &[char], i: usize, out: &str, var: char) -> Result<Option<usize>
     let plain_num = a < o.len() && (a == 0 || matches!(o[a - 1], ' ' | '+' | '-' | '*' | '('));
     // (but not before a bracket: 1/2(θ + 1) is the old 6/2(1 + 2) puzzle)
     if number && plain_num && cs.get(k) != Some(&'(') { return Ok(Some(end)); }
-    let show = |t: &[char]| t.iter().collect::<String>().trim().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+    let show = |t: &[char]| t.iter().collect::<String>().trim().replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}");
     let den = show(&cs[j..end]);
     let rest = show(&cs[k..factor_end(cs, k, var)]);
-    let num = { let t = term_start(out); out[t..].replace('*', "").replace('q', "\u{3b8}").replace("pi", "\u{3c0}") };
+    let num = { let t = term_start(out); out[t..].replace('*', "").replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}") };
     let num = if num.trim().is_empty() { "\u{2026}".to_string() } else { num.trim().to_string() };
     let gap = if spaced { " " } else { "" };
     let paren = |t: &str| if t.chars().count() == 1 || t.starts_with('(') { t.to_string() } else { format!("({t})") };
@@ -446,7 +511,7 @@ fn apply_fn(cs: &[char], i: usize, name: &str, var: char) -> Result<(String, usi
     let Some((arg, end)) = bare_factor(cs, j, var) else { return Err(format!("write brackets after {name}: {name}({v}), {name}(2{v}), {name}(\u{2212}{v})")) };
     let mut k = end;
     while k < cs.len() && cs[k] == ' ' { k += 1; }
-    let shown_arg = arg.replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+    let shown_arg = arg.replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}");
     let pure_number = !arg.contains(var) && !arg.contains("pi");
     match cs.get(k) {
         // a power after the argument: sin θ^2, sin θ² could be sin(θ²) or (sin θ)²
@@ -486,9 +551,9 @@ fn exponent(cs: &[char], j: usize, var: char) -> Result<(String, usize), String>
         Some((f, end)) if f == "1" && cs.get(end) == Some(&'/') => Err(format!("write brackets: is ^{f}/\u{2026} meant as ^({f}/\u{2026}) or as the power {f} then divided? Type ^({f}/2) or ^{f}*\u{2026}")),
         // sin(θ)^2 θ: a power 2θ, or the power 2 times θ?
         Some((f, end)) if cs[k0..end].contains(&' ') => {
-            let typed: String = cs[k0..end].iter().collect::<String>().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
-            let first: String = cs[k0..end].iter().take_while(|c| **c != ' ').collect::<String>().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
-            let f = f.replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+            let typed: String = cs[k0..end].iter().collect::<String>().replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}");
+            let first: String = cs[k0..end].iter().take_while(|c| **c != ' ').collect::<String>().replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}");
+            let f = f.replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}");
             Err(format!("write brackets: is ^{typed} meant as ^({f}) or as the power {first} times the rest? Type ^({f}), or put * after the power"))
         }
         Some((f, end)) => {
@@ -513,7 +578,7 @@ fn read_fn(rhs: &str, polar: bool, what: &str) -> Result<(Node, String), String>
     let plain = tangent::expr_plain(&rewritten, if polar { "r" } else { "x" }, var).map_err(|e| format!("{what}: {}", e.replace("variable is q", "variable is \u{3b8}").replace("\u{201c}q\u{201d}", "\u{201c}\u{3b8}\u{201d}").replace("r(q)", "r(\u{3b8})").replace("(x)", &format!("({})", shown_var(var)))))?;
     let node = ex::parse(&plain).ok_or_else(|| format!("{what}: cannot read the function"))?;
     // printed from the bracketed spelling, so every typed spelling of one curve prints alike
-    let shown = shown_fn(&rewritten.replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}"));
+    let shown = shown_fn(&rewritten.replace("sqrt", "\u{1}").replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}"));
     Ok((node, shown))
 }
 /// The typed function typeset: √, π, |x|, powers, and cos θ for cos(θ), sin 2θ for sin(2θ). The bracket is dropped only
@@ -670,7 +735,14 @@ fn read_curve(raw: &str, row: usize, p: &Params, what: &str) -> Result<Curve, St
     let dec_ok = has_decimal(&u);
     let c0 = Ctx { exact: true, dec: 3, deg: false };
     let range_text = format!("{} \u{2264} {var} \u{2264} {}", vtext(&lo, &c0).0, vtext(&hi, &c0).0);
-    let shown = match (&g, &shown_g) { (Some(_), Some(sg)) => format!("x = {shown_f}, y = {sg}"), _ => format!("r = {shown_f}") };
+    // (only an equation that, typed back, reads as this curve is printed; otherwise none, with a note)
+    let pf = verified_print(&shown_f, &f, polar, lo.v, hi.v);
+    let pg = match (&g, &shown_g) { (Some(g), Some(sg)) => Some(verified_print(sg, g, false, lo.v, hi.v)), _ => None };
+    let shown = match (pf, pg) {
+        (Some(a), None) => format!("r = {a}"),
+        (Some(a), Some(Some(b))) => format!("x = {a}, y = {b}"),
+        _ => String::new(),
+    };
     let df = ex::deriv(&f);
     let dg = g.as_ref().map(ex::deriv);
     Ok(Curve { row, polar, shown, range_text, f, g, df, dg, lo, hi, own_range: own, dec_ok })
@@ -1325,6 +1397,7 @@ pub(crate) fn build(p0: &Params) -> Out {
     let deg = p.s("ray_labels") == "Degrees";
     let ctx = Ctx { exact: p.s("values") == "Exact", dec: p.i("dec") as usize, deg };
     let curves = curves_of(p, &mut notes);
+    for c in curves.iter().filter(|c| c.shown.is_empty()) { notes.push(format!("Curve {}: its equation cannot be written without ambiguity, so no equation is written for it (the curve is drawn as typed).", c.row + 1)); }
     let points = points_of(p, &mut notes);
     let used: Vec<String> = points.iter().map(|q| q.name.clone()).collect();
     let marks = marks_of(p, &curves, &used, &mut notes);
@@ -1711,12 +1784,12 @@ pub(crate) fn build(p0: &Params) -> Out {
             let swatch = if pts_only { None } else { Some((colour(c.row).to_string(), dash(&style_of(c.row)), CURVE_W)) };
             let parts = if eq_blank {
                 if c.polar { vec![mt("r = "), Part::Blank] } else { vec![mt("x = "), Part::Blank, mt(", y = "), Part::Blank] }
-            } else { vec![mt(&c.shown)] };
+            } else if c.shown.is_empty() { vec![pr(&format!("Curve {}", c.row + 1))] } else { vec![mt(&c.shown)] };
             pl.push(PLine { swatch, parts, indent: false });
             pl.push(PLine { swatch: None, parts: vec![mt(&c.range_text)], indent: true });
         }
     }
-    for c in &curves { key.push(vec![mt(&format!("{}, {}", c.shown, c.range_text))]); }
+    for c in curves.iter().filter(|c| !c.shown.is_empty()) { key.push(vec![mt(&format!("{}, {}", c.shown, c.range_text))]); }
     if let Some(rg) = &reg {
         let (a, _) = atext(&rg.a, &Ctx { exact: true, ..ctx });
         let (b, _) = atext(&rg.b, &Ctx { exact: true, ..ctx });

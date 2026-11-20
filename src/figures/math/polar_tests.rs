@@ -900,6 +900,11 @@ fn spellings_and_printing_agree_with_sympy() {
             if !cs.is_empty() || !notes.iter().any(|n| n.contains("bracket")) { bad.push(format!("{typed:?} should be refused with a note about brackets: {notes:?}")); }
             continue;
         }
+        if e["kind"] == "nested" {
+            n_refused += 1;
+            if !cs.is_empty() || !notes.iter().any(|n| n.contains("bars inside bars")) { bad.push(format!("{typed:?} should be refused as bars inside bars: {notes:?}")); }
+            continue;
+        }
         if e["kind"] == "unsupported" {
             n_refused += 1;
             if !cs.is_empty() || !notes.iter().any(|n| n.contains("not a function this figure reads")) { bad.push(format!("{typed:?} should be refused as unsupported: {notes:?}")); }
@@ -928,7 +933,8 @@ fn spellings_and_printing_agree_with_sympy() {
             let want: Vec<String> = ops.iter().map(|(o, _)| o.replace('-', "\u{2212}").replace(' ', "")).collect();
             for w in &want { if !raised.iter().any(|r| r.replace(' ', "") == *w) { bad.push(format!("{typed:?}: the power {w:?} is not raised whole (raised: {raised:?})")); } }
         }
-        if b.shown != c.shown { bad.push(format!("{typed:?}: printed {:?}, reprinted {:?}", c.shown, b.shown)); }
+        // (printing what was printed may tidy it, but it still reads as the same curve)
+        if let Some(bb) = read_row(&b.shown).0.first() { check(bb, e, &format!("reprinted {:?} for", b.shown), &mut bad); } else { bad.push(format!("{typed:?}: the reprint {:?} does not read", b.shown)); }
     }
     println!("spellings: {n_read} read, {n_printed} printed and read back, {n_powers} printed powers checked whole, {n_refused} refused; {} faults", bad.len());
     assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
@@ -1245,7 +1251,7 @@ fn products_after_a_division_print_bracketed() {
     assert!(c.at(PI).is_some_and(|q| (q.0 + PI / 2.0).abs() < 1e-12 && q.1.abs() < 1e-12));
     assert_eq!(c.shown, "x = (t/2)\u{b7}cos t, y = (t/2)\u{b7}sin t");
     // bars: 1/2|cos θ| at π is 1/2; θ/2|θ| at 2 is 2; 1/2 abs(θ) at 3 is 3/2
-    assert!((one("r = 1/2|cos θ|").r(PI).unwrap() - 0.5).abs() < 1e-12 && one("r = 1/2|cos θ|").shown == "r = (1/2)|cos \u{3b8}|", "{}", one("r = 1/2|cos θ|").shown);
+    assert!((one("r = 1/2|cos θ|").r(PI).unwrap() - 0.5).abs() < 1e-12 && one("r = 1/2|cos θ|").shown.replace('\u{b7}', "") == "r = (1/2)|cos \u{3b8}|", "{}", one("r = 1/2|cos θ|").shown);
     assert!((one("r = θ/2|θ|").r(2.0).unwrap() - 2.0).abs() < 1e-12 && one("r = θ/2|θ|").shown.starts_with("r = (\u{3b8}/2)"));
     assert!((one("r = 1/2 abs(θ)").r(3.0).unwrap() - 1.5).abs() < 1e-12);
     // notes from the typed factors
@@ -1260,4 +1266,94 @@ fn products_after_a_division_print_bracketed() {
     // a student copy's blank coordinates written in the panel keep their blanks
     let o = build(&with(&[("show_answers", b(false)), ("student_copy", s(polar::STUDENT[2])), ("marks_at", s("0, pi/12, pi/6, pi/4, pi/3, 5pi/12, pi/2")), ("label_size", s("Large"))]));
     for t in texts(&o.svg, "panel") { assert!(!t.contains("(, )"), "{t}"); }
+}
+
+// ───────────────────────── check 5: the printed-equation invariant ─────────────────────────
+
+/// Whether a printed equation, typed back, draws the same curve as `c`: the same values (10⁻⁹ relative) and the same
+/// undefined points at 24 places across the range.
+fn prints_as_drawn(c: &polar::Curve) -> Result<(), String> {
+    if c.shown.is_empty() { return Ok(()); }
+    let (back, n) = read_row(&c.shown);
+    let Some(b) = back.first() else { return Err(format!("{:?} is refused typed back: {n:?}", c.shown)) };
+    for k in 0..24 {
+        let s = c.lo.v + (c.hi.v - c.lo.v) * (k as f64 + 0.31) / 24.0;
+        let (p, q) = (c.at(s), b.at(s));
+        match (p, q) {
+            (Some(p), Some(q)) if (p.0 - q.0).abs() <= 1e-9 * (1.0 + p.0.abs()) && (p.1 - q.1).abs() <= 1e-9 * (1.0 + p.1.abs()) => {}
+            (None, None) => {}
+            _ => return Err(format!("{:?} reads back as another curve at {s}: {p:?} against {q:?}", c.shown)),
+        }
+    }
+    Ok(())
+}
+
+/// The invariant for every curve line of every example and of every classroom case: what is printed reads back as what
+/// is drawn (the sweep of typed spellings checks the same against sympy).
+#[test]
+fn every_printed_equation_reads_back_as_drawn() {
+    let d = def();
+    let mut rows: Vec<String> = crate::figures::examples_for(ID).iter().flat_map(|e| e.params.iter().filter(|(k, _)| *k == "curves").map(|(_, v)| if let Value::S(s) = v { s.clone() } else { String::new() }).collect::<Vec<_>>()).collect();
+    rows.extend(classroom().iter().map(|c| c.0.to_string()));
+    rows.push(d.title.to_string().replace("Polar and Parametric Curves", "r = 2 + 2cos(θ)"));
+    let mut bad = vec![];
+    let mut n = 0;
+    for r in rows {
+        for c in polar::curves_of(&with(&[("curves", s(&r))]), &mut vec![]) {
+            n += 1;
+            if c.shown.is_empty() { bad.push(format!("{:?}: no equation printed", r)); }
+            if let Err(e) = prints_as_drawn(&c) { bad.push(e); }
+        }
+    }
+    assert!(n >= 80 && bad.is_empty(), "{n} curves: {bad:?}");
+}
+
+/// The fallback: when the textbook print is spoiled, the tree's print is used and reads back as drawn; when every print
+/// is spoiled, no equation is written and the panel says so.
+#[test]
+fn spoiled_prints_fall_back_or_are_withheld() {
+    let rows = ["r = |θ/2*cos θ|", "x = cos(t)^3*4, y = sin(t)^3*4", "r = |θ/2|", "r = 2 + 2cos(θ)", "r = e^cos θ - 2cos 4θ + sin^5(θ/12)", "r = θ^2*3", "r = 1/θ^2*cos θ"];
+    polar::SPOIL.with(|c| c.set(1));
+    let mut seen = vec![];
+    for r in rows {
+        let c = polar::curves_of(&with(&[("curves", s(r))]), &mut vec![]).remove(0);
+        assert!(!c.shown.is_empty() && !c.shown.ends_with("+ 1"), "{r}: {}", c.shown);
+        prints_as_drawn(&c).unwrap();
+        seen.push(c.shown);
+    }
+    polar::SPOIL.with(|c| c.set(2));
+    let o = build(&with(&[("curves", s("r = 2 + 2cos(θ)")), ("key_line", b(true)), ("points", s(""))]));
+    polar::SPOIL.with(|c| c.set(0));
+    assert!(o.curves[0].shown.is_empty() && o.notes.iter().any(|n| n.contains("cannot be written without ambiguity")), "{:?}", o.notes);
+    assert!(!all_text(&o.svg).contains("cos"), "no equation written");
+    // the tree's prints, as used above
+    assert!(seen.iter().any(|s| s.contains("|(\u{3b8}/2)\u{b7}cos(\u{3b8})|")), "{seen:?}");
+    assert!(seen.iter().any(|s| s == "x = cos(t)^3\u{b7}4, y = sin(t)^3\u{b7}4"), "{seen:?}");
+}
+
+/// Check 5's cases, by hand: the textbook print where it is sound, the right curve, and no internal letter in a note.
+#[test]
+fn check_5_cases_by_hand() {
+    use std::f64::consts::PI;
+    let one = |t: &str| { let (c, n) = read_row(t); assert!(n.is_empty(), "{t}: {n:?}"); c.into_iter().next().unwrap() };
+    // |θ/2·cos θ| at 2: |cos 2| = 0.4161…; never negative
+    let c = one("r = |θ/2*cos θ|");
+    assert!((c.r(2.0).unwrap() - (2.0f64).cos().abs()).abs() < 1e-12 && c.shown == "r = |(\u{3b8}/2)\u{b7}cos \u{3b8}|", "{}", c.shown);
+    assert_eq!(one("r = |θ/2|").shown, "r = |\u{3b8}/2|");
+    // the astroid: 4cos³t at 0 is 4; θ^2*3 at 2 is 12; 2*3*θ at 1 is 6; √2*2 is 2√2
+    let c = one("x = cos(t)^3*4, y = sin(t)^3*4");
+    assert!(c.at(0.0).is_some_and(|q| (q.0 - 4.0).abs() < 1e-12) && !c.shown.contains("34"), "{}", c.shown);
+    for (t, at, want) in [("r = θ^2*3", 2.0, 12.0), ("r = 2*3*θ", 1.0, 6.0), ("r = √2*2", 1.0, 2.0 * 2f64.sqrt()), ("r = π|θ|", -1.0, PI), ("r = 2π|θ|", 1.0, 2.0 * PI)] {
+        let c = one(t);
+        assert!((c.r(at).unwrap() - want).abs() < 1e-12, "{t}");
+        prints_as_drawn(&c).unwrap();
+    }
+    assert!(one("r = θasin(θ/7)").shown.contains("arcsin"));
+    assert!(one("r = θ/2*-θ").shown.contains("(\u{2212}\u{3b8})"), "{}", one("r = θ/2*-θ").shown);
+    // 1/θ^2 cos θ is refused; notes never show the reader's own letter
+    assert!(read_row("r = 1/θ^2 cos θ").1.iter().any(|n| n.contains("two ways")));
+    for t in ["r = sqrt(θ)/2π", "r = sqrtθ/2π", "r = |θ/2π|", "r = |1/2 cos θ|", "r = √2cos θ", "r = θ/2(1+θ)"] {
+        let n = read_row(t).1.join(" ");
+        assert!(!n.is_empty() && !n.replace("sqrt", "").contains('q') && !n.contains("s\u{3b8}rt") && !n.contains("(|"), "{t}: {n}");
+    }
 }

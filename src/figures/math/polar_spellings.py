@@ -206,6 +206,62 @@ for typed, expr in [("r = θ/2Π", None), ("r = 2Πθ", 2 * sp.pi * th), ("r = s
         add("spelling", typed, expr)
 cases.append({"kind": "refused", "typed": "r = θ/2Π"})
 cases.append({"kind": "spelling", "typed": "x = t/2*cos(t), y = t/2*sin(t)", "values": vals(t / 2 * sp.cos(t), t), "y": vals(t / 2 * sp.sin(t), t)})
+# check 5: every printed equation must read back as the curve; a grid of explicit products after every kind of
+# denominator (number, letter, π, bracket, function, power, bar, exponential), inside bars and outside, polar and parametric
+NUM6 = [('θ', lambda v: v), ('3θ', lambda v: 3 * v), ('sin θ', lambda v: sp.sin(v)), ('1', lambda v: sp.Integer(1)), ('e^θ', lambda v: sp.exp(v)), ('(1+θ)', lambda v: 1 + v)]
+DEN6 = [('2', lambda v: 2), ('π', lambda v: sp.pi), ('θ', lambda v: v), ('(1+θ)', lambda v: 1 + v), ('cos θ', lambda v: sp.cos(v)), ('θ^2', lambda v: v ** 2), ('|θ|', lambda v: sp.Abs(v)), ('e^θ', lambda v: sp.exp(v))]
+FAC6 = [('θ', lambda v: v), ('cos θ', lambda v: sp.cos(v)), ('(1 - θ)', lambda v: 1 - v), ('3', lambda v: 3), ('π', lambda v: sp.pi), ('-θ', lambda v: -v)]
+def poladd(typed, expr):
+    add("spelling", typed, expr)
+def paradd(body, expr):
+    cases.append({"kind": "spelling", "typed": f"x = {body}, y = t", "values": vals(expr, t), "y": vals(t, t)})
+for polar in [True, False]:
+    v = th if polar else t
+    for n_txt, n_f in NUM6:
+        for d_txt, d_f in DEN6:
+            for op in (['*', '·', '×', '⋅'] if polar else ['*', '·']):
+                for f_txt, f_f in FAC6:
+                    body = f"{n_txt}/{d_txt}{op}{f_txt}"
+                    q = n_f(v) / d_f(v) * f_f(v)
+                    for wrap, w in [("{}", q), ("|{}|", sp.Abs(q))] + ([("1 + |{}|", 1 + sp.Abs(q))] if op == '*' else []):
+                        b = wrap.format(body)
+                        if not polar:
+                            b = b.replace('θ', 't')
+                        if '|' in wrap and '|' in d_txt:
+                            # bars inside bars: refused (the inner one must be written abs(…))
+                            cases.append({"kind": "nested", "typed": f"r = {b}" if polar else f"x = {b}, y = t"})
+                            continue
+                        (poladd(f"r = {b}", w) if polar else paradd(b, w))
+# a quotient alone in bars, and bars after a coefficient or π
+for typed, expr in [("|θ/2|", sp.Abs(th / 2)), ("|cos θ/2|", sp.Abs(sp.cos(th) / 2)), ("|cos(θ)/2|", sp.Abs(sp.cos(th) / 2)), ("|θ/π|", sp.Abs(th / sp.pi)),
+                    ("|2/θ|", sp.Abs(2 / th)), ("1 + |θ/2|", 1 + sp.Abs(th / 2)), ("2 + |θ/π|", 2 + sp.Abs(th / sp.pi)), ("1 - |cos θ/2|", 1 - sp.Abs(sp.cos(th) / 2)),
+                    ("|θ/2|^2", sp.Abs(th / 2) ** 2), ("e^|θ/2|", sp.exp(sp.Abs(th / 2))), ("|θ/2| + |θ/3|", sp.Abs(th / 2) + sp.Abs(th / 3)),
+                    ("|θ/2|/|θ/3|", sp.Abs(th / 2) / sp.Abs(th / 3)), ("abs(θ/2)", sp.Abs(th / 2)), ("π|θ|", sp.pi * sp.Abs(th)), ("2π|θ|", 2 * sp.pi * sp.Abs(th)),
+                    ("π abs(θ)", sp.pi * sp.Abs(th)), ("2|cos θ|", 2 * sp.Abs(sp.cos(th))), ("θ/2*-θ", -th ** 2 / 2), ("θasin(θ/7)", th * sp.asin(th / 7)),
+                    ("2*3*θ", 6 * th), ("2*3", sp.Integer(6)), ("√2*2", 2 * sp.sqrt(2)), ("2*3*cos θ", 6 * sp.cos(th)), ("4*0.5*θ", 2 * th), ("3*θ*2", 6 * th),
+                    ("1/θ^2*cos θ", sp.cos(th) / th ** 2), ("e^θ/θ^2*sin θ", sp.exp(th) / th ** 2 * sp.sin(th)), ("2/θ^3*sin θ", 2 / th ** 3 * sp.sin(th)),
+                    ("θ/2^2*θ", th ** 2 / 4), ("θ/π^2*θ", th ** 2 / sp.pi ** 2), ("θ/(1+θ)^2*θ", th ** 2 / (1 + th) ** 2)]:
+    poladd(f"r = {typed}", expr)
+for typed in ["r = 1/θ^2 cos θ", "r = θ/2^2 θ"]:
+    cases.append({"kind": "refused", "typed": typed})
+# an explicit product after a power, polar and parametric
+for polar in [True, False]:
+    v = th if polar else t
+    for b_txt, b_f in [('θ', lambda v: v), ('cos(θ)', lambda v: sp.cos(v)), ('sin(θ)', lambda v: sp.sin(v)), ('(1+cos θ)', lambda v: 1 + sp.cos(v)), ('e', lambda v: sp.E)]:
+        for k in [2, 3]:
+            for op in ['*', '·']:
+                for f_txt, f_f in [('3', lambda v: 3), ('4', lambda v: 4), ('0.5', lambda v: sp.Rational(1, 2)), ('16', lambda v: 16), ('θ', lambda v: v), ('π', lambda v: sp.pi), ('cos θ', lambda v: sp.cos(v))]:
+                    body = f"{b_txt}^{k}{op}{f_txt}"
+                    expr = b_f(v) ** k * f_f(v)
+                    if polar:
+                        poladd(f"r = {body}", expr)
+                    else:
+                        paradd(body.replace('θ', 't'), expr)
+cases.append({"kind": "spelling", "typed": "x = cos(t)^3*4, y = sin(t)^3*4", "values": vals(4 * sp.cos(t) ** 3, t), "y": vals(4 * sp.sin(t) ** 3, t)})
+cases.append({"kind": "spelling", "typed": "x = |t/2*cos t|, y = |t/2*sin t|", "values": vals(sp.Abs(t / 2 * sp.cos(t)), t), "y": vals(sp.Abs(t / 2 * sp.sin(t)), t)})
+for typed, expr in [("r = |θ/abs(θ)*cos θ|", sp.Abs(th / sp.Abs(th) * sp.cos(th))), ("r = |abs(θ)/2*θ|", sp.Abs(sp.Abs(th) / 2 * th))]:
+    add("spelling", typed, expr)
+cases.append({"kind": "spelling", "typed": "x = t, y = |cos t/2*sin t|", "values": vals(t, t), "y": vals(sp.Abs(sp.cos(t) / 2 * sp.sin(t)), t)})
 # what can be read two ways is refused (no values)
 for typed in ["r = cos θ^2", "r = sin θ(1 + θ)", "r = sin -θ", "r = 2cos", "x = cos t^2, y = t",
               "x = sin t(e^cos t - 2cos 4t), y = t", "r = sin θ²", "r = cos θ²", "r = 1 - sin θ²", "r = sin θ^2", "r = sin 1/2θ", "x = sin t², y = t"]:
