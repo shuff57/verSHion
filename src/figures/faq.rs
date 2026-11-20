@@ -210,6 +210,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "conic-sections" => CONIC_SECTIONS,
         "limits-discontinuities" => LIMITS_DISCONTINUITIES,
         "tangent-secant-lines" => TANGENT_SECANT_LINES,
+        "slope-fields" => SLOPE_FIELDS,
         _ => &[],
     }
 }
@@ -4648,4 +4649,27 @@ const COMPLEX_PLANE: &[Faq] = &[
  Faq {q:"What does the construction show?",a:"Choose conjugate, sum, difference, product, quotient, roots or powers. The sum uses a parallelogram. Products rotate by the second argument and stretch by its modulus. Roots lie on a circle; Join roots adds their regular polygon."},
  Faq {q:"How do I make a student copy?",a:"Select Coordinates, Modulus and argument, or Construction, then turn Show answers off. Student + key exports the matching pair. Print gives neutral greys."},
  Faq {q:"Why are some values approximate?",a:"Exact rational results and directly derived special arguments are written with equals. Other calculated values use the approximation sign. The principal argument is in (−π, π]; zero has no argument. Notes explain invalid values and items outside the axis window."},
+];
+
+const SLOPE_FIELDS: &[Faq] = &[
+    Faq {
+        q: "What does the slope field show?",
+        a: "At each grid point it draws a short segment with the slope dy/dx = f(x, y) there, all of the same length. A solution curve follows the segments: through each starting point it is worked out accurately (an adaptive Runge\u{2013}Kutta method) and drawn both ways, or forward only. Where dy/dx is undefined at a grid point, as for 1/(x \u{2212} y) on the line y = x or ln(y) for y \u{2264} 0, no segment is drawn and the editor says where.",
+    },
+    Faq {
+        q: "Why does a solution curve stop before the edge?",
+        a: "A curve is never drawn through a point where dy/dx is undefined or across a blow-up. It stops where the solution reaches such a point (y\u{2032} = y/x at x = 0), where its slope grows without bound (the circles of y\u{2032} = \u{2212}x/y at y = 0), or where it leaves the window for good (y\u{2032} = y\u{b2} from (0, 1) before x = 1). The editor says where and why.",
+    },
+    Faq {
+        q: "How does Euler's method work here?",
+        a: "Tick Euler's method: from the first starting point it takes n steps of size h, each along the slope at the start of the step, y\u{2099}\u{208a}\u{2081} = y\u{2099} + h\u{b7}f(x\u{2099}, y\u{2099}), drawn as joined segments with a table of x and y. The values are exact (fractions, or decimals where a decimal was typed) while they are exact rationals, otherwise rounded with \u{2248}. Compare with the solution draws the solution curve and adds its values at each x to the table.",
+    },
+    Faq {
+        q: "How are the equilibrium solutions found?",
+        a: "An equilibrium solution is a horizontal line y = c on which dy/dx = 0 for every x. The figure finds the roots of f along a line across the window and keeps those where f is 0 at every x tried; a value is written exactly only when exact arithmetic shows f(x, c) = 0. The list is said to be every one in the window only when f is a polynomial in y whose roots can be counted (Sturm's theorem); otherwise it says there may be others.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers and choose the copy: the field and the starting points to sketch the solutions on; dots at the grid points for students to draw the segments (the AP \u{2018}sketch at the nine points\u{2019}); a blank line for the equation; or four equations A to D to match the field to, with the right one boxed on the key. Student + key exports both copies; Answer key line under the graph sums up Euler's values, the solution and the equilibria.",
+    },
 ];

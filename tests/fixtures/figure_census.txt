@@ -316,6 +316,8 @@ sequences-series__defaults 9240b785875bde18
 sequences-series__start 9240b785875bde18
 sine-cosine__defaults 3180a65e16ea590e
 sine-cosine__start 3180a65e16ea590e
+slope-fields__defaults c541cf186390299e
+slope-fields__start c541cf186390299e
 slope-triangle__defaults 53cc7d348c685d49
 slope-triangle__start 53cc7d348c685d49
 soil-texture__defaults f152d300793f74e5
