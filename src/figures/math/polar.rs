@@ -23,7 +23,7 @@ mod print;
 
 #[cfg(test)]
 thread_local! {
-    /// Test hook: 1 spoils the textbook print (the tree's prints must take over), 2 spoils every print.
+    /// Test hook: 1 spoils the textbook print, 2 the tree's bracketed print too, 3 every print.
     pub(crate) static SPOIL: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
 }
 #[cfg(test)]
@@ -31,6 +31,9 @@ fn spoil(level: u8, s: String) -> String { if SPOIL.with(|c| c.get()) >= level {
 #[cfg(not(test))]
 fn spoil(_: u8, s: String) -> String { s }
 
+/// The tree's print of a function (for tests: which printer a curve's equation came from).
+#[cfg(test)]
+pub(crate) fn tree_print(node: &Node, polar: bool, full: bool) -> String { print::tree(node, if polar { "\u{3b8}" } else { "t" }, full) }
 /// Brackets and bars nest (a bar closes only the bar it opened, never across a bracket), and nothing of the reader's own
 /// spelling shows (q, sqrt, pi), and no sign follows a product or quotient sign (θ/2·−θ).
 fn well_formed(s: &str) -> bool {
@@ -61,7 +64,7 @@ fn reads_same(text: &str, node: &Node, polar: bool, lo: f64, hi: f64) -> bool {
 /// bracketed print, else the fully bracketed one; None when none does (then no equation is written).
 pub(crate) fn verified_print(textbook: &str, node: &Node, polar: bool, lo: f64, hi: f64) -> Option<String> {
     let var = if polar { "\u{3b8}" } else { "t" };
-    [spoil(1, textbook.to_string()), spoil(2, print::tree(node, var, false)), spoil(2, print::tree(node, var, true))]
+    [spoil(1, textbook.to_string()), spoil(2, print::tree(node, var, false)), spoil(3, print::tree(node, var, true))]
         .into_iter().find(|t| reads_same(t, node, polar, lo, hi))
 }
 use super::{coordinate_grid_build, coordinate_grid_params, grid_layout, math_text, math_tspans, GridL, SERIF};

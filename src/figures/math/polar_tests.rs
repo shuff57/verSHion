@@ -1321,7 +1321,14 @@ fn spoiled_prints_fall_back_or_are_withheld() {
         prints_as_drawn(&c).unwrap();
         seen.push(c.shown);
     }
+    // with the tree's print spoiled too, the fully bracketed print is used, and reads back as drawn
     polar::SPOIL.with(|c| c.set(2));
+    let full = polar::curves_of(&with(&[("curves", s("r = |θ/2*cos θ| + 2cos(θ)^2*3"))]), &mut vec![]).remove(0);
+    assert_eq!(full.shown, format!("r = {}", polar::tree_print(&full.f, true, true)));
+    prints_as_drawn(&full).unwrap();
+    let fo = build(&with(&[("curves", s("r = |θ/2*cos θ| + 2cos(θ)^2*3")), ("key_line", b(true)), ("points", s("")), ("tracer", b(false)), ("rmax", f(6.0))]));
+    if let Ok(dir) = std::env::var("VERSHION_POLAR_DUMP") { std::fs::create_dir_all(&dir).unwrap(); std::fs::write(format!("{dir}/fully_bracketed.png"), crate::figures::to_png(&fo.svg, 1.5).unwrap()).unwrap(); }
+    polar::SPOIL.with(|c| c.set(3));
     let o = build(&with(&[("curves", s("r = 2 + 2cos(θ)")), ("key_line", b(true)), ("points", s(""))]));
     polar::SPOIL.with(|c| c.set(0));
     assert!(o.curves[0].shown.is_empty() && o.notes.iter().any(|n| n.contains("cannot be written without ambiguity")), "{:?}", o.notes);
@@ -1356,4 +1363,32 @@ fn check_5_cases_by_hand() {
         let n = read_row(t).1.join(" ");
         assert!(!n.is_empty() && !n.replace("sqrt", "").contains('q') && !n.contains("s\u{3b8}rt") && !n.contains("(|"), "{t}: {n}");
     }
+}
+
+/// Which printer each equation of the sweep came from (the textbook print, the tree's, or the fully bracketed one).
+#[test]
+fn printers_used_across_the_sweep() {
+    let data: Vec<serde_json::Value> = serde_json::from_str(include_str!("polar_spellings.json")).unwrap();
+    let (mut a, mut b, mut c, mut none) = (0, 0, 0, 0);
+    let mut full_examples = vec![];
+    for e in &data {
+        let typed = e["typed"].as_str().unwrap();
+        for cv in read_row(typed).0 {
+            if cv.shown.is_empty() { none += 1; continue; }
+            if !cv.polar { continue; }
+            let rhs = cv.shown.trim_start_matches("r = ");
+            if rhs == polar::tree_print(&cv.f, true, true) && rhs != polar::tree_print(&cv.f, true, false) { c += 1; if full_examples.len() < 5 { full_examples.push(typed.to_string()); } }
+            else if rhs == polar::tree_print(&cv.f, true, false) { b += 1; } else { a += 1; }
+        }
+    }
+    println!("printers: textbook {a}, tree {b}, fully bracketed {c}, none {none}; fully bracketed for {full_examples:?}");
+    // what choosing and verifying the print costs, per curve (reading a curve without it is the baseline)
+    let rows: Vec<&str> = data.iter().filter(|e| e["kind"] != "refused" && e["kind"] != "nested" && e["kind"] != "unsupported").map(|e| e["typed"].as_str().unwrap()).collect();
+    let t0 = std::time::Instant::now();
+    let mut n = 0;
+    for r in &rows { n += read_row(r).0.len(); }
+    let per = t0.elapsed().as_secs_f64() / n as f64;
+    println!("printers: reading and verifying {n} curves, {:.3} ms per curve (all of reading included)", per * 1e3);
+    assert!(per < 1e-3);
+    assert_eq!(none, 0);
 }
