@@ -708,7 +708,7 @@ fn marks_of(p: &Params, cs: &[Curve], used: &[String], notes: &mut Vec<String>) 
 // ───────────────────────── labels ─────────────────────────
 
 #[derive(Clone, Default)]
-pub(crate) struct Scene { pub segs: Vec<(Pt, Pt)>, pub boxes: Vec<Bx>, pub dots: Vec<(Pt, f64)>, pub bounds: Bx }
+pub(crate) struct Scene { pub segs: Vec<(Pt, Pt)>, pub boxes: Vec<Bx>, pub dots: Vec<(Pt, f64)>, pub bounds: Bx, pub soft: Vec<(Pt, Pt)>, pub strict: bool }
 fn overlap(a: Bx, b: Bx, pad: f64) -> bool { !(a.2 + pad <= b.0 || b.2 + pad <= a.0 || a.3 + pad <= b.1 || b.3 + pad <= a.1) }
 pub(crate) fn seg_hits(a: Pt, b: Pt, r: Bx, pad: f64) -> bool { clip_rect(a, b, (r.0 - pad, r.1 - pad, r.2 + pad, r.3 + pad)).is_some() }
 pub(crate) fn box_pt(b: Bx, p: Pt) -> f64 { let dx = (b.0 - p.0).max(0.0).max(p.0 - b.2); let dy = (b.1 - p.1).max(0.0).max(p.1 - b.3); dx.hypot(dy) }
@@ -718,6 +718,8 @@ impl Scene {
             && !self.boxes.iter().any(|o| overlap(b, *o, 2.0))
             && !self.dots.iter().any(|(d, r)| d.0 > b.0 - r - 2.0 && d.0 < b.2 + r + 2.0 && d.1 > b.1 - r - 2.0 && d.1 < b.3 + r + 2.0)
             && !self.segs.iter().any(|(a, c)| seg_hits(*a, *c, b, 2.5))
+            // (first, clear of the gridlines too: a label is not set along a gridline where it need not be)
+            && !(self.strict && self.soft.iter().any(|(a, c)| seg_hits(*a, *c, b, 0.5)))
     }
     fn cost(&self, b: Bx) -> f64 {
         let out = (self.bounds.0 - b.0).max(0.0) + (b.2 - self.bounds.2).max(0.0) + (self.bounds.1 - b.1).max(0.0) + (b.3 - self.bounds.3).max(0.0);
@@ -828,7 +830,10 @@ fn place(sc: &mut Scene, r: &Req, out: &mut String, to_panel: &mut Vec<String>, 
         }
         None
     };
+    sc.strict = true;
     let mut chosen = try_text(sc, &r.text, false).map(|x| (x, r.text.clone()));
+    sc.strict = false;
+    if chosen.is_none() { chosen = try_text(sc, &r.text, false).map(|x| (x, r.text.clone())); }
     // a complete shorter wording (the angle's value alone beside its arc), then each on a short leader
     if let (None, Some(alt)) = (&chosen, &r.alt) { chosen = try_text(sc, alt, false).map(|x| (x, alt.clone())); }
     if chosen.is_none() { chosen = try_text(sc, &r.text, true).map(|x| (x, r.text.clone())); }
@@ -975,6 +980,7 @@ pub(crate) fn build(p0: &Params) -> Out {
                     // (the axes are drawn darker below)
                     if (j * k) % 6 == 0 { continue; }
                     body += &format!(r##"<line x1="{cx:.2}" y1="{cy:.2}" x2="{:.2}" y2="{:.2}" stroke="{gc}" stroke-width="1" data-pp="gridray"/>"##, cx + rpx * a.cos(), cy - rpx * a.sin());
+                    sc.soft.push(((cx, cy), (cx + rpx * a.cos(), cy - rpx * a.sin())));
                 }
             }
             body += &format!(r##"<circle cx="{cx:.2}" cy="{cy:.2}" r="{rpx:.2}" fill="none" stroke="#777777" stroke-width="1.2" data-pp="circle"/>"##);
@@ -1031,6 +1037,13 @@ pub(crate) fn build(p0: &Params) -> Out {
         body += &gsvg[start..end];
         let fr = Frame { polar: false, cx: 0.0, cy: 0.0, u: g.ux, rpx: 0.0, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, ml: g.ml, mt: g.mt, ph: g.ph, ux: g.ux, uy: g.uy };
         let pl = fr.plot();
+        if gp.s("grid") != "None" {
+            let (xs, ys) = (g.xs, g.ys);
+            let mut x = (g.x0 / xs).ceil() * xs;
+            while x <= g.x1 + 1e-9 && sc.soft.len() < 400 { let q = fr.to(x, 0.0).0; sc.soft.push(((q, pl.1), (q, pl.3))); x += xs; }
+            let mut y = (g.y0 / ys).ceil() * ys;
+            while y <= g.y1 + 1e-9 && sc.soft.len() < 800 { let q = fr.to(0.0, y).1; sc.soft.push(((pl.0, q), (pl.2, q))); y += ys; }
+        }
         let ax_y = if g.y0 <= 0.0 && g.y1 >= 0.0 { 0.0 } else { g.y0 };
         let ax_x = if g.x0 <= 0.0 && g.x1 >= 0.0 { 0.0 } else { g.x0 };
         let (yy, xx) = (fr.to(0.0, ax_y).1, fr.to(ax_x, 0.0).0);
