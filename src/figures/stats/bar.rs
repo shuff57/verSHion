@@ -63,7 +63,7 @@ pub fn def() -> FigureDef {
         id: ID,
         subject: Subject::Math,
         title: "Bar Chart",
-        blurb: "A bar chart of categories and their counts or percents, with gaps between the bars: one group or two side by side, in typed, sorted or Pareto order.",
+        blurb: "A bar chart of categories and their counts or percents, with gaps between the bars: one group or two side by side, in typed, sorted or Pareto order. Bars can be thin lines for a vertical line graph (stick graph), with tick marks on both axes and an arrowed value axis.",
         params,
         render,
     }
@@ -79,8 +79,9 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("orient", "Bars", &["Vertical", "Horizontal"], "Vertical"),
         ParamDef::choice("measure", "Bar height", &[COUNT, PERCENT], COUNT).hint("Relative frequency is each category's percent of its group's total, so each group's bars add to 100%"),
         ParamDef::choice("order", "Order", &ORDERS, "As typed").hint("Categories have no natural order unless they are ordered words (like Never, Sometimes, Often): keep those as typed"),
-        ParamDef::choice("gap", "Gap between bars", &["Narrow", "Medium", "Wide"], "Medium").hint("Bars of a bar chart never touch: the categories are separate"),
+        ParamDef::choice("gap", "Gap between bars", &["Narrow", "Medium", "Wide", "Lines"], "Medium").hint("Bars of a bar chart never touch: the categories are separate. Lines draws each bar as a thin vertical line, as in a vertical line graph (stick graph) of a discrete distribution"),
         ParamDef::bool("cat_ticks", "Tick marks at the categories", false).hint("A short mark on the category axis at the middle of each category, as many printed charts have"),
+        ParamDef::bool("val_arrow", "Arrowhead on the value axis", false).hint("A filled arrowhead just past the end of the value axis, as printed on many exam graphs"),
         ParamDef::bool("values", "Write the value on each bar", true),
         ParamDef::choice("values_at", "Values sit", &VALUES_AT, VALUES_AT[0]).hint("Inside writes each value in its bar, on a white chip; a bar too short for it keeps its value at the end"),
         ParamDef::int("decimals", "Decimals in percents", 0, 2, 0),
@@ -1247,6 +1248,8 @@ struct Opts {
     gap: f64,
     /// A short tick on the category axis at each category's middle.
     cat_ticks: bool,
+    /// An arrowhead past the end of the value axis.
+    val_arrow: bool,
     values: bool,
     decimals: u32,
     grid: bool,
@@ -1347,9 +1350,11 @@ fn opts(p: &Params, t: &Table) -> Opts {
         gap: match p.s("gap") {
             "Narrow" => 0.25,
             "Wide" => 0.6,
+            "Lines" => 0.92,
             _ => 0.4,
         },
         cat_ticks: p.b("cat_ticks"),
+        val_arrow: p.b("val_arrow"),
         values: p.b("values"),
         decimals: p.i("decimals").clamp(0, 2) as u32,
         grid: p.b("grid"),
@@ -2072,7 +2077,8 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
     let legend_row_h = fs * PITCH + 4.0;
     let key_col_w = legend.iter().map(|l| l.1).fold(0.0, f64::max);
     let key_right = key_on && o.key == 1;
-    let slot_min = (gb as f64 * fv * 1.45 / (1.0 - o.gap)).max(fs * 1.45);
+    // Thin line bars carry no value inside them, so they need no wider slot than wide bars.
+    let slot_min = (gb as f64 * fv * 1.45 / (1.0 - o.gap.min(0.6))).max(fs * 1.45);
     let plot_h_v = 260.0 + (k - 1.0) * 60.0;
     let mut w: f64 = 640.0;
     let (l, mut r);
@@ -2094,7 +2100,7 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
         let name_w = idx.iter().map(|&i| tw(&t.cats[i].name, fs)).fold(0.0, f64::max).min(200.0 * k);
         name_lines = idx.iter().map(|&i| wrap(&t.cats[i].name, name_w, fs, true).unwrap_or_default()).collect();
         let max_lines = name_lines.iter().map(|v| v.len()).max().unwrap_or(1).max(1) as f64;
-        let slot_h = (max_lines * fs * PITCH + 8.0).max(gb as f64 * fv * 1.45 / (1.0 - o.gap));
+        let slot_h = (max_lines * fs * PITCH + 8.0).max(gb as f64 * fv * 1.45 / (1.0 - o.gap.min(0.6)));
         plot_h = (n as f64 * slot_h).max(150.0);
         ct_lines = if o.cat_title.is_empty() { Vec::new() } else { wrap(&o.cat_title, plot_h - 8.0, fa, true).unwrap_or_default() };
         let ct_n = reserved(&ct_lines, o.cat_line);
@@ -2373,8 +2379,16 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
         }
     }
     // axes over the bars' feet
-    d.line(l, bottom, w - r, bottom, ink, 2.0);
-    d.line(l, top, l, bottom, ink, 2.0);
+    if o.val_arrow && o.horizontal {
+        d.arrow(l, bottom, w - r + 16.0, bottom, ink, 2.0);
+    } else {
+        d.line(l, bottom, w - r, bottom, ink, 2.0);
+    }
+    if o.val_arrow && !o.horizontal {
+        d.arrow(l, bottom, l, top - 16.0, ink, 2.0);
+    } else {
+        d.line(l, top, l, bottom, ink, 2.0);
+    }
     if o.cat_ticks {
         for j in 0..n {
             let c = (j as f64 + 0.5) * slot;

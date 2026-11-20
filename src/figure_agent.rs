@@ -384,12 +384,12 @@ fn with_measured_dashes(r: Rendered, reference: Option<&[u8]>, has_reference: bo
     }
 }
 
-/// A judge problem that is about dash style alone: it names dashes and a continuous/solid line,
-/// and nothing else a figure can get wrong (labels, values, marks, positions, missing or extra
-/// parts).
+/// A judge problem that is about dash style alone: it names dashes, and nothing else a figure can
+/// get wrong (labels, values, marks, positions, missing or extra parts). Whether the styles are
+/// right is then settled by the pixel measurement, not by this wording.
 fn dash_style_only(problem: &str) -> bool {
     let p = problem.to_lowercase();
-    let about_dashes = p.contains("dash") && ["continuous", "solid", "no visible gap", "no gaps", "unbroken"].iter().any(|w| p.contains(w));
+    let about_dashes = p.contains("dash");
     let other = ["label", "missing", "extra", "absent", "omit", "arc", "tick", "arrow", "value", "number", "measure", "misplac", "moved", "shift", "position", "length", "angle", "orientation", "rotat", "mirror", "curve", "color", "colour", "text", "caption", "title", "unit", "scale"]
         .iter()
         .any(|w| p.contains(w));
@@ -1102,6 +1102,8 @@ mod tests {
         assert!(!dash_style_only("The hidden edge is dashed but solid in the source, and the label 4 mi is missing."));
         assert!(!dash_style_only("The back-right edge is missing."));
         assert!(!dash_style_only("The rose has a narrower upper-left petal."));
+        // Round 28, volume p2 #8: the second objection names no continuous or solid line.
+        assert!(dash_style_only("Only the vertical hidden edge from the apex down to H is clearly dashed in the reference. Image 1 dashes all three hidden edges."));
         let spec=FigureSpec{id:"geometry-diagram".into(),params:BTreeMap::new()};
         let mixed=Verdict{matches:false,problems:vec!["Edges are dashed, the source shows continuous lines.".into(),"The angle arc at B is missing.".into()]};
         assert!(measured_styles_overrule(&spec,&mixed,Some(&[])).is_none(),"any other objection keeps the rejection");

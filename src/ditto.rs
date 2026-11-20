@@ -442,21 +442,67 @@ pub fn current_page_direction_targets(reply: &str, page_no: usize, context: Opti
 /// Append only reviewed literal current-page task mappings. Question payloads,
 /// answers, figures, headings and existing exam entries are never rewritten.
 pub fn recover_printed_direction_mappings(reply: &str, page_no: usize, context: Option<&DocContext>, directions: &[String], mappings: &[(usize,usize)]) -> Result<String,String> {
+    recover_printed_direction_mappings_noting(reply,page_no,context,directions,mappings).map(|(r,_)|r)
+}
+
+/// [`recover_printed_direction_mappings`], also returning why a recovered direction was left
+/// out. Two readings are not applied: a "direction" that is mostly the question's own words (the
+/// reader returned the question as its task), and one the conversion already gave to a section
+/// that does not hold this item (a group's task spread past the group).
+pub fn recover_printed_direction_mappings_noting(reply: &str, page_no: usize, context: Option<&DocContext>, directions: &[String], mappings: &[(usize,usize)]) -> Result<(String,Vec<String>),String> {
     let allowed=current_page_direction_targets(reply,page_no,context);
     if directions.iter().any(|s|s.trim().is_empty()) {return Err("Printed directions must contain literal nonempty source text.".into());}
     let mut v=json_object(reply).ok_or("No source object.")?;
     let questions=v.pointer("/bank/questions").and_then(Value::as_array).ok_or("No source questions.")?;
-    let mut additions=Vec::new();let mut seen=Vec::new();
+    let owned=section_owners(&v);
+    let mut additions=Vec::new();let mut seen=Vec::new();let mut skipped=Vec::new();
     for &(index,direction) in mappings {
         if !allowed.contains(&index)||seen.contains(&index) {return Err("Current-page repair must identify an eligible unmapped item once only.".into());}seen.push(index);
         let text=directions.get(direction).ok_or("Unknown current-page direction index.")?;
         let id=questions[index]["id"].as_str().expect("validated unique source id");
+        let label=raw_label(&questions[index],index).0;
+        if restates_question(text,&questions[index]) {
+            skipped.push(format!("{label}: the recovered direction is mostly the question's own words; not added"));
+            continue;
+        }
+        if owned.iter().any(|(key,ids)|*key==instruction_key(text)&&!ids.iter().any(|q|q==id)) {
+            skipped.push(format!("{label}: the conversion already gave this direction to another group; not spread to this item"));
+            continue;
+        }
         additions.push(serde_json::json!({"name":"","sections":[{"title":"","instructions":text,"inheritedFromPage":null}],"positions":[{"question":id,"section":0}]}));
     }
-    if additions.is_empty() {return Ok(reply.into());}
+    if additions.is_empty() {return Ok((reply.into(),skipped));}
     if v.get("exams").is_none() {v["exams"]=v.pointer("/bank/exams").cloned().unwrap_or_else(||serde_json::json!([]));}
     v["exams"].as_array_mut().ok_or("Source exams are not a list.")?.extend(additions);
-    serde_json::to_string(&v).map_err(|e|e.to_string())
+    serde_json::to_string(&v).map(|r|(r,skipped)).map_err(|e|e.to_string())
+}
+
+/// Each nonempty section instruction in the reply (normalized) with the question ids it holds.
+fn section_owners(v: &Value) -> Vec<(String,Vec<String>)> {
+    let exams=v.get("exams").or_else(||v.pointer("/bank/exams")).and_then(Value::as_array).cloned().unwrap_or_default();
+    let mut out=Vec::new();
+    for exam in &exams {
+        let sections=exam.get("sections").and_then(Value::as_array).cloned().unwrap_or_default();
+        let positions=exam.get("positions").and_then(Value::as_array).cloned().unwrap_or_default();
+        for (si,section) in sections.iter().enumerate() {
+            let Some(text)=section.get("instructions").and_then(Value::as_str).filter(|t|!t.trim().is_empty()) else {continue};
+            let ids:Vec<String>=positions.iter().filter(|p|p.get("section").and_then(Value::as_u64)==Some(si as u64)).filter_map(|p|p.get("question").and_then(Value::as_str).map(str::to_string)).collect();
+            if !ids.is_empty() {out.push((instruction_key(text),ids));}
+        }
+    }
+    out
+}
+
+/// A recovered direction of three or more words, three quarters of which (math markup aside)
+/// already appear in the question's stem or parts: the question restated, not a group's task.
+fn restates_question(direction: &str, question: &Value) -> bool {
+    let mut text=question.get("stem").and_then(Value::as_str).unwrap_or("").to_string();
+    for part in question.get("parts").and_then(Value::as_array).into_iter().flatten() {
+        text.push('\n');text.push_str(part.get("stem").and_then(Value::as_str).unwrap_or(""));
+    }
+    let have:std::collections::HashSet<String>=prose_words(&text).into_iter().collect();
+    let mut want=prose_words(direction);want.sort();want.dedup();
+    want.len()>=3 && want.iter().filter(|w|have.contains(*w)).count()*4>=want.len()*3
 }
 
 /// Application-owned merge: a reviewed item may select only one direction already printed
@@ -488,10 +534,23 @@ fn range_text(labels: &[String]) -> String {
     } else {labels.join(", ")}
 }
 
-/// The printed question number in a label such as `13`, `13.`, `13)` or `Question 13`.
+/// The printed question number in a label such as `13`, `13.`, `13)`, `Question 13`, `Problem 13`,
+/// `Exercise 13`, `#13`, `Q13`, `Q[13]:` (CLP textbooks) or `[13]`.
 pub fn label_number(label: &str) -> Option<u32> {
-    let t = label.trim();
-    let t = t.get(..9).filter(|p| p.eq_ignore_ascii_case("question ")).map_or(t, |_| t[9..].trim_start());
+    let t = label.trim().trim_end_matches([':', '.']).trim();
+    let lower = t.to_ascii_lowercase();
+    let mut t = t;
+    for word in ["question", "problem", "exercise", "q", "#"] {
+        if lower.starts_with(word) && t.len() > word.len() {
+            let rest = &t[word.len()..];
+            // A word prefix needs a separator or a digit/bracket after it: "Question 13", "Q13", "Q[13]".
+            if rest.starts_with([' ', '.', '[', '(']) || rest.starts_with(|c: char| c.is_ascii_digit()) {
+                t = rest.trim_start_matches(['.', ' ']);
+                break;
+            }
+        }
+    }
+    let t = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')).or_else(|| t.strip_prefix('(').and_then(|s| s.strip_suffix(')'))).unwrap_or(t);
     t.trim_end_matches(['.', ')']).trim().parse().ok()
 }
 
@@ -2035,12 +2094,48 @@ mod tests {
     }
 
     #[test]
+    fn a_recovered_direction_that_restates_the_question_or_belongs_to_another_group_is_not_applied() {
+        // Holdout v5, word for word: UKMT #14, Hefferon 2.18, Whitman 27-32.
+        let q = |id: &str, label: &str, stem: &str| serde_json::json!({"id":id,"label":label,"type":"short-answer","stem":stem});
+        let reply = serde_json::json!({"format":FORMAT,"bank":{"name":"t","questions":[
+            q("q3","14","Which of these is equal to $3^3 + 4^3 + 5^3$?"),
+            q("q4","2.18","Find the system of equations resulting from starting with\n$h_{1,1}x_1 + h_{1,2}x_2 + h_{1,3}x_3 = d_1$\n$h_{2,1}x_1 + h_{2,2}x_2 + h_{2,3}x_3 = d_2$\nand making this change of variable (i.e., substitution).\n$x_1 = g_{1,1}y_1 + g_{1,2}y_2$"),
+            q("q27","27","$f(x) = 1/(1+x^2)$"),
+            q("q32","32","Let $f(x) = 1/(x^2 - a^2)$, where $a \\geq 0$. Find any vertical and horizontal asymptotes and the intervals upon which the given function is concave up and increasing. Discuss how the value of $a$ affects these features."),
+            q("q40","40","$2x + 3 = 11$")]},
+            "exams":[{"name":"","sections":[{"title":"","instructions":"For each of the following five functions, identify any vertical and horizontal asymptotes."},{"title":"","instructions":""}],
+                "positions":[{"question":"q27","section":0},{"question":"q32","section":1}]}]}).to_string();
+        let directions = vec![
+            "Which of these is equal to 3³ + 4³ + 5³?".to_string(),
+            "Find the system of equations resulting from starting with the two printed equations h_{1,1}x_1 + h_{1,2}x_2 + h_{1,3}x_3 = d_1 and h_{2,1}x_1 + h_{2,2}x_2 + h_{2,3}x_3 = d_2 and making this change of variable (i.e., substitution).".to_string(),
+            "For each of the following five functions, identify any vertical and horizontal asymptotes.".to_string(),
+            "Solve each equation for x.".to_string(),
+        ];
+        let targets = current_page_direction_targets(&reply, 1, None);
+        assert_eq!(targets, vec![0, 1, 3, 4], "q27 already has its group's task");
+        let (out, skipped) = recover_printed_direction_mappings_noting(&reply, 1, None, &directions, &[(0, 0), (1, 1), (3, 2), (4, 3)]).unwrap();
+        assert_eq!(skipped.len(), 3, "{skipped:?}");
+        assert!(skipped[0].starts_with("14:") && skipped[1].starts_with("2.18:") && skipped[2].starts_with("32:") && skipped[2].contains("another group"));
+        // A real group task still applies.
+        let v: Value = serde_json::from_str(&out).unwrap();
+        let added: Vec<_> = v["exams"].as_array().unwrap()[1..].iter().map(|e| (e["positions"][0]["question"].as_str().unwrap().to_string(), e["sections"][0]["instructions"].as_str().unwrap().to_string())).collect();
+        assert_eq!(added, vec![("q40".to_string(), "Solve each equation for x.".to_string())]);
+    }
+
+    #[test]
     fn a_new_document_starts_with_no_context() {
         let fresh = DocContext { document: "geometry-volume-solids".into(), directions: Vec::new() };
         assert!(fresh.is_empty() && fresh.prompt_block(1).is_empty());
         assert_eq!(label_number("Question 13."), Some(13));
         assert_eq!(label_number(" 7) "), Some(7));
         assert_eq!(label_number("5B-2"), None);
+        // Holdout v5: CLP-1 prints "Q[2]:".
+        for (label, n) in [("Q[2]", 2), ("Q[3]:", 3), ("Q12", 12), ("q 4.", 4), ("Problem 5", 5), ("Exercise 6:", 6), ("#7", 7), ("[8]", 8), ("(9)", 9), ("13:", 13)] {
+            assert_eq!(label_number(label), Some(n), "{label}");
+        }
+        for label in ["Quiz", "Q", "Question", "Q[2]a", "2.18", "1b", "Problem set 3", "(a)"] {
+            assert_eq!(label_number(label), None, "{label}");
+        }
     }
 
     #[test]

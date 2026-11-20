@@ -8,8 +8,8 @@ angles__defaults a9ab1a805bb5a62d
 angles__start 44e61618780dc53d
 bank-reconciliation__defaults c20d9ecbca79cb9d
 bank-reconciliation__start c20d9ecbca79cb9d
-bar-chart__defaults aee0af800ed41b11
-bar-chart__start 208a340577ea2008
+bar-chart__defaults fa536d3ade24faad
+bar-chart__start 27497a1d0463218c
 base-ten-blocks__defaults 97fbd9fc9cf4b4c9
 base-ten-blocks__start 97fbd9fc9cf4b4c9
 block-diagram__defaults b867b23d618e4937

@@ -4,6 +4,8 @@ use super::*;
 // Match the hosted service's per-call limit. Leaving this unset can reserve a
 // provider's entire output allowance and reject an affordable single-page job.
 const MAX_OUTPUT_TOKENS: u32 = 8192;
+/// The one larger limit a figure tool turn cut off at MAX_OUTPUT_TOKENS is retried with.
+const FIGURE_RETRY_OUTPUT_TOKENS: u32 = 32000;
 
 pub(super) fn messages(turns: &[Turn], ollama: bool) -> Vec<Value> {
     turns.iter().map(|t| {
@@ -272,7 +274,13 @@ pub(super) async fn figure_traced(
     request["tools"] = json!(definitions);
     request["tool_choice"] = json!("required");
     request["parallel_tool_calls"] = json!(false);
-    let raw = send(cfg, request).await?;
+    let mut raw = send(cfg, request.clone()).await?;
+    // A figure built from many primitives (a six-panel set of graphs) can outrun the usual output
+    // limit in one tool call; that turn is asked once more with a larger limit.
+    if raw.pointer("/choices/0/finish_reason") == Some(&json!("length")) && request.get("max_tokens").is_some() {
+        request["max_tokens"] = json!(FIGURE_RETRY_OUTPUT_TOKENS);
+        raw = send(cfg, request).await?;
+    }
     *provider_reply = Some(reply_evidence(&raw, false));
     let message = vershion_ai_core::assistant_message(&raw).map_err(str::to_string)?;
     let calls = message["tool_calls"]
@@ -361,6 +369,28 @@ mod tests {
             200,
             json!({"choices":[{"message":{"content":text},"finish_reason":"stop"}]}).to_string(),
         )
+    }
+
+    #[test]
+    fn a_figure_tool_turn_cut_off_at_the_usual_limit_is_asked_once_with_a_larger_limit() {
+        // Holdout v5: a six-panel figure's tool call ran past 8192 output tokens on every attempt.
+        let cut = (200, json!({"choices":[{"finish_reason":"length","message":{"content":null}}]}).to_string());
+        let call = json!({"id":"one","type":"function","function":{"name":"get_figure","arguments":"{\"id\":\"geometry-diagram\"}"}});
+        let whole = (200, json!({"choices":[{"finish_reason":"tool_calls","message":{"content":null,"tool_calls":[call]}}]}).to_string());
+        let (base, server) = stub_relay(vec![cut.clone(), whole]);
+        let cfg = AiCfg { provider: "custom".into(), base, native_tools: true, ..AiCfg::default() };
+        let mut saved = std::collections::BTreeMap::new();
+        let reply = block_on(figure_traced(&cfg, &[Turn::new("user", "copy")], &mut saved, &mut None));
+        assert!(reply.is_ok(), "{reply:?}");
+        let sent: Vec<Value> = server.join().unwrap().into_iter().map(|(_, body)| serde_json::from_str(&body).unwrap()).collect();
+        assert_eq!(sent.len(), 2);
+        assert_eq!((sent[0]["max_tokens"].as_u64(), sent[1]["max_tokens"].as_u64()), (Some(MAX_OUTPUT_TOKENS as u64), Some(FIGURE_RETRY_OUTPUT_TOKENS as u64)));
+        // Cut off again at the larger limit: the error stands, with no third request.
+        let (base, server) = stub_relay(vec![cut.clone(), cut]);
+        let cfg = AiCfg { provider: "custom".into(), base, native_tools: true, ..AiCfg::default() };
+        let reply = block_on(figure_traced(&cfg, &[Turn::new("user", "copy")], &mut saved, &mut None));
+        assert!(reply.is_err_and(|e| e.contains("cut off")));
+        assert_eq!(server.join().unwrap().len(), 2);
     }
 
     #[test]

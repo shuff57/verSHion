@@ -15,6 +15,8 @@ pub struct PageTaskRecoveryTrace {
     pub blocked_indices: Vec<usize>,
     pub original_exams: Value,
     pub applied_exams: Value,
+    /// Recovered directions the application did not apply, and why.
+    pub skipped: Vec<String>,
     pub error: Option<String>,
 }
 struct Decisions {
@@ -139,6 +141,7 @@ pub(super) async fn review(
         blocked_indices: targets.clone(),
         original_exams: original_exams.clone(),
         applied_exams: original_exams,
+        skipped: Vec::new(),
         error: None,
     };
     let cfg = cfg.with_output(schema);
@@ -167,14 +170,15 @@ pub(super) async fn review(
         }
     };
     match parsed {
-        Ok(decisions) => match crate::ditto::recover_printed_direction_mappings(
+        Ok(decisions) => match crate::ditto::recover_printed_direction_mappings_noting(
             &raw,
             page,
             context,
             &decisions.directions,
             &decisions.printed,
         ) {
-            Ok(corrected) => {
+            Ok((corrected, skipped)) => {
+                trace.skipped = skipped;
                 trace.confirmed_indices = decisions.printed.iter().map(|p| p.0).collect();
                 trace.not_printed_indices = decisions.not_printed;
                 trace.blocked_indices = decisions.uncertain;

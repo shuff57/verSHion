@@ -2447,3 +2447,19 @@ fn category_ticks_add_one_short_mark_per_category_on_either_orientation() {
     }
     assert_eq!(render(&defaults()), render(&with(&[("cat_ticks", "false")])), "off by default: old charts are unchanged");
 }
+
+#[test]
+fn line_bars_are_thin_and_the_value_axis_can_carry_an_arrowhead() {
+    // Holdout v5, AQA "Houses sold": a vertical line graph with an arrowed value axis.
+    let widths = |gap: &str| {
+        let svg = render(&with(&[("gap", gap), ("values", "false")]));
+        let xml = roxmltree::Document::parse(&svg).unwrap();
+        xml.descendants().filter(|n| n.has_tag_name("rect")).filter_map(|n| n.attribute("width")?.parse::<f64>().ok()).filter(|w| *w > 0.5 && *w < 400.0).fold(f64::INFINITY, f64::min)
+    };
+    assert!(widths("Lines") * 3.0 < widths("Wide"), "line bars are much thinner than wide bars");
+    let polys = |p: &[(&str, &str)]| render(&with(p)).matches("<polygon").count();
+    for orient in ["Vertical", "Horizontal"] {
+        assert_eq!(polys(&[("orient", orient), ("val_arrow", "true")]) - polys(&[("orient", orient), ("val_arrow", "false")]), 1, "{orient}: one arrowhead");
+    }
+    assert_eq!(render(&defaults()), render(&with(&[("val_arrow", "false")])), "off by default: old charts are unchanged");
+}

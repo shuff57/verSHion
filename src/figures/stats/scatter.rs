@@ -24,7 +24,7 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         ("scatterplot", "eq") => p.b("fit"),
         ("scatterplot", "grid_xmin" | "grid_xmax" | "grid_ymin" | "grid_ymax") => p.s("grid_bounds_mode") == "Explicit",
         ("scatterplot", "minor_grid_color") => p.i("x_major_every") > 1 || p.i("y_major_every") > 1,
-        ("scatterplot", "axis_x_extension" | "axis_y_extension") => p.s("axis_style") == "Left and bottom",
+        ("scatterplot", "axis_x_extension" | "axis_y_extension" | "axis_arrows" | "x_end_label" | "y_end_label") => p.s("axis_style") != "None",
         _ => true,
     }
 }
@@ -87,10 +87,16 @@ fn params() -> Vec<ParamDef> {
         ParamDef::color("minor_grid_color", "Minor grid colour", &["#dfe3ea", "#c7c7c7", "#b0b0b0", "#777777"], "#dfe3ea"),
         ParamDef::choice("axis_style", "Axes", &["Left and bottom", "Box", "None"], "Left and bottom"),
         ParamDef::float("axis_x_extension", "x-axis extra length (grid steps)", 0.0, 4.0, 0.05, 0.0)
-            .hint("Extends only the right axis stroke into extra canvas space. Gridlines, tick positions and supplied data coordinates stay fixed. Used with Left and bottom axes."),
+            .hint("Extends only the right axis stroke into extra canvas space. Gridlines, tick positions and supplied data coordinates stay fixed. With Box axes the bottom axis runs past the box."),
         ParamDef::float("axis_y_extension", "y-axis extra length (grid steps)", 0.0, 4.0, 0.05, 0.0)
             .hint("Extends only the upper axis stroke into extra canvas space; does not add gridlines, numbers, points or a top border."),
         ParamDef::float("axis_width", "Axis thickness", 0.0, 4.0, 0.1, 2.0),
+        ParamDef::bool("axis_arrows", "Arrowheads on the axis ends", false)
+            .hint("Filled arrowheads at the right end of the x-axis and the top of the y-axis, as printed on many test graphs. Pair with the axis extensions when the source arrow runs past the grid or box."),
+        ParamDef::text("x_end_label", "Letter at the x-axis end", "")
+            .hint("A variable printed just past the arrow end of the x-axis, such as x. Separate from the centred axis title."),
+        ParamDef::text("y_end_label", "Letter at the y-axis end", "")
+            .hint("A variable printed just above the top of the y-axis, such as y. Separate from the rotated axis title."),
         ParamDef::bool("tick_marks", "Tick marks outside the grid", true),
         ParamDef::bool("square_plot", "Square plot area", false),
         ParamDef::choice("point_color", "Point colour", &["Automatic", "#0000ff", "#000000", "#ff0000"], "Automatic"),
@@ -242,18 +248,23 @@ fn render_impl(p: &Params, capture: bool) -> (String, serde_json::Value) {
         y1: ay1,
     };
     if p.b("square_plot"){frame.h=frame.w-frame.l-frame.r+frame.t+frame.b;}
-    let (xext,yext)=if p.s("axis_style")=="Left and bottom" {
+    let (xext,yext)=if p.s("axis_style")!="None" {
         (p.f("axis_x_extension").clamp(0.0,4.0)*xs/(ax1-ax0)*(frame.right()-frame.left()),p.f("axis_y_extension").clamp(0.0,4.0)*ys/(ay1-ay0)*(frame.bottom()-frame.top()))
     } else {(0.0,0.0)};
+    let ends=p.s("axis_style")!="None";
+    let (x_end,y_end)=if ends {(p.s("x_end_label").trim().to_string(),p.s("y_end_label").trim().to_string())} else {(String::new(),String::new())};
+    let arrows=ends&&p.b("axis_arrows");
+    // Room past the axis ends for an end letter.
+    let (xroom,yroom)=(if x_end.is_empty(){0.0}else{fs*1.6},if y_end.is_empty(){0.0}else{fs*1.5});
     // Preserve the plot's size and mapping. Only the new upper/right margin grows.
-    frame.t+=yext;frame.h+=yext;
-    let mut d = Doc::new(frame.w+xext, frame.h);
+    frame.t+=yext+yroom;frame.h+=yext+yroom;
+    let mut d = Doc::new(frame.w+xext+xroom, frame.h);
     let mut captured = capture.then(|| diagnostics::Capture::new(pts.len(), p.s("axis_style"), p.b("grid")));
     d.defs(&fills.defs());
     if !title.is_empty() {
         chart::text(&mut d, w / 2.0, 14.0 + fs * 1.4, fs * 1.3, "middle", title);
     }
-    let custom=manual||explicit_grid||xext>0.0||yext>0.0||p.i("x_major_every")>1||p.i("y_major_every")>1||p.s("grid_directions")=="Both"||p.s("grid_color")!="#dfe3ea"||p.s("axis_style")!="Left and bottom"||p.f("axis_width")!=2.0||!p.b("tick_marks")||!p.b("zero_labels")||!p.s("x_ticks").trim().is_empty()||!p.s("y_ticks").trim().is_empty();
+    let custom=manual||explicit_grid||xext>0.0||yext>0.0||p.i("x_major_every")>1||p.i("y_major_every")>1||p.s("grid_directions")=="Both"||p.s("grid_color")!="#dfe3ea"||p.s("axis_style")!="Left and bottom"||p.f("axis_width")!=2.0||!p.b("tick_marks")||!p.b("zero_labels")||!p.s("x_ticks").trim().is_empty()||!p.s("y_ticks").trim().is_empty()||arrows||!x_end.is_empty()||!y_end.is_empty();
     if !custom {
         let from = d.len();
         chart::axes(&mut d, &frame, &AxesOpts { xticks: &xticks, yticks: &yticks, grid: p.b("grid"), x_title: xt, y_title: yt, fs });
@@ -267,7 +278,11 @@ fn render_impl(p: &Params, capture: bool) -> (String, serde_json::Value) {
         if p.b("grid") {for(v,_)in &ygrid{d.line(frame.px(gx0),frame.py(*v),frame.px(gx1),frame.py(*v),grid_colour(*v,ys,"y_major_every"),1.0);}if p.s("grid_directions")=="Both"{for(v,_)in &xgrid{d.line(frame.px(*v),frame.py(gy1),frame.px(*v),frame.py(gy0),grid_colour(*v,xs,"x_major_every"),1.0);}}}
         if let Some(c) = &mut captured { c.grid(d.fragment(from)); }
         let from = d.len();
-        if p.s("axis_style")!="None" {d.line(frame.left(),frame.bottom(),frame.right()+xext,frame.bottom(),INK,p.f("axis_width"));d.line(frame.left(),frame.top()-yext,frame.left(),frame.bottom(),INK,p.f("axis_width"));if p.s("axis_style")=="Box"{d.line(frame.left(),frame.top(),frame.right(),frame.top(),INK,p.f("axis_width"));d.line(frame.right(),frame.top(),frame.right(),frame.bottom(),INK,p.f("axis_width"));}}
+        if p.s("axis_style")!="None" {
+            if arrows {d.arrow(frame.left(),frame.bottom(),frame.right()+xext,frame.bottom(),INK,p.f("axis_width").max(0.5));d.arrow(frame.left(),frame.bottom(),frame.left(),frame.top()-yext,INK,p.f("axis_width").max(0.5));}
+            else {d.line(frame.left(),frame.bottom(),frame.right()+xext,frame.bottom(),INK,p.f("axis_width"));d.line(frame.left(),frame.top()-yext,frame.left(),frame.bottom(),INK,p.f("axis_width"));}
+            if p.s("axis_style")=="Box"{d.line(frame.left(),frame.top(),frame.right(),frame.top(),INK,p.f("axis_width"));d.line(frame.right(),frame.top(),frame.right(),frame.bottom(),INK,p.f("axis_width"));}
+        }
         if let Some(c) = &mut captured {
             let roles: &[&str] = match p.s("axis_style") {
                 "None" => &[], "Box" => &["bottom", "left", "top", "right"], _ => &["bottom", "left"],
@@ -276,6 +291,8 @@ fn render_impl(p: &Params, capture: bool) -> (String, serde_json::Value) {
         }
         for(v,t)in &xticks{let x=frame.px(*v);if p.b("tick_marks"){d.line(x,frame.bottom(),x,frame.bottom()+6.0,INK,1.6);}chart::text(&mut d,x,frame.bottom()+8.0+fs*1.05,fs,"middle",t);}
         for(v,t)in &yticks{let y=frame.py(*v);if p.b("tick_marks"){d.line(frame.left()-6.0,y,frame.left(),y,INK,1.6);}chart::text(&mut d,frame.left()-10.0,y+fs*0.35,fs,"end",t);}
+        if !x_end.is_empty(){chart::text(&mut d,frame.right()+xext+5.0,frame.bottom()+fs*0.35,fs*1.1,"start",&x_end);}
+        if !y_end.is_empty(){chart::text(&mut d,frame.left(),frame.top()-yext-6.0,fs*1.1,"middle",&y_end);}
         if !xt.is_empty(){chart::text(&mut d,(frame.left()+frame.right())/2.0,frame.h-10.0,fs*1.1,"middle",xt);}if !yt.is_empty(){chart::vtext(&mut d,18.0+fs*0.2,(frame.top()+frame.bottom())/2.0,fs*1.1,yt);}
     }
 
@@ -412,6 +429,31 @@ mod tests {
         assert_eq!(render(&p),before,"Follow axes and every1 retain the exact previous render path");
         p.set_s("grid_bounds_mode","Explicit");p.set_f("grid_xmin",20.0);p.set_f("grid_xmax",10.0);
         assert!(render(&p).contains("explicit grid rectangle"),"reversed new controls are reported, not silently substituted");
+    }
+
+    #[test]
+    fn axis_arrows_and_end_letters_are_drawn_only_when_asked() {
+        // Holdout v5 (STAAR hotel costs): arrowed axes with x and y at their ends, plus centred titles.
+        let mut p=defaults();
+        let plain=render(&p);
+        p.set_b("axis_arrows",false);p.set_s("x_end_label","");p.set_s("y_end_label","");
+        assert_eq!(render(&p),plain,"the defaults keep the previous render");
+        p.set_s("axes_mode","Manual");p.set_f("xmin",0.0);p.set_f("xmax",7.0);p.set_f("xstep",1.0);p.set_f("ymin",0.0);p.set_f("ymax",700.0);p.set_f("ystep",100.0);
+        let before=render(&p);
+        p.set_b("axis_arrows",true);p.set_s("x_end_label","x");p.set_s("y_end_label","y");
+        let svg=render(&p);
+        let xml=roxmltree::Document::parse(&svg).unwrap();
+        assert_eq!(xml.descendants().filter(|n|n.has_tag_name("polygon")&&n.attribute("fill")==Some(INK)).count(),2,"one head per axis");
+        let texts:Vec<_>=xml.descendants().filter(|n|n.has_tag_name("text")).filter_map(|n|n.text()).collect();
+        assert!(texts.contains(&"x")&&texts.contains(&"y"),"{texts:?}");
+        assert_ne!(svg,before);
+        // Boxed axes keep their ends too (the STAAR graph is boxed); no axes have none.
+        p.set_s("axis_style","Box");
+        let boxed=render(&p);
+        assert!(boxed.contains(">x<")&&roxmltree::Document::parse(&boxed).unwrap().descendants().filter(|n|n.has_tag_name("polygon")&&n.attribute("fill")==Some(INK)).count()==2);
+        p.set_s("axis_style","None");
+        let none=render(&p);
+        assert!(!none.contains(">x<")&&roxmltree::Document::parse(&none).unwrap().descendants().filter(|n|n.has_tag_name("polygon")&&n.attribute("fill")==Some(INK)).count()==0);
     }
 
     #[test]
