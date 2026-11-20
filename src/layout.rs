@@ -76,6 +76,17 @@ pub struct DocQ {
     /// No answer room at all: no default ruled lines (short answer, fill-in), no work space.
     /// The bank-file PDF sets it; exams leave it false.
     pub no_answer_space: bool,
+    /// Multiple choice: each choice's picture, parallel to `choices` (None = a text choice).
+    /// Empty (the default) when no choice is a picture. A picture prints under its choice's
+    /// text, so a question with any picture choice prints its choices one per line.
+    pub choice_images: Vec<Option<DocImage>>,
+}
+
+impl DocQ {
+    /// Whether any choice of this question is a picture.
+    pub fn has_choice_pictures(&self) -> bool {
+        self.choice_images.iter().any(Option::is_some)
+    }
 }
 
 /// How the answer-key document lays out (the export dialog's choice).
@@ -116,6 +127,17 @@ pub fn picture_size_pt(w_px: u32, h_px: u32, avail_w: f64) -> (f64, f64) {
 
 /// Tallest a question's picture prints (3 inches).
 pub const PICTURE_MAX_H_PT: f64 = 216.0;
+
+/// Printed size (pt) of a choice's picture: as [`picture_size_pt`], at most
+/// [`CHOICE_PICTURE_MAX_H_PT`] tall so four picture choices fit a page.
+pub fn choice_picture_size_pt(w_px: u32, h_px: u32, avail_w: f64) -> (f64, f64) {
+    let (w, h) = (w_px.max(1) as f64, h_px.max(1) as f64);
+    let s = 0.75_f64.min(avail_w.max(36.0) / w).min(CHOICE_PICTURE_MAX_H_PT / h);
+    (w * s, h * s)
+}
+
+/// Tallest a choice's picture prints (1.5 inches).
+pub const CHOICE_PICTURE_MAX_H_PT: f64 = 108.0;
 
 /// Splits a stem at its first `[picture]` / `[picture: ...]` marker: (text before, text after,
 /// with any later markers kept as written). None when the stem has no marker. The attached

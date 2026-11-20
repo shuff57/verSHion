@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::layout::{DocImage, DocQ, DocSection, ExamDoc};
-use crate::model::{Kind, PartKind, QKind, Question, QuestionBank};
+use crate::model::{Answer, Kind, PartKind, QKind, Question, QuestionBank};
 
 /// The attachment's file name inside the PDF.
 /// Stable attachment name, deliberately unchanged by the verSHion rename: bank PDFs exported
@@ -133,7 +133,10 @@ fn bank_q(q: &Question, number: u32, image: Option<DocImage>) -> DocQ {
                     PartKind::Mc { answers } => {
                         for (i, a) in answers.iter().enumerate() {
                             let mark = if a.correct { "  **(Correct answer)**" } else { "" };
-                            s.push_str(&format!("\n{}. {}{mark}", letter(i), a.text.trim()));
+                            // A part's choices print inside the question text, where a picture
+                            // cannot go: the print says so (the file's data keeps it).
+                            let t = if a.image.is_some() { with_note(a.text.trim(), PART_PICTURE_NOTE) } else { a.text.trim().to_string() };
+                            s.push_str(&format!("\n{}. {t}{mark}", letter(i)));
                         }
                         let k: Vec<String> = answers.iter().enumerate().filter(|(_, a)| a.correct).map(|(i, _)| letter(i).to_string()).collect();
                         keys.push(format!("{l}. {}", k.join(", ")));
@@ -166,6 +169,26 @@ fn bank_q(q: &Question, number: u32, image: Option<DocImage>) -> DocQ {
         text.push_str(&p);
     }
     DocQ { number, text: vec![text], choices, image, key_text: key, rule_lines: 0, no_answer_space: true, points: q.points, ..Default::default() }
+}
+
+/// What a multipart part's picture choice prints in the bank file in place of its picture.
+const PART_PICTURE_NOTE: &str = "*(picture left out of the print)*";
+
+/// `text` then `note`, with a space between when both are there.
+fn with_note(text: &str, note: &str) -> String {
+    if text.is_empty() { note.to_string() } else { format!("{text} {note}") }
+}
+
+/// A choice as plain text: a picture choice says `[picture]` where its picture was (the
+/// text formats cannot carry it), after any text it has.
+fn choice_plain(a: &Answer) -> String {
+    if a.image.is_some() { with_note(a.text.trim(), "[picture]") } else { a.text.trim().to_string() }
+}
+
+/// Whether a multiple-choice question has a picture choice (the key-only text formats,
+/// Aiken and Blackboard, cannot carry one and skip the question).
+fn has_picture_choice(kind: &Kind) -> bool {
+    matches!(kind, Kind::Mc { answers } if answers.iter().any(|a| a.image.is_some()))
 }
 
 /// The bank as CSV (RFC 4180, CRLF): one header row and one row per question, for Excel,
@@ -234,7 +257,7 @@ fn question_cell(q: &Question) -> String {
 /// or each multipart part's key.
 fn answer_cell(kind: &Kind) -> String {
     match kind {
-        Kind::Mc { answers } => answers.iter().filter(|a| a.correct).map(|a| a.text.trim()).collect::<Vec<_>>().join(" | "),
+        Kind::Mc { answers } => answers.iter().filter(|a| a.correct).map(choice_plain).collect::<Vec<_>>().join(" | "),
         Kind::Tf { correct } => (if *correct { "True" } else { "False" }).to_string(),
         Kind::Matching { pairs, .. } => pairs.iter().map(|p| format!("{} → {}", p.left.trim(), p.right.trim())).collect::<Vec<_>>().join(" | "),
         Kind::Blank { accept } => blank_key(accept),
@@ -245,16 +268,17 @@ fn answer_cell(kind: &Kind) -> String {
 
 fn part_answer(kind: &PartKind) -> String {
     match kind {
-        PartKind::Mc { answers } => answers.iter().filter(|a| a.correct).map(|a| a.text.trim()).collect::<Vec<_>>().join(", "),
+        PartKind::Mc { answers } => answers.iter().filter(|a| a.correct).map(choice_plain).collect::<Vec<_>>().join(", "),
         PartKind::Tf { correct } => (if *correct { "True" } else { "False" }).to_string(),
         PartKind::Short { sample } => sample.trim().to_string(),
     }
 }
 
-/// Choice texts with their letters (`A. ... | B. ...`), including multipart choice parts.
+/// Choice texts with their letters (`A. ... | B. ...`), including multipart choice parts; a
+/// picture choice reads `[picture]` (a spreadsheet cell holds no picture).
 fn choices_cell(kind: &Kind) -> String {
     match kind {
-        Kind::Mc { answers } => answers.iter().enumerate().map(|(i, a)| format!("{}. {}", letter(i), a.text.trim())).collect::<Vec<_>>().join(" | "),
+        Kind::Mc { answers } => answers.iter().enumerate().map(|(i, a)| format!("{}. {}", letter(i), choice_plain(a))).collect::<Vec<_>>().join(" | "),
         Kind::Multipart { parts } => parts
             .iter()
             .enumerate()
@@ -262,7 +286,7 @@ fn choices_cell(kind: &Kind) -> String {
                 PartKind::Mc { answers } => Some(format!(
                     "({}) {}",
                     part_letter(pi),
-                    answers.iter().enumerate().map(|(i, a)| format!("{}. {}", letter(i), a.text.trim())).collect::<Vec<_>>().join(" | ")
+                    answers.iter().enumerate().map(|(i, a)| format!("{}. {}", letter(i), choice_plain(a))).collect::<Vec<_>>().join(" | ")
                 )),
                 _ => None,
             })
@@ -274,7 +298,8 @@ fn choices_cell(kind: &Kind) -> String {
 
 /// Aiken format: only single-answer multiple choice fits, as `question`, lettered choices and
 /// `ANSWER: C`, with a blank line between questions. Returns the text and the number of
-/// questions the format cannot hold.
+/// questions the format cannot hold (a question with a picture choice is one of them: the
+/// format has no pictures, and its choices would be blank or wrong without them).
 pub fn bank_aiken(bank: &QuestionBank) -> (String, usize) {
     let mut blocks = Vec::new();
     let mut skipped = 0;
@@ -283,8 +308,9 @@ pub fn bank_aiken(bank: &QuestionBank) -> (String, usize) {
             skipped += 1;
             continue;
         };
-        if crate::qcheck::key_missing(q) {
-            // The format is a key: a question with none cannot be written.
+        if crate::qcheck::key_missing(q) || has_picture_choice(&q.kind) {
+            // The format is a key: a question with none cannot be written; nor can one whose
+            // choices are pictures.
             skipped += 1;
             continue;
         }
@@ -309,14 +335,15 @@ pub fn bank_aiken(bank: &QuestionBank) -> (String, usize) {
 
 /// Blackboard Learn 7.3+ "Upload Questions" tab-delimited text. Holds single-answer multiple
 /// choice (`MC`), true/false (`TF`), fill in the blank (`FIB`) and short answer (`ESS`);
-/// matching, multipart and multi-answer MC are skipped and counted. Every row pads to the same
+/// matching, multipart, multi-answer MC and MC with a picture choice (the upload file holds
+/// no pictures) are skipped and counted. Every row pads to the same
 /// number of incorrect-answer columns so the positional Categories/Topics/Feedback fields line
 /// up, and embedded tabs/newlines become spaces.
 pub fn bank_blackboard(bank: &QuestionBank) -> (String, usize) {
     let mut pad = 0;
     let mut skipped = 0;
     for q in &bank.questions {
-        if crate::qcheck::key_missing(q) {
+        if crate::qcheck::key_missing(q) || has_picture_choice(&q.kind) {
             skipped += 1;
             continue;
         }
@@ -336,7 +363,7 @@ pub fn bank_blackboard(bank: &QuestionBank) -> (String, usize) {
     }
     let mut rows = Vec::new();
     for q in &bank.questions {
-        if crate::qcheck::key_missing(q) {
+        if crate::qcheck::key_missing(q) || has_picture_choice(&q.kind) {
             continue; // counted in the first pass
         }
         let (kind, correct, wrong): (&str, String, Vec<String>) = match &q.kind {
@@ -419,7 +446,7 @@ pub fn cover_lines(bank: &QuestionBank) -> Vec<String> {
 
 /// The bank file as an exam document: one section per question type ("Multiple Choice",
 /// "2 questions"), every question with its difficulty / topics line and its answers.
-/// `image` resolves a question's picture (the caller reads the store's media).
+/// `image` resolves a question's or a choice's picture (the caller reads the store's media).
 pub fn bank_doc(bank: &QuestionBank, image: &dyn Fn(&crate::model::ImageRef) -> Option<DocImage>) -> ExamDoc {
     let mut questions = Vec::new();
     let mut n = 0u32;
@@ -427,6 +454,18 @@ pub fn bank_doc(bank: &QuestionBank, image: &dyn Fn(&crate::model::ImageRef) -> 
         for (i, q) in qs.into_iter().enumerate() {
             n += 1;
             let mut dq = bank_q(q, n, q.image.as_ref().and_then(image));
+            if let Kind::Mc { answers } = &q.kind
+                && answers.iter().any(|a| a.image.is_some())
+            {
+                // Picture choices print their pictures under their letters; one whose file
+                // is missing says `[picture]` instead.
+                dq.choice_images = answers.iter().map(|a| a.image.as_ref().and_then(image)).collect();
+                for ((c, a), im) in dq.choices.iter_mut().zip(answers).zip(&dq.choice_images) {
+                    if a.image.is_some() && im.is_none() {
+                        *c = format!("{} [picture]", c.trim_end());
+                    }
+                }
+            }
             if i == 0 {
                 let mut directions = plural(dq_count(bank, k), "question");
                 if gi == 0 {
@@ -475,22 +514,40 @@ pub fn file_stem(name: &str) -> String {
 
 // ---------- the data that rides along ----------
 
-/// The bank as the JSON file (`bankui::bank_export_json`) plus every picture it uses, so the
+/// The bank as the JSON file (`bankui::bank_export_json`) plus every picture it uses (choice
+/// pictures included), so the
 /// file imports on another computer with its pictures: `"media": {"media/<hash>.png": base64}`.
 pub fn bank_data(bank: &QuestionBank) -> serde_json::Value {
     let mut doc = crate::bankui::bank_export_json(bank);
     let mut media = BTreeMap::new();
-    for q in &bank.questions {
-        if let Some(img) = &q.image {
-            if let Some(b) = crate::store::read_media(&img.file) {
-                media.insert(img.file.clone(), serde_json::Value::String(b64_encode(&b)));
-            }
+    for img in bank.questions.iter().flat_map(pictures_of) {
+        if !media.contains_key(&img.file)
+            && let Some(b) = crate::store::read_media(&img.file)
+        {
+            media.insert(img.file.clone(), serde_json::Value::String(b64_encode(&b)));
         }
     }
     if !media.is_empty() {
         doc["media"] = serde_json::Value::Object(media.into_iter().collect());
     }
     doc
+}
+
+/// Every picture a question uses: its own, then its choices' (multipart parts' too).
+fn pictures_of(q: &Question) -> Vec<&crate::model::ImageRef> {
+    let mut out: Vec<&crate::model::ImageRef> = q.image.iter().collect();
+    match &q.kind {
+        Kind::Mc { answers } => out.extend(answers.iter().filter_map(|a| a.image.as_ref())),
+        Kind::Multipart { parts } => {
+            for p in parts {
+                if let PartKind::Mc { answers } = &p.kind {
+                    out.extend(answers.iter().filter_map(|a| a.image.as_ref()));
+                }
+            }
+        }
+        _ => {}
+    }
+    out
 }
 
 /// Writes the pictures a bank file carries into the store (only those missing there).
@@ -1007,5 +1064,346 @@ mod tests {
         assert_eq!(b64_encode(b"fo"), "Zm8=");
         assert_eq!(file_stem("Chemistry Chapter 4 Quiz (5A and 5B)"), "chemistry-chapter-4-quiz-5a-and-5b.question-bank");
         assert_eq!(file_stem("  ¿?  "), "question-bank");
+    }
+}
+
+/// Banks without picture choices export exactly as they did before choices could be pictures:
+/// every bank format, and the exam PDF / Word writers in every paper style, answer-column
+/// setting and key layout, hash to the bytes recorded from the code before the change.
+#[cfg(test)]
+mod text_only_golden_tests {
+    use super::*;
+    use crate::formats::make_question;
+    use crate::layout::{DocImage, KeyLayout};
+    use crate::model::{Answer, Pair, Part, PaperStyle};
+
+    fn fnv(b: &[u8]) -> u64 {
+        b.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, c| (h ^ u64::from(*c)).wrapping_mul(0x0100_0000_01b3))
+    }
+
+    fn png() -> Vec<u8> {
+        let img = image::RgbImage::from_fn(40, 24, |x, y| image::Rgb([(x * 6) as u8, (y * 9) as u8, 120]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(img).write_to(&mut out, image::ImageFormat::Png).unwrap();
+        out.into_inner()
+    }
+
+    fn text_bank() -> QuestionBank {
+        let a = |t: &str, c: bool| Answer { text: t.into(), correct: c, locked: false, image: None, figure: None };
+        let mut mc = make_question("Which is the **most** electronegative? [picture]".into(), Kind::Mc { answers: vec![a("Ge", false), a("Ca", false), a("O", true), a("C", false)] });
+        mc.topics = vec!["Electronegativity".into()];
+        mc.points = Some(2.0);
+        mc.image = Some(crate::model::ImageRef { file: "media/golden.png".into(), width: 40, height: 24 });
+        let ma = make_question("Which are metals?".into(), Kind::Mc { answers: vec![a("Copper", true), a("Sulfur", false), a("Zinc, the grey one", true)] });
+        let tf = make_question("The sun is a star.".into(), Kind::Tf { correct: true });
+        let m = make_question("Match".into(), Kind::Matching { pairs: vec![Pair { left: "Fe".into(), right: "Iron".into() }, Pair { left: "Pb".into(), right: "Lead".into() }], distractors: vec!["Tin".into()] });
+        let fill = make_question("BONDING: ___ NONBONDING: ___".into(), Kind::Blank { accept: vec![vec!["14".into()], vec!["10".into()]] });
+        let mut short = make_question("How many grams?".into(), Kind::Short { sample: "3.1 g".into() });
+        short.explanation = Some("Use the molar mass.".into());
+        let multi = make_question(
+            "For each compound:".into(),
+            Kind::Multipart {
+                parts: vec![
+                    Part { stem: "CO₂ shape?".into(), kind: PartKind::Mc { answers: vec![a("linear", true), a("bent", false)] } },
+                    Part { stem: "b. Is it polar?".into(), kind: PartKind::Tf { correct: false } },
+                    Part { stem: "Why?".into(), kind: PartKind::Short { sample: "symmetry".into() } },
+                ],
+            },
+        );
+        let mut questions = vec![mc, ma, tf, m, fill, short, multi];
+        for (i, q) in questions.iter_mut().enumerate() {
+            q.id = format!("q{i}");
+            q.created = 1;
+            q.modified = 1;
+        }
+        QuestionBank { id: "b".into(), name: "Golden bank".into(), questions, created: 1, modified: 1, details: Default::default() }
+    }
+
+    /// (name, digest) of every output.
+    fn digests() -> Vec<(String, u64)> {
+        let b = text_bank();
+        let pic = png();
+        let resolve = |_: &crate::model::ImageRef| Some(DocImage { bytes: pic.clone(), width_px: 40, height_px: 24 });
+        let mut out = vec![
+            ("csv".to_string(), fnv(bank_csv(&b).as_bytes())),
+            ("aiken".to_string(), fnv(format!("{:?}", bank_aiken(&b)).as_bytes())),
+            ("blackboard".to_string(), fnv(format!("{:?}", bank_blackboard(&b)).as_bytes())),
+            ("json".to_string(), fnv(serde_json::to_string(&crate::bankui::bank_export_json(&b)).unwrap().as_bytes())),
+        ];
+        let base = bank_doc(&b, &resolve);
+        for style in [PaperStyle::Standard, PaperStyle::Classic, PaperStyle::Condensed, PaperStyle::ExamBoard] {
+            for cols in [0u8, 2, 4] {
+                for key in [None, Some(KeyLayout::List), Some(KeyLayout::Section), Some(KeyLayout::Marked)] {
+                    let mut d = base.clone();
+                    d.style = style;
+                    d.header_line = "Name: ____ Class: ____ Date: ____".into();
+                    for q in &mut d.questions {
+                        q.answer_columns = cols;
+                        q.no_answer_space = false;
+                        if q.choices.len() == 4 {
+                            q.correct = vec![2];
+                            q.key_marks = vec!["C".into()];
+                        }
+                    }
+                    if let Some(k) = key {
+                        d.is_key = true;
+                        d.key_layout = k;
+                    }
+                    let tag = format!("{style:?}/{cols}/{key:?}");
+                    out.push((format!("pdf {tag}"), fnv(&crate::export::render_pdf(&d).unwrap())));
+                    out.push((format!("docx {tag}"), fnv(&crate::export::render_docx(&d).unwrap())));
+                }
+            }
+        }
+        out
+    }
+
+    /// Recorded from the code before choices could be pictures (commit 096b1ce5).
+    const BEFORE: &[(&str, u64)] = &[
+        ("csv", 0x4de9250531519a5a),
+        ("aiken", 0xdfddad82b3110a1a),
+        ("blackboard", 0x251cf5369c8306d2),
+        ("json", 0x20c8ad72f4f1de46),
+        ("pdf Standard/0/None", 0xf8c5fd996953c6d3),
+        ("docx Standard/0/None", 0xdd18a943730c936e),
+        ("pdf Standard/0/Some(List)", 0x5c53297e53a21b21),
+        ("docx Standard/0/Some(List)", 0x812c3742813862f8),
+        ("pdf Standard/0/Some(Section)", 0x3e50d44e57341f1a),
+        ("docx Standard/0/Some(Section)", 0xcd476482f607a265),
+        ("pdf Standard/0/Some(Marked)", 0x237cab256a1e8eb2),
+        ("docx Standard/0/Some(Marked)", 0xde9f7bcb09a8e39c),
+        ("pdf Standard/2/None", 0x2fbd21d9860ae564),
+        ("docx Standard/2/None", 0xdda3914937f813c3),
+        ("pdf Standard/2/Some(List)", 0x5c53297e53a21b21),
+        ("docx Standard/2/Some(List)", 0x812c3742813862f8),
+        ("pdf Standard/2/Some(Section)", 0x3e50d44e57341f1a),
+        ("docx Standard/2/Some(Section)", 0xcd476482f607a265),
+        ("pdf Standard/2/Some(Marked)", 0x2fa431627e7689d9),
+        ("docx Standard/2/Some(Marked)", 0xb434271b44bb559a),
+        ("pdf Standard/4/None", 0xa340657ed7f6eed9),
+        ("docx Standard/4/None", 0x53074c617f037015),
+        ("pdf Standard/4/Some(List)", 0x5c53297e53a21b21),
+        ("docx Standard/4/Some(List)", 0x812c3742813862f8),
+        ("pdf Standard/4/Some(Section)", 0x3e50d44e57341f1a),
+        ("docx Standard/4/Some(Section)", 0xcd476482f607a265),
+        ("pdf Standard/4/Some(Marked)", 0xf3ba4dc8151c9381),
+        ("docx Standard/4/Some(Marked)", 0xbe29524f5541f978),
+        ("pdf Classic/0/None", 0x3e15e067429f8ae8),
+        ("docx Classic/0/None", 0x9fdbdae5b82b2742),
+        ("pdf Classic/0/Some(List)", 0x5c53297e53a21b21),
+        ("docx Classic/0/Some(List)", 0x812c3742813862f8),
+        ("pdf Classic/0/Some(Section)", 0x3e50d44e57341f1a),
+        ("docx Classic/0/Some(Section)", 0xcd476482f607a265),
+        ("pdf Classic/0/Some(Marked)", 0x4dabb183ae62e8b1),
+        ("docx Classic/0/Some(Marked)", 0xa8d4d7cf18548e8d),
+        ("pdf Classic/2/None", 0xd17528fbfa23547c),
+        ("docx Classic/2/None", 0x95c21d6ac173f159),
+        ("pdf Classic/2/Some(List)", 0x5c53297e53a21b21),
+        ("docx Classic/2/Some(List)", 0x812c3742813862f8),
+        ("pdf Classic/2/Some(Section)", 0x3e50d44e57341f1a),
+        ("docx Classic/2/Some(Section)", 0xcd476482f607a265),
+        ("pdf Classic/2/Some(Marked)", 0x4fadef7d634fd22f),
+        ("docx Classic/2/Some(Marked)", 0x4f6c3bf93f2366f1),
+        ("pdf Classic/4/None", 0x789cf897aecbe9cb),
+        ("docx Classic/4/None", 0xc087ad727e1ed1e4),
+        ("pdf Classic/4/Some(List)", 0x5c53297e53a21b21),
+        ("docx Classic/4/Some(List)", 0x812c3742813862f8),
+        ("pdf Classic/4/Some(Section)", 0x3e50d44e57341f1a),
+        ("docx Classic/4/Some(Section)", 0xcd476482f607a265),
+        ("pdf Classic/4/Some(Marked)", 0x77155609c60ba93d),
+        ("docx Classic/4/Some(Marked)", 0x8952373037c23679),
+        ("pdf Condensed/0/None", 0x1095cf47b4dd5a45),
+        ("docx Condensed/0/None", 0x8e947aa2a17fe657),
+        ("pdf Condensed/0/Some(List)", 0x00bf23a08515b188),
+        ("docx Condensed/0/Some(List)", 0x812c3742813862f8),
+        ("pdf Condensed/0/Some(Section)", 0x78fc84966741e632),
+        ("docx Condensed/0/Some(Section)", 0xcd476482f607a265),
+        ("pdf Condensed/0/Some(Marked)", 0x8b2dde84305ab2f3),
+        ("docx Condensed/0/Some(Marked)", 0x750f84f386e039a8),
+        ("pdf Condensed/2/None", 0x3730a4c31d8332c8),
+        ("docx Condensed/2/None", 0x0f4e961138d8dcab),
+        ("pdf Condensed/2/Some(List)", 0x00bf23a08515b188),
+        ("docx Condensed/2/Some(List)", 0x812c3742813862f8),
+        ("pdf Condensed/2/Some(Section)", 0x78fc84966741e632),
+        ("docx Condensed/2/Some(Section)", 0xcd476482f607a265),
+        ("pdf Condensed/2/Some(Marked)", 0x411ab38236e2bf8c),
+        ("docx Condensed/2/Some(Marked)", 0x932fd00203f45406),
+        ("pdf Condensed/4/None", 0x6491e24cf02ea722),
+        ("docx Condensed/4/None", 0xd3745a247023e46d),
+        ("pdf Condensed/4/Some(List)", 0x00bf23a08515b188),
+        ("docx Condensed/4/Some(List)", 0x812c3742813862f8),
+        ("pdf Condensed/4/Some(Section)", 0x78fc84966741e632),
+        ("docx Condensed/4/Some(Section)", 0xcd476482f607a265),
+        ("pdf Condensed/4/Some(Marked)", 0x43a8561a41860fb4),
+        ("docx Condensed/4/Some(Marked)", 0xaa59bcb54a3e3287),
+        ("pdf ExamBoard/0/None", 0xaa6297a9f2b3ef65),
+        ("docx ExamBoard/0/None", 0xd45178f9c43fc520),
+        ("pdf ExamBoard/0/Some(List)", 0x6d1173e5b3fb2ee4),
+        ("docx ExamBoard/0/Some(List)", 0x88ee85d9598c932f),
+        ("pdf ExamBoard/0/Some(Section)", 0x2818ed6c3a5e859c),
+        ("docx ExamBoard/0/Some(Section)", 0xf500accb02049cb8),
+        ("pdf ExamBoard/0/Some(Marked)", 0xb1d8c6f82efa0459),
+        ("docx ExamBoard/0/Some(Marked)", 0x43df4ae6dc72f977),
+        ("pdf ExamBoard/2/None", 0xad81adb0ed70334a),
+        ("docx ExamBoard/2/None", 0xebc97973f819e610),
+        ("pdf ExamBoard/2/Some(List)", 0x6d1173e5b3fb2ee4),
+        ("docx ExamBoard/2/Some(List)", 0x88ee85d9598c932f),
+        ("pdf ExamBoard/2/Some(Section)", 0x2818ed6c3a5e859c),
+        ("docx ExamBoard/2/Some(Section)", 0xf500accb02049cb8),
+        ("pdf ExamBoard/2/Some(Marked)", 0x87428894ebfd7a6d),
+        ("docx ExamBoard/2/Some(Marked)", 0x9c34579840e26f39),
+        ("pdf ExamBoard/4/None", 0xc913b1cf57b0ce5f),
+        ("docx ExamBoard/4/None", 0x26a51299517e6473),
+        ("pdf ExamBoard/4/Some(List)", 0x6d1173e5b3fb2ee4),
+        ("docx ExamBoard/4/Some(List)", 0x88ee85d9598c932f),
+        ("pdf ExamBoard/4/Some(Section)", 0x2818ed6c3a5e859c),
+        ("docx ExamBoard/4/Some(Section)", 0xf500accb02049cb8),
+        ("pdf ExamBoard/4/Some(Marked)", 0x031f17093e4f85ba),
+        ("docx ExamBoard/4/Some(Marked)", 0x7644187f25bc8ca4),
+    ];
+
+    #[test]
+    fn text_only_bank_exports_byte_identical_to_before() {
+        let now = digests();
+        assert_eq!(now.len(), BEFORE.len());
+        for ((n, h), (bn, bh)) in now.iter().zip(BEFORE) {
+            assert_eq!((n.as_str(), *h), (*bn, *bh), "{n} changed");
+        }
+    }
+}
+
+/// Multiple-choice questions whose choices are pictures, in every bank format.
+#[cfg(test)]
+mod picture_choice_tests {
+    use super::*;
+    use crate::formats::make_question;
+    use crate::layout::DocImage;
+    use crate::model::{Answer, ImageRef, Part};
+
+    fn img(file: &str) -> Option<ImageRef> {
+        Some(ImageRef { file: file.into(), width: 40, height: 24 })
+    }
+
+    fn png() -> Vec<u8> {
+        let im = image::RgbImage::from_fn(40, 24, |x, y| image::Rgb([(x * 6) as u8, (y * 9) as u8, 200]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(im).write_to(&mut out, image::ImageFormat::Png).unwrap();
+        out.into_inner()
+    }
+
+    /// Four pie charts as options A-D: A a bare picture, B a picture with a caption, C text,
+    /// D a picture whose file is missing from the store.
+    fn pies() -> Question {
+        let pic = |text: &str, file: &str, correct: bool| Answer { text: text.into(), correct, image: img(file), ..Default::default() };
+        make_question(
+            "Which pie chart shows one quarter shaded?".into(),
+            Kind::Mc { answers: vec![pic("", "media/a.png", false), pic("Ten", "media/b.png", true), Answer::new("Twelve", false), pic("", "media/missing.png", false)] },
+        )
+    }
+
+    fn bank_of(questions: Vec<Question>) -> QuestionBank {
+        QuestionBank { id: "b".into(), name: "Pies".into(), questions, created: 1, modified: 1, details: Default::default() }
+    }
+
+    fn resolve(r: &ImageRef) -> Option<DocImage> {
+        (r.file != "media/missing.png").then(|| DocImage { bytes: png(), width_px: 40, height_px: 24 })
+    }
+
+    fn count(hay: &[u8], needle: &[u8]) -> usize {
+        hay.windows(needle.len()).filter(|w| *w == needle).count()
+    }
+
+    #[test]
+    fn bank_pdf_prints_each_choice_picture_under_its_letter() {
+        let d = bank_doc(&bank_of(vec![pies()]), &resolve);
+        let q = &d.questions[0];
+        assert_eq!(q.choices, ["A. ", "B. Ten  **(Correct answer)**", "C. Twelve", "D. [picture]"]);
+        let has: Vec<bool> = q.choice_images.iter().map(Option::is_some).collect();
+        assert_eq!(has, [true, true, false, false], "a missing file prints `[picture]` instead");
+        let pdf = crate::export::render_pdf(&d).unwrap();
+        assert_eq!(count(&pdf, b"/Subtype /Image"), 2, "both readable choice pictures are embedded");
+        assert!(count(&pdf, b"/Im1 Do") == 1 && count(&pdf, b"/Im2 Do") == 1, "and drawn");
+        let docx = crate::export::render_docx(&d).unwrap();
+        let z = zip::ZipArchive::new(std::io::Cursor::new(docx)).unwrap();
+        let media: Vec<&str> = z.file_names().filter(|n| n.starts_with("word/media/")).collect();
+        assert_eq!(media.len(), 2, "{media:?}");
+    }
+
+    #[test]
+    fn question_picture_keeps_im1_and_choice_pictures_follow() {
+        let mut q = pies();
+        q.image = img("media/stem.png");
+        let d = bank_doc(&bank_of(vec![q]), &resolve);
+        let pdf = crate::export::render_pdf(&d).unwrap();
+        assert_eq!(count(&pdf, b"/Subtype /Image"), 3);
+        let at = |n: &[u8]| pdf.windows(n.len()).position(|w| w == n).unwrap();
+        assert!(at(b"/Im1 Do") < at(b"/Im2 Do") && at(b"/Im2 Do") < at(b"/Im3 Do"), "stem picture first, then choices in order");
+        let pv = crate::export::preview_pages(&d).unwrap();
+        assert_eq!(pv.images.len(), 3);
+    }
+
+    #[test]
+    fn picture_choices_print_one_per_line_in_every_paper_style() {
+        for style in [crate::model::PaperStyle::Standard, crate::model::PaperStyle::Classic, crate::model::PaperStyle::Condensed, crate::model::PaperStyle::ExamBoard] {
+            for cols in [0u8, 2, 4] {
+                let mut d = bank_doc(&bank_of(vec![pies()]), &resolve);
+                d.style = style;
+                d.questions[0].answer_columns = cols;
+                let pdf = crate::export::render_pdf(&d).unwrap();
+                assert_eq!(count(&pdf, b" Do Q"), 2, "{style:?} {cols}: both pictures drawn");
+                let docx = crate::export::render_docx(&d).unwrap();
+                let mut z = zip::ZipArchive::new(std::io::Cursor::new(docx)).unwrap();
+                let mut xml = String::new();
+                std::io::Read::read_to_string(&mut z.by_name("word/document.xml").unwrap(), &mut xml).unwrap();
+                assert_eq!(xml.matches("<w:drawing>").count(), 2, "{style:?} {cols}");
+                assert!(!xml.contains("<w:tbl><w:tblPr><w:tblW"), "{style:?} {cols}: no choice-column table");
+            }
+        }
+    }
+
+    #[test]
+    fn multipart_picture_choice_says_it_is_left_out_of_the_print() {
+        let q = make_question(
+            "Parts".into(),
+            Kind::Multipart { parts: vec![Part { stem: "a. Pick".into(), kind: PartKind::Mc { answers: vec![Answer { text: "".into(), correct: true, image: img("media/a.png"), ..Default::default() }, Answer::new("None", false)] } }] },
+        );
+        let d = bank_doc(&bank_of(vec![q]), &resolve);
+        let t = d.questions[0].text.join("\n");
+        assert!(t.contains("A. *(picture left out of the print)*  **(Correct answer)**\nB. None"), "{t}");
+        assert!(d.questions[0].choice_images.is_empty());
+    }
+
+    #[test]
+    fn csv_says_picture_where_a_choice_picture_was() {
+        let csv = bank_csv(&bank_of(vec![pies()]));
+        let row = csv.lines().nth(1).unwrap();
+        assert!(row.contains("Ten [picture]"), "answer column: {row}");
+        assert!(row.contains("A. [picture] | B. Ten [picture] | C. Twelve | D. [picture]"), "{row}");
+    }
+
+    #[test]
+    fn aiken_and_blackboard_skip_and_count_picture_choice_questions() {
+        let text = make_question("2 + 2?".into(), Kind::Mc { answers: vec![Answer::new("4", true), Answer::new("5", false)] });
+        let b = bank_of(vec![pies(), text]);
+        let (aiken, skipped) = bank_aiken(&b);
+        assert_eq!((aiken.as_str(), skipped), ("2 + 2?\nA. 4\nB. 5\nANSWER: A\n", 1));
+        let (bb, skipped) = bank_blackboard(&b);
+        assert_eq!((bb.as_str(), skipped), ("2 + 2?\tMC\t\t4\t5\t\t\t\n", 1));
+    }
+
+    #[test]
+    fn bank_data_carries_choice_pictures_with_the_question_ones() {
+        let mut q = pies();
+        q.image = img("media/stem.png");
+        let mp = make_question(
+            "Parts".into(),
+            Kind::Multipart { parts: vec![Part { stem: "a.".into(), kind: PartKind::Mc { answers: vec![Answer { image: img("media/part.png"), ..Default::default() }] } }] },
+        );
+        let files: Vec<&str> = pictures_of(&q).into_iter().chain(pictures_of(&mp)).map(|i| i.file.as_str()).collect();
+        assert_eq!(files, ["media/stem.png", "media/a.png", "media/b.png", "media/missing.png", "media/part.png"]);
+        // The JSON keeps each choice's picture reference, so it imports back with it.
+        let json = crate::bankui::bank_export_json(&bank_of(vec![q]));
+        assert_eq!(json["questions"][0]["kind"]["Mc"]["answers"][1]["image"]["file"], "media/b.png");
+        assert!(json["questions"][0]["kind"]["Mc"]["answers"][2].get("image").is_none(), "a text choice has no image key");
     }
 }

@@ -1043,6 +1043,9 @@ struct R {
     annots: Vec<(usize, [f64; 4], String)>,
     /// Marked answer key: correct choices print checked and bold, expected answers in place.
     mark: bool,
+    /// The question being laid out: the `imgs` index of each choice's picture, parallel to
+    /// its choices (empty when no choice is a picture).
+    choice_idx: Vec<Option<usize>>,
 }
 
 impl R {
@@ -1559,6 +1562,24 @@ fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
             }
         }
     }
+    // Choice pictures follow every question picture, so question pictures keep their
+    // `/Im` numbers (the exam page preview maps those to the questions' files).
+    let mut choice_idx: Vec<Vec<Option<usize>>> = Vec::with_capacity(doc.questions.len());
+    for q in &doc.questions {
+        let mut row = Vec::new();
+        if q.has_choice_pictures() {
+            for im in &q.choice_images {
+                row.push(match im {
+                    Some(im) => {
+                        imgs.push(if encode { prepare_image(im)? } else { Px { jpeg: Vec::new(), alpha: None, equation_png: None, w: im.width_px.max(1), h: im.height_px.max(1) } });
+                        Some(imgs.len() - 1)
+                    }
+                    None => None,
+                });
+            }
+        }
+        choice_idx.push(row);
+    }
 
     let m = doc.margins_mm();
     let mm = |v: f32| (v as f64).max(6.0) * MM_PT;
@@ -1590,6 +1611,7 @@ fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
         fb: Vec::new(),
         annots: Vec::new(),
         mark: false,
+        choice_idx: Vec::new(),
     };
 
     let questions = printed_questions(doc);
@@ -1668,6 +1690,7 @@ fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
             next_img += 1;
             next_img - 1
         });
+        r.choice_idx = choice_idx.get(qi).cloned().unwrap_or_default();
         let sec = q.section.as_ref().filter(|_| !list_key);
         let est = if section_key { section_key_h(&r, q) } else { q_est_height(&r, q, img_idx, list_key) } + sec.map_or(0.0, |s| section_h(&r, s));
         // Keep-together: break before a question (with its section heading) that will not
@@ -1694,6 +1717,7 @@ fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
         }
         r.y -= body * if section_key { 0.25 } else { doc.style.q_gap() as f64 }; // separator between questions
     }
+    r.choice_idx.clear();
     if !r.cur.is_empty() {
         let cur = std::mem::take(&mut r.cur);
         let used = std::mem::take(&mut r.used);
@@ -1971,6 +1995,14 @@ fn render_q(r: &mut R, q: &DocQ, img_idx: Option<usize>) {
     } else {
         for ci in 0..q.choices.len() {
             let c = choice_text(r, q, ci);
+            let pic = choice_pic(r, q, ci);
+            if let Some(idx) = pic {
+                // A picture choice keeps its first text line and its picture on one page.
+                let first = text_lines(&c, avail, avail, r.body).first().map_or(r.lead, |l| line_metrics(l, r.body, r.lead).0);
+                if r.remaining() < first + choice_pic_h(r, idx, stem_x) && first + choice_pic_h(r, idx, stem_x) <= r.full_height() {
+                    r.new_page();
+                }
+            }
             for (j, l) in text_lines(&c, avail, avail, r.body).into_iter().enumerate() {
                 let (h, ascent) = line_metrics(&l, r.body, r.lead);
                 if r.remaining() < h { r.new_page(); }
@@ -1980,6 +2012,9 @@ fn render_q(r: &mut R, q: &DocQ, img_idx: Option<usize>) {
                 }
                 r.placed(stem_x, by, &l);
                 r.y -= h;
+            }
+            if let Some(idx) = pic {
+                draw_choice_image(r, idx, stem_x + choice_pic_indent(r));
             }
         }
     }
@@ -2083,7 +2118,7 @@ struct ChoiceGrid {
 /// The explicit answer-column grid for a multiple-choice question (None: one per line or the
 /// style's own layout). True/False and matching questions keep their own layouts.
 fn explicit_grid(r: &R, q: &DocQ, avail: f64) -> Option<ChoiceGrid> {
-    if q.answer_columns < 2 || q.choices.len() < 2 || is_tf(&q.choices) {
+    if q.answer_columns < 2 || q.choices.len() < 2 || is_tf(&q.choices) || q.has_choice_pictures() {
         return None;
     }
     let grid = crate::layout::choice_grid(q.choices.len(), q.answer_columns.min(4));
@@ -2099,7 +2134,7 @@ fn explicit_grid(r: &R, q: &DocQ, avail: f64) -> Option<ChoiceGrid> {
 /// Condensed: how many columns the choices print across in (None = one per line). Every
 /// choice must fit its column on one line.
 fn choice_columns(r: &R, q: &DocQ, avail: f64) -> Option<usize> {
-    if !r.style.choices_across() || q.choices.len() < 2 {
+    if !r.style.choices_across() || q.choices.len() < 2 || q.has_choice_pictures() {
         return None;
     }
     let widest = q
@@ -2143,7 +2178,8 @@ fn q_est_height(r: &R, q: &DocQ, img_idx: Option<usize>, is_key: bool) -> f64 {
             metrics.iter().map(|m| m.1).fold(0.0, f64::max) + metrics.iter().map(|m| m.0 - m.1).fold(0.0, f64::max)
         }).sum()
     } else {
-        q.choices.iter().map(|c| lines_h(&text_lines(&r.style.choice_label(c), avail, avail, r.body), r.body, r.lead)).sum()
+        q.choices.iter().map(|c| lines_h(&text_lines(&r.style.choice_label(c), avail, avail, r.body), r.body, r.lead)).sum::<f64>()
+            + (0..q.choices.len()).filter_map(|ci| choice_pic(r, q, ci)).map(|idx| choice_pic_h(r, idx, stem_x)).sum::<f64>()
     };
     h += choices_h + (rule_count(q) as f64 + q.work_lines as f64) * r.pitch();
     if let Some(idx) = img_idx {
@@ -2159,12 +2195,51 @@ fn pdf_image_size(r: &R, idx: usize, x: f64) -> (f64, f64) {
     crate::layout::picture_size_pt(px.w, px.h, r.x1 - x)
 }
 
+/// The `imgs` index of choice `ci`'s picture, when it has one.
+fn choice_pic(r: &R, q: &DocQ, ci: usize) -> Option<usize> {
+    q.choice_images.get(ci)?.as_ref()?;
+    r.choice_idx.get(ci).copied().flatten()
+}
+
+/// A choice picture sits under its choice's text, past the choice letter.
+fn choice_pic_indent(r: &R) -> f64 {
+    text_w("M. ", Face::Reg, r.body)
+}
+
+/// Gap above and below a choice's picture.
+const CHOICE_PIC_GAP: f64 = 3.0;
+
+/// The room a choice's picture takes under its text (picture plus its gaps).
+fn choice_pic_h(r: &R, idx: usize, x: f64) -> f64 {
+    let px = &r.imgs[idx];
+    crate::layout::choice_picture_size_pt(px.w, px.h, r.x1 - x - choice_pic_indent(r)).1 + 2.0 * CHOICE_PIC_GAP
+}
+
+/// Draws a choice's picture at `x` under the choice text (`layout::choice_picture_size_pt`).
+fn draw_choice_image(r: &mut R, idx: usize, x: f64) {
+    let px = &r.imgs[idx];
+    let (w, h) = crate::layout::choice_picture_size_pt(px.w, px.h, r.x1 - x);
+    if r.remaining() < h + 2.0 * CHOICE_PIC_GAP {
+        r.new_page();
+    }
+    r.y -= CHOICE_PIC_GAP;
+    place_image(r, idx, x, w, h);
+    r.y -= CHOICE_PIC_GAP;
+}
+
 fn draw_pdf_image(r: &mut R, idx: usize, x: f64) {
     let (w, h) = pdf_image_size(r, idx, x);
     if r.remaining() < h + r.body {
         r.new_page();
     }
     r.y -= 6.0;
+    place_image(r, idx, x, w, h);
+    r.y -= 6.0;
+}
+
+/// Draws image XObject `idx` `w` x `h` pt with its top-left at (`x`, `r.y`); `r.y` moves to
+/// its bottom edge.
+fn place_image(r: &mut R, idx: usize, x: f64, w: f64, h: f64) {
     let yb = r.y - h;
     r.cur.extend_from_slice(b"q ");
     r.cur.extend_from_slice(fnum(w).as_bytes());
@@ -2178,7 +2253,7 @@ fn draw_pdf_image(r: &mut R, idx: usize, x: f64) {
     r.cur.extend_from_slice((idx + 1).to_string().as_bytes());
     r.cur.extend_from_slice(b" Do Q\n");
     r.used.push(idx);
-    r.y = yb - 6.0;
+    r.y = yb;
 }
 
 fn prepare_image(im: &DocImage) -> Result<Px, String> {
@@ -3038,6 +3113,22 @@ fn docx_followed_by_workspace(q: &DocQ, split: Option<&(DocQ, DocQ)>, marked: bo
 /// JPEG embed as they are; other formats are re-encoded to PNG. False when the bytes do not
 /// decode (the caller then prints the `[picture]` placeholder).
 fn docx_picture(b: &mut String, media: &mut Vec<(Vec<u8>, &'static str)>, im: &DocImage, ind: i64, text_w_tw: i64, keep_first_work: bool) -> bool {
+    docx_picture_sized(b, media, im, ind, text_w_tw, keep_first_work, crate::layout::picture_size_pt, "120")
+}
+
+/// [`docx_picture`] at a given printed size (`size(w_px, h_px, column_pt)`) and paragraph
+/// spacing (twips before and after).
+#[allow(clippy::too_many_arguments)]
+fn docx_picture_sized(
+    b: &mut String,
+    media: &mut Vec<(Vec<u8>, &'static str)>,
+    im: &DocImage,
+    ind: i64,
+    text_w_tw: i64,
+    keep_first_work: bool,
+    size: fn(u32, u32, f64) -> (f64, f64),
+    spacing: &str,
+) -> bool {
     let fmt = image::guess_format(&im.bytes).ok();
     let (bytes, ext, (wpx, hpx)) = match fmt {
         Some(image::ImageFormat::Png) | Some(image::ImageFormat::Jpeg) => {
@@ -3060,13 +3151,13 @@ fn docx_picture(b: &mut String, media: &mut Vec<(Vec<u8>, &'static str)>, im: &D
     if wpx == 0 || hpx == 0 {
         return false;
     }
-    let (w, h) = crate::layout::picture_size_pt(wpx, hpx, (text_w_tw - ind) as f64 / 20.0);
+    let (w, h) = size(wpx, hpx, (text_w_tw - ind) as f64 / 20.0);
     let (cx, cy) = ((w * 12700.0).round() as i64, (h * 12700.0).round() as i64);
     media.push((bytes, ext));
     let n = media.len();
     let keep = if keep_first_work { "<w:keepNext/>" } else { "" };
     b.push_str(&format!(
-        "<w:p><w:pPr><w:keepLines/>{keep}<w:spacing w:before=\"120\" w:after=\"120\"/><w:ind w:left=\"{ind}\"/></w:pPr><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"{cx}\" cy=\"{cy}\"/><wp:docPr id=\"{n}\" name=\"Picture {n}\"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect=\"1\"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:nvPicPr><pic:cNvPr id=\"{n}\" name=\"image{n}.{ext}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"rIdM{n}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+        "<w:p><w:pPr><w:keepLines/>{keep}<w:spacing w:before=\"{spacing}\" w:after=\"{spacing}\"/><w:ind w:left=\"{ind}\"/></w:pPr><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"{cx}\" cy=\"{cy}\"/><wp:docPr id=\"{n}\" name=\"Picture {n}\"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect=\"1\"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:nvPicPr><pic:cNvPr id=\"{n}\" name=\"image{n}.{ext}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"rIdM{n}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
     ));
     true
 }
@@ -3105,7 +3196,13 @@ fn docx_choice_grid(b: &mut String, q: &DocQ, style: PaperStyle, ind: i64, text_
 
 /// A choice paragraph indented `ind` twips (inline markup honoured; `\n` breaks lines).
 fn choice_para(b: &mut String, c: &str, ind: i64, body_sz: i64) {
-    b.push_str(&format!("<w:p><w:pPr><w:ind w:left=\"{ind}\"/></w:pPr>"));
+    choice_para_keep(b, c, ind, body_sz, false);
+}
+
+/// [`choice_para`], kept on the page of the next paragraph (its picture) when `keep_next`.
+fn choice_para_keep(b: &mut String, c: &str, ind: i64, body_sz: i64, keep_next: bool) {
+    let keep = if keep_next { "<w:keepNext/>" } else { "" };
+    b.push_str(&format!("<w:p><w:pPr>{keep}<w:ind w:left=\"{ind}\"/></w:pPr>"));
     for (i, l) in c.split('\n').enumerate() {
         if i > 0 {
             b.push_str("<w:r><w:br/></w:r>");
@@ -3408,6 +3505,19 @@ pub fn render_docx(doc: &ExamDoc) -> Result<Vec<u8>, String> {
                 b.push_str("</w:p>");
             } else if tf {
                 wpara(&mut b, &Par { ind, ..Par::body("True   False") }, body_sz);
+            } else if q.has_choice_pictures() {
+                // Picture choices: one per line, each picture under its choice's text, past
+                // the letter (as the PDF prints them); undecodable bytes print `[picture]`.
+                let pic_ind = ind + (text_w("M. ", Face::Reg, body_sz as f64 / 2.0) * 20.0).round() as i64;
+                for (ci, c) in q.choices.iter().enumerate() {
+                    let im = q.choice_images.get(ci).and_then(Option::as_ref);
+                    choice_para_keep(&mut b, &style.choice_label(c), ind, body_sz, im.is_some());
+                    if let Some(im) = im {
+                        if !docx_picture_sized(&mut b, &mut media, im, pic_ind, text_w_tw, false, crate::layout::choice_picture_size_pt, "40") {
+                            wpara(&mut b, &Par { italic: true, ind: pic_ind, ..Par::body("[picture]") }, body_sz);
+                        }
+                    }
+                }
             } else if q.answer_columns >= 2 && q.choices.len() > 1 {
                 // Answer columns 2 / 4: a borderless fixed-width table, filled column-major,
                 // each choice wrapping inside its cell.
@@ -5442,5 +5552,136 @@ mod docx_attachment_tests {
         let output = std::path::PathBuf::from(manifest["output"].as_str().unwrap()); std::fs::create_dir_all(&output).unwrap();
         std::fs::write(output.join("student.docx"), bytes).unwrap();
         println!("14 unchanged R3 written-response items, 10 byte-identical embedded images; only attachment keep properties and first answer-line border grouping differ from frozen student export. No inference or acceptance score.");
+    }
+}
+
+/// Choices that are pictures (`DocQ::choice_images`) in the PDF and Word writers.
+#[cfg(test)]
+mod choice_picture_tests {
+    use super::*;
+    use std::io::Read;
+
+    fn png(w: u32, h: u32) -> DocImage {
+        let im = image::RgbImage::from_fn(w, h, |x, _| image::Rgb([(x % 255) as u8, 90, 160]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(im).write_to(&mut out, image::ImageFormat::Png).unwrap();
+        DocImage { bytes: out.into_inner(), width_px: w, height_px: h }
+    }
+
+    fn doc(images: Vec<Option<DocImage>>) -> ExamDoc {
+        let choices: Vec<String> = (0..images.len()).map(|i| format!("{}. ", char::from(b'A' + i as u8))).collect();
+        ExamDoc {
+            title: "Pies".into(),
+            body_pt: 11.0,
+            heading_pt: 16.0,
+            margin_mm: 18.0,
+            questions: vec![DocQ { number: 1, text: vec!["Which pie shows one quarter?".into()], choices, choice_images: images, correct: vec![1], ..Default::default() }],
+            ..Default::default()
+        }
+    }
+
+    fn count(hay: &[u8], needle: &[u8]) -> usize {
+        hay.windows(needle.len()).filter(|w| *w == needle).count()
+    }
+
+    #[test]
+    fn pdf_draws_each_choice_picture_under_its_choice() {
+        let d = doc(vec![Some(png(160, 120)), None, Some(png(80, 60))]);
+        let pdf = render_pdf(&d).unwrap();
+        tests::verify_xref(&pdf);
+        assert_eq!(count(&pdf, b"/Subtype /Image"), 2);
+        let pv = preview_pages(&d).unwrap();
+        let ops = String::from_utf8_lossy(&pv.pages[0]).into_owned();
+        // Each picture is drawn after its own choice's letter and before the next one.
+        let at = |s: &str| ops.find(s).unwrap_or_else(|| panic!("{s} missing"));
+        assert!(at("(A.") < at("/Im1 Do") && at("/Im1 Do") < at("(B.") && at("(C.") < at("/Im2 Do"), "{ops}");
+        // A 160 px picture prints at 120 x 90 pt (0.75 pt per px), under 1.5 in.
+        assert!(ops.contains("q 120 0 0 90 "), "{ops}");
+    }
+
+    #[test]
+    fn tall_choice_pictures_cap_at_one_and_a_half_inches_and_count_in_the_height() {
+        let d = doc(vec![Some(png(100, 1000)), Some(png(100, 1000))]);
+        let pv = preview_pages(&d).unwrap();
+        let ops = String::from_utf8_lossy(&pv.pages[0]).into_owned();
+        assert_eq!(ops.matches(" 0 0 108 ").count(), 2, "{ops}");
+        let mut r = layout_pdf(&d, false).unwrap();
+        let q = &d.questions[0];
+        let without = q_est_height(&r, q, None, false);
+        r.choice_idx = vec![Some(0), Some(1)];
+        let with = q_est_height(&r, q, None, false);
+        assert!((with - without - 2.0 * (108.0 + 2.0 * CHOICE_PIC_GAP)).abs() < 0.01, "{with} {without}");
+    }
+
+    #[test]
+    fn a_picture_choice_moves_to_the_next_page_with_its_picture() {
+        let mut d = doc(vec![]);
+        let base = d.questions[0].clone();
+        d.questions = (1..=6)
+            .map(|n| DocQ { number: n, choice_images: vec![Some(png(100, 1000)), Some(png(100, 1000)), Some(png(100, 1000))], choices: vec!["A. ".into(), "B. ".into(), "C. ".into()], ..base.clone() })
+            .collect();
+        let pv = preview_pages(&d).unwrap();
+        for (i, p) in pv.pages.iter().enumerate() {
+            let ops = String::from_utf8_lossy(p).into_owned();
+            // Every page that shows a choice letter also shows its picture right after it.
+            let letters = ["(A.", "(B.", "(C."].iter().map(|l| ops.matches(l).count()).sum::<usize>();
+            assert_eq!(letters, ops.matches(" Do Q").count(), "page {i}: a letter without its picture");
+        }
+    }
+
+    #[test]
+    fn grid_and_across_layouts_give_way_to_one_choice_per_line() {
+        for style in [crate::model::PaperStyle::Standard, crate::model::PaperStyle::Condensed] {
+            let mut d = doc(vec![Some(png(40, 30)), Some(png(40, 30))]);
+            d.style = style;
+            d.questions[0].answer_columns = 2;
+            let q = &d.questions[0];
+            let r = layout_pdf(&d, false).unwrap();
+            assert!(explicit_grid(&r, q, 400.0).is_none() && choice_columns(&r, q, 400.0).is_none(), "{style:?}");
+        }
+    }
+
+    fn document_xml(d: &ExamDoc) -> (String, Vec<String>) {
+        let bytes = render_docx(d).unwrap();
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let media = z.file_names().filter(|n| n.starts_with("word/media/")).map(str::to_string).collect();
+        let mut xml = String::new();
+        z.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();
+        (xml, media)
+    }
+
+    #[test]
+    fn docx_puts_each_choice_picture_after_its_choice_and_keeps_them_together() {
+        let mut d = doc(vec![Some(png(160, 120)), None, Some(png(40, 30))]);
+        d.questions[0].answer_columns = 2;
+        let (xml, media) = document_xml(&d);
+        assert_eq!(media.len(), 2);
+        assert_eq!(xml.matches("<w:drawing>").count(), 2);
+        assert!(!xml.contains("<w:tblW"), "no choice-column table with pictures");
+        let at = |s: &str| xml.find(s).unwrap_or_else(|| panic!("{s} missing"));
+        assert!(at(">A. <") < at("name=\"Picture 1\"") && at("name=\"Picture 1\"") < at(">B. <") && at(">C. <") < at("name=\"Picture 2\""));
+        assert_eq!(xml.matches("<w:keepNext/><w:ind w:left=\"432\"/>").count(), 2, "a picture choice's letter keeps with its picture");
+        // 160 x 120 px prints at 120 x 90 pt, as in the PDF.
+        assert!(xml.contains("<wp:extent cx=\"1524000\" cy=\"1143000\"/>"), "{xml}");
+    }
+
+    #[test]
+    fn docx_undecodable_choice_picture_prints_a_placeholder() {
+        let d = doc(vec![Some(DocImage { bytes: b"not a picture".to_vec(), width_px: 10, height_px: 10 }), None]);
+        let (xml, media) = document_xml(&d);
+        assert!(media.is_empty());
+        assert!(xml.contains("[picture]"));
+    }
+
+    #[test]
+    fn marked_key_checks_a_correct_picture_choice() {
+        let mut d = doc(vec![Some(png(40, 30)), Some(png(40, 30))]);
+        d.is_key = true;
+        d.key_layout = KeyLayout::Marked;
+        let pv = preview_pages(&d).unwrap();
+        let ops = String::from_utf8_lossy(&pv.pages[0]).into_owned();
+        assert_eq!(ops.matches(" Do Q").count(), 2, "the marked test shows the pictures");
+        let (xml, _) = document_xml(&d);
+        assert!(xml.contains("\u{2713}") && xml.matches("<w:drawing>").count() == 2);
     }
 }
