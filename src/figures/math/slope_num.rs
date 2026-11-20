@@ -18,8 +18,6 @@ use std::f64::consts::{E as EULER, PI};
 /// The marker read as y.
 pub(crate) const SENT: f64 = 7.77e-300;
 pub(crate) const SENT_TXT: &str = "(7.77e-300)";
-/// A slope beyond this is not a value (an exact pole rounded): undefined.
-pub(crate) const HUGE: f64 = 1e12;
 
 fn b(n: Node) -> Box<Node> { Box::new(n) }
 fn is_y(n: &Node) -> bool { matches!(n, Node::Num(v, _) if *v == SENT) }
@@ -54,6 +52,22 @@ pub(crate) fn ev(n: &Node, x: f64, y: f64) -> f64 {
                 n => super::grid_b7::arc_recip(n, a),
             }
         }
+    }
+}
+
+/// `ev` with every part finite: None where any part of the expression is infinite or not a number.
+pub(crate) fn evs(n: &Node, x: f64, y: f64) -> Option<f64> {
+    use Node::*;
+    let ok = |v: f64| v.is_finite().then_some(v);
+    match n {
+        Num(..) | X | Pi | Euler => ok(ev(n, x, y)),
+        Neg(a) => ok(-evs(a, x, y)?),
+        Add(a, c) => ok(evs(a, x, y)? + evs(c, x, y)?),
+        Sub(a, c) => ok(evs(a, x, y)? - evs(c, x, y)?),
+        Mul(a, c) => ok(evs(a, x, y)? * evs(c, x, y)?),
+        Div(a, c) => { let (p, q) = (evs(a, x, y)?, evs(c, x, y)?); if q == 0.0 { None } else { ok(p / q) } }
+        Pow(a, e) | LogB(a, e) => { evs(a, x, y)?; evs(e, x, y)?; ok(ev(n, x, y)) }
+        Func(_, a) => { evs(a, x, y)?; ok(ev(n, x, y)) }
     }
 }
 
@@ -109,8 +123,9 @@ pub(crate) fn exact_pole(n: &Node, x: &Ex, y: &Ex) -> bool {
 pub(crate) struct F { pub tree: Node, pub guards: Vec<Node> }
 impl F {
     pub(crate) fn new(tree: Node) -> F { let mut g = vec![]; guards_of(&tree, &mut g); F { tree, guards: g } }
-    /// The slope at (x, y), or None where f is undefined (or beyond any value: an exact pole rounded).
-    pub(crate) fn at(&self, x: f64, y: f64) -> Option<f64> { let v = ev(&self.tree, x, y); (v.is_finite() && v.abs() <= HUGE).then_some(v) }
+    /// The slope at (x, y), or None where f is undefined: where any part of it is not a finite number (1/ln y at y = 0
+    /// is undefined, not the −0 that 1/(−∞) gives). A finite slope however large is a value.
+    pub(crate) fn at(&self, x: f64, y: f64) -> Option<f64> { evs(&self.tree, x, y) }
 }
 
 /// The factors whose zero makes a product zero (a denominator's zero set): x² and x·(y − 1) by their factors.
@@ -306,7 +321,8 @@ pub(crate) fn euler(f: &F, x0: (f64, Option<Ex>), y0: (f64, Option<Ex>), h: (f64
         let fv = f.at(cur.x, cur.y);
         if pole || fv.is_none() { return (out, Some(EulerStop::Undefined(k))); }
         let next_ye = match (&exact_f, &cur.ye, &he) { (Some(fe), Some(ye), Some(hh)) => hh.mul(fe).and_then(|d| ye.add(&d)).filter(|v| v.rational().is_some()), _ => None };
-        let next_xe = match (&cur.xe, &he) { (Some(xe), Some(hh)) if next_ye.is_some() => xe.add(hh), _ => None };
+        // (x = x0 + kh stays exact whether or not y does)
+        let next_xe = match (&cur.xe, &he) { (Some(xe), Some(hh)) => xe.add(hh), _ => None };
         let x = next_xe.as_ref().map(|e| e.value()).unwrap_or(x0.0 + (k + 1) as f64 * h.0);
         let y = next_ye.as_ref().map(|e| e.value()).unwrap_or(cur.y + h.0 * fv.unwrap_or(0.0));
         if !y.is_finite() || y.abs() > 1e6 { return (out, Some(EulerStop::TooBig(k + 1))); }
@@ -566,3 +582,45 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
 }
 /// f is the number 0 (no variables at all, or a product with an exact 0).
 fn has_no_vars_zero(n: &Node) -> bool { !has_x(n) && !has_y(n) && ex::exact(n, None).is_some_and(|v| v.is_zero()) || matches!(n, Node::Mul(a, c) if has_no_vars_zero(a) || has_no_vars_zero(c)) }
+
+// ───────────────────────── a typed solution's interval ─────────────────────────
+
+/// Where x lies for the solution through (x0, g(x0)) given by a typed g: on its interval of existence, at its end (where
+/// f stops being defined on it, as a circle meets the axis), or beyond its end (past a blow-up of g, an edge of g's
+/// domain or a point where f is undefined on it), with the x of that end.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Reach { Yes, End(f64), No(f64) }
+
+/// Whether the typed solution g (a tree in x) is the solution through its starting point at x: g and f along it are
+/// defined at every point between, and none of the quantities whose zero makes either undefined (denominators, domains;
+/// their guards) changes sign or reaches 0 on the way. A sign change between two samples is a blow-up between them.
+pub(crate) fn solution_reaches(g: &Node, f: &F, x0: f64, x: f64) -> Reach {
+    if x == x0 { return Reach::Yes; }
+    let gf = F::new(g.clone());
+    let dg = ex::deriv(g);
+    // every guard of g, and every guard of f taken along the curve, at t (None where g or f is undefined there, or where g
+    // stops satisfying the equation: (x + 1)² for y′ = 2√y is no solution for x < −1)
+    let state = |t: f64| -> Option<Vec<f64>> {
+        let y = gf.at(t, 0.0)?;
+        let fv = f.at(t, y)?;
+        let d = ev(&dg, t, 0.0);
+        if d.is_finite() && (d - fv).abs() > 1e-6 * (1.0 + fv.abs()) { return None; }
+        Some(gf.guards.iter().map(|q| ev(q, t, 0.0)).chain(f.guards.iter().map(|q| ev(q, t, y))).collect())
+    };
+    let s0 = match state(x0) { Some(v) => v, None => return Reach::No(x0) };
+    let same = |v: &[f64]| v.iter().zip(&s0).all(|(a, b)| !a.is_finite() || !b.is_finite() || (*a > 0.0) == (*b > 0.0) && *a != 0.0);
+    let good = |t: f64| state(t).is_some_and(|v| same(&v));
+    let n = 800;
+    let mut prev = x0;
+    for k in 1..=n {
+        let t = if k == n { x } else { x0 + (x - x0) * k as f64 / n as f64 };
+        if good(t) { prev = t; continue; }
+        // the end of the interval, between prev (good) and t (not), by bisection
+        let (mut lo, mut hi) = (prev, t);
+        for _ in 0..80 { let mid = 0.5 * (lo + hi); if good(mid) { lo = mid; } else { hi = mid; } }
+        // at x itself, and only there: the solution's end (g is defined there, f is not, or a guard just reaches 0)
+        if k == n && (hi - x).abs() <= 1e-12 * (1.0 + x.abs()) && gf.at(x, 0.0).is_some() { return Reach::End(x); }
+        return Reach::No(hi);
+    }
+    Reach::Yes
+}

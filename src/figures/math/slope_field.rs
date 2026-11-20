@@ -239,7 +239,7 @@ fn style_of(s: &str) -> &'static str { STYLES.iter().copied().find(|x| *x == s).
 
 /// What the panel shows of Euler's method.
 #[derive(Clone, Debug)]
-pub(crate) struct EulerOut { pub h: Num, pub steps: Vec<nm::Step>, pub stop: Option<nm::EulerStop>, pub sol: Vec<Option<(String, bool)>> }
+pub(crate) struct EulerOut { pub h: Num, pub steps: Vec<nm::Step>, pub stop: Option<nm::EulerStop>, pub sol: Vec<Option<(String, bool)>>, pub gap: Option<String> }
 
 /// The figure's numbers: everything the drawing and the panel write.
 pub(crate) struct Model {
@@ -280,7 +280,7 @@ pub(crate) fn model(p: &Params) -> Model {
             (Some(e), Some(s), Some(h)) => {
                 let n = p.i("n").clamp(1, 50) as usize;
                 let (steps, stop) = nm::euler(&e.f, (s.x.v, s.x.ex.clone()), (s.y.v, s.y.ex.clone()), (h.v, h.ex.clone()), n);
-                euler = Some(EulerOut { h, steps, stop, sol: vec![] });
+                euler = Some(EulerOut { h, steps, stop, sol: vec![], gap: None });
             }
             _ => {}
         }
@@ -529,7 +529,12 @@ pub(super) fn build(p0: &Params) -> Out {
                 match r.stop {
                     Stop::Undefined => { notes.push(format!("{} is undefined at the starting point {}: no solution curve starts there", lhs(&m.vs), coord(s))); break; }
                     Stop::Singular => notes.push(format!("The solution through {} stops {way} near ({}, {}): {} is undefined there", coord(s), fmt(r.end.0), fmt(r.end.1), lhs(&m.vs))),
-                    Stop::Stalled => if inside(r.end.0, r.end.1) { notes.push(format!("The solution through {} cannot be continued {way} of {} = {}: its slope grows without bound there", coord(s), m.vs.var, fmt(r.end.0))) },
+                    Stop::Stalled => if inside(r.end.0, r.end.1) {
+                        // (the reason as it is: a slope that truly grows without bound near the end, or a point where dy/dx is undefined)
+                        let steep = r.pts.iter().rev().take(4).filter_map(|q| e.f.at(q.0, q.1)).fold(0.0f64, |a, v| a.max(v.abs())) > 1e3;
+                        notes.push(if steep { format!("The solution through {} cannot be continued {way} of {} = {}: its slope grows without bound there", coord(s), m.vs.var, fmt(r.end.0)) }
+                            else { format!("The solution through {} stops {way} near ({}, {}): {} is undefined there", coord(s), fmt(r.end.0), fmt(r.end.1), lhs(&m.vs)) });
+                    },
                     Stop::Steps => notes.push(format!("The solution through {} is drawn {way} only to {} = {}", coord(s), m.vs.var, fmt(r.end.0))),
                     _ => {}
                 }
@@ -550,11 +555,28 @@ pub(super) fn build(p0: &Params) -> Out {
             let mut fi = 0;
             let mut bi = 0;
             let mut sol = vec![Some((m.starts[0].y.s.clone(), true))];
+            let span = g.x1 - g.x0;
+            let p0 = coord(&m.starts[0]);
+            let mut gap: Option<String> = None;
             for st in eu.steps.iter().skip(1) {
-                let v = if st.x >= xs0 { let v = fwd.at_stops.get(fi).copied().flatten(); fi += 1; v } else { let v = back.and_then(|b| b.at_stops.get(bi).copied().flatten()); bi += 1; v };
-                sol.push(v.map(|v| (tg::decimal(v, m.dec), false)));
+                let (v, r) = if st.x >= xs0 { let v = fwd.at_stops.get(fi).copied().flatten(); fi += 1; (v, Some(fwd)) } else { let v = back.and_then(|b| b.at_stops.get(bi).copied().flatten()); bi += 1; (v, back) };
+                let ends = |r: &Run| matches!(r.stop, Stop::Singular | Stop::Stalled);
+                // a value where the curve ends at that very x (a circle meeting the axis) is no value: the solution ends there
+                let at_end = r.is_some_and(|r| ends(r) && (r.end.0 - st.x).abs() <= 1e-3 * span);
+                match (v, r) {
+                    (Some(v), _) if !at_end => sol.push(Some((tg::decimal(v, m.dec), false))),
+                    (_, Some(r)) => {
+                        sol.push(None);
+                        if gap.is_none() {
+                            gap = Some(if ends(r) || at_end { format!("the solution through {p0} ends at {} \u{2248} {}", m.vs.var, fmt(r.end.0)) }
+                                else { format!("the solution through {p0} leaves the window far behind before {} = {}", m.vs.var, fmt(st.x)) });
+                        }
+                    }
+                    _ => sol.push(None),
+                }
             }
             eu.sol = sol;
+            eu.gap = gap;
         }
     }
 
@@ -587,13 +609,30 @@ pub(super) fn build(p0: &Params) -> Out {
         else { solution_ok = Some((tree.clone(), shown.clone())); }
     }
     // the solution's values at Euler's x, exactly where the typed solution gives them exactly
-    if let (Some(eu), Some((tree, _))) = (m.euler.as_mut(), &solution_ok) {
+    // (only on the solution's interval of existence through the starting point: 1/(1 − x) through (0, 1) has no value at
+    // x = 2, though the formula gives −1; at the end of the interval, the exact value where it is exact, else none)
+    if let (Some(eu), Some((tree, _)), Some(e), Some(s0)) = (m.euler.as_mut(), &solution_ok, &m.eq, m.starts.first()) {
+        let p0 = coord(s0);
+        let mut gap: Option<String> = None;
         eu.sol = eu.steps.iter().map(|st| {
-            let v = ex::eval(tree, st.x);
-            if !v.is_finite() { return None; }
             let exact = st.xe.as_ref().and_then(|xe| ex::exact(tree, Some(xe)));
-            Some(written(v, exact.as_ref(), m.dec_ok, m.dec))
+            match nm::solution_reaches(tree, &e.f, s0.x.v, st.x) {
+                nm::Reach::Yes => {
+                    let v = ex::eval(tree, st.x);
+                    v.is_finite().then(|| written(v, exact.as_ref(), m.dec_ok, m.dec))
+                }
+                nm::Reach::End(r) => {
+                    let w = exact.as_ref().and_then(|x| tg::exact_text(x, m.dec_ok)).map(|t| (t, true));
+                    if w.is_none() && gap.is_none() { gap = Some(format!("the solution through {p0} ends at {} \u{2248} {}", m.vs.var, fmt(r))); }
+                    w
+                }
+                nm::Reach::No(r) => {
+                    if gap.is_none() { gap = Some(format!("the solution through {p0} does not exist beyond {} \u{2248} {}", m.vs.var, fmt(r))); }
+                    None
+                }
+            }
         }).collect();
+        eu.gap = gap;
     }
 
     // ── equilibria ──
@@ -755,7 +794,7 @@ pub(super) fn build(p0: &Params) -> Out {
     let ywrite = |eq: &nm::Equil| match &eq.exact { Some(x) => format!("{} = {}", m.vs.dep, ex::text(x, m.dec_ok).unwrap_or_else(|| tg::decimal(eq.y, m.dec))), None => format!("{} \u{2248} {}", m.vs.dep, tg::decimal(eq.y, m.dec)) };
     if let Some(eqs) = &equils {
         let sw = Some((ink.equil.to_string(), "10 5", false));
-        if eqs.everywhere {
+        if eqs.everywhere && answers {
             lines.push(line(sw, vec![pr("Equilibrium solutions: every horizontal line")]));
             lines.push(ind(vec![pr("("), mt(&format!("{l} = 0")), pr(" everywhere)")]));
             key.push(vec![pr("every horizontal line is an equilibrium solution")]);
@@ -780,6 +819,7 @@ pub(super) fn build(p0: &Params) -> Out {
     }
     // Euler's method
     let mut table: Vec<Vec<Vec<Part>>> = vec![];
+    let mut gap_line: Option<String> = None;
     if let (Some(eu), Some(s0)) = (&m.euler, m.starts.first()) {
         lines.push(line(Some((ink.euler.to_string(), "", answers)), vec![pr("Euler's method, "), mt(&format!("h = {}", eu.h.s)), pr(", from "), mt(&coord(s0))]));
         let xw = |st: &nm::Step| written(st.x, st.xe.as_ref(), m.dec_ok, m.dec.max(2));
@@ -818,6 +858,12 @@ pub(super) fn build(p0: &Params) -> Out {
             let st = &eu.steps[n];
             let xs = xw(st);
             key.push(vec![pr("solution at "), mt(&format!("{} = {}", m.vs.var, xs.0)), pr(": "), mt(&format!("{} {} {v}", m.vs.dep, if *e { "=" } else { "\u{2248}" }))]);
+        } else if let (Some(gp), true) = (&eu.gap, compare) {
+            key.push(vec![pr(gp)]);
+        }
+        if let (Some(gp), true) = (&eu.gap, compare) {
+            if p.b("euler_table") { gap_line = Some(format!("\u{2014} : {gp}")); }
+            notes.push(format!("{}{}: no solution value is written past it", gp[..1].to_uppercase(), &gp[1..]));
         }
     }
     if !fallback.is_empty() { lines.push(line(None, vec![pr("Starting points: "), mt(&fallback.join(", "))])); }
@@ -832,7 +878,7 @@ pub(super) fn build(p0: &Params) -> Out {
     let ncol = table.first().map(|r| r.len()).unwrap_or(0);
     let colw: Vec<f64> = (0..ncol).map(|c| table.iter().map(|r| r.get(c).map(|x| parts_w(x, size)).unwrap_or(0.0)).fold(0.0, f64::max)).collect();
     let table_w = if table.is_empty() { 0.0 } else { colw.iter().sum::<f64>() + 18.0 * (ncol as f64 - 1.0) + sw + 6.0 };
-    let inner_w = lines.iter().map(line_w).fold(table_w, f64::max);
+    let inner_w = lines.iter().map(line_w).fold(table_w, f64::max).max(gap_line.as_ref().map(|t| sw + 6.0 + text_w(t, size)).unwrap_or(0.0));
     let px0 = gw + 4.0;
     let panel_w = if lines.is_empty() && table.is_empty() { 0.0 } else { inner_w + 24.0 };
     let mut y = g.mt + 4.0 + size;
@@ -859,6 +905,7 @@ pub(super) fn build(p0: &Params) -> Out {
             if i == 0 { panel += &format!(r##"<line x1="{x0:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#000" stroke-width="0.8"/>"##, y + 0.45 * size, x0 + table_w - sw - 6.0, y + 0.45 * size); }
             y += lh;
         }
+        if let Some(gl) = &gap_line { panel += &parts_svg(x0, y, size, &[pr(gl)], "panel"); y += lh; }
     }
     let panel_h = y - lh + 0.5 * size;
     let mut w = gw + panel_w;

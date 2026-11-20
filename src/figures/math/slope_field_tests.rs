@@ -779,7 +779,10 @@ fn dump_for_sweep() {
     for line in std::fs::read_to_string(cases).unwrap().lines().filter(|l| !l.trim().is_empty()) {
         let c: Vec<&str> = line.split('|').collect();
         let w: Vec<f64> = c[5..9].iter().map(|t| t.parse().unwrap()).collect();
-        let p = with(&[("dydx", s(c[0])), ("points", s(&format!("({}, {})", c[1], c[2]))), ("euler", b(true)), ("h", s(c[3])), ("n", Value::I(c[4].parse().unwrap())), ("xmin", f(w[0])), ("xmax", f(w[1])), ("ymin", f(w[2])), ("ymax", f(w[3])), ("xstep", f(ystep(w[0], w[1]))), ("ystep", f(ystep(w[2], w[3]))), ("equilibria", b(true)), ("compare", b(true))]);
+        let mut o: Vec<(&str, Value)> = vec![("dydx", s(c[0])), ("points", s(&format!("({}, {})", c[1], c[2]))), ("euler", b(true)), ("h", s(c[3])), ("n", Value::I(c[4].parse().unwrap())), ("xmin", f(w[0])), ("xmax", f(w[1])), ("ymin", f(w[2])), ("ymax", f(w[3])), ("xstep", f(ystep(w[0], w[1]))), ("ystep", f(ystep(w[2], w[3]))), ("equilibria", b(true)), ("compare", b(true))];
+        // (a tenth field: a typed solution)
+        if let Some(sol) = c.get(9) { o.push(("solution", s(sol))); }
+        let p = with(&o);
         let o = build(&p);
         let m = model(&p);
         let cells = texts(&o.svg, "table");
@@ -840,4 +843,86 @@ fn evidence_tokens_change_the_opening_state() {
     let hs = d.handles(&p, crate::figures::svg_size(&open));
     assert!(hs.iter().any(|h| h.drag.is_some() && h.tip.contains("Drag the starting point (0, 1)")));
     assert!(hs.iter().any(|h| h.click_at.is_some() && h.tip == "Click the field to start a solution curve there"));
+}
+
+// ───────────────────────── round 1: the first check's faults ─────────────────────────
+
+fn sol_column(o: &[(&str, Value)]) -> (Vec<String>, String) {
+    let out = build(&with(o));
+    let cells = texts(&out.svg, "table");
+    (cells.chunks(4).skip(1).filter(|r| r.len() == 4).map(|r| r[3].clone()).collect(), texts(&out.svg, "key").join(" "))
+}
+
+/// A typed solution's value is written only on its interval of existence through the starting point (worked by hand):
+/// 1/(1 − x) through (0, 1) exists for x < 1; 2/(2 − x²) for |x| < √2; tan x for |x| < π/2; 1/(1 − x²) for |x| < 1;
+/// ln x for x > 0; √(4 − x²) ends at x = 2 with y = 0; e^x, −1/(1 + x) forward and √(x² + 1) everywhere.
+#[test]
+fn typed_solution_values_only_on_its_interval() {
+    let m = |t: &str| t.replace('-', "\u{2212}");
+    let cases: Vec<(&str, &str, &str, &str, i64, Vec<&str>)> = vec![
+        ("y^2", "(0, 1)", "1/(1 - x)", "0.5", 4, vec!["1", "2", "\u{2014}", "\u{2014}", "\u{2014}"]),
+        ("y^2", "(0, 1)", "1/(1 - x)", "1/4", 4, vec!["1", "4/3", "2", "4", "\u{2014}"]),
+        ("x*y^2", "(0, 1)", "2/(2 - x^2)", "0.5", 4, vec!["1", "\u{2248} 1.143", "2", "\u{2014}", "\u{2014}"]),
+        ("1 + y^2", "(0, 0)", "tan(x)", "0.5", 4, vec!["0", "\u{2248} 0.546", "\u{2248} 1.557", "\u{2248} 14.101", "\u{2014}"]),
+        ("1 + y^2", "(0, 0)", "tan(x)", "-0.5", 4, vec!["0", "\u{2248} -0.546", "\u{2248} -1.557", "\u{2248} -14.101", "\u{2014}"]),
+        ("2x*y^2", "(0, 1)", "1/(1 - x^2)", "1/4", 4, vec!["1", "16/15", "4/3", "16/7", "\u{2014}"]),
+        ("y", "(0, 1)", "e^x", "1/2", 4, vec!["1", "\u{2248} 1.649", "e", "\u{2248} 4.482", "e2"]),
+        // (Euler stops at x = 0 itself, where 1/x is undefined: two steps)
+        ("1/x", "(1, 0)", "ln(x)", "-1/2", 3, vec!["0", "\u{2248} -0.693", "\u{2014}"]),
+        ("1/x", "(1, 0)", "ln(x)", "1/2", 2, vec!["0", "\u{2248} 0.405", "\u{2248} 0.693"]),
+        ("-x/y", "(0, 2)", "sqrt(4 - x^2)", "1/2", 4, vec!["2", "\u{221a}15/2", "\u{221a}3", "\u{221a}7/2", "0"]),
+        ("-x/y", "(0, 2)", "sqrt(4 - x^2)", "1/2", 5, vec!["2", "\u{221a}15/2", "\u{221a}3", "\u{221a}7/2", "0", "\u{2014}"]),
+        ("y^2", "(0, -1)", "-1/(1 + x)", "1/2", 4, vec!["-1", "-2/3", "-1/2", "-2/5", "-1/3"]),
+        ("y^2", "(0, -1)", "-1/(1 + x)", "-1/2", 3, vec!["-1", "-2", "\u{2014}", "\u{2014}"]),
+        ("x/y", "(0, 1)", "sqrt(x^2 + 1)", "1/2", 2, vec!["1", "\u{221a}5/2", "\u{221a}2"]),
+        ("-y^2", "(0, 1)", "1/(1 + x)", "-1/2", 3, vec!["1", "2", "\u{2014}", "\u{2014}"]),
+    ];
+    assert!(cases.len() >= 12);
+    for (eqt, pt, sol, h, n, want) in cases {
+        let o = [("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s(h)), ("n", Value::I(n)), ("key_line", b(true)), ("ymin", f(-8.0)), ("ymax", f(8.0)), ("ystep", f(2.0))];
+        let (col, key) = sol_column(&o);
+        let want: Vec<String> = want.iter().map(|w| m(w)).collect();
+        assert_eq!(col, want, "{eqt} {pt} y = {sol}, h = {h}: {key}");
+        if want.last().is_some_and(|w| w == "\u{2014}") {
+            assert!(key.contains("does not exist beyond") || key.contains("ends at"), "{eqt} {sol}: {key}");
+            assert!(!key.contains("solution at"), "{eqt} {sol}: {key}");
+        }
+    }
+    // the reason is true: 1/(1 − x) through (0, 1) does not exist beyond x = 1
+    let (_, key) = sol_column(&[("dydx", s("y^2")), ("points", s("(0, 1)")), ("solution", s("1/(1 - x)")), ("euler", b(true)), ("h", s("0.5")), ("n", Value::I(4)), ("key_line", b(true))]);
+    assert!(key.contains("the solution through (0, 1) does not exist beyond x \u{2248} 1"), "{key}");
+}
+
+/// Where the solution ends at Euler's x (a circle meeting the axis), no near-zero decimal is written: "—" and why.
+#[test]
+fn circle_ends_write_no_spurious_value() {
+    for (eqt, pt, want) in [("-x/y", "(0, 1)", vec!["1", "\u{2248} 0.866", "\u{2014}", "\u{2014}", "\u{2014}"]), ("-x/y", "(0, 2)", vec!["2", "\u{2248} 1.936", "\u{2248} 1.732", "\u{2248} 1.323", "\u{2014}"]), ("-x/(4y)", "(0, 1)", vec!["1", "\u{2248} 0.968", "\u{2248} 0.866", "\u{2248} 0.661", "\u{2014}"])] {
+        let (col, key) = sol_column(&[("dydx", s(eqt)), ("points", s(pt)), ("euler", b(true)), ("h", s("0.5")), ("n", Value::I(4)), ("key_line", b(true))]);
+        assert_eq!(col, want, "{eqt} {pt}");
+        assert!(key.contains("ends at x \u{2248}"), "{eqt}: {key}");
+    }
+}
+
+#[test]
+fn first_check_known_issues() {
+    // the reason a curve stops is said as it is
+    for (eqt, pt) in [("y/x", "(-2, 1)"), ("sqrt(y)", "(0, 1)")] {
+        let out = build(&with(&[("dydx", s(eqt)), ("points", s(pt))]));
+        let n = out.notes.join(" | ");
+        assert!(!n.contains("grows without bound"), "{eqt}: {n}");
+    }
+    let out = build(&with(&[("dydx", s("y^2")), ("points", s("(0, 1)")), ("ymax", f(1000.0)), ("ystep", f(100.0))]));
+    assert!(!out.notes.join(" ").contains("is undefined there"), "{:?}", out.notes);
+    // dy/dx = 0 on a student copy: the equilibria are a blank, the equation is not given away
+    for copy in STUDENT {
+        let out = build(&with(&[("dydx", s("0")), ("equilibria", b(true)), ("show_answers", b(false)), ("student_copy", s(copy))]));
+        let all = texts(&out.svg, "panel").join(" ");
+        assert!(!all.contains("every horizontal line") && !all.contains("everywhere"), "{copy}: {all}");
+    }
+    // 1/ln y at y = 0: ln 0 is undefined, so there is no equilibrium there and no curve starts there
+    let out = build(&with(&[("dydx", s("1/ln(y)")), ("points", s("(0, 0)")), ("equilibria", b(true))]));
+    assert!(out.equils.as_ref().unwrap().lines.is_empty() && out.runs.is_empty(), "{:?}", out.notes);
+    // e^(xy) on ±10: large slopes are values, not "undefined"
+    let out = build(&with(&[("dydx", s("e^(x*y)")), ("points", s("")), ("xmin", f(-10.0)), ("xmax", f(10.0)), ("ymin", f(-10.0)), ("ymax", f(10.0)), ("xstep", f(2.0)), ("ystep", f(2.0))]));
+    assert!(out.missing.is_empty(), "{:?}", out.notes);
 }
