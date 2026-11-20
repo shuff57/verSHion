@@ -35,6 +35,11 @@ class KeyTests(unittest.TestCase):
         self.assertFalse(h.has_invented_key({'kind':{'Multipart':{'parts':[part]}},'explanation':h.KEYLESS_SENTINEL}))
 
 class SourceMapTests(unittest.TestCase):
+    def test_declared_dotted_labels_map_by_their_last_part(self):
+        page={'items':[{'number':None,'label':'2.15','question_index':0,'status':'saved'},{'number':None,'label':'2.16','question_index':1,'status':'saved'}]};qs=[{'stem':'a'},{'stem':'b'}]
+        case={'source_id':'linear-algebra','question_numbers':[15,16],'dotted_labels':True}
+        self.assertEqual(h.parsed_source_map(case,page,qs)['by_number'],{15:qs[0],16:qs[1]})
+        self.assertEqual(h.parsed_source_map(dict(case,dotted_labels=False),page,qs)['by_number'],{})
     def test_a_declared_single_unnumbered_item_maps_to_its_case_number(self):
         page={'items':[{'number':None,'question_index':0,'status':'saved'}]};qs=[{'stem':'Activity 1.2.9'}]
         case={'source_id':'linear-algebra','question_numbers':[9],'single_unnumbered_item':True}

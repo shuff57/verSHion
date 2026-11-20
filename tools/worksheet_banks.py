@@ -176,6 +176,9 @@ def parsed_source_map(case,page,questions):
         return {'numbers':numbers,'by_number':by_number,'index':{n:i for i,n in enumerate(numbers) if n is not None},
                 'all_saved':len(raw)==len(questions),'unresolved':[],'status':{},'provenance':'legacy_zip'}
     numbers=[i.get('number') for i in items]
+    # A case declaring dotted labels ("Exercise 2.15") keys each item by the label's last part.
+    if case.get('dotted_labels'):
+        numbers=[n if n is not None else (int(m.group(1)) if (m:=re.fullmatch(r'\s*\d+(?:\.\d+)*\.(\d+)\s*',str(i.get('label') or ''))) else None) for n,i in zip(numbers,items)]
     if len(numbers)==1 and numbers[0] is None and (case['source_id']=='statistics-confidence-intervals' or (case.get('single_unnumbered_item') and len(case['question_numbers'])==1)):numbers=[1 if case['source_id']=='statistics-confidence-intervals' else case['question_numbers'][0]]
     by_number={};index={};status={};unresolved=[]
     for number,item in zip(numbers,items):

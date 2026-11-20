@@ -103,7 +103,7 @@ struct Page {
 
 impl Page {
     fn new(png: &[u8]) -> Option<Page> {
-        let luma = image::load_from_memory(png).ok()?.to_luma8();
+        let luma = native(image::load_from_memory(png).ok()?.to_luma8());
         let mut values: Vec<u8> = luma.pixels().map(|p| p.0[0]).collect();
         if values.len() < 100 {
             return None;
@@ -127,6 +127,29 @@ impl Page {
             .min()
             .unwrap_or(255)
     }
+}
+
+/// The reference at its own pixel scale. The figure maker sees the source crop enlarged by a whole
+/// number with nearest-neighbour copies (figure_observation::vision_reference); measured at that
+/// size a one-pixel stroke is several pixels wide and a few pixels of drawing offset miss it. An
+/// exact enlargement is undone; another large image is scaled down.
+fn native(luma: image::GrayImage) -> image::GrayImage {
+    let (w, h) = luma.dimensions();
+    for k in [4u32, 3, 2] {
+        if w % k != 0 || h % k != 0 || w / k < 16 || h / k < 16 {
+            continue;
+        }
+        let exact = (0..h).all(|y| (0..w).all(|x| luma.get_pixel(x, y) == luma.get_pixel(x - x % k, y - y % k)));
+        if exact {
+            return image::imageops::resize(&luma, w / k, h / k, image::imageops::FilterType::Nearest);
+        }
+    }
+    let longest = w.max(h);
+    if longest > 600 {
+        let f = longest.div_ceil(400);
+        return image::imageops::resize(&luma, (w / f).max(1), (h / f).max(1), image::imageops::FilterType::Triangle);
+    }
+    luma
 }
 
 /// Canvas to reference: x' = sx·x + tx, y' = sy·y + ty.
@@ -391,6 +414,20 @@ mod tests {
     }
 
     #[test]
+    fn the_enlarged_reference_the_maker_sees_measures_like_the_crop() {
+        // Round 26: the live reference is the crop enlarged 4x (nearest); it must still register.
+        let enlarge = |png: Vec<u8>| {
+            let im = image::load_from_memory(&png).unwrap();
+            let big = im.resize_exact(im.width() * 4, im.height() * 4, image::imageops::FilterType::Nearest);
+            let mut out = Vec::new();
+            big.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
+            out
+        };
+        assert_eq!(solid_gray_over_dashes(&params(), &enlarge(reference(true))).len(), 1);
+        assert!(solid_gray_over_dashes(&params(), &enlarge(reference(false))).is_empty());
+    }
+
+    #[test]
     fn a_continuous_source_line_and_unclear_cases_report_nothing() {
         assert!(solid_gray_over_dashes(&params(), &reference(false)).is_empty(), "continuous source line");
         // Already dashed in the candidate: nothing to check.
@@ -414,8 +451,12 @@ fn dash_check_over_saved_cases() {
     for line in std::fs::read_to_string(list).unwrap().lines() {
         let (spec, image) = line.split_once('\t').unwrap();
         let params: BTreeMap<String, Json> = serde_json::from_str(&std::fs::read_to_string(spec).unwrap()).unwrap();
+        // What the live maker and check receive: the crop as figure_observation enlarges it.
+        let live = crate::ai::figure_observation::vision_reference(&std::fs::read(image).unwrap()).unwrap();
+        let image_bytes = live;
         let p = crate::figures::params_from_json(&crate::figures::geometry_diagram::def(), &serde_json::to_value(&params).unwrap());
-        println!("{spec}: dash={:?} minus={:?} grid={}", solid_gray_over_dashes(&params, &std::fs::read(image).unwrap()).len(),
+        if std::env::var("DASH_DIAG").is_ok() { println!("{spec}: {:?}", diagnosis(&params, &image_bytes)); }
+        println!("{spec}: dash={:?} minus={:?} grid={}", solid_gray_over_dashes(&params, &image_bytes).len(),
             crate::figures::geometry_diagram::hidden_minus_signs(&p).unwrap_or_default().len(), hand_drawn_grid(&params).is_some());
     }
 }

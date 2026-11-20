@@ -186,7 +186,7 @@ pub fn figure_observation() -> OutputSchema {
                     "id":{"type":"string","minLength":1,"maxLength":16},
                     "from":{"type":"string","minLength":1,"maxLength":16},
                     "to":{"type":"string","minLength":1,"maxLength":16},
-                    "stroke":{"type":"string","minLength":1,"maxLength":48}
+                    "stroke":{"type":"string","minLength":1,"maxLength":120}
                 }))},
                 "crossings":{"type":"array","maxItems":24,"items":object(json!({
                     "first":{"type":"string","minLength":1,"maxLength":16},

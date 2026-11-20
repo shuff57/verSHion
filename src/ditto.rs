@@ -569,7 +569,10 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
         // A figure-only item is a real question when its figure is a real figure: its task is the section's
         // printed direction, or an explicit unresolved-review state. Without a valid figure it stays dropped.
         let mut unresolved = false;
-        let mut built = if text(item, "stem").is_empty() && matches!(&cropped, Some(Ok(_))) {
+        // A multipart whose parts carry the whole task needs no shared stem, with or without a
+        // shared figure (holdout v4: "1) [graph] (a) ... (d) ..."): it is not figure-only.
+        let parts_carry = text(item, "type") == "multipart" && parts_carry_task(item);
+        let mut built = if text(item, "stem").is_empty() && !parts_carry && matches!(&cropped, Some(Ok(_))) {
             let mut filled = item.clone();
             let stem = match &applied {
                 Some(d) => d.text.clone(),
@@ -648,7 +651,7 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                     info.figure = "attached_needs_review".into();
                     info.reason = Some(reason);
                     "saved_figure_box_unresolved"
-                } else if unresolved { "saved_figure_only_unresolved" } else if text(item, "stem").is_empty() { "saved_figure_only" } else { "saved" }.into();
+                } else if unresolved { "saved_figure_only_unresolved" } else if text(item, "stem").is_empty() && !parts_carry { "saved_figure_only" } else { "saved" }.into();
                 info.question_index = Some(questions.len());
                 info.directions = applied;
                 info.headings = source_id.as_ref().and_then(|id| directions.headings.get(id)).cloned().unwrap_or_default();
@@ -1515,6 +1518,23 @@ mod tests {
         assert!(matches!(got.doc.questions[0].kind, Kind::Tf { correct: false }) && keyless(&got.doc.questions[0]));
         assert!(matches!(got.doc.questions[1].kind, Kind::Tf { correct: false }) && !keyless(&got.doc.questions[1]), "a printed key is kept");
         assert!(keyless(&got.doc.questions[2]));
+    }
+
+    #[test]
+    fn a_shared_figure_with_parts_that_carry_the_task_gets_no_placeholder_stem() {
+        // Holdout v4, Berkeley Math 1A: "1) [graph of y = f(x)] (a) ... (d) ..." with no shared stem.
+        store();
+        let reply = serde_json::json!({"format":FORMAT,"bank":{"name":"1A","questions":[
+            {"id":"q1","label":"1","type":"multipart","stem":"","figure":{"box":[150, 200, 450, 800],"alt":"graph"},"parts":[
+                {"type":"short-answer","stem":"(a) Suppose h is positive. Draw the secant line."},
+                {"type":"short-answer","stem":"(b) Now suppose h is negative."}]}]}}).to_string();
+        let got = import_text(&reply, Some(&page()), 1, "w").unwrap();
+        assert_eq!(got.doc.questions.len(), 1, "{:?}", got.warnings);
+        let q = &got.doc.questions[0];
+        assert!(!q.stem.contains(UNRESOLVED_TASK), "{}", q.stem);
+        assert!(q.image.is_some());
+        assert_eq!(got.items[0].status, "saved");
+        assert!(!q.topics.iter().any(|t| t == UNRESOLVED_TOPIC));
     }
 
     #[test]
