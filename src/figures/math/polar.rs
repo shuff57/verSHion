@@ -99,7 +99,11 @@ impl Val {
     fn float(v: f64, dec_ok: bool) -> Val { Val { v, ex: None, dec_ok } }
     fn exact(e: Ex, dec_ok: bool) -> Val { Val { v: e.value(), ex: Some(e), dec_ok } }
     fn from(e: Option<Ex>, v: f64, dec_ok: bool) -> Val { match e { Some(e) => Val::exact(e, dec_ok), None => Val::float(v, dec_ok) } }
-    fn mul(&self, o: &Val) -> Val { Val::from(self.ex.as_ref().zip(o.ex.as_ref()).and_then(|(a, b)| a.mul(b)), self.v * o.v, self.dec_ok || o.dec_ok) }
+    fn mul(&self, o: &Val) -> Val {
+        // an exact 0 times anything is exactly 0 (the pole: r = 0 at θ = π/8 is (0, 0), not ≈ (0, 0))
+        if self.ex.as_ref().is_some_and(|e| e.is_zero()) || o.ex.as_ref().is_some_and(|e| e.is_zero()) { return Val::exact(Ex::rat(R(0, 1)), self.dec_ok || o.dec_ok); }
+        Val::from(self.ex.as_ref().zip(o.ex.as_ref()).and_then(|(a, b)| a.mul(b)), self.v * o.v, self.dec_ok || o.dec_ok)
+    }
 }
 pub(crate) fn has_decimal(t: &str) -> bool {
     let cs: Vec<char> = t.chars().collect();
@@ -608,7 +612,10 @@ pub(crate) fn region(p: &Params, cs: &[Curve], notes: &mut Vec<String>) -> Optio
     let mode = p.s("shade");
     if mode == SHADE[0] { return None; }
     let two = mode == SHADE[2];
-    let (i, o) = (p.i("shade_in") as usize, p.i("shade_out") as usize);
+    // (shading is for polar curves: with none it is not offered, and does nothing)
+    if !cs.iter().any(|c| c.polar) { return None; }
+    // with one curve, "inside curve" is that curve (the control is hidden)
+    let (i, o) = if cs.len() <= 1 { (cs[0].row + 1, p.i("shade_out") as usize) } else { (p.i("shade_in") as usize, p.i("shade_out") as usize) };
     let Some(f) = cs.iter().find(|c| c.row + 1 == i) else { notes.push(format!("Shading: there is no curve {i}; set Inside curve to one of the curves typed.")); return None; };
     if !f.polar { notes.push(format!("Shading: curve {i} is parametric; shading is for polar curves r = f(\u{3b8}).")); return None; }
     let g = if two {
@@ -681,8 +688,8 @@ pub(crate) struct Mk { pub name: String, pub curve: usize, pub s: Val, pub x: Va
 
 fn marks_of(p: &Params, cs: &[Curve], used: &[String], notes: &mut Vec<String>) -> Vec<Mk> {
     let t = p.s("marks_at").trim();
-    if t.is_empty() { return vec![]; }
-    let k = p.i("mark_curve") as usize;
+    if t.is_empty() || cs.is_empty() { return vec![]; }
+    let k = if cs.len() <= 1 { cs.first().map(|c| c.row + 1).unwrap_or(1) } else { p.i("mark_curve") as usize };
     let Some(c) = cs.iter().find(|c| c.row + 1 == k) else { notes.push(format!("Marks: there is no curve {k}; set Mark them on curve to one of the curves typed.")); return vec![]; };
     let mut free = ('A'..='Z').map(String::from).filter(|n| !used.contains(n) && n != "T").collect::<Vec<_>>().into_iter();
     let mut out = vec![];
@@ -724,7 +731,7 @@ fn bx_at(c: Pt, w: f64, size: f64) -> Bx { (c.0 - w / 2.0, c.1 - 0.48 * size, c.
 
 /// A label to place: its text, what it belongs to (a dot, or a segment such as the tracer's ray), and the shorter text
 /// (the letter) used when the whole does not fit.
-struct Req { id: String, text: String, short: Option<String>, own: Own, size: f64 }
+struct Req { id: String, text: String, alt: Option<String>, short: Option<String>, own: Own, size: f64 }
 #[derive(Clone, Copy)]
 enum Own { Dot(Pt, f64), Seg(Pt, Pt), Arc(Pt, f64, f64, f64) }
 /// Candidate centres for a box of width w beside what it labels, nearest first.
@@ -756,9 +763,9 @@ fn candidates(own: Own, w: f64, size: f64) -> Vec<(Pt, Option<Pt>)> {
             let n = dx.hypot(dy).max(1e-9);
             let (nx, ny) = (-dy / n, dx / n);
             let sup = (nx * w / 2.0).abs() + (ny * h / 2.0).abs();
-            for t in [0.5, 0.62, 0.38, 0.75, 0.25] {
+            for t in [0.5, 0.62, 0.38, 0.75, 0.25, 0.85, 0.15] {
                 let m = (a.0 + dx * t, a.1 + dy * t);
-                for gap in [4.0, 9.0, 15.0] { for s in [1.0, -1.0] { v.push(((m.0 + s * nx * (sup + gap), m.1 + s * ny * (sup + gap)), None)); } }
+                for gap in [4.0, 9.0, 15.0, 22.0] { for s in [1.0, -1.0] { v.push(((m.0 + s * nx * (sup + gap), m.1 + s * ny * (sup + gap)), None)); } }
             }
         }
         Own::Arc(c, r, a0, a1) => {
@@ -766,11 +773,29 @@ fn candidates(own: Own, w: f64, size: f64) -> Vec<(Pt, Option<Pt>)> {
                 let a = a0 + (a1 - a0) * f;
                 let (ux, uy) = (a.cos(), -a.sin());
                 let sup = (ux * w / 2.0).abs() + (uy * h / 2.0).abs();
-                for gap in [4.0, 10.0, 18.0] { v.push(((c.0 + ux * (r + sup + gap), c.1 + uy * (r + sup + gap)), None)); }
+                for gap in [4.0, 10.0, 18.0, 28.0, 40.0, 54.0] { v.push(((c.0 + ux * (r + sup + gap), c.1 + uy * (r + sup + gap)), None)); }
+            }
+        }
+    }
+    // then a ring round the middle of the segment or arc, on a short leader from it
+    if let Some(m) = anchor(own) {
+        for dist in [22.0, 32.0, 44.0, 58.0] {
+            for k in 0..16 {
+                let a = k as f64 * PI / 8.0 + PI / 16.0;
+                let end = (m.0 + dist * a.cos(), m.1 - dist * a.sin());
+                v.push(((end.0 + a.cos() * w / 2.0, end.1 - a.sin() * h / 2.0), Some(end)));
             }
         }
     }
     v
+}
+/// Where a leader to a segment's or an arc's label starts: its middle.
+fn anchor(own: Own) -> Option<Pt> {
+    match own {
+        Own::Seg(a, b) => Some((0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))),
+        Own::Arc(c, r, a0, a1) => { let a = 0.5 * (a0 + a1); Some((c.0 + r * a.cos(), c.1 - r * a.sin())) }
+        Own::Dot(..) => None,
+    }
 }
 fn belongs(sc: &Scene, b: Bx, own: Own, lead: bool) -> bool {
     match own {
@@ -783,14 +808,15 @@ fn belongs(sc: &Scene, b: Bx, own: Own, lead: bool) -> bool {
 }
 /// Places a label: whole beside its thing, whole on a short leader, the letter alone beside it (the whole is written in the
 /// panel), or the least bad place. Returns the SVG and, when the whole went to the panel, its text.
-fn place(sc: &mut Scene, r: &Req, out: &mut String, to_panel: &mut Vec<String>) {
+fn place(sc: &mut Scene, r: &Req, out: &mut String, to_panel: &mut Vec<String>, bare: &mut Vec<String>) {
     let try_text = |sc: &Scene, text: &str, leaders: bool| -> Option<(Bx, Option<(Pt, Pt)>)> {
         let w = text_w(text, r.size);
         for (c, lead) in candidates(r.own, w, r.size) {
             if lead.is_some() != leaders { continue; }
             let b = bx_at(c, w, r.size);
             if !sc.clear(b) || !belongs(sc, b, r.own, lead.is_some()) { continue; }
-            if let (Some(end), Own::Dot(o, rad)) = (lead, r.own) {
+            if let Some(end) = lead {
+                let (o, rad) = match r.own { Own::Dot(o, rad) => (o, rad), other => (anchor(other).unwrap(), 2.0) };
                 let n = (end.0 - o.0).hypot(end.1 - o.1).max(1e-9);
                 let start = (o.0 + (end.0 - o.0) / n * (rad + 2.0), o.1 + (end.1 - o.1) / n * (rad + 2.0));
                 if sc.segs.iter().any(|(a, c2)| super::tangent::seg_cross(start, end, *a, *c2)) { continue; }
@@ -803,24 +829,26 @@ fn place(sc: &mut Scene, r: &Req, out: &mut String, to_panel: &mut Vec<String>) 
         None
     };
     let mut chosen = try_text(sc, &r.text, false).map(|x| (x, r.text.clone()));
+    // a complete shorter wording (the angle's value alone beside its arc), then each on a short leader
+    if let (None, Some(alt)) = (&chosen, &r.alt) { chosen = try_text(sc, alt, false).map(|x| (x, alt.clone())); }
     if chosen.is_none() { chosen = try_text(sc, &r.text, true).map(|x| (x, r.text.clone())); }
+    if let (None, Some(alt)) = (&chosen, &r.alt) { chosen = try_text(sc, alt, true).map(|x| (x, alt.clone())); }
     if chosen.is_none() {
         if let Some(short) = &r.short {
             if let Some(x) = try_text(sc, short, false).or_else(|| try_text(sc, short, true)) { to_panel.push(r.text.clone()); chosen = Some((x, short.clone())); }
         }
     }
-    let ((b, lead), text) = chosen.unwrap_or_else(|| {
-        // the least bad place beside it
-        let w = text_w(&r.text, r.size);
-        let best = candidates(r.own, w, r.size).into_iter().filter(|x| x.1.is_none()).map(|(c, _)| bx_at(c, w, r.size)).min_by(|a, b| sc.cost(*a).total_cmp(&sc.cost(*b))).unwrap();
-        ((best, None), r.text.clone())
-    });
+    // no room anywhere beside it: written in the panel only, never drawn across a line or other text
+    let Some(((b, lead), text)) = chosen else { to_panel.push(r.text.clone()); bare.push(r.text.clone()); return; };
     if let Some((s, e)) = lead {
         out.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#333333" stroke-width="0.9" data-pp="leader"/>"##, s.0, s.1, e.0, e.1));
         sc.segs.push((s, e));
     }
     let base = b.1 + 0.72 * r.size;
-    out.push_str(&format!(r##"<g data-lbl="{}"><text x="{:.2}" y="{:.2}" font-size="{:.2}" text-anchor="start" font-family="{SERIF}" fill="#000" stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">{}</text></g>"##, esc(&r.id), b.0, base, r.size, math_tspans(&text)));
+    let at = match r.own { Own::Dot(c, _) => format!(r#" data-at="{:.2},{:.2}""#, c.0, c.1), _ => String::new() };
+    // (a blank to write on is set as it is: the typesetter would read its underscores as subscripts)
+    let body = text.split("____").map(math_tspans).collect::<Vec<_>>().join("____");
+    out.push_str(&format!(r##"<g data-lbl="{}"{at}><text x="{:.2}" y="{:.2}" font-size="{:.2}" text-anchor="start" font-family="{SERIF}" fill="#000" stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">{}</text></g>"##, esc(&r.id), b.0, base, r.size, body));
     sc.boxes.push(b);
 }
 
@@ -850,6 +878,8 @@ pub(crate) struct Out {
     pub region: Option<Region>,
     pub tan: Option<Tan>,
     pub to_panel: Vec<String>,
+    /// Labels with no room on the figure even for their letter (written in the panel only).
+    pub bare: Vec<String>,
 }
 
 struct Ink { curves: [&'static str; 4], tangent: &'static str, tracer: &'static str, fill: &'static str, fill2: &'static str }
@@ -944,7 +974,7 @@ pub(crate) fn build(p0: &Params) -> Out {
                     let a = j as f64 * k as f64 * PI / 12.0;
                     // (the axes are drawn darker below)
                     if (j * k) % 6 == 0 { continue; }
-                    body += &format!(r##"<line x1="{cx:.2}" y1="{cy:.2}" x2="{:.2}" y2="{:.2}" stroke="{gc}" stroke-width="1" data-pp="ray"/>"##, cx + rpx * a.cos(), cy - rpx * a.sin());
+                    body += &format!(r##"<line x1="{cx:.2}" y1="{cy:.2}" x2="{:.2}" y2="{:.2}" stroke="{gc}" stroke-width="1" data-pp="gridray"/>"##, cx + rpx * a.cos(), cy - rpx * a.sin());
                 }
             }
             body += &format!(r##"<circle cx="{cx:.2}" cy="{cy:.2}" r="{rpx:.2}" fill="none" stroke="#777777" stroke-width="1.2" data-pp="circle"/>"##);
@@ -1100,8 +1130,8 @@ pub(crate) fn build(p0: &Params) -> Out {
 
     // ── the tangent ──
     let mut tan_out: Option<Tan> = None;
-    if p.b("tangent") && !pts_only {
-        let k = p.i("tangent_curve") as usize;
+    if p.b("tangent") && !pts_only && !curves.is_empty() {
+        let k = if curves.len() <= 1 { curves.first().map(|c| c.row + 1).unwrap_or(1) } else { p.i("tangent_curve") as usize };
         match curves.iter().find(|c| c.row + 1 == k) {
             None => notes.push(format!("Tangent: there is no curve {k}; set Tangent to curve to one of the curves typed.")),
             Some(c) => match read_val(p.s("tangent_at"), c.polar) {
@@ -1176,13 +1206,13 @@ pub(crate) fn build(p0: &Params) -> Out {
                                         over += &format!(r##"<polyline points="{}" fill="none" stroke="{}" stroke-width="1.6" data-pp="arc"/>"##, sv.join(" "), ink.tracer);
                                         for w in pts.windows(2) { sc.segs.push((w[0], w[1])); }
                                         let (a0, a1) = if span > 0.0 { (0.0, span) } else { (span, 0.0) };
-                                        reqs.push(Req { id: "theta".into(), text: String::new(), short: None, own: Own::Arc(pole, ar, a0, a1), size });
+                                        reqs.push(Req { id: "theta".into(), text: String::new(), alt: None, short: Some("\u{3b8}".into()), own: Own::Arc(pole, ar, a0, a1), size });
                                     }
                                     tracer_lbl = Some((s.clone(), Some(r), true));
-                                    if (q.0 - pole.0).hypot(q.1 - pole.1) > 1.0 { reqs.push(Req { id: "r".into(), text: String::new(), short: None, own: Own::Seg(pole, q), size }); }
+                                    if (q.0 - pole.0).hypot(q.1 - pole.1) > 1.0 { reqs.push(Req { id: "r".into(), text: String::new(), alt: None, short: Some("r".into()), own: Own::Seg(pole, q), size }); }
                                 } else {
                                     tracer_lbl = Some((s.clone(), None, false));
-                                    reqs.push(Req { id: "t".into(), text: String::new(), short: None, own: Own::Dot(q, 5.0), size });
+                                    reqs.push(Req { id: "t".into(), text: String::new(), alt: None, short: Some("T".into()), own: Own::Dot(q, 5.0), size });
                                 }
                                 over += &format!(r##"<circle cx="{:.2}" cy="{:.2}" r="5" fill="{}" stroke="#fff" stroke-width="1.2" data-pp="tracer"/>"##, q.0, q.1, ink.tracer);
                                 sc.dots.push((q, 5.0));
@@ -1204,9 +1234,11 @@ pub(crate) fn build(p0: &Params) -> Out {
                 (Some(r), Some(th)) => Some(pair(r, th, true, &ctx)),
                 _ => {
                     // a parametric point's polar form: exact where derived
-                    let (er, et) = match (&x.ex, &y.ex) { (Some(a), Some(b)) if !(a.is_zero() && b.is_zero()) => pn::exact_polar(a, b), _ => (None, None) };
+                    // (at the pole r = 0 and θ is written 0)
+                    let at_pole = x.ex.as_ref().is_some_and(|e| e.is_zero()) && y.ex.as_ref().is_some_and(|e| e.is_zero()) || x.v.hypot(y.v) < 1e-12;
+                    let (er, et) = if at_pole { (Some(Ex::rat(R(0, 1))), Some(Ex::rat(R(0, 1)))) } else { match (&x.ex, &y.ex) { (Some(a), Some(b)) => pn::exact_polar(a, b), _ => (None, None) } };
                     let rv = Val::from(er, x.v.hypot(y.v), x.dec_ok || y.dec_ok);
-                    let tv = Val::from(et, pn::wrap(y.v.atan2(x.v)), x.dec_ok || y.dec_ok);
+                    let tv = Val::from(et, if at_pole { 0.0 } else { pn::wrap(y.v.atan2(x.v)) }, x.dec_ok || y.dec_ok);
                     Some(pair(&rv, &tv, true, &ctx))
                 }
             }.map(|(s, e)| if e { s } else { format!("\u{2248} {s}") })
@@ -1228,7 +1260,7 @@ pub(crate) fn build(p0: &Params) -> Out {
         over += &format!(r##"<circle cx="{:.2}" cy="{:.2}" r="4.5" fill="#111111" stroke="#fff" stroke-width="1" data-pp="point"/>"##, at.0, at.1);
         sc.dots.push((at, 4.5));
         let (text, short) = coord_text(&q.name, Some(&q.r), Some(&q.th), &q.x, &q.y);
-        if !text.is_empty() { reqs.push(Req { id: q.name.clone(), text, short, own: Own::Dot(at, 4.5), size }); }
+        if !text.is_empty() { reqs.push(Req { id: q.name.clone(), text, alt: None, short, own: Own::Dot(at, 4.5), size }); }
     }
     for m in &marks {
         let at = fr.to(m.x.v, m.y.v);
@@ -1237,7 +1269,7 @@ pub(crate) fn build(p0: &Params) -> Out {
         sc.dots.push((at, 4.0));
         let c = curves.iter().find(|c| c.row + 1 == m.curve).unwrap();
         let (text, short) = coord_text(&m.name, m.r.as_ref(), if c.polar { Some(&m.s) } else { None }, &m.x, &m.y);
-        if !text.is_empty() { reqs.push(Req { id: m.name.clone(), text, short, own: Own::Dot(at, 4.0), size }); }
+        if !text.is_empty() { reqs.push(Req { id: m.name.clone(), text, alt: None, short, own: Own::Dot(at, 4.0), size }); }
     }
     // the tracer's labels last but one: r along its ray, θ beside its arc
     let any_student = !answers;
@@ -1245,7 +1277,7 @@ pub(crate) fn build(p0: &Params) -> Out {
         for rq in reqs.iter_mut() {
             match rq.id.as_str() {
                 "r" => { let r = r.as_ref().unwrap(); let (t, e) = vtext(r, &ctx); rq.text = if any_student { "r = ____".into() } else { format!("r {} {t}", if e { "=" } else { "\u{2248}" }) }; }
-                "theta" => { let (t, e) = atext(s, &ctx); rq.text = format!("\u{3b8} {} {t}", if e { "=" } else { "\u{2248}" }); }
+                "theta" => { let (t, e) = atext(s, &ctx); rq.text = format!("\u{3b8} {} {t}", if e { "=" } else { "\u{2248}" }); if e { rq.alt = Some(t); } }
                 "t" if !polar => { let (t, e) = vtext(s, &ctx); rq.text = format!("t {} {t}", if e { "=" } else { "\u{2248}" }); }
                 _ => {}
             }
@@ -1255,7 +1287,8 @@ pub(crate) fn build(p0: &Params) -> Out {
     reqs.sort_by_key(|r| matches!(r.id.as_str(), "r" | "theta" | "t") as u8);
     let mut to_panel = vec![];
     let mut labels_svg = String::new();
-    for r in &reqs { if !r.text.is_empty() { place(&mut sc, r, &mut labels_svg, &mut to_panel); } }
+    let mut bare = vec![];
+    for r in &reqs { if !r.text.is_empty() { place(&mut sc, r, &mut labels_svg, &mut to_panel, &mut bare); } }
 
     // ── the panel ──
     let mut pl: Vec<PLine> = vec![];
@@ -1288,7 +1321,8 @@ pub(crate) fn build(p0: &Params) -> Out {
         }
     }
     if let Some(t) = &tan_out {
-        let c = curves.iter().find(|c| c.row + 1 == p.i("tangent_curve") as usize).unwrap();
+        let k = if curves.len() <= 1 { curves.first().map(|c| c.row + 1).unwrap_or(1) } else { p.i("tangent_curve") as usize };
+        let c = curves.iter().find(|c| c.row + 1 == k).unwrap();
         let v = c.var();
         let (st, _) = if c.polar { atext(&t.s, &ctx) } else { vtext(&t.s, &ctx) };
         let drawn = matches!(t.slope, Slope::Finite(_) | Slope::Vertical) && fr.inside(fr.to(t.x.v, t.y.v));
@@ -1409,7 +1443,7 @@ pub(crate) fn build(p0: &Params) -> Out {
     doc.raw(&keysvg);
     let _ = (pts_only, &samples);
     notes.dedup();
-    Out { svg: doc.finish(), notes, frame: fr, p_px, tracer_px, curves, points, region: reg, tan: tan_out, to_panel }
+    Out { svg: doc.finish(), notes, frame: fr, p_px, tracer_px, curves, points, region: reg, tan: tan_out, to_panel, bare }
 }
 fn gcd(a: i64, b: i64) -> i64 { let (mut a, mut b) = (a.abs(), b.abs()); while b != 0 { let t = a % b; a = b; b = t; } a.max(1) }
 
@@ -1503,11 +1537,12 @@ pub(crate) fn relevant(key: &str, p0: &Params) -> bool {
         "t_from" | "t_to" => (0..raw_rows.min(MAX_CURVES)).any(|i| { let row = p.s("curves").split(['\n', ';']).filter(|r| !r.trim().is_empty()).nth(i).unwrap_or("").to_string(); let u = unify(&row); let parts = top_split(&u); let l = parts[0].split('=').next().unwrap_or("").trim().to_lowercase(); (l == "x" || l == "x(t)") && parts.len() < 3 }),
         "style1" | "style2" | "style3" | "style4" => !pts_only && has_row(key[5..].parse::<usize>().unwrap_or(9)),
         "rays" | "rmax" | "rstep" => polar_grid,
-        "ray_labels" => polar_grid && p.s("rays") != RAYS[3] || cs.iter().any(|c| c.polar) && acts("ray_labels", p, &[s(if p.s("ray_labels") == "Degrees" { "Radians" } else { "Degrees" })]),
+        "ray_labels" => polar_grid && p.s("rays") != RAYS[3] || acts("ray_labels", p, &[s(if p.s("ray_labels") == "Degrees" { "Radians" } else { "Degrees" })]),
         "xmin" | "xmax" | "xstep" | "ymin" | "ymax" | "ystep" => !polar_grid,
         "shade" => !pts_only && cs.iter().any(|c| c.polar),
-        "shade_in" | "shade_from" | "shade_to" | "show_area" => shading,
-        "shade_out" => shading && p.s("shade") == SHADE[2],
+        "shade_from" | "shade_to" | "show_area" => shading && cs.iter().any(|c| c.polar),
+        "shade_in" => shading && n_curves > 1 && cs.iter().any(|c| c.polar),
+        "shade_out" => shading && p.s("shade") == SHADE[2] && cs.iter().any(|c| c.polar),
         "arrows" => !pts_only && n_curves > 0,
         "marks_at" => n_curves > 0,
         "mark_curve" => n_curves > 1 && !p.s("marks_at").trim().is_empty(),

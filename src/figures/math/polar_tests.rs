@@ -179,8 +179,13 @@ fn shading_refuses_what_it_cannot_measure() {
     let (_, rg, n) = area_of(&shade("r = sqrt(cos(2θ))", "0", "pi/2"));
     assert!(rg.is_none() && n.iter().any(|x| x.contains("undefined")));
     // a parametric curve
-    let (_, rg, n) = area_of(&shade("x = cos(t), y = sin(t)", "0", "pi"));
+    let mut o = shade("r = 2\nx = cos(t), y = sin(t)", "0", "pi");
+    o.push(("shade_in", i(2)));
+    let (_, rg, n) = area_of(&o);
     assert!(rg.is_none() && n.iter().any(|x| x.contains("parametric")));
+    // with no polar curve at all, shading is not offered and does nothing
+    let (_, rg, n) = area_of(&shade("x = cos(t), y = sin(t)", "0", "pi"));
+    assert!(rg.is_none() && n.is_empty() && !crate::figures::param_relevant(ID, "shade", &with(&shade("x = cos(t), y = sin(t)", "0", "pi"))));
     // inside r = 1 + cos θ and outside r = 3 cos θ over −π/3 to π/3: nowhere (the cardioid is inside there)
     let mut o = shade("r = 1 + cos(θ)\nr = 3cos(θ)", "-pi/3", "pi/3");
     o.push(("shade", s(polar::SHADE[2])));
@@ -466,4 +471,396 @@ fn the_sweep_agrees_with_sympy() {
     }
     println!("sweep: {} curves, {n_pts} points ({n_exact} values written exactly), {n_sl} slopes ({n_near} nearly vertical, said so), {n_ar} areas ({n_ar_exact} exact); {} faults", data["curves"], bad.len());
     assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+// ───────────────────────── the label sweep ─────────────────────────
+
+type Bx = (f64, f64, f64, f64);
+type Seg = ((f64, f64), (f64, f64));
+fn attr<'a>(h: &'a str, n: &str) -> Option<&'a str> { h.split(&format!(" {n}=\"")).nth(1).and_then(|r| r.split('"').next()) }
+fn numa(h: &str, n: &str) -> f64 { attr(h, n).and_then(|v| v.parse().ok()).unwrap_or(f64::NAN) }
+fn hit(a: Bx, b: Bx) -> bool { a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3 }
+fn on(b: Bx, s: Seg) -> bool { polar::clip_rect(s.0, s.1, (b.0 + 0.5, b.1 + 0.5, b.2 - 0.5, b.3 - 0.5)).is_some() }
+
+/// The strokes a label keeps off: curves, the axes, the tangent, the tracer's ray, arc and direction, leaders.
+fn strokes(svg: &str) -> Vec<(String, Seg)> {
+    let mut v = vec![];
+    for (i, _) in svg.match_indices("<line ") {
+        let h = &svg[i..i + svg[i..].find('>').unwrap()];
+        let tag = attr(h, "data-pp").unwrap_or("");
+        if matches!(tag, "axis" | "tangent" | "ray" | "direction" | "leader") || (tag.is_empty() && numa(h, "stroke-width") >= 1.5 && attr(h, "stroke") != Some("#000")) {
+            v.push((if tag.is_empty() { "axis".into() } else { tag.to_string() }, ((numa(h, "x1"), numa(h, "y1")), (numa(h, "x2"), numa(h, "y2")))));
+        }
+    }
+    for (i, _) in svg.match_indices("<polyline ") {
+        let h = &svg[i..i + svg[i..].find('>').unwrap()];
+        let tag = attr(h, "data-pp").unwrap_or("");
+        if !(tag.starts_with("curve") || tag == "arc") { continue; }
+        let pts: Vec<(f64, f64)> = attr(h, "points").unwrap_or("").split(' ').filter_map(|q| { let (a, b) = q.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect();
+        for w in pts.windows(2) { v.push((tag.to_string(), (w[0], w[1]))); }
+    }
+    v
+}
+/// The faults of one render, read from the drawn SVG.
+fn faults(svg: &str) -> Vec<(String, String)> {
+    let (w, h) = crate::figures::svg_size(svg);
+    let all = crate::figures::math::flat_b9::text_boxes(svg);
+    let lines = strokes(svg);
+    let dots: Vec<(f64, f64, f64)> = svg.match_indices("<circle ").map(|(i, _)| { let hd = &svg[i..i + svg[i..].find('>').unwrap()]; (numa(hd, "cx"), numa(hd, "cy"), numa(hd, "r"), attr(hd, "data-pp").unwrap_or("").to_string()) }).filter(|d| matches!(d.3.as_str(), "point" | "mark" | "tracer" | "tanpt")).map(|d| (d.0, d.1, d.2)).collect();
+    let leaders: Vec<(f64, f64)> = svg.match_indices(r#"data-pp="leader""#).map(|(i, _)| { let st = svg[..i].rfind("<line ").unwrap(); let h = &svg[st..i]; (numa(h, "x2"), numa(h, "y2")) }).collect();
+    let mut out = vec![];
+    for (i, _) in svg.match_indices("<g data-lbl=\"") {
+        let end = svg[i..].find("</g>").map(|e| i + e).unwrap();
+        let head = &svg[i..i + svg[i..].find('>').unwrap()];
+        let own = attr(head, "data-at").and_then(|a| { let (x, y) = a.split_once(',')?; Some((x.parse::<f64>().ok()?, y.parse::<f64>().ok()?)) });
+        for (t, bx) in crate::figures::math::flat_b9::text_boxes(&svg[i..end]) {
+            let led = leaders.iter().any(|e| e.0 >= bx.0 - 2.0 && e.0 <= bx.2 + 2.0 && e.1 >= bx.1 - 2.0 && e.1 <= bx.3 + 2.0);
+            if bx.0 < 0.0 || bx.1 < 0.0 || bx.2 > w || bx.3 > h { out.push((t.clone(), "off the page".into())); }
+            // (its own leader ends at it)
+            let own_leader = |k: &str, sg: &Seg| k == "leader" && (sg.1 .0 >= bx.0 - 2.0 && sg.1 .0 <= bx.2 + 2.0 && sg.1 .1 >= bx.1 - 2.0 && sg.1 .1 <= bx.3 + 2.0);
+            if let Some((k, _)) = lines.iter().find(|(k, sg)| !own_leader(k, sg) && on(bx, *sg)) { out.push((t.clone(), format!("on a stroke ({k})"))); }
+            if dots.iter().any(|d| d.0 + d.2 > bx.0 && d.0 - d.2 < bx.2 && d.1 + d.2 > bx.1 && d.1 - d.2 < bx.3) { out.push((t.clone(), "on a dot".into())); }
+            if all.iter().any(|(o, ob)| !(o == &t && (ob.0 - bx.0).abs() < 0.02 && (ob.1 - bx.1).abs() < 0.02) && hit(bx, *ob)) { out.push((t.clone(), "on other text".into())); }
+            if let (Some(o), false) = (own, led) {
+                let d0 = polar::box_pt(bx, o);
+                if d0 > 30.0 { out.push((t.clone(), "far from its point".into())); }
+                if dots.iter().any(|d| (d.0 - o.0).abs() + (d.1 - o.1).abs() > 0.5 && polar::box_pt(bx, (d.0, d.1)) + 2.0 < d0) { out.push((t.clone(), "nearer another dot".into())); }
+            }
+        }
+    }
+    out
+}
+
+/// Classroom polar and parametric curves (the curves, windows and values a textbook uses): (curves, rmax or window,
+/// points, marks at, tracer at, tangent at, shading (kind, from, to)).
+type Case = (&'static str, f64, &'static str, &'static str, &'static str, &'static str, Option<(usize, &'static str, &'static str)>);
+fn classroom() -> Vec<Case> {
+    vec![
+        ("r = 3sin(2θ)", 3.0, "", "pi/12, pi/4, 5pi/12", "pi/4", "pi/6", Some((1, "0", "pi/2"))),
+        ("r = 3cos(2θ)", 3.0, "P(3, pi/2)", "0, pi/4, pi/2", "pi/6", "pi/8", Some((1, "-pi/4", "pi/4"))),
+        ("r = 2sin(3θ)", 2.0, "", "pi/6, pi/2", "pi/6", "pi/9", Some((1, "0", "pi/3"))),
+        ("r = 4cos(3θ)", 4.0, "", "0, pi/3, 2pi/3", "pi/12", "pi/6", Some((1, "-pi/6", "pi/6"))),
+        ("r = 2cos(4θ)", 2.0, "", "0, pi/8", "pi/16", "pi/4", Some((1, "-pi/8", "pi/8"))),
+        ("r = 4sin(2θ)", 4.0, "P(2, 3pi/4)", "pi/4, 3pi/4", "pi/3", "pi/4", Some((1, "pi", "3pi/2"))),
+        ("r = 3sin(5θ)", 3.0, "", "pi/10", "pi/10", "pi/5", Some((1, "0", "pi/5"))),
+        ("r = 1 + cos(θ)", 2.0, "P(1, pi/2)", "0, pi/2, pi", "pi/3", "pi/2", Some((1, "0", "pi"))),
+        ("r = 1 - cos(θ)", 2.0, "", "pi/2, pi, 3pi/2", "2pi/3", "pi/2", Some((1, "0", "2pi"))),
+        ("r = 2 + 2sin(θ)", 4.0, "P(2, pi)", "0, pi/2, pi", "pi/6", "pi/6", Some((1, "0", "pi"))),
+        ("r = 3 - 3sin(θ)", 6.0, "", "0, pi, 3pi/2", "pi/4", "pi", Some((1, "pi", "2pi"))),
+        ("r = 2 + 2cos(θ)", 4.0, "P(3, 5pi/6)", "", "pi/3", "pi/2", Some((1, "0", "pi/2"))),
+        ("r = 1 + 2cos(θ)", 3.0, "", "0, pi/2, 2pi/3, pi", "pi/3", "pi/2", Some((1, "2pi/3", "4pi/3"))),
+        ("r = 2 + cos(θ)", 3.0, "P(1, pi/4)", "0, pi/2, pi", "pi/4", "pi/3", Some((1, "0", "2pi"))),
+        ("r = 3 + 2sin(θ)", 5.0, "", "pi/2, 3pi/2", "pi/6", "0", Some((1, "0", "pi"))),
+        ("r = 1 - 2sin(θ)", 3.0, "", "0, pi/6, pi/2", "pi", "0", Some((1, "pi/6", "5pi/6"))),
+        ("r = 2 - 3cos(θ)", 5.0, "", "0, pi", "pi/2", "pi/2", None),
+        ("r = 2", 3.0, "P(2, pi/6), Q(-2, pi/6)", "", "pi/4", "pi/3", Some((1, "0", "pi/3"))),
+        ("r = 4cos(θ), 0 <= θ <= pi", 4.0, "", "0, pi/6, pi/4, pi/3", "pi/6", "pi/4", Some((1, "0", "pi/4"))),
+        ("r = 4sin(θ), 0 <= θ <= pi", 4.0, "P(2, pi/6)", "pi/6, pi/2", "pi/3", "pi/6", Some((1, "0", "pi"))),
+        ("r = -3cos(θ), 0 <= θ <= pi", 3.0, "", "0, pi/3", "pi/4", "2pi/3", None),
+        ("r = 6sin(θ)", 6.0, "", "pi/6, pi/2, 5pi/6", "pi/4", "pi/3", None),
+        ("r = θ, 0 <= θ <= 4pi", 13.0, "", "pi/2, pi, 3pi/2, 2pi", "3pi/2", "pi", Some((1, "0", "pi"))),
+        ("r = θ/2, 0 <= θ <= 4pi", 7.0, "", "pi, 2pi", "5pi/2", "pi/2", None),
+        ("r = θ, 0 <= θ <= 2pi", 7.0, "P(3, pi/2)", "", "pi/2", "pi", Some((1, "0", "2pi"))),
+        ("r = e^(θ/5), 0 <= θ <= 4pi", 13.0, "", "0, 2pi", "pi", "pi/2", None),
+        ("r = 2sqrt(cos(2θ))", 2.0, "", "0, pi/6", "pi/8", "pi/6", Some((1, "-pi/4", "pi/4"))),
+        ("r = sin(θ/2), 0 <= θ <= 4pi", 1.0, "", "pi, 3pi", "pi/2", "pi", None),
+        ("r = cos(2θ/3), 0 <= θ <= 6pi", 1.0, "", "0, 3pi", "pi/2", "3pi/2", None),
+        ("r = 2/(1 + 0.5cos(θ))", 4.0, "", "0, pi/2, pi", "pi/3", "pi/2", Some((1, "0", "pi/2"))),
+        ("r = 1/(1 - cos(θ))", 5.0, "", "pi/2, pi", "pi/2", "pi/2", None),
+        ("r = 2sec(θ)", 5.0, "", "0, pi/4", "pi/6", "0", None),
+        ("r = 3csc(θ)", 5.0, "", "pi/2, pi/4", "pi/3", "pi/2", None),
+        ("r = cos(θ)^2", 1.0, "", "0, pi/4", "pi/6", "pi/4", None),
+        ("r = 2cos(θ) + 2sin(θ)", 3.0, "", "0, pi/4, pi/2", "pi/4", "0", Some((1, "0", "pi/2"))),
+        ("r = 3cos(θ)\nr = 1 + cos(θ)", 3.0, "", "", "pi/4", "pi/3", Some((2, "-pi/3", "pi/3"))),
+        ("r = 3sin(θ)\nr = 1 + sin(θ)", 3.0, "", "", "pi/3", "pi/2", Some((2, "pi/6", "5pi/6"))),
+        ("r = 2\nr = 2 - 2cos(θ)", 4.0, "", "", "pi/2", "pi/2", Some((2, "-pi/2", "pi/2"))),
+        ("r = 4\nr = 2 + 2cos(θ)", 4.0, "", "", "pi/3", "pi/2", Some((2, "pi/2", "3pi/2"))),
+        ("r = 2sin(2θ)\nr = 1", 2.0, "", "", "pi/4", "pi/4", Some((2, "pi/12", "5pi/12"))),
+        ("r = 4cos(θ)\nr = 2", 4.0, "", "pi/3", "pi/6", "pi/6", Some((2, "-pi/3", "pi/3"))),
+        ("r = 6sin(θ)\nr = 3", 6.0, "", "", "pi/2", "pi/2", Some((2, "pi/6", "5pi/6"))),
+        ("r = 3sin(2θ)\nr = 1.5", 3.0, "", "", "pi/4", "pi/4", None),
+        ("r = 1 + cos(θ)\nr = 1 - cos(θ)", 2.0, "", "pi/2", "pi/3", "pi/2", None),
+        ("r = 2cos(θ)\nr = 2sin(θ)", 2.0, "", "pi/4", "pi/6", "pi/4", Some((1, "0", "pi/4"))),
+        ("", 4.0, "P(2, pi/3), Q(-2, pi/3), R(3, 7pi/4), S(-1, 5pi/2)", "", "", "", None),
+        ("", 5.0, "A(4, 0), B(3, pi/2), C(2, pi), D(1, 3pi/2), E(-3, pi/6)", "", "", "", None),
+        ("", 3.0, "P(1, 30\u{b0}), Q(2, 135\u{b0}), R(3, 240\u{b0}), S(-2, 300\u{b0})", "", "", "", None),
+        ("x = 3cos(t), y = 3sin(t)", -4.0, "", "0, pi/2, pi", "pi/4", "pi/4", None),
+        ("x = 3cos(t), y = 2sin(t)", -4.0, "", "0, pi/2", "pi/3", "pi/4", None),
+        ("x = t, y = t^2, -2 <= t <= 2", -5.0, "", "-1, 0, 1", "1", "1", None),
+        ("x = t^2, y = t^3, -1.5 <= t <= 1.5", -4.0, "", "-1, 1", "1", "1", None),
+        ("x = 2t + 1, y = 3 - t, -2 <= t <= 2", -6.0, "", "0, 1", "1", "0", None),
+        ("x = cos(t)^3, y = sin(t)^3", -2.0, "", "0, pi/4", "pi/4", "pi/4", None),
+        ("x = sin(2t), y = cos(t)", -2.0, "", "0, pi/2", "pi/4", "pi/6", None),
+        ("x = t - sin(t), y = 1 - cos(t), 0 <= t <= 4pi", -14.0, "", "pi, 2pi", "pi/2", "pi", None),
+        ("x = e^t, y = e^(-t), -1.5 <= t <= 1.5", -5.0, "", "0, 1", "0", "0", None),
+        ("x = t^3 - 3t, y = t^2, -2 <= t <= 2", -5.0, "", "-1, 0, 1", "1", "2", None),
+        ("x = 2cos(t), y = 2sin(t)\nx = 3cos(t), y = sin(t)", -4.0, "", "", "pi/3", "pi/4", None),
+        ("x = cos(t) + t, y = sin(t), 0 <= t <= 2pi", -8.0, "", "0, pi", "pi/2", "pi", None),
+        ("r = 2 + 2cos(θ)", 4.0, "P(2, pi/2), Q(2, 3pi/2), R(4, 0)", "pi/3, 2pi/3", "pi/4", "pi/3", Some((1, "0", "pi/3"))),
+        ("r = 3cos(3θ)", 3.0, "P(-3, pi/3)", "pi/9, 2pi/9", "pi/18", "pi/9", Some((1, "pi/6", "pi/2"))),
+    ]
+}
+fn case_params(c: &Case, size: &str, opt: &str) -> Params {
+    let (curves, w, pts, marks, tr, tg, sh) = *c;
+    let mut v: Vec<(&str, Value)> = vec![("curves", s(curves)), ("points", s(pts)), ("label_size", s(size)), ("tracer", b(!tr.is_empty())), ("trace_at", s(tr))];
+    if w > 0.0 { v.push(("rmax", f(w))); v.push(("rstep", f(if w > 8.0 { 2.0 } else if w <= 1.0 { 0.25 } else if w <= 2.0 { 0.5 } else { 1.0 }))); }
+    else { let w = -w; v.extend([("grid_kind", s("Rectangular")), ("xmin", f(-w)), ("xmax", f(w)), ("ymin", f(-w)), ("ymax", f(w)), ("xstep", f(if w > 8.0 { 2.0 } else { 1.0 })), ("ystep", f(if w > 8.0 { 2.0 } else { 1.0 }))]); }
+    let all = opt == "all";
+    if opt == "marks_rt" || opt == "marks_xy" || all { v.push(("marks_at", s(marks))); v.push(("pt_labels", s(if opt == "marks_xy" { polar::LBL[1] } else { polar::LBL[0] }))); }
+    if (opt == "tangent" || all) && !tg.is_empty() { v.push(("tangent", b(true))); v.push(("tangent_at", s(tg))); }
+    if let (true, Some((k, a, z))) = (opt == "shade" || all, sh) { v.extend([("shade", s(polar::SHADE[k])), ("shade_from", s(a)), ("shade_to", s(z))]); }
+    if opt == "arrows" || all { v.push(("arrows", b(true))); }
+    if opt == "degrees" { v.push(("ray_labels", s("Degrees"))); v.push(("marks_at", s(marks))); }
+    with(&v)
+}
+const OPTS: [&str; 8] = ["base", "marks_rt", "marks_xy", "tangent", "shade", "arrows", "degrees", "all"];
+
+/// Every label of every classroom case, at each size, each option alone and all together: off the page, on a stroke, on
+/// other text, on a dot, far from its point or nearer another: none. Also: nothing left off (a label that does not fit
+/// beside its point is said in full in the panel), and every render is fast.
+#[test]
+fn classroom_sweep_labels_are_clear() {
+    let cases = classroom();
+    assert!(cases.len() >= 60);
+    let (mut renders, mut labels_n, mut to_panel, mut slowest) = (0, 0, 0, 0.0f64);
+    let mut bad = vec![];
+    let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut bare: Vec<String> = vec![];
+    for c in &cases {
+        for size in ["Small", "Medium", "Large"] {
+            for opt in OPTS {
+                let p = case_params(c, size, opt);
+                let t0 = std::time::Instant::now();
+                let o = build(&p);
+                slowest = slowest.max(t0.elapsed().as_secs_f64());
+                renders += 1;
+                labels_n += o.svg.matches("<g data-lbl=").count();
+                to_panel += o.to_panel.len();
+                // the named exceptions: the tracer's θ in a wedge of π/10 or less (inside a rose's petal), and a point at the pole
+                let thin = polar::read_val(c.4, true).is_some_and(|v| v.v <= std::f64::consts::PI / 10.0 + 1e-9);
+                let at_pole = |t: &str| t.chars().next().is_some_and(|ch| ch.is_ascii_uppercase()) && t[1..].starts_with("(0, ");
+                if size != "Large" { for t in &o.bare { if !((t.starts_with('\u{3b8}') && thin) || at_pole(t)) { bare.push(format!("{:?} {size} {opt}: {t}", c.0)); } } }
+                for t in &o.to_panel { let k = format!("{size} {}", if t.starts_with('\u{3b8}') { "theta" } else if t.starts_with("r ") { "r" } else if t.starts_with('t') { "t" } else { "point" }); *kinds.entry(k).or_insert(0) += 1; if std::env::var("POLAR_SHOW").is_ok() && size == "Medium" { println!("PANEL {:?} {opt}: {t}", c.0); } }
+                for (t, why) in faults(&o.svg) { bad.push(format!("{:?} {size} {opt}: {t:?} {why}", c.0)); }
+            }
+        }
+    }
+    println!("label sweep: {} cases, {renders} renders, {labels_n} labels, {to_panel} written in the panel instead, {} faults, slowest {:.3} s", cases.len(), bad.len(), slowest);
+    println!("in the panel: {kinds:?}");
+    assert!(bare.is_empty(), "with nothing on the figure at Small and Medium: {}\n{}", bare.len(), bare.join("\n"));
+    // a label written in the panel instead stays rare at Medium (its letter, θ or r is still on the figure)
+    let medium: usize = kinds.iter().filter(|(k, _)| k.starts_with("Medium")).map(|(_, v)| *v).sum();
+    assert!((medium as f64) < 0.06 * labels_n as f64 / 3.0, "{medium} at Medium");
+    assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+// ───────────────────────── the panel, copies, print, drags, links ─────────────────────────
+
+/// Each finite control (switches, choices, whole numbers) is shown exactly when some other value of it changes the
+/// drawing or the notes, over the opening state, every example and a few student copies.
+#[test]
+fn controls_show_exactly_when_they_act() {
+    let d = def();
+    let defs = (d.params)();
+    let mut states = vec![start_params(&d)];
+    for e in crate::figures::examples_for(ID) { let mut p = Params::defaults(&defs); for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); } p.normalize(&defs, false); states.push(p); }
+    for sc_ in polar::STUDENT { states.push(with(&[("show_answers", b(false)), ("student_copy", s(sc_)), ("shade", s(polar::SHADE[1])), ("tangent", b(true))])); }
+    states.push(with(&[("grid_kind", s("Rectangular")), ("curves", s("x = cos(t), y = sin(t)"))]));
+    states.push(with(&[("curves", s("")), ("points", s(""))]));
+    let mut bad = vec![];
+    for p in &states {
+        let base = build(p);
+        for pd in &defs {
+            let alts: Vec<Value> = match &pd.kind {
+                crate::figures::Kind::Bool => vec![Value::B(!p.b(pd.key))],
+                crate::figures::Kind::Choice(o) => o.iter().filter(|x| **x != p.s(pd.key)).map(|x| s(x)).collect(),
+                crate::figures::Kind::Int { min, max } => (*min..=*max).filter(|v| *v != p.i(pd.key)).map(Value::I).collect(),
+                _ => continue,
+            };
+            // label size and style always act; the curve styles act where the curve is drawn
+            let acts = alts.iter().any(|a| { let mut q = p.clone(); q.0.insert(pd.key.to_string(), a.clone()); let o = build(&q); o.svg != base.svg || o.notes != base.notes });
+            let shown = crate::figures::param_relevant(ID, pd.key, p);
+            if acts != shown { bad.push(format!("{}: shown {shown}, acts {acts} ({:?})", pd.key, p.s("curves"))); }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+#[test]
+fn pure_render_student_copies_and_print() {
+    let d = def();
+    let p = with(&[("marks_at", s("pi/6, pi/2")), ("shade", s(polar::SHADE[1])), ("shade_from", s("0")), ("shade_to", s("pi/2")), ("tangent", b(true)), ("tangent_at", s("pi/2")), ("key_line", b(true))]);
+    assert_eq!((d.render)(&p), (d.render)(&p));
+    // the key: 2 + 2cos θ, P(3, 5π/6), the marks A(3, π/6) hmm: r(π/6) = 2 + √3; area ½∫(2 + 2cos θ)² from 0 to π/2 =
+    // ½[6θ + 8 sin θ + sin 2θ] = 3π/2 + 4; tangent at π/2: dy/dx = 1; tracer r(π/3) = 3
+    let key = all_text(&build(&p).svg);
+    for want in ["Area = 3\u{3c0}/2 + 4", "dy/dx = 1", "r = 3", "A(\u{221a}3 + 2, \u{3c0}/6)", "B(2, \u{3c0}/2)", "Key:"] { assert!(key.contains(want), "key lacks {want}: {key}"); }
+    for (i, copy) in polar::STUDENT.iter().enumerate() {
+        let mut q = p.clone();
+        q.set_b("show_answers", false);
+        q.set_s("student_copy", copy);
+        let o = build(&q);
+        let st = all_text(&o.svg);
+        for gone in ["3\u{3c0}/2 + 4", "dy/dx = 1", "r = 3", "Key:"] { assert!(!st.contains(gone), "copy {i} shows {gone}: {st}"); }
+        match i {
+            // points only: no curve, no shading, no tangent; the points with their coordinates; the equation as the prompt
+            0 => { assert!(!o.svg.contains("data-pp=\"curve") && !o.svg.contains("data-pp=\"shade") && !o.svg.contains("data-pp=\"tangent")); assert!(st.contains("P(3, 5\u{3c0}/6)") && st.contains("cos")); }
+            // blank equations: the curve, no equation written
+            1 => { assert!(o.svg.contains("data-pp=\"curve1") && !st.contains("cos") && o.svg.matches("data-pp=\"blank\"").count() >= 3); }
+            // blank coordinates: the letters kept, the coordinates blank
+            _ => { let l = labels(&o.svg); assert!(l.iter().any(|x| x.1 == "P(____, ____)") && !l.iter().any(|x| x.1.contains("5\u{3c0}/6")) && !st.contains("P(3"), "{l:?}"); }
+        }
+        // the description exported with the SVG says nothing of the answers
+        let full = d.svg(&q);
+        let desc = full.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap();
+        assert!(!desc.chars().any(|c| c.is_ascii_digit()), "{desc}");
+    }
+    // Print: greys only
+    for over in [vec![("style", s("Print"))], vec![("style", s("Print")), ("grid_kind", s("Rectangular")), ("curves", s("x = 3cos(t), y = 3sin(t)\nx = t, y = t^2"))]] {
+        let mut v = vec![("marks_at", s("pi/6")), ("shade", s(polar::SHADE[1])), ("tangent", b(true)), ("arrows", b(true)), ("curves", s("r = 2 + 2cos(θ)\nr = 2\nr = 3sin(2θ)\nr = 1"))];
+        v.extend(over);
+        let svg = build(&with(&v)).svg;
+        for (i, _) in svg.match_indices('#') {
+            let h = &svg[i + 1..];
+            if h.len() >= 6 && h[..6].chars().all(|c| c.is_ascii_hexdigit()) && !h[6..].starts_with(|c: char| c.is_ascii_hexdigit()) {
+                let c: Vec<u8> = (0..3).map(|k| u8::from_str_radix(&h[2 * k..2 * k + 2], 16).unwrap()).collect();
+                assert!(c[0] == c[1] && c[1] == c[2], "colour #{} in Print", &h[..6]);
+            }
+        }
+    }
+}
+
+/// The ends of every range: bounded output, no NaN, a sensible page, and fast.
+#[test]
+fn extremes_stay_bounded() {
+    for o in [
+        vec![("rmax", f(1000.0)), ("rstep", f(0.1)), ("rays", s(polar::RAYS[0])), ("label_size", s("Large"))],
+        vec![("rmax", f(0.5)), ("rstep", f(500.0))],
+        vec![("grid_kind", s("Rectangular")), ("xmin", f(-1000.0)), ("xmax", f(1000.0)), ("ymin", f(-1000.0)), ("ymax", f(1000.0)), ("xstep", f(0.05)), ("ystep", f(0.05))],
+        vec![("curves", s("r = θ, 0 <= θ <= 40pi")), ("rmax", f(130.0)), ("arrows", b(true))],
+        vec![("curves", s("x = t, y = sin(50t), 0 <= t <= 2000")), ("grid_kind", s("Rectangular"))],
+        vec![("curves", s("r = 1/sin(7θ)\nr = tan(5θ)\nr = sqrt(sin(9θ))\nr = 1/(θ - 1)")), ("rmax", f(4.0)), ("theta_to", s("40pi"))],
+        vec![("points", s(&(0..20).map(|k| format!("P{k}({}, {k}pi/7)", k % 4)).collect::<Vec<_>>().join(", "))), ("marks_at", s("0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"))],
+        vec![("curves", s(&format!("r = {}", "θ+".repeat(150) + "1"))), ("title", s(&"T".repeat(300)))],
+        vec![("trace_at", s("1000000")), ("tangent", b(true)), ("tangent_at", s("-1000000")), ("shade", s(polar::SHADE[1])), ("shade_from", s("-1000000")), ("shade_to", s("1000000"))],
+    ] {
+        let t0 = std::time::Instant::now();
+        let r = build(&with(&o));
+        let el = t0.elapsed().as_secs_f64();
+        assert!(el < 0.3, "{el} s for {:?}", o.iter().map(|x| x.0).collect::<Vec<_>>());
+        assert!(r.svg.len() < 3_000_000 && !r.svg.contains("NaN") && !r.svg.contains("inf"), "{:?}", o.iter().map(|x| x.0).collect::<Vec<_>>());
+        let (w, h) = crate::figures::svg_size(&r.svg);
+        assert!(w < 4000.0 && h < 4000.0, "{w} {h}");
+    }
+}
+
+/// P and the tracer are dragged through the workspace's own hit test.
+#[test]
+fn drag_p_and_the_tracer_through_the_hit_test() {
+    use crate::figures::interact::{handles_for, pick};
+    let d = def();
+    let p = start_params(&d);
+    let size = crate::figures::svg_size(&(d.render)(&p));
+    let o = build(&p);
+    let hs = handles_for(ID, &p, size);
+    let pp = o.p_px[0].1;
+    for (dx, dy) in [(0.0, 0.0), (3.0, -3.0), (-4.0, 2.0)] {
+        let i = pick(&hs, (pp.0 + dx, pp.1 + dy), 1.0).expect("P is under the pointer");
+        assert!(hs[i].tip.contains("Drag P"), "{}", hs[i].tip);
+    }
+    let i = pick(&hs, pp, 1.0).unwrap();
+    // to its own place: nothing changes
+    let mut q = p.clone();
+    (hs[i].drag.as_ref().unwrap())(&mut q, pp);
+    assert_eq!(q.s("points"), p.s("points"));
+    // to (2, π/4): x = y = √2
+    let mut q = p.clone();
+    (hs[i].drag.as_ref().unwrap())(&mut q, o.frame.to(2f64.sqrt(), 2f64.sqrt()));
+    assert_eq!(q.s("points"), "P(2, pi/4)");
+    // to (−1, −1.6): r = 1.887 → 2 (half-steps of 1), θ = 238° → 240° = 4π/3
+    let mut q = p.clone();
+    (hs[i].drag.as_ref().unwrap())(&mut q, o.frame.to(-1.0, -1.6));
+    assert_eq!(q.s("points"), "P(2, 4pi/3)");
+    // a second point keeps its text; degrees on the rays write degrees
+    let p2 = with(&[("points", s("A(1, pi/6); B(-2, 3pi/4)")), ("ray_labels", s("Degrees"))]);
+    let o2 = build(&p2);
+    let hs2 = handles_for(ID, &p2, crate::figures::svg_size(&o2.svg));
+    let i = pick(&hs2, o2.p_px[1].1, 1.0).unwrap();
+    let mut q = p2.clone();
+    (hs2[i].drag.as_ref().unwrap())(&mut q, o2.frame.to(0.0, 3.0));
+    assert_eq!(q.s("points"), "A(1, pi/6); B(3, 90\u{b0})");
+    // the tracer: dragged towards θ = π/2 on the cardioid (r = 2 there, at (0, 2))
+    let t = o.tracer_px.unwrap();
+    let i = pick(&hs, t, 1.0).unwrap();
+    assert!(hs[i].tip.contains("Drag T"));
+    let mut q = p.clone();
+    (hs[i].drag.as_ref().unwrap())(&mut q, o.frame.to(0.05, 2.02));
+    assert_eq!(q.s("trace_at"), "pi/2");
+    assert!(all_text(&build(&q).svg).contains("r = 2"));
+    // on a parametric circle typed in π, t snaps to π/24
+    let p3 = with(&[("curves", s("x = 3cos(t), y = 3sin(t)")), ("grid_kind", s("Rectangular")), ("trace_at", s("pi/4"))]);
+    let o3 = build(&p3);
+    let hs3 = handles_for(ID, &p3, crate::figures::svg_size(&o3.svg));
+    let i = pick(&hs3, o3.tracer_px.unwrap(), 1.0).unwrap();
+    let mut q = p3.clone();
+    (hs3[i].drag.as_ref().unwrap())(&mut q, o3.frame.to(0.0, 3.0));
+    assert_eq!(q.s("trace_at"), "pi/2");
+    // 1,000 positions per handle leave clean values that read back
+    for k in 0..1000 {
+        let a = k as f64 * 0.0137;
+        let pos = o.frame.to(4.5 * (a * 1.3).cos() * (k as f64 / 1000.0), 4.5 * a.sin() * (k as f64 / 1000.0));
+        for h in &hs {
+            let mut q = p.clone();
+            (h.drag.as_ref().unwrap())(&mut q, pos);
+            assert!(polar::read_val(q.s("trace_at"), true).is_some() && build(&q).notes.is_empty(), "{:?} {:?}", q.s("points"), q.s("trace_at"));
+        }
+    }
+}
+
+#[test]
+fn saved_specs_and_share_links_round_trip() {
+    use crate::figures::share;
+    let d = def();
+    let base = start_params(&d);
+    let mut cases: Vec<Params> = vec![base.clone(), with(&[("curves", s("r = sin(θ/2), 0 <= θ <= 4pi\nx = t, y = t^2")), ("points", s("P(-2, 150\u{b0})")), ("shade", s(polar::SHADE[1])), ("style", s("Print")), ("show_answers", b(false)), ("student_copy", s(polar::STUDENT[2]))])];
+    for e in crate::figures::examples_for(ID) { let mut p = Params::defaults(&(d.params)()); for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); } p.normalize(&(d.params)(), false); cases.push(p); }
+    for p in cases {
+        let link = share::encode(ID, &p, &base);
+        let (id, m) = share::decode(&link).unwrap();
+        assert_eq!(id, ID);
+        let back = share::link_params(&d, m, share::version(&link));
+        assert_eq!((d.render)(&back), (d.render)(&p), "{link}");
+        let spec = crate::model::FigureSpec { id: ID.to_string(), params: p.0.iter().map(|(k, v)| (k.clone(), crate::figures::spec::value_to_json(v))).collect() };
+        let saved = crate::figures::spec::params_from_spec(&d, &spec);
+        assert_eq!((d.render)(&saved), (d.render)(&p));
+    }
+}
+
+/// Each example is what its title says, read off the figure's own analysis, with no note.
+#[test]
+fn examples_are_what_they_say() {
+    let d = def();
+    let ex_: Vec<(String, Params)> = crate::figures::examples_for(ID).into_iter().map(|e| { let mut p = Params::defaults(&(d.params)()); for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); } p.normalize(&(d.params)(), false); (e.name.to_string(), p) }).collect();
+    assert!(ex_.len() >= 8);
+    for (name, p) in &ex_ {
+        let o = build(p);
+        assert!(o.notes.is_empty(), "{name}: {:?}", o.notes);
+        let c = o.curves.first();
+        let zeros = |c: &polar::Curve| (0..3600).filter(|k| { let (a, b) = (c.r((*k as f64 + 0.5) * std::f64::consts::PI / 1800.0), c.r((*k as f64 + 1.5) * std::f64::consts::PI / 1800.0)); matches!((a, b), (Some(a), Some(b)) if a * b < 0.0) }).count();
+        let t = all_text(&o.svg);
+        match name.as_str() {
+            n if n.starts_with("Rose") => assert_eq!(zeros(c.unwrap()), 4, "{n}: r = 3 sin 2θ changes sign 4 times in a turn (4 petals)"),
+            n if n.starts_with("Cardioid") => assert!(t.contains("dy/dx = 1")),
+            n if n.starts_with("Lima") => assert!((0..100).any(|k| c.unwrap().r(k as f64 * 0.0628).unwrap() < 0.0), "an inner loop needs r < 0"),
+            n if n.starts_with("Spiral") => assert!(c.unwrap().hi.v > 2.0 * std::f64::consts::PI),
+            n if n.starts_with("Circle") => assert!((c.unwrap().r(0.0).unwrap() - 4.0).abs() < 1e-12),
+            n if n.starts_with("Area in one petal") => assert!(t.contains("Area = 9\u{3c0}/8")),
+            n if n.starts_with("Inside") => assert!(t.contains("Area = \u{3c0}")),
+            n if n.starts_with("Parametric circle") => assert!(!c.unwrap().polar),
+            n if n.starts_with("Projectile") => assert!(t.contains("dy/dx = 2/3") && t.contains("B(96, 64)")),
+            n if n.starts_with("Polar points") => assert!(t.contains("Q(\u{2212}2, \u{3c0}/3)")),
+            n if n.starts_with("Lemniscate") => assert!(t.contains("Area \u{2248} 2")),
+            _ => {}
+        }
+    }
 }

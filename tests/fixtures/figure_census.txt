@@ -256,6 +256,8 @@ plate-boundaries__defaults 902cec21e2eb9cc1
 plate-boundaries__start 902cec21e2eb9cc1
 plot-arc__defaults 7a80ecd90bf2d7c5
 plot-arc__start 7a80ecd90bf2d7c5
+polar-parametric__defaults d44a37b010d0ef1e
+polar-parametric__start d44a37b010d0ef1e
 population-growth__defaults f3c0728e4ae634ca
 population-growth__start f3c0728e4ae634ca
 population-pyramid__defaults ddcffba637a462cd
