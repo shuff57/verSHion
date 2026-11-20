@@ -240,53 +240,120 @@ const FN_NAMES: [&str; 13] = ["arcsin", "arccos", "arctan", "sqrt", "sin", "cos"
 /// cos θ/2 is (cos θ)/2, as the figure prints them. What could be read two ways (cos θ^2, sin θ(1 + θ), sin −θ) is
 /// refused with a note saying which brackets to write.
 pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
-    let cs: Vec<char> = rhs.replace('\u{2009}', " ").replace('\u{3c0}', "pi").chars().collect();
+    let cs: Vec<char> = rhs.replace('\u{2009}', " ").replace('\u{3c0}', "pi").replace('\u{2212}', "-").chars().collect();
     let mut out = String::new();
     let mut i = 0;
-    let lower = |c: char| c.to_ascii_lowercase();
     while i < cs.len() {
-        let prev_letter = i > 0 && cs[i - 1].is_ascii_alphabetic();
-        let name = if prev_letter { None } else { FN_NAMES.iter().find(|n| n.chars().enumerate().all(|(k, ch)| cs.get(i + k).is_some_and(|c| lower(*c) == ch))) };
-        let Some(name) = name else { out.push(cs[i]); i += 1; continue; };
-        let mut j = i + name.len();
-        // a power on the name: sin^2 θ, sin²θ
-        let mut power = String::new();
-        if cs.get(j) == Some(&'^') { let st = j + 1; let mut k = st; while k < cs.len() && cs[k].is_ascii_digit() { k += 1; } if k > st { power = cs[st..k].iter().collect(); j = k; } }
-        else if matches!(cs.get(j), Some('\u{b2}') | Some('\u{b3}')) { power = if cs[j] == '\u{b2}' { "2".into() } else { "3".into() }; j += 1; }
-        while j < cs.len() && cs[j] == ' ' { j += 1; }
-        let wrap = |arg: &str| if power.is_empty() { format!("{name}({arg})") } else { format!("({name}({arg}))^{power}") };
-        if cs.get(j) == Some(&'(') {
-            let mut depth = 0;
-            let mut close = None;
-            for (k, c) in cs.iter().enumerate().skip(j) { if *c == '(' { depth += 1 } else if *c == ')' { depth -= 1; if depth == 0 { close = Some(k); break; } } }
-            let Some(cl) = close else { return Err(format!("a bracket after {name} is not closed")) };
-            // (the inside is read the same way)
-            let inner = textbook(&cs[j + 1..cl].iter().collect::<String>(), var)?;
-            out.push_str(&wrap(&inner));
-            i = cl + 1;
+        if let Some(name) = fn_at(&cs, i) {
+            let (text, next) = apply_fn(&cs, i, name, var)?;
+            out.push_str(&text);
+            i = next;
             continue;
         }
-        // a bare argument: digits, then pi, then the variable (at least one of them)
-        let st = j;
-        while j < cs.len() && (cs[j].is_ascii_digit() || cs[j] == '.') { j += 1; }
-        if cs[j..].starts_with(&['p', 'i']) { j += 2; }
-        if cs.get(j) == Some(&var) { j += 1; }
-        let arg: String = cs[st..j].iter().collect();
-        let v = if var == 'q' { "\u{3b8}".to_string() } else { var.to_string() };
-        if arg.is_empty() { return Err(format!("write brackets after {name}: {name}({v}), {name}(2{v}), {name}(\u{2212}{v})")); }
-        let mut k = j;
-        while k < cs.len() && cs[k] == ' ' { k += 1; }
-        let shown_arg = arg.replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
-        match cs.get(k) {
-            Some('^') => return Err(format!("write brackets: is {name} {shown_arg}^\u{2026} meant as {name}({shown_arg}^\u{2026}) or ({name} {shown_arg})^\u{2026}?")),
-            Some('(') if k == j => return Err(format!("write brackets: is {name} {shown_arg}(\u{2026}) meant as {name}({shown_arg}(\u{2026})) or ({name} {shown_arg})(\u{2026})?")),
-            Some(c) if k == j && (c.is_ascii_digit() || *c == '.' || *c == var) => return Err(format!("write brackets after {name}")),
-            _ => {}
+        if cs[i] == '^' {
+            let (text, next) = exponent(&cs, i + 1, var)?;
+            out.push('^');
+            out.push_str(&text);
+            i = next;
+            continue;
         }
-        out.push_str(&wrap(&arg));
-        i = j;
+        out.push(cs[i]);
+        i += 1;
     }
     Ok(out)
+}
+const SUPERSCRIPTS: [char; 10] = ['\u{2070}', '\u{b9}', '\u{b2}', '\u{b3}', '\u{2074}', '\u{2075}', '\u{2076}', '\u{2077}', '\u{2078}', '\u{2079}'];
+fn shown_var(var: char) -> String { if var == 'q' { "\u{3b8}".into() } else { var.to_string() } }
+/// The function name starting at i (not inside a longer word).
+fn fn_at(cs: &[char], i: usize) -> Option<&'static str> {
+    if i > 0 && cs[i - 1].is_ascii_alphabetic() { return None; }
+    FN_NAMES.iter().copied().find(|n| n.chars().enumerate().all(|(k, ch)| cs.get(i + k).is_some_and(|c| c.to_ascii_lowercase() == ch)))
+}
+/// A bare factor from j: a number, π, the variable, or a product of them in that order, spaces allowed between them
+/// (2θ, 2 θ, pi θ, 2 π θ, 0.5θ): (its text, written without spaces, and where it ends). None when there is none.
+fn bare_factor(cs: &[char], j: usize, var: char) -> Option<(String, usize)> {
+    let skip = |k: usize| { let mut k = k; while k < cs.len() && cs[k] == ' ' { k += 1; } k };
+    let (mut k, mut text) = (j, String::new());
+    let st = k;
+    while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+    text.extend(&cs[st..k]);
+    let mut end = k;
+    let n = if text.is_empty() { k } else { skip(k) };
+    if cs[n..].starts_with(&['p', 'i']) && !cs.get(n + 2).is_some_and(|c| c.is_ascii_alphabetic() && *c != var) { text.push_str("pi"); end = n + 2; }
+    let n = if text.is_empty() { end } else { skip(end) };
+    if cs.get(n) == Some(&var) && !cs.get(n + 1).is_some_and(|c| c.is_ascii_alphabetic() && fn_at(cs, n + 1).is_none()) { text.push(var); end = n + 1; }
+    (!text.is_empty()).then_some((text, end))
+}
+/// A function applied from i: name, a power written on the name (sin^2 θ, sin²θ, sin^5(θ/12)), and its argument,
+/// bracketed or bare. Written with brackets: sin(2θ), (sin(θ))^2.
+fn apply_fn(cs: &[char], i: usize, name: &str, var: char) -> Result<(String, usize), String> {
+    let v = shown_var(var);
+    let mut j = i + name.len();
+    // a letter right after the name makes another word: sinh, cosh are not read
+    if cs.get(j).is_some_and(|c| c.is_ascii_alphabetic() && *c != var) && !cs[j..].starts_with(&['p', 'i']) {
+        let word: String = cs[i..].iter().take_while(|c| c.is_ascii_alphabetic()).collect();
+        return Err(format!("\u{201c}{word}\u{201d} is not a function this figure reads (hyperbolic functions such as sinh are not supported)"));
+    }
+    let mut power = String::new();
+    if cs.get(j) == Some(&'^') { let st = j + 1; let mut k = st; while k < cs.len() && cs[k].is_ascii_digit() { k += 1; } if k > st { power = cs[st..k].iter().collect(); j = k; } }
+    else if let Some(d) = cs.get(j).and_then(|c| SUPERSCRIPTS.iter().position(|s| s == c)) { power = d.to_string(); j += 1; }
+    while j < cs.len() && cs[j] == ' ' { j += 1; }
+    let wrap = |arg: &str| if power.is_empty() { format!("{name}({arg})") } else { format!("({name}({arg}))^{power}") };
+    if cs.get(j) == Some(&'(') {
+        let mut depth = 0;
+        let mut close = None;
+        for (k, c) in cs.iter().enumerate().skip(j) { if *c == '(' { depth += 1 } else if *c == ')' { depth -= 1; if depth == 0 { close = Some(k); break; } } }
+        let Some(cl) = close else { return Err(format!("a bracket after {name} is not closed")) };
+        // (the inside is read the same way)
+        let inner = textbook(&cs[j + 1..cl].iter().collect::<String>(), var)?;
+        return Ok((wrap(&inner), cl + 1));
+    }
+    let Some((arg, end)) = bare_factor(cs, j, var) else { return Err(format!("write brackets after {name}: {name}({v}), {name}(2{v}), {name}(\u{2212}{v})")) };
+    let mut k = end;
+    while k < cs.len() && cs[k] == ' ' { k += 1; }
+    let shown_arg = arg.replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+    let pure_number = !arg.contains(var) && !arg.contains("pi");
+    match cs.get(k) {
+        // a power after the argument: sin θ^2, sin θ² could be sin(θ²) or (sin θ)²
+        Some('^') => return Err(format!("write brackets: is {name} {shown_arg}^2 meant as {name}({shown_arg}^2) or ({name} {shown_arg})^2? (sin^2 {v} is read as (sin {v})^2)")),
+        Some(c) if SUPERSCRIPTS.contains(c) => return Err(format!("write brackets: is {name} {shown_arg}{c} meant as {name}({shown_arg}{c}) or ({name} {shown_arg}){c}? ({name}{c}{v} is read as ({name} {v}){c})")),
+        Some('(') if k == end => return Err(format!("write brackets: is {name} {shown_arg}(\u{2026}) meant as {name}({shown_arg}(\u{2026})) or ({name} {shown_arg})(\u{2026})?")),
+        // sin 1/2θ: sin(θ/2) or (sin 1)/(2θ)?
+        Some('/') if pure_number => return Err(format!("write brackets: is {name} {shown_arg}/\u{2026} meant as {name}({shown_arg}/\u{2026}) or ({name} {shown_arg})/\u{2026}?")),
+        Some(c) if c.is_ascii_digit() || *c == '.' || *c == var => return Err(format!("write brackets after {name}: {name}({shown_arg}\u{2026})")),
+        _ => {}
+    }
+    Ok((wrap(&arg), end))
+}
+/// The exponent after ^ at j, read whole and bracketed unless it is a plain number or a single letter: e^-θ is e^(−θ),
+/// e^cos θ is e^(cos θ), e^2θ is e^(2θ), 2^-θ is 2^(−θ); a bracket is kept as typed (and read inside).
+fn exponent(cs: &[char], j: usize, var: char) -> Result<(String, usize), String> {
+    let mut k = j;
+    while k < cs.len() && cs[k] == ' ' { k += 1; }
+    let neg = cs.get(k) == Some(&'-');
+    let k0 = if neg { k + 1 } else { k };
+    let sign = if neg { "-" } else { "" };
+    if cs.get(k0) == Some(&'(') {
+        let mut depth = 0;
+        let mut close = None;
+        for (m, c) in cs.iter().enumerate().skip(k0) { if *c == '(' { depth += 1 } else if *c == ')' { depth -= 1; if depth == 0 { close = Some(m); break; } } }
+        let Some(cl) = close else { return Err("a bracket after ^ is not closed".into()) };
+        let inner = textbook(&cs[k0 + 1..cl].iter().collect::<String>(), var)?;
+        return Ok((if neg { format!("(-({inner}))") } else { format!("({inner})") }, cl + 1));
+    }
+    if let Some(name) = fn_at(cs, k0) {
+        let (text, next) = apply_fn(cs, k0, name, var)?;
+        return Ok((format!("({sign}{text})"), next));
+    }
+    match bare_factor(cs, k0, var) {
+        Some((f, end)) => {
+            // a bare power stays bare (θ^2, e^θ); a signed one, or a number times the variable or π, is bracketed
+            let plain = !neg && (f.chars().all(|c| c.is_ascii_digit() || c == '.') || f.chars().count() == 1 || f == "pi");
+            Ok((if plain { f } else { format!("({sign}{f})") }, end))
+        }
+        None if neg => Err("write brackets round a negative power: e^(\u{2212}\u{3b8})".into()),
+        None => Ok((String::new(), k)),
+    }
 }
 
 fn read_fn(rhs: &str, polar: bool, what: &str) -> Result<(Node, String), String> {
@@ -297,7 +364,7 @@ fn read_fn(rhs: &str, polar: bool, what: &str) -> Result<(Node, String), String>
     // (θ is read as q by the shared reader; a typed q is no letter of this figure)
     let var = if polar { 'q' } else { 't' };
     let rewritten = textbook(&if polar { rhs.replace(TH, "q") } else { rhs.to_string() }, var).map_err(|e| format!("{what}: {e}"))?;
-    let plain = tangent::expr_plain(&rewritten, if polar { "r" } else { "x" }, var).map_err(|e| format!("{what}: {}", e.replace("variable is q", "variable is \u{3b8}").replace("\u{201c}q\u{201d}", "\u{201c}\u{3b8}\u{201d}").replace("r(q)", "r(\u{3b8})")))?;
+    let plain = tangent::expr_plain(&rewritten, if polar { "r" } else { "x" }, var).map_err(|e| format!("{what}: {}", e.replace("variable is q", "variable is \u{3b8}").replace("\u{201c}q\u{201d}", "\u{201c}\u{3b8}\u{201d}").replace("r(q)", "r(\u{3b8})").replace("(x)", &format!("({})", shown_var(var)))))?;
     let node = ex::parse(&plain).ok_or_else(|| format!("{what}: cannot read the function"))?;
     // printed from the bracketed spelling, so every typed spelling of one curve prints alike
     let shown = shown_fn(&rewritten.replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}"));
@@ -1190,7 +1257,8 @@ pub(crate) fn build(p0: &Params) -> Out {
         // beyond the window: said, with how far it reaches
         let reach = pcs.iter().flatten().fold(0.0f64, |m, (_, q)| m.max(if polar_grid { q.0.hypot(q.1) } else { (q.0 - fr.x0).min(fr.x1 - q.0).min(q.1 - fr.y0).min(fr.y1 - q.1).min(0.0).abs() }));
         if polar_grid && reach > p.f("rmax") * (1.0 + 1e-9) && !pts_only {
-            let need = (reach / p.f("rstep").max(0.1)).ceil() * p.f("rstep").max(0.1);
+            // (a reach of 5 computed as 5.0000000001 needs the circle 5, as the shading's note says)
+            let need = (reach * (1.0 - 1e-9) / p.f("rstep").max(0.1)).ceil() * p.f("rstep").max(0.1);
             notes.push(if reach > 1000.0 { format!("Curve {} runs beyond the largest circle (it grows without bound); the part inside r = {} is drawn.", c.row + 1, tangent::decimal(p.f("rmax"), 3)) } else { format!("Part of curve {} lies beyond the largest circle r = {}: set Largest circle to at least {} to see all of it.", c.row + 1, tangent::decimal(p.f("rmax"), 3), tangent::decimal(need, 3)) });
         }
         if !polar_grid && reach > 1e-9 && !pts_only { notes.push(format!("Part of curve {} lies outside the axes' window.", c.row + 1)); }
@@ -1220,7 +1288,7 @@ pub(crate) fn build(p0: &Params) -> Out {
         let outside = rg.pieces.iter().any(|(ta, tb)| (0..=200).any(|k| { let t = ta + (tb - ta) * k as f64 / 200.0; far({ let r = f.r(t).unwrap_or(0.0); fr.to(r * t.cos(), r * t.sin()) }) }));
         if outside {
             let reach = rg.pieces.iter().flat_map(|(ta, tb)| (0..=400).map(move |k| ta + (tb - ta) * k as f64 / 400.0)).filter_map(|t| f.r(t)).fold(0.0f64, |m, r| m.max(r.abs()));
-            notes.push(if polar_grid { format!("Part of the shaded region lies beyond the largest circle and is cut off there; its area is the whole region's. Set Largest circle to at least {} to see all of it.", tangent::decimal((reach / p.f("rstep").max(0.1)).ceil() * p.f("rstep").max(0.1), 3)) } else { "Part of the shaded region lies outside the axes and is cut off there; its area is the whole region's.".into() });
+            notes.push(if polar_grid { format!("Part of the shaded region lies beyond the largest circle and is cut off there; its area is the whole region's. Set Largest circle to at least {} to see all of it.", tangent::decimal((reach * (1.0 - 1e-9) / p.f("rstep").max(0.1)).ceil() * p.f("rstep").max(0.1), 3)) } else { "Part of the shaded region lies outside the axes and is cut off there; its area is the whole region's.".into() });
         }
     }
     let _ = ink.fill2;
@@ -1277,8 +1345,9 @@ pub(crate) fn build(p0: &Params) -> Out {
             None => notes.push(format!("Tangent: there is no curve {k}; set Tangent to curve to one of the curves typed.")),
             Some(c) => match read_val(p.s("tangent_at"), c.polar) {
                 None => notes.push(format!("Tangent: cannot read \u{201c}{}\u{201d} as a value of {}.", p.s("tangent_at").trim(), c.var())),
+                // (as the marks: a value outside the curve's range is not on the curve drawn, so nothing is drawn or written)
+                Some(s) if s.v < c.lo.v - 1e-12 || s.v > c.hi.v + 1e-12 => notes.push(format!("Tangent: {} = {} is outside curve {k}'s range {}; no tangent is drawn there.", c.var(), p.s("tangent_at").trim(), c.range_text)),
                 Some(s) => {
-                    if s.v < c.lo.v - 1e-12 || s.v > c.hi.v + 1e-12 { notes.push(format!("Tangent: {} = {} is outside curve {k}'s range {}.", c.var(), p.s("tangent_at").trim(), c.range_text)); }
                     let t = tangent_at(c, &s);
                     let at = fr.to(t.x.v, t.y.v);
                     match &t.slope {
@@ -1316,8 +1385,8 @@ pub(crate) fn build(p0: &Params) -> Out {
         if let Some(c) = curves.first().filter(|c| c.row == 0) {
             match read_val(p.s("trace_at"), c.polar) {
                 None => notes.push(format!("Tracer: cannot read \u{201c}{}\u{201d} as a value of {}.", p.s("trace_at").trim(), c.var())),
+                Some(s) if s.v < c.lo.v - 1e-12 || s.v > c.hi.v + 1e-12 => notes.push(format!("Tracer: {} = {} is outside curve 1's range {}; the tracer is not drawn.", c.var(), p.s("trace_at").trim(), c.range_text)),
                 Some(s) => {
-                    if s.v < c.lo.v - 1e-12 || s.v > c.hi.v + 1e-12 { notes.push(format!("Tracer: {} = {} is outside curve 1's range {}.", c.var(), p.s("trace_at").trim(), c.range_text)); }
                     match point_on(c, &s) {
                         None => notes.push(format!("Tracer: curve 1 is undefined at {} = {}.", c.var(), p.s("trace_at").trim())),
                         Some((x, y, r)) => {
@@ -1467,10 +1536,11 @@ pub(crate) fn build(p0: &Params) -> Out {
         let k = if curves.len() <= 1 { curves.first().map(|c| c.row + 1).unwrap_or(1) } else { p.i("tangent_curve") as usize };
         let c = curves.iter().find(|c| c.row + 1 == k).unwrap();
         let v = c.var();
-        let (st, _) = if c.polar { atext(&t.s, &ctx) } else { vtext(&t.s, &ctx) };
+        let (st, st_exact) = if c.polar { atext(&t.s, &ctx) } else { vtext(&t.s, &ctx) };
+        let at_rel = if st_exact { "=" } else { "\u{2248}" };
         let drawn = matches!(t.slope, Slope::Finite(_) | Slope::Vertical) && fr.inside(fr.to(t.x.v, t.y.v));
         if drawn {
-            pl.push(PLine { swatch: Some((ink.tangent.to_string(), "", 2.0)), parts: vec![pr("Tangent at "), mt(&format!("{v} = {st}"))], indent: false });
+            pl.push(PLine { swatch: Some((ink.tangent.to_string(), "", 2.0)), parts: vec![pr("Tangent at "), mt(&format!("{v} {at_rel} {st}"))], indent: false });
             let slope_line = match &t.slope { Slope::Finite(m) => { let (s, e) = vtext(m, &ctx); vec![mt(&format!("dy/dx {} {s}", if e { "=" } else { "\u{2248}" }))] } _ => vec![pr("vertical: "), mt("dy/dx"), pr(" does not exist")] };
             if answers {
                 if let (Some(dx), Some(dy)) = (&t.dx, &t.dy) {
@@ -1482,7 +1552,7 @@ pub(crate) fn build(p0: &Params) -> Out {
             } else {
                 pl.push(PLine { swatch: None, parts: vec![mt("dy/dx = "), Part::Blank], indent: true });
             }
-            let mut kp = vec![pr("tangent at "), mt(&format!("{v} = {st}: "))];
+            let mut kp = vec![pr("tangent at "), mt(&format!("{v} {at_rel} {st}: "))];
             kp.extend(slope_line);
             key.push(kp);
         }

@@ -876,7 +876,7 @@ fn read_row(row: &str) -> (Vec<polar::Curve>, Vec<String>) { let mut n = vec![];
 fn spellings_and_printing_agree_with_sympy() {
     let data: Vec<serde_json::Value> = serde_json::from_str(include_str!("polar_spellings.json")).unwrap();
     let mut bad = vec![];
-    let (mut n_read, mut n_printed, mut n_refused) = (0, 0, 0);
+    let (mut n_read, mut n_printed, mut n_refused, mut n_powers) = (0, 0, 0, 0);
     let check = |c: &polar::Curve, e: &serde_json::Value, how: &str, bad: &mut Vec<String>| {
         for (key, ys) in [("values", false), ("y", true)] {
             let Some(vs) = e.get(key).and_then(|v| v.as_array()) else { continue };
@@ -900,6 +900,11 @@ fn spellings_and_printing_agree_with_sympy() {
             if !cs.is_empty() || !notes.iter().any(|n| n.contains("bracket")) { bad.push(format!("{typed:?} should be refused with a note about brackets: {notes:?}")); }
             continue;
         }
+        if e["kind"] == "unsupported" {
+            n_refused += 1;
+            if !cs.is_empty() || !notes.iter().any(|n| n.contains("not a function this figure reads")) { bad.push(format!("{typed:?} should be refused as unsupported: {notes:?}")); }
+            continue;
+        }
         let Some(c) = cs.first() else { bad.push(format!("{typed:?} not read: {notes:?}")); continue };
         n_read += 1;
         check(c, e, "typed", &mut bad);
@@ -909,10 +914,58 @@ fn spellings_and_printing_agree_with_sympy() {
         n_printed += 1;
         check(b, e, &format!("printed {:?} for", c.shown), &mut bad);
         if c.shown.contains('q') || c.shown.contains("sqrt") || c.shown.contains("pi") { bad.push(format!("{typed:?} prints {:?}", c.shown)); }
+        // every power is raised whole: the printed exponent is a bracket, a signed number, a number or one letter, and
+        // nothing after it could be read as more of it; the SVG raises exactly those runs
+        let ops = exponents(&c.shown);
+        for (op, after) in &ops { if after.is_some_and(|a| a.is_alphanumeric() || a == '(' || a == '.') { bad.push(format!("{typed:?} prints {:?}: the power {op:?} is followed by {after:?}", c.shown)); } }
+        n_powers += ops.len();
+        if !ops.is_empty() {
+            let svg = build(&with(&[("curves", s(typed)), ("points", s("")), ("tracer", Value::B(false))])).svg;
+            let raised = raised_runs(&svg);
+            let want: Vec<String> = ops.iter().map(|(o, _)| o.replace('-', "\u{2212}").replace(' ', "")).collect();
+            for w in &want { if !raised.iter().any(|r| r.replace(' ', "") == *w) { bad.push(format!("{typed:?}: the power {w:?} is not raised whole (raised: {raised:?})")); } }
+        }
         if b.shown != c.shown { bad.push(format!("{typed:?}: printed {:?}, reprinted {:?}", c.shown, b.shown)); }
     }
-    println!("spellings: {n_read} read, {n_printed} printed and read back, {n_refused} refused; {} faults", bad.len());
+    println!("spellings: {n_read} read, {n_printed} printed and read back, {n_powers} printed powers checked whole, {n_refused} refused; {} faults", bad.len());
     assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// Each power in a printed equation, as the typesetter raises it (a bracket's inside, a signed number, digits, or one
+/// letter), with the character after it.
+fn exponents(shown: &str) -> Vec<(String, Option<char>)> {
+    let ch: Vec<char> = shown.chars().collect();
+    let mut out = vec![];
+    let mut i = 0;
+    while i < ch.len() {
+        if ch[i] != '^' { i += 1; continue; }
+        i += 1;
+        let st = i;
+        let mut inner = None;
+        if ch.get(i) == Some(&'(') {
+            let mut depth = 0;
+            while i < ch.len() { if ch[i] == '(' { depth += 1; } if ch[i] == ')' { depth -= 1; if depth == 0 { i += 1; break; } } i += 1; }
+            inner = Some(ch[st + 1..i - 1].iter().collect::<String>());
+        } else if ch.get(i).is_some_and(|c| *c == '-' || *c == '\u{2212}') { i += 1; while i < ch.len() && (ch[i].is_ascii_digit() || ch[i] == '.') { i += 1; } }
+        else if ch.get(i).is_some_and(|c| c.is_alphabetic()) { i += 1; }
+        else { while i < ch.len() && (ch[i].is_ascii_digit() || ch[i] == '.') { i += 1; } }
+        out.push((inner.unwrap_or_else(|| ch[st..i].iter().collect()), ch.get(i).copied()));
+    }
+    out
+}
+/// The text of every raised run in an SVG (tags inside dropped).
+fn raised_runs(svg: &str) -> Vec<String> {
+    let pat = r#"<tspan baseline-shift="super" font-size="70%">"#;
+    svg.match_indices(pat).map(|(i, _)| {
+        let rest = &svg[i + pat.len()..];
+        let (mut depth, mut end) = (1, 0);
+        let mut k = 0;
+        while k < rest.len() { if !rest.is_char_boundary(k) { k += 1; continue; } if rest[k..].starts_with("<tspan") { depth += 1; } else if rest[k..].starts_with("</tspan>") { depth -= 1; if depth == 0 { end = k; break; } } k += 1; }
+        let mut out = String::new();
+        let mut inside = false;
+        for c in rest[..end].chars() { match c { '<' => inside = true, '>' => inside = false, c if !inside => out.push(c), _ => {} } }
+        out
+    }).collect()
 }
 
 /// The equations check 1 found printed for another curve, and the forms around them, worked by hand.
@@ -929,7 +982,7 @@ fn printed_equations_keep_their_brackets() {
     assert_eq!(shown("x = cos(t)/2, y = sin(t)/2"), "x = cos(t)/2, y = sin(t)/2");
     // a power or a factor after it keeps it too; a sum, the end, or another function after a space does not need it
     assert_eq!(shown("r = sin(θ)^2"), "r = sin(\u{3b8})^2");
-    assert_eq!(shown("r = 2^sin(θ)"), "r = 2^sin(\u{3b8})");
+    assert_eq!(shown("r = 2^sin(θ)"), "r = 2^(sin \u{3b8})");
     assert_eq!(shown("r = 2 + 2cos(θ)"), format!("r = 2 + 2{th}cos \u{3b8}"));
     assert_eq!(shown("r = 3sin(2θ)"), format!("r = 3{th}sin 2\u{3b8}"));
     assert_eq!(shown("r = sin(θ/2)"), "r = sin(\u{3b8}/2)");
@@ -1033,4 +1086,61 @@ fn a_tangent_outside_the_window_is_said() {
     assert!(!o.svg.contains(r#"data-pp="tangent""#) && o.notes.iter().any(|n| n.contains("touches the window only at its point")), "{:?}", o.notes);
     let o = build(&with(&[("curves", s("r = 3sin(2θ)")), ("rmax", f(4.0)), ("tangent", b(true)), ("tangent_at", s("pi/4")), ("points", s(""))]));
     assert!(o.svg.contains(r#"data-pp="tangent""#) && o.notes.is_empty());
+}
+
+/// Check 2: a spaced coefficient belongs to the argument; an exponent is read and printed whole; a power after the
+/// argument is refused; hand-worked.
+#[test]
+fn spaced_coefficients_and_whole_powers_by_hand() {
+    use std::f64::consts::{E, PI};
+    let one = |t: &str| { let (c, n) = read_row(t); assert!(n.is_empty(), "{t}: {n:?}"); c.into_iter().next().unwrap() };
+    // r = 4 cos 2 θ is the rose 4cos(2θ): at π/4 it is 0, at π/2 it is −4 (never the spiral 4cos(2)θ)
+    let c = one("r = 4 cos 2 θ");
+    assert!(c.r(PI / 4.0).unwrap().abs() < 1e-12 && (c.r(PI / 2.0).unwrap() + 4.0).abs() < 1e-12);
+    assert_eq!(c.shown, "r = 4 cos 2\u{3b8}");
+    // sin pi θ = sin(πθ): at θ = 1/2 it is 1; sin 2 π θ at 1/4 is 1
+    let c = one("r = sin pi θ");
+    assert!((c.r(0.5).unwrap() - 1.0).abs() < 1e-12 && c.shown == "r = sin(\u{3c0}\u{3b8})", "{}", c.shown);
+    assert!((one("r = sin 2 π θ").r(0.25).unwrap() - 1.0).abs() < 1e-12);
+    // x = cos 2 t, y = sin 2 t is the unit circle: at t = π/4, (0, 1)
+    let c = one("x = cos 2 t, y = sin 2 t");
+    assert!(c.at(PI / 4.0).is_some_and(|q| q.0.abs() < 1e-12 && (q.1 - 1.0).abs() < 1e-12));
+    // e^-θ = e^(−θ): at 1, 1/e; printed e^(−θ) with all of −θ raised
+    let c = one("r = e^-θ");
+    assert!((c.r(1.0).unwrap() - 1.0 / E).abs() < 1e-12 && c.shown == "r = e^(\u{2212}\u{3b8})", "{}", c.shown);
+    // e^-θ/4 = (e^(−θ))/4; 2^-θ at 1 = 1/2
+    assert!((one("r = e^-θ/4").r(0.0).unwrap() - 0.25).abs() < 1e-12);
+    assert!((one("r = 2^-θ").r(1.0).unwrap() - 0.5).abs() < 1e-12);
+    // e^cos θ at 0 = e; the butterfly e^cos θ − 2cos 4θ + sin^5(θ/12) at 0 = e − 2
+    let c = one("r = e^cos θ - 2cos 4θ + sin^5(θ/12)");
+    assert!((c.r(0.0).unwrap() - (E - 2.0)).abs() < 1e-12);
+    assert!(c.shown.starts_with("r = e^(cos \u{3b8}) \u{2212} 2 cos 4\u{3b8}"), "{}", c.shown);
+    let svg = build(&with(&[("curves", s("r = e^cos θ - 2cos 4θ + sin^5(θ/12)")), ("points", s("")), ("tracer", b(false)), ("key_line", b(true))])).svg;
+    assert!(raised_runs(&svg).iter().any(|r| r == "cos \u{3b8}"), "{:?}", raised_runs(&svg));
+    // e^2θ = e^(2θ): at 1, e²; printed e^(2θ)
+    let c = one("r = e^2θ");
+    assert!((c.r(1.0).unwrap() - E * E).abs() < 1e-9 && c.shown == "r = e^(2\u{3b8})", "{}", c.shown);
+    // a power after the argument is refused, written either way; one on the name is (sin θ)²
+    for t in ["r = sin θ²", "r = sin θ^2", "r = 1 - cos θ²"] { assert!(read_row(t).1.iter().any(|n| n.contains("write brackets")), "{t}"); }
+    assert!((one("r = sin²θ").r(PI / 6.0).unwrap() - 0.25).abs() < 1e-12);
+    // sinh is said to be unsupported; sin 1/2θ is refused
+    assert!(read_row("r = sinh θ").1[0].contains("\u{201c}sinh\u{201d} is not a function"));
+    assert!(read_row("r = sin 1/2θ").1[0].contains("write brackets"));
+}
+
+/// Check 2: in Rounded mode a rounded angle takes ≈; a tangent or tracer outside the curve's range is refused and not
+/// written in the key; the advice for the largest circle agrees between the curve and its shading.
+#[test]
+fn rounded_angles_ranges_and_advice() {
+    let o = build(&with(&[("values", s("Rounded")), ("tangent", b(true)), ("tangent_at", s("pi/4")), ("key_line", b(true))]));
+    let t = all_text(&o.svg);
+    assert!(t.contains("Tangent at \u{3b8} \u{2248} 0.79") && !t.contains("\u{3b8} = 0.79"), "{t}");
+    let o = build(&with(&[("curves", s("r = 2 + 2cos(θ), 0 <= θ <= pi")), ("tangent", b(true)), ("tangent_at", s("-pi/6")), ("trace_at", s("3pi/2")), ("key_line", b(true)), ("points", s(""))]));
+    let k = texts(&o.svg, "key").join(" ");
+    assert!(!k.contains("tangent") && !k.contains("tracer") && !o.svg.contains(r#"data-pp="tangent""#) && !o.svg.contains(r#"data-pp="tracer""#), "{k}");
+    assert!(o.notes.iter().any(|n| n.contains("Tangent:") && n.contains("outside")) && o.notes.iter().any(|n| n.contains("Tracer:") && n.contains("outside")));
+    // r = 5 sin 2θ reaches 5: both notes say the circle 5
+    let o = build(&with(&[("curves", s("r = 5sin(2θ)")), ("rmax", f(3.0)), ("shade", s(polar::SHADE[1])), ("points", s("")), ("tracer", b(false))]));
+    let n = o.notes.join(" | ");
+    assert!(n.contains("at least 5 to see all of it") && !n.contains("at least 6"), "{n}");
 }
