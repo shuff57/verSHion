@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-19T07:12:54+00:00",
-  "src_mtime": 1795071607.440888,
-  "git": "9591516+dirty",
-  "figures": 192
+  "built_at": "2026-11-20T17:55:49+00:00",
+  "src_mtime": 1795197213.8058002,
+  "git": "8113e03+dirty",
+  "figures": 193
  },
  "figures": {
   "free-body-diagram": {
@@ -28212,6 +28212,534 @@
       "Small"
      ],
      "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "segment-addition": {
+   "id": "segment-addition",
+   "title": "Segment Addition",
+   "blurb": "Points in order on a line, each part labeled with a length, an expression in one letter or a blank line, with congruence ticks, braces for longer spans, arrows for a ray or a line and a crossing line; the labels are solved as a check on the key.",
+   "params": [
+    {
+     "key": "n",
+     "label": "Points",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "p1_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "A"
+    },
+    {
+     "key": "p1_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p1_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p1_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": "2x + 1"
+    },
+    {
+     "key": "p1_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p1_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p2_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "B"
+    },
+    {
+     "key": "p2_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p2_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p2_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": "3x"
+    },
+    {
+     "key": "p2_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p2_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p3_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "C"
+    },
+    {
+     "key": "p3_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p3_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p3_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p3_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p3_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p4_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "D"
+    },
+    {
+     "key": "p4_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p4_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p4_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p4_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p4_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p5_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "E"
+    },
+    {
+     "key": "p5_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p5_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p5_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p5_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p5_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p6_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "F"
+    },
+    {
+     "key": "p6_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p6_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p6_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p6_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p6_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p7_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "G"
+    },
+    {
+     "key": "p7_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "spans",
+     "label": "Spans",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "s1_from",
+     "label": "Starts at",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "s1_to",
+     "label": "Ends at",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "s1_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "s1_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": "27"
+    },
+    {
+     "key": "s2_from",
+     "label": "Starts at",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "s2_to",
+     "label": "Ends at",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "s2_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "s2_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "s3_from",
+     "label": "Starts at",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "s3_to",
+     "label": "Ends at",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "s3_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "s3_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "left_end",
+     "label": "Left end",
+     "kind": "choice",
+     "options": [
+      "Stops at the point",
+      "Arrow",
+      "Line arrow"
+     ],
+     "default": "Stops at the point"
+    },
+    {
+     "key": "right_end",
+     "label": "Right end",
+     "kind": "choice",
+     "options": [
+      "Stops at the point",
+      "Arrow",
+      "Line arrow"
+     ],
+     "default": "Stops at the point"
+    },
+    {
+     "key": "cross_at",
+     "label": "Crosses at",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "cross_name",
+     "label": "Line name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "cross_ang",
+     "label": "Angle (°)",
+     "kind": "float",
+     "options": [],
+     "default": "90.0"
+    },
+    {
+     "key": "cross_right",
+     "label": "Right-angle mark",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "turn",
+     "label": "Turn",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
     }
    ],
    "handle_list": [],

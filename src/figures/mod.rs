@@ -45,6 +45,7 @@ pub mod unitcircle;
 pub mod transform;
 pub mod fraction;
 pub mod triangle_centres;
+pub mod segment;
 pub mod slope;
 pub mod protractor;
 pub mod baseten;
@@ -569,6 +570,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(fraction::defs());
     v.extend(triangle_centres::defs());
     v.extend(slope::defs());
+    v.push(segment::def());
     v.extend(protractor::defs());
     v.extend(baseten::defs());
     v.extend(nets::defs());
@@ -776,6 +778,7 @@ pub fn label_after_typing(value_key: &str, was_empty: bool, now: &str, mode: &st
 pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
     match id {
         "pulley" => physics::pulley_relevant(key, p),
+        segment::ID => segment::relevant(key, p),
         // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
         "circle" if key == "join_from" || key == "poly_names" => false,
         // the reference has no "Show resultant" box (the arrow's "Left off" does it) and no bold switch
@@ -893,7 +896,7 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
     if id == stats::histogram::ID {
         return stats::histogram::warnings(p);
     }
-    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => physics::ray_warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "boltzmann-distribution" => chemistry::boltzmann::warnings(p), "vsepr-shapes" => chemistry::vsepr::warnings(p), "dot-and-cross" => chemistry::dotcross::warnings(p), "nuclide-notation" => chemistry::nuclide::warnings(p), "periodic-table" => chemistry::periodic::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), "xylem-phloem" => biology::xylem::warnings(p), "ogive" => stats::ogive::warnings(p), "bar-chart" => stats::bar::warnings(p), "pie-chart" => stats::pie::warnings(p), "table-of-values" => stats::tov::warnings(p), "frequency-table" => stats::frequency::warnings(p), "two-way-table" => stats::twoway::warnings(p), "number-line" => math::number_line_b7::warnings(p), "heating-cooling-curve" => chemistry::heatcurve_warnings(p), "cylinder" | "prism" | "cone" | "pyramid" => math::solids_b8::warnings(id, p), "vector-diagram" => physics::vector_warnings(p),
+    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "segment-addition" => segment::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => physics::ray_warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "boltzmann-distribution" => chemistry::boltzmann::warnings(p), "vsepr-shapes" => chemistry::vsepr::warnings(p), "dot-and-cross" => chemistry::dotcross::warnings(p), "nuclide-notation" => chemistry::nuclide::warnings(p), "periodic-table" => chemistry::periodic::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), "xylem-phloem" => biology::xylem::warnings(p), "ogive" => stats::ogive::warnings(p), "bar-chart" => stats::bar::warnings(p), "pie-chart" => stats::pie::warnings(p), "table-of-values" => stats::tov::warnings(p), "frequency-table" => stats::frequency::warnings(p), "two-way-table" => stats::twoway::warnings(p), "number-line" => math::number_line_b7::warnings(p), "heating-cooling-curve" => chemistry::heatcurve_warnings(p), "cylinder" | "prism" | "cone" | "pyramid" => math::solids_b8::warnings(id, p), "vector-diagram" => physics::vector_warnings(p),
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon" => math::flat_b9::warnings(id, p),
         "pulley" => physics::pulley_warnings(p),
         "population-growth" => biology::popdyn::growth_warnings(p),
@@ -1020,6 +1023,7 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| fraction::examples(id))
         .or_else(|| triangle_centres::examples(id))
         .or_else(|| slope::examples(id))
+        .or_else(|| segment::examples(id))
         .or_else(|| protractor::examples(id))
         .or_else(|| baseten::examples(id))
         .or_else(|| nets::examples(id))

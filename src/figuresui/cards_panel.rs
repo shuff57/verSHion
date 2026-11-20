@@ -10,6 +10,7 @@ use crate::figures::biology::{gel, popdyn};
 use crate::figures::cards::{self, Card};
 use crate::figures::chemistry::{atoms, spectra};
 use crate::figures::items;
+use crate::figures::segment as seg;
 
 const LABEL_MODES: [&str; 3] = ["Text", "Blank line", "None"];
 const ARROWS: [&str; 3] = ["Drawn", "Dashed", "Left off"];
@@ -22,6 +23,14 @@ fn buffered_edit(ui: &mut Ui, id: egui::Id, current: &str, width: f32, hint: &st
     let r = ui.add(TextEdit::singleline(&mut buf).id(id).desired_width(width).hint_text(hint));
     ui.data_mut(|d| d.insert_temp(id, buf.clone()));
     r.changed().then_some(buf)
+}
+
+/// An icon button a screen reader (and a test) finds by `name`, such as "Remove B".
+fn named_icon(ui: &mut Ui, glyph: &str, on: bool, name: &str) -> bool {
+    let b = Button::new(RichText::new(glyph).size(if theme::chem_skin() { 18.0 } else { 14.0 })).frame(false).min_size(Vec2::splat(if theme::chem_skin() { 28.0 } else { 22.0 }));
+    let r = ui.add_enabled(on, b).on_hover_text(name).on_disabled_hover_text(name);
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, on, name));
+    r.clicked()
 }
 
 /// A small frameless icon button (move / remove).
@@ -468,6 +477,9 @@ impl Workspace {
                     });
             }
             Card::Strips => self.strips_card(ui),
+            Card::SegPoints => self.seg_points_card(ui, fig, pdefs),
+            Card::SegSpans => self.seg_spans_card(ui, fig, pdefs),
+            Card::SegCross => self.seg_cross_card(ui),
             Card::Particles => self.particles_card(ui, pdefs),
         }
     }
@@ -1375,6 +1387,144 @@ impl Workspace {
             self.card_commit(q, true);
         }
         self.add_chips(ui, fig, pdefs);
+        ui.add_space(4.0);
+    }
+
+    // ------------------------------------------------------------ segment addition
+
+    /// Point i with the part after it: name and dot, then the part's label, ticks and drawn
+    /// length. Remove takes a point out (the later ones move up); + Point adds one at the end.
+    fn seg_points_card(&mut self, ui: &mut Ui, fig: &str, pdefs: &[ParamDef]) {
+        let n = seg::n_points(&self.params);
+        let call = seg::model(&self.params).call;
+        let def = |k: &str| pdefs.iter().find(|d| d.key == k).cloned();
+        let mut remove = None;
+        for i in 0..n {
+            item_frame(ui, |ui| {
+                header(ui, &format!("Point {}", i + 1), |ui| {
+                    if named_icon(ui, remove_glyph(), n > seg::MIN_POINTS, &format!("Remove {}", call[i])) {
+                        remove = Some(i);
+                    }
+                });
+                for k in [seg::NAME_KEYS[i], seg::DOT_KEYS[i]] {
+                    if let Some(pd) = def(k) {
+                        param_control(ui, fig, &pd, &mut self.params);
+                    }
+                }
+            });
+            if i + 1 < n {
+                item_frame(ui, |ui| {
+                    header(ui, &format!("{}{}", call[i], call[i + 1]), |_| {});
+                    for k in [seg::MODE_KEYS[i], seg::LAB_KEYS[i], seg::TICK_KEYS[i], seg::LEN_KEYS[i]] {
+                        if k == seg::LAB_KEYS[i] && self.params.s(seg::MODE_KEYS[i]) != seg::LABEL_MODES[0] {
+                            continue;
+                        }
+                        if let Some(pd) = def(k) {
+                            param_control(ui, fig, &pd, &mut self.params);
+                        }
+                    }
+                });
+            }
+        }
+        if let Some(i) = remove {
+            let mut q = self.params.clone();
+            seg::remove_point(&mut q, pdefs, i);
+            self.card_commit(q, true);
+        }
+        if action(ui, "+ Point", n < seg::MAX_POINTS).clicked() {
+            let mut q = self.params.clone();
+            seg::add_point(&mut q, pdefs);
+            self.card_commit(q, true);
+        }
+        ui.add_space(4.0);
+    }
+
+    /// A point picker listing `names` from index `skip` (point i is value i + 1), with `none`
+    /// (value 0) first when given. Returns the newly picked value.
+    fn seg_pick(ui: &mut Ui, id: (&str, usize), names: &[String], cur: i64, none: Option<&str>, skip: usize) -> Option<i64> {
+        let shown = match cur {
+            c if c >= 1 && (c as usize) <= names.len() => names[c as usize - 1].clone(),
+            _ => none.unwrap_or("").to_string(),
+        };
+        let mut pick = None;
+        let w = if theme::chem_skin() { ui.available_width().min(220.0) } else { 120.0 };
+        ComboBox::from_id_salt(id).selected_text(shown).width(w).show_ui(ui, |ui| {
+            if let Some(label) = none {
+                if ui.selectable_label(cur == 0, label).clicked() {
+                    pick = Some(0);
+                }
+            }
+            for (i, name) in names.iter().enumerate().skip(skip) {
+                if ui.selectable_label(cur == i as i64 + 1, name).clicked() {
+                    pick = Some(i as i64 + 1);
+                }
+            }
+        });
+        pick.filter(|v| *v != cur)
+    }
+
+    /// Each brace: from a point to a later one, and its label. + Span adds one (up to three).
+    fn seg_spans_card(&mut self, ui: &mut Ui, fig: &str, pdefs: &[ParamDef]) {
+        let k = seg::n_spans(&self.params);
+        let call = seg::model(&self.params).call;
+        let n = call.len();
+        let def = |key: &str| pdefs.iter().find(|d| d.key == key).cloned();
+        let mut remove = None;
+        for j in 0..k {
+            item_frame(ui, |ui| {
+                header(ui, &format!("Span {}", j + 1), |ui| {
+                    if named_icon(ui, remove_glyph(), true, &format!("Remove span {}", j + 1)) {
+                        remove = Some(j);
+                    }
+                });
+                let f = self.params.i(seg::FROM_KEYS[j]).clamp(1, n as i64);
+                let t = self.params.i(seg::TO_KEYS[j]).clamp(1, n as i64);
+                ui.horizontal(|ui| {
+                    caption(ui, "From");
+                    if let Some(v) = Self::seg_pick(ui, ("seg_from", j), &call[..n - 1], f, None, 0) {
+                        self.params.set_i(seg::FROM_KEYS[j], v);
+                        if t <= v {
+                            self.params.set_i(seg::TO_KEYS[j], v + 1);
+                        }
+                    }
+                    caption(ui, "to");
+                    if let Some(v) = Self::seg_pick(ui, ("seg_to", j), &call, t.max(f + 1), None, f as usize) {
+                        self.params.set_i(seg::TO_KEYS[j], v);
+                    }
+                });
+                for key in [seg::SPAN_MODE_KEYS[j], seg::SPAN_LAB_KEYS[j]] {
+                    if key == seg::SPAN_LAB_KEYS[j] && self.params.s(seg::SPAN_MODE_KEYS[j]) != seg::LABEL_MODES[0] {
+                        continue;
+                    }
+                    if let Some(pd) = def(key) {
+                        param_control(ui, fig, &pd, &mut self.params);
+                    }
+                }
+            });
+        }
+        if let Some(j) = remove {
+            let mut q = self.params.clone();
+            seg::remove_span(&mut q, pdefs, j);
+            self.card_commit(q, true);
+        }
+        if action(ui, "+ Span", k < seg::MAX_SPANS).clicked() {
+            let mut q = self.params.clone();
+            seg::add_span(&mut q, pdefs);
+            self.card_commit(q, true);
+        }
+        ui.add_space(4.0);
+    }
+
+    /// The crossing line's point, picked by name (or no crossing line).
+    fn seg_cross_card(&mut self, ui: &mut Ui) {
+        let call = seg::model(&self.params).call;
+        caption(ui, "Crosses at");
+        let cur = self.params.i("cross_at");
+        if let Some(v) = Self::seg_pick(ui, ("seg_cross", 0), &call, cur, Some("No crossing line"), 0) {
+            let mut q = self.params.clone();
+            q.set_i("cross_at", v);
+            self.card_commit(q, true);
+        }
         ui.add_space(4.0);
     }
 

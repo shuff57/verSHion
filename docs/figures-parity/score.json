@@ -1,15 +1,13 @@
 {
- "generated_at": "2026-11-19T07:13:10+00:00",
- "probe_checked_at": "2026-11-18T23:13:10",
+ "generated_at": "2026-11-20T17:56:09+00:00",
+ "probe_checked_at": "2026-11-20T09:56:09",
  "comparable": true,
  "drift": [],
- "pooled": 95.5,
- "mean": 95.8,
- "figures_scored": 76,
- "figures_built": 77,
- "figures_missing": [
-  "math/segment-addition"
- ],
+ "pooled": 95.6,
+ "mean": 95.9,
+ "figures_scored": 77,
+ "figures_built": 78,
+ "figures_missing": [],
  "figures": {
   "angles": {
    "score": 100.0,
@@ -842,6 +840,13 @@
      "why": "no evidence"
     }
    ]
+  },
+  "segment-addition": {
+   "score": 100.0,
+   "got": 122.0,
+   "total": 122.0,
+   "unclassified": 0,
+   "gaps": []
   },
   "solid-net": {
    "score": 14.4,

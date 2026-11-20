@@ -1,10 +1,8 @@
 {
- "frozen_at": "2026-11-19T07:13:10+00:00",
- "map_sha256": "94f289d77db76fe7fb6d8131e38fa6eb4f298a9acc4986e408ddbb863f6b4d71",
+ "frozen_at": "2026-11-20T17:56:09+00:00",
+ "map_sha256": "d98480f3855d01965a5fe86c1d752ca845b684865484cfc8b4e0fd10311b00be",
  "not_doing_sha256": "0d4d68bef94ec157aa39e4048a440fc3b2f491bb3ec66ce38d39b83dfef34a60",
- "missing_figures": [
-  "math/segment-addition"
- ],
+ "missing_figures": [],
  "figures": {
   "angles": {
    "page": "math/angles",
@@ -130,6 +128,11 @@
    "page": "math/scatter-plot",
    "text_sha256": "282d4dcc8801c239ceabd3fde5ece7fbfcd18cf12f209eae300eb039c8c3a1b2",
    "shape": "ed93edc8c89af48442850ecd0236bb4735b88237ffe5c724e0793eb170037e51"
+  },
+  "segment-addition": {
+   "page": "math/segment-addition",
+   "text_sha256": "218f2be5795561cb249197b9d14609c52a33ba4c9f85d5598348dbb89d35d7d4",
+   "shape": "5dd596da2538ddcc26747b419b83d17f0a04768be1116ff4d0d68aa9f999de7b"
   },
   "sphere": {
    "page": "math/sphere",

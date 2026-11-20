@@ -153,7 +153,7 @@ pub struct Rat {
 const BIG: i128 = 1_000_000_000_000_000_000_000_000_000_000;
 
 impl Rat {
-    fn new(n: i128, d: i128) -> Option<Rat> {
+    pub(crate) fn new(n: i128, d: i128) -> Option<Rat> {
         if d == 0 {
             return None;
         }
@@ -164,13 +164,13 @@ impl Rat {
         }
         (n.abs() <= BIG && d <= BIG).then_some(Rat { n, d })
     }
-    fn int(n: i128) -> Rat { Rat { n, d: 1 } }
-    fn f(self) -> f64 { self.n as f64 / self.d as f64 }
-    fn is_int(self) -> bool { self.d == 1 }
-    fn add(self, o: Rat) -> Option<Rat> { Rat::new(self.n.checked_mul(o.d)?.checked_add(o.n.checked_mul(self.d)?)?, self.d.checked_mul(o.d)?) }
-    fn mul(self, o: Rat) -> Option<Rat> { Rat::new(self.n.checked_mul(o.n)?, self.d.checked_mul(o.d)?) }
-    fn neg(self) -> Rat { Rat { n: -self.n, d: self.d } }
-    fn recip(self) -> Option<Rat> { Rat::new(self.d, self.n) }
+    pub(crate) fn int(n: i128) -> Rat { Rat { n, d: 1 } }
+    pub(crate) fn f(self) -> f64 { self.n as f64 / self.d as f64 }
+    pub(crate) fn is_int(self) -> bool { self.d == 1 }
+    pub(crate) fn add(self, o: Rat) -> Option<Rat> { Rat::new(self.n.checked_mul(o.d)?.checked_add(o.n.checked_mul(self.d)?)?, self.d.checked_mul(o.d)?) }
+    pub(crate) fn mul(self, o: Rat) -> Option<Rat> { Rat::new(self.n.checked_mul(o.n)?, self.d.checked_mul(o.d)?) }
+    pub(crate) fn neg(self) -> Rat { Rat { n: -self.n, d: self.d } }
+    pub(crate) fn recip(self) -> Option<Rat> { Rat::new(self.d, self.n) }
     fn powi(self, k: i64) -> Option<Rat> {
         if k < 0 {
             return self.recip()?.powi(-k);

@@ -1,0 +1,273 @@
+{
+ "figure": "segment-addition",
+ "site": "math",
+ "slug": "segment-addition",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Put points in order along one line and add more with + Point, from two up to seven",
+   "class": "core",
+   "evidence": "changes:n=5 + ui-test:figuresui::tests::segment_ui::the_points_card_removes_a_middle_point_and_adds_one_at_the_end",
+   "note": "Opening state: A, B and C. '+ Point' is greyed out at seven; the page never goes below two. Where an added point goes (at the right end) is inferred, not seen."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Remove a chosen point, including one in the middle, down to two points",
+   "class": "control",
+   "evidence": "ui-test:figuresui::tests::segment_ui::the_points_card_removes_a_middle_point_and_adds_one_at_the_end + ui-test:figures::segment::tests::removing_a_point_moves_the_later_ones_up",
+   "note": "Each point box has its own remove button ('Remove A'). What happens to the two parts either side of a removed middle point (joined or dropped) was not seen."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Rename a point, such as M for a midpoint, up to four characters",
+   "class": "control",
+   "evidence": "changes:p2_name=M",
+   "note": "Point name boxes: maxlength 4, placeholder '?'. Names are drawn in italic under the line. Example 'Midpoint of a segment' uses A, M, B."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Leave a chosen point undotted, with its name still drawn",
+   "class": "control",
+   "evidence": "changes:p2_dot=false",
+   "note": "Dots section: one checkbox per point, all on at the opening state; the summary then reads 'n of m dotted'."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Label a part above the line with a number length, such as 12",
+   "class": "core",
+   "evidence": "changes:p1_lab=12",
+   "note": "Parts are the pieces between neighbouring points (AB, BC). The label mode starts at Text."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Label a part with an expression in one letter, such as 2x + 3, the letter drawn in italic",
+   "class": "core",
+   "evidence": "changes:p1_lab=2x + 3",
+   "note": "Opening state: AB is 2x + 1 and BC is 3x − 4. Any one letter, not only x."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Type a part's expression with brackets or a number fraction, such as 3(x − 2) or x/2, and it is still solved",
+   "class": "control",
+   "evidence": "changes:p1_lab=3(x - 2) + ui-test:figures::segment::tests::labels_read_as_a_number_or_an_expression_in_one_letter",
+   "note": "Not in the bullets or help. Read from the page's solver: brackets, a number times a bracket and division by a number are accepted. How x/2 is drawn on the figure was not seen."
+  },
+  {
+   "id": "cap-02d",
+   "text": "Type a part label that is neither a number nor an expression (such as ?), drawn as typed and left out of the check with a note",
+   "class": "control",
+   "evidence": "changes:p1_lab=? + ui-test:figures::segment::tests::labels_that_cant_be_solved_say_why",
+   "note": "Not in the bullets. The check panel then says '“?” isn’t a number or an expression like 2x + 3, so it’s left out' (or 'so it can’t be solved' when nothing else gives the letter)."
+  },
+  {
+   "id": "cap-02e",
+   "text": "Put a blank line in place of a part's label for students",
+   "class": "version",
+   "evidence": "changes:p1_lab_mode=Blank line",
+   "note": "Per part 'How AB is labeled': Text / Blank line / None. Example 'four points' has a blank line over QR."
+  },
+  {
+   "id": "cap-02f",
+   "text": "Leave a part with no label at all",
+   "class": "control",
+   "evidence": "changes:p1_lab_mode=None",
+   "note": "Label mode None. Example 'Line with four collinear points' has no lengths."
+  },
+  {
+   "id": "cap-02g",
+   "text": "Mark a part with one, two or three congruence ticks",
+   "class": "control",
+   "evidence": "changes:p1_ticks=2 ticks",
+   "note": "Per part 'Congruence ticks on AB': None / | / || / |||; None at the opening state. Ticks are separate from the label: a part can have both."
+  },
+  {
+   "id": "cap-02h",
+   "text": "Mark two different pairs congruent in one figure with different tick counts (| on one pair, || on another)",
+   "class": "control",
+   "evidence": "changes:{\"n\":5,\"p1_ticks\":\"1 tick\",\"p2_ticks\":\"1 tick\",\"p3_ticks\":\"2 ticks\",\"p4_ticks\":\"2 ticks\"} + ui-test:figures::segment::tests::a_midpoint_with_expressions_solves_from_the_ticks",
+   "note": "The solver reads tick counts 1, 2 and 3 as separate groups, each giving its own equation."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw a brace under the line from one point to a later one, labeled with a length, such as AC = 27",
+   "class": "core",
+   "evidence": "changes:s1_lab=30",
+   "note": "Opening state: one brace under AC labeled 27."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Choose where a brace starts and ends, from any point to any later one, not only the whole segment",
+   "class": "control",
+   "evidence": "changes:s1_from=2",
+   "note": "Each span row has 'starts at' and 'ends at' selects; the end list only offers later points."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Draw up to three braces, overlapping ones stacked so they don't collide",
+   "class": "control",
+   "evidence": "changes:{\"spans\":3,\"s2_from\":1,\"s2_to\":2,\"s3_from\":2,\"s3_to\":3} + ui-test:figuresui::tests::segment_ui::the_spans_card_adds_and_removes_braces",
+   "note": "'+ Span' is greyed out at three. Example 'four points and overlapping segments': braces for PR, QS and PS."
+  },
+  {
+   "id": "cap-03d",
+   "text": "Label a brace with an expression in the letter, such as 5x − 1",
+   "class": "control",
+   "evidence": "changes:s1_lab=5x - 3",
+   "note": "Not in the examples. The span box's placeholder is 27, but its label goes through the same solver as a part's."
+  },
+  {
+   "id": "cap-03e",
+   "text": "Put a blank line under a brace for students",
+   "class": "version",
+   "evidence": "changes:s1_lab_mode=Blank line",
+   "note": "Span label mode Blank line. Example 'Midpoint of a segment with expressions' has a blank line under the AB brace."
+  },
+  {
+   "id": "cap-03f",
+   "text": "Draw a brace with no label",
+   "class": "control",
+   "evidence": "changes:s1_lab_mode=None",
+   "note": "Span label mode None. Example 'four points': PS is a brace left unlabeled."
+  },
+  {
+   "id": "cap-03g",
+   "text": "Remove a brace, down to no braces",
+   "class": "control",
+   "evidence": "changes:spans=0 + ui-test:figuresui::tests::segment_ui::the_spans_card_adds_and_removes_braces",
+   "note": "Each span row has 'Remove the span AC'. The perpendicular bisector example has no brace."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Make a ray: an arrow on the right end, the left end stopping at its point",
+   "class": "control",
+   "evidence": "changes:right_end=Arrow",
+   "note": "Ends: Left end / Right end, each 'Stops at the point' (opening state), 'Arrow' or 'Line arrow'. The Ends summary then reads Ray."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Make a ray pointing left: an arrow on the left end only",
+   "class": "control",
+   "evidence": "changes:left_end=Arrow",
+   "note": "Either end can carry the arrow on its own."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Make a line: arrows on both ends",
+   "class": "control",
+   "evidence": "changes:{\"left_end\":\"Arrow\",\"right_end\":\"Arrow\"}",
+   "note": "Example 'Line with four collinear points'. The Ends summary reads Line."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Choose the arrowhead's style on each end, a filled arrow or an open line arrow",
+   "class": "control",
+   "evidence": "changes:right_end=Line arrow + ui-test:figures::segment::tests::ends_make_a_segment_a_ray_or_a_line",
+   "note": "Options 'Arrow' and 'Line arrow' per end; mixed ends are allowed. The page's hint: 'Stopping at both points makes a segment; one arrow makes a ray, two a line.'"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw a line crossing the segment at a chosen point, such as the midpoint M, for a bisector",
+   "class": "control",
+   "evidence": "changes:cross_at=2",
+   "note": "'Crosses at': No crossing line (opening state) or any point, end points included. Hint: 'A bisector crosses at the midpoint: give the parts either side the same ticks.'"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Name the crossing line, such as ℓ",
+   "class": "control",
+   "evidence": "changes:{\"cross_at\":2,\"cross_name\":\"ℓ\"}",
+   "note": "Name box: placeholder ℓ, up to four characters; empty at the opening state. Shown only once a crossing point is chosen."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Set the crossing line's angle to the segment, from 20° to 160° in steps of 5°",
+   "class": "control",
+   "evidence": "changes:{\"cross_at\":2,\"cross_ang\":45}",
+   "note": "'Angle (°)' number box, 90° when the line is first added; limits read from the page's control."
+  },
+  {
+   "id": "cap-05d",
+   "text": "At 90°, draw a right-angle mark where the line crosses, or turn it off",
+   "class": "control",
+   "evidence": "ui-test:figures::segment::tests::a_crossing_line_at_a_point_with_a_right_angle_mark_at_90",
+   "note": "'Right-angle mark' checkbox, shown only at 90° and on by default. Example 'Perpendicular bisector of a segment'."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Draw each part to scale from its length, or from the solved value of the letter, none shorter than a fifth of the longest",
+   "class": "control",
+   "evidence": "changes:p1_lab=20 + ui-test:figures::segment::tests::parts_are_drawn_to_scale_unless_typed",
+   "note": "Drawn lengths summary 'Worked out' at the opening state: AB = 13 and BC = 14 put B just left of the middle. FAQ: 'none shorter than a fifth of the longest'. What an unworkable part is drawn as (inferred: the average of the others) was not seen."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Type how long each part is drawn, for a figure not drawn to scale",
+   "class": "control",
+   "evidence": "changes:p1_len=1",
+   "note": "Drawn lengths: one box per part, placeholder 'auto'; the summary then reads 'As typed'. A part left empty keeps its worked-out size."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Turn the whole figure, from −90° to 90° in steps of 5°",
+   "class": "control",
+   "evidence": "changes:turn=30",
+   "note": "Turn slider, 0° (Level) at the opening state."
+  },
+  {
+   "id": "cap-06d",
+   "text": "Make the labels large",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": "Label size buttons on the figure toolbar: Large / Medium (opening state) / Small."
+  },
+  {
+   "id": "cap-06e",
+   "text": "Make the labels small",
+   "class": "control",
+   "evidence": "changes:label_size=Small",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Write the equation each brace gives, such as AB + BC = AC, below the parts",
+   "class": "version",
+   "evidence": "ui-test:figures::segment::tests::the_key_copy_writes_the_check_under_the_figure",
+   "note": "Opening state reads 'AB + BC = AC'. A brace over a single part gives no equation of its own. Shown in the settings panel, not on the figure. Owner's round-0 rule (2026-11-19): counts only when drawn on the figure's answer-key copy."
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write the equation matching ticks give, such as AM = MB, below the parts",
+   "class": "version",
+   "evidence": "ui-test:figures::segment::tests::a_midpoint_with_expressions_solves_from_the_ticks",
+   "note": "FAQ: 'AM = MB for parts with the same ticks'. Three parts with the same ticks give AB = BC = CD. Owner's round-0 rule (2026-11-19): counts only when drawn on the figure's answer-key copy."
+  },
+  {
+   "id": "cap-07c",
+   "text": "Solve for the one letter and list its value and every part and brace length, such as x = 6 · AB = 13 · BC = 14 · AC = 27",
+   "class": "version",
+   "evidence": "ui-test:figures::segment::tests::the_key_copy_writes_the_check_under_the_figure",
+   "note": "Opening state exactly as quoted. Points help: 'Labels in one letter are solved below as a check.' There is no student/answer switch: the figure never shows these values. Owner's round-0 rule (2026-11-19): counts only when drawn on the figure's answer-key copy."
+  },
+  {
+   "id": "cap-07d",
+   "text": "Work out the length of a blank or unlabeled part from a brace or matching ticks and list it, such as QR = 7 from PQ = 5 and PR = 12",
+   "class": "version",
+   "evidence": "ui-test:figures::segment::tests::a_blank_part_is_worked_out_and_written_on_the_key_only",
+   "note": "Read from the page's solver: a part with no number is filled from a brace when it is the only unknown under it, or from a part with the same ticks. Also braces with no label are summed from their parts. Owner's round-0 rule (2026-11-19): counts only when drawn on the figure's answer-key copy."
+  },
+  {
+   "id": "cap-07e",
+   "text": "Say when the labels don't agree: a brace that doesn't add up with all-number labels, or a solved letter that breaks another equation",
+   "class": "version",
+   "evidence": "ui-test:figures::segment::tests::labels_that_dont_agree_say_so",
+   "note": "Merged from the classifier's 07e and 07f by the owner's round-0 review. Owner's round-0 rule (2026-11-19): counts only when drawn on the figure's answer-key copy."
+  },
+  {
+   "id": "cap-07g",
+   "text": "Say when the labels can't be solved: a length comes out 0 or less, more than one letter is used, or there is no equation to solve from (or the letter cancels)",
+   "class": "version",
+   "evidence": "ui-test:figures::segment::tests::labels_that_cant_be_solved_say_why",
+   "note": "Merged from the classifier's 07g, 07h and 07i by the owner's round-0 review. Owner's round-0 rule (2026-11-19): counts only when drawn on the figure's answer-key copy."
+  }
+ ]
+}

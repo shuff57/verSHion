@@ -33,7 +33,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | rectangle | `rectangle` | 55 | 9 | 6 | — | 100 |
 | regular-polygon | `regular-polygon` | 33 | 8 | 6 | — | 100 |
 | scatter-plot | `scatterplot` | 12 | 0 | 7 | reference pastes a table; ours has no data/list control | 37 |
-| segment-addition | **missing** | | | 6 | | |
+| segment-addition | `segment-addition` | 62 | 0 | 6 | — | 100 |
 | sphere | `sphere` | 17 | 2 | 6 | — | 100 |
 | stem-and-leaf | `stem-and-leaf` | 23 | 0 | 8 | — | 100 |
 | table-of-values | `table-of-values` | 23 | 10 | 6 | — | 100 |
@@ -104,13 +104,13 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 ## Reference figures we do not have
 
-`math/segment-addition`
+(none)
 
 Our figures with no reference page: 116
 
-Generated: 2026-11-19T07:13:10+00:00 · probe: 2026-11-18T23:13:10
+Generated: 2026-11-20T17:56:09+00:00 · probe: 2026-11-20T09:56:09
 
-**Pooled 95.5** · mean 95.8 over 76 figures · built 77 of 78 reference figures (missing: math/segment-addition)
+**Pooled 95.6** · mean 95.9 over 77 figures · built 78 of 78 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -209,6 +209,7 @@ Comparable with the frozen baseline: **yes**
 - `rectangle`: 100 (86/86)
 - `regular-polygon`: 100 (79/79)
 - `ruler-reading`: 100 (62/62)
+- `segment-addition`: 100 (122/122)
 - `sphere`: 100 (35/35)
 - `spring-scale`: 100 (51/51)
 - `stem-and-leaf`: 100 (67/67)

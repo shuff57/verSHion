@@ -524,6 +524,15 @@ static BAR_CHART: [RefSection; 7] = [
     s("Student copy and appearance", &["blank", "questions", "show_answers", "style", "label_size"], "Turn off Show answers for a student copy: it leaves out the values, the bars (students draw them from a table) or the scale numbers, and the answers to the questions."),
 ];
 
+static SEGMENT_ADDITION: [RefSection; 6] = [
+    s("Points", &["n"], "The points sit in order along one line. Each part, the piece between two neighbouring points, is labeled above the line with a length like 12 or an expression like 2x + 3, or left as a blank line for students. Give parts the same ticks to mark them congruent, as at a midpoint. Labels in one letter are solved as a check on the key."),
+    s("Spans", &["spans"], "A span is a brace under the line from one point to a later one, like AC, with its own label."),
+    s("Ends", &["left_end", "right_end"], "Stopping at both points makes a segment; one arrow makes a ray, two a line."),
+    s("Crossing line", &["cross_at", "cross_name", "cross_ang", "cross_right"], "A bisector crosses at the midpoint: give the parts either side the same ticks."),
+    s("Turn and labels", &["turn", "style", "label_size"], ""),
+    s("Student copy", &["show_answers"], "Turn off Show answers for a student copy: the blank lines stay empty and the check under the figure is left out."),
+];
+
 static TABLE_OF_VALUES: [RefSection; 5] = [
     s("Values", &["source", "rule", "xs", "from", "to", "step", "list", "typed", "blanks", "blank_y"], "Type a rule like y = 2x + 1 and the x-values as a range or a list; each y is worked out for you. Type the range in fractions, \u{3c0} or degrees and the x-values are written that way. Or pick Typed and type the pairs yourself, words too. Click any value on the figure to make it a blank for students."),
     s("Headings and titles", &["heads", "head1", "head2", "title_kind", "title", "show_rule"], "Leave a heading empty for a blank heading. A blank line for the rule leaves it for students to find."),
@@ -1246,6 +1255,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "bar-chart" => &BAR_CHART,
         "pie-chart" => &PIE_CHART,
         "table-of-values" => &TABLE_OF_VALUES,
+        "segment-addition" => &SEGMENT_ADDITION,
         "dot-plot" => &DOT_PLOT,
         "ogive" => &OGIVE,
         "normal-curve" => &NORMAL_CURVE,

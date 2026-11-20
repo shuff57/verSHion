@@ -5,7 +5,7 @@ use super::*;
 use crate::figures::biology::pedigree as ped;
 
 /// Side-panel and popup widgets as a screen reader finds them: (role, label, rect, disabled), top to bottom.
-fn panel_widgets(ctx: &egui::Context, ws: &mut Workspace) -> Vec<(egui::accesskit::Role, String, egui::Rect, bool)> {
+pub(super) fn panel_widgets(ctx: &egui::Context, ws: &mut Workspace) -> Vec<(egui::accesskit::Role, String, egui::Rect, bool)> {
     let out = tall_frame(ctx, ws, vec![]);
     let tree = out.platform_output.accesskit_update.expect("accesskit tree");
     let mut v: Vec<_> = tree
@@ -22,7 +22,7 @@ fn panel_widgets(ctx: &egui::Context, ws: &mut Workspace) -> Vec<(egui::accesski
     v
 }
 
-fn press_at(ctx: &egui::Context, ws: &mut Workspace, p: egui::Pos2) {
+pub(super) fn press_at(ctx: &egui::Context, ws: &mut Workspace, p: egui::Pos2) {
     tall_frame(ctx, ws, vec![egui::Event::PointerMoved(p)]);
     let mut ev = btn(p, true);
     ev.extend(btn(p, false));
@@ -31,7 +31,7 @@ fn press_at(ctx: &egui::Context, ws: &mut Workspace, p: egui::Pos2) {
 }
 
 /// Clicks the enabled panel button whose words (an icon glyph and a "+ " before them aside) are `words`.
-fn press_button(ctx: &egui::Context, ws: &mut Workspace, words: &str) {
+pub(super) fn press_button(ctx: &egui::Context, ws: &mut Workspace, words: &str) {
     let ws_list = panel_widgets(ctx, ws);
     let hit = ws_list
         .iter()

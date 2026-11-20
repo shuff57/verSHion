@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-19T07:13:10+00:00 · probe: 2026-11-18T23:13:10
+Generated: 2026-11-20T17:56:09+00:00 · probe: 2026-11-20T09:56:09
 
-**Pooled 95.5** · mean 95.8 over 76 figures · built 77 of 78 reference figures (missing: math/segment-addition)
+**Pooled 95.6** · mean 95.9 over 77 figures · built 78 of 78 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -101,6 +101,7 @@ Comparable with the frozen baseline: **yes**
 - `rectangle`: 100 (86/86)
 - `regular-polygon`: 100 (79/79)
 - `ruler-reading`: 100 (62/62)
+- `segment-addition`: 100 (122/122)
 - `sphere`: 100 (35/35)
 - `spring-scale`: 100 (51/51)
 - `stem-and-leaf`: 100 (67/67)

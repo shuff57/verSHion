@@ -27,6 +27,12 @@ pub enum Card {
     TitReadout,
     Strips,
     Particles,
+    /// Segment addition: each point with the part after it (label, ticks, drawn length).
+    SegPoints,
+    /// Segment addition: the braces, each from a point to a later one.
+    SegSpans,
+    /// Segment addition: the point the crossing line goes through, picked by name.
+    SegCross,
 }
 
 /// The card drawn instead of param `key`'s own control.
@@ -42,6 +48,9 @@ pub fn replaces(fig: &str, key: &str) -> Option<Card> {
         ("predator-prey", "y_fit") => Card::PpFit(false),
         ("line-spectrum", "strips") => Card::Strips,
         ("particle-diagram", "shuffle") => Card::Particles,
+        (super::segment::ID, "n") => Card::SegPoints,
+        (super::segment::ID, "spans") => Card::SegSpans,
+        (super::segment::ID, "cross_at") => Card::SegCross,
         _ => return None,
     })
 }
@@ -71,6 +80,8 @@ pub fn owner(fig: &str, key: &str) -> Option<Card> {
         "motion-graphs" | "motion-map" if item_of(key).is_some_and(|(l, _)| l == "s") => Card::Segments,
         "line-spectrum" if SPECTRUM_OLD.contains(&key) => Card::Strips,
         "particle-diagram" if atoms::is_kind_key(key) => Card::Particles,
+        super::segment::ID if item_of(key).is_some_and(|(l, _)| l == "p") => Card::SegPoints,
+        super::segment::ID if item_of(key).is_some_and(|(l, _)| l == "s") => Card::SegSpans,
         _ => return None,
     };
     Some(card)
@@ -178,7 +189,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(anchors, 14);
+        assert_eq!(anchors, 17);
     }
 
     #[test]

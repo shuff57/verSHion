@@ -198,6 +198,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "bar-chart" => BAR_CHART,
         "pie-chart" => PIE_CHART,
         "table-of-values" => TABLE_OF_VALUES,
+        "segment-addition" => SEGMENT_ADDITION,
         "frequency-table" => FREQUENCY_TABLE,
         "normal-curve" => NORMAL_CURVE,
         "sampling-distribution" => SAMPLING_DISTRIBUTION,
@@ -2756,6 +2757,33 @@ const BAR_CHART: &[Faq] = &[
     Faq {
         q: "Why does the editor warn when the scale does not start at 0?",
         a: "A bar's length stands for its value, so the axis must start at 0. Starting higher makes small differences look large: a bar twice as long no longer means twice as many. The warning stays while Scale start is above 0, which is useful for teaching how graphs mislead.",
+    },
+];
+
+const SEGMENT_ADDITION: &[Faq] = &[
+    Faq {
+        q: "How do I label the parts?",
+        a: "Each part, the piece between two neighbouring points, is labeled above the line: a length like 12, an expression in one letter like 2x + 3, 3(x \u{2212} 2) or x/2, a blank line for students, or nothing. A unit after the number (12 cm) is kept. A label that isn't a number or an expression, like ?, is drawn as typed and left out of the check.",
+    },
+    Faq {
+        q: "How is x solved?",
+        a: "Each brace gives an equation (AB + BC = AC), and parts with the same ticks are equal (AM = MB). The one letter is solved for exactly and every part's and brace's length is worked out, a blank part's too. Show answers writes the check under the figure and the length on each blank line; it also says when the labels don't agree, when a length comes out 0 or less, or when there is nothing to solve x from.",
+    },
+    Faq {
+        q: "How do I make a midpoint or a bisector?",
+        a: "Name the middle point M and give the two parts beside it the same ticks. For a bisector, pick the midpoint in Crossing line: the line crosses there at the angle you set, with a right-angle mark at 90\u{b0}.",
+    },
+    Faq {
+        q: "How do I draw a ray or a line?",
+        a: "Set an end to Arrow or Line arrow so it runs on past its point. Stopping at both points makes a segment; one arrow makes a ray, two a line.",
+    },
+    Faq {
+        q: "Is the figure drawn to scale?",
+        a: "Yes: each part is drawn as long as its label says (or as solved), none shorter than a fifth of the longest. Type a drawn length for a part to draw a figure not to scale; a part left empty keeps its worked-out size.",
+    },
+    Faq {
+        q: "What happens when I remove a point?",
+        a: "The points after it move up, and the two parts beside it become one part with no label text of its own; it keeps the later part’s label style and ticks. A brace that starts or ends at the point is removed, and so is a crossing line through it; a brace over it gets shorter.",
     },
 ];
 
