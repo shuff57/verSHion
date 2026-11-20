@@ -44,7 +44,7 @@ fn q(id: &str, stem: &str, kind: Kind) -> Question {
 }
 
 fn ans(text: &str, correct: bool) -> Answer {
-    Answer { text: text.into(), correct, locked: false }
+    Answer { text: text.into(), correct, locked: false, image: None, figure: None }
 }
 
 /// A figure spec exactly as the figure editor writes one: the registry's defaults through `spec_for`.
@@ -59,7 +59,7 @@ fn pipette_spec() -> FigureSpec {
 /// (name, value, the app's own pretty JSON of it in struct field order).
 fn fixtures() -> Vec<(&'static str, serde_json::Value, String)> {
     let mut mc = q("q00101a2b3c", "Which planet is closest to the Sun?\n\n**Hint:** think *small*.", Kind::Mc {
-        answers: vec![ans("Venus", false), ans("Mercury", true), ans("Mars", false), Answer { text: "None of these".into(), correct: false, locked: true }],
+        answers: vec![ans("Venus", false), ans("Mercury", true), ans("Mars", false), Answer { text: "None of these".into(), correct: false, locked: true, image: None, figure: None }],
     });
     mc.points = Some(2.0);
     mc.difficulty = Some(Difficulty::Medium);
