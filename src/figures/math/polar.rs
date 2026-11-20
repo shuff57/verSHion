@@ -984,6 +984,7 @@ pub(crate) fn build(p0: &Params) -> Out {
                 }
             }
             body += &format!(r##"<circle cx="{cx:.2}" cy="{cy:.2}" r="{rpx:.2}" fill="none" stroke="#777777" stroke-width="1.2" data-pp="circle"/>"##);
+            for j in 0..96 { let (a0, a1) = (j as f64 * PI / 48.0, (j + 1) as f64 * PI / 48.0); sc.soft.push(((cx + rpx * a0.cos(), cy - rpx * a0.sin()), (cx + rpx * a1.cos(), cy - rpx * a1.sin()))); }
         }
         // the axes through the pole
         for (a, b) in [((cx - rpx, cy), (cx + rpx, cy)), ((cx, cy - rpx), (cx, cy + rpx))] {
