@@ -216,7 +216,7 @@ fn read_fn(rhs: &str, polar: bool, what: &str) -> Result<(Node, String), String>
     let rhs = rhs.trim();
     if rhs.is_empty() { return Err(format!("{what}: type a function after the = sign")); }
     let plain = if polar {
-        let l = rhs.to_lowercase();
+        let l = rhs.to_lowercase().replace("sqrt", "");
         // (θ is read as q by the shared reader; a typed q is no letter of this figure)
         if l.contains('q') { return Err(format!("{what}: cannot read \u{201c}q\u{201d}: the variable is \u{3b8}")); }
         tangent::expr_plain(&rhs.replace(TH, "q"), "r", 'q').map_err(|e| format!("{what}: {}", e.replace("variable is q", "variable is \u{3b8}").replace("“q”", "\u{201c}\u{3b8}\u{201d}")))?
@@ -637,8 +637,19 @@ pub(crate) fn region(p: &Params, cs: &[Curve], notes: &mut Vec<String>) -> Optio
         return Some(Region { a, b, inside: i, outside: Some(o), area, pieces });
     }
     if !nonneg && !nonpos {
-        notes.push(format!("Shading: r of curve {i} changes sign between the angles (r < 0 near \u{3b8} \u{2248} {}); choose angles where r keeps one sign, such as between two zeros of r.", tangent::decimal(changes(&fv).unwrap_or(a.v), 2)));
-        return None;
+        // where r < 0 the curve is drawn on the opposite ray: the region is measured by ½∫r² dθ only when no direction is
+        // swept both by a positive r and by a negative one (r = 4 cos θ over 0 to π: yes; r = 1 + 2 cos θ over 0 to 2π:
+        // the inner loop twice, no). Each direction (bin centres, so a shared boundary ray is not counted) is checked.
+        let bins = 3600;
+        let cover = |phi: f64, sign: f64| -> Option<f64> {
+            let base = phi - if sign < 0.0 { PI } else { 0.0 };
+            let k0 = ((a.v - base) / (2.0 * PI)).ceil() as i64;
+            (k0..=k0 + 2).map(|k| base + 2.0 * PI * k as f64).filter(|t| *t >= a.v && *t <= b.v).find(|t| f.r(*t).is_some_and(|r| r * sign > tol))
+        };
+        if let Some(t) = (0..bins).map(|j| (j as f64 + 0.5) * 2.0 * PI / bins as f64).find_map(|phi| cover(phi, 1.0).and(cover(phi, -1.0))) {
+            notes.push(format!("Shading: between these angles r of curve {i} is negative near \u{3b8} \u{2248} {}, where the curve goes over a part already swept with r > 0, so the region would be counted twice; choose angles where r keeps one sign, such as between two zeros of r.", tangent::decimal(t, 2)));
+            return None;
+        }
     }
     let num = 0.5 * pn::integrate(&|t| { let u = f.r(t).unwrap_or(0.0); u * u }, a.v, b.v, 1e-13 * (1.0 + fmax * fmax)).0;
     let exact = a.ex.as_ref().zip(b.ex.as_ref()).and_then(|(ea, eb)| pn::exact_area(&f.f, None, ea, eb)).filter(|e| (e.value() - num).abs() <= 1e-9 * (1.0 + num.abs()));
@@ -1271,7 +1282,7 @@ pub(crate) fn build(p0: &Params) -> Out {
                 if let (Some(dx), Some(dy)) = (&t.dx, &t.dy) {
                     let (sx, ex_) = vtext(dx, &ctx);
                     let (sy, ey) = vtext(dy, &ctx);
-                    pl.push(PLine { swatch: None, parts: vec![mt(&format!("dy/d{v} {} {sy}, dx/d{v} {} {sx}", if ey { "=" } else { "\u{2248}" }, if ex_ { "=" } else { "\u{2248}" }))], indent: true });
+                    pl.push(PLine { swatch: None, parts: vec![mt(&format!("dx/d{v} {} {sx}, dy/d{v} {} {sy}", if ex_ { "=" } else { "\u{2248}" }, if ey { "=" } else { "\u{2248}" }))], indent: true });
                 }
                 pl.push(PLine { swatch: None, parts: slope_line.clone(), indent: true });
             } else {

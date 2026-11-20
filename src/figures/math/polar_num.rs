@@ -259,10 +259,13 @@ pub(crate) fn integrate(f: &dyn Fn(f64) -> f64, a: f64, b: f64, tol: f64) -> (f6
 pub(crate) fn sign_changes(f: &dyn Fn(f64) -> f64, a: f64, b: f64, n: usize) -> Vec<f64> {
     let mut out = vec![];
     let mut prev = (a, f(a));
+    if prev.1 == 0.0 { if let Some(k) = (1..=n).find(|k| f(a + (b - a) * *k as f64 / n as f64) != 0.0) { let x = a + (b - a) * k as f64 / n as f64; prev = (x, f(x)); } }
     for i in 1..=n {
         let x = a + (b - a) * i as f64 / n as f64;
         let v = f(x);
-        if prev.1 != 0.0 && v != 0.0 && (prev.1 < 0.0) != (v < 0.0) {
+        // (an exact zero at a sample is stepped over: the change is between the last nonzero sample and this one)
+        if v == 0.0 { continue; }
+        if prev.1 != 0.0 && (prev.1 < 0.0) != (v < 0.0) {
             let (mut lo, mut hi) = (prev.0, x);
             let neg_lo = prev.1 < 0.0;
             for _ in 0..80 {
