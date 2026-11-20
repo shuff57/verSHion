@@ -77,6 +77,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "volume-reading" => VOLUME_READING,
         // math
         "coordinate-grid" => COORDINATE_GRID,
+        "riemann-sums" => RIEMANN_SUMS,
         "composite-shape" => COMPOSITE_SHAPE,
         "number-line" => NUMBER_LINE,
         "triangle" => TRIANGLE,
@@ -1370,6 +1371,29 @@ const TANGENT_SECANT_LINES: &[Faq] = &[
     Faq {
         q: "How do I make a student copy?",
         a: "Turn off Show answers. Blank lines for the slopes and equations keeps the lines and leaves the slopes, equations and the slope triangle's rise for students; Curve and P only leaves just the curve and the point, for students to draw the tangent themselves. Student + key exports both copies, and Answer key line under the graph sums up the answers on the key.",
+    },
+];
+
+const RIEMANN_SUMS: &[Faq] = &[
+    Faq {
+        q: "Which sums can the figure draw?",
+        a: "Left, right and midpoint sums use the value of f at the left end, right end or middle of each strip; the trapezoid sum joins the values at the two ends; the upper and lower sums make each strip as tall as the greatest or least value of f anywhere on the strip, which can be inside the strip rather than at an end (for 3x − x² on [0, 3] with 3 strips the middle strip's greatest value is 9/4, at x = 3/2). A table of x and f(x) values makes strips of different widths, as on AP questions.",
+    },
+    Faq {
+        q: "How is the exact value worked out?",
+        a: "A polynomial with whole-number or fractional coefficients is integrated exactly, with bounds such as 1/2 or π/2, so ∫ from 0 to 2 of x² + 1 is 14/3. Any other function is integrated numerically to about 15 digits, and the value is written exactly only when it is a fraction, a multiple of π, a value with a square root, a logarithm or e, such as 1 − √2/2, 2 ln 2 or e − 1; otherwise it is rounded and written with ≈.",
+    },
+    Faq {
+        q: "What does signed area mean?",
+        a: "The integral counts area below the x-axis as negative. With Signed area on, the part below the axis is shaded in a second colour (or hatched the other way) and the exact value is written as the area above minus the area below, so ∫ from 0 to 2π of sin x is 2 − 2 = 0.",
+    },
+    Faq {
+        q: "How do I slice the area between two curves horizontally?",
+        a: "Choose Between f(x) and g(x), then Horizontal strips. Each strip runs across the region at its height, as wide as the region is there, so the sum approximates the integral in y of the right curve minus the left one, written ∫ (x_R − x_L) dy. Choose Where f and g cross to use the crossings as the bounds.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its key?",
+        a: "Switch on the lines you want written (Δx, the sum, the integral, its exact value, the error), then turn off Show answers: each value becomes a blank line. The student copy can instead leave the strips off for students to draw, or put a blank on each strip for its height. Turn on the answer key line to give the sum, the exact integral and the error on the key; Student + key exports both.",
     },
 ];
 

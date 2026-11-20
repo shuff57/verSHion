@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-18T04:46:00+00:00",
-  "src_mtime": 1794976790.298301,
-  "git": "5bd7fee+dirty",
-  "figures": 196
+  "built_at": "2026-11-20T18:21:45+00:00",
+  "src_mtime": 1795197727.6849148,
+  "git": "59620d8+dirty",
+  "figures": 197
  },
  "figures": {
   "free-body-diagram": {
@@ -26727,6 +26727,394 @@
    ],
    "handles": true,
    "label_drag": true,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "riemann-sums": {
+   "id": "riemann-sums",
+   "title": "Riemann Sums and Area",
+   "blurb": "Left, right, midpoint, trapezoid, upper and lower sums of a typed function, from a table, or the exact area under a curve or between two curves.",
+   "params": [
+    {
+     "key": "region",
+     "label": "Area",
+     "kind": "choice",
+     "options": [
+      "Under f(x)",
+      "Between f(x) and g(x)",
+      "From a table of values"
+     ],
+     "default": "Under f(x)"
+    },
+    {
+     "key": "f",
+     "label": "f(x) =",
+     "kind": "text",
+     "options": [],
+     "default": "x^2 + 1"
+    },
+    {
+     "key": "g",
+     "label": "g(x) =",
+     "kind": "text",
+     "options": [],
+     "default": "x^2"
+    },
+    {
+     "key": "bounds",
+     "label": "Bounds",
+     "kind": "choice",
+     "options": [
+      "From a to b",
+      "Where f and g cross"
+     ],
+     "default": "From a to b"
+    },
+    {
+     "key": "a",
+     "label": "a =",
+     "kind": "text",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "b",
+     "label": "b =",
+     "kind": "text",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "table",
+     "label": "Table of x and f(x)",
+     "kind": "long",
+     "options": [],
+     "default": "0, 2; 1, 5; 3, 6; 4, 4; 7, 3"
+    },
+    {
+     "key": "strips",
+     "label": "Strips",
+     "kind": "choice",
+     "options": [
+      "Vertical",
+      "Horizontal",
+      "None (shade the exact area)"
+     ],
+     "default": "Vertical"
+    },
+    {
+     "key": "rule",
+     "label": "Rule",
+     "kind": "choice",
+     "options": [
+      "Left",
+      "Right",
+      "Midpoint",
+      "Trapezoid",
+      "Upper",
+      "Lower"
+     ],
+     "default": "Left"
+    },
+    {
+     "key": "n",
+     "label": "Number of strips n",
+     "kind": "int",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "signed",
+     "label": "Signed area: shade the area below the x-axis differently and count it negative",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "curve",
+     "label": "Draw the curve over the strips",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "mark_bounds",
+     "label": "Mark a and b with vertical lines and labels",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "sample_pts",
+     "label": "Mark the sample point on each strip",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "strip_labels",
+     "label": "Label each strip with",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Heights",
+      "Areas"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "x_marks",
+     "label": "Mark x₀, x₁, …, xₙ on the x-axis",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_dx",
+     "label": "Write Δx = (b − a)/n",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "sum_line",
+     "label": "Write the sum, worked as Δx times the sum of the heights",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "integral_line",
+     "label": "Write the integral ∫ f(x) dx",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "exact_line",
+     "label": "Write the exact value of the integral",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "error_line",
+     "label": "Write the error (the sum minus the exact value)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "values",
+     "label": "Values",
+     "kind": "choice",
+     "options": [
+      "Exact",
+      "Decimals"
+     ],
+     "default": "Exact"
+    },
+    {
+     "key": "dec",
+     "label": "Decimal places",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "shading",
+     "label": "Shading",
+     "kind": "choice",
+     "options": [
+      "Tint",
+      "Hatching"
+     ],
+     "default": "Tint"
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-1.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "3.0"
+    },
+    {
+     "key": "xstep",
+     "label": "x-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ymin",
+     "label": "y-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-1.0"
+    },
+    {
+     "key": "ymax",
+     "label": "y-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "6.0"
+    },
+    {
+     "key": "ystep",
+     "label": "y-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "xunits",
+     "label": "x-axis units",
+     "kind": "choice",
+     "options": [
+      "Numbers",
+      "Multiples of π"
+     ],
+     "default": "Numbers"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Light"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines per step",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "numbers",
+     "label": "Number the axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "xlabel",
+     "label": "x-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "ylabel",
+     "label": "y-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "title_mode",
+     "label": "Title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "student",
+     "label": "The student copy",
+     "kind": "choice",
+     "options": [
+      "Blank the written values",
+      "Curve and bounds only",
+      "Strip heights blank"
+     ],
+     "default": "Blank the written values"
+    },
+    {
+     "key": "key_line",
+     "label": "Answer key line: the sum, the exact integral and the error",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag a along the x-axis"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag b along the x-axis"
+    },
+    {
+     "actions": [
+      "click",
+      "scroll"
+     ],
+     "edit": null,
+     "tip": "Scroll over the strips to add or take away strips"
+    }
+   ],
+   "handles": true,
+   "label_drag": false,
    "show_answers": true,
    "style": true,
    "label_size": true

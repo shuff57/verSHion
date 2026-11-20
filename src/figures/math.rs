@@ -2189,6 +2189,9 @@ pub(crate) use parallel::handles as parallel_handles;
 mod angles;
 pub(crate) use angles::handles as angles_handles;
 mod grid_b7;
+pub(crate) mod riemann;
+mod riemann_exact;
+mod riemann_sym;
 pub(super) use grid_b7::{circle_room as grid_circle_room, label_ext as grid_label_ext};
 pub(super) use grid_b7::{float_text as grid_float_text, row_style_keys as grid_row_style_keys, typed_range as grid_typed_float, ROW_STYLE_KEYS as GRID_ROW_STYLE_KEYS};
 use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
@@ -3082,7 +3085,20 @@ pub fn grid_warnings(p: &Params) -> Vec<String> {
     notes
 }
 
-fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
+fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String { coordinate_grid_build_with(p, notes, &GridHooks::default()) }
+
+/// What another figure drawn on the coordinate grid (the Riemann sums figure) adds to it. The default adds nothing, so the
+/// coordinate grid itself draws exactly as before.
+#[derive(Default)]
+pub(super) struct GridHooks {
+    /// Draw as beside a conic: shading under the gridlines, a softer Standard grid, the tick numbers on halo plates over
+    /// everything drawn before the curves.
+    pub late: bool,
+    /// SVG put after the gridlines and before the axes (clipped to the plot by its author).
+    pub over_grid: String,
+}
+
+fn coordinate_grid_build_with(p: &Params, notes: &mut Vec<String>, hooks: &GridHooks) -> String {
     // like the UI, clamp every control first: the render is safe even for a spec that never was
     let mut pn = p.clone();
     pn.normalize(&coordinate_grid_params(), false);
@@ -3099,7 +3115,7 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
     let has_conic = p.s("equations").split(';').take(MAX_ROWS).any(|r| { let r = r.trim(); !r.is_empty() && is_curve_row(r, x0, x1, y0, y1, deg) });
     // beside a conic (or in Print) the shading goes under the gridlines and the tick numbers over the curves, so
     // neither the hatching nor a curve can hide a number
-    let late = has_conic || print;
+    let late = has_conic || print || hooks.late;
     let mut shade = String::new();
     if p.b("numbers") && (xs * ux < 2.0 && every_n(p.s("xnum")) == 1 || ys * uy < 2.0 && every_n(p.s("ynum")) == 1) {
         notes.push("A line every pixel or two cannot be numbered: choose Every 10th line for the axis numbers, or a larger step".to_string());
@@ -3182,7 +3198,7 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
     // the reference's standard grid is near-black 1 px crisp lines under 2.4 px axes
     let (mut gcol, mut gw, mut mcol, axw) = match gstyle { "Light" => ("#dde3ea", 0.9, "#eef1f5", 2.4), "Bold" => ("#6f7d8c", 1.4, "#b9c2cc", 2.6), "None" => ("none", 0.0, "none", 2.4), _ => ("#111827", 1.0, "#e6ebf1", 2.4) };
     // (beside a conic the standard grid is a mid grey-blue, so it does not outweigh the 2 px curves)
-    if !print && has_conic && gstyle == "Standard" { gcol = "#8794a3"; }
+    if !print && (has_conic || hooks.late) && gstyle == "Standard" { gcol = "#8794a3"; }
     if print { (gcol, gw, mcol) = match gstyle { "Light" => ("#8c8c8c", 1.0, "#d2d2d2"), "Bold" => ("#4a4a4a", 1.8, "#aaaaaa"), "None" => ("none", 0.0, "none"), _ => ("#5a5a5a", 1.4, "#aaaaaa") }; }
     // (a crispEdges group: figures::to_rgba widens its 1 px lines when the preview shrinks, as a browser does)
     let crisp = gstyle == "Standard" || gstyle.is_empty() || print;
@@ -3209,6 +3225,7 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
         let mut n = 0; while k * ys <= y1 + 1e-9 && n < MAX_LINES { if (k as i64).rem_euclid(gsy) == 0 { gl(&mut d, ml, sy(k * ys), ml + pw, sy(k * ys), gcol, gw); } k += 1.0; n += 1; }
         if crisp { d.raw("</g>"); }
     }
+    d.raw(&hooks.over_grid);
     // axes: the reference runs each 20 px past the grid, with a triangle head at both ends
     let ax_y = if y0 <= 0.0 && y1 >= 0.0 { 0.0 } else { y0 };
     let ax_x = if x0 <= 0.0 && x1 >= 0.0 { 0.0 } else { x0 };
@@ -6593,7 +6610,7 @@ pub(super) fn render_for(id: &str) -> Option<fn(&Params) -> String> {
 /// "Start from an example" entries for this subject's figures. Solids and plots (math-b) live in
 /// `examples_b`; flat shapes (math-a) chain their own `examples_a` here with `.or_else`.
 pub fn examples(id: &str) -> Option<Vec<super::Example>> {
-    flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id)).or_else(|| limits::examples(id)).or_else(|| (id == tangent::ID).then(tangent::examples))
+    flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id)).or_else(|| limits::examples(id)).or_else(|| (id == tangent::ID).then(tangent::examples)).or_else(|| (id == riemann::ID).then(riemann::examples))
 }
 
 /// The Measures card of the figure (none yet): rows for the shape's sides/angles/dimensions.
@@ -6761,6 +6778,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::H
         .or_else(|| (id == conics::ID).then(|| conics::handles(p)))
         .or_else(|| (id == limits::ID).then(|| limits::handles(p)))
         .or_else(|| (id == tangent::ID).then(|| tangent::handles(p)))
+        .or_else(|| (id == riemann::ID).then(|| riemann::handles(p)))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's
@@ -6819,6 +6837,7 @@ pub fn defs() -> Vec<FigureDef> {
         f("mapping-diagram", "Mapping Diagram", "Input and output sets joined by arrows, from ordered pairs.", mapping_diagram_params, mapping_diagram_render),
         f("ruler-reading", "Ruler Reading", "A metric or inch ruler with an object to measure at any position and length.", length_reading_params, length_reading_render),
         f(tangent::ID, "Tangent and Secant Lines", "A typed function with the tangent at a point, secants for one or several h, the slopes worked out and the secants closing in on the tangent.", tangent::params, tangent::render),
+        f(riemann::ID, "Riemann Sums and Area", "Left, right, midpoint, trapezoid, upper and lower sums of a typed function, from a table, or the exact area under a curve or between two curves.", riemann::params, riemann::render),
     ]
 }
 

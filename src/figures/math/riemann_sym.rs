@@ -1,0 +1,1061 @@
+//! Exact values for the Riemann sums figure, derived by exact arithmetic and never guessed from a decimal. A typed
+//! function is read into a tree by the same rules as the coordinate grid's reader (and checked against that reader at
+//! many points before it is trusted); the tree is evaluated over an exact number type: rationals, and rational
+//! combinations of products of √n, ∛n, π^k, e^q and ln p. f at a sample point, Δx, the sum and the error are built from
+//! these pieces term by term; an integral is exact only from an antiderivative this module actually has (polynomials,
+//! powers and reciprocals of a linear expression, e^(kx + m), sin and cos of kx + m, |…| split at its exact zeros).
+//! Anything else gives no exact value, and the figure writes a rounded decimal with ≈.
+use super::riemann_exact::Rat;
+use std::collections::BTreeMap;
+use std::f64::consts::{E as EULER, PI};
+
+// ───────────────────────── the tree ─────────────────────────
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Fun { Sqrt, Abs, Sin, Cos, Tan, Ln, Exp, Log }
+
+#[derive(Clone, Debug)]
+pub enum Node { Num(Rat), X, Pi, E, Neg(Box<Node>), Add(Box<Node>, Box<Node>), Sub(Box<Node>, Box<Node>), Mul(Box<Node>, Box<Node>), Div(Box<Node>, Box<Node>), Pow(Box<Node>, Box<Node>), F(Fun, Box<Node>) }
+use Node::*;
+
+fn bx(n: Node) -> Box<Node> { Box::new(n) }
+
+struct P<'a> { s: &'a [char], i: usize }
+impl<'a> P<'a> {
+    fn ws(&mut self) { while self.i < self.s.len() && self.s[self.i] == ' ' { self.i += 1; } }
+    fn peek(&mut self) -> Option<char> { self.ws(); self.s.get(self.i).copied() }
+    fn expr(&mut self) -> Option<Node> {
+        let mut v = self.term()?;
+        loop {
+            match self.peek() {
+                Some('+') => { self.i += 1; v = Add(bx(v), bx(self.term()?)); }
+                Some('-') => { self.i += 1; v = Sub(bx(v), bx(self.term()?)); }
+                _ => return Some(v),
+            }
+        }
+    }
+    fn term(&mut self) -> Option<Node> {
+        let mut v = self.unary()?;
+        loop {
+            match self.peek() {
+                Some('*') => { self.i += 1; v = Mul(bx(v), bx(self.unary()?)); }
+                Some('/') => { self.i += 1; v = Div(bx(v), bx(self.unary()?)); }
+                Some(c) if c.is_ascii_digit() || c == '.' || c == '(' || c.is_alphabetic() => { v = Mul(bx(v), bx(self.power()?)); }
+                _ => return Some(v),
+            }
+        }
+    }
+    fn unary(&mut self) -> Option<Node> {
+        match self.peek() {
+            Some('-') => { self.i += 1; Some(Neg(bx(self.unary()?))) }
+            Some('+') => { self.i += 1; self.unary() }
+            _ => self.power(),
+        }
+    }
+    fn power(&mut self) -> Option<Node> {
+        let b = self.atom()?;
+        if self.peek() == Some('^') { self.i += 1; let e = self.unary()?; return Some(Pow(bx(b), bx(e))); }
+        Some(b)
+    }
+    fn arg(&mut self) -> Option<Node> {
+        if self.peek()? != '(' { return None; }
+        self.i += 1;
+        let a = self.expr()?;
+        if self.peek()? != ')' { return None; }
+        self.i += 1;
+        Some(a)
+    }
+    fn atom(&mut self) -> Option<Node> {
+        match self.peek()? {
+            '(' => { self.i += 1; let v = self.expr()?; if self.peek()? != ')' { return None; } self.i += 1; Some(v) }
+            c if c.is_ascii_digit() || c == '.' => {
+                let st = self.i;
+                while self.i < self.s.len() && (self.s[self.i].is_ascii_digit() || self.s[self.i] == '.') { self.i += 1; }
+                let t: String = self.s[st..self.i].iter().collect();
+                let mut r = dec_rat(&t)?;
+                // (scientific notation, as the reader takes it: 2.5e-1 is 1/4 exactly; the tree is trusted only
+                // where it agrees with the reader, so no other reading of "e" can slip through)
+                if self.i < self.s.len() && (self.s[self.i] == 'e' || self.s[self.i] == 'E') && self.s.get(self.i + 1).is_some_and(|c| c.is_ascii_digit() || *c == '-' || *c == '+') {
+                    let mut j = self.i + 1;
+                    let neg = self.s[j] == '-';
+                    if self.s[j] == '-' || self.s[j] == '+' { j += 1; }
+                    let ds = j;
+                    while j < self.s.len() && self.s[j].is_ascii_digit() { j += 1; }
+                    if j == ds { return None; }
+                    let k: u32 = self.s[ds..j].iter().collect::<String>().parse().ok().filter(|k| *k <= 30)?;
+                    let p = Rat::new(10i128.checked_pow(k)?, 1)?;
+                    r = if neg { r.div(p)? } else { r.mul(p)? };
+                    self.i = j;
+                }
+                Some(Num(r))
+            }
+            '\u{3c0}' => { self.i += 1; Some(Pi) }
+            c if c.is_alphabetic() => {
+                let st = self.i;
+                while self.i < self.s.len() && self.s[self.i].is_ascii_alphabetic() { self.i += 1; }
+                let name: String = self.s[st..self.i].iter().collect();
+                match name.as_str() {
+                    "x" => return Some(X),
+                    "pi" => return Some(Pi),
+                    "e" => return Some(E),
+                    _ => {}
+                }
+                // (log is base 10, as the reader takes it; log_b(…) has no exact reading here)
+                if name == "log" && self.peek() == Some('_') { return None; }
+                let f = match name.as_str() { "sqrt" => Fun::Sqrt, "abs" => Fun::Abs, "sin" => Fun::Sin, "cos" => Fun::Cos, "tan" => Fun::Tan, "ln" => Fun::Ln, "exp" => Fun::Exp, "log" => Fun::Log, _ => {
+                    // (as the reader does: a run starting with x or e is x or e times the rest; any other name has no exact reading)
+                    if name.starts_with('x') { self.i = st + 1; return Some(X); }
+                    if name.starts_with('e') && !["exp"].contains(&name.as_str()) && !is_known(&name) { self.i = st + 1; return Some(E); }
+                    return None;
+                } };
+                let a = self.arg()?;
+                Some(F(f, bx(a)))
+            }
+            _ => None,
+        }
+    }
+}
+fn is_known(n: &str) -> bool { ["sqrt", "abs", "sin", "cos", "tan", "sec", "csc", "cot", "arcsin", "arccos", "arctan", "asin", "acos", "atan", "ln", "log", "exp"].contains(&n) }
+/// "0.25" → 1/4, "3" → 3.
+fn dec_rat(t: &str) -> Option<Rat> {
+    let (w, f) = t.split_once('.').unwrap_or((t, ""));
+    if w.len() + f.len() > 15 { return None; }
+    let n: i128 = format!("{w}{f}").parse().ok().or(if w.is_empty() && f.is_empty() { None } else { Some(0) })?;
+    Rat::new(n, 10i128.pow(f.len() as u32))
+}
+
+/// The tree of a typed expression (as normalised for the grid's reader: |…| is abs(…)), when it is read whole.
+pub fn parse(src: &str) -> Option<Node> {
+    let cs: Vec<char> = super::norm_expr(src);
+    if cs.len() > 300 { return None; }
+    let mut p = P { s: &cs, i: 0 };
+    let n = p.expr()?;
+    p.ws();
+    (p.i == cs.len()).then_some(n)
+}
+
+/// The tree's value at x, in floating point (odd roots of negative bases real, as the figure reads them).
+pub fn num(n: &Node, x: f64) -> Option<f64> {
+    let v = match n {
+        Num(r) => r.f(),
+        X => x,
+        Pi => PI,
+        E => EULER,
+        Neg(a) => -num(a, x)?,
+        Add(a, b) => num(a, x)? + num(b, x)?,
+        Sub(a, b) => num(a, x)? - num(b, x)?,
+        Mul(a, b) => num(a, x)? * num(b, x)?,
+        Div(a, b) => num(a, x)? / num(b, x)?,
+        Pow(a, b) => {
+            let (u, e) = (num(a, x)?, num(b, x)?);
+            // (a negative base to a constant power with an odd denominator: the real odd root)
+            if u < 0.0 && !depends(b) && let Some(r) = eval(b, &Ex::zero()).and_then(|e| e.as_rat()) && r.d % 2 == 1 && r.d > 1 { let m = u.abs().powf(e); if r.n % 2 != 0 { -m } else { m } } else { u.powf(e) }
+        }
+        F(f, a) => {
+            let u = num(a, x)?;
+            match f { Fun::Sqrt => u.sqrt(), Fun::Abs => u.abs(), Fun::Sin => u.sin(), Fun::Cos => u.cos(), Fun::Tan => u.tan(), Fun::Ln => u.ln(), Fun::Exp => u.exp(), Fun::Log => u.log10() }
+        }
+    };
+    v.is_finite().then_some(v)
+}
+
+/// The tree of a typed function, trusted only when it agrees with the figure's own reading (`ev`) at 41 points.
+pub fn tree_of(src: &str, ev: &dyn Fn(f64) -> Option<f64>) -> Option<Node> {
+    let n = parse(src)?;
+    let mut seen = 0;
+    for k in 0..=40 {
+        let x = -5.0 + 0.25 * k as f64 + 0.0137;
+        match (num(&n, x), ev(x)) {
+            (Some(a), Some(b)) => { if (a - b).abs() > 1e-9 * a.abs().max(b.abs()).max(1.0) { return None; } seen += 1; }
+            (None, None) => {}
+            _ => return None,
+        }
+    }
+    (seen > 0).then_some(n)
+}
+
+// ───────────────────────── exact numbers ─────────────────────────
+
+/// A product of the named irrationals: √sq · ∛cb · π^pi · e^e · Π (ln p)^k.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Mono { pub sq: i64, pub cb: i64, pub pi: i32, pub e: (i128, i128), pub ln: Vec<(i64, i32)> }
+impl Mono {
+    pub fn one() -> Mono { Mono { sq: 1, cb: 1, pi: 0, e: (0, 1), ln: vec![] } }
+    fn is_one(&self) -> bool { *self == Mono::one() }
+    fn erat(&self) -> Rat { Rat { n: self.e.0, d: self.e.1 } }
+    pub fn approx(&self) -> f64 {
+        (self.sq as f64).sqrt() * (self.cb as f64).cbrt() * PI.powi(self.pi) * EULER.powf(self.erat().f()) * self.ln.iter().map(|(p, k)| (*p as f64).ln().powi(*k)).product::<f64>()
+    }
+}
+
+/// k with k^power dividing n and the rest (n = k^power · rest), for n up to 10^12.
+fn pull(n: i64, power: u32) -> Option<(i64, i64)> {
+    if n <= 0 || n > 1_000_000_000_000 { return None; }
+    let (mut k, mut rest) = (1i64, n);
+    let mut d = 2i64;
+    while d.checked_pow(power)? <= rest {
+        let dp = d.pow(power);
+        while rest % dp == 0 { rest /= dp; k *= d; }
+        d += 1;
+        if d > 1_000_000 { break; }
+    }
+    Some((k, rest))
+}
+fn primes(mut n: i128) -> Option<Vec<(i64, i32)>> {
+    if n <= 0 || n > 1_000_000_000_000 { return None; }
+    let mut v = vec![];
+    let mut d = 2i128;
+    while d * d <= n { let mut k = 0; while n % d == 0 { n /= d; k += 1; } if k > 0 { v.push((d as i64, k)); } d += 1; }
+    if n > 1 { v.push((n as i64, 1)); }
+    Some(v)
+}
+
+/// Σ coefficient · monomial, exact.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ex(pub BTreeMap<Mono, Rat>);
+impl Ex {
+    pub fn zero() -> Ex { Ex(BTreeMap::new()) }
+    pub fn rat(r: Rat) -> Ex { let mut m = BTreeMap::new(); if !r.is_zero() { m.insert(Mono::one(), r); } Ex(m) }
+    pub fn int(k: i128) -> Ex { Ex::rat(Rat::int(k)) }
+    fn term(c: Rat, m: Mono) -> Ex { let mut t = BTreeMap::new(); if !c.is_zero() { t.insert(m, c); } Ex(t) }
+    pub fn pi() -> Ex { Ex::term(Rat::int(1), Mono { pi: 1, ..Mono::one() }) }
+    pub fn e_pow(q: Rat) -> Ex { Ex::term(Rat::int(1), Mono { e: (q.n, q.d), ..Mono::one() }) }
+    pub fn is_zero(&self) -> bool { self.0.is_empty() }
+    pub fn as_rat(&self) -> Option<Rat> { if self.0.is_empty() { return Some(Rat::zero()); } if self.0.len() == 1 { let (m, c) = self.0.iter().next()?; if m.is_one() { return Some(*c); } } None }
+    pub fn approx(&self) -> f64 { self.0.iter().map(|(m, c)| c.f() * m.approx()).sum() }
+    pub fn add(&self, o: &Ex) -> Option<Ex> {
+        let mut m = self.0.clone();
+        for (k, c) in &o.0 {
+            let s = match m.get(k) { Some(x) => x.add(*c)?, None => *c };
+            if s.is_zero() { m.remove(k); } else { m.insert(k.clone(), s); }
+        }
+        (m.len() <= 64).then_some(Ex(m))
+    }
+    pub fn neg(&self) -> Ex { Ex(self.0.iter().map(|(k, c)| (k.clone(), Rat { n: -c.n, d: c.d })).collect()) }
+    pub fn sub(&self, o: &Ex) -> Option<Ex> { self.add(&o.neg()) }
+    pub fn scale(&self, r: Rat) -> Option<Ex> { self.mul(&Ex::rat(r)) }
+    pub fn mul(&self, o: &Ex) -> Option<Ex> {
+        let mut out = Ex::zero();
+        for (ma, ca) in &self.0 {
+            for (mb, cb) in &o.0 {
+                let (k, m) = mono_mul(ma, mb)?;
+                out = out.add(&Ex::term(ca.mul(*cb)?.mul(k)?, m))?;
+            }
+        }
+        Some(out)
+    }
+    /// 1/self, for a single term only.
+    pub fn inv(&self) -> Option<Ex> {
+        if self.0.len() != 1 { return None; }
+        let (m, c) = self.0.iter().next()?;
+        let (k, mi) = mono_inv(m)?;
+        Some(Ex::term(Rat::int(1).div(*c)?.mul(k)?, mi))
+    }
+    pub fn div(&self, o: &Ex) -> Option<Ex> { self.mul(&o.inv()?) }
+    pub fn pow_int(&self, k: i64) -> Option<Ex> {
+        if k.abs() > 24 { return None; }
+        if k < 0 { return self.inv()?.pow_int(-k); }
+        let mut r = Ex::int(1);
+        for _ in 0..k { r = r.mul(self)?; }
+        Some(r)
+    }
+    /// self^(p/q): an integer power, or a square or cube root of a single term (of a negative base too for the cube
+    /// root), or any power of a pure power of e.
+    pub fn pow_rat(&self, r: Rat) -> Option<Ex> {
+        if self.is_zero() { return (r.n > 0).then(Ex::zero); }
+        if r.d == 1 { return self.pow_int(r.n as i64); }
+        if self.0.len() != 1 { return None; }
+        let (m, c) = self.0.iter().next()?;
+        // e^a to any rational power, times a rational coefficient 1
+        if c.n == 1 && c.d == 1 && m.sq == 1 && m.cb == 1 && m.pi == 0 && m.ln.is_empty() {
+            let q = m.erat().mul(r)?;
+            return Some(Ex::e_pow(q));
+        }
+        // (any other root only where it comes out rational: (−1)^(6/5) = 1, 32^(1/5) = 2)
+        if r.d != 2 && r.d != 3 {
+            if !m.is_one() || r.d > 12 || (c.n < 0 && r.d % 2 == 0) { return None; }
+            let root = |v: i128| -> Option<i128> { let k = (v.abs() as f64).powf(1.0 / r.d as f64).round() as i128; (k.checked_pow(r.d as u32)? == v.abs()).then_some(if v < 0 { -k } else { k }) };
+            return Ex::rat(Rat::new(root(c.n)?, root(c.d)?)?).pow_int(r.n as i64);
+        }
+        let q = r.d as i64;
+        if m.sq != 1 || m.cb != 1 || !m.ln.is_empty() || m.pi % q as i32 != 0 { return None; }
+        let (s, t) = (c.n, c.d);
+        let root = if q == 2 {
+            if s < 0 { return None; }
+            let st = i64::try_from(s.checked_mul(t)?).ok()?;
+            let (k, rest) = pull(st, 2)?;
+            Ex::term(Rat::new(k as i128, t)?, Mono { sq: rest, ..Mono::one() })
+        } else {
+            let sign = if s < 0 { -1 } else { 1 };
+            let st = i64::try_from(s.abs().checked_mul(t.checked_mul(t)?)?).ok()?;
+            let (k, rest) = pull(st, 3)?;
+            Ex::term(Rat::new(sign * k as i128, t)?, Mono { cb: rest, ..Mono::one() })
+        };
+        let mono_rest = Ex::term(Rat::int(1), Mono { pi: m.pi / q as i32, e: { let e = m.erat().div(Rat::int(q as i128))?; (e.n, e.d) }, ..Mono::one() });
+        root.mul(&mono_rest)?.pow_int(r.n as i64)
+    }
+    /// The sign, when the value is plainly not zero (exact zero is 0).
+    pub fn sign(&self) -> Option<i32> {
+        if self.is_zero() { return Some(0); }
+        let v = self.approx();
+        let scale: f64 = self.0.iter().map(|(m, c)| (c.f() * m.approx()).abs()).fold(0.0, f64::max);
+        (v.abs() > 1e-9 * scale.max(1e-300)).then(|| if v > 0.0 { 1 } else { -1 })
+    }
+}
+
+fn mono_mul(a: &Mono, b: &Mono) -> Option<(Rat, Mono)> {
+    let (k2, sq) = pull(a.sq.checked_mul(b.sq)?, 2)?;
+    let (k3, cb) = pull(a.cb.checked_mul(b.cb)?, 3)?;
+    let e = a.erat().add(b.erat())?;
+    let mut ln: BTreeMap<i64, i32> = a.ln.iter().cloned().collect();
+    for (p, k) in &b.ln { *ln.entry(*p).or_default() += k; }
+    let ln: Vec<(i64, i32)> = ln.into_iter().filter(|(_, k)| *k != 0).collect();
+    Some((Rat::int(k2 as i128 * k3 as i128), Mono { sq, cb, pi: a.pi + b.pi, e: (e.n, e.d), ln }))
+}
+fn mono_inv(m: &Mono) -> Option<(Rat, Mono)> {
+    // 1/√n = √n/n, 1/∛n = ∛(n²)/n
+    let (k3, cb) = pull(m.cb.checked_mul(m.cb)?, 3)?;
+    let c = Rat::new(k3 as i128, m.sq as i128 * m.cb as i128)?;
+    let e = m.erat();
+    Some((c, Mono { sq: m.sq, cb, pi: -m.pi, e: (-e.n, e.d), ln: m.ln.iter().map(|(p, k)| (*p, -k)).collect() }))
+}
+
+/// ln of an exact value: of a positive rational (by its primes), of e^q, of √n, ∛n; None otherwise.
+fn ln_ex(u: &Ex) -> Option<Ex> {
+    if u.0.len() != 1 { return None; }
+    let (m, c) = u.0.iter().next()?;
+    if c.n <= 0 || m.pi != 0 || !m.ln.is_empty() { return None; }
+    let mut out = Ex::zero();
+    let lnp = |p: i64, k: Rat| Ex::term(k, Mono { ln: vec![(p, 1)], ..Mono::one() });
+    for (p, k) in primes(c.n)? { out = out.add(&lnp(p, Rat::int(k as i128)))?; }
+    for (p, k) in primes(c.d)? { out = out.add(&lnp(p, Rat::int(-k as i128)))?; }
+    for (p, k) in primes(m.sq as i128)? { out = out.add(&lnp(p, Rat::new(k as i128, 2)?))?; }
+    for (p, k) in primes(m.cb as i128)? { out = out.add(&lnp(p, Rat::new(k as i128, 3)?))?; }
+    out.add(&Ex::rat(m.erat()))
+}
+
+/// e^u, for u a rational plus rational multiples of ln p: e^(r + k ln p) = e^r · p^k (e^(ln 2) = 2).
+fn exp_ex(u: &Ex) -> Option<Ex> {
+    let mut out = Ex::int(1);
+    for (m, c) in &u.0 {
+        let factor = if m.is_one() { Ex::e_pow(*c) }
+            else if m.sq == 1 && m.cb == 1 && m.pi == 0 && m.e == (0, 1) && m.ln.len() == 1 && m.ln[0].1 == 1 { Ex::int(m.ln[0].0 as i128).pow_rat(*c)? }
+            else { return None };
+        out = out.mul(&factor)?;
+    }
+    Some(out)
+}
+
+/// a/b when a is a rational multiple of b (the same monomials in the same proportion).
+fn ratio(a: &Ex, b: &Ex) -> Option<Rat> {
+    if a.0.len() != b.0.len() { return None; }
+    let mut r: Option<Rat> = None;
+    for (m, c) in &a.0 {
+        let q = c.div(*b.0.get(m)?)?;
+        if r.is_some_and(|x| x != q) { return None; }
+        r = Some(q);
+    }
+    r
+}
+
+/// sin(kπ/12) for the angles a textbook knows (multiples of π/6 and π/4).
+fn sin_pi(r: Rat) -> Option<Ex> {
+    let t = r.mul(Rat::int(12))?;
+    if t.d != 1 { return None; }
+    let k = t.n.rem_euclid(24);
+    let half = Rat::new(1, 2)?;
+    let s2 = Ex::term(half, Mono { sq: 2, ..Mono::one() });
+    let s3 = Ex::term(half, Mono { sq: 3, ..Mono::one() });
+    let v = match k { 0 | 12 => Ex::zero(), 2 | 10 => Ex::rat(half), 3 | 9 => s2, 4 | 8 => s3, 6 => Ex::int(1), 14 | 22 => Ex::rat(half).neg(), 15 | 21 => s2.neg(), 16 | 20 => s3.neg(), 18 => Ex::int(-1), _ => return None };
+    Some(v)
+}
+/// The angle as a rational multiple of π (0 included).
+fn pi_mult(u: &Ex) -> Option<Rat> {
+    if u.is_zero() { return Some(Rat::zero()); }
+    if u.0.len() != 1 { return None; }
+    let (m, c) = u.0.iter().next()?;
+    (*m == Mono { pi: 1, ..Mono::one() }).then_some(*c)
+}
+
+/// The tree's exact value at an exact x.
+pub fn eval(n: &Node, x: &Ex) -> Option<Ex> {
+    Some(match n {
+        Num(r) => Ex::rat(*r),
+        X => x.clone(),
+        Pi => Ex::pi(),
+        E => Ex::e_pow(Rat::int(1)),
+        Neg(a) => eval(a, x)?.neg(),
+        Add(a, b) => eval(a, x)?.add(&eval(b, x)?)?,
+        Sub(a, b) => eval(a, x)?.sub(&eval(b, x)?)?,
+        Mul(a, b) => eval(a, x)?.mul(&eval(b, x)?)?,
+        Div(a, b) => eval(a, x)?.div(&eval(b, x)?)?,
+        Pow(a, b) if matches!(**a, E) => exp_ex(&eval(b, x)?)?,
+        Pow(a, b) => {
+            let e = eval(b, x)?.as_rat()?;
+            eval(a, x)?.pow_rat(e)?
+        }
+        F(f, a) => {
+            let u = eval(a, x)?;
+            match f {
+                Fun::Sqrt => u.pow_rat(Rat::new(1, 2)?)?,
+                Fun::Abs => match u.sign()? { -1 => u.neg(), _ => u },
+                Fun::Ln => ln_ex(&u)?,
+                // log u exactly only where it is rational: ln u a rational multiple of ln 10 (log 1000 = 3, log 1 = 0)
+                Fun::Log => { let lu = ln_ex(&u)?; if lu.is_zero() { Ex::zero() } else { Ex::rat(ratio(&lu, &ln_ex(&Ex::int(10))?)?) } }
+                Fun::Exp => exp_ex(&u)?,
+                Fun::Sin => sin_pi(pi_mult(&u)?)?,
+                Fun::Cos => sin_pi(pi_mult(&u)?.add(Rat::new(1, 2)?)?)?,
+                Fun::Tan => { let r = pi_mult(&u)?; let c = sin_pi(r.add(Rat::new(1, 2)?)?)?; if c.is_zero() { return None; } sin_pi(r)?.div(&c)? }
+            }
+        }
+    })
+}
+
+/// The exact value, checked against a floating-point value of the same quantity (a slip in either is never written).
+pub fn checked(e: Option<Ex>, v: f64) -> Option<Ex> {
+    let e = e?;
+    let a = e.approx();
+    ((a - v).abs() <= 1e-9 * a.abs().max(v.abs()).max(1.0)).then_some(e)
+}
+
+// ───────────────────────── derivatives and candidates ─────────────────────────
+
+/// The derivative of the tree, by the usual rules (None where it has none here, such as a variable power of a variable).
+pub fn deriv(n: &Node) -> Option<Node> {
+    let c = |r: i128| Num(Rat::int(r));
+    Some(match n {
+        Num(_) | Pi | E => c(0),
+        X => c(1),
+        Neg(a) => Neg(bx(deriv(a)?)),
+        Add(a, b) => Add(bx(deriv(a)?), bx(deriv(b)?)),
+        Sub(a, b) => Sub(bx(deriv(a)?), bx(deriv(b)?)),
+        Mul(a, b) => Add(bx(Mul(bx(deriv(a)?), b.clone())), bx(Mul(a.clone(), bx(deriv(b)?)))),
+        Div(a, b) => Div(bx(Sub(bx(Mul(bx(deriv(a)?), b.clone())), bx(Mul(a.clone(), bx(deriv(b)?))))), bx(Pow(b.clone(), bx(c(2))))),
+        Pow(a, b) if !depends(b) => Mul(bx(Mul(b.clone(), bx(Pow(a.clone(), bx(Sub(b.clone(), bx(c(1)))))))), bx(deriv(a)?)),
+        Pow(a, b) if !depends(a) => Mul(bx(Mul(bx(n.clone()), bx(F(Fun::Ln, a.clone())))), bx(deriv(b)?)),
+        Pow(..) => return None,
+        F(f, a) => {
+            let da = deriv(a)?;
+            let outer = match f {
+                Fun::Sqrt => Div(bx(Num(Rat::new(1, 2)?)), bx(F(Fun::Sqrt, a.clone()))),
+                Fun::Abs => Div(a.clone(), bx(F(Fun::Abs, a.clone()))),
+                Fun::Sin => F(Fun::Cos, a.clone()),
+                Fun::Cos => Neg(bx(F(Fun::Sin, a.clone()))),
+                Fun::Tan => Div(bx(c(1)), bx(Pow(bx(F(Fun::Cos, a.clone())), bx(c(2))))),
+                Fun::Ln => Div(bx(c(1)), a.clone()),
+                Fun::Exp => F(Fun::Exp, a.clone()),
+                Fun::Log => Div(bx(c(1)), bx(Mul(a.clone(), bx(F(Fun::Ln, bx(c(10))))))),
+            };
+            Mul(bx(outer), bx(da))
+        }
+    })
+}
+
+/// The exact numbers near x worth trying: the simple fraction (denominator up to 1000) and the simple multiple of π
+/// (denominator up to 24) closest to it.
+pub fn candidates(x: f64) -> Vec<Ex> {
+    let tol = 1e-6 * x.abs().max(1.0);
+    let mut out = vec![];
+    if let Some(r) = Rat::near(x, 1000, tol) { out.push(Ex::rat(r)); }
+    if let Some(r) = Rat::near(x / PI, 24, tol / PI) && let Some(e) = Ex::pi().scale(r) { out.push(e); }
+    // (a simple power of e: e, 1/e, √e, e², the turning point of ln x / x and of x ln x)
+    if x > 0.0 && let Some(q) = Rat::near(x.ln(), 6, 1e-7) && !q.is_zero() { out.push(Ex::e_pow(q)); }
+    out
+}
+/// The insides of every |…| in the tree.
+pub fn abs_args_of(n: &Node, out: &mut Vec<Node>) { abs_args(n, out) }
+
+// ───────────────────────── print ─────────────────────────
+
+fn sup(k: i64) -> String { if k == 1 { String::new() } else { format!("^{k}") } }
+/// e^q (q > 0) as a book writes it: e, e^2, √e, e√e, e^(2/3).
+fn e_text(q: Rat) -> String {
+    if q.d == 1 { return format!("e{}", sup(q.n as i64)); }
+    if q.d == 2 { let k = (q.n - 1) / 2; return format!("{}\u{221a}e", if k == 0 { String::new() } else { format!("e{}", sup(k as i64)) }); }
+    format!("e^({}/{})", q.n, q.d)
+}
+fn gcd_i(a: i128, b: i128) -> i128 { if b == 0 { a.abs() } else { gcd_i(b, a % b) } }
+
+/// One written term: its rational coefficient, the factors over it and under it (π, e, roots; roots last), the logarithms
+/// that follow it (always after every other factor, set off by a space), and its value (for the self-check).
+struct Term { c: Rat, num: Vec<String>, den: Vec<String>, rational: bool, val: f64, logs: String, log_den: String }
+impl Term {
+    /// The term without its sign, with the coefficient `c` (scaled for a shared denominator).
+    fn text(&self, c: Rat) -> String {
+        let (cn, cd) = (c.n.abs(), c.d);
+        if !self.logs.is_empty() {
+            // a coefficient (rational, roots, π, e) before the logarithms: √2 ln 2, (√3/3) ln 3, (25/32) ln(5/4),
+            // π ln(3/2), (1/2)(ln(3/2))^2; a factor never follows a log's argument
+            let plain = Term { c, num: self.num.clone(), den: self.den.clone(), rational: false, val: 0.0, logs: String::new(), log_den: String::new() };
+            let coef = plain.text(c);
+            if self.logs == "1" {
+                let den = if self.log_den.contains(' ') { format!("({})", self.log_den) } else { self.log_den.clone() };
+                return if coef.contains('/') { format!("({coef})/{den}") } else { format!("{coef}/{den}") };
+            }
+            let mut s = if coef == "1" { self.logs.clone() } else if coef.contains('/') || coef.contains(' ') {
+                if self.logs.starts_with('(') { format!("({coef}){}", self.logs) } else { format!("({coef}) {}", self.logs) }
+            } else { format!("{coef} {}", self.logs) };
+            if !self.log_den.is_empty() { s = if self.log_den.contains(' ') { format!("{s}/({})", self.log_den) } else { format!("{s}/{}", self.log_den) }; }
+            return s;
+        }
+        // (roots last, so √2 never reads as the root of what follows)
+        let num: String = self.num.concat();
+        let lead = if num.is_empty() { cn.to_string() } else if cn == 1 { String::new() } else { cn.to_string() };
+        let sep = if !lead.is_empty() && num.starts_with('^') { "\u{2009}" } else { "" };
+        let top = format!("{lead}{sep}{num}");
+        let mut bottom = String::new();
+        if cd != 1 { bottom.push_str(&cd.to_string()); }
+        for f in &self.den { bottom.push_str(f); }
+        if bottom.is_empty() { return top; }
+        let many = (cd != 1 && !self.den.is_empty()) || self.den.len() > 1;
+        if many { format!("{top}/({bottom})") } else { format!("{top}/{bottom}") }
+    }
+}
+
+/// ln(n/d) as written: ln 6, ln(3/2).
+fn ln_arg(n: i128, d: i128) -> String { if d == 1 { format!("ln {n}") } else { format!("ln({n}/{d})") } }
+
+/// Σ cᵢ ln pᵢ as one term g·ln(N/D): g the largest rational all the cᵢ are whole multiples of, N/D the product of the
+/// primes to those multiples; an integer g taken into the argument while it stays under a million (ln 4, not 2 ln 2).
+/// None when the argument would be too large (or overflow).
+fn one_log(logs: &[(i64, Rat)]) -> Option<(Rat, i128, i128)> {
+    let l = logs.iter().try_fold(1i128, |acc, (_, c)| (acc / gcd_i(acc, c.d)).checked_mul(c.d))?;
+    let nums: Vec<i128> = logs.iter().map(|(_, c)| c.n.checked_mul(l / c.d)).collect::<Option<_>>()?;
+    let gn = nums.iter().fold(0i128, |acc, v| gcd_i(acc, *v));
+    if gn == 0 { return None; }
+    let g = Rat::new(gn, l)?;
+    let (mut n, mut d) = (1i128, 1i128);
+    for ((p, _), v) in logs.iter().zip(&nums) {
+        let e = v / gn;
+        let pw = (*p as i128).checked_pow(u32::try_from(e.unsigned_abs()).ok()?)?;
+        if e > 0 { n = n.checked_mul(pw)?; } else { d = d.checked_mul(pw)?; }
+        if n > 1_000_000 || d > 1_000_000 { return None; }
+    }
+    Some(absorb(g, n, d))
+}
+/// A whole-number multiple goes into the argument while it stays small: 2 ln(3/2) = ln(9/4), 2 ln 2 = ln 4.
+fn absorb(g: Rat, n: i128, d: i128) -> (Rat, i128, i128) {
+    // (while the power stays a small number: ln 4 and ln(9/4), but 8 ln 2, not ln 256)
+    if g.d == 1 && g.n > 1 && g.n <= 3 && let (Some(nn), Some(dd)) = (n.checked_pow(g.n as u32), d.checked_pow(g.n as u32)) && nn <= 100 && dd <= 100 {
+        return (Rat::int(1), nn, dd);
+    }
+    (g, n, d)
+}
+
+/// Σ cₚ ln p as the fewest terms gⱼ ln(Nⱼ/Dⱼ) (one or two, each ratio's parts at most 100), each gⱼ one of the |cₚ| and every prime's coefficient a
+/// small whole combination of them: (25/32) ln(5/4) + (49/32) ln(7/4), never split into the logs of primes. None when
+/// there is no such form.
+fn log_terms(logs: &[(i64, Rat)]) -> Option<Vec<(Rat, i128, i128)>> {
+    if let Some(t) = one_log(logs) { return Some(vec![t]); }
+    let mut gens: Vec<Rat> = vec![];
+    for (_, c) in logs { let a = Rat { n: c.n.abs(), d: c.d }; if !gens.contains(&a) { gens.push(a); } }
+    gens.truncate(6);
+    // the whole combination Σ gⱼ eⱼ = c with the least Σ|eⱼ| (|eⱼ| ≤ 6), solved for the last one
+    let solve = |g: &[Rat], c: Rat| -> Option<Vec<i128>> {
+        let m = g.len();
+        let mut best: Option<Vec<i128>> = None;
+        let mut e = vec![0i128; m];
+        let free = m - 1;
+        let total = 13usize.pow(free as u32);
+        for k in 0..total {
+            let mut r = c;
+            let mut kk = k;
+            for j in 0..free { e[j] = (kk % 13) as i128 - 6; kk /= 13; r = r.sub(g[j].mul(Rat::int(e[j]))?)?; }
+            let last = r.div(g[free])?;
+            if last.d != 1 || last.n.abs() > 6 { continue; }
+            e[free] = last.n;
+            let cost: i128 = e.iter().map(|x| x.abs()).sum();
+            if best.as_ref().is_none_or(|b| cost < b.iter().map(|x| x.abs()).sum()) { best = Some(e.clone()); }
+        }
+        best
+    };
+    // (two terms at most: three logs of made-up ratios, (5/4) ln(15/4) + (1/2) ln(7/20) + (1/4) ln 143, read as no book)
+    for m in 2..=2usize.min(gens.len()) {
+        let mut found: Option<(f64, Vec<(Rat, i128, i128)>)> = None;
+        let idx: Vec<usize> = (0..gens.len()).collect();
+        let mut subsets: Vec<Vec<usize>> = vec![];
+        for a in &idx { for b in &idx { if b <= a { continue; } if m == 2 { subsets.push(vec![*a, *b]); continue; } for c in &idx { if c > b { subsets.push(vec![*a, *b, *c]); } } } }
+        'sub: for sub in subsets {
+            let g: Vec<Rat> = sub.iter().map(|&k| gens[k]).collect();
+            let (mut ns, mut ds) = (vec![1i128; m], vec![1i128; m]);
+            for (p, c) in logs {
+                let Some(e) = solve(&g, *c) else { continue 'sub };
+                for j in 0..m {
+                    let Some(pw) = (*p as i128).checked_pow(e[j].unsigned_abs() as u32) else { continue 'sub };
+                    let slot = if e[j] > 0 { &mut ns[j] } else { &mut ds[j] };
+                    let Some(v) = slot.checked_mul(pw) else { continue 'sub };
+                    // (each a small ratio, as a book's terms are: 5/4, 7/4; else no form)
+                    if v > 100 { continue 'sub; }
+                    *slot = v;
+                }
+            }
+            if (0..m).any(|j| ns[j] == ds[j]) { continue; }
+            let cost: f64 = (0..m).map(|j| ((ns[j] * ds[j]) as f64).log10()).sum();
+            if found.as_ref().is_none_or(|f| cost < f.0) { found = Some((cost, (0..m).map(|j| absorb(g[j], ns[j], ds[j])).collect())); }
+        }
+        if let Some((_, t)) = found { return Some(t); }
+    }
+    None
+}
+
+/// Σ c ln p ln q (p ≤ q) as g·(ln(N/D))², when it is one squared logarithm: (ln 3)² + (ln 5)² − 2 ln 3 ln 5 = (ln(5/3))².
+fn square_log(q: &[((i64, i64), Rat)]) -> Option<(Rat, i128, i128)> {
+    let mut ps: Vec<i64> = q.iter().flat_map(|((p, r), _)| [*p, *r]).collect();
+    ps.sort(); ps.dedup();
+    let get = |p: i64, r: i64| -> Rat { let (a, b) = if p <= r { (p, r) } else { (r, p) }; q.iter().find(|(k, _)| *k == (a, b)).map(|x| x.1).unwrap_or(Rat::zero()) };
+    let p0 = *ps.iter().find(|p| !get(**p, **p).is_zero())?;
+    let d0 = get(p0, p0);
+    // eₚ/eₚ₀ = c(p₀, p) / (2 c(p₀, p₀))
+    let r: Vec<Rat> = ps.iter().map(|&p| if p == p0 { Some(Rat::int(1)) } else { get(p0, p).div(d0.mul(Rat::int(2))?) }).collect::<Option<_>>()?;
+    for (i, &p) in ps.iter().enumerate() {
+        for (j, &s) in ps.iter().enumerate() {
+            if j < i { continue; }
+            let want = d0.mul(r[i])?.mul(r[j])?.mul(Rat::int(if i == j { 1 } else { 2 }))?;
+            if want != get(p, s) { return None; }
+        }
+    }
+    let l = r.iter().try_fold(1i128, |acc, x| (acc / gcd_i(acc, x.d)).checked_mul(x.d))?;
+    let ints: Vec<i128> = r.iter().map(|x| x.n.checked_mul(l / x.d)).collect::<Option<_>>()?;
+    let gi = ints.iter().fold(0i128, |acc, v| gcd_i(acc, *v));
+    if gi == 0 { return None; }
+    let e: Vec<i128> = ints.iter().map(|v| v / gi).collect();
+    let e0 = e[ps.iter().position(|p| *p == p0)?];
+    let g = d0.div(Rat::int(e0.checked_mul(e0)?))?;
+    let (mut n, mut d) = (1i128, 1i128);
+    for (p, k) in ps.iter().zip(&e) {
+        let pw = (*p as i128).checked_pow(u32::try_from(k.unsigned_abs()).ok()?)?;
+        if *k > 0 { n = n.checked_mul(pw)?; } else { d = d.checked_mul(pw)?; }
+        if n > 1_000_000 || d > 1_000_000 { return None; }
+    }
+    Some(if n >= d { (g, n, d) } else { (g, d, n) })
+}
+
+impl Ex {
+    /// The value as a textbook writes it, in the figure's markup (^ raises the next token): 14/3, (e − 1)/2, π√2/8,
+    /// ln(3/2), (8/9) ln(3/2), √2 ln 2, (25/32) ln(5/4) + (49/32) ln(7/4), (1/2)(ln(3/2))^2, 1 − √2/2, 1/(2e), e^(−3/2),
+    /// −3 ³√2 − 6. A log's argument is one number or bracketed, and nothing multiplies it from after. None when it would
+    /// be too long to read (over 5 terms or 60 characters), when its logs have no such form, or when the written terms,
+    /// evaluated, do not give the value (a self-check on every form).
+    pub fn text(&self) -> Option<String> {
+        if self.0.is_empty() { return Some("0".into()); }
+        let mut terms: Vec<Term> = vec![];
+        // the factors other than logs, over and under
+        let outer = |m: &Mono| -> (Vec<String>, Vec<String>) {
+            let (mut num, mut den) = (vec![], vec![]);
+            if m.pi > 0 { num.push(format!("\u{3c0}{}", sup(m.pi as i64))); } else if m.pi < 0 { den.push(format!("\u{3c0}{}", sup(-m.pi as i64))); }
+            let e = m.erat();
+            // (e to a negative fraction raised as a power, e^(−3/2): never 1/e√e, which reads as √e/e)
+            if e.n > 0 { num.push(e_text(e)); } else if e.n < 0 && e.d == 1 { den.push(e_text(Rat { n: -e.n, d: e.d })); } else if e.n < 0 { num.push(format!("e^(\u{2212}{}/{})", -e.n, e.d)); }
+            if m.sq != 1 { num.push(format!("\u{221a}{}", m.sq)); }
+            if m.cb != 1 { num.push(format!("^3\u{221a}{}", m.cb)); }
+            (num, den)
+        };
+        // logs grouped by the factor they multiply: the first power of one log (combined), products of two (one square),
+        // anything else as it stands
+        let mut lin: BTreeMap<Mono, Vec<(i64, Rat)>> = BTreeMap::new();
+        let mut quad: BTreeMap<Mono, Vec<((i64, i64), Rat)>> = BTreeMap::new();
+        for (m, c) in &self.0 {
+            if m.ln.is_empty() { continue; }
+            let o = Mono { ln: vec![], ..m.clone() };
+            if m.ln.len() == 1 && m.ln[0].1 == 1 { lin.entry(o).or_default().push((m.ln[0].0, *c)); continue; }
+            if m.ln.len() == 1 && m.ln[0].1 == 2 { quad.entry(o).or_default().push(((m.ln[0].0, m.ln[0].0), *c)); continue; }
+            if m.ln.len() == 2 && m.ln[0].1 == 1 && m.ln[1].1 == 1 { quad.entry(o).or_default().push(((m.ln[0].0, m.ln[1].0), *c)); continue; }
+            let (num, den) = outer(m);
+            let mut logs: Vec<String> = vec![];
+            let mut log_den: Vec<String> = vec![];
+            for (p, k) in &m.ln {
+                let t = if k.abs() == 1 { format!("ln {p}") } else { format!("(ln {p})^{}", k.abs()) };
+                if *k > 0 { logs.push(t); } else { log_den.push(t); }
+            }
+            // (a log only under the line: 1/ln 2 written with a 1 over it)
+            let logs = if logs.is_empty() && !log_den.is_empty() { "1".to_string() } else { logs.join(" ") };
+            terms.push(Term { c: *c, num, den, rational: m.is_one(), val: c.f() * m.approx(), logs, log_den: log_den.join(" ") });
+        }
+        for (o, logs) in &lin {
+            let (num, den) = outer(o);
+            for (g, n, d) in log_terms(logs)? {
+                // (−ln 2 and −(3/2) ln 2, not ln(1/2) or (3/2) ln(1/2); a fraction's own log, (7/13) ln(7/13), as it falls)
+                let flip = n < d && (g.d == 1 || n == 1);
+                let (c, a, b) = if flip { (Rat { n: -g.n, d: g.d }, d, n) } else { (g, n, d) };
+                terms.push(Term { c, num: num.clone(), den: den.clone(), rational: false, val: c.f() * o.approx() * (a as f64 / b as f64).ln(), logs: ln_arg(a, b), log_den: String::new() });
+            }
+        }
+        for (o, q) in &quad {
+            let (num, den) = outer(o);
+            if q.len() == 1 && q[0].0.0 != q[0].0.1 {
+                let ((p, r), c) = q[0];
+                terms.push(Term { c, num, den, rational: false, val: c.f() * o.approx() * (p as f64).ln() * (r as f64).ln(), logs: format!("ln {p} ln {r}"), log_den: String::new() });
+                continue;
+            }
+            let (g, n, d) = square_log(q)?;
+            let arg = ln_arg(n, d);
+            terms.push(Term { c: g, num, den, rational: false, val: g.f() * o.approx() * (n as f64 / d as f64).ln().powi(2), logs: format!("({arg})^2"), log_den: String::new() });
+        }
+        for (m, c) in &self.0 {
+            if !m.ln.is_empty() { continue; }
+            let (num, den) = outer(m);
+            terms.push(Term { c: *c, num, den, rational: m.is_one(), val: c.f() * m.approx(), logs: String::new(), log_den: String::new() });
+        }
+        if terms.is_empty() { return Some("0".into()); }
+        if terms.len() > 5 { return None; }
+        // the self-check: the terms as written must add up to the value
+        let total: f64 = terms.iter().map(|t| t.val).sum();
+        let v = self.approx();
+        let scale = terms.iter().map(|t| t.val.abs()).fold(v.abs(), f64::max).max(1e-300);
+        if !((total - v).abs() <= 1e-9 * scale) { return None; }
+        // the irrational terms first, a positive one leading (e − 1, ln 5 − 2 ln 2); a negative irrational after a positive
+        // rational one (1 − √2/2)
+        let (mut irr, rat): (Vec<Term>, Vec<Term>) = terms.into_iter().partition(|t| !t.rational);
+        irr.sort_by_key(|t| t.c.n < 0);
+        let lead_neg_irr = irr.first().is_some_and(|t| t.c.n < 0) && rat.first().is_some_and(|t| t.c.n > 0);
+        let order: Vec<Term> = if lead_neg_irr { rat.into_iter().chain(irr).collect() } else { irr.into_iter().chain(rat).collect() };
+        // terms that all share one denominator over a common line: (e − 1)/2, (√2 + 1)/2
+        let d0 = order[0].c.d;
+        let shared = order.len() > 1 && d0 > 1 && order.iter().all(|t| t.c.d == d0 && t.den.is_empty() && t.logs.is_empty());
+        let mut out = String::new();
+        for (k, t) in order.iter().enumerate() {
+            let c = if shared { Rat { n: t.c.n, d: 1 } } else { t.c };
+            let body = t.text(c);
+            if k == 0 { if t.c.n < 0 { out.push('\u{2212}'); } out.push_str(&body); } else { out.push_str(if t.c.n < 0 { " \u{2212} " } else { " + " }); out.push_str(&body); }
+        }
+        if shared { out = format!("({out})/{d0}"); }
+        (out.chars().count() <= 60).then_some(out)
+    }
+}
+
+// ───────────────────────── polynomials and integrals ─────────────────────────
+
+/// The tree as a polynomial with rational coefficients (constant first), when it is one (degree up to 12).
+pub fn poly(n: &Node) -> Option<Vec<Rat>> {
+    fn add(a: &[Rat], b: &[Rat], sign: i128) -> Option<Vec<Rat>> {
+        let mut v = vec![Rat::zero(); a.len().max(b.len())];
+        for (k, c) in a.iter().enumerate() { v[k] = c.clone(); }
+        for (k, c) in b.iter().enumerate() { v[k] = v[k].add(c.mul(Rat::int(sign))?)?; }
+        Some(v)
+    }
+    fn mul(a: &[Rat], b: &[Rat]) -> Option<Vec<Rat>> {
+        if a.len() + b.len() > 14 { return None; }
+        let mut v = vec![Rat::zero(); a.len() + b.len() - 1];
+        for (i, x) in a.iter().enumerate() { for (j, y) in b.iter().enumerate() { v[i + j] = v[i + j].add(x.mul(*y)?)?; } }
+        Some(v)
+    }
+    Some(match n {
+        Num(r) => vec![*r],
+        X => vec![Rat::zero(), Rat::int(1)],
+        Neg(a) => poly(a)?.iter().map(|c| Rat { n: -c.n, d: c.d }).collect(),
+        Add(a, b) => add(&poly(a)?, &poly(b)?, 1)?,
+        Sub(a, b) => add(&poly(a)?, &poly(b)?, -1)?,
+        Mul(a, b) => mul(&poly(a)?, &poly(b)?)?,
+        Div(a, b) => { let d = poly(b)?; if d.iter().skip(1).any(|c| !c.is_zero()) || d.first()?.is_zero() { return None; } poly(a)?.iter().map(|c| c.div(d[0])).collect::<Option<_>>()? }
+        Pow(a, b) => { let e = poly(b)?; if e.iter().skip(1).any(|c| !c.is_zero()) { return None; } let e = e.first().copied().unwrap_or(Rat::zero()); if e.d != 1 || e.n < 0 || e.n > 12 { return None; } let base = poly(a)?; let mut r = vec![Rat::int(1)]; for _ in 0..e.n { r = mul(&r, &base)?; } r }
+        _ => return None,
+    })
+}
+/// p(x) exactly at an exact x.
+pub fn poly_at(p: &[Rat], x: &Ex) -> Option<Ex> {
+    let mut r = Ex::zero();
+    for c in p.iter().rev() { r = r.mul(x)?.add(&Ex::rat(*c))?; }
+    Some(r)
+}
+/// Whether the tree has x in it (a tree without is a constant).
+pub fn depends(n: &Node) -> bool {
+    match n { X => true, Num(_) | Pi | E => false, Neg(a) | F(_, a) => depends(a), Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) => depends(a) || depends(b) }
+}
+fn has_abs(n: &Node) -> bool {
+    match n { F(Fun::Abs, _) => true, X | Num(_) | Pi | E => false, Neg(a) | F(_, a) => has_abs(a), Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) => has_abs(a) || has_abs(b) }
+}
+fn abs_args(n: &Node, out: &mut Vec<Node>) {
+    match n { F(Fun::Abs, a) => { out.push((**a).clone()); abs_args(a, out); } X | Num(_) | Pi | E => {}, Neg(a) | F(_, a) => abs_args(a, out), Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) => { abs_args(a, out); abs_args(b, out); } }
+}
+/// The tree with each |…| replaced by ± its inside, by the inside's sign at x.
+fn unabs(n: &Node, x: f64) -> Option<Node> {
+    Some(match n {
+        F(Fun::Abs, a) => { let v = num(a, x)?; let a = unabs(a, x)?; if v < 0.0 { Neg(bx(a)) } else { a } }
+        X | Num(_) | Pi | E => n.clone(),
+        Neg(a) => Neg(bx(unabs(a, x)?)),
+        F(f, a) => F(*f, bx(unabs(a, x)?)),
+        Add(a, b) => Add(bx(unabs(a, x)?), bx(unabs(b, x)?)),
+        Sub(a, b) => Sub(bx(unabs(a, x)?), bx(unabs(b, x)?)),
+        Mul(a, b) => Mul(bx(unabs(a, x)?), bx(unabs(b, x)?)),
+        Div(a, b) => Div(bx(unabs(a, x)?), bx(unabs(b, x)?)),
+        Pow(a, b) => Pow(bx(unabs(a, x)?), bx(unabs(b, x)?)),
+    })
+}
+
+/// Where the tree changes sign strictly inside (a, b), each found as an exact number the tree is exactly 0 at
+/// (a simple fraction or a simple multiple of π, tried and then checked exactly); None if a change cannot be pinned so.
+pub fn exact_sign_changes(n: &Node, a: f64, b: f64) -> Option<Vec<(f64, Ex)>> {
+    let k = 2000;
+    let mut out = vec![];
+    let mut prev: Option<(f64, f64)> = None;
+    for i in 0..=k {
+        let x = a + (b - a) * i as f64 / k as f64;
+        let Some(y) = num(n, x) else { prev = None; continue };
+        if let Some((px, py)) = prev && py != 0.0 && y != 0.0 && py.signum() != y.signum() {
+            let (mut l, mut r, fl) = (px, x, py);
+            for _ in 0..80 { let m = 0.5 * (l + r); let Some(v) = num(n, m) else { return None }; if v == 0.0 { l = m; r = m; break; } if v.signum() == fl.signum() { l = m; } else { r = m; } }
+            let root = 0.5 * (l + r);
+            out.push((root, exact_zero(n, root)?));
+        }
+        if y == 0.0 && i > 0 && i < k {
+            // (a zero right on a sample: a change only if the sign differs either side)
+            let (l, r) = (num(n, x - (b - a) * 1e-7), num(n, x + (b - a) * 1e-7));
+            if let (Some(l), Some(r)) = (l, r) && l.signum() != r.signum() && out.last().is_none_or(|q: &(f64, Ex)| (q.0 - x).abs() > 1e-9) { out.push((x, exact_zero(n, x)?)); }
+            prev = None;
+            continue;
+        }
+        prev = Some((x, y));
+    }
+    Some(out)
+}
+/// Algebraic zeros derived from polynomial coefficients, never from a float.
+/// Quadratics use the quadratic formula; zero/rational factors reduce higher
+/// degrees, and a translated pure cube gives a real cube root. Other roots
+/// remain numerical. Every returned value is checked by exact substitution.
+pub fn algebraic_zeros(n: &Node) -> Vec<Ex> {
+    fn solve(mut p: Vec<Rat>) -> Option<Vec<Ex>> {
+        while p.last().is_some_and(|c| c.is_zero()) { p.pop(); }
+        let deg = p.len().saturating_sub(1);
+        if deg == 0 { return Some(vec![]); }
+        if deg == 1 { return Some(vec![Ex::rat(p[0].mul(Rat::int(-1))?.div(p[1])?)]); }
+        if deg == 2 {
+            let disc = p[1].mul(p[1])?.sub(p[2].mul(p[0])?.mul(Rat::int(4))?)?;
+            if disc.n < 0 { return Some(vec![]); }
+            let root = Ex::rat(disc).pow_rat(Rat::new(1, 2)?)?;
+            let b = Ex::rat(p[1]).neg();
+            let den = Ex::rat(p[2].mul(Rat::int(2))?);
+            return Some(vec![b.sub(&root)?.div(&den)?, b.add(&root)?.div(&den)?]);
+        }
+        // Rational-root theorem after clearing the coefficient denominators.
+        // A bounded divisor list keeps arbitrary typed polynomials quick.
+        let mut candidates = vec![Rat::zero()];
+        let lcm = p.iter().try_fold(1i128, |a, c| (a / gcd_i(a, c.d)).checked_mul(c.d));
+        let divisors = |v: i128| -> Vec<i128> {
+            let Some(v) = v.checked_abs() else { return vec![] };
+            if v == 0 || v > 1_000_000 { return vec![]; }
+            let mut out = vec![];
+            let mut i = 1;
+            while i*i <= v { if v % i == 0 { out.push(i); if i*i != v { out.push(v/i); } } i += 1; }
+            out
+        };
+        if let Some(l) = lcm {
+            if let (Some(a), Some(b)) = (p[0].n.checked_mul(l / p[0].d), p[deg].n.checked_mul(l / p[deg].d)) {
+                for a in divisors(a) { for b in divisors(b) { for sign in [-1, 1] { candidates.push(Rat::new(sign*a, b)?); } } }
+            }
+        }
+        for r in candidates {
+            let mut q = vec![Rat::zero(); deg];
+            q[deg-1] = p[deg];
+            let mut valid = true;
+            for i in (1..deg).rev() { if let Some(v) = q[i].mul(r).and_then(|v| v.add(p[i])) { q[i-1] = v; } else { valid = false; break; } }
+            if valid && q[0].mul(r).and_then(|v| v.add(p[0])).is_some_and(|v| v.is_zero()) {
+                let mut out = vec![Ex::rat(r)];
+                out.extend(solve(q)?);
+                return Some(out);
+            }
+        }
+        if deg == 3 {
+            // x=u-b/(3a); when the depressed cubic has no u term,
+            // u³=-f(-b/(3a))/a. This includes (x-h)³=k.
+            let shift = p[2].mul(Rat::int(-1))?.div(p[3].mul(Rat::int(3))?)?;
+            let linear = p[1].add(p[2].mul(shift)?.mul(Rat::int(2))?)?.add(p[3].mul(shift.mul(shift)?)?.mul(Rat::int(3))?)?;
+            if linear.is_zero() {
+                let at = poly_at(&p, &Ex::rat(shift))?.as_rat()?;
+                let cube = Ex::rat(at.mul(Rat::int(-1))?.div(p[3])?).pow_rat(Rat::new(1, 3)?)?;
+                return Some(vec![cube.add(&Ex::rat(shift))?]);
+            }
+        }
+        Some(vec![])
+    }
+    let mut out = poly(n).and_then(solve).unwrap_or_default();
+    out.retain(|x| eval(n, x).is_some_and(|v| v.is_zero()));
+    out.sort_by(|a, b| a.approx().total_cmp(&b.approx()));
+    out.dedup_by(|a, b| a.sub(b).is_some_and(|v| v.is_zero()));
+    out
+}
+/// An exact zero near x: a verified rational or rational multiple of π, or a
+/// root derived algebraically from the polynomial coefficients.
+pub fn exact_zero(n: &Node, x: f64) -> Option<Ex> {
+    let tol = 1e-7 * x.abs().max(1.0);
+    let mut cands = vec![];
+    if let Some(r) = Rat::near(x, 1000, tol) { cands.push(Ex::rat(r)); }
+    if let Some(r) = Rat::near(x / PI, 12, tol / PI) { cands.push(Ex::pi().scale(r)?); }
+    cands.into_iter().find(|c| eval(n, c).is_some_and(|v| v.is_zero()))
+        .or_else(|| algebraic_zeros(n).into_iter().find(|c| (c.approx() - x).abs() <= tol))
+}
+
+/// u as k·x + m with rational k ≠ 0, m.
+fn linear(u: &Node) -> Option<(Rat, Rat)> {
+    let p = poly(u)?;
+    if p.len() > 2 && p[2..].iter().any(|c| !c.is_zero()) { return None; }
+    let k = p.get(1).copied().unwrap_or(Rat::zero());
+    (!k.is_zero()).then(|| (k, p[0]))
+}
+
+/// ∫ₐᵇ of the tree exactly, from an antiderivative this module has; None otherwise.
+pub fn integral(n: &Node, a: &Ex, b: &Ex) -> Option<Ex> {
+    let (af, bf) = (a.approx(), b.approx());
+    if has_abs(n) {
+        // |…| split where its inside changes sign (each such place exact), each piece integrated without it
+        let mut args = vec![];
+        abs_args(n, &mut args);
+        let mut cuts: Vec<(f64, Ex)> = vec![(af, a.clone()), (bf, b.clone())];
+        for u in &args { cuts.extend(exact_sign_changes(u, af, bf)?); }
+        cuts.sort_by(|p, q| p.0.total_cmp(&q.0));
+        cuts.dedup_by(|p, q| (p.0 - q.0).abs() < 1e-12);
+        let mut total = Ex::zero();
+        for w in cuts.windows(2) {
+            let piece = unabs(n, 0.5 * (w[0].0 + w[1].0))?;
+            if has_abs(&piece) { return None; }
+            total = total.add(&integral(&piece, &w[0].1, &w[1].1)?)?;
+        }
+        return Some(total);
+    }
+    if let Some(p) = poly(n) {
+        let mut acc = Ex::zero();
+        for (k, c) in p.iter().enumerate() {
+            if c.is_zero() { continue; }
+            let up = (k + 1) as i64;
+            let d = poly_pow(b, up)?.sub(&poly_pow(a, up)?)?;
+            acc = acc.add(&d.scale(c.div(Rat::int(up as i128))?)?)?;
+        }
+        return Some(acc);
+    }
+    // a constant (π, e, √2 …): times b − a
+    if !depends(n) { return eval(n, &Ex::zero())?.mul(&b.sub(a)?); }
+    let anti = |f: &dyn Fn(&Ex) -> Option<Ex>| -> Option<Ex> { f(b)?.sub(&f(a)?) };
+    // a polynomial times sin, cos or e of kx + m: by parts, as many times as the polynomial's degree
+    if let Mul(l, r) = n {
+        for (pn, tn) in [(l, r), (r, l)] {
+            let Some(pp) = poly(pn) else { continue };
+            let (kind, u) = match tn.as_ref() { F(Fun::Sin, u) => (0, u), F(Fun::Cos, u) => (1, u), F(Fun::Exp, u) => (2, u), Pow(base, u) if matches!(base.as_ref(), E) => (2, u), _ => continue };
+            let Some((k, m)) = linear(u) else { continue };
+            return parts(&pp, kind, k, m, a, b);
+        }
+    }
+    match n {
+        Add(x, y) => integral(x, a, b)?.add(&integral(y, a, b)?),
+        Sub(x, y) => integral(x, a, b)?.sub(&integral(y, a, b)?),
+        Neg(x) => Some(integral(x, a, b)?.neg()),
+        Mul(c, u) if !depends(c) => eval(c, &Ex::zero())?.mul(&integral(u, a, b)?),
+        Mul(u, c) if !depends(c) => eval(c, &Ex::zero())?.mul(&integral(u, a, b)?),
+        Div(u, c) if !depends(c) => integral(u, a, b)?.div(&eval(c, &Ex::zero())?),
+        // ln x / x: (ln x)²/2
+        Div(u, d) if matches!(d.as_ref(), X) && matches!(u.as_ref(), F(Fun::Ln, v) if matches!(v.as_ref(), X)) => anti(&|x| { let l = ln_ex(x)?; l.mul(&l)?.scale(Rat::new(1, 2)?) }),
+        Div(c, d) if !depends(c) => {
+            let c = eval(c, &Ex::zero())?;
+            // c/u, c/u^r
+            match d.as_ref() {
+                Pow(u, r) if !depends(r) => { let r = eval(r, &Ex::zero())?.as_rat()?; let (k, m) = linear(u)?; Some(c.mul(&power_anti(k, m, Rat { n: -r.n, d: r.d }, a, b)?)?) }
+                u => { let (k, m) = linear(u)?; Some(c.mul(&power_anti(k, m, Rat::int(-1), a, b)?)?) }
+            }
+        }
+        Pow(u, r) if !depends(r) && depends(u) => { let r = eval(r, &Ex::zero())?.as_rat()?; let (k, m) = linear(u)?; power_anti(k, m, r, a, b) }
+        Pow(base, u) if matches!(base.as_ref(), E) => { let (k, m) = linear(u)?; anti(&|x| Ex::e_pow(lin_at(k, m, x)?.as_rat()?).scale(Rat::int(1).div(k)?)) }
+        F(Fun::Exp, u) => { let (k, m) = linear(u)?; anti(&|x| Ex::e_pow(lin_at(k, m, x)?.as_rat()?).scale(Rat::int(1).div(k)?)) }
+        F(Fun::Sqrt, u) => { let (k, m) = linear(u)?; power_anti(k, m, Rat::new(1, 2)?, a, b) }
+        F(Fun::Sin, u) => { let (k, m) = linear(u)?; anti(&|x| sin_pi(pi_mult(&lin_at(k, m, x)?)?.add(Rat::new(1, 2)?)?)?.scale(Rat::int(-1).div(k)?)) }
+        F(Fun::Cos, u) => { let (k, m) = linear(u)?; anti(&|x| sin_pi(pi_mult(&lin_at(k, m, x)?)?)?.scale(Rat::int(1).div(k)?)) }
+        // ln(kx + m): (u ln u − u)/k, u = kx + m (4 ln 4 − 3 for ∫₁⁴ ln x dx)
+        F(Fun::Ln, u) => { let (k, m) = linear(u)?; anti(&|x| { let u = lin_at(k, m, x)?; u.mul(&ln_ex(&u)?)?.sub(&u)?.scale(Rat::int(1).div(k)?) }) }
+        _ => None,
+    }
+}
+/// ∫ₐᵇ P(x)·T(kx + m) dx for T = sin (0), cos (1) or exp (2), by parts: [P·G] − ∫P′·G with G the antiderivative of T.
+fn parts(p: &[Rat], kind: u8, k: Rat, m: Rat, a: &Ex, b: &Ex) -> Option<Ex> {
+    if p.iter().all(|c| c.is_zero()) { return Some(Ex::zero()); }
+    let inv_k = Rat::int(1).div(k)?;
+    // G at x: −cos(u)/k, sin(u)/k or e^u/k
+    let g = |x: &Ex| -> Option<Ex> {
+        let u = lin_at(k, m, x)?;
+        let v = match kind { 0 => sin_pi(pi_mult(&u)?.add(Rat::new(1, 2)?)?)?.neg(), 1 => sin_pi(pi_mult(&u)?)?, _ => Ex::e_pow(u.as_rat()?) };
+        v.scale(inv_k)
+    };
+    let bracket = poly_at(p, b)?.mul(&g(b)?)?.sub(&poly_at(p, a)?.mul(&g(a)?)?)?;
+    let dp: Vec<Rat> = p.iter().enumerate().skip(1).map(|(j, c)| c.mul(Rat::int(j as i128))).collect::<Option<_>>()?;
+    let rest = match kind {
+        0 => parts(&dp, 1, k, m, a, b)?.scale(inv_k)?,
+        1 => parts(&dp, 0, k, m, a, b)?.scale(inv_k)?.neg(),
+        _ => parts(&dp, 2, k, m, a, b)?.scale(inv_k)?.neg(),
+    };
+    bracket.add(&rest)
+}
+fn poly_pow(x: &Ex, k: i64) -> Option<Ex> { x.pow_int(k) }
+fn lin_at(k: Rat, m: Rat, x: &Ex) -> Option<Ex> { x.scale(k)?.add(&Ex::rat(m)) }
+/// ∫ₐᵇ (kx + m)^r dx exactly: ln|u| for r = −1 (u the same sign at both ends), else u^(r+1)/(k(r+1)).
+fn power_anti(k: Rat, m: Rat, r: Rat, a: &Ex, b: &Ex) -> Option<Ex> {
+    let (ua, ub) = (lin_at(k, m, a)?, lin_at(k, m, b)?);
+    if r == Rat::int(-1) {
+        let (sa, sb) = (ua.sign()?, ub.sign()?);
+        if sa == 0 || sa != sb { return None; }
+        let abs = |u: Ex| if sa < 0 { u.neg() } else { u };
+        return ln_ex(&abs(ub))?.sub(&ln_ex(&abs(ua))?)?.scale(Rat::int(1).div(k)?);
+    }
+    let r1 = r.add(Rat::int(1))?;
+    ub.pow_rat(r1)?.sub(&ua.pow_rat(r1)?)?.scale(Rat::int(1).div(k.mul(r1)?)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn ex_of(s: &str) -> Ex { eval(&parse(s).unwrap(), &Ex::zero()).unwrap() }
+    #[test]
+    fn exact_values_and_forms() {
+        assert_eq!(ex_of("sqrt(8)").text().unwrap(), "2\u{221a}2");
+        assert_eq!(ex_of("sin(pi/4)").text().unwrap(), "\u{221a}2/2");
+        assert_eq!(ex_of("1 - sin(pi/4)").text().unwrap(), "1 \u{2212} \u{221a}2/2");
+        assert_eq!(ex_of("e - 1").text().unwrap(), "e \u{2212} 1");
+        assert_eq!(ex_of("ln(4)").text().unwrap(), "ln 4");
+        assert_eq!(ex_of("ln(3) - ln(2)").text().unwrap(), "ln(3/2)");
+        assert_eq!(ex_of("e^(1/2)/2 + 1/2").text().unwrap(), "(\u{221a}e + 1)/2");
+        assert_eq!(ex_of("1/(2e)").text().unwrap(), "1/(2e)");
+        assert_eq!(ex_of("pi*sqrt(2)/8").text().unwrap(), "\u{3c0}\u{221a}2/8");
+        assert_eq!(ex_of("(-8)^(1/3)").text().unwrap(), "\u{2212}2");
+        assert_eq!(ex_of("5^(1/3)").text().unwrap(), "^3\u{221a}5");
+        assert_eq!(ex_of("3*5^(1/3)").text().unwrap(), "3\u{2009}^3\u{221a}5");
+        assert_eq!(ex_of("2^(3/2)").text().unwrap(), "2\u{221a}2");
+        assert_eq!(ex_of("1/sqrt(2)").text().unwrap(), "\u{221a}2/2");
+        assert!(ex_of("sqrt(2)*sqrt(2) - 2").is_zero());
+        assert_eq!(ex_of("e^2*e^(-1)").text().unwrap(), "e");
+        // a root or π times a log: the factor before the log, the log's argument one number or bracketed
+        assert_eq!(ex_of("sqrt(2) ln(2)").text().unwrap(), "\u{221a}2 ln 2");
+        assert_eq!(ex_of("sqrt(3) ln(3)/3").text().unwrap(), "(\u{221a}3/3) ln 3");
+        assert_eq!(ex_of("sqrt(2) ln(2) + sqrt(3) ln(3) + 4 ln(2)").text().unwrap(), "4 ln 2 + \u{221a}2 ln 2 + \u{221a}3 ln 3");
+        assert_eq!(ex_of("3 sqrt(10) ln(5/2)/4").text().unwrap(), "(3\u{221a}10/4) ln(5/2)");
+        assert_eq!(ex_of("pi ln(3) - pi ln(2)").text().unwrap(), "\u{3c0} ln(3/2)");
+        // two logs with different multiples stay two logs of the typed ratios, not logs of primes
+        assert_eq!(ex_of("(25/32) ln(5/4) + (49/32) ln(7/4)").text().unwrap(), "(25/32) ln(5/4) + (49/32) ln(7/4)");
+        // a squared log stays one squared log
+        assert_eq!(ex_of("ln(5/3)^2").text().unwrap(), "(ln(5/3))^2");
+        assert_eq!(ex_of("ln(3/2)^2/2").text().unwrap(), "(1/2)(ln(3/2))^2");
+        assert_eq!(ex_of("ln(2) ln(3)").text().unwrap(), "ln 2 ln 3");
+        // −(3/2) ln 2, not (3/2) ln(1/2); (7/13) ln(7/13) as it falls
+        assert_eq!(ex_of("(3/4) ln(1/4)").text().unwrap(), "\u{2212}(3/2) ln 2");
+        assert_eq!(ex_of("(1/2) ln(1/10)").text().unwrap(), "\u{2212}(1/2) ln 10");
+        assert_eq!(ex_of("(7/13) ln(7/13)").text().unwrap(), "(7/13) ln(7/13)");
+        assert!(eval(&parse("sin(1)").unwrap(), &Ex::zero()).is_none(), "sin 1 has no exact form here");
+        assert!(eval(&parse("1/(1 + sqrt(2))").unwrap(), &Ex::zero()).is_none(), "a sum is not inverted");
+    }
+    #[test]
+    fn integrals_from_antiderivatives() {
+        let i = |f: &str, a: &str, b: &str| { let z = Ex::zero(); integral(&parse(f).unwrap(), &eval(&parse(a).unwrap(), &z).unwrap(), &eval(&parse(b).unwrap(), &z).unwrap()).map(|e| e.text().unwrap()) };
+        assert_eq!(i("x^2 + 1", "0", "2").unwrap(), "14/3");
+        assert_eq!(i("abs(x - 1)", "0", "3").unwrap(), "5/2");
+        assert_eq!(i("1/x", "1", "4").unwrap(), "ln 4");
+        assert_eq!(i("sin(x)", "0", "pi").unwrap(), "2");
+        assert_eq!(i("e^x", "0", "1").unwrap(), "e \u{2212} 1");
+        assert_eq!(i("sqrt(x)", "0", "4").unwrap(), "16/3");
+        assert_eq!(i("x^(1/3)", "-8", "1").unwrap(), "\u{2212}45/4");
+        assert_eq!(i("1/(x + 1)", "0", "3").unwrap(), "ln 4");
+        assert_eq!(i("2^x", "0", "3"), None, "no antiderivative here for 2^x");
+        // by parts: ∫₀^π x sin x dx = [sin x − x cos x] = π; ∫₀¹ x eˣ dx = 1; ∫₀³ x e^(−x) dx = 1 − 4/e³
+        assert_eq!(i("x sin(x)", "0", "pi").unwrap(), "\u{3c0}");
+        assert_eq!(i("x e^x", "0", "1").unwrap(), "1");
+        assert_eq!(i("x + pi", "0", "1").unwrap(), "\u{3c0} + 1/2");
+        assert_eq!(i("1/(1 + x^2)", "0", "1"), None);
+        // ∫ ln: x ln x − x at the bounds; ∫ ln x / x = (ln x)²/2
+        assert_eq!(i("ln(x)", "1", "4").unwrap(), "8 ln 2 \u{2212} 3");
+        assert_eq!(i("ln(x)", "1", "e").unwrap(), "1");
+        assert_eq!(i("ln(x)/x", "1", "e").unwrap(), "1/2");
+    }
+}

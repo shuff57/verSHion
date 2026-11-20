@@ -7,316 +7,316 @@
    "id": "cap-01",
    "text": "Type the function f(x)",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"f\": \"4 - x^2\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-02",
    "text": "Set the bounds a and b, typed exactly (fractions, π)",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"a\": \"1/2\", \"b\": \"pi/2\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-03",
    "text": "Set the number of strips n",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"n\": 8}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-04",
    "text": "Draw a left Riemann sum",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"rule\": \"Left\", \"sample_pts\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-05",
    "text": "Draw a right Riemann sum",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"rule\": \"Right\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-06",
    "text": "Draw a midpoint Riemann sum",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"rule\": \"Midpoint\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-07",
    "text": "Draw a trapezoid sum",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"rule\": \"Trapezoid\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-08",
    "text": "Draw an upper sum: each strip as tall as the function's greatest value anywhere on that strip, not just the higher endpoint",
    "class": "core",
-   "evidence": "",
-   "note": "owner decision 2026-11-12: the true greatest value on the strip"
+   "evidence": "changes:{\"f\": \"3x - x^2\", \"b\": \"3\", \"n\": 3, \"rule\": \"Upper\", \"sum_line\": true, \"sample_pts\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-09",
    "text": "Draw a lower sum: each strip as tall as the function's least value anywhere on that strip, not just the lower endpoint",
    "class": "core",
-   "evidence": "",
-   "note": "owner decision 2026-11-12: the true least value on the strip"
+   "evidence": "changes:{\"f\": \"(x - 1.5)^2 + 1\", \"b\": \"3\", \"n\": 3, \"rule\": \"Lower\", \"sum_line\": true, \"sample_pts\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-10",
    "text": "Make the strips from a typed table of x and f(x) values, widths unequal (AP style)",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"region\": \"From a table of values\", \"xmax\": 8.0, \"ymax\": 7.0}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-11",
    "text": "Shade the exact area under the curve from a to b, with no strips",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"strips\": \"None (shade the exact area)\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-12",
    "text": "Shade the area between two curves f and g from a to b",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"region\": \"Between f(x) and g(x)\", \"g\": \"x\", \"strips\": \"None (shade the exact area)\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-13",
    "text": "Shade the area between two curves bounded by where they cross, the crossings found",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"region\": \"Between f(x) and g(x)\", \"f\": \"x + 2\", \"g\": \"x^2\", \"bounds\": \"Where f and g cross\", \"strips\": \"None (shade the exact area)\", \"xmin\": -2.0}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-14",
    "text": "Show signed area: regions below the axis shaded differently and counted negative",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"f\": \"x^2 - 1\", \"signed\": true, \"strips\": \"None (shade the exact area)\", \"exact_line\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-15",
    "text": "Write the sum's value, worked as Δx times the sum of the heights",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"sum_line\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-16",
    "text": "Write the exact value of the integral, exactly where it can be",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"exact_line\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-17",
    "text": "Write Δx = (b - a)/n",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_dx\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-18",
    "text": "Mark the sample point on each strip",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"sample_pts\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-19",
    "text": "Label each strip with its height f(x_i) or its area",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"strip_labels\": \"Heights\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-20",
    "text": "Mark x_0, x_1, …, x_n on the x-axis",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"x_marks\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-21",
    "text": "Mark the bounds a and b with vertical lines and labels",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"mark_bounds\": false}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-22",
    "text": "Write the integral ∫ from a to b of f(x) dx on the figure",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"integral_line\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-23",
    "text": "Write the error, the sum minus the exact value",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"error_line\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-24",
    "text": "Slice the area between curves with horizontal strips, integrating in y",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"region\": \"Between f(x) and g(x)\", \"f\": \"sqrt(x)\", \"g\": \"x/2\", \"bounds\": \"Where f and g cross\", \"strips\": \"Horizontal\", \"xmax\": 5.0, \"ymax\": 3.0}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-25",
    "text": "Shade with a tint or hatching",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"shading\": \"Hatching\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-26",
    "text": "Draw the curve over the strips, or the strips alone",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curve\": false}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-27",
    "text": "Give values as fractions or rounded to chosen decimals",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"sum_line\": true, \"values\": \"Decimals\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-28",
    "text": "Load a classic example (left and right sums of x^2, a midpoint sum, trapezoids from a table, area between y = x and y = x^2, signed area of sin x)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"f\": \"sin(x)\", \"a\": \"0\", \"b\": \"2pi\", \"strips\": \"None (shade the exact area)\", \"signed\": true, \"xunits\": \"Multiples of π\", \"xmin\": -0.5, \"xmax\": 2.5, \"xstep\": 0.5, \"ymin\": -1.5, \"ymax\": 1.5, \"ystep\": 0.5, \"integral_line\": true, \"exact_line\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-29",
    "text": "Set each axis's From, To and Count by",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"xmin\": -2.0, \"xmax\": 4.0, \"xstep\": 0.5, \"ymax\": 8.0, \"ystep\": 2.0}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-30",
    "text": "Make the gridlines light, standard, bold or none",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"grid\": \"Bold\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-31",
    "text": "Add minor gridlines between the numbered lines",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"minor\": 4}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-32",
    "text": "Number the axes, or leave the numbers off",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"numbers\": false}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-33",
    "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"xlabel\": \"t\", \"ylabel\": \"v(t)\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-34",
    "text": "Number the x-axis in multiples of π",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"xunits\": \"Multiples of π\", \"f\": \"sin(x)\", \"b\": \"pi\", \"xmin\": -0.5, \"xmax\": 1.5, \"xstep\": 0.5, \"ymin\": -0.5, \"ymax\": 1.5, \"ystep\": 0.5}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-35",
    "text": "Write a title",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"title\": \"Left sum of f(x) = x^2 + 1\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-36",
    "text": "Put a blank line in place of the title for students",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"title_mode\": \"Blank line\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-37",
    "text": "Make the labels small, medium or large",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"label_size\": \"Large\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-38",
    "text": "Draw it in black and white for photocopying (Print)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"style\": \"Print\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-39",
    "text": "A student copy with blank lines for the sum and the integral",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\": false, \"sum_line\": true, \"integral_line\": true, \"exact_line\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-40",
    "text": "A student copy with the curve and the bounds only, for students to draw the strips",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\": false, \"student\": \"Curve and bounds only\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-41",
    "text": "A student copy with the strip heights left blank",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\": false, \"student\": \"Strip heights blank\"}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-42",
    "text": "An answer key line giving the sum, the exact integral and the error",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"key_line\": true}",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-43",
    "text": "Drag a along the x-axis on the figure",
    "class": "interaction",
-   "evidence": "",
-   "note": "opening state: a is a handle"
+   "evidence": "handle:drag:Drag a along the x-axis",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-44",
    "text": "Drag b along the x-axis on the figure",
    "class": "interaction",
-   "evidence": "",
-   "note": "opening state: b is a handle"
+   "evidence": "handle:drag:Drag b along the x-axis",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   },
   {
    "id": "cap-45",
    "text": "Scroll over the strips on the figure to add or take away strips",
    "class": "interaction",
-   "evidence": "",
-   "note": "a scroll handle on the strips at the opening state"
+   "evidence": "handle:scroll:Scroll over the strips to add or take away strips",
+   "note": "Round 1 (2026-11-20): accepted on the sixteenth independent check (pc2, 5e81e9b)."
   }
  ]
 }
