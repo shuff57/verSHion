@@ -169,6 +169,43 @@ for typed, expr in [("r = asin(θ/7)", sp.asin(th / 7)), ("r = acos(θ/7)", sp.a
     add("spelling", typed, expr)
 for typed in ["r = θ^1/2", "r = 2θ^1/3", "r = sin(θ)^2 θ", "r = e^2 θ"]:
     cases.append({"kind": "refused", "typed": typed})
+# check 4: an explicit multiplication after a division multiplies the quotient: θ/2*θ = (θ/2)θ, printed (θ/2)·θ; so do a
+# bar and abs(…) after it: θ/2|θ| = (θ/2)|θ|, 1/2 abs(θ) = (1/2)|θ|
+NUM5 = [('θ', lambda v: v), ('3θ', lambda v: 3 * v), ('sin θ', lambda v: sp.sin(v)), ('e^θ', lambda v: sp.exp(v)), ('θ^2', lambda v: v ** 2), ('1', lambda v: sp.Integer(1)), ('(1+θ)', lambda v: 1 + v)]
+DEN5 = [('2', lambda v: 2), ('4', lambda v: 4), ('π', lambda v: sp.pi), ('θ', lambda v: v), ('cos θ', lambda v: sp.cos(v)), ('(2θ)', lambda v: 2 * v)]
+OPS = ['*', '·', '×', '⋅', ' * ']
+FOL = [('θ', lambda v: v), ('π', lambda v: sp.pi), ('cos θ', lambda v: sp.cos(v)), ('sin(θ)', lambda v: sp.sin(v)), ('(1+θ)', lambda v: 1 + v), ('2', lambda v: 2), ('e^θ', lambda v: sp.exp(v))]
+for polar in [True, False]:
+    v = th if polar else t
+    for n_txt, n_f in NUM5:
+        for d_txt, d_f in DEN5:
+            for op in (OPS if polar else ['*', '·']):
+                for f_txt, f_f in FOL:
+                    body = f"{n_txt}/{d_txt}{op}{f_txt}"
+                    if not polar:
+                        body = body.replace('θ', 't')
+                    expr = n_f(v) / d_f(v) * f_f(v)
+                    if polar:
+                        add("spelling", f"r = {body}", expr)
+                    else:
+                        cases.append({"kind": "spelling", "typed": f"x = {body}, y = t", "values": vals(expr, t), "y": vals(t, t)})
+    for n_txt, n_f in NUM5:
+        for d_txt, d_f in [('2', lambda v: 2), ('4', lambda v: 4), ('π', lambda v: sp.pi)]:
+            for f_txt, f_f in [('|θ|', lambda v: sp.Abs(v)), ('|cos θ|', lambda v: sp.Abs(sp.cos(v))), (' abs(θ)', lambda v: sp.Abs(v)), ('|sin(θ)|', lambda v: sp.Abs(sp.sin(v)))]:
+                body = f"{n_txt}/{d_txt}{f_txt}"
+                if not polar:
+                    body = body.replace('θ', 't')
+                expr = n_f(v) / d_f(v) * f_f(v)
+                if polar:
+                    add("spelling", f"r = {body}", expr)
+                else:
+                    cases.append({"kind": "spelling", "typed": f"x = {body}, y = t", "values": vals(expr, t), "y": vals(t, t)})
+for typed, expr in [("r = θ/2Π", None), ("r = 2Πθ", 2 * sp.pi * th), ("r = sin Πθ", sp.sin(sp.pi * th)), ("r = √θ θ", sp.sqrt(th) * th), ("r = √(θ)θ", sp.sqrt(th) * th),
+                    ("r = sqrt(θ)θ", sp.sqrt(th) * th), ("r = √3 cos θ", sp.sqrt(3) * sp.cos(th)), ("x = t/2*cos(t), y = t/2*sin(t)", None)]:
+    if expr is not None:
+        add("spelling", typed, expr)
+cases.append({"kind": "refused", "typed": "r = θ/2Π"})
+cases.append({"kind": "spelling", "typed": "x = t/2*cos(t), y = t/2*sin(t)", "values": vals(t / 2 * sp.cos(t), t), "y": vals(t / 2 * sp.sin(t), t)})
 # what can be read two ways is refused (no values)
 for typed in ["r = cos θ^2", "r = sin θ(1 + θ)", "r = sin -θ", "r = 2cos", "x = cos t^2, y = t",
               "x = sin t(e^cos t - 2cos 4t), y = t", "r = sin θ²", "r = cos θ²", "r = 1 - sin θ²", "r = sin θ^2", "r = sin 1/2θ", "x = sin t², y = t"]:

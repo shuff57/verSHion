@@ -241,7 +241,8 @@ const FN_NAMES: [&str; 13] = ["arcsin", "arccos", "arctan", "sqrt", "sin", "cos"
 /// refused with a note saying which brackets to write.
 pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
     // (one case throughout: Pi and PI are pi, SIN is sin; the shared reader lower-cases too)
-    let low = rhs.replace('\u{2009}', " ").replace('\u{3c0}', "pi").replace('\u{2212}', "-").to_lowercase();
+    // (lower case first, so a capital Π is π too; ×, ⋅ and · are all *)
+    let low = rhs.to_lowercase().replace('\u{2009}', " ").replace('\u{3c0}', "pi").replace('\u{2212}', "-").replace(['\u{d7}', '\u{22c5}', '\u{b7}'], "*");
     // asin, acos, atan are arcsin, arccos, arctan (and print so)
     let mut cs: Vec<char> = vec![];
     let lc: Vec<char> = low.chars().collect();
@@ -280,11 +281,29 @@ pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
             while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
             if k > i + 1 && cs.get(k).is_some_and(|c| c.is_alphabetic() || *c == '(' || *c == '\u{221a}') {
                 let d = show(&cs[i + 1..k]);
-                let more = show(&cs[k..k + 1]);
+                let more = show(&cs[k..factor_end(&cs, k, var)]);
                 return Err(format!("write brackets: is \u{221a}{d}{more} meant as \u{221a}({d}{more}) or \u{221a}{d}\u{b7}{more}? Type sqrt({d}{more}) or sqrt({d}){more}"));
             }
         }
-        if cs[i] == '/' { division(&cs, i, &out, var)?; }
+        if cs[i] == '/' {
+            // a quotient followed by more of the same product (θ/2·θ, t/2 cos t, 1/2|cos θ|) is written in brackets, so the
+            // print can never read as a division by the rest: (θ/2)·θ, (t/2) cos t, (1/2)|cos θ|
+            if let Some(end) = division(&cs, i, &out, var)? {
+                let mut k = end;
+                while k < cs.len() && cs[k] == ' ' { k += 1; }
+                let product = cs.get(k).is_some_and(|c| *c == '*' || *c == '|' || *c == '(' || c.is_alphabetic() || *c == '\u{221a}' || (c.is_ascii_digit() && k > end));
+                if product && k < cs.len() {
+                    let st = term_start(&out);
+                    let den = textbook(&cs[i + 1..end].iter().collect::<String>(), var)?;
+                    let num = out.split_off(st);
+                    let lead = num.len() - num.trim_start().len();
+                    out.push_str(&num[..lead]);
+                    out.push_str(&format!("({}/{})", num.trim(), den.trim()));
+                    i = end;
+                    continue;
+                }
+            }
+        }
         out.push(cs[i]);
         i += 1;
     }
@@ -293,48 +312,90 @@ pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
 /// A division whose denominator is an unbracketed run of factors (θ/2π, 3θ/2θ, θ/2 cos θ, θ/πθ) can be read two ways:
 /// refused, naming both. A plain number over a plain number before a factor is a coefficient (1/2 cos θ is (1/2)cos θ,
 /// printed so).
-fn division(cs: &[char], i: usize, out: &str, var: char) -> Result<(), String> {
+/// Where the product term ending `out` starts (after a + or − between terms, an open bracket, or the start).
+fn term_start(out: &str) -> usize {
+    let o: Vec<(usize, char)> = out.char_indices().collect();
+    let mut depth = 0i32;
+    let mut k = o.len();
+    while k > 0 {
+        let (bi, c) = o[k - 1];
+        match c {
+            ')' => depth += 1,
+            '(' => { if depth == 0 { return bi + 1; } depth -= 1; }
+            '+' | '-' | ',' if depth == 0 => {
+                // a sign right after ^ or at the start belongs to the term
+                let prev = o[..k - 1].iter().rev().find(|x| x.1 != ' ').map(|x| x.1);
+                if prev.is_some_and(|p| p != '^' && p != '(' && p != '*' && p != '/') { return o.get(k).map(|x| x.0).unwrap_or(out.len()); }
+            }
+            ' ' if depth == 0 => {
+                // a space between terms is only round a + or −
+                let next = o[k..].iter().find(|x| x.1 != ' ').map(|x| x.1);
+                if matches!(next, Some('+') | Some('-')) { return o.get(k).map(|x| x.0).unwrap_or(out.len()); }
+            }
+            _ => {}
+        }
+        k -= 1;
+    }
+    0
+}
+/// Where the factor starting at k ends: a function applied, a bracket, or a run of letters and digits.
+fn factor_end(cs: &[char], k: usize, var: char) -> usize {
+    if k >= cs.len() { return k; }
+    if let Some(name) = fn_at(cs, k) { return apply_fn(cs, k, name, var).map(|(_, e)| e).unwrap_or(k + name.len()); }
+    if cs[k] == '(' || cs[k] == '|' {
+        let (open, close) = if cs[k] == '(' { ('(', ')') } else { ('|', '|') };
+        let mut depth = 0;
+        for (m, c) in cs.iter().enumerate().skip(k) {
+            if open == '|' { if *c == '|' && m > k { return m + 1; } continue; }
+            if *c == open { depth += 1 } else if *c == close { depth -= 1; if depth == 0 { return m + 1; } }
+        }
+        return cs.len();
+    }
+    let mut m = k;
+    while m < cs.len() && (cs[m].is_alphanumeric() || cs[m] == '.') && (m == k || fn_at(cs, m).is_none()) { m += 1; }
+    m.max(k + 1)
+}
+fn division(cs: &[char], i: usize, out: &str, var: char) -> Result<Option<usize>, String> {
     let skip = |k: usize| { let mut k = k; while k < cs.len() && cs[k] == ' ' { k += 1; } k };
     let j = skip(i + 1);
-    if j >= cs.len() { return Ok(()); }
+    if j >= cs.len() { return Ok(None); }
     // the denominator's first factor, and whether it is a plain number
     let (end, number) = if cs[j] == '(' {
         let mut depth = 0;
         let mut close = None;
         for (m, c) in cs.iter().enumerate().skip(j) { if *c == '(' { depth += 1 } else if *c == ')' { depth -= 1; if depth == 0 { close = Some(m); break; } } }
-        match close { Some(c) => (c + 1, false), None => return Ok(()) }
+        match close { Some(c) => (c + 1, false), None => return Ok(None) }
     } else if cs[j].is_ascii_digit() || cs[j] == '.' {
         let mut k = j;
         while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
         (k, true)
     } else if let Some(name) = fn_at(cs, j) {
-        match apply_fn(cs, j, name, var) { Ok((_, e)) => (e, false), Err(_) => return Ok(()) }
+        match apply_fn(cs, j, name, var) { Ok((_, e)) => (e, false), Err(_) => return Ok(None) }
     } else if cs[j..].starts_with(&['p', 'i']) { (j + 2, false) }
     else if cs[j] == var || cs[j] == 'e' { (j + 1, false) }
-    else { return Ok(()); };
+    else { return Ok(None); };
     // what follows it: another factor, multiplied by being written next to it, makes two readings (a power binds to it)
-    if cs.get(end) == Some(&'^') { return Ok(()); }
+    if cs.get(end) == Some(&'^') { return Ok(None); }
     let spaced = cs.get(end) == Some(&' ');
     let k = skip(end);
     let more = cs.get(k).is_some_and(|c| *c == var || *c == '\u{221a}' || (*c == '(' && !spaced) || (c.is_ascii_digit() && !number) || (*c == 'e' && !cs.get(k + 1).is_some_and(|d| d.is_ascii_alphabetic())))
         || cs[k..].starts_with(&['p', 'i']) || fn_at(cs, k).is_some();
-    if !more { return Ok(()); }
+    if !more { return Ok(Some(end)); }
     // a plain number over a plain number: the coefficient (1/2)
     let o: Vec<char> = out.chars().collect();
     let mut a = o.len();
     while a > 0 && (o[a - 1].is_ascii_digit() || o[a - 1] == '.') { a -= 1; }
     let plain_num = a < o.len() && (a == 0 || matches!(o[a - 1], ' ' | '+' | '-' | '*' | '('));
     // (but not before a bracket: 1/2(θ + 1) is the old 6/2(1 + 2) puzzle)
-    if number && plain_num && cs.get(k) != Some(&'(') { return Ok(()); }
+    if number && plain_num && cs.get(k) != Some(&'(') { return Ok(Some(end)); }
     let show = |t: &[char]| t.iter().collect::<String>().trim().replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
     let den = show(&cs[j..end]);
-    let m = match fn_at(cs, k) {
-        Some(name) => apply_fn(cs, k, name, var).map(|(_, e)| e).unwrap_or(k + name.len()),
-        None => { let mut m = k; while m < cs.len() && !matches!(cs[m], ' ' | '+' | '-' | ')' | '/' | '*' | '^') { m += 1; } m.max(k + 1) }
-    };
-    let rest = show(&cs[k..m.min(cs.len())]);
+    let rest = show(&cs[k..factor_end(cs, k, var)]);
+    let num = { let t = term_start(out); out[t..].replace('*', "").replace('q', "\u{3b8}").replace("pi", "\u{3c0}") };
+    let num = if num.trim().is_empty() { "\u{2026}".to_string() } else { num.trim().to_string() };
     let gap = if spaced { " " } else { "" };
-    Err(format!("write brackets: \u{201c}/{den}{gap}{rest}\u{201d} can be read two ways; type /({den}{gap}{rest}) to divide by {den}{gap}{rest}, or (\u{2026}/{den}){rest} to divide by {den} and multiply by {rest}"))
+    let paren = |t: &str| if t.chars().count() == 1 || t.starts_with('(') { t.to_string() } else { format!("({t})") };
+    Err(format!("write brackets: \u{201c}{num}/{den}{gap}{rest}\u{201d} can be read two ways; type ({num}/{den}){rest} to multiply by {rest}, or {num}/({den}{gap}{rest}) to divide by {}", paren(&format!("{den}{gap}{rest}"))))
 }
 const SUPERSCRIPTS: [char; 10] = ['\u{2070}', '\u{b9}', '\u{b2}', '\u{b3}', '\u{2074}', '\u{2075}', '\u{2076}', '\u{2077}', '\u{2078}', '\u{2079}'];
 fn shown_var(var: char) -> String { if var == 'q' { "\u{3b8}".into() } else { var.to_string() } }
@@ -470,8 +531,12 @@ fn tidy(s: &str) -> String {
         if c == '\u{221a}' {
             let mut k = i + 1;
             while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') { k += 1; }
+            // (√θ θ, √θθ: the root of one letter, then a factor)
+            if k == i + 1 && cs.get(k).is_some_and(|d| d.is_alphabetic()) { k += 1; }
             out.extend(&cs[i..k]);
-            if k > i + 1 && cs.get(k).is_some_and(|d| d.is_alphabetic() || *d == '(' || *d == '\u{221a}') { out.push('\u{b7}'); }
+            let mut m = k;
+            while m < cs.len() && cs[m] == ' ' { m += 1; }
+            if k > i + 1 && cs.get(m).is_some_and(|d| d.is_alphabetic() || *d == '(' || *d == '\u{221a}') { out.push('\u{b7}'); i = m; continue; }
             i = k;
             continue;
         }
@@ -1729,7 +1794,7 @@ pub(crate) fn build(p0: &Params) -> Out {
         let mut cx = x;
         let mut blanks = vec![];
         for part in &l.parts {
-            match part { Part::Prose(s) => { body_t.push_str(&esc(s)); cx += text_w(s, size); } Part::Math(s) => { body_t.push_str(&math_tspans(s)); cx += text_w(s, size); } Part::Blank => { blanks.push(cx + 3.0); body_t.push_str(&format!(r#"<tspan dx="{:.2}"> </tspan>"#, BLANK_W + 6.0 - text_w(" ", size))); cx += BLANK_W + 6.0; } }
+            match part { Part::Prose(s) => { body_t.push_str(&esc(s)); cx += text_w(s, size); } Part::Math(s) => { body_t.push_str(&s.split("____").map(math_tspans).collect::<Vec<_>>().join("____")); cx += text_w(s, size); } Part::Blank => { blanks.push(cx + 3.0); body_t.push_str(&format!(r#"<tspan dx="{:.2}"> </tspan>"#, BLANK_W + 6.0 - text_w(" ", size))); cx += BLANK_W + 6.0; } }
         }
         panel += &format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" text-anchor="start" font-family="{SERIF}" fill="#000" data-pp="panel">{}</text>"##, signs(&body_t));
         for bx in blanks { panel += &format!(r##"<line x1="{bx:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#000" stroke-width="1.2" data-pp="blank"/>"##, y + 2.0, bx + BLANK_W, y + 2.0); }

@@ -1159,7 +1159,7 @@ fn divisions_read_one_way_or_are_refused() {
         assert!(n.iter().any(|x| x.contains("can be read two ways")), "{t}: {n:?}");
     }
     let n = read_row("r = θ/2π").1.join(" ");
-    assert!(n.contains("/(2\u{3c0})") && n.contains("(\u{2026}/2)\u{3c0}"), "{n}");
+    assert!(n.contains("\u{3b8}/(2\u{3c0})") && n.contains("(\u{3b8}/2)\u{3c0}"), "{n}");
     // θ/(2π) at 2π is 1; printed with its bracket
     let c = one("r = θ/(2π)");
     assert!((c.r(2.0 * PI).unwrap() - 1.0).abs() < 1e-12 && c.shown == "r = \u{3b8}/(2\u{3c0})", "{}", c.shown);
@@ -1227,4 +1227,37 @@ fn small_spellings_of_check_3() {
     assert!((one("r = θ^2/4").r(2.0).unwrap() - 1.0).abs() < 1e-12);
     assert_eq!(one("r = | sin θ|").shown, "r = |sin \u{3b8}|");
     let _ = PI;
+}
+
+/// Check 4: a multiplication typed after a division multiplies the quotient, and the print brackets the quotient so it
+/// reads one way (never θ/2θ or θ/2π); bars and abs(…) after it alike; notes name the typed factors.
+#[test]
+fn products_after_a_division_print_bracketed() {
+    use std::f64::consts::PI;
+    let one = |t: &str| { let (c, n) = read_row(t); assert!(n.is_empty(), "{t}: {n:?}"); c.into_iter().next().unwrap() };
+    // θ/2*θ = θ²/2: at 2, 2; printed (θ/2)·θ
+    let c = one("r = θ/2*θ");
+    assert!((c.r(2.0).unwrap() - 2.0).abs() < 1e-12 && c.shown == "r = (\u{3b8}/2)\u{b7}\u{3b8}", "{}", c.shown);
+    // θ/2*π and θ/2·π = πθ/2: at 1, π/2; printed (θ/2)·π
+    for t in ["r = θ/2*π", "r = θ/2·π", "r = θ/2×π", "r = θ/2⋅π"] { let c = one(t); assert!((c.r(1.0).unwrap() - PI / 2.0).abs() < 1e-12 && c.shown == "r = (\u{3b8}/2)\u{b7}\u{3c0}", "{t}: {}", c.shown); }
+    // the classroom spiral x = t/2*cos(t), y = t/2*sin(t): at π, (−π/2, 0); printed (t/2)·cos t
+    let c = one("x = t/2*cos(t), y = t/2*sin(t)");
+    assert!(c.at(PI).is_some_and(|q| (q.0 + PI / 2.0).abs() < 1e-12 && q.1.abs() < 1e-12));
+    assert_eq!(c.shown, "x = (t/2)\u{b7}cos t, y = (t/2)\u{b7}sin t");
+    // bars: 1/2|cos θ| at π is 1/2; θ/2|θ| at 2 is 2; 1/2 abs(θ) at 3 is 3/2
+    assert!((one("r = 1/2|cos θ|").r(PI).unwrap() - 0.5).abs() < 1e-12 && one("r = 1/2|cos θ|").shown == "r = (1/2)|cos \u{3b8}|", "{}", one("r = 1/2|cos θ|").shown);
+    assert!((one("r = θ/2|θ|").r(2.0).unwrap() - 2.0).abs() < 1e-12 && one("r = θ/2|θ|").shown.starts_with("r = (\u{3b8}/2)"));
+    assert!((one("r = 1/2 abs(θ)").r(3.0).unwrap() - 1.5).abs() < 1e-12);
+    // notes from the typed factors
+    let n = read_row("r = 1/2(1 + cos θ)").1.join(" ");
+    assert!(n.contains("(1/2)(1 + cos \u{3b8})") && n.contains("1/(2(1 + cos \u{3b8}))"), "{n}");
+    let n = read_row("r = √2cos θ").1.join(" ");
+    assert!(n.contains("sqrt(2)cos \u{3b8}") && n.contains("sqrt(2cos \u{3b8})"), "{n}");
+    // √θ θ prints √θ·θ; capital Π is π
+    assert_eq!(one("r = √θ θ").shown, "r = \u{221a}\u{3b8}\u{b7}\u{3b8}");
+    assert!((one("r = 2Πθ").r(1.0).unwrap() - 2.0 * PI).abs() < 1e-12);
+    assert!(read_row("r = θ/2Π").1.iter().any(|x| x.contains("two ways")));
+    // a student copy's blank coordinates written in the panel keep their blanks
+    let o = build(&with(&[("show_answers", b(false)), ("student_copy", s(polar::STUDENT[2])), ("marks_at", s("0, pi/12, pi/6, pi/4, pi/3, 5pi/12, pi/2")), ("label_size", s("Large"))]));
+    for t in texts(&o.svg, "panel") { assert!(!t.contains("(, )"), "{t}"); }
 }
