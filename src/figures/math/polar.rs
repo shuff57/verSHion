@@ -307,7 +307,8 @@ fn read_fn(rhs: &str, polar: bool, what: &str) -> Result<(Node, String), String>
 /// where nothing after it could be read as part of the argument: the end, a + or −, a closing bracket, a comma, or a space
 /// before another function (sin θ cos θ). So cos(θ)/2 stays cos(θ)/2 (never cos θ/2), sin(θ)^2 and 2^sin(θ) keep theirs.
 pub(crate) fn shown_fn(typed: &str) -> String {
-    let s = tangent::shown_func(typed);
+    // (an ordinary space before a function's name: the serif has no thin space)
+    let s = tangent::shown_func(typed).replace('\u{2009}', " ");
     let cs: Vec<char> = s.chars().collect();
     let mut out = String::new();
     let mut i = 0;
@@ -778,7 +779,36 @@ fn marks_of(p: &Params, cs: &[Curve], used: &[String], notes: &mut Vec<String>) 
 // ───────────────────────── labels ─────────────────────────
 
 #[derive(Clone, Default)]
-pub(crate) struct Scene { pub segs: Vec<(Pt, Pt)>, pub boxes: Vec<Bx>, pub dots: Vec<(Pt, f64)>, pub bounds: Bx, pub soft: Vec<(Pt, Pt)>, pub strict: bool }
+pub(crate) struct Scene { pub segs: SegIdx, pub boxes: Vec<Bx>, pub dots: Vec<(Pt, f64)>, pub bounds: Bx, pub soft: SegIdx, pub strict: bool }
+/// Segments indexed by the 24 px cells they cross, so a label's box is checked against the strokes near it only.
+#[derive(Clone, Default)]
+pub(crate) struct SegIdx { segs: Vec<(Pt, Pt)>, cells: std::collections::HashMap<(i32, i32), Vec<u32>> }
+const CELL: f64 = 24.0;
+impl SegIdx {
+    pub(crate) fn push(&mut self, s: (Pt, Pt)) {
+        let i = self.segs.len() as u32;
+        let (x0, x1) = (s.0 .0.min(s.1 .0), s.0 .0.max(s.1 .0));
+        let (y0, y1) = (s.0 .1.min(s.1 .1), s.0 .1.max(s.1 .1));
+        if !(x0.is_finite() && x1.is_finite() && y0.is_finite() && y1.is_finite()) { return; }
+        let (cx0, cx1, cy0, cy1) = ((x0 / CELL).floor() as i32, (x1 / CELL).floor() as i32, (y0 / CELL).floor() as i32, (y1 / CELL).floor() as i32);
+        self.segs.push(s);
+        // (a long segment is listed in the cells it passes near: those its bounding box covers, at most 4000)
+        if ((cx1 - cx0 + 1) as i64) * ((cy1 - cy0 + 1) as i64) > 4000 { self.cells.entry((i32::MIN, 0)).or_default().push(i); return; }
+        for cx in cx0..=cx1 { for cy in cy0..=cy1 { self.cells.entry((cx, cy)).or_default().push(i); } }
+    }
+    pub(crate) fn len(&self) -> usize { self.segs.len() }
+    /// The segments listed in the cells a box (grown by pad) touches, each once.
+    fn near(&self, b: Bx, pad: f64) -> Vec<(Pt, Pt)> {
+        let (cx0, cx1, cy0, cy1) = (((b.0 - pad) / CELL).floor() as i32, ((b.2 + pad) / CELL).floor() as i32, ((b.1 - pad) / CELL).floor() as i32, ((b.3 + pad) / CELL).floor() as i32);
+        let mut idx: Vec<u32> = self.cells.get(&(i32::MIN, 0)).cloned().unwrap_or_default();
+        if ((cx1 - cx0 + 1) as i64) * ((cy1 - cy0 + 1) as i64) > 4000 { return self.segs.clone(); }
+        for cx in cx0..=cx1 { for cy in cy0..=cy1 { if let Some(v) = self.cells.get(&(cx, cy)) { idx.extend(v); } } }
+        idx.sort_unstable();
+        idx.dedup();
+        idx.into_iter().map(|i| self.segs[i as usize]).collect()
+    }
+    fn any_hits(&self, b: Bx, pad: f64) -> bool { self.near(b, pad).iter().any(|(a, c)| seg_hits(*a, *c, b, pad)) }
+}
 fn overlap(a: Bx, b: Bx, pad: f64) -> bool { !(a.2 + pad <= b.0 || b.2 + pad <= a.0 || a.3 + pad <= b.1 || b.3 + pad <= a.1) }
 pub(crate) fn seg_hits(a: Pt, b: Pt, r: Bx, pad: f64) -> bool { clip_rect(a, b, (r.0 - pad, r.1 - pad, r.2 + pad, r.3 + pad)).is_some() }
 pub(crate) fn box_pt(b: Bx, p: Pt) -> f64 { let dx = (b.0 - p.0).max(0.0).max(p.0 - b.2); let dy = (b.1 - p.1).max(0.0).max(p.1 - b.3); dx.hypot(dy) }
@@ -787,17 +817,41 @@ impl Scene {
         b.0 >= self.bounds.0 && b.1 >= self.bounds.1 && b.2 <= self.bounds.2 && b.3 <= self.bounds.3
             && !self.boxes.iter().any(|o| overlap(b, *o, 2.0))
             && !self.dots.iter().any(|(d, r)| d.0 > b.0 - r - 2.0 && d.0 < b.2 + r + 2.0 && d.1 > b.1 - r - 2.0 && d.1 < b.3 + r + 2.0)
-            && !self.segs.iter().any(|(a, c)| seg_hits(*a, *c, b, 2.5))
+            && !self.segs.any_hits(b, 2.5)
             // (first, clear of the gridlines too: a label is not set along a gridline where it need not be)
-            && !(self.strict && self.soft.iter().any(|(a, c)| seg_hits(*a, *c, b, 0.5)))
+            && !(self.strict && self.soft.any_hits(b, 0.5))
     }
     fn cost(&self, b: Bx) -> f64 {
         let out = (self.bounds.0 - b.0).max(0.0) + (b.2 - self.bounds.2).max(0.0) + (self.bounds.1 - b.1).max(0.0) + (b.3 - self.bounds.3).max(0.0);
-        out * 100.0 + self.segs.iter().filter(|(a, c)| seg_hits(*a, *c, b, 1.0)).count() as f64 * 3.0 + self.boxes.iter().filter(|o| overlap(b, **o, 0.0)).count() as f64 * 8.0
+        out * 100.0 + self.segs.near(b, 1.0).iter().filter(|(a, c)| seg_hits(*a, *c, b, 1.0)).count() as f64 * 3.0 + self.boxes.iter().filter(|o| overlap(b, **o, 0.0)).count() as f64 * 8.0
             + self.dots.iter().filter(|(d, r)| d.0 > b.0 - r && d.0 < b.2 + r && d.1 > b.1 - r && d.1 < b.3 + r).count() as f64 * 8.0
     }
 }
 pub(crate) fn text_w(s: &str, size: f64) -> f64 { super::flat_b9::glyph_w(s, size) }
+/// math_tspans' output with its italic tspans dropped (marked \u{2} for a superscript's opening, \u{1} for every closing):
+/// only the superscripts' tspans are kept.
+fn fix_sup(s: &str) -> String {
+    let mut out = String::new();
+    let mut stack: Vec<bool> = vec![];
+    for c in s.chars() {
+        match c {
+            '\u{2}' => { out.push_str(r#"<tspan baseline-shift="super" font-size="70%">"#); stack.push(true); }
+            '\u{3}' => stack.push(false),
+            '\u{1}' => { if stack.pop() == Some(true) { out.push_str("</tspan>"); } }
+            c => out.push(c),
+        }
+    }
+    out
+}
+/// The few signs the serif lacks (≤, √, ≈, ′) set in the bundled math face: otherwise the renderer searches every font for
+/// them (slow) and sets the whole run in the face it finds, losing the italic letters round them.
+fn signs(body: &str) -> String {
+    let mut out = String::with_capacity(body.len() + 32);
+    for c in body.chars() {
+        if matches!(c, '\u{2264}' | '\u{2265}' | '\u{221a}' | '\u{2248}' | '\u{2032}') { out.push_str(r#"<tspan font-family="Source Serif 4, DejaVu Serif, serif">"#); out.push(c); out.push_str("</tspan>"); } else { out.push(c); }
+    }
+    out
+}
 /// A label's box with its centre at c.
 fn bx_at(c: Pt, w: f64, size: f64) -> Bx { (c.0 - w / 2.0, c.1 - 0.48 * size, c.0 + w / 2.0, c.1 + 0.48 * size) }
 
@@ -891,7 +945,7 @@ fn place(sc: &mut Scene, r: &Req, out: &mut String, to_panel: &mut Vec<String>, 
                 let (o, rad) = match r.own { Own::Dot(o, rad) => (o, rad), other => (anchor(other).unwrap(), 2.0) };
                 let n = (end.0 - o.0).hypot(end.1 - o.1).max(1e-9);
                 let start = (o.0 + (end.0 - o.0) / n * (rad + 2.0), o.1 + (end.1 - o.1) / n * (rad + 2.0));
-                if sc.segs.iter().any(|(a, c2)| super::tangent::seg_cross(start, end, *a, *c2)) { continue; }
+                if sc.segs.near((start.0.min(end.0), start.1.min(end.1), start.0.max(end.0), start.1.max(end.1)), 1.0).iter().any(|(a, c2)| super::tangent::seg_cross(start, end, *a, *c2)) { continue; }
                 if sc.boxes.iter().any(|o2| seg_hits(start, end, *o2, 1.0)) { continue; }
                 if sc.dots.iter().any(|(d, rr)| (d.0 - o.0).abs() + (d.1 - o.1).abs() > 0.5 && seg_hits(start, end, (d.0 - rr, d.1 - rr, d.0 + rr, d.1 + rr), 1.0)) { continue; }
                 return Some((b, Some((start, end))));
@@ -922,7 +976,7 @@ fn place(sc: &mut Scene, r: &Req, out: &mut String, to_panel: &mut Vec<String>, 
     let base = b.1 + 0.72 * r.size;
     let at = match r.own { Own::Dot(c, _) => format!(r#" data-at="{:.2},{:.2}""#, c.0, c.1), _ => String::new() };
     // (a blank to write on is set as it is: the typesetter would read its underscores as subscripts)
-    let body = text.split("____").map(math_tspans).collect::<Vec<_>>().join("____");
+    let body = signs(&text.split("____").map(math_tspans).collect::<Vec<_>>().join("____"));
     out.push_str(&format!(r##"<g data-lbl="{}"{at}><text x="{:.2}" y="{:.2}" font-size="{:.2}" text-anchor="start" font-family="{SERIF}" fill="#000" stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">{}</text></g>"##, esc(&r.id), b.0, base, r.size, body));
     sc.boxes.push(b);
 }
@@ -1238,7 +1292,9 @@ pub(crate) fn build(p0: &Params) -> Out {
                         else {
                             let (ddx, ddy) = match &t.slope { Slope::Finite(m) => { let (a, b) = (fr.ux, -m.v * fr.uy); let n = a.hypot(b); (a / n, b / n) } _ => (0.0, 1.0) };
                             let l = 4.0 * (plot.2 - plot.0 + plot.3 - plot.1);
-                            if let Some((a, b)) = fr.clip((at.0 - ddx * l, at.1 - ddy * l), (at.0 + ddx * l, at.1 + ddy * l)) {
+                            let seg = fr.clip((at.0 - ddx * l, at.1 - ddy * l), (at.0 + ddx * l, at.1 + ddy * l)).filter(|(a, b)| (a.0 - b.0).hypot(a.1 - b.1) > 6.0);
+                            if seg.is_none() { notes.push("Tangent: the line touches the window only at its point (it lies outside the largest circle or the axes); widen the window to see it.".into()); }
+                            if let Some((a, b)) = seg {
                                 over += &format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="2" stroke-linecap="round" data-pp="tangent"/>"##, a.0, a.1, b.0, b.1, ink.tangent);
                                 sc.segs.push((a, b));
                             }
@@ -1470,7 +1526,7 @@ pub(crate) fn build(p0: &Params) -> Out {
         for part in &l.parts {
             match part { Part::Prose(s) => { body_t.push_str(&esc(s)); cx += text_w(s, size); } Part::Math(s) => { body_t.push_str(&math_tspans(s)); cx += text_w(s, size); } Part::Blank => { blanks.push(cx + 3.0); body_t.push_str(&format!(r#"<tspan dx="{:.2}"> </tspan>"#, BLANK_W + 6.0 - text_w(" ", size))); cx += BLANK_W + 6.0; } }
         }
-        panel += &format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" text-anchor="start" font-family="{SERIF}" fill="#000" data-pp="panel">{body_t}</text>"##);
+        panel += &format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size:.2}" text-anchor="start" font-family="{SERIF}" fill="#000" data-pp="panel">{}</text>"##, signs(&body_t));
         for bx in blanks { panel += &format!(r##"<line x1="{bx:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#000" stroke-width="1.2" data-pp="blank"/>"##, y + 2.0, bx + BLANK_W, y + 2.0); }
         y += lh;
     }
@@ -1494,7 +1550,10 @@ pub(crate) fn build(p0: &Params) -> Out {
         let mut yy = h + 2.0;
         for r in &rows {
             yy += 1.5 * ks;
-            let body_t: String = r.iter().map(|p| match p { Part::Prose(s) => esc(s), Part::Math(s) => math_tspans(s), Part::Blank => String::new() }).collect();
+            // (the key line is set upright, one run of text: each tspan costs the renderer a font lookup, and a long key
+            // of points and marks would take most of a second to draw; a power still gets its superscript)
+            let body_t: String = r.iter().map(|p| match p { Part::Prose(s) => esc(s), Part::Math(s) if s.contains('^') => math_tspans(s).replace(r#"<tspan font-style="italic">"#, "\u{3}").replace("</tspan>", "\u{1}").replace(r#"<tspan baseline-shift="super" font-size="70%">"#, "\u{2}"), Part::Math(s) => esc(s), Part::Blank => String::new() }).collect();
+            let body_t = fix_sup(&body_t);
             keysvg += &format!(r##"<text x="16" y="{yy:.2}" font-size="{ks:.2}" text-anchor="start" font-family="{SERIF}" fill="#000" data-pp="key">{body_t}</text>"##);
         }
         h = yy + 0.8 * ks;

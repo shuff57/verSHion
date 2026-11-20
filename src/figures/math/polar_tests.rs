@@ -354,10 +354,10 @@ fn typed_rows_and_their_notes() {
     // the equation typeset as a textbook prints it
     let o = build(&with(&[("curves", s("r = 3sin(2theta)\nr = sqrt(cos(2θ))\nr = 1 + 2cos(θ/2)\nx = 2cos(t)^2, y = t^3"))]));
     let shown: Vec<String> = o.curves.iter().map(|c| c.shown.clone()).collect();
-    assert_eq!(shown[0], "r = 3\u{2009}sin 2\u{3b8}");
+    assert_eq!(shown[0], "r = 3 sin 2\u{3b8}");
     assert_eq!(shown[1], "r = \u{221a}(cos 2\u{3b8})");
-    assert_eq!(shown[2], "r = 1 + 2\u{2009}cos(\u{3b8}/2)");
-    assert!(shown[3].starts_with("x = 2\u{2009}cos(t)^2, y = t^3"), "{}", shown[3]);
+    assert_eq!(shown[2], "r = 1 + 2 cos(\u{3b8}/2)");
+    assert!(shown[3].starts_with("x = 2 cos(t)^2, y = t^3"), "{}", shown[3]);
     // points: what cannot be read is said; degrees past 4π in radians are queried
     let pn_ = |t: &str| build(&with(&[("points", s(t))])).notes;
     assert!(pn_("P(2)")[0].contains("two values"));
@@ -919,7 +919,7 @@ fn spellings_and_printing_agree_with_sympy() {
 #[test]
 fn printed_equations_keep_their_brackets() {
     let shown = |t: &str| read_row(t).0.first().map(|c| c.shown.clone()).unwrap_or_else(|| panic!("{t}"));
-    let th = "\u{2009}";
+    let th = " ";
     // a quotient of the function keeps the bracket: cos θ/2 would read as cos(θ/2)
     assert_eq!(shown("r = 1 + cos(θ)/2"), "r = 1 + cos(\u{3b8})/2");
     assert_eq!(shown("r = 3cos(θ)/2"), format!("r = 3{th}cos(\u{3b8})/2"));
@@ -1022,4 +1022,15 @@ fn rounded_keys_use_approximately() {
     // exact values keep =
     let o = build(&with(&[("points", s("P(sqrt(2), pi/4)")), ("key_line", b(true)), ("curves", s("")), ("tracer", b(false))]));
     assert!(texts(&o.svg, "key").join(" ").contains("P(\u{221a}2, \u{3c0}/4) = (1, 1)"));
+}
+
+/// A tangent whose line lies outside the window but for its point is said, not silently missing.
+#[test]
+fn a_tangent_outside_the_window_is_said() {
+    // r = 3 sin 2θ at π/4 is the petal's tip (3, π/4) on the largest circle 3; the tangent there, slope −1, is
+    // perpendicular to the radius, so it touches the circle only at that point
+    let o = build(&with(&[("curves", s("r = 3sin(2θ)")), ("rmax", f(3.0)), ("tangent", b(true)), ("tangent_at", s("pi/4")), ("points", s(""))]));
+    assert!(!o.svg.contains(r#"data-pp="tangent""#) && o.notes.iter().any(|n| n.contains("touches the window only at its point")), "{:?}", o.notes);
+    let o = build(&with(&[("curves", s("r = 3sin(2θ)")), ("rmax", f(4.0)), ("tangent", b(true)), ("tangent_at", s("pi/4")), ("points", s(""))]));
+    assert!(o.svg.contains(r#"data-pp="tangent""#) && o.notes.is_empty());
 }
