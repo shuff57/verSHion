@@ -4512,6 +4512,59 @@ fn styled_choice(style: model::PaperStyle, ci: usize, text: &str) -> String {
     style.choice_label(&format!("{}. {}", letter(ci), text))
 }
 
+/// Tallest a choice's picture prints (1.5 inches, half a question picture's 3), so four picture
+/// choices fit on a page with their question.
+pub(crate) const CHOICE_PICTURE_MAX_H_PT: f64 = 108.0;
+
+/// One answer choice on the paper. A text choice prints as before ([`popt`] of its label); a
+/// picture choice prints its letter with the picture beside it, under the choice's text when it
+/// has some, so a choice that is only a picture still has its letter.
+#[allow(clippy::too_many_arguments)]
+fn paper_choice(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, style: model::PaperStyle, ci: usize, a: &model::Answer, bp: f32) {
+    let Some(img) = &a.image else {
+        popt(ui, styled_choice(style, ci, &a.text), bp);
+        return;
+    };
+    // the label alone ("A.", "a.", "A"), in a column as wide as the widest letter's ("W.") plus
+    // the gap a text choice has after it, so the pictures of A-D line up
+    let label = styled_choice(style, ci, "").trim_end().to_string();
+    let font = FontId::new(bp, theme::serif_family());
+    let width = |s: String| ui.painter().layout_no_wrap(s, font.clone(), PAPER_INK).size().x;
+    let lw = width(label.clone()).max(width(styled_choice(style, 22, "").trim_end().to_string())) + bp * 0.45;
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::ZERO;
+        let (lr, _) = ui.allocate_exact_size(Vec2::new(lw, bp * 1.45), Sense::hover());
+        // (the row's first line: the letter sits where a text choice's letter does)
+        ui.painter().text(Pos2::new(lr.left(), lr.top() + bp * 0.2), Align2::LEFT_TOP, &label, font, PAPER_INK);
+        ui.vertical(|ui| {
+            if !a.text.trim().is_empty() {
+                popt(ui, a.text.clone(), bp);
+            } else {
+                // a picture's top lines up with the letter's cap height
+                ui.add_space(bp * 0.25);
+            }
+            draw_choice_image(app, ui, ctx, img, bp);
+        });
+    });
+}
+
+/// A choice's picture at its printed size in the space beside its letter: as a question picture
+/// ([`crate::layout::picture_size_pt`]), but at most [`CHOICE_PICTURE_MAX_H_PT`] tall.
+fn draw_choice_image(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, img: &model::ImageRef, bp: f32) {
+    match app.image_texture(ctx, &img.file) {
+        Some(tex) => {
+            let [tw, th] = tex.size();
+            let (w_px, h_px) = if img.width > 0 && img.height > 0 { (img.width, img.height) } else { (tw as u32, th as u32) };
+            let (w, h) = crate::layout::picture_size_pt(w_px, h_px, (ui.available_width() / PT) as f64);
+            let k = (CHOICE_PICTURE_MAX_H_PT / h.max(1.0)).min(1.0);
+            ui.add(egui::Image::new(&tex).fit_to_exact_size(egui::vec2((w * k) as f32 * PT, (h * k) as f32 * PT)));
+            ui.add_space(4.0 * PT);
+        }
+        // (the picture file is gone from the store: say so where it would print)
+        None => picture_needed_box(ui, bp, Some("picture file missing")),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_item_body(
     app: &mut crate::App,
@@ -4544,14 +4597,16 @@ fn draw_item_body(
                 for row in crate::layout::choice_grid(labels.len(), n) {
                     ui.columns(n as usize, |cs| {
                         for (k, &ci) in row.iter().enumerate() {
-                            popt(&mut cs[k], labels[ci].clone(), bp);
+                            paper_choice(app, &mut cs[k], ctx, style, ci, &answers[ci], bp);
                         }
                     });
                 }
                 return;
             }
-            // Condensed prints the choices across when every one fits its column.
-            let across = style.choices_across() && labels.len() > 1 && !labels.iter().any(|l| needs_rich(l) || l.contains("[picture"));
+            // Condensed prints the choices across when every one fits its column (picture choices
+            // go across only in the item's answer columns, above).
+            let pictures = answers.iter().any(|a| a.image.is_some());
+            let across = style.choices_across() && labels.len() > 1 && !pictures && !labels.iter().any(|l| needs_rich(l) || l.contains("[picture"));
             let cols = if across {
                 let widest = labels.iter().map(|l| l.chars().count()).max().unwrap_or(0) as f32 * bp * 0.5 + 12.0;
                 [labels.len(), 4, 3, 2].into_iter().filter(|&c| c >= 2 && c <= labels.len()).find(|&c| widest <= body_w / c as f32)
@@ -4569,8 +4624,8 @@ fn draw_item_body(
                     }
                 }
                 None => {
-                    for l in labels {
-                        popt(ui, l, bp);
+                    for (ci, a) in answers.iter().enumerate() {
+                        paper_choice(app, ui, ctx, style, ci, a, bp);
                     }
                 }
             }
@@ -4628,7 +4683,7 @@ fn draw_item_body(
                             PartKind::Mc { answers } => {
                                 popt(ui, rest.clone(), bp);
                                 for (ci, a) in answers.iter().enumerate() {
-                                    popt(ui, styled_choice(style, ci, &a.text), bp);
+                                    paper_choice(app, ui, ctx, style, ci, a, bp);
                                 }
                             }
                             PartKind::Tf { .. } => popt(ui, format!("{rest} (True / False)"), bp),
@@ -11410,5 +11465,196 @@ mod child_figure_mapping_tests {
         std::fs::write(output.join("warnings.json"),serde_json::to_vec_pretty(&got.warnings).unwrap()).unwrap();
         let previews=crate::ditto::source_figure_previews(&raw,&page,1);assert_eq!(previews.len(),1);std::fs::write(output.join("supplied-source-crop.png"),&previews[0].2).unwrap();
         println!("offline replay: {} question, {} original parts, {} supplied source crop, {} student PDF pages; no API or fitting call, no fresh-bank acceptance claim",got.doc.questions.len(),parts.len(),got.figures,pv.pages.len());
+    }
+}
+
+#[cfg(test)]
+mod picture_choice_paper_tests {
+    use super::*;
+    use crate::qedit::pic_test::{solid, Drawn, Painter};
+    use model::{Answer, ImageRef, Part};
+
+    const FILES: [&str; 4] = ["media/pie-a.png", "media/pie-b.png", "media/pie-c.png", "media/pie-d.png"];
+
+    fn pic(file: &str, text: &str, correct: bool) -> Answer {
+        Answer { text: text.into(), correct, image: Some(ImageRef { file: file.into(), width: 160, height: 120 }), ..Answer::default() }
+    }
+
+    fn question(kind: Kind) -> model::Question {
+        model::Question { id: "pies".into(), stem: "Which pie chart shows one quarter shaded?".into(), kind, points: Some(1.0), difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 0, modified: 0 }
+    }
+
+    /// Four pie charts as A-D, B correct. `captions`: each choice also has a word.
+    fn pies(captions: bool) -> model::Question {
+        let t = |s: &'static str| if captions { s } else { "" };
+        question(Kind::Mc { answers: vec![pic(FILES[0], t("half"), false), pic(FILES[1], t("quarter"), true), pic(FILES[2], t("third"), false), pic(FILES[3], t("whole"), false)] })
+    }
+
+    /// A headless paper column drawing `q` as it prints, with the pictures in the media cache.
+    struct Paper {
+        ctx: egui::Context,
+        app: crate::App,
+        ids: Vec<egui::TextureId>,
+        painter: Painter,
+    }
+
+    impl Paper {
+        fn new() -> Paper {
+            crate::store::init(Box::new(crate::store::FsBackend::new(std::env::temp_dir().join(format!("vershion-picture-choices-{}", std::process::id())))));
+            let ctx = egui::Context::default();
+            let mut app = crate::App::new_from(&ctx);
+            theme::setup(&ctx);
+            let cols = [[230, 120, 60], [70, 140, 210], [90, 170, 90], [200, 80, 160]];
+            let ids = FILES
+                .iter()
+                .enumerate()
+                .map(|(i, f)| {
+                    let t = solid(&ctx, f, 160, 120, cols[i]);
+                    let id = t.id();
+                    app.textures.insert(f.to_string(), t);
+                    id
+                })
+                .collect();
+            Paper { ctx, app, ids, painter: Painter::default() }
+        }
+
+        fn out(&mut self, q: &model::Question, style: model::PaperStyle) -> egui::FullOutput {
+            let mut last = None;
+            for _ in 0..3 {
+                let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(PAGE_W, PAGE_H))), ..Default::default() };
+                let ctx = self.ctx.clone();
+                let app = &mut self.app;
+                let out = ctx.run_ui(input, |ui| {
+                    egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::WHITE).inner_margin(Margin::same(40))).show_inside(ui, |ui| {
+                        let cw = ui.available_width();
+                        paper_question(app, ui, &ctx, Some(q), 1, cw, 12.0 * PT * 1.25, style);
+                    });
+                });
+                self.painter.apply(&out.textures_delta);
+                if let Some(o) = last.replace(out) {
+                    o.drop_without_applying_deltas();
+                }
+            }
+            last.unwrap()
+        }
+
+        fn draw(&mut self, q: &model::Question, style: model::PaperStyle) -> Drawn {
+            let out = self.out(q, style);
+            let d = Drawn::of(&out.shapes);
+            out.drop_without_applying_deltas();
+            d
+        }
+    }
+
+    /// Each picture choice prints its letter with its picture beside it, A to D down the page, in
+    /// every paper style's letter form, whether or not the choice has text.
+    #[test]
+    fn picture_choices_print_with_their_letters() {
+        let mut paper = Paper::new();
+        for (style, labels) in [
+            (model::PaperStyle::Standard, ["A.", "B.", "C.", "D."]),
+            (model::PaperStyle::Classic, ["a.", "b.", "c.", "d."]),
+            (model::PaperStyle::ExamBoard, ["A", "B", "C", "D"]),
+        ] {
+            for captions in [false, true] {
+                let d = paper.draw(&pies(captions), style);
+                let mut prev = f32::MIN;
+                for (i, id) in paper.ids.iter().enumerate() {
+                    let l = d.find(labels[i]).unwrap_or_else(|| panic!("{style:?}: letter {} printed: {:?}", labels[i], d.text));
+                    let p = d.pictures(*id);
+                    assert_eq!(p.len(), 1, "{style:?} {}: its picture once", labels[i]);
+                    let p = p[0];
+                    assert!(p.left() > l.right(), "{style:?} {}: the picture is beside the letter ({l:?} {p:?})", labels[i]);
+                    assert!(p.top() < l.bottom() + 40.0, "{style:?} {}: on the letter's line, or under its text", labels[i]);
+                    assert!(p.height() <= CHOICE_PICTURE_MAX_H_PT as f32 * PT + 0.5, "{p:?}");
+                    assert!(l.top() > prev, "{style:?}: A to D in order");
+                    prev = p.bottom();
+                }
+                if captions {
+                    let q = d.find("quarter").expect("B's text prints");
+                    let b = d.pictures(paper.ids[1])[0];
+                    assert!(q.bottom() <= b.top() + 0.5 && (q.left() - b.left()).abs() < 2.0, "text above its picture");
+                }
+                assert!(!d.text.iter().any(|(t, _)| t.contains("Picture needed")));
+            }
+        }
+    }
+
+    /// The exam item's answer columns lay picture choices out in the same column-major grid as
+    /// text: 4 pictures in 2 columns print A C / B D.
+    #[test]
+    fn picture_choices_take_the_items_answer_columns() {
+        let mut paper = Paper::new();
+        let mut item = ExamItem::new("b", "pies");
+        item.answer_columns = 2;
+        let e = model::Exam { paper_style: Default::default(), margins: None, id: "pie-exam".into(), name: "Quiz".into(), header: String::new(), title: None, items: vec![item], heading_pt: 16.0, body_pt: 11.0, margin_mm: 18.0, ruled_blanks: 2, modified: 0 };
+        paper.app.store.exams.push(e);
+        let q = pies(true);
+        let mut st = EditUi::default();
+        let ctx = paper.ctx.clone();
+        let mut d = Drawn::default();
+        for _ in 0..3 {
+            let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(PAGE_W, PAGE_H))), ..Default::default() };
+            let app = &mut paper.app;
+            let st = &mut st;
+            let out = ctx.run_ui(input, |ui| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
+                    let cw = ui.available_width();
+                    let id: Id = "pie-exam".into();
+                    paper_question_ws(app, ui, &ctx, Some(&q), 1, cw, 12.0, model::PaperStyle::Standard, Some((&id, 0, st)));
+                });
+            });
+            d = Drawn::of(&out.shapes);
+            out.drop_without_applying_deltas();
+        }
+        let r: Vec<Rect> = paper.ids.iter().map(|id| d.pictures(*id)[0]).collect();
+        assert!((r[0].top() - r[2].top()).abs() < 1.0 && r[2].left() > r[0].right(), "A and C share the first row: {r:?}");
+        assert!((r[1].top() - r[3].top()).abs() < 1.0 && r[1].top() > r[0].bottom(), "B and D the second: {r:?}");
+        for l in ["A.", "B.", "C.", "D."] {
+            assert!(d.find(l).is_some(), "{l} printed");
+        }
+    }
+
+    /// A multipart part's picture choices print with their letters too; text choices print as
+    /// before (one label per choice, no picture).
+    #[test]
+    fn part_picture_choices_print_and_text_choices_are_unchanged() {
+        let mut paper = Paper::new();
+        let q = question(Kind::Multipart { parts: vec![Part { stem: "a. Pick one".into(), kind: model::PartKind::Mc { answers: vec![pic(FILES[0], "", true), pic(FILES[1], "", false)] } }] });
+        let d = paper.draw(&q, model::PaperStyle::Standard);
+        for (i, l) in ["A.", "B."].iter().enumerate() {
+            let lr = d.find(l).unwrap_or_else(|| panic!("{l}: {:?}", d.text));
+            assert!(d.pictures(paper.ids[i])[0].left() > lr.right());
+        }
+        let text = question(Kind::Mc { answers: vec![Answer::new("Venus", false), Answer::new("Mercury", true)] });
+        let d = paper.draw(&text, model::PaperStyle::Standard);
+        assert!(d.find("A. Venus").is_some() && d.find("B. Mercury").is_some(), "{:?}", d.text);
+        assert!(paper.ids.iter().all(|id| d.pictures(*id).is_empty()));
+    }
+
+    /// For export a picture choice keeps its letter ("A." with no text) and its place in the key:
+    /// the marked key still marks B.
+    #[test]
+    fn exported_picture_choices_keep_their_letters_and_key() {
+        let m = map_question_raw(1, &pies(true));
+        assert_eq!(m.dq.choices, ["A. half", "B. quarter", "C. third", "D. whole"]);
+        assert_eq!((m.dq.correct.clone(), m.dq.key_marks.clone()), (vec![1], vec!["B".to_string()]));
+        let m = map_question_raw(1, &pies(false));
+        assert!(m.dq.choices.iter().zip(["A.", "B.", "C.", "D."]).all(|(c, l)| c.trim_end() == l), "{:?}", m.dq.choices);
+    }
+
+    /// Hand-run: `PA_SHOTS=<dir> cargo test --offline --lib examui::picture_choice_paper_tests::shot -- --ignored`
+    /// writes a paper page with four picture choices as `exam-picture-choices.png`.
+    #[test]
+    #[ignore = "writes a PNG; run by hand with PA_SHOTS=<dir>"]
+    fn shot_exam_page_with_picture_choices() {
+        let Some(dir) = crate::qedit::pic_test::shot_dir() else { return };
+        let mut paper = Paper::new();
+        let out = paper.out(&pies(false), model::PaperStyle::Standard);
+        let ctx = paper.ctx.clone();
+        let img = paper.painter.paint(&ctx, out, PAGE_W as usize, PAGE_H as usize, Color32::WHITE);
+        let p = dir.join("exam-picture-choices.png");
+        img.save(&p).unwrap();
+        println!("{}", p.display());
     }
 }

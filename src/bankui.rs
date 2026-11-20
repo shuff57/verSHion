@@ -630,8 +630,16 @@ impl App {
             }
         });
 
-        // Insert-figure modal stacks on top of the open editor.
+        // Insert-figure modal stacks on top of the open editor. Opened for an answer choice, it
+        // reads and fills that choice's picture: the choice's slot stands in for the question's
+        // while it draws.
+        if let Some(d) = self.qedit.as_mut() {
+            d.swap_figure_slot();
+        }
         self.draw_figure_picker(&ctx);
+        if let Some(d) = self.qedit.as_mut() {
+            d.swap_figure_slot();
+        }
         draw_topic_dialog(self, &ctx, key, &bank_id);
         draw_details_dialog(self, &ctx, key, &bank_id);
         // Headless/QA hook: VERSHION_TIDY=1 opens the bank's "Tidy stems" dialog once.
@@ -3266,12 +3274,61 @@ fn answer_block(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
     ui.painter().vline(r.left() + 1.0, r.y_range(), Stroke::new(2.0, theme::border()));
 }
 
+/// Tallest a choice's picture is drawn on a bank card.
+const CARD_CHOICE_PIC_H: f32 = 120.0;
+
+/// A choice's picture on a bank card (at most [`CARD_CHOICE_PIC_H`] tall, never enlarged).
+fn card_choice_picture(ui: &mut Ui, app: &mut App, img: &crate::model::ImageRef, size: f32) {
+    let ctx = ui.ctx().clone();
+    if let Some(tex) = texture_for(app, &ctx, img) {
+        let sz = tex.size_vec2();
+        let k = (ui.available_width().min(240.0) / sz.x.max(1.0)).min(1.0).min(CARD_CHOICE_PIC_H / sz.y.max(1.0));
+        ui.add_space(2.0);
+        ui.add(egui::Image::new(&tex).fit_to_exact_size(sz * k));
+        ui.add_space(2.0);
+    } else {
+        card_picture_box(ui, Some("picture file missing"), size);
+    }
+}
+
+/// What a choice says in plain text: its text, or `[picture]` for a choice that is only a picture.
+pub(crate) fn choice_words(a: &crate::model::Answer) -> &str {
+    if a.text.trim().is_empty() && a.image.is_some() { "[picture]" } else { &a.text }
+}
+
 /// Choices with the correct ones marked (green, bold letter, check mark), as Test Parrot's
-/// bank list shows them.
+/// bank list shows them. A picture choice shows its picture beside its letter, under the
+/// choice's text when it has some.
 fn card_choices(ui: &mut Ui, app: &mut App, answers: &[crate::model::Answer], size: f32, indent: f32) {
     use crate::equation::Rich;
     for (i, a) in answers.iter().enumerate() {
         let letter = format!("{}. ", char::from(b'A' + (i % 26) as u8));
+        if let Some(img) = &a.image {
+            let col = if a.correct { theme::green() } else { theme::ink() };
+            // (the letter in the card's serif, bold when correct, as `Rich`'s lead prints it)
+            let family = if a.correct { theme::serif_bold_family() } else { theme::serif_family() };
+            ui.horizontal_top(|ui| {
+                ui.add_space(indent);
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.label(RichText::new(letter.clone()).size(size).color(col).family(family));
+                ui.vertical(|ui| {
+                    let mut rich = Rich::new(size, if a.correct { theme::green() } else { theme::text_col() });
+                    if a.correct {
+                        rich.family = rich.bold_family.clone();
+                    }
+                    if !a.text.trim().is_empty() {
+                        let mut none = None;
+                        card_rich(ui, app, &a.text, &rich, &mut none);
+                    }
+                    card_choice_picture(ui, app, img, size);
+                });
+                if a.correct {
+                    // (the check mark follows the picture, as it follows a text choice's last line)
+                    ui.label(RichText::new(" ✓").size(size).color(col).family(theme::serif_bold_family()));
+                }
+            });
+            continue;
+        }
         ui.horizontal_top(|ui| {
             ui.add_space(indent);
             ui.vertical(|ui| {
@@ -4141,7 +4198,7 @@ pub(crate) fn popover_copy_text_cols(q: &Question, lines: u8, latex: bool, cols:
     let abc = |i: usize| char::from(b'A' + (i % 26) as u8);
     match &q.kind {
         Kind::Mc { answers } => {
-            let items: Vec<String> = answers.iter().enumerate().map(|(i, a)| format!("{}. {}", abc(i), one(&a.text))).collect();
+            let items: Vec<String> = answers.iter().enumerate().map(|(i, a)| format!("{}. {}", abc(i), one(choice_words(a)))).collect();
             out.extend(choice_rows(&items, cols));
         }
         Kind::Tf { .. } => out.push("True / False".to_string()),
@@ -4158,7 +4215,7 @@ pub(crate) fn popover_copy_text_cols(q: &Question, lines: u8, latex: bool, cols:
                 out.push(format!("{}{}", part_label(pi, &p.stem), pl.first().cloned().unwrap_or_default()));
                 out.extend(pl.into_iter().skip(1));
                 match &p.kind {
-                    PartKind::Mc { answers } => out.extend(answers.iter().enumerate().map(|(i, a)| format!("   {}. {}", abc(i), one(&a.text)))),
+                    PartKind::Mc { answers } => out.extend(answers.iter().enumerate().map(|(i, a)| format!("   {}. {}", abc(i), one(choice_words(a))))),
                     PartKind::Tf { .. } => out.push("   True / False".to_string()),
                     PartKind::Short { .. } => push_lines(&mut out),
                 }
@@ -4249,7 +4306,7 @@ fn popover_card(ui: &mut Ui, q: &Question, n: usize, ps: &mut PopoverState, exam
                 let cols = ps.cols.get(&q.id).copied().unwrap_or(1);
                 if cols <= 1 {
                     for (i, a) in answers.iter().enumerate() {
-                        rich_ui(ui, &a.text, &Rich::new(size, theme::text_col()).lead(abc(i), size, theme::ink()));
+                        rich_ui(ui, choice_words(a), &Rich::new(size, theme::text_col()).lead(abc(i), size, theme::ink()));
                     }
                 } else {
                     // Column-major grid of equal-width columns (A B down the first column).
@@ -4262,7 +4319,7 @@ fn popover_card(ui: &mut Ui, q: &Question, n: usize, ps: &mut PopoverState, exam
                             for i in row {
                                 ui.allocate_ui_with_layout(Vec2::new(cw, 0.0), Layout::top_down(Align::Min), |ui| {
                                     ui.set_width(cw - 6.0);
-                                    rich_ui(ui, &answers[i].text, &Rich::new(size, theme::text_col()).lead(abc(i), size, theme::ink()));
+                                    rich_ui(ui, choice_words(&answers[i]), &Rich::new(size, theme::text_col()).lead(abc(i), size, theme::ink()));
                                 });
                             }
                         });
@@ -4294,7 +4351,7 @@ fn popover_card(ui: &mut Ui, q: &Question, n: usize, ps: &mut PopoverState, exam
                         ui.horizontal_wrapped(|ui| {
                             ui.add_space(16.0);
                             for (i, a) in answers.iter().enumerate() {
-                                ui.label(theme::text(format!("{}{}", abc(i), crate::equation::stem_preview(&a.text))).size(size - 1.0));
+                                ui.label(theme::text(format!("{}{}", abc(i), crate::equation::stem_preview(choice_words(a)))).size(size - 1.0));
                             }
                         });
                     }
@@ -5444,5 +5501,91 @@ mod child_figure_card_tests {
             let later=text.iter().find(|t|t.0.contains("Later")).unwrap_or_else(|| panic!("later text missing: {text:?}")).1;
             assert!(owner.max.y<=images[0].min.y+0.1 && images[0].max.y<=later.min.y+0.1,"image stays between owning part text and later part text");
         }
+    }
+}
+
+#[cfg(test)]
+mod picture_choice_card_tests {
+    use super::*;
+    use crate::model::{Answer, ImageRef, Kind, Part, PartKind};
+    use crate::qedit::pic_test::{solid, Drawn};
+
+    fn pic(file: &str, text: &str, correct: bool) -> Answer {
+        Answer { text: text.into(), correct, image: Some(ImageRef { file: file.into(), width: 160, height: 120 }), ..Answer::default() }
+    }
+
+    fn question(kind: Kind) -> Question {
+        Question { id: "pies".into(), stem: "Which pie chart shows 25%?".into(), kind, points: None, difficulty: None, topics: Vec::new(), image: None, explanation: None, figure: None, created: 0, modified: 0 }
+    }
+
+    /// The card draws `q`; each picture's texture is in the app's media cache already.
+    fn card(q: &Question, files: &[&str]) -> (Drawn, Vec<egui::TextureId>) {
+        crate::store::init(Box::new(crate::store::FsBackend::new(std::env::temp_dir().join(format!("vershion-picture-choices-{}", std::process::id())))));
+        let ctx = egui::Context::default();
+        let mut app = App::new_from(&ctx);
+        theme::setup(&ctx);
+        let ids: Vec<egui::TextureId> = files
+            .iter()
+            .map(|f| {
+                let t = solid(&ctx, f, 160, 120, [70, 140, 210]);
+                let id = t.id();
+                app.textures.insert(f.to_string(), t);
+                id
+            })
+            .collect();
+        let mut drawn = Drawn::default();
+        for _ in 0..3 {
+            let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(600.0, 1400.0))), ..Default::default() };
+            let out = ctx.run_ui(input, |ui| card_full_question(ui, &mut app, q, 14.0));
+            drawn = Drawn::of(&out.shapes);
+            out.drop_without_applying_deltas();
+        }
+        (drawn, ids)
+    }
+
+    /// Four pie charts as A-D: each picture beside its letter, in order, B (correct) checked; a
+    /// choice with text keeps it above its picture.
+    #[test]
+    fn picture_choices_show_beside_their_letters() {
+        let files = ["media/a.png", "media/b.png", "media/c.png", "media/d.png"];
+        let q = question(Kind::Mc { answers: vec![pic(files[0], "", false), pic(files[1], "", true), pic(files[2], "One half", false), pic(files[3], "", false)] });
+        let (drawn, ids) = card(&q, &files);
+        let mut last_bottom = f32::MIN;
+        for (i, id) in ids.iter().enumerate() {
+            let letter = format!("{}.", (b'A' + i as u8) as char);
+            let l = drawn.find(&letter).unwrap_or_else(|| panic!("letter {letter} printed: {:?}", drawn.text));
+            let pics = drawn.pictures(*id);
+            assert_eq!(pics.len(), 1, "{letter}: its picture once");
+            let p = pics[0];
+            assert!(p.left() >= l.right() - 0.5 && (p.top() - l.top()).abs() < 30.0, "{letter} {l:?}: picture beside it {p:?}");
+            assert!(p.height() <= CARD_CHOICE_PIC_H + 0.5, "{p:?}");
+            assert!(l.top() >= last_bottom - 0.5, "{letter}: below the choice before");
+            last_bottom = p.bottom();
+        }
+        assert_eq!(drawn.count("✓"), 1, "the correct choice is checked: {:?}", drawn.text);
+        let tick = drawn.text.iter().find(|(t, _)| t.trim() == "✓").unwrap().1;
+        let b = drawn.pictures(ids[1])[0];
+        assert!(tick.left() >= b.right() - 0.5 && (tick.top() - b.top()).abs() < 6.0, "B's check mark follows its picture: {tick:?} {b:?}");
+        let half = drawn.text.iter().find(|(t, _)| t.contains("One")).expect("C's text").1;
+        let c = drawn.pictures(ids[2])[0];
+        assert!(half.bottom() <= c.top() + 0.5 && (half.left() - c.left()).abs() < 2.0, "text above the picture, lined up");
+        assert!(!drawn.text.iter().any(|(t, _)| t.contains("Picture needed")));
+    }
+
+    /// The same inside a multipart part, and a picture file that is gone says so.
+    #[test]
+    fn part_picture_choices_and_a_missing_file() {
+        let q = question(Kind::Multipart { parts: vec![Part { stem: "a. Pick one".into(), kind: PartKind::Mc { answers: vec![pic("media/a.png", "", true), pic("media/gone.png", "", false)] } }] });
+        let (drawn, ids) = card(&q, &["media/a.png"]);
+        assert!(drawn.find("A.").is_some() && drawn.find("B.").is_some(), "{:?}", drawn.text);
+        assert_eq!(drawn.pictures(ids[0]).len(), 1);
+        assert!(drawn.text.iter().any(|(t, _)| t.contains("picture file missing")));
+    }
+
+    /// Copied as text, a choice that is only a picture says so; text choices copy as before.
+    #[test]
+    fn picture_choices_copy_as_a_picture_marker() {
+        let q = question(Kind::Mc { answers: vec![pic("media/a.png", "", true), pic("media/b.png", "half", false), Answer::new("none", false)] });
+        assert_eq!(popover_copy_text(&q, 0, false), "Which pie chart shows 25%?\nA. [picture]\nB. half\nC. none");
     }
 }
