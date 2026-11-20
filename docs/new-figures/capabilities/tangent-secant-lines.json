@@ -1,0 +1,273 @@
+{
+ "figure": "tangent-secant-lines",
+ "site": "new",
+ "slug": "tangent-secant-lines",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Type the function f(x), with powers, roots, trig, e^x and ln",
+   "class": "core",
+   "evidence": "changes:{\"func\": \"x^3 - 3x\", \"xmin\": -3.0, \"xmax\": 3.0, \"ymin\": -4.0, \"ymax\": 4.0}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-02",
+   "text": "Set the point of tangency x = a",
+   "class": "core",
+   "evidence": "changes:{\"a\": \"2\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-03",
+   "text": "Draw the tangent line at x = a",
+   "class": "core",
+   "evidence": "changes:{\"show_secant\": false}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-04",
+   "text": "Draw the secant line through x = a and x = a + h",
+   "class": "core",
+   "evidence": "changes:{\"show_tangent\": false}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-05",
+   "text": "Set h, positive or negative",
+   "class": "core",
+   "evidence": "changes:{\"h\": \"-1\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-06",
+   "text": "Draw several secants for shrinking h (such as 2, 1, 0.5, 0.1) approaching the tangent",
+   "class": "core",
+   "evidence": "changes:{\"h\": \"2\", \"more_h\": \"1, 0.5, 0.1\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-07",
+   "text": "Write the tangent's slope f'(a)",
+   "class": "core",
+   "evidence": "changes:{\"a\": \"1/2\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-08",
+   "text": "Write the secant's slope as [f(a + h) - f(a)]/h, worked with the values",
+   "class": "core",
+   "evidence": "changes:{\"worked\": true}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-09",
+   "text": "Write the tangent line's equation in point-slope or slope-intercept form",
+   "class": "control",
+   "evidence": "changes:{\"tangent_eq\": \"Point-slope\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-10",
+   "text": "Write the secant line's equation",
+   "class": "control",
+   "evidence": "changes:{\"secant_eq\": \"Slope-intercept\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-11",
+   "text": "Draw the normal line at the point, with its slope or equation",
+   "class": "control",
+   "evidence": "changes:{\"normal\": \"With its equation\", \"square\": true}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-12",
+   "text": "Draw tangents at more than one point at once",
+   "class": "control",
+   "evidence": "changes:{\"more_a\": \"-1, 2\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-13",
+   "text": "Mark and label P(a, f(a)) and Q(a + h, f(a + h)) with coordinates or letters only",
+   "class": "control",
+   "evidence": "changes:{\"pt_labels\": \"Letters and coordinates\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-14",
+   "text": "Mark the secant's rise and run (Δy and h) as a slope triangle",
+   "class": "control",
+   "evidence": "changes:{\"secant_triangle\": true}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-15",
+   "text": "Mark the tangent's rise over run as a slope triangle",
+   "class": "control",
+   "evidence": "changes:{\"tangent_triangle\": true}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-16",
+   "text": "Mark h on the x-axis between a and a + h",
+   "class": "control",
+   "evidence": "changes:{\"h_mark\": true}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-17",
+   "text": "List the secant slopes for each h in a small table beside the graph",
+   "class": "control",
+   "evidence": "changes:{\"table\": true, \"more_h\": \"0.5, 0.1\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-18",
+   "text": "Give slopes exactly as fractions or rounded to chosen decimals",
+   "class": "control",
+   "evidence": "changes:{\"h\": \"1/3\", \"slope_form\": \"Decimals\", \"dec\": 3}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-19",
+   "text": "Draw each line solid, dashed or dotted",
+   "class": "control",
+   "evidence": "changes:{\"tangent_style\": \"Dashed\", \"secant_style\": \"Dotted\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-20",
+   "text": "Run the lines across the whole window or draw a short segment through the point",
+   "class": "control",
+   "evidence": "changes:{\"extent\": \"Short segment through the point\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-21",
+   "text": "Rename the function and variable, such as s(t) against t",
+   "class": "control",
+   "evidence": "changes:{\"fname\": \"s\", \"var\": \"t\", \"func\": \"t^2\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-22",
+   "text": "Load a classic example (y = x^2 with shrinking h, a cubic's horizontal tangent, sin x at 0, average and instantaneous velocity)",
+   "class": "control",
+   "evidence": "changes:{\"func\": \"x^3-3x\", \"a\": \"1\", \"h\": \"1\", \"xmin\": -3, \"xmax\": 3, \"ymin\": -4, \"ymax\": 4, \"title\": \"A cubic's horizontal tangent\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-23",
+   "text": "Set each axis's From, To and Count by",
+   "class": "control",
+   "evidence": "changes:{\"xmin\": -4.0, \"xmax\": 4.0, \"xstep\": 2.0}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-24",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "changes:{\"grid\": \"Bold\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-25",
+   "text": "Add minor gridlines between the numbered lines",
+   "class": "control",
+   "evidence": "changes:{\"minor\": 4}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-26",
+   "text": "Number the axes, or leave the numbers off",
+   "class": "control",
+   "evidence": "changes:{\"numbers\": false}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-27",
+   "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
+   "class": "control",
+   "evidence": "changes:{\"xlabel\": \"time\", \"ylabel\": \"distance\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-28",
+   "text": "Number the x-axis in multiples of π",
+   "class": "control",
+   "evidence": "changes:{\"xunits\": \"Multiples of π\", \"func\": \"sin(x)\", \"a\": \"pi/3\", \"h\": \"pi/2\", \"xmin\": -1.0, \"xmax\": 1.0, \"xstep\": 0.25, \"ymin\": -2.0, \"ymax\": 2.0}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-29",
+   "text": "Write a title",
+   "class": "control",
+   "evidence": "changes:{\"title\": \"Tangent to y = x^2 at x = 1\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-30",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "changes:{\"title_mode\": \"Blank line\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-31",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "changes:{\"label_size\": \"Large\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-32",
+   "text": "Draw it in black and white for photocopying (Print)",
+   "class": "control",
+   "evidence": "changes:{\"style\": \"Print\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-33",
+   "text": "A student copy with blank lines for the slopes and equations",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\": false}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-34",
+   "text": "A student copy with the curve and the point only, for students to draw the tangent",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\": false, \"student_copy\": \"Curve and P only, to draw the tangent\"}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-35",
+   "text": "An answer key line giving f'(a), the tangent's equation and the secant slopes",
+   "class": "version",
+   "evidence": "changes:{\"key_line\": true}",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-36",
+   "text": "Drag P along the curve on the figure to move the point of tangency",
+   "class": "interaction",
+   "evidence": "handle:drag:Drag P along the curve to move the point of tangency",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-37",
+   "text": "Drag Q along the curve on the figure to change h, the secant swinging toward the tangent",
+   "class": "interaction",
+   "evidence": "handle:drag:Drag Q along the curve to change h",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  },
+  {
+   "id": "cap-38",
+   "text": "Drag a label on the figure to move it",
+   "class": "interaction",
+   "evidence": "label-drag",
+   "note": "Round 1 (2026-11-15): accepted on the sixth independent check (pc2, 5bc2150)."
+  }
+ ]
+}

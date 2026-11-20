@@ -1,0 +1,266 @@
+{
+ "figure": "complex-plane",
+ "site": "new",
+ "slug": "complex-plane",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Plot z = a + bi typed exactly (fractions, roots)",
+   "class": "core",
+   "evidence": "changes:{\"zr\": \"1/3\", \"zi\": \"sqrt(2)\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-02",
+   "text": "Plot several numbers, each named",
+   "class": "core",
+   "evidence": "changes:{\"extra\": \"A, 1, -2\\nB, -3, -2\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-03",
+   "text": "Type a number in polar form, r(cos θ + i sin θ) or re^(iθ), in degrees or radians",
+   "class": "core",
+   "evidence": "changes:{\"input\": \"Polar exponential\", \"radius\": \"3\", \"theta\": \"pi/3\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-04",
+   "text": "Draw and write the modulus |z|",
+   "class": "core",
+   "evidence": "changes:{\"zr\": \"2\", \"zi\": \"3\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-05",
+   "text": "Mark the argument with an arc and write it (principal value)",
+   "class": "core",
+   "evidence": "changes:{\"zr\": \"-1\", \"zi\": \"-1\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-06",
+   "text": "Draw the conjugate, reflected in the real axis",
+   "class": "core",
+   "evidence": "changes:{\"operation\": \"Conjugate\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-07",
+   "text": "Draw the sum z + w by the parallelogram or head to tail",
+   "class": "core",
+   "evidence": "changes:{\"zr\": \"2\", \"zi\": \"1\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-08",
+   "text": "Draw the difference z - w",
+   "class": "core",
+   "evidence": "changes:{\"operation\": \"Difference\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-09",
+   "text": "Draw the product zw as a rotation and a stretch: moduli multiply, arguments add",
+   "class": "core",
+   "evidence": "changes:{\"operation\": \"Product\", \"zr\": \"1\", \"zi\": \"1\", \"wr\": \"2\", \"wi\": \"-1\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-10",
+   "text": "Draw the quotient z/w",
+   "class": "core",
+   "evidence": "changes:{\"operation\": \"Quotient\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-11",
+   "text": "Draw the nth roots of a number on a circle as a regular polygon",
+   "class": "core",
+   "evidence": "changes:{\"operation\": \"Roots\", \"zr\": \"1\", \"zi\": \"0\", \"n\": 5}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-12",
+   "text": "Draw powers z^n (De Moivre), each power marked",
+   "class": "control",
+   "evidence": "changes:{\"operation\": \"Powers\", \"zr\": \"1\", \"zi\": \"sqrt(3)\", \"n\": 3, \"polar\": true, \"xmin\": -10, \"xmax\": 10, \"ymin\": -10, \"ymax\": 10, \"xstep\": 2, \"ystep\": 2}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-13",
+   "text": "Draw each number as a point or as a vector from 0",
+   "class": "control",
+   "evidence": "changes:{\"marks\": \"Points\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-14",
+   "text": "Label each number with a + bi, its polar form, or a letter only",
+   "class": "control",
+   "evidence": "changes:{\"labels\": \"Cartesian\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-15",
+   "text": "Write the polar form r cis θ beside the figure",
+   "class": "control",
+   "evidence": "changes:{\"polar\": true}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-16",
+   "text": "Draw the circle |z| = r",
+   "class": "control",
+   "evidence": "changes:{\"circle\": true}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-17",
+   "text": "Draw dashed lines to the axes showing the real and imaginary parts",
+   "class": "control",
+   "evidence": "changes:{\"components\": true}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-18",
+   "text": "Join the roots into a polygon",
+   "class": "control",
+   "evidence": "changes:{\"operation\": \"Roots\", \"zr\": \"1\", \"zi\": \"0\", \"n\": 4, \"polygon\": true}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-19",
+   "text": "Give angles in degrees or radians, exactly (π/3) or rounded",
+   "class": "control",
+   "evidence": "changes:{\"unit\": \"Degrees\", \"zr\": \"1\", \"zi\": \"1\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-20",
+   "text": "Give moduli exactly (√13) or rounded to chosen decimals",
+   "class": "control",
+   "evidence": "changes:{\"accuracy\": \"Rounded\", \"dec\": 2}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-21",
+   "text": "Shade a region such as |z - 2i| ≤ 3 or an argument between two angles",
+   "class": "control",
+   "evidence": "changes:{\"locus\": \"Disc\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-22",
+   "text": "Label the axes Re and Im, or typed names",
+   "class": "control",
+   "evidence": "changes:{\"xlabel\": \"Real\", \"ylabel\": \"Imaginary\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-23",
+   "text": "Load a classic example (conjugate, sum by the parallelogram, multiplying by i, a product, the cube roots of 8, the fifth roots of unity)",
+   "class": "control",
+   "evidence": "changes:{\"operation\": \"Product\", \"wr\": \"0\", \"wi\": \"1\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-24",
+   "text": "Set each axis's From, To and Count by",
+   "class": "control",
+   "evidence": "changes:{\"xmin\": -5, \"xmax\": 7, \"ymin\": -4, \"ymax\": 8, \"xstep\": 2, \"ystep\": 2}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-25",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "changes:{\"grid\": \"Bold\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-26",
+   "text": "Number the axes, or leave the numbers off",
+   "class": "control",
+   "evidence": "changes:{\"numbers\": false}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-27",
+   "text": "Write a title",
+   "class": "control",
+   "evidence": "changes:{\"title\": \"Complex numbers\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-28",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "changes:{\"title_mode\": \"Blank line\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-29",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "changes:{\"label_size\": \"Large\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-30",
+   "text": "Draw it in black and white for photocopying (Print)",
+   "class": "control",
+   "evidence": "changes:{\"style\": \"Print\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-31",
+   "text": "A student copy with the points unlabelled, for students to write each as a + bi",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\": false, \"question\": \"Coordinates\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-32",
+   "text": "A student copy with blank lines for the modulus and argument",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\": false, \"question\": \"Modulus and argument\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-33",
+   "text": "A student copy with the given numbers only, the sum, product or roots left for students",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\": false, \"question\": \"Construction\", \"operation\": \"Product\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-34",
+   "text": "An answer key line giving each number in both forms and the result",
+   "class": "version",
+   "evidence": "changes:{\"polar\": true, \"labels\": \"Cartesian\"}",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-35",
+   "text": "Drag z on the figure to move it, its modulus, argument and results following",
+   "class": "interaction",
+   "evidence": "handle:drag:Drag z to change its real and imaginary parts and update the construction",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-36",
+   "text": "Drag w on the figure to move it",
+   "class": "interaction",
+   "evidence": "handle:drag:Drag w to change its real and imaginary parts",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  },
+  {
+   "id": "cap-37",
+   "text": "Drag a label on the figure to move it",
+   "class": "interaction",
+   "evidence": "label-drag",
+   "note": "Round 1 (2026-11-18): accepted on the fourth independent check (pc2, b002e08)."
+  }
+ ]
+}

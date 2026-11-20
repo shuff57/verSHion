@@ -1,0 +1,861 @@
+{
+ "generated_at": "2026-11-20T18:21:58+00:00",
+ "probe_checked_at": "2026-11-20T10:21:58",
+ "comparable": true,
+ "drift": [],
+ "pooled": 69.0,
+ "mean": 60.0,
+ "figures_scored": 10,
+ "figures_built": 7,
+ "figures_missing": [
+  "new/derivative-graphs",
+  "new/polar-parametric",
+  "new/slope-fields"
+ ],
+ "figures": {
+  "complex-plane": {
+   "score": 100.0,
+   "got": 130.0,
+   "total": 130.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "conic-sections": {
+   "score": 100.0,
+   "got": 151.0,
+   "total": 151.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "coordinate-grid": {
+   "score": 0.0,
+   "got": 0.0,
+   "total": 34.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a on a graphed row, the answers in the key",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-02",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Ask for the limits as x → ∞ and x → -∞ of a graphed row",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-03",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Ask the questions at several values of a at once",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write answers as numbers, ∞, -∞ or 'does not exist'",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-05",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a row's horizontal asymptote, found from its end behaviour, dashed and labelled with its equation",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label each discontinuity's kind (removable, jump, infinite) on the graph",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Ask where a row is not continuous, the key listing each x and its kind",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load a limits example (a moved hole, a jump, a vertical asymptote, a limit at infinity)",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-09",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with blank lines for each limit asked",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-10",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy without the discontinuity-kind labels",
+     "why": "no evidence"
+    }
+   ]
+  },
+  "derivative-graphs": {
+   "score": 0.0,
+   "got": 0.0,
+   "total": 116.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type the function f(x)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-02",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type a piecewise f, with corners where f' is undefined",
+     "why": "not built"
+    },
+    {
+     "id": "cap-03",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw f' under f on aligned axes, the x scales lined up",
+     "why": "not built"
+    },
+    {
+     "id": "cap-04",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw f'' as a third aligned graph",
+     "why": "not built"
+    },
+    {
+     "id": "cap-05",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw f, f' and f'' on one grid in different line styles",
+     "why": "not built"
+    },
+    {
+     "id": "cap-06",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Give the graph of f' as the given one (AP 'graph of f'' questions), with f drawn in the key through a chosen point",
+     "why": "not built"
+    },
+    {
+     "id": "cap-07",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the critical points on f and the zeros of f', joined by dashed vertical guides",
+     "why": "not built"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label the local maxima and minima",
+     "why": "not built"
+    },
+    {
+     "id": "cap-09",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the inflection points on f with the matching extrema of f' and zeros of f''",
+     "why": "not built"
+    },
+    {
+     "id": "cap-10",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the intervals where f increases and decreases",
+     "why": "not built"
+    },
+    {
+     "id": "cap-11",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the intervals where f is concave up and concave down",
+     "why": "not built"
+    },
+    {
+     "id": "cap-12",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a sign chart for f' under the graphs",
+     "why": "not built"
+    },
+    {
+     "id": "cap-13",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a sign chart for f''",
+     "why": "not built"
+    },
+    {
+     "id": "cap-14",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the absolute maximum and minimum on a closed interval, endpoints included",
+     "why": "not built"
+    },
+    {
+     "id": "cap-15",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give coordinates exactly or rounded to chosen decimals",
+     "why": "not built"
+    },
+    {
+     "id": "cap-16",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label each graph y = f(x), y = f'(x), or with typed names such as g and g'",
+     "why": "not built"
+    },
+    {
+     "id": "cap-17",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw each graph solid, dashed or dotted",
+     "why": "not built"
+    },
+    {
+     "id": "cap-18",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give each aligned graph its own y range",
+     "why": "not built"
+    },
+    {
+     "id": "cap-19",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load a classic example (a cubic, a quartic, x e^(-x), sin x, an AP-style f' made of segments and a semicircle)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-20",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set each axis's From, To and Count by",
+     "why": "not built"
+    },
+    {
+     "id": "cap-21",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the gridlines light, standard, bold or none",
+     "why": "not built"
+    },
+    {
+     "id": "cap-22",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add minor gridlines between the numbered lines",
+     "why": "not built"
+    },
+    {
+     "id": "cap-23",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Number the axes, or leave the numbers off",
+     "why": "not built"
+    },
+    {
+     "id": "cap-24",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-25",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Number the x-axis in multiples of π",
+     "why": "not built"
+    },
+    {
+     "id": "cap-26",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write a title",
+     "why": "not built"
+    },
+    {
+     "id": "cap-27",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of the title for students",
+     "why": "not built"
+    },
+    {
+     "id": "cap-28",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the labels small, medium or large",
+     "why": "not built"
+    },
+    {
+     "id": "cap-29",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw it in black and white for photocopying (Print)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-30",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A 'sketch f' from f' student copy: f drawn, blank aligned axes for f'",
+     "why": "not built"
+    },
+    {
+     "id": "cap-31",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A 'sketch f from f'' student copy: f' drawn, blank aligned axes for f",
+     "why": "not built"
+    },
+    {
+     "id": "cap-32",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with the graphs and none of the marks (critical points, intervals)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-33",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A blank sign chart for students to fill in",
+     "why": "not built"
+    },
+    {
+     "id": "cap-34",
+     "class": "version",
+     "weight": 3.0,
+     "text": "An answer key listing the critical points, extrema, inflection points and intervals",
+     "why": "not built"
+    },
+    {
+     "id": "cap-35",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag a tracer across the graphs on the figure to read f, f' and f'' at the same x, the tangent on f following it",
+     "why": "not built"
+    }
+   ]
+  },
+  "limits-discontinuities": {
+   "score": 100.0,
+   "got": 115.0,
+   "total": 115.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "polar-parametric": {
+   "score": 0.0,
+   "got": 0.0,
+   "total": 109.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type a polar curve r = f(θ)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-02",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Set the θ range, such as 0 to 2π",
+     "why": "not built"
+    },
+    {
+     "id": "cap-03",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw several polar curves on one grid",
+     "why": "not built"
+    },
+    {
+     "id": "cap-04",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Plot polar points (r, θ), negative r included",
+     "why": "not built"
+    },
+    {
+     "id": "cap-05",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type a parametric curve x(t), y(t) with its t range",
+     "why": "not built"
+    },
+    {
+     "id": "cap-06",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw a polar grid of circles and rays",
+     "why": "not built"
+    },
+    {
+     "id": "cap-07",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw rays every 15°, 30° or 45° (π/12, π/6, π/4)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label the rays in degrees or radians",
+     "why": "not built"
+    },
+    {
+     "id": "cap-09",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the largest circle and how far apart the circles are",
+     "why": "not built"
+    },
+    {
+     "id": "cap-10",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Put a rectangular grid behind the curve instead of a polar one",
+     "why": "not built"
+    },
+    {
+     "id": "cap-11",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Shade a polar region between two angles, or inside one curve and outside another",
+     "why": "not built"
+    },
+    {
+     "id": "cap-12",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the curve's direction with arrows",
+     "why": "not built"
+    },
+    {
+     "id": "cap-13",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark and label points at chosen t values",
+     "why": "not built"
+    },
+    {
+     "id": "cap-14",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark points on a polar curve at chosen θ values",
+     "why": "not built"
+    },
+    {
+     "id": "cap-15",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Label points with (r, θ), (x, y) or a letter only",
+     "why": "not built"
+    },
+    {
+     "id": "cap-16",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the ray from the pole to a point on the curve, showing r",
+     "why": "not built"
+    },
+    {
+     "id": "cap-17",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the tangent line at a chosen t, with its slope dy/dx",
+     "why": "not built"
+    },
+    {
+     "id": "cap-18",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write each curve's equation on the figure",
+     "why": "not built"
+    },
+    {
+     "id": "cap-19",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw each curve solid, dashed or dotted",
+     "why": "not built"
+    },
+    {
+     "id": "cap-20",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Give values exactly (π/3, √3) or rounded",
+     "why": "not built"
+    },
+    {
+     "id": "cap-21",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load a classic example (rose, cardioid, limaçon with a loop, spiral, circle r = 4 cos θ, area in one petal, a parametric",
+     "why": "not built"
+    },
+    {
+     "id": "cap-22",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the rectangular axes' From, To and Count by for a parametric curve",
+     "why": "not built"
+    },
+    {
+     "id": "cap-23",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the gridlines light, standard, bold or none",
+     "why": "not built"
+    },
+    {
+     "id": "cap-24",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write a title",
+     "why": "not built"
+    },
+    {
+     "id": "cap-25",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of the title for students",
+     "why": "not built"
+    },
+    {
+     "id": "cap-26",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the labels small, medium or large",
+     "why": "not built"
+    },
+    {
+     "id": "cap-27",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw it in black and white for photocopying (Print)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-28",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with the points only on a blank polar grid, for students to sketch the curve",
+     "why": "not built"
+    },
+    {
+     "id": "cap-29",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with a blank line for the equation, to name the curve",
+     "why": "not built"
+    },
+    {
+     "id": "cap-30",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with the points' coordinates left blank",
+     "why": "not built"
+    },
+    {
+     "id": "cap-31",
+     "class": "version",
+     "weight": 3.0,
+     "text": "An answer key line giving the equations, the points and any area",
+     "why": "not built"
+    },
+    {
+     "id": "cap-32",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag P on the polar grid on the figure to set its r and θ",
+     "why": "not built"
+    },
+    {
+     "id": "cap-33",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag a tracer along the curve on the figure, its θ, ray and r following",
+     "why": "not built"
+    }
+   ]
+  },
+  "riemann-sums": {
+   "score": 100.0,
+   "got": 164.0,
+   "total": 164.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "sequences-series": {
+   "score": 100.0,
+   "got": 121.0,
+   "total": 121.0,
+   "unclassified": 0,
+   "gaps": []
+  },
+  "slope-fields": {
+   "score": 0.0,
+   "got": 0.0,
+   "total": 104.0,
+   "unclassified": 0,
+   "gaps": [
+    {
+     "id": "cap-01",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Type the differential equation dy/dx = f(x, y)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-02",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw the field's segments on a grid over a chosen range",
+     "why": "not built"
+    },
+    {
+     "id": "cap-03",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw a solution curve through a typed point (x_0, y_0)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-04",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw several solution curves, each through its own point",
+     "why": "not built"
+    },
+    {
+     "id": "cap-05",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw Euler's method from (x_0, y_0) with step h and n steps, as joined segments",
+     "why": "not built"
+    },
+    {
+     "id": "cap-06",
+     "class": "control",
+     "weight": 3.0,
+     "text": "List the Euler steps' x and y values in a table",
+     "why": "not built"
+    },
+    {
+     "id": "cap-07",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set how far apart the segments are",
+     "why": "not built"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set how long the segments are",
+     "why": "not built"
+    },
+    {
+     "id": "cap-09",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the segments as plain segments or as arrows",
+     "why": "not built"
+    },
+    {
+     "id": "cap-10",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark the equilibrium solutions (where dy/dx = 0 for every x) as lines",
+     "why": "not built"
+    },
+    {
+     "id": "cap-11",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Mark and label each starting point",
+     "why": "not built"
+    },
+    {
+     "id": "cap-12",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the solution curve beside Euler's steps to compare them",
+     "why": "not built"
+    },
+    {
+     "id": "cap-13",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a solution curve forward from its point only, or both ways",
+     "why": "not built"
+    },
+    {
+     "id": "cap-14",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw each solution curve solid, dashed or dotted",
+     "why": "not built"
+    },
+    {
+     "id": "cap-15",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Rename the variables, such as dP/dt against t",
+     "why": "not built"
+    },
+    {
+     "id": "cap-16",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Load a classic example (dy/dx = x, growth, x - y, circles, logistic, Euler with h = 0.5)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-17",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set each axis's From, To and Count by",
+     "why": "not built"
+    },
+    {
+     "id": "cap-18",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the gridlines light, standard, bold or none",
+     "why": "not built"
+    },
+    {
+     "id": "cap-19",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Add minor gridlines between the numbered lines",
+     "why": "not built"
+    },
+    {
+     "id": "cap-20",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Number the axes, or leave the numbers off",
+     "why": "not built"
+    },
+    {
+     "id": "cap-21",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-22",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write a title",
+     "why": "not built"
+    },
+    {
+     "id": "cap-23",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Put a blank line in place of the title for students",
+     "why": "not built"
+    },
+    {
+     "id": "cap-24",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the labels small, medium or large",
+     "why": "not built"
+    },
+    {
+     "id": "cap-25",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw it in black and white for photocopying (Print)",
+     "why": "not built"
+    },
+    {
+     "id": "cap-26",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with the field and the starting point only, for students to sketch the solution",
+     "why": "not built"
+    },
+    {
+     "id": "cap-27",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with dots at the grid points and no segments, for students to draw the field (AP 'sketch at the nine poin",
+     "why": "not built"
+    },
+    {
+     "id": "cap-28",
+     "class": "version",
+     "weight": 3.0,
+     "text": "A student copy with a blank line for the equation",
+     "why": "not built"
+    },
+    {
+     "id": "cap-29",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Four candidate equations labelled A to D under the field, the matching one marked in the key",
+     "why": "not built"
+    },
+    {
+     "id": "cap-30",
+     "class": "version",
+     "weight": 3.0,
+     "text": "An answer key line giving the Euler values and the solution",
+     "why": "not built"
+    },
+    {
+     "id": "cap-31",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Drag the starting point on the figure to move its solution curve",
+     "why": "not built"
+    },
+    {
+     "id": "cap-32",
+     "class": "interaction",
+     "weight": 2.0,
+     "text": "Click on the field on the figure to start a solution curve there",
+     "why": "not built"
+    }
+   ]
+  },
+  "tangent-secant-lines": {
+   "score": 100.0,
+   "got": 127.0,
+   "total": 127.0,
+   "unclassified": 0,
+   "gaps": []
+  }
+ }
+}

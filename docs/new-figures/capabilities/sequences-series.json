@@ -1,0 +1,259 @@
+{
+ "figure": "sequences-series",
+ "site": "new",
+ "slug": "sequences-series",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "An arithmetic sequence from a_1 and d",
+   "class": "core",
+   "evidence": "changes:{\"first\":\"3\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-02",
+   "text": "A geometric sequence from a_1 and r, including negative and fractional r",
+   "class": "core",
+   "evidence": "changes:{\"mode\":\"Geometric\",\"ratio\":\"-1/2\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-03",
+   "text": "A sequence from a typed explicit formula a_n = f(n)",
+   "class": "core",
+   "evidence": "changes:{\"formula\":\"n^2\",\"from\":0,\"mode\":\"Explicit\",\"step\":10,\"to\":70}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-04",
+   "text": "A sequence from a typed recursive formula, using a_(n-1) and a_(n-2)",
+   "class": "core",
+   "evidence": "changes:{\"explicit\":false,\"first\":\"1\",\"from\":0,\"mode\":\"Recursive\",\"recurrence\":\"a_(n-1)+a_(n-2)\",\"recursive\":true,\"second\":\"1\",\"step\":5,\"to\":25}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-05",
+   "text": "Set how many terms, and whether n starts at 0 or 1",
+   "class": "core",
+   "evidence": "changes:{\"count\":10,\"start\":\"0\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-06",
+   "text": "Draw the terms as discrete points (n, a_n)",
+   "class": "core",
+   "evidence": "changes:{\"count\":12,\"explicit\":false,\"formula\":\"(-1)^n*n/(n+1)\",\"from\":-1.2,\"mode\":\"Explicit\",\"step\":0.4,\"terms\":false,\"to\":1.2}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-07",
+   "text": "Draw the partial sums S_n as their own points",
+   "class": "core",
+   "evidence": "changes:{\"display\":\"Partial sums\",\"step\":10,\"to\":50}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-08",
+   "text": "Draw the limit line y = L for a convergent sequence or series",
+   "class": "core",
+   "evidence": "changes:{\"display\":\"Partial sums\",\"explicit\":false,\"first\":\"6\",\"from\":0,\"limit\":true,\"mode\":\"Geometric\",\"ratio\":\"1/2\",\"step\":2,\"terms\":false,\"to\":14}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-09",
+   "text": "Type values as fractions",
+   "class": "control",
+   "evidence": "changes:{\"first\":\"1/3\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-10",
+   "text": "Write the explicit formula on the figure",
+   "class": "control",
+   "evidence": "changes:{\"explicit\":true,\"first\":\"3\",\"from\":0,\"mode\":\"Geometric\",\"ratio\":\"2/3\",\"start\":\"0\",\"step\":1,\"terms\":false,\"to\":4}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-11",
+   "text": "Write the recursive formula on the figure",
+   "class": "control",
+   "evidence": "changes:{\"recursive\":true}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-12",
+   "text": "Label each point with its value",
+   "class": "control",
+   "evidence": "changes:{\"point_values\":true}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-13",
+   "text": "List the terms a_1, a_2, … under the graph",
+   "class": "control",
+   "evidence": "changes:{\"count\":10,\"explicit\":false,\"formula\":\"(-1)^n/(n+1)\",\"from\":-1,\"mode\":\"Explicit\",\"start\":\"0\",\"step\":0.5,\"terms\":true,\"to\":1}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-14",
+   "text": "List the partial sums under the graph",
+   "class": "control",
+   "evidence": "changes:{\"step\":10,\"sums\":true,\"to\":50}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-15",
+   "text": "Write the sum of n terms, and the sum to infinity a/(1 - r) when |r| < 1",
+   "class": "control",
+   "evidence": "changes:{\"mode\":\"Geometric\",\"sum\":true}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-16",
+   "text": "State whether it converges, and its limit",
+   "class": "control",
+   "evidence": "changes:{\"convergence\":true,\"mode\":\"Geometric\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-17",
+   "text": "Join the points with a light line",
+   "class": "control",
+   "evidence": "changes:{\"join\":true}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-18",
+   "text": "Draw the terms as spikes from the axis instead of dots",
+   "class": "control",
+   "evidence": "changes:{\"marks\":\"Spikes\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-19",
+   "text": "Draw terms and partial sums on one grid in two styles, or on two aligned graphs",
+   "class": "control",
+   "evidence": "changes:{\"display\":\"Both\",\"layout\":\"Two aligned graphs\",\"step\":10,\"to\":50}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-20",
+   "text": "Draw a band of width ε around the limit",
+   "class": "control",
+   "evidence": "changes:{\"band\":true,\"limit\":true,\"mode\":\"Geometric\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-21",
+   "text": "Show the terms as points on a number line closing in on the limit",
+   "class": "control",
+   "evidence": "changes:{\"from\":-1,\"layout\":\"Number line\",\"limit\":true,\"mode\":\"Geometric\",\"to\":3}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-22",
+   "text": "Load a classic example (arithmetic, geometric halving, alternating r = -1/2, Fibonacci, 1/n, geometric partial sums)",
+   "class": "control",
+   "evidence": "changes:{\"first\":\"8\",\"mode\":\"Geometric\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-23",
+   "text": "Set the vertical axis's From, To and Count by (the n axis counts by whole numbers)",
+   "class": "control",
+   "evidence": "changes:{\"from\":-4,\"step\":4,\"to\":16}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-24",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "changes:{\"grid\":\"Bold\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-25",
+   "text": "Set the axis labels at the arrow tips (n and a_n, or typed names)",
+   "class": "control",
+   "evidence": "changes:{\"xlabel\":\"Term\",\"ylabel\":\"Value\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-26",
+   "text": "Write a title",
+   "class": "control",
+   "evidence": "changes:{\"title\":\"A growing sequence\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-27",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "changes:{\"blank_title\":true}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-28",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "changes:{\"label_size\":\"Large\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-29",
+   "text": "Draw it in black and white for photocopying (Print)",
+   "class": "control",
+   "evidence": "changes:{\"style\":\"Print\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-30",
+   "text": "A student copy with a blank line for the formula, to write it from the graph",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\":false}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-31",
+   "text": "A student copy with chosen terms blank (a_5 = ___)",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\":false,\"task\":\"Missing terms\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-32",
+   "text": "A student copy with the first few terms drawn and the rest for students to continue",
+   "class": "version",
+   "evidence": "changes:{\"show_answers\":false,\"task\":\"Continue\"}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-33",
+   "text": "An answer key line giving the formula, the terms asked, the sum and the limit",
+   "class": "version",
+   "evidence": "changes:{\"convergence\":true,\"first\":\"3\",\"from\":-2,\"missing\":\"4,6,8\",\"mode\":\"Geometric\",\"point_values\":true,\"ratio\":\"-1/2\",\"recursive\":true,\"show_answers\":true,\"step\":1,\"sum\":true,\"task\":\"Missing terms\",\"to\":4}",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-34",
+   "text": "Drag the first term's point up or down on the figure to change a_1",
+   "class": "interaction",
+   "evidence": "handle:drag:Drag the first term up or down to change the first value",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-35",
+   "text": "Drag the second term's point up or down on the figure to change d (or r)",
+   "class": "interaction",
+   "evidence": "handle:drag:Drag the second term up or down to change the difference or ratio",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  },
+  {
+   "id": "cap-36",
+   "text": "Drag the last point left or right on the figure to show more or fewer terms",
+   "class": "interaction",
+   "evidence": "handle:drag:Drag the last term left or right to change the number of terms",
+   "note": "Round 1 (2026-11-15): accepted on the third independent check (NAS, 7abb7a4)."
+  }
+ ]
+}

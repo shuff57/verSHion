@@ -1,0 +1,35 @@
+{
+ "note": "new/<slug> -> our figure id. null = not built yet; its ledger id is the slug, set ours to the slug when built. A page that adds to an existing figure maps to that figure's id (new/coordinate-grid-limits -> coordinate-grid) and its ledger is capabilities/<that id>.json in this folder only.",
+ "figures": {
+  "new/conic-sections": {
+   "ours": "conic-sections"
+  },
+  "new/tangent-secant-lines": {
+   "ours": "tangent-secant-lines"
+  },
+  "new/riemann-sums": {
+   "ours": "riemann-sums"
+  },
+  "new/derivative-graphs": {
+   "ours": null
+  },
+  "new/limits-discontinuities": {
+   "ours": "limits-discontinuities"
+  },
+  "new/sequences-series": {
+   "ours": "sequences-series"
+  },
+  "new/complex-plane": {
+   "ours": "complex-plane"
+  },
+  "new/polar-parametric": {
+   "ours": null
+  },
+  "new/slope-fields": {
+   "ours": null
+  },
+  "new/coordinate-grid-limits": {
+   "ours": "coordinate-grid"
+  }
+ }
+}

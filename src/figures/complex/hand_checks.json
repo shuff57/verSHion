@@ -1,0 +1,522 @@
+[
+  {
+    "input": [
+      "3",
+      "2",
+      "-1",
+      "1"
+    ],
+    "operation": "Sum",
+    "expected": [
+      2.0,
+      3.0
+    ]
+  },
+  {
+    "input": [
+      "3",
+      "2",
+      "-1",
+      "1"
+    ],
+    "operation": "Difference",
+    "expected": [
+      4.0,
+      1.0
+    ]
+  },
+  {
+    "input": [
+      "3",
+      "2",
+      "-1",
+      "1"
+    ],
+    "operation": "Product",
+    "expected": [
+      -5.0,
+      1.0
+    ]
+  },
+  {
+    "input": [
+      "3",
+      "2",
+      "-1",
+      "1"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      -0.5,
+      -2.5
+    ]
+  },
+  {
+    "input": [
+      "1",
+      "1",
+      "2",
+      "-1"
+    ],
+    "operation": "Sum",
+    "expected": [
+      3.0,
+      0.0
+    ]
+  },
+  {
+    "input": [
+      "1",
+      "1",
+      "2",
+      "-1"
+    ],
+    "operation": "Difference",
+    "expected": [
+      -1.0,
+      2.0
+    ]
+  },
+  {
+    "input": [
+      "1",
+      "1",
+      "2",
+      "-1"
+    ],
+    "operation": "Product",
+    "expected": [
+      3.0,
+      1.0
+    ]
+  },
+  {
+    "input": [
+      "1",
+      "1",
+      "2",
+      "-1"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      0.2,
+      0.6
+    ]
+  },
+  {
+    "input": [
+      "-2",
+      "3",
+      "1",
+      "2"
+    ],
+    "operation": "Sum",
+    "expected": [
+      -1.0,
+      5.0
+    ]
+  },
+  {
+    "input": [
+      "-2",
+      "3",
+      "1",
+      "2"
+    ],
+    "operation": "Difference",
+    "expected": [
+      -3.0,
+      1.0
+    ]
+  },
+  {
+    "input": [
+      "-2",
+      "3",
+      "1",
+      "2"
+    ],
+    "operation": "Product",
+    "expected": [
+      -8.0,
+      -1.0
+    ]
+  },
+  {
+    "input": [
+      "-2",
+      "3",
+      "1",
+      "2"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      0.8,
+      1.4
+    ]
+  },
+  {
+    "input": [
+      "1/3",
+      "1/2",
+      "2/3",
+      "-1/4"
+    ],
+    "operation": "Sum",
+    "expected": [
+      1.0,
+      0.25
+    ]
+  },
+  {
+    "input": [
+      "1/3",
+      "1/2",
+      "2/3",
+      "-1/4"
+    ],
+    "operation": "Difference",
+    "expected": [
+      -0.3333333333333333,
+      0.75
+    ]
+  },
+  {
+    "input": [
+      "1/3",
+      "1/2",
+      "2/3",
+      "-1/4"
+    ],
+    "operation": "Product",
+    "expected": [
+      0.3472222222222222,
+      0.25
+    ]
+  },
+  {
+    "input": [
+      "1/3",
+      "1/2",
+      "2/3",
+      "-1/4"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      0.1917808219178082,
+      0.821917808219178
+    ]
+  },
+  {
+    "input": [
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "operation": "Sum",
+    "expected": [
+      1.0,
+      1.0
+    ]
+  },
+  {
+    "input": [
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "operation": "Difference",
+    "expected": [
+      -1.0,
+      -1.0
+    ]
+  },
+  {
+    "input": [
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "operation": "Product",
+    "expected": [
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "input": [
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "input": [
+      "-3",
+      "-4",
+      "2",
+      "-1"
+    ],
+    "operation": "Sum",
+    "expected": [
+      -1.0,
+      -5.0
+    ]
+  },
+  {
+    "input": [
+      "-3",
+      "-4",
+      "2",
+      "-1"
+    ],
+    "operation": "Difference",
+    "expected": [
+      -5.0,
+      -3.0
+    ]
+  },
+  {
+    "input": [
+      "-3",
+      "-4",
+      "2",
+      "-1"
+    ],
+    "operation": "Product",
+    "expected": [
+      -10.0,
+      -5.0
+    ]
+  },
+  {
+    "input": [
+      "-3",
+      "-4",
+      "2",
+      "-1"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      -0.4,
+      -2.2
+    ]
+  },
+  {
+    "input": [
+      "4",
+      "-2",
+      "-2",
+      "3"
+    ],
+    "operation": "Sum",
+    "expected": [
+      2.0,
+      1.0
+    ]
+  },
+  {
+    "input": [
+      "4",
+      "-2",
+      "-2",
+      "3"
+    ],
+    "operation": "Difference",
+    "expected": [
+      6.0,
+      -5.0
+    ]
+  },
+  {
+    "input": [
+      "4",
+      "-2",
+      "-2",
+      "3"
+    ],
+    "operation": "Product",
+    "expected": [
+      -2.0,
+      16.0
+    ]
+  },
+  {
+    "input": [
+      "4",
+      "-2",
+      "-2",
+      "3"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      -1.0769230769230769,
+      -0.6153846153846154
+    ]
+  },
+  {
+    "input": [
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "operation": "Sum",
+    "expected": [
+      1.0,
+      1.0
+    ]
+  },
+  {
+    "input": [
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "operation": "Difference",
+    "expected": [
+      1.0,
+      -1.0
+    ]
+  },
+  {
+    "input": [
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "operation": "Product",
+    "expected": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "input": [
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      0.0,
+      -1.0
+    ]
+  },
+  {
+    "input": [
+      "0",
+      "2",
+      "3",
+      "0"
+    ],
+    "operation": "Sum",
+    "expected": [
+      3.0,
+      2.0
+    ]
+  },
+  {
+    "input": [
+      "0",
+      "2",
+      "3",
+      "0"
+    ],
+    "operation": "Difference",
+    "expected": [
+      -3.0,
+      2.0
+    ]
+  },
+  {
+    "input": [
+      "0",
+      "2",
+      "3",
+      "0"
+    ],
+    "operation": "Product",
+    "expected": [
+      0.0,
+      6.0
+    ]
+  },
+  {
+    "input": [
+      "0",
+      "2",
+      "3",
+      "0"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      0.0,
+      0.6666666666666666
+    ]
+  },
+  {
+    "input": [
+      "-1",
+      "1",
+      "-1",
+      "-1"
+    ],
+    "operation": "Sum",
+    "expected": [
+      -2.0,
+      0.0
+    ]
+  },
+  {
+    "input": [
+      "-1",
+      "1",
+      "-1",
+      "-1"
+    ],
+    "operation": "Difference",
+    "expected": [
+      0.0,
+      2.0
+    ]
+  },
+  {
+    "input": [
+      "-1",
+      "1",
+      "-1",
+      "-1"
+    ],
+    "operation": "Product",
+    "expected": [
+      2.0,
+      0.0
+    ]
+  },
+  {
+    "input": [
+      "-1",
+      "1",
+      "-1",
+      "-1"
+    ],
+    "operation": "Quotient",
+    "expected": [
+      0.0,
+      -1.0
+    ]
+  }
+]

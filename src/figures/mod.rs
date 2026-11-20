@@ -46,6 +46,7 @@ pub mod transform;
 pub mod fraction;
 pub mod triangle_centres;
 pub mod slope;
+pub mod sequences;
 pub mod protractor;
 pub mod baseten;
 pub mod nets;
@@ -61,6 +62,7 @@ pub mod math;
 pub mod math_geo;
 pub mod math_plot;
 pub mod implicit;
+pub mod complex;
 pub mod physics;
 pub mod sections;
 pub mod share;
@@ -565,10 +567,12 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(trig::defs());
     v.extend(sincos::defs());
     v.extend(unitcircle::defs());
+    v.extend(complex::defs());
     v.extend(transform::defs());
     v.extend(fraction::defs());
     v.extend(triangle_centres::defs());
     v.extend(slope::defs());
+    v.extend(sequences::defs());
     v.extend(protractor::defs());
     v.extend(baseten::defs());
     v.extend(nets::defs());
@@ -591,6 +595,8 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(language::defs());
     v.extend(health::defs());
     v.extend(art::defs());
+    v.extend(math::conics::defs());
+    v.extend(math::limits::defs());
     v
 }
 
@@ -774,6 +780,8 @@ pub fn label_after_typing(value_key: &str, was_empty: bool, now: &str, mode: &st
 /// only the controls of the chosen setup (a pulley's Atwood setup has no ramp angle). Hidden
 /// params keep their values, so switching back restores them. Default: shown.
 pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
+    if id == sequences::ID { return sequences::relevant(key,p); }
+    if id == complex::ID { return complex::relevant(key, p); }
     match id {
         "pulley" => physics::pulley_relevant(key, p),
         // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
@@ -821,6 +829,11 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "waves" | "projectile-motion" => physics::relevant(id, key, p) && cards::relevant(id, key, p),
         // batch 9: the inflection point's and the phases' label modes only where they draw
         "population-growth" => biology::popdyn::growth_b9_relevant(key, p) && cards::relevant(id, key, p),
+        "conic-sections" => math::conics::relevant(key, p),
+        "limits-discontinuities" => math::limits::relevant(key, p),
+        // the tangent and secant lines: only the controls of the lines drawn, the student copy's choice on a student copy
+        math::tangent::ID => math::tangent::relevant(key, p) && cards::relevant(id, key, p),
+        math::riemann::ID => math::riemann::relevant(key, p) && cards::relevant(id, key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -847,6 +860,10 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     }
     if id == "transformations" {
         transform::panel_changed(key, p);
+    }
+    // a typed conic equation fills the value boxes; a changed value rewrites the typed equation
+    if id == math::conics::ID {
+        math::conics::panel_changed(key, p);
     }
     if id == "predator-prey" {
         biology::popdyn::pp_panel_changed(key, p);
@@ -890,6 +907,8 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
+    if id == sequences::ID { return sequences::warnings(p); }
+    if id == complex::ID { return complex::warnings(p); }
     if id == stats::histogram::ID {
         return stats::histogram::warnings(p);
     }
@@ -897,6 +916,10 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon" => math::flat_b9::warnings(id, p),
         "pulley" => physics::pulley_warnings(p),
         "population-growth" => biology::popdyn::growth_warnings(p),
+        "conic-sections" => math::conics::warnings(p),
+        "limits-discontinuities" => math::limits::warnings(p),
+        math::tangent::ID => math::tangent::warnings(p),
+        math::riemann::ID => math::riemann::warnings(p),
         _ => vec![] }
 }
 
@@ -996,7 +1019,7 @@ pub fn random_reading(id: &str, p: &mut Params, seed: u64) -> bool {
 /// The reference's "Classic setups" dropdown (population growth, Punnett square, pedigree):
 /// named starting points like `Example`, applied over the plain defaults.
 pub fn classic_setups(id: &str) -> Vec<Example> {
-    biology::classic_setups(id).unwrap_or_default()
+    biology::classic_setups(id).or_else(|| math::conics::classic_setups(id)).or_else(|| math::limits::classic_setups(id)).unwrap_or_default()
 }
 
 /// A named starting point for a figure ("Start from an example"): parameter overrides on top of
@@ -1016,10 +1039,12 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| trig::examples(id))
         .or_else(|| sincos::examples(id))
         .or_else(|| unitcircle::examples(id))
+        .or_else(|| complex::examples(id))
         .or_else(|| transform::examples(id))
         .or_else(|| fraction::examples(id))
         .or_else(|| triangle_centres::examples(id))
         .or_else(|| slope::examples(id))
+        .or_else(|| sequences::examples(id))
         .or_else(|| protractor::examples(id))
         .or_else(|| baseten::examples(id))
         .or_else(|| nets::examples(id))

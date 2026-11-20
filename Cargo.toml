@@ -30,6 +30,11 @@ pool-custom-server = []
 url = "2"   # build.rs checks VERSHION_POOL_URL
 
 [dependencies]
+# Exact large finite sums in the sequences figure (already present transitively).
+num-bigint = "0.4.8"
+num-rational = "0.4.2"
+num-traits = "0.2.19"
+
 egui = "0.36"
 log = "0.4"
 # std clocks panic on wasm32; this is std's clock natively and the browser's in a page.

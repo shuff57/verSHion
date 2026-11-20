@@ -60,12 +60,16 @@ collision-momentum__defaults 81efc199f24875ad
 collision-momentum__start 81efc199f24875ad
 colour-wheel__defaults d0eb066355a4f4fe
 colour-wheel__start d0eb066355a4f4fe
+complex-plane__defaults 7be779da983da2aa
+complex-plane__start 7be779da983da2aa
 composite-shape__defaults 1a1d2c6528bf698e
 composite-shape__start 1a1d2c6528bf698e
 cone__defaults 95a39fa272e72581
 cone__start bdae63a6889d6814
 confidence-interval__defaults 0215572bebb0d6c0
 confidence-interval__start 0215572bebb0d6c0
+conic-sections__defaults 4f8a4f72d392b726
+conic-sections__start 4f8a4f72d392b726
 coordinate-grid__defaults c8327805634055d3
 coordinate-grid__start 4bd1ffb58bb88a2d
 cost-curves__defaults 948ca5ae19d142a9
@@ -164,6 +168,8 @@ length-reading__defaults 6f537c7a8a3fef24
 length-reading__start 453f02e67ba5f037
 lewis-structures__defaults a66516d92e06586f
 lewis-structures__start a66516d92e06586f
+limits-discontinuities__defaults f630aa668b36b5d6
+limits-discontinuities__start f630aa668b36b5d6
 line-spectrum__defaults bd8fcd1ec5c958da
 line-spectrum__start 3750cf1d61a8d616
 loan-amortisation__defaults 2550b7d1785fa669
@@ -296,6 +302,8 @@ residual-plot__defaults 27e35e6a92629c17
 residual-plot__start 27e35e6a92629c17
 rhythm-counting__defaults c1c620ae3e27b02a
 rhythm-counting__start c1c620ae3e27b02a
+riemann-sums__defaults dcf0e6995d2be198
+riemann-sums__start dcf0e6995d2be198
 right-triangle-trig__defaults 04ee5345d24965e7
 right-triangle-trig__start 04ee5345d24965e7
 ruler-reading__defaults 3f6161466de39320
@@ -306,6 +314,8 @@ scatterplot__defaults 9346175339a08c40
 scatterplot__start 9346175339a08c40
 sentence-diagram__defaults 16a9df68074b212f
 sentence-diagram__start 16a9df68074b212f
+sequences-series__defaults 9240b785875bde18
+sequences-series__start 9240b785875bde18
 sine-cosine__defaults 3180a65e16ea590e
 sine-cosine__start 3180a65e16ea590e
 slope-triangle__defaults 53cc7d348c685d49
@@ -338,6 +348,8 @@ swot__defaults b6fb63ab23735d12
 swot__start b6fb63ab23735d12
 t-account__defaults 0930021c1be63185
 t-account__start 0930021c1be63185
+tangent-secant-lines__defaults 4ff21d4bc6f6d6d4
+tangent-secant-lines__start 4ff21d4bc6f6d6d4
 temperature-reading__defaults 01d08d382c5bc6fb
 temperature-reading__start c03451ce808fd8f9
 time-value__defaults 00ca45c70e402807

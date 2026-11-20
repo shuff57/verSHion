@@ -1,0 +1,77 @@
+{
+ "figure": "coordinate-grid",
+ "site": "new",
+ "slug": "coordinate-grid-limits",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a on a graphed row, the answers in the key",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Ask for the limits as x → ∞ and x → -∞ of a graphed row",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Ask the questions at several values of a at once",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Write answers as numbers, ∞, -∞ or 'does not exist'",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Draw a row's horizontal asymptote, found from its end behaviour, dashed and labelled with its equation",
+   "class": "control",
+   "evidence": "",
+   "note": "the grid's asymptote switch draws vertical asymptotes only"
+  },
+  {
+   "id": "cap-06",
+   "text": "Label each discontinuity's kind (removable, jump, infinite) on the graph",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Ask where a row is not continuous, the key listing each x and its kind",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Load a limits example (a moved hole, a jump, a vertical asymptote, a limit at infinity)",
+   "class": "control",
+   "evidence": "",
+   "note": "a setup choice, as the parity figures' Classic setups; an Examples-menu entry alone is not evidence the probe can read"
+  },
+  {
+   "id": "cap-09",
+   "text": "A student copy with blank lines for each limit asked",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-10",
+   "text": "A student copy without the discontinuity-kind labels",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}
