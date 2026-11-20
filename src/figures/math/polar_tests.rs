@@ -864,3 +864,162 @@ fn examples_are_what_they_say() {
         }
     }
 }
+
+// ───────────────────────── check 1: printing and reading equations ─────────────────────────
+
+fn read_row(row: &str) -> (Vec<polar::Curve>, Vec<String>) { let mut n = vec![]; let c = polar::curves_of(&with(&[("curves", s(row))]), &mut n); (c, n) }
+
+/// What the figure prints for an equation is the same curve when read back by the figure's own convention (sin 2θ is
+/// sin(2θ), cos θ/2 is (cos θ)/2): the sympy cases (267 spellings without brackets, 294 bracketed equations) read as
+/// sympy reads them, and so does the printed form of each; printing what was printed changes nothing.
+#[test]
+fn spellings_and_printing_agree_with_sympy() {
+    let data: Vec<serde_json::Value> = serde_json::from_str(include_str!("polar_spellings.json")).unwrap();
+    let mut bad = vec![];
+    let (mut n_read, mut n_printed, mut n_refused) = (0, 0, 0);
+    let check = |c: &polar::Curve, e: &serde_json::Value, how: &str, bad: &mut Vec<String>| {
+        for (key, ys) in [("values", false), ("y", true)] {
+            let Some(vs) = e.get(key).and_then(|v| v.as_array()) else { continue };
+            for pair in vs {
+                let (sv, want) = (pair[0].as_f64().unwrap(), pair[1].as_f64());
+                let got = if c.polar { c.r(sv) } else if ys { c.g.as_ref().map(|g| ex::eval(g, sv)).filter(|v| v.is_finite()) } else { Some(ex::eval(&c.f, sv)).filter(|v| v.is_finite()) };
+                match (got, want) {
+                    (Some(g), Some(w)) if (g - w).abs() <= 1e-9 * (1.0 + w.abs()) => {}
+                    (None, None) => {}
+                    (Some(g), None) if g.abs() > 1e5 => {}
+                    _ => bad.push(format!("{how} {:?} at {sv}: {got:?}, sympy {want:?}", e["typed"])),
+                }
+            }
+        }
+    };
+    for e in &data {
+        let typed = e["typed"].as_str().unwrap();
+        let (cs, notes) = read_row(typed);
+        if e["kind"] == "refused" {
+            n_refused += 1;
+            if !cs.is_empty() || !notes.iter().any(|n| n.contains("bracket")) { bad.push(format!("{typed:?} should be refused with a note about brackets: {notes:?}")); }
+            continue;
+        }
+        let Some(c) = cs.first() else { bad.push(format!("{typed:?} not read: {notes:?}")); continue };
+        n_read += 1;
+        check(c, e, "typed", &mut bad);
+        // the printed equation, read back
+        let (back, n2) = read_row(&c.shown);
+        let Some(b) = back.first() else { bad.push(format!("{typed:?} prints {:?}, which does not read: {n2:?}", c.shown)); continue };
+        n_printed += 1;
+        check(b, e, &format!("printed {:?} for", c.shown), &mut bad);
+        if c.shown.contains('q') || c.shown.contains("sqrt") || c.shown.contains("pi") { bad.push(format!("{typed:?} prints {:?}", c.shown)); }
+        if b.shown != c.shown { bad.push(format!("{typed:?}: printed {:?}, reprinted {:?}", c.shown, b.shown)); }
+    }
+    println!("spellings: {n_read} read, {n_printed} printed and read back, {n_refused} refused; {} faults", bad.len());
+    assert!(bad.is_empty(), "{} faults:\n{}", bad.len(), bad.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// The equations check 1 found printed for another curve, and the forms around them, worked by hand.
+#[test]
+fn printed_equations_keep_their_brackets() {
+    let shown = |t: &str| read_row(t).0.first().map(|c| c.shown.clone()).unwrap_or_else(|| panic!("{t}"));
+    let th = "\u{2009}";
+    // a quotient of the function keeps the bracket: cos θ/2 would read as cos(θ/2)
+    assert_eq!(shown("r = 1 + cos(θ)/2"), "r = 1 + cos(\u{3b8})/2");
+    assert_eq!(shown("r = 3cos(θ)/2"), format!("r = 3{th}cos(\u{3b8})/2"));
+    assert_eq!(shown("r = sin(θ)/2"), "r = sin(\u{3b8})/2");
+    assert_eq!(shown("r = cos(2θ)/2"), "r = cos(2\u{3b8})/2");
+    assert_eq!(shown("r = 2 - sin(θ)/2"), format!("r = 2 {M} sin(\u{3b8})/2"));
+    assert_eq!(shown("x = cos(t)/2, y = sin(t)/2"), "x = cos(t)/2, y = sin(t)/2");
+    // a power or a factor after it keeps it too; a sum, the end, or another function after a space does not need it
+    assert_eq!(shown("r = sin(θ)^2"), "r = sin(\u{3b8})^2");
+    assert_eq!(shown("r = 2^sin(θ)"), "r = 2^sin(\u{3b8})");
+    assert_eq!(shown("r = 2 + 2cos(θ)"), format!("r = 2 + 2{th}cos \u{3b8}"));
+    assert_eq!(shown("r = 3sin(2θ)"), format!("r = 3{th}sin 2\u{3b8}"));
+    assert_eq!(shown("r = sin(θ/2)"), "r = sin(\u{3b8}/2)");
+    // the key writes what the figure writes
+    let o = build(&with(&[("curves", s("r = 1 + cos(θ)/2")), ("key_line", b(true)), ("points", s(""))]));
+    assert!(texts(&o.svg, "key")[0].contains("r = 1 + cos(\u{3b8})/2") && texts(&o.svg, "panel")[0].contains("cos(\u{3b8})/2"));
+}
+
+/// Spellings a class types read as a textbook means them; what cannot be read is said specifically.
+#[test]
+fn bracketless_spellings_by_hand() {
+    use std::f64::consts::PI;
+    let r_at = |t: &str, th: f64| read_row(t).0.first().unwrap_or_else(|| panic!("{t}: {:?}", read_row(t).1)).r(th).unwrap();
+    // 2cosθ at π/3 = 1; 4 cos θ at 0 = 4; 1+2cosθ at π/2 = 1; 3sin2θ at π/4 = 3; 2 cos 2θ at π/3 = −1
+    assert!((r_at("r = 2cosθ", PI / 3.0) - 1.0).abs() < 1e-12);
+    assert!((r_at("r = 4 cos θ", 0.0) - 4.0).abs() < 1e-12);
+    assert!((r_at("r = 1+2cosθ", PI / 2.0) - 1.0).abs() < 1e-12);
+    assert!((r_at("r = 3sin2θ", PI / 4.0) - 3.0).abs() < 1e-12);
+    assert!((r_at("r = 2 cos 2θ", PI / 3.0) + 1.0).abs() < 1e-12);
+    // sin θ cos θ at π/4 = 1/2; cos θ/2 at 0 is (cos 0)/2 = 1/2, not cos 0 = 1; sin²θ at π/6 = 1/4
+    assert!((r_at("r = sin θ cos θ", PI / 4.0) - 0.5).abs() < 1e-12);
+    assert!((r_at("r = cos θ/2", 0.0) - 0.5).abs() < 1e-12);
+    assert!((r_at("r = sin^2 θ", PI / 6.0) - 0.25).abs() < 1e-12);
+    assert!((r_at("r = sec θ", PI / 3.0) - 2.0).abs() < 1e-12);
+    assert!((r_at("r = 4/(1-cos θ)", PI / 2.0) - 4.0).abs() < 1e-12);
+    // θ typed as theta works the same
+    assert!((r_at("r = 2cos theta", PI / 3.0) - 1.0).abs() < 1e-12);
+    // printed alike however it was typed
+    assert_eq!(read_row("r = 2cosθ").0[0].shown, read_row("r = 2cos(θ)").0[0].shown);
+    let (c, n) = read_row("x = cos t, y = sin t");
+    assert!(n.is_empty() && !c[0].polar && c[0].at(PI / 2.0).is_some_and(|q| q.0.abs() < 1e-12 && (q.1 - 1.0).abs() < 1e-12));
+    // two readings: refused with which brackets to write
+    for (t, want) in [("r = cos θ^2", "cos(\u{3b8}^"), ("r = sin θ(1 + θ)", "meant as"), ("r = sin -θ", "write brackets after sin")] {
+        let n = read_row(t).1;
+        assert!(n.iter().any(|x| x.contains(want)), "{t}: {n:?}");
+    }
+    // lines θ = c and r² = … are said specifically
+    assert!(read_row("θ = pi/4").1[0].contains("lines \u{3b8} = c are not supported"));
+    assert!(read_row("theta = pi/4").1[0].contains("lines \u{3b8} = c are not supported"));
+    let n = read_row("r^2 = 4cos(2θ)").1;
+    assert!(n[0].contains("r\u{b2} are not supported") && n[0].contains("2sqrt(cos(2\u{3b8}))"), "{n:?}");
+    // a range written without its comma does not mention the reader's own variable
+    let n = read_row("r = sin(θ) 0 <= θ <= pi").1;
+    assert!(!n.is_empty() && !n.iter().any(|x| x.contains("(q)") || x.contains(" q")), "{n:?}");
+}
+
+/// Shading is cut at the largest circle (and at the axes), with a note saying how large a circle shows it all.
+#[test]
+fn shading_is_clipped_to_the_window() {
+    // r = 4 − 4 sin θ reaches r = 8 at θ = 3π/2: the largest circle 4 cuts it
+    let o = build(&with(&[("curves", s("r = 4 - 4sin(θ)")), ("points", s("")), ("shade", s(polar::SHADE[1])), ("shade_from", s("0")), ("shade_to", s("2pi")), ("tracer", b(false))]));
+    let g = o.svg.split(r#"<g clip-path="url(#pp-plot)">"#).nth(1).expect("the fill is clipped");
+    assert!(g.split("</g>").next().unwrap().contains(r#"data-pp="shade""#));
+    assert!(o.svg.contains(&format!(r#"<circle cx="{:.2}" cy="{:.2}" r="{:.2}"/></clipPath>"#, o.frame.cx, o.frame.cy, o.frame.rpx)));
+    assert!(o.notes.iter().any(|n| n.contains("cut off") && n.contains("at least 8")), "{:?}", o.notes);
+    // the area is the whole region's: ½∫(4 − 4 sin θ)² = ½(32π + 16π) = 24π
+    assert!(all_text(&o.svg).contains("Area = 24\u{3c0}"));
+    // every shaded polygon sits in the clipped group
+    assert_eq!(o.svg.matches(r#"data-pp="shade""#).count(), g.split("</g>").next().unwrap().matches(r#"data-pp="shade""#).count());
+}
+
+/// Marks outside a curve's own range are refused with a note, as the tracer is.
+#[test]
+fn marks_outside_the_range_are_refused() {
+    let o = build(&with(&[("curves", s("r = θ, 0 <= θ <= 2pi")), ("marks_at", s("pi, 3pi")), ("rmax", f(10.0)), ("points", s(""))]));
+    assert_eq!(o.svg.matches(r#"data-pp="mark""#).count(), 1);
+    assert!(o.notes.iter().any(|n| n.contains("3pi is outside curve 1's range")), "{:?}", o.notes);
+}
+
+/// The vertical-tangent note never tells a teacher to type θ exactly when it was typed exactly.
+#[test]
+fn nearly_vertical_note_gives_no_false_advice() {
+    for (c, at) in [("r = e^θ", "pi/4"), ("r = 2sqrt(sin(2θ))", "pi/6"), ("r = 2sec(θ)", "pi/12")] {
+        let o = build(&with(&[("curves", s(c)), ("tangent", b(true)), ("tangent_at", s(at)), ("rmax", f(6.0)), ("points", s(""))]));
+        let n = o.notes.join(" ");
+        assert!(!n.contains("Type") && !n.contains("exactly"), "{c}: {n}");
+        if matches!(o.tan.as_ref().unwrap().slope, Slope::NearlyVertical) { assert!(n.contains("vertical or very nearly so")); }
+        assert!(!all_text(&o.svg).contains("dy/dx \u{2248}"), "{c}: no slope written");
+    }
+}
+
+/// Rounded values are never followed by = in the key: P(√2, π/4) is (1, 1) exactly, but its rounded r and θ are not.
+#[test]
+fn rounded_keys_use_approximately() {
+    let o = build(&with(&[("points", s("P(sqrt(2), pi/4), Q(-4, pi)")), ("values", s("Rounded")), ("key_line", b(true)), ("curves", s("")), ("tracer", b(false))]));
+    let k = texts(&o.svg, "key").join(" ");
+    assert!(k.contains("P: (r, \u{3b8}) \u{2248} (1.41, 0.79), (x, y) = (1, 1)"), "{k}");
+    // Q(−4, π) is (4, 0): r is exact, θ rounded
+    assert!(k.contains("Q: (r, \u{3b8}) \u{2248} (\u{2212}4, 3.14), (x, y) = (4, 0)"), "{k}");
+    // exact values keep =
+    let o = build(&with(&[("points", s("P(sqrt(2), pi/4)")), ("key_line", b(true)), ("curves", s("")), ("tracer", b(false))]));
+    assert!(texts(&o.svg, "key").join(" ").contains("P(\u{221a}2, \u{3c0}/4) = (1, 1)"));
+}

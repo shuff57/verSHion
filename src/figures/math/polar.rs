@@ -231,41 +231,107 @@ fn unify(s: &str) -> String {
     t
 }
 /// A function of θ (polar) or t, as the reader reads it, with the message for what is wrong.
+/// Function names a bare argument may follow (longest first, so arcsin is not read as arc·sin).
+const FN_NAMES: [&str; 13] = ["arcsin", "arccos", "arctan", "sqrt", "sin", "cos", "tan", "sec", "csc", "cot", "exp", "ln", "log"];
+
+/// The spellings a textbook prints read as it means them, written with brackets for the shared reader:
+/// `2cosθ`, `4 cos θ`, `3sin2θ`, `sin θ cos θ`, `sec θ`, `sin^2 θ`, `cos t`. A name followed by a bare argument (a
+/// number, the variable, π, or a number times the variable or π) takes that factor only: sin 2θ is sin(2θ), and
+/// cos θ/2 is (cos θ)/2, as the figure prints them. What could be read two ways (cos θ^2, sin θ(1 + θ), sin −θ) is
+/// refused with a note saying which brackets to write.
+pub(crate) fn textbook(rhs: &str, var: char) -> Result<String, String> {
+    let cs: Vec<char> = rhs.replace('\u{2009}', " ").replace('\u{3c0}', "pi").chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    let lower = |c: char| c.to_ascii_lowercase();
+    while i < cs.len() {
+        let prev_letter = i > 0 && cs[i - 1].is_ascii_alphabetic();
+        let name = if prev_letter { None } else { FN_NAMES.iter().find(|n| n.chars().enumerate().all(|(k, ch)| cs.get(i + k).is_some_and(|c| lower(*c) == ch))) };
+        let Some(name) = name else { out.push(cs[i]); i += 1; continue; };
+        let mut j = i + name.len();
+        // a power on the name: sin^2 θ, sin²θ
+        let mut power = String::new();
+        if cs.get(j) == Some(&'^') { let st = j + 1; let mut k = st; while k < cs.len() && cs[k].is_ascii_digit() { k += 1; } if k > st { power = cs[st..k].iter().collect(); j = k; } }
+        else if matches!(cs.get(j), Some('\u{b2}') | Some('\u{b3}')) { power = if cs[j] == '\u{b2}' { "2".into() } else { "3".into() }; j += 1; }
+        while j < cs.len() && cs[j] == ' ' { j += 1; }
+        let wrap = |arg: &str| if power.is_empty() { format!("{name}({arg})") } else { format!("({name}({arg}))^{power}") };
+        if cs.get(j) == Some(&'(') {
+            let mut depth = 0;
+            let mut close = None;
+            for (k, c) in cs.iter().enumerate().skip(j) { if *c == '(' { depth += 1 } else if *c == ')' { depth -= 1; if depth == 0 { close = Some(k); break; } } }
+            let Some(cl) = close else { return Err(format!("a bracket after {name} is not closed")) };
+            // (the inside is read the same way)
+            let inner = textbook(&cs[j + 1..cl].iter().collect::<String>(), var)?;
+            out.push_str(&wrap(&inner));
+            i = cl + 1;
+            continue;
+        }
+        // a bare argument: digits, then pi, then the variable (at least one of them)
+        let st = j;
+        while j < cs.len() && (cs[j].is_ascii_digit() || cs[j] == '.') { j += 1; }
+        if cs[j..].starts_with(&['p', 'i']) { j += 2; }
+        if cs.get(j) == Some(&var) { j += 1; }
+        let arg: String = cs[st..j].iter().collect();
+        let v = if var == 'q' { "\u{3b8}".to_string() } else { var.to_string() };
+        if arg.is_empty() { return Err(format!("write brackets after {name}: {name}({v}), {name}(2{v}), {name}(\u{2212}{v})")); }
+        let mut k = j;
+        while k < cs.len() && cs[k] == ' ' { k += 1; }
+        let shown_arg = arg.replace('q', "\u{3b8}").replace("pi", "\u{3c0}");
+        match cs.get(k) {
+            Some('^') => return Err(format!("write brackets: is {name} {shown_arg}^\u{2026} meant as {name}({shown_arg}^\u{2026}) or ({name} {shown_arg})^\u{2026}?")),
+            Some('(') if k == j => return Err(format!("write brackets: is {name} {shown_arg}(\u{2026}) meant as {name}({shown_arg}(\u{2026})) or ({name} {shown_arg})(\u{2026})?")),
+            Some(c) if k == j && (c.is_ascii_digit() || *c == '.' || *c == var) => return Err(format!("write brackets after {name}")),
+            _ => {}
+        }
+        out.push_str(&wrap(&arg));
+        i = j;
+    }
+    Ok(out)
+}
+
 fn read_fn(rhs: &str, polar: bool, what: &str) -> Result<(Node, String), String> {
     let rhs = rhs.trim();
     if rhs.is_empty() { return Err(format!("{what}: type a function after the = sign")); }
-    let plain = if polar {
-        let l = rhs.to_lowercase().replace("sqrt", "");
-        // (θ is read as q by the shared reader; a typed q is no letter of this figure)
-        if l.contains('q') { return Err(format!("{what}: cannot read \u{201c}q\u{201d}: the variable is \u{3b8}")); }
-        tangent::expr_plain(&rhs.replace(TH, "q"), "r", 'q').map_err(|e| format!("{what}: {}", e.replace("variable is q", "variable is \u{3b8}").replace("“q”", "\u{201c}\u{3b8}\u{201d}")))?
-    } else {
-        if rhs.contains(TH) { return Err(format!("{what}: a parametric curve is in t, not \u{3b8}")); }
-        tangent::expr_plain(rhs, "x", 't').map_err(|e| format!("{what}: {e}"))?
-    };
+    if polar && rhs.to_lowercase().replace("sqrt", "").contains('q') { return Err(format!("{what}: cannot read \u{201c}q\u{201d}: the variable is \u{3b8}")); }
+    if !polar && rhs.contains(TH) { return Err(format!("{what}: a parametric curve is in t, not \u{3b8}")); }
+    // (θ is read as q by the shared reader; a typed q is no letter of this figure)
+    let var = if polar { 'q' } else { 't' };
+    let rewritten = textbook(&if polar { rhs.replace(TH, "q") } else { rhs.to_string() }, var).map_err(|e| format!("{what}: {e}"))?;
+    let plain = tangent::expr_plain(&rewritten, if polar { "r" } else { "x" }, var).map_err(|e| format!("{what}: {}", e.replace("variable is q", "variable is \u{3b8}").replace("\u{201c}q\u{201d}", "\u{201c}\u{3b8}\u{201d}").replace("r(q)", "r(\u{3b8})")))?;
     let node = ex::parse(&plain).ok_or_else(|| format!("{what}: cannot read the function"))?;
-    let shown = shown_fn(&rhs.replace("pi", "\u{3c0}"));
+    // printed from the bracketed spelling, so every typed spelling of one curve prints alike
+    let shown = shown_fn(&rewritten.replace("sqrt", "\u{1}").replace('q', "\u{3b8}").replace('\u{1}', "sqrt").replace("pi", "\u{3c0}"));
     Ok((node, shown))
 }
-/// The typed function typeset: √, π, |x|, powers, and cos θ for cos(θ), sin 2θ for sin(2θ) (a bracket kept round a sum,
-/// a fraction or a power).
+/// The typed function typeset: √, π, |x|, powers, and cos θ for cos(θ), sin 2θ for sin(2θ). The bracket is dropped only
+/// where nothing after it could be read as part of the argument: the end, a + or −, a closing bracket, a comma, or a space
+/// before another function (sin θ cos θ). So cos(θ)/2 stays cos(θ)/2 (never cos θ/2), sin(θ)^2 and 2^sin(θ) keep theirs.
 pub(crate) fn shown_fn(typed: &str) -> String {
     let s = tangent::shown_func(typed);
     let cs: Vec<char> = s.chars().collect();
     let mut out = String::new();
     let mut i = 0;
+    let fn_at = |k: usize| FN_NAMES.iter().any(|n| { let v: Vec<char> = n.chars().collect(); cs[k..].starts_with(&v) && cs.get(k + v.len()) == Some(&'(') });
     while i < cs.len() {
         let names = ["sin(", "cos(", "tan(", "sec(", "csc(", "cot("];
-        if let Some(n) = names.iter().find(|n| cs[i..].starts_with(&n.chars().collect::<Vec<_>>())) {
+        let preceded_ok = i == 0 || !(cs[i - 1] == '^' || cs[i - 1].is_alphabetic());
+        if let (true, Some(n)) = (preceded_ok, names.iter().find(|n| cs[i..].starts_with(&n.chars().collect::<Vec<_>>()))) {
             let open = i + 3;
             let mut depth = 0;
             let mut close = None;
             for (j, c) in cs.iter().enumerate().skip(open) { if *c == '(' { depth += 1 } else if *c == ')' { depth -= 1; if depth == 0 { close = Some(j); break; } } }
             if let Some(cl) = close {
                 let inner: String = cs[open + 1..cl].iter().collect();
-                let simple = !inner.is_empty() && inner.chars().all(|c| c.is_ascii_digit() || c == TH || c == 't' || c == '.') && inner.chars().filter(|c| *c == TH || *c == 't').count() <= 1
-                    && !cs.get(cl + 1).is_some_and(|c| c.is_alphanumeric() || *c == '(' || *c == TH || *c == '^');
-                if simple { out.push_str(&n[..3]); out.push(' '); out.push_str(&inner); i = cl + 1; continue; }
+                let simple = !inner.is_empty() && inner.chars().all(|c| c.is_ascii_digit() || c == TH || c == 't' || c == '.') && inner.chars().filter(|c| *c == TH || *c == 't').count() <= 1;
+                // what follows the bracket: only these leave the argument unmistakable
+                let mut k = cl + 1;
+                while k < cs.len() && (cs[k] == ' ' || cs[k] == '\u{2009}') { k += 1; }
+                let spaced = k > cl + 1;
+                let safe = match cs.get(k) {
+                    None => true,
+                    Some(c) => matches!(c, '+' | '-' | '\u{2212}' | ')' | ',' | '|' | ']') || (spaced && fn_at(k)),
+                };
+                if simple && safe { out.push_str(&n[..3]); out.push(' '); out.push_str(&inner); i = cl + 1; continue; }
             }
         }
         out.push(cs[i]);
@@ -311,6 +377,8 @@ fn read_curve(raw: &str, row: usize, p: &Params, what: &str) -> Result<Curve, St
     let polar = match l0.as_str() {
         "r" | "r(\u{3b8})" => true,
         "x" | "x(t)" => false,
+        "\u{3b8}" => return Err(format!("{what}: lines \u{3b8} = c are not supported; type r = f(\u{3b8}) (the line \u{3b8} = c through the pole is not a function of \u{3b8})")),
+        l if l.starts_with("r^") || l.starts_with("r\u{b2}") => return Err(format!("{what}: equations in r\u{b2} are not supported; type r = f(\u{3b8}), such as r = 2sqrt(cos(2\u{3b8})) for r\u{b2} = 4cos(2\u{3b8})")),
         _ => return Err(format!("{what}: type r = f(\u{3b8}), or x = f(t), y = g(t)")),
     };
     let (f, shown_f, g, shown_g, rest) = if polar {
@@ -697,6 +765,8 @@ fn marks_of(p: &Params, cs: &[Curve], used: &[String], notes: &mut Vec<String>) 
     if items.len() > 12 { notes.push("Marks: only the first 12 values are marked.".into()); }
     for it in items.into_iter().take(12) {
         let Some(s) = read_val(it, c.polar) else { notes.push(format!("Marks: cannot read \u{201c}{it}\u{201d} as a value of {}.", c.var())); continue; };
+        // (as the tracer and the tangent: a value outside the curve's range is not on the curve drawn)
+        if s.v < c.lo.v - 1e-12 || s.v > c.hi.v + 1e-12 { notes.push(format!("Marks: {} = {it} is outside curve {k}'s range {}; nothing is marked there.", c.var(), c.range_text)); continue; }
         match point_on(c, &s) {
             Some((x, y, r)) => out.push(Mk { name: free.next().unwrap_or_else(|| "A".into()), curve: k, s, x, y, r }),
             None => notes.push(format!("Marks: curve {k} is undefined at {} = {it}; nothing is marked there.", c.var())),
@@ -1094,7 +1164,10 @@ pub(crate) fn build(p0: &Params) -> Out {
         }
         let far = |q: Pt| !fr.inside(q);
         let outside = rg.pieces.iter().any(|(ta, tb)| (0..=200).any(|k| { let t = ta + (tb - ta) * k as f64 / 200.0; far({ let r = f.r(t).unwrap_or(0.0); fr.to(r * t.cos(), r * t.sin()) }) }));
-        if outside { notes.push("Part of the shaded region lies outside the window: its area is the whole region's.".into()); }
+        if outside {
+            let reach = rg.pieces.iter().flat_map(|(ta, tb)| (0..=400).map(move |k| ta + (tb - ta) * k as f64 / 400.0)).filter_map(|t| f.r(t)).fold(0.0f64, |m, r| m.max(r.abs()));
+            notes.push(if polar_grid { format!("Part of the shaded region lies beyond the largest circle and is cut off there; its area is the whole region's. Set Largest circle to at least {} to see all of it.", tangent::decimal((reach / p.f("rstep").max(0.1)).ceil() * p.f("rstep").max(0.1), 3)) } else { "Part of the shaded region lies outside the axes and is cut off there; its area is the whole region's.".into() });
+        }
     }
     let _ = ink.fill2;
 
@@ -1157,7 +1230,7 @@ pub(crate) fn build(p0: &Params) -> Out {
                     match &t.slope {
                         Slope::Undefined(why) => notes.push(format!("Tangent: no tangent at {} = {}: {why}.", c.var(), p.s("tangent_at").trim())),
                         Slope::ZeroOverZero => notes.push(format!("Tangent: at {} = {} both dx/d{v} and dy/d{v} are 0, so the slope formula gives 0/0 there; the app cannot determine the tangent from it. Choose another {v}.", c.var(), p.s("tangent_at").trim(), v = c.var())),
-                        Slope::NearlyVertical => notes.push(format!("Tangent: dx/d{v} is 0 to within rounding at {v} = {}: the tangent is vertical or very nearly so, and the app cannot write its slope. Type {v} exactly (such as pi/2) for an exact answer.", p.s("tangent_at").trim(), v = c.var())),
+                        Slope::NearlyVertical => notes.push(format!("Tangent: at {v} = {} dx/d{v} is 0 to within the computer's rounding, so the tangent is vertical or very nearly so; the app cannot tell which, and writes no slope.", p.s("tangent_at").trim(), v = c.var())),
                         _ => {}
                     }
                     if matches!(t.slope, Slope::Finite(_) | Slope::Vertical) {
@@ -1359,15 +1432,18 @@ pub(crate) fn build(p0: &Params) -> Out {
         }
     }
     for q in &points {
-        let (a, _) = pair(&q.r, &q.th, true, &ctx);
-        let (b, e) = pair(&q.x, &q.y, false, &ctx);
-        key.push(vec![mt(&format!("{}{a} {} {b}", q.name, if e { "=" } else { "\u{2248}" }))]);
+        let (a, ea) = pair(&q.r, &q.th, true, &ctx);
+        let (b, eb) = pair(&q.x, &q.y, false, &ctx);
+        // (a rounded side is never followed by =: P ≈ (1.41, 0.79) is not exactly (1, 1))
+        let rel = |e: bool| if e { "=" } else { "\u{2248}" };
+        key.push(vec![mt(&if ea && eb { format!("{}{a} = {b}", q.name) } else { format!("{}: (r, \u{3b8}) {} {a}, (x, y) {} {b}", q.name, rel(ea), rel(eb)) })]);
     }
     for m in &marks {
         let c = curves.iter().find(|c| c.row + 1 == m.curve).unwrap();
-        let (b, e) = pair(&m.x, &m.y, false, &ctx);
-        let head = match (&m.r, c.polar) { (Some(r), true) => pair(r, &m.s, true, &ctx).0, _ => format!("(t = {})", vtext(&m.s, &ctx).0) };
-        key.push(vec![mt(&format!("{}{head} {} {b}", m.name, if e { "=" } else { "\u{2248}" }))]);
+        let (b, eb) = pair(&m.x, &m.y, false, &ctx);
+        let (head, ea) = match (&m.r, c.polar) { (Some(r), true) => pair(r, &m.s, true, &ctx), _ => { let (t, e) = vtext(&m.s, &ctx); (format!("(t {} {t})", if e { "=" } else { "\u{2248}" }), e) } };
+        let rel = |e: bool| if e { "=" } else { "\u{2248}" };
+        key.push(vec![mt(&if !c.polar { format!("{}{head}: (x, y) {} {b}", m.name, rel(eb)) } else if ea && eb { format!("{}{head} = {b}", m.name) } else { format!("{}: (r, \u{3b8}) {} {head}, (x, y) {} {b}", m.name, rel(ea), rel(eb)) })]);
     }
     if let Some((_, Some(r), true)) = &tracer_lbl { let (t, e) = vtext(r, &ctx); key.push(vec![pr("tracer "), mt(&format!("r {} {t}", if e { "=" } else { "\u{2248}" }))]); }
     if !to_panel.is_empty() { pl.push(PLine { swatch: None, parts: vec![pr("On the figure: "), mt(&to_panel.join(", "))], indent: false }); }
@@ -1445,7 +1521,8 @@ pub(crate) fn build(p0: &Params) -> Out {
         // the shading under the grid's lines and numbers
         let split = body.find(r#"data-pp="circle""#).map(|i| body[..i].rfind('<').unwrap_or(0)).unwrap_or(0);
         doc.raw(&body[..split]);
-        doc.raw(&fills);
+        // (the fill is cut at the largest circle, as the curves are)
+        if !fills.is_empty() { doc.raw(&format!(r#"<defs><clipPath id="pp-plot"><circle cx="{:.2}" cy="{:.2}" r="{:.2}"/></clipPath></defs><g clip-path="url(#pp-plot)">{fills}</g>"#, fr.cx, fr.cy, fr.rpx)); }
         doc.raw(&body[split..]);
     } else {
         doc.raw(&body);
@@ -1500,7 +1577,8 @@ pub(crate) fn handles(p0: &Params) -> Vec<Handle> {
     }
     if let (Some(at), Some(c)) = (o.tracer_px, o.curves.first().filter(|c| c.row == 0).cloned()) {
         let tip = if c.polar { "Drag T along curve 1: its \u{3b8}, ray and r follow (\u{3b8} snaps to \u{3c0}/24 steps)".to_string() } else { "Drag T along curve 1: its t follows".to_string() };
-        let pi_t = !c.polar && ["t_from", "t_to"].iter().any(|k| p.s(k).contains("pi") || p.s(k).contains('\u{3c0}'));
+        let in_pi = |v: &Val| v.ex.as_ref().is_some_and(|e| !e.is_zero() && pn::pi_multiple(e).is_some());
+        let pi_t = !c.polar && (in_pi(&c.lo) || in_pi(&c.hi));
         let span = c.hi.v - c.lo.v;
         let tstep = if c.polar || pi_t { PI / 24.0 } else { let raw = span / 48.0; let mag = 10f64.powf(raw.log10().floor()); [1.0, 2.0, 5.0, 10.0].iter().map(|k| k * mag).find(|s| *s >= raw).unwrap_or(10.0 * mag) };
         let pcs = sample(&c, &fr);
