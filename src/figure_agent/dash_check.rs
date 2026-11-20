@@ -200,7 +200,7 @@ fn register(page: &Page, size: (f64, f64), anchors: &[&Seg]) -> Option<Fit> {
     // fractions of the image, centred so a scale change keeps the middle in place.
     let fit = |kx: f64, ky: f64, ox: f64, oy: f64| Fit { sx: base.sx * kx, sy: base.sy * ky, tx: ox * w + w * (1.0 - kx) / 2.0, ty: oy * h + h * (1.0 - ky) / 2.0 };
     let mut best = (coverage(page, &base, anchors), (1.0, 1.0, 0.0, 0.0));
-    let mut try_fit = |kx: f64, ky: f64, ox: f64, oy: f64, best: &mut (f64, (f64, f64, f64, f64))| {
+    let try_fit = |kx: f64, ky: f64, ox: f64, oy: f64, best: &mut (f64, (f64, f64, f64, f64))| {
         let c = coverage(page, &fit(kx, ky, ox, oy), anchors);
         if c > best.0 {
             *best = (c, (kx, ky, ox, oy));

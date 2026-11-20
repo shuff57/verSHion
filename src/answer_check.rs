@@ -654,7 +654,7 @@ mod tests {
         crate::formats::make_question(stem.into(), kind)
     }
     fn mc(stem: &str, c: &[(&str, bool)]) -> Question {
-        q(stem, Kind::Mc { answers: c.iter().map(|(t, ok)| Answer { text: t.to_string(), correct: *ok, locked: false }).collect() })
+        q(stem, Kind::Mc { answers: c.iter().map(|(t, ok)| Answer { text: t.to_string(), correct: *ok, locked: false, image: None, figure: None }).collect() })
     }
     fn bank() -> Vec<Question> {
         vec![

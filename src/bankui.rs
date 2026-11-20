@@ -4609,7 +4609,7 @@ mod tests {
     }
 
     fn mc(texts: &[&str]) -> crate::model::Kind {
-        crate::model::Kind::Mc { answers: texts.iter().enumerate().map(|(i, t)| crate::model::Answer { text: t.to_string(), correct: i == 0, locked: false }).collect() }
+        crate::model::Kind::Mc { answers: texts.iter().enumerate().map(|(i, t)| crate::model::Answer { text: t.to_string(), correct: i == 0, locked: false, image: None, figure: None }).collect() }
     }
 
     /// The Banks grid fills its width: 1280 (about 1110 of page) is three wide tiles, 760 (about

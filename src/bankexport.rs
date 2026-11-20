@@ -734,7 +734,7 @@ mod tests {
     /// by the key-only ones; nothing panics for any kind, and no wrong key is written.
     #[test]
     fn drafts_export_without_a_key() {
-        let a = |t: &str| crate::model::Answer { text: t.into(), correct: false, locked: false };
+        let a = |t: &str| crate::model::Answer { text: t.into(), correct: false, locked: false, image: None, figure: None };
         let mc = make_question("Pick".into(), Kind::Mc { answers: vec![a("x"), a("y")] });
         let bl = make_question("Fill ___ and ___".into(), Kind::Blank { accept: vec![vec!["one".into()], vec![]] });
         let ma = make_question("Match".into(), Kind::Matching { pairs: vec![crate::model::Pair { left: "a".into(), right: "1".into() }, crate::model::Pair { left: "b".into(), right: String::new() }], distractors: vec![] });
@@ -782,7 +782,7 @@ mod tests {
         assert!(!csv.contains(",False,") && !csv.contains(",True,"), "{csv}");
         let (bb, skipped) = bank_blackboard(&bank);
         assert_eq!((bb.trim(), skipped), ("", 3));
-        let mut mc = make_question("Pick".into(), Kind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false }, Answer { text: "y".into(), correct: false, locked: false }] });
+        let mut mc = make_question("Pick".into(), Kind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false, image: None, figure: None }, Answer { text: "y".into(), correct: false, locked: false, image: None, figure: None }] });
         mc.explanation = Some(crate::model::KEYLESS_SENTINEL.to_string());
         let (aiken, skipped) = bank_aiken(&QuestionBank { questions: vec![mc], ..bank });
         assert_eq!((aiken.as_str(), skipped), ("", 1));
@@ -792,7 +792,7 @@ mod tests {
     fn bank() -> QuestionBank {
         let mut mc = make_question(
             "Which of the following elements is the **most** electronegative?".into(),
-            Kind::Mc { answers: ["Ge", "Ca", "O", "C"].iter().map(|t| Answer { text: t.to_string(), correct: *t == "O", locked: false }).collect() },
+            Kind::Mc { answers: ["Ge", "Ca", "O", "C"].iter().map(|t| Answer { text: t.to_string(), correct: *t == "O", locked: false, image: None, figure: None }).collect() },
         );
         mc.topics = vec!["Electronegativity".into()];
         mc.difficulty = Some(crate::model::Difficulty::Low);
@@ -852,7 +852,7 @@ mod tests {
     fn bank_csv_quotes_commas_quotes_and_newlines() {
         let mut q = make_question(
             "Pick, \"one\".\nNext line".into(),
-            Kind::Mc { answers: vec![Answer { text: "x, y".into(), correct: true, locked: false }] },
+            Kind::Mc { answers: vec![Answer { text: "x, y".into(), correct: true, locked: false, image: None, figure: None }] },
         );
         q.explanation = Some("Line one\nLine two".into());
         let b = QuestionBank { id: "b2".into(), name: "Quotes".into(), questions: vec![q], created: 0, modified: 0, details: Default::default() };
@@ -884,9 +884,9 @@ mod tests {
             "Pick both.".into(),
             Kind::Mc {
                 answers: vec![
-                    Answer { text: "one".into(), correct: true, locked: false },
-                    Answer { text: "two".into(), correct: true, locked: false },
-                    Answer { text: "three".into(), correct: false, locked: false },
+                    Answer { text: "one".into(), correct: true, locked: false, image: None, figure: None },
+                    Answer { text: "two".into(), correct: true, locked: false, image: None, figure: None },
+                    Answer { text: "three".into(), correct: false, locked: false, image: None, figure: None },
                 ],
             },
         );

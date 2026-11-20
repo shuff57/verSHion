@@ -345,7 +345,7 @@ fn a_real_bank_and_exam_become_sources() {
 fn a_draft_can_not_be_shared_and_a_fixed_one_can() {
     use crate::model::*;
     let q = |id: &str, stem: &str, kind: Kind| Question { id: id.into(), stem: stem.into(), kind, points: None, difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 1, modified: 1 };
-    let a = |t: &str, c: bool| Answer { text: t.into(), correct: c, locked: false };
+    let a = |t: &str, c: bool| Answer { text: t.into(), correct: c, locked: false, image: None, figure: None };
     let ok = q("ok", "Fine", Kind::Tf { correct: true });
     let drafts = [
         (q("mc", "Pick", Kind::Mc { answers: vec![a("x", false), a("y", false)] }), "Mark one answer correct"),

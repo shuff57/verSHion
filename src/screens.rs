@@ -2914,10 +2914,10 @@ impl crate::App {
             stem: "Which planet is closest to the Sun?".to_string(),
             kind: Kind::Mc {
                 answers: vec![
-                    Answer { text: "Mercury".into(), correct: true, locked: false },
-                    Answer { text: "Venus".into(), correct: false, locked: false },
-                    Answer { text: "Mars".into(), correct: false, locked: false },
-                    Answer { text: "Earth".into(), correct: false, locked: false },
+                    Answer { text: "Mercury".into(), correct: true, locked: false, image: None, figure: None },
+                    Answer { text: "Venus".into(), correct: false, locked: false, image: None, figure: None },
+                    Answer { text: "Mars".into(), correct: false, locked: false, image: None, figure: None },
+                    Answer { text: "Earth".into(), correct: false, locked: false, image: None, figure: None },
                 ],
             },
             points: Some(1.0),

@@ -43,12 +43,24 @@ impl QKind {
 }
 
 /// One answer choice. `locked` means exporting/shuffling must not move it (Test Parrot's
-/// "Lock answer position" button). `correct` marks the right answer(s).
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// "Lock answer position" button). `correct` marks the right answer(s). A choice can be a
+/// picture (four pie charts as options A-D): `image` holds it, with or without `text`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Answer {
     pub text: String,
     #[serde(default)] pub correct: bool,
     #[serde(default)] pub locked: bool,
+    /// The choice's picture, cropped from the source or drawn by a figure. Absent for a text choice.
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub image: Option<ImageRef>,
+    /// Figure-engine origin of `image` (id + params), so the picture can be reopened and edited.
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub figure: Option<FigureSpec>,
+}
+
+impl Answer {
+    /// A text choice.
+    pub fn new(text: impl Into<String>, correct: bool) -> Self {
+        Answer { text: text.into(), correct, ..Default::default() }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -498,7 +510,7 @@ mod tests {
         q.explanation = Some(KEYLESS_SENTINEL.into());
         assert!(!rekeyed(&q, &Kind::Tf { correct: false }));
         assert!(rekeyed(&q, &Kind::Tf { correct: true }));
-        let a = |c| Answer { text: "x".into(), correct: c, locked: false };
+        let a = |c| Answer { text: "x".into(), correct: c, locked: false, image: None, figure: None };
         assert!(!rekeyed(&q, &Kind::Mc { answers: vec![a(false), a(false)] }));
         assert!(rekeyed(&q, &Kind::Mc { answers: vec![a(true), a(false)] }));
         let p = |r: &str| Pair { left: "l".into(), right: r.into() };

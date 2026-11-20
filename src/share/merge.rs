@@ -148,7 +148,7 @@ fn strip_part(p: &Part) -> Part {
     Part {
         stem: p.stem.clone(),
         kind: match &p.kind {
-            PartKind::Mc { answers } => PartKind::Mc { answers: answers.iter().map(|a| crate::model::Answer { text: a.text.clone(), correct: false, locked: a.locked }).collect() },
+            PartKind::Mc { answers } => PartKind::Mc { answers: answers.iter().map(|a| crate::model::Answer { text: a.text.clone(), correct: false, locked: a.locked, image: None, figure: None }).collect() },
             PartKind::Tf { .. } => PartKind::Tf { correct: false },
             PartKind::Short { .. } => PartKind::Short { sample: String::new() },
         },
@@ -158,7 +158,7 @@ fn strip_part(p: &Part) -> Part {
 /// The question without its answer key: what students see.
 pub fn strip_key(k: &Kind) -> Kind {
     match k {
-        Kind::Mc { answers } => Kind::Mc { answers: answers.iter().map(|a| crate::model::Answer { text: a.text.clone(), correct: false, locked: a.locked }).collect() },
+        Kind::Mc { answers } => Kind::Mc { answers: answers.iter().map(|a| crate::model::Answer { text: a.text.clone(), correct: false, locked: a.locked, image: None, figure: None }).collect() },
         Kind::Tf { .. } => Kind::Tf { correct: false },
         Kind::Matching { pairs, distractors } => {
             Kind::Matching { pairs: pairs.iter().map(|p| crate::model::Pair { left: p.left.clone(), right: String::new() }).collect(), distractors: distractors.clone() }
@@ -177,7 +177,7 @@ pub(super) fn shape(k: &Kind) -> String {
 /// `canon`): a question the server stored composed is the same as the bank's decomposed one.
 fn canon_kind(k: &Kind) -> Kind {
     let b = |s: &str| canon::block(s).into_owned();
-    let answers = |a: &[crate::model::Answer]| a.iter().map(|x| crate::model::Answer { text: b(&x.text), correct: x.correct, locked: x.locked }).collect();
+    let answers = |a: &[crate::model::Answer]| a.iter().map(|x| crate::model::Answer { text: b(&x.text), correct: x.correct, locked: x.locked, image: None, figure: None }).collect();
     match k {
         Kind::Mc { answers: a } => Kind::Mc { answers: answers(a) },
         Kind::Tf { correct } => Kind::Tf { correct: *correct },

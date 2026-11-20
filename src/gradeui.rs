@@ -1661,8 +1661,8 @@ mod grade_tests {
     #[test]
     fn grade_mc_answer_correct() {
         let answers = vec![
-            crate::model::Answer { text: "A".into(), correct: true, locked: false },
-            crate::model::Answer { text: "B".into(), correct: false, locked: false },
+            crate::model::Answer { text: "A".into(), correct: true, locked: false, image: None, figure: None },
+            crate::model::Answer { text: "B".into(), correct: false, locked: false, image: None, figure: None },
         ];
         assert_eq!(grade_mc_answer(&answers, "A"), (true, 1.0));
     }

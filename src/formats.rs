@@ -361,7 +361,7 @@ fn bb_upload_row(row: &[String]) -> Result<Option<Question>, String> {
                 .map(|c| Answer {
                     text: c[0].clone(),
                     correct: c.get(1).is_some_and(|f| f.eq_ignore_ascii_case("correct")),
-                    locked: false,
+                    locked: false, image: None, figure: None
                 })
                 .collect();
             if answers.is_empty() {
@@ -702,7 +702,7 @@ fn parse_mc(lines: &[String]) -> Result<(String, Vec<Answer>), String> {
     let mut answers: Vec<Answer> = Vec::new();
     for line in lines {
         match parse_choice(line) {
-            Some((correct, text)) if !text.is_empty() => answers.push(Answer { text, correct, locked: false }),
+            Some((correct, text)) if !text.is_empty() => answers.push(Answer { text, correct, locked: false, image: None, figure: None }),
             Some((..)) => {} // a bare `a.` or lone `*`: dropped as an empty choice
             None => {
                 if stem.is_empty() {
@@ -770,7 +770,7 @@ fn plain_line_choices(lines: &[String]) -> Option<(String, Vec<Answer>)> {
                 Some(r) => (true, r.trim()),
                 None => (false, t),
             };
-            (!text.is_empty()).then(|| Answer { text: text.to_string(), correct, locked: false })
+            (!text.is_empty()).then(|| Answer { text: text.to_string(), correct, locked: false, image: None, figure: None })
         })
         .collect();
     if choices.len() < 2 {
@@ -833,7 +833,7 @@ fn parse_aiken(block: &[String]) -> Result<Question, String> {
                     continue;
                 }
                 match parse_choice(line) {
-                    Some((correct, text)) if !text.is_empty() => answers.push(Answer { text, correct, locked: false }),
+                    Some((correct, text)) if !text.is_empty() => answers.push(Answer { text, correct, locked: false, image: None, figure: None }),
                     _ => return Err(format!("not a choice line after the stem: {line:?}")),
                 }
             }
@@ -949,7 +949,7 @@ fn try_csv(text: &str) -> Option<Result<Vec<Question>, String>> {
                     .filter_map(|c| *c)
                     .map(|i| get(Some(i)))
                     .filter(|t| !t.is_empty())
-                    .map(|text| Answer { text, correct: false, locked: false })
+                    .map(|text| Answer { text, correct: false, locked: false, image: None, figure: None })
                     .collect();
                 if answers.is_empty() {
                     return Some(Err(format!("CSV row {row}: an MC row has no answers — fill the a…h columns")));
@@ -1351,7 +1351,7 @@ fn tp_choice_answers(item: &serde_json::Value) -> Result<Vec<Answer>, String> {
         .map(|c| Answer {
             text: doc_text(c),
             correct: c.get("correct").and_then(serde_json::Value::as_bool).unwrap_or(false),
-            locked: c.get("locked").and_then(serde_json::Value::as_bool).unwrap_or(false),
+            locked: c.get("locked").and_then(serde_json::Value::as_bool).unwrap_or(false), image: None, figure: None
         })
         .collect();
     if answers.is_empty() { Err("the question has no choices".into()) } else { Ok(answers) }
@@ -3394,7 +3394,7 @@ fn gift_answers(content: &str, item: &dyn Fn(&str) -> String) -> Result<(Kind, b
         return Ok((Kind::Matching { pairs, distractors }, false, general));
     }
     if answers.iter().any(|a| a.mark == '~') {
-        let answers: Vec<Answer> = answers.iter().map(|a| Answer { text: item(&a.text), correct: a.positive(), locked: false }).collect();
+        let answers: Vec<Answer> = answers.iter().map(|a| Answer { text: item(&a.text), correct: a.positive(), locked: false, image: None, figure: None }).collect();
         if !answers.iter().any(|a| a.correct) {
             return Err("no correct answer: mark it with = (or a positive weight like ~%50%)".into());
         }
@@ -3782,7 +3782,7 @@ fn numbered_question(first: &str, rest: &[String], meta: &NumMeta) -> Result<Que
             } else if choices.is_empty() {
                 return Err("no answers: add lettered choices (a) …, *b) …), [*]/[ ] boxes, `* answer`, `= number` or a ____ line".into());
             } else {
-                let mut answers: Vec<Answer> = choices.iter().map(|(c, t)| Answer { text: t.clone(), correct: *c, locked: false }).collect();
+                let mut answers: Vec<Answer> = choices.iter().map(|(c, t)| Answer { text: t.clone(), correct: *c, locked: false, image: None, figure: None }).collect();
                 if let Some(k) = key {
                     for i in k {
                         answers.get_mut(i).ok_or_else(|| format!("the Answer: line names choice {} but only {} are given", i + 1, choices.len()))?.correct = true;
@@ -3873,7 +3873,7 @@ fn brightspace_question(rows: &[Vec<String>]) -> Result<Option<Question>, String
     let rich = |s: &str| if looks_html(s) { html_to_markup(s).0 } else { s.to_string() };
     let kind = match ty.as_str() {
         "MC" | "MS" => {
-            let answers: Vec<Answer> = options.iter().map(|(w, t)| Answer { text: rich(t), correct: *w > 0.0, locked: false }).collect();
+            let answers: Vec<Answer> = options.iter().map(|(w, t)| Answer { text: rich(t), correct: *w > 0.0, locked: false, image: None, figure: None }).collect();
             if !answers.iter().any(|a| a.correct) {
                 return Err("no Option row has a positive weight".into());
             }
@@ -3963,7 +3963,7 @@ fn kahoot_rows(rows: &[Vec<String>]) -> Option<Result<Vec<Question>, String>> {
         for (k, c) in ac.iter().enumerate() {
             let text = c.map(get).unwrap_or_default();
             if !text.is_empty() {
-                answers.push(Answer { text, correct: keys.contains(&k), locked: false });
+                answers.push(Answer { text, correct: keys.contains(&k), locked: false, image: None, figure: None });
             }
         }
         if answers.is_empty() || !answers.iter().any(|a| a.correct) {
@@ -4268,7 +4268,7 @@ fn moodle_question(q: XNode<'_, '_>, ty: &str) -> Result<Option<Question>, Strin
     let answers = moodle_answers(q);
     let kind = match ty {
         "multichoice" => {
-            let answers: Vec<Answer> = answers.iter().map(|(f, t, _)| Answer { text: t.clone(), correct: *f > 0.0, locked: false }).collect();
+            let answers: Vec<Answer> = answers.iter().map(|(f, t, _)| Answer { text: t.clone(), correct: *f > 0.0, locked: false, image: None, figure: None }).collect();
             if answers.is_empty() {
                 return Err("no answers".into());
             }
@@ -4782,7 +4782,7 @@ fn qti1_item(item: XNode<'_, '_>) -> QtiResult {
     } else if lids.len() == 1 {
         let r = lids[0];
         let ok = correct_for(&r.ident);
-        let answers: Vec<Answer> = r.labels.iter().map(|(id, t)| Answer { text: t.clone(), correct: ok.contains(id), locked: false }).collect();
+        let answers: Vec<Answer> = r.labels.iter().map(|(id, t)| Answer { text: t.clone(), correct: ok.contains(id), locked: false, image: None, figure: None }).collect();
         if answers.is_empty() {
             return Err("a choice question with no choices".into());
         }
@@ -4947,7 +4947,7 @@ fn qti2_block(b: XNode<'_, '_>, decl: Option<&Decl>) -> Result<Kind, String> {
                 return Err("a choice interaction with no choices".into());
             }
             let multi = xattr(b, "maxChoices").is_some_and(|m| m.trim() != "1") || decl.is_some_and(|d| d.multiple);
-            let answers: Vec<Answer> = list.iter().map(|(id, t, fixed)| Answer { text: t.clone(), correct: correct.contains(id), locked: *fixed }).collect();
+            let answers: Vec<Answer> = list.iter().map(|(id, t, fixed)| Answer { text: t.clone(), correct: correct.contains(id), locked: *fixed, image: None, figure: None }).collect();
             if !answers.iter().any(|a| a.correct) {
                 return Err("no choice is in the correct response".into());
             }

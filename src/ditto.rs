@@ -582,7 +582,24 @@ pub fn label_number(label: &str) -> Option<u32> {
         }
     }
     let t = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')).or_else(|| t.strip_prefix('(').and_then(|s| s.strip_suffix(')'))).unwrap_or(t);
-    t.trim_end_matches(['.', ')']).trim().parse().ok()
+    let t = t.trim_end_matches(['.', ')']).trim();
+    t.parse().ok().or_else(|| number_word(t))
+}
+
+/// A question number written as a word, as some exam papers print it ("QUESTION THREE",
+/// "Twenty-one"): one to ninety-nine.
+fn number_word(t: &str) -> Option<u32> {
+    const ONES: [&str; 19] = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+    const TENS: [&str; 8] = ["twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+    let lower = t.to_ascii_lowercase();
+    let words: Vec<&str> = lower.split(['-', ' ']).filter(|w| !w.is_empty()).collect();
+    let one = |w: &str| ONES.iter().position(|o| *o == w).map(|i| i as u32 + 1);
+    let ten = |w: &str| TENS.iter().position(|o| *o == w).map(|i| (i as u32 + 2) * 10);
+    match words.as_slice() {
+        [w] => one(w).or_else(|| ten(w)),
+        [t, o] => Some(ten(t)? + one(o).filter(|n| *n < 10)?),
+        _ => None,
+    }
 }
 
 fn raw_label(item: &Value, index: usize) -> (String, Option<String>) {
@@ -1010,7 +1027,7 @@ fn choices(item: &Value) -> Result<Vec<Answer>, String> {
     let answers: Vec<Answer> = item
         .get("choices")
         .and_then(Value::as_array)
-        .map(|a| a.iter().map(|c| Answer { text: text(c, "text").to_string(), correct: c.get("correct").and_then(Value::as_bool).unwrap_or(false), locked: false }).filter(|a| !a.text.is_empty()).collect())
+        .map(|a| a.iter().map(|c| Answer { text: text(c, "text").to_string(), correct: c.get("correct").and_then(Value::as_bool).unwrap_or(false), locked: false, image: None, figure: None }).filter(|a| !a.text.is_empty()).collect())
         .unwrap_or_default();
     if answers.len() < 2 {
         return Err("a multiple-choice question needs at least two choices.".into());
@@ -2197,10 +2214,12 @@ mod tests {
         assert_eq!(label_number(" 7) "), Some(7));
         assert_eq!(label_number("5B-2"), None);
         // Holdout v5: CLP-1 prints "Q[2]:".
-        for (label, n) in [("Q[2]", 2), ("Q[3]:", 3), ("Q12", 12), ("q 4.", 4), ("Problem 5", 5), ("Exercise 6:", 6), ("#7", 7), ("[8]", 8), ("(9)", 9), ("13:", 13)] {
+        for (label, n) in [("Q[2]", 2), ("Q[3]:", 3), ("Q12", 12), ("q 4.", 4), ("Problem 5", 5), ("Exercise 6:", 6), ("#7", 7), ("[8]", 8), ("(9)", 9), ("13:", 13),
+            // Holdout v7, NZQA: "QUESTION THREE".
+            ("THREE", 3), ("Question Three", 3), ("QUESTION TWELVE", 12), ("Twenty-one", 21), ("forty two", 42), ("Ninety", 90)] {
             assert_eq!(label_number(label), Some(n), "{label}");
         }
-        for label in ["Quiz", "Q", "Question", "Q[2]a", "2.18", "1b", "Problem set 3", "(a)"] {
+        for label in ["Quiz", "Q", "Question", "Q[2]a", "2.18", "1b", "Problem set 3", "(a)", "Twenty-eleven", "Once", "one two"] {
             assert_eq!(label_number(label), None, "{label}");
         }
     }

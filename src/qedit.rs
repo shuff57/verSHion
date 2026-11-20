@@ -34,11 +34,7 @@ pub fn type_tag(k: QKind) -> &'static str {
 }
 
 fn empty_answer() -> Answer {
-    Answer {
-        text: String::new(),
-        correct: false,
-        locked: false,
-    }
+    Answer::default()
 }
 
 fn empty_answers(n: usize) -> Vec<Answer> {
@@ -607,7 +603,7 @@ impl Draft {
                 .map(|a| Answer {
                     text: a.text.trim().to_string(),
                     correct: a.correct,
-                    locked: a.locked,
+                    locked: a.locked, image: None, figure: None
                 })
                 .collect()
         };
@@ -874,15 +870,15 @@ pub fn plan_switch(stem: &str, from: &Kind, to: QKind, tf_keyed: bool) -> Switch
         },
         (Kind::Short { sample }, QKind::Mc) if filled(sample) => {
             let mut answers = empty_answers(4);
-            answers[0] = Answer { text: sample.trim().to_string(), correct: true, locked: false };
+            answers[0] = Answer { text: sample.trim().to_string(), correct: true, locked: false, image: None, figure: None };
             plan.kind = Kind::Mc { answers };
             plan.kept.push("the model answer as the first choice, marked correct".to_string());
             plan.lost.clear();
         }
         (Kind::Tf { correct }, QKind::Mc) if tf_keyed => {
             let mut answers = empty_answers(4);
-            answers[0] = Answer { text: "True".into(), correct: *correct, locked: false };
-            answers[1] = Answer { text: "False".into(), correct: !*correct, locked: false };
+            answers[0] = Answer { text: "True".into(), correct: *correct, locked: false, image: None, figure: None };
+            answers[1] = Answer { text: "False".into(), correct: !*correct, locked: false, image: None, figure: None };
             plan.kind = Kind::Mc { answers };
             plan.kept.push("True and False as the first two choices".to_string());
         }
@@ -2389,12 +2385,12 @@ mod tests {
                     Answer {
                         text: "4".to_string(),
                         correct: true,
-                        locked: false,
+                        locked: false, image: None, figure: None
                     },
                     Answer {
                         text: "5".to_string(),
                         correct: false,
-                        locked: false,
+                        locked: false, image: None, figure: None
                     },
                 ],
             },
@@ -2796,7 +2792,7 @@ mod tests {
             let mut m = Modal::new();
             let mut d = Draft::new("b".to_string());
             d.stem = "Which is prime".to_string();
-            d.kind = Kind::Mc { answers: (0..9).map(|i| Answer { text: format!("a{i}"), correct: i == 1, locked: false }).collect() };
+            d.kind = Kind::Mc { answers: (0..9).map(|i| Answer { text: format!("a{i}"), correct: i == 1, locked: false, image: None, figure: None }).collect() };
             m.settle(&mut d, 8);
             let sid: UiId = m.ctx.data(|dd| dd.get_temp(UiId::new("qedit_test_scroll_id"))).unwrap();
             d.confirm = Some(c.clone());
@@ -2896,7 +2892,7 @@ mod tests {
         d.stem = "Parts".to_string();
         if let Kind::Multipart { parts } = &mut d.kind {
             parts[1].stem = "second".to_string();
-            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false }, Answer { text: "y".into(), correct: false, locked: false }] };
+            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false, image: None, figure: None }, Answer { text: "y".into(), correct: false, locked: false, image: None, figure: None }] };
         }
         assert_eq!(msgs_of(&d), ["Part 1 needs its own stem", "Part 2 needs a correct answer"]);
         assert_eq!(d.build_question(None).stem, "Parts");
@@ -3012,7 +3008,7 @@ mod tests {
             parts[0].stem = "first".into();
             parts[0].kind = PartKind::Mc { answers: vec![] };
             parts[1].stem = "second".into();
-            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false }] };
+            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false, image: None, figure: None }] };
         }
         // (a new draft, no part visited)
         let mut m = Modal::new();
@@ -3075,7 +3071,7 @@ mod tests {
     }
 
     fn mc(texts: &[(&str, bool)]) -> Kind {
-        Kind::Mc { answers: texts.iter().map(|(t, c)| Answer { text: t.to_string(), correct: *c, locked: false }).collect() }
+        Kind::Mc { answers: texts.iter().map(|(t, c)| Answer { text: t.to_string(), correct: *c, locked: false, image: None, figure: None }).collect() }
     }
 
     #[test]

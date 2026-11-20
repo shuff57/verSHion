@@ -258,7 +258,7 @@ mod tests {
     use crate::model::{Answer, Pair, Part};
 
     fn a(t: &str, c: bool) -> Answer {
-        Answer { text: t.to_string(), correct: c, locked: false }
+        Answer::new(t, c)
     }
 
     fn q(stem: &str, kind: Kind) -> Question {

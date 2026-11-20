@@ -8327,7 +8327,7 @@ mod tests {
         Kind::Mc {
             answers: answers
                 .iter()
-                .map(|(t, c, l)| Answer { text: t.to_string(), correct: *c, locked: *l })
+                .map(|(t, c, l)| Answer { text: t.to_string(), correct: *c, locked: *l, image: None, figure: None })
                 .collect(),
         }
     }
@@ -8368,7 +8368,7 @@ mod tests {
     }
 
     fn ans(t: &str, c: bool) -> model::Answer {
-        model::Answer { text: t.to_string(), correct: c, locked: false }
+        model::Answer::new(t, c)
     }
 
     fn bank_of(qs: Vec<Question>) -> model::QuestionBank {
@@ -8531,7 +8531,7 @@ mod tests {
                 Part {
                     stem: "2 + 2 = ?".into(),
                     kind: PartKind::Mc {
-                        answers: vec![Answer { text: "4".into(), correct: true, locked: false }],
+                        answers: vec![Answer { text: "4".into(), correct: true, locked: false, image: None, figure: None }],
                     },
                 },
                 Part {
@@ -8896,7 +8896,7 @@ mod stem_ui_tests {
         let p = |l: &str, r: &str| model::Pair { left: l.into(), right: r.into() };
         for kind in [
             Kind::Tf { correct: false },
-            Kind::Mc { answers: vec![model::Answer { text: "x".into(), correct: false, locked: false }, model::Answer { text: "y".into(), correct: false, locked: false }] },
+            Kind::Mc { answers: vec![model::Answer { text: "x".into(), correct: false, locked: false, image: None, figure: None }, model::Answer { text: "y".into(), correct: false, locked: false, image: None, figure: None }] },
             Kind::Matching { pairs: vec![p("Dog", "Mammal"), p("Frog", "Amphibian")], distractors: vec!["Bird".into()] },
             Kind::Blank { accept: vec![vec![]] },
             Kind::Short { sample: String::new() },
@@ -8982,7 +8982,7 @@ mod examed_tests {
         Question {
             id: id.into(),
             stem: format!("Stem {id}"),
-            kind: Kind::Mc { answers: answers.iter().map(|(t, c, l)| Answer { text: t.to_string(), correct: *c, locked: *l }).collect() },
+            kind: Kind::Mc { answers: answers.iter().map(|(t, c, l)| Answer { text: t.to_string(), correct: *c, locked: *l, image: None, figure: None }).collect() },
             points: Some(1.0),
             difficulty: None,
             topics: vec![],
@@ -9099,7 +9099,7 @@ mod examed_tests {
                 model::Part { stem: "$f$ is even.".into(), kind: PartKind::Tf { correct: true } },
                 model::Part {
                     stem: "Which is $f'(x)$?".into(),
-                    kind: PartKind::Mc { answers: vec![model::Answer { text: "$2x$".into(), correct: true, locked: false }, model::Answer { text: "$x$".into(), correct: false, locked: false }] },
+                    kind: PartKind::Mc { answers: vec![model::Answer { text: "$2x$".into(), correct: true, locked: false, image: None, figure: None }, model::Answer { text: "$x$".into(), correct: false, locked: false, image: None, figure: None }] },
                 },
             ],
         };
@@ -10458,7 +10458,7 @@ mod review_tests {
     #[test]
     fn show_all_opens_a_card_in_place() {
         let long = "A milliliter of cow's milk contains 0.026 g of casein protein. ".repeat(9);
-        let mut qs = vec![question("long", &long, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false }] }, Some(12.5), 100)];
+        let mut qs = vec![question("long", &long, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false, image: None, figure: None }] }, Some(12.5), 100)];
         for k in 0..9 {
             qs.push(question(&format!("q{k}"), &"Which of the following elements is the least electronegative of all? ".repeat(1 + k % 3), Kind::Short { sample: "x".into() }, Some(1.0), 90 - k as i64));
         }
@@ -10912,7 +10912,7 @@ mod review_tests {
     #[test]
     fn the_add_button_sits_in_the_header_row_and_overlaps_nothing() {
         let img = || Some(crate::model::ImageRef { file: "media/x.png".into(), width: 10, height: 10 });
-        let keyless = |id: &str, stem: &str| question(id, stem, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false }] }, Some(12.5), 100);
+        let keyless = |id: &str, stem: &str| question(id, stem, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false, image: None, figure: None }] }, Some(12.5), 100);
         let part = |s: &str| model::Part { stem: s.into(), kind: PartKind::Short { sample: "x".into() } };
         let mut a = keyless("long", &"A milliliter of cow's milk contains 0.026 g of casein protein. ".repeat(4));
         a.image = img();
@@ -11359,7 +11359,7 @@ mod child_figure_mapping_tests {
     fn owning_part_picture_marker_survives_mapping_choices_and_part_work_splitting() {
         let q=model::Question { id:"child-picture".into(),stem:"Shared givens.".into(),kind:Kind::Multipart {parts:vec![
             model::Part {stem:"a) Earlier part.".into(),kind:model::PartKind::Short {sample:"".into()}},
-            model::Part {stem:"b) Owning part.\n[picture]".into(),kind:model::PartKind::Mc {answers:vec![model::Answer {text:"First choice".into(),correct:false,locked:false},model::Answer {text:"Second choice".into(),correct:false,locked:false}]}},
+            model::Part {stem:"b) Owning part.\n[picture]".into(),kind:model::PartKind::Mc {answers:vec![model::Answer {text:"First choice".into(),correct:false,locked:false, image: None, figure: None},model::Answer {text:"Second choice".into(),correct:false,locked:false, image: None, figure: None}]}},
             model::Part {stem:"c) Later part.".into(),kind:model::PartKind::Short {sample:"".into()}}
         ]},points:None,difficulty:None,topics:Vec::new(),image:None,explanation:None,figure:None,created:0,modified:0};
         let mut mapped=map_question_style(1,&q,model::PaperStyle::Standard);

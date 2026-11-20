@@ -374,7 +374,7 @@ mod tests {
         Question { id: stem.into(), stem: stem.into(), kind, points: None, difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 0, modified: 0 }
     }
     fn mc(stem: &str, choices: &[(&str, bool)]) -> Question {
-        q(stem, Kind::Mc { answers: choices.iter().map(|(t, c)| Answer { text: (*t).into(), correct: *c, locked: false }).collect() })
+        q(stem, Kind::Mc { answers: choices.iter().map(|(t, c)| Answer { text: (*t).into(), correct: *c, locked: false, image: None, figure: None }).collect() })
     }
     fn blank(stem: &str, accept: &[&str]) -> Question {
         q(stem, Kind::Blank { accept: accept.iter().map(|a| vec![(*a).to_string()]).collect() })
