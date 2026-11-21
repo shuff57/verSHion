@@ -1,9 +1,9 @@
 {
- "checked_at": "2026-11-20T10:21:58",
- "ours_built_at": "2026-11-20T18:21:45+00:00",
- "git": "59620d8+dirty",
+ "checked_at": "2026-11-20T16:42:59",
+ "ours_built_at": "2026-11-21T00:41:48+00:00",
+ "git": "70ccc10+dirty",
  "figures": {
-  "sequences-series": {
+  "limits-discontinuities": {
    "caps": {
     "cap-01": {
      "pass": true,
@@ -11,9 +11,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"first\":\"3\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/e11ade7f3fc51bfb.png"
+       "token": "changes:{\"pieces\": \"y = -x - 1, x < -2\\ny = x^2/2 - 1, -2 <= x <= 2\\ny = 3, x > 2\", \"dots\": \"\", \"ask_at\": \"2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/f40157aaa6d2f560.png"
       }
      ]
     },
@@ -23,9 +23,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"mode\":\"Geometric\",\"ratio\":\"-1/2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/1275fa0fa14ef9c0.png"
+       "token": "changes:{\"pieces\": \"(-5, 1) (-3, 3) (-1, 2) (1, 4) open\\nclosed (1, 1) (3, 0) (5, 2)\", \"dots\": \"\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/5866d353b2842c68.png"
       }
      ]
     },
@@ -35,9 +35,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"formula\":\"n^2\",\"from\":0,\"mode\":\"Explicit\",\"step\":10,\"to\":70}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/aa7039635ffe938f.png"
+       "token": "changes:{\"pieces\": \"y = (x^2 - 4)/(x - 2)\", \"dots\": \"(2, 1)\", \"ask_at\": \"2\", \"xmin\": -4.0, \"xmax\": 6.0, \"ymin\": -2.0, \"ymax\": 7.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/e29be58145604f51.png"
       }
      ]
     },
@@ -47,9 +47,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"explicit\":false,\"first\":\"1\",\"from\":0,\"mode\":\"Recursive\",\"recurrence\":\"a_(n-1)+a_(n-2)\",\"recursive\":true,\"second\":\"1\",\"step\":5,\"to\":25}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/7a365643a4571514.png"
+       "token": "changes:{\"pieces\": \"y = x + 2, x < 1\\ny = 4 - 2x, x >= 1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/e7fa69528065eaba.png"
       }
      ]
     },
@@ -59,9 +59,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"count\":10,\"start\":\"0\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/1d9d41f556a90952.png"
+       "token": "changes:{\"pieces\": \"y = 2/(x - 3)\", \"dots\": \"\", \"ask_at\": \"3\", \"xmin\": -4.0, \"xmax\": 8.0, \"ymin\": -7.0, \"ymax\": 7.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/e72e8b111ada2ffc.png"
       }
      ]
     },
@@ -71,9 +71,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"count\":12,\"explicit\":false,\"formula\":\"(-1)^n*n/(n+1)\",\"from\":-1.2,\"mode\":\"Explicit\",\"step\":0.4,\"terms\":false,\"to\":1.2}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/bd8b9c861615c7bf.png"
+       "token": "changes:{\"pieces\": \"y = (2x^2 + 1)/(x^2 + 1)\", \"dots\": \"\", \"ask_at\": \"\", \"ask_inf\": \"Both\", \"xmin\": -8.0, \"xmax\": 8.0, \"ymin\": -3.0, \"ymax\": 6.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/a046117ebcd929c8.png"
       }
      ]
     },
@@ -83,9 +83,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"display\":\"Partial sums\",\"step\":10,\"to\":50}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/5759e80070f7bf00.png"
+       "token": "changes:{\"ask_at\": \"-2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/471a111c84a2f872.png"
       }
      ]
     },
@@ -95,9 +95,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"display\":\"Partial sums\",\"explicit\":false,\"first\":\"6\",\"from\":0,\"limit\":true,\"mode\":\"Geometric\",\"ratio\":\"1/2\",\"step\":2,\"terms\":false,\"to\":14}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/13c51fd4bcf019dd.png"
+       "token": "changes:{\"ask_inf\": \"Both\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/ec902aa0c85d4c1e.png"
       }
      ]
     },
@@ -107,9 +107,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"first\":\"1/3\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/da56575762a0f064.png"
+       "token": "changes:{\"pieces\": \"y = 4 - (x - 1)^2/3, x <= 1, x ≠ -2\\ny = 2 + 3/(x - 4), x > 1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/8cdadeeef1396e06.png"
       }
      ]
     },
@@ -119,9 +119,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"explicit\":true,\"first\":\"3\",\"from\":0,\"mode\":\"Geometric\",\"ratio\":\"2/3\",\"start\":\"0\",\"step\":1,\"terms\":false,\"to\":4}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/2378720556cfe532.png"
+       "token": "changes:{\"dots\": \"(-2, 3), (4, 5)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/ce0506c213a6ad7f.png"
       }
      ]
     },
@@ -131,9 +131,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"recursive\":true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/8afb848fba7abb4c.png"
+       "token": "changes:{\"asym_eqs\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/7860e977c8eff0d4.png"
       }
      ]
     },
@@ -143,9 +143,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"point_values\":true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/14a333a50491052b.png"
+       "token": "changes:{\"arrows\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/d89231b34c71d16c.png"
       }
      ]
     },
@@ -155,9 +155,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"count\":10,\"explicit\":false,\"formula\":\"(-1)^n/(n+1)\",\"from\":-1,\"mode\":\"Explicit\",\"start\":\"0\",\"step\":0.5,\"terms\":true,\"to\":1}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/9091fefd19b52e86.png"
+       "token": "changes:{\"guide\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/36d9ec580d2540bf.png"
       }
      ]
     },
@@ -167,9 +167,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"step\":10,\"sums\":true,\"to\":50}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/5b09a2ad891a71ad.png"
+       "token": "changes:{\"ask_at\": \"-2, 1, 4\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/dcc2f2177ce467d0.png"
       }
      ]
     },
@@ -179,9 +179,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"mode\":\"Geometric\",\"sum\":true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/0a4be4de18245039.png"
+       "token": "changes:{\"ask_at\": \"1, 4\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/7a2ef0c5202a39ae.png"
       }
      ]
     },
@@ -191,9 +191,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"convergence\":true,\"mode\":\"Geometric\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/07fbe2852ca4e9d1.png"
+       "token": "changes:{\"kind_labels\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/24accadc42d98170.png"
       }
      ]
     },
@@ -203,9 +203,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"join\":true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/6753fda4be35044b.png"
+       "token": "changes:{\"ask_disc\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/6665cff5b33b3ca4.png"
       }
      ]
     },
@@ -215,9 +215,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"marks\":\"Spikes\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/0eb2961863d0d899.png"
+       "token": "changes:{\"pieces\": \"y = x + 2, x < 1\\ny = 4 - 2x, x >= 1\", \"dots\": \"\", \"ask_at\": \"1\", \"guide\": true, \"kind_labels\": true, \"title\": \"A jump discontinuity\", \"xmin\": -5.0, \"xmax\": 5.0, \"ymin\": -3.0, \"ymax\": 6.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/fda5d8fe0d93a679.png"
       }
      ]
     },
@@ -227,9 +227,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"display\":\"Both\",\"layout\":\"Two aligned graphs\",\"step\":10,\"to\":50}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/187ec81cd673c8f3.png"
+       "token": "changes:{\"xmin\": -8.0, \"xmax\": 12.0, \"xstep\": 2.0, \"ymin\": -8.0, \"ymax\": 8.0, \"ystep\": 2.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/2b3612e9bb79a668.png"
       }
      ]
     },
@@ -239,9 +239,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"band\":true,\"limit\":true,\"mode\":\"Geometric\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/bfab13642588cf33.png"
+       "token": "changes:{\"grid\": \"Bold\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/5ff9aaec6a1122dd.png"
       }
      ]
     },
@@ -251,9 +251,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"from\":-1,\"layout\":\"Number line\",\"limit\":true,\"mode\":\"Geometric\",\"to\":3}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/087adc02d85f6e4b.png"
+       "token": "changes:{\"minor\": 2}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/f173125b26467eeb.png"
       }
      ]
     },
@@ -263,9 +263,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"first\":\"8\",\"mode\":\"Geometric\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/732eff374893d6e5.png"
+       "token": "changes:{\"numbers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/d5a5caf691daecfc.png"
       }
      ]
     },
@@ -275,9 +275,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"from\":-4,\"step\":4,\"to\":16}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/9d05f77c28ba4830.png"
+       "token": "changes:{\"xlabel\": \"t\", \"ylabel\": \"f(t)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/2bb7ded2bd50ba13.png"
       }
      ]
     },
@@ -287,21 +287,21 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"grid\":\"Bold\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/a4820f293488c912.png"
+       "token": "changes:{\"title\": \"Limits from a graph\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/7b4d07ee645ab41d.png"
       }
      ]
     },
     "cap-25": {
      "pass": true,
      "why": "ok",
-     "class": "control",
+     "class": "version",
      "renders": [
       {
-       "token": "changes:{\"xlabel\":\"Term\",\"ylabel\":\"Value\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/6972fc4f20dfb034.png"
+       "token": "changes:{\"title_mode\": \"Blank line\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/c6ed587b01631701.png"
       }
      ]
     },
@@ -311,45 +311,45 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"title\":\"A growing sequence\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/5212910f616d98c8.png"
+       "token": "changes:{\"label_size\": \"Large\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/ef7c3979cb3d06e2.png"
       }
      ]
     },
     "cap-27": {
      "pass": true,
      "why": "ok",
-     "class": "version",
+     "class": "control",
      "renders": [
       {
-       "token": "changes:{\"blank_title\":true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/cbb8da91084c4041.png"
+       "token": "changes:{\"style\": \"Print\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/fc8c59c2879982c0.png"
       }
      ]
     },
     "cap-28": {
      "pass": true,
      "why": "ok",
-     "class": "control",
+     "class": "version",
      "renders": [
       {
-       "token": "changes:{\"label_size\":\"Large\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/43fd7eb8039544b1.png"
+       "token": "changes:{\"show_answers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/95ca0ca900eef493.png"
       }
      ]
     },
     "cap-29": {
      "pass": true,
      "why": "ok",
-     "class": "control",
+     "class": "version",
      "renders": [
       {
-       "token": "changes:{\"style\":\"Print\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/0f8ed7cd312e9569.png"
+       "token": "changes:{\"ask_at\": \"-2, 1, 4\", \"ask_inf\": \"Both\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/5cc89f51060477e0.png"
       }
      ]
     },
@@ -359,9 +359,9 @@
      "class": "version",
      "renders": [
       {
-       "token": "changes:{\"show_answers\":false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/5106c803451b0f6a.png"
+       "token": "changes:{\"kind_labels\": true, \"ask_disc\": true, \"show_answers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/8ad9736f19001e36.png"
       }
      ]
     },
@@ -371,21 +371,415 @@
      "class": "version",
      "renders": [
       {
-       "token": "changes:{\"show_answers\":false,\"task\":\"Missing terms\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/9e01d8f16eab432c.png"
+       "token": "changes:{\"asym_eqs\": true, \"ask_inf\": \"Both\", \"show_answers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/bf7379d26e449ed3.png"
       }
      ]
     },
     "cap-32": {
      "pass": true,
      "why": "ok",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-34": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
+  "tangent-secant-lines": {
+   "caps": {
+    "cap-01": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"func\": \"x^3 - 3x\", \"xmin\": -3.0, \"xmax\": 3.0, \"ymin\": -4.0, \"ymax\": 4.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/3d672863ed83ec62.png"
+      }
+     ]
+    },
+    "cap-02": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"a\": \"2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/2528a460541667fd.png"
+      }
+     ]
+    },
+    "cap-03": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"show_secant\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/d0145d364401d8ce.png"
+      }
+     ]
+    },
+    "cap-04": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"show_tangent\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/e127f0efa9f5196b.png"
+      }
+     ]
+    },
+    "cap-05": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"h\": \"-1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/07e1946d021b9559.png"
+      }
+     ]
+    },
+    "cap-06": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"h\": \"2\", \"more_h\": \"1, 0.5, 0.1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/7fefee8998e447a8.png"
+      }
+     ]
+    },
+    "cap-07": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"a\": \"1/2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/b2b14d82cc57472b.png"
+      }
+     ]
+    },
+    "cap-08": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"worked\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/0ea57a38ceeb629b.png"
+      }
+     ]
+    },
+    "cap-09": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"tangent_eq\": \"Point-slope\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/be6974be9530efa9.png"
+      }
+     ]
+    },
+    "cap-10": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"secant_eq\": \"Slope-intercept\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/d0d84c4ed08091b3.png"
+      }
+     ]
+    },
+    "cap-11": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"normal\": \"With its equation\", \"square\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/5e6d00300dc2c460.png"
+      }
+     ]
+    },
+    "cap-12": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"more_a\": \"-1, 2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/9782d8425aae64d0.png"
+      }
+     ]
+    },
+    "cap-13": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"pt_labels\": \"Letters and coordinates\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/c6033295dddffc85.png"
+      }
+     ]
+    },
+    "cap-14": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"secant_triangle\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/fc380f2079acf672.png"
+      }
+     ]
+    },
+    "cap-15": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"tangent_triangle\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/a76b228f975e98c9.png"
+      }
+     ]
+    },
+    "cap-16": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"h_mark\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/61a99a9a93695167.png"
+      }
+     ]
+    },
+    "cap-17": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"table\": true, \"more_h\": \"0.5, 0.1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/d6b09b832505f0dd.png"
+      }
+     ]
+    },
+    "cap-18": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"h\": \"1/3\", \"slope_form\": \"Decimals\", \"dec\": 3}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/657ebd3dbdb44768.png"
+      }
+     ]
+    },
+    "cap-19": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"tangent_style\": \"Dashed\", \"secant_style\": \"Dotted\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/8b6d5fe9c665ba5f.png"
+      }
+     ]
+    },
+    "cap-20": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"extent\": \"Short segment through the point\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/e977f3fc46dd8356.png"
+      }
+     ]
+    },
+    "cap-21": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"fname\": \"s\", \"var\": \"t\", \"func\": \"t^2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/86d032c2e2497a4a.png"
+      }
+     ]
+    },
+    "cap-22": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"func\": \"x^3-3x\", \"a\": \"1\", \"h\": \"1\", \"xmin\": -3, \"xmax\": 3, \"ymin\": -4, \"ymax\": 4, \"title\": \"A cubic's horizontal tangent\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/a1aa8c5188f6e57a.png"
+      }
+     ]
+    },
+    "cap-23": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"xmin\": -4.0, \"xmax\": 4.0, \"xstep\": 2.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/e7fac6f2805b0c9f.png"
+      }
+     ]
+    },
+    "cap-24": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"grid\": \"Bold\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/8cf1ee9abc7cb263.png"
+      }
+     ]
+    },
+    "cap-25": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"minor\": 4}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/300516d33cdfda92.png"
+      }
+     ]
+    },
+    "cap-26": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"numbers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/57996a630d3c9f2f.png"
+      }
+     ]
+    },
+    "cap-27": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"xlabel\": \"time\", \"ylabel\": \"distance\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/d353ddc5b97a859f.png"
+      }
+     ]
+    },
+    "cap-28": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"xunits\": \"Multiples of π\", \"func\": \"sin(x)\", \"a\": \"pi/3\", \"h\": \"pi/2\", \"xmin\": -1.0, \"xmax\": 1.0, \"xstep\": 0.25, \"ymin\": -2.0, \"ymax\": 2.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/c734d7e0b642a2e0.png"
+      }
+     ]
+    },
+    "cap-29": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"title\": \"Tangent to y = x^2 at x = 1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/c2596c3c45f1ece5.png"
+      }
+     ]
+    },
+    "cap-30": {
+     "pass": true,
+     "why": "ok",
      "class": "version",
      "renders": [
       {
-       "token": "changes:{\"show_answers\":false,\"task\":\"Continue\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/1338e81c3c851185.png"
+       "token": "changes:{\"title_mode\": \"Blank line\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/5944818bd442ec3a.png"
+      }
+     ]
+    },
+    "cap-31": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"label_size\": \"Large\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/6ea1a8cd20758a34.png"
+      }
+     ]
+    },
+    "cap-32": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"style\": \"Print\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/37d721d082a3c145.png"
       }
      ]
     },
@@ -395,25 +789,49 @@
      "class": "version",
      "renders": [
       {
-       "token": "changes:{\"convergence\":true,\"first\":\"3\",\"from\":-2,\"missing\":\"4,6,8\",\"mode\":\"Geometric\",\"point_values\":true,\"ratio\":\"-1/2\",\"recursive\":true,\"show_answers\":true,\"step\":1,\"sum\":true,\"task\":\"Missing terms\",\"to\":4}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/244c9220a0c4b8fe.png"
+       "token": "changes:{\"show_answers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/174bcfb1a2caca0d.png"
       }
      ]
     },
     "cap-34": {
      "pass": true,
      "why": "ok",
-     "class": "interaction",
-     "renders": []
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\": false, \"student_copy\": \"Curve and P only, to draw the tangent\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/612c1d1c65453592.png"
+      }
+     ]
     },
     "cap-35": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"key_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/15a44b3a091a49cf.png"
+      }
+     ]
+    },
+    "cap-36": {
      "pass": true,
      "why": "ok",
      "class": "interaction",
      "renders": []
     },
-    "cap-36": {
+    "cap-37": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-38": {
      "pass": true,
      "why": "ok",
      "class": "interaction",
@@ -421,66 +839,528 @@
     }
    }
   },
-  "coordinate-grid": {
+  "riemann-sums": {
    "caps": {
     "cap-01": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"f\": \"4 - x^2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/be6461260a2790ac.png"
+      }
+     ]
     },
     "cap-02": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "core",
-     "renders": []
+     "renders": [
+      {
+       "token": "changes:{\"a\": \"1/2\", \"b\": \"pi/2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/7d337c06f096d526.png"
+      }
+     ]
     },
     "cap-03": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"n\": 8}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/c669f16ed92e808c.png"
+      }
+     ]
     },
     "cap-04": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"rule\": \"Left\", \"sample_pts\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/49645cd43125013b.png"
+      }
+     ]
     },
     "cap-05": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"rule\": \"Right\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/c1f6650a7a4957e3.png"
+      }
+     ]
     },
     "cap-06": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"rule\": \"Midpoint\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/5bd704aa130751cb.png"
+      }
+     ]
     },
     "cap-07": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"rule\": \"Trapezoid\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/eb8b5fbc19f25b33.png"
+      }
+     ]
     },
     "cap-08": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "control",
-     "renders": []
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"f\": \"3x - x^2\", \"b\": \"3\", \"n\": 3, \"rule\": \"Upper\", \"sum_line\": true, \"sample_pts\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/38a117dff7a8a182.png"
+      }
+     ]
     },
     "cap-09": {
-     "pass": false,
-     "why": "no evidence",
-     "class": "version",
-     "renders": []
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"f\": \"(x - 1.5)^2 + 1\", \"b\": \"3\", \"n\": 3, \"rule\": \"Lower\", \"sum_line\": true, \"sample_pts\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/a6f5d627e166d61f.png"
+      }
+     ]
     },
     "cap-10": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"region\": \"From a table of values\", \"xmax\": 8.0, \"ymax\": 7.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/3a5c3939211424fd.png"
+      }
+     ]
+    },
+    "cap-11": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"strips\": \"None (shade the exact area)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/da5048334052366c.png"
+      }
+     ]
+    },
+    "cap-12": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"region\": \"Between f(x) and g(x)\", \"g\": \"x\", \"strips\": \"None (shade the exact area)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/acd34dc963a16e0f.png"
+      }
+     ]
+    },
+    "cap-13": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"region\": \"Between f(x) and g(x)\", \"f\": \"x + 2\", \"g\": \"x^2\", \"bounds\": \"Where f and g cross\", \"strips\": \"None (shade the exact area)\", \"xmin\": -2.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/d3473cc4321ca20a.png"
+      }
+     ]
+    },
+    "cap-14": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"f\": \"x^2 - 1\", \"signed\": true, \"strips\": \"None (shade the exact area)\", \"exact_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/8ef0087c6e350c89.png"
+      }
+     ]
+    },
+    "cap-15": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"sum_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/20dab8ad526c0264.png"
+      }
+     ]
+    },
+    "cap-16": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"exact_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/d7e3992aeefc65f1.png"
+      }
+     ]
+    },
+    "cap-17": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"show_dx\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/43a1487f860af2b6.png"
+      }
+     ]
+    },
+    "cap-18": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"sample_pts\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/3b241936da508557.png"
+      }
+     ]
+    },
+    "cap-19": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"strip_labels\": \"Heights\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/722d60ec5a54ab1f.png"
+      }
+     ]
+    },
+    "cap-20": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"x_marks\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/91a68308c1ebe1f5.png"
+      }
+     ]
+    },
+    "cap-21": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"mark_bounds\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/3d5c1feb7753cbd1.png"
+      }
+     ]
+    },
+    "cap-22": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"integral_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/134a08bd930668c8.png"
+      }
+     ]
+    },
+    "cap-23": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"error_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/821909848e8a9a80.png"
+      }
+     ]
+    },
+    "cap-24": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"region\": \"Between f(x) and g(x)\", \"f\": \"sqrt(x)\", \"g\": \"x/2\", \"bounds\": \"Where f and g cross\", \"strips\": \"Horizontal\", \"xmax\": 5.0, \"ymax\": 3.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/8fed962a34765234.png"
+      }
+     ]
+    },
+    "cap-25": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"shading\": \"Hatching\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/eee29983c94956c5.png"
+      }
+     ]
+    },
+    "cap-26": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"curve\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/f1b545417187ea10.png"
+      }
+     ]
+    },
+    "cap-27": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"sum_line\": true, \"values\": \"Decimals\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/ff81c6f61c476f1d.png"
+      }
+     ]
+    },
+    "cap-28": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"f\": \"sin(x)\", \"a\": \"0\", \"b\": \"2pi\", \"strips\": \"None (shade the exact area)\", \"signed\": true, \"xunits\": \"Multiples of π\", \"xmin\": -0.5, \"xmax\": 2.5, \"xstep\": 0.5, \"ymin\": -1.5, \"ymax\": 1.5, \"ystep\": 0.5, \"integral_line\": true, \"exact_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/0bbdf6fdf05f8619.png"
+      }
+     ]
+    },
+    "cap-29": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"xmin\": -2.0, \"xmax\": 4.0, \"xstep\": 0.5, \"ymax\": 8.0, \"ystep\": 2.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/5832af71cfaa717c.png"
+      }
+     ]
+    },
+    "cap-30": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"grid\": \"Bold\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/8a221a2d395ec266.png"
+      }
+     ]
+    },
+    "cap-31": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"minor\": 4}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/b6dbe7b06c157d8d.png"
+      }
+     ]
+    },
+    "cap-32": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"numbers\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/b15747ab9ad5b52d.png"
+      }
+     ]
+    },
+    "cap-33": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"xlabel\": \"t\", \"ylabel\": \"v(t)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/d8dbcede9555fe80.png"
+      }
+     ]
+    },
+    "cap-34": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"xunits\": \"Multiples of π\", \"f\": \"sin(x)\", \"b\": \"pi\", \"xmin\": -0.5, \"xmax\": 1.5, \"xstep\": 0.5, \"ymin\": -0.5, \"ymax\": 1.5, \"ystep\": 0.5}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/deacd0bcd6404a90.png"
+      }
+     ]
+    },
+    "cap-35": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"title\": \"Left sum of f(x) = x^2 + 1\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/01d9e95fc4dd21d9.png"
+      }
+     ]
+    },
+    "cap-36": {
+     "pass": true,
+     "why": "ok",
      "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"title_mode\": \"Blank line\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/b08d320ae9f53608.png"
+      }
+     ]
+    },
+    "cap-37": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"label_size\": \"Large\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/ba2ba1ceba18f749.png"
+      }
+     ]
+    },
+    "cap-38": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"style\": \"Print\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/b52c7c63767374d8.png"
+      }
+     ]
+    },
+    "cap-39": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\": false, \"sum_line\": true, \"integral_line\": true, \"exact_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/d773f7b6d0c82c7e.png"
+      }
+     ]
+    },
+    "cap-40": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\": false, \"student\": \"Curve and bounds only\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/06c2f7b67a5e2868.png"
+      }
+     ]
+    },
+    "cap-41": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\": false, \"student\": \"Strip heights blank\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/e34db09d25e4b481.png"
+      }
+     ]
+    },
+    "cap-42": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"key_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/854a81af0dcf0a1d.png"
+      }
+     ]
+    },
+    "cap-43": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-44": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-45": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
      "renders": []
     }
    }
@@ -699,208 +1579,6 @@
     }
    }
   },
-  "polar-parametric": {
-   "caps": {
-    "cap-01": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-02": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-03": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-04": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-05": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-06": {
-     "pass": false,
-     "why": "not built",
-     "class": "core",
-     "renders": []
-    },
-    "cap-07": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-08": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-09": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-10": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-11": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-12": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-13": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-14": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-15": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-16": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-17": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-18": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-19": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-20": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-21": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-22": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-23": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-24": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-25": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-26": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-27": {
-     "pass": false,
-     "why": "not built",
-     "class": "control",
-     "renders": []
-    },
-    "cap-28": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-29": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-30": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-31": {
-     "pass": false,
-     "why": "not built",
-     "class": "version",
-     "renders": []
-    },
-    "cap-32": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-33": {
-     "pass": false,
-     "why": "not built",
-     "class": "interaction",
-     "renders": []
-    }
-   }
-  },
   "slope-fields": {
    "caps": {
     "cap-01": {
@@ -1097,7 +1775,7 @@
     }
    }
   },
-  "limits-discontinuities": {
+  "sequences-series": {
    "caps": {
     "cap-01": {
      "pass": true,
@@ -1105,9 +1783,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"pieces\": \"y = -x - 1, x < -2\\ny = x^2/2 - 1, -2 <= x <= 2\\ny = 3, x > 2\", \"dots\": \"\", \"ask_at\": \"2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/ed7fcb59ba066b74.png"
+       "token": "changes:{\"first\":\"3\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/94452099e7ec740c.png"
       }
      ]
     },
@@ -1117,9 +1795,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"pieces\": \"(-5, 1) (-3, 3) (-1, 2) (1, 4) open\\nclosed (1, 1) (3, 0) (5, 2)\", \"dots\": \"\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/b58de6f0ac452d88.png"
+       "token": "changes:{\"mode\":\"Geometric\",\"ratio\":\"-1/2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/439267775da03fae.png"
       }
      ]
     },
@@ -1129,9 +1807,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"pieces\": \"y = (x^2 - 4)/(x - 2)\", \"dots\": \"(2, 1)\", \"ask_at\": \"2\", \"xmin\": -4.0, \"xmax\": 6.0, \"ymin\": -2.0, \"ymax\": 7.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/5a6ba4c3305428ed.png"
+       "token": "changes:{\"formula\":\"n^2\",\"from\":0,\"mode\":\"Explicit\",\"step\":10,\"to\":70}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/e91c6fef26f65d88.png"
       }
      ]
     },
@@ -1141,9 +1819,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"pieces\": \"y = x + 2, x < 1\\ny = 4 - 2x, x >= 1\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/5c560c2b13e2f1fd.png"
+       "token": "changes:{\"explicit\":false,\"first\":\"1\",\"from\":0,\"mode\":\"Recursive\",\"recurrence\":\"a_(n-1)+a_(n-2)\",\"recursive\":true,\"second\":\"1\",\"step\":5,\"to\":25}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/e4332f8fdab63303.png"
       }
      ]
     },
@@ -1153,9 +1831,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"pieces\": \"y = 2/(x - 3)\", \"dots\": \"\", \"ask_at\": \"3\", \"xmin\": -4.0, \"xmax\": 8.0, \"ymin\": -7.0, \"ymax\": 7.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/e95acd81f3726080.png"
+       "token": "changes:{\"count\":10,\"start\":\"0\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/b0e3889ec82d012e.png"
       }
      ]
     },
@@ -1165,9 +1843,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"pieces\": \"y = (2x^2 + 1)/(x^2 + 1)\", \"dots\": \"\", \"ask_at\": \"\", \"ask_inf\": \"Both\", \"xmin\": -8.0, \"xmax\": 8.0, \"ymin\": -3.0, \"ymax\": 6.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/de26050644a77e59.png"
+       "token": "changes:{\"count\":12,\"explicit\":false,\"formula\":\"(-1)^n*n/(n+1)\",\"from\":-1.2,\"mode\":\"Explicit\",\"step\":0.4,\"terms\":false,\"to\":1.2}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/d14abf4bb6153072.png"
       }
      ]
     },
@@ -1177,9 +1855,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"ask_at\": \"-2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/1331bd44111a7dda.png"
+       "token": "changes:{\"display\":\"Partial sums\",\"step\":10,\"to\":50}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/6b01b8dcc8ff6562.png"
       }
      ]
     },
@@ -1189,9 +1867,9 @@
      "class": "core",
      "renders": [
       {
-       "token": "changes:{\"ask_inf\": \"Both\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/5f0c0e0faa26a13e.png"
+       "token": "changes:{\"display\":\"Partial sums\",\"explicit\":false,\"first\":\"6\",\"from\":0,\"limit\":true,\"mode\":\"Geometric\",\"ratio\":\"1/2\",\"step\":2,\"terms\":false,\"to\":14}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/01489e1ae413fa82.png"
       }
      ]
     },
@@ -1201,9 +1879,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"pieces\": \"y = 4 - (x - 1)^2/3, x <= 1, x ≠ -2\\ny = 2 + 3/(x - 4), x > 1\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/a5131ff1d031227d.png"
+       "token": "changes:{\"first\":\"1/3\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/729bf7c172e48bba.png"
       }
      ]
     },
@@ -1213,9 +1891,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"dots\": \"(-2, 3), (4, 5)\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/649ed6e027c2bb00.png"
+       "token": "changes:{\"explicit\":true,\"first\":\"3\",\"from\":0,\"mode\":\"Geometric\",\"ratio\":\"2/3\",\"start\":\"0\",\"step\":1,\"terms\":false,\"to\":4}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/9c466dbbcea44c5d.png"
       }
      ]
     },
@@ -1225,9 +1903,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"asym_eqs\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/a2be62bf7396ff71.png"
+       "token": "changes:{\"recursive\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/9948a7ee5a02fe6b.png"
       }
      ]
     },
@@ -1237,9 +1915,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"arrows\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/dd1134e968a40be0.png"
+       "token": "changes:{\"point_values\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/347d23f39e80b5a0.png"
       }
      ]
     },
@@ -1249,9 +1927,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"guide\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/0954ccdc7b384021.png"
+       "token": "changes:{\"count\":10,\"explicit\":false,\"formula\":\"(-1)^n/(n+1)\",\"from\":-1,\"mode\":\"Explicit\",\"start\":\"0\",\"step\":0.5,\"terms\":true,\"to\":1}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/a203c43dc939cc95.png"
       }
      ]
     },
@@ -1261,9 +1939,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"ask_at\": \"-2, 1, 4\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/5f5491ccac33afee.png"
+       "token": "changes:{\"step\":10,\"sums\":true,\"to\":50}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/8a194ab6df8821d6.png"
       }
      ]
     },
@@ -1273,9 +1951,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"ask_at\": \"1, 4\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/d9b3c0f7e683e13b.png"
+       "token": "changes:{\"mode\":\"Geometric\",\"sum\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/cbcad16076c3cf28.png"
       }
      ]
     },
@@ -1285,9 +1963,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"kind_labels\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/7d7dfdaf8b202f3e.png"
+       "token": "changes:{\"convergence\":true,\"mode\":\"Geometric\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/796474e679812357.png"
       }
      ]
     },
@@ -1297,9 +1975,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"ask_disc\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/820a0e41a6892e4a.png"
+       "token": "changes:{\"join\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/4c19d3402649ab49.png"
       }
      ]
     },
@@ -1309,9 +1987,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"pieces\": \"y = x + 2, x < 1\\ny = 4 - 2x, x >= 1\", \"dots\": \"\", \"ask_at\": \"1\", \"guide\": true, \"kind_labels\": true, \"title\": \"A jump discontinuity\", \"xmin\": -5.0, \"xmax\": 5.0, \"ymin\": -3.0, \"ymax\": 6.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/5bf8e766ab1e62ff.png"
+       "token": "changes:{\"marks\":\"Spikes\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/f9f12dbbf86c42ed.png"
       }
      ]
     },
@@ -1321,9 +1999,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"xmin\": -8.0, \"xmax\": 12.0, \"xstep\": 2.0, \"ymin\": -8.0, \"ymax\": 8.0, \"ystep\": 2.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/e066fd173de396a5.png"
+       "token": "changes:{\"display\":\"Both\",\"layout\":\"Two aligned graphs\",\"step\":10,\"to\":50}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/4334543f97b9b625.png"
       }
      ]
     },
@@ -1333,9 +2011,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"grid\": \"Bold\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/86845e0e0f698135.png"
+       "token": "changes:{\"band\":true,\"limit\":true,\"mode\":\"Geometric\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/3b2b3c11a217d630.png"
       }
      ]
     },
@@ -1345,9 +2023,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"minor\": 2}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/fdea34c6870318e3.png"
+       "token": "changes:{\"from\":-1,\"layout\":\"Number line\",\"limit\":true,\"mode\":\"Geometric\",\"to\":3}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/7191b9fa31e92580.png"
       }
      ]
     },
@@ -1357,9 +2035,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"numbers\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/d42cf08081252843.png"
+       "token": "changes:{\"first\":\"8\",\"mode\":\"Geometric\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/b216f34e60d8e54e.png"
       }
      ]
     },
@@ -1369,9 +2047,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"xlabel\": \"t\", \"ylabel\": \"f(t)\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/6f225f99c0fb7a22.png"
+       "token": "changes:{\"from\":-4,\"step\":4,\"to\":16}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/1147edb43fcda55e.png"
       }
      ]
     },
@@ -1381,403 +2059,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"title\": \"Limits from a graph\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/342bbda5e30bcf52.png"
-      }
-     ]
-    },
-    "cap-25": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"title_mode\": \"Blank line\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/7f04cbd851be3e1d.png"
-      }
-     ]
-    },
-    "cap-26": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"label_size\": \"Large\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/885d4459dbece667.png"
-      }
-     ]
-    },
-    "cap-27": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"style\": \"Print\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/f182bb75e875ac72.png"
-      }
-     ]
-    },
-    "cap-28": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"show_answers\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/e0357289316ed3a7.png"
-      }
-     ]
-    },
-    "cap-29": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"ask_at\": \"-2, 1, 4\", \"ask_inf\": \"Both\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/2bace6f67c2069fb.png"
-      }
-     ]
-    },
-    "cap-30": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"kind_labels\": true, \"ask_disc\": true, \"show_answers\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/2ba91c3f34b3107b.png"
-      }
-     ]
-    },
-    "cap-31": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"asym_eqs\": true, \"ask_inf\": \"Both\", \"show_answers\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/328b097139765916.png"
-      }
-     ]
-    },
-    "cap-32": {
-     "pass": true,
-     "why": "ok",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-33": {
-     "pass": true,
-     "why": "ok",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-34": {
-     "pass": true,
-     "why": "ok",
-     "class": "interaction",
-     "renders": []
-    }
-   }
-  },
-  "riemann-sums": {
-   "caps": {
-    "cap-01": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"f\": \"4 - x^2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/b250a7783b77c8d7.png"
-      }
-     ]
-    },
-    "cap-02": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"a\": \"1/2\", \"b\": \"pi/2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/425c54d469d45bdb.png"
-      }
-     ]
-    },
-    "cap-03": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"n\": 8}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/0f32dc3f0eb3dd11.png"
-      }
-     ]
-    },
-    "cap-04": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"rule\": \"Left\", \"sample_pts\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/668e59c0675201e6.png"
-      }
-     ]
-    },
-    "cap-05": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"rule\": \"Right\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/f7d482265a4b0bcd.png"
-      }
-     ]
-    },
-    "cap-06": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"rule\": \"Midpoint\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/4116b3211eb4df4c.png"
-      }
-     ]
-    },
-    "cap-07": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"rule\": \"Trapezoid\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/756a52fc2a269bb1.png"
-      }
-     ]
-    },
-    "cap-08": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"f\": \"3x - x^2\", \"b\": \"3\", \"n\": 3, \"rule\": \"Upper\", \"sum_line\": true, \"sample_pts\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/48658191f9a710e6.png"
-      }
-     ]
-    },
-    "cap-09": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"f\": \"(x - 1.5)^2 + 1\", \"b\": \"3\", \"n\": 3, \"rule\": \"Lower\", \"sum_line\": true, \"sample_pts\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/c478b48ef3f2b4b4.png"
-      }
-     ]
-    },
-    "cap-10": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"region\": \"From a table of values\", \"xmax\": 8.0, \"ymax\": 7.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/b5ddfb2477694f8b.png"
-      }
-     ]
-    },
-    "cap-11": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"strips\": \"None (shade the exact area)\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/dcc23949c32c5880.png"
-      }
-     ]
-    },
-    "cap-12": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"region\": \"Between f(x) and g(x)\", \"g\": \"x\", \"strips\": \"None (shade the exact area)\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/3a8574effd9023ec.png"
-      }
-     ]
-    },
-    "cap-13": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"region\": \"Between f(x) and g(x)\", \"f\": \"x + 2\", \"g\": \"x^2\", \"bounds\": \"Where f and g cross\", \"strips\": \"None (shade the exact area)\", \"xmin\": -2.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/75f515bcc9598be7.png"
-      }
-     ]
-    },
-    "cap-14": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"f\": \"x^2 - 1\", \"signed\": true, \"strips\": \"None (shade the exact area)\", \"exact_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/901bde1cbf39bd54.png"
-      }
-     ]
-    },
-    "cap-15": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"sum_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/f19407a22826c7ea.png"
-      }
-     ]
-    },
-    "cap-16": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"exact_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/9444073d0ae1f6aa.png"
-      }
-     ]
-    },
-    "cap-17": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"show_dx\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/dcb58ec7825280cb.png"
-      }
-     ]
-    },
-    "cap-18": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"sample_pts\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/5b0defeb1df8f74a.png"
-      }
-     ]
-    },
-    "cap-19": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"strip_labels\": \"Heights\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/1c200b77b07482c1.png"
-      }
-     ]
-    },
-    "cap-20": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"x_marks\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/18bfa73e5a466075.png"
-      }
-     ]
-    },
-    "cap-21": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"mark_bounds\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/212bfa48bb038990.png"
-      }
-     ]
-    },
-    "cap-22": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"integral_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/d99436a675cd2f97.png"
-      }
-     ]
-    },
-    "cap-23": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"error_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/3b2798c549a248e2.png"
-      }
-     ]
-    },
-    "cap-24": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"region\": \"Between f(x) and g(x)\", \"f\": \"sqrt(x)\", \"g\": \"x/2\", \"bounds\": \"Where f and g cross\", \"strips\": \"Horizontal\", \"xmax\": 5.0, \"ymax\": 3.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/5192385d45ae296c.png"
+       "token": "changes:{\"grid\":\"Bold\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/debdff9a3c270b52.png"
       }
      ]
     },
@@ -1787,9 +2071,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"shading\": \"Hatching\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/162a7eef8b6ea60a.png"
+       "token": "changes:{\"xlabel\":\"Term\",\"ylabel\":\"Value\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/1777f39eb2afa025.png"
       }
      ]
     },
@@ -1799,21 +2083,21 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"curve\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/2f1522b0ffe10492.png"
+       "token": "changes:{\"title\":\"A growing sequence\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/d751aa15a2dc4a1e.png"
       }
      ]
     },
     "cap-27": {
      "pass": true,
      "why": "ok",
-     "class": "control",
+     "class": "version",
      "renders": [
       {
-       "token": "changes:{\"sum_line\": true, \"values\": \"Decimals\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/48708b125295c416.png"
+       "token": "changes:{\"blank_title\":true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/0dcb89096d714080.png"
       }
      ]
     },
@@ -1823,9 +2107,9 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"f\": \"sin(x)\", \"a\": \"0\", \"b\": \"2pi\", \"strips\": \"None (shade the exact area)\", \"signed\": true, \"xunits\": \"Multiples of π\", \"xmin\": -0.5, \"xmax\": 2.5, \"xstep\": 0.5, \"ymin\": -1.5, \"ymax\": 1.5, \"ystep\": 0.5, \"integral_line\": true, \"exact_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/68305bf60062feb5.png"
+       "token": "changes:{\"label_size\":\"Large\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/0620ffd85672fce1.png"
       }
      ]
     },
@@ -1835,623 +2119,73 @@
      "class": "control",
      "renders": [
       {
-       "token": "changes:{\"xmin\": -2.0, \"xmax\": 4.0, \"xstep\": 0.5, \"ymax\": 8.0, \"ystep\": 2.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/f382ac5724d51bbf.png"
+       "token": "changes:{\"style\":\"Print\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/00d1ffbdca10c943.png"
       }
      ]
     },
     "cap-30": {
      "pass": true,
      "why": "ok",
-     "class": "control",
+     "class": "version",
      "renders": [
       {
-       "token": "changes:{\"grid\": \"Bold\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/7be8262e5e7dbdb9.png"
+       "token": "changes:{\"show_answers\":false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/3c59715069a0a163.png"
       }
      ]
     },
     "cap-31": {
      "pass": true,
      "why": "ok",
-     "class": "control",
+     "class": "version",
      "renders": [
       {
-       "token": "changes:{\"minor\": 4}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/55e18429a6ebc758.png"
+       "token": "changes:{\"show_answers\":false,\"task\":\"Missing terms\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/c8cf09f7d4c82980.png"
       }
      ]
     },
     "cap-32": {
      "pass": true,
      "why": "ok",
-     "class": "control",
+     "class": "version",
      "renders": [
       {
-       "token": "changes:{\"numbers\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/c20f9b69180bdca7.png"
+       "token": "changes:{\"show_answers\":false,\"task\":\"Continue\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/4c628480d546d7e4.png"
       }
      ]
     },
     "cap-33": {
      "pass": true,
      "why": "ok",
-     "class": "control",
+     "class": "version",
      "renders": [
       {
-       "token": "changes:{\"xlabel\": \"t\", \"ylabel\": \"v(t)\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/884394e727e26e5d.png"
+       "token": "changes:{\"convergence\":true,\"first\":\"3\",\"from\":-2,\"missing\":\"4,6,8\",\"mode\":\"Geometric\",\"point_values\":true,\"ratio\":\"-1/2\",\"recursive\":true,\"show_answers\":true,\"step\":1,\"sum\":true,\"task\":\"Missing terms\",\"to\":4}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/sequences-series/b362c859d98e9043.png"
       }
      ]
     },
     "cap-34": {
      "pass": true,
      "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"xunits\": \"Multiples of π\", \"f\": \"sin(x)\", \"b\": \"pi\", \"xmin\": -0.5, \"xmax\": 1.5, \"xstep\": 0.5, \"ymin\": -0.5, \"ymax\": 1.5, \"ystep\": 0.5}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/788478161d505d91.png"
-      }
-     ]
+     "class": "interaction",
+     "renders": []
     },
     "cap-35": {
      "pass": true,
      "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"title\": \"Left sum of f(x) = x^2 + 1\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/b02d9ef58dfecb40.png"
-      }
-     ]
+     "class": "interaction",
+     "renders": []
     },
     "cap-36": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"title_mode\": \"Blank line\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/28ea81fda6b4b4e9.png"
-      }
-     ]
-    },
-    "cap-37": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"label_size\": \"Large\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/042beb0286798bf6.png"
-      }
-     ]
-    },
-    "cap-38": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"style\": \"Print\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/5cfe7e72b071f0bd.png"
-      }
-     ]
-    },
-    "cap-39": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"show_answers\": false, \"sum_line\": true, \"integral_line\": true, \"exact_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/abed0344c48f8ee0.png"
-      }
-     ]
-    },
-    "cap-40": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"show_answers\": false, \"student\": \"Curve and bounds only\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/d1f010da93080de0.png"
-      }
-     ]
-    },
-    "cap-41": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"show_answers\": false, \"student\": \"Strip heights blank\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/2994ede9febf7a31.png"
-      }
-     ]
-    },
-    "cap-42": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"key_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/riemann-sums/b9f32ba1af0eb0d6.png"
-      }
-     ]
-    },
-    "cap-43": {
-     "pass": true,
-     "why": "ok",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-44": {
-     "pass": true,
-     "why": "ok",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-45": {
-     "pass": true,
-     "why": "ok",
-     "class": "interaction",
-     "renders": []
-    }
-   }
-  },
-  "tangent-secant-lines": {
-   "caps": {
-    "cap-01": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"func\": \"x^3 - 3x\", \"xmin\": -3.0, \"xmax\": 3.0, \"ymin\": -4.0, \"ymax\": 4.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/627cf23468a16ce9.png"
-      }
-     ]
-    },
-    "cap-02": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"a\": \"2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/c927e589fa3c82df.png"
-      }
-     ]
-    },
-    "cap-03": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"show_secant\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/bca88a5ad7d73013.png"
-      }
-     ]
-    },
-    "cap-04": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"show_tangent\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/6bb6284cd96625c9.png"
-      }
-     ]
-    },
-    "cap-05": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"h\": \"-1\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/19bda6fa5c9081e0.png"
-      }
-     ]
-    },
-    "cap-06": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"h\": \"2\", \"more_h\": \"1, 0.5, 0.1\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/7877521a3d53d3f4.png"
-      }
-     ]
-    },
-    "cap-07": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"a\": \"1/2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/f1464652457dc4bc.png"
-      }
-     ]
-    },
-    "cap-08": {
-     "pass": true,
-     "why": "ok",
-     "class": "core",
-     "renders": [
-      {
-       "token": "changes:{\"worked\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/dc95c0a9ba33ef50.png"
-      }
-     ]
-    },
-    "cap-09": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"tangent_eq\": \"Point-slope\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/0dd09d319821c65a.png"
-      }
-     ]
-    },
-    "cap-10": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"secant_eq\": \"Slope-intercept\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/c3bc8e741aac1025.png"
-      }
-     ]
-    },
-    "cap-11": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"normal\": \"With its equation\", \"square\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/80e8a3ab1955ed00.png"
-      }
-     ]
-    },
-    "cap-12": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"more_a\": \"-1, 2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/df3a025908bff12a.png"
-      }
-     ]
-    },
-    "cap-13": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"pt_labels\": \"Letters and coordinates\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/8f99e9f04feff99c.png"
-      }
-     ]
-    },
-    "cap-14": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"secant_triangle\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/614e354f3908c305.png"
-      }
-     ]
-    },
-    "cap-15": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"tangent_triangle\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/670195ed6524bdf5.png"
-      }
-     ]
-    },
-    "cap-16": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"h_mark\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/73ed72557ec480f5.png"
-      }
-     ]
-    },
-    "cap-17": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"table\": true, \"more_h\": \"0.5, 0.1\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/acb35d2f4a7a30a8.png"
-      }
-     ]
-    },
-    "cap-18": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"h\": \"1/3\", \"slope_form\": \"Decimals\", \"dec\": 3}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/6212c0cb6c722790.png"
-      }
-     ]
-    },
-    "cap-19": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"tangent_style\": \"Dashed\", \"secant_style\": \"Dotted\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/8007db637555b91e.png"
-      }
-     ]
-    },
-    "cap-20": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"extent\": \"Short segment through the point\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/1b2a8861f1ec4647.png"
-      }
-     ]
-    },
-    "cap-21": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"fname\": \"s\", \"var\": \"t\", \"func\": \"t^2\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/529afa5182c60603.png"
-      }
-     ]
-    },
-    "cap-22": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"func\": \"x^3-3x\", \"a\": \"1\", \"h\": \"1\", \"xmin\": -3, \"xmax\": 3, \"ymin\": -4, \"ymax\": 4, \"title\": \"A cubic's horizontal tangent\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/86566de4ff28ae8a.png"
-      }
-     ]
-    },
-    "cap-23": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"xmin\": -4.0, \"xmax\": 4.0, \"xstep\": 2.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/8f902c123f25ba64.png"
-      }
-     ]
-    },
-    "cap-24": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"grid\": \"Bold\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/51a548770aa94b31.png"
-      }
-     ]
-    },
-    "cap-25": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"minor\": 4}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/ea1002b9acc0a832.png"
-      }
-     ]
-    },
-    "cap-26": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"numbers\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/1a9c3fc647de5b89.png"
-      }
-     ]
-    },
-    "cap-27": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"xlabel\": \"time\", \"ylabel\": \"distance\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/ba0f1a7ef6dcf202.png"
-      }
-     ]
-    },
-    "cap-28": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"xunits\": \"Multiples of π\", \"func\": \"sin(x)\", \"a\": \"pi/3\", \"h\": \"pi/2\", \"xmin\": -1.0, \"xmax\": 1.0, \"xstep\": 0.25, \"ymin\": -2.0, \"ymax\": 2.0}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/4b05100d288e246e.png"
-      }
-     ]
-    },
-    "cap-29": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"title\": \"Tangent to y = x^2 at x = 1\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/6bcabb1e10531413.png"
-      }
-     ]
-    },
-    "cap-30": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"title_mode\": \"Blank line\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/8db9a7d1c759423f.png"
-      }
-     ]
-    },
-    "cap-31": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"label_size\": \"Large\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/8e0efae2d0c3ac80.png"
-      }
-     ]
-    },
-    "cap-32": {
-     "pass": true,
-     "why": "ok",
-     "class": "control",
-     "renders": [
-      {
-       "token": "changes:{\"style\": \"Print\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/8062b5d7e2d6a195.png"
-      }
-     ]
-    },
-    "cap-33": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"show_answers\": false}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/b164fd541061e5ec.png"
-      }
-     ]
-    },
-    "cap-34": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"show_answers\": false, \"student_copy\": \"Curve and P only, to draw the tangent\"}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/e600e3fe80432256.png"
-      }
-     ]
-    },
-    "cap-35": {
-     "pass": true,
-     "why": "ok",
-     "class": "version",
-     "renders": [
-      {
-       "token": "changes:{\"key_line\": true}",
-       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/tangent-secant-lines/14330a163f459bb1.png"
-      }
-     ]
-    },
-    "cap-36": {
-     "pass": true,
-     "why": "ok",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-37": {
-     "pass": true,
-     "why": "ok",
-     "class": "interaction",
-     "renders": []
-    },
-    "cap-38": {
      "pass": true,
      "why": "ok",
      "class": "interaction",
@@ -2469,7 +2203,7 @@
       {
        "token": "changes:{\"conic\":\"Hyperbola\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/ea2a89c7ccbc040b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/6154cb853e1f13d5.png"
       }
      ]
     },
@@ -2481,7 +2215,7 @@
       {
        "token": "changes:{\"h\":\"3\",\"k\":\"2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/667982298905f2f8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/29560439549d4268.png"
       }
      ]
     },
@@ -2493,7 +2227,7 @@
       {
        "token": "changes:{\"conic\":\"Circle\",\"r\":\"6\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/78326e8637224ef6.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/62f2a87327e2e10f.png"
       }
      ]
     },
@@ -2505,7 +2239,7 @@
       {
        "token": "changes:{\"a\":\"6\",\"b\":\"2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/041b72739fb1ddec.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/bbf88b36c5815dd1.png"
       }
      ]
     },
@@ -2517,7 +2251,7 @@
       {
        "token": "changes:{\"conic\":\"Parabola\",\"pf\":\"3\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/96adf1d54de387e2.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a0f6005a73e4b959.png"
       }
      ]
     },
@@ -2529,7 +2263,7 @@
       {
        "token": "changes:{\"conic\":\"Parabola\",\"opens\":\"Left\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/7b6c1a1dc8618c40.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/406bf0d28f165d90.png"
       }
      ]
     },
@@ -2541,7 +2275,7 @@
       {
        "token": "changes:{\"axis\":\"Vertical\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/9abb5c77c90ca0b1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/8e823edd4bbf5d90.png"
       }
      ]
     },
@@ -2553,7 +2287,7 @@
       {
        "token": "changes:{\"equation\":\"(x - 2)^2/9 + (y + 1)^2/4 = 1\",\"xmin\":-3.0,\"xmax\":7.0,\"ymin\":-5.0,\"ymax\":3.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/19420380a15fe6da.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/36606c51828bfe51.png"
       }
      ]
     },
@@ -2565,7 +2299,7 @@
       {
        "token": "changes:{\"equation\":\"4x^2 + 9y^2 - 16x + 18y - 11 = 0\",\"xmin\":-3.0,\"xmax\":7.0,\"ymin\":-5.0,\"ymax\":3.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/276133b592ba52c6.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/e38f468221859f02.png"
       }
      ]
     },
@@ -2577,7 +2311,7 @@
       {
        "token": "changes:{\"b\":\"√5\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/9b63c92ef159addc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/2e09b5d5cc6d162f.png"
       }
      ]
     },
@@ -2589,7 +2323,7 @@
       {
        "token": "changes:{\"show_centre\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/03f1b046afcaab58.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/8becd24b92d3cdcd.png"
       }
      ]
     },
@@ -2601,7 +2335,7 @@
       {
        "token": "changes:{\"show_vertices\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/f343c9005f2ee355.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/b45b937cfd08ec48.png"
       }
      ]
     },
@@ -2613,7 +2347,7 @@
       {
        "token": "changes:{\"show_covertices\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a320d91e3bea9ffd.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/d49f13f89e1fd4aa.png"
       }
      ]
     },
@@ -2625,7 +2359,7 @@
       {
        "token": "changes:{\"show_foci\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a7ac136fb9190b14.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/293187ec14008472.png"
       }
      ]
     },
@@ -2637,7 +2371,7 @@
       {
        "token": "changes:{\"conic\":\"Parabola\",\"show_p\":false,\"show_directrix\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/bd3a1e7ae862ea87.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/7ebcc906506b9874.png"
       }
      ]
     },
@@ -2649,7 +2383,7 @@
       {
        "token": "changes:{\"show_directrices\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/32c6e0bf560f5d7c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/e7809534f132f3f4.png"
       }
      ]
     },
@@ -2661,7 +2395,7 @@
       {
        "token": "changes:{\"show_axes\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/7b3848f5f13d1376.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/38d863da3546d609.png"
       }
      ]
     },
@@ -2673,7 +2407,7 @@
       {
        "token": "changes:{\"conic\":\"Parabola\",\"show_sym\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/cc8c9b8c7bf0c131.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/17a3d18c2ec90967.png"
       }
      ]
     },
@@ -2685,7 +2419,7 @@
       {
        "token": "changes:{\"conic\":\"Hyperbola\",\"h\":\"0\",\"k\":\"0\",\"a\":\"4\",\"b\":\"3\",\"show_p\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/d16aef911ffb88a5.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/dd3301087d897cc1.png"
       }
      ]
     },
@@ -2697,7 +2431,7 @@
       {
        "token": "changes:{\"conic\":\"Hyperbola\",\"h\":\"0\",\"k\":\"0\",\"a\":\"4\",\"b\":\"3\",\"show_p\":false,\"show_rect\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/84772e1ede18d7bc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/6d49479658d4844c.png"
       }
      ]
     },
@@ -2709,7 +2443,7 @@
       {
        "token": "changes:{\"show_latus\":true,\"show_p\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/fe107e992e348ab0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/c92c4fd723d0a0bd.png"
       }
      ]
     },
@@ -2721,7 +2455,7 @@
       {
        "token": "changes:{\"p_at\":120.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/58fbe1a869c8a1ba.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/67ec0c296f410d26.png"
       }
      ]
     },
@@ -2733,7 +2467,7 @@
       {
        "token": "changes:{\"show_ecc\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/775862647638b917.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/123717f1d96e89ec.png"
       }
      ]
     },
@@ -2745,7 +2479,7 @@
       {
        "token": "changes:{\"show_work\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/08cc75c060f479b3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/6baa9ebc45eda1fa.png"
       }
      ]
     },
@@ -2757,7 +2491,7 @@
       {
        "token": "changes:{\"pt_labels\":\"Letters only\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/956dad5b4c91f9af.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/cb83038087115d57.png"
       }
      ]
     },
@@ -2769,7 +2503,7 @@
       {
        "token": "changes:{\"b\":\"√5\",\"coords\":\"Decimals\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a976077cf8b4d59c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/8e6ad080b12ca718.png"
       }
      ]
     },
@@ -2781,7 +2515,7 @@
       {
        "token": "changes:{\"eq_form\":\"General form\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/ce716cad851f9f6a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/516fe97402eda6db.png"
       }
      ]
     },
@@ -2793,7 +2527,7 @@
       {
        "token": "changes:{\"xmin\":-8.0,\"xmax\":8.0,\"ymin\":-3.0,\"ymax\":9.0,\"conic\":\"Parabola\",\"h\":\"0\",\"k\":\"0\",\"pf\":\"2\",\"opens\":\"Up\",\"title\":\"A satellite dish: the receiver at the focus\",\"show_latus\":true,\"show_p\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/7086b48801352bc6.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/29a96b6d609cb917.png"
       }
      ]
     },
@@ -2805,7 +2539,7 @@
       {
        "token": "changes:{\"xmin\":-6.0,\"xmax\":8.0,\"xstep\":2.0}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/97ad98966c69259d.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/1423e3157128fe14.png"
       }
      ]
     },
@@ -2817,7 +2551,7 @@
       {
        "token": "changes:{\"grid\":\"Bold\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/02573ceb465deddf.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/bd1369d599517c9e.png"
       }
      ]
     },
@@ -2829,7 +2563,7 @@
       {
        "token": "changes:{\"minor\":2}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/3b5adda677c6be46.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/8c6552772eab7988.png"
       }
      ]
     },
@@ -2841,7 +2575,7 @@
       {
        "token": "changes:{\"numbers\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/aec9b217c2aa625f.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/be72e37c5df00326.png"
       }
      ]
     },
@@ -2853,7 +2587,7 @@
       {
        "token": "changes:{\"xlabel\":\"t\",\"ylabel\":\"d\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/fbd4e35ff81e4ab3.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/7ceda4dfd6d0aecd.png"
       }
      ]
     },
@@ -2865,7 +2599,7 @@
       {
        "token": "changes:{\"title\":\"An ellipse\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/16f66d8177c07ed1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/d29ec0787206f680.png"
       }
      ]
     },
@@ -2877,7 +2611,7 @@
       {
        "token": "changes:{\"title\":\"An ellipse\",\"title_mode\":\"Blank line\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/552b93c5ded7a0a0.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/12e4e855cfd3af86.png"
       }
      ]
     },
@@ -2889,7 +2623,7 @@
       {
        "token": "changes:{\"label_size\":\"Large\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/fce168d1c44d9d4e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/0c33ef4c85193899.png"
       }
      ]
     },
@@ -2901,7 +2635,7 @@
       {
        "token": "changes:{\"style\":\"Print\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/a5ee176e533de2ca.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/b69192be2a311290.png"
       }
      ]
     },
@@ -2913,7 +2647,7 @@
       {
        "token": "changes:{\"show_answers\":false,\"blank_equation\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/4f54e80ece67dee9.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/1be54777de65b9ab.png"
       }
      ]
     },
@@ -2925,7 +2659,7 @@
       {
        "token": "changes:{\"show_answers\":false,\"blank_curve\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/700369a0dbe4c06c.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/b54e6b1e1b96f44c.png"
       }
      ]
     },
@@ -2937,7 +2671,7 @@
       {
        "token": "changes:{\"show_answers\":false,\"blank_labels\":false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/87cd297d46fab7dc.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/42d4145bcd277ba1.png"
       }
      ]
     },
@@ -2949,7 +2683,7 @@
       {
        "token": "changes:{\"key_line\":true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/3c14f94fe4537dac.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/conic-sections/2ff9f6563c512535.png"
       }
      ]
     },
@@ -2985,6 +2719,458 @@
     }
    }
   },
+  "coordinate-grid": {
+   "caps": {
+    "cap-01": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "core",
+     "renders": []
+    },
+    "cap-02": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "core",
+     "renders": []
+    },
+    "cap-03": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-04": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-05": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-06": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-07": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-08": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "control",
+     "renders": []
+    },
+    "cap-09": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "version",
+     "renders": []
+    },
+    "cap-10": {
+     "pass": false,
+     "why": "no evidence",
+     "class": "version",
+     "renders": []
+    }
+   }
+  },
+  "polar-parametric": {
+   "caps": {
+    "cap-01": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"r = 3sin(2θ)\", \"rmax\": 3.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/bf184416010d61cc.png"
+      }
+     ]
+    },
+    "cap-02": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"r = 2 + 2cos(θ)\", \"theta_from\": \"0\", \"theta_to\": \"pi\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/257453a7305f324f.png"
+      }
+     ]
+    },
+    "cap-03": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"r = 2 + 2cos(θ)\\nr = 3\\nr = 3sin(2θ)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/ed34115a733b7b39.png"
+      }
+     ]
+    },
+    "cap-04": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"points\": \"P(3, 5pi/6), Q(-2, pi/4), R(3, 150°)\", \"curves\": \"\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/d07bd41a49b618b2.png"
+      }
+     ]
+    },
+    "cap-05": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"x = 3cos(t), y = 2sin(t), 0 <= t <= pi\", \"grid_kind\": \"Rectangular\", \"points\": \"\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/12d8aa7a172b8a9f.png"
+      }
+     ]
+    },
+    "cap-06": {
+     "pass": true,
+     "why": "ok",
+     "class": "core",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"\", \"points\": \"\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/3895ece763b582f3.png"
+      }
+     ]
+    },
+    "cap-07": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"rays\": \"Every 15° (π/12)\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/5b80a58f4eb1ec5e.png"
+      }
+     ]
+    },
+    "cap-08": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"ray_labels\": \"Degrees\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/084a29f6e5aa1ebf.png"
+      }
+     ]
+    },
+    "cap-09": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"rmax\": 6.0, \"rstep\": 2.0}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/85b71357aacce713.png"
+      }
+     ]
+    },
+    "cap-10": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"grid_kind\": \"Rectangular\", \"points\": \"\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/e26d8bedea2ffe02.png"
+      }
+     ]
+    },
+    "cap-11": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"r = 3cos(θ)\\nr = 1 + cos(θ)\", \"shade\": \"Inside one curve, outside another\", \"shade_from\": \"-pi/3\", \"shade_to\": \"pi/3\", \"points\": \"\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/f420978d18bc0adc.png"
+      }
+     ]
+    },
+    "cap-12": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"arrows\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/b048e8e92981fb8d.png"
+      }
+     ]
+    },
+    "cap-13": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"x = 3cos(t), y = 3sin(t)\", \"grid_kind\": \"Rectangular\", \"marks_at\": \"0, pi/2, pi\", \"pt_labels\": \"Letter and (x, y)\", \"points\": \"\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/0ca051b56e28737a.png"
+      }
+     ]
+    },
+    "cap-14": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"marks_at\": \"0, pi/3, pi/2\", \"points\": \"\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/3cce4987b1564781.png"
+      }
+     ]
+    },
+    "cap-15": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"marks_at\": \"pi/3\", \"points\": \"P(2, pi/3)\", \"pt_labels\": \"Letter and (x, y)\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/349cd8aef420122c.png"
+      }
+     ]
+    },
+    "cap-16": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"trace_at\": \"pi/2\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/fc91fa4d982e26ec.png"
+      }
+     ]
+    },
+    "cap-17": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"tangent\": true, \"tangent_at\": \"pi/2\", \"points\": \"\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/43269d001656d4ab.png"
+      }
+     ]
+    },
+    "cap-18": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"eq_labels\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/a56c8cb91d471386.png"
+      }
+     ]
+    },
+    "cap-19": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"r = 2 + 2cos(θ)\\nr = 3\", \"style1\": \"Dotted\", \"style2\": \"Solid\", \"points\": \"\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/a1d1c8be6ab6f2a5.png"
+      }
+     ]
+    },
+    "cap-20": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"values\": \"Rounded\", \"marks_at\": \"pi/6\", \"tracer\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/a406c1a39d778722.png"
+      }
+     ]
+    },
+    "cap-21": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"r = 3cos(θ)\\nr = 1 + cos(θ)\", \"points\": \"\", \"rmax\": 3.0, \"rstep\": 0.5, \"shade\": \"Inside one curve, outside another\", \"shade_in\": 1, \"shade_out\": 2, \"shade_from\": \"-pi/3\", \"shade_to\": \"pi/3\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/080767c421034caa.png"
+      }
+     ]
+    },
+    "cap-22": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"curves\": \"x = 48t, y = 64t - 16t^2, 0 <= t <= 4\", \"grid_kind\": \"Rectangular\", \"xmin\": 0.0, \"xmax\": 200.0, \"xstep\": 20.0, \"ymin\": 0.0, \"ymax\": 80.0, \"ystep\": 10.0, \"points\": \"\", \"tracer\": false}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/0a99fd1ccbf7a7b8.png"
+      }
+     ]
+    },
+    "cap-23": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"grid\": \"Bold\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/ce94552691dfc6c2.png"
+      }
+     ]
+    },
+    "cap-24": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"title\": \"The cardioid r = 2 + 2 cos θ\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/9cd9d70172a04dba.png"
+      }
+     ]
+    },
+    "cap-25": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"title_mode\": \"Blank line\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/b9bada76f9308d2b.png"
+      }
+     ]
+    },
+    "cap-26": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"label_size\": \"Large\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/b7ec4de4813cd1fa.png"
+      }
+     ]
+    },
+    "cap-27": {
+     "pass": true,
+     "why": "ok",
+     "class": "control",
+     "renders": [
+      {
+       "token": "changes:{\"style\": \"Print\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/74f05bf28244ab3f.png"
+      }
+     ]
+    },
+    "cap-28": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\": false, \"student_copy\": \"Points only, to sketch the curves\", \"marks_at\": \"0, pi/2, pi\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/0e9dd11573dfc724.png"
+      }
+     ]
+    },
+    "cap-29": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\": false, \"student_copy\": \"Blank lines for the equations\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/a416fafde22b3202.png"
+      }
+     ]
+    },
+    "cap-30": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"show_answers\": false, \"student_copy\": \"Points' coordinates blank\"}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/6230ce1729014d82.png"
+      }
+     ]
+    },
+    "cap-31": {
+     "pass": true,
+     "why": "ok",
+     "class": "version",
+     "renders": [
+      {
+       "token": "changes:{\"key_line\": true}",
+       "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/opening.png",
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/polar-parametric/dba10a2ec45c6c65.png"
+      }
+     ]
+    },
+    "cap-32": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    },
+    "cap-33": {
+     "pass": true,
+     "why": "ok",
+     "class": "interaction",
+     "renders": []
+    }
+   }
+  },
   "complex-plane": {
    "caps": {
     "cap-01": {
@@ -2995,7 +3181,7 @@
       {
        "token": "changes:{\"zr\": \"1/3\", \"zi\": \"sqrt(2)\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/309f6154afbe113a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/83fbbcafb52850da.png"
       }
      ]
     },
@@ -3007,7 +3193,7 @@
       {
        "token": "changes:{\"extra\": \"A, 1, -2\\nB, -3, -2\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/619462e47eb77aba.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/0aaf2d84a57abed3.png"
       }
      ]
     },
@@ -3019,7 +3205,7 @@
       {
        "token": "changes:{\"input\": \"Polar exponential\", \"radius\": \"3\", \"theta\": \"pi/3\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/d3aa3247eb62b3ee.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/3619c3060435766d.png"
       }
      ]
     },
@@ -3031,7 +3217,7 @@
       {
        "token": "changes:{\"zr\": \"2\", \"zi\": \"3\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/5b9863b0c4748483.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/71077fb201cfdf04.png"
       }
      ]
     },
@@ -3043,7 +3229,7 @@
       {
        "token": "changes:{\"zr\": \"-1\", \"zi\": \"-1\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/7af90c1fd54c9aa7.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/a384815fde37c35c.png"
       }
      ]
     },
@@ -3055,7 +3241,7 @@
       {
        "token": "changes:{\"operation\": \"Conjugate\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/0ccec64492321939.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/74030cd9f7d3a932.png"
       }
      ]
     },
@@ -3067,7 +3253,7 @@
       {
        "token": "changes:{\"zr\": \"2\", \"zi\": \"1\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/c7644f0d95326a9a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/9c8388dc34573ecd.png"
       }
      ]
     },
@@ -3079,7 +3265,7 @@
       {
        "token": "changes:{\"operation\": \"Difference\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/e8d12e260561bb2b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/d160f56648cc599e.png"
       }
      ]
     },
@@ -3091,7 +3277,7 @@
       {
        "token": "changes:{\"operation\": \"Product\", \"zr\": \"1\", \"zi\": \"1\", \"wr\": \"2\", \"wi\": \"-1\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/b6e1786940e67c01.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/04fd6a451acb8a6c.png"
       }
      ]
     },
@@ -3103,7 +3289,7 @@
       {
        "token": "changes:{\"operation\": \"Quotient\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/c2c7bd90e45961db.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/8dab360bb2e5bf2f.png"
       }
      ]
     },
@@ -3115,7 +3301,7 @@
       {
        "token": "changes:{\"operation\": \"Roots\", \"zr\": \"1\", \"zi\": \"0\", \"n\": 5}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/e6ceaec959ed6317.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/638d034c438cbdc2.png"
       }
      ]
     },
@@ -3127,7 +3313,7 @@
       {
        "token": "changes:{\"operation\": \"Powers\", \"zr\": \"1\", \"zi\": \"sqrt(3)\", \"n\": 3, \"polar\": true, \"xmin\": -10, \"xmax\": 10, \"ymin\": -10, \"ymax\": 10, \"xstep\": 2, \"ystep\": 2}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/91181c3505cce6a8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/6a52da3cea3e2769.png"
       }
      ]
     },
@@ -3139,7 +3325,7 @@
       {
        "token": "changes:{\"marks\": \"Points\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/d1d7ed7383e4dce4.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/bd6caa9773fa4fd9.png"
       }
      ]
     },
@@ -3151,7 +3337,7 @@
       {
        "token": "changes:{\"labels\": \"Cartesian\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/b7413378da600550.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/cace39cd81395ca6.png"
       }
      ]
     },
@@ -3163,7 +3349,7 @@
       {
        "token": "changes:{\"polar\": true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/074f887616accacb.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/88a4a3b2f9185a95.png"
       }
      ]
     },
@@ -3175,7 +3361,7 @@
       {
        "token": "changes:{\"circle\": true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/64f1967adc5458e1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/c37b5d22898cb5d7.png"
       }
      ]
     },
@@ -3187,7 +3373,7 @@
       {
        "token": "changes:{\"components\": true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/95dbe16261379a38.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/ac979f90fc4ee374.png"
       }
      ]
     },
@@ -3199,7 +3385,7 @@
       {
        "token": "changes:{\"operation\": \"Roots\", \"zr\": \"1\", \"zi\": \"0\", \"n\": 4, \"polygon\": true}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/f0ee0dd55a557134.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/00d63fa3794f55b7.png"
       }
      ]
     },
@@ -3211,7 +3397,7 @@
       {
        "token": "changes:{\"unit\": \"Degrees\", \"zr\": \"1\", \"zi\": \"1\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/82abedbb8401a047.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/323c95af5827f636.png"
       }
      ]
     },
@@ -3223,7 +3409,7 @@
       {
        "token": "changes:{\"accuracy\": \"Rounded\", \"dec\": 2}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/698a3d73eab5a581.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/609f5240dacab9f9.png"
       }
      ]
     },
@@ -3235,7 +3421,7 @@
       {
        "token": "changes:{\"locus\": \"Disc\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/3089be58e64ddcce.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/6c265e5b865906b3.png"
       }
      ]
     },
@@ -3247,7 +3433,7 @@
       {
        "token": "changes:{\"xlabel\": \"Real\", \"ylabel\": \"Imaginary\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/13a8b228346d418e.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/8da0c12f660370cb.png"
       }
      ]
     },
@@ -3259,7 +3445,7 @@
       {
        "token": "changes:{\"operation\": \"Product\", \"wr\": \"0\", \"wi\": \"1\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/67339e0b13122f78.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/9b93cc89f67b80d7.png"
       }
      ]
     },
@@ -3271,7 +3457,7 @@
       {
        "token": "changes:{\"xmin\": -5, \"xmax\": 7, \"ymin\": -4, \"ymax\": 8, \"xstep\": 2, \"ystep\": 2}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/d61c1989d35273f9.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/0b11123757b0ec6c.png"
       }
      ]
     },
@@ -3283,7 +3469,7 @@
       {
        "token": "changes:{\"grid\": \"Bold\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/2fc8af2dabc6b0ff.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/b1b14e5c13b952db.png"
       }
      ]
     },
@@ -3295,7 +3481,7 @@
       {
        "token": "changes:{\"numbers\": false}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/8833955fc94e725a.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/49d7bc24e503604e.png"
       }
      ]
     },
@@ -3307,7 +3493,7 @@
       {
        "token": "changes:{\"title\": \"Complex numbers\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/63cb8b8f1a9768e8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/6d7066dde0db117b.png"
       }
      ]
     },
@@ -3319,7 +3505,7 @@
       {
        "token": "changes:{\"title_mode\": \"Blank line\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/65c92970fba13a36.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/a2a8aac8ca772acc.png"
       }
      ]
     },
@@ -3331,7 +3517,7 @@
       {
        "token": "changes:{\"label_size\": \"Large\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/55122369969c712b.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/738664bdb44b869e.png"
       }
      ]
     },
@@ -3343,7 +3529,7 @@
       {
        "token": "changes:{\"style\": \"Print\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/93ea52b64e2939c1.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/0678d0c9d31c7070.png"
       }
      ]
     },
@@ -3355,7 +3541,7 @@
       {
        "token": "changes:{\"show_answers\": false, \"question\": \"Coordinates\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/03337f1361ce9215.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/963f1f0baa73baa1.png"
       }
      ]
     },
@@ -3367,7 +3553,7 @@
       {
        "token": "changes:{\"show_answers\": false, \"question\": \"Modulus and argument\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/316df51b552763f8.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/eee0a5fcdd853f5c.png"
       }
      ]
     },
@@ -3379,7 +3565,7 @@
       {
        "token": "changes:{\"show_answers\": false, \"question\": \"Construction\", \"operation\": \"Product\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/94eb019c54ec9b04.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/bfeca833c2f9bd90.png"
       }
      ]
     },
@@ -3391,7 +3577,7 @@
       {
        "token": "changes:{\"polar\": true, \"labels\": \"Cartesian\"}",
        "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/opening.png",
-       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/bf66d4c7bca80244.png"
+       "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/complex-plane/3b16cec6f0982329.png"
       }
      ]
     },

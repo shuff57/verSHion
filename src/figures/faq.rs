@@ -211,6 +211,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "conic-sections" => CONIC_SECTIONS,
         "limits-discontinuities" => LIMITS_DISCONTINUITIES,
         "tangent-secant-lines" => TANGENT_SECANT_LINES,
+        "polar-parametric" => POLAR_PARAMETRIC,
         _ => &[],
     }
 }
@@ -4672,4 +4673,12 @@ const COMPLEX_PLANE: &[Faq] = &[
  Faq {q:"What does the construction show?",a:"Choose conjugate, sum, difference, product, quotient, roots or powers. The sum uses a parallelogram. Products rotate by the second argument and stretch by its modulus. Roots lie on a circle; Join roots adds their regular polygon."},
  Faq {q:"How do I make a student copy?",a:"Select Coordinates, Modulus and argument, or Construction, then turn Show answers off. Student + key exports the matching pair. Print gives neutral greys."},
  Faq {q:"Why are some values approximate?",a:"Exact rational results and directly derived special arguments are written with equals. Other calculated values use the approximation sign. The principal argument is in (−π, π]; zero has no argument. Notes explain invalid values and items outside the axis window."},
+];
+
+const POLAR_PARAMETRIC: &[Faq] = &[
+    Faq { q: "How do I type a curve?", a: "One curve a line: r = 3sin(2theta) for a polar curve (type theta or \u{3b8}), or x = 3cos(t), y = 2sin(t) for a parametric one. A range after a comma, such as r = sin(theta/2), 0 <= theta <= 4pi, overrides the figure's \u{3b8} or t range. Up to four curves, each solid, dashed or dotted." },
+    Faq { q: "How are negative r and large angles drawn?", a: "A point (r, \u{3b8}) is drawn at x = r cos \u{3b8}, y = r sin \u{3b8}, so a negative r lands on the opposite ray and \u{3b8} beyond 2\u{3c0} turns round again. Where r is undefined the curve stops at the edge of its domain, and where r grows without bound it is broken, never joined across." },
+    Faq { q: "How is the shaded area worked out?", a: "As \u{bd}\u{222b}r\u{b2} d\u{3b8} between the two angles (inside one curve and outside another: \u{bd}\u{222b}(R\u{b2} \u{2212} r\u{b2}) d\u{3b8} where the first is outside the second). It is written exactly, such as 9\u{3c0}/8, when it is worked out exactly from the typed curve and angles, otherwise to the decimal places chosen with \u{2248}. A region swept twice is refused with a note." },
+    Faq { q: "How is the slope of the tangent found?", a: "For r = f(\u{3b8}), dy/dx = (r\u{2032} sin \u{3b8} + r cos \u{3b8})/(r\u{2032} cos \u{3b8} \u{2212} r sin \u{3b8}); for a parametric curve, (dy/dt)/(dx/dt). When dx/d\u{3b8} is 0 and dy/d\u{3b8} is not, the tangent is vertical and dy/dx does not exist; when both are 0 the formula gives 0/0 and a note says so." },
+    Faq { q: "How do I make a student copy?", a: "Turn off Show answers and choose the copy: points only on a blank grid to sketch the curve, blank lines for the equations, or the points' coordinates blank. The area, slope and r become blank lines; Student + key exports both, and the answer key line sums up the equations, points and area." },
 ];

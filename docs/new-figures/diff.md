@@ -13,7 +13,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | coordinate-grid-limits | `coordinate-grid` | 59 | 2 | 10 | — | 0 |
 | derivative-graphs | **missing** | | | 35 | | |
 | limits-discontinuities | `limits-discontinuities` | 37 | 5 | 34 | — | 100 |
-| polar-parametric | **missing** | | | 33 | | |
+| polar-parametric | `polar-parametric` | 48 | 2 | 33 | — | 100 |
 | riemann-sums | `riemann-sums` | 43 | 3 | 45 | — | 100 |
 | sequences-series | `sequences-series` | 40 | 3 | 36 | — | 100 |
 | slope-fields | **missing** | | | 32 | | |
@@ -21,13 +21,13 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 ## Reference figures we do not have
 
-`new/derivative-graphs`, `new/polar-parametric`, `new/slope-fields`
+`new/derivative-graphs`, `new/slope-fields`
 
 Our figures with no reference page: 190
 
-Generated: 2026-11-20T18:21:58+00:00 · probe: 2026-11-20T10:21:58
+Generated: 2026-11-21T00:42:59+00:00 · probe: 2026-11-20T16:42:59
 
-**Pooled 69.0** · mean 60.0 over 10 figures · built 7 of 10 reference figures (missing: new/derivative-graphs, new/polar-parametric, new/slope-fields)
+**Pooled 78.3** · mean 70.0 over 10 figures · built 8 of 10 reference figures (missing: new/derivative-graphs, new/slope-fields)
 
 Comparable with the frozen baseline: **yes**
 
@@ -45,13 +45,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [core 5] Draw f'' as a third aligned graph — not built
   - cap-05 [core 5] Draw f, f' and f'' on one grid in different line styles — not built
   - cap-06 [core 5] Give the graph of f' as the given one (AP 'graph of f'' questions), with f drawn in the key through a chosen point — not built
-- `polar-parametric`: 0 (0/109)
-  - cap-01 [core 5] Type a polar curve r = f(θ) — not built
-  - cap-02 [core 5] Set the θ range, such as 0 to 2π — not built
-  - cap-03 [core 5] Draw several polar curves on one grid — not built
-  - cap-04 [core 5] Plot polar points (r, θ), negative r included — not built
-  - cap-05 [core 5] Type a parametric curve x(t), y(t) with its t range — not built
-  - cap-06 [core 5] Draw a polar grid of circles and rays — not built
 - `slope-fields`: 0 (0/104)
   - cap-01 [core 5] Type the differential equation dy/dx = f(x, y) — not built
   - cap-02 [core 5] Draw the field's segments on a grid over a chosen range — not built
@@ -62,6 +55,7 @@ Comparable with the frozen baseline: **yes**
 - `complex-plane`: 100 (130/130)
 - `conic-sections`: 100 (151/151)
 - `limits-discontinuities`: 100 (115/115)
+- `polar-parametric`: 100 (109/109)
 - `riemann-sums`: 100 (164/164)
 - `sequences-series`: 100 (121/121)
 - `tangent-secant-lines`: 100 (127/127)
