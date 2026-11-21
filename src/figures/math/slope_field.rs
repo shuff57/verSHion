@@ -531,33 +531,6 @@ pub(super) fn build(p0: &Params) -> Out {
             if !wanted { continue; }
             let mut rs = vec![nm::integrate(&e.f, s.x.v, s.y.v, 1.0, &win, &[])];
             if both { rs.push(nm::integrate(&e.f, s.x.v, s.y.v, -1.0, &win, &[])); }
-            // a curve is drawn only as far as it can be trusted: the run again from a start 1e-12 away, at a tolerance 100
-            // times finer, must lie within half a pixel of it (measured across the curve). Where they part, the curve
-            // depends on digits finer than the point's own (a stiff or unstable equation drifting off the solution through
-            // (0, −0.1), which is not exact in binary): the drawing stops there, and the editor says so
-            let tight = Win { tol: 1e-12, ..win };
-            for (k, r) in rs.iter_mut().enumerate() {
-                if r.stop == Stop::Undefined || r.pts.len() < 3 { continue; }
-                let t = nm::integrate(&e.f, s.x.v, s.y.v + 1e-12 * (1.0 + s.y.v.abs()), if k == 0 { 1.0 } else { -1.0 }, &tight, &[]);
-                let tx: Vec<f64> = t.pts.iter().map(|q| q.0).collect();
-                let cut = r.pts.iter().position(|q| {
-                    let j = if k == 0 { tx.partition_point(|x| *x < q.0) } else { tx.partition_point(|x| *x > q.0) };
-                    if j == 0 || j >= tx.len() { return false; }
-                    let (a, c) = (t.pts[j - 1], t.pts[j]);
-                    if (c.0 - a.0).abs() < 1e-300 { return false; }
-                    let yt = a.1 + (c.1 - a.1) * (q.0 - a.0) / (c.0 - a.0);
-                    let slope = e.f.at(q.0, q.1).unwrap_or(0.0) * g.uy / g.ux;
-                    (q.1 - yt).abs() * g.uy / (1.0 + slope * slope).sqrt() > 0.5
-                });
-                if let Some(c) = cut {
-                    let x = r.pts[c].0;
-                    r.pts.truncate(c.max(1));
-                    // (its own note above; no stop note besides)
-                    r.stop = Stop::Edge;
-                    r.end = *r.pts.last().unwrap_or(&r.end);
-                    notes.push(format!("The solution through {} is drawn {} only to {} \u{2248} {}: past it the curve depends on digits finer than those of the point, so it is not drawn", coord(s), if k == 0 { "to the right" } else { "to the left" }, m.vs.var, fmt(x)));
-                }
-            }
             // what the curve does at its ends, said where it is not the side of the window
             for (k, r) in rs.iter().enumerate() {
                 if k == 1 && !both { continue; }
@@ -651,7 +624,8 @@ pub(super) fn build(p0: &Params) -> Out {
                     let side = if k == 0 { g.x1 } else { g.x0 };
                     let end = match nm::along(tree, &d, &e.f, s0.x.v, side, 2000) { nm::Along::Big(t) | nm::Along::Stop(t) | nm::Along::Fails(t) => t, _ => side };
                     let n = 1500;
-                    r.pts = (0..=n).map(|j| s0.x.v + (end - s0.x.v) * j as f64 / n as f64).filter_map(|t| sv(t).map(|v| (t, v))).collect();
+                    // (from the point on, up to the last sample before g is undefined or past ±1000000: never across a pole)
+                    r.pts = (0..=n).map(|j| s0.x.v + (end - s0.x.v) * j as f64 / n as f64).map_while(|t| sv(t).filter(|v| v.abs() <= 1e6).map(|v| (t, v))).collect();
                 }
             }
         }

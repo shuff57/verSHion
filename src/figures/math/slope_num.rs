@@ -647,9 +647,42 @@ pub(crate) fn along(g: &Node, dg: &Node, f: &F, x0: f64, x: f64, n: usize) -> Al
     let bvals = |t: f64, y: f64| -> Vec<f64> { f.branch.iter().map(|q| ev(q, t, y)).collect() };
     let mut prev_g = gvals(x0, y0);
     let mut prev_b = bvals(x0, y0);
+    // every guard along g, each one's size at the start (its scale), for finding where one touches 0 without changing sign
+    let all = |t: f64| -> Option<Vec<f64>> { let y = gf.at(t, 0.0)?; let mut v = gvals(t, y); v.extend(bvals(t, y)); Some(v) };
+    let scale0: Vec<f64> = all(x0).unwrap_or_default().iter().map(|v| 1.0 + if v.is_finite() { v.abs() } else { 0.0 }).collect();
+    let mut prev_t = x0;
+    let mut prev_all = all(x0).unwrap_or_default();
     for k in 1..=n {
         let t = if k == n { x } else { x0 + (x - x0) * k as f64 / n as f64 };
         let at_end = k == n;
+        // a guard touching 0 inside this step without changing sign (the base y = (2 − x)² of −2√y at x = 2, 1 − sin²x of
+        // √(1 − y²) at π/2): its smallest size in the step, by golden section, within 1e-9 of 0 ends the walk there
+        if let Some(cur_all) = all(t) {
+            for (j, (pa, ca)) in prev_all.iter().zip(&cur_all).enumerate() {
+                let sc = scale0.get(j).copied().unwrap_or(1.0);
+                if !(pa.is_finite() && ca.is_finite()) || pa.abs().min(ca.abs()) > 1e-2 * sc { continue; }
+                let b = |u: f64| all(u).and_then(|v| v.get(j).copied()).filter(|v| v.is_finite()).map(f64::abs).unwrap_or(f64::MAX);
+                let (mut lo, mut hi) = (prev_t, t);
+                let gr = 0.618_033_988_75;
+                for _ in 0..90 {
+                    let (p1, p2) = (hi - gr * (hi - lo), lo + gr * (hi - lo));
+                    if b(p1) < b(p2) { hi = p2; } else { lo = p1; }
+                }
+                let xs = 0.5 * (lo + hi);
+                // (a local minimum strictly inside the step: a guard still falling at the step's end, (x + 1)³ near −1, is
+                // left to the sign-change and end tests; 1e-11 of its scale)
+                let cell = (t - prev_t).abs();
+                let inside = (xs - prev_t).abs() > 1e-6 * cell && (xs - t).abs() > 1e-6 * cell;
+                let touch = (inside && b(xs) <= 1e-11 * sc).then_some(xs);
+                if let Some(xt) = touch {
+                    // (a guard that is 0 at the start itself, x for √x at x = 0, is no end)
+                    if (xt - x0).abs() <= 1e-9 * (1.0 + x0.abs()) { continue; }
+                    return if (xt - x).abs() <= 1e-6 * (1.0 + x.abs()) { Along::End } else { Along::Stop(xt) };
+                }
+            }
+            prev_all = cur_all;
+        }
+        prev_t = t;
         let Some(gv) = gf.at(t, 0.0) else { return Along::Stop(t) };
         if gv.abs() > 1e6 { return Along::Big(t); }
         let cur_g = gvals(t, gv);

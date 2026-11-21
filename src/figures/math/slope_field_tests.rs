@@ -1300,3 +1300,95 @@ fn round5_stiff_curve_drawn_without_drift() {
     }
     assert!(n > 50);
 }
+
+
+// ───────────────────────── round 6: the sixth check's faults ─────────────────────────
+
+/// Solutions that touch y = 0 (or another root's base) tangentially, where the solution stops: Torricelli's draining tank
+/// y = (c − x)² for y′ = −2√y (and dh/dt = −k√h), (x/2 + c)² for √y, (x + c)² for 2√y, sin x for √(1 − y²), 2 sin x for
+/// √(4 − y²). Accepted on 3 windows, named in the key, values by hand from the formula (exact where they are), "—" past
+/// the touch.
+#[test]
+fn round6_solutions_that_touch_zero_are_accepted() {
+    type G = fn(f64) -> f64;
+    // (dy/dx, variable, dependent, point, solution, h, n, base window, formula, touch x, exact values expected)
+    let cases: Vec<(&str, &str, &str, &str, &str, &str, i64, [f64; 4], G, f64, bool)> = vec![
+        ("-2sqrt(y)", "x", "y", "(0.5, 2.25)", "(2 - x)^2", "0.25", 8, [0.0, 5.0, 0.0, 10.0], |x| (2.0 - x).powi(2), 2.0, true),
+        ("-2sqrt(y)", "x", "y", "(0, 4)", "(2 - x)^2", "0.25", 8, [0.0, 5.0, 0.0, 10.0], |x| (2.0 - x).powi(2), 2.0, true),
+        ("-2sqrt(y)", "x", "y", "(1, 1)", "(2 - x)^2", "1/4", 6, [0.0, 5.0, 0.0, 10.0], |x| (2.0 - x).powi(2), 2.0, true),
+        ("-2sqrt(y)", "x", "y", "(1, 4)", "(3 - x)^2", "1/4", 8, [0.0, 5.0, 0.0, 10.0], |x| (3.0 - x).powi(2), 3.0, true),
+        ("-2sqrt(y)", "x", "y", "(0.3, 2.89)", "(2 - x)^2", "0.25", 8, [0.0, 5.0, 0.0, 10.0], |x| (2.0 - x).powi(2), 2.0, true),
+        ("-2sqrt(y)", "x", "y", "(0, 9)", "(3 - x)^2", "1/2", 8, [0.0, 5.0, 0.0, 10.0], |x| (3.0 - x).powi(2), 3.0, true),
+        ("-2sqrt(y)", "x", "y", "(0, 6.25)", "(2.5 - x)^2", "0.25", 8, [0.0, 5.0, 0.0, 10.0], |x| (2.5 - x).powi(2), 2.5, true),
+        ("-2sqrt(y)", "x", "y", "(0, 2)", "(sqrt(2) - x)^2", "0.25", 6, [0.0, 5.0, 0.0, 10.0], |x| (2f64.sqrt() - x).powi(2), 2f64.sqrt(), false),
+        ("-sqrt(y)", "x", "y", "(0, 9)", "(3 - x/2)^2", "1", 8, [-1.0, 7.0, -1.0, 10.0], |x| (3.0 - x / 2.0).powi(2), 6.0, true),
+        ("-sqrt(y)", "x", "y", "(0, 4)", "(2 - x/2)^2", "1/2", 8, [-1.0, 7.0, -1.0, 10.0], |x| (2.0 - x / 2.0).powi(2), 4.0, true),
+        ("sqrt(y)", "x", "y", "(1, 9/4)", "(x/2 + 1)^2", "-1/4", 8, [-4.0, 4.0, -4.0, 4.0], |x| (x / 2.0 + 1.0).powi(2), -2.0, true),
+        ("sqrt(y)", "x", "y", "(2, 4)", "(x/2 + 1)^2", "-1/2", 10, [-4.0, 4.0, -4.0, 8.0], |x| (x / 2.0 + 1.0).powi(2), -2.0, true),
+        ("sqrt(y)", "x", "y", "(0.5, 25/16)", "(x/2 + 1)^2", "-1/4", 8, [-4.0, 4.0, -4.0, 4.0], |x| (x / 2.0 + 1.0).powi(2), -2.0, true),
+        ("sqrt(y)", "x", "y", "(-1, 1/4)", "(x/2 + 1)^2", "-1/4", 6, [-4.0, 4.0, -4.0, 4.0], |x| (x / 2.0 + 1.0).powi(2), -2.0, true),
+        ("sqrt(y)", "x", "y", "(0.3, 1.3225)", "(x/2 + 1)^2", "-0.25", 10, [-4.0, 4.0, -4.0, 4.0], |x| (x / 2.0 + 1.0).powi(2), -2.0, true),
+        ("sqrt(y)", "x", "y", "(1, 1)", "((x + 1)/2)^2", "-1/4", 10, [-4.0, 4.0, -4.0, 4.0], |x| ((x + 1.0) / 2.0).powi(2), -1.0, true),
+        ("sqrt(y)", "x", "y", "(1, 4)", "((x + 3)/2)^2", "-1/2", 10, [-4.0, 4.0, -4.0, 8.0], |x| ((x + 3.0) / 2.0).powi(2), -3.0, true),
+        ("2sqrt(y)", "x", "y", "(0, 1)", "(x + 1)^2", "-1/4", 6, [-4.0, 4.0, -4.0, 4.0], |x| (x + 1.0).powi(2), -1.0, true),
+        ("2sqrt(y)", "x", "y", "(1, 4)", "(x + 1)^2", "-1/4", 10, [-4.0, 4.0, -4.0, 8.0], |x| (x + 1.0).powi(2), -1.0, true),
+        ("2sqrt(y)", "x", "y", "(2, 9)", "(x + 1)^2", "-1/2", 8, [-4.0, 4.0, -4.0, 10.0], |x| (x + 1.0).powi(2), -1.0, true),
+        ("sqrt(1 - y^2)", "x", "y", "(0, 0)", "sin(x)", "0.25", 8, [-4.0, 4.0, -4.0, 4.0], |x| x.sin(), std::f64::consts::FRAC_PI_2, false),
+        ("sqrt(1 - y^2)", "x", "y", "(0, 0)", "sin(x)", "-0.25", 8, [-4.0, 4.0, -4.0, 4.0], |x| x.sin(), -std::f64::consts::FRAC_PI_2, false),
+        ("sqrt(1 - y^2)", "x", "y", "(0, 1/2)", "sin(x + pi/6)", "0.25", 6, [-4.0, 4.0, -4.0, 4.0], |x| (x + std::f64::consts::PI / 6.0).sin(), std::f64::consts::PI / 3.0, false),
+        ("-sqrt(1 - y^2)", "x", "y", "(0, 0)", "-sin(x)", "0.25", 8, [-4.0, 4.0, -4.0, 4.0], |x| -x.sin(), std::f64::consts::FRAC_PI_2, false),
+        ("sqrt(4 - y^2)", "x", "y", "(0, 0)", "2sin(x)", "0.25", 8, [-4.0, 4.0, -4.0, 4.0], |x| 2.0 * x.sin(), std::f64::consts::FRAC_PI_2, false),
+        ("-4sqrt(h)", "t", "h", "(0, 4)", "(2 - 2t)^2", "0.125", 10, [0.0, 2.0, 0.0, 5.0], |x| (2.0 - 2.0 * x).powi(2), 1.0, true),
+        ("-0.6sqrt(h)", "t", "h", "(0, 9)", "(3 - 0.3t)^2", "1", 12, [0.0, 12.0, 0.0, 10.0], |x| (3.0 - 0.3 * x).powi(2), 10.0, true),
+        ("-2sqrt(h)", "t", "h", "(0, 16)", "(4 - t)^2", "0.25", 12, [0.0, 6.0, 0.0, 20.0], |x| (4.0 - x).powi(2), 4.0, true),
+        ("-sqrt(h)", "t", "h", "(0, 1)", "(1 - t/2)^2", "1/4", 10, [0.0, 3.0, 0.0, 2.0], |x| (1.0 - x / 2.0).powi(2), 2.0, true),
+        ("-0.5sqrt(h)", "t", "h", "(0, 25)", "(5 - t/4)^2", "2", 12, [0.0, 24.0, 0.0, 30.0], |x| (5.0 - x / 4.0).powi(2), 20.0, true),
+    ];
+    assert!(cases.len() >= 30);
+    let num = |c: &str| -> f64 { let c = c.replace('\u{2212}', "-"); let c = c.trim_start_matches('\u{2248}').trim(); if let Some((a, b2)) = c.split_once('/') { a.parse::<f64>().unwrap() / b2.parse::<f64>().unwrap() } else { c.parse().unwrap_or(f64::NAN) } };
+    for (eqt, v, dp, pt, sol, h, n, w, g, touch, exact) in cases {
+        for scale in [1.0, 2.0, 0.5] {
+            let (cx, cy, hx, hy) = ((w[0] + w[1]) / 2.0, (w[2] + w[3]) / 2.0, (w[1] - w[0]) / 2.0 * scale, (w[3] - w[2]) / 2.0 * scale);
+            let o = [("dydx", s(eqt)), ("var", s(v)), ("dep", s(dp)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s(h)), ("n", Value::I(n)), ("key_line", b(true)),
+                ("xmin", f(cx - hx)), ("xmax", f(cx + hx)), ("ymin", f(cy - hy)), ("ymax", f(cy + hy)), ("xstep", f(ystep(cx - hx, cx + hx))), ("ystep", f(ystep(cy - hy, cy + hy)))];
+            let out = build(&with(&o));
+            assert!(!out.notes.iter().any(|n| n.contains("it is not used")), "{eqt} {pt} y = {sol} (scale {scale}): {:?}", out.notes);
+            let key = texts(&out.svg, "key").join(" ");
+            assert!(key.contains("solution"), "{eqt} {pt} (scale {scale}): {key}");
+            let cells = texts(&out.svg, "table");
+            let rows: Vec<&[String]> = cells.chunks(4).skip(1).filter(|r| r.len() == 4).collect();
+            assert!(rows.len() >= 2, "{eqt} {pt}: {cells:?}");
+            for r in &rows {
+                let x = num(&r[1]);
+                let past = if touch > num(&rows[0][1]) { x > touch + 1e-9 } else { x < touch - 1e-9 };
+                if past { assert_eq!(r[3], "\u{2014}", "{eqt} {pt} at x = {x} (scale {scale}): past the touch at {touch}"); continue; }
+                let c = &r[3];
+                assert!((num(c) - g(x)).abs() <= 5e-4 * (1.0 + g(x).abs()), "{eqt} {pt} y = {sol} at x = {x} (scale {scale}): written {c}, true {}", g(x));
+                if exact { assert!(!c.starts_with('\u{2248}'), "{eqt} {pt} at x = {x}: {c} should be exact"); }
+            }
+        }
+    }
+}
+
+/// An exact equilibrium (and an exact line) is drawn whole, with no "drawn only to" note: y = 0 for the logistic from (0, 0)
+/// on 0..60, xy from (0, 0), y from (0, 0) on −10..30, y − 2 from (0, 2), y − x from (0, 1) on −10..40.
+#[test]
+fn round6_exact_equilibria_drawn_whole() {
+    let cases: Vec<(&str, &str, [f64; 4])> = vec![
+        ("0.5y(1 - y/10)", "(0, 0); (0, 2); (0, 10); (0, 15)", [0.0, 60.0, 0.0, 20.0]),
+        ("x y", "(0, 0)", [-8.0, 8.0, -8.0, 8.0]),
+        ("3y", "(0, 0)", [-10.0, 10.0, -10.0, 10.0]),
+        ("y", "(0, 0)", [-10.0, 30.0, -10.0, 10.0]),
+        ("y(1 - y)", "(0, 0)", [-10.0, 30.0, -2.0, 2.0]),
+        ("y - 2", "(0, 2)", [0.0, 30.0, 0.0, 4.0]),
+        ("y^2 - 1", "(0, 1)", [-10.0, 40.0, -2.0, 2.0]),
+        ("y - x", "(0, 1)", [-10.0, 40.0, -10.0, 50.0]),
+    ];
+    for (eqt, pts, w) in cases {
+        let out = build(&with(&[("dydx", s(eqt)), ("points", s(pts)), ("xmin", f(w[0])), ("xmax", f(w[1])), ("ymin", f(w[2])), ("ymax", f(w[3])), ("xstep", f(ystep(w[0], w[1]))), ("ystep", f(ystep(w[2], w[3])))]));
+        assert!(!out.notes.iter().any(|n| n.contains("drawn") && n.contains("only to") || n.contains("digits finer")), "{eqt}: {:?}", out.notes);
+        // the first point's curve reaches both sides of the window
+        let (_, rs) = out.runs.iter().find(|(i, _)| *i == 0).unwrap();
+        assert!((rs[0].end.0 - w[1]).abs() < 1e-6 && rs.get(1).is_none_or(|r| (r.end.0 - w[0]).abs() < 1e-6), "{eqt}: ends {:?}", rs.iter().map(|r| r.end).collect::<Vec<_>>());
+    }
+}
