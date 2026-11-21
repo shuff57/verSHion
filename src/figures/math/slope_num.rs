@@ -608,3 +608,61 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
 }
 /// f is the number 0 (no variables at all, or a product with an exact 0).
 fn has_no_vars_zero(n: &Node) -> bool { !has_x(n) && !has_y(n) && ex::exact(n, None).is_some_and(|v| v.is_zero()) || matches!(n, Node::Mul(a, c) if has_no_vars_zero(a) || has_no_vars_zero(c)) }
+
+// ───────────────────────── a typed solution, along itself ─────────────────────────
+
+/// Where a typed solution g stands between x0 and x, walked along g itself.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Along {
+    /// It is the solution all the way to x.
+    Yes,
+    /// It is the solution up to x, where f stops being defined on it (a circle meeting the axis).
+    End,
+    /// It grows past ±1000000 before x (at the first x given).
+    Big(f64),
+    /// It reaches a point where f, or g, is undefined or not smooth in y before x: the solution is not followed past it.
+    Stop(f64),
+    /// g′ ≠ f(x, g) at this x, where f is well conditioned: g is not a solution there.
+    Fails(f64),
+}
+
+/// g′ = f(x, g) at x, to 1e-8 and to what f's own rounding allows there: f's change when x and g move by 1e-13 of themselves,
+/// ten times over (next to x = 0 in (y − 2)/x, (x + 2 − 2)/x loses digits; a Taylor polynomial's miss is no rounding).
+pub(crate) fn satisfies(f: &F, x: f64, gv: f64, dv: f64) -> Option<bool> {
+    let fv = f.at(x, gv)?;
+    if !dv.is_finite() { return Some(true); }
+    let (ex_, ey) = (1e-13 * (1.0 + x.abs()), 1e-13 * (1.0 + gv.abs()));
+    let wob = [(x + ex_, gv), (x - ex_, gv), (x, gv + ey), (x, gv - ey)].iter().filter_map(|(a, c)| f.at(*a, *c)).map(|v| (v - fv).abs()).fold(0.0, f64::max);
+    Some((dv - fv).abs() <= 1e-8 * (1.0 + fv.abs()) + 10.0 * wob)
+}
+
+/// Walk g from x0 to x at n even steps: g finite and within ±1000000, f defined on it, g′ = f (see `satisfies`), and no
+/// denominator or domain of f (or of g) changing sign and no root's base reaching 0 on the way. By uniqueness, a g with
+/// g(x0) = y0 that passes is the solution through (x0, y0) on that stretch.
+pub(crate) fn along(g: &Node, dg: &Node, f: &F, x0: f64, x: f64, n: usize) -> Along {
+    if x == x0 { return Along::Yes; }
+    let gf = F::new(g.clone());
+    let y0 = ev(g, x0, 0.0);
+    let gvals = |t: f64, y: f64| -> Vec<f64> { gf.guards.iter().map(|q| ev(q, t, 0.0)).chain(f.guards.iter().map(|q| ev(q, t, y))).collect() };
+    let bvals = |t: f64, y: f64| -> Vec<f64> { f.branch.iter().map(|q| ev(q, t, y)).collect() };
+    let mut prev_g = gvals(x0, y0);
+    let mut prev_b = bvals(x0, y0);
+    for k in 1..=n {
+        let t = if k == n { x } else { x0 + (x - x0) * k as f64 / n as f64 };
+        let at_end = k == n;
+        let Some(gv) = gf.at(t, 0.0) else { return Along::Stop(t) };
+        if gv.abs() > 1e6 { return Along::Big(t); }
+        let cur_g = gvals(t, gv);
+        if crossed(&prev_g, &cur_g) && !at_end { return Along::Stop(t); }
+        let cur_b = bvals(t, gv);
+        if crossed(&prev_b, &cur_b) || cur_b.iter().any(|v| v.abs() <= 1e-12 * (1.0 + y0.abs())) { return if at_end { Along::End } else { Along::Stop(t) }; }
+        match satisfies(f, t, gv, ev(dg, t, 0.0)) {
+            None => return if at_end { Along::End } else { Along::Stop(t) },
+            Some(false) => return Along::Fails(t),
+            Some(true) => {}
+        }
+        prev_g = cur_g;
+        prev_b = cur_b;
+    }
+    Along::Yes
+}

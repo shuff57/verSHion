@@ -372,7 +372,7 @@ fn a_typed_solution_is_checked_before_it_is_used() {
     let off = build(&with(&[("dydx", s("y")), ("points", s("(0, 2)")), ("solution", s("e^x"))]));
     assert!(off.notes.iter().any(|n| n.contains("does not pass through (0, 2)")), "{:?}", off.notes);
     let wrong = build(&with(&[("dydx", s("y")), ("points", s("(0, 1)")), ("solution", s("x^2 + 1"))]));
-    assert!(wrong.notes.iter().any(|n| n.contains("differs from the worked-out solution")), "{:?}", wrong.notes);
+    assert!(wrong.notes.iter().any(|n| (n.contains("differs from the worked-out solution") || n.contains("does not satisfy") || n.contains("where the solution itself goes on"))), "{:?}", wrong.notes);
     let circle = build(&with(&[("dydx", s("-x/y")), ("points", s("(0, 2)")), ("solution", s("sqrt(4 - x^2)"))]));
     assert!(texts(&circle.svg, "panel").iter().any(|t| t.contains("\u{221a}(4 \u{2212} x2)")), "{:?} {:?}", circle.notes, texts(&circle.svg, "panel"));
     let renamed = build(&with(&[("dydx", s("0.5P(1 - P/10)")), ("var", s("t")), ("dep", s("P")), ("points", s("(0, 1)")), ("solution", s("10/(1 + 9e^(-0.5t))")), ("xmin", f(0.0)), ("xmax", f(12.0)), ("ymin", f(0.0)), ("ymax", f(12.0))]));
@@ -1105,7 +1105,7 @@ fn round3_solutions_that_leave_the_window_at_once() {
 /// for another start, a nearby equation's solution, a wrong formula.
 #[test]
 fn round3_wrong_solutions_still_refused() {
-    for (eqt, pt, sol, why) in [("y", "(0, 1)", "e^x + 0.0000001x", "differs"), ("y", "(0, 4)", "e^x", "does not pass through"), ("y", "(0, 1)", "e^(1.01x)", "differs"), ("x y", "(0, 4)", "4e^(x^2)", "differs"), ("x y", "(0, 4)", "4 + x^2", "differs")] {
+    for (eqt, pt, sol, why) in [("y", "(0, 1)", "e^x + 0.0000001x", "does not satisfy"), ("y", "(0, 4)", "e^x", "does not pass through"), ("y", "(0, 1)", "e^(1.01x)", "does not satisfy"), ("x y", "(0, 4)", "4e^(x^2)", "does not satisfy"), ("x y", "(0, 4)", "4 + x^2", "does not satisfy")] {
         for w in [4.0, 40.0, 0.5] {
             let out = build(&with(&[("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("xmin", f(-w)), ("xmax", f(w)), ("ymin", f(-w)), ("ymax", f(w)), ("xstep", f(ystep(-w, w))), ("ystep", f(ystep(-w, w)))]));
             assert!(out.notes.iter().any(|n| n.contains(why) && n.contains("it is not used")), "{eqt} y = {sol} on ±{w}: {:?}", out.notes);
@@ -1163,7 +1163,7 @@ fn round4_taylor_polynomials_refused() {
         for w in [4.0, 8.0, 2.0] {
             let o = [("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s("0.5")), ("n", Value::I(4)), ("key_line", b(true)), ("xmin", f(-w)), ("xmax", f(w)), ("ymin", f(-w)), ("ymax", f(w)), ("xstep", f(ystep(-w, w))), ("ystep", f(ystep(-w, w)))];
             let out = build(&with(&o));
-            assert!(out.notes.iter().any(|n| n.contains("differs from the worked-out solution") && n.contains("it is not used")), "{eqt} y = {sol} on ±{w}: {:?}", out.notes);
+            assert!(out.notes.iter().any(|n| (n.contains("differs from the worked-out solution") || n.contains("does not satisfy") || n.contains("where the solution itself goes on")) && n.contains("it is not used")), "{eqt} y = {sol} on ±{w}: {:?}", out.notes);
             let panel = texts(&out.svg, "panel").join(" | ");
             let key = texts(&out.svg, "key").join(" ");
             assert!(!panel.contains("Solution through") && !key.contains("solution y ="), "{eqt} y = {sol} on ±{w}: {panel} / {key}");
@@ -1195,7 +1195,7 @@ fn round4_piecewise_forms() {
         let out = build(&with(&o));
         match want {
             // (named at the first worked-out point past the kink, within a step of x = 0)
-            None => assert!(out.notes.iter().any(|n| n.contains("differs from the worked-out solution") && n.contains("it is not used")), "{eqt} y = {sol}: {:?}", out.notes),
+            None => assert!(out.notes.iter().any(|n| (n.contains("differs from the worked-out solution") || n.contains("does not satisfy") || n.contains("where the solution itself goes on")) && n.contains("it is not used")), "{eqt} y = {sol}: {:?}", out.notes),
             Some(want) => {
                 assert!(!out.notes.iter().any(|n| n.contains("typed solution")), "{eqt} y = {sol}: {:?}", out.notes);
                 let (col, key) = sol_column(&o);
@@ -1203,4 +1203,100 @@ fn round4_piecewise_forms() {
             }
         }
     }
+}
+
+// ───────────────────────── round 5: the fifth check's fault ─────────────────────────
+
+/// dy/dx = (y − c)/x and its relatives with their line solutions, Euler landing on the singular line x = 0 (or x = ±1):
+/// accepted, values by hand (y = c + Kx; at the singular x itself the solution's end value).
+#[test]
+fn round5_line_solutions_with_euler_on_the_singular_line() {
+    let m = |t: &str| t.replace('-', "\u{2212}");
+    let cases: Vec<(&str, &str, &str, &str, i64, Vec<&str>)> = vec![
+        ("(y - 2)/x", "(-2, 0)", "x + 2", "1", 4, vec!["0", "1", "2"]),
+        ("(y - 2)/x", "(1, 3)", "x + 2", "-0.25", 4, vec!["3", "2.75", "2.5", "2.25", "2"]),
+        ("(y - 2)/x", "(1, 3)", "x + 2", "-0.5", 2, vec!["3", "2.5", "2"]),
+        ("(y - 2)/x", "(1, 3)", "x + 2", "-1", 1, vec!["3", "2"]),
+        ("(y - 2)/x", "(1, 3)", "x + 2", "-1/3", 3, vec!["3", "8/3", "7/3", "2"]),
+        ("(y - 2)/x", "(1, 3)", "x + 2", "-0.1", 10, vec!["3", "2.9", "2.8", "2.7", "2.6", "2.5", "2.4", "2.3", "2.2", "2.1", "2"]),
+        ("(y - 2)/x", "(-1, 1)", "x + 2", "0.5", 2, vec!["1", "1.5", "2"]),
+        ("(y - 1)/x", "(1, 3)", "2x + 1", "-0.5", 2, vec!["3", "2", "1"]),
+        ("(y - 1)/x", "(2, 5)", "2x + 1", "-0.5", 4, vec!["5", "4", "3", "2", "1"]),
+        ("(y - 1)/x", "(-1, -1)", "2x + 1", "1/2", 2, vec!["-1", "0", "1"]),
+        ("y/x - 2/x", "(1, 3)", "x + 2", "-1/2", 2, vec!["3", "5/2", "2"]),
+        ("(y + 1)/x", "(1, 1)", "2x - 1", "-1/2", 2, vec!["1", "0", "-1"]),
+        ("(y - 3)/x", "(1, 4)", "x + 3", "-1/2", 2, vec!["4", "7/2", "3"]),
+        ("(y - 4)/x", "(1, 2)", "4 - 2x", "-1/2", 2, vec!["2", "3", "4"]),
+        ("(y + 2)/x", "(1, 1)", "3x - 2", "-1/2", 2, vec!["1", "-1/2", "-2"]),
+        ("2(y - 1)/x", "(1, 2)", "x^2 + 1", "-1/2", 2, vec!["2", "5/4", "1"]),
+        ("(2y - 2)/x", "(1, 3)", "2x^2 + 1", "-1/2", 2, vec!["3", "3/2", "1"]),
+        ("(y - 2)/(x - 1)", "(2, 3)", "x + 1", "-1/2", 2, vec!["3", "5/2", "2"]),
+        ("(y - 1)/(x + 1)", "(0, 2)", "x + 2", "-1/2", 2, vec!["2", "3/2", "1"]),
+    ];
+    assert!(cases.len() >= 15);
+    for (eqt, pt, sol, h, n, want) in cases {
+        let o = [("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s(h)), ("n", Value::I(n)), ("key_line", b(true))];
+        let out = build(&with(&o));
+        assert!(!out.notes.iter().any(|n| n.contains("typed solution")), "{eqt} y = {sol}, h = {h}: {:?}", out.notes);
+        let (col, key) = sol_column(&o);
+        let want: Vec<String> = want.iter().map(|w| m(w)).collect();
+        assert_eq!(col, want, "{eqt} y = {sol}, h = {h}: {key}");
+        assert!(key.contains("solution y ="), "{key}");
+    }
+}
+
+/// Unstable equations (the worked-out run's error grows like e^(k·distance)): a typed solution that satisfies the
+/// equation and passes through the point is the solution, and is accepted on large windows and long tables; its values
+/// are its own (by hand from the formula).
+#[test]
+fn round5_unstable_equations_accept_their_solutions() {
+    type C = (&'static str, &'static str, &'static str, &'static str, i64, f64, fn(f64) -> f64);
+    let cases: Vec<C> = vec![
+        ("4x - 4y", "(0, -1/4)", "x - 1/4", "-1", 9, 10.0, |x| x - 0.25),
+        ("4x - 4y", "(0, -1/4)", "x - 1/4", "1", 9, 10.0, |x| x - 0.25),
+        ("-10(y - x)", "(0, -0.1)", "x - 0.1", "-0.5", 7, 4.0, |x| x - 0.1),
+        ("2y - 4x", "(0, 1)", "2x + 1", "2", 10, 20.0, |x| 2.0 * x + 1.0),
+        ("y - x", "(0, 1)", "x + 1", "3", 12, 4.0, |x| x + 1.0),
+        ("5x - 5y", "(0, -0.2)", "x - 0.2", "-1", 8, 8.0, |x| x - 0.2),
+        ("y - sin(x)", "(0, 1/2)", "(sin(x) + cos(x))/2", "2", 8, 20.0, |x| (x.sin() + x.cos()) / 2.0),
+        ("-2(y - sin(x))", "(0, -2/5)", "(4sin(x) - 2cos(x))/5", "-1", 8, 10.0, |x| (4.0 * x.sin() - 2.0 * x.cos()) / 5.0),
+        ("3x - 3y", "(0, -1/3)", "x - 1/3", "-2", 10, 20.0, |x| x - 1.0 / 3.0),
+    ];
+    assert!(cases.len() >= 8);
+    for (eqt, pt, sol, h, n, w, g) in cases {
+        let o = [("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s(h)), ("n", Value::I(n)), ("key_line", b(true)), ("xmin", f(-w)), ("xmax", f(w)), ("ymin", f(-w)), ("ymax", f(w)), ("xstep", f(ystep(-w, w))), ("ystep", f(ystep(-w, w)))];
+        let out = build(&with(&o));
+        assert!(!out.notes.iter().any(|n| n.contains("typed solution")), "{eqt} y = {sol} on ±{w}: {:?}", out.notes);
+        let cells = texts(&out.svg, "table");
+        let hv: f64 = if h.contains('/') { let (a, b2) = h.split_once('/').unwrap(); a.parse::<f64>().unwrap() / b2.parse::<f64>().unwrap() } else { h.parse().unwrap() };
+        let x0: f64 = pt.trim_matches(|c| c == '(' || c == ')').split(',').next().unwrap().trim().parse().unwrap();
+        let rows: Vec<&[String]> = cells.chunks(4).skip(1).filter(|r| r.len() == 4).collect();
+        assert_eq!(rows.len() as i64, n + 1, "{eqt}: {cells:?}");
+        for (k, r) in rows.iter().enumerate() {
+            let x = x0 + k as f64 * hv;
+            let c = r[3].replace('\u{2212}', "-");
+            let c = c.trim_start_matches('\u{2248}').trim();
+            let v: f64 = if let Some((a, b2)) = c.split_once('/') { a.parse::<f64>().unwrap() / b2.parse::<f64>().unwrap() } else { c.parse().unwrap_or_else(|_| panic!("{eqt}: cell {c}")) };
+            assert!((v - g(x)).abs() <= 5e-4 * (1.0 + g(x).abs()), "{eqt} at x = {x}: written {c}, true {}", g(x));
+        }
+    }
+}
+
+/// On a stiff equation the drawn curve through a point on the slow solution is that solution (the typed one, exact), with
+/// no drift off it: −10(y − x) from (0, −0.1), the line y = x − 0.1.
+#[test]
+fn round5_stiff_curve_drawn_without_drift() {
+    let out = build(&with(&[("dydx", s("-10(y - x)")), ("points", s("(0, -0.1)")), ("solution", s("x - 0.1"))]));
+    let g = out.layout.as_ref().unwrap();
+    let mut n = 0;
+    for h in tagged(&out.svg, "curve") {
+        let d = attr(h, "d").unwrap();
+        for tok in d.split(['M', 'L']).filter(|t| !t.is_empty()) {
+            let v: Vec<f64> = tok.split(' ').filter_map(|t| t.parse().ok()).collect();
+            let (x, y) = (g.x0 + (v[0] - g.ml) / g.ux, g.y0 + (g.mt + g.ph - v[1]) / g.uy);
+            assert!((y - (x - 0.1)).abs() * g.uy < 0.6, "({x}, {y}) is off the line");
+            n += 1;
+        }
+    }
+    assert!(n > 50);
 }

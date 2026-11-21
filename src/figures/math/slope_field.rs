@@ -531,6 +531,33 @@ pub(super) fn build(p0: &Params) -> Out {
             if !wanted { continue; }
             let mut rs = vec![nm::integrate(&e.f, s.x.v, s.y.v, 1.0, &win, &[])];
             if both { rs.push(nm::integrate(&e.f, s.x.v, s.y.v, -1.0, &win, &[])); }
+            // a curve is drawn only as far as it can be trusted: the run again from a start 1e-12 away, at a tolerance 100
+            // times finer, must lie within half a pixel of it (measured across the curve). Where they part, the curve
+            // depends on digits finer than the point's own (a stiff or unstable equation drifting off the solution through
+            // (0, −0.1), which is not exact in binary): the drawing stops there, and the editor says so
+            let tight = Win { tol: 1e-12, ..win };
+            for (k, r) in rs.iter_mut().enumerate() {
+                if r.stop == Stop::Undefined || r.pts.len() < 3 { continue; }
+                let t = nm::integrate(&e.f, s.x.v, s.y.v + 1e-12 * (1.0 + s.y.v.abs()), if k == 0 { 1.0 } else { -1.0 }, &tight, &[]);
+                let tx: Vec<f64> = t.pts.iter().map(|q| q.0).collect();
+                let cut = r.pts.iter().position(|q| {
+                    let j = if k == 0 { tx.partition_point(|x| *x < q.0) } else { tx.partition_point(|x| *x > q.0) };
+                    if j == 0 || j >= tx.len() { return false; }
+                    let (a, c) = (t.pts[j - 1], t.pts[j]);
+                    if (c.0 - a.0).abs() < 1e-300 { return false; }
+                    let yt = a.1 + (c.1 - a.1) * (q.0 - a.0) / (c.0 - a.0);
+                    let slope = e.f.at(q.0, q.1).unwrap_or(0.0) * g.uy / g.ux;
+                    (q.1 - yt).abs() * g.uy / (1.0 + slope * slope).sqrt() > 0.5
+                });
+                if let Some(c) = cut {
+                    let x = r.pts[c].0;
+                    r.pts.truncate(c.max(1));
+                    // (its own note above; no stop note besides)
+                    r.stop = Stop::Edge;
+                    r.end = *r.pts.last().unwrap_or(&r.end);
+                    notes.push(format!("The solution through {} is drawn {} only to {} \u{2248} {}: past it the curve depends on digits finer than those of the point, so it is not drawn", coord(s), if k == 0 { "to the right" } else { "to the left" }, m.vs.var, fmt(x)));
+                }
+            }
             // what the curve does at its ends, said where it is not the side of the window
             for (k, r) in rs.iter().enumerate() {
                 if k == 1 && !both { continue; }
@@ -575,46 +602,59 @@ pub(super) fn build(p0: &Params) -> Out {
         }
     }
 
-    // a typed solution, checked against that worked-out solution along its whole run (not only where the window shows it):
-    // the same branch, and g′ = f to 1e-8, the test of a solution. Each way, the stretch over which g is the solution runs
-    // out to the first place it differs (for y′ = √y, (x/2 + 1)² is the solution through (0, 1) for x ≥ −2 only).
+    // a typed solution, checked along itself: g(x0) = y0 and g′ = f(x, g) at every one of 400 points each way, out to every
+    // x the figure uses (the window's sides and Euler's x values), to 1e-8 and to what f's own rounding allows there. By
+    // uniqueness such a g IS the solution, wherever f is smooth in y; the walk stops where the solution itself stops (a
+    // blow-up past ±1000000, a point where f is undefined on it, a root's base reaching 0), and only that stretch counts.
+    // A formula right only near the point (a Taylor polynomial) fails g′ = f further out and is refused.
     let mut solution_ok: Option<(Node, String)> = None;
-    // each way, the x where the typed solution first differs from the worked-out one (None: it never does)
-    let mut differs: [Option<f64>; 2] = [None, None];
     if let (Some((tree, shown)), Some(e), Some(s0)) = (&m.solution, &m.eq, m.starts.first()) {
         let sv = |x: f64| { let v = ex::eval(tree, x); v.is_finite().then_some(v) };
         let d = ex::deriv(tree);
-        let scale = 1.0 + s0.y.v.abs();
-        let through = sv(s0.x.v).is_some_and(|v| (v - s0.y.v).abs() <= 1e-9 * scale);
-        let runs = sol_runs.as_ref().map(|r| [&r[0].0, &r[1].0]);
-        let mut checked = 0;
-        if let Some(rs) = runs {
-            for (way, r) in rs.iter().enumerate() {
-                let last = r.pts.len().saturating_sub(1);
-                for (k, q) in r.pts.iter().enumerate() {
-                    let Some(fq) = e.f.at(q.0, q.1) else { continue };
-                    let ok = match (sv(q.0), ex::eval(&d, q.0)) {
-                        // (a curve ending against a vertical tangent: its last points may lie a hair past the formula's domain)
-                        (None, _) => k == last || fq.abs() >= 1e3,
-                        // the same branch (to 1e-3 across the curve: the run's own error grows on an unstable equation),
-                        // and g′ = f to 1e-8
-                        (Some(gv), dv) => (gv - q.1).abs() / (1.0 + fq * fq).sqrt() <= 1e-3 * (1.0 + q.1.abs())
-                            && match e.f.at(q.0, gv) { Some(fg) if dv.is_finite() => { checked += 1; (dv - fg).abs() <= 1e-8 * (1.0 + fg.abs()) } _ => true },
-                    };
-                    if !ok { differs[way] = Some(q.0); break; }
+        let through = sv(s0.x.v).is_some_and(|v| (v - s0.y.v).abs() <= 1e-9 * (1.0 + s0.y.v.abs()));
+        let xs: Vec<f64> = m.euler.as_ref().map(|eu| eu.steps.iter().map(|st| st.x).collect()).unwrap_or_default();
+        let far = [xs.iter().fold(g.x1, |a, b| a.max(*b)), xs.iter().fold(g.x0, |a, b| a.min(*b))];
+        let mut fails: Option<f64> = None;
+        let mut short: Option<f64> = None;
+        let mut reach = 0.0f64;
+        for (way, x) in far.into_iter().enumerate() {
+            if (x - s0.x.v).abs() < 1e-12 { continue; }
+            match nm::along(tree, &d, &e.f, s0.x.v, x, 400) {
+                nm::Along::Fails(t) => { if fails.is_none_or(|f0| (t - s0.x.v).abs() < (f0 - s0.x.v).abs()) { fails = Some(t); } }
+                nm::Along::Yes | nm::Along::End => reach = reach.max((x - s0.x.v).abs()),
+                big_or_stop @ (nm::Along::Big(t) | nm::Along::Stop(t)) => {
+                    // the formula stops here: so must the solution (the worked-out run ends here too, or grows past ±1000000
+                    // as the formula does), else the formula is the solution only part of the way (√(x²) for y′ = 1 stops at
+                    // 0, the solution y = x goes on)
+                    let dir = if way == 0 { 1.0 } else { -1.0 };
+                    let run_on = sol_runs.as_ref().is_some_and(|r| {
+                        let run = &r[way].0;
+                        let grew = run.stop == Stop::Left;
+                        if matches!(big_or_stop, nm::Along::Big(_)) { !grew && (run.end.0 - t) * dir > 1e-2 * (1.0 + t.abs()) }
+                        else { (run.end.0 - t) * dir > 1e-2 * (1.0 + t.abs()) }
+                    });
+                    if run_on { short.get_or_insert(t); }
+                    reach = reach.max((t - s0.x.v).abs());
                 }
             }
         }
-        // the first place it differs, nearest the point
-        let first = differs.iter().flatten().copied().min_by(|a, b| (a - s0.x.v).abs().total_cmp(&(b - s0.x.v).abs()));
-        let n_pts = runs.map(|rs| rs[0].pts.len() + rs[1].pts.len()).unwrap_or(0);
         if !through { notes.push(format!("The typed solution {} = {} does not pass through {}: it is not used", m.vs.dep, shown, coord(s0))); }
-        // (it must be the worked-out solution over the whole of its run, both ways, out to every x the figure uses and the
-        // window's sides: a Taylor polynomial, right only near the point, is refused; where the solution itself stops, at a
-        // blow-up, a circle's end or a branch point, the run stops there too, and past it values are "—")
-        else if let Some(x) = first { notes.push(format!("The typed solution {} = {} differs from the worked-out solution of {} = {} through {} at {} \u{2248} {}: it is not used", m.vs.dep, shown, lhs(&m.vs), e.shown, coord(s0), m.vs.var, fmt(x))); }
-        else if n_pts < 4 || checked < 3 { notes.push(format!("The typed solution {} = {} cannot be checked: the solution through {} is not worked out from it, so it is not used", m.vs.dep, shown, coord(s0))); }
-        else { solution_ok = Some((tree.clone(), shown.clone())); }
+        else if let Some(t) = fails { notes.push(format!("The typed solution {} = {} is not the solution through {}: it does not satisfy {} = {} at {} \u{2248} {}, so it is not used", m.vs.dep, shown, coord(s0), lhs(&m.vs), e.shown, m.vs.var, fmt(t))); }
+        else if let Some(t) = short { notes.push(format!("The typed solution {} = {} is the solution through {} only as far as {} \u{2248} {}, where the solution itself goes on: it is not used", m.vs.dep, shown, coord(s0), m.vs.var, fmt(t))); }
+        else if reach <= 1e-9 * (1.0 + s0.x.v.abs()) { notes.push(format!("The typed solution {} = {} cannot be checked: the solution through {} is not followed from it, so it is not used", m.vs.dep, shown, coord(s0))); }
+        else {
+            solution_ok = Some((tree.clone(), shown.clone()));
+            // its own curve is drawn for the first point (exact: no drift on a stiff or unstable equation), as far as it is
+            // the solution within the window, each way the curves are drawn
+            if let Some((_, rs)) = runs.iter_mut().find(|(i, _)| *i == 0) {
+                for (k, r) in rs.iter_mut().enumerate() {
+                    let side = if k == 0 { g.x1 } else { g.x0 };
+                    let end = match nm::along(tree, &d, &e.f, s0.x.v, side, 2000) { nm::Along::Big(t) | nm::Along::Stop(t) | nm::Along::Fails(t) => t, _ => side };
+                    let n = 1500;
+                    r.pts = (0..=n).map(|j| s0.x.v + (end - s0.x.v) * j as f64 / n as f64).filter_map(|t| sv(t).map(|v| (t, v))).collect();
+                }
+            }
+        }
     }
 
     // ── Euler's values against the solution's ──
@@ -627,62 +667,50 @@ pub(super) fn build(p0: &Params) -> Out {
         let p0 = coord(s0);
         let mut sol = vec![Some((s0.y.s.clone(), true))];
         let mut gap: Option<String> = None;
-        let mut disagree: Option<f64> = None;
+        let typed = solution_ok.as_ref().map(|(t, _)| (t.clone(), ex::deriv(t)));
         for st in eu.steps.iter().skip(1) {
             let way = if st.x >= s0.x.v { 0 } else { 1 };
             let (r, rl, xs) = (&rs[way].0, &rs[way].1, &rs[way].2);
+            let exact = |t: &Node| st.xe.as_ref().and_then(|xe| ex::exact(t, Some(xe)));
+            // an accepted typed solution: its own value, wherever it is the solution (walked along itself); the worked-out run
+            // only confirms a blow-up (it stopped growing past ±1000000 where g is large too)
+            if let (Some((t, dt)), Some(e)) = (&typed, &e_f) {
+                let run_blew = r.stop == Stop::Left && (r.end.0 - s0.x.v).abs() < (st.x - s0.x.v).abs() && ex::eval(t, r.end.0).abs() > 1e5;
+                let walk = if run_blew { nm::Along::Big(r.end.0) } else { nm::along(t, dt, e, s0.x.v, st.x, 800) };
+                match walk {
+                    nm::Along::Yes => { let gv = ex::eval(t, st.x); sol.push(Some(written(gv, exact(t).as_ref(), m.dec_ok, m.dec))); }
+                    nm::Along::End => match exact(t).and_then(|x| exact_text(&x, m.dec_ok)) {
+                        Some(w) => sol.push(Some((w, true))),
+                        None => { sol.push(None); gap.get_or_insert_with(|| format!("the solution through {p0} ends at {} \u{2248} {}", m.vs.var, fmt(st.x))); }
+                    },
+                    nm::Along::Big(_) => { sol.push(None); gap.get_or_insert_with(|| format!("the solution through {p0} grows past \u{b1}1000000 before {} = {}", m.vs.var, fmt(st.x))); }
+                    nm::Along::Stop(x) | nm::Along::Fails(x) => { sol.push(None); gap.get_or_insert_with(|| format!("the solution through {p0} is worked out only to {} \u{2248} {}", m.vs.var, fmt(x))); }
+                }
+                continue;
+            }
             let k = xs.iter().position(|x| *x == st.x);
             let v = k.and_then(|k| r.at_stops.get(k).copied().flatten());
             let vl = k.and_then(|k| rl.at_stops.get(k).copied().flatten());
             // the curve ends at this very x (a circle meeting the axis): the value there is not worked out reliably
             let ends_here = matches!(r.stop, Stop::Singular | Stop::Stalled | Stop::Branch) && (r.end.0 - st.x).abs() <= 1e-6 * (1.0 + st.x.abs());
-            let typed = solution_ok.as_ref().map(|(t, _)| t);
-            let exact = |t: &Node| st.xe.as_ref().and_then(|xe| ex::exact(t, Some(xe)));
-            // on the typed solution's stretch (short of where it first differs, this way)
-            let on_stretch = differs[way].is_none_or(|xd| (xd - st.x) * if way == 0 { 1.0 } else { -1.0 } > 0.0);
             match v {
                 Some(v) if !ends_here => {
-                    let w = match typed.map(|t| (t, ex::eval(t, st.x))) {
-                        Some((t, gv)) if gv.is_finite() && on_stretch => written(gv, exact(t).as_ref(), m.dec_ok, m.dec),
-                        other => {
-                            if other.is_some() { disagree.get_or_insert(st.x); }
-                            // (the places the run supports: where the two tolerances differ by e, those with 20e under one unit)
-                            let e = match vl { Some(l) => (v - l).abs(), None => 1e-6 * (1.0 + v.abs()) };
-                            let places = if e == 0.0 { m.dec } else { ((-(20.0 * e).log10()).floor().max(0.0) as usize).min(m.dec) };
-                            (tg::decimal(v, places), false)
-                        }
-                    };
-                    sol.push(Some(w));
+                    // (the places the run supports: where the two tolerances differ by e, those with 20e under one unit)
+                    let e = match vl { Some(l) => (v - l).abs(), None => 1e-6 * (1.0 + v.abs()) };
+                    let places = if e == 0.0 { m.dec } else { ((-(20.0 * e).log10()).floor().max(0.0) as usize).min(m.dec) };
+                    sol.push(Some((tg::decimal(v, places), false)));
                 }
                 _ => {
-                    // at the end itself, a typed solution's exact value there, when it is the end of the worked-out curve
-                    // (the run ending within 1e-3 of this x, as it stops just short of a branch point whatever the window;
-                    // the formula meeting the run's end, and satisfying the equation at x itself where f is defined there)
-                    let near_end = matches!(r.stop, Stop::Singular | Stop::Stalled | Stop::Branch) && (r.end.0 - st.x).abs() <= 1e-3 * (1.0 + st.x.abs());
-                    let end_exact = if ends_here || near_end { typed.and_then(|t| {
-                        let gv = ex::eval(t, st.x);
-                        let dv = ex::eval(&ex::deriv(t), st.x);
-                        let fits = e_f.as_ref().is_none_or(|f| f.at(st.x, gv).is_none_or(|fv| !dv.is_finite() || (dv - fv).abs() <= 1e-8 * (1.0 + fv.abs())));
-                        (gv.is_finite() && fits && (gv - r.end.1).abs() <= 1e-3 * (1.0 + gv.abs())).then(|| exact(t)).flatten()
-                    }) } else { None };
-                    match end_exact.and_then(|x| exact_text(&x, m.dec_ok)) {
-                        Some(t) => sol.push(Some((t, true))),
-                        None => {
-                            sol.push(None);
-                            if gap.is_none() {
-                                gap = Some(match r.stop {
-                                    Stop::Left => format!("the solution through {p0} grows past \u{b1}1000000 before {} = {}", m.vs.var, fmt(st.x)),
-                                    _ => format!("the solution through {p0} is worked out only to {} \u{2248} {}", m.vs.var, fmt(r.end.0)),
-                                });
-                            }
-                        }
-                    }
+                    sol.push(None);
+                    gap.get_or_insert_with(|| match r.stop {
+                        Stop::Left => format!("the solution through {p0} grows past \u{b1}1000000 before {} = {}", m.vs.var, fmt(st.x)),
+                        _ => format!("the solution through {p0} is worked out only to {} \u{2248} {}", m.vs.var, fmt(r.end.0)),
+                    });
                 }
             }
         }
         eu.sol = sol;
         eu.gap = gap;
-        if let (Some(x), Some((_, shown))) = (disagree, &solution_ok) { notes.push(format!("The typed solution {} = {} differs from the worked-out solution through {p0} at {} = {}: the worked-out value is written there", m.vs.dep, shown, m.vs.var, fmt(x))); }
     }
 
     // ── equilibria ──
