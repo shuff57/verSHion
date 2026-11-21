@@ -126,7 +126,7 @@ fn steep_slopes_draw_short_vertical_segments() {
 
 // ───────────────────────── solution curves ─────────────────────────
 
-fn win() -> Win { Win { x0: -4.0, x1: 4.0, y0: -4.0, y1: 4.0, ux: 60.0, uy: 60.0, cap: None } }
+fn win() -> Win { Win { x0: -4.0, x1: 4.0, y0: -4.0, y1: 4.0, ux: 60.0, uy: 60.0, cap: None, tol: 1e-10 } }
 /// The largest error of the points from the exact solution, measured across the curve (|Δy| over √(1 + slope²)), so that
 /// near a vertical tangent a tiny error in x does not read as a large one in y.
 fn max_err(pts: &[(f64, f64)], exact: &dyn Fn(f64) -> f64, w: &Win) -> f64 {
@@ -372,7 +372,7 @@ fn a_typed_solution_is_checked_before_it_is_used() {
     let off = build(&with(&[("dydx", s("y")), ("points", s("(0, 2)")), ("solution", s("e^x"))]));
     assert!(off.notes.iter().any(|n| n.contains("does not pass through (0, 2)")), "{:?}", off.notes);
     let wrong = build(&with(&[("dydx", s("y")), ("points", s("(0, 1)")), ("solution", s("x^2 + 1"))]));
-    assert!(wrong.notes.iter().any(|n| n.contains("is not the solution of")), "{:?}", wrong.notes);
+    assert!(wrong.notes.iter().any(|n| n.contains("differs from the worked-out solution")), "{:?}", wrong.notes);
     let circle = build(&with(&[("dydx", s("-x/y")), ("points", s("(0, 2)")), ("solution", s("sqrt(4 - x^2)"))]));
     assert!(texts(&circle.svg, "panel").iter().any(|t| t.contains("\u{221a}(4 \u{2212} x2)")), "{:?} {:?}", circle.notes, texts(&circle.svg, "panel"));
     let renamed = build(&with(&[("dydx", s("0.5P(1 - P/10)")), ("var", s("t")), ("dep", s("P")), ("points", s("(0, 1)")), ("solution", s("10/(1 + 9e^(-0.5t))")), ("xmin", f(0.0)), ("xmax", f(12.0)), ("ymin", f(0.0)), ("ymax", f(12.0))]));
@@ -1042,11 +1042,97 @@ fn round2_cheap_items() {
 fn round2_not_unique_past_a_branch_point() {
     let d = "\u{2014}";
     let (col, key) = sol_column(&[("dydx", s("3y^(2/3)")), ("points", s("(0, 1)")), ("solution", s("(x + 1)^3")), ("euler", b(true)), ("h", s("-0.5")), ("n", Value::I(5)), ("key_line", b(true))]);
-    // (1/8 exactly, as a decimal was typed; the run stops just short of y = 0, so −1 itself is "—")
-    assert_eq!(col, ["1", "0.125", d, d, d, d], "{key}");
+    // (1/8 exactly, as a decimal was typed; at −1 the end value (x + 1)³ = 0, exactly; past it "—")
+    assert_eq!(col, ["1", "0.125", "0", d, d, d], "{key}");
     assert!(key.contains("is worked out only to x \u{2248} \u{2212}1"), "{key}");
     let out = build(&with(&[("dydx", s("3y^(2/3)")), ("points", s("(0, 1)"))]));
     assert!(out.notes.iter().any(|n| n.contains("need not be unique")), "{:?}", out.notes);
     let out = build(&with(&[("dydx", s("y^(1/3)")), ("points", s("(0, 0)"))]));
     assert!(out.runs.is_empty() && out.notes.iter().any(|n| n.contains("need not be unique: no solution curve")), "{:?}", out.notes);
+}
+
+
+// ───────────────────────── round 3: the third check's fault ─────────────────────────
+
+/// Typed solutions whose curve shows on almost none of the window, or starts on its edge or outside it: accepted, and their
+/// values written (by hand). The answer never depends on the window.
+#[test]
+fn round3_solutions_that_leave_the_window_at_once() {
+    let d = "\u{2014}";
+    let a = |v: &str| format!("\u{2248} {v}");
+    type W = [f64; 4];
+    let w4: W = [-4.0, 4.0, -4.0, 4.0];
+    let cases: Vec<(&str, &str, &str, &str, &str, &str, i64, W, Vec<String>)> = vec![
+        ("x y", "x", "y", "(0, 4)", "4e^(x^2/2)", "0.5", 4, w4, vec!["4".into(), a("4.533"), a("6.595"), a("12.321"), a("29.556")]),
+        ("x sqrt(y)", "x", "y", "(0, 4)", "(x^2/4 + 2)^2", "1/2", 4, w4, vec!["4".into(), "1089/256".into(), "81/16".into(), "1681/256".into(), "9".into()]),
+        ("x y^2", "x", "y", "(0, 4)", "4/(1 - 2x^2)", "1/4", 4, w4, vec!["4".into(), "32/7".into(), "8".into(), d.into(), d.into()]),
+        ("2x y", "x", "y", "(0, 4)", "4e^(x^2)", "1/2", 2, [-2.0, 2.0, 0.0, 4.0], vec!["4".into(), a("5.136"), "4e".into()]),
+        ("0.5P", "t", "P", "(0, 80)", "80e^(0.5t)", "1", 4, [0.0, 10.0, 0.0, 100.0], vec!["80".into(), a("131.898"), a("217.463"), a("358.535"), a("591.124")]),
+        ("2P", "t", "P", "(0, 50)", "50e^(2t)", "1", 2, [0.0, 10.0, 0.0, 100.0], vec!["50".into(), "50e2".into(), "50e4".into()]),
+        ("0.03P", "t", "P", "(0, 1000)", "1000e^(0.03t)", "10", 3, [0.0, 100.0, 0.0, 1000.0], vec!["1000".into(), a("1349.859"), a("1822.119"), a("2459.603")]),
+        ("y", "x", "y", "(0, 4)", "4e^x", "1", 3, [0.0, 4.0, 0.0, 4.0], vec!["4".into(), "4e".into(), "4e2".into(), "4e3".into()]),
+        ("x", "x", "y", "(0, 0)", "x^2/2", "100", 3, [-1000.0, 1000.0, -1000.0, 1000.0], vec!["0".into(), "5000".into(), "20000".into(), "45000".into()]),
+        ("x^2", "x", "y", "(0, 0)", "x^3/3", "10", 3, [-1000.0, 1000.0, -1000.0, 1000.0], vec!["0".into(), "1000/3".into(), "8000/3".into(), "9000".into()]),
+        ("0.5(y - 4)", "x", "y", "(0, 5)", "4 + e^(x/2)", "1", 2, w4, vec!["5".into(), a("5.649"), a("6.718")]),
+        ("x y", "x", "y", "(0, -4)", "-4e^(x^2/2)", "1/2", 2, w4, vec!["\u{2212}4".into(), a("\u{2212}4.533"), a("\u{2212}6.595")]),
+        ("x y", "x", "y", "(1, 4)", "4e^((x^2 - 1)/2)", "1/2", 2, w4, vec!["4".into(), a("7.473"), a("17.927")]),
+        ("3y", "x", "y", "(0, 4)", "4e^(3x)", "1/2", 2, w4, vec!["4".into(), a("17.927"), "4e3".into()]),
+        ("-2y", "x", "y", "(0, 4)", "4e^(-2x)", "1", 2, [0.0, 4.0, 0.0, 4.0], vec!["4".into(), "4/e2".into(), "4/e4".into()]),
+        ("2x", "x", "y", "(0, 4)", "x^2 + 4", "1", 3, w4, vec!["4".into(), "5".into(), "8".into(), "13".into()]),
+        ("y^2", "x", "y", "(0, 4)", "4/(1 - 4x)", "1/8", 3, w4, vec!["4".into(), "8".into(), d.into(), d.into()]),
+        ("x/y", "x", "y", "(0, 4)", "sqrt(x^2 + 16)", "1", 2, w4, vec!["4".into(), "\u{221a}17".into(), "2\u{221a}5".into()]),
+        ("-x/y", "x", "y", "(0, 4)", "sqrt(16 - x^2)", "1", 4, w4, vec!["4".into(), "\u{221a}15".into(), "2\u{221a}3".into(), "\u{221a}7".into(), "0".into()]),
+        ("2sqrt(y)", "x", "y", "(0, 4)", "(x + 2)^2", "1/2", 2, w4, vec!["4".into(), "25/4".into(), "9".into()]),
+        // (unstable: the worked-out run's error grows like e^x; the typed exact solution is written, never "differs")
+        ("y + x^2", "x", "y", "(0, -2)", "-x^2 - 2x - 2", "1.5", 12, [-1.0, 20.0, -400.0, 10.0], (0..=12).map(|k: i64| { let x = 1.5 * k as f64; format!("{}", -x * x - 2.0 * x - 2.0).replace('-', "\u{2212}") }).collect()),
+    ];
+    assert!(cases.len() >= 21);
+    for (eqt, v, dp, pt, sol, h, n, w, want) in cases {
+        for scale in [1.0, 2.0, 0.5] {
+            // (the same case on three windows: the answer must not depend on the window)
+            let (cx, cy, hx, hy) = ((w[0] + w[1]) / 2.0, (w[2] + w[3]) / 2.0, (w[1] - w[0]) / 2.0 * scale, (w[3] - w[2]) / 2.0 * scale);
+            let o = [("dydx", s(eqt)), ("var", s(v)), ("dep", s(dp)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s(h)), ("n", Value::I(n)), ("key_line", b(true)),
+                ("xmin", f(cx - hx)), ("xmax", f(cx + hx)), ("ymin", f(cy - hy)), ("ymax", f(cy + hy)), ("xstep", f(ystep(cx - hx, cx + hx))), ("ystep", f(ystep(cy - hy, cy + hy)))];
+            let out = build(&with(&o));
+            assert!(!out.notes.iter().any(|n| n.contains("it is not used") || n.contains("differs")), "{eqt} y = {sol} (scale {scale}): {:?}", out.notes);
+            let (col, key) = sol_column(&o);
+            assert_eq!(col, want, "{eqt} y = {sol} (scale {scale}): {key}");
+        }
+    }
+}
+
+/// Typed solutions that are not the solution are still refused, on every window: e^x + 0.0000001x for y′ = y, a solution
+/// for another start, a nearby equation's solution, a wrong formula.
+#[test]
+fn round3_wrong_solutions_still_refused() {
+    for (eqt, pt, sol, why) in [("y", "(0, 1)", "e^x + 0.0000001x", "differs"), ("y", "(0, 4)", "e^x", "does not pass through"), ("y", "(0, 1)", "e^(1.01x)", "differs"), ("x y", "(0, 4)", "4e^(x^2)", "differs"), ("x y", "(0, 4)", "4 + x^2", "differs")] {
+        for w in [4.0, 40.0, 0.5] {
+            let out = build(&with(&[("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("xmin", f(-w)), ("xmax", f(w)), ("ymin", f(-w)), ("ymax", f(w)), ("xstep", f(ystep(-w, w))), ("ystep", f(ystep(-w, w)))]));
+            assert!(out.notes.iter().any(|n| n.contains(why) && n.contains("it is not used")), "{eqt} y = {sol} on ±{w}: {:?}", out.notes);
+        }
+    }
+}
+
+/// A worked-out value is written to the places the run supports: for y′ = y from (0, 1) at dec 6, each written value is e^x
+/// to every place shown (e^8 = 2980.957987…, e^10 = 22026.465794…, e^13 = 442413.392008…).
+#[test]
+fn round3_worked_out_digits_are_right() {
+    let mut seen = 0;
+    // (x = 1, …, 12 with h = 1; x = 13 in one step of 13)
+    for (h, n) in [("1", 12), ("13", 1)] {
+    let out = build(&with(&[("dydx", s("y")), ("points", s("(0, 1)")), ("euler", b(true)), ("h", s(h)), ("n", Value::I(n)), ("dec", Value::I(6))]));
+    let cells = texts(&out.svg, "table");
+    let rows: Vec<&[String]> = cells.chunks(4).skip(1).filter(|r| r.len() == 4).collect();
+    for r in rows {
+        let Ok(k) = r[1].parse::<i32>() else { continue };
+        let c = r[3].trim_start_matches('\u{2248}').trim();
+        if c == "\u{2014}" || k == 0 { continue; }
+        let v: f64 = c.parse().unwrap();
+        let places = c.split('.').nth(1).map(|t| t.len()).unwrap_or(0) as i32;
+        let truth = (k as f64).exp();
+        assert!((v - truth).abs() <= 0.5 * 10f64.powi(-places) + 1e-9 * truth, "x = {k}: written {c}, e^x = {truth}");
+        seen += 1;
+    }
+    }
+    assert!(seen >= 7, "{seen}");
 }

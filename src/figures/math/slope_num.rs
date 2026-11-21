@@ -204,7 +204,7 @@ pub(crate) enum Stop {
 
 /// The window the curves are drawn in, and its scale in px per unit (for the 3 px steps).
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Win { pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub ux: f64, pub uy: f64, pub cap: Option<f64> }
+pub(crate) struct Win { pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub ux: f64, pub uy: f64, pub cap: Option<f64>, pub tol: f64 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct Run { pub pts: Vec<(f64, f64)>, pub stop: Stop, pub end: (f64, f64), pub at_stops: Vec<Option<f64>> }
@@ -248,7 +248,7 @@ pub(crate) fn integrate(f: &F, x0: f64, y0: f64, dir: f64, w: &Win, stops: &[f64
     let side = if dir > 0.0 { w.x1 } else { w.x0 };
     let target = stops.iter().fold(side, |m, s| if dir > 0.0 { m.max(*s) } else { m.min(*s) });
     let Some(mut k1) = f.at(x0, y0) else { return Run { pts: vec![(x0, y0)], stop: Stop::Undefined, end: (x0, y0), at_stops } };
-    let (atol, rtol) = (1e-10 * hy, 1e-10);
+    let (atol, rtol) = (w.tol * hy, w.tol);
     let hmin = 1e-11 * span;
     let (mut x, mut y) = (x0, y0);
     let mut h = span / 200.0;
@@ -296,7 +296,8 @@ pub(crate) fn integrate(f: &F, x0: f64, y0: f64, dir: f64, w: &Win, stops: &[f64
             break Stop::Singular;
         }
         let bn = bvals(xn, yn);
-        if crossed(&bv, &bn) || bn.iter().any(|v| v.abs() <= 1e-12 * hy) {
+        // (touching 0: to the start's scale, not the window's, so the answer does not depend on the window)
+        if crossed(&bv, &bn) || bn.iter().any(|v| v.abs() <= 1e-12 * (1.0 + y0.abs())) {
             let t = bv.iter().zip(&bn).filter(|(u, v)| u.is_finite() && v.is_finite() && ((**u > 0.0 && **v <= 0.0) || (**u < 0.0 && **v >= 0.0)))
                 .map(|(u, v)| u / (u - v)).fold(1.0f64, f64::min).clamp(0.0, 1.0);
             pts.push((x + (xn - x) * t, y + (yn - y) * t));
