@@ -181,11 +181,14 @@ pub(super) async fn chat_message_traced(cfg: &AiCfg, turns: &[Turn], temp: f64, 
     if cfg.output_mode != OutputMode::Json && cfg.output.is_some() {
         turns.insert(0,Turn::new("system","Follow the supplied output schema exactly. Include all required fields; use null for absent optional values and the stated defaults for unchanged parameters. Never invent missing source answers."));
     }
-    let reply = send(
-        cfg,
-        body(cfg, messages(&turns, cfg.provider == "ollama"), temp),
-    )
-    .await?;
+    let mut request = body(cfg, messages(&turns, cfg.provider == "ollama"), temp);
+    let mut reply = send(cfg, request.clone()).await?;
+    // A long reply (holdout v12: a figure description of four graphs) can stop at the usual
+    // output limit; it is asked once more with a larger one, as figure tool turns are.
+    if reply.pointer("/choices/0/finish_reason") == Some(&json!("length")) && request.get("max_tokens").is_some() {
+        request["max_tokens"] = json!(FIGURE_RETRY_OUTPUT_TOKENS);
+        reply = send(cfg, request).await?;
+    }
     *provider_reply = Some(reply_evidence(&reply, cfg.provider == "ollama"));
     let message = if cfg.provider == "ollama" {
         if reply["done_reason"] == "length" {
@@ -372,6 +375,22 @@ mod tests {
     }
 
     #[test]
+    fn a_chat_reply_cut_off_at_the_usual_limit_is_asked_once_with_a_larger_limit() {
+        let cut = (200, json!({"choices":[{"finish_reason":"length","message":{"content":"{\"structure\":"}}]}).to_string());
+        let whole = (200, json!({"choices":[{"finish_reason":"stop","message":{"content":"{}"}}]}).to_string());
+        let (base, server) = stub_relay(vec![cut.clone(), whole]);
+        let cfg = AiCfg { provider: "custom".into(), base, ..AiCfg::default() };
+        let reply = block_on(chat_message_traced(&cfg, &[Turn::new("user", "describe")], 0.0, &mut None));
+        assert_eq!(reply.unwrap()["content"], "{}");
+        let sent: Vec<Value> = server.join().unwrap().into_iter().map(|(_, body)| serde_json::from_str(&body).unwrap()).collect();
+        assert_eq!((sent[0]["max_tokens"].as_u64(), sent[1]["max_tokens"].as_u64()), (Some(MAX_OUTPUT_TOKENS as u64), Some(FIGURE_RETRY_OUTPUT_TOKENS as u64)));
+        // A whole reply is sent once.
+        let (base, server) = stub_relay(vec![(200, json!({"choices":[{"finish_reason":"stop","message":{"content":"{}"}}]}).to_string())]);
+        let cfg = AiCfg { provider: "custom".into(), base, ..AiCfg::default() };
+        assert!(block_on(chat_message_traced(&cfg, &[Turn::new("user", "describe")], 0.0, &mut None)).is_ok());
+        assert_eq!(server.join().unwrap().len(), 1);
+    }
+    #[test]
     fn a_figure_tool_turn_cut_off_at_the_usual_limit_is_asked_once_with_a_larger_limit() {
         // Holdout v5: a six-panel figure's tool call ran past 8192 output tokens on every attempt.
         let cut = (200, json!({"choices":[{"finish_reason":"length","message":{"content":null}}]}).to_string());
@@ -511,14 +530,15 @@ mod tests {
         unsafe { std::env::set_var("VERSHION_STORE_DIR",std::env::temp_dir().join(format!("vershion-compat-trace-tests-{}",std::process::id()))); }
         let cutoff=json!({"finish_reason":"length","message":{"content":"partial raw reply"}});
         let bad_schema=json!({"finish_reason":"stop","message":{"content":"{\"id\":42,\"reason\":\"bad\"}"}});
-        let(base,server)=stub_relay(vec![(200,json!({"choices":[cutoff.clone()]}).to_string()),(200,json!({"choices":[bad_schema.clone()]}).to_string())]);
+        // A cut-off reply is asked once more with a larger limit; here it is cut off again.
+        let(base,server)=stub_relay(vec![(200,json!({"choices":[cutoff.clone()]}).to_string()),(200,json!({"choices":[cutoff.clone()]}).to_string()),(200,json!({"choices":[bad_schema.clone()]}).to_string())]);
         let cfg=AiCfg{provider:"custom".into(),base,output_mode:OutputMode::Schema,output:Some(vershion_ai_core::figure_pick()),..AiCfg::default()};
         for choice in [cutoff,bad_schema] {
             let mut capture=None;
             assert!(block_on(chat_traced(&cfg,&[Turn::new("user","pick")],0.0,&mut capture)).is_err());
             assert_eq!(capture,Some(json!({"choice":choice})));
         }
-        assert_eq!(server.join().unwrap().len(),2);
+        assert_eq!(server.join().unwrap().len(),3);
     }
 
     #[test]

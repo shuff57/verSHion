@@ -374,7 +374,16 @@ pub(crate) async fn observe(bytes: &[u8], cfg: &AiCfg) -> (Vec<u8>, SourceObserv
         };
         match result {
             Ok(facts) => {
-                let hold = unresolved_topology(&facts).or_else(|| unresolved_plot(&facts));
+                // A plot fact still uncertain after the one reinspection no longer holds the redraw:
+                // the plot contract leaves it unenforced and the source comparison judges the drawing
+                // (holdout v12: dashed grids offset from the ticks kept three graphs as crops).
+                let topology_hold = unresolved_topology(&facts);
+                let plot_hold = unresolved_plot(&facts);
+                let hold = topology_hold.clone().or_else(|| plot_hold.clone().filter(|_| attempt == 0));
+                if attempt == 1 && topology_hold.is_none() && let Some(reason) = &plot_hold
+                    && let Some(reply) = trace.replies.last_mut() {
+                    reply["source_plot_unresolved"] = json!(reason);
+                }
                 trace.error = hold.clone();
                 trace.error_stage = hold
                     .as_ref()
@@ -728,7 +737,8 @@ mod tests {
         for hold in [false,true] {
             let(first,second)=if hold{(uncertain.clone(),uncertain.clone())}else{(legacy.clone(),plain.clone())};let response=|v:&Value|(200,json!({"choices":[{"message":{"content":v.to_string()}}]}).to_string());let(base,server)=super::super::tests::stub_relay(vec![response(&first),response(&second)]);let cfg=AiCfg{provider:"custom".into(),base,model:"stub".into(),..AiCfg::default()};let(vision,trace)=block_on(observe(&image,&cfg));let seen=server.join().unwrap();assert_eq!(seen.len(),2);assert_eq!(trace.max_attempts,2);assert_eq!(trace.replies.len(),2);assert_eq!(trace.facts,Some(second));assert_eq!(trace.schema.as_ref().unwrap().name,"source_figure_observation_v4");
             for(_,request)in &seen{let body:Value=serde_json::from_str(request).unwrap();assert_eq!(body["max_tokens"],8192);assert!(request.contains("x_negative and y_negative endpoints there are line"));}
-            if hold {assert_eq!(trace.error_stage,Some(ObservationErrorStage::UncertainSource));assert!(trace.error.as_deref().unwrap().contains("axis_overhang.y_positive"));assert_eq!(trace.replies[1]["attempt_kind"],"source_reinspection");}
+            // Still uncertain after the reinspection: recorded, but the redraw goes ahead.
+            if hold {assert!(trace.error.is_none()&&trace.error_stage.is_none());assert!(trace.replies[1]["source_plot_unresolved"].as_str().unwrap().contains("axis_overhang.y_positive"));assert_eq!(trace.replies[0]["error_stage"],json!(ObservationErrorStage::UncertainSource));assert_eq!(trace.replies[1]["attempt_kind"],"source_reinspection");}
             else {assert!(trace.error.is_none());assert_eq!(trace.replies[1]["attempt_kind"],"format_repair");assert!(!seen[1].1.contains("PLANTED_PRIOR_ORIGIN_READING_63"));assert_input_images(&seen[1].1,&trace.replies[1],&image,&vision,false);}
         }
     }
@@ -831,15 +841,10 @@ mod tests {
             assert_eq!(seen.len(), 2);
             assert_eq!(trace.max_attempts, 2);
             assert_eq!(trace.facts, Some(second));
-            assert_eq!(
-                trace.error_stage,
-                if reaffirm {
-                    Some(ObservationErrorStage::UncertainSource)
-                } else {
-                    None
-                }
-            );
+            // A reaffirmed plot uncertainty is recorded on the reply and no longer holds the redraw.
+            assert_eq!(trace.error_stage, None);
             let r = &trace.replies[1];
+            assert_eq!(r.get("source_plot_unresolved").is_some(), reaffirm);
             assert_eq!(r["attempt_kind"], "source_reinspection");
             assert_eq!(
                 r["requested_focus_box_xyxy_1000"],
@@ -907,10 +912,9 @@ mod tests {
         let (vision, trace) = block_on(observe(&source, &cfg));
         let seen = server.join().unwrap();
         assert_eq!(seen.len(), 2);
-        assert_eq!(
-            trace.error_stage,
-            Some(ObservationErrorStage::UncertainSource)
-        );
+        // The last of the two calls: a plot uncertainty is recorded and the redraw goes ahead.
+        assert_eq!(trace.error_stage, None);
+        assert!(trace.replies[1].get("source_plot_unresolved").is_some());
         assert_eq!(trace.replies[1]["attempt_kind"], "format_repair");
         for (request, reply) in seen.iter().zip(&trace.replies) {
             assert_input_images(&request.1, reply, &source, &vision, false);

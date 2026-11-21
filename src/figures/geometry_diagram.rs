@@ -149,6 +149,29 @@ struct Label {
     color: String,
     #[serde(default = "font_size")]
     size: f64,
+    /// Degrees clockwise about the anchor; -90 reads bottom to top, as a printed y-axis title.
+    #[serde(default)]
+    rotate: f64,
+    #[serde(default)]
+    weight: FontWeight,
+    #[serde(default)]
+    style: FontStyle,
+}
+
+#[derive(Clone, Copy, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum FontWeight {
+    #[default]
+    Normal,
+    Bold,
+}
+
+#[derive(Clone, Copy, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum FontStyle {
+    #[default]
+    Normal,
+    Italic,
 }
 
 #[derive(Clone, Copy, Default, Deserialize)]
@@ -280,7 +303,7 @@ fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::float("width", "Canvas width", 100.0, 1600.0, 1.0, 390.0),
         ParamDef::float("height", "Canvas height", 100.0, 1600.0, 1.0, 285.0),
-        ParamDef::long("diagram", "Diagram JSON", EXAMPLE).hint("JSON object, or its JSON text. Coordinates are canvas pixels, x right, y down. nodes: {A:[x,y],B:[x,y]}. segments: [{from:'A',to:'B',arrows:'none|start|end|both',style:'solid|dashed|dotted',color:'#rrggbb',width:1.5,ticks:0,tick_color:'#rrggbb',parallel_marks:0,parallel_color:'#rrggbb',label:'',label_offset:-12}]. ticks and parallel_marks are independently the exact authored count 0..3; their optional colors default to the edge color. parallel_marks draws middle chevrons pointing from from toward to; it does not add endpoint arrows or infer that any other edge is parallel. Use arrows only for visibly arrowed endpoints. lines: [{id:'axis',through:'O',toward:'T',back:100,forward:100,arrows:'none|start|end|both',style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]. through/toward must be literal base nodes. back/forward are explicit pixel lengths in opposite directions; ports axis:back and axis:forward may be used as node names in angles/labels/segments. Lines sharing through:'O' are exactly concurrent. Use this primitive for source straight lines/opposite rays; never approximate a shared vertex with independent crossing endpoints. angles: [{vertex:'B',from:'A',to:'C',arcs:0,right:false,reflex:false,radius:18,color:'#rrggbb',label:'',label_color:'#rrggbb',label_radius:0,label_size:18}]; the minor sector is used unless reflex:true; arcs is independently the exact count 0..3 (0 draws no arc). Put plain angle text in label with arcs:0 and the actual two named boundary legs, rather than unbound absolute text. label_radius is a preferred minimum; the entire label is placed within that sector clear of its rays/canvas, or the tool returns an error. Right squares use the explicit from/to legs; no angle measure is inferred. Count source marks at each named corner individually; no polygon regularity fills omitted marks. labels: [{text:'x + 3',node:'A',offset:[dx,dy]}] or {text:'...',at:[x,y],color:'#rrggbb',size:18}. dimensions: [{from:'A',to:'B',label:'?',offset:25,ends:'arrows|ticks|arrows_and_ticks',color:'#0000ff',label_color:'#000000',label_offset:-12}]. points: [{node:'A',radius:3,color:'#rrggbb'}]. ellipses: [{center:'O',rx:80,ry:20,start:0,end:360,style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]; start/end are degrees y-up, full or partial ellipse. Optional id:'rim' exposes rim:center/right/top/left/bottom/start/end as exact node names. Optional ports:{tip:25} exposes rim:tip at that explicitly supplied projected-ellipse parameter angle (not a physical angle or a solved measure). Named ellipses need a literal base center node and ids distinct from line ids. Use these ports in segments only when the source visibly connects center/rim; no radius, dot, mark or attachment is drawn automatically, and existing independent endpoints are never snapped. paths: [{nodes:['A','control','B'],kind:'polyline|quadratic|cubic',arrows:'none|start|end|both',style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]; quadratic has 3 nodes, cubic 4. Projected solids use explicit visible/hidden edges, ellipses and colored source annotations; do not require a 3D solver. Draw only visible source marks and labels; nodes alone have no dot or name. Omit optional arrays. JSON requires double quotes. Unmarked angle-text example: {\"nodes\":{\"O\":[80,180],\"A\":[80,30],\"B\":[250,180]},\"segments\":[{\"from\":\"O\",\"to\":\"A\"},{\"from\":\"O\",\"to\":\"B\"}],\"angles\":[{\"vertex\":\"O\",\"from\":\"A\",\"to\":\"B\",\"label\":\"b\",\"arcs\":0}]}. This draws b in its named sector and NO arc; the lack of a source arc is not a reason to use free text. Source-first annotation check: enumerate every visible corner/edge mark and its count, each point joined to a guide, each leader target, and visible/hidden edge roles. Do not fill missing marks from a regular-looking shape or treat a nearby point as joined. A black edge with two red ticks is explicit: {\"from\":\"A\",\"to\":\"B\",\"color\":\"#000000\",\"ticks\":2,\"tick_color\":\"#ff0000\"}. A middle red parallel chevron is {\"from\":\"A\",\"to\":\"B\",\"parallel_marks\":1,\"parallel_color\":\"#ff0000\",\"arrows\":\"none\"}. Keep these distinct from endpoint arrows. Exact leader-target example: {\"nodes\":{\"A\":[60,70],\"M\":[140,110],\"B\":[220,150],\"S\":[240,230],\"C\":[120,210]},\"segments\":[{\"from\":\"A\",\"to\":\"M\"},{\"from\":\"M\",\"to\":\"B\"}],\"paths\":[{\"nodes\":[\"S\",\"C\",\"M\"],\"kind\":\"quadratic\",\"arrows\":\"end\"}]}. The explicit guide and leader share M; M alone draws no dot. Use the actual source target, not a nearby independent endpoint; no snapping or missing target is inferred. For a visibly joined T-junction, explicitly split the host at one shared node: nodes K:[20,80], B:[120,80], L:[220,80], C:[120,180], with segments K-to-B, B-to-L and B-to-C. Keep K/B/L collinear and reuse B; an independent B near an unsplit K-to-L segment does not declare a join. Apply this only when the source visibly joins; preserve intentional nonjoins. No node or coordinate is autogenerated."),
+        ParamDef::long("diagram", "Diagram JSON", EXAMPLE).hint("JSON object, or its JSON text. Coordinates are canvas pixels, x right, y down. nodes: {A:[x,y],B:[x,y]}. segments: [{from:'A',to:'B',arrows:'none|start|end|both',style:'solid|dashed|dotted',color:'#rrggbb',width:1.5,ticks:0,tick_color:'#rrggbb',parallel_marks:0,parallel_color:'#rrggbb',label:'',label_offset:-12}]. ticks and parallel_marks are independently the exact authored count 0..3; their optional colors default to the edge color. parallel_marks draws middle chevrons pointing from from toward to; it does not add endpoint arrows or infer that any other edge is parallel. Use arrows only for visibly arrowed endpoints. lines: [{id:'axis',through:'O',toward:'T',back:100,forward:100,arrows:'none|start|end|both',style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]. through/toward must be literal base nodes. back/forward are explicit pixel lengths in opposite directions; ports axis:back and axis:forward may be used as node names in angles/labels/segments. Lines sharing through:'O' are exactly concurrent. Use this primitive for source straight lines/opposite rays; never approximate a shared vertex with independent crossing endpoints. angles: [{vertex:'B',from:'A',to:'C',arcs:0,right:false,reflex:false,radius:18,color:'#rrggbb',label:'',label_color:'#rrggbb',label_radius:0,label_size:18}]; the minor sector is used unless reflex:true; arcs is independently the exact count 0..3 (0 draws no arc). Put plain angle text in label with arcs:0 and the actual two named boundary legs, rather than unbound absolute text. label_radius is a preferred minimum; the entire label is placed within that sector clear of its rays/canvas, or the tool returns an error. Right squares use the explicit from/to legs; no angle measure is inferred. Count source marks at each named corner individually; no polygon regularity fills omitted marks. labels: [{text:'x + 3',node:'A',offset:[dx,dy]}] or {text:'...',at:[x,y],color:'#rrggbb',size:18,rotate:0,weight:'normal|bold',style:'normal|italic'}. rotate turns the text that many degrees clockwise about its anchor: a printed y-axis title read bottom to top is rotate:-90, one continuous label, never letters stacked one per line. Match printed bold titles with weight:'bold' and italic variable letters with style:'italic'. dimensions: [{from:'A',to:'B',label:'?',offset:25,ends:'arrows|ticks|arrows_and_ticks',color:'#0000ff',label_color:'#000000',label_offset:-12}]. points: [{node:'A',radius:3,color:'#rrggbb'}]. ellipses: [{center:'O',rx:80,ry:20,start:0,end:360,style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]; start/end are degrees y-up, full or partial ellipse. Optional id:'rim' exposes rim:center/right/top/left/bottom/start/end as exact node names. Optional ports:{tip:25} exposes rim:tip at that explicitly supplied projected-ellipse parameter angle (not a physical angle or a solved measure). Named ellipses need a literal base center node and ids distinct from line ids. Use these ports in segments only when the source visibly connects center/rim; no radius, dot, mark or attachment is drawn automatically, and existing independent endpoints are never snapped. paths: [{nodes:['A','control','B'],kind:'polyline|quadratic|cubic',arrows:'none|start|end|both',style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]; quadratic has 3 nodes, cubic 4. Projected solids use explicit visible/hidden edges, ellipses and colored source annotations; do not require a 3D solver. Draw only visible source marks and labels; nodes alone have no dot or name. Omit optional arrays. JSON requires double quotes. Unmarked angle-text example: {\"nodes\":{\"O\":[80,180],\"A\":[80,30],\"B\":[250,180]},\"segments\":[{\"from\":\"O\",\"to\":\"A\"},{\"from\":\"O\",\"to\":\"B\"}],\"angles\":[{\"vertex\":\"O\",\"from\":\"A\",\"to\":\"B\",\"label\":\"b\",\"arcs\":0}]}. This draws b in its named sector and NO arc; the lack of a source arc is not a reason to use free text. Source-first annotation check: enumerate every visible corner/edge mark and its count, each point joined to a guide, each leader target, and visible/hidden edge roles. Do not fill missing marks from a regular-looking shape or treat a nearby point as joined. A black edge with two red ticks is explicit: {\"from\":\"A\",\"to\":\"B\",\"color\":\"#000000\",\"ticks\":2,\"tick_color\":\"#ff0000\"}. A middle red parallel chevron is {\"from\":\"A\",\"to\":\"B\",\"parallel_marks\":1,\"parallel_color\":\"#ff0000\",\"arrows\":\"none\"}. Keep these distinct from endpoint arrows. Exact leader-target example: {\"nodes\":{\"A\":[60,70],\"M\":[140,110],\"B\":[220,150],\"S\":[240,230],\"C\":[120,210]},\"segments\":[{\"from\":\"A\",\"to\":\"M\"},{\"from\":\"M\",\"to\":\"B\"}],\"paths\":[{\"nodes\":[\"S\",\"C\",\"M\"],\"kind\":\"quadratic\",\"arrows\":\"end\"}]}. The explicit guide and leader share M; M alone draws no dot. Use the actual source target, not a nearby independent endpoint; no snapping or missing target is inferred. For a visibly joined T-junction, explicitly split the host at one shared node: nodes K:[20,80], B:[120,80], L:[220,80], C:[120,180], with segments K-to-B, B-to-L and B-to-C. Keep K/B/L collinear and reuse B; an independent B near an unsplit K-to-L segment does not declare a join. Apply this only when the source visibly joins; preserve intentional nonjoins. No node or coordinate is autogenerated."),
         ParamDef::choice("font", "Label font", &["Serif", "Sans"], "Serif"),
     ]
 }
@@ -488,6 +511,7 @@ impl Diagram {
             if l.at.is_some_and(|p| !finite(p))
                 || !finite(l.offset)
                 || !(4.0..=80.0).contains(&l.size)
+                || !(-360.0..=360.0).contains(&l.rotate)
             {
                 return Err("Invalid label position or size".into());
             }
@@ -581,6 +605,7 @@ pub fn hidden_minus_signs(p: &Params) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     for l in &g.labels {
         let Some(first) = l.text.trim_start().chars().next().filter(|c| *c == '-' || *c == '\u{2212}') else { continue };
+        if l.rotate != 0.0 { continue; }
         let base = match &l.node {
             Some(n) => g.node(n)?,
             None => l.at.map(|q| (q[0], q[1])).unwrap_or_default(),
@@ -691,6 +716,18 @@ fn label(d: &mut Doc, p: &Params, at: (f64, f64), size: f64, t: &str, c: &str) {
         "Liberation Serif, DejaVu Serif, serif"
     };
     d.raw(&format!(r#"<text x="{:.2}" y="{:.2}" font-family="{font}" font-size="{size}" text-anchor="middle" fill="{c}">{}</text>"#,at.0,at.1,svg::esc(t)));
+}
+/// A free label with a turn, bold or italic; plain labels keep [`label`]'s exact output.
+fn styled_label(d: &mut Doc, p: &Params, at: (f64, f64), l: &Label) {
+    if l.text.is_empty() {
+        return;
+    }
+    let font = if p.s("font") == "Sans" { "Liberation Sans, DejaVu Sans, sans-serif" } else { "Liberation Serif, DejaVu Serif, serif" };
+    let mut extra = String::new();
+    if l.weight == FontWeight::Bold { extra.push_str(r#" font-weight="bold""#); }
+    if l.style == FontStyle::Italic { extra.push_str(r#" font-style="italic""#); }
+    if l.rotate != 0.0 { extra.push_str(&format!(r#" transform="rotate({:.2} {:.2} {:.2})""#, l.rotate, at.0, at.1)); }
+    d.raw(&format!(r#"<text x="{:.2}" y="{:.2}" font-family="{font}" font-size="{}" text-anchor="middle" fill="{}"{extra}>{}</text>"#, at.0, at.1, l.size, l.color, svg::esc(&l.text)));
 }
 fn segment(
     d: &mut Doc,
@@ -998,14 +1035,12 @@ fn render(p: &Params) -> String {
                 let q = l.at.unwrap();
                 (q[0], q[1])
             });
-        label(
-            &mut d,
-            p,
-            semantics::keep_on_canvas((q.0 + l.offset[0], q.1 + l.offset[1]), &l.text, l.size, p.f("width"), p.f("height")),
-            l.size,
-            &l.text,
-            &l.color,
-        );
+        let at = semantics::keep_turned_on_canvas((q.0 + l.offset[0], q.1 + l.offset[1]), &l.text, l.size, l.rotate, p.f("width"), p.f("height"));
+        if l.rotate == 0.0 && l.weight == FontWeight::Normal && l.style == FontStyle::Normal {
+            label(&mut d, p, at, l.size, &l.text, &l.color);
+        } else {
+            styled_label(&mut d, p, at, l);
+        }
     }
     d.finish()
 }
@@ -1157,6 +1192,22 @@ mod tests {
             assert!(validate(&p).is_err());
             assert!(!s.contains("data-segment="));
         }
+    }
+    #[test]
+    fn a_label_can_turn_and_be_bold_or_italic_and_plain_labels_are_unchanged() {
+        // Holdout v12: printed y-axis titles read bottom to top, bold titles, italic axis letters.
+        let (_, s) = draw(serde_json::json!({"labels":[{"at":[20,150],"text":"Number of Pictures Taken","rotate":-90,"weight":"bold"},{"at":[200,20],"text":"x","style":"italic"}]}));
+        assert!(s.contains(r#"font-weight="bold" transform="rotate(-90.00 "#), "{s}");
+        assert!(s.contains(r#"font-style="italic""#));
+        assert_eq!(s.matches("Number of Pictures Taken").count(), 1, "one continuous label");
+        // A long turned title near the left edge stays where it was put: its turned box is narrow.
+        assert!(s.contains(r#"x="20.00" y="150.00""#), "{s}");
+        let (_, plain) = draw(serde_json::json!({"labels":[{"at":[50,50],"text":"A"}]}));
+        assert!(!plain.contains("transform=\"rotate") && !plain.contains("font-weight"));
+        let d = def();
+        let mut p = figures::start_params(&d);
+        p.0.insert("diagram".into(), Value::S(serde_json::json!({"labels":[{"at":[5,5],"text":"A","rotate":720}]}).to_string()));
+        assert!(validate(&p).unwrap_err().contains("Invalid label position or size"));
     }
     #[test]
     fn text_is_escaped_and_default_is_rasterizable() {

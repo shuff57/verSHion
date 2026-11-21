@@ -219,11 +219,30 @@ pub(super) fn text_box(at: (f64, f64), text: &str, size: f64) -> [f64; 4] {
     let hw = crate::figures::circle::tw(text, size, false) / 2.0 + 0.7;
     [at.0 - hw, at.1 - size * 0.85, at.0 + hw, at.1 + size * 0.22]
 }
+/// [`text_box`] for text turned `rotate` degrees clockwise about its anchor: the box around the
+/// turned rectangle. With 0 it equals `text_box`.
+pub(super) fn turned_box(at: (f64, f64), text: &str, size: f64, rotate: f64) -> [f64; 4] {
+    let b = text_box(at, text, size);
+    if rotate == 0.0 { return b; }
+    let (s, c) = rotate.to_radians().sin_cos();
+    let corners = [(b[0], b[1]), (b[2], b[1]), (b[2], b[3]), (b[0], b[3])].map(|(x, y)| {
+        let (dx, dy) = (x - at.0, y - at.1);
+        (at.0 + dx * c - dy * s, at.1 + dx * s + dy * c)
+    });
+    let xs = corners.map(|p| p.0);
+    let ys = corners.map(|p| p.1);
+    [xs.iter().cloned().fold(f64::INFINITY, f64::min), ys.iter().cloned().fold(f64::INFINITY, f64::min),
+     xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max), ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max)]
+}
 /// Where a free label is drawn: its authored position, moved inward only by the amount its
 /// conservative text box would leave the canvas (2 px clear). A label wider or taller than the
 /// canvas keeps its authored position on that axis. A label already on the canvas is unchanged.
 pub(super) fn keep_on_canvas(at: (f64, f64), text: &str, size: f64, width: f64, height: f64) -> (f64, f64) {
-    let b = text_box(at, text, size);
+    keep_turned_on_canvas(at, text, size, 0.0, width, height)
+}
+/// [`keep_on_canvas`] for text turned `rotate` degrees.
+pub(super) fn keep_turned_on_canvas(at: (f64, f64), text: &str, size: f64, rotate: f64, width: f64, height: f64) -> (f64, f64) {
+    let b = turned_box(at, text, size, rotate);
     let shift = |lo: f64, hi: f64, max: f64| -> f64 {
         const CLEAR: f64 = 2.0;
         if hi - lo > max - 2.0 * CLEAR {
@@ -334,7 +353,7 @@ fn free_ends(g: &Diagram, edges: &[Edge]) -> Vec<String> {
         let near_label = g.labels.iter().any(|l| {
             let anchor = l.node.as_ref().and_then(|n| g.node(n).ok()).or(l.at.map(|a| (a[0], a[1])));
             anchor.is_some_and(|a| {
-                let b = text_box((a.0 + l.offset[0], a.1 + l.offset[1]), &l.text, l.size);
+                let b = turned_box((a.0 + l.offset[0], a.1 + l.offset[1]), &l.text, l.size, l.rotate);
                 q.0 >= b[0] - 12.0 && q.0 <= b[2] + 12.0 && q.1 >= b[1] - 12.0 && q.1 <= b[3] + 12.0
             })
         });
@@ -610,14 +629,14 @@ pub(super) fn report(g: &Diagram, p: &Params) -> SemanticReport {
                 (q[0], q[1])
             });
         let authored = (q.0 + l.offset[0], q.1 + l.offset[1]);
-        let at = keep_on_canvas(authored, &l.text, l.size, p.f("width"), p.f("height"));
+        let at = keep_turned_on_canvas(authored, &l.text, l.size, l.rotate, p.f("width"), p.f("height"));
         if at != authored {
             warn(
                 &mut warnings,
                 format!("Free text {:?} would leave the canvas, so it is drawn {:.1} px right and {:.1} px down from its authored position to stay whole. Check that it still sits where the source places it.", l.text, at.0 - authored.0, at.1 - authored.1),
             );
         }
-        let b = text_box(at, &l.text, l.size);
+        let b = turned_box(at, &l.text, l.size, l.rotate);
         if let Some(e) = edges
             .iter()
             .find(|e| segment_meets_box(e.a, e.b, b, e.width / 2.0))

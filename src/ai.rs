@@ -1817,14 +1817,70 @@ pub async fn convert_document_async(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, 
     out
 }
 
-/// Join content that continues a question begun on the previous page (the reply's `continued`
-/// item, saved first on `next`) onto that page's last question, so a problem split by a page break
-/// is one bank item with its number, data and task. Returns whether it joined. A join that would
-/// drop a picture or answers is not made; the continuation then stays saved and flagged.
+/// Link content that continues a question begun on the previous page (the reply's `continued`
+/// items, saved first on `next`) to that page's last question. One continuation is joined onto it,
+/// so a problem split by a page break is one bank item with its number, data and task. When a join
+/// would drop a picture or answers, or the continuation was split into one question per figure,
+/// each continuation question instead takes the host's number and lead text, like a split part.
+/// Returns whether anything was linked.
 fn join_page_break(prev: &mut Converted, next: &mut Converted, prev_page: usize) -> bool {
+    let mut conts: Vec<(usize, usize)> = next.items.iter().enumerate()
+        .filter(|(_, i)| i.status == "saved_continued")
+        .filter_map(|(slot, i)| i.question_index.map(|qi| (qi, slot)))
+        .collect();
+    conts.sort();
+    // Only content leading the page continues the previous page's last question.
+    let leading = conts.iter().enumerate().take_while(|(k, (qi, _))| k == qi).count();
+    conts.truncate(leading);
+    if conts.is_empty() || prev.doc.questions.is_empty() { return false; }
+    if conts.len() == 1 && merge_continuation(prev, next, conts[0].1, prev_page) { return true; }
+    adopt_continuations(prev, next, &conts, prev_page)
+}
+
+/// Each continuation question keeps its own picture and takes the host's printed number and its
+/// lead text (the shared start of a split group, else the host's stem).
+fn adopt_continuations(prev: &mut Converted, next: &mut Converted, conts: &[(usize, usize)], prev_page: usize) -> bool {
+    let target = prev.doc.questions.len() - 1;
+    let Some(number) = prev.items.iter().find(|i| i.question_index == Some(target)).and_then(|i| i.number) else { return false };
+    let group: Vec<&str> = prev.items.iter()
+        .filter(|i| i.number == Some(number))
+        .filter_map(|i| i.question_index.and_then(|qi| prev.doc.questions.get(qi)).map(|q| q.stem.as_str()))
+        .collect();
+    let lead = if group.len() > 1 { shared_lead(&group) } else { prev.doc.questions[target].stem.trim().to_string() };
+    for &(qi, slot) in conts {
+        let item = &mut next.items[slot];
+        let suffix: String = item.label.as_deref().unwrap_or("").trim().trim_matches(['(', ')', '[', ']']).trim()
+            .get("continued".len()..).unwrap_or("").trim().trim_matches(['(', ')', '.', ' ']).to_string();
+        let label = if suffix.is_empty() { format!("{number} (continued)") } else { format!("{number}{suffix}") };
+        item.number = Some(number);
+        item.label = Some(label.clone());
+        item.status = "saved".into();
+        item.reason = Some(format!("continues question {number} from page {prev_page}; saved as its own question with that number and its lead text"));
+        let q = &mut next.doc.questions[qi];
+        if !lead.is_empty() && !q.stem.trim_start().starts_with(&lead) { q.stem = format!("{lead}\n\n{}", q.stem.trim_start()).trim_end().to_string(); }
+        q.topics.retain(|t| t != crate::ditto::CONTINUED_TOPIC);
+        next.warnings.push(format!("Question {label}: continues question {number} from page {prev_page}; saved with that number and its lead text."));
+    }
+    next.warnings.retain(|w| !w.contains("continues a question begun on an earlier page"));
+    true
+}
+
+/// The text a split group's questions share before their own part, cut back to a line or sentence end.
+fn shared_lead(stems: &[&str]) -> String {
+    let first = stems[0];
+    let mut end = first.len();
+    for s in &stems[1..] {
+        end = end.min(first.char_indices().zip(s.chars()).take_while(|((_, a), b)| a == b).last().map(|((i, a), _)| i + a.len_utf8()).unwrap_or(0));
+    }
+    let common = &first[..end];
+    let cut = common.rfind('\n').or_else(|| common.rfind(". ").map(|i| i + 1)).unwrap_or(0);
+    common[..cut].trim().to_string()
+}
+
+/// [`join_page_break`]'s join: the continuation at `slot` appended to the previous page's last question.
+fn merge_continuation(prev: &mut Converted, next: &mut Converted, slot: usize, prev_page: usize) -> bool {
     use crate::model::{Kind, PartKind};
-    let Some(slot) = next.items.iter().position(|i| i.question_index == Some(0) && i.status == "saved_continued") else { return false };
-    let Some(target) = prev.doc.questions.len().checked_sub(1) else { return false };
+    let target = prev.doc.questions.len() - 1;
     let cont = &next.doc.questions[0];
     let host = &prev.doc.questions[target];
     let choice_pictures = |q: &crate::model::Question| match &q.kind {
@@ -2040,18 +2096,51 @@ pub(crate) mod tests {
         assert!(join_page_break(&mut prev, &mut next, 1));
         let Kind::Multipart { parts } = &prev.doc.questions[0].kind else { panic!() };
         assert_eq!(parts[1].stem, "b) Show that the probability is one half.");
-        // Both halves carry a picture: no join, the continuation stays flagged.
-        let mut host = page_question("See the figure.", short());
+        // Both halves carry a picture (holdout v12, SCSA #6): no join; the continuation keeps its
+        // picture and takes the host's number and lead text.
+        let mut host = page_question("The graph is shown below.", short());
         host.image = Some(crate::model::ImageRef::default());
-        let mut cont = page_question("more", short());
+        let mut cont = page_question("(b) Use the second graph.", short());
         cont.image = Some(crate::model::ImageRef::default());
-        let mut prev = page_of(vec![host], vec![saved(0, "2", Some(2), "saved", 0)]);
+        cont.topics.push(crate::ditto::CONTINUED_TOPIC.into());
+        let mut prev = page_of(vec![host], vec![saved(0, "6", Some(6), "saved", 0)]);
         let mut next = page_of(vec![cont], vec![saved(0, "continued", None, "saved_continued", 0)]);
-        assert!(!join_page_break(&mut prev, &mut next, 1));
-        assert_eq!((next.doc.questions.len(), next.items[0].status.as_str()), (1, "saved_continued"));
+        assert!(join_page_break(&mut prev, &mut next, 1));
+        assert_eq!(prev.doc.questions[0].stem, "The graph is shown below.");
+        assert_eq!(next.doc.questions[0].stem, "The graph is shown below.\n\n(b) Use the second graph.");
+        assert!(next.doc.questions[0].image.is_some() && next.doc.questions[0].topics.is_empty());
+        let item = &next.items[0];
+        assert_eq!((item.number, item.label.as_deref(), item.status.as_str(), item.question_index), (Some(6), Some("6 (continued)"), "saved", Some(0)));
         // No continuation on the next page: nothing changes.
         let mut next = page_of(vec![page_question("Three.", short())], vec![saved(0, "3", Some(3), "saved", 0)]);
         assert!(!join_page_break(&mut prev, &mut next, 1));
+        // A host with no printed number: the continuation stays flagged.
+        let mut prev = page_of(vec![page_question("Intro.", short())], vec![saved(0, "", None, "saved", 0)]);
+        let mut next = page_of(vec![page_question("more", Kind::Mc { answers: vec![crate::model::Answer::new("x", true)] })], vec![saved(0, "continued", None, "saved_continued", 0)]);
+        next.doc.questions[0].image = Some(crate::model::ImageRef::default());
+        prev.doc.questions[0].image = Some(crate::model::ImageRef::default());
+        assert!(!join_page_break(&mut prev, &mut next, 1));
+        assert_eq!(next.items[0].status, "saved_continued");
+    }
+
+    #[test]
+    fn a_continued_problem_split_per_figure_takes_the_host_number_and_shared_lead() {
+        // Holdout v12, Utah grade 8: 1a-1d (one grid each) on page 1, parts e-h on page 2.
+        let lead = "Solve the system of linear equations graphically.\nIf there is one solution, verify it.";
+        let pictured = |stem: String| { let mut q = page_question(&stem, short()); q.image = Some(crate::model::ImageRef::default()); q };
+        let mut prev = page_of(["a", "b", "c", "d"].iter().map(|p| pictured(format!("{lead}\n{p}. y = x"))).collect(),
+            ["1a", "1b", "1c", "1d"].iter().enumerate().map(|(i, l)| saved(i, l, Some(1), "saved", i)).collect());
+        let mut next = page_of(["e", "f", "g", "h"].iter().map(|p| pictured(format!("{p}. y = 2x"))).collect(),
+            ["e", "f", "g", "h"].iter().enumerate().map(|(i, p)| saved(i, &format!("continued{p}"), None, "saved_continued", i)).collect());
+        next.items.push(saved(4, "2", Some(2), "saved", 4));
+        next.doc.questions.push(page_question("Two.", short()));
+        assert!(join_page_break(&mut prev, &mut next, 1));
+        assert_eq!(next.items.iter().map(|i| i.label.clone().unwrap()).collect::<Vec<_>>(), ["1e", "1f", "1g", "1h", "2"]);
+        assert!(next.items[..4].iter().all(|i| i.number == Some(1) && i.status == "saved"));
+        assert_eq!(next.doc.questions[0].stem, format!("{lead}\n\ne. y = 2x"));
+        assert_eq!(next.doc.questions[4].stem, "Two.");
+        assert_eq!(shared_lead(&["Find it.\na) one", "Find it.\nb) two"]), "Find it.");
+        assert_eq!(shared_lead(&["a) one", "b) two"]), "");
     }
 
     fn settings(provider: &str, model: &str, base: &str) -> Settings {

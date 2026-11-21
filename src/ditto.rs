@@ -538,7 +538,30 @@ fn restates_question(direction: &str, question: &Value) -> bool {
     }
     let have:std::collections::HashSet<String>=prose_words(&text).into_iter().collect();
     let mut want=prose_words(direction);want.sort();want.dedup();
-    want.len()>=3 && want.iter().filter(|w|have.contains(*w)).count()*4>=want.len()*3
+    if want.len()>=3 && want.iter().filter(|w|have.contains(*w)).count()*4>=want.len()*3 {return true;}
+    // Mostly symbols ("show that F(x) F(y) = F(x + y)"): the whole direction printed inside the stem.
+    let want=compact_text(direction);
+    want.chars().count()>=10 && compact_text(&text).contains(&want)
+}
+
+/// Letters and digits only, lower case, with LaTeX environment wrappers and \left/\right dropped
+/// and Greek letters spelled out, so "$\begin{bmatrix}\cos\alpha\end{bmatrix}$" and "[[cos α]]" compare equal.
+fn compact_text(s: &str) -> String {
+    const GREEK: [(char,&str);24]=[('α',"alpha"),('β',"beta"),('γ',"gamma"),('δ',"delta"),('ε',"epsilon"),('ζ',"zeta"),('η',"eta"),('θ',"theta"),('ι',"iota"),('κ',"kappa"),('λ',"lambda"),('μ',"mu"),('ν',"nu"),('ξ',"xi"),('ο',"omicron"),('π',"pi"),('ρ',"rho"),('σ',"sigma"),('τ',"tau"),('υ',"upsilon"),('φ',"phi"),('χ',"chi"),('ψ',"psi"),('ω',"omega")];
+    let mut t=s.to_string();
+    for wrapper in ["\\begin{","\\end{"] {
+        while let Some(at)=t.find(wrapper) {
+            let close=t[at..].find('}').map(|c|at+c+1).unwrap_or(t.len());
+            t.replace_range(at..close,"");
+        }
+    }
+    let t=t.replace("\\left","").replace("\\right","");
+    let mut out=String::new();
+    for c in t.chars().flat_map(char::to_lowercase) {
+        if let Some((_,name))=GREEK.iter().find(|(g,_)|*g==c) {out.push_str(name);}
+        else if c.is_alphanumeric() {out.push(c);}
+    }
+    out
 }
 
 /// Application-owned merge: a reviewed item may select only one direction already printed
@@ -737,7 +760,9 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                 if ownership_review.is_some() {
                     q.topics.push("needs review: source figure ownership".into());
                 }
-                let continued = continued_label(info.label.as_deref());
+                // A continued problem split per figure keeps "continued" as its parent label ("continuede").
+                let continued = continued_label(info.label.as_deref())
+                    || continued_label(raw[i].pointer("/splitFrom/label").and_then(Value::as_str));
                 if continued {
                     let reason = "continues a question begun on an earlier page; its number and task are not printed here, so review it with that page".to_string();
                     warnings.push(format!("Question {label}: {reason}."));
@@ -1658,6 +1683,17 @@ mod tests {
                 "positions":[{"question":"q1","section":0},{"question":"q2","section":1}]}]})
     }
 
+    #[test]
+    fn a_mostly_symbolic_direction_printed_inside_the_stem_is_a_restatement() {
+        // Holdout v12, NCERT matrices: the reader returned each question's own task as its direction.
+        let q=|stem:&str|serde_json::json!({"stem":stem});
+        assert!(restates_question("show that F(x) F(y) = F(x + y).",&q("If $F(x) = \\begin{bmatrix}\\cos x&-\\sin x\\\\\\sin x&\\cos x\\end{bmatrix}$, show that $F(x) F(y) = F(x + y)$.")));
+        assert!(restates_question("find k so that A² = kA – 2I",&q("If $A = \\begin{bmatrix}3&-2\\\\4&-2\\end{bmatrix}$, find $k$ so that A² = $k$A – 2I")));
+        assert!(restates_question("show that I + A = (I – A) [[cos α, –sin α],[sin α, cos α]]",&q("If A is given, show that\nI + A = (I – A) $\\begin{bmatrix}\\cos\\alpha&-\\sin\\alpha\\\\\\sin\\alpha&\\cos\\alpha\\end{bmatrix}$")));
+        // A real group task is not inside the stem, and a short word is never enough on its own.
+        assert!(!restates_question("Find the product AB.",&q("$A = \\begin{bmatrix}1&2\\end{bmatrix}$")));
+        assert!(!restates_question("Find x",&q("Find x + y when x = 2.")));
+    }
     #[test]
     fn inline_lettered_parts_are_kept_without_a_shared_stem_or_a_restated_copy() {
         let got = import_text(&inline_parts_package().to_string(),None,1,"worksheet").unwrap();
