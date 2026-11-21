@@ -371,6 +371,37 @@ fn binding_conflicts(r: &Rendered, reference: Option<&[u8]>) -> Vec<String> {
     figures::geometry_diagram::hidden_minus_signs(&p).unwrap_or_default()
 }
 
+/// A geometry diagram whose negative labels have their minus sign drawn on a line, with those
+/// labels given a white backing and rendered again (holdout v14 and R36: the model could not
+/// move a "-1" off its grid line within its turns, so a correct graph stayed a crop).
+fn with_clear_minus_signs(r: Rendered, has_reference: bool) -> (Rendered, Vec<String>) {
+    if r.spec.id != "geometry-diagram" {
+        return (r, Vec::new());
+    }
+    let p = figures::params_from_json(&figures::geometry_diagram::def(), &serde_json::to_value(&r.spec.params).unwrap_or_default());
+    let hidden = figures::geometry_diagram::hidden_minus_labels(&p).unwrap_or_default();
+    if hidden.is_empty() {
+        return (r, Vec::new());
+    }
+    let Some(raw) = r.spec.params.get("diagram") else { return (r, Vec::new()) };
+    let as_text = raw.is_string();
+    let Some(mut diagram) = (match raw { Json::String(s) => serde_json::from_str::<Json>(s).ok(), other => Some(other.clone()) }) else { return (r, Vec::new()) };
+    let Some(labels) = diagram.get_mut("labels").and_then(Json::as_array_mut) else { return (r, Vec::new()) };
+    let mut notes = Vec::new();
+    for (i, _) in &hidden {
+        if let Some(label) = labels.get_mut(*i) {
+            label["halo"] = Json::Bool(true);
+            notes.push(format!("Label {} sits on a line; drawn with a white backing so its minus sign shows.", label["text"]));
+        }
+    }
+    let mut params: serde_json::Map<String, Json> = r.spec.params.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    params.insert("diagram".into(), if as_text { Json::String(diagram.to_string()) } else { diagram });
+    match render_context("geometry-diagram", &Json::Object(params), has_reference) {
+        Ok(fixed) => (fixed, notes),
+        Err(_) => (r, Vec::new()),
+    }
+}
+
 /// A geometry diagram with every solid gray edge the reference measures dashed set dashed and
 /// rendered again, with a note per edge. Unchanged (and no notes) when nothing is measured.
 fn with_measured_dashes(r: Rendered, reference: Option<&[u8]>, has_reference: bool) -> (Rendered, Vec<String>) {
@@ -741,7 +772,9 @@ If anything the request asked for is not in the figure (a value beyond the gener
                     if id == "geometry-diagram" && let Some(why) = reference.and_then(|src| dash_check::diagnosis(&r.spec.params, src)) {
                         out.steps.push(StepLog { tool: "dash_check".into(), summary: why });
                     }
-                    let (r, dash_notes) = with_measured_dashes(r, reference, has_reference);
+                    let (r, mut dash_notes) = with_measured_dashes(r, reference, has_reference);
+                    let (r, minus_notes) = with_clear_minus_signs(r, has_reference);
+                    dash_notes.extend(minus_notes);
                     if !dash_notes.is_empty() {
                         out.steps.push(StepLog { tool: "final".into(), summary: brief(&dash_notes.join(" "), 160) });
                     }
@@ -841,7 +874,9 @@ If anything the request asked for is not in the figure (a value beyond the gener
     // Out of turns: keep the last figure the model rendered, so the work is not thrown away.
     match last {
         Some(r) => {
-            let (r, dash_notes) = with_measured_dashes(r, reference, has_reference);
+            let (r, mut dash_notes) = with_measured_dashes(r, reference, has_reference);
+            let (r, minus_notes) = with_clear_minus_signs(r, has_reference);
+            dash_notes.extend(minus_notes);
             if let Some(check)=source_plot_check(&r.spec.id,&r,source_plot) {
                 out.error=source_plot_conflict(&check);
                 out.source_plot_check=Some(check);
@@ -1093,6 +1128,27 @@ async fn run_with_retries_context_async<C:AsyncChat+?Sized,J:AsyncJudge+?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_minus_sign_on_a_grid_line_is_given_a_backing_instead_of_failing_the_figure() {
+        // Holdout v14 CST #72 and R36 trig graphs: correct graphs kept as crops over a "-1" on its line.
+        let diagram = serde_json::json!({"nodes":{"L":[0,200],"R":[380,200]},"segments":[{"from":"L","to":"R","color":"#999999"}],
+            "labels":[{"text":"\u{2212}3","at":[40.0, 205.4],"size":18},{"text":"2","at":[80.0,150.0]}]});
+        let params = serde_json::json!({"width":400.0,"height":300.0,"diagram":diagram.to_string()});
+        let r = render_context("geometry-diagram", &params, false).unwrap();
+        assert_eq!(binding_conflicts(&r, None).len(), 1);
+        let (fixed, notes) = with_clear_minus_signs(r, false);
+        assert!(binding_conflicts(&fixed, None).is_empty());
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("white backing"));
+        let saved: Json = serde_json::from_str(fixed.spec.params["diagram"].as_str().unwrap()).unwrap();
+        assert_eq!((saved["labels"][0]["halo"].as_bool(), saved["labels"][1].get("halo")), (Some(true), None));
+        // Nothing hidden: unchanged, no note.
+        let r = render_context("geometry-diagram", &serde_json::json!({"width":400.0,"height":300.0,"diagram":serde_json::json!({"labels":[{"text":"x","at":[50,50]}]}).to_string()}), false).unwrap();
+        let before = r.spec.clone();
+        let (same, notes) = with_clear_minus_signs(r, false);
+        assert!(notes.is_empty() && same.spec == before);
+    }
 
     #[test]
     fn only_a_pure_dash_style_objection_can_be_weighed_against_the_measurement() {

@@ -1399,10 +1399,15 @@ const FIGURE_PARALLEL: usize = 3;
 /// Runs a page's redraws, a few at a time on native (each model call blocks its thread), in
 /// order in the browser. Results come back in job order.
 async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(RedrawOutcome, f64)> {
+    // A panic inside one redraw (holdout v14: the renderer overflowed on far-off coordinates) fails
+    // that picture only; the page's other redraws and its questions are kept.
     #[cfg(not(target_arch = "wasm32"))]
     let timed = |job: &RedrawJob| {
         let t = std::time::Instant::now();
-        let out = block_on(redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg));
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            block_on(redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg))
+        }))
+        .unwrap_or_else(|_| (None, crashed_redraw(job)));
         (out, t.elapsed().as_secs_f64())
     };
     #[cfg(not(target_arch = "wasm32"))]
@@ -1433,6 +1438,12 @@ async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(RedrawOutcome, f64
         out.push((result, secs));
     }
     out
+}
+
+/// The trace of a redraw that panicked: no figure, the source crop stays.
+fn crashed_redraw(job: &RedrawJob) -> FigureImportTrace {
+    let detail = "The figure drawing crashed before it finished; the source crop was kept.";
+    FigureImportTrace { executions: Vec::new(), question_index: job.question, choice: job.choice, sees: None, steps: Vec::new(), spec: None, review: None, accepted: false, note: String::new(), error: Some(detail.into()), failure: Some(figure_failure::FigureFailure::new("generation_error", detail, None)) }
 }
 
 /// Every answer choice of a question kind: (part, choice index, answer).
@@ -1863,12 +1874,24 @@ fn adopt_continuations(prev: &mut Converted, next: &mut Converted, conts: &[(usi
         if item.status == "saved_continued" { item.status = "saved".into(); }
         item.reason = Some(format!("continues question {number} from page {prev_page}; saved as its own question with that number and its lead text"));
         let q = &mut next.doc.questions[qi];
+        // The host's lead text carries the task the continuation lacked.
+        if !lead.is_empty() { settle_unresolved_task(q); }
         if !lead.is_empty() && !q.stem.trim_start().starts_with(&lead) { q.stem = format!("{lead}\n\n{}", q.stem.trim_start()).trim_end().to_string(); }
         q.topics.retain(|t| t != crate::ditto::CONTINUED_TOPIC);
         next.warnings.push(format!("Question {label}: continues question {number} from page {prev_page}; saved with that number and its lead text."));
     }
     next.warnings.retain(|w| !w.contains("continues a question begun on an earlier page"));
     true
+}
+
+/// Drop the "task not visible" placeholder and its review topic from a continuation linked to the
+/// question whose task it continues (holdout v14, RMIT sine rule 1c).
+fn settle_unresolved_task(q: &mut crate::model::Question) {
+    if q.stem.contains(crate::ditto::UNRESOLVED_TASK) {
+        q.stem = q.stem.replace(crate::ditto::UNRESOLVED_TASK, "").trim().to_string();
+        while q.stem.contains("\n\n\n") { q.stem = q.stem.replace("\n\n\n", "\n\n"); }
+    }
+    q.topics.retain(|t| t != crate::ditto::UNRESOLVED_TOPIC);
 }
 
 /// The text a split group's questions share before their own part, cut back to a line or sentence end.
@@ -1914,7 +1937,8 @@ fn merge_continuation(prev: &mut Converted, next: &mut Converted, slot: usize, p
         _ => return false,
     };
     let into_part = matches!((&host.kind, &cont.kind), (Kind::Multipart { .. }, Kind::Short { .. }));
-    let cont = next.doc.questions.remove(0);
+    let mut cont = next.doc.questions.remove(0);
+    settle_unresolved_task(&mut cont);
     let label = prev.items.iter().find(|i| i.question_index == Some(target)).and_then(|i| i.label.clone()).unwrap_or_else(|| format!("{}", target + 1));
     let host = &mut prev.doc.questions[target];
     if !into_part { host.stem = join_text(&host.stem, &cont.stem); }
@@ -2106,9 +2130,10 @@ pub(crate) mod tests {
         // picture and takes the host's number and lead text.
         let mut host = page_question("The graph is shown below.", short());
         host.image = Some(crate::model::ImageRef::default());
-        let mut cont = page_question("(b) Use the second graph.", short());
+        let mut cont = page_question(&format!("(b) Use the second graph.\n\n{}", crate::ditto::UNRESOLVED_TASK), short());
         cont.image = Some(crate::model::ImageRef::default());
         cont.topics.push(crate::ditto::CONTINUED_TOPIC.into());
+        cont.topics.push(crate::ditto::UNRESOLVED_TOPIC.into());
         let mut prev = page_of(vec![host], vec![saved(0, "6", Some(6), "saved", 0)]);
         let mut next = page_of(vec![cont], vec![saved(0, "continued", None, "saved_continued", 0)]);
         assert!(join_page_break(&mut prev, &mut next, 1));

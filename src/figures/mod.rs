@@ -1175,8 +1175,16 @@ pub fn to_png(svg: &str, scale: f32) -> Result<Vec<u8>, String> {
     let size = tree.size();
     let (w, h) = ((size.width() * scale).ceil() as u32, (size.height() * scale).ceil() as u32);
     let mut pm = resvg::tiny_skia::Pixmap::new(w.max(1), h.max(1)).ok_or("bad size")?;
-    resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(scale, scale), &mut pm.as_mut());
+    render_guarded(&tree, resvg::tiny_skia::Transform::from_scale(scale, scale), &mut pm)?;
     pm.encode_png().map_err(|e| e.to_string())
+}
+
+/// `resvg::render`, with a renderer panic turned into an error. Coordinates far outside the
+/// canvas (a curve run out toward an asymptote) overflow resvg's integer group bounds, which
+/// panics in a checked build (holdout v14: one such drawing stopped a whole page import).
+fn render_guarded(tree: &resvg::usvg::Tree, transform: resvg::tiny_skia::Transform, pm: &mut resvg::tiny_skia::Pixmap) -> Result<(), String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resvg::render(tree, transform, &mut pm.as_mut())))
+        .map_err(|_| "The drawing could not be rendered: some of its coordinates are far outside the canvas. Keep every point, curve and label within a reasonable distance of the visible figure.".to_string())
 }
 
 /// A subpixel stroke in a crispEdges group can round to zero covered pixels at some phases.
@@ -1281,13 +1289,22 @@ pub fn to_rgba_at(svg: &str, scale: f32, phase: (f32, f32)) -> Result<(u32, u32,
     let extra = if phase.0 > 0.0 || phase.1 > 0.0 { 1.0 } else { 0.0 };
     let (w, h) = ((size.width() * scale + extra).ceil().max(1.0) as u32, (size.height() * scale + extra).ceil().max(1.0) as u32);
     let mut pm = resvg::tiny_skia::Pixmap::new(w, h).ok_or("bad size")?;
-    resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(scale, scale).post_translate(phase.0, phase.1), &mut pm.as_mut());
+    render_guarded(&tree, resvg::tiny_skia::Transform::from_scale(scale, scale).post_translate(phase.0, phase.1), &mut pm)?;
     Ok((w, h, pm.take()))
 }
 
 #[cfg(test)]
 mod crisp_grid_raster_tests {
     use super::*;
+    #[test]
+    fn a_drawing_with_far_off_coordinates_is_an_error_not_a_crash() {
+        // Holdout v14: a curve run out toward an asymptote overflowed resvg's group bounds.
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g opacity="0.5"><path d="M 0 0 L 9e15 9e15" stroke="black" stroke-width="1"/></g></svg>"#;
+        let r = std::panic::catch_unwind(|| to_png(svg, 1.0));
+        assert!(r.is_ok(), "rendering must not panic");
+        assert!(r.unwrap().unwrap_err().contains("far outside the canvas"));
+        assert!(to_png(r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><g opacity="0.5"><path d="M 0 0 L 5 5" stroke="black"/></g></svg>"#, 1.0).is_ok());
+    }
 
     fn png_pixels(svg: &str, scale: f32) -> (u32, u32, Vec<u8>) {
         let image = image::load_from_memory(&to_png(svg, scale).unwrap()).unwrap().to_rgba8();
