@@ -161,7 +161,7 @@
    "id": "cap-06b",
    "text": "Add glue tabs for cutting the net out",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:tabs=true + ui-test:figures::nets::tests::glue_tabs_go_on_one_of_each_pair_of_cut_edges",
    "note": ""
   },
   {
@@ -175,28 +175,28 @@
    "id": "cap-07a",
    "text": "Name the faces A, B, C … inside them",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:in_face=Names + ui-test:figures::nets::tests::faces_are_named_in_reading_order_tinted_alike_and_their_areas_written",
    "note": "faces carry 'a x b' / 'a x c' / 'b x c', which say which edges make them, not names"
   },
   {
    "id": "cap-07b",
    "text": "Write each face's area inside it",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:in_face=Areas + ui-test:figures::nets::tests::faces_are_named_in_reading_order_tinted_alike_and_their_areas_written",
    "note": "only the total surface area is written, in the readout"
   },
   {
    "id": "cap-07c",
    "text": "Tint matching faces (same shape and size) the same colour",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:tint=true + ui-test:figures::nets::tests::faces_are_named_in_reading_order_tinted_alike_and_their_areas_written",
    "note": "all faces share one fill"
   },
   {
    "id": "cap-08",
    "text": "Draw the 3D shape beside its net",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:show_3d=true + ui-test:figures::nets::tests::the_solid_is_drawn_beside_its_net",
    "note": ""
   },
   {

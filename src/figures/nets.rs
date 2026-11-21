@@ -11,6 +11,7 @@ use super::svg;
 use super::*;
 
 mod draw;
+mod extras;
 pub mod geom;
 mod mathtext;
 #[cfg(test)]
@@ -24,6 +25,7 @@ pub const SHAPES: [&str; 5] = ["Cube", "Prism", "Pyramid", "Cylinder", "Cone"];
 pub const BASES: [&str; 4] = ["Rectangle", "Right triangle", "Isosceles triangle", "Regular polygon"];
 pub const PYR_BASES: [&str; 2] = ["Rectangle", "Regular polygon"];
 pub const FOLDS: [&str; 2] = ["Dashed", "Solid"];
+pub const IN_FACE: [&str; 4] = ["Nothing", "Names", "Areas", "Names and areas"];
 pub const UNITS: [&str; 9] = ["None", "cm", "m", "mm", "in", "ft", "yd", "units", "Other\u{2026}"];
 pub const ROUNDS: [&str; 3] = ["Whole numbers", "Tenths", "Hundredths"];
 /// How a measure is labeled: its value, a text such as x, or not at all.
@@ -86,6 +88,10 @@ pub fn params() -> Vec<ParamDef> {
     }
     v.extend([
         ParamDef::choice("folds", "Fold lines", &FOLDS, "Dashed"),
+        ParamDef::bool("tabs", "Glue tabs", false).hint("Flaps to glue the cut-out net together: one for each join."),
+        ParamDef::choice("in_face", "In each face", &IN_FACE, "Nothing"),
+        ParamDef::bool("tint", "Tint matching faces", false).hint("Identical faces are coloured alike."),
+        ParamDef::bool("show_3d", "Show the 3D shape", false).hint("Draws the folded solid to the right of the net."),
         ParamDef::bool("squares", "Right-angle squares", true).hint("Squares on right angles: a right-triangle base's corner, and the foot of a height or slant height drawn on the net."),
         ParamDef::choice("unit", "Unit", &UNITS, "cm"),
         ParamDef::text("unit_other", "Unit name", "").hint("Your own unit, such as km (12 characters at most)."),

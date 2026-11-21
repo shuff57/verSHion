@@ -1,0 +1,35 @@
+{
+ "round": 408,
+ "figure": "solid-net",
+ "capability": "cap-08",
+ "hypothesis": "Batch 3 solid-net: cap-08; evidence changes:show_3d=true + ui-test:figures::nets::tests::the_solid_is_drawn_beside_its_net",
+ "started_at": "2026-11-21T02:45:35",
+ "git": "553d5b7",
+ "before": {
+  "figure": 95.2,
+  "pooled": 96.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-21T02:45:40",
+ "after": {
+  "figure": 98.1,
+  "pooled": 97.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:show_3d=true",
+    "opening": "/home/shuff57/checker-out/net/probe-renders/solid-net/opening.png",
+    "override": "/home/shuff57/checker-out/net/probe-renders/solid-net/d9a88ffdb6abb014.png"
+   }
+  ]
+ },
+ "checker": "pass: all 5 claimed capabilities hold, the three fixes since round 12 work, and nothing new turned up that a teacher would plausibly hit.",
+ "result": "hit",
+ "evidence": "nets tests 31 + census + figures suite 3092 passed; 13 independent checks on batch 3 (the 13th passed: ~37,000 renders, 9,600 areas recomputed, 0 panics); sweeps over the checkers' 4,344 everyday cases: 0 text overlaps, 0 names beside another face's area, 0 blocks off the net that fit",
+ "next": "solid-net batch 4: cap-09c label drag"
+}

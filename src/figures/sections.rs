@@ -533,9 +533,10 @@ static SEGMENT_ADDITION: [RefSection; 6] = [
     s("Student copy", &["show_answers"], "Turn off Show answers for a student copy: the blank lines stay empty and the check under the figure is left out."),
 ];
 
-static SOLID_NET: [RefSection; 4] = [
+static SOLID_NET: [RefSection; 5] = [
     s("Shape", &["shape", "base", "pyr_base", "sides", "cube_net", "diameter"], "A prism's base can be a rectangle, a right or isosceles triangle, or a regular polygon of 3 to 8 sides; a pyramid's a rectangle or a regular polygon. A cube has 11 different nets."),
-    s("Lines", &["folds", "squares"], "Cut edges are always solid; only the fold lines are dashed or solid."),
+    s("Lines", &["folds", "tabs", "squares"], "Cut edges are always solid; only the fold lines are dashed or solid. Glue tabs are flaps for sticking the cut-out net together, one on each join."),
+    s("Faces", &["in_face", "tint", "show_3d"], "Faces are named A, B, C … top to bottom, then left to right. Areas are rounded as chosen under Labels and are blanks on the student copy. Faces the same shape and size share a tint."),
     s("Labels", &["unit", "unit_other", "round", "style", "label_size"], "Rounding applies to worked-out measures and to the surface area and volume; typed measures are written as typed."),
     s("Student copy", &["readout", "show_answers"], "The surface area and the volume, written under the net, are blanks while Show answers is off."),
 ];

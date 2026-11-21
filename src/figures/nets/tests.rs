@@ -278,6 +278,11 @@ fn labels_never_overlap_each_other_or_a_line() {
         json!({"length": "7/2", "width": "sqrt(13/2)", "side": "2sqrt3", "tri_base": "5", "tri_height": "7/3", "radius": "sqrt2", "height": "", "slant": "13/2", "label_size": "Large"}),
         json!({"lab_apothem": "Measure", "lab_angle": "Measure", "label_size": "Large", "radius": "1", "height": "7"}),
         json!({"lab_angle": "Measure", "radius": "1", "height": "15", "lab_circ": "Text", "txt_circ": "6pi", "lab_side": "Text", "txt_side": "2pir"}),
+        json!({"tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true}),
+        json!({"tabs": true, "in_face": "Names", "show_3d": true, "label_size": "Large"}),
+        json!({"tabs": true, "in_face": "Areas", "label_size": "Small", "round": "Hundredths"}),
+        json!({"lab_angle": "Measure", "tabs": true, "in_face": "Names and areas", "radius": "4", "height": "3"}),
+        json!({"lab_angle": "Measure", "in_face": "Names and areas", "label_size": "Large"}),
     ] {
         for v in all_shapes() {
             let mut o = v.as_object().unwrap().clone();
@@ -292,8 +297,11 @@ fn labels_never_overlap_each_other_or_a_line() {
                 let (p, q) = (a.rect(), b.rect());
                 assert!(!(p.0 < q.2 && q.0 < p.2 && p.1 < q.3 && q.1 < p.3), "{} and {} overlap in {v}", a.what, b.what);
             }
-            for (s, e) in &r.strokes {
-                assert!(!crate::figures::segment::seg_hits(*s, *e, a.rect(), -0.5), "a line runs through {} ({}) in {v}", a.what, a.text());
+            // (a face's name or area with no room clear of its lines is written over them, as the reference does)
+            if !r.overflow.contains(&a.what) {
+                for (s, e) in &r.strokes {
+                    assert!(!crate::figures::segment::seg_hits(*s, *e, a.rect(), -0.5), "a line runs through {} ({}) in {v}", a.what, a.text());
+                }
             }
             let (x0, y0, x1, y1) = a.rect();
             assert!(x0 >= 0.0 && y0 >= 0.0 && x1 <= r.size.0 && y1 <= r.size.1, "{} off the page in {v}", a.what);
@@ -521,6 +529,239 @@ fn controls_show_only_where_they_act() {
     assert_eq!(label_for("side", &js(json!({"shape": "Cube"}))), Some("Edge"));
 }
 
+#[test]
+fn glue_tabs_go_on_one_of_each_pair_of_cut_edges() {
+    let r = |v: serde_json::Value| render_full(&js(v));
+    let tabs = |svg: &str| svg.matches("fill=\"#e5e7eb\"").count();
+    // the box: the left rectangle's top, bottom and left, and the tops and bottoms of the third and fourth
+    assert_eq!(tabs(&r(json!({"tabs": true})).svg), 7);
+    for k in 1..=11 {
+        assert_eq!(tabs(&r(json!({"shape": "Cube", "cube_net": k, "tabs": true})).svg), 7, "net {k}: the cube's 7 cut pairs");
+    }
+    // a cylinder: one tab on the rectangle's short edge, and teeth round the circles except where they'd hit it
+    let cyl = tabs(&r(json!({"shape": "Cylinder", "tabs": true})).svg);
+    assert!(cyl > 1 + 12 && cyl < 1 + 24, "{cyl}");
+    let cone = tabs(&r(json!({"shape": "Cone", "tabs": true})).svg);
+    assert!(cone > 1 + 6 && cone <= 1 + 12, "{cone}");
+    // a tabbed edge is drawn as a fold
+    let plain = r(json!({})).svg.matches("stroke-dasharray=\"7 5\"").count();
+    assert_eq!(r(json!({"tabs": true})).svg.matches("stroke-dasharray=\"7 5\"").count(), plain + 7);
+    assert_eq!(tabs(&r(json!({})).svg), 0);
+}
+
+#[test]
+fn faces_are_named_in_reading_order_tinted_alike_and_their_areas_written() {
+    let r = render_full(&js(json!({"in_face": "Names and areas", "tint": true})));
+    let t = texts(&r);
+    let at = |w: &str| r.texts.iter().find(|x| x.what == w).unwrap().c;
+    // A the top base, B to E the strip left to right, F the bottom base
+    assert!(at("face A").1 < at("face B").1 && at("face B").0 < at("face C").0 && at("face C").0 < at("face D").0 && at("face D").0 < at("face E").0 && at("face E").1 < at("face F").1);
+    for want in ["15 cm\u{b2}", "12 cm\u{b2}", "20 cm\u{b2}"] {
+        assert!(t.iter().any(|x| x.1 == want), "{want} in {t:?}");
+    }
+    // three kinds of face, three tints: 3 × 4 blue, 5 × 4 amber, 5 × 3 green
+    for c in ["#dbeafe", "#fef3c7", "#dcfce7"] {
+        assert!(r.svg.contains(c), "{c}");
+    }
+    assert!(!r.svg.contains("#fce7f3"));
+    // every face of a pyramid gets its name and its area, the slant heights' lines notwithstanding
+    let pyr = render_full(&js(json!({"shape": "Pyramid", "in_face": "Names and areas", "tabs": true})));
+    assert_eq!(pyr.texts.iter().filter(|t| t.what.starts_with("area ")).count(), 5, "{:?}", texts(&pyr));
+    // a block that only just fits its face is written in it, as the reference centres it, never sent off on a leader
+    for v in [json!({"base": "Regular polygon", "sides": 6, "side": "3", "height": "12", "tabs": true, "in_face": "Names and areas"}), json!({"base": "Isosceles triangle", "tri_base": "3", "tri_height": "8", "height": "8", "in_face": "Names and areas"}), json!({"length": "10", "width": "2", "height": "3", "tabs": true, "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 6, "side": "2", "height": "15", "tabs": true, "in_face": "Names and areas"}), json!({"in_face": "Areas", "unit": "units"}), json!({"in_face": "Names and areas", "unit": "units", "tabs": true, "show_3d": true}), json!({"base": "Regular polygon", "sides": 7, "side": "5", "height": "7.5", "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 8, "side": "10", "height": "15", "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 8, "side": "5", "height": "4.5", "in_face": "Names and areas"})] {
+        let r = render_full(&js(v.clone()));
+        assert!(!r.leaders.iter().any(|l| l.0.starts_with("face ")), "{:?} in {v}", r.leaders);
+    }
+    // where every block fits its face (a row of strips, a box's big faces), each is written whole inside its own face: none
+    // pushed onto the outer cut line, where cutting the net out would slice it
+    for v in [json!({"base": "Regular polygon", "sides": 7, "side": "5", "height": "7.5", "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 8, "side": "10", "height": "15", "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 8, "side": "5", "height": "4.5", "in_face": "Names and areas"})] {
+        let r = render_full(&js(v.clone()));
+        let names = super::extras::names(&r.faces);
+        for t in r.texts.iter().filter(|t| t.what.starts_with("face ") || t.what.starts_with("area ")) {
+            let own = names.iter().position(|n| *n == t.what[5..]).unwrap();
+            let (x0, y0, x1, y1) = super::draw::drawn(t.rect());
+            let corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
+            let mid = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+            assert!(super::draw::inside_any(std::slice::from_ref(&r.faces[own]), mid), "{} out of its face in {v}", t.what);
+            assert!(corners.iter().all(|c| super::draw::inside_any(&r.faces, *c)), "{} off the net in {v}", t.what);
+        }
+    }
+    let r = render_full(&js(json!({"length": "12", "width": "3", "height": "2", "tabs": true, "in_face": "Names and areas"})));
+    let names = super::extras::names(&r.faces);
+    let a = names.iter().position(|n| n == "A").unwrap();
+    for w in ["face A", "area A"] {
+        let t = r.texts.iter().find(|t| t.what == w).unwrap();
+        let (x0, y0, x1, y1) = t.rect();
+        assert!([(x0, y0), (x1, y0), (x1, y1), (x0, y1)].iter().all(|c| super::draw::inside_any(std::slice::from_ref(&r.faces[a]), *c)), "{w} not whole in A");
+    }
+    // a cylinder's glue teeth never push its radius's or diameter's label into the side rectangle, where it would read
+    // as that edge's length; and no face's leader runs through another leader's dot or a radius's end
+    for v in [json!({"shape": "Cylinder", "radius": "2", "height": "15", "tabs": true}), json!({"shape": "Cylinder", "diameter": true, "radius": "3", "height": "15", "tabs": true}), json!({"shape": "Cylinder", "diameter": true, "radius": "2.5", "height": "10", "tabs": true}), json!({"shape": "Cylinder", "radius": "3", "height": "20", "tabs": true, "in_face": "Names and areas"})] {
+        let r = render_full(&js(v.clone()));
+        let t = r.texts.iter().find(|t| t.what == "lab radius" || t.what == "lab diameter").unwrap();
+        let (x0, y0, x1, y1) = t.rect();
+        let rect = r.faces.iter().find(|f| matches!(f.outline, super::geom::Outline::Poly(_))).unwrap();
+        assert!([(x0, y0), (x1, y0), (x1, y1), (x0, y1), t.c].iter().all(|p| !super::draw::inside_any(std::slice::from_ref(rect), *p)), "{} in the rectangle in {v}", t.what);
+        for (lw, a, b) in r.leaders.iter().filter(|l| l.0.starts_with("face ")) {
+            for (mw, c, d) in r.leaders.iter().filter(|l| l.0 != *lw) {
+                for e in [c, d] {
+                    let ab = (b.0 - a.0, b.1 - a.1);
+                    let tt = (((e.0 - a.0) * ab.0 + (e.1 - a.1) * ab.1) / (ab.0 * ab.0 + ab.1 * ab.1)).clamp(0.0, 1.0);
+                    let dist = (e.0 - a.0 - tt * ab.0).hypot(e.1 - a.1 - tt * ab.1);
+                    assert!(dist >= 5.0, "{lw}'s leader runs through {mw}'s end in {v}");
+                }
+            }
+        }
+    }
+    // however crowded (a low octagonal prism at Large in units, its strips shut in), no block is written over another text
+    for v in [json!({"base": "Regular polygon", "sides": 8, "side": "6", "height": "2", "tabs": true, "in_face": "Names and areas", "unit": "units", "label_size": "Large"}), json!({"base": "Regular polygon", "sides": 6, "side": "5", "height": "4", "in_face": "Names and areas", "unit": "units", "label_size": "Large"}), json!({"base": "Regular polygon", "sides": 8, "side": "5", "height": "4", "in_face": "Names and areas", "unit": "units"})] {
+        let r = render_full(&js(v.clone()));
+        for (k, a) in r.texts.iter().enumerate() {
+            for b in &r.texts[k + 1..] {
+                // (a name by a name or an area by an area, side by side in a row of strips, by what's drawn)
+                let same = (a.what.starts_with("face ") && b.what.starts_with("face ")) || (a.what.starts_with("area ") && b.what.starts_with("area "));
+                let (p, q) = if same { (super::draw::drawn(a.rect()), super::draw::drawn(b.rect())) } else { (a.rect(), b.rect()) };
+                assert!(!(p.0 < q.2 && q.0 < p.2 && p.1 < q.3 && q.1 < p.3), "{} and {} overlap in {v}", a.what, b.what);
+            }
+        }
+    }
+    // no area is ever left out, however crowded the face
+    for v in [json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 3, "in_face": "Names and areas", "lab_apothem": "Measure", "tabs": true}), json!({"shape": "Cylinder", "diameter": true, "tabs": true, "in_face": "Names and areas", "label_size": "Large"}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 3, "in_face": "Names and areas", "unit": "units", "tabs": true, "tint": true, "show_3d": true}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 5, "in_face": "Names and areas", "lab_apothem": "Measure", "tabs": true}), json!({"shape": "Cube", "in_face": "Areas", "unit": "units", "tabs": true}),
+              json!({"shape": "Cone", "tabs": true, "in_face": "Names and areas", "label_size": "Large"}), json!({"base": "Regular polygon", "sides": 7, "tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true, "label_size": "Large"}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 3, "in_face": "Names and areas", "show_answers": false, "label_size": "Large"}), json!({"shape": "Cylinder", "diameter": true, "tabs": true, "in_face": "Names and areas", "label_size": "Large", "show_answers": false}),
+              json!({"base": "Isosceles triangle", "in_face": "Names and areas"}), json!({"shape": "Cylinder", "tabs": true, "in_face": "Names and areas", "round": "Hundredths"}), json!({"shape": "Cylinder", "diameter": true, "tint": true, "tabs": true, "show_3d": true, "in_face": "Names and areas", "unit": "units"}), json!({"base": "Regular polygon", "sides": 8, "tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true, "unit": "units"}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 6, "tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true, "unit": "None"}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 7, "in_face": "Names and areas", "show_answers": false}),
+              json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 5, "in_face": "Names and areas", "show_answers": false}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 6, "in_face": "Names and areas", "label_size": "Small", "show_answers": false}), json!({"base": "Regular polygon", "sides": 8, "in_face": "Names and areas", "label_size": "Large"}), json!({"base": "Regular polygon", "sides": 8, "in_face": "Names and areas", "label_size": "Large", "tabs": true}), json!({"base": "Isosceles triangle", "tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true, "label_size": "Large"}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 6, "in_face": "Names and areas", "label_size": "Large", "round": "Hundredths"}),
+              json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 7, "in_face": "Names and areas"}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 8, "in_face": "Names and areas"}), json!({"shape": "Pyramid", "tabs": true, "in_face": "Names and areas", "label_size": "Large"}), json!({"shape": "Pyramid", "in_face": "Names and areas"}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 4, "tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 6, "in_face": "Names and areas"}), json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": 8, "in_face": "Areas"}), json!({"in_face": "Names and areas", "unit": "units"}), json!({"base": "Regular polygon", "sides": 6, "side": "3", "height": "10", "unit": "units", "in_face": "Names and areas"}), json!({"base": "Right triangle", "tri_base": "5", "tri_height": "12", "height": "10", "in_face": "Areas"}), json!({"shape": "Pyramid", "sides": 5, "pyr_base": "Regular polygon", "in_face": "Names and areas", "label_size": "Large"}), json!({"base": "Right triangle", "tri_base": "3", "tri_height": "4", "height": "10", "tabs": true, "in_face": "Names and areas", "unit": "units"}), json!({"shape": "Pyramid", "in_face": "Names and areas", "unit": "units", "tabs": true}), json!({"length": "12", "width": "12", "height": "2", "in_face": "Names and areas", "lab_apothem": "Measure"}), json!({"base": "Right triangle", "tri_base": "3", "tri_height": "4", "height": "15", "tabs": true, "in_face": "Names and areas", "label_size": "Large"}), json!({"base": "Right triangle", "tri_base": "3", "tri_height": "4", "height": "25", "tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true}), json!({"base": "Regular polygon", "sides": 8, "side": "3", "height": "10", "tabs": true, "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 8, "side": "2", "height": "8", "tabs": true, "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 6, "side": "3", "height": "12", "tabs": true, "in_face": "Names and areas"}), json!({"length": "10", "width": "2", "height": "3", "tabs": true, "in_face": "Names and areas"}), json!({"base": "Isosceles triangle", "tri_base": "3", "tri_height": "8", "height": "8", "in_face": "Names and areas"}), json!({"base": "Right triangle", "tri_base": "3", "tri_height": "4", "height": "25", "tabs": true, "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 6, "side": "2", "height": "15", "tabs": true, "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 6, "side": "5", "height": "20", "in_face": "Names and areas"}), json!({"base": "Regular polygon", "sides": 8, "side": "2", "height": "6", "in_face": "Names and areas"}), json!({"in_face": "Areas", "unit": "units"}), json!({"base": "Isosceles triangle", "tri_base": "4", "tri_height": "6", "height": "12", "tabs": true, "in_face": "Names and areas"})] {
+        let r = render_full(&js(v.clone()));
+        let n = r.faces.len();
+        assert_eq!(r.texts.iter().filter(|t| t.what.starts_with("area ")).count(), n, "{v}");
+        // and the names are all one size, the areas too
+        for kind in ["face ", "area "] {
+            let sizes: Vec<f64> = r.texts.iter().filter(|t| t.what.starts_with(kind)).map(|t| t.size).collect();
+            assert!(sizes.windows(2).all(|w| w[0] == w[1]), "{kind} in {v}");
+        }
+        // each face's text sits in its own face: its middle inside it, nearer its middle than any other face's
+        for t in r.texts.iter().filter(|t| t.what.starts_with("face ") || t.what.starts_with("area ")) {
+            let name = &t.what[5..];
+            let names = super::extras::names(&r.faces);
+            let own = names.iter().position(|n| n == name).unwrap();
+            let face_block: Vec<&crate::figures::segment::TextBox> = r.texts.iter().filter(|x| (x.what.starts_with("face ") || x.what.starts_with("area ")) && &x.what[5..] == name).collect();
+            let (y0, y1) = (face_block.iter().map(|x| x.rect().1).fold(f64::MAX, f64::min), face_block.iter().map(|x| x.rect().3).fold(f64::MIN, f64::max));
+            let mid = (t.c.0, (y0 + y1) / 2.0);
+            // (or tied to it by a leader from its middle)
+            let tied = r.leaders.iter().any(|(w, a, _)| w == &format!("face {name}") && super::draw::inside_any(std::slice::from_ref(&r.faces[own]), *a));
+            assert!(tied || super::draw::inside_any(std::slice::from_ref(&r.faces[own]), mid), "{} is outside its face in {v}", t.what);
+            // and never inside another face
+            let others: Vec<Face> = r.faces.iter().enumerate().filter(|(k, _)| *k != own).map(|(_, f)| f.clone()).collect();
+            assert!(!super::draw::inside_any(&others, mid), "{} is in another face in {v}", t.what);
+            // nor tied to its face by a leader that crosses another (unless it's a pyramid's base, shut in by its
+            // triangles, where every way out crosses one)
+            // (also at Large on a crowded net, where every way out crosses a neighbour: the least bad of crossing one, writing
+            // over text, or spilling into another face)
+            let shut_in = v["shape"] == "Pyramid" && own == 0;
+            for (_, a, b) in r.leaders.iter().filter(|l| l.0 == format!("face {name}") && !shut_in) {
+                assert!((1..10).all(|k| !super::draw::inside_any(&others, (a.0 + (b.0 - a.0) * k as f64 / 10.0, a.1 + (b.1 - a.1) * k as f64 / 10.0))), "{}'s leader crosses another face in {v}", t.what);
+            }
+        }
+        // no face's leader crosses another leader (a measure's or a face's)
+        let cross = |a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)| {
+            let o = |p: (f64, f64), q: (f64, f64), r: (f64, f64)| (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0);
+            o(c, d, a) * o(c, d, b) < 0.0 && o(a, b, c) * o(a, b, d) < 0.0
+        };
+        for (k, (lw, a, b)) in r.leaders.iter().enumerate() {
+            for (mw, c, d) in &r.leaders[k + 1..] {
+                if lw.starts_with("face ") || mw.starts_with("face ") {
+                    assert!(!cross(*a, *b, *c, *d), "{lw}'s leader crosses {mw}'s in {v}");
+                }
+            }
+        }
+        // no face's leader runs alongside a line near it
+        for (lw, a, b) in r.leaders.iter().filter(|l| l.0.starts_with("face ")) {
+            let u = ((b.0 - a.0) / (b.0 - a.0).hypot(b.1 - a.1), (b.1 - a.1) / (b.0 - a.0).hypot(b.1 - a.1));
+            for (p, q) in r.strokes.iter().filter(|s| !(s.0 == *a && s.1 == *b)) {
+                let l = (q.0 - p.0).hypot(q.1 - p.1);
+                if l < 8.0 {
+                    continue;
+                }
+                let dir = ((q.0 - p.0) / l, (q.1 - p.1) / l);
+                let par = (u.0 * dir.1 - u.1 * dir.0).abs() < 0.26;
+                let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+                let t = (((mid.0 - p.0) * dir.0 + (mid.1 - p.1) * dir.1) / l).clamp(0.0, 1.0);
+                let d = (mid.0 - p.0 - t * l * dir.0).hypot(mid.1 - p.1 - t * l * dir.1);
+                assert!(!(par && d < 8.0), "{lw}'s leader runs alongside a line in {v}");
+            }
+        }
+        // no face's name level with, and close beside, another face's area, where it would read as that face's
+        for a in r.texts.iter().filter(|t| t.what.starts_with("face ")) {
+            for b in r.texts.iter().filter(|t| t.what.starts_with("area ") && t.what[5..] != a.what[5..]) {
+                let (p, q) = (a.rect(), b.rect());
+                let level = p.3.min(q.3) - p.1.max(q.1) > 0.3 * (p.3 - p.1).min(q.3 - q.1);
+                let gap = (q.0 - p.2).max(p.0 - q.2);
+                let (x0, x1) = if p.2 <= q.0 { (p.2, q.0) } else { (q.2, p.0) };
+                let ym = (p.1.max(q.1) + p.3.min(q.3)) / 2.0;
+                let line_between = r.strokes.iter().any(|(s, e)| {
+                    let (lo, hi) = (s.0.min(e.0), s.0.max(e.0));
+                    let (ylo, yhi) = (s.1.min(e.1), s.1.max(e.1));
+                    lo > x0 + 1.0 && hi < x1 - 1.0 && ylo <= ym && yhi >= ym
+                });
+                assert!(!(level && (gap < 12.0 || (gap < 40.0 && !line_between))), "{} reads with {} in {v}", a.what, b.what);
+            }
+        }
+        // no two texts on each other (as drawn: the width estimate runs a little wide)
+        for (k, a) in r.texts.iter().enumerate() {
+            for b in &r.texts[k + 1..] {
+                // (a name by a name or an area by an area, side by side in a row of strips, by what's drawn)
+                let same = (a.what.starts_with("face ") && b.what.starts_with("face ")) || (a.what.starts_with("area ") && b.what.starts_with("area "));
+                let (p, q) = if same { (super::draw::drawn(a.rect()), super::draw::drawn(b.rect())) } else { (a.rect(), b.rect()) };
+                assert!(!(p.0 < q.2 && q.0 < p.2 && p.1 < q.3 && q.1 < p.3), "{} and {} overlap in {v}", a.what, b.what);
+            }
+        }
+        // no face text sits on a leader's start
+        for (lw, a, _) in &r.leaders {
+            for t in r.texts.iter().filter(|t| (t.what.starts_with("face ") || t.what.starts_with("area ")) && !lw.ends_with(&t.what[5..])) {
+                let q = t.rect();
+                assert!(!(a.0 > q.0 - 2.0 && a.0 < q.2 + 2.0 && a.1 > q.1 - 2.0 && a.1 < q.3 + 2.0), "{} covers a leader's start in {v}", t.what);
+            }
+        }
+    }
+    // the readout clears the tabs, and Print's tints differ from its tabs
+    let rd = render_full(&js(json!({"shape": "Cylinder", "tabs": true, "readout": true})));
+    let teeth_bottom = rd.faces.iter().flat_map(|f| f.outline_points()).fold(0.0f64, |m, q| m.max(q.1));
+    assert!(rd.texts.iter().filter(|t| t.what.starts_with("readout")).all(|t| t.rect().1 > teeth_bottom));
+    // a cube's faces all match
+    let cube = render_full(&js(json!({"shape": "Cube", "tint": true}))).svg;
+    assert_eq!(cube.matches("#dbeafe").count(), 6);
+    // the areas are blanks on the student copy; the names stay
+    let stu = render_full(&js(json!({"in_face": "Names and areas", "show_answers": false})));
+    assert!(texts(&stu).iter().any(|x| x.1 == "A") && !stu.svg.contains("15 cm") && !stu.svg.contains("20 cm"));
+    // a cylinder's areas are decimals, and the unit "units" is "square units"
+    let cyl = render_full(&js(json!({"shape": "Cylinder", "in_face": "Areas", "unit": "units"})));
+    assert!(texts(&cyl).iter().any(|x| x.1 == "28.3 square units"), "{:?}", texts(&cyl));
+    // Print tints are greys
+    let pr = render_full(&js(json!({"tint": true, "tabs": true, "style": "Print"}))).svg;
+    assert!(!pr.contains("#dbeafe") && !pr.contains("#e5e7eb"));
+}
+
+#[test]
+fn the_solid_is_drawn_beside_its_net() {
+    for v in all_shapes() {
+        let mut o = v.as_object().unwrap().clone();
+        o.insert("show_3d".into(), json!(true));
+        let on = render_full(&js(serde_json::Value::Object(o)));
+        let off = render_full(&js(v.clone()));
+        assert!(on.size.0 > off.size.0 + 40.0, "{v}: the page grows to the right");
+        // no taller than 60% of the net
+        assert!(on.size.1 <= off.size.1 + 1.0, "{v}");
+    }
+    // a box shows three hidden edges, dashed
+    let b = render_full(&js(json!({"show_3d": true}))).svg;
+    assert_eq!(b.matches("stroke-dasharray=\"6 5\"").count(), 3);
+    // a cylinder's and a cone's circles: the far half of the base dashed
+    for shape in ["Cylinder", "Cone"] {
+        let s = render_full(&js(json!({"shape": shape, "show_3d": true}))).svg;
+        assert_eq!(s.matches("stroke-dasharray=\"6 5\"").count(), 1, "{shape}");
+    }
+}
+
 /// Writes each case's SVG, and one sheet of them all, when NET_DUMP names a folder. NET_CASES names a file of
 /// `name<TAB>json` lines (else a few of each shape).
 #[test]
@@ -572,6 +813,11 @@ fn labels_stay_by_what_they_measure() {
     }
     for n in 3..=8 {
         cases.push(json!({"shape": "Pyramid", "pyr_base": "Regular polygon", "sides": n, "side": "3", "height": "6"}));
+    }
+    for extra in [json!({"diameter": true, "tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true, "label_size": "Large"}), json!({"diameter": true, "in_face": "Names and areas", "unit": "units", "label_size": "Large"})] {
+        let mut o = extra.as_object().unwrap().clone();
+        o.insert("shape".into(), json!("Cylinder"));
+        cases.push(serde_json::Value::Object(o));
     }
     for (r, h) in [("2.5", "12"), ("4", "20"), ("3", "20"), ("1.5", "8"), ("1", "15")] {
         for shape in ["Cylinder", "Cone"] {
@@ -683,7 +929,7 @@ fn labels_stay_by_what_they_measure() {
             let c = match r.faces[1].outline { Outline::Circle(c, _) => c, _ => unreachable!() };
             for t in &r.texts {
                 let (x0, y0, x1, y1) = t.rect();
-                assert!(!(c.0 > x0 - 3.0 && c.0 < x1 + 3.0 && c.1 > y0 - 3.0 && c.1 < y1 + 3.0), "{} covers the centre dot in {v}", t.what);
+                assert!(m.diameter || !(c.0 > x0 - 3.0 && c.0 < x1 + 3.0 && c.1 > y0 - 3.0 && c.1 < y1 + 3.0), "{} covers the centre dot in {v}", t.what);
             }
             // the radius line is drawn, at least half of it showing
             let rad = match r.faces[1].outline { Outline::Circle(_, rr) => rr, _ => 0.0 };

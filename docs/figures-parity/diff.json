@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-21T02:35:28+00:00",
+ "generated_at": "2026-11-21T10:45:58+00:00",
  "spec_generated_at": "2026-11-19T01:39:54+00:00",
  "figures": [
   {
@@ -1345,6 +1345,10 @@
     "lab_angle",
     "txt_angle",
     "folds",
+    "tabs",
+    "in_face",
+    "tint",
+    "show_3d",
     "squares",
     "unit",
     "unit_other",
@@ -1354,7 +1358,7 @@
     "style",
     "label_size"
    ],
-   "param_count": 49,
+   "param_count": 53,
    "handles": 0,
    "label_drag": false,
    "show_answers": true,

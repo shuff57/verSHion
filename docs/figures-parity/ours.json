@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-21T02:31:46+00:00",
-  "src_mtime": 1795228277.5508742,
-  "git": "86eea42+dirty",
+  "built_at": "2026-11-21T10:29:58+00:00",
+  "src_mtime": 1795256266.6874835,
+  "git": "553d5b7+dirty",
   "figures": 193
  },
  "figures": {
@@ -29226,6 +29226,39 @@
       "Solid"
      ],
      "default": "Dashed"
+    },
+    {
+     "key": "tabs",
+     "label": "Glue tabs",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "in_face",
+     "label": "In each face",
+     "kind": "choice",
+     "options": [
+      "Nothing",
+      "Names",
+      "Areas",
+      "Names and areas"
+     ],
+     "default": "Nothing"
+    },
+    {
+     "key": "tint",
+     "label": "Tint matching faces",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_3d",
+     "label": "Show the 3D shape",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "squares",

@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-21T02:35:28+00:00 · probe: 2026-11-20T18:35:27
+Generated: 2026-11-21T10:45:58+00:00 · probe: 2026-11-21T02:45:58
 
-**Pooled 96.7** · mean 96.8 over 77 figures · built 78 of 78 reference figures
+**Pooled 97.0** · mean 97.0 over 77 figures · built 78 of 78 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -34,15 +34,10 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [version 3] Leave a single probability empty for students to fill in — no evidence
   - cap-03b [control 3] Write path names run together (HT) — no evidence
   - cap-03d [control 3] Multiply fraction branches out to a fraction in lowest terms — no evidence
-- `solid-net`: 84 (87/104)
-  - cap-06b [control 3] Add glue tabs for cutting the net out — no evidence
-  - cap-07a [control 3] Name the faces A, B, C … inside them — no evidence
-  - cap-07b [control 3] Write each face's area inside it — no evidence
-  - cap-07c [control 3] Tint matching faces (same shape and size) the same colour — no evidence
-  - cap-08 [control 3] Draw the 3D shape beside its net — no evidence
-  - cap-09c [interaction 2] Drag any label on the figure to move it, and reset the positions — no evidence
 - `population-growth`: 98 (128/131)
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
+- `solid-net`: 98 (102/104)
+  - cap-09c [interaction 2] Drag any label on the figure to move it, and reset the positions — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
