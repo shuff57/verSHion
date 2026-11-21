@@ -198,7 +198,7 @@ def parsed_source_map(case,page,questions):
     numbers=[i.get('number') for i in items]
     # A case declaring dotted labels ("Exercise 2.15") keys each item by the label's last part.
     if case.get('dotted_labels'):
-        numbers=[n if n is not None else (int(m.group(1)) if (m:=re.fullmatch(r'\s*\d+(?:\.\d+)*\.(\d+)\s*',str(i.get('label') or ''))) else None) for n,i in zip(numbers,items)]
+        numbers=[n if n is not None else (int(m.group(1)) if (m:=re.fullmatch(r'\s*(?:[A-Za-z]\.)?\d+(?:\.\d+)*\.(\d+)\s*',str(i.get('label') or ''))) else None) for n,i in zip(numbers,items)]
     if len(numbers)==1 and numbers[0] is None and (case['source_id']=='statistics-confidence-intervals' or (case.get('single_unnumbered_item') and len(case['question_numbers'])==1)):numbers=[1 if case['source_id']=='statistics-confidence-intervals' else case['question_numbers'][0]]
     numbers=leading_continuation(case,items,numbers)
     by_number={};index={};status={};unresolved=[]
