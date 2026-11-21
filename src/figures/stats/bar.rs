@@ -81,6 +81,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("order", "Order", &ORDERS, "As typed").hint("Categories have no natural order unless they are ordered words (like Never, Sometimes, Often): keep those as typed"),
         ParamDef::choice("gap", "Gap between bars", &["Narrow", "Medium", "Wide", "Lines"], "Medium").hint("Bars of a bar chart never touch: the categories are separate. Lines draws each bar as a thin vertical line, as in a vertical line graph (stick graph) of a discrete distribution"),
         ParamDef::bool("cat_ticks", "Tick marks at the categories", false).hint("A short mark on the category axis at the middle of each category, as many printed charts have"),
+        ParamDef::bool("cat_names_up", "Turn the category names", false).hint("Prints every category name turned up the page, as some charts print their scale of scores or years; otherwise a name turns only when a word does not fit its slot"),
         ParamDef::bool("val_arrow", "Arrowhead on the value axis", false).hint("A filled arrowhead just past the end of the value axis, as printed on many exam graphs"),
         ParamDef::bool("values", "Write the value on each bar", true),
         ParamDef::choice("values_at", "Values sit", &VALUES_AT, VALUES_AT[0]).hint("Inside writes each value in its bar, on a white chip; a bar too short for it keeps its value at the end"),
@@ -122,6 +123,7 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         (ID, "fill_list") => p.s("look") != LOOKS[2],
         (ID, "values_at") => p.b("values"),
         (ID, "grid_weight" | "minor") => p.b("grid"),
+        (ID, "cat_names_up") => p.s("orient") != "Horizontal",
         (ID, "err_caps" | "err_note") => parse(p.s("data")).is_ok_and(|t| t.has_err),
         _ => true,
     }
@@ -1250,6 +1252,8 @@ struct Opts {
     cat_ticks: bool,
     /// An arrowhead past the end of the value axis.
     val_arrow: bool,
+    /// Category names always turned up the page (vertical bars).
+    cat_names_up: bool,
     values: bool,
     decimals: u32,
     grid: bool,
@@ -1355,6 +1359,7 @@ fn opts(p: &Params, t: &Table) -> Opts {
         },
         cat_ticks: p.b("cat_ticks"),
         val_arrow: p.b("val_arrow"),
+        cat_names_up: p.b("cat_names_up"),
         values: p.b("values"),
         decimals: p.i("decimals").clamp(0, 2) as u32,
         grid: p.b("grid"),
@@ -2155,7 +2160,7 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
     let mut names_up = false;
     if !o.horizontal {
         let tried: Vec<Option<Vec<String>>> = idx.iter().map(|&i| wrap(&t.cats[i].name, slot - 6.0, fs, false).filter(|v| v.len() <= 3)).collect();
-        if tried.iter().all(|t| t.is_some()) {
+        if !o.cat_names_up && tried.iter().all(|t| t.is_some()) {
             name_lines = tried.into_iter().map(|t| t.unwrap()).collect();
         } else {
             names_up = true;

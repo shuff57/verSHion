@@ -233,7 +233,18 @@ fn read_description(
     schema
         .validate(&facts)
         .map_err(|e| (e, ObservationErrorStage::DescriptionSchema))?;
-    validate_topology(&facts).map_err(|e| (e, ObservationErrorStage::StructuralContract))?;
+    if let Err(e) = validate_topology(&facts) {
+        // The structural inventory is for solids and geometry diagrams. On a Cartesian plot (a step
+        // graph whose segments lie along the axes; holdout v8) its own contract can fail on strokes
+        // the plot facts already describe: the inventory is set aside, with the reason, instead
+        // of rejecting the whole reading. Geometry keeps the binding contract.
+        if !facts.get("plot").is_some_and(Value::is_object) {
+            return Err((e, ObservationErrorStage::StructuralContract));
+        }
+        let reason: String = format!("Cartesian plot; the straight-stroke inventory was set aside because it broke the structural contract: {e}").chars().take(500).collect();
+        facts["topology"] = json!({"status":"not_applicable","reason":reason,"nodes":[],"edges":[],"crossings":[]});
+        validate_topology(&facts).map_err(|e| (e, ObservationErrorStage::StructuralContract))?;
+    }
     Ok(facts)
 }
 
@@ -481,6 +492,25 @@ mod tests {
         }
         facts
     }
+    #[test]
+    fn a_cartesian_plot_whose_stroke_inventory_breaks_the_contract_keeps_its_plot_reading() {
+        // Holdout v8, APEX step graph: a step segment lies along the x-axis, recorded as a
+        // nonjoining crossing whose strokes share an endpoint.
+        let schema = vershion_ai_core::figure_observation();
+        let mut facts = plot_facts();
+        facts["topology"] = json!({"status":"complete","reason":"Axes and step segments.",
+            "nodes":[{"id":"o","position":"origin"},{"id":"xr","position":"x-axis right end"},{"id":"d","position":"open circle at x=1"}],
+            "edges":[{"id":"xp","from":"o","to":"xr","stroke":"black axis"},{"id":"se","from":"o","to":"d","stroke":"blue segment"}],
+            "crossings":[{"first":"se","second":"xp","joins":false,"evidence":"The segment lies over the axis."}]});
+        let read = read_description(&facts.to_string(), &schema).expect("the plot reading stands");
+        assert_eq!(read["topology"]["status"], "not_applicable");
+        assert!(read["topology"]["reason"].as_str().unwrap().contains("set aside"));
+        assert_eq!(read["plot"], facts["plot"], "plot facts are untouched");
+        // Without plot facts the same inventory still fails.
+        facts["plot"] = Value::Null;
+        assert_eq!(read_description(&facts.to_string(), &schema).unwrap_err().1, ObservationErrorStage::StructuralContract);
+    }
+
     #[test]
     fn an_unlisted_mark_kind_is_read_as_other_with_the_readers_word_kept() {
         // Holdout v6 (Corral #5): "arrowheads" invalidated the whole description on both attempts.

@@ -2463,3 +2463,11 @@ fn line_bars_are_thin_and_the_value_axis_can_carry_an_arrowhead() {
     }
     assert_eq!(render(&defaults()), render(&with(&[("val_arrow", "false")])), "off by default: old charts are unchanged");
 }
+
+#[test]
+fn category_names_can_be_turned_on_request() {
+    // Holdout v8, MATHCOUNTS "Quiz Scores": scores 0-21 printed turned under the bars.
+    let turned = |up: &str| render(&with(&[("cat_names_up", up)])).matches("rotate(-90)").count();
+    assert_eq!(turned("true") - turned("false"), 4, "the default data's four names turn");
+    assert_eq!(render(&defaults()), render(&with(&[("cat_names_up", "false")])), "off by default: old charts are unchanged");
+}

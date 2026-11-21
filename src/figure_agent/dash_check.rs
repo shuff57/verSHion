@@ -621,6 +621,6 @@ pub fn hand_drawn_grid(params: &BTreeMap<String, Json>) -> Option<String> {
         .filter(|t| t.trim().replace('\u{2212}', "-").parse::<f64>().is_ok())
         .count();
     (across >= 5 && down >= 5 && numbers >= 4).then(|| format!(
-        "This geometry-diagram is a coordinate graph drawn by hand ({across} horizontal and {down} vertical grid lines, {numbers} number labels). coordinate-grid draws a graph's axes, grid, tick labels and curves exactly; inspect it with get_figure and use it, unless the source needs something it cannot draw, in which case send this final again and say what in the note."
+        "This geometry-diagram is a coordinate graph drawn by hand ({across} horizontal and {down} vertical grid lines, {numbers} number labels). coordinate-grid draws a graph's axes, grid, tick labels and curves exactly; for blank graph paper (a fine minor grid with darker major lines and no axes) scatterplot with Manual axes, no pairs, Both grid directions, axes None and a darker gridline every N lines draws it exactly. Count the minor lines between two major lines in the source. Inspect one with get_figure and use it, unless the source needs something neither can draw, in which case send this final again and say what in the note."
     ))
 }
