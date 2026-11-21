@@ -190,13 +190,16 @@ def leading_continuation(case,items,numbers):
     if len(missing)==1 and all(missing[0]<n for n in printed):return [missing[0],*numbers[1:]]
     return numbers
 
-def parsed_source_map(case,page,questions):
+def parsed_source_map(case,page,questions,previous=None):
     """Source number -> saved question, from the importer's own per-raw-item provenance.
 
     The importer records every raw item (saved or dropped) with its printed number and the index of the
     question it became, so a dropped item can never shift a later number onto the wrong question. Traces
     from before that record fall back to zipping raw labels with surviving questions, which is only right
-    when nothing was dropped."""
+    when nothing was dropped.
+
+    Continued content the importer joined onto the previous page's last question (status
+    merged_into_previous_page) resolves to that question in `previous`, the previous page's questions."""
     items=page.get('items')
     if items is None:
         raw=raw_questions(page);numbers=[source_number(q) for q in raw]
@@ -210,10 +213,13 @@ def parsed_source_map(case,page,questions):
         numbers=[n if n is not None else (int(m.group(1)) if (m:=re.fullmatch(r'\s*(?:[A-Za-z]\.)?\d+(?:\.\d+)*\.(\d+)\s*',str(i.get('label') or ''))) else None) for n,i in zip(numbers,items)]
     if len(numbers)==1 and numbers[0] is None and (case['source_id']=='statistics-confidence-intervals' or (case.get('single_unnumbered_item') and len(case['question_numbers'])==1)):numbers=[1 if case['source_id']=='statistics-confidence-intervals' else case['question_numbers'][0]]
     numbers=leading_continuation(case,items,numbers)
-    by_number={};index={};status={};unresolved=[];groups={}
+    by_number={};index={};status={};unresolved=[];groups={};merged={}
     for number,item in zip(numbers,items):
         if number is None:continue
         status[number]=item.get('status')
+        mi=item.get('merged_into')
+        if item.get('status')=='merged_into_previous_page' and previous is not None and type(mi) is int and 0<=mi<len(previous):
+            by_number[number]=previous[mi];merged[number]=mi;continue
         qi=item.get('question_index')
         if qi is not None and 0<=qi<len(questions):
             by_number[number]=questions[qi];index[number]=qi
@@ -221,8 +227,9 @@ def parsed_source_map(case,page,questions):
             # A valid crop can still overlap another problem or have no visible task. New or
             # explicit review states must never silently become complete source items.
             if item.get('status') not in {'saved','saved_figure_only'}:unresolved.append(number)
-    return {'numbers':numbers,'by_number':by_number,'index':index,'all_saved':all(i.get('question_index') is not None for i in items),
-            'unresolved':unresolved,'status':status,'provenance':'importer_source_items','groups':groups}
+    return {'numbers':numbers,'by_number':by_number,'index':index,
+            'all_saved':all(i.get('question_index') is not None or (i.get('status')=='merged_into_previous_page' and i.get('merged_into') in merged.values()) for i in items),
+            'unresolved':unresolved,'status':status,'provenance':'importer_source_items','groups':groups,'merged':merged}
 
 def figure_execution_evidence(page):
     """Diagnostic logical-call counts across ALL retained attempts, never a source-quality gate.
@@ -361,7 +368,10 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
     page=pages[page_index]
     offset=sum(len(p['questions']) for p in pages[:page_index])
     questions=banks[0]['questions'][offset:offset+len(page['questions'])]
-    source=parsed_source_map(case,page,questions);numbers=source['numbers'];expected=case['question_numbers']
+    prev_page=pages[page_index-1] if page_index>0 else None
+    previous=banks[0]['questions'][offset-len(prev_page['questions']):offset] if prev_page is not None else None
+    source=parsed_source_map(case,page,questions,previous);numbers=source['numbers'];expected=case['question_numbers']
+    merged=source.get('merged',{})
     by_number=source['by_number']
     # A question's own figure run; runs that redrew one of its answer choices carry 'choice'.
     runs={x['question_index']:x for x in page.get('figure_runs',[]) if x.get('choice') is None}
@@ -383,7 +393,24 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
         own_ok=not own or verified(runs.get(qi,{}),q.get('figure'))
         choices_ok=all(verified(choice_runs.get((qi,)+key,{}),a.get('figure')) for key,a in pictured)
         return own or bool(pictured),bool(scope_ok and own_ok and choices_ok)
+    def merged_pictures(mi):
+        """part_pictures for a continuation joined onto question `mi` of the previous page, checked
+        against that page's own figure runs and scope review."""
+        q=previous[mi];own=bool(q.get('image'));pictured=[(key,a) for key,a in keyed_choice_answers(q) if a.get('image')]
+        prev_runs={x['question_index']:x for x in prev_page.get('figure_runs',[]) if x.get('choice') is None}
+        prev_choice={(x['question_index'],(x.get('choice') or {}).get('part'),(x.get('choice') or {}).get('choice')):x for x in prev_page.get('figure_runs',[]) if x.get('choice') is not None}
+        prev_scope=prev_page.get('source_box_review')
+        scope_ok=prev_scope is None or prev_scope.get('applied') is True
+        own_ok=not own or verified(prev_runs.get(mi,{}),q.get('figure'))
+        choices_ok=all(verified(prev_choice.get((mi,)+key,{}),a.get('figure')) for key,a in pictured)
+        return own or bool(pictured),bool(scope_ok and own_ok and choices_ok),prev_runs.get(mi,{})
     for n in required:
+        if n in merged:
+            has,ok,run=merged_pictures(merged[n]);q=previous[merged[n]]
+            good=has and ok and not has_invented_key(q)
+            (matched_figures if good else missing_figures).append(n)
+            if not good:figure_failures.append(figure_failure_detail(n,q,run,scope_ready=scope_ready,unresolved=False,contract=None))
+            continue
         q=by_number.get(n);index=source['index'].get(n)
         # Every saved question carrying this number: one, or each part of a question split for its figures.
         parts=[part_pictures(qi) for qi in source.get('groups',{}).get(n,[index] if index is not None else [])]
@@ -410,7 +437,7 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
             figure_failures.append(figure_failure_detail(n,q,run,scope_ready=item_scope_ready,
                 unresolved=n in source['unresolved'],contract=contract_failures.get(str(n))))
     for n,q in by_number.items():
-        if n not in required and (q.get('image') or q.get('figure')):invented_figures.append(n)
+        if n not in required and n not in merged and (q.get('image') or q.get('figure')):invented_figures.append(n)
     for q in questions:
         image=q.get('image')
         if image:
@@ -420,7 +447,7 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
                     decoded.verify()
                 if re.fullmatch(r'[a-f0-9]{64}',p.stem) and sha(p)!=p.stem:broken_media.append(q['id'])
             except (OSError,ValueError):broken_media.append(q['id'])
-    count_ok=len(questions)==len(expected)
+    count_ok=len(questions)+len(merged)==len(expected)
     order_ok=numbers==expected and source['all_saved']
     key_ok=not any(has_invented_key(q) for q in questions)
     # The bank gives a question with no printed points the default; that is the only allowed

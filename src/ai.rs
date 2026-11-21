@@ -1169,6 +1169,7 @@ fn figure_request_for_item(stem: &str, rejected: &str, printed_label: Option<&st
         request.push_str(&format!("\nApplication-owned source identification: {marker} is the external worksheet item number, not a diagram label. A padded crop or unverified source observation may include it; do not print that item marker in the recreated figure. Preserve actual dimensions, variables and point names."));
     }
     request.push_str("\nFor supplied scatter plots preserve marker size relative to grid spacing and visible mark-to-mark and mark-to-axis touching/overlap, as well as plotted positions. Do not move data points to compensate for marker sizes or frame proportions.");
+    request.push_str("\nCount the tick marks on each axis of the crop, including unlabelled minor ticks between numbered ones, and make the recreated axis show the same number of ticks at the same spacing; numbered labels alone do not fix the tick count.");
     request.push_str("\nWhen source scale numbers are printed directly over gridlines without white backing, coordinate-grid's number_halo=false can preserve that grid/label contact. Read each sign literally; a nearby grid stub is not an extra minus sign. Use the option only to match the source, not to change supplied tick values.");
     request
 }
@@ -1301,7 +1302,12 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
             }
         }
     }
-    let mut results: Vec<Option<(Option<(crate::model::ImageRef, crate::model::FigureSpec)>, FigureImportTrace)>> = run_redraws(&jobs, cfg).await.into_iter().map(Some).collect();
+    #[cfg(not(target_arch = "wasm32"))]
+    let started = std::time::Instant::now();
+    let mut first = run_redraws(&jobs, cfg).await;
+    #[cfg(not(target_arch = "wasm32"))]
+    retry_failed_siblings(&jobs, &mut first, started.elapsed().as_secs_f64(), cfg).await;
+    let mut results: Vec<Option<_>> = first.into_iter().map(|(out, _secs)| Some(out)).collect();
     for slot in slots {
         let trace = match slot {
             Slot::Done(trace) => trace,
@@ -1327,7 +1333,52 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
     Ok(Converted { doc: r.doc, warnings: r.warnings, cropped: r.figures, redrawn, raw_reply: raw.into(), figure_runs, items: r.items, context: context.cloned(), source_box_review, direction_review:None })
 }
 
+type RedrawOutcome = (Option<(crate::model::ImageRef, crate::model::FigureSpec)>, FigureImportTrace);
+
+/// Redraw phases at most this long may spend one more wave on retries (seconds).
+#[cfg(not(target_arch = "wasm32"))]
+const RETRY_PHASE_SECS: f64 = 240.0;
+/// A failed redraw is retried only when its own first run took at most this long, which bounds the
+/// extra wait (a document runs under one 20-minute budget in the harness).
+#[cfg(not(target_arch = "wasm32"))]
+const RETRY_JOB_SECS: f64 = 180.0;
+
+/// Which printed item a picture belongs to: a question split into one saved question per
+/// sub-figure keeps its printed label, so its sub-figures are siblings.
+fn sibling_key(job: &RedrawJob) -> String {
+    job.printed_label.clone().unwrap_or_else(|| format!("#{}", job.question))
+}
+
+/// Failed redraws whose siblings (other pictures of the same printed item) were redrawn: the
+/// figure type is drawable, so a failure there is often a one-off reading or judging slip. One
+/// wave of them is asked once more when the page's redraws were quick enough (holdout v11: five
+/// items kept one crop among redrawn siblings).
+fn sibling_retries(jobs: &[RedrawJob], results: &[(RedrawOutcome, f64)], phase_secs: f64, phase_limit: f64, job_limit: f64) -> Vec<usize> {
+    if phase_secs > phase_limit { return Vec::new(); }
+    let drawn: std::collections::HashSet<String> = jobs.iter().zip(results).filter(|(_, r)| r.0.0.is_some()).map(|(j, _)| sibling_key(j)).collect();
+    (0..jobs.len())
+        .filter(|&i| results[i].0.0.is_none() && results[i].1 <= job_limit && drawn.contains(&sibling_key(&jobs[i])))
+        .take(3)
+        .collect()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn retry_failed_siblings(jobs: &[RedrawJob], results: &mut [(RedrawOutcome, f64)], phase_secs: f64, cfg: &AiCfg) {
+    let retry = sibling_retries(jobs, results, phase_secs, RETRY_PHASE_SECS, RETRY_JOB_SECS);
+    if retry.is_empty() { return; }
+    let again: Vec<RedrawJob> = retry.iter().map(|&i| jobs[i].clone()).collect();
+    for (&i, (out, secs)) in retry.iter().zip(run_redraws(&again, cfg).await) {
+        if out.0.is_none() { continue; }
+        let (_, first) = &results[i].0;
+        let why = first.failure.as_ref().map(|f| f.detail.clone()).or_else(|| first.error.clone()).unwrap_or_else(|| first.note.clone());
+        let (redraw, mut trace) = out;
+        trace.note = format!("Second attempt, made because the item's other pictures were redrawn; the first failed: {why}. {}", trace.note).trim_end().to_string();
+        results[i] = ((redraw, trace), results[i].1 + secs);
+    }
+}
+
 /// One picture for the figure agent to redraw: a question's own, or one of its answer choices'.
+#[derive(Clone)]
 struct RedrawJob {
     question: usize,
     choice: Option<ChoiceRef>,
@@ -1347,7 +1398,13 @@ const FIGURE_PARALLEL: usize = 3;
 
 /// Runs a page's redraws, a few at a time on native (each model call blocks its thread), in
 /// order in the browser. Results come back in job order.
-async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(Option<(crate::model::ImageRef, crate::model::FigureSpec)>, FigureImportTrace)> {
+async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(RedrawOutcome, f64)> {
+    #[cfg(not(target_arch = "wasm32"))]
+    let timed = |job: &RedrawJob| {
+        let t = std::time::Instant::now();
+        let out = block_on(redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg));
+        (out, t.elapsed().as_secs_f64())
+    };
     #[cfg(not(target_arch = "wasm32"))]
     if jobs.len() > 1 {
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1358,8 +1415,7 @@ async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(Option<(crate::mod
                 sc.spawn(|| loop {
                     let i = next.fetch_add(1, Ordering::SeqCst);
                     let Some(job) = jobs.get(i) else { break };
-                    let out = block_on(redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg));
-                    *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(out);
+                    *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(timed(job));
                 });
             }
         });
@@ -1367,7 +1423,14 @@ async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(Option<(crate::mod
     }
     let mut out = Vec::with_capacity(jobs.len());
     for job in jobs {
-        out.push(redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg).await);
+        #[cfg(not(target_arch = "wasm32"))]
+        let t = std::time::Instant::now();
+        let result = redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg).await;
+        #[cfg(not(target_arch = "wasm32"))]
+        let secs = t.elapsed().as_secs_f64();
+        #[cfg(target_arch = "wasm32")]
+        let secs = 0.0;
+        out.push((result, secs));
     }
     out
 }
@@ -1745,7 +1808,99 @@ pub async fn convert_document_async(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, 
         out.push(r);
         progress(i + 1, pages.len());
     }
+    for k in 1..out.len() {
+        let (before, after) = out.split_at_mut(k);
+        if let (Ok(prev), Ok(next)) = (&mut before[k - 1], &mut after[0]) {
+            join_page_break(prev, next, k);
+        }
+    }
     out
+}
+
+/// Join content that continues a question begun on the previous page (the reply's `continued`
+/// item, saved first on `next`) onto that page's last question, so a problem split by a page break
+/// is one bank item with its number, data and task. Returns whether it joined. A join that would
+/// drop a picture or answers is not made; the continuation then stays saved and flagged.
+fn join_page_break(prev: &mut Converted, next: &mut Converted, prev_page: usize) -> bool {
+    use crate::model::{Kind, PartKind};
+    let Some(slot) = next.items.iter().position(|i| i.question_index == Some(0) && i.status == "saved_continued") else { return false };
+    let Some(target) = prev.doc.questions.len().checked_sub(1) else { return false };
+    let cont = &next.doc.questions[0];
+    let host = &prev.doc.questions[target];
+    let choice_pictures = |q: &crate::model::Question| match &q.kind {
+        Kind::Mc { answers } => answers.iter().any(|a| a.image.is_some() || a.figure.is_some()),
+        Kind::Multipart { parts } => parts.iter().any(|p| matches!(&p.kind, PartKind::Mc { answers } if answers.iter().any(|a| a.image.is_some() || a.figure.is_some()))),
+        _ => false,
+    };
+    let cont_picture = cont.image.is_some() || cont.figure.is_some();
+    if choice_pictures(cont) || (cont_picture && (host.image.is_some() || host.figure.is_some())) { return false; }
+    let open_host = matches!(&host.kind, Kind::Short { sample } if sample.trim().is_empty());
+    let kind = match (&host.kind, &cont.kind) {
+        (Kind::Multipart { parts: a }, Kind::Multipart { parts: b }) => {
+            Kind::Multipart { parts: a.iter().chain(b).cloned().collect() }
+        }
+        (Kind::Multipart { parts }, Kind::Short { sample }) if sample.trim().is_empty() && !parts.is_empty() => {
+            let mut parts = parts.clone();
+            let last = parts.last_mut().expect("nonempty parts");
+            last.stem = join_text(&last.stem, &cont.stem);
+            Kind::Multipart { parts }
+        }
+        (Kind::Short { sample: a }, Kind::Short { sample: b }) => {
+            Kind::Short { sample: if a.trim().is_empty() { b.clone() } else { a.clone() } }
+        }
+        (_, other) if open_host && !matches!(other, Kind::Short { .. }) => other.clone(),
+        _ => return false,
+    };
+    let into_part = matches!((&host.kind, &cont.kind), (Kind::Multipart { .. }, Kind::Short { .. }));
+    let cont = next.doc.questions.remove(0);
+    let label = prev.items.iter().find(|i| i.question_index == Some(target)).and_then(|i| i.label.clone()).unwrap_or_else(|| format!("{}", target + 1));
+    let host = &mut prev.doc.questions[target];
+    if !into_part { host.stem = join_text(&host.stem, &cont.stem); }
+    host.kind = kind;
+    if host.points.is_none() { host.points = cont.points; }
+    for topic in cont.topics {
+        if topic != crate::ditto::CONTINUED_TOPIC && !host.topics.contains(&topic) { host.topics.push(topic); }
+    }
+    if host.explanation.is_none() { host.explanation = cont.explanation; }
+    if cont_picture {
+        host.image = cont.image;
+        host.figure = cont.figure;
+    }
+    let mut kept = Vec::with_capacity(next.figure_runs.len());
+    for mut run in next.figure_runs.drain(..) {
+        if run.question_index == 0 {
+            run.question_index = target;
+            prev.figure_runs.push(run);
+        } else {
+            run.question_index -= 1;
+            kept.push(run);
+        }
+    }
+    next.figure_runs = kept;
+    for item in &mut next.items {
+        if let Some(qi) = item.question_index.as_mut() && *qi > 0 { *qi -= 1; }
+    }
+    let item = &mut next.items[slot];
+    item.question_index = None;
+    item.merged_into = Some(target);
+    item.status = "merged_into_previous_page".into();
+    item.reason = Some(format!("continues question {label} from page {prev_page}; joined to that question"));
+    prev.warnings.push(format!("Question {label}: joined with its continuation printed at the top of page {}.", prev_page + 1));
+    next.warnings.retain(|w| !w.contains("continues a question begun on an earlier page"));
+    next.warnings.push(format!("The continuation at the top of this page was joined to question {label} on page {prev_page}."));
+    true
+}
+
+/// Two halves of text split by a page break, joined with one space (a word hyphenated at the break is rejoined).
+fn join_text(first: &str, second: &str) -> String {
+    let (a, b) = (first.trim_end(), second.trim_start());
+    if a.is_empty() { return b.to_string(); }
+    if b.is_empty() { return a.to_string(); }
+    let mut chars = a.chars().rev();
+    if chars.next() == Some('-') && chars.next().is_some_and(char::is_alphabetic) && b.starts_with(|c: char| c.is_lowercase()) {
+        return format!("{}{b}", &a[..a.len() - 1]);
+    }
+    format!("{a} {b}")
 }
 
 /// Several documents, each read in page order, up to `VERSHION_AI_PARALLEL` documents at the same time.
@@ -1811,6 +1966,93 @@ fn base64_encode(data: &[u8]) -> String {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    fn page_question(stem: &str, kind: crate::model::Kind) -> crate::model::Question {
+        crate::model::Question { id: crate::model::new_id(), stem: stem.into(), kind, points: None, difficulty: None, topics: Vec::new(), image: None, explanation: None, figure: None, created: 0, modified: 0 }
+    }
+    fn page_of(questions: Vec<crate::model::Question>, items: Vec<crate::ditto::SourceItem>) -> Converted {
+        Converted { doc: crate::formats::ImportDoc { name: String::new(), questions, exams: Vec::new() }, warnings: Vec::new(), cropped: 0, redrawn: 0, raw_reply: String::new(), figure_runs: Vec::new(), items, context: None, source_box_review: None, direction_review: None }
+    }
+    fn saved(index: usize, label: &str, number: Option<u32>, status: &str, qi: usize) -> crate::ditto::SourceItem {
+        crate::ditto::SourceItem { index, label: Some(label.into()), number, status: status.into(), question_index: Some(qi), figure: "none".into(), ..Default::default() }
+    }
+    fn short() -> crate::model::Kind { crate::model::Kind::Short { sample: String::new() } }
+    fn figure_run(question_index: usize) -> FigureImportTrace {
+        FigureImportTrace { executions: Vec::new(), question_index, choice: None, sees: None, steps: Vec::new(), spec: None, review: None, accepted: true, note: String::new(), error: None, failure: None }
+    }
+
+    #[test]
+    fn only_a_quick_failed_picture_with_a_redrawn_sibling_is_retried() {
+        let job = |question: usize, label: Option<&str>| RedrawJob { question, choice: None, crop: Vec::new(), context: String::new(), printed_label: label.map(str::to_string), label: String::new() };
+        let ok = |q: usize, secs: f64| ((Some((crate::model::ImageRef::default(), crate::model::FigureSpec { id: "x".into(), params: Default::default() })), figure_run(q)), secs);
+        let bad = |q: usize, secs: f64| ((None, figure_run(q)), secs);
+        // Question 1 split into three saved questions (1a, 1b, 1c), one failed; question 2 alone failed;
+        // question 3's own picture redrew but its slow choice picture failed.
+        let jobs = vec![job(0, Some("1")), job(1, Some("1")), job(2, Some("1")), job(3, Some("2")), job(4, None), job(4, None)];
+        let results = vec![ok(0, 40.0), bad(1, 60.0), ok(2, 50.0), bad(3, 30.0), ok(4, 20.0), bad(4, 200.0)];
+        assert_eq!(sibling_retries(&jobs, &results, 120.0, 240.0, 180.0), [1]);
+        assert!(sibling_retries(&jobs, &results, 300.0, 240.0, 180.0).is_empty(), "a slow page spends no more time");
+        assert_eq!(sibling_retries(&jobs, &results, 120.0, 240.0, 600.0), [1, 5]);
+    }
+
+    #[test]
+    fn a_problem_split_by_a_page_break_is_joined_into_one_question() {
+        let mut prev = page_of(vec![page_question("First.", short()), page_question("Assume the sons of professional men ... Set up", short())],
+            vec![saved(0, "10", Some(10), "saved", 0), saved(1, "11", Some(11), "saved", 1)]);
+        let mut cont = page_question("the matrix of transition probabilities. Find the probability.", short());
+        cont.topics.push(crate::ditto::CONTINUED_TOPIC.into());
+        let mut next = page_of(vec![cont, page_question("Twelve.", short()), page_question("Thirteen.", short())],
+            vec![saved(0, "continued", None, "saved_continued", 0), saved(1, "12", Some(12), "saved", 1), saved(2, "13", Some(13), "saved", 2)]);
+        next.warnings.push("Question continued: continues a question begun on an earlier page; its number and task are not printed here, so review it with that page.".into());
+        next.figure_runs.push(figure_run(2));
+        assert!(join_page_break(&mut prev, &mut next, 1));
+        assert_eq!(prev.doc.questions[1].stem, "Assume the sons of professional men ... Set up the matrix of transition probabilities. Find the probability.");
+        assert!(prev.doc.questions[1].topics.is_empty());
+        assert_eq!(next.doc.questions.iter().map(|q| q.stem.as_str()).collect::<Vec<_>>(), ["Twelve.", "Thirteen."]);
+        assert_eq!(next.items.iter().map(|i| i.question_index).collect::<Vec<_>>(), [None, Some(0), Some(1)]);
+        assert_eq!((next.items[0].status.as_str(), next.items[0].merged_into), ("merged_into_previous_page", Some(1)));
+        assert_eq!(next.figure_runs[0].question_index, 1);
+        assert!(next.warnings.iter().all(|w| !w.contains("continues a question begun")));
+        assert!(prev.warnings.iter().any(|w| w.contains("Question 11: joined")));
+        let json = serde_json::to_value(&next.items).unwrap();
+        assert_eq!(json[0]["merged_into"], 1);
+        assert!(json[1].get("merged_into").is_none());
+    }
+
+    #[test]
+    fn continued_parts_and_a_moved_picture_join_but_a_second_picture_does_not() {
+        use crate::model::{Kind, Part, PartKind};
+        let part = |s: &str| Part { stem: s.into(), kind: PartKind::Short { sample: String::new() } };
+        let mut prev = page_of(vec![page_question("Use the table.", Kind::Multipart { parts: vec![part("a"), part("b")] })], vec![saved(0, "4", Some(4), "saved", 0)]);
+        let mut cont = page_question("", Kind::Multipart { parts: vec![part("c")] });
+        cont.image = Some(crate::model::ImageRef { file: "media/x.png".into(), width: 1, height: 1 });
+        let mut next = page_of(vec![cont], vec![saved(0, "continued", None, "saved_continued", 0)]);
+        next.figure_runs.push(figure_run(0));
+        assert!(join_page_break(&mut prev, &mut next, 1));
+        let Kind::Multipart { parts } = &prev.doc.questions[0].kind else { panic!() };
+        assert_eq!(parts.iter().map(|p| p.stem.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
+        assert_eq!(prev.doc.questions[0].stem, "Use the table.");
+        assert!(prev.doc.questions[0].image.is_some());
+        assert_eq!((prev.figure_runs.len(), prev.figure_runs[0].question_index, next.figure_runs.len()), (1, 0, 0));
+        // Text continuing the last part goes to that part.
+        let mut prev = page_of(vec![page_question("Lead.", Kind::Multipart { parts: vec![part("a) Find the"), part("b) Show that the prob-")] })], vec![saved(0, "4", Some(4), "saved", 0)]);
+        let mut next = page_of(vec![page_question("ability is one half.", short())], vec![saved(0, "continued", None, "saved_continued", 0)]);
+        assert!(join_page_break(&mut prev, &mut next, 1));
+        let Kind::Multipart { parts } = &prev.doc.questions[0].kind else { panic!() };
+        assert_eq!(parts[1].stem, "b) Show that the probability is one half.");
+        // Both halves carry a picture: no join, the continuation stays flagged.
+        let mut host = page_question("See the figure.", short());
+        host.image = Some(crate::model::ImageRef::default());
+        let mut cont = page_question("more", short());
+        cont.image = Some(crate::model::ImageRef::default());
+        let mut prev = page_of(vec![host], vec![saved(0, "2", Some(2), "saved", 0)]);
+        let mut next = page_of(vec![cont], vec![saved(0, "continued", None, "saved_continued", 0)]);
+        assert!(!join_page_break(&mut prev, &mut next, 1));
+        assert_eq!((next.doc.questions.len(), next.items[0].status.as_str()), (1, "saved_continued"));
+        // No continuation on the next page: nothing changes.
+        let mut next = page_of(vec![page_question("Three.", short())], vec![saved(0, "3", Some(3), "saved", 0)]);
+        assert!(!join_page_break(&mut prev, &mut next, 1));
+    }
 
     fn settings(provider: &str, model: &str, base: &str) -> Settings {
         Settings { ai_provider: provider.into(), ai_model: model.into(), ai_base: base.into(), dark: bool::default(), ..Default::default() }

@@ -143,13 +143,15 @@ fn unresolved_topology(facts: &Value) -> Option<String> {
         })
 }
 
+/// Plot facts whose uncertainty holds a redraw. Point-to-axis contact is a
+/// styling detail the scatter redraw carries from marker size and position, so
+/// an unreadable contact no longer leaves the figure as a crop.
 fn unresolved_plot(facts: &Value) -> Option<String> {
     let plot = facts["plot"].as_object()?;
     for key in [
         "axis_ends",
         "axis_overhang",
         "grid_spill",
-        "point_axis_contact",
     ] {
         for (side, value) in plot[key].as_object().expect("schema checked plot fields") {
             if value == "uncertain" {
@@ -713,8 +715,8 @@ mod tests {
         assert_eq!(read_description(&plain.to_string(),&schema).unwrap(),plain);assert!(unresolved_plot(&plain).is_none());
     }
     #[test]
-    fn source_v4_uncertain_point_contact_is_a_hold_not_a_default_contact_value() {
-        let schema=vershion_ai_core::figure_observation();let mut facts=plot_facts();facts["plot"]["points_present"]=json!("yes");facts["plot"]["point_axis_contact"]["y"]=json!("uncertain");facts["uncertain"]=json!(["The source mark and axis boundary cannot be resolved."]);let before=facts.clone();let parsed=read_description(&facts.to_string(),&schema).unwrap();assert_eq!(parsed,before);assert_eq!(parsed["plot"]["point_axis_contact"]["y"],"uncertain");assert!(unresolved_plot(&parsed).unwrap().contains("plot.point_axis_contact.y"));
+    fn source_v4_uncertain_point_contact_is_kept_without_holding_the_redraw() {
+        let schema=vershion_ai_core::figure_observation();let mut facts=plot_facts();facts["plot"]["points_present"]=json!("yes");facts["plot"]["point_axis_contact"]["y"]=json!("uncertain");facts["uncertain"]=json!(["The source mark and axis boundary cannot be resolved."]);let before=facts.clone();let parsed=read_description(&facts.to_string(),&schema).unwrap();assert_eq!(parsed,before);assert_eq!(parsed["plot"]["point_axis_contact"]["y"],"uncertain");assert!(unresolved_plot(&parsed).is_none());
     }
     #[test]
     fn source_v4_endpoint_format_repair_and_uncertain_contact_hold_stay_within_two_calls() {
@@ -722,11 +724,11 @@ mod tests {
         let mut image=Vec::new();image::DynamicImage::ImageRgb8(image::RgbImage::new(32,24)).write_to(&mut std::io::Cursor::new(&mut image),image::ImageFormat::Png).unwrap();
         let mut plain=plot_facts();for side in ["x_negative","x_positive","y_negative","y_positive"]{plain["plot"]["axis_ends"][side]=json!("line");}
         let mut legacy=plain.clone();legacy["plot"]["axis_ends"]["x_negative"]=json!("none");legacy["plot"]["axis_ends"]["y_negative"]=json!("none");legacy["plot"]["evidence"]=json!(["PLANTED_PRIOR_ORIGIN_READING_63"]);
-        let mut uncertain=plain.clone();uncertain["plot"]["points_present"]=json!("yes");uncertain["plot"]["point_axis_contact"]["y"]=json!("uncertain");
+        let mut uncertain=plain.clone();uncertain["plot"]["axis_overhang"]["y_positive"]=json!("uncertain");
         for hold in [false,true] {
             let(first,second)=if hold{(uncertain.clone(),uncertain.clone())}else{(legacy.clone(),plain.clone())};let response=|v:&Value|(200,json!({"choices":[{"message":{"content":v.to_string()}}]}).to_string());let(base,server)=super::super::tests::stub_relay(vec![response(&first),response(&second)]);let cfg=AiCfg{provider:"custom".into(),base,model:"stub".into(),..AiCfg::default()};let(vision,trace)=block_on(observe(&image,&cfg));let seen=server.join().unwrap();assert_eq!(seen.len(),2);assert_eq!(trace.max_attempts,2);assert_eq!(trace.replies.len(),2);assert_eq!(trace.facts,Some(second));assert_eq!(trace.schema.as_ref().unwrap().name,"source_figure_observation_v4");
             for(_,request)in &seen{let body:Value=serde_json::from_str(request).unwrap();assert_eq!(body["max_tokens"],8192);assert!(request.contains("x_negative and y_negative endpoints there are line"));}
-            if hold {assert_eq!(trace.error_stage,Some(ObservationErrorStage::UncertainSource));assert!(trace.error.as_deref().unwrap().contains("point_axis_contact.y"));assert_eq!(trace.replies[1]["attempt_kind"],"source_reinspection");}
+            if hold {assert_eq!(trace.error_stage,Some(ObservationErrorStage::UncertainSource));assert!(trace.error.as_deref().unwrap().contains("axis_overhang.y_positive"));assert_eq!(trace.replies[1]["attempt_kind"],"source_reinspection");}
             else {assert!(trace.error.is_none());assert_eq!(trace.replies[1]["attempt_kind"],"format_repair");assert!(!seen[1].1.contains("PLANTED_PRIOR_ORIGIN_READING_63"));assert_input_images(&seen[1].1,&trace.replies[1],&image,&vision,false);}
         }
     }
@@ -754,11 +756,13 @@ mod tests {
         let good = plot_facts();
         read_description(&good.to_string(), &schema).unwrap();
         assert!(unresolved_plot(&good).is_none());
+        let mut contact = good.clone();
+        contact["plot"]["point_axis_contact"]["x"] = json!("uncertain");
+        assert!(unresolved_plot(&contact).is_none());
         for group in [
             "axis_ends",
             "axis_overhang",
             "grid_spill",
-            "point_axis_contact",
         ] {
             let mut bad = good.clone();
             let key = bad["plot"][group]

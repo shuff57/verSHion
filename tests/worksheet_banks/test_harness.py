@@ -454,6 +454,24 @@ class DocumentAndProvenanceTests(unittest.TestCase):
         # The whole bank must be accounted for by the trace, or a trimmed trace could hide extra questions.
         (self.store/'banks.json').write_text(json.dumps([{'questions':[dict(self.q('one'),points=1.0),dict(self.q('two'),points=1.0),dict(self.q('extra'),points=1.0)]}]))
         self.assertFalse(h.score_case(c1,self.store,trace,page_index=0)['bank_integrity_ok'])
+    def test_a_continuation_joined_onto_the_previous_page_counts_on_both_pages(self):
+        # Holdout v11, Grinstead-Snell exercise 11: data and "Set up" on page 1, the task on page 2.
+        c1={'question_numbers':[10,11],'required_figure_numbers':[],'source_id':'s','source_pdf_page':1,
+            'question_expectations':{'11':{'math':'transition'}}}
+        c2={'question_numbers':[11,12],'required_figure_numbers':[],'source_id':'s','source_pdf_page':2,
+            'question_expectations':{'11':{'math':'grandson'}}}
+        joined=self.q('Sons of professional men ... Set up the matrix of transition probabilities. Find the grandson probability.')
+        merged={'index':0,'number':None,'label':'continued','question_index':None,'status':'merged_into_previous_page','merged_into':1,'figure':'none'}
+        pages=[{'document':'s','questions':[self.q('ten'),joined],'figure_runs':[],'warnings':[],'items':[self.item(0,10,0),self.item(1,11,1)]},
+               {'document':'s','questions':[self.q('twelve')],'figure_runs':[],'warnings':[],'items':[merged,self.item(1,12,0)]}]
+        trace=self.save(pages)
+        a=h.score_case(c1,self.store,trace,page_index=0);b=h.score_case(c2,self.store,trace,page_index=1)
+        self.assertTrue(a['structural_pass'] and b['structural_pass'])
+        self.assertEqual(b['question_numbers'],[11,12]);self.assertEqual(b['review_unresolved'],[])
+        self.assertEqual(h.parsed_source_map(c2,pages[1],pages[1]['questions'],pages[0]['questions'])['by_number'][11]['stem'],joined['stem'])
+        # Without the previous page (or with a bad index) the number is not credited.
+        self.assertNotIn(11,h.parsed_source_map(c2,pages[1],pages[1]['questions'])['by_number'])
+        self.assertNotIn(11,h.parsed_source_map(c2,dict(pages[1],items=[dict(merged,merged_into=5),pages[1]['items'][1]]),pages[1]['questions'],pages[0]['questions'])['by_number'])
     def test_documents_group_by_source_in_original_page_order_and_never_mix(self):
         cases=[{'id':'b2','source_id':'b','source_pdf_page':2},{'id':'a1','source_id':'a','source_pdf_page':1},{'id':'b1','source_id':'b','source_pdf_page':1}]
         groups=h.document_groups(cases)

@@ -159,8 +159,9 @@ pub struct SourceItem {
     pub label: Option<String>,
     /// The printed question number when the label is a plain number.
     pub number: Option<u32>,
-    /// `saved`, `saved_figure_only`, `saved_figure_only_unresolved`,
-    /// `saved_figure_box_unresolved`, `saved_figure_ownership_unresolved`, `saved_part_picture_missing` or `dropped`.
+    /// `saved`, `saved_figure_only`, `saved_figure_only_unresolved`, `saved_figure_box_unresolved`,
+    /// `saved_figure_ownership_unresolved`, `saved_part_picture_missing`, `saved_continued`,
+    /// `merged_into_previous_page` or `dropped`.
     pub status: String,
     /// Index into the parsed question list of this page when it was saved.
     pub question_index: Option<usize>,
@@ -175,6 +176,10 @@ pub struct SourceItem {
     pub headings: Vec<String>,
     /// The task directions applied to this item and where they came from.
     pub directions: Option<DirectionSource>,
+    /// For continued content joined across a page break: the question index on the previous page
+    /// that now holds it (status `merged_into_previous_page`, no `question_index` of its own).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merged_into: Option<usize>,
 }
 
 /// Source ownership is kept independently of the parent image slot used by stored questions.

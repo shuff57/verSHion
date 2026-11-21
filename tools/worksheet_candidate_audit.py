@@ -90,8 +90,11 @@ def reconcile(cases, run, run_sha, references, audits, corpus, threshold=harness
             else:
                 require(digest(store / 'banks.json') == result['bank_sha256'] and digest(store / 'trace.json') == result['trace_sha256'], 'Inconsistent document hashes: ' + cid)
             verified = harness.score_case(expected[cid], store, verified_stores[str(store)], threshold=threshold, page_index=result.get('page_index', 0))
-            page = verified_stores[str(store)]['pages'][result.get('page_index', 0)]
-            saved = harness.parsed_source_map(expected[cid], page, page['questions'])
+            page_index = result.get('page_index', 0)
+            trace_pages = verified_stores[str(store)]['pages']
+            page = trace_pages[page_index]
+            previous = trace_pages[page_index - 1]['questions'] if page_index > 0 else None
+            saved = harness.parsed_source_map(expected[cid], page, page['questions'], previous)
             require(set(case['items']) == set(map(str, expected[cid]['question_numbers'])), 'Audit must account for every item: ' + cid)
             items = {}
             required = set(expected[cid]['required_figure_numbers'])
