@@ -120,9 +120,9 @@ pub(crate) fn exact_pole(n: &Node, x: &Ex, y: &Ex) -> bool {
 
 /// f(x, y) read from the equation, with the quantities whose sign change marks a point where f is undefined.
 #[derive(Clone, Debug)]
-pub(crate) struct F { pub tree: Node, pub guards: Vec<Node> }
+pub(crate) struct F { pub tree: Node, pub guards: Vec<Node>, pub branch: Vec<Node> }
 impl F {
-    pub(crate) fn new(tree: Node) -> F { let mut g = vec![]; guards_of(&tree, &mut g); F { tree, guards: g } }
+    pub(crate) fn new(tree: Node) -> F { let (mut g, mut br) = (vec![], vec![]); guards_of(&tree, &mut g, &mut br); F { tree, guards: g, branch: br } }
     /// The slope at (x, y), or None where f is undefined: where any part of it is not a finite number (1/ln y at y = 0
     /// is undefined, not the −0 that 1/(−∞) gives). A finite slope however large is a value.
     pub(crate) fn at(&self, x: f64, y: f64) -> Option<f64> { evs(&self.tree, x, y) }
@@ -141,17 +141,20 @@ fn factors(n: &Node, out: &mut Vec<Node>) {
         _ => out.push(n.clone()),
     }
 }
-fn guards_of(n: &Node, out: &mut Vec<Node>) {
+/// `out`: where f stops being defined (denominators, domains). `br`: where f stops being smooth in y though defined (the
+/// base of a root with a power under 1 that holds y: y^(2/3), √y and ∛(y − 1) at 0), where the solution need not be unique.
+fn guards_of(n: &Node, out: &mut Vec<Node>, br: &mut Vec<Node>) {
     use Node::*;
     match n {
         Num(..) | X | Pi | Euler => {}
-        Neg(a) => guards_of(a, out),
-        Add(a, c) | Sub(a, c) | Mul(a, c) => { guards_of(a, out); guards_of(c, out); }
-        Div(a, c) => { guards_of(a, out); guards_of(c, out); factors(c, out); }
+        Neg(a) => guards_of(a, out, br),
+        Add(a, c) | Sub(a, c) | Mul(a, c) => { guards_of(a, out, br); guards_of(c, out, br); }
+        Div(a, c) => { guards_of(a, out, br); guards_of(c, out, br); factors(c, out); }
         Pow(a, e) => {
-            guards_of(a, out);
-            guards_of(e, out);
+            guards_of(a, out, br);
+            guards_of(e, out, br);
             let k = if has_x(e) || has_y(e) { None } else { ex::exact(e, None).and_then(|v| v.rational()) };
+            if has_y(a) && k.is_some_and(|(p, q)| p > 0 && p < q) { factors(a, br); }
             match k {
                 // a whole power ≥ 0 and a real odd root of a positive power are defined for every base
                 Some((p, 1)) if p >= 0 => {}
@@ -159,9 +162,10 @@ fn guards_of(n: &Node, out: &mut Vec<Node>) {
                 _ => factors(a, out),
             }
         }
-        LogB(bs, a) => { guards_of(bs, out); guards_of(a, out); out.push((**a).clone()); out.push((**bs).clone()); }
+        LogB(bs, a) => { guards_of(bs, out, br); guards_of(a, out, br); out.push((**a).clone()); out.push((**bs).clone()); }
         Func(f, a) => {
-            guards_of(a, out);
+            guards_of(a, out, br);
+            if *f == "sqrt" && has_y(a) { factors(a, br); }
             let one = || Num(1.0, R::new(1, 1));
             let two = || Num(2.0, R::new(2, 1));
             match *f {
@@ -193,11 +197,14 @@ pub(crate) enum Stop {
     Undefined,
     /// Too many steps (a curve that winds without end).
     Steps,
+    /// It reaches a point where dy/dx is defined but not smooth in y (y^(2/3) at y = 0): past it the solution need not be
+    /// unique, so it is not followed (at the start itself: no curve).
+    Branch,
 }
 
 /// The window the curves are drawn in, and its scale in px per unit (for the 3 px steps).
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Win { pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub ux: f64, pub uy: f64 }
+pub(crate) struct Win { pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub ux: f64, pub uy: f64, pub cap: Option<f64> }
 
 #[derive(Clone, Debug)]
 pub(crate) struct Run { pub pts: Vec<(f64, f64)>, pub stop: Stop, pub end: (f64, f64), pub at_stops: Vec<Option<f64>> }
@@ -247,6 +254,9 @@ pub(crate) fn integrate(f: &F, x0: f64, y0: f64, dir: f64, w: &Win, stops: &[f64
     let mut h = span / 200.0;
     let mut pts = vec![(x, y)];
     let mut gv = guard_vals(f, x, y);
+    let bvals = |x: f64, y: f64| -> Vec<f64> { f.branch.iter().map(|g| ev(g, x, y)).collect() };
+    let mut bv = bvals(x, y);
+    if bv.iter().any(|v| *v == 0.0) { return Run { pts: vec![(x0, y0)], stop: Stop::Branch, end: (x0, y0), at_stops }; }
     let mut si = 0;
     // a stop at the start itself
     while si < stops.len() && (stops[si] - x).abs() <= 1e-12 * span { at_stops[si] = Some(y); si += 1; }
@@ -285,13 +295,23 @@ pub(crate) fn integrate(f: &F, x0: f64, y0: f64, dir: f64, w: &Win, stops: &[f64
             pts.push((x + (xn - x) * t, y + (yn - y) * t));
             break Stop::Singular;
         }
+        let bn = bvals(xn, yn);
+        if crossed(&bv, &bn) || bn.iter().any(|v| v.abs() <= 1e-12 * hy) {
+            let t = bv.iter().zip(&bn).filter(|(u, v)| u.is_finite() && v.is_finite() && ((**u > 0.0 && **v <= 0.0) || (**u < 0.0 && **v >= 0.0)))
+                .map(|(u, v)| u / (u - v)).fold(1.0f64, f64::min).clamp(0.0, 1.0);
+            pts.push((x + (xn - x) * t, y + (yn - y) * t));
+            break Stop::Branch;
+        }
+        bv = bn;
         x = xn;
         y = yn;
         k1 = kn;
         gv = gn;
         pts.push((x, y));
         while si < stops.len() && (stops[si] - x) * dir <= 1e-12 * span { at_stops[si] = Some(y); si += 1; }
-        if y < w.y0 - 10.0 * hy || y > w.y1 + 10.0 * hy { break Stop::Left; }
+        // (drawing: ten window heights out is far enough; a value worked out for a table: up to ±cap, wherever the window is)
+        let far = match w.cap { Some(c) => y.abs() > c, None => y < w.y0 - 10.0 * hy || y > w.y1 + 10.0 * hy };
+        if far { break Stop::Left; }
         let grow = if err > 0.0 { (0.9 * (tol / err).powf(0.2)).clamp(0.2, 5.0) } else { 5.0 };
         h = if landing { h.max(hh) } else { hh * grow };
     };
@@ -313,8 +333,9 @@ pub(crate) fn euler(f: &F, x0: (f64, Option<Ex>), y0: (f64, Option<Ex>), h: (f64
     let rat = |e: &Option<Ex>| e.as_ref().filter(|v| v.rational().is_some()).cloned();
     let he = rat(&h.1);
     let mut cur = Step { x: x0.0, y: y0.0, xe: rat(&x0.1), ye: rat(&y0.1) };
-    if he.is_none() { cur.xe = None; cur.ye = None; }
+    // (the start is written as typed whatever h is; with an h that is not rational, every later value is rounded)
     let mut out = vec![cur.clone()];
+    if he.is_none() { cur.xe = None; cur.ye = None; }
     for k in 0..n {
         let exact_f = match (&cur.xe, &cur.ye) { (Some(xe), Some(ye)) => exact_at(&f.tree, xe, ye).filter(|v| v.rational().is_some()), _ => None };
         let pole = matches!((&cur.xe, &cur.ye), (Some(xe), Some(ye)) if exact_pole(&f.tree, xe, ye));
@@ -498,10 +519,13 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     let hy = (y1 - y0).max(1e-9);
     // x values that are no grid value (an irregular spread), where every equilibrium must be a root
     let xs: Vec<f64> = (0..401).map(|i| x0 + w * ((i as f64 + 0.5 * ((i * 7919) % 13) as f64 / 13.0) / 401.5)).collect();
+    // the size of f: the median |f| over the window (one grid point beside a pole, where |f| is 1e16, must not make every
+    // value look small), at least 1
     let scale = {
-        let mut m: f64 = 0.0;
-        for i in 0..=20 { for j in 0..=20 { if let Some(v) = f.at(x0 + w * i as f64 / 20.0, y0 + hy * j as f64 / 20.0) { m = m.max(v.abs()); } } }
-        m.max(1.0)
+        let mut v: Vec<f64> = vec![];
+        for i in 0..=20 { for j in 0..=20 { if let Some(q) = f.at(x0 + w * i as f64 / 20.0, y0 + hy * j as f64 / 20.0) { v.push(q.abs()); } } }
+        v.sort_by(|a, b| a.total_cmp(b));
+        v.get(v.len() / 2).copied().unwrap_or(1.0).clamp(1.0, 1e6)
     };
     // the x the roots are first looked for at: a short binary fraction (so its polynomial is exact) about 0.382 across
     let pick = |t: f64| { let v = x0 + t * w; let s = (v * 64.0).round() / 64.0; if s > x0 && s < x1 { s } else { v } };
@@ -523,7 +547,7 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
                     if a != 0.0 && c != 0.0 && (a > 0.0) != (c > 0.0) {
                         let r = bis(ys[j], ys[j + 1]);
                         // a sign change across a pole is no root
-                        if f.at(xr, r).is_some_and(|v| v.abs() < 1e-6 * scale) { out.push(r); }
+                        if f.at(xr, r).is_some_and(|v| v.abs() < 1e-9 * scale) { out.push(r); }
                     }
                 }
             }
@@ -559,7 +583,8 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
         // f is 0 on the line y = r at every x where it is defined (and defined at most of them)
         let vals: Vec<Option<f64>> = xs.iter().map(|x| f.at(*x, r)).collect();
         let defined = vals.iter().filter(|v| v.is_some()).count();
-        if defined < 4 || !vals.iter().flatten().all(|v| v.abs() <= 1e-7 * scale) { continue; }
+        // (f is 0 on the line at every one of at least 25 x's where it is defined: a sign change across a pole is no root)
+        if defined < 25 || !vals.iter().flatten().all(|v| v.abs() <= 1e-9 * scale) { continue; }
         // an exact value, shown exactly: f(x, c) is 0 for every x by exact arithmetic
         let exact = candidates(r).into_iter().find(|c| zero_fn(&subst(&f.tree, None, Some(c)))).and_then(|c| ex::exact(&c, None));
         let yv = exact.as_ref().map(|e| e.value()).unwrap_or(r);
@@ -582,45 +607,3 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
 }
 /// f is the number 0 (no variables at all, or a product with an exact 0).
 fn has_no_vars_zero(n: &Node) -> bool { !has_x(n) && !has_y(n) && ex::exact(n, None).is_some_and(|v| v.is_zero()) || matches!(n, Node::Mul(a, c) if has_no_vars_zero(a) || has_no_vars_zero(c)) }
-
-// ───────────────────────── a typed solution's interval ─────────────────────────
-
-/// Where x lies for the solution through (x0, g(x0)) given by a typed g: on its interval of existence, at its end (where
-/// f stops being defined on it, as a circle meets the axis), or beyond its end (past a blow-up of g, an edge of g's
-/// domain or a point where f is undefined on it), with the x of that end.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Reach { Yes, End(f64), No(f64) }
-
-/// Whether the typed solution g (a tree in x) is the solution through its starting point at x: g and f along it are
-/// defined at every point between, and none of the quantities whose zero makes either undefined (denominators, domains;
-/// their guards) changes sign or reaches 0 on the way. A sign change between two samples is a blow-up between them.
-pub(crate) fn solution_reaches(g: &Node, f: &F, x0: f64, x: f64) -> Reach {
-    if x == x0 { return Reach::Yes; }
-    let gf = F::new(g.clone());
-    let dg = ex::deriv(g);
-    // every guard of g, and every guard of f taken along the curve, at t (None where g or f is undefined there, or where g
-    // stops satisfying the equation: (x + 1)² for y′ = 2√y is no solution for x < −1)
-    let state = |t: f64| -> Option<Vec<f64>> {
-        let y = gf.at(t, 0.0)?;
-        let fv = f.at(t, y)?;
-        let d = ev(&dg, t, 0.0);
-        if d.is_finite() && (d - fv).abs() > 1e-6 * (1.0 + fv.abs()) { return None; }
-        Some(gf.guards.iter().map(|q| ev(q, t, 0.0)).chain(f.guards.iter().map(|q| ev(q, t, y))).collect())
-    };
-    let s0 = match state(x0) { Some(v) => v, None => return Reach::No(x0) };
-    let same = |v: &[f64]| v.iter().zip(&s0).all(|(a, b)| !a.is_finite() || !b.is_finite() || (*a > 0.0) == (*b > 0.0) && *a != 0.0);
-    let good = |t: f64| state(t).is_some_and(|v| same(&v));
-    let n = 800;
-    let mut prev = x0;
-    for k in 1..=n {
-        let t = if k == n { x } else { x0 + (x - x0) * k as f64 / n as f64 };
-        if good(t) { prev = t; continue; }
-        // the end of the interval, between prev (good) and t (not), by bisection
-        let (mut lo, mut hi) = (prev, t);
-        for _ in 0..80 { let mid = 0.5 * (lo + hi); if good(mid) { lo = mid; } else { hi = mid; } }
-        // at x itself, and only there: the solution's end (g is defined there, f is not, or a guard just reaches 0)
-        if k == n && (hi - x).abs() <= 1e-12 * (1.0 + x.abs()) && gf.at(x, 0.0).is_some() { return Reach::End(x); }
-        return Reach::No(hi);
-    }
-    Reach::Yes
-}

@@ -126,7 +126,7 @@ fn steep_slopes_draw_short_vertical_segments() {
 
 // ───────────────────────── solution curves ─────────────────────────
 
-fn win() -> Win { Win { x0: -4.0, x1: 4.0, y0: -4.0, y1: 4.0, ux: 60.0, uy: 60.0 } }
+fn win() -> Win { Win { x0: -4.0, x1: 4.0, y0: -4.0, y1: 4.0, ux: 60.0, uy: 60.0, cap: None } }
 /// The largest error of the points from the exact solution, measured across the curve (|Δy| over √(1 + slope²)), so that
 /// near a vertical tangent a tiny error in x does not read as a large one in y.
 fn max_err(pts: &[(f64, f64)], exact: &dyn Fn(f64) -> f64, w: &Win) -> f64 {
@@ -372,7 +372,7 @@ fn a_typed_solution_is_checked_before_it_is_used() {
     let off = build(&with(&[("dydx", s("y")), ("points", s("(0, 2)")), ("solution", s("e^x"))]));
     assert!(off.notes.iter().any(|n| n.contains("does not pass through (0, 2)")), "{:?}", off.notes);
     let wrong = build(&with(&[("dydx", s("y")), ("points", s("(0, 1)")), ("solution", s("x^2 + 1"))]));
-    assert!(wrong.notes.iter().any(|n| n.contains("does not satisfy")), "{:?}", wrong.notes);
+    assert!(wrong.notes.iter().any(|n| n.contains("is not the solution of")), "{:?}", wrong.notes);
     let circle = build(&with(&[("dydx", s("-x/y")), ("points", s("(0, 2)")), ("solution", s("sqrt(4 - x^2)"))]));
     assert!(texts(&circle.svg, "panel").iter().any(|t| t.contains("\u{221a}(4 \u{2212} x2)")), "{:?} {:?}", circle.notes, texts(&circle.svg, "panel"));
     let renamed = build(&with(&[("dydx", s("0.5P(1 - P/10)")), ("var", s("t")), ("dep", s("P")), ("points", s("(0, 1)")), ("solution", s("10/(1 + 9e^(-0.5t))")), ("xmin", f(0.0)), ("xmax", f(12.0)), ("ymin", f(0.0)), ("ymax", f(12.0))]));
@@ -884,13 +884,13 @@ fn typed_solution_values_only_on_its_interval() {
         let want: Vec<String> = want.iter().map(|w| m(w)).collect();
         assert_eq!(col, want, "{eqt} {pt} y = {sol}, h = {h}: {key}");
         if want.last().is_some_and(|w| w == "\u{2014}") {
-            assert!(key.contains("does not exist beyond") || key.contains("ends at"), "{eqt} {sol}: {key}");
+            assert!(key.contains("is worked out only to") || key.contains("grows past"), "{eqt} {sol}: {key}");
             assert!(!key.contains("solution at"), "{eqt} {sol}: {key}");
         }
     }
     // the reason is true: 1/(1 − x) through (0, 1) does not exist beyond x = 1
     let (_, key) = sol_column(&[("dydx", s("y^2")), ("points", s("(0, 1)")), ("solution", s("1/(1 - x)")), ("euler", b(true)), ("h", s("0.5")), ("n", Value::I(4)), ("key_line", b(true))]);
-    assert!(key.contains("the solution through (0, 1) does not exist beyond x \u{2248} 1"), "{key}");
+    assert!(key.contains("the solution through (0, 1) grows past \u{b1}1000000 before x = 1"), "{key}");
 }
 
 /// Where the solution ends at Euler's x (a circle meeting the axis), no near-zero decimal is written: "—" and why.
@@ -899,7 +899,7 @@ fn circle_ends_write_no_spurious_value() {
     for (eqt, pt, want) in [("-x/y", "(0, 1)", vec!["1", "\u{2248} 0.866", "\u{2014}", "\u{2014}", "\u{2014}"]), ("-x/y", "(0, 2)", vec!["2", "\u{2248} 1.936", "\u{2248} 1.732", "\u{2248} 1.323", "\u{2014}"]), ("-x/(4y)", "(0, 1)", vec!["1", "\u{2248} 0.968", "\u{2248} 0.866", "\u{2248} 0.661", "\u{2014}"])] {
         let (col, key) = sol_column(&[("dydx", s(eqt)), ("points", s(pt)), ("euler", b(true)), ("h", s("0.5")), ("n", Value::I(4)), ("key_line", b(true))]);
         assert_eq!(col, want, "{eqt} {pt}");
-        assert!(key.contains("ends at x \u{2248}"), "{eqt}: {key}");
+        assert!(key.contains("is worked out only to x \u{2248}"), "{eqt}: {key}");
     }
 }
 
@@ -925,4 +925,128 @@ fn first_check_known_issues() {
     // e^(xy) on ±10: large slopes are values, not "undefined"
     let out = build(&with(&[("dydx", s("e^(x*y)")), ("points", s("")), ("xmin", f(-10.0)), ("xmax", f(10.0)), ("ymin", f(-10.0)), ("ymax", f(10.0)), ("xstep", f(2.0)), ("ystep", f(2.0))]));
     assert!(out.missing.is_empty(), "{:?}", out.notes);
+}
+
+
+// ───────────────────────── round 2: the second check's faults ─────────────────────────
+
+/// Typed solutions' values, worked by hand (decimals by mpmath, outside the app), each written correctly or "—": even-order
+/// poles (1/(1 + cos x) touches its pole at π, 1/(1 − sin x) at π/2, 1/(1 − x)² at 1), solutions from a point where a
+/// guard is 0 (√x, x^(3/2) at 0), solutions valid on one side only ((x/2 + 1)² for √y, x ≥ −2), and others.
+#[test]
+fn round2_typed_solutions_by_hand() {
+    let d = "\u{2014}";
+    let cases: Vec<(&str, &str, &str, &str, i64, Vec<&str>)> = vec![
+        ("y^2 sin(x)", "(0, 1/2)", "1/(1 + cos(x))", "0.5", 8, vec!["1/2", "\u{2248} 0.533", "\u{2248} 0.649", "\u{2248} 0.934", "\u{2248} 1.713", "\u{2248} 5.029", "\u{2248} 99.925", d, d]),
+        ("y^2 cos(x)", "(0, 1)", "1/(1 - sin(x))", "0.5", 4, vec!["1", "\u{2248} 1.921", "\u{2248} 6.308", "\u{2248} 399.199", d]),
+        ("2y^(3/2)", "(0, 1)", "1/(1 - x)^2", "1/4", 4, vec!["1", "16/9", "4", "16", d]),
+        ("sqrt(x)", "(0, 0)", "(2/3)x^(3/2)", "0.5", 4, vec!["0", "\u{2248} 0.236", "\u{2248} 0.667", "\u{2248} 1.225", "\u{2248} 1.886"]),
+        ("sqrt(x)", "(0, 1)", "(2/3)x^(3/2) + 1", "1/4", 4, vec!["1", "13/12", "\u{221a}2/6 + 1", "\u{221a}3/4 + 1", "5/3"]),
+        ("x*sqrt(x)", "(0, 0)", "(2/5)x^(5/2)", "1/2", 2, vec!["0", "\u{221a}2/20", "2/5"]),
+        ("3sqrt(x)", "(0, 0)", "2x^(3/2)", "1", 3, vec!["0", "2", "4\u{221a}2", "6\u{221a}3"]),
+        ("sqrt(x)*y", "(0, 1)", "e^((2/3)x^(3/2))", "1", 2, vec!["1", "\u{2248} 1.948", "\u{2248} 6.59"]),
+        ("sqrt(y)", "(0, 1)", "(x/2 + 1)^2", "0.5", 4, vec!["1", "1.5625", "2.25", "3.0625", "4"]),
+        ("sqrt(y)", "(0, 1)", "(x + 2)^2/4", "1/2", 2, vec!["1", "25/16", "9/4"]),
+        ("2sqrt(y)", "(0, 4)", "(x + 2)^2", "1/2", 2, vec!["4", "25/4", "9"]),
+        ("2sqrt(y)", "(0, 1)", "(x + 1)^2", "1/2", 2, vec!["1", "9/4", "4"]),
+        ("-sqrt(y)", "(0, 1)", "(1 - x/2)^2", "1/2", 3, vec!["1", "9/16", "1/4", "1/16"]),
+        ("3y^(2/3)", "(0, 1)", "(x + 1)^3", "1/2", 2, vec!["1", "27/8", "8"]),
+        ("-x/y", "(2, 3)", "sqrt(13 - x^2)", "0.2", 8, vec!["3", "\u{2248} 2.857", "\u{2248} 2.691", "\u{2248} 2.498", "\u{2248} 2.272", "2", "\u{2248} 1.661", "1.2", "0.2"]),
+        ("-2x*y^2", "(0, 1)", "1/(1 + x^2)", "1/2", 2, vec!["1", "4/5", "1/2"]),
+        ("y^2", "(0, -1/2)", "-1/(2 + x)", "1/2", 2, vec!["\u{2212}1/2", "\u{2212}2/5", "\u{2212}1/3"]),
+        ("2x(y - 1)", "(0, 2)", "1 + e^(x^2)", "1/2", 2, vec!["2", "\u{2248} 2.284", "e + 1"]),
+        ("x^2*y^2", "(0, 1)", "3/(3 - x^3)", "1/2", 4, vec!["1", "24/23", "3/2", d, d]),
+        ("cos(x)/y", "(0, 1)", "sqrt(1 + 2sin(x))", "-1/4", 3, vec!["1", "\u{2248} 0.711", "\u{2248} 0.203", d]),
+        ("y^2", "(0, 1)", "1/(1 - x)", "1/4", 4, vec!["1", "4/3", "2", "4", d]),
+        ("1 + y^2", "(0, 0)", "tan(x)", "0.5", 4, vec!["0", "\u{2248} 0.546", "\u{2248} 1.557", "\u{2248} 14.101", d]),
+        ("y", "(0, 1)", "e^x", "1/2", 4, vec!["1", "\u{2248} 1.649", "e", "\u{2248} 4.482", "e2"]),
+        ("-x/y", "(0, 2)", "sqrt(4 - x^2)", "1/2", 5, vec!["2", "\u{221a}15/2", "\u{221a}3", "\u{221a}7/2", "0", d]),
+    ];
+    assert!(cases.len() >= 24);
+    for (eqt, pt, sol, h, n, want) in cases {
+        let o = [("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s(h)), ("n", Value::I(n)), ("key_line", b(true)), ("ymin", f(-8.0)), ("ymax", f(8.0)), ("ystep", f(2.0))];
+        let out = build(&with(&o));
+        assert!(!out.notes.iter().any(|n| n.contains("it is not used")), "{eqt} y = {sol}: {:?}", out.notes);
+        let (col, key) = sol_column(&o);
+        assert_eq!(col, want, "{eqt} {pt} y = {sol}, h = {h}: {key}");
+        // never a false reason: only "worked out only to" or "grows past"
+        assert!(!key.contains("does not exist") && !key.contains("far behind"), "{key}");
+    }
+}
+
+/// Without a typed solution: near the end of a circle the value is written where the solution exists (y(3.6) = 0.2 on
+/// x² + y² = 13), "—" only past the end; and −∛y says only how far the solution is worked out.
+#[test]
+fn round2_values_near_an_end() {
+    let d = "\u{2014}";
+    let a = |v: &str| format!("\u{2248} {}", v.replace('-', "\u{2212}"));
+    let cases: Vec<(&str, &str, i64, Vec<String>)> = vec![
+        ("(2, 3)", "0.2", 8, vec!["3".into(), a("2.857"), a("2.691"), a("2.498"), a("2.272"), a("2"), a("1.661"), a("1.2"), a("0.2")]),
+        ("(2, -3)", "0.2", 8, vec!["\u{2212}3".into(), a("-2.857"), a("-2.691"), a("-2.498"), a("-2.272"), a("-2"), a("-1.661"), a("-1.2"), a("-0.2")]),
+        ("(-2, -3)", "-0.2", 8, vec!["\u{2212}3".into(), a("-2.857"), a("-2.691"), a("-2.498"), a("-2.272"), a("-2"), a("-1.661"), a("-1.2"), a("-0.2")]),
+        ("(3, 2)", "0.1", 8, vec!["2".into(), a("1.841"), a("1.661"), a("1.453"), a("1.2"), a("0.866"), a("0.2"), d.into(), d.into()]),
+    ];
+    for (pt, h, n, want) in cases {
+        let (col, key) = sol_column(&[("dydx", s("-x/y")), ("points", s(pt)), ("euler", b(true)), ("h", s(h)), ("n", Value::I(n)), ("key_line", b(true))]);
+        assert_eq!(col, want, "-x/y from {pt}, h = {h}: {key}");
+    }
+    // −∛y from (0, 1): y = (1 − 2x/3)^(3/2) to x = 3/2 (0.544, 0.192 by hand); past where it is worked out, "—" and only that
+    let (col, key) = sol_column(&[("dydx", s("-y^(1/3)")), ("points", s("(0, 1)")), ("euler", b(true)), ("h", s("0.5")), ("n", Value::I(6)), ("key_line", b(true))]);
+    assert_eq!(&col[..3], &["1".to_string(), a("0.544"), a("0.192")]);
+    assert!(col[4..].iter().all(|c| c == d) && key.contains("is worked out only to x") && !key.contains("far behind"), "{col:?} {key}");
+}
+
+/// Equilibria beside pole lines: no line where f only changes sign across a pole; true lines still found (by hand: the
+/// numerator is 0 for every x on y = c, the denominator is not).
+#[test]
+fn round2_pole_line_equilibria() {
+    let pi = "\u{3c0}";
+    let cases: Vec<(&str, Vec<String>)> = vec![
+        ("(x - y)/(x + y)", vec![]), ("(y - x)/(y + x)", vec![]), ("(x - 2y)/(2x + y)", vec![]), ("(2x + y)/(x - 2y)", vec![]), ("(x - y)/(x + y + 1)", vec![]),
+        ("(x + y)/(x - y)", vec![]), ("x/(x + y)", vec![]), ("1/(x + y)", vec![]), ("2x/(y + x)", vec![]), ("1/(y - x)", vec![]),
+        ("y/(x + y)", vec!["y = 0".into()]), ("(y - 1)/(x + y)", vec!["y = 1".into()]), ("y(y - 2)/(x + y)", vec!["y = 0".into(), "y = 2".into()]),
+        ("(y - 1)(y + 2)/(x + y)", vec!["y = \u{2212}2".into(), "y = 1".into()]), ("y/(x - 2y)", vec!["y = 0".into()]), ("(y^2 - 1)/(x - y)", vec!["y = \u{2212}1".into(), "y = 1".into()]),
+        ("(y - 3)/(x + y - 1)", vec!["y = 3".into()]), ("(y + 1)/(y - x)", vec!["y = \u{2212}1".into()]), ("tan(y)", vec![format!("y = \u{2212}{pi}"), "y = 0".into(), format!("y = {pi}")]),
+        ("sin(y)/(x + y)", vec![format!("y = \u{2212}{pi}"), "y = 0".into(), format!("y = {pi}")]), ("y/sin(x)", vec!["y = 0".into()]),
+        // polynomial and factorable ones are still found, and all of them shown
+        ("y(4 - y)", vec!["y = 0".into(), "y = 4".into()]), ("y - y^3", vec!["y = \u{2212}1".into(), "y = 0".into(), "y = 1".into()]), ("(y - 1)^2", vec!["y = 1".into()]),
+    ];
+    assert!(cases.len() >= 20);
+    for (eqt, want) in cases {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s(""))]));
+        let q = out.equils.as_ref().unwrap();
+        let panel = texts(&out.svg, "panel").join(" | ");
+        assert_eq!(q.lines.len(), want.len(), "{eqt}: {panel}");
+        for w in &want { assert!(panel.split(" | ").any(|l| l.split(", ").any(|t| t == w)), "{eqt}: {panel} lacks {w}"); }
+        for l in &q.lines { for k in 0..60 { let x = -3.9 + 0.13 * k as f64; if let Some(v) = eqn(eqt).at(x, l.y) { assert!(v.abs() < 1e-9, "{eqt}: f({x}, {}) = {v}", l.y); } } }
+    }
+}
+
+/// The cheap items: a grid point on a decimal pole is left out (1/(y − 0.7) on a 0.1 window); the start of Euler's table
+/// written as typed with an h of π/8; a long fraction written rounded; the stop wording where dy/dx is defined at the end.
+#[test]
+fn round2_cheap_items() {
+    let out = build(&with(&[("dydx", s("1/(y - 0.7)")), ("points", s("")), ("xmin", f(-1.0)), ("xmax", f(1.0)), ("ymin", f(-1.0)), ("ymax", f(1.0)), ("xstep", f(0.1)), ("ystep", f(0.1)), ("spacing", s("Every gridline"))]));
+    assert!(out.missing.iter().all(|q| (q.1 - 0.7).abs() < 1e-12) && out.missing.len() == 19, "{:?}", out.missing);
+    let cells = texts(&build(&with(&[("dydx", s("1 + y^2")), ("points", s("(0, 0)")), ("euler", b(true)), ("h", s("pi/8")), ("n", Value::I(2))])).svg, "table");
+    assert_eq!(&cells[4..7], &["0", "0", "0"], "{cells:?}");
+    let cells = texts(&build(&with(&[("dydx", s("1 + y^2")), ("points", s("(0, 0)")), ("euler", b(true)), ("h", s("1/4")), ("n", Value::I(4)), ("compare", b(false))])).svg, "table");
+    assert!(cells.iter().all(|c| c.chars().count() <= 14), "{cells:?}");
+    let out = build(&with(&[("dydx", s("sqrt(x)")), ("points", s("(0, 0)"))]));
+    assert!(out.notes.iter().any(|n| n.contains("undefined beyond it")), "{:?}", out.notes);
+}
+
+/// Past a point where dy/dx is not smooth in y (y^(2/3) and ∛y at y = 0) the solution need not be unique: nothing past it
+/// is written or drawn, and the editor says why. By hand: 3y^(2/3) through (0, 1) is (x + 1)³ to x = −1, where y = 0.
+#[test]
+fn round2_not_unique_past_a_branch_point() {
+    let d = "\u{2014}";
+    let (col, key) = sol_column(&[("dydx", s("3y^(2/3)")), ("points", s("(0, 1)")), ("solution", s("(x + 1)^3")), ("euler", b(true)), ("h", s("-0.5")), ("n", Value::I(5)), ("key_line", b(true))]);
+    // (1/8 exactly, as a decimal was typed; the run stops just short of y = 0, so −1 itself is "—")
+    assert_eq!(col, ["1", "0.125", d, d, d, d], "{key}");
+    assert!(key.contains("is worked out only to x \u{2248} \u{2212}1"), "{key}");
+    let out = build(&with(&[("dydx", s("3y^(2/3)")), ("points", s("(0, 1)"))]));
+    assert!(out.notes.iter().any(|n| n.contains("need not be unique")), "{:?}", out.notes);
+    let out = build(&with(&[("dydx", s("y^(1/3)")), ("points", s("(0, 0)"))]));
+    assert!(out.runs.is_empty() && out.notes.iter().any(|n| n.contains("need not be unique: no solution curve")), "{:?}", out.notes);
 }
