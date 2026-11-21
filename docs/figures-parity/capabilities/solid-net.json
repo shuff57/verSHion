@@ -7,154 +7,154 @@
    "id": "cap-01a",
    "text": "Draw the net of a cube",
    "class": "core",
-   "evidence": "changes:solid=Cube",
+   "evidence": "changes:shape=Cube",
    "note": ""
   },
   {
    "id": "cap-01b",
    "text": "Draw the net of a prism (with a rectangular base)",
    "class": "core",
-   "evidence": "changes:b=5",
+   "evidence": "changes:width=5",
    "note": "only the rectangular prism (Cuboid, the opening); the other bases are cap-03a to cap-03c"
   },
   {
    "id": "cap-01c",
    "text": "Draw the net of a pyramid",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:shape=Pyramid",
    "note": "solids are Cube and Cuboid only"
   },
   {
    "id": "cap-01d",
    "text": "Draw the net of a cylinder",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:shape=Cylinder",
    "note": ""
   },
   {
    "id": "cap-01e",
    "text": "Draw the net of a cone",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:shape=Cone",
    "note": ""
   },
   {
    "id": "cap-02",
    "text": "Choose any of the 11 nets of a cube",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Cube\",\"cube_net\":6} + ui-test:figuresui::tests::nets_ui::the_net_card_picks_any_of_the_eleven_cube_nets + ui-test:figures::nets::tests::every_cube_net_folds_into_a_cube",
    "note": "one layout (a row of four with a face above and below the first)"
   },
   {
    "id": "cap-03a",
    "text": "Give a prism a right-triangle base",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:base=Right triangle",
    "note": ""
   },
   {
    "id": "cap-03b",
    "text": "Give a prism an isosceles-triangle base",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:base=Isosceles triangle",
    "note": ""
   },
   {
    "id": "cap-03c",
    "text": "Give a prism a regular-polygon base of 3 to 8 sides",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"base\":\"Regular polygon\",\"sides\":5}",
    "note": ""
   },
   {
    "id": "cap-03d",
    "text": "Give a pyramid a rectangular base",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Pyramid\",\"pyr_base\":\"Rectangle\",\"width\":\"4\"}",
    "note": ""
   },
   {
    "id": "cap-03e",
    "text": "Give a pyramid a regular-polygon base",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Pyramid\",\"pyr_base\":\"Regular polygon\",\"sides\":6}",
    "note": ""
   },
   {
    "id": "cap-04a",
    "text": "Type each measure (length, width, height) as a number",
    "class": "core",
-   "evidence": "changes:a=6",
+   "evidence": "changes:length=6",
    "note": "the edges are listed in the readout under the net, not written on its edges"
   },
   {
    "id": "cap-04b",
    "text": "Type a measure as a fraction, with a square root or with pi",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:length=5/2 + changes:width=sqrt3 + changes:height=2pi + ui-test:figures::nets::tests::typed_measures_are_written_as_typed_and_worked_ones_rounded",
    "note": "the edges are float spinners"
   },
   {
    "id": "cap-04c",
    "text": "Label an edge on the net with its measure",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Cylinder\",\"lab_circ\":\"Measure\"} + ui-test:figures::nets::tests::labels_go_where_the_reference_puts_them",
    "note": "faces say 'a x b'; edge values appear only in the 'Edges' readout row"
   },
   {
    "id": "cap-04d",
    "text": "Label a measure with text such as x",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"lab_length\":\"Text\",\"txt_length\":\"x\"} + ui-test:figures::nets::tests::the_measures_card_has_a_row_per_measure_with_its_own_label",
    "note": ""
   },
   {
    "id": "cap-04e",
    "text": "Leave a measure without a label",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:lab_height=None + ui-test:figures::nets::tests::the_measures_card_has_a_row_per_measure_with_its_own_label",
    "note": ""
   },
   {
    "id": "cap-05a",
    "text": "Give a pyramid's height or its slant height and have the other worked out",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Pyramid\",\"height\":\"\",\"slant\":\"5\"} + ui-test:figures::nets::tests::worked_out_measures_follow_the_reference",
    "note": ""
   },
   {
    "id": "cap-05b",
    "text": "Give a cone's height or its slant height and have the other worked out",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Cone\",\"height\":\"\",\"slant\":\"8\"} + ui-test:figures::nets::tests::worked_out_measures_follow_the_reference",
    "note": ""
   },
   {
    "id": "cap-05c",
    "text": "Work out and label a rectangular pyramid's second slant height",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Pyramid\",\"width\":\"4\"} + ui-test:figures::nets::tests::labels_go_where_the_reference_puts_them",
    "note": ""
   },
   {
    "id": "cap-05d",
    "text": "Work out and label a cylinder's circumference on its net",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Cylinder\",\"lab_circ\":\"Measure\"}",
    "note": ""
   },
   {
    "id": "cap-05e",
    "text": "Work out and label a cone's sector angle on its net",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"shape\":\"Cone\",\"lab_angle\":\"Measure\"}",
    "note": ""
   },
   {
    "id": "cap-06a",
    "text": "Draw the fold lines dashed or solid",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:folds=Solid",
    "note": "fold lines are the shared face edges, always solid"
   },
   {
@@ -168,7 +168,7 @@
    "id": "cap-06c",
    "text": "Mark right angles with squares",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"base\":\"Right triangle\",\"squares\":false} + ui-test:figures::nets::tests::right_angle_squares_where_the_reference_draws_them",
    "note": ""
   },
   {
@@ -203,14 +203,14 @@
    "id": "cap-09a",
    "text": "Choose a unit (cm, m, mm, in, ft, yd, units) or type your own",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:unit=in + changes:{\"unit\":\"Other…\",\"unit_other\":\"km\"}",
    "note": "no unit"
   },
   {
    "id": "cap-09b",
    "text": "Choose the rounding for worked-out measures",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"base\":\"Right triangle\",\"round\":\"Hundredths\"} + ui-test:figures::nets::tests::typed_measures_are_written_as_typed_and_worked_ones_rounded",
    "note": "dec rounds the worked-out surface area and volume (21.82, 6.41); the render also differs because the edges change. The reference rounds worked-out net measures (slant heights, circumference), which we do not draw; evidence cleared at round-0 review (owner: strict, credit only a full match): was changes:{\"a\": 1.3, \"b\": 1.7, \"c\": 2.9, \"dec\": 2}"
   },
   {

@@ -147,6 +147,9 @@ pub fn dynamic_label(fig: &str, key: &str, p: &Params) -> Option<String> {
     if fig == "circle" {
         return circle::control_label(key, p);
     }
+    if fig == nets::ID {
+        return nets::control_label(key, p);
+    }
     if fig != "predator-prey" {
         return None;
     }
@@ -171,6 +174,8 @@ pub fn dynamic_label(fig: &str, key: &str, p: &Params) -> Option<String> {
 
 pub fn label_for(fig: &str, key: &str, p: &Params) -> Option<&'static str> {
     match fig {
+        // the net's measures are named for the shape: a cube's edge, a lying triangular prism's length
+        nets::ID => nets::label_for(key, p),
         // the reference's segment blocks name each field for what it does
         // the reference's Resultant card: "Arrow", "Label" and a caption-less text box
         "vector-diagram" => match key {
@@ -745,12 +750,36 @@ pub fn row_style_keys(colour_key: &str) -> Vec<(&'static str, &'static str, &'st
 
 /// The Measures card of a figure, if it has one (math shapes and solids contribute).
 pub fn measures_for(id: &str) -> Option<MeasureCard> {
+    if id == nets::ID {
+        return Some(nets::card());
+    }
     math::measures(id)
+}
+
+/// The unit a Measures card writes after its boxes (`$unit` rows): the `unit` param, or the figure's own reading of it
+/// (the nets' None and Other…).
+pub fn measure_unit(id: &str, p: &Params) -> String {
+    if id == nets::ID {
+        return nets::unit(p);
+    }
+    p.s("unit").to_string()
+}
+
+/// Whether a Measures-card row, by its name, applies now (for rows sharing a value box: a lying prism's Length and
+/// another solid's Height both edit `height`). Default: shown.
+pub fn row_visible(id: &str, name: &str, p: &Params) -> bool {
+    if id == nets::ID {
+        return nets::row_visible(name, p);
+    }
+    true
 }
 
 /// Whether a Measures-card group (by title) or a row (by value key) applies to the current
 /// params. The reference hides, e.g., the "Oblique" group of a right solid. Default: shown.
 pub fn card_visible(id: &str, group: &str, row: Option<&str>, p: &Params) -> bool {
+    if id == nets::ID {
+        return nets::card_visible(group, row, p);
+    }
     math::card_visible(id, group, row, p)
 }
 
@@ -779,6 +808,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
     match id {
         "pulley" => physics::pulley_relevant(key, p),
         segment::ID => segment::relevant(key, p),
+        nets::ID => nets::relevant(key, p),
         // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
         "circle" if key == "join_from" || key == "poly_names" => false,
         // the reference has no "Show resultant" box (the arrow's "Left off" does it) and no bold switch
@@ -921,6 +951,9 @@ pub fn params_key(p: &Params) -> u64 {
 }
 
 pub fn computed_for(id: &str, p: &Params) -> Vec<(&'static str, String)> {
+    if id == nets::ID {
+        return nets::computed(p);
+    }
     math::computed(id, p)
 }
 
@@ -951,6 +984,10 @@ pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
     // a two-way table saved before typed totals and blank boxes: its counts are rewritten as the numbers it drew
     if id == stats::twoway::ID {
         stats::twoway::migrate(spec, p);
+    }
+    // a net saved as a cube or cuboid with edges a, b, c opens as the same cube or rectangular prism
+    if id == nets::ID {
+        nets::migrate(spec, p);
     }
     // a motion map from before its segments: its four stages become segments with the same motion
     physics::migrate(id, spec, p);

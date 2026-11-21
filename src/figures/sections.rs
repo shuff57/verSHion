@@ -533,6 +533,13 @@ static SEGMENT_ADDITION: [RefSection; 6] = [
     s("Student copy", &["show_answers"], "Turn off Show answers for a student copy: the blank lines stay empty and the check under the figure is left out."),
 ];
 
+static SOLID_NET: [RefSection; 4] = [
+    s("Shape", &["shape", "base", "pyr_base", "sides", "cube_net", "diameter"], "A prism's base can be a rectangle, a right or isosceles triangle, or a regular polygon of 3 to 8 sides; a pyramid's a rectangle or a regular polygon. A cube has 11 different nets."),
+    s("Lines", &["folds", "squares"], "Cut edges are always solid; only the fold lines are dashed or solid."),
+    s("Labels", &["unit", "unit_other", "round", "style", "label_size"], "Rounding applies to worked-out measures and to the surface area and volume; typed measures are written as typed."),
+    s("Student copy", &["readout", "show_answers"], "The surface area and the volume, written under the net, are blanks while Show answers is off."),
+];
+
 static TABLE_OF_VALUES: [RefSection; 5] = [
     s("Values", &["source", "rule", "xs", "from", "to", "step", "list", "typed", "blanks", "blank_y"], "Type a rule like y = 2x + 1 and the x-values as a range or a list; each y is worked out for you. Type the range in fractions, \u{3c0} or degrees and the x-values are written that way. Or pick Typed and type the pairs yourself, words too. Click any value on the figure to make it a blank for students."),
     s("Headings and titles", &["heads", "head1", "head2", "title_kind", "title", "show_rule"], "Leave a heading empty for a blank heading. A blank line for the rule leaves it for students to find."),
@@ -1256,6 +1263,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "pie-chart" => &PIE_CHART,
         "table-of-values" => &TABLE_OF_VALUES,
         "segment-addition" => &SEGMENT_ADDITION,
+        "solid-net" => &SOLID_NET,
         "dot-plot" => &DOT_PLOT,
         "ogive" => &OGIVE,
         "normal-curve" => &NORMAL_CURVE,

@@ -1,0 +1,35 @@
+{
+ "round": 392,
+ "figure": "solid-net",
+ "capability": "cap-04c",
+ "hypothesis": "Batch 1 solid-net: cap-04c; evidence changes:{\"shape\":\"Cylinder\",\"lab_circ\":\"Measure\"} + ui-test:figures::nets::tests::labels_go_where_the_reference_puts_them",
+ "started_at": "2026-11-20T18:34:43",
+ "git": "86eea42",
+ "before": {
+  "figure": 49.0,
+  "pooled": 96.1
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-20T18:34:45",
+ "after": {
+  "figure": 51.9,
+  "pooled": 96.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"shape\":\"Cylinder\",\"lab_circ\":\"Measure\"}",
+    "opening": "/home/shuff57/checker-out/net/probe-renders/solid-net/opening.png",
+    "override": "/home/shuff57/checker-out/net/probe-renders/solid-net/c9d9781a244b0444.png"
+   }
+  ]
+ },
+ "checker": "pass: all 25 claimed capabilities work as a teacher would see them, the cap-09b rounding that failed round 12 now rounds every half up, and no plausible defect remains.",
+ "result": "hit",
+ "evidence": "nets tests 28 + nets_ui 2 + census (solid-net only, blessed) + figures suite 3089 passed; 13 independent checks on batch 1 (the 13th passed: 402,138 rounding checks, ~25,000 renders); no task run (builder on the NAS)",
+ "next": "solid-net batch 3: cap-06b glue tabs, cap-07a-07c face names/areas/tints, cap-08 the 3D shape; batch 4: cap-09c label drag"
+}

@@ -22,7 +22,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | kite | `kite` | 64 | 10 | 5 | — | 100 |
 | length-reading | `ruler-reading` | 17 | 3 | 6 | — | 100 |
 | mapping-diagram | `mapping-diagram` | 14 | 0 | 4 | reference mentions click/drag; ours has no handles; reference has a student version; ours has no show_answers | 100 |
-| net | `solid-net` | 8 | 0 | 9 | reference mentions click/drag; ours has no handles | 14 |
+| net | `solid-net` | 49 | 0 | 9 | reference mentions click/drag; ours has no handles | 84 |
 | normal-curve | `normal-curve` | 13 | 0 | 7 | — | 42 |
 | number-line | `number-line` | 30 | 0 | 6 | — | 100 |
 | parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 100 |
@@ -108,19 +108,12 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 116
 
-Generated: 2026-11-20T17:56:09+00:00 · probe: 2026-11-20T09:56:09
+Generated: 2026-11-21T02:35:28+00:00 · probe: 2026-11-20T18:35:27
 
-**Pooled 95.6** · mean 95.9 over 77 figures · built 78 of 78 reference figures
+**Pooled 96.7** · mean 96.8 over 77 figures · built 78 of 78 reference figures
 
 Comparable with the frozen baseline: **yes**
 
-- `solid-net`: 14 (15/104)
-  - cap-01c [core 5] Draw the net of a pyramid — no evidence
-  - cap-01d [core 5] Draw the net of a cylinder — no evidence
-  - cap-01e [core 5] Draw the net of a cone — no evidence
-  - cap-02 [control 3] Choose any of the 11 nets of a cube — no evidence
-  - cap-03a [control 3] Give a prism a right-triangle base — no evidence
-  - cap-03b [control 3] Give a prism an isosceles-triangle base — no evidence
 - `scatterplot`: 37 (28/76)
   - cap-01b [control 3] Type the points into a two-column x / y table — no evidence
   - cap-01d [control 3] Write the points as (3, 72), (5, 80) — no evidence
@@ -149,6 +142,13 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [version 3] Leave a single probability empty for students to fill in — no evidence
   - cap-03b [control 3] Write path names run together (HT) — no evidence
   - cap-03d [control 3] Multiply fraction branches out to a fraction in lowest terms — no evidence
+- `solid-net`: 84 (87/104)
+  - cap-06b [control 3] Add glue tabs for cutting the net out — no evidence
+  - cap-07a [control 3] Name the faces A, B, C … inside them — no evidence
+  - cap-07b [control 3] Write each face's area inside it — no evidence
+  - cap-07c [control 3] Tint matching faces (same shape and size) the same colour — no evidence
+  - cap-08 [control 3] Draw the 3D shape beside its net — no evidence
+  - cap-09c [interaction 2] Drag any label on the figure to move it, and reset the positions — no evidence
 - `population-growth`: 98 (128/131)
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)

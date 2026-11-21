@@ -4021,20 +4021,24 @@ const BASE_TEN_BLOCKS: &[Faq] = &[
 
 const SOLID_NET: &[Faq] = &[
     Faq {
-        q: "How does the net fold up?",
-        a: "The four rectangles in the row wrap round the sides, and the two rectangles above and below the first one become the top and the bottom. Every edge of the net meets an edge of the same length when it is folded, which is why the row alternates a by c and b by c.",
+        q: "Which solids and nets can it draw?",
+        a: "A cube (any of its 11 nets), a prism with a rectangle, right-triangle, isosceles-triangle or regular-polygon base (3 to 8 sides), a pyramid with a rectangle or regular-polygon base, a cylinder and a cone. A prism's side faces run in a row with a base above and below the middle one; a pyramid's triangles stand on each edge of its base; a cylinder's circles touch the middle of its rectangle's long sides; a cone's circle touches the bottom of its sector.",
     },
     Faq {
-        q: "Where do the surface area and the volume come from?",
-        a: "The surface area is the area of the six rectangles added up, which is 2(ab + ac + bc). The volume is length x width x height, abc. Both are worked out from the three edges and printed under the net.",
+        q: "How do I type a measure?",
+        a: "As a number, a fraction (5/2), with a root (2sqrt3 or 2\u{221a}3) or with pi (3pi). It's written on the net exactly as typed. Measures the net needs but you don't give, such as a hypotenuse, a slant height or a cone's sector angle, are worked out and rounded to the places you choose under Labels.",
     },
     Faq {
-        q: "Why is a cube a special case?",
-        a: "Choosing Cube makes all three edges the same, so the net is six equal squares and the formulas collapse to 6a squared for the area and a cubed for the volume. The Width and Height controls are ignored while Cube is chosen.",
+        q: "How do the height and slant height of a pyramid or cone work?",
+        a: "Give one and leave the other empty: the empty one is worked out, and its box shows the worked-out value faintly. Only the slant height lies on the net, so the height is never drawn. A slant height has to be longer than half the width, the apothem or the radius, and if you give both they must fit together; otherwise the panel says so and the figure keeps a sensible size.",
+    },
+    Faq {
+        q: "Which edges get labels?",
+        a: "Each measure is labeled once, on the edge a reader looks at first: an outside edge along the bottom, then the left, then the top; a fold line only when no outside edge carries that measure, with its label just inside the bigger face. A triangle's height, a slant height, an apothem and a radius are drawn as lines inside a face, with right-angle squares where they meet an edge. Each measure's Label choice writes its value, a text such as x, or nothing.",
     },
     Faq {
         q: "How do I make a worksheet?",
-        a: "Turn Show answers off: the surface area and the volume become blanks while the net and the edges stay. The edges are the given, because the net is scaled to fit its box, so two similar boxes draw the same picture and the edges cannot be measured back from it.",
+        a: "Turn on Surface area and volume to write them under the net, then turn Show answers off: they become blanks while the net and its measures stay. Labeling a measure with a letter, or with nothing, asks students to find it.",
     },
 ];
 

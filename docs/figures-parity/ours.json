@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-20T17:55:49+00:00",
-  "src_mtime": 1795197213.8058002,
-  "git": "8113e03+dirty",
+  "built_at": "2026-11-21T02:31:46+00:00",
+  "src_mtime": 1795228277.5508742,
+  "git": "86eea42+dirty",
   "figures": 193
  },
  "figures": {
@@ -28869,45 +28869,412 @@
   "solid-net": {
    "id": "solid-net",
    "title": "Nets",
-   "blurb": "The net of a cube or a cuboid: six rectangles laid flat, with the surface area and the volume worked out from the edges.",
+   "blurb": "The net of a cube, prism, pyramid, cylinder or cone, laid flat with its fold lines and its measures on its edges.",
    "params": [
     {
-     "key": "solid",
-     "label": "Solid",
+     "key": "shape",
+     "label": "3D shape",
      "kind": "choice",
      "options": [
       "Cube",
-      "Cuboid"
+      "Prism",
+      "Pyramid",
+      "Cylinder",
+      "Cone"
      ],
-     "default": "Cuboid"
+     "default": "Prism"
     },
     {
-     "key": "a",
-     "label": "Length a",
-     "kind": "float",
+     "key": "base",
+     "label": "Base",
+     "kind": "choice",
+     "options": [
+      "Rectangle",
+      "Right triangle",
+      "Isosceles triangle",
+      "Regular polygon"
+     ],
+     "default": "Rectangle"
+    },
+    {
+     "key": "pyr_base",
+     "label": "Base",
+     "kind": "choice",
+     "options": [
+      "Rectangle",
+      "Regular polygon"
+     ],
+     "default": "Rectangle"
+    },
+    {
+     "key": "sides",
+     "label": "Sides",
+     "kind": "int",
      "options": [],
-     "default": "4.0"
+     "default": "6"
     },
     {
-     "key": "b",
-     "label": "Width b",
-     "kind": "float",
-     "options": [],
-     "default": "3.0"
-    },
-    {
-     "key": "c",
-     "label": "Height c",
-     "kind": "float",
-     "options": [],
-     "default": "2.0"
-    },
-    {
-     "key": "dec",
-     "label": "Decimal places",
+     "key": "cube_net",
+     "label": "Net",
      "kind": "int",
      "options": [],
      "default": "1"
+    },
+    {
+     "key": "side",
+     "label": "Side",
+     "kind": "text",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "length",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": "5"
+    },
+    {
+     "key": "width",
+     "label": "Width",
+     "kind": "text",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "tri_base",
+     "label": "Base",
+     "kind": "text",
+     "options": [],
+     "default": "6"
+    },
+    {
+     "key": "tri_height",
+     "label": "Triangle's height",
+     "kind": "text",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "radius",
+     "label": "Radius",
+     "kind": "text",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "height",
+     "label": "Height",
+     "kind": "text",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "slant",
+     "label": "Slant height",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "diameter",
+     "label": "Diameter instead",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lab_length",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_length",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_width",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_width",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_tri_base",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_tri_base",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_tri_height",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_tri_height",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_hyp",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_hyp",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_side",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_side",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_height",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_height",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_slant",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_slant",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_slant_w",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_slant_w",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_circ",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "txt_circ",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_apothem",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "txt_apothem",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_radius",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_radius",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_angle",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "txt_angle",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "folds",
+     "label": "Fold lines",
+     "kind": "choice",
+     "options": [
+      "Dashed",
+      "Solid"
+     ],
+     "default": "Dashed"
+    },
+    {
+     "key": "squares",
+     "label": "Right-angle squares",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "unit",
+     "label": "Unit",
+     "kind": "choice",
+     "options": [
+      "None",
+      "cm",
+      "m",
+      "mm",
+      "in",
+      "ft",
+      "yd",
+      "units",
+      "Other…"
+     ],
+     "default": "cm"
+    },
+    {
+     "key": "unit_other",
+     "label": "Unit name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "round",
+     "label": "Round to",
+     "kind": "choice",
+     "options": [
+      "Whole numbers",
+      "Tenths",
+      "Hundredths"
+     ],
+     "default": "Tenths"
+    },
+    {
+     "key": "readout",
+     "label": "Surface area and volume",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "show_answers",

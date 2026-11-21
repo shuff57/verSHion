@@ -480,6 +480,7 @@ impl Workspace {
             Card::SegPoints => self.seg_points_card(ui, fig, pdefs),
             Card::SegSpans => self.seg_spans_card(ui, fig, pdefs),
             Card::SegCross => self.seg_cross_card(ui),
+            Card::CubeNets => self.cube_nets_card(ui),
             Card::Particles => self.particles_card(ui, pdefs),
         }
     }
@@ -1523,6 +1524,46 @@ impl Workspace {
         if let Some(v) = Self::seg_pick(ui, ("seg_cross", 0), &call, cur, Some("No crossing line"), 0) {
             let mut q = self.params.clone();
             q.set_i("cross_at", v);
+            self.card_commit(q, true);
+        }
+        ui.add_space(4.0);
+    }
+
+    // ------------------------------------------------------------ the cube's nets
+
+    /// The 11 nets of a cube as small pictures, numbered as the reference numbers them; a click picks one.
+    fn cube_nets_card(&mut self, ui: &mut Ui) {
+        caption(ui, "Net");
+        let cur = self.params.i("cube_net").clamp(1, 11) as usize;
+        let mut pick = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+            for (k, sq) in crate::figures::nets::geom::CUBE_NETS.iter().enumerate() {
+                let n = k + 1;
+                let unit = 9.0;
+                let (resp, painter) = ui.allocate_painter(Vec2::new(5.0 * unit + 12.0, 3.0 * unit + 26.0), egui::Sense::click());
+                let r = resp.rect;
+                let on = n == cur;
+                let ink = if on { theme::accent_col() } else { ui.visuals().text_color() };
+                painter.rect_stroke(r.shrink(1.0), 4.0, egui::Stroke::new(if on { 2.0 } else { 1.0 }, if on { theme::accent_col() } else { theme::border() }), egui::StrokeKind::Inside);
+                let cols = sq.iter().map(|q| q.1).max().unwrap_or(0) + 1;
+                let rows = sq.iter().map(|q| q.0).max().unwrap_or(0) + 1;
+                let o = egui::pos2(r.center().x - cols as f32 * unit / 2.0, r.top() + 6.0 + (3 - rows) as f32 * unit / 2.0);
+                for &(row, col) in sq.iter() {
+                    let cell = egui::Rect::from_min_size(o + Vec2::new(col as f32 * unit, row as f32 * unit), Vec2::splat(unit));
+                    painter.rect_stroke(cell, 0.0, egui::Stroke::new(1.0, ink), egui::StrokeKind::Inside);
+                }
+                painter.text(egui::pos2(r.center().x, r.bottom() - 9.0), egui::Align2::CENTER_CENTER, n.to_string(), egui::FontId::proportional(11.0), ink);
+                let name = format!("Net {n}");
+                resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::RadioButton, true, on, &name));
+                if resp.on_hover_text(&name).clicked() {
+                    pick = Some(n);
+                }
+            }
+        });
+        if let Some(n) = pick && n != cur {
+            let mut q = self.params.clone();
+            q.set_i("cube_net", n as i64);
             self.card_commit(q, true);
         }
         ui.add_space(4.0);

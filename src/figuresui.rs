@@ -2464,7 +2464,7 @@ impl Workspace {
                         let summary = (skin || def.subject == figures::Subject::Physics || matches!(def.id, "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon")).then(|| figures::chemistry::skin_summary_in(def.id, &sec.title, &self.params, skin_phys)).flatten().or_else(|| sec.items.iter().find_map(|&i| figures::cards::summary(def.id, pdefs[i].key, &self.params))).or_else(|| if def.id == "population-growth" { figures::biology::popdyn::growth_section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "pedigree" { figures::biology::pedigree::section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "titration-curve" { figures::chemistry::tit_section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "boltzmann-distribution" { figures::chemistry::boltzmann::section_summary(&sec.title, &self.params) } else { None }).unwrap_or_else(|| section_summary(&pdefs, &self.params, &relevant));
                         let mut reset = false;
                         let (mut reset_labels, mut straighten) = (false, false);
-                        let mut st = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, if skin { (def.id == "population-growth" && sec.title == "Graphs") || (def.id == "gel-electrophoresis" && si_ == 1) || (si_ == 0 && def.subject != figures::Subject::Physics && def.id != "pedigree" && !((shell || def.subject == figures::Subject::Math) && (figures::measures_for(def.id).is_some() || figures::rows_for(def.id).is_some()))) || sec.title.to_lowercase().contains("reading") } else { si_ < open_sections(def.id) });
+                        let mut st = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, if skin { (def.id == "population-growth" && sec.title == "Graphs") || (def.id == "gel-electrophoresis" && si_ == 1) || (si_ == 0 && def.subject != figures::Subject::Physics && def.id != "pedigree" && !((shell || def.subject == figures::Subject::Math) && (figures::measures_for(def.id).is_some() || figures::rows_for(def.id).is_some()))) || sec.title.to_lowercase().contains("reading") || (def.id == figures::nets::ID && si_ == 0) } else { si_ < open_sections(def.id) });
                         let mut body = |ui: &mut Ui| {
                                 // the chemistry page's blocks sit 12 px apart (5.2 px item spacing plus this), number rows 9.6
                                 // the shell spaces every subject's blocks as the math page does; the reference
@@ -2938,7 +2938,7 @@ impl Workspace {
                         ui.label(theme::strong(g.title).size(if skin { 13.0 } else { 12.5 }));
                     }
                     for r in &g.rows {
-                        if !figures::card_visible(fig, g.title, Some(r.value_key), &self.params) {
+                        if !figures::card_visible(fig, g.title, Some(r.value_key), &self.params) || !figures::row_visible(fig, r.name, &self.params) {
                             continue;
                         }
                         self.measure_row(ui, pdefs, r, &computed);
@@ -3313,10 +3313,16 @@ impl Workspace {
                 ui.add_sized([49.0, rh], egui::Label::new(RichText::new(nm).family(fam).size(16.0).color(theme::text_col())));
             }
             // Value.
-            let unit_txt: String = if r.unit == "$unit" { self.params.s("unit").to_string() } else { r.unit.to_string() };
+            let fig_id = self.sel.map(|i| reg()[i].id).unwrap_or("");
+            let unit_txt: String = if r.unit == "$unit" { figures::measure_unit(fig_id, &self.params) } else { r.unit.to_string() };
             let shown;
             if let Some(eq) = r.equals {
-                ui.add_sized([if skin { 88.0 } else { 96.0 }, if skin { 20.0 } else { rh }], egui::Label::new(theme::muted(format!("= {eq}")).size(if skin { 12.0 } else { 14.0 })));
+                // a net's worked-out measure shows its value faintly, as the reference's rows do
+                let eq = match computed.get(r.value_key) {
+                    Some(v) if fig_id == figures::nets::ID => if unit_txt == "\u{b0}" { format!("{v}\u{b0}") } else { format!("{v} {unit_txt}").trim_end().to_string() },
+                    _ => format!("= {eq}"),
+                };
+                ui.add_sized([if skin { 88.0 } else { 96.0 }, if skin { 20.0 } else { rh }], egui::Label::new(theme::muted(eq).size(if skin { 12.0 } else { 14.0 })));
                 shown = computed.get(r.value_key).cloned().unwrap_or_default();
             } else {
                 match find(r.value_key).map(|d| &d.kind) {
@@ -3362,7 +3368,8 @@ impl Workspace {
                         if ui.add(te).changed() {
                             self.params.0.insert(r.value_key.to_string(), Value::S(v.clone()));
                             // Like the reference: typing a value shows its label, clearing it hides it.
-                            if !r.label_key.is_empty() && let Some(m) = figures::label_after_typing(r.value_key, was_empty, &v, self.params.s(r.label_key)) {
+                            // (a net's emptied height or slant height is worked out and still drawn: its label stays)
+                            if !r.label_key.is_empty() && fig_id != figures::nets::ID && let Some(m) = figures::label_after_typing(r.value_key, was_empty, &v, self.params.s(r.label_key)) {
                                 self.params.0.insert(r.label_key.to_string(), Value::S(m.into()));
                             }
                         }
@@ -3383,7 +3390,11 @@ impl Workspace {
             let txt = match mode.as_str() {
                 "Text" => self.params.s(r.text_key).to_string(),
                 "None" => "None".to_string(),
-                _ => format!("{shown}{}", if shown.is_empty() { String::new() } else { if unit_txt == "°" || unit_txt == "%" { unit_txt.clone() } else { format!(" {unit_txt}").trim_end().to_string() } }),
+                _ => {
+                    // a net's typed measure as it's set on the figure (√3, 2π), not as typed
+                    let shown = if fig_id == figures::nets::ID { figures::math::solids_b8::pretty(&shown) } else { shown.clone() };
+                    format!("{shown}{}", if shown.is_empty() { String::new() } else { if unit_txt == "°" || unit_txt == "%" { unit_txt.clone() } else { format!(" {unit_txt}").trim_end().to_string() } })
+                }
             };
             let btn = if skin {
                 // the label button hugs the panel's right edge, as the reference's does
@@ -5057,6 +5068,7 @@ impl crate::App {
 #[cfg(test)]
 mod tests {
     mod last_b11;
+    mod nets_ui;
     mod segment_ui;
     use super::*;
 

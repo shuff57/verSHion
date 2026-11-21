@@ -1447,7 +1447,7 @@ pub fn words_of(s: &str) -> Vec<(String, bool)> {
     })
 }
 
-fn tw(s: &str, size: f64) -> f64 {
+pub(crate) fn tw(s: &str, size: f64) -> f64 {
     let t: String = s.chars().map(|c| match c {
         '\u{2212}' => '+',
         '\u{b7}' => '.',
@@ -1464,7 +1464,7 @@ fn text_box(c: Pt, s: &str, size: f64, ink: &'static str, bold: bool, serif: boo
 }
 
 /// Liang–Barsky: whether segment a-b passes through the box (inflated by `pad`).
-fn seg_hits(a: Pt, b: Pt, r: (f64, f64, f64, f64), pad: f64) -> bool {
+pub(crate) fn seg_hits(a: Pt, b: Pt, r: (f64, f64, f64, f64), pad: f64) -> bool {
     let (x0, y0, x1, y1) = (r.0 - pad, r.1 - pad, r.2 + pad, r.3 + pad);
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let (mut t0, mut t1) = (0.0f64, 1.0f64);
@@ -1963,7 +1963,7 @@ fn wrap(s: &str, sep: &str, size: f64, w: f64) -> Vec<String> {
     out
 }
 
-fn text_svg(t: &TextBox, off: Pt) -> String {
+pub(crate) fn text_svg(t: &TextBox, off: Pt) -> String {
     let wide = |c: char| (c as u32) > 0x24f && !(0x370..=0x3ff).contains(&(c as u32)) && !matches!(c, '\u{2212}' | '\u{2013}' | '\u{2014}' | '\u{2019}' | '\u{201c}' | '\u{201d}' | '\u{2026}');
     let fam = match t.serif {
         true if t.runs.iter().any(|(s, _)| s.chars().any(wide)) => WIDE_SERIF,

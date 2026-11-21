@@ -33,6 +33,8 @@ pub enum Card {
     SegSpans,
     /// Segment addition: the point the crossing line goes through, picked by name.
     SegCross,
+    /// Nets: the cube's 11 nets as pictures to pick from.
+    CubeNets,
 }
 
 /// The card drawn instead of param `key`'s own control.
@@ -51,6 +53,7 @@ pub fn replaces(fig: &str, key: &str) -> Option<Card> {
         (super::segment::ID, "n") => Card::SegPoints,
         (super::segment::ID, "spans") => Card::SegSpans,
         (super::segment::ID, "cross_at") => Card::SegCross,
+        (super::nets::ID, "cube_net") => Card::CubeNets,
         _ => return None,
     })
 }
@@ -189,7 +192,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(anchors, 17);
+        assert_eq!(anchors, 18);
     }
 
     #[test]
