@@ -40,6 +40,9 @@ class SourceMapTests(unittest.TestCase):
         case={'source_id':'linear-algebra','question_numbers':[15,16],'dotted_labels':True}
         self.assertEqual(h.parsed_source_map(case,page,qs)['by_number'],{15:qs[0],16:qs[1]})
         self.assertEqual(h.parsed_source_map(dict(case,dotted_labels=False),page,qs)['by_number'],{})
+        # Holdout v8, Lebl appendix exercises: "A.3.1".
+        page={'items':[{'number':None,'label':'A.3.1','question_index':0,'status':'saved'},{'number':None,'label':'A.3.2','question_index':1,'status':'saved'}]}
+        self.assertEqual(h.parsed_source_map(dict(case,question_numbers=[1,2]),page,qs)['by_number'],{1:qs[0],2:qs[1]})
     def test_a_leading_continuation_takes_the_one_missing_earlier_number(self):
         # Holdout v6, UC Davis: the page opens mid-problem 1, then prints problems 2 and 3.
         items=[{'number':None,'label':'continued','question_index':0,'status':'saved_continued'},{'number':2,'label':'2','question_index':1,'status':'saved'},{'number':3,'label':'3','question_index':2,'status':'saved'}]
