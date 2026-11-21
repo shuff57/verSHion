@@ -182,6 +182,19 @@ class AcceptanceTests(unittest.TestCase):
         self.assertFalse(self.score()['bank_integrity_ok'])
     def test_webp_media_is_valid(self):
         self.figure();s=self.score();self.assertTrue(s['bank_integrity_ok']);self.assertEqual(s['figures_recreated'],1)
+    def test_a_figure_question_with_picture_choices_needs_each_choice_redrawn(self):
+        # Holdout v7, NESA #8: the stem picture and four picture choices.
+        self.figure()
+        pic={'file':'media/f.webp','width':16,'height':16}
+        def with_choices(figures):
+            self.q['kind']={'Mc':{'answers':[{'text':'','correct':False,'locked':False,'image':pic,**({'figure':{'id':'pie','params':{}}} if f else {})} for f in figures]}}
+            self.trace['pages'][0]['questions']=[copy.deepcopy(self.q)];self.save()
+            return self.score()['figures_recreated']
+        self.assertEqual(with_choices([True,True,True,True]),1)
+        self.assertEqual(with_choices([True,False,True,True]),0,'a choice still only a crop is not recreated')
+        # A choice run never stands in for the question's own run.
+        self.trace['pages'][0]['figure_runs'].append({'question_index':0,'choice':{'part':None,'choice':0},'accepted':False,'spec':None,'review':{'matches':False},'steps':[]})
+        self.assertEqual(with_choices([True,True,True,True]),1)
     def test_plain_crop_does_not_pass_recreation(self):
         self.figure();self.q['figure']=None;self.trace['pages'][0]['questions']=[copy.deepcopy(self.q)];self.save()
         self.assertEqual(self.score()['figures_recreated'],0)

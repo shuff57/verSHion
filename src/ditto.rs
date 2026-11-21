@@ -752,6 +752,7 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                         }
                     }
                 }
+                figures += attach_choice_pictures(&mut q, item, page.as_ref(), page_no, &label, &mut warnings);
                 if let Some(id) = &source_id {
                     ids.insert(id.clone(), q.id.clone());
                 }
@@ -1023,11 +1024,53 @@ fn strings(v: Option<&Value>) -> Vec<String> {
     v.and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default()
 }
 
+/// A raw choice the importer keeps: printed text, or a picture box (a choice that is a picture).
+fn kept_choice(c: &Value) -> bool {
+    !text(c, "text").is_empty() || choice_box(c).is_some()
+}
+
+/// A raw choice's picture box, when the reply gives one.
+fn choice_box(c: &Value) -> Option<&Value> {
+    c.get("figure").filter(|f| f.get("box").and_then(Value::as_array).is_some_and(|b| b.len() == 4))
+}
+
+/// Crops each picture choice of `q` from the page (the question's own choices and its parts'),
+/// matching built answers to the raw choices the importer kept. Returns how many were attached.
+fn attach_choice_pictures(q: &mut Question, item: &Value, page: Option<&image::DynamicImage>, page_no: usize, label: &str, warnings: &mut Vec<String>) -> usize {
+    let mut attached = 0;
+    let mut attach = |answers: &mut Vec<Answer>, raw: Option<&Value>| {
+        let raw: Vec<&Value> = raw.and_then(Value::as_array).map(|a| a.iter().filter(|c| kept_choice(c)).collect()).unwrap_or_default();
+        for (ci, (a, c)) in answers.iter_mut().zip(raw).enumerate() {
+            let Some(b) = choice_box(c) else { continue };
+            match crop(b, page, page_no).and_then(|png| crate::store::put_image(&png).map_err(|e| e.to_string())) {
+                Ok(img) => {
+                    a.image = Some(img);
+                    attached += 1;
+                }
+                Err(e) => warnings.push(format!("Question {label}: the picture of choice {} was dropped ({e}).", char::from(b'A' + ci.min(25) as u8))),
+            }
+        }
+    };
+    match &mut q.kind {
+        Kind::Mc { answers } => attach(answers, item.get("choices")),
+        Kind::Multipart { parts } => {
+            let raw: Vec<&Value> = item.get("parts").and_then(Value::as_array).map(|a| a.iter().filter(|p| part(p).is_some()).collect()).unwrap_or_default();
+            for (p, r) in parts.iter_mut().zip(raw) {
+                if let PartKind::Mc { answers } = &mut p.kind {
+                    attach(answers, r.get("choices"));
+                }
+            }
+        }
+        _ => {}
+    }
+    attached
+}
+
 fn choices(item: &Value) -> Result<Vec<Answer>, String> {
     let answers: Vec<Answer> = item
         .get("choices")
         .and_then(Value::as_array)
-        .map(|a| a.iter().map(|c| Answer { text: text(c, "text").to_string(), correct: c.get("correct").and_then(Value::as_bool).unwrap_or(false), locked: false, image: None, figure: None }).filter(|a| !a.text.is_empty()).collect())
+        .map(|a| a.iter().filter(|c| kept_choice(c)).map(|c| Answer { text: text(c, "text").to_string(), correct: c.get("correct").and_then(Value::as_bool).unwrap_or(false), locked: false, image: None, figure: None }).collect())
         .unwrap_or_default();
     if answers.len() < 2 {
         return Err("a multiple-choice question needs at least two choices.".into());
@@ -1661,6 +1704,29 @@ mod tests {
         assert!(got.warnings.iter().any(|w| w.contains("earlier page")));
         assert_eq!((second.status.as_str(), second.number), ("saved", Some(2)));
         assert!(continued_label(Some("(Continued)")) && !continued_label(Some("1")) && !continued_label(None));
+    }
+
+    #[test]
+    fn picture_choices_are_cropped_and_kept_even_without_text() {
+        // Holdout v7, NESA #8: four pie charts as the options A-D, with no other text.
+        store();
+        let pic = |y: u32| serde_json::json!({"box":[150, y, 400, y + 150],"alt":"pie chart"});
+        let reply = serde_json::json!({"format":FORMAT,"bank":{"name":"N","questions":[
+            {"id":"q1","label":"8","type":"multiple-choice","stem":"Which spinner?","figure":null,"choices":[
+                {"text":"","correct":false,"figure":pic(150)},{"text":"","correct":false,"figure":pic(330)},
+                {"text":"","correct":false,"figure":pic(510)},{"text":"Spinner D","correct":false,"figure":pic(690)}]},
+            {"id":"q2","label":"9","type":"multiple-choice","stem":"Pick","figure":null,"choices":[
+                {"text":"x","correct":true,"figure":null},{"text":"","correct":false,"figure":null},{"text":"y","correct":false,"figure":null}]}]}}).to_string();
+        let got = import_text(&reply, Some(&page()), 1, "w").unwrap();
+        let Kind::Mc { answers } = &got.doc.questions[0].kind else { panic!("multiple choice") };
+        assert_eq!(answers.len(), 4, "picture-only choices are kept");
+        assert!(answers.iter().all(|a| a.image.is_some()), "each choice has its own crop");
+        assert_eq!(answers[3].text, "Spinner D");
+        assert_eq!(got.figures, 4);
+        // Text choices are unchanged: an empty text choice with no picture is still left out.
+        let Kind::Mc { answers } = &got.doc.questions[1].kind else { panic!("multiple choice") };
+        assert_eq!(answers.iter().map(|a| a.text.as_str()).collect::<Vec<_>>(), ["x", "y"]);
+        assert!(answers.iter().all(|a| a.image.is_none()));
     }
 
     #[test]

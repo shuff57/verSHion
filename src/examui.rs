@@ -6557,6 +6557,8 @@ fn shelf_row(
 struct Mapped {
     dq: DocQ,
     img: Option<model::ImageRef>,
+    /// Pictures of the printed choices, in printed order; empty when no choice has one.
+    choice_imgs: Vec<Option<model::ImageRef>>,
     /// Multipart: the stem text cut at each part (piece 0 = stem + part a, piece k = part k),
     /// joined with `\n` it is `dq.text[0]`. Used when the exam sets per-part work space.
     pieces: Vec<String>,
@@ -6608,6 +6610,7 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
     dq.rule_lines = 0;
     let mut ktext: String;
     let mut pieces: Vec<String> = Vec::new();
+    let mut choice_imgs: Vec<Option<model::ImageRef>> = Vec::new();
 
     match &q.kind {
         Kind::Mc { answers } => {
@@ -6617,6 +6620,10 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
                 .enumerate()
                 .map(|(i, a)| format!("{}. {}", letter(i), a.text))
                 .collect();
+            if answers.iter().any(|a| a.image.is_some()) {
+                choice_imgs = answers.iter().map(|a| a.image.clone()).collect();
+                dq.choice_images = choice_imgs.iter().map(|r| r.as_ref().and_then(read_img)).collect();
+            }
             let ks: Vec<usize> = answers
                 .iter()
                 .enumerate()
@@ -6750,7 +6757,7 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
         dq.correct.clear();
         dq.key_marks.clear();
         dq.key_text = "Key not provided".to_string();
-        return Mapped { dq, img: q.image.clone(), pieces };
+        return Mapped { dq, img: q.image.clone(), choice_imgs, pieces };
     }
     // The teacher's explanation travels inside key_text (prints only on the key).
     if let Some(ex) = &q.explanation {
@@ -6760,7 +6767,7 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
         }
     }
     dq.key_text = ktext;
-    Mapped { dq, img: q.image.clone(), pieces }
+    Mapped { dq, img: q.image.clone(), choice_imgs, pieces }
 }
 
 /// Headless export (QA hook VERSHION_EXPORT): writes `exam.pdf`, `exam.docx` and `key.pdf` for the
@@ -6917,6 +6924,7 @@ fn build_doc(
                 let mut dq = m.dq.clone();
                 if is_key {
                     dq.choices.clear();
+                    dq.choice_images.clear();
                     dq.image = None;
                     dq.rule_lines = 0;
                     dq.text = vec![];
@@ -7084,6 +7092,9 @@ struct SnapQ {
     pub text: Vec<String>,
     pub choices: Vec<String>,
     pub image: Option<SnapImage>,
+    /// Pictures of the printed choices (absent in snapshots without picture choices).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choice_images: Vec<Option<SnapImage>>,
     pub key_text: String,
     pub rule_lines: u8,
     pub points: Option<f64>,
@@ -7113,6 +7124,14 @@ struct SnapImage {
     pub height: u32,
 }
 
+fn snap_image(r: &model::ImageRef) -> SnapImage {
+    SnapImage { file: r.file.clone(), width: r.width, height: r.height }
+}
+
+fn read_snap_image(s: &SnapImage) -> Option<DocImg> {
+    read_img(&model::ImageRef { file: s.file.clone(), width: s.width, height: s.height })
+}
+
 impl SnapDoc {
     #[cfg(test)]
     fn from_parts(
@@ -7140,6 +7159,7 @@ impl SnapDoc {
                         width: r.width,
                         height: r.height,
                     }),
+                    choice_images: if doc.questions[i].choice_images.is_empty() { Vec::new() } else { m.choice_imgs.iter().map(|r| r.as_ref().map(snap_image)).collect() },
                     key_text: doc.questions[i].key_text.clone(),
                     rule_lines: doc.questions[i].rule_lines,
                     points: doc.questions[i].points,
@@ -7198,6 +7218,7 @@ impl SnapDoc {
                         };
                         read_img(&img_ref)
                     }),
+                    choice_images: q.choice_images.iter().map(|s| s.as_ref().and_then(read_snap_image)).collect(),
                     key_text: q.key_text.clone(),
                     rule_lines: q.rule_lines,
                     points: q.points,
@@ -8626,6 +8647,30 @@ mod tests {
             q("q3", "plain2", Kind::Tf { correct: true }),
         ];
         assert_eq!(doc_numbers(&qs), vec![1, 2, 5]);
+    }
+
+    #[test]
+    fn picture_choices_reach_the_exported_paper_and_its_snapshot_but_not_the_compact_key() {
+        // Holdout v7, NESA: four pie charts as options A-D.
+        let pic = |n: &str| model::ImageRef { file: format!("media/{n}.png"), width: 40, height: 40 };
+        let answers: Vec<model::Answer> = ["a", "b", "c", "d"].iter().enumerate()
+            .map(|(i, n)| model::Answer { image: Some(pic(n)), correct: i == 1, ..Default::default() }).collect();
+        let q = model::Question { id: "pies".into(), stem: "Which spinner?".into(), kind: Kind::Mc { answers }, points: None, difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 0, modified: 0 };
+        let m = map_question(1, &q);
+        assert_eq!(m.dq.choice_images.len(), 4, "one slot per printed choice");
+        assert_eq!(m.choice_imgs.iter().map(|r| r.as_ref().unwrap().file.clone()).collect::<Vec<_>>(), ["media/a.png", "media/b.png", "media/c.png", "media/d.png"]);
+        let exam = model::Exam::default();
+        let mapped = vec![m];
+        assert_eq!(build_doc(&exam, &mapped, None, false).questions[0].choice_images.len(), 4);
+        assert!(build_doc(&exam, &mapped, None, true).questions[0].choice_images.is_empty(), "the compact key prints no choices");
+        let snap = SnapDoc::from_parts(&exam, &mapped, None, false, "x.pdf".into());
+        assert_eq!(snap.questions[0].choice_images.iter().flatten().map(|s| s.file.as_str()).collect::<Vec<_>>(), ["media/a.png", "media/b.png", "media/c.png", "media/d.png"]);
+        // Text choices keep the snapshot and the paper exactly as before.
+        let text = model::Question { kind: Kind::Mc { answers: vec![model::Answer::new("x", true), model::Answer::new("y", false)] }, ..q };
+        let m = map_question(1, &text);
+        assert!(m.dq.choice_images.is_empty() && m.choice_imgs.is_empty());
+        let snap = SnapDoc::from_parts(&exam, &[m], None, false, "x.pdf".into());
+        assert!(!serde_json::to_string(&snap).unwrap().contains("choice_images"));
     }
 
     #[test]

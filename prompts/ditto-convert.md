@@ -57,8 +57,12 @@ them, copy its text exactly, and set `"inheritedFromPage"` on that section to th
 Directions printed on this page always win. Never invent directions.
 
 # Question types (use `type`)
-- `multiple-choice`: `choices` = `[{"text": "...", "correct": true|false}]` in printed order,
-  without the letter ("a.", "(B)"). Set `correct` ONLY where the source marks the answer. If
+- `multiple-choice`: `choices` = `[{"text": "...", "correct": true|false, "figure": null}]` in
+  printed order, without the letter ("a.", "(B)"). When a choice IS a picture (a graph, chart or
+  diagram printed as option A, B, ...), give that choice a `figure` box around its picture only
+  (not its letter, not the other options) and its printed caption in `text`, or `""` when only the
+  picture is printed; the question's own `figure` stays the picture in the stem, if any. A text
+  choice has `"figure": null`. Set `correct` ONLY where the source marks the answer. If
   none is marked, every choice is `"correct": false`. Never decide the answer yourself.
   A printed answer-key line such as "Answer: B", "Correct: C", or "1. B" marks the corresponding
   printed choice. Map its letter to that choice, set that choice's `correct` to true, and leave
@@ -171,7 +175,7 @@ replace it with an inferred subject name. Such a heading supplies context, never
 # Examples
 
 Page shows "1. Which gas do plants absorb?" with choices a. O₂  b. CO₂ (circled)  c. N₂:
-{"id":"q1","type":"multiple-choice","stem":"Which gas do plants absorb?","choices":[{"text":"O₂","correct":false},{"text":"CO₂","correct":true},{"text":"N₂","correct":false}]}
+{"id":"q1","type":"multiple-choice","stem":"Which gas do plants absorb?","choices":[{"text":"O₂","correct":false,"figure":null},{"text":"CO₂","correct":true,"figure":null},{"text":"N₂","correct":false,"figure":null}]}
 
 Page shows "2. Name each compound." with a table: Formula | Ionic or Covalent? | Name, rows
 KI (Ionic, potassium iodide) and SO₃ (Covalent, sulfur trioxide), answers handwritten:

@@ -1073,6 +1073,9 @@ fn source_review_contact_sheet(previews: &[(usize, String, Vec<u8>)]) -> Result<
 pub struct FigureImportTrace {
     pub executions:Vec<crate::figure_agent::ExecutionTrace>,
     pub question_index: usize,
+    /// Set when the run redrew one of the question's answer choices rather than its own picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub choice: Option<ChoiceRef>,
     pub sees: Option<String>,
     pub steps: Vec<crate::figure_agent::StepLog>,
     pub spec: Option<crate::model::FigureSpec>,
@@ -1253,42 +1256,19 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
         if let Some(item) = r.items.iter().find(|item| item.question_index == Some(i) && item.status == "saved_figure_box_unresolved") {
             // Retain visible source evidence for review, but do not spend figure-tool calls fitting
             // a picture whose scope may include the next problem. A plausible redraw cannot certify it.
-            figure_runs.push(FigureImportTrace { executions:Vec::new(), question_index: i, sees: None, steps: Vec::new(), spec: None, review: None, accepted: false,
+            figure_runs.push(FigureImportTrace { executions:Vec::new(), question_index: i, choice: None, sees: None, steps: Vec::new(), spec: None, review: None, accepted: false,
                 note: "Source figure box remains unresolved; figure recreation was not attempted.".into(), error: item.reason.clone(),
                 failure: Some(FigureFailure::new("source_scope_unconfirmed", item.reason.as_deref().unwrap_or("The source crop has not been confirmed complete; drawing was not attempted."), None)) });
             continue;
         }
         let crop = crate::store::read_media(&q.image.as_ref().expect("checked").file).unwrap_or_default();
         if cfg.native_tools {
-            let request = figure_request_for_item(&q.stem, "", printed_label.as_deref());
-            let mut run = crate::figure_agent::run_model_async(&request, Some(&crop), cfg).await;
-            let mut executions=Vec::new();
-            let mut earlier_steps = Vec::new();
-            // A title that copies a line of the question text is how a crop that reached into the question
-            // used to look: ask once for the figure as printed, and do not accept it if the text stays.
-            let mut leak = record_figure_execution(&mut run, &q.stem, printed_label.as_deref(), &mut executions);
-            if let Some(problem) = leak.clone() {
-                earlier_steps = std::mem::take(&mut run.steps);
-                run = crate::figure_agent::run_model_async(&figure_request_for_item(&q.stem, &problem, printed_label.as_deref()), Some(&crop), cfg).await;
-                leak = record_figure_execution(&mut run, &q.stem, printed_label.as_deref(), &mut executions);
+            let (redraw, trace) = redraw_crop_async(&crop, &q.stem, printed_label.as_deref(), i, None, cfg).await;
+            match redraw {
+                Some((img, spec)) => { q.image = Some(img); q.figure = Some(spec); redrawn += 1; }
+                None => if let Some(reason) = &trace.failure { r.warnings.push(reason.warning(&label)) },
             }
-            earlier_steps.append(&mut run.steps);
-            run.steps = earlier_steps;
-            // A known mismatch must never replace the source crop. An unavailable review
-            // also stays unresolved rather than becoming an apparently verified redraw.
-            let mut accepted = false;
-            let mut failure = None;
-            if leak.is_none() && figure_import_verified(&run) && let (Some(spec), Some(png)) = (&run.spec, &run.png) {
-                match crate::store::put_image(png) {
-                    Ok(img) => { q.image = Some(img); q.figure = Some(spec.clone()); redrawn += 1; accepted = true; }
-                    Err(e) => failure = Some(FigureFailure::new("storage_error", format!("The rendered figure could not be saved: {e}"), Some(&spec.id))),
-                }
-            }
-            if !accepted {
-                let reason = failure.get_or_insert_with(|| figure_failure::from_run(&run, &executions, leak.as_deref()));
-                r.warnings.push(reason.warning(&label));
-            }
-            figure_runs.push(FigureImportTrace { executions, question_index: i, sees: run.sees, steps: run.steps, spec: run.spec, review: run.review, accepted, note: run.note, error: run.error.or(leak), failure });
+            figure_runs.push(trace);
             continue;
         }
         // Up to 3 attempts: a picture the first generator misses gets another generator.
@@ -1305,7 +1285,81 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
             Err(e) => r.warnings.push(format!("Question {}: figure fitting failed ({e}), kept the cropped image.", i + 1)),
         }
     }
+    // A choice that is a picture (four pie charts as options A-D) is redrawn like a question's
+    // picture; its run is recorded with the choice it belongs to.
+    if cfg.native_tools {
+        for (i, q) in r.doc.questions.iter_mut().enumerate() {
+            let printed_label = r.items.iter().find(|item| item.question_index == Some(i)).and_then(|item| item.label.clone());
+            let label = printed_label.clone().unwrap_or_else(|| (i + 1).to_string());
+            let stem = q.stem.clone();
+            let mut lists: Vec<(Option<usize>, &mut Vec<crate::model::Answer>)> = match &mut q.kind {
+                crate::model::Kind::Mc { answers } => vec![(None, answers)],
+                crate::model::Kind::Multipart { parts } => parts.iter_mut().enumerate().filter_map(|(pi, p)| match &mut p.kind {
+                    crate::model::PartKind::Mc { answers } => Some((Some(pi), answers)),
+                    _ => None,
+                }).collect(),
+                _ => Vec::new(),
+            };
+            for (part, answers) in lists.iter_mut() {
+                for (ci, a) in answers.iter_mut().enumerate() {
+                    let Some(image) = a.image.as_ref().filter(|_| a.figure.is_none()) else { continue };
+                    let crop = crate::store::read_media(&image.file).unwrap_or_default();
+                    let letter = char::from(b'A' + (ci as u8).min(25));
+                    let context = format!("{stem}\n[This picture is answer choice {letter}{}.]", part.map(|p| format!(" of part {}", char::from(b'a' + (p as u8).min(25)))).unwrap_or_default());
+                    let (redraw, trace) = redraw_crop_async(&crop, &context, printed_label.as_deref(), i, Some(ChoiceRef { part: *part, choice: ci }), cfg).await;
+                    match redraw {
+                        Some((img, spec)) => { a.image = Some(img); a.figure = Some(spec); redrawn += 1; }
+                        None => if let Some(reason) = &trace.failure { r.warnings.push(reason.warning(&format!("{label} choice {letter}"))) },
+                    }
+                    figure_runs.push(trace);
+                }
+            }
+        }
+    }
     Ok(Converted { doc: r.doc, warnings: r.warnings, cropped: r.figures, redrawn, raw_reply: raw.into(), figure_runs, items: r.items, context: context.cloned(), source_box_review, direction_review:None })
+}
+
+/// The answer choice a figure run redrew: its part (for a multipart) and its index.
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+pub struct ChoiceRef {
+    pub part: Option<usize>,
+    pub choice: usize,
+}
+
+/// One cropped picture through the figure agent, asking once more when the drawing copies the
+/// question text. Some((image, spec)) only for a verified redraw that was saved; otherwise the
+/// trace's failure says why the source crop stays. The trace is recorded either way.
+async fn redraw_crop_async(crop: &[u8], stem: &str, printed_label: Option<&str>, question_index: usize, choice: Option<ChoiceRef>, cfg: &AiCfg) -> (Option<(crate::model::ImageRef, crate::model::FigureSpec)>, FigureImportTrace) {
+    let request = figure_request_for_item(stem, "", printed_label);
+    let mut run = crate::figure_agent::run_model_async(&request, Some(crop), cfg).await;
+    let mut executions=Vec::new();
+    let mut earlier_steps = Vec::new();
+    // A title that copies a line of the question text is how a crop that reached into the question
+    // used to look: ask once for the figure as printed, and do not accept it if the text stays.
+    let mut leak = record_figure_execution(&mut run, stem, printed_label, &mut executions);
+    if let Some(problem) = leak.clone() {
+        earlier_steps = std::mem::take(&mut run.steps);
+        run = crate::figure_agent::run_model_async(&figure_request_for_item(stem, &problem, printed_label), Some(crop), cfg).await;
+        leak = record_figure_execution(&mut run, stem, printed_label, &mut executions);
+    }
+    earlier_steps.append(&mut run.steps);
+    run.steps = earlier_steps;
+    // A known mismatch must never replace the source crop. An unavailable review
+    // also stays unresolved rather than becoming an apparently verified redraw.
+    let mut saved = None;
+    let mut failure = None;
+    if leak.is_none() && figure_import_verified(&run) && let (Some(spec), Some(png)) = (&run.spec, &run.png) {
+        match crate::store::put_image(png) {
+            Ok(img) => saved = Some((img, spec.clone())),
+            Err(e) => failure = Some(FigureFailure::new("storage_error", format!("The rendered figure could not be saved: {e}"), Some(&spec.id))),
+        }
+    }
+    let accepted = saved.is_some();
+    if !accepted && failure.is_none() {
+        failure = Some(figure_failure::from_run(&run, &executions, leak.as_deref()));
+    }
+    let trace = FigureImportTrace { executions, question_index, choice, sees: run.sees, steps: run.steps, spec: run.spec, review: run.review, accepted, note: run.note, error: run.error.or(leak), failure };
+    (saved, trace)
 }
 
 /// `transcribe`, then up to two retries when the reply isn't valid JSON: the error is quoted

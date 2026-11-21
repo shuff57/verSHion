@@ -66,15 +66,20 @@ pub fn blank_count(stem: &str) -> usize {
     stem.matches("___").count()
 }
 
+/// A choice that prints something: its text, or its picture (a choice can be a picture).
+fn choice_filled(a: &model::Answer) -> bool {
+    filled(&a.text) || a.image.is_some()
+}
+
 /// Rows of an answer list that are empty but would be missed: one before a filled row, or any when
 /// fewer than two rows are filled (the rows trailing a complete list are simply not saved).
 fn empty_rows(answers: &[model::Answer]) -> Vec<Issue> {
-    let n_filled = answers.iter().filter(|a| filled(&a.text)).count();
-    let last = answers.iter().rposition(|a| filled(&a.text));
+    let n_filled = answers.iter().filter(|a| choice_filled(a)).count();
+    let last = answers.iter().rposition(|a| choice_filled(a));
     answers
         .iter()
         .enumerate()
-        .filter(|(i, a)| !filled(&a.text) && (n_filled < 2 || last.is_some_and(|l| *i < l)))
+        .filter(|(i, a)| !choice_filled(a) && (n_filled < 2 || last.is_some_and(|l| *i < l)))
         .map(|(i, _)| note(Where::Answer(i), format!("Answer {} is empty", i + 1)))
         .collect()
 }
@@ -93,10 +98,10 @@ pub fn check(stem: &str, kind: &Kind) -> Vec<Issue> {
     }
     match kind {
         Kind::Mc { answers } => {
-            if answers.iter().filter(|a| filled(&a.text)).count() < 2 {
+            if answers.iter().filter(|a| choice_filled(a)).count() < 2 {
                 v.push(fix(Where::Answers, "Add at least two answer choices", false));
             }
-            if !answers.iter().any(|a| a.correct && filled(&a.text)) {
+            if !answers.iter().any(|a| a.correct && choice_filled(a)) {
                 v.push(fix(Where::Answers, "Mark one answer correct", true));
             }
             v.extend(empty_rows(answers));
@@ -145,10 +150,10 @@ pub fn check(stem: &str, kind: &Kind) -> Vec<Issue> {
                 }
                 match &p.kind {
                     PartKind::Mc { answers } => {
-                        if answers.iter().filter(|a| filled(&a.text)).count() < 2 {
+                        if answers.iter().filter(|a| choice_filled(a)).count() < 2 {
                             v.push(fix(Where::Part(i), format!("Part {} needs at least two answer choices", i + 1), false));
                         }
-                        if !answers.iter().any(|a| a.correct && filled(&a.text)) {
+                        if !answers.iter().any(|a| a.correct && choice_filled(a)) {
                             v.push(fix(Where::Part(i), format!("Part {} needs a correct answer", i + 1), true));
                         }
                     }
@@ -259,6 +264,15 @@ mod tests {
 
     fn a(t: &str, c: bool) -> Answer {
         Answer::new(t, c)
+    }
+
+    #[test]
+    fn a_choice_that_is_a_picture_counts_as_filled() {
+        let pic = |c: bool| Answer { image: Some(crate::model::ImageRef { file: "media/p.png".into(), width: 1, height: 1 }), correct: c, ..Default::default() };
+        let k = Kind::Mc { answers: vec![pic(false), pic(true), pic(false)] };
+        assert!(check("Which spinner?", &k).is_empty(), "{:?}", check("Which spinner?", &k));
+        let none = Kind::Mc { answers: vec![Answer::default(), pic(true)] };
+        assert!(!check("Which?", &none).is_empty(), "a choice with neither text nor picture is still empty");
     }
 
     fn q(stem: &str, kind: Kind) -> Question {

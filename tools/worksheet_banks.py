@@ -161,6 +161,15 @@ def has_invented_key(q):
     # always holds a value, so only the keyless marker shows that value is a placeholder, not a key.
     return ('Mc' in kind and any(a.get('correct') for a in kind['Mc'].get('answers',[]))) or ('Tf' in kind and q.get('explanation')!=KEYLESS_SENTINEL)
 
+def choice_answers(q):
+    """Every answer choice of a saved question: its own (multiple choice) and its parts'."""
+    kind=q.get('kind') or {}
+    if 'Mc' in kind:return list(kind['Mc'].get('answers') or [])
+    out=[]
+    for part in (kind.get('Multipart') or {}).get('parts') or []:
+        out.extend(((part.get('kind') or {}).get('Mc') or {}).get('answers') or [])
+    return out
+
 def leading_continuation(case,items,numbers):
     """A page that opens mid-problem: the importer saves the printed continuation first, labelled
     "continued" and unnumbered. It answers to the one expected number nothing else claims, and only
@@ -344,7 +353,8 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
     questions=banks[0]['questions'][offset:offset+len(page['questions'])]
     source=parsed_source_map(case,page,questions);numbers=source['numbers'];expected=case['question_numbers']
     by_number=source['by_number']
-    runs={x['question_index']:x for x in page.get('figure_runs',[])}
+    # A question's own figure run; runs that redrew one of its answer choices carry 'choice'.
+    runs={x['question_index']:x for x in page.get('figure_runs',[]) if x.get('choice') is None}
     matched_figures=[];missing_figures=[];invented_figures=[];broken_media=[];contract_failures={};figure_failures=[]
     required=set(case['required_figure_numbers'])
     scope=page.get('source_box_review')
@@ -359,7 +369,8 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
         item_scope_ready=scope_ready if confirmed_scope is None else raw_index.get(index) in confirmed_scope
         good=(q is not None and n not in source['unresolved'] and item_scope_ready and q.get('figure') and q.get('image') and run.get('accepted')
               and run.get('spec')==q['figure'] and run.get('review',{}).get('matches') is True
-              and any(s['tool']=='render_figure' for s in run.get('steps',[])))
+              and any(s['tool']=='render_figure' for s in run.get('steps',[]))
+              and all(a.get('figure') for a in choice_answers(q) if a.get('image')))
         spec_ref=case.get('figure_expectations',{}).get(str(n))
         if good and spec_ref:
             differences=[]

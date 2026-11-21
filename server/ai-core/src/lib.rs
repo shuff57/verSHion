@@ -228,7 +228,8 @@ pub fn ditto() -> OutputSchema {
     let figure = nullable(object(
         json!({"box":{"type":"array","items":{"type":"number","minimum":0,"maximum":1000},"minItems":4,"maxItems":4},"alt":string}),
     ));
-    let choices = array(object(json!({"text":string,"correct":{"type":"boolean"}})));
+    // A choice can be a picture (four pie charts as options A-D): its own figure box, else null.
+    let choices = array(object(json!({"text":string,"correct":{"type":"boolean"},"figure":figure.clone()})));
     let make_question = |parts: bool| {
         let mut variants = Vec::new();
         for ty in [
