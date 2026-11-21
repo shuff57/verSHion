@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-21T10:45:58+00:00",
- "probe_checked_at": "2026-11-21T02:45:58",
+ "generated_at": "2026-11-21T17:30:07+00:00",
+ "probe_checked_at": "2026-11-21T09:30:07",
  "comparable": true,
  "drift": [],
  "pooled": 97.0,
@@ -849,19 +849,11 @@
    "gaps": []
   },
   "solid-net": {
-   "score": 98.1,
-   "got": 102.0,
+   "score": 100.0,
+   "got": 104.0,
    "total": 104.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-09c",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Drag any label on the figure to move it, and reset the positions",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "sphere": {
    "score": 100.0,

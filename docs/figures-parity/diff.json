@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-21T10:45:58+00:00",
+ "generated_at": "2026-11-21T17:30:07+00:00",
  "spec_generated_at": "2026-11-19T01:39:54+00:00",
  "figures": [
   {
@@ -1356,16 +1356,15 @@
     "readout",
     "show_answers",
     "style",
-    "label_size"
+    "label_size",
+    "label_offsets"
    ],
-   "param_count": 53,
-   "handles": 0,
-   "label_drag": false,
+   "param_count": 54,
+   "handles": 3,
+   "label_drag": true,
    "show_answers": true,
    "style": true,
-   "interaction_gaps": [
-    "reference mentions click/drag; ours has no handles"
-   ]
+   "interaction_gaps": []
   },
   {
    "site": "math",

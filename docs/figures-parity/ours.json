@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-21T10:29:58+00:00",
-  "src_mtime": 1795256266.6874835,
-  "git": "553d5b7+dirty",
+  "built_at": "2026-11-21T17:29:24+00:00",
+  "src_mtime": 1795282071.8760731,
+  "git": "b25135c+dirty",
   "figures": 193
  },
  "figures": {
@@ -29336,11 +29336,43 @@
       "Small"
      ],
      "default": "Medium"
+    },
+    {
+     "key": "label_offsets",
+     "label": "Label positions",
+     "kind": "text",
+     "options": [],
+     "default": ""
     }
    ],
-   "handle_list": [],
-   "handles": false,
-   "label_drag": false,
+   "handle_list": [
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    }
+   ],
+   "handles": true,
+   "label_drag": true,
    "show_answers": true,
    "style": true,
    "label_size": true

@@ -100,11 +100,14 @@ pub fn params() -> Vec<ParamDef> {
         answers_param(),
         svg::style_param(),
         svg::label_size_param(),
+        // (dragging a label on the figure sets it; the Labels section's button clears it)
+        super::labels::param(),
     ]);
     v
 }
 
-fn render(p: &Params) -> String { render_full(p).svg }
+// (the page grown to take in any label dragged past its edge, as the other draggable figures')
+fn render(p: &Params) -> String { super::labels::grown(render_full(p).svg) }
 
 const LAB_KEYS: [&str; 13] = ["lab_length", "lab_width", "lab_tri_base", "lab_tri_height", "lab_hyp", "lab_side", "lab_height", "lab_slant", "lab_slant_w", "lab_circ", "lab_apothem", "lab_radius", "lab_angle"];
 const TXT_KEYS: [&str; 13] = ["txt_length", "txt_width", "txt_tri_base", "txt_tri_height", "txt_hyp", "txt_side", "txt_height", "txt_slant", "txt_slant_w", "txt_circ", "txt_apothem", "txt_radius", "txt_angle"];

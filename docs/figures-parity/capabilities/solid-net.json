@@ -217,8 +217,7 @@
    "id": "cap-09c",
    "text": "Drag any label on the figure to move it, and reset the positions",
    "class": "interaction",
-   "evidence": "",
-   "note": "no handles, not in labels::FIGURES"
+   "evidence": "label-drag + handle:label:move this label + ui-test:figures::nets::tests::every_label_can_be_dragged_its_leader_following_and_reset_puts_it_back"
   }
  ]
 }

@@ -1268,7 +1268,8 @@ impl Workspace {
             && let Some(si) = self.sel
         {
             let def = &reg()[si];
-            let h = hash_params(def.id, &self.params);
+            // (a label drag let go re-renders it, the page then growing to take in the moved label)
+            let h = hash_params(def.id, &self.params).wrapping_add(figures::labels::frozen().is_some() as u64);
             // the preview is rasterized at the zoom it is shown at (see `preview_interactive`),
             // so a bigger window or a small figure stays crisp; exports keep their own scale
             let max_side = ctx.input(|i| i.max_texture_side) as f64;
@@ -2015,6 +2016,10 @@ impl Workspace {
         // The order and the boxes are interact's, which its tests share (`interact::pick`).
         let order = figures::interact::hit_order(&hs);
         let has_labels = hs.iter().any(|h| h.label_drag);
+        // (a held page with no button down is a drag that ended unseen: let it go)
+        if figures::labels::frozen().is_some() && !ui.input(|i| i.pointer.any_down()) {
+            figures::labels::freeze(None);
+        }
         let painter = ui.painter_at(full.expand(8.0));
         let acc = theme::accent_col();
         let mut changed = false;
@@ -2052,6 +2057,17 @@ impl Workspace {
             {
                 let t = to_svg(ptr);
                 ui.data_mut(|d| d.insert_temp(UiId::new("fig_drag_off"), (t.0 - h.pos.0, t.1 - h.pos.1)));
+            }
+            // a label being dragged holds the page as it was (no growing or shifting under the pointer); let go, the page
+            // grows to take the label in, as the reference's frame does
+            if h.label_drag && r.drag_started() {
+                figures::labels::freeze(Some(figures::labels::growth(&def.svg(&self.params))));
+            }
+            if h.label_drag && r.drag_stopped() {
+                figures::labels::freeze(None);
+                // (redrawn at once, not after the typing pause, so the grown page shows as the label is let go)
+                self.live = true;
+                changed = true;
             }
             if active
                 && let (Some(f), Some(ptr)) = (&h.drag, r.interact_pointer_pos())
@@ -5409,7 +5425,7 @@ mod tests {
     /// on a flat shape and on a solid; vertex knobs keep working next to a moved label.
     #[test]
     fn dragging_a_label_moves_it_as_one_undo_step() {
-        for (id, lbl) in [("triangle", "s0"), ("rectangle", "v2"), ("cone", "h")] {
+        for (id, lbl) in [("triangle", "s0"), ("rectangle", "v2"), ("cone", "h"), ("solid-net", "lab_height")] {
             let (ctx, mut ws) = open_fig(id);
             let def = &reg()[ws.sel.unwrap()];
             let before = ws.params.clone();
@@ -5445,6 +5461,48 @@ mod tests {
         preview_drag(&ctx, &mut ws, knob, (knob.0 - 60.0, knob.1));
         assert_ne!(ws.params.s("m_ab"), ab, "the width knob still works");
         assert_eq!(ws.params.s(figures::labels::KEY), "v2:20,-20", "and leaves the label alone");
+    }
+
+    /// A label dragged past the page's edge: the page holds still while it's dragged (nothing grows or moves under the
+    /// pointer), then grows to take the label in once it's let go, so it's never cut off; its handle stays on it.
+    #[test]
+    fn a_label_dragged_past_the_edge_grows_the_page_once_let_go() {
+        let (ctx, mut ws) = open_fig("solid-net");
+        let def = &reg()[ws.sel.unwrap()];
+        let svg0 = (def.render)(&ws.params);
+        let (w0, h0) = figures::svg_size(&svg0);
+        let b = figures::labels::boxes(&svg0).into_iter().find(|b| b.id == "lab_height").expect("the height's label");
+        let c = b.centre();
+        let to = (b.half.0 * 0.5, c.1);
+        let (o, k) = ws.preview_map.expect("preview drawn");
+        let sc = |q: (f64, f64)| egui::pos2(o.x + (q.0 * k) as f32, o.y + (q.1 * k) as f32);
+        let (pa, pb) = (sc(c), sc(to));
+        comp_frame(&ctx, &mut ws, vec![egui::Event::PointerMoved(pa)]);
+        comp_frame(&ctx, &mut ws, btn(pa, true));
+        for i in 1..=4 {
+            comp_frame(&ctx, &mut ws, vec![egui::Event::PointerMoved(pa + (pb - pa) * (i as f32 / 4.0))]);
+            assert_eq!(ws.canvas, (w0, h0), "the page holds still while the label is dragged");
+        }
+        let held = figures::labels::get(&ws.params, "lab_height");
+        assert!(held.0 < -10.0, "the label moved out: {held:?}");
+        comp_frame(&ctx, &mut ws, btn(pb, false));
+        for _ in 0..3 {
+            comp_frame(&ctx, &mut ws, vec![]);
+        }
+        assert!(figures::labels::frozen().is_none());
+        // let go: the page has grown on the left to take the label in, the label whole on it and its handle on it
+        let svg = (def.render)(&ws.params);
+        let (w1, h1) = figures::svg_size(&svg);
+        assert!(w1 > w0 && h1 == h0, "{w0}x{h0} -> {w1}x{h1}");
+        assert_eq!(ws.canvas, (w1, h1), "the preview shows the grown page");
+        let moved = figures::labels::boxes(&svg).into_iter().find(|b| b.id == "lab_height").unwrap();
+        let mc = moved.centre();
+        assert!(mc.0 - moved.half.0 >= 0.0 && mc.0 + moved.half.0 <= w1, "label whole on the page: {mc:?} in {w1}");
+        let hs = def.handles(&ws.params, ws.canvas);
+        assert!(hs.iter().any(|h| h.label_drag && (h.pos.0 - mc.0).abs() < 1e-6 && (h.pos.1 - mc.1).abs() < 1e-6), "the handle is on the moved label");
+        // the rest of the drawing kept its place against that label: the net moved right with the page's growth
+        let g = figures::labels::growth(&svg);
+        assert!(g[0] > 0.0 && g[1] == 0.0 && g[2] == 0.0 && g[3] == 0.0, "{g:?}");
     }
 
     /// Offsets survive a saved spec / preset round trip and reach every output (PNG and SVG).

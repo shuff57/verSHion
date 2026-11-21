@@ -940,3 +940,77 @@ fn labels_stay_by_what_they_measure() {
         }
     }
 }
+
+#[test]
+fn every_label_can_be_dragged_its_leader_following_and_reset_puts_it_back() {
+    use crate::figures::labels;
+    // every measure's label, the angle's, and each face's name and area is movable; the readout is not
+    let v = json!({"in_face": "Names and areas", "readout": true, "lab_apothem": "Measure"});
+    let r = render_full(&js(v.clone()));
+    let ids: Vec<String> = labels::boxes(&r.svg).into_iter().map(|b| b.id).collect();
+    for t in &r.texts {
+        let movable = t.what.starts_with("lab ") || t.what.starts_with("face ") || t.what.starts_with("area ");
+        assert_eq!(ids.contains(&super::draw::label_id(&t.what)), movable, "{} in {ids:?}", t.what);
+    }
+    assert!(ids.iter().any(|i| i == "face_A") && ids.iter().any(|i| i == "area_A") && ids.iter().any(|i| i.starts_with("lab_")), "{ids:?}");
+    let cone = render_full(&js(json!({"shape": "Cone", "lab_angle": "Measure"})));
+    assert!(labels::boxes(&cone.svg).iter().any(|b| b.id == "lab_angle"));
+    // dragging one moves it by its offset, the page left as it was (so it doesn't rescale under the pointer), others put
+    let mut p = js(v.clone());
+    let first = ids.iter().find(|i| i.starts_with("lab_")).unwrap().clone();
+    labels::set(&mut p, &first, (25.0, -15.0));
+    let moved = render_full(&p);
+    assert_eq!(moved.size, r.size);
+    for (a, b) in r.texts.iter().zip(&moved.texts) {
+        let want = if super::draw::label_id(&a.what) == first { (a.c.0 + 25.0, a.c.1 - 15.0) } else { a.c };
+        assert!((b.c.0 - want.0).abs() < 1e-6 && (b.c.1 - want.1).abs() < 1e-6, "{} at {:?}, want {want:?}", b.what, b.c);
+    }
+    let bx = labels::boxes(&moved.svg).into_iter().find(|b| b.id == first).unwrap();
+    assert_eq!(bx.off, (25.0, -15.0));
+    // a face's leader goes with the block it ends at
+    let v = json!({"shape": "Cylinder", "radius": "3", "height": "20", "tabs": true, "in_face": "Names and areas"});
+    let r = render_full(&js(v.clone()));
+    let (lw, a, b) = r.leaders.iter().find(|l| l.0.starts_with("face ")).cloned().expect("a face leader");
+    let name = &lw[5..];
+    let mut p = js(v.clone());
+    labels::set(&mut p, &format!("face_{name}"), (-30.0, 10.0));
+    labels::set(&mut p, &format!("area_{name}"), (-30.0, 10.0));
+    let moved = render_full(&p);
+    let (_, a2, b2) = moved.leaders.iter().find(|l| l.0 == lw).cloned().unwrap();
+    assert_eq!(a2, a, "the leader's dot stays on its face");
+    assert!((b2.0 - (b.0 - 30.0)).abs() < 1e-6 && (b2.1 - (b.1 + 10.0)).abs() < 1e-6, "{b:?} -> {b2:?}");
+    // a line broken round a label is whole again once the label is dragged away (a fold or a height left with a hole
+    // would mislead on a net to be cut out): the moved render's strokes join up where the unmoved one's were broken
+    let pieces = |r: &super::draw::Rendered| r.strokes.len();
+    for (v, ids) in [(json!({"shape": "Pyramid", "label_size": "Large"}), vec!["lab_slant"])] {
+        let still = render_full(&js(v.clone()));
+        let mut q = js(v.clone());
+        for id in &ids {
+            labels::set(&mut q, id, (-60.0, -20.0));
+        }
+        let moved = render_full(&q);
+        // (each of these breaks a line round the label where it stands: dragged away, that line is one piece again)
+        assert!(pieces(&moved) < pieces(&still), "{v}: {} pieces moved, {} still", pieces(&moved), pieces(&still));
+    }
+    // a face's leader, its row dragged, ends on that row
+    let v7 = json!({"base": "Regular polygon", "sides": 7, "tabs": true, "in_face": "Names and areas", "tint": true, "show_3d": true, "unit": "units"});
+    let r7 = render_full(&js(v7.clone()));
+    for (lw, _, _) in r7.leaders.iter().filter(|l| l.0.starts_with("face ")) {
+        let name = &lw[5..];
+        let mut q = js(v7.clone());
+        labels::set(&mut q, &format!("area_{name}"), (-20.0, 40.0));
+        labels::set(&mut q, &format!("face_{name}"), (-20.0, 40.0));
+        let moved = render_full(&q);
+        let (_, _, end) = moved.leaders.iter().find(|l| &l.0 == lw).unwrap();
+        let near = moved.texts.iter().filter(|t| t.what == format!("face {name}") || t.what == format!("area {name}")).map(|t| {
+            let r = t.rect();
+            let c = (end.0.clamp(r.0, r.2), end.1.clamp(r.1, r.3));
+            (c.0 - end.0).hypot(c.1 - end.1)
+        }).fold(f64::MAX, f64::min);
+        assert!(near <= 3.0, "{lw}'s leader ends {near} from its moved block in {v7}");
+    }
+    // reset: every label back in its own place, the figure as it was
+    labels::reset(&mut p);
+    assert!(!labels::any_moved(&p));
+    assert_eq!(render_full(&p).svg, r.svg);
+}

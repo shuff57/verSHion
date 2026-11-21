@@ -1,6 +1,6 @@
 # Figures parity score
 
-Generated: 2026-11-21T10:45:58+00:00 · probe: 2026-11-21T02:45:58
+Generated: 2026-11-21T17:30:07+00:00 · probe: 2026-11-21T09:30:07
 
 **Pooled 97.0** · mean 97.0 over 77 figures · built 78 of 78 reference figures
 
@@ -36,8 +36,6 @@ Comparable with the frozen baseline: **yes**
   - cap-03d [control 3] Multiply fraction branches out to a fraction in lowest terms — no evidence
 - `population-growth`: 98 (128/131)
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
-- `solid-net`: 98 (102/104)
-  - cap-09c [interaction 2] Drag any label on the figure to move it, and reset the positions — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
@@ -97,6 +95,7 @@ Comparable with the frozen baseline: **yes**
 - `regular-polygon`: 100 (79/79)
 - `ruler-reading`: 100 (62/62)
 - `segment-addition`: 100 (122/122)
+- `solid-net`: 100 (104/104)
 - `sphere`: 100 (35/35)
 - `spring-scale`: 100 (51/51)
 - `stem-and-leaf`: 100 (67/67)

@@ -1,0 +1,29 @@
+{
+ "round": 409,
+ "figure": "solid-net",
+ "capability": "cap-09c",
+ "hypothesis": "Batch 4 solid-net: cap-09c; evidence label-drag + handle:label:move this label + ui-test:figures::nets::tests::every_label_can_be_dragged_its_leader_following_and_reset_puts_it_back",
+ "started_at": "2026-11-21T09:29:32",
+ "git": "b25135c",
+ "before": {
+  "figure": 98.1,
+  "pooled": 97.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-21T09:29:37",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: cap-09c holds: every net label can be grabbed, lands where it's dropped and stays whole on the page after the drop, lines are no longer left broken round a moved label, face leaders follow their row, and opening renders are unchanged.",
+ "result": "hit",
+ "evidence": "nets tests 32 + labels/interact/UI label tests + census + frozen fixture + figures suite 3094 passed; 2 independent checks on batch 4 (the 2nd passed: 15,876 offset cases, 5,382 real handle drags, 2,500 value changes after a drag, 0 panics); the page grows after a drop for all 12 draggable figures",
+ "next": "solid-net complete; next figure in the parity climb"
+}

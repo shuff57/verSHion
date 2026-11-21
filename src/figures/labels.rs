@@ -18,10 +18,10 @@ use super::{ParamDef, Params};
 /// Param holding the label offsets.
 pub const KEY: &str = "label_offsets";
 
-/// Figures whose labels can be dragged (the 11 reference geometry pages that offer it).
-pub const FIGURES: [&str; 11] = [
+/// Figures whose labels can be dragged (the 12 reference geometry pages that offer it).
+pub const FIGURES: [&str; 12] = [
     "triangle", "rectangle", "parallelogram", "trapezoid", "kite", "regular-polygon",
-    "prism", "pyramid", "cylinder", "cone", "sphere",
+    "prism", "pyramid", "cylinder", "cone", "sphere", "solid-net",
 ];
 
 /// Figures with the reference's Turn slider (+ Straighten): the flat shapes.
@@ -48,6 +48,9 @@ pub fn with_param(mut v: Vec<ParamDef>) -> Vec<ParamDef> {
 
 pub type Offsets = BTreeMap<String, (f64, f64)>;
 
+/// The furthest a label can be moved from its own place (SVG units).
+const MAX_OFF: f64 = 2000.0;
+
 /// `"a:3,-4.5;s0:0,12"` -> map. Malformed entries are skipped (never panics).
 pub fn parse(s: &str) -> Offsets {
     let mut m = Offsets::new();
@@ -59,7 +62,9 @@ pub fn parse(s: &str) -> Offsets {
         if id.is_empty() || !x.is_finite() || !y.is_finite() {
             continue;
         }
-        m.insert(id.to_string(), (x, y));
+        // (no further than a page could sensibly grow: a hand-edited link with a huge offset would otherwise grow the
+        // page past what an export can draw)
+        m.insert(id.to_string(), (x.clamp(-MAX_OFF, MAX_OFF), y.clamp(-MAX_OFF, MAX_OFF)));
     }
     m
 }
@@ -175,8 +180,103 @@ fn attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     tag[i..].split('"').next()
 }
 
-/// Every `wrap`ped label of `svg`, in drawing order.
+thread_local! {
+    /// The page growth held while a label is being dragged (left, top, right, bottom), so the page doesn't grow or move
+    /// under the pointer; it grows to take in the moved label once the label is let go (the reference's frozen frame).
+    static FREEZE: std::cell::Cell<Option<[f64; 4]>> = const { std::cell::Cell::new(None) };
+}
+
+/// Holds the page at `g` (from [`growth`] of the page shown when the drag began) until `None` lets it go.
+pub fn freeze(g: Option<[f64; 4]>) {
+    FREEZE.with(|f| f.set(g));
+}
+
+/// The growth held, if a label is being dragged.
+pub fn frozen() -> Option<[f64; 4]> {
+    FREEZE.with(|f| f.get())
+}
+
+/// Clear space kept round a moved label at the page's edge.
+const GROW_MARGIN: f64 = 6.0;
+
+/// How far a rendered page was grown for its moved labels (left, top, right, bottom); zeros when it wasn't.
+pub fn growth(svg: &str) -> [f64; 4] {
+    // (searched whole: a byte cut could fall inside a character such as √)
+    let Some(i) = svg.find(" data-grow=\"") else { return [0.0; 4] };
+    let v: Vec<f64> = svg[i + 12..].split('"').next().unwrap_or("").split_whitespace().filter_map(|t| t.parse().ok()).collect();
+    if v.len() == 4 { [v[0], v[1], v[2], v[3]] } else { [0.0; 4] }
+}
+
+/// A rendered page grown to take in its moved labels, as the reference's frame takes in theirs: a label dragged past
+/// the edge is never cut off, in the preview or any export. The drawing is shifted as one group (`data-grow`, which
+/// [`boxes`] reads back, so the drag handles stay on the labels); while a drag is held ([`freeze`]) the page keeps the
+/// growth it had when the drag began.
+pub fn grown(svg: String) -> String {
+    if !svg.contains("<g data-lbl=\"") {
+        return svg;
+    }
+    let (w, h) = super::svg_size(&svg);
+    let g = match frozen() {
+        Some(g) => g,
+        None => {
+            let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+            for b in boxes(&svg).iter().filter(|b| b.off != (0.0, 0.0)) {
+                let c = b.centre();
+                (x0, y0, x1, y1) = (x0.min(c.0 - b.half.0), y0.min(c.1 - b.half.1), x1.max(c.0 + b.half.0), y1.max(c.1 + b.half.1));
+            }
+            if x0 > x1 {
+                return svg;
+            }
+            let up = |v: f64| if v > 0.0 { v.ceil() } else { 0.0 };
+            [up(GROW_MARGIN - x0), up(GROW_MARGIN - y0), up(x1 + GROW_MARGIN - w), up(y1 + GROW_MARGIN - h)]
+        }
+    };
+    if g == [0.0; 4] {
+        return svg;
+    }
+    let (nw, nh) = (w + g[0] + g[2], h + g[1] + g[3]);
+    let Some(open_end) = svg.find('>') else { return svg };
+    let set = |tag: &str, name: &str, val: &str| -> String {
+        let pat = format!(" {name}=\"");
+        match tag.find(&pat) {
+            Some(i) => {
+                let s = i + pat.len();
+                let e = s + tag[s..].find('"').unwrap_or(0);
+                format!("{}{}{}", &tag[..s], val, &tag[e..])
+            }
+            None => tag.to_string(),
+        }
+    };
+    let mut open = svg[..open_end].to_string();
+    open = set(&open, "width", &format!("{nw}"));
+    open = set(&open, "height", &format!("{nh}"));
+    open = set(&open, "viewBox", &format!("0 0 {nw} {nh}"));
+    // (the title, description and white page stay outside the shifted drawing)
+    let mut rest = &svg[open_end + 1..];
+    let mut lead = String::new();
+    for (start, end) in [("<title>", "</title>"), ("<desc>", "</desc>"), ("<rect width=\"100%\" height=\"100%\"", "/>")] {
+        if rest.starts_with(start)
+            && let Some(e) = rest.find(end)
+        {
+            lead.push_str(&rest[..e + end.len()]);
+            rest = &rest[e + end.len()..];
+        }
+    }
+    let close = rest.rfind("</svg>").unwrap_or(rest.len());
+    format!(
+        "{open}>{lead}<g data-grow=\"{} {} {} {}\" transform=\"translate({} {})\">{}</g>{}",
+        g[0], g[1], g[2], g[3], g[0], g[1], &rest[..close], &rest[close..]
+    )
+}
+
+/// [`rendering`] for a figure whose labels move: its page [`grown`] to take them in.
+pub fn render_with(p: &Params, f: impl FnOnce() -> String) -> String {
+    grown(rendering(p, f))
+}
+
+/// Every `wrap`ped label of `svg`, in drawing order (in the page's own units, a [`grown`] page's shift included).
 pub fn boxes(svg: &str) -> Vec<LabelBox> {
+    let g = growth(svg);
     let mut out = Vec::new();
     let mut rest = svg;
     while let Some(i) = rest.find("<g data-lbl=\"") {
@@ -197,7 +297,7 @@ pub fn boxes(svg: &str) -> Vec<LabelBox> {
             })
             .unwrap_or((0.0, 0.0));
         let turn = attr(tag, "data-turn").and_then(|t| t.parse().ok()).unwrap_or(0.0);
-        out.push(LabelBox { id: id.to_string(), base: (b[0], b[1]), half: (b[2], b[3]), off, turn });
+        out.push(LabelBox { id: id.to_string(), base: (b[0] + g[0], b[1] + g[1]), half: (b[2], b[3]), off, turn });
     }
     out
 }
@@ -240,6 +340,8 @@ mod tests {
         let t = format(&m);
         assert_eq!(t, "a0:3,-4.5;s1:0,12");
         assert_eq!(parse(&t), m);
+        // a huge offset (a hand-edited link) is held to a page's reach
+        assert_eq!(parse("a:1e6,-1e308")["a"], (MAX_OFF, -MAX_OFF));
         // zero offsets vanish, -0 never appears
         let mut p = Params::default();
         set(&mut p, "v0", (0.04, -0.04));
@@ -272,6 +374,33 @@ mod tests {
         assert_eq!(b[1].off, (0.0, 0.0));
         // scope restored
         assert!(!wrap("s0", (0.0, 0.0), (1.0, 1.0), "").contains("transform"));
+    }
+
+    #[test]
+    fn a_page_grows_to_take_in_a_moved_label_and_holds_while_frozen() {
+        let page = |body: &str| format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80" viewBox="0 0 100 80" role="img"><title>T</title><desc>D</desc><rect width="100%" height="100%" fill="#fff"/>{body}</svg>"##);
+        // nothing moved: unchanged
+        let still = page(&wrap("a", (50.0, 40.0), (10.0, 5.0), "x"));
+        assert_eq!(grown(still.clone()), still);
+        // moved past the left and bottom edges: grown there, the drawing shifted, the label whole on the page
+        let mut p = Params::default();
+        p.set_s(KEY, "a:-55,45");
+        let moved = page(&rendering(&p, || wrap("a", (50.0, 40.0), (10.0, 5.0), "x")));
+        let g = grown(moved.clone());
+        let (w, h) = super::super::svg_size(&g);
+        let gr = growth(&g);
+        assert!(gr[0] > 0.0 && gr[1] == 0.0 && gr[2] == 0.0 && gr[3] > 0.0, "{gr:?}");
+        assert_eq!((w, h), (100.0 + gr[0], 80.0 + gr[3]));
+        assert!(g.contains(&format!(r#"viewBox="0 0 {w} {h}""#)) && g.starts_with("<svg") && g.contains("<title>T</title><desc>D</desc><rect"), "{g}");
+        let b = &boxes(&g)[0];
+        let c = b.centre();
+        assert!(c.0 - b.half.0 >= 0.0 && c.1 + b.half.1 <= h, "{c:?} in {w}x{h}");
+        assert_eq!(b.base, (50.0 + gr[0], 40.0), "the label's own place moved with the drawing");
+        // held (a drag in progress): the page keeps the growth it had
+        freeze(Some([0.0; 4]));
+        assert_eq!(grown(moved.clone()), moved);
+        freeze(None);
+        assert_eq!(grown(moved), g);
     }
 
     #[test]

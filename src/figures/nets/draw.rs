@@ -543,6 +543,9 @@ pub fn render_full(p: &Params) -> Rendered {
     }
     // the inner lines' labels: beside a steep line (to its right), above a flat one; when that crosses a line, the other
     // side, then a little further along the line either way
+    // (labels the teacher has dragged: a line is never broken round where one of them would have been)
+    let dragged = crate::figures::labels::parse(p.s(crate::figures::labels::KEY));
+    let is_dragged = |what: &str| dragged.get(&label_id(what)).is_some_and(|o| *o != (0.0, 0.0));
     for l in &lines {
         let Some(lab) = lab_of(p, &m, l.md, fs) else { continue };
         let (w, h) = (lab.w, lab.h);
@@ -627,7 +630,7 @@ pub fn render_full(p: &Params) -> Rendered {
                         continue;
                     }
                     if clear(r, &texts, &others) {
-                        {
+                        if !is_dragged(&format!("lab {}", l.md)) {
                             let pieces = [(l.a, along(l.a, l.b, t0)), (along(l.a, l.b, t1), l.b)];
                             if let Some(ix) = prims.iter().position(|q| matches!(q, Prim::Line { a, b, .. } if *a == l.a && *b == l.b)) {
                                 let Prim::Line { w, dash, .. } = prims[ix].clone() else { unreachable!() };
@@ -868,9 +871,11 @@ pub fn render_full(p: &Params) -> Rendered {
                     }
                 }
                 if let Some((cx, cy)) = spot {
-                    let r = (cx - width / 2.0 - 3.0, cy - total / 2.0 - 3.0, cx + width / 2.0 + 3.0, cy + total / 2.0 + 3.0);
-                    for (a, b) in cut {
-                        break_line(&mut prims, &mut strokes, a, b, r);
+                    let row_ids: Vec<(f64, f64, bool)> = rows.iter().map(|r| (text_w(&r.0, r.1), r.1 * 1.05, is_dragged(&r.2))).collect();
+                    for r in still_rects((cx, cy), width, total, &row_ids) {
+                        for (a, b) in &cut {
+                            break_line(&mut prims, &mut strokes, *a, *b, r);
+                        }
                     }
                     let mut y = cy - total / 2.0;
                     for (k, (txt, size, what)) in rows.into_iter().enumerate() {
@@ -992,9 +997,11 @@ pub fn render_full(p: &Params) -> Rendered {
                 let mut found = best.map(|b| b.1);
                 if let Some(q) = found {
                     let r = rect_at(q);
-                    let r3 = (r.0 - 3.0, r.1 - 3.0, r.2 + 3.0, r.3 + 3.0);
-                    for (a, b) in dashed_inner.iter().filter(|(a, b)| seg_hits(*a, *b, r, 3.0)) {
-                        break_line(&mut prims, &mut strokes, *a, *b, r3);
+                    let row_ids: Vec<(f64, f64, bool)> = rows.iter().map(|r| (text_w(&r.0, r.1), r.1 * 1.05, is_dragged(&r.2))).collect();
+                    for r3 in still_rects(q, width, total, &row_ids) {
+                        for (a, b) in dashed_inner.iter().filter(|(a, b)| seg_hits(*a, *b, r, 3.0)) {
+                            break_line(&mut prims, &mut strokes, *a, *b, r3);
+                        }
                     }
                 }
                 // the middle is taken (a label or a leader is there): the nearest clear spot, on a leader into the face
@@ -1048,9 +1055,11 @@ pub fn render_full(p: &Params) -> Rendered {
                 // across another face only when even that can't be had
                 if found.is_none() && spot_found.is_none() && let Some(q) = shut_in {
                     let r = rect_at(q);
-                    let r3 = (r.0 - 3.0, r.1 - 3.0, r.2 + 3.0, r.3 + 3.0);
-                    for (a, b) in dashed_inner.iter().filter(|(a, b)| seg_hits(*a, *b, r, 3.0)) {
-                        break_line(&mut prims, &mut strokes, *a, *b, r3);
+                    let row_ids: Vec<(f64, f64, bool)> = rows.iter().map(|r| (text_w(&r.0, r.1), r.1 * 1.05, is_dragged(&r.2))).collect();
+                    for r3 in still_rects(q, width, total, &row_ids) {
+                        for (a, b) in dashed_inner.iter().filter(|(a, b)| seg_hits(*a, *b, r, 3.0)) {
+                            break_line(&mut prims, &mut strokes, *a, *b, r3);
+                        }
                     }
                     found = Some(q);
                 }
@@ -1144,6 +1153,45 @@ pub fn render_full(p: &Params) -> Rendered {
     }
     let off = (MARGIN - bx0, MARGIN - by0);
     let (w, h) = (bx1 - bx0 + 2.0 * MARGIN, by1 - by0 + 2.0 * MARGIN);
+    // ── dragged labels: each measure's label, the angle's, a face's name or area moves by its own offset (the page as it
+    // was, so it doesn't rescale under the pointer), its leader's end following it ──
+    let moved = crate::figures::labels::parse(p.s(crate::figures::labels::KEY));
+    let lo = |what: &str| moved.get(&label_id(what)).copied().unwrap_or((0.0, 0.0));
+    for (lw, a, b) in leaders.iter_mut() {
+        // (a face's leader goes with whichever of its name or area it ends at)
+        let what = if let Some(name) = lw.strip_prefix("face ") {
+            let near = |w: &str| texts.iter().find(|t| t.what == w).map(|t| { let r = t.rect(); let q = (b.0.clamp(r.0, r.2), b.1.clamp(r.1, r.3)); len(sub(q, *b)) }).unwrap_or(f64::MAX);
+            let (nw, aw) = (format!("face {name}"), format!("area {name}"));
+            if near(&nw) <= near(&aw) { nw } else { aw }
+        } else {
+            lw.clone()
+        };
+        let o = lo(&what);
+        if o == (0.0, 0.0) {
+            continue;
+        }
+        // (to the moved text's nearest point from the leader's dot: a face's leader may have ended at its block's corner,
+        // touching neither row, so its end moved by the offset alone could point at nothing)
+        let nb = match texts.iter().find(|t| t.what == what) {
+            Some(t) if lw.starts_with("face ") => {
+                let r = t.rect();
+                let r = (r.0 + o.0 - 2.0, r.1 + o.1 - 2.0, r.2 + o.0 + 2.0, r.3 + o.1 + 2.0);
+                (a.0.clamp(r.0, r.2), a.1.clamp(r.1, r.3))
+            }
+            _ => (b.0 + o.0, b.1 + o.1),
+        };
+        for q in prims.iter_mut() {
+            if let Prim::Line { a: pa, b: pb, .. } = q && *pa == *a && *pb == *b {
+                *pb = nb;
+            }
+        }
+        for s in strokes.iter_mut() {
+            if s.0 == *a && s.1 == *b {
+                s.1 = nb;
+            }
+        }
+        *b = nb;
+    }
     let mut d = svg::Doc::new(w.ceil(), h.ceil());
     let (title, desc) = describe(&m);
     d.describe(&title, &desc);
@@ -1199,19 +1247,24 @@ pub fn render_full(p: &Params) -> Rendered {
             }
         }
     }
-    for (i, tb) in texts.iter().enumerate() {
-        match maths.iter().find(|q| q.0 == i) {
-            Some((_, draws, bx)) => {
-                d.raw(&mathtext::svg(draws, tb.c.0 - tb.w / 2.0 + off.0, tb.c.1 - tb.h / 2.0 + bx.asc + off.1, ink, SERIF));
-            }
-            None => {
-                d.raw(&text_svg(tb, off));
+    crate::figures::labels::rendering(p, || {
+        for (i, tb) in texts.iter().enumerate() {
+            let inner = match maths.iter().find(|q| q.0 == i) {
+                Some((_, draws, bx)) => mathtext::svg(draws, tb.c.0 - tb.w / 2.0 + off.0, tb.c.1 - tb.h / 2.0 + bx.asc + off.1, ink, SERIF),
+                None => text_svg(tb, off),
+            };
+            // (a label, a face's name or area: movable, drawn unmoved and carried by its offset; the readout is not)
+            if draggable(&tb.what) {
+                d.raw(&crate::figures::labels::wrap(&label_id(&tb.what), (tb.c.0 + off.0, tb.c.1 + off.1), (tb.w / 2.0, tb.h / 2.0), &inner));
+            } else {
+                d.raw(&inner);
             }
         }
-    }
+    });
     let shift = |q: Pt| (q.0 + off.0, q.1 + off.1);
     let texts: Vec<TextBox> = texts.into_iter().map(|mut tb| {
-        tb.c = shift(tb.c);
+        let o = if draggable(&tb.what) { lo(&tb.what) } else { (0.0, 0.0) };
+        tb.c = shift((tb.c.0 + o.0, tb.c.1 + o.1));
         tb
     }).collect();
     let strokes = strokes.into_iter().map(|(a, b)| (shift(a), shift(b))).collect();
@@ -1542,6 +1595,33 @@ fn break_line(prims: &mut Vec<Prim>, strokes: &mut Vec<(Pt, Pt)>, a: Pt, b: Pt, 
             k += 1;
         }
     }
+}
+
+/// The boxes a face block at `q` breaks lines round (3 units clear): the whole block when none of its rows (width,
+/// height, dragged) has been dragged away, as it always was; none when all have; else each row still in place.
+fn still_rects(q: Pt, width: f64, total: f64, rows: &[(f64, f64, bool)]) -> Vec<(f64, f64, f64, f64)> {
+    if !rows.iter().any(|r| r.2) {
+        return vec![(q.0 - width / 2.0 - 3.0, q.1 - total / 2.0 - 3.0, q.0 + width / 2.0 + 3.0, q.1 + total / 2.0 + 3.0)];
+    }
+    let mut out = Vec::new();
+    let mut y = q.1 - total / 2.0;
+    for (w, h, moved) in rows {
+        if !moved {
+            out.push((q.0 - w / 2.0 - 3.0, y - 3.0, q.0 + w / 2.0 + 3.0, y + h + 3.0));
+        }
+        y += h + 4.0;
+    }
+    out
+}
+
+/// Whether a text can be dragged: a measure's label (the angle's too), a face's name or area; not the readout.
+fn draggable(what: &str) -> bool {
+    what.starts_with("lab ") || what.starts_with("face ") || what.starts_with("area ")
+}
+
+/// A draggable text's id in the label offsets: "lab radius" -> "lab_radius", "face A" -> "face_A".
+pub(super) fn label_id(what: &str) -> String {
+    what.replace(' ', "_")
 }
 
 /// A text's box as drawn: the width estimate runs a little wide of the drawn text (0.89–0.94 of it measured), so
