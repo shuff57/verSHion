@@ -1136,3 +1136,71 @@ fn round3_worked_out_digits_are_right() {
     }
     assert!(seen >= 7, "{seen}");
 }
+
+// ───────────────────────── round 4: the fourth check's fault ─────────────────────────
+
+/// Taylor polynomials agree with the solution only near the point: refused on every window, and nothing is named as the
+/// solution (not in the panel, not in the key).
+#[test]
+fn round4_taylor_polynomials_refused() {
+    let cases = [
+        ("y", "(0, 1)", "1 + x + x^2/2 + x^3/6 + x^4/24 + x^5/120"),
+        ("y", "(0, 1)", "1 + x + x^2/2 + x^3/6 + x^4/24 + x^5/120 + x^6/720"),
+        ("y", "(0, 1)", "1 + x + x^2/2 + x^3/6 + x^4/24 + x^5/120 + x^6/720 + x^7/5040"),
+        ("y", "(0, 1)", "1 + x + x^2/2 + x^3/6 + x^4/24 + x^5/120 + x^6/720 + x^7/5040 + x^8/40320 + x^9/362880"),
+        ("-y", "(0, 1)", "1 - x + x^2/2 - x^3/6 + x^4/24 - x^5/120"),
+        ("x + y", "(0, 1)", "1 + x + x^2 + x^3/3 + x^4/12 + x^5/60"),
+        ("cos(x)", "(0, 0)", "x - x^3/6 + x^5/120"),
+        ("cos(x)", "(0, 0)", "x - x^3/6 + x^5/120 - x^7/5040"),
+        ("cos(x)", "(0, 0)", "x - x^3/6 + x^5/120 - x^7/5040 + x^9/362880"),
+        ("x y", "(0, 4)", "4 + 2x^2 + x^4/2 + x^6/12 + x^8/96"),
+        ("y^2", "(0, 1)", "1 + x + x^2 + x^3 + x^4 + x^5 + x^6 + x^7 + x^8"),
+        ("1/(1 + x^2)", "(0, 0)", "x - x^3/3 + x^5/5 - x^7/7"),
+        ("-sin(x)", "(0, 1)", "1 - x^2/2 + x^4/24 - x^6/720"),
+    ];
+    assert!(cases.len() >= 10);
+    for (eqt, pt, sol) in cases {
+        for w in [4.0, 8.0, 2.0] {
+            let o = [("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s("0.5")), ("n", Value::I(4)), ("key_line", b(true)), ("xmin", f(-w)), ("xmax", f(w)), ("ymin", f(-w)), ("ymax", f(w)), ("xstep", f(ystep(-w, w))), ("ystep", f(ystep(-w, w)))];
+            let out = build(&with(&o));
+            assert!(out.notes.iter().any(|n| n.contains("differs from the worked-out solution") && n.contains("it is not used")), "{eqt} y = {sol} on ±{w}: {:?}", out.notes);
+            let panel = texts(&out.svg, "panel").join(" | ");
+            let key = texts(&out.svg, "key").join(" ");
+            assert!(!panel.contains("Solution through") && !key.contains("solution y ="), "{eqt} y = {sol} on ±{w}: {panel} / {key}");
+        }
+    }
+}
+
+/// Piecewise forms (|x|, √(x²), x|x|, x²/|x|) are the solution on one side of their kink only. The figure's choice: refused
+/// when the worked-out curve (out to the window's sides) or the table crosses the kink; accepted, with its values, only
+/// where every x the figure uses is on the side where it is the solution.
+#[test]
+fn round4_piecewise_forms() {
+    type C = (&'static str, &'static str, &'static str, [f64; 4], &'static str, Option<Vec<&'static str>>);
+    let w4 = [-4.0, 4.0, -4.0, 4.0];
+    let cases: Vec<C> = vec![
+        // the curve runs across x = 0 on the default window: refused
+        ("1", "(1, 1)", "abs(x)", w4, "0.5", None),
+        ("1", "(1, 1)", "sqrt(x^2)", w4, "0.5", None),
+        ("2x", "(1, 1)", "x abs(x)", w4, "0.5", None),
+        ("1", "(1, 1)", "x^2/abs(x)", w4, "0.5", None),
+        ("1", "(-2, -2)", "-abs(x)", w4, "0.5", None),
+        // every x used is on one side: accepted, values by hand (|x| = x, x|x| = x² for x > 0; |x| = −x for x < 0)
+        ("1", "(1, 1)", "abs(x)", [0.5, 4.0, 0.0, 4.0], "0.5", Some(vec!["1", "1.5", "2", "2.5", "3"])),
+        ("2x", "(1, 1)", "x abs(x)", [0.5, 4.0, 0.0, 16.0], "0.5", Some(vec!["1", "2.25", "4", "6.25", "9"])),
+        ("-1", "(-1, 1)", "abs(x)", [-4.0, -0.5, 0.0, 4.0], "-0.5", Some(vec!["1", "1.5", "2", "2.5", "3"])),
+    ];
+    for (eqt, pt, sol, w, h, want) in cases {
+        let o = [("dydx", s(eqt)), ("points", s(pt)), ("solution", s(sol)), ("euler", b(true)), ("h", s(h)), ("n", Value::I(4)), ("key_line", b(true)), ("xmin", f(w[0])), ("xmax", f(w[1])), ("ymin", f(w[2])), ("ymax", f(w[3])), ("xstep", f(0.5)), ("ystep", f(ystep(w[2], w[3])))];
+        let out = build(&with(&o));
+        match want {
+            // (named at the first worked-out point past the kink, within a step of x = 0)
+            None => assert!(out.notes.iter().any(|n| n.contains("differs from the worked-out solution") && n.contains("it is not used")), "{eqt} y = {sol}: {:?}", out.notes),
+            Some(want) => {
+                assert!(!out.notes.iter().any(|n| n.contains("typed solution")), "{eqt} y = {sol}: {:?}", out.notes);
+                let (col, key) = sol_column(&o);
+                assert_eq!(col, want, "{eqt} y = {sol}: {key}");
+            }
+        }
+    }
+}

@@ -587,8 +587,7 @@ pub(super) fn build(p0: &Params) -> Out {
         let scale = 1.0 + s0.y.v.abs();
         let through = sv(s0.x.v).is_some_and(|v| (v - s0.y.v).abs() <= 1e-9 * scale);
         let runs = sol_runs.as_ref().map(|r| [&r[0].0, &r[1].0]);
-        let (mut checked, mut near) = (0, None::<f64>);
-        let mut ends = [s0.x.v, s0.x.v];
+        let mut checked = 0;
         if let Some(rs) = runs {
             for (way, r) in rs.iter().enumerate() {
                 let last = r.pts.len().saturating_sub(1);
@@ -602,26 +601,20 @@ pub(super) fn build(p0: &Params) -> Out {
                         (Some(gv), dv) => (gv - q.1).abs() / (1.0 + fq * fq).sqrt() <= 1e-3 * (1.0 + q.1.abs())
                             && match e.f.at(q.0, gv) { Some(fg) if dv.is_finite() => { checked += 1; (dv - fg).abs() <= 1e-8 * (1.0 + fg.abs()) } _ => true },
                     };
-                    if !ok {
-                        differs[way] = Some(q.0);
-                        // (differing at the point or at once beside it: g is not this solution)
-                        if k <= 3 && near.is_none() { near = Some(q.0); }
-                        break;
-                    }
-                    ends[way] = q.0;
+                    if !ok { differs[way] = Some(q.0); break; }
                 }
             }
         }
+        // the first place it differs, nearest the point
+        let first = differs.iter().flatten().copied().min_by(|a, b| (a - s0.x.v).abs().total_cmp(&(b - s0.x.v).abs()));
         let n_pts = runs.map(|rs| rs[0].pts.len() + rs[1].pts.len()).unwrap_or(0);
         if !through { notes.push(format!("The typed solution {} = {} does not pass through {}: it is not used", m.vs.dep, shown, coord(s0))); }
-        else if let Some(x) = near { notes.push(format!("The typed solution {} = {} differs from the worked-out solution of {} = {} through {} at {} \u{2248} {}: it is not used", m.vs.dep, shown, lhs(&m.vs), e.shown, coord(s0), m.vs.var, fmt(x))); }
+        // (it must be the worked-out solution over the whole of its run, both ways, out to every x the figure uses and the
+        // window's sides: a Taylor polynomial, right only near the point, is refused; where the solution itself stops, at a
+        // blow-up, a circle's end or a branch point, the run stops there too, and past it values are "—")
+        else if let Some(x) = first { notes.push(format!("The typed solution {} = {} differs from the worked-out solution of {} = {} through {} at {} \u{2248} {}: it is not used", m.vs.dep, shown, lhs(&m.vs), e.shown, coord(s0), m.vs.var, fmt(x))); }
         else if n_pts < 4 || checked < 3 { notes.push(format!("The typed solution {} = {} cannot be checked: the solution through {} is not worked out from it, so it is not used", m.vs.dep, shown, coord(s0))); }
-        else {
-            let v = &m.vs.var;
-            let only = match differs { [Some(_), Some(_)] => Some(format!("from about {v} = {} to {v} = {}", fmt(ends[1]), fmt(ends[0]))), [None, Some(_)] => Some(format!("for {v} \u{2265} {} or so", fmt(ends[1]))), [Some(_), None] => Some(format!("for {v} \u{2264} {} or so", fmt(ends[0]))), _ => None };
-            if let Some(o) = only { notes.push(format!("The typed solution {} = {} is the solution through {} only {o}: beyond that it differs from the worked-out solution, whose values are written", m.vs.dep, shown, coord(s0))); }
-            solution_ok = Some((tree.clone(), shown.clone()));
-        }
+        else { solution_ok = Some((tree.clone(), shown.clone())); }
     }
 
     // ── Euler's values against the solution's ──
