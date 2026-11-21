@@ -25,8 +25,15 @@ fn server_error() -> Fail {
 pub(super) fn to_json(v: &Value) -> Json {
     Json::parse(v.to_string().as_bytes()).unwrap_or(Json::Null)
 }
+/// The pictures part of the key-free facts: the question's image sha, exactly as before picture choices existed when it has none; with
+/// picture choices, that sha (or nothing) followed by each choice's text and picture, sorted, so a changed, added or swapped choice
+/// picture changes what non-authors are shown.
 fn img_of(q: &Json) -> Option<String> {
-    super::circlesendmeta::images_at(std::slice::from_ref(q)).into_iter().next().flatten()
+    let own = super::pictures::question_sha_j(q);
+    match super::pictures::choice_pictures_j(q) {
+        None => own,
+        Some(choices) => Some(format!("{}\u{1}{}", own.unwrap_or_default(), choices.join("\u{1}"))),
+    }
 }
 
 /// Distinct search words of served stems (folded, split on punctuation), words of 1 to 40 UTF-16 units, at most `SEARCH_WORDS_MAX`.

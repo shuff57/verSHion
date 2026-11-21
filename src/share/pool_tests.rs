@@ -1251,6 +1251,32 @@ fn images_are_read_from_questions_only() {
     assert!(images_in_payload(b"{}").is_err());
 }
 
+/// A picture choice is uploaded like the question's own picture: listed under its question's position, the question's
+/// own first, each file once per question, in Mc answers and in a Multipart's Mc parts. A bad name is refused alike.
+#[test]
+fn choice_pictures_are_uploaded_like_question_pictures() {
+    let f = |c: char| format!("media/{}.webp", c.to_string().repeat(64));
+    let mc = json!({"image": {"file": f('a')}, "kind": {"Mc": {"answers": [
+        {"text": "", "image": {"file": f('b'), "width": 2, "height": 2}},
+        {"text": "x"},
+        {"text": "", "image": {"file": f('a'), "width": 2, "height": 2}},
+        {"text": "y", "image": {"file": f('c'), "width": 2, "height": 2}, "figure": {"id": "pie-chart", "params": {}}}
+    ]}}});
+    let mp = json!({"kind": {"Multipart": {"parts": [
+        {"stem": "s", "kind": {"Tf": {"correct": true}}},
+        {"stem": "t", "kind": {"Mc": {"answers": [{"text": "", "image": {"file": f('d')}}, {"text": "z"}]}}}
+    ]}}});
+    let text_only = json!({"kind": {"Mc": {"answers": [{"text": "p", "correct": true}, {"text": "q"}]}}});
+    let p = json!({"schema_version": 2, "bank": {"questions": [mc, text_only, mp]}});
+    let u = images_in_payload(p.to_string().as_bytes()).unwrap();
+    let got: Vec<(usize, String)> = u.iter().map(|x| (x.position, x.file.clone())).collect();
+    assert_eq!(got, [(0, f('a')), (0, f('b')), (0, f('c')), (2, f('d'))]);
+    assert_eq!(u[1].sha256, "b".repeat(64));
+    assert_eq!(super::pool::picture_files(&p["bank"]["questions"][1]), Vec::<&str>::new());
+    let bad = json!({"schema_version": 2, "question": {"kind": {"Mc": {"answers": [{"text": "", "image": {"file": "../x.png"}}]}}}});
+    assert!(matches!(images_in_payload(bad.to_string().as_bytes()), Err(LocalProblem::BadMediaName { .. })));
+}
+
 #[test]
 fn licences_round_trip_their_wire_names() {
     for l in License::ALL {

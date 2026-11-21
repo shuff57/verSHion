@@ -81,14 +81,14 @@ pub fn read_strip_decisions(m: &Map<String, Value>) -> Result<StripDecisions, Po
     Ok(out)
 }
 
-/// The image hashes a stripped payload keeps (what the image route may serve a viewer).
+/// The image hashes a stripped payload keeps (what the image route may serve a viewer): every question's image and picture choices'.
 pub fn kept_images(payload: &Value) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for q in questions_of(payload) {
-        let Some(f) = q.get("image").and_then(|i| i.get("file")).and_then(Value::as_str) else { continue };
-        let Some((sha, ext)) = f.strip_prefix("media/").and_then(|r| r.split_once('.')) else { continue };
-        if super::sqlfrag::is_sha(sha) && matches!(ext, "png" | "jpg" | "gif" | "webp") && !out.iter().any(|s| s == sha) {
-            out.push(sha.to_string());
+        for sha in super::pictures::shas(q) {
+            if !out.contains(&sha) {
+                out.push(sha);
+            }
         }
     }
     out

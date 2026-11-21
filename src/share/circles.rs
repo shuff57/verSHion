@@ -690,31 +690,37 @@ pub(super) async fn copy_bank(pool: &Pool<'_>, images: &(dyn ImageSink + Send + 
     if super::circle_links::payload_question_count(&doc.payload) > theirs.len() {
         return Err(PoolError::Local(super::pool::LocalProblem::NewerQuestions));
     }
+    // Every picture once, the questions' own and their picture choices' alike.
     let mut stored: std::collections::HashMap<String, Option<ImageRef>> = Default::default();
+    let wanted: Vec<String> = theirs.iter().flat_map(|t| t.sha.iter().cloned().chain(super::merge::choice_picture_shas(&t.q))).collect();
+    for sha in wanted {
+        if stored.contains_key(&sha) {
+            continue;
+        }
+        let got = if is_sha256(&sha) {
+            match pool.circle_blob(&doc.circle_id, &b.id, &sha).await {
+                Ok(blob) => images.put(&blob.bytes).ok(),
+                Err(PoolError::Api(ApiError::SignedOut)) => return Err(PoolError::Api(ApiError::SignedOut)),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+        stored.insert(sha, got);
+    }
     let (mut pictures, mut missing) = (0usize, 0usize);
     for t in &mut theirs {
-        let Some(sha) = t.sha.clone() else { continue };
-        pictures += 1;
-        let image = match stored.get(&sha) {
-            Some(done) => done.clone(),
-            None => {
-                let got = if is_sha256(&sha) {
-                    match pool.circle_blob(&doc.circle_id, &b.id, &sha).await {
-                        Ok(blob) => images.put(&blob.bytes).ok(),
-                        Err(PoolError::Api(ApiError::SignedOut)) => return Err(PoolError::Api(ApiError::SignedOut)),
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                };
-                stored.insert(sha, got.clone());
-                got
+        if let Some(sha) = t.sha.clone() {
+            pictures += 1;
+            let image = stored.get(&sha).cloned().flatten();
+            if image.is_none() {
+                missing += 1;
             }
-        };
-        if image.is_none() {
-            missing += 1;
+            t.q.image = image;
         }
-        t.q.image = image;
+        let (n, lost) = super::merge::localize_choice_pictures(&mut t.q, &stored);
+        pictures += n;
+        missing += lost;
     }
     let questions: Vec<Question> = theirs.iter().map(|t| t.q.clone()).collect();
     let fingerprints = theirs.iter().map(|t| t.fp.clone()).collect();

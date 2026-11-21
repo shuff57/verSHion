@@ -7,7 +7,7 @@ use super::jsonscan::scan_json;
 use super::publishmeta::PublishMeta;
 use super::publishstart::Landing;
 use super::qjson::sort_utf16;
-use super::sqlfrag::{DAY_MS, alive_sql, is_sha, new_id};
+use super::sqlfrag::{DAY_MS, alive_sql, new_id};
 use crate::blobs::BlobStore;
 use rusqlite::params;
 use serde_json::{Value, json};
@@ -91,16 +91,6 @@ pub fn image_ext(content_type: &str) -> &'static str {
     }
 }
 
-/// The sha of an image reference `media/<sha256>.<ext>`.
-fn media_sha(file: &str) -> Option<&str> {
-    let rest = file.strip_prefix("media/")?;
-    let (sha, ext) = rest.split_once('.')?;
-    (is_sha(sha) && matches!(ext, "png" | "jpg" | "gif" | "webp")).then_some(sha)
-}
-fn img_of(q: &Value) -> Option<String> {
-    q.get("image").and_then(|i| i.get("file")).and_then(Value::as_str).and_then(media_sha).map(String::from)
-}
-
 /// An origin the author declared on a question: recorded for the hard check, then dropped; provenance is the server's.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Declared {
@@ -129,8 +119,8 @@ pub struct Rewritten {
     pub new_qids: Vec<String>,
     pub declared: Vec<Option<Declared>>,
     pub blob_info: HashMap<String, BlobInfo>,
-    /// The sha of each question's image, if any.
-    pub images: Vec<Option<String>>,
+    /// The shas of each question's pictures: its image, then its picture choices' (`pictures::shas`).
+    pub images: Vec<Vec<String>>,
     /// The rewritten payload, ready for share-core's one validating, stripping, hashing call.
     pub bytes: Vec<u8>,
 }
@@ -197,8 +187,9 @@ pub fn rewrite(x: &PoolCtx, store: &BlobStore, core: &Core, me: &str, land: &Lan
     let qids: Vec<String> = sent.iter().map(|s| s.as_ref().filter(|s| owned.contains(*s) && counts.get(s.as_str()) == Some(&1)).cloned().unwrap_or_else(new_id)).collect();
     let new_qids: Vec<String> = qids.iter().enumerate().filter(|(i, q)| Some(*q) != sent[*i].as_ref() || !owned.contains(*q)).map(|(_, q)| q.clone()).collect();
 
-    // Images: every referenced blob must be verified and the author's (pending, or in one of their publishes).
-    let images: Vec<Option<String>> = qs.iter().map(img_of).collect();
+    // Images: every referenced blob (a question's image or a picture choice's) must be verified and the author's (pending, or in one of their
+    // publishes).
+    let images: Vec<Vec<String>> = qs.iter().map(super::pictures::shas).collect();
     let mut shas: Vec<String> = vec![];
     for s in images.iter().flatten() {
         if !shas.contains(s) {
@@ -218,7 +209,7 @@ pub fn rewrite(x: &PoolCtx, store: &BlobStore, core: &Core, me: &str, land: &Lan
             let (sha, info) = r?;
             blob_info.insert(sha, info);
         }
-        let missing: Vec<usize> = images.iter().enumerate().filter(|(_, s)| s.as_ref().is_some_and(|s| !blob_info.contains_key(s))).map(|(i, _)| i).take(100).collect();
+        let missing: Vec<usize> = images.iter().enumerate().filter(|(_, s)| s.iter().any(|s| !blob_info.contains_key(s))).map(|(i, _)| i).take(100).collect();
         if !missing.is_empty() {
             return Err(PoolError::new(422, "blob_missing").with("positions", json!(missing)).into());
         }
@@ -247,7 +238,7 @@ pub fn rewrite(x: &PoolCtx, store: &BlobStore, core: &Core, me: &str, land: &Lan
                 if !dry {
                     x.conn.execute("UPDATE blobs SET missing_at = COALESCE(missing_at, ?2) WHERE sha256 = ?1", params![s, x.now])?;
                 }
-                let positions: Vec<usize> = images.iter().enumerate().filter(|(_, i)| i.as_deref() == Some(s)).map(|(i, _)| i).take(100).collect();
+                let positions: Vec<usize> = images.iter().enumerate().filter(|(_, i)| i.contains(s)).map(|(i, _)| i).take(100).collect();
                 return Err(PoolError::new(422, "blob_missing").with("reason", json!("reupload")).with("positions", json!(positions)).into());
             }
         }
@@ -273,11 +264,8 @@ pub fn rewrite(x: &PoolCtx, store: &BlobStore, core: &Core, me: &str, land: &Lan
         o.insert("modified".into(), json!(day));
         o.remove("origin");
         o.remove("published");
-        if let Some(s) = images[i].as_ref() {
-            if o.get("image").is_some_and(|v| !v.is_null()) {
-                let b = &blob_info[s];
-                o.insert("image".into(), json!({ "file": format!("media/{s}.{}", image_ext(&b.content_type)), "width": b.width, "height": b.height }));
-            }
+        if !images[i].is_empty() {
+            super::pictures::rewrite(q, &|s| blob_info.get(s).map(|b| (image_ext(&b.content_type), b.width, b.height)));
         }
     };
     if let Some(bank) = raw.get_mut("bank").filter(|b| !b.is_null()).and_then(Value::as_object_mut) {

@@ -36,8 +36,8 @@ use super::pool::{Issue, LabelChoice, LabelDecision, LabelFinding, PayloadRefusa
 /// images): the question's number and its first line tell it apart.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Picture {
-    /// The question's position in the bank (0-based): what the pool's `image_ok` names. A question has at most
-    /// one picture, so this is one decision per picture.
+    /// The question's position in the bank (0-based): what the pool's `image_ok` names. One decision covers all the
+    /// question's pictures (its own and its picture choices'), as the strip reads them.
     pub question: usize,
     /// The question's first line, plain.
     pub stem: String,
@@ -83,8 +83,9 @@ impl Pictures {
         let list: Vec<Picture> = questions
             .iter()
             .enumerate()
-            // (what the strip reads: a question's `image`, whatever its file name)
-            .filter(|(_, q)| q.pointer("/image/file").and_then(Value::as_str).is_some_and(|f| !f.is_empty()))
+            // (what the strip reads: a question's `image` and its picture choices' `image`, whatever their file names;
+            // one decision covers them all)
+            .filter(|(_, q)| super::pool::picture_files(q).iter().any(|f| !f.is_empty()))
             .map(|(question, q)| {
                 let raw = q.get("stem").and_then(Value::as_str).unwrap_or("");
                 let first = raw.lines().find(|l| !l.trim().is_empty()).unwrap_or("");

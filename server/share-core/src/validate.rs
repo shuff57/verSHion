@@ -17,7 +17,8 @@
 //! # Well-formedness (both entry points)
 //! | Where | Rule | Code |
 //! |---|---|---|
-//! | every stem, part stem, answer text, match item, distractor, accepted blank | at least one visible character (`text::has_visible`) | `blank_text` |
+//! | every stem, part stem, answer text (except a picture choice's: one with an `image`), match item, distractor, accepted blank | at least one visible character (`text::has_visible`) | `blank_text` |
+//! | an answer's `image` and `figure` (a picture choice) | exactly a question's rules and limits (file name, sides, figure id and params), reported at `...answers[i].image` / `.figure` | as for a question |
 //! | `Mc` (and an `Mc` part) | at least 2 answers | `too_few` (limit 2) |
 //! | `Matching` | at least 2 pairs; every right side visible, or `""` on a keyless question (any other right side there is `keyless_key_material`) | `too_few`, `blank_text` |
 //! | `Blank` | `accept.len()` equals the number of blanks in the stem (runs of three underscores or more, round 10), at least 1 | `blank_count_mismatch`, `too_few` |
@@ -369,11 +370,19 @@ impl Cx<'_> {
         let mut out = Vec::with_capacity(arr.len());
         for (i, a) in arr.iter().enumerate() {
             let p = idx(path, i);
-            let Some(m) = self.object(a, &p, &["text", "correct", "locked"], &[]) else { continue };
-            let text = self.req_visible(m, "text", &p, len);
+            // `image` and `figure` (a picture choice) are read in every schema version, like a
+            // question's: they are what the app's model writes, and an older reader drops them as
+            // unknown fields of the answer object.
+            let Some(m) = self.object(a, &p, &["text", "correct", "locked", "image", "figure"], &[]) else { continue };
+            // The same rules and limits as a question's image and figure.
+            let image = m.get("image").and_then(|i| self.image(i, &at(&p, "image")));
+            // A picture choice may have no text ("four pie charts as options A-D"); a text choice
+            // needs a visible character.
+            let text = if image.is_some() { self.req_string(m, "text", &p, Class::Block, len) } else { self.req_visible(m, "text", &p, len) };
             let correct = self.opt_bool(m, "correct", &p);
             let locked = self.opt_bool(m, "locked", &p);
-            out.push(Answer { text, correct, locked });
+            let figure = m.get("figure").and_then(|f| self.figure(f, &at(&p, "figure")));
+            out.push(Answer { text, correct, locked, image, figure });
         }
         if v.as_array().is_some_and(|a| a.len() <= max) {
             self.at_least(arr.len(), 2, path);
@@ -859,6 +868,25 @@ impl Cx<'_> {
         if figure {
             bad(self, at(path, "figure"));
         }
+        // A choice's figure, like the question's: its params can name what the picture shows.
+        let choice_figures = |cx: &mut Self, answers: &[Answer], p: String| {
+            for (i, a) in answers.iter().enumerate() {
+                if a.figure.is_some() {
+                    bad(cx, format!("{p}[{i}].figure"));
+                }
+            }
+        };
+        match kind {
+            Kind::Mc { answers } => choice_figures(self, answers, format!("{k}.Mc.answers")),
+            Kind::Multipart { parts } => {
+                for (i, p) in parts.iter().enumerate() {
+                    if let PartKind::Mc { answers } = &p.kind {
+                        choice_figures(self, answers, format!("{k}.Multipart.parts[{i}].kind.Mc.answers"));
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     fn question(&mut self, v: &Node, path: &str) -> Option<Question> {
@@ -1123,8 +1151,10 @@ pub fn publish_errors(p: &Payload, opts: &PublishOptions) -> Vec<ValidationError
                 _ => {}
             }
         }
+        // Two choices are the same when their text and their picture are (picture choices often
+        // have no text at all).
         let dup = |answers: &[Answer]| {
-            let mut t: Vec<String> = answers.iter().map(|a| text::hash_form(&a.text)).collect();
+            let mut t: Vec<(String, Option<&str>)> = answers.iter().map(|a| (text::hash_form(&a.text), a.image.as_ref().map(|i| i.file.as_str()))).collect();
             t.sort();
             t.windows(2).any(|w| w[0] == w[1])
         };

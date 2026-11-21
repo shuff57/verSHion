@@ -143,7 +143,7 @@ fn the_scan_finds_exact_student_data_blocks_and_images_and_copyright_blocks() {
     let fp = Fingerprinter::from_root_hex(ROOT).unwrap();
     let qs = vec![question("q1", "What is two plus two here", None), question("q2", "Entirely different words about rivers", Some(SHA))];
     let form = |qs: Vec<Json>| ScanForm { img_at: images_at(&qs), mh: vec![], qs };
-    assert_eq!(images_at(&qs), vec![None, Some(SHA.to_string())]);
+    assert_eq!(images_at(&qs), vec![vec![], vec![SHA.to_string()]]);
     let x = PoolCtx::new(&c, 5_000);
     let clean = privacy_scan(&x, &fp, &[form(qs.clone())], "z").unwrap();
     assert!((clean.exact.is_empty() && clean.near.is_empty() && clean.copyright.is_empty()) && clean.keys.len() > 3 && clean.shas == vec![SHA.to_string()]);
@@ -165,6 +165,23 @@ fn the_scan_finds_exact_student_data_blocks_and_images_and_copyright_blocks() {
     // An expired or lifted block holds nothing.
     c.execute("UPDATE blocked_hashes SET lifted_at = 2", []).unwrap();
     assert!(privacy_scan(&x, &fp, &[form(qs)], "q").unwrap().copyright.is_empty());
+}
+
+#[test]
+fn a_blocked_choice_picture_flags_its_question_like_a_question_image() {
+    let (c, _d, _s) = open();
+    let fp = Fingerprinter::from_root_hex(ROOT).unwrap();
+    let pictured = json!({ "id": "q2", "stem": "Which chart shows the data", "kind": { "Mc": { "answers": [
+        { "text": "", "correct": true, "image": { "file": format!("media/{SHA}.png"), "width": 1, "height": 1 } },
+        { "text": "none of them", "correct": false }
+    ] } } });
+    let qs = vec![question("q1", "What is two plus two here", None), Json::parse(pictured.to_string().as_bytes()).unwrap()];
+    assert_eq!(images_at(&qs), vec![vec![], vec![SHA.to_string()]]);
+    let x = PoolCtx::new(&c, 5_000);
+    let form = ScanForm { img_at: images_at(&qs), mh: vec![], qs };
+    assert_eq!(privacy_scan(&x, &fp, std::slice::from_ref(&form), "z").unwrap().shas, vec![SHA.to_string()]);
+    c.execute("INSERT INTO privacy_blocks (kind, hash, item_id, at) VALUES ('blob', ?1, 'i', 1)", [SHA]).unwrap();
+    assert_eq!(privacy_scan(&x, &fp, &[form], "z").unwrap().exact, vec![1]);
 }
 
 #[test]

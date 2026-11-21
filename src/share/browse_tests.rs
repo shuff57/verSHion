@@ -758,6 +758,49 @@ fn pictures_are_fetched_checked_stored_and_a_missing_one_is_reported_not_fatal()
     assert_eq!((d.pictures, d.pictures_missing), (3, 1));
 }
 
+/// A choice's picture comes back like a question's: fetched once by its hash, checked, stored here under this store's
+/// name; a lost one leaves its choice without it and is counted, never failing the import.
+#[test]
+fn picture_choices_are_fetched_and_stored_like_question_pictures() {
+    let s = Script::new();
+    let (mut m, _, images) = browsing(&s, vec![], None);
+    let mut banks = vec![];
+    let (pic_a, pic_b, pic_c) = (b"PICTURE-A".to_vec(), b"PICTURE-B".to_vec(), b"PICTURE-C".to_vec());
+    let (sha_a, sha_b, sha_c) = (sha256_hex(&pic_a), sha256_hex(&pic_b), sha256_hex(&pic_c));
+    let pic = |sha: &str| json!({"file": format!("media/{sha}.png"), "width": 4, "height": 4});
+    let mut payload = bank_payload(&["a", "b"], false);
+    payload["bank"]["questions"][0]["image"] = pic(&sha_a);
+    payload["bank"]["questions"][0]["kind"] = json!({"Mc": {"answers": [{"text": "", "correct": false, "image": pic(&sha_b)}, {"text": "x", "correct": false, "image": pic(&sha_a)}, {"text": "y"}]}});
+    payload["bank"]["questions"][1]["kind"] = json!({"Mc": {"answers": [{"text": "", "correct": false, "image": pic(&sha_c)}, {"text": "z"}]}});
+    let mut h = head("stripped", false, 2);
+    h["item"]["has_images"] = json!(true);
+    viewing(&mut m, &s, streamed(&h, &payload, None), &mut banks);
+    m.begin_import();
+    s.say_item(streamed(&h, &payload, Some(import_extra(&[]))));
+    s.say_bytes(pic_a.clone());
+    s.say_bytes(pic_b.clone());
+    s.say(404, json!({"error": "not_found"}));
+    m.confirm_import();
+    settle(&mut m, &s, &mut banks);
+    let paths = s.paths();
+    let blobs: Vec<&String> = paths.iter().filter(|p| p.contains("/blobs/")).collect();
+    assert_eq!(blobs.len(), 3, "one fetch per distinct picture: {paths:?}");
+    assert!(blobs[1].contains(&sha_b) && blobs[2].contains(&sha_c));
+    let local = |b: &[u8]| format!("media/{}.webp", sha256_hex(b));
+    let qs = &banks[0].questions;
+    let crate::model::Kind::Mc { answers } = &qs[0].kind else { panic!() };
+    assert_eq!(qs[0].image.as_ref().unwrap().file, local(&pic_a));
+    assert_eq!(answers[0].image.as_ref().map(|i| i.file.clone()), Some(local(&pic_b)), "stored under this store's name");
+    assert_eq!(answers[1].image.as_ref().map(|i| i.file.clone()), Some(local(&pic_a)), "the question's picture reused");
+    assert!(answers[2].image.is_none());
+    let crate::model::Kind::Mc { answers } = &qs[1].kind else { panic!() };
+    assert!(answers[0].image.is_none(), "the lost one is left out");
+    assert_eq!(answers[1].text, "z");
+    assert_eq!(images.0.lock().unwrap().len(), 2);
+    let d = done(&m);
+    assert_eq!((d.pictures, d.pictures_missing), (4, 1));
+}
+
 #[test]
 fn a_picture_that_does_not_match_its_name_is_not_stored() {
     let s = Script::new();

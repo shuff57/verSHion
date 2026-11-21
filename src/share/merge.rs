@@ -148,17 +148,22 @@ fn strip_part(p: &Part) -> Part {
     Part {
         stem: p.stem.clone(),
         kind: match &p.kind {
-            PartKind::Mc { answers } => PartKind::Mc { answers: answers.iter().map(|a| crate::model::Answer { text: a.text.clone(), correct: false, locked: a.locked, image: None, figure: None }).collect() },
+            PartKind::Mc { answers } => PartKind::Mc { answers: answers.iter().map(unkeyed).collect() },
             PartKind::Tf { .. } => PartKind::Tf { correct: false },
             PartKind::Short { .. } => PartKind::Short { sample: String::new() },
         },
     }
 }
 
+/// A choice as students see it: its text, place and picture, no key and no figure (never served).
+fn unkeyed(a: &crate::model::Answer) -> crate::model::Answer {
+    crate::model::Answer { text: a.text.clone(), correct: false, locked: a.locked, image: a.image.clone(), figure: None }
+}
+
 /// The question without its answer key: what students see.
 pub fn strip_key(k: &Kind) -> Kind {
     match k {
-        Kind::Mc { answers } => Kind::Mc { answers: answers.iter().map(|a| crate::model::Answer { text: a.text.clone(), correct: false, locked: a.locked, image: None, figure: None }).collect() },
+        Kind::Mc { answers } => Kind::Mc { answers: answers.iter().map(unkeyed).collect() },
         Kind::Tf { .. } => Kind::Tf { correct: false },
         Kind::Matching { pairs, distractors } => {
             Kind::Matching { pairs: pairs.iter().map(|p| crate::model::Pair { left: p.left.clone(), right: String::new() }).collect(), distractors: distractors.clone() }
@@ -175,9 +180,14 @@ pub(super) fn shape(k: &Kind) -> String {
 
 /// (critic 79 I3) The choices and key of a question with every text in the form verSHion's server stores it (see
 /// `canon`): a question the server stored composed is the same as the bank's decomposed one.
+///
+/// A picture choice counts by having a picture, not by its file: the pool's name for it and this store's (a fetched
+/// picture kept re-encoded) differ, so a picture added to or taken from a choice is a change, and the same picture
+/// under two names is not.
 fn canon_kind(k: &Kind) -> Kind {
     let b = |s: &str| canon::block(s).into_owned();
-    let answers = |a: &[crate::model::Answer]| a.iter().map(|x| crate::model::Answer { text: b(&x.text), correct: x.correct, locked: x.locked, image: None, figure: None }).collect();
+    let pic = |i: &Option<crate::model::ImageRef>| i.as_ref().map(|_| crate::model::ImageRef { file: String::new(), width: 0, height: 0 });
+    let answers = |a: &[crate::model::Answer]| a.iter().map(|x| crate::model::Answer { text: b(&x.text), correct: x.correct, locked: x.locked, image: pic(&x.image), figure: None }).collect();
     match k {
         Kind::Mc { answers: a } => Kind::Mc { answers: answers(a) },
         Kind::Tf { correct } => Kind::Tf { correct: *correct },
@@ -243,7 +253,12 @@ pub(super) fn key_value(k: &Kind) -> String {
 
 /// The choices of a question in words (no key).
 pub fn kind_text(k: &Kind) -> String {
-    let list = |a: &[crate::model::Answer]| a.iter().map(|x| text::shown(&x.text)).collect::<Vec<_>>().join(" | ");
+    let shown = |x: &crate::model::Answer| match (x.image.is_some(), x.text.trim().is_empty()) {
+        (false, _) => text::shown(&x.text),
+        (true, true) => "[picture]".to_string(),
+        (true, false) => format!("{} [picture]", text::shown(&x.text)),
+    };
+    let list = |a: &[crate::model::Answer]| a.iter().map(shown).collect::<Vec<_>>().join(" | ");
     match k {
         Kind::Mc { answers } => list(answers),
         Kind::Tf { .. } => "True / False".into(),
@@ -303,7 +318,9 @@ pub struct Theirs {
 }
 
 /// Turns a pool question into a local one: new id, the key placeholder where the key is hidden,
-/// the picture left for the caller. Also returns the picture's name on the pool.
+/// the picture left for the caller. Also returns the picture's name on the pool. Picture choices
+/// keep the pool's names until the caller stores them ([`choice_picture_shas`],
+/// [`localize_choice_pictures`]).
 pub fn convert_question(mut raw: Value, keyless_form: bool, at_ms: i64) -> Option<(Question, Option<String>)> {
     let file = raw.pointer("/image/file").and_then(Value::as_str).map(str::to_string);
     let keyless = keyless_form || raw.get("keyless").and_then(Value::as_bool) == Some(true);
@@ -319,6 +336,62 @@ pub fn convert_question(mut raw: Value, keyless_form: bool, at_ms: i64) -> Optio
     }
     let sha = file.and_then(|f| f.strip_prefix("media/").and_then(|r| r.split_once('.')).map(|(s, _)| s.to_string()));
     Some((q, sha))
+}
+
+/// Every choice of a question, its Multipart parts' included.
+fn answers_mut(k: &mut Kind) -> Vec<&mut crate::model::Answer> {
+    match k {
+        Kind::Mc { answers } => answers.iter_mut().collect(),
+        Kind::Multipart { parts } => parts
+            .iter_mut()
+            .flat_map(|p| match &mut p.kind {
+                PartKind::Mc { answers } => answers.iter_mut().collect::<Vec<_>>(),
+                _ => Vec::new(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn pool_sha(file: &str) -> Option<String> {
+    file.strip_prefix("media/").and_then(|r| r.split_once('.')).map(|(s, _)| s.to_string())
+}
+
+/// The pool's names (hashes) of a converted question's picture choices, in order, each once. `convert_question` leaves
+/// these on the choices as the pool names them; an import fetches and stores each here, as it does the question's own
+/// picture, and then puts the stored ones in place with [`localize_choice_pictures`].
+pub fn choice_picture_shas(q: &Question) -> Vec<String> {
+    let parts: Vec<&crate::model::Answer> = match &q.kind {
+        Kind::Mc { answers } => answers.iter().collect(),
+        Kind::Multipart { parts } => parts.iter().flat_map(|p| if let PartKind::Mc { answers } = &p.kind { answers.iter().collect() } else { Vec::new() }).collect(),
+        _ => Vec::new(),
+    };
+    let mut out: Vec<String> = Vec::new();
+    for a in parts {
+        if let Some(sha) = a.image.as_ref().and_then(|i| pool_sha(&i.file))
+            && !out.contains(&sha)
+        {
+            out.push(sha);
+        }
+    }
+    out
+}
+
+/// Puts the pictures stored here in place of the pool's names on a converted question's picture choices. `stored` maps
+/// a pool hash to the picture this store kept for it; one that could not be fetched (`None`, or not in `stored`)
+/// leaves its choice without the picture, as a lost question picture does (the import does not fail for it). Returns
+/// (picture choices, pictures missing).
+pub fn localize_choice_pictures(q: &mut Question, stored: &std::collections::HashMap<String, Option<crate::model::ImageRef>>) -> (usize, usize) {
+    let (mut pictures, mut missing) = (0, 0);
+    for a in answers_mut(&mut q.kind) {
+        let Some(img) = a.image.take() else { continue };
+        pictures += 1;
+        a.image = pool_sha(&img.file).and_then(|sha| stored.get(&sha).cloned().flatten());
+        if a.image.is_none() {
+            missing += 1;
+        }
+    }
+    (pictures, missing)
 }
 
 // ---- the review ---------------------------------------------------------------------------------------------

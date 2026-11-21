@@ -638,32 +638,38 @@ async fn import_item(pool: &Pool<'_>, images: &(dyn ImageSink + Send + Sync), id
     }
     let at_ms = now_ms();
     let mut theirs = theirs_of(&doc.payload, &doc.head, at_ms);
+    // Every picture once, the questions' own and their picture choices' alike: fetched, hash-checked, stored here.
     let mut stored: std::collections::HashMap<String, Option<ImageRef>> = Default::default();
+    let wanted: Vec<String> = theirs.iter().flat_map(|t| t.sha.iter().cloned().chain(merge::choice_picture_shas(&t.q))).collect();
+    for sha in wanted {
+        if stored.contains_key(&sha) {
+            continue;
+        }
+        let got = if is_sha256(&sha) {
+            match pool.get_blob(id, &sha).await {
+                Ok(b) => images.put(&b.bytes).ok(),
+                // The sign-in ended: the whole import is retried after signing in again.
+                Err(PoolError::Api(ApiError::SignedOut)) => return Err(PoolError::Api(ApiError::SignedOut)),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+        stored.insert(sha, got);
+    }
     let (mut pictures, mut missing) = (0usize, 0usize);
     for t in &mut theirs {
-        let Some(sha) = t.sha.clone() else { continue };
-        pictures += 1;
-        let image = match stored.get(&sha) {
-            Some(done) => done.clone(),
-            None => {
-                let got = if is_sha256(&sha) {
-                    match pool.get_blob(id, &sha).await {
-                        Ok(b) => images.put(&b.bytes).ok(),
-                        // The sign-in ended: the whole import is retried after signing in again.
-                        Err(PoolError::Api(ApiError::SignedOut)) => return Err(PoolError::Api(ApiError::SignedOut)),
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                };
-                stored.insert(sha, got.clone());
-                got
+        if let Some(sha) = t.sha.clone() {
+            pictures += 1;
+            let image = stored.get(&sha).cloned().flatten();
+            if image.is_none() {
+                missing += 1;
             }
-        };
-        if image.is_none() {
-            missing += 1;
+            t.q.image = image;
         }
-        t.q.image = image;
+        let (n, lost) = merge::localize_choice_pictures(&mut t.q, &stored);
+        pictures += n;
+        missing += lost;
     }
     let questions: Vec<Question> = theirs.iter().map(|t| t.q.clone()).collect();
     let fingerprints = theirs.iter().map(|t| t.fp.clone()).collect();

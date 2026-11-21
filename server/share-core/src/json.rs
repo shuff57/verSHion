@@ -541,7 +541,7 @@ macro_rules! obj {
     ($($k:literal => $s:expr),* $(,)?) => { Shape::Obj(&[$(($k, $s)),*]) };
 }
 
-pub static ANSWER: Shape = obj! { "text" => &Shape::Scalar, "correct" => &Shape::Scalar, "locked" => &Shape::Scalar };
+pub static ANSWER: Shape = obj! { "text" => &Shape::Scalar, "correct" => &Shape::Scalar, "locked" => &Shape::Scalar, "image" => &IMAGE, "figure" => &FIGURE };
 static ANSWERS: Shape = Shape::Arr(Cap::McAnswers, &ANSWER);
 static MC: Shape = obj! { "answers" => &ANSWERS };
 static TF: Shape = obj! { "correct" => &Shape::Scalar };

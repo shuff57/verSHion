@@ -82,7 +82,8 @@ pub struct Plan {
 
 pub fn plan(m: &PublishMeta, rw: &Rewritten, h: &Hashed, is_new: bool) -> (Plan, i64) {
     let kinds_mask = h.full_qs.iter().fold(0, |acc, q| acc | KIND_BITS.iter().find(|(k, _)| *k == kind_tag(q)).map_or(0, |(_, b)| *b));
-    let has_images = h.served.iter().any(|q| q.get("image").is_some_and(|i| !i.is_null())) as i64;
+    // (A served picture choice counts as an image too.)
+    let has_images = h.served.iter().any(|q| q.get("image").is_some_and(|i| !i.is_null()) || !super::pictures::shas(q).is_empty()) as i64;
     let bank_name = h.prep.full.payload.get("bank").map(|b| b.get("name").map(|n| n.as_str().map_or_else(|| n.to_string(), String::from)).unwrap_or_default()).unwrap_or_default();
     let title = if rw.meta.title.is_empty() { bank_name.clone() } else { rw.meta.title.clone() };
     let st = h.prep.stripped.as_ref();
@@ -109,7 +110,7 @@ pub fn plan(m: &PublishMeta, rw: &Rewritten, h: &Hashed, is_new: bool) -> (Plan,
         schema_version: h.prep.full.payload.get("schema_version").and_then(Value::as_i64).unwrap_or(0),
         tags: tags_of(&rw.meta.tags, &h.full_qs),
         shas: uniq(rw.images.iter().flatten().cloned()),
-        stripped_shas: st.map(|s| uniq(questions_of(&s.v.payload).into_iter().filter_map(image_sha))).unwrap_or_default(),
+        stripped_shas: st.map(|s| uniq(questions_of(&s.v.payload).into_iter().flat_map(super::pictures::shas))).unwrap_or_default(),
         served_shas: vec![],
         acks,
         full_bytes,
