@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-20T18:21:45+00:00",
-  "src_mtime": 1795197727.6849148,
-  "git": "59620d8+dirty",
-  "figures": 197
+  "built_at": "2026-11-21T00:41:48+00:00",
+  "src_mtime": 1795220559.448488,
+  "git": "70ccc10+dirty",
+  "figures": 198
  },
  "figures": {
   "free-body-diagram": {
@@ -27111,6 +27111,432 @@
      ],
      "edit": null,
      "tip": "Scroll over the strips to add or take away strips"
+    }
+   ],
+   "handles": true,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "polar-parametric": {
+   "id": "polar-parametric",
+   "title": "Polar and Parametric Curves",
+   "blurb": "Polar curves r = f(θ) and parametric curves on a polar grid or axes, with polar points, shaded regions and their areas, the tracer and tangents with dy/dx.",
+   "params": [
+    {
+     "key": "curves",
+     "label": "Curves, one a line",
+     "kind": "long",
+     "options": [],
+     "default": "r = 2 + 2cos(θ)"
+    },
+    {
+     "key": "theta_from",
+     "label": "θ from",
+     "kind": "text",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "theta_to",
+     "label": "θ to",
+     "kind": "text",
+     "options": [],
+     "default": "2pi"
+    },
+    {
+     "key": "t_from",
+     "label": "t from",
+     "kind": "text",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "t_to",
+     "label": "t to",
+     "kind": "text",
+     "options": [],
+     "default": "2pi"
+    },
+    {
+     "key": "style1",
+     "label": "Curve 1",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "style2",
+     "label": "Curve 2",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Dashed"
+    },
+    {
+     "key": "style3",
+     "label": "Curve 3",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Dotted"
+    },
+    {
+     "key": "style4",
+     "label": "Curve 4",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "points",
+     "label": "Polar points (r, θ)",
+     "kind": "long",
+     "options": [],
+     "default": "P(3, 5pi/6)"
+    },
+    {
+     "key": "grid_kind",
+     "label": "Grid",
+     "kind": "choice",
+     "options": [
+      "Polar",
+      "Rectangular"
+     ],
+     "default": "Polar"
+    },
+    {
+     "key": "rays",
+     "label": "Rays",
+     "kind": "choice",
+     "options": [
+      "Every 15° (π/12)",
+      "Every 30° (π/6)",
+      "Every 45° (π/4)",
+      "None"
+     ],
+     "default": "Every 30° (π/6)"
+    },
+    {
+     "key": "ray_labels",
+     "label": "Label the rays and angles in",
+     "kind": "choice",
+     "options": [
+      "Radians",
+      "Degrees",
+      "None"
+     ],
+     "default": "Radians"
+    },
+    {
+     "key": "rmax",
+     "label": "Largest circle r =",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "rstep",
+     "label": "Circles every",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-5.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "5.0"
+    },
+    {
+     "key": "xstep",
+     "label": "x-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ymin",
+     "label": "y-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-5.0"
+    },
+    {
+     "key": "ymax",
+     "label": "y-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "5.0"
+    },
+    {
+     "key": "ystep",
+     "label": "y-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Standard"
+    },
+    {
+     "key": "numbers",
+     "label": "Number the circles (or axes)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "shade",
+     "label": "Shade a region",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Inside one curve",
+      "Inside one curve, outside another"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "shade_in",
+     "label": "Inside curve",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "shade_out",
+     "label": "Outside curve",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "shade_from",
+     "label": "Shade from θ =",
+     "kind": "text",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "shade_to",
+     "label": "Shade to θ =",
+     "kind": "text",
+     "options": [],
+     "default": "pi/2"
+    },
+    {
+     "key": "show_area",
+     "label": "Write the shaded area",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "arrows",
+     "label": "Arrows for the direction",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "marks_at",
+     "label": "Mark points at θ (or t) =",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "mark_curve",
+     "label": "Mark them on curve",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "pt_labels",
+     "label": "Point labels",
+     "kind": "choice",
+     "options": [
+      "Letter and (r, θ)",
+      "Letter and (x, y)",
+      "Letter",
+      "(r, θ)",
+      "(x, y)",
+      "None"
+     ],
+     "default": "Letter and (r, θ)"
+    },
+    {
+     "key": "tracer",
+     "label": "Tracer on curve 1 (ray from the pole, r and θ)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "trace_at",
+     "label": "Tracer at θ (or t) =",
+     "kind": "text",
+     "options": [],
+     "default": "pi/3"
+    },
+    {
+     "key": "tangent",
+     "label": "Tangent line with dy/dx",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "tangent_at",
+     "label": "Tangent at θ (or t) =",
+     "kind": "text",
+     "options": [],
+     "default": "pi/2"
+    },
+    {
+     "key": "tangent_curve",
+     "label": "Tangent to curve",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "eq_labels",
+     "label": "Write each curve's equation",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "values",
+     "label": "Values",
+     "kind": "choice",
+     "options": [
+      "Exact",
+      "Rounded"
+     ],
+     "default": "Exact"
+    },
+    {
+     "key": "dec",
+     "label": "Decimal places",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "title_mode",
+     "label": "Title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "student_copy",
+     "label": "Student copy",
+     "kind": "choice",
+     "options": [
+      "Points only, to sketch the curves",
+      "Blank lines for the equations",
+      "Points' coordinates blank"
+     ],
+     "default": "Points only, to sketch the curves"
+    },
+    {
+     "key": "key_line",
+     "label": "Answer key line under the figure",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag P on the grid to set its r and θ (θ snaps to 15° steps, r to 0.5)"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag T along curve 1: its θ, ray and r follow (θ snaps to π/24 steps)"
     }
    ],
    "handles": true,

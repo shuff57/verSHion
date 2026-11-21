@@ -7,232 +7,232 @@
    "id": "cap-01",
    "text": "Type a polar curve r = f(θ)",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"r = 3sin(2θ)\", \"rmax\": 3.0}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-02",
    "text": "Set the θ range, such as 0 to 2π",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"r = 2 + 2cos(θ)\", \"theta_from\": \"0\", \"theta_to\": \"pi\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-03",
    "text": "Draw several polar curves on one grid",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"r = 2 + 2cos(θ)\\nr = 3\\nr = 3sin(2θ)\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-04",
    "text": "Plot polar points (r, θ), negative r included",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"points\": \"P(3, 5pi/6), Q(-2, pi/4), R(3, 150°)\", \"curves\": \"\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-05",
    "text": "Type a parametric curve x(t), y(t) with its t range",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"x = 3cos(t), y = 2sin(t), 0 <= t <= pi\", \"grid_kind\": \"Rectangular\", \"points\": \"\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-06",
    "text": "Draw a polar grid of circles and rays",
    "class": "core",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"\", \"points\": \"\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-07",
    "text": "Draw rays every 15°, 30° or 45° (π/12, π/6, π/4)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"rays\": \"Every 15° (π/12)\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-08",
    "text": "Label the rays in degrees or radians",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"ray_labels\": \"Degrees\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-09",
    "text": "Set the largest circle and how far apart the circles are",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"rmax\": 6.0, \"rstep\": 2.0}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-10",
    "text": "Put a rectangular grid behind the curve instead of a polar one",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"grid_kind\": \"Rectangular\", \"points\": \"\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-11",
    "text": "Shade a polar region between two angles, or inside one curve and outside another",
    "class": "control",
-   "evidence": "",
-   "note": "AP Calculus BC area"
+   "evidence": "changes:{\"curves\": \"r = 3cos(θ)\\nr = 1 + cos(θ)\", \"shade\": \"Inside one curve, outside another\", \"shade_from\": \"-pi/3\", \"shade_to\": \"pi/3\", \"points\": \"\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-12",
    "text": "Mark the curve's direction with arrows",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"arrows\": true}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-13",
    "text": "Mark and label points at chosen t values",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"x = 3cos(t), y = 3sin(t)\", \"grid_kind\": \"Rectangular\", \"marks_at\": \"0, pi/2, pi\", \"pt_labels\": \"Letter and (x, y)\", \"points\": \"\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-14",
    "text": "Mark points on a polar curve at chosen θ values",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"marks_at\": \"0, pi/3, pi/2\", \"points\": \"\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-15",
    "text": "Label points with (r, θ), (x, y) or a letter only",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"marks_at\": \"pi/3\", \"points\": \"P(2, pi/3)\", \"pt_labels\": \"Letter and (x, y)\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-16",
    "text": "Draw the ray from the pole to a point on the curve, showing r",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"trace_at\": \"pi/2\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-17",
    "text": "Draw the tangent line at a chosen t, with its slope dy/dx",
    "class": "control",
-   "evidence": "",
-   "note": "AP Calculus BC"
+   "evidence": "changes:{\"tangent\": true, \"tangent_at\": \"pi/2\", \"points\": \"\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-18",
    "text": "Write each curve's equation on the figure",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"eq_labels\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-19",
    "text": "Draw each curve solid, dashed or dotted",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"r = 2 + 2cos(θ)\\nr = 3\", \"style1\": \"Dotted\", \"style2\": \"Solid\", \"points\": \"\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-20",
    "text": "Give values exactly (π/3, √3) or rounded",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"values\": \"Rounded\", \"marks_at\": \"pi/6\", \"tracer\": true}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-21",
    "text": "Load a classic example (rose, cardioid, limaçon with a loop, spiral, circle r = 4 cos θ, area in one petal, a parametric circle, a projectile path)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"r = 3cos(θ)\\nr = 1 + cos(θ)\", \"points\": \"\", \"rmax\": 3.0, \"rstep\": 0.5, \"shade\": \"Inside one curve, outside another\", \"shade_in\": 1, \"shade_out\": 2, \"shade_from\": \"-pi/3\", \"shade_to\": \"pi/3\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-22",
    "text": "Set the rectangular axes' From, To and Count by for a parametric curve",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"curves\": \"x = 48t, y = 64t - 16t^2, 0 <= t <= 4\", \"grid_kind\": \"Rectangular\", \"xmin\": 0.0, \"xmax\": 200.0, \"xstep\": 20.0, \"ymin\": 0.0, \"ymax\": 80.0, \"ystep\": 10.0, \"points\": \"\", \"tracer\": false}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-23",
    "text": "Make the gridlines light, standard, bold or none",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"grid\": \"Bold\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-24",
    "text": "Write a title",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"title\": \"The cardioid r = 2 + 2 cos θ\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-25",
    "text": "Put a blank line in place of the title for students",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"title_mode\": \"Blank line\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-26",
    "text": "Make the labels small, medium or large",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"label_size\": \"Large\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-27",
    "text": "Draw it in black and white for photocopying (Print)",
    "class": "control",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"style\": \"Print\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-28",
    "text": "A student copy with the points only on a blank polar grid, for students to sketch the curve",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\": false, \"student_copy\": \"Points only, to sketch the curves\", \"marks_at\": \"0, pi/2, pi\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-29",
    "text": "A student copy with a blank line for the equation, to name the curve",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\": false, \"student_copy\": \"Blank lines for the equations\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-30",
    "text": "A student copy with the points' coordinates left blank",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"show_answers\": false, \"student_copy\": \"Points' coordinates blank\"}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-31",
    "text": "An answer key line giving the equations, the points and any area",
    "class": "version",
-   "evidence": "",
-   "note": ""
+   "evidence": "changes:{\"key_line\": true}",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-32",
    "text": "Drag P on the polar grid on the figure to set its r and θ",
    "class": "interaction",
-   "evidence": "",
-   "note": "opening state: P is a handle"
+   "evidence": "handle:drag:Drag P on the grid to set its r and",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   },
   {
    "id": "cap-33",
    "text": "Drag a tracer along the curve on the figure, its θ, ray and r following",
    "class": "interaction",
-   "evidence": "",
-   "note": "opening state: the tracer is a handle"
+   "evidence": "handle:drag:Drag T along curve 1",
+   "note": "Round 1 (2026-11-21): accepted on the sixth independent check (NAS, 244dd0d)."
   }
  ]
 }
