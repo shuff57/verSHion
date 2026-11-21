@@ -1824,16 +1824,21 @@ pub async fn convert_document_async(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, 
 /// each continuation question instead takes the host's number and lead text, like a split part.
 /// Returns whether anything was linked.
 fn join_page_break(prev: &mut Converted, next: &mut Converted, prev_page: usize) -> bool {
+    // A continuation is known by its review topic: a later check (the figure scope review) may
+    // have replaced its saved_continued status with its own review state (holdout v13, SEC JC).
     let mut conts: Vec<(usize, usize)> = next.items.iter().enumerate()
-        .filter(|(_, i)| i.status == "saved_continued")
         .filter_map(|(slot, i)| i.question_index.map(|qi| (qi, slot)))
+        .filter(|&(qi, slot)| next.items[slot].status == "saved_continued"
+            || next.doc.questions.get(qi).is_some_and(|q| q.topics.iter().any(|t| t == crate::ditto::CONTINUED_TOPIC)))
         .collect();
     conts.sort();
     // Only content leading the page continues the previous page's last question.
     let leading = conts.iter().enumerate().take_while(|(k, (qi, _))| k == qi).count();
     conts.truncate(leading);
     if conts.is_empty() || prev.doc.questions.is_empty() { return false; }
-    if conts.len() == 1 && merge_continuation(prev, next, conts[0].1, prev_page) { return true; }
+    // Only a continuation with no other review state is joined; one with an unresolved figure box
+    // keeps that state on its own question.
+    if conts.len() == 1 && next.items[conts[0].1].status == "saved_continued" && merge_continuation(prev, next, conts[0].1, prev_page) { return true; }
     adopt_continuations(prev, next, &conts, prev_page)
 }
 
@@ -1854,7 +1859,8 @@ fn adopt_continuations(prev: &mut Converted, next: &mut Converted, conts: &[(usi
         let label = if suffix.is_empty() { format!("{number} (continued)") } else { format!("{number}{suffix}") };
         item.number = Some(number);
         item.label = Some(label.clone());
-        item.status = "saved".into();
+        // Another review state (an unresolved figure box) stays; only the continued flag is settled.
+        if item.status == "saved_continued" { item.status = "saved".into(); }
         item.reason = Some(format!("continues question {number} from page {prev_page}; saved as its own question with that number and its lead text"));
         let q = &mut next.doc.questions[qi];
         if !lead.is_empty() && !q.stem.trim_start().starts_with(&lead) { q.stem = format!("{lead}\n\n{}", q.stem.trim_start()).trim_end().to_string(); }
@@ -2121,6 +2127,27 @@ pub(crate) mod tests {
         prev.doc.questions[0].image = Some(crate::model::ImageRef::default());
         assert!(!join_page_break(&mut prev, &mut next, 1));
         assert_eq!(next.items[0].status, "saved_continued");
+    }
+
+    #[test]
+    fn a_continuation_whose_status_a_later_review_replaced_is_still_linked_and_keeps_that_state() {
+        // Holdout v13, SEC JC #6: the scope review set saved_figure_box_unresolved on the continuation.
+        use crate::model::{Kind, Part, PartKind};
+        let part = |s: &str| Part { stem: s.into(), kind: PartKind::Short { sample: String::new() } };
+        let mut host = page_question("John looked up the figures.", Kind::Multipart { parts: vec![part("(a)"), part("(b)")] });
+        host.image = Some(crate::model::ImageRef::default());
+        let mut prev = page_of(vec![host], vec![saved(0, "6", Some(6), "saved", 0)]);
+        let mut cont = page_question("", Kind::Multipart { parts: vec![part("(c) Draw two bars."), part("(d)")] });
+        cont.topics.push(crate::ditto::CONTINUED_TOPIC.into());
+        let mut next = page_of(vec![cont], vec![saved(0, "continued", None, "saved_figure_box_unresolved", 0)]);
+        assert!(join_page_break(&mut prev, &mut next, 1));
+        let item = &next.items[0];
+        assert_eq!((item.number, item.label.as_deref(), item.status.as_str()), (Some(6), Some("6 (continued)"), "saved_figure_box_unresolved"));
+        assert_eq!(next.doc.questions[0].stem, "John looked up the figures.");
+        assert!(next.doc.questions[0].topics.is_empty());
+        // Without the continued topic, an unresolved first item is not taken for a continuation.
+        let mut next = page_of(vec![page_question("Seven.", short())], vec![saved(0, "7", Some(7), "saved_figure_box_unresolved", 0)]);
+        assert!(!join_page_break(&mut prev, &mut next, 1));
     }
 
     #[test]

@@ -389,7 +389,9 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
     def part_pictures(qi):
         """(has a picture, every picture redrawn and verified) for one saved question: its own and its choices'."""
         q=questions[qi];own=bool(q.get('image'));pictured=[(key,a) for key,a in keyed_choice_answers(q) if a.get('image')]
-        scope_ok=scope_ready if confirmed_scope is None else raw_index.get(qi) in confirmed_scope
+        # The page scope review checks a question's own figure box; answer-choice pictures are not
+        # part of it (holdout v13, Nova Scotia #1: four option pictures beside two scope-reviewed figures).
+        scope_ok=not own or (scope_ready if confirmed_scope is None else raw_index.get(qi) in confirmed_scope)
         own_ok=not own or verified(runs.get(qi,{}),q.get('figure'))
         choices_ok=all(verified(choice_runs.get((qi,)+key,{}),a.get('figure')) for key,a in pictured)
         return own or bool(pictured),bool(scope_ok and own_ok and choices_ok)
@@ -400,7 +402,7 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
         prev_runs={x['question_index']:x for x in prev_page.get('figure_runs',[]) if x.get('choice') is None}
         prev_choice={(x['question_index'],(x.get('choice') or {}).get('part'),(x.get('choice') or {}).get('choice')):x for x in prev_page.get('figure_runs',[]) if x.get('choice') is not None}
         prev_scope=prev_page.get('source_box_review')
-        scope_ok=prev_scope is None or prev_scope.get('applied') is True
+        scope_ok=not own or prev_scope is None or prev_scope.get('applied') is True
         own_ok=not own or verified(prev_runs.get(mi,{}),q.get('figure'))
         choices_ok=all(verified(prev_choice.get((mi,)+key,{}),a.get('figure')) for key,a in pictured)
         return own or bool(pictured),bool(scope_ok and own_ok and choices_ok),prev_runs.get(mi,{})

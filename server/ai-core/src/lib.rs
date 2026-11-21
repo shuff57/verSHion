@@ -178,17 +178,17 @@ pub fn figure_observation() -> OutputSchema {
             "topology":object(json!({
                 "status":{"type":"string","enum":["complete","not_applicable","uncertain"]},
                 "reason":{"type":"string","minLength":1,"maxLength":512},
-                "nodes":{"type":"array","maxItems":40,"items":object(json!({
+                "nodes":{"type":"array","maxItems":80,"items":object(json!({
                     "id":{"type":"string","minLength":1,"maxLength":16},
                     "position":{"type":"string","minLength":1,"maxLength":256}
                 }))},
-                "edges":{"type":"array","maxItems":64,"items":object(json!({
+                "edges":{"type":"array","maxItems":128,"items":object(json!({
                     "id":{"type":"string","minLength":1,"maxLength":16},
                     "from":{"type":"string","minLength":1,"maxLength":16},
                     "to":{"type":"string","minLength":1,"maxLength":16},
                     "stroke":{"type":"string","minLength":1,"maxLength":120}
                 }))},
-                "crossings":{"type":"array","maxItems":24,"items":object(json!({
+                "crossings":{"type":"array","maxItems":48,"items":object(json!({
                     "first":{"type":"string","minLength":1,"maxLength":16},
                     "second":{"type":"string","minLength":1,"maxLength":16},
                     "joins":{"type":["boolean","null"]},

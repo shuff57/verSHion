@@ -203,6 +203,11 @@ class AcceptanceTests(unittest.TestCase):
         self.assertEqual(with_choices([True,True,True,True],runs=[True,True,False,True]),0,'a choice whose redraw was not verified')
         self.assertEqual(with_choices([True,True,True,True],own=False),1,'pictures only on the answers')
         self.assertEqual(with_choices([True,True,False,True],own=False),0)
+        # Holdout v13, Nova Scotia #1: the page scope review covered the page's other figures, not
+        # the option pictures, so it never lists this question; that does not hold its choices.
+        self.trace['pages'][0]['source_box_review']={'applied':True,'confirmed_indices':[5],'protocol':'per_figure_scope_v6'}
+        self.assertEqual(with_choices([True,True,True,True],own=False),1)
+        self.assertEqual(with_choices([True,True,True,True],own=True),0,'its own figure still needs the scope review')
     def test_a_question_split_for_its_figures_needs_every_pictured_part(self):
         # Holdout v9, number lines #6: saved as 6a and 6b (each a figure) and 6c (no figure).
         self.figure()
