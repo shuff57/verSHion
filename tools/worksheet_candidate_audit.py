@@ -74,6 +74,10 @@ def reconcile(cases, run, run_sha, references, audits, corpus, threshold=harness
             original = Path(corpus) / expected[cid]['file']
             require(digest(original) == expected[cid]['sha256'], 'Source PNG changed: ' + cid)
             result = results[cid]
+            if not result.get('bank_sha256'):
+                # The run saved nothing for this page (a timeout or crash): there is no bank to audit,
+                # and every item fails below whatever the audit says.
+                continue
             require(case['bank_sha256'] == result['bank_sha256'], 'Audit bank differs: ' + cid)
             require(case['trace_sha256'] == result['trace_sha256'], 'Audit trace differs: ' + cid)
             store = Path(result['store'])
@@ -132,6 +136,17 @@ def reconcile(cases, run, run_sha, references, audits, corpus, threshold=harness
     for cid, case in expected.items():
         if cid in reviewed:
             pages.append(reviewed[cid])
+            continue
+        result = results.get(cid) or {}
+        if result and not result.get('bank_sha256'):
+            why = 'The run saved nothing for this page (status ' + str(result.get('status')) + ': ' + str(result.get('error') or 'no bank') + ').'
+            pages.append({'case_id': cid, 'reviewer': None, 'items': {str(n): {
+                'content_status': 'fail',
+                'figure_visual_status': 'fail' if n in case['required_figure_numbers'] else 'not_required',
+                'editable_recreation_status': 'fail' if n in case['required_figure_numbers'] else 'not_required',
+                'bank_item_status': 'fail', 'worksheet_render_status': 'fail',
+                'complete_with_worksheet_status': 'fail', 'reasons': [why],
+            } for n in case['question_numbers']}})
             continue
         pages.append({'case_id': cid, 'reviewer': None, 'items': {str(n): {
             'content_status': 'pending',

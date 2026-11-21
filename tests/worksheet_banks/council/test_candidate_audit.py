@@ -44,6 +44,14 @@ class CandidateAuditTests(unittest.TestCase):
         self.assertEqual(report['counts']['bank_item_status'], {'pending': 1})
         self.assertFalse(report['independent_item_and_figure_gates_passed'])
 
+    def test_a_page_the_run_never_saved_fails_every_item_with_or_without_an_audit(self):
+        # Holdout v10: a page import timed out, so its result has no store, bank or trace.
+        self.result = {'id': 'doc-p1', 'status': 'timeout', 'error': 'Document import exceeded its time budget'}
+        for audits in ([], None):
+            report = h.reconcile([self.case], {'cases': [self.result]}, 'run-sha', [('source-ref-sha', self.reference)], [] if audits == [] else [('audit-sha', self.audit)], self.root)
+            self.assertEqual(report['counts']['bank_item_status'], {'fail': 1})
+            self.assertEqual(report['counts']['content_status'], {'fail': 1})
+
     def test_current_98_percent_gate_and_explicit_historical_threshold_are_distinct(self):
         nums=list(range(1,101));self.case['question_numbers']=nums
         questions=[dict(copy.deepcopy(self.q),id=f'q{n}') for n in nums]

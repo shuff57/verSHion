@@ -122,6 +122,8 @@ Directions printed on this page always win. Never invent directions.
   If the printed table has no header row, write the body rows only.
 - Chemical formulas and math: subscripts/superscripts as Unicode (H₂O, Mg(NO₂)₂, m²). Real
   equations as `$linear$` (e.g. `$\frac{a}{b}$` written as `$(a)/(b)$`).
+  A printed multiplication sign between numbers (×, or a letter x used as "times", as in
+  13 x (-13)) is `\times` inside math, never the variable `x`.
   Keep each entire number or expression inside one pair of `$` delimiters, including its
   sign and whole-number part: a mixed number is `$3 (2)/(7)$`, never `3 $(2)/(7)$`.
   Preserve the printed grouping of exponents, radicals, fractions and limits; do not simplify.
@@ -143,7 +145,9 @@ structure or circuit drawing) add `"figure": {"box": [ymin,xmin,ymax,xmax], "alt
   `[270, 420, 370, 620]`, never run together; `alt` is a separate key.
 - Never write a figure for typed text, a table, an equation, an answer blank, or handwriting.
   Blank grids, axes and curves provided as student workspaces ARE figures, including an
-  unlabeled curve with tick marks. Keep supplied plotted curves; colored ink alone does not
+  unlabeled curve with tick marks, and so is a blank diagram printed for a part to complete (a sign
+  diagram, number line, tree or chart outline under "(i) Complete the sign diagram below"): box it
+  on that part. Keep supplied plotted curves; colored ink alone does not
   mean handwriting. Distinguish printed drawings from handwritten additions by their form.
 - One figure attachment per question or part. A single supplied diagram containing several panels belongs
   in one box, with every panel and its labels included. In a multipart question, a picture shared by

@@ -1246,6 +1246,11 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
     if let Some(review) = &source_box_review { source_scope::mark_unconfirmed(&mut r, review); }
     let mut redrawn = 0;
     let mut figure_runs = Vec::new();
+    // Every picture the figure agent redraws: question pictures first, then answer pictures. Each
+    // slot keeps its place, so traces and warnings keep the page's order however the jobs run.
+    enum Slot { Done(FigureImportTrace), Job(usize) }
+    let mut slots: Vec<Slot> = Vec::new();
+    let mut jobs: Vec<RedrawJob> = Vec::new();
     for (i, q) in r.doc.questions.iter_mut().enumerate() {
         if q.image.is_none() || q.figure.is_some() {
             continue;
@@ -1256,19 +1261,15 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
         if let Some(item) = r.items.iter().find(|item| item.question_index == Some(i) && item.status == "saved_figure_box_unresolved") {
             // Retain visible source evidence for review, but do not spend figure-tool calls fitting
             // a picture whose scope may include the next problem. A plausible redraw cannot certify it.
-            figure_runs.push(FigureImportTrace { executions:Vec::new(), question_index: i, choice: None, sees: None, steps: Vec::new(), spec: None, review: None, accepted: false,
+            slots.push(Slot::Done(FigureImportTrace { executions:Vec::new(), question_index: i, choice: None, sees: None, steps: Vec::new(), spec: None, review: None, accepted: false,
                 note: "Source figure box remains unresolved; figure recreation was not attempted.".into(), error: item.reason.clone(),
-                failure: Some(FigureFailure::new("source_scope_unconfirmed", item.reason.as_deref().unwrap_or("The source crop has not been confirmed complete; drawing was not attempted."), None)) });
+                failure: Some(FigureFailure::new("source_scope_unconfirmed", item.reason.as_deref().unwrap_or("The source crop has not been confirmed complete; drawing was not attempted."), None)) }));
             continue;
         }
         let crop = crate::store::read_media(&q.image.as_ref().expect("checked").file).unwrap_or_default();
         if cfg.native_tools {
-            let (redraw, trace) = redraw_crop_async(&crop, &q.stem, printed_label.as_deref(), i, None, cfg).await;
-            match redraw {
-                Some((img, spec)) => { q.image = Some(img); q.figure = Some(spec); redrawn += 1; }
-                None => if let Some(reason) = &trace.failure { r.warnings.push(reason.warning(&label)) },
-            }
-            figure_runs.push(trace);
+            slots.push(Slot::Job(jobs.len()));
+            jobs.push(RedrawJob { question: i, choice: None, crop, context: q.stem.clone(), printed_label, label });
             continue;
         }
         // Up to 3 attempts: a picture the first generator misses gets another generator.
@@ -1288,35 +1289,110 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
     // A choice that is a picture (four pie charts as options A-D) is redrawn like a question's
     // picture; its run is recorded with the choice it belongs to.
     if cfg.native_tools {
-        for (i, q) in r.doc.questions.iter_mut().enumerate() {
+        for (i, q) in r.doc.questions.iter().enumerate() {
             let printed_label = r.items.iter().find(|item| item.question_index == Some(i)).and_then(|item| item.label.clone());
             let label = printed_label.clone().unwrap_or_else(|| (i + 1).to_string());
-            let stem = q.stem.clone();
-            let mut lists: Vec<(Option<usize>, &mut Vec<crate::model::Answer>)> = match &mut q.kind {
-                crate::model::Kind::Mc { answers } => vec![(None, answers)],
-                crate::model::Kind::Multipart { parts } => parts.iter_mut().enumerate().filter_map(|(pi, p)| match &mut p.kind {
-                    crate::model::PartKind::Mc { answers } => Some((Some(pi), answers)),
-                    _ => None,
-                }).collect(),
-                _ => Vec::new(),
-            };
-            for (part, answers) in lists.iter_mut() {
-                for (ci, a) in answers.iter_mut().enumerate() {
-                    let Some(image) = a.image.as_ref().filter(|_| a.figure.is_none()) else { continue };
-                    let crop = crate::store::read_media(&image.file).unwrap_or_default();
-                    let letter = char::from(b'A' + (ci as u8).min(25));
-                    let context = format!("{stem}\n[This picture is answer choice {letter}{}.]", part.map(|p| format!(" of part {}", char::from(b'a' + (p as u8).min(25)))).unwrap_or_default());
-                    let (redraw, trace) = redraw_crop_async(&crop, &context, printed_label.as_deref(), i, Some(ChoiceRef { part: *part, choice: ci }), cfg).await;
-                    match redraw {
-                        Some((img, spec)) => { a.image = Some(img); a.figure = Some(spec); redrawn += 1; }
-                        None => if let Some(reason) = &trace.failure { r.warnings.push(reason.warning(&format!("{label} choice {letter}"))) },
-                    }
-                    figure_runs.push(trace);
-                }
+            for (part, ci, a) in choice_slots(&q.kind) {
+                let Some(image) = a.image.as_ref().filter(|_| a.figure.is_none()) else { continue };
+                let letter = char::from(b'A' + (ci as u8).min(25));
+                let context = format!("{}\n[This picture is answer choice {letter}{}.]", q.stem, part.map(|p| format!(" of part {}", char::from(b'a' + (p as u8).min(25)))).unwrap_or_default());
+                slots.push(Slot::Job(jobs.len()));
+                jobs.push(RedrawJob { question: i, choice: Some(ChoiceRef { part, choice: ci }), crop: crate::store::read_media(&image.file).unwrap_or_default(), context, printed_label: printed_label.clone(), label: format!("{label} choice {letter}") });
             }
         }
     }
+    let mut results: Vec<Option<(Option<(crate::model::ImageRef, crate::model::FigureSpec)>, FigureImportTrace)>> = run_redraws(&jobs, cfg).await.into_iter().map(Some).collect();
+    for slot in slots {
+        let trace = match slot {
+            Slot::Done(trace) => trace,
+            Slot::Job(j) => {
+                let (redraw, trace) = results[j].take().expect("each job runs once");
+                let job = &jobs[j];
+                match redraw {
+                    Some((img, spec)) => {
+                        let q = &mut r.doc.questions[job.question];
+                        match job.choice {
+                            None => { q.image = Some(img); q.figure = Some(spec); }
+                            Some(c) => if let Some(a) = choice_mut(&mut q.kind, c) { a.image = Some(img); a.figure = Some(spec); },
+                        }
+                        redrawn += 1;
+                    }
+                    None => if let Some(reason) = &trace.failure { r.warnings.push(reason.warning(&job.label)) },
+                }
+                trace
+            }
+        };
+        figure_runs.push(trace);
+    }
     Ok(Converted { doc: r.doc, warnings: r.warnings, cropped: r.figures, redrawn, raw_reply: raw.into(), figure_runs, items: r.items, context: context.cloned(), source_box_review, direction_review:None })
+}
+
+/// One picture for the figure agent to redraw: a question's own, or one of its answer choices'.
+struct RedrawJob {
+    question: usize,
+    choice: Option<ChoiceRef>,
+    crop: Vec<u8>,
+    /// The question text given as context (with the choice named for an answer picture).
+    context: String,
+    printed_label: Option<String>,
+    /// How warnings name the picture ("8", "8 choice B").
+    label: String,
+}
+
+/// Figure redraws running at once on one page. Each runs its own model conversation; a page of
+/// several figures otherwise took one redraw after another (holdout v10: three figures, past
+/// the 20-minute page budget).
+#[cfg(not(target_arch = "wasm32"))]
+const FIGURE_PARALLEL: usize = 3;
+
+/// Runs a page's redraws, a few at a time on native (each model call blocks its thread), in
+/// order in the browser. Results come back in job order.
+async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(Option<(crate::model::ImageRef, crate::model::FigureSpec)>, FigureImportTrace)> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if jobs.len() > 1 {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let next = AtomicUsize::new(0);
+        let slots: Vec<std::sync::Mutex<Option<_>>> = (0..jobs.len()).map(|_| std::sync::Mutex::new(None)).collect();
+        std::thread::scope(|sc| {
+            for _ in 0..FIGURE_PARALLEL.min(jobs.len()) {
+                sc.spawn(|| loop {
+                    let i = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(job) = jobs.get(i) else { break };
+                    let out = block_on(redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg));
+                    *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(out);
+                });
+            }
+        });
+        return slots.into_iter().map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()).expect("every job ran")).collect();
+    }
+    let mut out = Vec::with_capacity(jobs.len());
+    for job in jobs {
+        out.push(redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg).await);
+    }
+    out
+}
+
+/// Every answer choice of a question kind: (part, choice index, answer).
+fn choice_slots(kind: &crate::model::Kind) -> Vec<(Option<usize>, usize, &crate::model::Answer)> {
+    match kind {
+        crate::model::Kind::Mc { answers } => answers.iter().enumerate().map(|(ci, a)| (None, ci, a)).collect(),
+        crate::model::Kind::Multipart { parts } => parts.iter().enumerate().flat_map(|(pi, p)| match &p.kind {
+            crate::model::PartKind::Mc { answers } => answers.iter().enumerate().map(|(ci, a)| (Some(pi), ci, a)).collect::<Vec<_>>(),
+            _ => Vec::new(),
+        }).collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn choice_mut(kind: &mut crate::model::Kind, c: ChoiceRef) -> Option<&mut crate::model::Answer> {
+    match (kind, c.part) {
+        (crate::model::Kind::Mc { answers }, None) => answers.get_mut(c.choice),
+        (crate::model::Kind::Multipart { parts }, Some(pi)) => match &mut parts.get_mut(pi)?.kind {
+            crate::model::PartKind::Mc { answers } => answers.get_mut(c.choice),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// The answer choice a figure run redrew: its part (for a multipart) and its index.
