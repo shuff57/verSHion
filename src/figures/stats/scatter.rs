@@ -104,6 +104,8 @@ fn params() -> Vec<ParamDef> {
         ParamDef::text("title", "Title", ""),
         ParamDef::text("x_title", "Horizontal axis title", "Hours studied"),
         ParamDef::text("y_title", "Vertical axis title", "Score"),
+        ParamDef::choice("y_title_at", "Vertical axis title sits", &["Turned, left of the axis", "Across, above the axis"], "Turned, left of the axis")
+            .hint("Across prints the title level, just above the top of the y-axis, as some exam graphs do"),
         svg::style_param(),
         svg::label_size_param(),
         answers_param().hint("Off hides the line, equation and r, leaving just the points for students to work from"),
@@ -255,7 +257,8 @@ fn render_impl(p: &Params, capture: bool) -> (String, serde_json::Value) {
     let (x_end,y_end)=if ends {(p.s("x_end_label").trim().to_string(),p.s("y_end_label").trim().to_string())} else {(String::new(),String::new())};
     let arrows=ends&&p.b("axis_arrows");
     // Room past the axis ends for an end letter.
-    let (xroom,yroom)=(if x_end.is_empty(){0.0}else{fs*1.6},if y_end.is_empty(){0.0}else{fs*1.5});
+    let y_above=p.s("y_title_at")=="Across, above the axis";
+    let (xroom,yroom)=(if x_end.is_empty(){0.0}else{fs*1.6},if y_end.is_empty()&&!y_above{0.0}else{fs*1.5});
     // Preserve the plot's size and mapping. Only the new upper/right margin grows.
     frame.t+=yext+yroom;frame.h+=yext+yroom;
     let mut d = Doc::new(frame.w+xext+xroom, frame.h);
@@ -264,7 +267,7 @@ fn render_impl(p: &Params, capture: bool) -> (String, serde_json::Value) {
     if !title.is_empty() {
         chart::text(&mut d, w / 2.0, 14.0 + fs * 1.4, fs * 1.3, "middle", title);
     }
-    let custom=manual||explicit_grid||xext>0.0||yext>0.0||p.i("x_major_every")>1||p.i("y_major_every")>1||p.s("grid_directions")=="Both"||p.s("grid_color")!="#dfe3ea"||p.s("axis_style")!="Left and bottom"||p.f("axis_width")!=2.0||!p.b("tick_marks")||!p.b("zero_labels")||!p.s("x_ticks").trim().is_empty()||!p.s("y_ticks").trim().is_empty()||arrows||!x_end.is_empty()||!y_end.is_empty();
+    let custom=manual||explicit_grid||xext>0.0||yext>0.0||p.i("x_major_every")>1||p.i("y_major_every")>1||p.s("grid_directions")=="Both"||p.s("grid_color")!="#dfe3ea"||p.s("axis_style")!="Left and bottom"||p.f("axis_width")!=2.0||!p.b("tick_marks")||!p.b("zero_labels")||!p.s("x_ticks").trim().is_empty()||!p.s("y_ticks").trim().is_empty()||arrows||!x_end.is_empty()||!y_end.is_empty()||y_above;
     if !custom {
         let from = d.len();
         chart::axes(&mut d, &frame, &AxesOpts { xticks: &xticks, yticks: &yticks, grid: p.b("grid"), x_title: xt, y_title: yt, fs });
@@ -288,12 +291,13 @@ fn render_impl(p: &Params, capture: bool) -> (String, serde_json::Value) {
                 "None" => &[], "Box" => &["bottom", "left", "top", "right"], _ => &["bottom", "left"],
             };
             c.axes(d.fragment(from), roles);
+            if arrows { c.arrows(); }
         }
         for(v,t)in &xticks{let x=frame.px(*v);if p.b("tick_marks"){d.line(x,frame.bottom(),x,frame.bottom()+6.0,INK,1.6);}chart::text(&mut d,x,frame.bottom()+8.0+fs*1.05,fs,"middle",t);}
         for(v,t)in &yticks{let y=frame.py(*v);if p.b("tick_marks"){d.line(frame.left()-6.0,y,frame.left(),y,INK,1.6);}chart::text(&mut d,frame.left()-10.0,y+fs*0.35,fs,"end",t);}
         if !x_end.is_empty(){chart::text(&mut d,frame.right()+xext+5.0,frame.bottom()+fs*0.35,fs*1.1,"start",&x_end);}
         if !y_end.is_empty(){chart::text(&mut d,frame.left(),frame.top()-yext-6.0,fs*1.1,"middle",&y_end);}
-        if !xt.is_empty(){chart::text(&mut d,(frame.left()+frame.right())/2.0,frame.h-10.0,fs*1.1,"middle",xt);}if !yt.is_empty(){chart::vtext(&mut d,18.0+fs*0.2,(frame.top()+frame.bottom())/2.0,fs*1.1,yt);}
+        if !xt.is_empty(){chart::text(&mut d,(frame.left()+frame.right())/2.0,frame.h-10.0,fs*1.1,"middle",xt);}if !yt.is_empty(){if y_above{chart::text(&mut d,frame.left()+if y_end.is_empty(){0.0}else{fs*1.2},frame.top()-yext-6.0,fs*1.1,"start",yt);}else{chart::vtext(&mut d,18.0+fs*0.2,(frame.top()+frame.bottom())/2.0,fs*1.1,yt);}}
     }
 
     let answers = p.b(SHOW_ANSWERS);

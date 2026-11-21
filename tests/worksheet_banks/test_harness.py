@@ -186,18 +186,37 @@ class AcceptanceTests(unittest.TestCase):
     def test_webp_media_is_valid(self):
         self.figure();s=self.score();self.assertTrue(s['bank_integrity_ok']);self.assertEqual(s['figures_recreated'],1)
     def test_a_figure_question_with_picture_choices_needs_each_choice_redrawn(self):
-        # Holdout v7, NESA #8: the stem picture and four picture choices.
+        # Holdout v7 NESA #8 (stem picture + picture options) and holdout v9 Alberta #22 (options only).
         self.figure()
         pic={'file':'media/f.webp','width':16,'height':16}
-        def with_choices(figures):
-            self.q['kind']={'Mc':{'answers':[{'text':'','correct':False,'locked':False,'image':pic,**({'figure':{'id':'pie','params':{}}} if f else {})} for f in figures]}}
+        spec={'id':'number-line','params':{}}
+        own_run=copy.deepcopy(self.trace['pages'][0]['figure_runs'][0])
+        def with_choices(figures,own=True,runs=None):
+            self.q['image']=pic if own else None;self.q['figure']={'id':'coordinate-grid','params':{}} if own else None
+            self.q['kind']={'Mc':{'answers':[{'text':'','correct':False,'locked':False,'image':pic,**({'figure':spec} if f else {})} for f in figures]}}
+            choice=lambda i,ok:{'question_index':0,'choice':{'part':None,'choice':i},'accepted':ok,'spec':spec,'review':{'matches':ok},'steps':[{'tool':'render_figure'}]}
+            self.trace['pages'][0]['figure_runs']=([copy.deepcopy(own_run)] if own else [])+[choice(i,ok) for i,ok in enumerate(runs or [True]*len(figures))]
             self.trace['pages'][0]['questions']=[copy.deepcopy(self.q)];self.save()
             return self.score()['figures_recreated']
         self.assertEqual(with_choices([True,True,True,True]),1)
         self.assertEqual(with_choices([True,False,True,True]),0,'a choice still only a crop is not recreated')
-        # A choice run never stands in for the question's own run.
-        self.trace['pages'][0]['figure_runs'].append({'question_index':0,'choice':{'part':None,'choice':0},'accepted':False,'spec':None,'review':{'matches':False},'steps':[]})
-        self.assertEqual(with_choices([True,True,True,True]),1)
+        self.assertEqual(with_choices([True,True,True,True],runs=[True,True,False,True]),0,'a choice whose redraw was not verified')
+        self.assertEqual(with_choices([True,True,True,True],own=False),1,'pictures only on the answers')
+        self.assertEqual(with_choices([True,True,False,True],own=False),0)
+    def test_a_question_split_for_its_figures_needs_every_pictured_part(self):
+        # Holdout v9, number lines #6: saved as 6a and 6b (each a figure) and 6c (no figure).
+        self.figure()
+        run=copy.deepcopy(self.trace['pages'][0]['figure_runs'][0])
+        parts=[dict(copy.deepcopy(self.q),id='q6a'),dict(copy.deepcopy(self.q),id='q6b'),dict(copy.deepcopy(self.q),id='q6c',image=None,figure=None)]
+        def score(runs_ok):
+            self.trace['pages'][0]['questions']=copy.deepcopy(parts)
+            self.trace['pages'][0]['items']=[{'number':1,'label':l,'question_index':i,'status':'saved'} for i,l in enumerate(['1a','1b','1c'])]
+            self.trace['pages'][0]['figure_runs']=[dict(copy.deepcopy(run),question_index=i,accepted=ok) for i,ok in enumerate(runs_ok)]
+            (self.store/'banks.json').write_text(json.dumps([{'questions':[dict(copy.deepcopy(q),points=1.0) for q in parts]}]))
+            (self.store/'trace.json').write_text(json.dumps(self.trace))
+            return self.score()['figures_recreated']
+        self.assertEqual(score([True,True]),1,'both pictured parts redrawn; the plain part does not count')
+        self.assertEqual(score([True,False]),0)
     def test_plain_crop_does_not_pass_recreation(self):
         self.figure();self.q['figure']=None;self.trace['pages'][0]['questions']=[copy.deepcopy(self.q)];self.save()
         self.assertEqual(self.score()['figures_recreated'],0)

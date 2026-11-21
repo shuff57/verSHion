@@ -161,6 +161,15 @@ def has_invented_key(q):
     # always holds a value, so only the keyless marker shows that value is a placeholder, not a key.
     return ('Mc' in kind and any(a.get('correct') for a in kind['Mc'].get('answers',[]))) or ('Tf' in kind and q.get('explanation')!=KEYLESS_SENTINEL)
 
+def keyed_choice_answers(q):
+    """((part index or None, choice index), answer) for every answer choice of a saved question."""
+    kind=q.get('kind') or {}
+    if 'Mc' in kind:return [((None,i),a) for i,a in enumerate(kind['Mc'].get('answers') or [])]
+    out=[]
+    for pi,part in enumerate((kind.get('Multipart') or {}).get('parts') or []):
+        out.extend(((pi,i),a) for i,a in enumerate(((part.get('kind') or {}).get('Mc') or {}).get('answers') or []))
+    return out
+
 def choice_answers(q):
     """Every answer choice of a saved question: its own (multiple choice) and its parts'."""
     kind=q.get('kind') or {}
@@ -201,18 +210,19 @@ def parsed_source_map(case,page,questions):
         numbers=[n if n is not None else (int(m.group(1)) if (m:=re.fullmatch(r'\s*(?:[A-Za-z]\.)?\d+(?:\.\d+)*\.(\d+)\s*',str(i.get('label') or ''))) else None) for n,i in zip(numbers,items)]
     if len(numbers)==1 and numbers[0] is None and (case['source_id']=='statistics-confidence-intervals' or (case.get('single_unnumbered_item') and len(case['question_numbers'])==1)):numbers=[1 if case['source_id']=='statistics-confidence-intervals' else case['question_numbers'][0]]
     numbers=leading_continuation(case,items,numbers)
-    by_number={};index={};status={};unresolved=[]
+    by_number={};index={};status={};unresolved=[];groups={}
     for number,item in zip(numbers,items):
         if number is None:continue
         status[number]=item.get('status')
         qi=item.get('question_index')
         if qi is not None and 0<=qi<len(questions):
             by_number[number]=questions[qi];index[number]=qi
+            groups.setdefault(number,[]).append(qi)
             # A valid crop can still overlap another problem or have no visible task. New or
             # explicit review states must never silently become complete source items.
             if item.get('status') not in {'saved','saved_figure_only'}:unresolved.append(number)
     return {'numbers':numbers,'by_number':by_number,'index':index,'all_saved':all(i.get('question_index') is not None for i in items),
-            'unresolved':unresolved,'status':status,'provenance':'importer_source_items'}
+            'unresolved':unresolved,'status':status,'provenance':'importer_source_items','groups':groups}
 
 def figure_execution_evidence(page):
     """Diagnostic logical-call counts across ALL retained attempts, never a source-quality gate.
@@ -363,14 +373,26 @@ def score_case(case,store,trace,threshold=DEFAULT_THRESHOLD,page_index=0):
     if scope is not None and ('confirmed_indices' in scope or 'protocol' in scope):
         if not isinstance(confirmed_scope,list) or not all(type(i) is int and i>=0 for i in confirmed_scope):confirmed_scope=[]
     raw_index={item.get('question_index'):item.get('index') for item in page.get('items') or []}
+    choice_runs={(x['question_index'],(x.get('choice') or {}).get('part'),(x.get('choice') or {}).get('choice')):x for x in page.get('figure_runs',[]) if x.get('choice') is not None}
+    def verified(run,spec):
+        return bool(spec) and run.get('accepted') and run.get('spec')==spec and run.get('review',{}).get('matches') is True and any(s['tool']=='render_figure' for s in run.get('steps',[]))
+    def part_pictures(qi):
+        """(has a picture, every picture redrawn and verified) for one saved question: its own and its choices'."""
+        q=questions[qi];own=bool(q.get('image'));pictured=[(key,a) for key,a in keyed_choice_answers(q) if a.get('image')]
+        scope_ok=scope_ready if confirmed_scope is None else raw_index.get(qi) in confirmed_scope
+        own_ok=not own or verified(runs.get(qi,{}),q.get('figure'))
+        choices_ok=all(verified(choice_runs.get((qi,)+key,{}),a.get('figure')) for key,a in pictured)
+        return own or bool(pictured),bool(scope_ok and own_ok and choices_ok)
     for n in required:
         q=by_number.get(n);index=source['index'].get(n)
+        # Every saved question carrying this number: one, or each part of a question split for its figures.
+        parts=[part_pictures(qi) for qi in source.get('groups',{}).get(n,[index] if index is not None else [])]
+        pictured=[ok for has,ok in parts if has]
+        primary=next((qi for qi in source.get('groups',{}).get(n,[]) if questions[qi].get('image')),index)
+        if primary is not None:q=questions[primary];index=primary
         run=runs.get(index,{})
         item_scope_ready=scope_ready if confirmed_scope is None else raw_index.get(index) in confirmed_scope
-        good=(q is not None and n not in source['unresolved'] and item_scope_ready and q.get('figure') and q.get('image') and run.get('accepted')
-              and run.get('spec')==q['figure'] and run.get('review',{}).get('matches') is True
-              and any(s['tool']=='render_figure' for s in run.get('steps',[]))
-              and all(a.get('figure') for a in choice_answers(q) if a.get('image')))
+        good=q is not None and n not in source['unresolved'] and bool(pictured) and all(pictured)
         spec_ref=case.get('figure_expectations',{}).get(str(n))
         if good and spec_ref:
             differences=[]

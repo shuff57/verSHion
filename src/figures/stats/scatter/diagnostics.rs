@@ -108,6 +108,8 @@ pub(super) struct Capture {
     grid_bounds: Option<[f64; 4]>,
     grid_envelope: Option<[f64; 4]>,
     issues: Vec<&'static str>,
+    /// Arrowheads drawn at the positive ends of the x- and y-axis.
+    axis_arrows: bool,
 }
 
 impl Capture {
@@ -116,7 +118,13 @@ impl Capture {
             authored, emitted: 0, skipped: 0, skipped_ids: Vec::new(), markers: Vec::new(),
             axes: Vec::new(), axis_style: axis_style.chars().take(32).collect(), grid_enabled,
             grid_counts: [0; 3], grid_bounds: None, grid_envelope: None, issues: Vec::new(),
+            axis_arrows: false,
         }
+    }
+
+    /// The figure drew arrowheads at the positive ends of both axes.
+    pub(super) fn arrows(&mut self) {
+        self.axis_arrows = true;
     }
 
     fn issue(&mut self, message: &'static str) {
@@ -260,6 +268,7 @@ impl Capture {
                 "emitted_centerline_rectangle":self.grid_bounds,"stroke_envelope_bounds":self.grid_envelope,
                 "rectangle_is_not_an_added_border":true},
             "axes":{"style":self.axis_style,"present":present,"marker_analysis_complete":complete,
+                "arrow_ends":{"x_positive":self.axis_arrows,"y_positive":self.axis_arrows},
                 "absent_reason":if present {None} else {Some("no_painted_axis_segments")},"segments":axes},
             "markers":markers,
             "geometric_touch_or_overlap_groups":{"available":complete,

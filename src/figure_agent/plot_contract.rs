@@ -88,7 +88,8 @@ impl<'a> Candidate<'a> {
     fn end(&self, direction: usize) -> Result<&'static str, &'static str> {
         if self.segment(axis_for(direction))?.is_none() { return Ok("none"); }
         match self.family {
-            Family::Scatter => Ok("line"),
+            // The scatterplot's optional arrowheads sit on the positive x and y ends only.
+            Family::Scatter => Ok(if self.value["axes"]["arrow_ends"][DIRECTIONS[direction].0] == true { "arrow" } else { "line" }),
             Family::Coordinate => {
                 let end = &self.value["axes"]["ends"][DIRECTIONS[direction].2];
                 match (end["kind"].as_str(), end["arrow_present"].as_bool()) {
@@ -272,6 +273,25 @@ pub(super) fn check(source_plot: &Value, generator: &str, drawing: Option<&Value
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn scatterplot_arrowheads_are_read_as_arrow_ends() {
+        // Holdout v9, Eduqas: the source's arrowed axes were refused because a scatterplot end was
+        // always reported as a plain line.
+        let defs = (crate::figures::stats::scatter::def().params)();
+        let mut p = crate::figures::Params::defaults(&defs);
+        p.set_b("axis_arrows", true);
+        let (_, report) = crate::figures::stats::scatter::render_with_diagnostics(&p);
+        let mut src = source();
+        src["axis_ends"]["x_positive"] = json!("arrow");
+        src["axis_ends"]["y_positive"] = json!("arrow");
+        src["axis_ends"]["x_negative"] = json!("line");
+        let r = check(&src, "scatterplot", Some(&report));
+        assert!(!r.has_conflicts(), "{:?}", r.issues);
+        p.set_b("axis_arrows", false);
+        let (_, plain) = crate::figures::stats::scatter::render_with_diagnostics(&p);
+        assert!(check(&src, "scatterplot", Some(&plain)).has_conflicts(), "plain ends still conflict with source arrows");
+    }
+
     fn source() -> Value { json!({
         "axis_ends":{"x_negative":"not_applicable","x_positive":"not_applicable","y_negative":"not_applicable","y_positive":"not_applicable"},
         "axis_overhang":{"x_negative":"not_applicable","x_positive":"not_applicable","y_negative":"not_applicable","y_positive":"not_applicable"},
