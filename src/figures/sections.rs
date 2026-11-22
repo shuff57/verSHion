@@ -98,6 +98,16 @@ static POLAR_PARAMETRIC: [RefSection; 7] = [
     s("Student copy", &["show_answers", "student_copy", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
 ];
 
+static SLOPE_FIELDS: [RefSection; 7] = [
+    s("Equation", &["dydx", "var", "dep"], ""),
+    s("Solution curves", &["points", "curves", "direction", "curve_style", "pt_labels", "solution"], "Drag a starting point on the figure to move its curve; click the field to start a new one."),
+    s("Field", &["show_field", "spacing", "seg_len", "draw_as", "equilibria"], ""),
+    s("Euler's method", &["euler", "h", "n", "euler_table", "compare", "dec"], ""),
+    s("Axes", &["xmin", "xmax", "xstep", "ymin", "ymax", "ystep", "minor", "numbers", "grid", "square", "xlabel", "ylabel"], ""),
+    s("Titles", &["title_mode", "title", "label_size", "style"], ""),
+    s("Student copy", &["show_answers", "student_copy", "others", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
 static TANGENT_SECANT: [RefSection; 7] = [
     s("Function", &["func", "fname", "var", "a", "h", "more_h", "more_a"], "Drag P or Q along the curve on the figure; Q's drag changes h."),
     s("Lines", &["show_tangent", "show_secant", "normal", "tangent_style", "secant_style", "normal_style", "extent"], ""),
@@ -1344,6 +1354,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "waves" => &FIG_49,
         "tangent-secant-lines" => &TANGENT_SECANT,
         "polar-parametric" => &POLAR_PARAMETRIC,
+        "slope-fields" => &SLOPE_FIELDS,
         _ => return None,
     })
 }
