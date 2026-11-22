@@ -143,7 +143,7 @@ pub(crate) fn parse(expr: &str) -> Option<Node> {
 
 /// The exponent of a power when it is written as a fraction of integers with an odd denominator, (1/3) or (-2/5): (p, q).
 /// (Only this spelling, the one `tangent::real_odd_roots` rewrites for the grid, so the tree and the drawn curve agree.)
-fn odd_root(e: &Node) -> Option<(i128, i128)> {
+pub(crate) fn odd_root(e: &Node) -> Option<(i128, i128)> {
     let int = |n: &Node| match n { Num(v, Some(r)) if r.1 == 1 => Some(*v as i128), Neg(m) => match &**m { Num(v, Some(r)) if r.1 == 1 => Some(-(*v as i128)), _ => None }, _ => None };
     // a typed decimal: 0.2 is 1/5 (and −0.6 is −3/5)
     let dec = |n: &Node| match n { Num(_, Some(r)) if r.1 > 1 => Some(*r), Neg(m) => match &**m { Num(_, Some(r)) if r.1 > 1 => Some(r.neg()), _ => None }, _ => None };

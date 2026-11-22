@@ -338,7 +338,7 @@ pub(crate) fn fval(expr: &str, x: f64) -> Option<f64> { let n = ex::parse(expr)?
 const NAMES: [&str; 24] = ["arcsin", "arccos", "arctan", "arcsec", "arccsc", "arccot", "asin", "acos", "atan", "asec", "acsc", "acot", "sqrt", "abs", "sin", "cos", "tan", "sec", "csc", "cot", "exp", "log", "ln", "pi"];
 
 /// Typed symbols the reader does not know, in its own spelling: x² → x^2, √x → sqrt(x), √(x+1) → sqrt(x+1), π → pi.
-fn plain_symbols(t: &str) -> String {
+pub(crate) fn plain_symbols(t: &str) -> String {
     let t = t.replace('\u{b2}', "^2").replace('\u{b3}', "^3").replace('\u{3c0}', "pi").replace('\u{d7}', "*").replace('\u{b7}', "*").replace('\u{2212}', "-");
     let cs: Vec<char> = t.chars().collect();
     let mut out = String::new();
@@ -502,7 +502,7 @@ pub(crate) fn expr_plain(typed: &str, fname: &str, var: char) -> Result<String, 
     Ok(out)
 }
 /// Spaces either side of ^ taken out ("x ^ (1/3)" is "x^(1/3)"), so both readers see the same power.
-fn no_space_at_powers(s: &str) -> String {
+pub(crate) fn no_space_at_powers(s: &str) -> String {
     let cs: Vec<char> = s.chars().collect();
     let mut out = String::new();
     for (i, c) in cs.iter().enumerate() {
@@ -524,7 +524,12 @@ pub(crate) fn shown_func(typed: &str) -> String {
     let t = typed.trim();
     let t = t.split_once('=').map(|(_, r)| r).unwrap_or(t).trim();
     // (the reader reads X² as x², so it is echoed as read)
-    let s = pretty(&plain_symbols(&t.to_lowercase()));
+    shown_plain(&plain_symbols(&t.to_lowercase()))
+}
+/// `shown_func` on text already in the reader's spelling, in the case it is to be written (the slope field keeps a typed
+/// capital P).
+pub(crate) fn shown_plain(t: &str) -> String {
+    let s = pretty(t);
     // ·: dropped after a number (2·x is 2x), kept between letters or brackets (x·x^(1/3))
     let cs: Vec<char> = s.chars().collect();
     let mut s = String::new();
@@ -634,7 +639,7 @@ fn ctx_for(exact: bool, dec: usize, typed: &[&str]) -> Ctx {
     Ctx { exact, dec, dec_ok: typed.iter().any(|t| has_decimal(t)) }
 }
 /// Whether text holds a typed decimal (0.5, 19.6) or a number in scientific notation (1e-5, 2.5E3).
-fn has_decimal(t: &str) -> bool {
+pub(crate) fn has_decimal(t: &str) -> bool {
     let cs: Vec<char> = t.chars().collect();
     cs.iter().enumerate().any(|(i, c)| {
         (*c == '.' && cs.get(i + 1).is_some_and(|d| d.is_ascii_digit()))

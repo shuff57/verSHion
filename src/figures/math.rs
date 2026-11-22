@@ -4110,6 +4110,10 @@ mod polar_num;
 mod polar_tests;
 #[cfg(test)]
 mod tangent_tests;
+pub(crate) mod slope_field;
+pub(crate) mod slope_num;
+#[cfg(test)]
+mod slope_field_tests;
 #[cfg(test)]
 mod number_line_b7_tests;
 
@@ -6616,6 +6620,7 @@ pub(super) fn render_for(id: &str) -> Option<fn(&Params) -> String> {
 pub fn examples(id: &str) -> Option<Vec<super::Example>> {
     flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id)).or_else(|| limits::examples(id)).or_else(|| (id == tangent::ID).then(tangent::examples)).or_else(|| (id == riemann::ID).then(riemann::examples))
         .or_else(|| (id == polar::ID).then(polar::examples))
+        .or_else(|| (id == slope_field::ID).then(slope_field::examples))
 }
 
 /// The Measures card of the figure (none yet): rows for the shape's sides/angles/dimensions.
@@ -6785,6 +6790,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::H
         .or_else(|| (id == tangent::ID).then(|| tangent::handles(p)))
         .or_else(|| (id == riemann::ID).then(|| riemann::handles(p)))
         .or_else(|| (id == polar::ID).then(|| polar::handles(p)))
+        .or_else(|| (id == slope_field::ID).then(|| slope_field::handles(p)))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's
@@ -6845,6 +6851,7 @@ pub fn defs() -> Vec<FigureDef> {
         f(tangent::ID, "Tangent and Secant Lines", "A typed function with the tangent at a point, secants for one or several h, the slopes worked out and the secants closing in on the tangent.", tangent::params, tangent::render),
         f(riemann::ID, "Riemann Sums and Area", "Left, right, midpoint, trapezoid, upper and lower sums of a typed function, from a table, or the exact area under a curve or between two curves.", riemann::params, riemann::render),
         f(polar::ID, "Polar and Parametric Curves", "Polar curves r = f(\u{3b8}) and parametric curves on a polar grid or axes, with polar points, shaded regions and their areas, the tracer and tangents with dy/dx.", polar::params, polar::render),
+        f(slope_field::ID, "Slope Fields", "The slope field of a typed dy/dx = f(x, y), with solution curves through chosen points, Euler's method and its table, equilibrium solutions and student copies to sketch on or match.", slope_field::params, slope_field::render),
     ]
 }
 

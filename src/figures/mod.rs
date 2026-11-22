@@ -835,6 +835,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         math::tangent::ID => math::tangent::relevant(key, p) && cards::relevant(id, key, p),
         math::riemann::ID => math::riemann::relevant(key, p) && cards::relevant(id, key, p),
         math::polar::ID => math::polar::relevant(key, p),
+        math::slope_field::ID => math::slope_field::relevant(key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -921,6 +922,7 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
         math::tangent::ID => math::tangent::warnings(p),
         math::riemann::ID => math::riemann::warnings(p),
         math::polar::ID => math::polar::warnings(p),
+        math::slope_field::ID => math::slope_field::warnings(p),
         _ => vec![] }
 }
 
