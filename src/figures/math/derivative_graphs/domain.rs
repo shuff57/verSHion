@@ -1,0 +1,337 @@
+//! f′ and f″ live only where the typed f has a value. A derivative's own expression often has a wider domain (ln x
+//! gives 1/x, defined for x < 0 too; (√x)² gives 1): its grid row is then guarded by the typed f, so the coordinate
+//! grid's own reader has no value wherever f has none and every drawn point of f′ and f″ lies over a point of f.
+use super::*;
+
+/// The typed expression's real-domain obligations, retained even when differentiation or algebra removes
+/// the corresponding operation. This is structural: narrow gaps and periodic aliasing cannot hide a constraint.
+fn positive(e: &Ex) -> bool {
+    use sym::{Ex::*,F};
+    match e {
+        Num(n)=>*n>0.0, E|Pi|Fun(F::Exp,_)=>true,
+        Pow(a,_)=>positive(a),
+        Add(a,b)=>(positive(a)&&nonnegative(b))||(positive(b)&&nonnegative(a)),
+        Mul(a,b)|Div(a,b)=>positive(a)&&positive(b),
+        _=>false,
+    }
+}
+fn nonnegative(e: &Ex) -> bool {
+    use sym::{Ex::*,F};
+    match e {
+        Num(n)=>*n>=0.0, Fun(F::Abs|F::Sqrt,_)=>true,
+        Pow(_,b) if sym::konst(b).is_some_and(|k| k>0.0 && k.fract()==0.0 && k%2.0==0.0)=>true,
+        Add(a,b)|Mul(a,b)=>nonnegative(a)&&nonnegative(b),
+        _=>positive(e),
+    }
+}
+fn nonzero(e: &Ex) -> bool {
+    match e { Ex::Num(n)=>*n!=0.0, Ex::Neg(a)=>positive(a), _=>positive(e) }
+}
+fn constraints(e: &Ex, out: &mut Vec<Ex>) {
+    use sym::{Ex::*,F};
+    let mut add=|guard:Ex| { if !out.contains(&guard) { out.push(guard); } };
+    match e {
+        Div(_,b) if !nonzero(b)=>add(sym::div(Num(1.0),(**b).clone())),
+        Fun(F::Ln|F::Log,a) if !positive(a)=>add(Fun(F::Ln,a.clone())),
+        Fun(F::Sqrt,a) if !nonnegative(a)=>add(Fun(F::Sqrt,a.clone())),
+        Fun(F::Tan|F::Sec,a)=>add(sym::div(Num(1.0),Fun(F::Cos,a.clone()))),
+        Fun(F::Cot|F::Csc,a)=>add(sym::div(Num(1.0),Fun(F::Sin,a.clone()))),
+        Fun(F::Asin|F::Acos,a)=>add(Fun(F::Sqrt,Box::new(sym::sub(Num(1.0),sym::pow((**a).clone(),Num(2.0)))))),
+        Fun(F::Asec|F::Acsc,a)=>add(Fun(F::Sqrt,Box::new(sym::sub(sym::pow((**a).clone(),Num(2.0)),Num(1.0))))),
+        Pow(a,b)=> {
+            if let Some(k)=sym::konst(b) {
+                // Use the same real odd-root convention as the typed evaluator, without recognising output values.
+                if !nonnegative(a) && k.fract()!=0.0 && !sym::ratio(k,15).is_some_and(|(_,q)| q%2==1) { add(Fun(F::Sqrt,a.clone())); }
+                if k<0.0 && !nonzero(a) { add(sym::div(Num(1.0),(**a).clone())); }
+            } else if !sym::konst(a).is_some_and(|a|a>0.0) { add(e.clone()); }
+        }
+        LogB(base,arg)=> {
+            if !positive(base) { add(Fun(F::Ln,base.clone())); }
+            if !positive(arg) { add(Fun(F::Ln,arg.clone())); }
+            add(sym::div(Num(1.0),Fun(F::Ln,base.clone())));
+        }
+        _=>{}
+    }
+    match e {
+        Neg(a)|Fun(_,a)=>constraints(a,out),
+        Add(a,b)|Sub(a,b)|Mul(a,b)|Div(a,b)|Pow(a,b)|LogB(a,b)=> { constraints(a,out); constraints(b,out); }
+        _=>{}
+    }
+}
+pub(super) fn has_constraints(e: &Ex) -> bool {
+    let mut guards=vec![]; constraints(e,&mut guards); !guards.is_empty()
+}
+fn guarded_body(typed: &Ex, derived: &Ex) -> String {
+    let mut body=sym::print(derived);
+    let mut guards=vec![]; constraints(typed,&mut guards);
+    // Always enforce the source domain explicitly, even when the derived tree contains the same
+    // operations. IEEE rules such as 1^NaN=1 can erase an undefined operand during grid evaluation.
+    for guard in guards { body=format!("({body})+0*({})",sym::print(&guard)); }
+    // Never fall back to an unguarded derivative if a row exceeds the reader's length limit. The grid refuses
+    // an overlong row with its existing panel note, rather than drawing an expression on the wrong domain.
+    body
+}
+pub(super) fn needs_guard(m: &Model, pi: usize, k: usize, _win: (f64,f64)) -> bool {
+    k>0 && has_constraints(&m.pieces[pi].e)
+}
+pub(super) fn row_body(m: &Model, pi: usize, k: usize, _win: (f64,f64)) -> String {
+    let pc=&m.pieces[pi];
+    if k==0 {
+        // IEEE powers such as NaN^0 or 1^NaN can hide a missing inner value in the grid evaluator.
+        // Keep the typed domain explicit on f itself when one of these operators occurs.
+        fn masks_missing(e: &Ex) -> bool {
+            use sym::Ex::*;
+            match e {
+                Pow(a,b) if sym::konst(b)==Some(0.0) || sym::konst(a)==Some(1.0)=>true,
+                Neg(a)|Fun(_,a)=>masks_missing(a),
+                Add(a,b)|Sub(a,b)|Mul(a,b)|Div(a,b)|Pow(a,b)|LogB(a,b)=>masks_missing(a)||masks_missing(b),
+                _=>false,
+            }
+        }
+        let mut body=sym::print(&pc.e);
+        if masks_missing(&pc.e) {
+            let mut guards=vec![]; constraints(&pc.e,&mut guards);
+            for g in guards { body=format!("({body})+0*({})",sym::print(&g)); }
+        }
+        body
+    } else { guarded_body(&pc.e,&pc.d[k-1]) }
+}
+
+/// The open ends of f's domain inside the window (f has a value on one side only, and none at the end itself), with the
+/// side it has values on (−1 left, +1 right).
+pub(super) fn open_ends(m: &Model, an: &Analysis, win: (f64, f64)) -> Vec<(f64, f64)> {
+    if !matches!(m.mode, Mode::F) { return vec![]; }
+    let mut out = vec![];
+    for &x in &an.breaks {
+        if x <= win.0 || x >= win.1 { continue; }
+        let xe = an.fp_marks.iter().find(|mk| (mk.x - x).abs() < 1e-7 * (1.0 + x.abs())).and_then(|mk| mk.pv.ex.clone());
+        if m.has_value(x, xe.as_ref()) { continue; }
+        // (a stretch with no value on one side: values at three scales there, none at all)
+        let none = |s: f64| [1e-3, 1e-6, 1e-9].iter().all(|k| m.f(x + s * k * (1.0 + x.abs())).is_none());
+        let some = |s: f64| [1e-3, 1e-6, 1e-9].iter().all(|k| m.f(x + s * k * (1.0 + x.abs())).is_some());
+        if none(-1.0) && some(1.0) { out.push((x, 1.0)); } else if none(1.0) && some(-1.0) { out.push((x, -1.0)); }
+    }
+    out
+}
+
+/// The one-sided limit of the n-th derivative of f at x from side `s`, where the values settle as the step shrinks.
+pub(super) fn one_sided(m: &Model, n: usize, x: f64, s: f64) -> Option<f64> {
+    let at = |k: f64| m.d(n, x + s * k * (1.0 + x.abs()));
+    let (v1, v2, v3) = (at(1e-5)?, at(1e-7)?, at(1e-9)?);
+    let (d12, d23) = ((v2 - v1).abs(), (v3 - v2).abs());
+    // (settling, as x ln x toward 0: the steps shrink and the last is small; running off, as ln x + 1: they do not)
+    (d23 <= 1e-3 * (1.0 + v3.abs()) && d23 <= 0.5 * d12.max(1e-300) || d12 + d23 <= 1e-12 * (1.0 + v3.abs())).then_some(v3)
+}
+
+// ───────────────────────── kinks: |u| at its zeros ─────────────────────────
+// A derivative of an expression with |u| is written with u/|u|, which has no value where u = 0 whether or not the
+// derivative exists there (x|x|: f′ = 2|x| is 0 at 0). Between the zeros of every u each |u| is ±u, so each derivative
+// row is drawn stretch by stretch in that plain form (the form the analysis uses), joined at a zero exactly where the
+// derivative has a value there (its two sides meet) and open where it does not.
+
+fn abs_args(e: &Ex, out: &mut Vec<Ex>) {
+    use sym::{Ex::*, F};
+    match e {
+        Fun(F::Abs, a) => { out.push((**a).clone()); abs_args(a, out); }
+        Neg(a) | Fun(_, a) => abs_args(a, out),
+        Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) | LogB(a, b) => { abs_args(a, out); abs_args(b, out); }
+        _ => {}
+    }
+}
+/// The zeros of the |u| of piece `pi` strictly inside its stretch of the window.
+fn abs_kinks(m: &Model, pi: usize, win: (f64, f64)) -> Vec<f64> {
+    let pc = &m.pieces[pi];
+    let mut args = vec![];
+    abs_args(&pc.e, &mut args);
+    if args.is_empty() { return vec![]; }
+    let inside = |c: f64| { let h = 1e-9 * (1.0 + c.abs()); in_dom(&pc.dom, c - h) && in_dom(&pc.dom, c + h) };
+    let mut out: Vec<f64> = vec![];
+    for u in &args {
+        let ug = |x: f64| { let v = sym::ev(u, x); v.is_finite().then_some(v) };
+        let du = sym::deriv(u);
+        let dug = |x: f64| { let v = sym::ev(&du, x); v.is_finite().then_some(v) };
+        for ev in find_events(&ug, &dug, &[], win.0, win.1).0 {
+            if ev.k == EvK::Zero && ev.x > win.0 && ev.x < win.1 && inside(ev.x) { out.push(ev.x); }
+        }
+    }
+    out.sort_by(|a, b| a.total_cmp(b));
+    out.dedup_by(|a, b| (*a - *b).abs() < 1e-9 * (1.0 + a.abs()));
+    out
+}
+/// The expression of the n-th derivative of f just to side `s` of x (−1 left, +1 right), in its plain form there: in
+/// lowest terms when it is rational, each |u| as ±u.
+pub(super) fn side_form(m: &Model, n: usize, x: f64, s: f64) -> Option<Ex> {
+    let at = x + s * 1e-9 * (1.0 + x.abs());
+    // (a side is one where f has values: e^(ln x) has no left side at 0)
+    let lives = |t: f64| match m.mode { Mode::F => m.f(t).is_some(), Mode::Fp { .. } => m.d(1, t).is_some() };
+    if ![1e-9, 1e-6].iter().all(|k| lives(x + s * k * (1.0 + x.abs()))) { return None; }
+    let pi = m.piece_at(at)?;
+    let (forms, rats) = m.seg_forms(pi, at);
+    rats.and_then(|r| r.get(n).map(|q| q.ex())).or_else(|| forms.get(n).cloned().flatten())
+}
+/// The one-sided limit of the n-th derivative of f at x from side `s`: the plain form's own value at x where it has one
+/// (exact at an exact x), else where the values settle as the step shrinks.
+pub(super) fn side_limit(m: &Model, n: usize, x: f64, xe: Option<&XV>, s: f64) -> Option<(f64, Option<XV>)> {
+    let lives = |t: f64| match m.mode { Mode::F => m.f(t).is_some(), Mode::Fp { .. } => m.d(1, t).is_some() };
+    if ![1e-9, 1e-6].iter().all(|k| lives(x + s * k * (1.0 + x.abs()))) { return None; }
+    let form = side_form(m, n, x, s);
+    if let Some(v) = form.as_ref().and_then(|e| xe.and_then(|xe| exact::ev(e, xe))) { return Some((v.f(), Some(v))); }
+    // (the expansion of f there, before any float: exactly 0 where no term of that order exists, as (x³ − 2)^(5/3) at ∛2,
+    // whose plain form the floats make 0.0 by rounding; or it runs off)
+    // (only where a root, an |u| or a fractional power has its base 0 there: elsewhere the plain form is analytic)
+    if let Some(pi) = m.piece_at(x + s * 1e-9 * (1.0 + x.abs())).filter(|&pi| singular_at(&m.pieces[pi].e, x, xe)) {
+        if let Some(lim) = m.expansion_limit(pi, n, x, xe, s) { return lim.map(|(v, z)| if z { (0.0, Some(XV::default())) } else { (v, None) }); }
+    }
+    if let Some(e) = form {
+        // (the plain form's float at x is its limit only where that float is trustworthy, counting the typed x itself, which
+        // a float only approximates: the neighbouring floats must give the same value, as they do at an ordinary point and
+        // do not beside (x² − 3)^(−1/3) at the float of √3)
+        let (v, err) = sym::ev_err(&e, x);
+        let near = [x.next_down(), x.next_up()].iter().all(|&y| { let w = sym::ev(&e, y); w.is_finite() && (w - v).abs() <= 1e-8 * (1.0 + v.abs()) });
+        if v.is_finite() && err <= 1e-8 * (1.0 + v.abs()) && near { return Some((v, None)); }
+    }
+    one_sided(m, n, x, s).map(|v| (v, None))
+}
+
+/// The grid rows of the k-th derivative of piece `pi` (function fi of the figure), stretch by stretch between the zeros
+/// of its |u|; None where the piece has no |u| with a zero in the window (its one row as before).
+pub(super) fn kink_rows(m: &Model, pi: usize, fi: usize, k: usize, win: (f64, f64), word: &str) -> Option<Vec<String>> {
+    if k == 0 { return None; }
+    let pc = &m.pieces[pi];
+    let cuts = abs_kinks(m, pi, win);
+    if cuts.is_empty() || cuts.len() > 7 { return None; }
+    let mut ends: Vec<f64> = vec![f64::NEG_INFINITY];
+    ends.extend(cuts.iter().copied());
+    ends.push(f64::INFINITY);
+    let mid = |j: usize| { let (a, b) = (ends[j].max(win.0 - 1.0).min(ends[j + 1] - 1e-6), ends[j + 1].min(win.1 + 1.0).max(ends[j] + 1e-6)); 0.5 * (a + b) };
+    let forms: Vec<(Vec<Option<Ex>>, Option<Vec<exact::Rat>>)> = (0..ends.len() - 1).map(|j| m.seg_forms(pi, mid(j))).collect();
+    let value = |j: usize, n: usize, c: f64| -> Option<f64> {
+        let (f, r) = &forms[j];
+        r.as_ref().and_then(|r| r.get(n)?.f(c)).filter(|v| v.is_finite()).or_else(|| { let v = sym::ev(f.get(n)?.as_ref()?, c); v.is_finite().then_some(v) })
+    };
+    // (joined at a zero where f and its derivatives up to this one have a value there and their two sides meet)
+    let joined: Vec<bool> = cuts.iter().enumerate().map(|(i, &c)| {
+        let from = if matches!(m.mode, Mode::F) { 0 } else { 1 };
+        m.f(c).is_some() && (from..=fi).all(|n| match (value(i, n, c), value(i + 1, n, c)) { (Some(l), Some(r)) => (l - r).abs() <= 1e-9 * (1.0 + l.abs()), _ => false })
+    }).collect();
+    let base = holes::domain(m, pi);
+    let mut rows = vec![];
+    for j in 0..ends.len() - 1 {
+        let (f, r) = &forms[j];
+        let e = r.as_ref().and_then(|r| r.get(fi).map(|q| q.ex())).or_else(|| f.get(fi).cloned().flatten())?;
+        // Specialising an absolute-value piece may remove additional domain-bearing terms.
+        let body = guarded_body(&pc.e,&e);
+        if body.len() > 3500 { return None; }
+        let mut seg = vec![];
+        if j > 0 { seg.push(format!("x {} {:?}", if joined[j - 1] { ">=" } else { ">" }, ends[j])); }
+        if j + 1 < ends.len() - 1 { seg.push(format!("x {} {:?}", if joined[j] { "<=" } else { "<" }, ends[j + 1])); }
+        let seg = seg.join(" and ");
+        let dom = match &base { Some(d) => d.split(" or ").map(|part| format!("{part} and {seg}")).collect::<Vec<_>>().join(" or "), None => seg };
+        rows.push(format!("y = {body}, {dom}{word}"));
+    }
+    Some(rows)
+}
+
+// ───────────────────────── a derivative that exists where its expression has none ─────────────────────────
+// x^(1/3)·sin x has f′(0) = 0, but its derivative's expression, (1/3)x^(−2/3) sin x + x^(1/3) cos x, has no value at 0:
+// the grid would leave a gap there, and an open circle where a sample falls on it. Where f is continuous and the
+// derivative's two sides meet, the grid's circle there is taken out and the curve is drawn on through the point.
+
+/// The value of the n-th derivative of f at x where it exists by its two sides (f continuous there, each derivative up to
+/// n with sides that meet).
+pub(super) fn exists_at(m: &Model, n: usize, x: f64, xe: Option<&XV>) -> Option<f64> {
+    if !matches!(m.mode, Mode::F) { return None; }
+    let fv = m.f_at(x, xe)?;
+    let mut v = fv;
+    for k in 0..=n {
+        let (l, r) = (side_limit(m, k, x, xe, -1.0)?, side_limit(m, k, x, xe, 1.0)?);
+        let meet = match (&l.1, &r.1) { (Some(a), Some(b)) => a == b, _ => (l.0 - r.0).abs() <= 1e-9 * (1.0 + l.0.abs()) };
+        if !meet { return None; }
+        v = if l.1.is_some() { l.0 } else { 0.5 * (l.0 + r.0) };
+        if k == 0 && (v - fv).abs() > 1e-9 * (1.0 + fv.abs()) { return None; }
+    }
+    Some(v)
+}
+
+/// Bridge f′ and f″ in a panel through every special point where they exist but their expressions have no value.
+pub(super) fn bridge(svg: &mut String, m: &Model, p: &Params, fis: &[usize], g: &GridL) {
+    if !matches!(m.mode, Mode::F) { return; }
+    let (wa, wb) = (g.x0, g.x1);
+    let mut cands: Vec<(f64, Option<XV>)> = vec![];
+    for pc in &m.pieces { for c in exact::special_points(&pc.e, wa, wb) { cands.push((c.f(), Some(c))); } }
+    for c in m.kinks(wa, wb) { if !cands.iter().any(|q| (q.0 - c).abs() < 1e-9 * (1.0 + c.abs())) { cands.push((c, None)); } }
+    cands.retain(|q| q.0 > wa && q.0 < wb);
+    if cands.is_empty() { return; }
+    let print = p.s("style") == "Print";
+    let one = p.s("layout") == LAYOUTS[1];
+    let colors = if print { ["#000000", "#444444", "#1c1c1c"] } else { COL };
+    let gw = match p.s("grid") { "Light" | "None" => 1.0, "Bold" => 1.8, _ => 1.4 };
+    let step = (wb - wa) / 900.0;
+    let mut add = String::new();
+    for &fi in fis {
+        if fi == 0 || !shows(p, fi) { continue; }
+        let lw = if print { 1.8 * gw * [1.0, 1.12, 1.4][fi] } else { 2.6 };
+        let dash = dash_of(line_of(p, fi, one));
+        let da = if dash.is_empty() { String::new() } else { format!(r#" stroke-dasharray="{dash}""#) };
+        for (c, ce) in &cands {
+            // (only where the expression itself has no value: elsewhere the grid draws it already)
+            if m.d(fi, *c).is_some() { continue; }
+            let Some(v) = exists_at(m, fi, *c, ce.as_ref()) else { continue };
+            let (lx, ly) = (g.ml + (c - g.x0) * g.ux, g.mt + (g.y1 - v) * g.uy);
+            // the grid's open circle there
+            let mut out = String::with_capacity(svg.len());
+            let mut rest = svg.as_str();
+            while let Some(i) = rest.find("<circle ") {
+                let end = rest[i..].find("/>").map(|e| i + e + 2).unwrap_or(rest.len());
+                let tag = &rest[i..end];
+                let num = |k: &str| tag.split(&format!(" {k}=\"")).nth(1).and_then(|t| t.split('"').next()).and_then(|t| t.parse::<f64>().ok());
+                let ours = tag.contains("fill=\"#fff\"") && tag.contains(&format!("stroke=\"{}\"", colors[fi])) && num("cx").is_some_and(|x| (x - lx).abs() < 1.5) && num("cy").is_some_and(|y| (y - ly).abs() < 1.5);
+                out.push_str(&rest[..i]);
+                if !ours { out.push_str(tag); }
+                rest = &rest[end..];
+            }
+            out.push_str(rest);
+            *svg = out;
+            // the curve on through the point: three samples each side, the value at it
+            let pts: Vec<String> = (-3..=3).filter_map(|j| {
+                let t = c + j as f64 * step;
+                let y = if j == 0 { Some(v) } else { m.d(fi, t) };
+                y.filter(|y| y.is_finite()).map(|y| format!("{:.2},{:.2}", g.ml + (t - g.x0) * g.ux, g.mt + (g.y1 - y.clamp(g.y0 - (g.y1 - g.y0), g.y1 + (g.y1 - g.y0))) * g.uy))
+            }).collect();
+            if pts.len() >= 3 { add.push_str(&format!(r#"<g clip-path="url(#plot)"><polyline points="{}" fill="none" stroke="{}" stroke-width="{lw}" stroke-linejoin="round"{da} data-curve="bridge"/></g>"#, pts.join(" "), colors[fi])); }
+        }
+    }
+    holes::insert(svg, &add);
+}
+
+/// Whether e has a root, an |u| or a fractional power whose base u vanishes at x (exactly at an exact x, else to within
+/// its rounding): the points where a derivative must be decided by the two sides' expansions, not by a float.
+pub(super) fn singular_at(e: &Ex, x: f64, xe: Option<&XV>) -> bool {
+    use sym::{Ex::*, F};
+    let vanishes = |u: &Ex| -> bool {
+        if !sym::has_x(u) { return false; }
+        if let Some(v) = xe.and_then(|xe| exact::ev(u, xe)) { return v.is_zero(); }
+        let (v, err) = sym::ev_err(u, x);
+        let slope = sym::ev(&sym::deriv(u), x).abs();
+        v.is_finite() && v.abs() <= 16.0 * err + 1e-13 * (1.0 + x.abs()) * slope.max(1e-300)
+    };
+    match e {
+        Fun(F::Abs | F::Sqrt, u) => vanishes(u) || singular_at(u, x, xe),
+        Pow(u, k) => (sym::konst(k).is_some_and(|k| k.fract() != 0.0) && vanishes(u)) || singular_at(u, x, xe) || singular_at(k, x, xe),
+        Neg(a) | Fun(_, a) => singular_at(a, x, xe),
+        Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | LogB(a, b) => singular_at(a, x, xe) || singular_at(b, x, xe),
+        _ => false,
+    }
+}
+/// Whether e multiplies a root or fractional power by another power of something (x·x^(1/3), x·√|x|): where advice to
+/// type one power helps.
+pub(super) fn root_product(e: &Ex) -> bool {
+    use sym::{Ex::*, F};
+    let rootish = |f: &Ex| matches!(f, Fun(F::Sqrt, _)) || matches!(f, Pow(_, k) if sym::konst(k).is_some_and(|k| k.fract() != 0.0));
+    match e {
+        Mul(a, b) => (rootish(a) && sym::has_x(b)) || (rootish(b) && sym::has_x(a)) || root_product(a) || root_product(b),
+        Neg(a) | Fun(_, a) => root_product(a),
+        Add(a, b) | Sub(a, b) | Div(a, b) | Pow(a, b) | LogB(a, b) => root_product(a) || root_product(b),
+        _ => false,
+    }
+}

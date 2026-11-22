@@ -118,6 +118,16 @@ static TANGENT_SECANT: [RefSection; 7] = [
     s("Student copy", &["show_answers", "student_copy", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
 ];
 
+static DERIVATIVE_GRAPHS: [RefSection; 7] = [
+    s("Function", &["start", "f", "fp", "pt_x", "pt_y", "name", "graph_labels"], "Type f, or its pieces with their domains (x^2, x < 1; 2 - x, x >= 1). Start from f\u{2032}(x) for an AP graph of f\u{2032}: f is drawn on the key through the point you give."),
+    s("Graphs", &["layout", "show_fpp", "line_f", "line_fp", "line_fpp"], ""),
+    s("Marks", &["crit", "extrema", "inflect", "incdec", "concavity", "sign_fp", "sign_fpp", "absolute", "abs_a", "abs_b", "rounding", "tracer", "tracer_x"], "Drag the tracer on the figure to read f, f\u{2032} and f\u{2033} at one x."),
+    s("x-axis", &["xmin", "xmax", "xstep", "xunits", "xlabel", "numbers"], ""),
+    s("y-axes", &["ymin", "ymax", "ystep", "ymin1", "ymax1", "ystep1", "ymin2", "ymax2", "ystep2", "ylabel"], "Each graph has its own y range."),
+    s("Grid and title", &["minor", "grid", "title", "title_mode", "label_size", "style"], ""),
+    s("Student copy and key", &["show_answers", "student_copy", "key_list"], "Show answers off is the student copy; Student + key exports both."),
+];
+
 static TRANSFORMATIONS: [RefSection; 7] = [
     s("Show", &["show_answers", "question", "show_pre", "show_between", "show_guides", "show_arrows", "pt_labels", "coord_list", "style", "label_size"], "Show answers off is the student copy, where the images are left to draw; with Question on as well, the images are drawn and the transformations left to name."),
     s("Pre-image", &["pre", "closed", "adding", "names", "pre_colour", "pre_line", "pre_weight"], "Click grid points on the figure to add vertices, or type them, one x, y pair per line. Drag a vertex to move it."),
@@ -1301,6 +1311,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "coordinate-grid" => &FIG_6,
         "conic-sections" => &CONIC_SECTIONS,
         "limits-discontinuities" => &LIMITS,
+        "derivative-graphs" => &DERIVATIVE_GRAPHS,
         "transformations" => &TRANSFORMATIONS,
         "cylinder" => &FIG_7,
         "free-body-diagram" => &FIG_8,
