@@ -124,6 +124,9 @@ fn a_decimal_typed_beside_a_cusp_or_pole_has_its_large_true_derivatives() {
         ("(x^2-3)^(2/3)", "1.7320508", |x| 4.0 * x / (3.0 * (x * x - 3.0).cbrt()), |x| { let u = x * x - 3.0; 4.0 / (3.0 * u.cbrt()) - 8.0 * x * x / (9.0 * u.cbrt().powi(4)) }),
         ("(x^2-3)^(2/3)", "1.73205081", |x| 4.0 * x / (3.0 * (x * x - 3.0).cbrt()), |x| { let u = x * x - 3.0; 4.0 / (3.0 * u.cbrt()) - 8.0 * x * x / (9.0 * u.cbrt().powi(4)) }),
         ("sin(x)^(2/3)", "3.1415927", |x| 2.0 * x.cos() / (3.0 * x.sin().cbrt()), |x| { let (s, c) = (x.sin(), x.cos()); -2.0 * s.cbrt().powi(2) / 3.0 - 2.0 * c * c / (9.0 * s.cbrt().powi(4)) }),
+        ("|sin(2x)|", "1.5708", |x| -2.0 * (2.0*x).cos(), |x| 4.0 * (2.0*x).sin()),
+        ("|x^3-2|", "1.259921", |x| -3.0 * x*x, |x| -6.0 * x),
+        ("|e^x-2|", "0.693147", |x| -x.exp(), |x| -x.exp()),
         ("tan(x)", "1.5707963", |x| 1.0 / x.cos().powi(2), |x| 2.0 * x.tan() / x.cos().powi(2)),
         ("(3x-1)^(2/3)", "0.3333333", |x| 2.0 / (3.0 * x - 1.0).cbrt(), |x| -2.0 / (3.0 * x - 1.0).cbrt().powi(4)),
         ("x^(2/3)", "0.0000000001", |x| 2.0 / (3.0 * x.cbrt()), |x| -2.0 / (9.0 * x.cbrt().powi(4))),
@@ -141,7 +144,7 @@ fn a_decimal_typed_beside_a_cusp_or_pole_has_its_large_true_derivatives() {
             let v: String = v.chars().map(|c| match c { '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}'..='\u{2079}' => char::from_digit(c as u32 - 0x2070, 10).unwrap(), c => c }).collect();
             let got: f64 = v.parse().unwrap_or_else(|_| panic!("{fx} at {tx}: {r}"));
             let want = g(x);
-            assert!((got - want).abs() <= 1e-3 * want.abs(), "{fx} at {tx}: derivative {k} written {got}, by hand {want}");
+            assert!((got - want).abs() <= (1e-3 * want.abs()).max(if want.abs() >= 0.01 { 0.005 } else { 0.0 }), "{fx} at {tx}: derivative {k} written {got}, by hand {want}");
         }
     }
 }

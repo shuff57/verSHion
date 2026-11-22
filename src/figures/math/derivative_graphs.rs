@@ -1963,6 +1963,21 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                     }
                 }
                 _ => {
+                    // Use the same smooth branch as the plotted curve beside an absolute-value corner.
+                    // Differentiating u/|u| directly can introduce cancelling terms of order 1/|u|.
+                    if lp.is_some_and(|pi| lp == rp && sym::print(&m.pieces[pi].e).contains("abs(")) {
+                        let left = domain::side_form(m, fi, t.v, -1.0);
+                        let right = domain::side_form(m, fi, t.v, 1.0);
+                        if let Some(form) = left.filter(|form| right.as_ref() == Some(form)) {
+                            if let Some(exact) = te.as_ref().and_then(|x| exact::ev(&form, x)) {
+                                return Some((exact.f(), Some(exact)));
+                            }
+                            let (value, error) = sym::ev_err(&form, t.v);
+                            if value.is_finite() && error <= 1e-8 * (1.0 + value.abs()) {
+                                return Some((value, None));
+                            }
+                        }
+                    }
                     // (an ordinary point: the derivative's own value. Where its exact expression has no value and f has values
                     // on one side only, the slope there is the one side's, which must settle)
                     let undefined = te.as_ref().is_some_and(|x| [lp, rp].iter().flatten().any(|&pi| m.fexpr(pi, fi).is_some_and(|e| exact::undefined_at(e, x))));
