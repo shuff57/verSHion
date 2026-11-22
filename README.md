@@ -23,10 +23,12 @@ one self-contained binary, 64-bit Linux with glibc 2.35+ (`docs/desktop-release.
   Cartridge / LMS export `.zip`s, Respondus and text2qti text, Quizlet/Anki term lists, Kahoot and
   Brightspace sheets, and real `.parrot.json` Test Parrot packages; paste or file. Grammar and
   mappings: `src/formats.rs` module docs; `VERSHION_PARSE=<file>` prints any file's parse as JSON.
-- **AI conversion**: a photo/scan/screenshot is transcribed to import text by
-  **Ollama Cloud** (`gemma4:31b` — default), local **Ollama**, **OpenRouter**, or any custom
-  OpenAI-compatible endpoint. Keys are read from the environment or the ollama-cloud credentials
-  file at request time and never stored.
+- **AI conversion**: photos, scans and PDF pages become Ditto question banks through the same
+  desktop/web workflow. Choose **verSHion AI (account credits)**, **your own key** (OpenRouter,
+  Ollama Cloud or a compatible endpoint), or **local Ollama** (the default). Keys saved on the
+  desktop are separate from settings and backups; browser keys stay in memory for the tab.
+  Strict JSON schemas and native figure tools are optional; existing servers use compatible JSON.
+  See `docs/ai-harness-spec.md` for the shared protocol and rollout flags.
 
 Data lives in `${XDG_DATA_HOME:-~/.local/share}/vershion/`. Headless helpers:
 `VERSHION_SELFTEST=1`, `VERSHION_SEED=1`, `VERSHION_CONVERT=<file>` (prints import text),

@@ -91,6 +91,7 @@ pub mod publishdel;
 pub mod poolio;
 pub mod poolmail;
 pub mod privacynear;
+pub mod pictures;
 pub mod poolkeys;
 pub mod preread;
 pub mod qhash;

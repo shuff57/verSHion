@@ -1,7 +1,7 @@
 //! The model call (port of `callOpenRouter`, `shapeReply` and `callModel` in worker/src/ai/index.ts).
 //!
-//! OpenRouter is the first upstream. Off Cloudflare there is no Workers AI binding, so the fallback is a
-//! second OpenRouter model (decision 2026-10-31): one try on the primary, then up to two on the fallback
+//! OpenRouter is the first upstream (CheaperInference the default, see `config.rs`). Off Cloudflare there is no Workers AI binding, so the fallback is a
+//! second model on the same provider (decision 2026-10-31): one try on the primary, then up to two on the fallback
 //! model, or a second try on the primary when none is configured. The HTTP itself sits behind `Transport`
 //! so the logic is tested without a network. Only a status or an error CLASS is logged: a message can carry
 //! the key or the prompt.
@@ -15,12 +15,18 @@ pub const CHEAPERINFERENCE_URL: &str = "https://api.cheaperinference.com/v1/chat
 /// CheaperInference names the same model without the vendor prefix.
 pub const CHEAPERINFERENCE_DEFAULT_MODEL: &str = "deepseek-v4.1-flash-1017";
 
-pub struct OpenRouter {
+/// One configured chat-completions provider: the key, endpoint and model the relay calls. Built by
+/// `config.rs` from `AI_UPSTREAM` (CheaperInference by default, or OpenRouter).
+pub struct Upstream {
+    /// Which provider this is, as `/ai/health` reports it ("openrouter" or "cheaperinference").
+    pub name: &'static str,
     pub key: String,
     /// The chat-completions endpoint of the upstream.
     pub url: String,
     /// A plain OpenAI-compatible upstream (CheaperInference): none of OpenRouter's own request fields are sent.
     pub plain: bool,
+    pub structured_outputs: bool,
+    pub tools: bool,
     /// Extra top-level request fields for a plain upstream (for example how it turns reasoning off), from the deployment's env.
     pub extra: Option<serde_json::Map<String, Value>>,
     pub model: String,
@@ -31,9 +37,10 @@ pub struct OpenRouter {
     pub timeout: Duration,
 }
 
-impl OpenRouter {
-    pub fn new(key: impl Into<String>) -> Self {
-        Self { key: key.into(), url: OPENROUTER_URL.into(), plain: false, extra: None, model: DEFAULT_MODEL.into(), fallback_model: None, privacy: true, timeout: Duration::from_secs(60) }
+impl Upstream {
+    /// OpenRouter with its defaults; the other fields are overridden with struct update syntax.
+    pub fn openrouter(key: impl Into<String>) -> Self {
+        Self { name: "openrouter", key: key.into(), url: OPENROUTER_URL.into(), plain: false, structured_outputs: false, tools: false, extra: None, model: DEFAULT_MODEL.into(), fallback_model: None, privacy: true, timeout: Duration::from_secs(60) }
     }
 }
 
@@ -137,10 +144,16 @@ pub struct Reply {
 /// completion is not an answer (None), so the caller retries.
 pub fn shape_reply(raw: &Value) -> Option<Reply> {
     let choice = raw.pointer("/choices/0");
-    let content = choice?.pointer("/message/content")?.as_str()?;
-    if content.trim().is_empty() {
-        return None;
+    let source=choice?.get("message")?;
+    let content=source["content"].as_str().unwrap_or("");
+    let calls=source["tool_calls"].as_array().filter(|a| !a.is_empty() && a.len()<=vershion_ai_core::MAX_TOOL_CALLS);
+    if content.trim().is_empty() && calls.is_none() && source.get("refusal").is_none() { return None; }
+    let mut message=json!({"role":"assistant","content":if content.is_empty(){Value::Null}else{json!(content)}});
+    if let Some(calls)=calls {
+        message["tool_calls"]=json!(calls);
+        if let Some(details)=source.get("reasoning_details").filter(|d|d.is_array() && d.to_string().len()<=64*1024) { message["reasoning_details"]=details.clone(); }
     }
+    if let Some(refusal)=source.get("refusal") { message["refusal"]=refusal.clone(); }
     let n = |p: &str| raw.pointer(p).and_then(Value::as_f64).filter(|x| x.is_finite()).unwrap_or(0.0);
     // CheaperInference reports the price as a decimal string in `billing.billed_cost_usd`; OpenRouter as `usage.cost`.
     let billed = raw.pointer("/billing/billed_cost_usd").and_then(Value::as_str).and_then(|c| c.parse::<f64>().ok()).filter(|x| x.is_finite());
@@ -152,14 +165,14 @@ pub fn shape_reply(raw: &Value) -> Option<Reply> {
         out_tokens,
         cost_usd: billed.unwrap_or_else(|| n("/usage/cost")),
         reply: json!({
-            "choices": [{ "index": 0, "message": { "role": "assistant", "content": content }, "finish_reason": finish }],
+            "choices": [{ "index": 0, "message": message, "finish_reason": finish }],
             "usage": { "prompt_tokens": in_tokens, "completion_tokens": out_tokens, "total_tokens": n("/usage/total_tokens") },
         }),
     })
 }
 
 /// The request body. The client chose none of the model, reasoning or provider options.
-pub fn request_body(o: &OpenRouter, model: &str, messages: &[Message], max_tokens: i64, temperature: f64) -> Value {
+pub fn request_body(o: &Upstream, model: &str, messages: &[Message], max_tokens: i64, temperature: f64) -> Value {
     if o.plain {
         let mut body = json!({
             "model": model,
@@ -188,21 +201,27 @@ pub fn request_body(o: &OpenRouter, model: &str, messages: &[Message], max_token
     })
 }
 
-async fn call_once<T: Transport>(t: &T, o: &OpenRouter, model: &str, messages: &[Message], max_tokens: i64, temperature: f64) -> ModelOut {
-    let body = request_body(o, model, messages, max_tokens, temperature);
+async fn call_once<T: Transport>(t: &T, o: &Upstream, model: &str, messages: &[Message], max_tokens: i64, temperature: f64, options: &super::request::Options) -> ModelOut {
+    let mut body = request_body(o, model, messages, max_tokens, temperature);
+    if let Some(format)=&options.response_format { body["response_format"]=format.clone(); }
+    if let Some(tools)=&options.tools {
+        body.as_object_mut().unwrap().remove("response_format");
+        body["tools"]=tools.clone(); body["tool_choice"]=options.tool_choice.clone().unwrap_or(json!("auto")); body["parallel_tool_calls"]=json!(false);
+    }
+    if options.advanced() && !o.plain { body["provider"]["require_parameters"]=json!(true); }
     match t.post(Post { url: &o.url, key: &o.key, body: &body, timeout: o.timeout }).await {
         Err(class) => {
-            tracing::error!("ai: openrouter call failed ({class})");
+            tracing::error!(provider=o.name, "ai call failed ({class})");
             ModelOut::Failed
         }
         Ok(a) if !(200..300).contains(&a.status) => {
-            tracing::error!("ai: openrouter answered {}", a.status);
+            tracing::error!(provider=o.name, "ai answered {}", a.status);
             ModelOut::Failed
         }
         Ok(a) => match shape_reply(&a.body) {
             Some(r) => ModelOut::Ok(r),
             None => {
-                tracing::error!("ai: openrouter returned no text");
+                tracing::error!(provider=o.name, "ai returned no answer");
                 ModelOut::Empty
             }
         },
@@ -211,18 +230,23 @@ async fn call_once<T: Transport>(t: &T, o: &OpenRouter, model: &str, messages: &
 
 /// One model turn. Primary once; then the fallback model (up to two tries) or, with none, the primary again.
 /// The result is the last failure's class when every try fails.
-pub async fn call_model<T: Transport>(t: &T, o: &OpenRouter, messages: &[Message], max_tokens: i64, temperature: f64) -> ModelOut {
-    let first = call_once(t, o, &o.model, messages, max_tokens, temperature).await;
+pub async fn call_model<T: Transport>(t: &T, o: &Upstream, messages: &[Message], max_tokens: i64, temperature: f64) -> ModelOut {
+    call_model_with_options(t,o,messages,max_tokens,temperature,&super::request::Options::default()).await
+}
+
+pub async fn call_model_with_options<T: Transport>(t: &T, o: &Upstream, messages: &[Message], max_tokens: i64, temperature: f64, options: &super::request::Options) -> ModelOut {
+    let first = call_once(t, o, &o.model, messages, max_tokens, temperature, options).await;
     if matches!(first, ModelOut::Ok(_)) {
         return first;
     }
-    let (model, tries) = match &o.fallback_model {
+    let fallback = if options.advanced() || messages.iter().any(|m| matches!(m.content, super::request::Content::Protocol(_))) { None } else { o.fallback_model.as_ref() };
+    let (model, tries) = match fallback {
         Some(m) => (m.as_str(), 2),
         None => (o.model.as_str(), 1),
     };
     let mut last = first;
     for _ in 0..tries {
-        last = call_once(t, o, model, messages, max_tokens, temperature).await;
+        last = call_once(t, o, model, messages, max_tokens, temperature, options).await;
         if matches!(last, ModelOut::Ok(_)) {
             break;
         }
@@ -235,8 +259,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tool_only_answers_keep_reasoning_and_cost_without_leaking_the_raw_body() {
+        let details=json!([{"type":"future","opaque":42}]);
+        let raw=json!({"secret":"never forward","choices":[{"message":{"content":null,"tool_calls":[{"id":"x","type":"function","function":{"name":"get_figure","arguments":"{}"}}],"reasoning_details":details},"finish_reason":"tool_calls"}],"usage":{"cost":0.02}});
+        let reply=shape_reply(&raw).unwrap();
+        assert_eq!(reply.cost_usd,0.02); assert!(reply.reply.get("secret").is_none());
+        assert_eq!(reply.reply["choices"][0]["message"]["reasoning_details"],details);
+        assert_eq!(reply.reply["choices"][0]["finish_reason"],"tool_calls");
+    }
+
+    #[test]
     fn a_plain_upstream_gets_no_openrouter_fields_and_its_cost_is_read_from_billing() {
-        let o = OpenRouter { plain: true, extra: json!({ "reasoning_effort": "none", "max_tokens": 1 }).as_object().cloned(), ..OpenRouter::new("k") };
+        let o = Upstream { plain: true, extra: json!({ "reasoning_effort": "none", "max_tokens": 1 }).as_object().cloned(), ..Upstream::openrouter("k") };
         let body = request_body(&o, "gemma-4-26b-a4b-it", &[], 100, 0.0);
         assert_eq!((body["reasoning_effort"].as_str(), body["max_tokens"].as_i64()), (Some("none"), Some(100)), "extra fields never override the relay's own");
         assert!(body.get("reasoning").is_none() && body.get("usage").is_none() && body.get("provider").is_none());
@@ -284,8 +318,16 @@ mod tests {
     fn msgs() -> Vec<Message> {
         vec![Message { role: "user".into(), content: Content::Text("hi".into()) }]
     }
-    fn or(fallback: Option<&str>) -> OpenRouter {
-        OpenRouter { model: "google/test-model".into(), fallback_model: fallback.map(String::from), ..OpenRouter::new("or-secret-key") }
+    fn or(fallback: Option<&str>) -> Upstream {
+        Upstream { model: "google/test-model".into(), fallback_model: fallback.map(String::from), ..Upstream::openrouter("or-secret-key") }
+    }
+
+    #[tokio::test]
+    async fn a_schema_request_never_falls_back_to_a_model_with_unknown_capabilities() {
+        let fake=Fake::new(vec![status(500),ok("{}",0.01)]);
+        let options=super::super::request::Options {response_format:Some(vershion_ai_core::figure_pick().response_format()),..Default::default()};
+        let _=call_model_with_options(&fake,&or(Some("other-model")),&msgs(),200,0.0,&options).await;
+        assert_eq!(fake.models(),["google/test-model","google/test-model"]);
     }
 
     #[tokio::test]
@@ -317,7 +359,7 @@ mod tests {
     #[tokio::test]
     async fn privacy_can_be_relaxed_only_by_the_deployment() {
         let t = Fake::new(vec![ok("x", 0.0)]);
-        let o = OpenRouter { privacy: false, ..or(None) };
+        let o = Upstream { privacy: false, ..or(None) };
         call_model(&t, &o, &msgs(), 10, 0.0).await;
         assert_eq!(t.seen.lock().unwrap()[0].2["provider"], json!({ "data_collection": "allow" }));
     }

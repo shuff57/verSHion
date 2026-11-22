@@ -173,9 +173,37 @@ pub fn start_service(store: &mut AiStore, lim: &Limits, body: &Value, who: &Call
     if !who.credited || !credits_on {
         return Outcome::json(200, json!({ "session": null, "credits": 0, "unlimited": true }));
     }
+    // Derive an account-scoped session id. Keeping the operation mapping in the session
+    // row gives it exactly the same erasure and retention policy, without another table.
+    let operation = match body.get("operation") {
+        None => None,
+        Some(v) => match v.as_str().filter(|s| s.len()==32 && s.bytes().all(|b|b.is_ascii_hexdigit() && !b.is_ascii_uppercase())) {
+            Some(id) => {
+                use sha2::{Digest,Sha256};
+                let mut hash=Sha256::new(); hash.update(b"vershion-ai-operation-v1\0"); hash.update(who.user_id.as_bytes()); hash.update([0]); hash.update(id.as_bytes());
+                Some(hash.finalize()[..16].iter().map(|b|format!("{b:02x}")).collect::<String>())
+            },
+            None => return Outcome::err(400,"bad_request","Invalid operation id."),
+        }
+    };
     let week_start = utc_week_start(now);
     let credits = service.credits(pages);
     let run = (|| -> rusqlite::Result<Outcome> {
+        if let Some(id)=&operation {
+            if let Some(mut existing)=store.operation_session(id,&who.user_id)? {
+                if existing["service"]!=service.id() || existing["pages"]!=pages {
+                    return Ok(Outcome::err(409,"operation_conflict","This operation was already started with different inputs."));
+                }
+                if existing["expires_at"].as_i64().unwrap_or(0)<=now {
+                    return Ok(Outcome::err(409,"operation_expired","This operation has expired. Start a new operation."));
+                }
+                existing["session"]=json!(id);
+                existing["left"]=json!((lim.weekly_credits-store.credits_spent(&who.user_id,week_start,now)?).max(0));
+                existing["purchased"]=json!(store.purchased_balance(&who.user_id)?);
+                existing["resets_at"]=json!(week_start+WEEK_MS);
+                return Ok(Outcome::json(200,existing));
+            }
+        }
         if store.cost_since(utc_day_start(now))? >= lim.daily_usd {
             return Ok(Outcome::err(429, "quota_exhausted", "The AI allowance for today is used up.").with("Retry-After", until_midnight(now)));
         }
@@ -196,7 +224,7 @@ pub fn start_service(store: &mut AiStore, lim: &Limits, body: &Value, who: &Call
                     }),
                 ));
             }
-            let id = store.new_id()?;
+            let id = match &operation { Some(id)=>id.clone(),None=>store.new_id()? };
             let expires_at = now + service.ttl_ms();
             let s = NewSession {
                 id: &id, principal: &who.user_id, service: service.id(), credits, paid, calls_allowed: service.calls(pages), pages, now, expires_at, week_start, allowance: lim.weekly_credits,
@@ -261,6 +289,22 @@ mod tests {
         for _ in 0..5 {
             assert_eq!(svc(s, who, json!({ "service": "figure" }), T).status, 200);
         }
+    }
+
+    #[test]
+    fn service_creation_is_idempotent_and_bound_to_account_and_inputs() {
+        let mut c=conn(); let mut s=AiStore::new(&mut c);
+        let body=json!({"service":"import","pages":3,"operation":"0123456789abcdef0123456789abcdef"});
+        let first=svc(&mut s,&u("u1"),body.clone(),T);
+        let again=svc(&mut s,&u("u1"),body.clone(),T+1);
+        assert_eq!(first.status,200); assert_eq!(again.status,200);
+        assert_eq!(first.body["session"],again.body["session"]);
+        assert_eq!(s.credits_spent("u1",MON,T+1).unwrap(),2);
+        let other=svc(&mut s,&u("u2"),body.clone(),T+1);
+        assert_ne!(first.body["session"],other.body["session"]);
+        let mut changed=body.clone(); changed["pages"]=json!(4);
+        assert_eq!(svc(&mut s,&u("u1"),changed,T+1).status,409);
+        assert_eq!(svc(&mut s,&u("u1"),body,T+3*HOUR_MS).body["error"]["code"],"operation_expired");
     }
 
     #[test]

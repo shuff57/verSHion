@@ -18,6 +18,7 @@ pub enum Part {
 pub enum Content {
     Text(String),
     Parts(Vec<Part>),
+    Protocol(Value),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,7 +30,9 @@ pub struct Message {
 impl Message {
     /// The OpenAI-shaped JSON the upstream takes.
     pub fn to_json(&self) -> Value {
+        if let Content::Protocol(v) = &self.content { return v.clone(); }
         let content = match &self.content {
+            Content::Protocol(_) => unreachable!(),
             Content::Text(t) => json!(t),
             Content::Parts(ps) => Value::Array(
                 ps.iter()
@@ -61,6 +64,10 @@ pub fn data_uri_bytes(url: &str) -> Option<usize> {
 
 /// Validates `messages` and counts images across the whole conversation. Err carries the client-facing sentence.
 pub fn read_messages(v: &Value, max_image_bytes: usize) -> Result<Vec<Message>, String> {
+    read_messages_with_tools(v, max_image_bytes, false)
+}
+
+pub fn read_messages_with_tools(v: &Value, max_image_bytes: usize, tools: bool) -> Result<Vec<Message>, String> {
     let list = match v.as_array() {
         Some(a) if !a.is_empty() => a,
         _ => return Err("messages must be a non-empty array".into()),
@@ -70,10 +77,43 @@ pub fn read_messages(v: &Value, max_image_bytes: usize) -> Result<Vec<Message>, 
     }
     let mut out = Vec::with_capacity(list.len());
     let mut images = 0;
+    let mut pending = std::collections::BTreeSet::new();
+    let mut seen = std::collections::BTreeSet::new();
     for (i, m) in list.iter().enumerate() {
         let Some(obj) = m.as_object() else {
             return Err(format!("messages[{i}] is not an object"));
         };
+        if tools && obj.get("role").and_then(Value::as_str) == Some("tool") {
+            let id=obj.get("tool_call_id").and_then(Value::as_str).ok_or("A tool result needs a call id.")?;
+            if !pending.remove(id) { return Err("A tool result has no pending call.".into()); }
+            let text=obj.get("content").and_then(Value::as_str).ok_or("Tool results must be strings.")?;
+            if text.len()>256*1024 { return Err("A tool result is too large.".into()); }
+            out.push(Message {role:"tool".into(),content:Content::Protocol(json!({"role":"tool","tool_call_id":id,"content":text}))});
+            continue;
+        }
+        if !pending.is_empty() { return Err("Return all tool results before continuing the conversation.".into()); }
+        if tools && obj.get("role").and_then(Value::as_str) == Some("assistant") && obj.contains_key("tool_calls") {
+            let calls=obj["tool_calls"].as_array().filter(|a| !a.is_empty() && a.len()<=vershion_ai_core::MAX_TOOL_CALLS).ok_or("Invalid tool calls.")?;
+            for call in calls {
+                let id=call["id"].as_str().filter(|id| !id.is_empty() && id.len()<=128).ok_or("Invalid tool call id.")?;
+                if !seen.insert(id.to_string()) { return Err("Duplicate tool call id.".into()); }
+                if call["type"]!="function" { return Err("Only function tools are accepted.".into()); }
+                let name=call["function"]["name"].as_str().ok_or("Invalid tool name.")?;
+                if !vershion_ai_core::FIGURE_TOOLS.contains(&name) && name!="submit_result" { return Err("Unknown tool name.".into()); }
+                let args=call["function"]["arguments"].as_str().filter(|s| s.len()<=vershion_ai_core::MAX_SCHEMA_BYTES).ok_or("Invalid tool arguments.")?;
+                if !serde_json::from_str::<Value>(args).is_ok_and(|v| v.is_object()) { return Err("Tool arguments must encode a JSON object.".into()); }
+                pending.insert(id.to_string());
+            }
+            let content=obj.get("content").cloned().unwrap_or(Value::Null);
+            if !content.is_null() && !content.is_string() { return Err("Invalid assistant content.".into()); }
+            let mut msg=json!({"role":"assistant","content":content,"tool_calls":calls});
+            if let Some(reasoning)=obj.get("reasoning_details") {
+                if !reasoning.is_array() || reasoning.to_string().len()>64*1024 { return Err("Invalid reasoning metadata.".into()); }
+                msg["reasoning_details"]=reasoning.clone();
+            }
+            out.push(Message{role:"assistant".into(),content:Content::Protocol(msg)});
+            continue;
+        }
         let role = match obj.get("role").and_then(Value::as_str) {
             Some(r @ ("system" | "user" | "assistant")) => r.to_string(),
             _ => return Err(format!("messages[{i}].role must be system, user or assistant")),
@@ -112,6 +152,54 @@ pub fn read_messages(v: &Value, max_image_bytes: usize) -> Result<Vec<Message>, 
         }
         out.push(Message { role, content: Content::Parts(read) });
     }
+    if !pending.is_empty() { return Err("Tool calls need results before requesting another turn.".into()); }
+    Ok(out)
+}
+
+/// Only these new request fields can cross the relay. Provider/model/privacy options
+/// remain deployment-owned, and complex or external-reference schemas are refused.
+#[derive(Clone, Debug, Default)]
+pub struct Options {
+    pub response_format: Option<Value>,
+    pub tools: Option<Value>,
+    pub tool_choice: Option<Value>,
+}
+impl Options {
+    pub fn advanced(&self) -> bool { self.response_format.is_some() || self.tools.is_some() }
+}
+pub fn read_options(body: &serde_json::Map<String,Value>, schemas: bool, tools: bool) -> Result<Options,String> {
+    let mut out=Options::default();
+    if let Some(format)=body.get("response_format") {
+        match format["type"].as_str() {
+            Some("json_object") => {},
+            Some("json_schema") if schemas => {
+                let spec=&format["json_schema"];
+                let name=spec["name"].as_str().filter(|s| !s.is_empty() && s.len()<=64 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b==b'_')).ok_or("Invalid schema name.")?;
+                vershion_ai_core::check_schema(&spec["schema"])?;
+                out.response_format=Some(json!({"type":"json_schema","json_schema":{"name":name,"strict":true,"schema":spec["schema"]}}));
+            },
+            _=>return Err("Structured outputs are not enabled for this deployment or the requested format is invalid.".into()),
+        }
+    }
+    if let Some(list)=body.get("tools") {
+        if !tools { return Err("Native tools are not enabled for this deployment.".into()); }
+        let list=list.as_array().filter(|a| !a.is_empty() && a.len()<=6).ok_or("Invalid tool definitions.")?;
+        let mut defs=Vec::new(); let mut names=std::collections::BTreeSet::new();
+        for t in list {
+            let f=&t["function"];
+            let name=f["name"].as_str().ok_or("A tool needs a name.")?;
+            if t["type"]!="function" || (!vershion_ai_core::FIGURE_TOOLS.contains(&name) && name!="submit_result") || !names.insert(name) { return Err("Unknown or duplicate function tool.".into()); }
+            vershion_ai_core::check_schema(&f["parameters"])?;
+            let desc=f["description"].as_str().unwrap_or("");
+            if desc.len()>2048 { return Err("Tool description is too long.".into()); }
+            defs.push(json!({"type":"function","function":{"name":name,"description":desc,"parameters":f["parameters"],"strict":f["strict"].as_bool().unwrap_or(false)}}));
+        }
+        let choice=body.get("tool_choice").cloned().unwrap_or(json!("auto"));
+        let valid=choice.as_str().is_some_and(|s| ["auto","none","required"].contains(&s)) || (choice["type"]=="function" && choice["function"]["name"].as_str().is_some_and(|s|names.contains(s)));
+        if !valid { return Err("Invalid tool choice.".into()); }
+        out.tools=Some(json!(defs)); out.tool_choice=Some(choice);
+    }
+    if out.tools.is_some() && out.response_format.is_some() { return Err("Choose a result schema or tools for a turn, not both.".into()); }
     Ok(out)
 }
 
@@ -131,6 +219,31 @@ mod tests {
     use super::*;
 
     const PNG: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+    #[test]
+    fn native_history_requires_matching_results_and_preserves_opaque_metadata() {
+        let detail=json!([{"type":"future","opaque":true}]);
+        let assistant=json!({"role":"assistant","content":null,"tool_calls":[{"id":"a","type":"function","function":{"name":"get_figure","arguments":"{\"id\":\"triangle\"}"}}],"reasoning_details":detail});
+        let result=json!({"role":"tool","tool_call_id":"a","content":"parameters"});
+        let messages=read_messages_with_tools(&json!([assistant.clone(),result.clone()]),1024,true).unwrap();
+        assert_eq!(messages[0].to_json()["reasoning_details"],detail);
+        assert_eq!(messages[1].to_json(),result);
+        assert!(read_messages_with_tools(&json!([assistant.clone()]),1024,true).is_err());
+        assert!(read_messages_with_tools(&json!([result.clone()]),1024,true).is_err());
+        assert!(read_messages_with_tools(&json!([assistant,result.clone(),result]),1024,true).is_err());
+    }
+    #[test]
+    fn only_bounded_explicit_schema_and_function_options_are_forwarded() {
+        let format=vershion_ai_core::figure_pick().response_format();
+        let body=json!({"response_format":format,"provider":{"data_collection":"allow"},"model":"expensive"});
+        assert!(read_options(body.as_object().unwrap(),false,false).is_err());
+        let opts=read_options(body.as_object().unwrap(),true,false).unwrap();
+        assert_eq!(opts.response_format.unwrap()["type"],"json_schema");
+        let body=json!({"tools":[{"type":"function","function":{"name":"shell","parameters":{"type":"object"}}}]});
+        assert!(read_options(body.as_object().unwrap(),true,true).is_err());
+        let body=json!({"response_format":{"type":"json_schema","json_schema":{"name":"bad","schema":{"type":"object","$ref":"http://external"}}}});
+        assert!(read_options(body.as_object().unwrap(),true,true).is_err());
+    }
 
     #[test]
     fn only_png_jpeg_webp_base64_data_uris_count_and_their_size_is_the_decoded_size() {

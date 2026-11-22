@@ -8,8 +8,8 @@ angles__defaults a9ab1a805bb5a62d
 angles__start 44e61618780dc53d
 bank-reconciliation__defaults c20d9ecbca79cb9d
 bank-reconciliation__start c20d9ecbca79cb9d
-bar-chart__defaults aee0af800ed41b11
-bar-chart__start 208a340577ea2008
+bar-chart__defaults fa536d3ade24faad
+bar-chart__start 27497a1d0463218c
 base-ten-blocks__defaults 97fbd9fc9cf4b4c9
 base-ten-blocks__start 97fbd9fc9cf4b4c9
 block-diagram__defaults b867b23d618e4937
@@ -84,6 +84,8 @@ depreciation-schedule__defaults 8418f5e4d808335c
 depreciation-schedule__start 8418f5e4d808335c
 derivative-graphs__defaults 22a52142041c19c1
 derivative-graphs__start 22a52142041c19c1
+direction-field__defaults 46be19faeed77a03
+direction-field__start 46be19faeed77a03
 discrete-distribution__defaults 767041fc6b5f1a4e
 discrete-distribution__start 767041fc6b5f1a4e
 dna-protein-synthesis__defaults 41bb336383f7343a
@@ -138,6 +140,8 @@ gear-train__defaults d59a75455ad1a05e
 gear-train__start d59a75455ad1a05e
 gel-electrophoresis__defaults 2f7dbe42faffe79c
 gel-electrophoresis__start 2f7dbe42faffe79c
+geometry-diagram__defaults a1b99783b1a91698
+geometry-diagram__start a1b99783b1a91698
 graph-diagram__defaults 064f2b98ca36050c
 graph-diagram__start 064f2b98ca36050c
 grid-reference__defaults bd20f29bc53724a1
@@ -258,6 +262,8 @@ plate-boundaries__defaults 902cec21e2eb9cc1
 plate-boundaries__start 902cec21e2eb9cc1
 plot-arc__defaults 7a80ecd90bf2d7c5
 plot-arc__start 7a80ecd90bf2d7c5
+polar-grid__defaults 593bb4e546672837
+polar-grid__start 593bb4e546672837
 polar-parametric__defaults c16127d1c8ca13a2
 polar-parametric__start c16127d1c8ca13a2
 population-growth__defaults f3c0728e4ae634ca
@@ -314,8 +320,8 @@ ruler-reading__defaults 3f6161466de39320
 ruler-reading__start 3740bf21470e8d6b
 sampling-distribution__defaults 0ce8cab36065a2f8
 sampling-distribution__start 0ce8cab36065a2f8
-scatterplot__defaults 9346175339a08c40
-scatterplot__start 9346175339a08c40
+scatterplot__defaults 1d70a0f15303a28a
+scatterplot__start 1d70a0f15303a28a
 sentence-diagram__defaults 16a9df68074b212f
 sentence-diagram__start 16a9df68074b212f
 sequences-series__defaults 9240b785875bde18

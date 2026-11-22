@@ -4687,6 +4687,7 @@ dependencies = [
  "num-bigint",
  "num-rational",
  "num-traits",
+ "pollster 0.4.0",
  "resvg",
  "rexie",
  "rfd",
@@ -4698,12 +4699,21 @@ dependencies = [
  "ttf-parser",
  "ureq",
  "url",
+ "vershion-ai-core",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
  "zeroize",
  "zip",
+]
+
+[[package]]
+name = "vershion-ai-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

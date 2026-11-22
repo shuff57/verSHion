@@ -64,9 +64,9 @@ static FIG_5: [RefSection; 5] = [
 
 static FIG_6: [RefSection; 4] = [
     s("Titles", &["title", "equations", "eq_labels", "title_mode", "xtitle_mode", "xtitle", "ytitle_mode", "ytitle"], ""),
-    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "arrows", "square", "xlabel", "xnum", "xunits", "x_fractions", "x_left_end", "x_right_end"], ""),
-    s("y-axis", &["ymin", "ymax", "ystep", "ylabel", "ynum", "y_fractions", "y_bottom_end", "y_top_end"], ""),
-    s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label"], ""),
+    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "arrows", "square", "xlabel", "xnum", "xunits", "x_fractions", "x_left_end", "x_right_end", "x_left_extension", "x_right_extension"], ""),
+    s("y-axis", &["ymin", "ymax", "ystep", "ylabel", "ynum", "y_fractions", "y_bottom_end", "y_top_end", "y_bottom_extension", "y_top_extension"], ""),
+    s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label", "point_radius", "pt_outline", "x_major_every", "x_major_style", "y_major_every", "y_major_style"], ""),
 ];
 
 static CONIC_SECTIONS: [RefSection; 6] = [

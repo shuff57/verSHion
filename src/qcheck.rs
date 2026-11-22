@@ -66,32 +66,42 @@ pub fn blank_count(stem: &str) -> usize {
     stem.matches("___").count()
 }
 
+/// A choice that prints something: its text, or its picture (a choice can be a picture).
+fn choice_filled(a: &model::Answer) -> bool {
+    filled(&a.text) || a.image.is_some()
+}
+
 /// Rows of an answer list that are empty but would be missed: one before a filled row, or any when
 /// fewer than two rows are filled (the rows trailing a complete list are simply not saved).
 fn empty_rows(answers: &[model::Answer]) -> Vec<Issue> {
-    let n_filled = answers.iter().filter(|a| filled(&a.text)).count();
-    let last = answers.iter().rposition(|a| filled(&a.text));
+    let n_filled = answers.iter().filter(|a| choice_filled(a)).count();
+    let last = answers.iter().rposition(|a| choice_filled(a));
     answers
         .iter()
         .enumerate()
-        .filter(|(i, a)| !filled(&a.text) && (n_filled < 2 || last.is_some_and(|l| *i < l)))
+        .filter(|(i, a)| !choice_filled(a) && (n_filled < 2 || last.is_some_and(|l| *i < l)))
         .map(|(i, _)| note(Where::Answer(i), format!("Answer {} is empty", i + 1)))
         .collect()
+}
+
+/// A multipart problem printed as "1) (a) ... (b) ..." needs no shared stem when every part has its own.
+pub fn parts_carry_task(kind: &Kind) -> bool {
+    matches!(kind, Kind::Multipart { parts } if !parts.is_empty() && parts.iter().all(|p| filled(&p.stem)))
 }
 
 /// Everything missing from a stem and kind. Works on a draft as the editor holds it (empty rows and
 /// half-filled pairs still present) and on a stored question alike.
 pub fn check(stem: &str, kind: &Kind) -> Vec<Issue> {
     let mut v = Vec::new();
-    if !filled(stem) {
+    if !filled(stem) && !parts_carry_task(kind) {
         v.push(fix(Where::Stem, "Add a question stem", false));
     }
     match kind {
         Kind::Mc { answers } => {
-            if answers.iter().filter(|a| filled(&a.text)).count() < 2 {
+            if answers.iter().filter(|a| choice_filled(a)).count() < 2 {
                 v.push(fix(Where::Answers, "Add at least two answer choices", false));
             }
-            if !answers.iter().any(|a| a.correct && filled(&a.text)) {
+            if !answers.iter().any(|a| a.correct && choice_filled(a)) {
                 v.push(fix(Where::Answers, "Mark one answer correct", true));
             }
             v.extend(empty_rows(answers));
@@ -140,10 +150,10 @@ pub fn check(stem: &str, kind: &Kind) -> Vec<Issue> {
                 }
                 match &p.kind {
                     PartKind::Mc { answers } => {
-                        if answers.iter().filter(|a| filled(&a.text)).count() < 2 {
+                        if answers.iter().filter(|a| choice_filled(a)).count() < 2 {
                             v.push(fix(Where::Part(i), format!("Part {} needs at least two answer choices", i + 1), false));
                         }
-                        if !answers.iter().any(|a| a.correct && filled(&a.text)) {
+                        if !answers.iter().any(|a| a.correct && choice_filled(a)) {
                             v.push(fix(Where::Part(i), format!("Part {} needs a correct answer", i + 1), true));
                         }
                     }
@@ -253,7 +263,16 @@ mod tests {
     use crate::model::{Answer, Pair, Part};
 
     fn a(t: &str, c: bool) -> Answer {
-        Answer { text: t.to_string(), correct: c, locked: false }
+        Answer::new(t, c)
+    }
+
+    #[test]
+    fn a_choice_that_is_a_picture_counts_as_filled() {
+        let pic = |c: bool| Answer { image: Some(crate::model::ImageRef { file: "media/p.png".into(), width: 1, height: 1 }), correct: c, ..Default::default() };
+        let k = Kind::Mc { answers: vec![pic(false), pic(true), pic(false)] };
+        assert!(check("Which spinner?", &k).is_empty(), "{:?}", check("Which spinner?", &k));
+        let none = Kind::Mc { answers: vec![Answer::default(), pic(true)] };
+        assert!(!check("Which?", &none).is_empty(), "a choice with neither text nor picture is still empty");
     }
 
     fn q(stem: &str, kind: Kind) -> Question {
@@ -304,6 +323,16 @@ mod tests {
             let v = check("  ", &k);
             assert_eq!(v.first().map(|i| (i.at, i.msg.as_str())), Some((Where::Stem, "Add a question stem")), "{k:?}");
         }
+    }
+
+    #[test]
+    fn multipart_parts_can_carry_the_task_without_a_shared_stem() {
+        let p = |s: &str| Part { stem: s.into(), kind: PartKind::Short { sample: String::new() } };
+        let ok = check("", &Kind::Multipart { parts: vec![p("(a) Find x."), p("(b) Find y.")] });
+        assert!(ok.iter().all(|i| i.at != Where::Stem), "{ok:?}");
+        let gap = check("", &Kind::Multipart { parts: vec![p("(a) Find x."), p(" ")] });
+        assert!(gap.iter().any(|i| i.at == Where::Stem));
+        assert!(check("", &Kind::Multipart { parts: vec![] }).iter().any(|i| i.at == Where::Stem));
     }
 
     #[test]

@@ -77,6 +77,14 @@
       "6c68eaaa02d78fa871ef70ef7129646d134af7b74d83bdf1c2c6766fa8d01688"
     ]
   },
+  "question_mc_pictures": {
+    "full_hash": [
+      "657db9f4096d6dd4c4cf5e9d30b0454cfacee28c9c1d7a9924afd97fef2e85f9"
+    ],
+    "match_hash": [
+      "e20b9b0e8309a0a6c319d7fd9149537f0f278de4b7028c45f7b92c3be921bf9a"
+    ]
+  },
   "question_multipart": {
     "full_hash": [
       "6b01550f624ad7a29bebe83a1c2caa975a84d21df27c68ba87bae7475c6e4596"

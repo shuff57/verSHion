@@ -17,6 +17,11 @@ pub struct Settings {
     pub ai_provider: String, // "ollama" | "openrouter" | "custom"
     #[serde(default)]
     pub ai_model: String,
+    /// "json" (compatibility), "schema", or "tool". Existing installations stay compatible.
+    #[serde(default)]
+    pub ai_output_mode: String,
+    #[serde(default)]
+    pub ai_native_tools: bool,
     #[serde(default)]
     pub ai_base: String, // custom OpenAI-compatible base URL
     /// A self-hosted Ollama's URL (empty: this machine, 127.0.0.1:11434).
@@ -175,12 +180,8 @@ impl App {
     pub fn new_from(ctx: &egui::Context) -> Self {
         theme::setup(ctx);
         let mut settings: Settings = store::load_json("settings.json").unwrap_or_default();
-        if settings.ai_provider.trim().is_empty() {
-            settings.ai_provider = "cloud".to_string();
-        }
-        if settings.ai_model.trim().is_empty() {
-            settings.ai_model = "gemma4:31b".to_string();
-        }
+        // Match the headless default and keep the provider's own model default.
+        if settings.ai_provider.trim().is_empty() { settings.ai_provider="ollama".into(); }
         theme::set_dark(settings.dark, Some(ctx));
         let app = App {
             store: Store::load(),

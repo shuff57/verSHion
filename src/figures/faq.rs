@@ -79,6 +79,9 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "coordinate-grid" => COORDINATE_GRID,
         "riemann-sums" => RIEMANN_SUMS,
         "derivative-graphs" => DERIVATIVE_GRAPHS,
+        "geometry-diagram" => GEOMETRY_DIAGRAM,
+        "polar-grid" => POLAR_GRID,
+        "direction-field" => DIRECTION_FIELD,
         "composite-shape" => COMPOSITE_SHAPE,
         "number-line" => NUMBER_LINE,
         "triangle" => TRIANGLE,
@@ -1877,6 +1880,75 @@ const RULER_READING: &[Faq] = &[
     Faq {
         q: "How should fractional inch readings be written?",
         a: "In simplest form: 2/4 in is 1/2 in and 6/8 in is 3/4 in. Finer rulers go down to eighths or sixteenths of an inch.",
+    },
+];
+
+const GEOMETRY_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "What do the tick marks on two sides mean?",
+        a: "Sides with the same number of tick marks are congruent. One tick on two sides means those two are equal; a side with two ticks matches only other two-tick sides.",
+    },
+    Faq {
+        q: "What do the arcs inside an angle mean?",
+        a: "Angles with the same number of arcs are congruent. A small square in the corner instead of an arc marks a right angle, 90 degrees.",
+    },
+    Faq {
+        q: "Why are some edges of a solid dashed?",
+        a: "Dashed edges are hidden: they are on the back of the solid and could not be seen from the front. They still count when you work out the number of edges or a length.",
+    },
+    Faq {
+        q: "What does an arrowhead at the end of a line mean?",
+        a: "The line keeps going in that direction. A line with arrows at both ends is a full line; a ray has one endpoint and one arrow.",
+    },
+    Faq {
+        q: "Is the diagram drawn to scale?",
+        a: "Not unless the question says so. Use the labelled measures and marks, not a ruler on the picture.",
+    },
+];
+
+const POLAR_GRID: &[Faq] = &[
+    Faq {
+        q: "How do you read a point on a polar grid?",
+        a: "A point (r, theta) is r units out from the centre along the ray at angle theta, measured counterclockwise from the ray marked 0.",
+    },
+    Faq {
+        q: "What does a negative r mean?",
+        a: "Go r units in the opposite direction: (-2, pi/4) is the same point as (2, 5pi/4).",
+    },
+    Faq {
+        q: "How many petals does a rose curve have?",
+        a: "For r = a cos(n theta) or r = a sin(n theta), there are n petals when n is odd and 2n petals when n is even.",
+    },
+    Faq {
+        q: "How do you tell a limacon with an inner loop from a cardioid?",
+        a: "For r = a + b cos theta: when |a| < |b| there is an inner loop, when |a| = |b| it is a cardioid, and when |a| > |b| it is dimpled or convex.",
+    },
+    Faq {
+        q: "How do you check a polar graph for symmetry?",
+        a: "Replacing theta with -theta tests the polar axis, replacing theta with pi - theta tests the line theta = pi/2, and replacing r with -r tests the pole.",
+    },
+];
+
+const DIRECTION_FIELD: &[Faq] = &[
+    Faq {
+        q: "What does each small segment in a direction field show?",
+        a: "Its slope is the value of dy/dx at that point. A solution curve passing through the point has that slope there.",
+    },
+    Faq {
+        q: "How do you sketch a solution curve on a direction field?",
+        a: "Start at the initial point and follow the segments, keeping the curve parallel to the nearby slopes without crossing them.",
+    },
+    Faq {
+        q: "Why are all the segments in a column the same when dy/dx depends only on x?",
+        a: "Then the slope is the same at every height for a given x, so solution curves are vertical shifts of one another.",
+    },
+    Faq {
+        q: "What do horizontal segments mean?",
+        a: "The slope is zero there. Along a whole row of horizontal segments, y is constant, which is an equilibrium solution.",
+    },
+    Faq {
+        q: "Does a direction field give the exact solution?",
+        a: "No. It shows the shape of the solutions; the particular solution still comes from solving the equation with the initial condition.",
     },
 ];
 

@@ -198,7 +198,7 @@ pub fn generic_code_text(code: &str, limit: Option<u64>) -> String {
         "no_correct" => "no answer choice is marked correct".into(),
         "blank_count_mismatch" => "the number of blanks does not match the answers".into(),
         "bad_image_file" => "a picture has a name the pool can not take".into(),
-        "expected_string" | "expected_array" | "expected_object" | "expected_bool" | "expected_number" | "expected_integer" => {
+        "choice_picture_needs_image_ok" => "this answer choice is only a picture: keep the question's pictures for students, or give the choice a text".into(),        "expected_string" | "expected_array" | "expected_object" | "expected_bool" | "expected_number" | "expected_integer" => {
             "this has the wrong shape".into()
         }
         "schema_version_unsupported" => "this file is from a newer version of verSHion".into(),

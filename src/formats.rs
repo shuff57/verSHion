@@ -361,7 +361,7 @@ fn bb_upload_row(row: &[String]) -> Result<Option<Question>, String> {
                 .map(|c| Answer {
                     text: c[0].clone(),
                     correct: c.get(1).is_some_and(|f| f.eq_ignore_ascii_case("correct")),
-                    locked: false,
+                    locked: false, image: None, figure: None
                 })
                 .collect();
             if answers.is_empty() {
@@ -702,7 +702,7 @@ fn parse_mc(lines: &[String]) -> Result<(String, Vec<Answer>), String> {
     let mut answers: Vec<Answer> = Vec::new();
     for line in lines {
         match parse_choice(line) {
-            Some((correct, text)) if !text.is_empty() => answers.push(Answer { text, correct, locked: false }),
+            Some((correct, text)) if !text.is_empty() => answers.push(Answer { text, correct, locked: false, image: None, figure: None }),
             Some((..)) => {} // a bare `a.` or lone `*`: dropped as an empty choice
             None => {
                 if stem.is_empty() {
@@ -770,7 +770,7 @@ fn plain_line_choices(lines: &[String]) -> Option<(String, Vec<Answer>)> {
                 Some(r) => (true, r.trim()),
                 None => (false, t),
             };
-            (!text.is_empty()).then(|| Answer { text: text.to_string(), correct, locked: false })
+            (!text.is_empty()).then(|| Answer { text: text.to_string(), correct, locked: false, image: None, figure: None })
         })
         .collect();
     if choices.len() < 2 {
@@ -833,7 +833,7 @@ fn parse_aiken(block: &[String]) -> Result<Question, String> {
                     continue;
                 }
                 match parse_choice(line) {
-                    Some((correct, text)) if !text.is_empty() => answers.push(Answer { text, correct, locked: false }),
+                    Some((correct, text)) if !text.is_empty() => answers.push(Answer { text, correct, locked: false, image: None, figure: None }),
                     _ => return Err(format!("not a choice line after the stem: {line:?}")),
                 }
             }
@@ -949,7 +949,7 @@ fn try_csv(text: &str) -> Option<Result<Vec<Question>, String>> {
                     .filter_map(|c| *c)
                     .map(|i| get(Some(i)))
                     .filter(|t| !t.is_empty())
-                    .map(|text| Answer { text, correct: false, locked: false })
+                    .map(|text| Answer { text, correct: false, locked: false, image: None, figure: None })
                     .collect();
                 if answers.is_empty() {
                     return Some(Err(format!("CSV row {row}: an MC row has no answers — fill the a…h columns")));
@@ -1315,7 +1315,7 @@ fn tp_question(item: &serde_json::Value, media: &std::collections::HashMap<Strin
     let stem_node = item.get("stem").ok_or_else(|| format!("question {pkg_id} has no stem document"))?;
     let flat = flatten_doc(stem_node);
     let kind = match ty.as_str() {
-        "multiple-choice" => tp_choice_answers(item).map(|answers| Kind::Mc { answers }),
+        "multiple-choice" => tp_choice_answers(item, media).map(|answers| Kind::Mc { answers }),
         "true-false" => tp_true_false(item),
         "matching" => tp_matching(item),
         "fill-in-the-blank" if flat.blanks.is_empty() => {
@@ -1323,7 +1323,7 @@ fn tp_question(item: &serde_json::Value, media: &std::collections::HashMap<Strin
         }
         "fill-in-the-blank" => Ok(Kind::Blank { accept: flat.blanks.iter().map(|b| vec![b.clone()]).collect() }),
         "short-answer" => Ok(Kind::Short { sample: item.get("suggestedAnswer").map(doc_text).unwrap_or_default() }),
-        "multipart" => tp_parts(item).map(|parts| Kind::Multipart { parts }),
+        "multipart" => tp_parts(item, media).map(|parts| Kind::Multipart { parts }),
         other => Err(format!("question {pkg_id}: unsupported Test Parrot type {other:?}")),
     }
     .map_err(|e| format!("question {pkg_id}: {e}"))?;
@@ -1341,17 +1341,29 @@ fn tp_question(item: &serde_json::Value, media: &std::collections::HashMap<Strin
 }
 
 /// The `choices` array of a question, part or subpart → model answers (all three share
-/// the same choice shape: `content` document, `correct`, optional `locked`).
-fn tp_choice_answers(item: &serde_json::Value) -> Result<Vec<Answer>, String> {
+/// the same choice shape: `content` document, `correct`, optional `locked`). A choice whose
+/// content shows a picture with inline bytes in `media` gets it as the answer's picture.
+fn tp_choice_answers(item: &serde_json::Value, media: &std::collections::HashMap<String, serde_json::Value>) -> Result<Vec<Answer>, String> {
     let Some(choices) = item.get("choices").and_then(serde_json::Value::as_array) else {
         return Err("the question has no \"choices\" array".into());
     };
     let answers: Vec<Answer> = choices
         .iter()
-        .map(|c| Answer {
-            text: doc_text(c),
-            correct: c.get("correct").and_then(serde_json::Value::as_bool).unwrap_or(false),
-            locked: c.get("locked").and_then(serde_json::Value::as_bool).unwrap_or(false),
+        .map(|c| {
+            let flat = doc_flat(c);
+            let mut a = Answer {
+                text: flat.text,
+                correct: c.get("correct").and_then(serde_json::Value::as_bool).unwrap_or(false),
+                locked: c.get("locked").and_then(serde_json::Value::as_bool).unwrap_or(false), image: None, figure: None
+            };
+            for hex in &flat.images {
+                if let Some(bytes) = media.get(hex.as_str()).and_then(media_bytes)
+                    && attach_choice_picture(&mut a, &bytes)
+                {
+                    break;
+                }
+            }
+            a
         })
         .collect();
     if answers.is_empty() { Err("the question has no choices".into()) } else { Ok(answers) }
@@ -1401,7 +1413,7 @@ fn tp_matching(item: &serde_json::Value) -> Result<Kind, String> {
     Ok(Kind::Matching { pairs, distractors })
 }
 
-fn tp_parts(item: &serde_json::Value) -> Result<Vec<Part>, String> {
+fn tp_parts(item: &serde_json::Value, media: &std::collections::HashMap<String, serde_json::Value>) -> Result<Vec<Part>, String> {
     let raw = item
         .get("parts")
         .and_then(serde_json::Value::as_array)
@@ -1409,7 +1421,7 @@ fn tp_parts(item: &serde_json::Value) -> Result<Vec<Part>, String> {
         .ok_or("a multipart question needs at least one part")?;
     let mut out: Vec<Part> = Vec::new();
     for p in raw {
-        tp_one_part(p, &mut out)?;
+        tp_one_part(p, media, &mut out)?;
     }
     Ok(out)
 }
@@ -1417,19 +1429,19 @@ fn tp_parts(item: &serde_json::Value) -> Result<Vec<Part>, String> {
 /// One part → one `model::Part`; a part carrying subparts (a lead-in stem, no answer of
 /// its own) becomes its lead-in stem plus one part per subpart, since `PartKind` cannot
 /// nest. Subparts' own points are not representable in `model::Part` and are dropped.
-fn tp_one_part(p: &serde_json::Value, out: &mut Vec<Part>) -> Result<(), String> {
+fn tp_one_part(p: &serde_json::Value, media: &std::collections::HashMap<String, serde_json::Value>, out: &mut Vec<Part>) -> Result<(), String> {
     let part_id = field_str(p, "id").unwrap_or("?").to_string();
     let stem = p.get("stem").map(doc_text).unwrap_or_default();
     let subparts = arr(p, "subparts");
     if subparts.is_empty() {
-        let kind = tp_answer_kind(p).map_err(|e| format!("part {part_id}: {e}"))?;
+        let kind = tp_answer_kind(p, media).map_err(|e| format!("part {part_id}: {e}"))?;
         out.push(Part { stem, kind });
         return Ok(());
     }
     out.push(Part { stem, kind: PartKind::Short { sample: String::new() } });
     for sp in subparts {
         let sp_id = field_str(sp, "id").unwrap_or("?").to_string();
-        match tp_answer_kind(sp) {
+        match tp_answer_kind(sp, media) {
             Ok(kind) => out.push(Part { stem: sp.get("stem").map(doc_text).unwrap_or_default(), kind }),
             Err(e) => return Err(format!("subpart {sp_id}: {e}")),
         }
@@ -1438,9 +1450,9 @@ fn tp_one_part(p: &serde_json::Value, out: &mut Vec<Part>) -> Result<(), String>
 }
 
 /// A part's or subpart's own answer: multiple-choice choices, else a suggested answer.
-fn tp_answer_kind(item: &serde_json::Value) -> Result<PartKind, String> {
+fn tp_answer_kind(item: &serde_json::Value, media: &std::collections::HashMap<String, serde_json::Value>) -> Result<PartKind, String> {
     if item.get("choices").is_some() {
-        return Ok(PartKind::Mc { answers: tp_choice_answers(item)? });
+        return Ok(PartKind::Mc { answers: tp_choice_answers(item, media)? });
     }
     if let Some(sa) = item.get("suggestedAnswer") {
         return Ok(PartKind::Short { sample: doc_text(sa) });
@@ -1518,13 +1530,18 @@ fn flatten_doc(document: &serde_json::Value) -> Flat {
 /// A node with `content` flattened to plain text — choices, prompts, answers; a document
 /// keeps its blocks as lines, anything else flattens inline.
 fn doc_text(v: &serde_json::Value) -> String {
+    doc_flat(v).text
+}
+
+/// [`doc_text`] with the blanks and image assets the document shows.
+fn doc_flat(v: &serde_json::Value) -> Flat {
     // Choice/prompt/wordBank/part entries wrap their document in `content`; the value may
     // also already be the document itself (stray inline node).
     let document = if node_type(v) == "document" { v } else { v.get("content").unwrap_or(&serde_json::Value::Null) };
     if !document.is_object() {
-        return String::new();
+        return Flat::default();
     }
-    flatten_doc(document).text
+    flatten_doc(document)
 }
 
 fn children(node: &serde_json::Value) -> &[serde_json::Value] {
@@ -3013,6 +3030,49 @@ fn attach_src(q: &mut Question, srcs: &[String], media: &HashMap<String, Vec<u8>
     }
 }
 
+/// Every multiple-choice answer of a question in reading order: its own choices, else each
+/// multipart choice part's in turn. Importers list per-choice picture sources in this order.
+fn mc_answers_mut(kind: &mut Kind) -> Vec<&mut Answer> {
+    match kind {
+        Kind::Mc { answers } => answers.iter_mut().collect(),
+        Kind::Multipart { parts } => parts
+            .iter_mut()
+            .filter_map(|p| match &mut p.kind {
+                PartKind::Mc { answers } => Some(answers.iter_mut()),
+                _ => None,
+            })
+            .flatten()
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The first resolvable image of each choice becomes that choice's picture: `srcs[i]` are the
+/// image sources of the i-th answer of [`mc_answers_mut`].
+fn attach_choice_srcs(q: &mut Question, srcs: &[Vec<String>], media: &HashMap<String, Vec<u8>>, base: &str) {
+    for (a, ss) in mc_answers_mut(&mut q.kind).into_iter().zip(srcs) {
+        for s in ss {
+            if let Some(bytes) = resolve_media(s, media, base)
+                && attach_choice_picture(a, &bytes)
+            {
+                break;
+            }
+        }
+    }
+}
+
+/// Stores `bytes` as the choice's picture; the `[picture]` placeholder it stands for leaves
+/// the choice text (what remains is the choice's own text, often empty). False when the
+/// bytes are not a picture the store takes (the placeholder then stays).
+fn attach_choice_picture(a: &mut Answer, bytes: &[u8]) -> bool {
+    let Ok(img) = store_image(bytes) else { return false };
+    a.image = Some(img);
+    if let Some((before, after)) = crate::layout::split_at_picture(&a.text) {
+        a.text = [before.trim(), after.trim()].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join(" ");
+    }
+    true
+}
+
 /// `store::put_image`, except that unit tests never write into the user's real store
 /// (the `tests/import_formats.rs` integration test checks the real write against a
 /// temporary store directory through the headless `VERSHION_PARSE` hook).
@@ -3394,7 +3454,7 @@ fn gift_answers(content: &str, item: &dyn Fn(&str) -> String) -> Result<(Kind, b
         return Ok((Kind::Matching { pairs, distractors }, false, general));
     }
     if answers.iter().any(|a| a.mark == '~') {
-        let answers: Vec<Answer> = answers.iter().map(|a| Answer { text: item(&a.text), correct: a.positive(), locked: false }).collect();
+        let answers: Vec<Answer> = answers.iter().map(|a| Answer { text: item(&a.text), correct: a.positive(), locked: false, image: None, figure: None }).collect();
         if !answers.iter().any(|a| a.correct) {
             return Err("no correct answer: mark it with = (or a positive weight like ~%50%)".into());
         }
@@ -3782,7 +3842,7 @@ fn numbered_question(first: &str, rest: &[String], meta: &NumMeta) -> Result<Que
             } else if choices.is_empty() {
                 return Err("no answers: add lettered choices (a) …, *b) …), [*]/[ ] boxes, `* answer`, `= number` or a ____ line".into());
             } else {
-                let mut answers: Vec<Answer> = choices.iter().map(|(c, t)| Answer { text: t.clone(), correct: *c, locked: false }).collect();
+                let mut answers: Vec<Answer> = choices.iter().map(|(c, t)| Answer { text: t.clone(), correct: *c, locked: false, image: None, figure: None }).collect();
                 if let Some(k) = key {
                     for i in k {
                         answers.get_mut(i).ok_or_else(|| format!("the Answer: line names choice {} but only {} are given", i + 1, choices.len()))?.correct = true;
@@ -3873,7 +3933,7 @@ fn brightspace_question(rows: &[Vec<String>]) -> Result<Option<Question>, String
     let rich = |s: &str| if looks_html(s) { html_to_markup(s).0 } else { s.to_string() };
     let kind = match ty.as_str() {
         "MC" | "MS" => {
-            let answers: Vec<Answer> = options.iter().map(|(w, t)| Answer { text: rich(t), correct: *w > 0.0, locked: false }).collect();
+            let answers: Vec<Answer> = options.iter().map(|(w, t)| Answer { text: rich(t), correct: *w > 0.0, locked: false, image: None, figure: None }).collect();
             if !answers.iter().any(|a| a.correct) {
                 return Err("no Option row has a positive weight".into());
             }
@@ -3963,7 +4023,7 @@ fn kahoot_rows(rows: &[Vec<String>]) -> Option<Result<Vec<Question>, String>> {
         for (k, c) in ac.iter().enumerate() {
             let text = c.map(get).unwrap_or_default();
             if !text.is_empty() {
-                answers.push(Answer { text, correct: keys.contains(&k), locked: false });
+                answers.push(Answer { text, correct: keys.contains(&k), locked: false, image: None, figure: None });
             }
         }
         if answers.is_empty() || !answers.iter().any(|a| a.correct) {
@@ -4268,7 +4328,28 @@ fn moodle_question(q: XNode<'_, '_>, ty: &str) -> Result<Option<Question>, Strin
     let answers = moodle_answers(q);
     let kind = match ty {
         "multichoice" => {
-            let answers: Vec<Answer> = answers.iter().map(|(f, t, _)| Answer { text: t.clone(), correct: *f > 0.0, locked: false }).collect();
+            // A choice's picture: an <img> in its text, its bytes a <file> of the answer (or
+            // of the question text).
+            let shared = qt.map(moodle_files).unwrap_or_default();
+            let answers: Vec<Answer> = answers
+                .iter()
+                .map(|(f, t, node)| {
+                    let mut a = Answer { text: t.clone(), correct: *f > 0.0, locked: false, image: None, figure: None };
+                    let (_, srcs) = moodle_rich(*node);
+                    if !srcs.is_empty() {
+                        let mut files = shared.clone();
+                        files.extend(moodle_files(*node));
+                        for s in &srcs {
+                            if let Some(bytes) = resolve_media(s, &files, "")
+                                && attach_choice_picture(&mut a, &bytes)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    a
+                })
+                .collect();
             if answers.is_empty() {
                 return Err("no answers".into());
             }
@@ -4468,7 +4549,9 @@ struct QtiAcc {
     media: HashMap<String, Vec<u8>>,
 }
 
-type QtiResult = Result<Option<(Question, Vec<String>)>, String>;
+/// An item's question, its stem's image sources, and each choice's image sources (in
+/// [`mc_answers_mut`] order; empty when no choice shows one).
+type QtiResult = Result<Option<(Question, Vec<String>, Vec<Vec<String>>)>, String>;
 
 impl QtiAcc {
     /// Adds one item's result; a repeated item ident (Common Cartridge zips carry each
@@ -4478,8 +4561,9 @@ impl QtiAcc {
             return;
         }
         match r {
-            Ok(Some((mut q, srcs))) => {
+            Ok(Some((mut q, srcs, choice_srcs))) => {
                 attach_src(&mut q, &srcs, &self.media, base);
+                attach_choice_srcs(&mut q, &choice_srcs, &self.media, base);
                 self.questions.push(q);
                 self.origin.push(origin.to_string());
             }
@@ -4660,6 +4744,8 @@ struct Resp1 {
     multiple: bool,
     prompt: String,
     labels: Vec<(String, String)>,
+    /// Each label's image sources, parallel to `labels`.
+    label_srcs: Vec<Vec<String>>,
 }
 
 fn qti1_item(item: XNode<'_, '_>) -> QtiResult {
@@ -4693,13 +4779,23 @@ fn qti1_item(item: XNode<'_, '_>) -> QtiResult {
         };
         let mut ignore = Vec::new();
         let prompt = kids(r, "material").into_iter().map(|m| single_line(&qti1_material(m, &mut ignore))).collect::<Vec<_>>().join(" ");
-        let labels = descs(r, "response_label").into_iter().map(|l| (l.attribute("ident").unwrap_or("").to_string(), single_line(&qti1_material(l, &mut ignore)))).collect();
+        let mut label_srcs = Vec::new();
+        let labels = descs(r, "response_label")
+            .into_iter()
+            .map(|l| {
+                let mut srcs = Vec::new();
+                let text = single_line(&qti1_material(l, &mut srcs));
+                label_srcs.push(srcs);
+                (l.attribute("ident").unwrap_or("").to_string(), text)
+            })
+            .collect();
         resps.push(Resp1 {
             ident: r.attribute("ident").unwrap_or("").to_string(),
             kind,
             multiple: r.attribute("rcardinality").is_some_and(|c| c.eq_ignore_ascii_case("multiple")),
             prompt,
             labels,
+            label_srcs,
         });
     }
     let (eq, ranges) = qti1_correct(item);
@@ -4712,6 +4808,7 @@ fn qti1_item(item: XNode<'_, '_>) -> QtiResult {
     };
     let lids: Vec<&Resp1> = resps.iter().filter(|r| r.kind == 'l').collect();
     let has = |k: &str| qtype.contains(k);
+    let mut choice_srcs: Vec<Vec<String>> = Vec::new();
     let blanks = has("fill_in_multiple_blanks") || has("multiple_dropdowns") || (!lids.is_empty() && lids.iter().all(|r| !r.prompt.is_empty() && stem.contains(&format!("[{}]", r.prompt))));
     let kind = if blanks {
         let mut placed: Vec<(usize, &Resp1)> = lids.iter().filter_map(|r| stem.find(&format!("[{}]", r.prompt)).map(|p| (p, *r))).collect();
@@ -4782,7 +4879,7 @@ fn qti1_item(item: XNode<'_, '_>) -> QtiResult {
     } else if lids.len() == 1 {
         let r = lids[0];
         let ok = correct_for(&r.ident);
-        let answers: Vec<Answer> = r.labels.iter().map(|(id, t)| Answer { text: t.clone(), correct: ok.contains(id), locked: false }).collect();
+        let answers: Vec<Answer> = r.labels.iter().map(|(id, t)| Answer { text: t.clone(), correct: ok.contains(id), locked: false, image: None, figure: None }).collect();
         if answers.is_empty() {
             return Err("a choice question with no choices".into());
         }
@@ -4796,7 +4893,10 @@ fn qti1_item(item: XNode<'_, '_>) -> QtiResult {
                 None => Kind::Tf { correct: answers[0].correct },
             }
         } else {
-            tf_from(&answers, multi).unwrap_or(Kind::Mc { answers })
+            tf_from(&answers, multi).unwrap_or_else(|| {
+                choice_srcs = r.label_srcs.clone();
+                Kind::Mc { answers }
+            })
         }
     } else if resps.iter().any(|r| r.kind == 's') {
         let mut accept: Vec<String> = eq.values().flatten().filter(|v| !v.is_empty()).cloned().collect();
@@ -4815,7 +4915,7 @@ fn qti1_item(item: XNode<'_, '_>) -> QtiResult {
         .find(|f| f.attribute("ident").is_some_and(|i| i == "general_fb"))
         .map(|f| qti1_material(f, &mut Vec::new()))
         .filter(|s| !s.trim().is_empty());
-    Ok(Some((q, srcs)))
+    Ok(Some((q, srcs, choice_srcs)))
 }
 
 /// Correct responses of a QTI 1.2 item from its positive-score `respcondition`s:
@@ -4934,7 +5034,16 @@ fn xinline(n: XNode<'_, '_>) -> String {
     HtmlOut::default().one_line(&n.children().filter_map(|c| qti2_h(c, true)).collect::<Vec<_>>(), false)
 }
 
-fn qti2_block(b: XNode<'_, '_>, decl: Option<&Decl>) -> Result<Kind, String> {
+/// The image sources [`xinline`] meets in `n` (`<img>`, image `<object>`).
+fn xinline_srcs(n: XNode<'_, '_>) -> Vec<String> {
+    let mut h = HtmlOut::default();
+    h.one_line(&n.children().filter_map(|c| qti2_h(c, true)).collect::<Vec<_>>(), false);
+    h.images
+}
+
+/// One block interaction → its kind; a multiple-choice one also appends each choice's image
+/// sources to `choice_srcs`.
+fn qti2_block(b: XNode<'_, '_>, decl: Option<&Decl>, choice_srcs: &mut Vec<Vec<String>>) -> Result<Kind, String> {
     let correct: Vec<String> = decl.map(|d| if d.correct.is_empty() { d.mapped.clone() } else { d.correct.clone() }).unwrap_or_default();
     let choices = |tag: &str| -> Vec<(String, String, bool)> {
         descs(b, tag).into_iter().map(|c| (xattr(c, "identifier").unwrap_or("").to_string(), xinline(c), xattr(c, "fixed") == Some("true"))).collect()
@@ -4947,11 +5056,14 @@ fn qti2_block(b: XNode<'_, '_>, decl: Option<&Decl>) -> Result<Kind, String> {
                 return Err("a choice interaction with no choices".into());
             }
             let multi = xattr(b, "maxChoices").is_some_and(|m| m.trim() != "1") || decl.is_some_and(|d| d.multiple);
-            let answers: Vec<Answer> = list.iter().map(|(id, t, fixed)| Answer { text: t.clone(), correct: correct.contains(id), locked: *fixed }).collect();
+            let answers: Vec<Answer> = list.iter().map(|(id, t, fixed)| Answer { text: t.clone(), correct: correct.contains(id), locked: *fixed, image: None, figure: None }).collect();
             if !answers.iter().any(|a| a.correct) {
                 return Err("no choice is in the correct response".into());
             }
-            Ok(tf_from(&answers, multi).unwrap_or(Kind::Mc { answers }))
+            Ok(tf_from(&answers, multi).unwrap_or_else(|| {
+                choice_srcs.extend(descs(b, "simplechoice").into_iter().map(xinline_srcs));
+                Kind::Mc { answers }
+            }))
         }
         "orderinteraction" => {
             let list = choices("simplechoice");
@@ -5005,6 +5117,7 @@ fn qti2_item(item: XNode<'_, '_>) -> QtiResult {
     let multipart = blocks.len() >= 2;
     let mut h = HtmlOut::default();
     let mut stem = h.render(&body.children().filter_map(|c| qti2_h(c, !multipart)).collect::<Vec<_>>());
+    let mut choice_srcs: Vec<Vec<String>> = Vec::new();
     let kind = if blocks.is_empty() {
         let mut accept = Vec::new();
         for d in body.descendants() {
@@ -5040,7 +5153,7 @@ fn qti2_item(item: XNode<'_, '_>) -> QtiResult {
         let mut parts = Vec::new();
         for b in &blocks {
             let pstem = kid(*b, "prompt").map(|p| HtmlOut::default().render(&p.children().filter_map(|c| qti2_h(c, true)).collect::<Vec<_>>())).unwrap_or_default();
-            let kind = match qti2_block(*b, decl(*b))? {
+            let kind = match qti2_block(*b, decl(*b), &mut choice_srcs)? {
                 Kind::Mc { answers } => PartKind::Mc { answers },
                 Kind::Tf { correct } => PartKind::Tf { correct },
                 Kind::Short { sample } => PartKind::Short { sample },
@@ -5050,7 +5163,7 @@ fn qti2_item(item: XNode<'_, '_>) -> QtiResult {
         }
         Kind::Multipart { parts }
     } else {
-        qti2_block(blocks[0], decl(blocks[0]))?
+        qti2_block(blocks[0], decl(blocks[0]), &mut choice_srcs)?
     };
     if stem.trim().is_empty() {
         match kind {
@@ -5068,7 +5181,7 @@ fn qti2_item(item: XNode<'_, '_>) -> QtiResult {
         .and_then(|o| desc(o, "value"))
         .and_then(|v| xtext(v).trim().parse::<f64>().ok())
         .filter(|p| p.is_finite() && *p > 0.0);
-    Ok(Some((q, h.images)))
+    Ok(Some((q, h.images, choice_srcs)))
 }
 
 // ---------- format label (the import screen's source chip) ----------
@@ -6503,5 +6616,256 @@ mod import_format_tests {
         assert!(term_pairs("MC\tstem one\nTF\tstem two\n").is_none());
         // Ordinary vocabulary tab lists are still term lists.
         assert!(term_pairs("cat\tgato\ndog\tperro\nbird\tpajaro\n").is_some());
+    }
+}
+
+/// Files without picture choices import exactly as they did before choices could be pictures:
+/// every import fixture's questions hash to what the code before the change produced.
+#[cfg(test)]
+mod text_only_import_golden_tests {
+    use super::*;
+
+    fn fnv(b: &[u8]) -> u64 {
+        b.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, c| (h ^ u64::from(*c)).wrapping_mul(0x0100_0000_01b3))
+    }
+
+    fn digests() -> Vec<(String, u64)> {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/import_fixtures");
+        let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()?.file_name().into_string().ok()).filter(|n| !n.ends_with(".py")).collect();
+        names.sort();
+        names
+            .into_iter()
+            .map(|n| {
+                let bytes = std::fs::read(dir.join(&n)).unwrap();
+                let text = match detect_and_parse(&bytes, &n) {
+                    Ok(d) => {
+                        let mut qs = serde_json::to_value(&d.questions).unwrap();
+                        for q in qs.as_array_mut().unwrap() {
+                            let o = q.as_object_mut().unwrap();
+                            for k in ["id", "created", "modified"] {
+                                o.remove(k);
+                            }
+                        }
+                        format!("{} {} {}", d.name, d.exams.len(), qs)
+                    }
+                    Err(e) => format!("error {e}"),
+                };
+                (n, fnv(text.as_bytes()))
+            })
+            .collect()
+    }
+
+    /// Recorded from the code before choices could be pictures (commit 096b1ce5).
+    const BEFORE: &[(&str, u64)] = &[
+        ("aiken.txt", 0x05da5d02ef96d69b),
+        ("anki_notes.txt", 0x2d8127f7fe8bb9cd),
+        ("brightspace.csv", 0x86da1775eeabc663),
+        ("canvas_qti_export.zip", 0xe55d6cc3c0d58b5a),
+        ("kahoot.xlsx", 0x86f3069c46f895fe),
+        ("moodle_image.xml", 0xe66ba04b5b386278),
+        ("moodle_quiz.xml", 0x630463bcb249dd07),
+        ("moodle_sample.gift", 0x14714b3634b3cb1e),
+        ("qti12_blackboard.xml", 0x26d5d7a75cd988d7),
+        ("qti12_canvas_quiz.xml", 0x1386e2bb848542b4),
+        ("qti21_choice_multiple.xml", 0xf53e87578adf0df1),
+        ("qti21_package.zip", 0xd30ba3a2bf22fe9e),
+        ("qti3_item.xml", 0x59131c10de78cf77),
+        ("questions.xlsx", 0x499c15e90948aa46),
+        ("quizlet_terms.txt", 0x354749e36cb86ca7),
+        ("respondus.txt", 0x77743e793792311a),
+        ("text2qti.md", 0x0255779223841a7e),
+        ("vocab.xlsx", 0xfdca50b97fa7d64c),
+        ("vocab_list.csv", 0x28237e8d6ba944dd),
+    ];
+
+    #[test]
+    fn text_only_imports_identical_to_before() {
+        let now = digests();
+        assert_eq!(now.len(), BEFORE.len());
+        for ((n, h), (bn, bh)) in now.iter().zip(BEFORE) {
+            assert_eq!((n.as_str(), *h), (*bn, *bh), "{n} changed");
+        }
+    }
+}
+
+/// Choices that are pictures read in as the answers' pictures, in every importer that reads
+/// question pictures (QTI 1.2, QTI 2.x/3, Moodle XML, Test Parrot records).
+#[cfg(test)]
+mod choice_picture_import_tests {
+    use super::*;
+
+    /// Distinct "picture" bytes; the unit-test store names each `media/unit-test-<len>.png`.
+    fn pic(n: usize) -> Vec<u8> {
+        let mut b = b"\x89PNG".to_vec();
+        b.resize(4 + n, b'x');
+        b
+    }
+
+    fn data_uri(n: usize) -> String {
+        format!("data:image/png;base64,{}", crate::bankexport::b64_encode(&pic(n)))
+    }
+
+    fn stored(n: usize) -> Option<String> {
+        Some(format!("media/unit-test-{}.png", 4 + n))
+    }
+
+    fn answers(q: &Question) -> Vec<(String, bool, Option<String>)> {
+        let Kind::Mc { answers } = &q.kind else { panic!("not MC: {:?}", q.kind) };
+        answers.iter().map(|a| (a.text.clone(), a.correct, a.image.as_ref().map(|i| i.file.clone()))).collect()
+    }
+
+    #[test]
+    fn qti12_choice_pictures_from_matimage_and_html_img() {
+        let xml = format!(
+            r#"<?xml version="1.0"?><questestinterop><assessment title="Pies"><section><item ident="i1" title="Pies">
+<presentation><material><mattext>Which pie shows one quarter?</mattext></material>
+<response_lid ident="r1" rcardinality="Single"><render_choice>
+<response_label ident="a"><material><matimage imagtype="image/png" uri="{a}"/></material></response_label>
+<response_label ident="b"><material><mattext texttype="text/html">&lt;img src="{b}" alt="pie"&gt; Ten</mattext></material></response_label>
+<response_label ident="c"><material><mattext>Twelve</mattext></material></response_label>
+<response_label ident="d"><material><matimage uri="missing.png"/></material></response_label>
+</render_choice></response_lid></presentation>
+<resprocessing><respcondition><conditionvar><varequal respident="r1">b</varequal></conditionvar><setvar action="Set">100</setvar></respcondition></resprocessing>
+</item></section></assessment></questestinterop>"#,
+            a = data_uri(1),
+            b = data_uri(2)
+        );
+        let d = detect_and_parse(xml.as_bytes(), "pies.xml").unwrap();
+        let q = &d.questions[0];
+        assert_eq!(
+            answers(q),
+            vec![
+                (String::new(), false, stored(1)),
+                ("Ten".into(), true, stored(2)),
+                ("Twelve".into(), false, None),
+                ("[picture]".into(), false, None),
+            ],
+            "a picture leaves its placeholder; an unresolvable one keeps it"
+        );
+        assert!(q.image.is_none(), "choice pictures are not the question's picture");
+    }
+
+    #[test]
+    fn qti21_zip_choice_pictures_resolve_against_the_item_folder() {
+        use std::io::Write;
+        let item = r#"<?xml version="1.0"?><assessmentItem xmlns="http://www.imsglobal.org/xsd/imsqti_v2p1" identifier="pies" title="Pies">
+<responseDeclaration identifier="RESPONSE" cardinality="single" baseType="identifier"><correctResponse><value>B</value></correctResponse></responseDeclaration>
+<itemBody><p>Which pie shows one quarter?</p><choiceInteraction responseIdentifier="RESPONSE" maxChoices="1">
+<simpleChoice identifier="A"><img src="../images/pie1.png" alt="pie one"/></simpleChoice>
+<simpleChoice identifier="B"><object type="image/png" data="../images/pie2.png"/></simpleChoice>
+<simpleChoice identifier="C">None of these</simpleChoice>
+</choiceInteraction></itemBody></assessmentItem>"#;
+        let mut buf = Vec::new();
+        {
+            let mut z = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let o = zip::write::SimpleFileOptions::default();
+            z.start_file("items/pies.xml", o).unwrap();
+            z.write_all(item.as_bytes()).unwrap();
+            z.start_file("images/pie1.png", o).unwrap();
+            z.write_all(&pic(11)).unwrap();
+            z.start_file("images/pie2.png", o).unwrap();
+            z.write_all(&pic(12)).unwrap();
+            z.finish().unwrap();
+        }
+        let d = detect_and_parse(&buf, "pies.zip").unwrap();
+        let q = &d.questions[0];
+        assert_eq!(q.stem, "Which pie shows one quarter?", "choice pictures stay out of the stem");
+        assert!(q.image.is_none());
+        assert_eq!(answers(q), vec![(String::new(), false, stored(11)), (String::new(), true, stored(12)), ("None of these".into(), false, None)]);
+    }
+
+    #[test]
+    fn qti3_multipart_choice_parts_get_their_pictures() {
+        let xml = format!(
+            r#"<?xml version="1.0"?><qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="mp" title="Two parts">
+<qti-response-declaration identifier="R1" cardinality="single" base-type="identifier"><qti-correct-response><qti-value>a2</qti-value></qti-correct-response></qti-response-declaration>
+<qti-response-declaration identifier="R2" cardinality="single" base-type="identifier"><qti-correct-response><qti-value>b1</qti-value></qti-correct-response></qti-response-declaration>
+<qti-item-body><p>Look at the charts.</p>
+<qti-choice-interaction response-identifier="R1" max-choices="1"><qti-prompt>Which is a half?</qti-prompt>
+<qti-simple-choice identifier="a1">Neither</qti-simple-choice><qti-simple-choice identifier="a2"><img src="{a}" alt=""/></qti-simple-choice></qti-choice-interaction>
+<qti-choice-interaction response-identifier="R2" max-choices="1"><qti-prompt>Which is a third?</qti-prompt>
+<qti-simple-choice identifier="b1"><img src="{b}" alt=""/> Third</qti-simple-choice><qti-simple-choice identifier="b2">Neither</qti-simple-choice></qti-choice-interaction>
+</qti-item-body></qti-assessment-item>"#,
+            a = data_uri(21),
+            b = data_uri(22)
+        );
+        let d = detect_and_parse(xml.as_bytes(), "mp.xml").unwrap();
+        let Kind::Multipart { parts } = &d.questions[0].kind else { panic!("{:?}", d.questions[0].kind) };
+        let pics: Vec<Vec<(String, Option<String>)>> = parts
+            .iter()
+            .map(|p| match &p.kind {
+                PartKind::Mc { answers } => answers.iter().map(|a| (a.text.clone(), a.image.as_ref().map(|i| i.file.clone()))).collect(),
+                k => panic!("{k:?}"),
+            })
+            .collect();
+        assert_eq!(pics, vec![vec![("Neither".into(), None), (String::new(), stored(21))], vec![("Third".into(), stored(22)), ("Neither".into(), None)]]);
+    }
+
+    #[test]
+    fn moodle_choice_pictures_come_from_the_answers_files() {
+        let b64 = |n: usize| crate::bankexport::b64_encode(&pic(n));
+        let xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><quiz><question type="multichoice"><name><text>Pies</text></name>
+<questiontext format="html"><text><![CDATA[<p>Which pie shows one quarter?</p>]]></text><file name="shared.png" encoding="base64">{s}</file></questiontext>
+<answer fraction="0" format="html"><text><![CDATA[<img src="@@PLUGINFILE@@/pie%201.png" alt="">]]></text><file name="pie 1.png" encoding="base64">{a}</file></answer>
+<answer fraction="100" format="html"><text><![CDATA[<img src="@@PLUGINFILE@@/shared.png"> Ten]]></text></answer>
+<answer fraction="0" format="html"><text>Twelve</text></answer>
+</question></quiz>"#,
+            s = b64(31),
+            a = b64(32)
+        );
+        let d = detect_and_parse(xml.as_bytes(), "pies.xml").unwrap();
+        let q = &d.questions[0];
+        assert_eq!(answers(q), vec![(String::new(), false, stored(32)), ("Ten".into(), true, stored(31)), ("Twelve".into(), false, None)]);
+        assert!(q.image.is_none());
+    }
+
+    #[test]
+    fn test_parrot_record_choice_pictures_with_inline_media() {
+        let text = |t: &str| serde_json::json!({"type": "text", "text": t});
+        let doc = |t: &str| serde_json::json!({"type": "document", "content": [{"type": "paragraph", "content": [text(t)]}]});
+        let picture = |hex: &str| serde_json::json!({"type": "document", "content": [{"type": "block-image", "asset": format!("sha256:{hex}")}]});
+        let rec = serde_json::json!({
+            "format": "test-parrot/question-bank", "formatVersion": "0.10.0",
+            "generator": {"name": "g", "version": "1"}, "requiredFeatures": [],
+            "bank": {"name": "Pies", "questions": [
+                {"id": "q1", "type": "multiple-choice", "stem": doc("Which pie shows one quarter?"), "choices": [
+                    {"content": picture("aa"), "correct": false},
+                    {"content": picture("bb"), "correct": true},
+                    {"content": doc("Twelve"), "correct": false},
+                    {"content": picture("nobytes"), "correct": false},
+                ]},
+                {"id": "q2", "type": "multipart", "stem": doc("Parts"), "parts": [
+                    {"id": "p1", "stem": doc("Pick"), "choices": [{"content": picture("aa"), "correct": true}, {"content": doc("No"), "correct": false}]},
+                ]},
+            ]},
+            "media": [
+                {"id": "sha256:aa", "data": crate::bankexport::b64_encode(&pic(41))},
+                {"id": "sha256:bb", "data": crate::bankexport::b64_encode(&pic(42))},
+                {"id": "sha256:nobytes"},
+            ],
+        });
+        let d = detect_and_parse(rec.to_string().as_bytes(), "pies.parrot.json").unwrap();
+        assert_eq!(
+            answers(&d.questions[0]),
+            vec![(String::new(), false, stored(41)), (String::new(), true, stored(42)), ("Twelve".into(), false, None), ("[picture]".into(), false, None)]
+        );
+        let Kind::Multipart { parts } = &d.questions[1].kind else { panic!() };
+        let PartKind::Mc { answers } = &parts[0].kind else { panic!() };
+        assert_eq!(answers[0].image.as_ref().map(|i| i.file.clone()), stored(41));
+        assert!(answers[1].image.is_none());
+    }
+
+    #[test]
+    fn bank_json_round_trips_choice_pictures() {
+        let mut q = make_question(
+            "Pick".into(),
+            Kind::Mc { answers: vec![Answer { image: Some(crate::model::ImageRef { file: "media/p.png".into(), width: 3, height: 2 }), correct: true, ..Default::default() }, Answer::new("No", false)] },
+        );
+        q.id = "x".into();
+        let bank = crate::model::QuestionBank { id: "b".into(), name: "B".into(), questions: vec![q], created: 1, modified: 1, details: Default::default() };
+        let json = serde_json::to_vec(&crate::bankui::bank_export_json(&bank)).unwrap();
+        let d = detect_and_parse(&json, "b.json").unwrap();
+        assert_eq!(answers(&d.questions[0]), vec![(String::new(), true, Some("media/p.png".into())), ("No".into(), false, None)]);
     }
 }

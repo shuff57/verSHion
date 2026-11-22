@@ -7,7 +7,7 @@ pub fn fixtures_dir() -> PathBuf {
 }
 
 /// The model fixtures written by the app's `tests/share_core_fixtures.rs`.
-pub const MODEL: [&str; 11] = [
+pub const MODEL: [&str; 12] = [
     "question_mc",
     "question_mc_multi",
     "question_tf",
@@ -17,9 +17,16 @@ pub const MODEL: [&str; 11] = [
     "question_multipart",
     "question_figure_image",
     "question_matching_shared",
+    "question_mc_pictures",
     "bank_all_kinds",
     "bank_no_details",
 ];
+
+/// The pictures a fixture's strip keeps (`image_ok`): the picture-choice fixture's (a picture-only choice can not be
+/// served without its picture), none elsewhere. The app's `tests/share_core_fixtures.rs` uses the same rule.
+pub fn image_ok_for(name: &str) -> Vec<usize> {
+    if name == "question_mc_pictures" { vec![0] } else { vec![] }
+}
 
 pub fn model_json(name: &str) -> String {
     std::fs::read_to_string(fixtures_dir().join("model").join(format!("{name}.json"))).expect("fixture (regenerate from the app)")
@@ -79,7 +86,7 @@ pub fn q_payload_v1(q: &Question) -> String {
 }
 
 pub fn answer(text: &str, correct: bool) -> Answer {
-    Answer { text: text.into(), correct, locked: false }
+    Answer { text: text.into(), correct, locked: false, ..Default::default() }
 }
 
 pub fn seed(n: u8) -> [u8; 32] {

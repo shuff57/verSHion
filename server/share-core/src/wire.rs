@@ -35,11 +35,24 @@ pub struct ImageRef {
     pub height: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// One choice. A choice can be a picture: `image` is a store file exactly like a question's image
+/// (same validation and limits), with or without `text`; `figure` is the picture's figure-engine
+/// origin, like a question's `figure`. Both are left out of the JSON when absent, so a text choice
+/// serialises byte for byte as before they existed (the app's `model::Answer` does the same).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Answer {
     pub text: String,
     #[serde(default)] pub correct: bool,
     #[serde(default)] pub locked: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub image: Option<ImageRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub figure: Option<FigureSpec>,
+}
+
+impl Answer {
+    /// A text choice.
+    pub fn new(text: impl Into<String>, correct: bool) -> Self {
+        Answer { text: text.into(), correct, ..Default::default() }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,7 +67,7 @@ pub struct Part {
     pub kind: PartKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum PartKind {
     Mc { answers: Vec<Answer> },
     Tf { correct: bool },

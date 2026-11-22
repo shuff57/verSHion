@@ -29,6 +29,53 @@ fn markup(r: &mut Rng, max: usize) -> String {
     (0..n).map(|_| r.pick(TOK)).collect()
 }
 
+#[test]
+fn escaped_source_note_markers_survive_an_editor_roundtrip() {
+    let source=r"**\*\*\*A printed note** beside $x^2$.";
+    let (items,_)=decode_line(source);
+    let (encoded,_)=encode_checked(&items).expect("literal source marks must remain editable");
+    let (after,_)=decode_line(&encoded);
+    assert_eq!(items,after);
+    assert!(encoded.contains(r"\*\*\*"));
+    assert!(encoded.contains("$x^2$"));
+}
+
+#[test]
+fn currency_roundtrip_keeps_math_code_and_literal_backslashes() {
+    for source in [
+        r"\$7,400 at 10.5% for $(1)/(4)$ years",
+        r"\$1,900 at 5.9% for $2 (3)/(4)$ years",
+        r"\\$1,900 at 5.9% for $2 (3)/(4)$ years",
+        r"`C:\cash\$file` and C:\work\notes plus $\frac{1}{4}$ for \$5",
+    ] {
+        let (items, _) = decode_line(source);
+        let (encoded, _) = encode_checked(&items).expect("currency formatting must round-trip");
+        assert_eq!(encoded, source);
+        assert!(same_items(&decode_line(&encoded).0, &items));
+    }
+    assert_eq!(encode_checked(&[Item::plain('$')]).unwrap().0, r"\$");
+}
+
+#[test]
+fn currency_style_selection_and_caret_ranges_cover_both_escape_chars() {
+    let source = r"\$1,900 at 5.9% for $2 (3)/(4)$ years";
+    let (bold, a, b) = inline_op(source, 0, 2, IOp::Bold).unwrap();
+    assert_eq!(bold, r"**\$**1,900 at 5.9% for $2 (3)/(4)$ years");
+    assert_eq!(slice(&bold, a..b), r"\$");
+    assert_eq!(inline_op(&bold, a, b, IOp::Bold).unwrap().0, source);
+    // A caret within the amount formats the same numeric word and leaves its preceding
+    // escaped dollar and following mixed-number atom intact.
+    let (styled, a, b) = inline_op(source, 4, 4, IOp::Italic).unwrap();
+    assert!(styled.starts_with(r"\$1,*900*"));
+    assert_eq!(slice(&styled, a..b), "900");
+    assert!(styled.ends_with(r"for $2 (3)/(4)$ years"));
+    for op in [IOp::Bold, IOp::Italic, IOp::Strike, IOp::Sub, IOp::Sup] {
+        let (styled, a, b) = inline_op(source, 0, 2, op).unwrap();
+        assert!(a <= b && b <= clen(&styled));
+        assert_eq!(inline_op(&styled, a, b, op).unwrap().0, source, "{op:?}");
+    }
+}
+
 /// Structured-looking stems: lines of lists, tables and paragraphs.
 fn stem(r: &mut Rng) -> String {
     let mut lines = Vec::new();
@@ -1357,7 +1404,10 @@ fn corpus_inline_decode_encode_is_the_identity_per_line() {
         for line in s.split('\n') {
             let (items, _) = decode_line(line);
             let (back, _) = encode_line(&items);
-            assert_eq!(richtext::inline(&back), richtext::inline(line), "line {line:?}");
+            // Canonical literal-dollar escapes can split one text Span into several,
+            // without changing any visible char, style, code atom or equation atom.
+            assert!(same_items(&decode_line(&back).0, &items), "line {line:?} -> {back:?}");
+            assert_eq!(richtext::plain(&back), richtext::plain(line), "line {line:?}");
         }
     }
 }

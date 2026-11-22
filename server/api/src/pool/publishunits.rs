@@ -271,7 +271,7 @@ fn units_of(f: &Facts, pixel_of: &HashMap<String, String>) -> Vec<Vec<Unit>> {
         .map(|(i, img)| {
             let mut out: Vec<Unit> = f.served_text[i].iter().map(|k| Unit { key: k.clone(), kind: UnitKind::Text, part: None, hidden: false, stem_only: false }).collect();
             out.extend(f.hidden_text[i].iter().map(|k| Unit { key: k.clone(), kind: UnitKind::Text, part: None, hidden: true, stem_only: false }));
-            if let Some(sha) = img {
+            for sha in img {
                 out.push(Unit { key: sha.clone(), kind: UnitKind::Image, part: None, hidden: false, stem_only: false });
                 if let Some(px) = pixel_of.get(sha) {
                     out.push(Unit { key: px.clone(), kind: UnitKind::Image, part: None, hidden: false, stem_only: false });

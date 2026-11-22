@@ -3,7 +3,7 @@
 //! loop: the model proposes a structured spec, the app validates and renders it, the model
 //! checks the render against the original, and one repair round fixes what it flagged.
 //! When nothing fits, the caller keeps the plain cropped image.
-use crate::ai::{ask_images, AiCfg};
+use crate::ai::AiCfg;
 use crate::figures::{self, FigureDef, Kind, Value as PV};
 use crate::model::FigureSpec;
 use serde_json::Value;
@@ -52,9 +52,26 @@ fn debug(msg: &str) {
     }
 }
 
-fn ask_json(images: &[&[u8]], cfg: &AiCfg, prompt: &str) -> Result<Value, String> {
-    let reply = ask_images(images, cfg, prompt, 0.0)?;
+async fn ask_json(images: &[&[u8]], cfg: &AiCfg, prompt: &str) -> Result<Value, String> {
+    let reply = crate::ai::ask_images_async(images, cfg, prompt, 0.0).await?;
     crate::ditto::json_object(&reply).ok_or_else(|| "the model did not answer with JSON".to_string())
+}
+
+fn params_schema(def: &FigureDef) -> crate::ai::OutputSchema {
+    let mut props=serde_json::Map::new();
+    for p in (def.params)() {
+        let schema=match p.kind {
+            Kind::Float {min,max,..} => serde_json::json!({"type":"number","minimum":min,"maximum":max}),
+            Kind::Int {min,max} => serde_json::json!({"type":"integer","minimum":min,"maximum":max}),
+            Kind::Bool => serde_json::json!({"type":"boolean"}),
+            Kind::Choice(o) => serde_json::json!({"type":"string","enum":o}),
+            _ => serde_json::json!({"type":"string"}),
+        };
+        props.insert(p.key.into(),schema);
+    }
+    crate::ai::OutputSchema::new("figure_params_v1",vershion_ai_core::object(serde_json::json!({
+        "reasoning":{"type":"string"},"params":vershion_ai_core::object(Value::Object(props))
+    })))
 }
 
 fn render(def: &FigureDef, params: &Value) -> Result<(FigureSpec, Vec<u8>), String> {
@@ -78,16 +95,16 @@ enum Fitted {
 }
 
 /// One fitting attempt. `feedback` is what earlier attempts got wrong (empty on the first try).
-fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<Fitted, String> {
+async fn fit_once_async(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<Fitted, String> {
     let pick = ask_json(
         &[crop],
-        cfg,
+        &cfg.with_output(vershion_ai_core::figure_pick()),
         &format!(
             "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}{feedback}\n\nAnswer JSON only, written on one line with no indentation: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
             context.chars().take(200).collect::<String>(),
             catalog()
         ),
-    )?;
+    ).await?;
     debug(&format!("pick: {pick}"));
     let Some(id) = pick.get("id").and_then(Value::as_str) else {
         return Ok(Fitted::Miss("the model named no generator".to_string()));
@@ -101,14 +118,14 @@ fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<F
     for _round in 0..3 {
         let spec = ask_json(
             &[crop],
-            cfg,
+            &cfg.with_output(params_schema(&def)),
             &format!(
                 "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only, written on one line with no indentation: {{\"reasoning\": \"two short sentences working out which part of the picture each parameter describes (for a triangle: which corner is the right angle, which side is the longest)\", \"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. Every parameter you leave out keeps the default shown above, so when a default does not fit this picture (a preset angle or length it does not have), set it. Set a text parameter to \"\" (empty) to clear its default, which is how a measure the picture leaves out is \"worked out\" from the others. Check your values agree before answering: angles of a triangle add to 180, and the side opposite the largest angle (the hypotenuse, opposite a right angle) is the longest, so a 3 and a 4 are the two legs and the hypotenuse is the side left blank for the generator to work out. Match the picture's own labels exactly, units included (a side printed as \"3 cm\" needs the label text \"3 cm\"), and switch off every label, corner letter or measure the picture does not show. If the redraw shows a sentence of text instead of a drawing, the parameters contradict each other. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
                 def.title,
                 context.chars().take(200).collect::<String>(),
                 param_help(&def)
             ),
-        )?;
+        ).await?;
         debug(&format!("params: {spec}"));
         let spec_json = spec.get("params").cloned().unwrap_or(Value::Null).to_string();
         let Ok((spec, png)) = render(&def, spec.get("params").unwrap_or(&Value::Null)) else {
@@ -116,9 +133,9 @@ fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<F
         };
         let verdict = ask_json(
             &[crop, &png],
-            cfg,
+            &cfg.with_output(vershion_ai_core::figure_review()),
             "Image 1 is the original picture. Image 2 is a redraw made by a generator. Do they show the same thing: same molecule or structure, same labels and values, same layout? Ignore line thickness, font and exact position.\nAnswer JSON only, written on one line with no indentation: {\"same\": true or false, \"differences\": \"what is different, as a short instruction for fixing the parameters\"}",
-        )?;
+        ).await?;
         debug(&format!("verdict: {verdict}"));
         if verdict.get("same").and_then(Value::as_bool) == Some(true) {
             return Ok(Fitted::Found(Fit { spec, png }));
@@ -132,26 +149,17 @@ fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<F
     Ok(Fitted::Miss(format!("the \"{}\" redraw still did not match after 3 parameter repairs: {reason}", def.title)))
 }
 
-/// One fitting attempt; `Ok(None)` when no generator reproduces the picture closely enough.
+/// Blocking convenience wrappers for headless tools; both platforms use the async workflow.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn fit(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option<Fit>, String> {
-    if crop.is_empty() {
-        return Ok(None);
-    }
-    Ok(match fit_once(crop, context, cfg, "")? {
-        Fitted::Found(f) => Some(f),
-        Fitted::Miss(_) => None,
-    })
+    crate::ai::block_on(fit_async(crop,context,cfg))
 }
-
-/// Up to `tries` fitting attempts, each told why the ones before it failed. The import path asks
-/// for 3, so a picture the first generator misses still gets a chance with another one.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn fit_with_retries(crop: &[u8], context: &str, cfg: &AiCfg, tries: usize) -> Result<Option<Fit>, String> {
-    if crop.is_empty() {
-        return Ok(None);
-    }
-    retry_fit(tries, |feedback| fit_once(crop, context, cfg, feedback))
+    crate::ai::block_on(fit_async_with_retries(crop,context,cfg,tries))
 }
 
+#[cfg(test)]
 fn retry_fit(tries: usize, mut attempt: impl FnMut(&str) -> Result<Fitted, String>) -> Result<Option<Fit>, String> {
     let tries = tries.max(1);
     let mut feedback = String::new();
@@ -177,73 +185,6 @@ fn retry_fit(tries: usize, mut attempt: impl FnMut(&str) -> Result<Fitted, Strin
 }
 
 /// Browser version of [`fit`], awaiting each model round trip instead of blocking.
-#[cfg(target_arch = "wasm32")]
-async fn ask_json_async(images: &[&[u8]], cfg: &AiCfg, prompt: &str) -> Result<Value, String> {
-    let reply = crate::ai::ask_images_async(images, cfg, prompt, 0.0).await?;
-    crate::ditto::json_object(&reply).ok_or_else(|| "the model did not answer with JSON".to_string())
-}
-
-/// One fitting attempt on the web: the same prompts and feedback as [`fit_once`], awaited.
-#[cfg(target_arch = "wasm32")]
-async fn fit_once_async(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<Fitted, String> {
-    let pick = ask_json_async(
-        &[crop],
-        cfg,
-        &format!(
-            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}{feedback}\n\nAnswer JSON only, written on one line with no indentation: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
-            context.chars().take(200).collect::<String>(),
-            catalog()
-        ),
-    )
-    .await?;
-    debug(&format!("pick: {pick}"));
-    let Some(id) = pick.get("id").and_then(Value::as_str) else {
-        return Ok(Fitted::Miss("the model named no generator".to_string()));
-    };
-    let Some(def) = figures::registry().into_iter().find(|d| d.id == id) else {
-        return Ok(Fitted::Miss(format!("the model named a generator that does not exist ({id})")));
-    };
-
-    let mut feedback = feedback.to_string();
-    let mut reason = String::new();
-    for _round in 0..3 {
-        let spec = ask_json_async(
-            &[crop],
-            cfg,
-            &format!(
-                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only, written on one line with no indentation: {{\"reasoning\": \"two short sentences working out which part of the picture each parameter describes (for a triangle: which corner is the right angle, which side is the longest)\", \"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. Every parameter you leave out keeps the default shown above, so when a default does not fit this picture (a preset angle or length it does not have), set it. Set a text parameter to \"\" (empty) to clear its default, which is how a measure the picture leaves out is \"worked out\" from the others. Check your values agree before answering: angles of a triangle add to 180, and the side opposite the largest angle (the hypotenuse, opposite a right angle) is the longest, so a 3 and a 4 are the two legs and the hypotenuse is the side left blank for the generator to work out. Match the picture's own labels exactly, units included (a side printed as \"3 cm\" needs the label text \"3 cm\"), and switch off every label, corner letter or measure the picture does not show. If the redraw shows a sentence of text instead of a drawing, the parameters contradict each other. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
-                def.title,
-                context.chars().take(200).collect::<String>(),
-                param_help(&def)
-            ),
-        )
-        .await?;
-        debug(&format!("params: {spec}"));
-        let spec_json = spec.get("params").cloned().unwrap_or(Value::Null).to_string();
-        let Ok((spec, png)) = render(&def, spec.get("params").unwrap_or(&Value::Null)) else {
-            return Ok(Fitted::Miss(format!("the \"{}\" generator could not draw the parameters it proposed", def.title)));
-        };
-        let verdict = ask_json_async(
-            &[crop, &png],
-            cfg,
-            "Image 1 is the original picture. Image 2 is a redraw made by a generator. Do they show the same thing: same molecule or structure, same labels and values, same layout? Ignore line thickness, font and exact position.\nAnswer JSON only, written on one line with no indentation: {\"same\": true or false, \"differences\": \"what is different, as a short instruction for fixing the parameters\"}",
-        )
-        .await?;
-        debug(&format!("verdict: {verdict}"));
-        if verdict.get("same").and_then(Value::as_bool) == Some(true) {
-            return Ok(Fitted::Found(Fit { spec, png }));
-        }
-        reason = verdict.get("differences").and_then(Value::as_str).unwrap_or("it did not match").to_string();
-        feedback.push_str(&format!(
-            "\nAn earlier attempt with parameters {} was compared with the original and differed: {reason}",
-            spec_json,
-        ));
-    }
-    Ok(Fitted::Miss(format!("the \"{}\" redraw still did not match after 3 parameter repairs: {reason}", def.title)))
-}
-
-/// Browser version of [`fit`], awaiting each model round trip instead of blocking.
-#[cfg(target_arch = "wasm32")]
 pub async fn fit_async(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option<Fit>, String> {
     if crop.is_empty() {
         return Ok(None);
@@ -255,7 +196,6 @@ pub async fn fit_async(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option
 }
 
 /// Browser version of [`fit_with_retries`]: up to `tries` attempts, each told what the last missed.
-#[cfg(target_arch = "wasm32")]
 pub async fn fit_async_with_retries(crop: &[u8], context: &str, cfg: &AiCfg, tries: usize) -> Result<Option<Fit>, String> {
     if crop.is_empty() {
         return Ok(None);
@@ -285,6 +225,14 @@ pub async fn fit_async_with_retries(crop: &[u8], context: &str, cfg: &AiCfg, tri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_generator_has_a_bounded_parameter_schema() {
+        for def in figures::registry() {
+            let schema=params_schema(&def);
+            vershion_ai_core::check_schema(&schema.schema).unwrap_or_else(|e|panic!("{}: {e}",def.id));
+        }
+    }
 
     #[test]
     fn catalog_lists_every_figure_and_lewis_exposes_its_presets() {

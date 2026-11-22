@@ -15,7 +15,7 @@
 //! | `Blank` | every `accept` list emptied; the number of blanks is kept |
 //! | `Short` | `sample = ""` |
 //! | `Multipart` | the rules above for each part (`Mc`, `Tf`, `Short`) |
-//! | every question | `explanation` removed; `figure` **always** removed; `image` removed unless its position is in `image_ok`; `published` removed (author-local state); `origin.served_sha256` and `origin.match_hash` removed; `keyless = true` |
+//! | every question | `explanation` removed; `figure` **always** removed, a picture choice's too; `image` removed unless its position is in `image_ok`, and so is every picture choice's `image` (one tick covers all the question's pictures; a choice with no visible text whose picture would be removed is refused, `choice_picture_needs_image_ok` at `...answers[i].image`); `published` removed (author-local state); `origin.served_sha256` and `origin.match_hash` removed; `keyless = true` |
 //! | the bank | `published` removed; `origin.served_sha256` and `origin.match_hash` removed |
 //!
 //! Kept: `id`, `stem`, part stems, answer and left-item texts, `locked`, `topics`, `points`,
@@ -233,6 +233,8 @@ struct Ctx<'a, 'r> {
     acks: BTreeSet<usize>,
     drop_provenance: bool,
     formatting_checked: bool,
+    /// The payload is a bank (error paths start `bank.questions[i]`, else `question`).
+    bank: bool,
 }
 
 fn label_path(at: Pos) -> String {
@@ -1789,6 +1791,36 @@ fn clear_origin(o: &mut Option<Origin>) {
     }
 }
 
+/// What `strip_one` did to one question's pictures (its image and its picture choices').
+struct Pictures {
+    figure_removed: bool,
+    kept: bool,
+    removed: bool,
+}
+
+impl Pictures {
+    /// A question's choices: every figure removed; every image kept when the question's pictures
+    /// are ticked (`image_ok`), else removed. A picture-only choice (no visible text) whose picture
+    /// would be removed is refused: it would be served blank.
+    fn choices(&mut self, answers: &mut [Answer], image_ok: bool, path: &str, errors: &mut Vec<ValidationError>) {
+        for (i, a) in answers.iter_mut().enumerate() {
+            self.figure_removed |= a.figure.take().is_some();
+            if a.image.is_none() {
+                continue;
+            }
+            if image_ok {
+                self.kept = true;
+                continue;
+            }
+            a.image = None;
+            self.removed = true;
+            if !text::has_visible(&a.text) && errors.len() < MAX_ERRORS {
+                errors.push(ValidationError::new("choice_picture_needs_image_ok", &format!("{path}[{i}].image")));
+            }
+        }
+    }
+}
+
 fn strip_one(mut s: Question, image_ok: bool, pos: usize, cx: &mut Ctx) -> Question {
     // Formatting is judged on the served form (labels as decided), before anything is removed.
     if matches!(cx.order, Order::Shuffle(_)) && !cx.formatting_checked {
@@ -1809,16 +1841,37 @@ fn strip_one(mut s: Question, image_ok: bool, pos: usize, cx: &mut Ctx) -> Quest
     for t in s.topics.iter_mut() {
         *t = format::served_text(t);
     }
-    if s.figure.take().is_some() {
-        cx.out.figures_removed.push(pos);
-    }
+    // The question's pictures are its image and its picture choices' images: one tick
+    // (`image_ok`) covers them all, and the report names the question once.
+    let mut pics = Pictures { figure_removed: s.figure.take().is_some(), kept: false, removed: false };
     if s.image.is_some() {
         if image_ok {
-            cx.out.images_kept.push(pos);
+            pics.kept = true;
         } else {
             s.image = None;
-            cx.out.images_removed.push(pos);
+            pics.removed = true;
         }
+    }
+    let base = if cx.bank { format!("bank.questions[{pos}].kind") } else { "question.kind".to_string() };
+    match &mut s.kind {
+        Kind::Mc { answers } => pics.choices(answers, image_ok, &format!("{base}.Mc.answers"), &mut cx.errors),
+        Kind::Multipart { parts } => {
+            for (pi, p) in parts.iter_mut().enumerate() {
+                if let PartKind::Mc { answers } = &mut p.kind {
+                    pics.choices(answers, image_ok, &format!("{base}.Multipart.parts[{pi}].kind.Mc.answers"), &mut cx.errors);
+                }
+            }
+        }
+        _ => {}
+    }
+    if pics.figure_removed {
+        cx.out.figures_removed.push(pos);
+    }
+    if pics.kept {
+        cx.out.images_kept.push(pos);
+    }
+    if pics.removed {
+        cx.out.images_removed.push(pos);
     }
     s.published = None;
     clear_origin(&mut s.origin);
@@ -1908,6 +1961,7 @@ fn strip_owned(p: Payload, opts: &StripOptions, order: Order) -> Result<Stripped
         acks: opts.ack_formatting.iter().copied().collect(),
         drop_provenance: opts.drop_client_provenance,
         formatting_checked: opts.formatting_checked,
+        bank: matches!(p.body, Body::Bank(_)),
     };
     let body = match p.body {
         Body::Bank(mut b) => {
@@ -2071,7 +2125,7 @@ pub fn question_labels(all: &[LabelDecision], question: usize) -> QuestionLabels
 /// One question's stripped form with a given generator and decisions (tests).
 pub fn strip_question(q: &Question, image_ok: bool, labels: &QuestionLabels, rng: &mut ShuffleRng) -> Result<Question, Vec<ValidationError>> {
     let map: BTreeMap<(usize, Option<usize>), LabelChoice> = labels.iter().map(|(p, c)| ((0, *p), *c)).collect();
-    let mut cx = Ctx { order: Order::Shuffle(rng), labels: &map, out: empty_report(Payload { schema_version: SCHEMA_STRIPPED, body: Body::Question(placeholder()) }), errors: Vec::new(), keep_order: false, acks: BTreeSet::new(), drop_provenance: false, formatting_checked: false };
+    let mut cx = Ctx { order: Order::Shuffle(rng), labels: &map, out: empty_report(Payload { schema_version: SCHEMA_STRIPPED, body: Body::Question(placeholder()) }), errors: Vec::new(), keep_order: false, acks: BTreeSet::new(), drop_provenance: false, formatting_checked: false, bank: false };
     let s = strip_one(q.clone(), image_ok, 0, &mut cx);
     if cx.errors.is_empty() { Ok(s) } else { Err(cx.errors) }
 }
@@ -2107,7 +2161,7 @@ pub fn strip_without_shuffle(q: &Question, labels: &QuestionLabels) -> Question 
         }
         _ => {}
     }
-    let mut cx = Ctx { order: Order::Sort, labels: &map, out: empty_report(Payload { schema_version: SCHEMA_STRIPPED, body: Body::Question(placeholder()) }), errors: Vec::new(), keep_order: false, acks: BTreeSet::new(), drop_provenance: false, formatting_checked: true };
+    let mut cx = Ctx { order: Order::Sort, labels: &map, out: empty_report(Payload { schema_version: SCHEMA_STRIPPED, body: Body::Question(placeholder()) }), errors: Vec::new(), keep_order: false, acks: BTreeSet::new(), drop_provenance: false, formatting_checked: true, bank: false };
     strip_one(q.clone(), false, 0, &mut cx)
 }
 

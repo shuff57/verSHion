@@ -821,3 +821,21 @@ fn a_frequency_in_thousands_groups_or_with_an_exponent_reads_as_one_number() {
     assert_eq!(read("140 < h \u{2264} 150\t1,000\n150 < h \u{2264} 165\t1,200").0, vec![(Some(140.0), 150.0, Some(1000.0)), (Some(150.0), 165.0, Some(1200.0))]);
     assert_eq!(read("140 < h \u{2264} 150\t7").0, vec![(Some(140.0), 150.0, Some(7.0))]);
 }
+
+#[test]
+fn graph_paper_grid_and_arrowed_axes_on_request() {
+    // Holdout v9, WJEC: a frequency-density histogram on graph paper with arrowed axes.
+    let with = |pairs: &[(&str, &str)]| {
+        let mut p = defaults();
+        for (k, v) in pairs {
+            if *v == "true" || *v == "false" { p.set_b(k, *v == "true") } else { p.set_s(k, v) }
+        }
+        p
+    };
+    let base = render(&with(&[("minor", "5 per block")]));
+    let both = render(&with(&[("minor", "5 per block"), ("grid_directions", "Both ways")]));
+    assert!(both.matches("<line").count() > base.matches("<line").count() + 10, "upright major and minor lines are added");
+    let arrows = render(&with(&[("axis_arrows", "true")]));
+    assert!(arrows.matches("<polygon").count() >= render(&defaults()).matches("<polygon").count() + 2, "one head per axis");
+    assert_eq!(render(&defaults()), render(&with(&[("grid_directions", "Across"), ("axis_arrows", "false")])), "off by default: old histograms are unchanged");
+}

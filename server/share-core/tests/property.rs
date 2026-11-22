@@ -102,12 +102,12 @@ impl Gen {
                     format!("{l}{}", self.wrap(&m))
                 }
             };
-            v.push(Answer { text: t, correct: self.coin(), locked: self.rng.below(4) == 0 });
+            v.push(Answer { text: t, correct: self.coin(), locked: self.rng.below(4) == 0, ..Default::default() });
         }
         // Sometimes a choice that names its siblings.
         if self.rng.below(6) == 0 {
             let t = ["Both A and B", "All of the above", "None of these", "I and II only"][self.rng.below(4)];
-            v.push(Answer { text: t.into(), correct: false, locked: self.coin() });
+            v.push(Answer { text: t.into(), correct: false, locked: self.coin(), ..Default::default() });
         }
         // Correct flags that formatting alone would give away are refused by strip (tested in
         // round5); re-draw them here so these properties exercise the rest.
@@ -661,7 +661,7 @@ fn no_served_form_carries_the_key_in_formatting() {
         let answers: Vec<Answer> = (0..n)
             .map(|i| {
                 let (a, z) = if uniform || g.rng.below(3) != 0 { base } else { DECOS[g.rng.below(DECOS.len())] };
-                Answer { text: format!("{a}planet {i}{z}"), correct: i == 0 || g.rng.below(4) == 0, locked: false }
+                Answer { text: format!("{a}planet {i}{z}"), correct: i == 0 || g.rng.below(4) == 0, locked: false, ..Default::default() }
             })
             .collect();
         let leaky = share_core::labels::key_in_formatting(&answers.iter().map(|a| (a.text.as_str(), a.correct)).collect::<Vec<_>>());

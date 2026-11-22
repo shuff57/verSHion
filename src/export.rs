@@ -35,7 +35,8 @@
 //! questions print linearly (left items numbered, then the lettered right column
 //! indented); pictures embed as inline drawings (`word/media`, PNG / JPEG as they are, other
 //! formats re-encoded to PNG) at the PDF's size and place; only undecodable bytes fall back to
-//! a centered italic `[picture]` paragraph.
+//! a centered italic `[picture]` paragraph. Inline equations are editable OMML from the same
+//! parsed equaSHion AST used by the PDF renderer, preserving matrices, fractions and scripts.
 //!
 //! # Shared print rules (PDF and DOCX, matched by the exam page preview)
 //! Title area: header line with a rule under it, the title centred, a muted "N questions ·
@@ -49,6 +50,7 @@
 //! task items without a bullet. Stems without it print exactly as before.
 
 use crate::fonts;
+use std::sync::Arc;
 use crate::layout::{DocImage, DocQ, DocSection, ExamDoc, KeyLayout};
 use crate::model::PaperStyle;
 use crate::richtext::{self, Block, Node};
@@ -411,6 +413,8 @@ pub fn blanks_outside_tables(stem: &str) -> usize {
 #[derive(Clone, Debug)]
 struct Frag {
     text: String,
+    /// Original equation source, kept atomic through wrapping and emitted as OMML in Word.
+    math: bool,
     face: Face,
     script: i8,
     /// `~~struck through~~`.
@@ -423,11 +427,80 @@ struct Frag {
 #[derive(Clone, Debug)]
 struct Placed {
     dx: f64,
+    math: Option<MathPlaced>,
     text: String,
     face: Face,
     script: i8,
     strike: bool,
     link: Option<String>,
+}
+
+/// Only equation runs are rasterized; surrounding prose remains embedded selectable text.
+/// Four pixels per point (288 dpi), lossless RGB plus soft alpha, keeps rules and brackets sharp.
+#[derive(Debug)]
+struct MathRaster {
+    key: (String, u64),
+    png: Vec<u8>,
+    w: f64,
+    h: f64,
+    baseline: f64,
+}
+#[derive(Clone, Debug)]
+struct MathPlaced {
+    raster: Arc<MathRaster>,
+    scale: f64,
+}
+thread_local! {
+    static MATH_RASTERS: std::cell::RefCell<std::collections::HashMap<(String, u64), Option<Arc<MathRaster>>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+fn math_raster(source: &str, size: f64) -> Option<Arc<MathRaster>> {
+    let key = (source.to_string(), size.to_bits());
+    MATH_RASTERS.with(|cache| {
+        if let Some(v) = cache.borrow().get(&key) { return v.clone(); }
+        let raster = crate::equation::png(source, size as f32, 4.0).map(|p| Arc::new(MathRaster {
+            key: key.clone(), png: p.png, w: p.w_pt as f64, h: p.h_pt as f64, baseline: p.baseline_pt as f64,
+        }));
+        let mut c = cache.borrow_mut();
+        if c.len() >= 128 { c.clear(); }
+        c.insert(key, raster.clone());
+        raster
+    })
+}
+fn place_frag(f: &Frag, dx: f64, body: f64, room: f64) -> Placed {
+    let math = f.math.then(|| math_raster(&f.text, frag_size(f.script, body))).flatten().map(|raster| {
+        let scale = (room.max(1.0) / raster.w.max(1.0)).min(1.0);
+        MathPlaced { raster, scale }
+    });
+    Placed { dx, text: f.text.clone(), math, face: f.face, script: f.script, strike: f.strike, link: f.link.clone() }
+}
+fn placed_run_w(p: &Placed, body: f64) -> f64 {
+    p.math.as_ref().map_or_else(|| text_w(&p.text, p.face, frag_size(p.script, body)), |m| m.raster.w * m.scale)
+}
+/// Height and baseline from the top of a line slot. Plain text retains its previous pitch;
+/// equations can extend both above and below the shared baseline without colliding with rows.
+fn line_metrics_at(line: &[Placed], body: f64, lead: f64, text_ascent: f64) -> (f64, f64) {
+    let mut ascent = text_ascent;
+    let mut descent = lead - text_ascent;
+    for p in line {
+        if let Some(m) = &p.math {
+            let dy = match p.script { -1 => -0.2 * body, 1 => 0.36 * body, _ => 0.0 };
+            ascent = ascent.max(m.raster.baseline * m.scale + dy);
+            descent = descent.max((m.raster.h - m.raster.baseline) * m.scale - dy);
+        }
+    }
+    (ascent + descent, ascent)
+}
+fn line_metrics(line: &[Placed], body: f64, lead: f64) -> (f64, f64) {
+    line_metrics_at(line, body, lead, body * 0.78)
+}
+fn lines_h(lines: &[Vec<Placed>], body: f64, lead: f64) -> f64 {
+    lines.iter().map(|l| line_metrics(l, body, lead).0).sum()
+}
+fn cell_line_metrics(line: &[Placed], body: f64, lead: f64) -> (f64, f64) {
+    line_metrics_at(line, body, lead, 0.5 * lead + 0.33 * body)
+}
+fn cell_lines_h(lines: &[Vec<Placed>], body: f64, lead: f64) -> f64 {
+    lines.iter().map(|l| cell_line_metrics(l, body, lead).0).sum()
 }
 
 const SCRIPT_SCALE: f64 = 0.7;
@@ -456,7 +529,7 @@ fn frag_size(script: i8, body: f64) -> f64 {
 }
 
 fn frag_w(f: &Frag, body: f64) -> f64 {
-    text_w(&f.text, f.face, frag_size(f.script, body))
+    if f.math { math_raster(&f.text, frag_size(f.script, body)).map_or_else(|| text_w(&f.text, f.face, frag_size(f.script, body)), |m| m.w) } else { text_w(&f.text, f.face, frag_size(f.script, body)) }
 }
 
 /// Unicode sub/superscript characters -> (ASCII char, script), so every script prints the
@@ -495,17 +568,17 @@ fn split_unicode_scripts(text: &str, face: Face, base: i8, out: &mut Vec<Frag>) 
             None => (c, base),
         };
         if sc != cur_sc && !cur.is_empty() {
-            out.push(Frag { text: std::mem::take(&mut cur), face, script: cur_sc, strike: false, link: None });
+            out.push(Frag { text: std::mem::take(&mut cur), face, script: cur_sc, strike: false, link: None, math: false });
         }
         cur_sc = sc;
         cur.push(ch);
     }
     if !cur.is_empty() {
-        out.push(Frag { text: cur, face, script: cur_sc, strike: false, link: None });
+        out.push(Frag { text: cur, face, script: cur_sc, strike: false, link: None, math: false });
     }
 }
 
-/// Styled runs of one parsed line; `$math$` degrades through `equation_text::stem_to_plain`.
+/// Styled runs retain equation source for real PDF layout and editable Word equations.
 fn line_frags(line: &richtext::Line, force_bold: bool) -> Vec<Frag> {
     let mut out = Vec::new();
     for s in line {
@@ -517,11 +590,13 @@ fn line_frags(line: &richtext::Line, force_bold: bool) -> Vec<Frag> {
         if s.code {
             // `code`: the mono, literal (no Unicode script folding), on a tint when drawn.
             if !s.text.is_empty() {
-                out.push(Frag { text: s.text.clone(), face: Face::Mono, script: base, strike: s.strike, link: s.link.clone() });
+                out.push(Frag { text: s.text.clone(), face: Face::Mono, script: base, strike: s.strike, link: s.link.clone(), math: false });
             }
         } else if s.math {
-            let t = crate::equation_text::stem_to_plain(&format!("${}$", s.text));
-            split_unicode_scripts(&t, face, 0, &mut out);
+            // Unknown input remains visible as literal source instead of a lossy approximation.
+            let valid = crate::equation::parse(&s.text).is_some();
+            out.push(Frag { text: if valid { s.text.clone() } else { format!("${}$", s.text) },
+                face, script: base, strike: s.strike, link: s.link.clone(), math: valid });
         } else {
             let n0 = out.len();
             split_unicode_scripts(&s.text, face, base, &mut out);
@@ -547,6 +622,10 @@ struct Word {
 fn words(frags: &[Frag]) -> Vec<Word> {
     let mut ws: Vec<Word> = vec![Word { frags: vec![], sp: Face::Reg, script: 0 }];
     for f in frags {
+        if f.math {
+            ws.last_mut().unwrap().frags.push(f.clone());
+            continue;
+        }
         for (i, piece) in f.text.split(' ').enumerate() {
             if i > 0 {
                 ws.push(Word { frags: vec![], sp: f.face, script: f.script });
@@ -600,6 +679,16 @@ fn wrap_frags(frags: &[Frag], first_w: f64, rest_w: f64, body: f64) -> Vec<Vec<P
         }
         if ww > maxw(&lines) - x {
             for f in &word {
+                if f.math {
+                    let w = frag_w(f, body);
+                    if x > 0.0 && x + w > maxw(&lines) {
+                        lines.push(std::mem::take(&mut cur)); x = 0.0;
+                    }
+                    let p = place_frag(f, x, body, maxw(&lines) - x);
+                    x += placed_run_w(&p, body);
+                    cur.push(p);
+                    continue;
+                }
                 let size = frag_size(f.script, body);
                 for ch in f.text.chars() {
                     let s = ch.to_string();
@@ -608,14 +697,14 @@ fn wrap_frags(frags: &[Frag], first_w: f64, rest_w: f64, body: f64) -> Vec<Vec<P
                         lines.push(std::mem::take(&mut cur));
                         x = 0.0;
                     }
-                    cur.push(Placed { dx: x, text: s, face: f.face, script: f.script, strike: f.strike, link: f.link.clone() });
+                    cur.push(Placed { dx: x, text: s, math: None, face: f.face, script: f.script, strike: f.strike, link: f.link.clone() });
                     x += cw;
                 }
             }
         } else {
             for f in word {
                 let w = frag_w(&f, body);
-                cur.push(Placed { dx: x, text: f.text, face: f.face, script: f.script, strike: f.strike, link: f.link });
+                cur.push(place_frag(&f, x, body, maxw(&lines) - x));
                 x += w;
             }
         }
@@ -631,7 +720,7 @@ fn merge_runs(line: Vec<Placed>, body: f64) -> Vec<Placed> {
     let mut out: Vec<Placed> = Vec::with_capacity(line.len());
     for p in line {
         if let Some(last) = out.last_mut() {
-            if last.script == 0 && p.script == 0 && last.face == p.face && last.strike == p.strike && last.link == p.link {
+            if last.math.is_none() && p.math.is_none() && last.script == 0 && p.script == 0 && last.face == p.face && last.strike == p.strike && last.link == p.link {
                 let end = last.dx + text_w(&last.text, last.face, body);
                 let gap = p.dx - end;
                 // Gap of whole spaces in this face (a space between two runs of one face was
@@ -666,7 +755,7 @@ enum Item {
     /// One text line drawn `indent` points right of the block's x; `marker` (bullet or
     /// list number) ends just left of the indent; `bar` draws the quote rule.
     /// `scale` enlarges the line (headings; 1.0 for body text).
-    Line { indent: f64, frags: Vec<Placed>, marker: Option<String>, bar: bool, scale: f64 },
+    Line { indent: f64, frags: Vec<Placed>, marker: Option<String>, bar: bool, scale: f64, h: f64, ascent: f64 },
     Gap(f64),
     /// A divider: a thin rule across `w` points, centred in its slot.
     Rule { w: f64 },
@@ -683,7 +772,7 @@ enum Item {
 
 fn item_h(it: &Item, lead: f64) -> f64 {
     match it {
-        Item::Line { scale, .. } => lead * scale,
+        Item::Line { h, .. } => *h,
         Item::Gap(h) => *h,
         Item::Row { h, .. } => *h,
         Item::Rule { .. } => lead * 0.8,
@@ -754,9 +843,9 @@ fn layout_table(header: bool, rows: &[Vec<richtext::Line>], max_w: f64, body: f6
                 if is_blank_cell(cell) { vec![vec![]] } else { wrap_frags(cell, w, w, body) }
             })
             .collect();
-        let nl = cells.iter().map(|c| c.len()).max().unwrap_or(1).max(1);
+        let content_h = cells.iter().map(|c| cell_lines_h(c, body, lead)).fold(lead, f64::max);
         let roomy = if r.iter().any(|c| is_blank_cell(c)) { 0.5 * body } else { 0.0 };
-        let h = nl as f64 * lead + 2.0 * CELL_PAD_V + roomy;
+        let h = content_h + 2.0 * CELL_PAD_V + roomy;
         let is_head = header && ri == 0;
         out.push(Item::Row { cols: cols.clone(), cells, h, header: is_head, header_idx: (header && ri > 0).then_some(base) });
     }
@@ -784,7 +873,7 @@ fn nodes_of(blocks: &[Block]) -> Vec<Node> {
 
 /// Right end of a laid-out line (points from its start), its runs measured at `body`.
 fn placed_w(line: &[Placed], body: f64) -> f64 {
-    line.iter().map(|p| p.dx + text_w(&p.text, p.face, frag_size(p.script, body))).fold(0.0, f64::max)
+    line.iter().map(|p| p.dx + placed_run_w(p, body)).fold(0.0, f64::max)
 }
 
 /// Left offset that centres a line `w` wide in `room`.
@@ -828,7 +917,8 @@ fn layout_nodes(nodes: &[Node], avail: f64, first_w: f64, body: f64, lead: f64) 
                     for (j, pl) in wrap_frags(&line_frags(l, false), fw(first, 0.0), avail, body).into_iter().enumerate() {
                         let room = if j == 0 { fw(first, 0.0) } else { avail };
                         let indent = if center { center_off(placed_w(&pl, body), room) } else { 0.0 };
-                        items.push(Item::Line { indent, frags: pl, marker: None, bar: false, scale: 1.0 });
+                        let (h, ascent) = line_metrics(&pl, body, lead);
+                        items.push(Item::Line { indent, frags: pl, marker: None, bar: false, scale: 1.0, h, ascent });
                         first = false;
                     }
                 }
@@ -851,7 +941,8 @@ fn layout_nodes(nodes: &[Node], avail: f64, first_w: f64, body: f64, lead: f64) 
                             Block::Numbered(_) => Some(richtext::number_label(depth(k), ords[k])),
                             _ => None,
                         });
-                        items.push(Item::Line { indent, frags: pl, marker: marker.flatten(), bar, scale: 1.0 });
+                        let (h, ascent) = line_metrics(&pl, body, lead);
+                        items.push(Item::Line { indent, frags: pl, marker: marker.flatten(), bar, scale: 1.0, h, ascent });
                         first = false;
                     }
                 }
@@ -881,7 +972,8 @@ fn layout_nodes(nodes: &[Node], avail: f64, first_w: f64, body: f64, lead: f64) 
                 for (j, pl) in wrap_frags(&line_frags(l, true), fw(first, 0.0), avail, hb).into_iter().enumerate() {
                     let room = if j == 0 { fw(first, 0.0) } else { avail };
                     let indent = if center { center_off(placed_w(&pl, hb), room) } else { 0.0 };
-                    items.push(Item::Line { indent, frags: pl, marker: None, bar: false, scale });
+                    let (h, ascent) = line_metrics_at(&pl, hb, lead * scale, R::ascent_of(hb) + (lead * scale - hb * 1.2).max(0.0) * 0.5);
+                    items.push(Item::Line { indent, frags: pl, marker: None, bar: false, scale, h, ascent });
                     first = false;
                 }
             }
@@ -907,7 +999,11 @@ fn stem_nodes(text: &[String]) -> Vec<Node> {
 // ---------------------------------------------------------------- PDF writer
 
 struct Px {
+    /// JPEG for pictures; deflated raw RGB for equation rasters.
     jpeg: Vec<u8>,
+    alpha: Option<Vec<u8>>,
+    /// Retained for the export preview, aligned with the same /Im index as the PDF.
+    equation_png: Option<Vec<u8>>,
     w: u32,
     h: u32,
 }
@@ -931,6 +1027,7 @@ struct R {
     head: f64,
     lead: f64,
     imgs: Vec<Px>,
+    math_images: std::collections::HashMap<(String, u64), usize>,
     /// The printed "Name / Class / Date" line, repeated at the top of every page after
     /// the first (set once page 1's header area is drawn; `None` on the answer key).
     running: Option<String>,
@@ -946,6 +1043,9 @@ struct R {
     annots: Vec<(usize, [f64; 4], String)>,
     /// Marked answer key: correct choices print checked and bold, expected answers in place.
     mark: bool,
+    /// The question being laid out: the `imgs` index of each choice's picture, parallel to
+    /// its choices (empty when no choice is a picture).
+    choice_idx: Vec<Option<usize>>,
 }
 
 impl R {
@@ -1139,6 +1239,25 @@ impl R {
                 1 => 0.36 * self.body,
                 _ => 0.0,
             };
+            if let Some(m) = &p.math {
+                let key = m.raster.key.clone();
+                let idx = if let Some(idx) = self.math_images.get(&key) { *idx } else {
+                    let rgba = image::load_from_memory(&m.raster.png).expect("equation PNG").to_rgba8();
+                    let mut rgb = Vec::with_capacity((rgba.width() * rgba.height() * 3) as usize);
+                    let mut alpha = Vec::with_capacity((rgba.width() * rgba.height()) as usize);
+                    for pixel in rgba.pixels() { rgb.extend_from_slice(&pixel.0[..3]); alpha.push(pixel[3]); }
+                    let idx = self.imgs.len();
+                    self.imgs.push(Px { jpeg: fonts::deflate(&rgb), alpha: Some(fonts::deflate(&alpha)),
+                        equation_png: Some(m.raster.png.clone()), w: rgba.width(), h: rgba.height() });
+                    self.math_images.insert(key, idx);
+                    idx
+                };
+                let (w, h) = (m.raster.w * m.scale, m.raster.h * m.scale);
+                let bottom = by + dy - (m.raster.h - m.raster.baseline) * m.scale;
+                self.cur.extend_from_slice(format!("q {} 0 0 {} {} {} cm /Im{} Do Q\n", fnum(w), fnum(h), fnum(x + p.dx), fnum(bottom), idx + 1).as_bytes());
+                self.used.push(idx);
+                continue;
+            }
             if p.face == Face::Mono {
                 // Code sits on a light tint, as on screen.
                 let w = text_w(p.text.trim_end(), p.face, size);
@@ -1174,19 +1293,6 @@ impl R {
             match it {
                 Item::Gap(h) => self.y -= h,
                 Item::Work { lines, .. } => self.work_lines(x, *lines),
-                Item::Line { indent, frags, marker, bar, scale } if *scale != 1.0 => {
-                    let lead = self.lead * scale;
-                    if self.remaining() < lead {
-                        self.new_page();
-                    }
-                    let body = self.body;
-                    self.body = body * scale;
-                    let by = self.y - Self::ascent_of(self.body) - (lead - self.body * 1.2).max(0.0) * 0.5;
-                    self.placed(x + indent, by, frags);
-                    self.body = body;
-                    let _ = (marker, bar);
-                    self.y -= lead;
-                }
                 Item::Rule { w } => {
                     let h = self.lead * 0.8;
                     if self.remaining() < h {
@@ -1207,21 +1313,22 @@ impl R {
                     }
                     self.y = top - h;
                 }
-                Item::Line { indent, frags, marker, bar, .. } => {
-                    if self.remaining() < self.lead {
-                        self.new_page();
-                    }
-                    let by = self.y - Self::ascent_of(self.body);
+                Item::Line { indent, frags, marker, bar, scale, h, ascent } => {
+                    if self.remaining() < *h { self.new_page(); }
+                    let body = self.body;
+                    self.body *= scale;
+                    let by = self.y - ascent;
                     if let Some(m) = marker {
                         let w = text_w(m, Face::Reg, self.body);
                         self.text(x + indent - 5.0 - w, by, Face::Reg, self.body, m);
                     }
                     if *bar {
                         let bx = x + indent - 7.0;
-                        self.stroke_line(bx, self.y, bx, self.y - self.lead, 1.4, "0.6 0.6 0.6");
+                        self.stroke_line(bx, self.y, bx, self.y - h, 1.4, "0.6 0.6 0.6");
                     }
                     self.placed(x + indent, by, frags);
-                    self.y -= self.lead;
+                    self.body = body;
+                    self.y -= h;
                 }
                 Item::Row { h, header_idx, .. } => {
                     if self.remaining() < *h {
@@ -1285,14 +1392,15 @@ impl R {
             );
         }
         self.cur.extend_from_slice(b"S\n");
-        let nl = cells.iter().map(|c| c.len()).max().unwrap_or(1).max(1);
-        let extra = ((h - 2.0 * CELL_PAD_V - nl as f64 * self.lead) / 2.0).max(0.0);
+        let content_h = cells.iter().map(|c| cell_lines_h(c, self.body, self.lead)).fold(self.lead, f64::max);
+        let extra = ((h - 2.0 * CELL_PAD_V - content_h) / 2.0).max(0.0);
         for (c, lines) in cells.iter().enumerate() {
             let Some((cx, _)) = cols.get(c) else { continue };
-            for (j, l) in lines.iter().enumerate() {
-                // Cap height centred in the line slot (and the slot in a roomy row).
-                let by = top - CELL_PAD_V - extra - j as f64 * self.lead - (0.5 * self.lead + 0.33 * self.body);
-                self.placed(x + cx + CELL_PAD, by, l);
+            let mut y = top - CELL_PAD_V - extra;
+            for l in lines {
+                let (lh, ascent) = cell_line_metrics(l, self.body, self.lead);
+                self.placed(x + cx + CELL_PAD, y - ascent, l);
+                y -= lh;
             }
         }
     }
@@ -1421,6 +1529,8 @@ pub struct PdfPreview {
     pub page_h: f64,
     pub pages: Vec<Vec<u8>>,
     pub images: Vec<(u32, u32)>,
+    /// Equation PNGs at their PDF XObject indices; question pictures have `None` here.
+    pub equation_images: Vec<Option<Vec<u8>>>,
     /// The character behind each code of the fallback font F9 (the `<..>` strings it shows).
     pub fallback: Vec<char>,
 }
@@ -1433,11 +1543,13 @@ pub fn preview_pages(doc: &ExamDoc) -> Result<PdfPreview, String> {
         page_h: r.page_h,
         pages: r.pages.into_iter().map(|(ops, _)| ops).collect(),
         images: r.imgs.iter().map(|p| (p.w, p.h)).collect(),
+        equation_images: r.imgs.iter().map(|p| p.equation_png.clone()).collect(),
         fallback: r.fb.iter().map(|f| f.1).collect(),
     })
 }
 
-/// Lays every page out; `encode` false skips the JPEG re-encode (sizes only, for previews).
+/// Lays every page out; `encode` false skips picture JPEG encoding. Equation PNGs remain
+/// available to both live and thumbnail previews, at their exact PDF XObject indices.
 fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
     // Prepare images first (decode -> RGB -> JPEG q85) in question order.
     let mut imgs: Vec<Px> = vec![];
@@ -1446,9 +1558,27 @@ fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
             if encode {
                 imgs.push(prepare_image(im)?);
             } else {
-                imgs.push(Px { jpeg: Vec::new(), w: im.width_px.max(1), h: im.height_px.max(1) });
+                imgs.push(Px { jpeg: Vec::new(), alpha: None, equation_png: None, w: im.width_px.max(1), h: im.height_px.max(1) });
             }
         }
+    }
+    // Choice pictures follow every question picture, so question pictures keep their
+    // `/Im` numbers (the exam page preview maps those to the questions' files).
+    let mut choice_idx: Vec<Vec<Option<usize>>> = Vec::with_capacity(doc.questions.len());
+    for q in &doc.questions {
+        let mut row = Vec::new();
+        if q.has_choice_pictures() {
+            for im in &q.choice_images {
+                row.push(match im {
+                    Some(im) => {
+                        imgs.push(if encode { prepare_image(im)? } else { Px { jpeg: Vec::new(), alpha: None, equation_png: None, w: im.width_px.max(1), h: im.height_px.max(1) } });
+                        Some(imgs.len() - 1)
+                    }
+                    None => None,
+                });
+            }
+        }
+        choice_idx.push(row);
     }
 
     let m = doc.margins_mm();
@@ -1474,12 +1604,14 @@ fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
         head,
         lead: body * doc.style.lead() as f64,
         imgs,
+        math_images: Default::default(),
         running: None,
         glyphs: [[false; 256]; 5],
         cids: Default::default(),
         fb: Vec::new(),
         annots: Vec::new(),
         mark: false,
+        choice_idx: Vec::new(),
     };
 
     let questions = printed_questions(doc);
@@ -1558,6 +1690,7 @@ fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
             next_img += 1;
             next_img - 1
         });
+        r.choice_idx = choice_idx.get(qi).cloned().unwrap_or_default();
         let sec = q.section.as_ref().filter(|_| !list_key);
         let est = if section_key { section_key_h(&r, q) } else { q_est_height(&r, q, img_idx, list_key) } + sec.map_or(0.0, |s| section_h(&r, s));
         // Keep-together: break before a question (with its section heading) that will not
@@ -1584,6 +1717,7 @@ fn layout_pdf(doc: &ExamDoc, encode: bool) -> Result<R, String> {
         }
         r.y -= body * if section_key { 0.25 } else { doc.style.q_gap() as f64 }; // separator between questions
     }
+    r.choice_idx.clear();
     if !r.cur.is_empty() {
         let cur = std::mem::take(&mut r.cur);
         let used = std::mem::take(&mut r.used);
@@ -1687,8 +1821,7 @@ fn matching_rows(r: &R, q: &DocQ) -> Vec<(Vec<Vec<Placed>>, Vec<Vec<Placed>>, f6
         .map(|i| {
             let l = q.text.get(i).map(|t| text_lines(t, left_w, left_w, r.body)).unwrap_or_default();
             let rt = q.choices.get(i).map(|c| text_lines(&r.style.choice_label(c), right_w, right_w, r.body)).unwrap_or_default();
-            let n = l.len().max(rt.len()).max(1);
-            let h = (r.lead * n as f64).max(24.0);
+            let h = lines_h(&l, r.body, r.lead).max(lines_h(&rt, r.body, r.lead)).max(24.0);
             (l, rt, h)
         })
         .collect()
@@ -1710,18 +1843,23 @@ fn render_q(r: &mut R, q: &DocQ, img_idx: Option<usize>) {
                 r.new_page();
             }
             let top = r.y;
+            let mut y = top;
             for (j, piece) in left.iter().enumerate() {
-                let by = top - j as f64 * r.lead - R::ascent_of(r.body);
+                let (h, ascent) = line_metrics(piece, r.body, r.lead);
+                let by = y - ascent;
                 if j == 0 {
                     let lbl = r.style.number_label(q.number + i as u32);
                     let w = text_w(&lbl, Face::Reg, r.body);
                     r.text(stem_x - NUM_GAP - w, by, Face::Reg, r.body, &lbl);
                 }
                 r.placed(stem_x, by, piece);
+                y -= h;
             }
-            for (j, piece) in right.iter().enumerate() {
-                let by = top - j as f64 * r.lead - R::ascent_of(r.body);
-                r.placed(mid, by, piece);
+            let mut y = top;
+            for piece in &right {
+                let (h, ascent) = line_metrics(piece, r.body, r.lead);
+                r.placed(mid, y - ascent, piece);
+                y -= h;
             }
             if i == 0 {
                 if let Some(lbl) = &pt_label {
@@ -1756,15 +1894,17 @@ fn render_q(r: &mut R, q: &DocQ, img_idx: Option<usize>) {
         r.new_page();
     }
     // A stem that opens with a table puts the number on the first row's text line.
-    let dy = match items.first() {
+    let ascent = match items.first() {
+        Some(Item::Line { ascent, .. }) => *ascent,
         Some(Item::Row { h, cells, .. }) => {
-            let nl = cells.iter().map(|c| c.len()).max().unwrap_or(1).max(1);
-            let extra = ((h - 2.0 * CELL_PAD_V - nl as f64 * r.lead) / 2.0).max(0.0);
-            CELL_PAD_V + extra + 0.5 * r.lead + 0.33 * r.body - R::ascent_of(r.body)
+            let content_h = cells.iter().map(|c| cell_lines_h(c, r.body, r.lead)).fold(r.lead, f64::max);
+            let extra = ((h - 2.0 * CELL_PAD_V - content_h) / 2.0).max(0.0);
+            let first = cells.first().and_then(|c| c.first()).map_or(R::ascent_of(r.body), |l| cell_line_metrics(l, r.body, r.lead).1);
+            CELL_PAD_V + extra + first
         }
-        _ => 0.0,
+        _ => R::ascent_of(r.body),
     };
-    let by = r.y - R::ascent_of(r.body) - dy;
+    let by = r.y - ascent;
     let lbl = r.style.number_label(q.number);
     let w = text_w(&lbl, Face::Reg, r.body);
     r.text(stem_x - NUM_GAP - w, by, Face::Reg, r.body, &lbl);
@@ -1784,8 +1924,8 @@ fn render_q(r: &mut R, q: &DocQ, img_idx: Option<usize>) {
         draw_pdf_image(r, idx, stem_x);
     }
     if let Some((_, rest)) = &split {
-        let rest: Vec<Item> = layout_nodes(&stem_nodes(rest), avail, avail, r.body, r.lead);
-        r.items(stem_x, &rest);
+        let (rest_items, _) = stem_items(r, rest);
+        r.items(stem_x, &rest_items);
     }
 
     // Choices.
@@ -1815,18 +1955,21 @@ fn render_q(r: &mut R, q: &DocQ, img_idx: Option<usize>) {
         // each choice wrapping inside its column; a row never splits across pages.
         let col_w = avail / grid.cols as f64;
         for row in &grid.rows {
-            let h = row.iter().map(|(_, ls)| ls.len()).max().unwrap_or(1).max(1) as f64 * r.lead;
+            let h = row.iter().map(|(_, ls)| lines_h(ls, r.body, r.lead)).fold(r.lead, f64::max);
             if r.remaining() < h {
                 r.new_page();
             }
             let top = r.y;
             for (k, (ci, lines)) in row.iter().enumerate() {
+                let mut y = top;
                 for (j, l) in lines.iter().enumerate() {
-                    let by = top - j as f64 * r.lead - R::ascent_of(r.body);
+                    let (lh, ascent) = line_metrics(l, r.body, r.lead);
+                    let by = y - ascent;
                     if j == 0 && r.mark && q.correct.contains(ci) {
                         draw_check(r, stem_x + k as f64 * col_w, by);
                     }
                     r.placed(stem_x + k as f64 * col_w, by, l);
+                    y -= lh;
                 }
             }
             r.y = top - h;
@@ -1835,35 +1978,43 @@ fn render_q(r: &mut R, q: &DocQ, img_idx: Option<usize>) {
         // Condensed: choices across in a grid of `cols` columns.
         let col_w = avail / cols as f64;
         for (ri, row) in q.choices.chunks(cols).enumerate() {
-            if r.remaining() < r.lead {
-                r.new_page();
+            let lines: Vec<Vec<Placed>> = row.iter().enumerate().map(|(k, _)| {
+                text_lines(&choice_text(r, q, ri * cols + k), col_w, col_w, r.body).into_iter().next().unwrap_or_default()
+            }).collect();
+            let ascent = lines.iter().map(|l| line_metrics(l, r.body, r.lead).1).fold(R::ascent_of(r.body), f64::max);
+            let descent = lines.iter().map(|l| { let (h, a) = line_metrics(l, r.body, r.lead); h - a }).fold(r.lead - R::ascent_of(r.body), f64::max);
+            let h = ascent + descent;
+            if r.remaining() < h { r.new_page(); }
+            let by = r.y - ascent;
+            for (k, l) in lines.iter().enumerate() {
+                if r.mark && q.correct.contains(&(ri * cols + k)) { draw_check(r, stem_x + k as f64 * col_w, by); }
+                r.placed(stem_x + k as f64 * col_w, by, l);
             }
-            let by = r.y - R::ascent_of(r.body);
-            for (k, _) in row.iter().enumerate() {
-                let ci = ri * cols + k;
-                let c = choice_text(r, q, ci);
-                if r.mark && q.correct.contains(&ci) {
-                    draw_check(r, stem_x + k as f64 * col_w, by);
-                }
-                if let Some(l) = text_lines(&c, col_w, col_w, r.body).first() {
-                    r.placed(stem_x + k as f64 * col_w, by, l);
-                }
-            }
-            r.y -= r.lead;
+            r.y -= h;
         }
     } else {
         for ci in 0..q.choices.len() {
             let c = choice_text(r, q, ci);
-            for (j, l) in text_lines(&c, avail, avail, r.body).into_iter().enumerate() {
-                if r.remaining() < r.lead {
+            let pic = choice_pic(r, q, ci);
+            if let Some(idx) = pic {
+                // A picture choice keeps its first text line and its picture on one page.
+                let first = text_lines(&c, avail, avail, r.body).first().map_or(r.lead, |l| line_metrics(l, r.body, r.lead).0);
+                if r.remaining() < first + choice_pic_h(r, idx, stem_x) && first + choice_pic_h(r, idx, stem_x) <= r.full_height() {
                     r.new_page();
                 }
-                let by = r.y - R::ascent_of(r.body);
+            }
+            for (j, l) in text_lines(&c, avail, avail, r.body).into_iter().enumerate() {
+                let (h, ascent) = line_metrics(&l, r.body, r.lead);
+                if r.remaining() < h { r.new_page(); }
+                let by = r.y - ascent;
                 if j == 0 && r.mark && q.correct.contains(&ci) {
                     draw_check(r, stem_x, by);
                 }
                 r.placed(stem_x, by, &l);
-                r.y -= r.lead;
+                r.y -= h;
+            }
+            if let Some(idx) = pic {
+                draw_choice_image(r, idx, stem_x + choice_pic_indent(r));
             }
         }
     }
@@ -1920,23 +2071,36 @@ fn marked_answer_items(r: &R, q: &DocQ, avail: f64) -> Vec<Item> {
     items
 }
 
-/// A question with a picture and a `[picture]` marker in its stem: (the question cut before
-/// the marker, the stem text after it). Per-part work space keeps the picture under the stem.
-fn picture_split(q: &DocQ, img_idx: Option<usize>) -> Option<(DocQ, Vec<String>)> {
+/// Split at the first picture marker in ANY text entry, including a promoted multipart
+/// child's entry. Work after the owning part stays after its image, and later parts/choices
+/// are retained in order. The tail has no second question number or points label.
+fn picture_split(q: &DocQ, img_idx: Option<usize>) -> Option<(DocQ, DocQ)> {
     img_idx?;
-    if q.space_after.iter().any(|&n| n > 0) {
-        return None;
-    }
-    let (before, after) = crate::layout::split_at_picture(q.text.first()?)?;
+    let (at, before, after) = q.text.iter().enumerate().find_map(|(k, t)| {
+        crate::layout::split_at_picture(t).map(|(before, after)| (k, before, after))
+    })?;
     let mut head = q.clone();
-    head.text = vec![before];
     head.image = None;
-    let mut rest: Vec<String> = Vec::new();
-    if !after.trim().is_empty() {
-        rest.push(after);
+    head.text = q.text[..at].to_vec();
+    head.text.push(before);
+    head.space_after = (0..at).map(|k| q.space_after.get(k).copied().unwrap_or(0)).collect();
+    head.space_after.push(0);
+    let mut tail = q.clone();
+    tail.image = None;
+    tail.points = None;
+    tail.work_lines = 0;
+    tail.text.clear();
+    tail.space_after.clear();
+    let owner_work = q.space_after.get(at).copied().unwrap_or(0);
+    if !after.trim().is_empty() || owner_work > 0 {
+        tail.text.push(after);
+        tail.space_after.push(owner_work);
     }
-    rest.extend(q.text[1..].iter().cloned());
-    Some((head, rest))
+    for k in at + 1..q.text.len() {
+        tail.text.push(q.text[k].clone());
+        tail.space_after.push(q.space_after.get(k).copied().unwrap_or(0));
+    }
+    Some((head, tail))
 }
 
 /// The question's extra work space: ruled / dotted lines (Classic, Exam Board) or blank room.
@@ -1954,7 +2118,7 @@ struct ChoiceGrid {
 /// The explicit answer-column grid for a multiple-choice question (None: one per line or the
 /// style's own layout). True/False and matching questions keep their own layouts.
 fn explicit_grid(r: &R, q: &DocQ, avail: f64) -> Option<ChoiceGrid> {
-    if q.answer_columns < 2 || q.choices.len() < 2 || is_tf(&q.choices) {
+    if q.answer_columns < 2 || q.choices.len() < 2 || is_tf(&q.choices) || q.has_choice_pictures() {
         return None;
     }
     let grid = crate::layout::choice_grid(q.choices.len(), q.answer_columns.min(4));
@@ -1970,7 +2134,7 @@ fn explicit_grid(r: &R, q: &DocQ, avail: f64) -> Option<ChoiceGrid> {
 /// Condensed: how many columns the choices print across in (None = one per line). Every
 /// choice must fit its column on one line.
 fn choice_columns(r: &R, q: &DocQ, avail: f64) -> Option<usize> {
-    if !r.style.choices_across() || q.choices.len() < 2 {
+    if !r.style.choices_across() || q.choices.len() < 2 || q.has_choice_pictures() {
         return None;
     }
     let widest = q
@@ -1997,17 +2161,27 @@ fn q_est_height(r: &R, q: &DocQ, img_idx: Option<usize>, is_key: bool) -> f64 {
     if looks_matching(q, tf) {
         return matching_rows(r, q).iter().map(|x| x.2).sum::<f64>() + r.body + q.work_lines as f64 * r.pitch() + ans;
     }
-    let mut h = items_h(&stem_items(r, q).0, r.lead) + ans;
-    let lines = if tf {
-        1
+    let stem_h = if let Some((head, tail)) = picture_split(q, img_idx) {
+        items_h(&stem_items(r, &head).0, r.lead) + items_h(&stem_items(r, &tail).0, r.lead)
+    } else { items_h(&stem_items(r, q).0, r.lead) };
+    let mut h = stem_h + ans;
+    let choices_h = if tf {
+        r.lead
     } else if let Some(g) = explicit_grid(r, q, avail) {
-        g.rows.iter().map(|row| row.iter().map(|(_, ls)| ls.len()).max().unwrap_or(1).max(1)).sum::<usize>()
+        g.rows.iter().map(|row| row.iter().map(|(_, ls)| lines_h(ls, r.body, r.lead)).fold(r.lead, f64::max)).sum()
     } else if let Some(cols) = choice_columns(r, q, avail) {
-        q.choices.len().div_ceil(cols)
+        let cw = avail / cols as f64;
+        q.choices.chunks(cols).map(|row| {
+            let metrics: Vec<(f64, f64)> = row.iter().map(|c| {
+                text_lines(&r.style.choice_label(c), cw, cw, r.body).first().map_or((r.lead, R::ascent_of(r.body)), |l| line_metrics(l, r.body, r.lead))
+            }).collect();
+            metrics.iter().map(|m| m.1).fold(0.0, f64::max) + metrics.iter().map(|m| m.0 - m.1).fold(0.0, f64::max)
+        }).sum()
     } else {
-        q.choices.iter().map(|c| text_lines(&r.style.choice_label(c), avail, avail, r.body).len()).sum::<usize>()
+        q.choices.iter().map(|c| lines_h(&text_lines(&r.style.choice_label(c), avail, avail, r.body), r.body, r.lead)).sum::<f64>()
+            + (0..q.choices.len()).filter_map(|ci| choice_pic(r, q, ci)).map(|idx| choice_pic_h(r, idx, stem_x)).sum::<f64>()
     };
-    h += lines as f64 * r.lead + (rule_count(q) as f64 + q.work_lines as f64) * r.pitch();
+    h += choices_h + (rule_count(q) as f64 + q.work_lines as f64) * r.pitch();
     if let Some(idx) = img_idx {
         h += 12.0 + pdf_image_size(r, idx, stem_x).1;
     }
@@ -2021,12 +2195,51 @@ fn pdf_image_size(r: &R, idx: usize, x: f64) -> (f64, f64) {
     crate::layout::picture_size_pt(px.w, px.h, r.x1 - x)
 }
 
+/// The `imgs` index of choice `ci`'s picture, when it has one.
+fn choice_pic(r: &R, q: &DocQ, ci: usize) -> Option<usize> {
+    q.choice_images.get(ci)?.as_ref()?;
+    r.choice_idx.get(ci).copied().flatten()
+}
+
+/// A choice picture sits under its choice's text, past the choice letter.
+fn choice_pic_indent(r: &R) -> f64 {
+    text_w("M. ", Face::Reg, r.body)
+}
+
+/// Gap above and below a choice's picture.
+const CHOICE_PIC_GAP: f64 = 3.0;
+
+/// The room a choice's picture takes under its text (picture plus its gaps).
+fn choice_pic_h(r: &R, idx: usize, x: f64) -> f64 {
+    let px = &r.imgs[idx];
+    crate::layout::choice_picture_size_pt(px.w, px.h, r.x1 - x - choice_pic_indent(r)).1 + 2.0 * CHOICE_PIC_GAP
+}
+
+/// Draws a choice's picture at `x` under the choice text (`layout::choice_picture_size_pt`).
+fn draw_choice_image(r: &mut R, idx: usize, x: f64) {
+    let px = &r.imgs[idx];
+    let (w, h) = crate::layout::choice_picture_size_pt(px.w, px.h, r.x1 - x);
+    if r.remaining() < h + 2.0 * CHOICE_PIC_GAP {
+        r.new_page();
+    }
+    r.y -= CHOICE_PIC_GAP;
+    place_image(r, idx, x, w, h);
+    r.y -= CHOICE_PIC_GAP;
+}
+
 fn draw_pdf_image(r: &mut R, idx: usize, x: f64) {
     let (w, h) = pdf_image_size(r, idx, x);
     if r.remaining() < h + r.body {
         r.new_page();
     }
     r.y -= 6.0;
+    place_image(r, idx, x, w, h);
+    r.y -= 6.0;
+}
+
+/// Draws image XObject `idx` `w` x `h` pt with its top-left at (`x`, `r.y`); `r.y` moves to
+/// its bottom edge.
+fn place_image(r: &mut R, idx: usize, x: f64, w: f64, h: f64) {
     let yb = r.y - h;
     r.cur.extend_from_slice(b"q ");
     r.cur.extend_from_slice(fnum(w).as_bytes());
@@ -2040,7 +2253,7 @@ fn draw_pdf_image(r: &mut R, idx: usize, x: f64) {
     r.cur.extend_from_slice((idx + 1).to_string().as_bytes());
     r.cur.extend_from_slice(b" Do Q\n");
     r.used.push(idx);
-    r.y = yb - 6.0;
+    r.y = yb;
 }
 
 fn prepare_image(im: &DocImage) -> Result<Px, String> {
@@ -2056,7 +2269,7 @@ fn prepare_image(im: &DocImage) -> Result<Px, String> {
     let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85);
     enc.write_image(rgb.as_raw(), w, h, image::ExtendedColorType::Rgb8)
         .map_err(|e| format!("image encode: {e}"))?;
-    Ok(Px { jpeg, w, h })
+    Ok(Px { jpeg, alpha: None, equation_png: None, w, h })
 }
 
 /// Subset tag ("ABCDEF+") naming which glyphs a face's embedded subset holds.
@@ -2211,7 +2424,9 @@ fn extra_font_objects(r: &R, first: usize, desc_of: impl Fn(Face) -> usize) -> (
 fn assemble_pdf(r: R) -> Result<Vec<u8>, String> {
     let media = format!("[0 0 {} {}]", fnum(r.page_w), fnum(r.page_h));
     let npage = r.pages.len();
-    let n_imgs = r.imgs.len();
+    let mut image_at = Vec::with_capacity(r.imgs.len());
+    let mut n_imgs = 0;
+    for im in &r.imgs { image_at.push(n_imgs); n_imgs += 1 + usize::from(im.alpha.is_some()); }
     // Objects: 1 catalog, 2 page tree, 3..=6 fonts, then images, then 2 per page, then a
     // descriptor and a font program per font.
     const FIRST_IMG: usize = 7;
@@ -2253,15 +2468,17 @@ fn assemble_pdf(r: R) -> Result<Vec<u8>, String> {
     };
     // obj 7..: image XObjects (JPEG bytes embedded raw, no deflate).
     let mut imgs = r.imgs;
-    for Px { jpeg, w, h } in imgs.drain(..) {
+    for Px { jpeg, alpha, w, h, .. } in imgs.drain(..) {
+        let mask = alpha.as_ref().map_or(String::new(), |_| format!(" /SMask {} 0 R", bodies.len() + 2));
+        let filter = if alpha.is_some() { "FlateDecode" } else { "DCTDecode" };
         let mut b = format!(
-            "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {} >>\nstream\n",
-            w, h, jpeg.len()
-        )
-        .into_bytes();
-        b.extend_from_slice(&jpeg);
-        b.extend_from_slice(b"\nendstream\n");
-        bodies.push(b);
+            "<< /Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /{filter}{mask} /Length {} >>\nstream\n", jpeg.len()
+        ).into_bytes();
+        b.extend_from_slice(&jpeg); b.extend_from_slice(b"\nendstream\n"); bodies.push(b);
+        if let Some(alpha) = alpha {
+            let mut b = format!("<< /Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>\nstream\n", alpha.len()).into_bytes();
+            b.extend_from_slice(&alpha); b.extend_from_slice(b"\nendstream\n"); bodies.push(b);
+        }
     }
     // Then two objects per page: contents, then the page dict with its resources.
     for (p, (ops, used)) in r.pages.into_iter().enumerate() {
@@ -2273,8 +2490,10 @@ fn assemble_pdf(r: R) -> Result<Vec<u8>, String> {
         let mut xo = String::new();
         if !used.is_empty() {
             xo.push_str(" /XObject << ");
-            for &idx in &used {
-                xo.push_str(&format!("/Im{} {} 0 R ", idx + 1, FIRST_IMG + idx));
+            // Cached equations may be drawn repeatedly on a page, but a PDF resource dictionary
+            // must declare each name only once. Keep all draw operations, deduplicate only resources.
+            for idx in used.iter().copied().collect::<std::collections::BTreeSet<_>>() {
+                xo.push_str(&format!("/Im{} {} 0 R ", idx + 1, FIRST_IMG + image_at[idx]));
             }
             xo.push_str(">>");
         }
@@ -2453,14 +2672,24 @@ fn wrun_x(xml: &mut String, text: &str, bold: bool, italic: bool, strike: bool, 
     xml.push_str("</w:t></w:r>");
 }
 
-/// Runs of one parsed line, through the same styled runs as the PDF: `$math$` degraded to
-/// Unicode, sub/superscripts (markup or Unicode ₂ ⁺ ...) as real vertAlign runs.
+/// Inline math is real editable OMML from the same parsed AST used by the PDF typesetter.
+/// Ordinary text, styles and Unicode scripts remain normal Word runs.
 fn wline(xml: &mut String, line: &richtext::Line, sz: i64, force_bold: bool) {
     wfrags(xml, &line_frags(line, force_bold), sz);
 }
 
 fn wfrags(xml: &mut String, frags: &[Frag], sz: i64) {
     for f in frags {
+        if f.math {
+            if let Some(mut math) = crate::equation::parse(&f.text) {
+                math.para = false;
+                let omml = equashion_math::to_omml(&math);
+                // Word's equation runs inherit an explicit body size, including headings.
+                let props = format!("<w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:hAnsi=\"Cambria Math\"/><w:sz w:val=\"{sz}\"/></w:rPr>");
+                xml.push_str(&omml.replace("<m:t ", &format!("{props}<m:t ")));
+                continue;
+            }
+        }
         let bold = matches!(f.face, Face::Bold | Face::BoldItal);
         let italic = matches!(f.face, Face::Ital | Face::BoldItal);
         let code = f.face == Face::Mono;
@@ -2509,6 +2738,25 @@ fn docx_link_rels(body: &mut String) -> String {
         .collect()
 }
 
+/// A few short source lines are separate Word paragraphs so their inline math and text
+/// remain editable. Keep that small group together when it fits within six measured lines;
+/// a long multipart stem or a structural block must still flow across pages.
+fn docx_short_stem_paragraphs(q: &DocQ, body: f64, width: f64) -> usize {
+    let mut lines = Vec::new();
+    for node in q.text.iter().flat_map(|s| richtext::parse_tree(s)) {
+        match node {
+            Node::Block { block: Block::Para(source), center: false, .. } => lines.extend(source),
+            _ => return 0,
+        }
+    }
+    if !(2..=3).contains(&lines.len()) { return 0; }
+    let lead = body * 1.35;
+    let height: f64 = lines.iter().map(|line| {
+        lines_h(&wrap_frags(&line_frags(line, false), width, width, body), body, lead)
+    }).sum();
+    if height <= 6.0 * lead { lines.len() } else { 0 }
+}
+
 /// Stem body of an ordinary question: the number hangs in a 0.3" gutter on the first
 /// paragraph (points label at its end), later paragraphs and blocks indent to the same
 /// 0.3" column; bullets/numbered lists use the numbering part, tables are real Word
@@ -2518,11 +2766,15 @@ fn docx_stem(b: &mut String, q: &DocQ, pt_label: Option<&str>, body_sz: i64, tex
     // Classic objective questions hang an answer blank before the number.
     let blank = style.objective_blank() && is_objective(q);
     let ind_w: i64 = if blank { 1152 } else { 432 };
+    // Keep source paragraphs intact. A bounded short stem stays together; longer stems
+    // link only their first numbered/task paragraph, so multipart content can still flow.
+    let keep_first = q.text.iter().flat_map(|t| t.lines()).filter(|l| !l.trim().is_empty()).count() > 1;
+    let mut short_remaining = docx_short_stem_paragraphs(q, body_sz as f64 / 2.0, (text_w_tw - ind_w) as f64 / 20.0);
     let mut prefix: Option<String> = Some(if blank { format!("_______ {}", style.number_label(q.number)) } else { style.number_label(q.number) });
     // Emits the pending "N." (and points label) as its own paragraph before a non-text block.
     let flush_prefix = |b: &mut String, prefix: &mut Option<String>| {
         if let Some(p) = prefix.take() {
-            b.push_str(&format!("<w:p><w:pPr><w:ind w:left=\"{ind_w}\" w:hanging=\"{ind_w}\"/></w:pPr>"));
+            b.push_str(&format!("<w:p><w:pPr><w:keepLines/><w:keepNext/><w:ind w:left=\"{ind_w}\" w:hanging=\"{ind_w}\"/></w:pPr>"));
             wrun(b, &p, false, false, 0, body_sz);
             if let Some(l) = pt_label {
                 b.push_str("<w:r><w:tab/></w:r>");
@@ -2548,16 +2800,19 @@ fn docx_stem(b: &mut String, q: &DocQ, pt_label: Option<&str>, body_sz: i64, tex
         match block {
             Block::Para(lines) if center => {
                 for l in lines {
-                    b.push_str(&format!("<w:p><w:pPr><w:ind w:left=\"{ind_w}\"/><w:jc w:val=\"center\"/></w:pPr>"));
+                    b.push_str(&format!("<w:p><w:pPr><w:keepLines/><w:ind w:left=\"{ind_w}\"/><w:jc w:val=\"center\"/></w:pPr>"));
                     wline(b, l, body_sz, false);
                     b.push_str("</w:p>");
                 }
             }
             Block::Para(lines) => {
                 for l in lines {
+                    let keep_short_next = short_remaining > 1;
+                    short_remaining = short_remaining.saturating_sub(1);
                     match prefix.take() {
                         Some(p) => {
-                            b.push_str(&format!("<w:p><w:pPr><w:ind w:left=\"{ind_w}\" w:hanging=\"{ind_w}\"/></w:pPr>"));
+                            let keep_next = if keep_first || keep_short_next { "<w:keepNext/>" } else { "" };
+                            b.push_str(&format!("<w:p><w:pPr><w:keepLines/>{keep_next}<w:ind w:left=\"{ind_w}\" w:hanging=\"{ind_w}\"/></w:pPr>"));
                             wrun(b, &p, false, false, 0, body_sz);
                             b.push_str("<w:r><w:tab/></w:r>");
                             wline(b, l, body_sz, false);
@@ -2566,7 +2821,8 @@ fn docx_stem(b: &mut String, q: &DocQ, pt_label: Option<&str>, body_sz: i64, tex
                             }
                         }
                         None => {
-                            b.push_str(&format!("<w:p><w:pPr><w:ind w:left=\"{ind_w}\"/></w:pPr>"));
+                            let keep_next = if keep_short_next { "<w:keepNext/>" } else { "" };
+                            b.push_str(&format!("<w:p><w:pPr><w:keepLines/>{keep_next}<w:ind w:left=\"{ind_w}\"/></w:pPr>"));
                             wline(b, l, body_sz, false);
                         }
                     }
@@ -2649,7 +2905,7 @@ fn docx_nodes(b: &mut String, nodes: &[Node], ind: i64, body_sz: i64, max_tw: i6
         match block {
             Block::Para(lines) => {
                 for l in lines {
-                    b.push_str(&format!("<w:p><w:pPr><w:ind w:left=\"{ind}\"/>{jc}</w:pPr>"));
+                    b.push_str(&format!("<w:p><w:pPr><w:keepLines/><w:ind w:left=\"{ind}\"/>{jc}</w:pPr>"));
                     wline(b, l, body_sz, false);
                     b.push_str("</w:p>");
                 }
@@ -2770,11 +3026,109 @@ fn docx_table(b: &mut String, header: bool, rows: &[Vec<richtext::Line>], body_s
     b.push_str("</w:tbl>");
 }
 
+/// Keep only the final stem block with its following image or first work line. Earlier multipart paragraphs
+/// and table rows retain their normal page flow. A separate image-boundary decision may
+/// keep just its first work line, without chaining later work or parts. This changes only
+/// generated OOXML, never the source text.
+fn docx_keep_attachment_boundary(stem: &mut String) -> Result<(), String> {
+    const W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    let prefix = format!("<w:body xmlns:w=\"{W}\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\">");
+    let wrapped = format!("{prefix}{stem}</w:body>");
+    let tree = roxmltree::Document::parse(&wrapped).map_err(|e| format!("Word stem/image boundary: {e}"))?;
+    let Some(last) = tree.root_element().last_element_child() else { return Ok(()) };
+    let paragraphs: Vec<_> = if last.has_tag_name((W, "p")) {
+        vec![last]
+    } else if last.has_tag_name((W, "tbl")) {
+        // A table can flow normally until its last row; keep that row's final cell
+        // paragraphs with the following image rather than chaining the whole table.
+        last.children().rev().find(|n| n.has_tag_name((W, "tr"))).into_iter()
+            .flat_map(|row| row.children().filter(|n| n.has_tag_name((W, "tc"))))
+            .filter_map(|cell| cell.descendants().filter(|n| n.has_tag_name((W, "p"))).last()).collect()
+    } else { Vec::new() };
+    let mut edits = Vec::new();
+    for p in paragraphs {
+        let properties = p.children().find(|n| n.has_tag_name((W, "pPr")));
+        let has = |name| properties.is_some_and(|pr| pr.children().any(|n| n.has_tag_name((W, name))));
+        let add = format!("{}{}", if has("keepNext") { "" } else { "<w:keepNext/>" }, if has("keepLines") { "" } else { "<w:keepLines/>" });
+        if add.is_empty() { continue; }
+        if let Some(pr) = properties {
+            let range = pr.range();
+            let tag_end = wrapped[range.clone()].find('>').expect("generated paragraph properties") + range.start;
+            if wrapped.as_bytes()[tag_end - 1] == b'/' {
+                edits.push((range.start - prefix.len(), range.end - prefix.len(), format!("<w:pPr>{add}</w:pPr>")));
+            } else {
+                edits.push((tag_end + 1 - prefix.len(), tag_end + 1 - prefix.len(), add));
+            }
+        } else {
+            let at = p.range().start - prefix.len() + "<w:p>".len();
+            edits.push((at, at, format!("<w:pPr>{add}</w:pPr>")));
+        }
+    }
+    edits.sort_by_key(|e| std::cmp::Reverse(e.0));
+    for (from, to, value) in edits { stem.replace_range(from..to, &value); }
+    Ok(())
+}
+
+/// A kept first answer paragraph must show its own bottom rule at a page boundary.
+/// LibreOffice otherwise merges its `between` border with the following-page rule group
+/// even when the empty first paragraph itself stayed with the stem. Separate only that
+/// first border; later workspace remains independent and no line/paragraph is added.
+fn docx_separate_first_workspace_rule(body: &mut String, from: usize) -> Result<(), String> {
+    const W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    let prefix = format!("<w:body xmlns:w=\"{W}\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">");
+    let wrapped = format!("{prefix}{}</w:body>", &body[from..]);
+    let tree = roxmltree::Document::parse(&wrapped).map_err(|e| format!("Word first answer-line boundary: {e}"))?;
+    let mut remove = Vec::new();
+    for p in tree.descendants().filter(|n| n.has_tag_name((W, "p"))) {
+        if p.descendants().any(|n| n.has_tag_name((W, "t")) && n.text().is_some_and(|s| !s.trim().is_empty())) { continue; }
+        let Some(previous) = p.prev_sibling_element().filter(|n| n.has_tag_name((W, "p"))) else { continue };
+        let kept = previous.children().find(|n| n.has_tag_name((W, "pPr"))).is_some_and(|pr| pr.children().any(|n| n.has_tag_name((W, "keepNext"))));
+        if !kept { continue; }
+        if let Some(border) = p.children().find(|n| n.has_tag_name((W, "pPr"))).and_then(|pr| pr.children().find(|n| n.has_tag_name((W, "pBdr"))))
+            && let Some(between) = border.children().find(|n| n.has_tag_name((W, "between"))) {
+            let range = between.range(); remove.push((from + range.start - prefix.len(), from + range.end - prefix.len()));
+        }
+    }
+    remove.sort_by_key(|r| std::cmp::Reverse(r.0));
+    for (start, end) in remove { body.replace_range(start..end, ""); }
+    Ok(())
+}
+
+/// The final stem/image may keep one following answer/work paragraph only when that
+/// is the immediate next output. Continuation or later parts keep independent flow.
+fn docx_followed_by_workspace(q: &DocQ, split: Option<&(DocQ, DocQ)>, marked: bool) -> bool {
+    if q.no_answer_space { return false; }
+    if let Some((_, tail)) = split {
+        for (k, text) in tail.text.iter().enumerate() {
+            if !text.trim().is_empty() { return false; }
+            if tail.space_after.get(k).is_some_and(|n| *n > 0) { return true; }
+        }
+    }
+    if !q.choices.is_empty() || (marked && q.correct.is_empty() && !q.key_text.trim().is_empty()) { return false; }
+    rule_count(q) > 0 || q.work_lines > 0
+}
+
 /// Appends a question's picture as an inline drawing in its own paragraph, indented `ind`
 /// twips, sized by `layout::picture_size_pt` in the column (as the PDF prints it). PNG and
 /// JPEG embed as they are; other formats are re-encoded to PNG. False when the bytes do not
 /// decode (the caller then prints the `[picture]` placeholder).
-fn docx_picture(b: &mut String, media: &mut Vec<(Vec<u8>, &'static str)>, im: &DocImage, ind: i64, text_w_tw: i64) -> bool {
+fn docx_picture(b: &mut String, media: &mut Vec<(Vec<u8>, &'static str)>, im: &DocImage, ind: i64, text_w_tw: i64, keep_first_work: bool) -> bool {
+    docx_picture_sized(b, media, im, ind, text_w_tw, keep_first_work, crate::layout::picture_size_pt, "120")
+}
+
+/// [`docx_picture`] at a given printed size (`size(w_px, h_px, column_pt)`) and paragraph
+/// spacing (twips before and after).
+#[allow(clippy::too_many_arguments)]
+fn docx_picture_sized(
+    b: &mut String,
+    media: &mut Vec<(Vec<u8>, &'static str)>,
+    im: &DocImage,
+    ind: i64,
+    text_w_tw: i64,
+    keep_first_work: bool,
+    size: fn(u32, u32, f64) -> (f64, f64),
+    spacing: &str,
+) -> bool {
     let fmt = image::guess_format(&im.bytes).ok();
     let (bytes, ext, (wpx, hpx)) = match fmt {
         Some(image::ImageFormat::Png) | Some(image::ImageFormat::Jpeg) => {
@@ -2797,12 +3151,13 @@ fn docx_picture(b: &mut String, media: &mut Vec<(Vec<u8>, &'static str)>, im: &D
     if wpx == 0 || hpx == 0 {
         return false;
     }
-    let (w, h) = crate::layout::picture_size_pt(wpx, hpx, (text_w_tw - ind) as f64 / 20.0);
+    let (w, h) = size(wpx, hpx, (text_w_tw - ind) as f64 / 20.0);
     let (cx, cy) = ((w * 12700.0).round() as i64, (h * 12700.0).round() as i64);
     media.push((bytes, ext));
     let n = media.len();
+    let keep = if keep_first_work { "<w:keepNext/>" } else { "" };
     b.push_str(&format!(
-        "<w:p><w:pPr><w:keepNext/><w:spacing w:before=\"120\" w:after=\"120\"/><w:ind w:left=\"{ind}\"/></w:pPr><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"{cx}\" cy=\"{cy}\"/><wp:docPr id=\"{n}\" name=\"Picture {n}\"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect=\"1\"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:nvPicPr><pic:cNvPr id=\"{n}\" name=\"image{n}.{ext}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"rIdM{n}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+        "<w:p><w:pPr><w:keepLines/>{keep}<w:spacing w:before=\"{spacing}\" w:after=\"{spacing}\"/><w:ind w:left=\"{ind}\"/></w:pPr><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"{cx}\" cy=\"{cy}\"/><wp:docPr id=\"{n}\" name=\"Picture {n}\"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect=\"1\"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:nvPicPr><pic:cNvPr id=\"{n}\" name=\"image{n}.{ext}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"rIdM{n}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
     ));
     true
 }
@@ -2841,7 +3196,13 @@ fn docx_choice_grid(b: &mut String, q: &DocQ, style: PaperStyle, ind: i64, text_
 
 /// A choice paragraph indented `ind` twips (inline markup honoured; `\n` breaks lines).
 fn choice_para(b: &mut String, c: &str, ind: i64, body_sz: i64) {
-    b.push_str(&format!("<w:p><w:pPr><w:ind w:left=\"{ind}\"/></w:pPr>"));
+    choice_para_keep(b, c, ind, body_sz, false);
+}
+
+/// [`choice_para`], kept on the page of the next paragraph (its picture) when `keep_next`.
+fn choice_para_keep(b: &mut String, c: &str, ind: i64, body_sz: i64, keep_next: bool) {
+    let keep = if keep_next { "<w:keepNext/>" } else { "" };
+    b.push_str(&format!("<w:p><w:pPr>{keep}<w:ind w:left=\"{ind}\"/></w:pPr>"));
     for (i, l) in c.split('\n').enumerate() {
         if i > 0 {
             b.push_str("<w:r><w:br/></w:r>");
@@ -3085,6 +3446,7 @@ pub fn render_docx(doc: &ExamDoc) -> Result<Vec<u8>, String> {
         let tf = is_tf(&q.choices);
         let matching = looks_matching(q, tf);
         let ind: i64 = if style.objective_blank() && is_objective(q) && !matching { 1152 } else { 432 }; // choices line up under the stem
+        let question_start = b.len();
         if matching {
             for (i, item) in q.text.iter().enumerate() {
                 b.push_str("<w:p>");
@@ -3116,18 +3478,22 @@ pub fn render_docx(doc: &ExamDoc) -> Result<Vec<u8>, String> {
             // The picture prints at the stem's first `[picture]` marker, or under the stem,
             // as an inline drawing at the stem's indent (the PDF's size and place).
             let split = picture_split(q, q.image.as_ref().map(|_| 0));
+            let mut stem = String::new();
             match &split {
-                Some((head, _)) => docx_stem(&mut b, head, pt_label.as_deref(), body_sz, text_w_tw, &mut num_lists, style, &part_work),
-                None => docx_stem(&mut b, q, pt_label.as_deref(), body_sz, text_w_tw, &mut num_lists, style, &part_work),
+                Some((head, _)) => docx_stem(&mut stem, head, pt_label.as_deref(), body_sz, text_w_tw, &mut num_lists, style, &part_work),
+                None => docx_stem(&mut stem, q, pt_label.as_deref(), body_sz, text_w_tw, &mut num_lists, style, &part_work),
             }
+            if q.image.is_some() || docx_followed_by_workspace(q, split.as_ref(), marked) { docx_keep_attachment_boundary(&mut stem)?; }
+            b.push_str(&stem);
             if let Some(im) = &q.image {
-                if !docx_picture(&mut b, &mut media, im, ind_w, text_w_tw) {
+                if !docx_picture(&mut b, &mut media, im, ind_w, text_w_tw, docx_followed_by_workspace(q, split.as_ref(), marked)) {
                     wpara(&mut b, &Par { italic: true, center: true, ..Par::body("[picture]") }, body_sz);
                 }
             }
             if let Some((_, rest)) = &split {
-                for t in rest {
+                for (k, t) in rest.text.iter().enumerate() {
                     docx_nodes(&mut b, &richtext::parse_tree(t), ind_w, body_sz, text_w_tw - ind_w, &mut num_lists);
+                    if let Some(&n) = rest.space_after.get(k).filter(|&&n| n > 0) { part_work(&mut b, n); }
                 }
             }
 
@@ -3139,6 +3505,19 @@ pub fn render_docx(doc: &ExamDoc) -> Result<Vec<u8>, String> {
                 b.push_str("</w:p>");
             } else if tf {
                 wpara(&mut b, &Par { ind, ..Par::body("True   False") }, body_sz);
+            } else if q.has_choice_pictures() {
+                // Picture choices: one per line, each picture under its choice's text, past
+                // the letter (as the PDF prints them); undecodable bytes print `[picture]`.
+                let pic_ind = ind + (text_w("M. ", Face::Reg, body_sz as f64 / 2.0) * 20.0).round() as i64;
+                for (ci, c) in q.choices.iter().enumerate() {
+                    let im = q.choice_images.get(ci).and_then(Option::as_ref);
+                    choice_para_keep(&mut b, &style.choice_label(c), ind, body_sz, im.is_some());
+                    if let Some(im) = im {
+                        if !docx_picture_sized(&mut b, &mut media, im, pic_ind, text_w_tw, false, crate::layout::choice_picture_size_pt, "40") {
+                            wpara(&mut b, &Par { italic: true, ind: pic_ind, ..Par::body("[picture]") }, body_sz);
+                        }
+                    }
+                }
             } else if q.answer_columns >= 2 && q.choices.len() > 1 {
                 // Answer columns 2 / 4: a borderless fixed-width table, filled column-major,
                 // each choice wrapping inside its cell.
@@ -3185,6 +3564,7 @@ pub fn render_docx(doc: &ExamDoc) -> Result<Vec<u8>, String> {
                 wpara(&mut b, &Par::body(""), body_sz); // breathing room after each question
             }
         }
+        docx_separate_first_workspace_rule(&mut b, question_start)?;
     }
 
     // The Name/Class/Date line repeats on every page (Test Parrot does the same): a Word
@@ -3372,7 +3752,7 @@ mod tests {
         find_raw(&masked(hay), needle)
     }
 
-    fn verify_xref(pdf: &[u8]) {
+    pub(super) fn verify_xref(pdf: &[u8]) {
         // startxref -> last one -> offset must point at "xref"
         let sx = find_sub(pdf, b"startxref\n").expect("startxref");
         let num: usize = {
@@ -3895,9 +4275,9 @@ mod tests {
         assert_eq!(d[a..b].matches("<w:bottom w:val=\"single\" w:sz=\"6\"").count(), 4, "four ruled lines under part a");
         assert_eq!(d[b..c].matches("<w:bottom w:val=\"single\" w:sz=\"6\"").count(), 0);
         assert_eq!(d[c..].matches("<w:bottom w:val=\"single\" w:sz=\"6\"").count(), 2 + 3, "part c's two, then the question's three answer lines");
-        // Each rule paragraph repeats its line as the `between` border, so a run of them is
-        // not merged into one line by Word / LibreOffice.
-        assert_eq!(d.matches("<w:between w:val=\"single\"").count(), d.matches("<w:bottom w:val=\"single\" w:sz=\"6\"").count());
+        // The first kept answer line has a standalone bottom rule; the remaining
+        // matching `between` borders preserve one line per workspace paragraph.
+        assert_eq!(d.matches("<w:between w:val=\"single\"").count() + 1, d.matches("<w:bottom w:val=\"single\" w:sz=\"6\"").count());
         assert_eq!(x(&mk(PaperStyle::Standard, vec![])).matches("Second part?").count(), 1);
     }
 
@@ -4762,7 +5142,7 @@ mod r7_markup_tests {
     #[test]
     fn centred_groups_are_jc_center_in_the_docx() {
         let x = part(&doc("Evaluate:\n::: center\nShort centred line\n## A heading\n:::\n::: center\na | b\n1 | 2\n:::"), "word/document.xml");
-        assert!(x.contains("<w:p><w:pPr><w:ind w:left=\"432\"/><w:jc w:val=\"center\"/></w:pPr><w:r><w:rPr><w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">Short centred line</w:t>"), "{x}");
+        assert!(x.contains("<w:p><w:pPr><w:keepLines/><w:ind w:left=\"432\"/><w:jc w:val=\"center\"/></w:pPr><w:r><w:rPr><w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">Short centred line</w:t>"), "{x}");
         assert!(x.contains("<w:ind w:left=\"432\"/><w:jc w:val=\"center\"/></w:pPr>") && x.matches("<w:jc w:val=\"center\"/>").count() >= 4, "{x}");
         assert!(x.contains("<w:tblW w:w=\"") && x.contains("w:type=\"dxa\"/><w:jc w:val=\"center\"/><w:tblBorders>"), "table jc: {x}");
         // "Evaluate:" keeps the number in its gutter, left aligned.
@@ -4838,5 +5218,470 @@ mod r7_markup_tests {
             let b = layout_blocks(&richtext::parse(stem), 400.0, 380.0, 11.0, 15.6);
             assert_eq!(format!("{a:?}"), format!("{b:?}"), "{stem}");
         }
+    }
+}
+
+#[cfg(test)]
+mod math_export_tests {
+    use super::*;
+    use std::io::Read;
+
+    const MATRIX: &str = r"[■(1&2@3&4)]";
+    fn doc(stem: &str) -> ExamDoc {
+        ExamDoc { title: "Equation export regression".into(), body_pt: 11.0, heading_pt: 16.0,
+            margin_mm: 20.0, questions: vec![DocQ { number: 1, text: vec![stem.into()], no_answer_space: true, ..Default::default() }], ..Default::default() }
+    }
+    fn xml(doc: &ExamDoc) -> String {
+        let bytes = render_docx(doc).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut xml = String::new();
+        zip.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();
+        xml
+    }
+
+    #[test]
+    fn repeated_equations_have_one_resource_key_per_page_without_losing_draws() {
+        let d=doc("Repeat $x^2$ and $x^2$ on one line.");
+        let layout=layout_pdf(&d,true).unwrap();
+        assert_eq!(layout.imgs.len(),1,"the same equation raster is cached");
+        let ops=String::from_utf8_lossy(&layout.pages[0].0);
+        assert_eq!(ops.matches("/Im1 Do").count(),2,"both visible occurrences remain");
+        let pdf=assemble_pdf(layout).unwrap();tests::verify_xref(&pdf);
+        let text=String::from_utf8_lossy(&pdf);
+        let resources=text.split(" /XObject << ").nth(1).unwrap().split(">>").next().unwrap();
+        assert_eq!(resources.matches("/Im1 ").count(),1,"duplicate resource names violate the PDF dictionary contract");
+    }
+
+    #[test]
+    fn math_matrix_and_fraction_remain_atomic_with_shared_inline_baseline() {
+        let source = format!(r"Before ${MATRIX}$ plus $(x+1)/(y-2)$ after.");
+        let frags = line_frags(&richtext::inline(&source), false);
+        assert_eq!(frags.iter().filter(|f| f.math).count(), 2);
+        let lines = wrap_frags(&frags, 450.0, 450.0, 11.0);
+        assert_eq!(lines.len(), 1);
+        let math: Vec<_> = lines[0].iter().filter_map(|p| p.math.as_ref()).collect();
+        assert_eq!(math.len(), 2);
+        let (height, ascent) = line_metrics(&lines[0], 11.0, 13.2);
+        assert!(height > 25.0, "matrix needs both rows, not a text-sized slot: {height}");
+        for m in math {
+            // The full box fits above/below the very same baseline as the surrounding text.
+            assert!(ascent >= m.raster.baseline * m.scale);
+            assert!(height - ascent >= (m.raster.h - m.raster.baseline) * m.scale);
+        }
+        let r = layout_pdf(&doc(&source), true).unwrap();
+        assert_eq!(r.imgs.len(), 2);
+        assert!(r.imgs.iter().all(|im| im.alpha.is_some() && im.equation_png.is_some()));
+        let pdf = render_pdf(&doc(&source)).unwrap();
+        tests::verify_xref(&pdf);
+        let text = String::from_utf8_lossy(&tests::masked(&pdf)).into_owned();
+        assert!(text.contains("(Before)") && text.contains("(after.)"), "ordinary prose remains native PDF text");
+        assert!(!text.contains('■') && !text.contains("1&2@3&4"), "internal matrix notation never prints");
+        assert!(text.contains("/SMask") && text.contains("/FlateDecode"));
+    }
+
+    #[test]
+    fn wide_equation_scales_as_a_whole_and_moves_to_its_own_line() {
+        let source = format!("Introduction ${MATRIX}$ ending words.");
+        let lines = text_lines(&source, 30.0, 30.0, 11.0);
+        let placed: Vec<_> = lines.iter().flatten().filter(|p| p.math.is_some()).collect();
+        assert_eq!(placed.len(), 1, "a matrix is never cut into character fragments");
+        assert!(placed[0].math.as_ref().unwrap().scale < 1.0);
+        for line in &lines { assert!(placed_w(line, 11.0) <= 30.01); }
+    }
+
+    #[test]
+    fn math_pagination_uses_real_heights_in_stems_choices_and_table_cells() {
+        let mut d = doc(&format!("Compute ${MATRIX}$, then explain."));
+        let base = d.questions[0].clone();
+        d.questions = (1..=28).map(|number| DocQ { number, ..base.clone() }).collect();
+        d.questions[0].choices = vec![format!("A. ${MATRIX}$"), r"B. $(1)/(x)$".into()];
+        d.questions[0].answer_columns = 2;
+        d.questions[1].text = vec![format!("| Matrix | Fraction |\n| --- | --- |\n| ${MATRIX}$ | $(1)/(x)$ |")];
+        let r = layout_pdf(&d, true).unwrap();
+        assert!(r.pages.len() >= 2, "28 tall matrix rows must paginate");
+        for (ops, _) in &r.pages {
+            for line in String::from_utf8_lossy(ops).lines().filter(|l| l.starts_with("q ") && l.contains(" cm /Im")) {
+                let parts: Vec<_> = line.split_whitespace().collect();
+                let h: f64 = parts[4].parse().unwrap();
+                let y: f64 = parts[6].parse().unwrap();
+                assert!(y >= r.mb - 0.01, "math descender below printable page: {line}");
+                assert!(y + h <= r.page_h - r.mt + 0.01, "math ascender above printable page: {line}");
+            }
+        }
+        let preview = preview_pages(&d).unwrap();
+        assert_eq!(preview.images.len(), preview.equation_images.len());
+        assert!(preview.equation_images.iter().all(Option::is_some));
+        assert_eq!(preview.pages, r.pages.iter().map(|p| p.0.clone()).collect::<Vec<_>>(), "preview and PDF use identical measured math layout");
+        tests::verify_xref(&assemble_pdf(r).unwrap());
+    }
+
+    #[test]
+    fn docx_math_is_editable_omml_with_matrix_rows_and_real_fractions() {
+        let x = xml(&doc(&format!("Before ${MATRIX}$ and $(x+1)/(y-2)$ after.")));
+        let tree = roxmltree::Document::parse(&x).unwrap();
+        let math_ns = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+        let count = |name| tree.descendants().filter(|n| n.has_tag_name((math_ns, name))).count();
+        assert_eq!(count("oMath"), 2);
+        assert_eq!(count("mr"), 2);
+        assert_eq!(count("m"), 1);
+        assert_eq!(count("f"), 1);
+        assert!(x.contains("Before ") && x.contains(" after."));
+        assert!(!x.contains('■') && !x.contains("1&amp;2@3&amp;4"));
+        assert!(!x.contains("<w:drawing"), "math remains editable Word structure, not a picture");
+    }
+
+    #[test]
+    fn escaped_currency_stays_native_text_beside_real_fraction_math() {
+        for (source, amount, whole) in [
+            (r"\$7,400 at 10.5% for $(1)/(4)$ years", "$7,400", None),
+            (r"\$1,900 at 5.9% for $2 (3)/(4)$ years", "$1,900", Some("2")),
+        ] {
+            let d = doc(source);
+            let layout = layout_pdf(&d, true).unwrap();
+            assert_eq!(layout.imgs.len(), 1, "only the intended fraction span is math");
+            let native: String = layout.pages.iter().map(|p| String::from_utf8_lossy(&p.0)).collect();
+            assert!(native.contains(amount) && native.contains("years"), "currency and prose remain PDF text: {native}");
+            assert!(!native.contains("\\\\$"), "currency escape must not print");
+            let x = xml(&d);
+            let tree = roxmltree::Document::parse(&x).unwrap();
+            let math_ns = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+            let word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+            let math: Vec<_> = tree.descendants().filter(|n| n.has_tag_name((math_ns, "oMath"))).collect();
+            assert_eq!(math.len(), 1);
+            assert_eq!(math[0].descendants().filter(|n| n.has_tag_name((math_ns, "f"))).count(), 1);
+            assert!(tree.descendants().filter(|n| n.has_tag_name((word_ns, "t"))).filter_map(|n| n.text()).collect::<String>().contains(amount));
+            let math_text = math[0].descendants().filter(|n| n.has_tag_name((math_ns, "t"))).filter_map(|n| n.text()).collect::<String>();
+            assert!(!math_text.contains("years") && !math_text.contains('$'));
+            if let Some(whole) = whole { assert!(math_text.starts_with(whole), "whole mixed number remains inside its math span"); }
+        }
+    }
+
+    #[test]
+    fn source_trig_parentheses_and_vector_symbols_export_as_editable_structure() {
+        let x = xml(&doc("$3sin(θ-(5π)/(6))$; $vec(a) xx vec(b)$; $langle -9, 5, -3 rangle$"));
+        let tree = roxmltree::Document::parse(&x).unwrap();
+        let ns = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+        assert_eq!(tree.descendants().filter(|n| n.has_tag_name((ns, "func"))).count(), 1);
+        assert_eq!(tree.descendants().filter(|n| n.has_tag_name((ns, "d"))).count(), 1, "explicit function-argument parentheses are a real delimiter");
+        let text: String = tree.descendants().filter(|n| n.has_tag_name((ns, "t"))).filter_map(|n| n.text()).collect();
+        assert!(text.contains('×') && text.contains('⟨') && text.contains('⟩'));
+        assert!(!text.contains("xx") && !text.contains("langle") && !text.contains("rangle"));
+    }
+}
+
+#[cfg(test)]
+mod child_figure_export_tests {
+    use super::*;
+    use std::io::Read;
+    fn doc() -> ExamDoc {
+        let mut bytes=Vec::new();
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(100,40,image::Rgb([0,0,0])))
+            .write_to(&mut std::io::Cursor::new(&mut bytes),image::ImageFormat::Png).unwrap();
+        ExamDoc { title:"Multipart source figure".into(),body_pt:11.0,heading_pt:16.0,margin_mm:18.0,
+            questions:vec![DocQ { number:7,text:vec!["Shared givens.\na) First part.".into(),"b) Owning part.\n[picture]\nAfter its figure.".into(),"c) Later part.\nA. Choice one\nB. Choice two".into()],
+                image:Some(DocImage {bytes,width_px:100,height_px:40}),space_after:vec![1,2,3],..Default::default() }],..Default::default() }
+    }
+    #[test]
+    fn part_marker_splits_all_entries_and_keeps_each_part_work_space_after_its_content() {
+        let d=doc();let q=&d.questions[0]; let (head,tail)=picture_split(q,Some(0)).unwrap();
+        assert_eq!(head.text,["Shared givens.\na) First part.","b) Owning part."]); assert_eq!(head.space_after,[1,0]);
+        assert_eq!(tail.text,["After its figure.","c) Later part.\nA. Choice one\nB. Choice two"]);assert_eq!(tail.space_after,[2,3]);
+        let r=layout_pdf(&d,true).unwrap(); assert_eq!(r.pages.len(),1);
+        let ops=String::from_utf8_lossy(&r.pages[0].0);let image=ops.find("/Im1 Do").unwrap();
+        assert!(ops.find("Owning part.").unwrap()<image && image<ops.find("After its figure.").unwrap());
+        assert!(image<ops.find("Later part.").unwrap()); assert_eq!(ops.matches("(7.) Tj").count(),1,"one question number");
+        let bytes=render_docx(&d).unwrap(); let mut zip=zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();let mut xml=String::new();zip.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();
+        let image=xml.find("<w:drawing").unwrap();assert!(xml.find("Owning part.").unwrap()<image && image<xml.find("After its figure.").unwrap());
+        assert!(image<xml.find("Later part.").unwrap() && xml.contains("Choice two"));assert!(!xml.contains("[picture]"));
+        tests::verify_xref(&render_pdf(&d).unwrap());
+    }
+    #[test]
+    fn image_at_end_of_owner_part_precedes_that_parts_work_space_and_all_later_parts() {
+        let mut d=doc();d.questions[0].text[1]="b) Owning part.\n[picture]".into();
+        let (head,tail)=picture_split(&d.questions[0],Some(0)).unwrap();
+        assert_eq!(head.space_after,[1,0]); assert_eq!(tail.text[0],"");assert_eq!(tail.space_after,[2,3]);
+        let r=layout_pdf(&d,true).unwrap();let q=&d.questions[0];
+        let estimate=q_est_height(&r,q,Some(0),false);
+        assert!(estimate>100.0,"image and part work room are both measured");
+        assert!(render_pdf(&d).is_ok() && render_docx(&d).is_ok());
+    }
+    #[test]
+    fn docx_short_question_keeps_its_wrapped_prose_without_chaining_all_multipart_parts() {
+        let mut d=doc();d.questions[0].image=None;d.questions[0].space_after.clear();
+        d.questions[0].text=vec!["Use the printed task.".into(),"A body paragraph long enough to wrap over multiple lines should stay with its annually for two years ending.".into()];
+        let xml=|d:&ExamDoc| {
+            let bytes=render_docx(d).unwrap();let mut zip=zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();let mut xml=String::new();zip.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();xml
+        };
+        let short=xml(&d);assert_eq!(short.matches("<w:keepNext/>").count(),2,"short stem and first answer line stay together");assert_eq!(short.matches("<w:keepLines/>").count(),2);
+        d.questions[0].text=vec!["Find the investment value after the time given.\n$1,240 at 8% compounded\nannually for 2 years".into()];
+        let three=xml(&d);assert_eq!(three.matches("<w:keepNext/>").count(),3,"all three short source lines and their first answer line stay together");
+        assert_eq!(three.matches("<w:keepLines/>").count(),3);
+        assert_eq!(docx_short_stem_paragraphs(&d.questions[0],11.0,432.0),3);
+        d.questions[0].text=vec![format!("Task.\n{}\nEnding.","Long body paragraph ".repeat(200))];
+        assert_eq!(docx_short_stem_paragraphs(&d.questions[0],11.0,432.0),0,"a large source paragraph must not pull a long question into one group");
+        d.questions[0].text=std::iter::once("Shared multipart givens.".into()).chain((1..=20).map(|i|format!("Part {i} can flow on its own paragraph."))).collect();
+        let long=xml(&d);assert_eq!(long.matches("<w:keepNext/>").count(),2,"only the numbered start and final stem/work boundary, not every multipart part");assert_eq!(long.matches("<w:keepLines/>").count(),21);
+    }
+
+}
+
+#[cfg(test)]
+mod docx_attachment_tests {
+    use super::*;
+    use std::io::Read;
+    const W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    fn picture() -> DocImage {
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(120, 80, image::Rgb([20, 20, 20])))
+            .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).unwrap();
+        DocImage { bytes, width_px: 120, height_px: 80 }
+    }
+    fn xml(bytes: &[u8]) -> String {
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut s = String::new(); z.by_name("word/document.xml").unwrap().read_to_string(&mut s).unwrap(); s
+    }
+    fn has(p: roxmltree::Node<'_, '_>, name: &str) -> bool {
+        p.children().find(|n| n.has_tag_name((W, "pPr"))).is_some_and(|pr| pr.children().any(|n| n.has_tag_name((W, name))))
+    }
+    fn doc(q: DocQ) -> ExamDoc {
+        ExamDoc { body_pt: 11.0, heading_pt: 16.0, margin_mm: 18.0, questions: vec![q], ..Default::default() }
+    }
+    #[test]
+    fn docx_attachment_keeps_last_stem_with_image_and_only_first_answer_line() {
+        let d = doc(DocQ { number: 1, text: vec!["Use the given figure.".into()], image: Some(picture()), rule_lines: 3, ..Default::default() });
+        let x = xml(&render_docx(&d).unwrap()); let tree = roxmltree::Document::parse(&x).unwrap();
+        let image = tree.descendants().find(|n| n.has_tag_name((W, "drawing"))).unwrap().ancestors().find(|n| n.has_tag_name((W, "p"))).unwrap();
+        let stem = image.prev_sibling_element().unwrap();
+        assert!(has(stem, "keepNext") && has(stem, "keepLines"), "stem and image move together");
+        assert!(has(image, "keepNext"), "image keeps its first answer line");
+        let first_line = image.next_sibling_element().unwrap();
+        assert!(!has(first_line, "keepNext"));
+        assert!(!first_line.descendants().any(|n| n.has_tag_name((W, "between"))), "first visible bottom rule is independent of the later border group");
+        assert!(first_line.next_sibling_element().unwrap().descendants().any(|n| n.has_tag_name((W, "between"))), "later answer lines retain their normal group");
+        assert_eq!(x.matches("<w:keepNext/>").count(), 2, "only stem/image/first-line boundaries are chained");
+    }
+    #[test]
+    fn docx_attachment_keeps_only_owning_part_after_long_multipart_and_preserves_math() {
+        let mut text: Vec<String> = (1..=16).map(|i| format!("Part {i} has independent text.")).collect();
+        text.push("Owning part: before $[■(1&2@3&4)]$ after.\n[picture]\nThe owner continues.".into());
+        text.push("A later part can flow independently.".into());
+        let d = doc(DocQ { number: 1, text, image: Some(picture()), no_answer_space: true, ..Default::default() });
+        let x = xml(&render_docx(&d).unwrap()); let tree = roxmltree::Document::parse(&x).unwrap();
+        let body = tree.descendants().find(|n| n.has_tag_name((W, "body"))).unwrap();
+        let paragraphs: Vec<_> = body.children().filter(|n| n.has_tag_name((W, "p"))).collect();
+        let at = paragraphs.iter().position(|p| p.descendants().any(|n| n.has_tag_name((W, "drawing")))).unwrap();
+        assert!(has(paragraphs[at - 1], "keepNext"));
+        assert!(!has(paragraphs[at], "keepNext") && !has(paragraphs[at + 1], "keepNext"));
+        assert_eq!(paragraphs[..at].iter().filter(|p| has(**p, "keepNext")).count(), 2, "first numbered paragraph and owner only, not every part");
+        assert!(x.contains("<m:m>") && x.contains("The owner continues.") && x.contains("A later part"));
+        assert!(!x.contains("[picture]"));
+    }
+    #[test]
+    fn docx_workspace_keeps_first_line_without_chaining_long_work_or_later_parts() {
+        let q = DocQ { number: 1, text: vec!["Use the figure.".into()], image: Some(picture()), work_lines: 23, rule_lines: 1, ..Default::default() };
+        assert!(docx_followed_by_workspace(&q, None, false));
+        let x = xml(&render_docx(&doc(q)).unwrap()); let tree = roxmltree::Document::parse(&x).unwrap();
+        let image = tree.descendants().find(|n| n.has_tag_name((W, "drawing"))).unwrap().ancestors().find(|n| n.has_tag_name((W, "p"))).unwrap();
+        assert!(has(image, "keepNext"));
+        let work: Vec<_> = image.next_siblings().skip(1).filter(|n| n.has_tag_name((W, "p"))).collect();
+        assert_eq!(work.len(), 25, "one answer line, 23 work lines, then the ordinary question spacer");
+        assert!(work.iter().all(|p| !has(*p, "keepNext")), "remaining workspace must be allowed to flow");
+        let owner = DocQ { number: 1, text: vec!["a) Owner.\n[picture]".into(), "b) Later part.".into()], image: Some(picture()), space_after: vec![2, 0], ..Default::default() };
+        let split = picture_split(&owner, Some(0));
+        assert!(docx_followed_by_workspace(&owner, split.as_ref(), false), "own part work precedes the later part");
+        let mut continuation = owner.clone(); continuation.text[0].push_str("\nOwner continuation before its work.");
+        let split = picture_split(&continuation, Some(0));
+        assert!(!docx_followed_by_workspace(&continuation, split.as_ref(), false), "do not pull continuation prose and its later workspace");
+        let mut no_room = owner.clone(); no_room.space_after.clear(); no_room.text.truncate(1); no_room.no_answer_space = true;
+        let split = picture_split(&no_room, Some(0));
+        assert!(!docx_followed_by_workspace(&no_room, split.as_ref(), false));
+        let plain = doc(DocQ { number: 1, text: vec!["Use the printed task.\nThe written details stay with one answer line.".into()], rule_lines: 3, ..Default::default() });
+        let px = xml(&render_docx(&plain).unwrap()); let ptree = roxmltree::Document::parse(&px).unwrap();
+        let last_stem = ptree.descendants().find(|n| n.has_tag_name((W, "p")) && n.descendants().any(|t| t.text().is_some_and(|s| s.contains("written details")))).unwrap();
+        assert!(has(last_stem, "keepNext"), "plain written stems also retain their first answer line");
+        assert!(!has(last_stem.next_sibling_element().unwrap(), "keepNext"), "later answer lines still flow");
+    }
+
+    #[test]
+    fn docx_attachment_keeps_only_the_final_table_row_with_its_image() {
+        let d = doc(DocQ { number: 1, text: vec!["Read this table:\nA | B\n1 | 2\n3 | 4".into()], image: Some(picture()), no_answer_space: true, ..Default::default() });
+        let x = xml(&render_docx(&d).unwrap()); let tree = roxmltree::Document::parse(&x).unwrap();
+        let table = tree.descendants().find(|n| n.has_tag_name((W, "tbl"))).unwrap();
+        let rows: Vec<_> = table.children().filter(|n| n.has_tag_name((W, "tr"))).collect();
+        assert!(rows.len() >= 2);
+        assert!(rows[..rows.len() - 1].iter().flat_map(|r| r.descendants()).filter(|n| n.has_tag_name((W, "p"))).all(|p| !has(p, "keepNext")));
+        assert!(rows.last().unwrap().descendants().filter(|n| n.has_tag_name((W, "p"))).all(|p| has(p, "keepNext") && has(p, "keepLines")));
+    }
+    /// Explicit isolated fixture only. This maps unchanged written-response items using the
+    /// public layout data (the same stem/image/three answer lines as the exam mapper), then
+    /// compares all resulting OOXML and media to the frozen app export after removing
+    /// keep properties and first-rule border grouping. No source import, inference, user
+    /// store or answer key is opened.
+    #[test]
+    #[ignore = "requires VERSHION_DOCX_ATTACHMENT_REVIEW with an isolated 14-item fixture"]
+    fn docx_attachment_render_unchanged_r3_volume_student_fixture() {
+        let path = crate::env_var("VERSHION_DOCX_ATTACHMENT_REVIEW").expect("isolated manifest");
+        let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let store = std::path::PathBuf::from(manifest["store"].as_str().unwrap());
+        let banks: Vec<crate::model::QuestionBank> = serde_json::from_slice(&std::fs::read(store.join("banks.json")).unwrap()).unwrap();
+        let exams: Vec<crate::model::Exam> = serde_json::from_slice(&std::fs::read(store.join("exams.json")).unwrap()).unwrap();
+        let exam = &exams[0]; assert_eq!(exam.items.len(), 14);
+        let mut questions = Vec::new();
+        for (i, item) in exam.items.iter().enumerate() {
+            let bank = banks.iter().find(|b| b.id == item.bank_id).unwrap();
+            let q = bank.questions.iter().find(|q| q.id == item.question_id).unwrap();
+            assert!(matches!(&q.kind, crate::model::Kind::Short { sample } if sample.is_empty()));
+            assert!(item.section.is_none() && item.part_work.is_empty());
+            let image = q.image.as_ref().map(|im| DocImage { bytes: std::fs::read(store.join(&im.file)).unwrap(), width_px: im.width, height_px: im.height });
+            questions.push(DocQ { number: i as u32 + 1, text: vec![q.stem.clone()], points: q.points, image, rule_lines: 3, work_lines: item.work_lines, ..Default::default() });
+        }
+        let d = ExamDoc { title: exam.title.clone().unwrap_or_else(|| exam.name.clone()), header_line: exam.header.clone(), heading_pt: exam.heading_pt,
+            body_pt: exam.body_pt, margin_mm: exam.margin_mm, ruled_blanks: exam.ruled_blanks, style: exam.paper_style, margins: exam.margins,
+            questions, answers_inline: true, ..Default::default() };
+        let bytes = render_docx(&d).unwrap();
+        let baseline = std::fs::read(manifest["baseline_student_docx"].as_str().unwrap()).unwrap();
+        let strip = |s: String| s.replace("<w:keepNext/>", "").replace("<w:keepLines/>", "").replace("<w:between w:val=\"single\" w:sz=\"6\" w:space=\"1\" w:color=\"808080\"/>", "");
+        assert_eq!(strip(xml(&bytes)), strip(xml(&baseline)), "every source text, picture extent, point and work line must match the frozen app export apart from keep properties and the first answer-line border grouping");
+        let mut old = zip::ZipArchive::new(std::io::Cursor::new(baseline)).unwrap();
+        let mut new = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+        for i in 1..=10 {
+            let name = format!("word/media/image{i}.png");
+            let mut a = Vec::new(); let mut b = Vec::new(); old.by_name(&name).unwrap().read_to_end(&mut a).unwrap(); new.by_name(&name).unwrap().read_to_end(&mut b).unwrap();
+            assert_eq!(a, b, "the fixture must not repair or replace frozen candidate image {i}");
+        }
+        let output = std::path::PathBuf::from(manifest["output"].as_str().unwrap()); std::fs::create_dir_all(&output).unwrap();
+        std::fs::write(output.join("student.docx"), bytes).unwrap();
+        println!("14 unchanged R3 written-response items, 10 byte-identical embedded images; only attachment keep properties and first answer-line border grouping differ from frozen student export. No inference or acceptance score.");
+    }
+}
+
+/// Choices that are pictures (`DocQ::choice_images`) in the PDF and Word writers.
+#[cfg(test)]
+mod choice_picture_tests {
+    use super::*;
+    use std::io::Read;
+
+    fn png(w: u32, h: u32) -> DocImage {
+        let im = image::RgbImage::from_fn(w, h, |x, _| image::Rgb([(x % 255) as u8, 90, 160]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(im).write_to(&mut out, image::ImageFormat::Png).unwrap();
+        DocImage { bytes: out.into_inner(), width_px: w, height_px: h }
+    }
+
+    fn doc(images: Vec<Option<DocImage>>) -> ExamDoc {
+        let choices: Vec<String> = (0..images.len()).map(|i| format!("{}. ", char::from(b'A' + i as u8))).collect();
+        ExamDoc {
+            title: "Pies".into(),
+            body_pt: 11.0,
+            heading_pt: 16.0,
+            margin_mm: 18.0,
+            questions: vec![DocQ { number: 1, text: vec!["Which pie shows one quarter?".into()], choices, choice_images: images, correct: vec![1], ..Default::default() }],
+            ..Default::default()
+        }
+    }
+
+    fn count(hay: &[u8], needle: &[u8]) -> usize {
+        hay.windows(needle.len()).filter(|w| *w == needle).count()
+    }
+
+    #[test]
+    fn pdf_draws_each_choice_picture_under_its_choice() {
+        let d = doc(vec![Some(png(160, 120)), None, Some(png(80, 60))]);
+        let pdf = render_pdf(&d).unwrap();
+        tests::verify_xref(&pdf);
+        assert_eq!(count(&pdf, b"/Subtype /Image"), 2);
+        let pv = preview_pages(&d).unwrap();
+        let ops = String::from_utf8_lossy(&pv.pages[0]).into_owned();
+        // Each picture is drawn after its own choice's letter and before the next one.
+        let at = |s: &str| ops.find(s).unwrap_or_else(|| panic!("{s} missing"));
+        assert!(at("(A.") < at("/Im1 Do") && at("/Im1 Do") < at("(B.") && at("(C.") < at("/Im2 Do"), "{ops}");
+        // A 160 px picture prints at 120 x 90 pt (0.75 pt per px), under 1.5 in.
+        assert!(ops.contains("q 120 0 0 90 "), "{ops}");
+    }
+
+    #[test]
+    fn tall_choice_pictures_cap_at_one_and_a_half_inches_and_count_in_the_height() {
+        let d = doc(vec![Some(png(100, 1000)), Some(png(100, 1000))]);
+        let pv = preview_pages(&d).unwrap();
+        let ops = String::from_utf8_lossy(&pv.pages[0]).into_owned();
+        assert_eq!(ops.matches(" 0 0 108 ").count(), 2, "{ops}");
+        let mut r = layout_pdf(&d, false).unwrap();
+        let q = &d.questions[0];
+        let without = q_est_height(&r, q, None, false);
+        r.choice_idx = vec![Some(0), Some(1)];
+        let with = q_est_height(&r, q, None, false);
+        assert!((with - without - 2.0 * (108.0 + 2.0 * CHOICE_PIC_GAP)).abs() < 0.01, "{with} {without}");
+    }
+
+    #[test]
+    fn a_picture_choice_moves_to_the_next_page_with_its_picture() {
+        let mut d = doc(vec![]);
+        let base = d.questions[0].clone();
+        d.questions = (1..=6)
+            .map(|n| DocQ { number: n, choice_images: vec![Some(png(100, 1000)), Some(png(100, 1000)), Some(png(100, 1000))], choices: vec!["A. ".into(), "B. ".into(), "C. ".into()], ..base.clone() })
+            .collect();
+        let pv = preview_pages(&d).unwrap();
+        for (i, p) in pv.pages.iter().enumerate() {
+            let ops = String::from_utf8_lossy(p).into_owned();
+            // Every page that shows a choice letter also shows its picture right after it.
+            let letters = ["(A.", "(B.", "(C."].iter().map(|l| ops.matches(l).count()).sum::<usize>();
+            assert_eq!(letters, ops.matches(" Do Q").count(), "page {i}: a letter without its picture");
+        }
+    }
+
+    #[test]
+    fn grid_and_across_layouts_give_way_to_one_choice_per_line() {
+        for style in [crate::model::PaperStyle::Standard, crate::model::PaperStyle::Condensed] {
+            let mut d = doc(vec![Some(png(40, 30)), Some(png(40, 30))]);
+            d.style = style;
+            d.questions[0].answer_columns = 2;
+            let q = &d.questions[0];
+            let r = layout_pdf(&d, false).unwrap();
+            assert!(explicit_grid(&r, q, 400.0).is_none() && choice_columns(&r, q, 400.0).is_none(), "{style:?}");
+        }
+    }
+
+    fn document_xml(d: &ExamDoc) -> (String, Vec<String>) {
+        let bytes = render_docx(d).unwrap();
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let media = z.file_names().filter(|n| n.starts_with("word/media/")).map(str::to_string).collect();
+        let mut xml = String::new();
+        z.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();
+        (xml, media)
+    }
+
+    #[test]
+    fn docx_puts_each_choice_picture_after_its_choice_and_keeps_them_together() {
+        let mut d = doc(vec![Some(png(160, 120)), None, Some(png(40, 30))]);
+        d.questions[0].answer_columns = 2;
+        let (xml, media) = document_xml(&d);
+        assert_eq!(media.len(), 2);
+        assert_eq!(xml.matches("<w:drawing>").count(), 2);
+        assert!(!xml.contains("<w:tblW"), "no choice-column table with pictures");
+        let at = |s: &str| xml.find(s).unwrap_or_else(|| panic!("{s} missing"));
+        assert!(at(">A. <") < at("name=\"Picture 1\"") && at("name=\"Picture 1\"") < at(">B. <") && at(">C. <") < at("name=\"Picture 2\""));
+        assert_eq!(xml.matches("<w:keepNext/><w:ind w:left=\"432\"/>").count(), 2, "a picture choice's letter keeps with its picture");
+        // 160 x 120 px prints at 120 x 90 pt, as in the PDF.
+        assert!(xml.contains("<wp:extent cx=\"1524000\" cy=\"1143000\"/>"), "{xml}");
+    }
+
+    #[test]
+    fn docx_undecodable_choice_picture_prints_a_placeholder() {
+        let d = doc(vec![Some(DocImage { bytes: b"not a picture".to_vec(), width_px: 10, height_px: 10 }), None]);
+        let (xml, media) = document_xml(&d);
+        assert!(media.is_empty());
+        assert!(xml.contains("[picture]"));
+    }
+
+    #[test]
+    fn marked_key_checks_a_correct_picture_choice() {
+        let mut d = doc(vec![Some(png(40, 30)), Some(png(40, 30))]);
+        d.is_key = true;
+        d.key_layout = KeyLayout::Marked;
+        let pv = preview_pages(&d).unwrap();
+        let ops = String::from_utf8_lossy(&pv.pages[0]).into_owned();
+        assert_eq!(ops.matches(" Do Q").count(), 2, "the marked test shows the pictures");
+        let (xml, _) = document_xml(&d);
+        assert!(xml.contains("\u{2713}") && xml.matches("<w:drawing>").count() == 2);
     }
 }

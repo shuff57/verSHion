@@ -1611,7 +1611,7 @@ pub(crate) fn build(p0: &Params) -> (String, Vec<String>) {
     }
     gp.set_s("equations", &rows.join("; "));
     let g = grid_layout(&gp);
-    let GridL { x0, x1, y0, y1, ux, uy, ml, mt, pw, ph, xs: xstep_real, ys: ystep_real } = g;
+    let GridL { x0, x1, y0, y1, ux, uy, ml, mt, pw, ph, xs: xstep_real, ys: ystep_real, .. } = g;
     // the interval, the strips or the area running past the window is said, with the axis value that takes it in
     if let Some(m) = &m {
         let pi_units = p.s("xunits") == "Multiples of \u{3c0}";

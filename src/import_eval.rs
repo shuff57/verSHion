@@ -16,9 +16,22 @@
 use crate::model::{Kind, Question};
 use serde::Serialize;
 
-/// Lower-case alphanumeric words of `s`; punctuation, markup and spacing are ignored.
+/// Lower-case words and mathematical operators. Formatting punctuation is ignored,
+/// but losing a minus, inequality, fraction bar or power must affect the score.
 fn words(s: &str) -> Vec<String> {
-    s.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_string).collect()
+    let mut out = Vec::new();
+    let mut word = String::new();
+    for c in s.to_lowercase().chars() {
+        if c.is_alphanumeric() {
+            word.push(c);
+        } else {
+            if !word.is_empty() { out.push(std::mem::take(&mut word)); }
+            let c = if c == '−' { '-' } else { c };
+            if "+-=/^<>≤≥≠".contains(c) { out.push(c.to_string()); }
+        }
+    }
+    if !word.is_empty() { out.push(word); }
+    out
 }
 
 /// Dice similarity of the two texts' word multisets, 0..=1. Two empty texts are the same.
@@ -103,11 +116,11 @@ fn answer_score(t: &Question, g: &Question) -> Option<f64> {
         }
         (Kind::Tf { correct: a }, Kind::Tf { correct: b }) => Some(if a == b { 1.0 } else { 0.0 }),
         (Kind::Blank { accept: ta }, Kind::Blank { accept: ga }) => {
-            let blanks: Vec<&Vec<String>> = ta.iter().filter(|a| !a.is_empty()).collect();
+            let blanks: Vec<(usize, &Vec<String>)> = ta.iter().enumerate().filter(|(_, a)| !a.is_empty()).collect();
             if blanks.is_empty() {
                 return None;
             }
-            let ok = blanks.iter().enumerate().filter(|(i, t)| ga.get(*i).is_some_and(|g| g.iter().any(|x| similarity(x, &t[0]) >= 0.8))).count();
+            let ok = blanks.iter().filter(|(i, t)| ga.get(*i).is_some_and(|g| g.iter().any(|x| similarity(x, &t[0]) >= 0.8))).count();
             Some(ok as f64 / blanks.len() as f64)
         }
         (Kind::Short { sample: a }, Kind::Short { sample: b }) => {
@@ -183,7 +196,7 @@ pub struct Report {
     pub precision: f64,
     pub mean_stem_similarity: f64,
     pub kind_accuracy: f64,
-    /// Mean answer-key score over the found questions whose reference has a key.
+    /// Mean over every reference question with a key; an omitted question scores zero.
     pub answer_accuracy: f64,
     pub points_accuracy: f64,
     pub picture_recall: f64,
@@ -211,14 +224,18 @@ pub fn compare(truth: &[Question], got: &[Question]) -> Report {
                 found: g.is_some(),
                 stem_similarity: g.map_or(0.0, |g| similarity(&t.stem, &g.stem)),
                 kind_ok: g.is_some_and(|g| g.kind.qkind() == t.kind.qkind()),
-                answer: g.and_then(|g| answer_score(t, g)),
+                answer: answer_score(t, t).map(|_| g.and_then(|g| answer_score(t, g)).unwrap_or(0.0)),
                 points_ok: t.points.map(|p| g.and_then(|g| g.points).is_some_and(|q| (p - q).abs() < 1e-6)),
                 picture_kept: (t.image.is_some() || t.figure.is_some()).then(|| g.is_some_and(|g| g.image.is_some() || g.figure.is_some())),
             }
         })
         .collect();
     let found = per.iter().filter(|q| q.found).count();
-    let answers: Vec<f64> = per.iter().filter(|q| q.found).filter_map(|q| q.answer).collect();
+    // A missing question also lost its answer. Averaging only found questions
+    // could report a perfect answer key after most of the page was dropped.
+    let answers: Vec<f64> = truth.iter().zip(&per)
+        .filter_map(|(t, q)| answer_score(t, t).map(|_| q.answer.unwrap_or(0.0)))
+        .collect();
     let pts: Vec<bool> = per.iter().filter_map(|q| q.points_ok).collect();
     let pics: Vec<bool> = per.iter().filter_map(|q| q.picture_kept).collect();
     Report {
@@ -293,29 +310,46 @@ pub fn dump_pages(pdf: &[u8], hint: &str, dir: &std::path::Path) -> Result<usize
     Ok(pages.len())
 }
 
-/// Converts every page of a PDF through the configured provider, keeping each raw reply in `cache` (when given) as
-/// `page-N.txt`. With `replay`, replies come only from the cache and a missing one is an error: no model call is made.
+/// Cache identity includes the page, prompt and requested provider/output configuration.
+#[cfg(not(target_arch = "wasm32"))]
+fn cached_page_path(dir: &std::path::Path, page: &[u8], prompt: &str, cfg: &crate::ai::AiCfg) -> std::path::PathBuf {
+    use sha2::{Digest, Sha256};
+    let context = serde_json::json!({
+        "version": 2, "page_sha256": format!("{:x}", Sha256::digest(page)),
+        "prompt": prompt, "provider": cfg.provider, "base": cfg.base,
+        "model": cfg.model, "output_mode": format!("{:?}", cfg.output_mode),
+        "native_tools": cfg.native_tools, "schema": vershion_ai_core::ditto().schema,
+    });
+    dir.join(format!("page-{:x}.txt", Sha256::digest(context.to_string().as_bytes())))
+}
+
+/// Converts pages using content-addressed cache entries. Replay and fully cached runs
+/// open no paid service session; partial runs price only the missing pages.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn convert_pdf(pdf: &[u8], hint: &str, cfg: &crate::ai::AiCfg, cache: Option<&std::path::Path>, replay: bool) -> Result<Vec<Question>, String> {
     let pages = crate::platform::render_pdf_pages(pdf)?;
     if let Some(dir) = cache {
         std::fs::create_dir_all(dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
     }
-    if !replay {
-        crate::ai::begin_service(cfg, "import", pages.len())?;
-    }
     let prompt = crate::ai::prompt_for(hint);
+    let files: Vec<_> = pages.iter().map(|page| cache.map(|dir| cached_page_path(dir, page, &prompt, cfg))).collect();
+    let cached: Vec<_> = files.iter().map(|file| file.as_ref().and_then(|f| std::fs::read_to_string(f).ok())).collect();
+    let missing = cached.iter().filter(|reply| reply.is_none()).count();
+    if replay && missing > 0 {
+        return Err(format!("replay: {missing} pages have no cache entry for this input, prompt and model"));
+    }
+    let started = if missing > 0 { Some(crate::ai::begin_service(cfg, "import", missing)?) } else { None };
+    let cfg = started.as_ref().map(|s| &s.cfg).unwrap_or(cfg);
     let mut out = Vec::new();
     for (i, png) in pages.iter().enumerate() {
-        let file = cache.map(|d| d.join(format!("page-{}.txt", i + 1)));
-        let cached = file.as_ref().and_then(|f| std::fs::read_to_string(f).ok());
-        let raw = match cached {
-            Some(r) => r,
-            None if replay => return Err(format!("replay: page {} has no cached reply", i + 1)),
+        let raw = match &cached[i] {
+            Some(r) => r.clone(),
             None => {
                 let r = crate::ai::transcribe_checked(png, "image/png", cfg, &prompt).map_err(|e| format!("page {}: {e}", i + 1))?;
-                if let Some(f) = &file {
-                    let _ = std::fs::write(f, &r);
+                if let Some(f) = &files[i] {
+                    let tmp = f.with_extension(format!("{}.tmp", crate::model::new_id()));
+                    std::fs::write(&tmp, &r).and_then(|_| std::fs::rename(&tmp, f))
+                        .map_err(|e| format!("cannot save page {} cache: {e}", i + 1))?;
                 }
                 r
             }
@@ -340,7 +374,7 @@ mod tests {
         Question { id: stem.into(), stem: stem.into(), kind, points: None, difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 0, modified: 0 }
     }
     fn mc(stem: &str, choices: &[(&str, bool)]) -> Question {
-        q(stem, Kind::Mc { answers: choices.iter().map(|(t, c)| Answer { text: (*t).into(), correct: *c, locked: false }).collect() })
+        q(stem, Kind::Mc { answers: choices.iter().map(|(t, c)| Answer { text: (*t).into(), correct: *c, locked: false, image: None, figure: None }).collect() })
     }
     fn blank(stem: &str, accept: &[&str]) -> Question {
         q(stem, Kind::Blank { accept: accept.iter().map(|a| vec![(*a).to_string()]).collect() })
@@ -384,9 +418,10 @@ mod tests {
         assert!((r.recall - 2.0 / 3.0).abs() < 1e-9 && r.precision == 1.0);
         assert_eq!(r.picture_recall, 0.0);
         assert_eq!(r.points_accuracy, 0.0);
-        // blank question: 1 of 2 blanks right = 0.5; multiple choice: wrong choice = 0.0
-        assert!((r.answer_accuracy - 0.25).abs() < 1e-9, "{}", r.summary());
+        // One of two blanks right; the MC key and missing true/false key are lost.
+        assert!((r.answer_accuracy - 1.0 / 6.0).abs() < 1e-9, "{}", r.summary());
         assert!(!r.per_question[2].found);
+        assert_eq!(r.per_question[2].answer, Some(0.0));
     }
 
     #[test]
@@ -426,5 +461,58 @@ mod tests {
         assert_eq!(similarity("a b", ""), 0.0);
         assert!((similarity("one two three", "one two four") - 2.0 / 3.0).abs() < 1e-9);
         assert_eq!(similarity("A, b!", "b a"), 1.0);
+    }
+
+    #[test]
+    fn mathematical_signs_and_powers_cannot_score_as_identical() {
+        assert!(similarity("$x+2=7$", "$x-2=7$") < 0.9);
+        assert!(similarity("$x^2=4$", "$x/2=4$") < 0.9);
+        assert!(similarity("-17", "17") < 0.8);
+        assert_eq!(similarity("x−2", "x-2"), 1.0);
+        assert_eq!(words("x < 2"), vec!["x", "<", "2"]);
+    }
+
+    #[test]
+    fn a_keyless_blank_does_not_shift_later_answer_positions() {
+        let truth = vec![q("First ___ second ___", Kind::Blank { accept: vec![vec![], vec!["14".into()]] })];
+        let shifted = vec![blank("First ___ second ___", &["14", ""] )];
+        let correct = vec![blank("First ___ second ___", &["", "14"] )];
+        assert_eq!(compare(&truth, &shifted).answer_accuracy, 0.0);
+        assert_eq!(compare(&truth, &correct).answer_accuracy, 1.0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    #[ignore = "requires pdftoppm; run explicitly for the local page harness"]
+    fn fully_cached_pdf_opens_no_service_or_model_connection() {
+        let pdf = include_bytes!("../tests/ai_loop/quiz_all_types.pdf");
+        let pages = crate::platform::render_pdf_pages(pdf).unwrap();
+        let dir = std::env::temp_dir().join(format!("vershion-cache-regression-{}", crate::model::new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = crate::ai::AiCfg { provider: "workers".into(), base: "http://127.0.0.1:9/ai".into(), ..Default::default() };
+        let prompt = crate::ai::prompt_for("");
+        let reply = r#"{"format":"queshion/ditto","formatVersion":"0.1.0","bank":{"name":"cached","questions":[]}}"#;
+        for page in &pages {
+            std::fs::write(cached_page_path(&dir, page, &prompt, &cfg), reply).unwrap();
+        }
+        let converted = convert_pdf(pdf, "", &cfg, Some(&dir), false).unwrap();
+        assert!(converted.is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn cache_reuse_requires_the_same_page_prompt_model_and_format() {
+        let cfg = crate::ai::AiCfg::default();
+        let dir = std::path::Path::new("cache");
+        let key = cached_page_path(dir, b"page A", "prompt A", &cfg);
+        assert_eq!(key, cached_page_path(dir, b"page A", "prompt A", &cfg));
+        assert_ne!(key, cached_page_path(dir, b"page B", "prompt A", &cfg));
+        assert_ne!(key, cached_page_path(dir, b"page A", "prompt B", &cfg));
+        let mut changed = cfg.clone(); changed.model = "another-model".into();
+        assert_ne!(key, cached_page_path(dir, b"page A", "prompt A", &changed));
+        changed = cfg.clone(); changed.output_mode = crate::ai::OutputMode::Schema;
+        assert_ne!(key, cached_page_path(dir, b"page A", "prompt A", &changed));
+        assert_ne!(key, dir.join("page-1.txt"));
     }
 }

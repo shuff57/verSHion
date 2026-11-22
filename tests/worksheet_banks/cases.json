@@ -1,0 +1,2553 @@
+{
+  "version": 1,
+  "threshold": 0.95,
+  "metric_scope": "Source question coverage, source figure recreation, persistence and model-assisted content review; exact mathematical fidelity remains separately uncertified until an independent reference/review is supplied.",
+  "cases": [
+    {
+      "id": "arithmetic-fractions-p1",
+      "file": "pages/arithmetic-fractions/page-01.png",
+      "sha256": "4a0aef89cc6f82c1cfe4f744ea17bc9caf3bfa62a24a2307bf868862b7fb7c19",
+      "subject": "Arithmetic",
+      "source_id": "arithmetic-fractions",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data.",
+      "question_expectations": {
+        "1": {
+          "math": "5/4-3/4",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "2": {
+          "math": "3/2-1/2",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "3": {
+          "math": "2/5+4/5",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "4": {
+          "math": "1/3-1/3",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "5": {
+          "math": "6-1/6",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "6": {
+          "math": "1/2-1/2",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "7": {
+          "math": "1/5+1/5",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "8": {
+          "math": "7/6-5/6",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "9": {
+          "math": "(-4/5)-7/8",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "10": {
+          "math": "1/3-(-5/3)",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "11": {
+          "math": "(-1/3)+3/8",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "12": {
+          "math": "(-10/7)+1/6",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "13": {
+          "math": "9/5+(-4/3)",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "14": {
+          "math": "2-13/8",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        }
+      },
+      "reference_basis": "Item-by-item reference transcribed from the full original source PNGs, including worksheet/section instructions. Fraction page 2 continues the evaluate instruction from page 1. No model reply was used as reference."
+    },
+    {
+      "id": "arithmetic-fractions-p2",
+      "file": "pages/arithmetic-fractions/page-02.png",
+      "sha256": "fb35d56dfa7db49428b0ac370d410ddf3e54f0e962e9a057c512a83135013353",
+      "subject": "Arithmetic",
+      "source_id": "arithmetic-fractions",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data.",
+      "question_expectations": {
+        "15": {
+          "math": "9/5-5/8",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "16": {
+          "math": "(-4/3)-(-3/2)",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "17": {
+          "math": "(-1)+(-2\\frac{2}{5})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "18": {
+          "math": "(-3\\frac{3}{5})-4\\frac{2}{5}",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "19": {
+          "math": "3\\frac{6}{7}+(-1\\frac{1}{7})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "20": {
+          "math": "1\\frac{2}{7}+(-3\\frac{4}{7})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "21": {
+          "math": "2\\frac{1}{3}+(-1\\frac{2}{3})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "22": {
+          "math": "(-1\\frac{3}{4})+(-3\\frac{3}{4})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "23": {
+          "math": "(-1\\frac{7}{8})+(-3\\frac{1}{2})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "24": {
+          "math": "(-2\\frac{7}{8})+(-1\\frac{1}{2})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "25": {
+          "math": "(-2\\frac{5}{6})-(-1\\frac{1}{4})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "26": {
+          "math": "(-3\\frac{5}{8})-4\\frac{2}{5}",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "27": {
+          "math": "1\\frac{2}{5}-(-3\\frac{3}{4})",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        },
+        "28": {
+          "math": "2\\frac{4}{5}-5/8",
+          "instruction_any": [
+            [
+              "evaluate",
+              "calculate",
+              "simplify"
+            ]
+          ]
+        }
+      },
+      "reference_basis": "Item-by-item reference transcribed from the full original source PNGs, including worksheet/section instructions. Fraction page 2 continues the evaluate instruction from page 1. No model reply was used as reference."
+    },
+    {
+      "id": "arithmetic-conversions-p1",
+      "file": "pages/arithmetic-conversions/page-01.png",
+      "sha256": "a6998c58cf73af9485427a29001aa957c6bc44a479c9585fd71d3459ef846b52",
+      "subject": "Arithmetic",
+      "source_id": "arithmetic-conversions",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data.",
+      "question_expectations": {
+        "1": {
+          "math": "90%",
+          "instruction_any": [
+            [
+              "decimal"
+            ],
+            [
+              "thousandths",
+              "thousandth",
+              "three decimal places",
+              "3 decimal places"
+            ]
+          ]
+        },
+        "2": {
+          "math": "30%",
+          "instruction_any": [
+            [
+              "decimal"
+            ],
+            [
+              "thousandths",
+              "thousandth",
+              "three decimal places",
+              "3 decimal places"
+            ]
+          ]
+        },
+        "3": {
+          "math": "115.9%",
+          "instruction_any": [
+            [
+              "decimal"
+            ],
+            [
+              "thousandths",
+              "thousandth",
+              "three decimal places",
+              "3 decimal places"
+            ]
+          ]
+        },
+        "4": {
+          "math": "9%",
+          "instruction_any": [
+            [
+              "decimal"
+            ],
+            [
+              "thousandths",
+              "thousandth",
+              "three decimal places",
+              "3 decimal places"
+            ]
+          ]
+        },
+        "5": {
+          "math": "7%",
+          "instruction_any": [
+            [
+              "decimal"
+            ],
+            [
+              "thousandths",
+              "thousandth",
+              "three decimal places",
+              "3 decimal places"
+            ]
+          ]
+        },
+        "6": {
+          "math": "65%",
+          "instruction_any": [
+            [
+              "decimal"
+            ],
+            [
+              "thousandths",
+              "thousandth",
+              "three decimal places",
+              "3 decimal places"
+            ]
+          ]
+        },
+        "7": {
+          "math": "0.3%",
+          "instruction_any": [
+            [
+              "decimal"
+            ],
+            [
+              "thousandths",
+              "thousandth",
+              "three decimal places",
+              "3 decimal places"
+            ]
+          ]
+        },
+        "8": {
+          "math": "445%",
+          "instruction_any": [
+            [
+              "decimal"
+            ],
+            [
+              "thousandths",
+              "thousandth",
+              "three decimal places",
+              "3 decimal places"
+            ]
+          ]
+        },
+        "9": {
+          "math": "0.452",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "tenth",
+              "tenths",
+              "one decimal place",
+              "1 decimal place"
+            ]
+          ]
+        },
+        "10": {
+          "math": "0.006",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "tenth",
+              "tenths",
+              "one decimal place",
+              "1 decimal place"
+            ]
+          ]
+        },
+        "11": {
+          "math": "0.002",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "tenth",
+              "tenths",
+              "one decimal place",
+              "1 decimal place"
+            ]
+          ]
+        },
+        "12": {
+          "math": "0.05",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "tenth",
+              "tenths",
+              "one decimal place",
+              "1 decimal place"
+            ]
+          ]
+        },
+        "13": {
+          "math": "4.78",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "tenth",
+              "tenths",
+              "one decimal place",
+              "1 decimal place"
+            ]
+          ]
+        },
+        "14": {
+          "math": "0.1",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "tenth",
+              "tenths",
+              "one decimal place",
+              "1 decimal place"
+            ]
+          ]
+        },
+        "15": {
+          "math": "3.63",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "tenth",
+              "tenths",
+              "one decimal place",
+              "1 decimal place"
+            ]
+          ]
+        },
+        "16": {
+          "math": "0.03",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "tenth",
+              "tenths",
+              "one decimal place",
+              "1 decimal place"
+            ]
+          ]
+        }
+      },
+      "reference_basis": "Item-by-item reference transcribed from the full original source PNGs, including worksheet/section instructions. Fraction page 2 continues the evaluate instruction from page 1. No model reply was used as reference."
+    },
+    {
+      "id": "arithmetic-conversions-p2",
+      "file": "pages/arithmetic-conversions/page-02.png",
+      "sha256": "e9218e6009d6844b0437b23a699c9a74ed865732e8f0071845abc902b1e28d3c",
+      "subject": "Arithmetic",
+      "source_id": "arithmetic-conversions",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data.",
+      "question_expectations": {
+        "17": {
+          "math": "25%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "18": {
+          "math": "70%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "19": {
+          "math": "93%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "20": {
+          "math": "58%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "21": {
+          "math": "50%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "22": {
+          "math": "66.6\u0304%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "23": {
+          "math": "20%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "24": {
+          "math": "80%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "25": {
+          "math": "71%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "26": {
+          "math": "30%",
+          "instruction_any": [
+            [
+              "fraction"
+            ]
+          ]
+        },
+        "27": {
+          "math": "1/2",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "repeating",
+              "recurring"
+            ]
+          ]
+        },
+        "28": {
+          "math": "1/8",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "repeating",
+              "recurring"
+            ]
+          ]
+        },
+        "29": {
+          "math": "2/3",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "repeating",
+              "recurring"
+            ]
+          ]
+        },
+        "30": {
+          "math": "1/100",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "repeating",
+              "recurring"
+            ]
+          ]
+        },
+        "31": {
+          "math": "2\\frac{1}{10}",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "repeating",
+              "recurring"
+            ]
+          ]
+        },
+        "32": {
+          "math": "3/8",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "repeating",
+              "recurring"
+            ]
+          ]
+        },
+        "33": {
+          "math": "1/10",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "repeating",
+              "recurring"
+            ]
+          ]
+        },
+        "34": {
+          "math": "87/100",
+          "instruction_any": [
+            [
+              "percent",
+              "percentage"
+            ],
+            [
+              "repeating",
+              "recurring"
+            ]
+          ]
+        }
+      },
+      "reference_basis": "Item-by-item reference transcribed from the full original source PNGs, including worksheet/section instructions. Fraction page 2 continues the evaluate instruction from page 1. No model reply was used as reference."
+    },
+    {
+      "id": "algebra-quadratic-formula-p1",
+      "file": "pages/algebra-quadratic-formula/page-01.png",
+      "sha256": "58ae9dac2c2dd37c575a0c4305a19870331a05fdd23f12c17a0df4f155a84839",
+      "subject": "Algebra",
+      "source_id": "algebra-quadratic-formula",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data.",
+      "question_expectations": {
+        "1": {
+          "math": "v^2+2v-8=0",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "2": {
+          "math": "k^2+5k-6=0",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "3": {
+          "math": "2v^2-5v+3=0",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "4": {
+          "math": "2a^2-a-13=2",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "5": {
+          "math": "2n^2-n-4=2",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "6": {
+          "math": "b^2-4b-14=-2",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "7": {
+          "math": "8n^2-4n=18",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "8": {
+          "math": "8a^2+6a=-5",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "9": {
+          "math": "10x^2+9=x",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "10": {
+          "math": "n^2=9n-20",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "11": {
+          "math": "3a^2=6a-3",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "12": {
+          "math": "x^2=-3x+40",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "13": {
+          "math": "9x^2-11=6x",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "14": {
+          "math": "4a^2-8=a",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "15": {
+          "math": "14m^2+1=6m^2+7m",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        },
+        "16": {
+          "math": "4x^2+4x-8=1",
+          "instruction_any": [
+            [
+              "solve"
+            ],
+            [
+              "quadratic formula"
+            ]
+          ]
+        }
+      },
+      "reference_basis": "Item-by-item reference transcribed from the full original source PNGs, including worksheet/section instructions. Fraction page 2 continues the evaluate instruction from page 1. No model reply was used as reference."
+    },
+    {
+      "id": "algebra-inequality-systems-p1",
+      "file": "pages/algebra-inequality-systems/page-01.png",
+      "sha256": "1767b6d31ab33e39611a2f3b857b9fde8423836e759aaf383ad611d75cc3d18e",
+      "subject": "Algebra",
+      "source_id": "algebra-inequality-systems",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data.",
+      "figure_expectations": {
+        "1": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "2": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "3": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "4": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        }
+      },
+      "question_expectations": {
+        "1": {
+          "maths": [
+            "y>4x-3",
+            "y>=-2x+3"
+          ],
+          "instruction_any": [
+            [
+              "graph",
+              "sketch"
+            ]
+          ]
+        },
+        "2": {
+          "maths": [
+            "y>=-5x+3",
+            "y>-2"
+          ],
+          "instruction_any": [
+            [
+              "graph",
+              "sketch"
+            ]
+          ]
+        },
+        "3": {
+          "maths": [
+            "y<3",
+            "y<=-x+1"
+          ],
+          "instruction_any": [
+            [
+              "graph",
+              "sketch"
+            ]
+          ]
+        },
+        "4": {
+          "maths": [
+            "y>=x-3",
+            "y>=-x-1"
+          ],
+          "instruction_any": [
+            [
+              "graph",
+              "sketch"
+            ]
+          ]
+        }
+      },
+      "reference_basis": "Item-by-item reference transcribed from the full original source PNGs, including worksheet/section instructions. Fraction page 2 continues the evaluate instruction from page 1. No model reply was used as reference.",
+      "figure_reference_note": "Full source grids have -5..5 integer ticks, arrowheads at both ends of both axes, and NO x/y axis-letter labels. This corrects the earlier assumption that x/y letters were present."
+    },
+    {
+      "id": "algebra-inequality-systems-p2",
+      "file": "pages/algebra-inequality-systems/page-02.png",
+      "sha256": "1e66e119793905a4520f0e547aa3b06656b59b55b54dd865b88545f3dd1c8dd7",
+      "subject": "Algebra",
+      "source_id": "algebra-inequality-systems",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        5,
+        6,
+        7,
+        8
+      ],
+      "required_figure_numbers": [
+        5,
+        6,
+        7,
+        8
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data.",
+      "figure_expectations": {
+        "5": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "6": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "7": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "8": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        }
+      },
+      "question_expectations": {
+        "5": {
+          "maths": [
+            "x<=-3",
+            "5x+3y>=-9"
+          ],
+          "instruction_any": [
+            [
+              "graph",
+              "sketch"
+            ]
+          ]
+        },
+        "6": {
+          "maths": [
+            "4x-3y<9",
+            "x+3y>6"
+          ],
+          "instruction_any": [
+            [
+              "graph",
+              "sketch"
+            ]
+          ]
+        },
+        "7": {
+          "maths": [
+            "x+y>2",
+            "2x-y>1"
+          ],
+          "instruction_any": [
+            [
+              "graph",
+              "sketch"
+            ]
+          ]
+        },
+        "8": {
+          "maths": [
+            "x+y>=2",
+            "4x+y>=-1"
+          ],
+          "instruction_any": [
+            [
+              "graph",
+              "sketch"
+            ]
+          ]
+        }
+      },
+      "reference_basis": "Item-by-item reference transcribed from the full original source PNGs, including worksheet/section instructions. Fraction page 2 continues the evaluate instruction from page 1. No model reply was used as reference.",
+      "figure_reference_note": "Full source grids have -5..5 integer ticks, arrowheads at both ends of both axes, and NO x/y axis-letter labels. This corrects the earlier assumption that x/y letters were present."
+    },
+    {
+      "id": "algebra-inequality-systems-p3",
+      "file": "pages/algebra-inequality-systems/page-03.png",
+      "sha256": "326f4dc271cb04bec0c60226123c292ef49a340e4b8b5c9432ea409927eba0e5",
+      "subject": "Algebra",
+      "source_id": "algebra-inequality-systems",
+      "source_pdf_page": 3,
+      "question_numbers": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "required_figure_numbers": [
+        9,
+        10,
+        11,
+        12
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data.",
+      "figure_expectations": {
+        "9": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "10": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "11": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        },
+        "12": {
+          "generator_ids": [
+            "coordinate-grid"
+          ],
+          "params": {
+            "xmin": -5,
+            "xmax": 5,
+            "ymin": -5,
+            "ymax": 5,
+            "xstep": 1,
+            "ystep": 1,
+            "equations": "",
+            "points": "",
+            "xlabel": "",
+            "ylabel": "",
+            "show_answers": false,
+            "arrows": true,
+            "numbers": true
+          },
+          "params_one_of": {
+            "x_left_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "x_right_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_bottom_end": [
+              "Automatic",
+              "Triangle arrow"
+            ],
+            "y_top_end": [
+              "Automatic",
+              "Triangle arrow"
+            ]
+          },
+          "no_visible_title": true
+        }
+      },
+      "figure_reference_note": "Full source grids have -5..5 integer ticks, arrowheads at both ends of both axes, and NO x/y axis-letter labels. This corrects the earlier assumption that x/y letters were present."
+    },
+    {
+      "id": "geometry-angle-pairs-p1",
+      "file": "pages/geometry-angle-pairs/page-01.png",
+      "sha256": "7b5ae91052ae30e6a1c08b09791fd3ea6a075ae9281325346d60cc340a6dea58",
+      "subject": "Geometry",
+      "source_id": "geometry-angle-pairs",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "geometry-angle-pairs-p2",
+      "file": "pages/geometry-angle-pairs/page-02.png",
+      "sha256": "38ee0752a87c39b6bf363243053ed44eb037955e7c9d21c7bdcb5583bcea57c7",
+      "subject": "Geometry",
+      "source_id": "geometry-angle-pairs",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ],
+      "required_figure_numbers": [
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "geometry-similar-triangles-p1",
+      "file": "pages/geometry-similar-triangles/page-01.png",
+      "sha256": "da276f230769787ee05962556ed04c73b652db4b812612deff3f2bb23b31af23",
+      "subject": "Geometry",
+      "source_id": "geometry-similar-triangles",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "geometry-similar-triangles-p2",
+      "file": "pages/geometry-similar-triangles/page-02.png",
+      "sha256": "7caeea49a15b3a0b1b7eb0f2f63536a0471b4ca4e754282c68efca0bac6927a7",
+      "subject": "Geometry",
+      "source_id": "geometry-similar-triangles",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "required_figure_numbers": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "geometry-similar-triangles-p3",
+      "file": "pages/geometry-similar-triangles/page-03.png",
+      "sha256": "5e2a93364918738d72776ad69ef6f9cada219277ee27cffe990db051e4b1f252",
+      "subject": "Geometry",
+      "source_id": "geometry-similar-triangles",
+      "source_pdf_page": 3,
+      "question_numbers": [
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "required_figure_numbers": [
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "geometry-volume-solids-p1",
+      "file": "pages/geometry-volume-solids/page-01.png",
+      "sha256": "cbcc7cbc684b9574fa38a7b686382336bbbb67c0413b39e4377fde51a1fae266",
+      "subject": "Geometry",
+      "source_id": "geometry-volume-solids",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "geometry-volume-solids-p2",
+      "file": "pages/geometry-volume-solids/page-02.png",
+      "sha256": "8e4226c77c5b04854eb40bc700a2643c349bc9a2aef0bd20012c4fdbd43d8960",
+      "subject": "Geometry",
+      "source_id": "geometry-volume-solids",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "required_figure_numbers": [
+        7,
+        8,
+        9,
+        10
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "complex-number-operations-p1",
+      "file": "pages/complex-number-operations/page-01.png",
+      "sha256": "d318a1e54850c9763036255b32f985583f232a2b17f1de4b55eb156a65d7df0f",
+      "subject": "Complex numbers",
+      "source_id": "complex-number-operations",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "complex-number-operations-p2",
+      "file": "pages/complex-number-operations/page-02.png",
+      "sha256": "a5fe345cbb419d444e35cab1b55cdee774c007840d0cd96b12d7273c9ae42971",
+      "subject": "Complex numbers",
+      "source_id": "complex-number-operations",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "precalculus-parametric-p1",
+      "file": "pages/precalculus-parametric/page-01.png",
+      "sha256": "4df5efb81fe7d4bfb5b713812e16e8413f055b10bfb03722482028d46797663d",
+      "subject": "Precalculus",
+      "source_id": "precalculus-parametric",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "precalculus-parametric-p2",
+      "file": "pages/precalculus-parametric/page-02.png",
+      "sha256": "f2b15aad96e645360cacd6ae54951c3cef290aa2e344c984771adf72dea95b29",
+      "subject": "Precalculus",
+      "source_id": "precalculus-parametric",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "precalculus-polar-graphs-p1",
+      "file": "pages/precalculus-polar-graphs/page-01.png",
+      "sha256": "99d2c6f0e780b80e861d3a9a728853a3c8ae6fd8063339605e857adf7755f76b",
+      "subject": "Precalculus",
+      "source_id": "precalculus-polar-graphs",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "precalculus-polar-graphs-p2",
+      "file": "pages/precalculus-polar-graphs/page-02.png",
+      "sha256": "a19f7337f9226ca463dbf28940a3d21189ac091abcbb7b6830e27b0b506863d1",
+      "subject": "Precalculus",
+      "source_id": "precalculus-polar-graphs",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        5,
+        6
+      ],
+      "required_figure_numbers": [
+        5,
+        6
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "calculus-discontinuous-limits-p1",
+      "file": "pages/calculus-discontinuous-limits/page-01.png",
+      "sha256": "49d8a0814d77c5d6bda32a1dffa424524223022ac2753098839a5e0bce92a77d",
+      "subject": "Differential calculus",
+      "source_id": "calculus-discontinuous-limits",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "calculus-discontinuous-limits-p2",
+      "file": "pages/calculus-discontinuous-limits/page-02.png",
+      "sha256": "0f30b0eb986485df6ed361d7179bad83676572ec88755bbade66672d37cadd75",
+      "subject": "Differential calculus",
+      "source_id": "calculus-discontinuous-limits",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "required_figure_numbers": [
+        5,
+        6
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "calculus-higher-derivatives-p1",
+      "file": "pages/calculus-higher-derivatives/page-01.png",
+      "sha256": "3cda5f04482de8f9c62982679f77032e9220fffa4cbd0f55f3a3af5fe45107db",
+      "subject": "Differential calculus",
+      "source_id": "calculus-higher-derivatives",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "calculus-definite-integration-p1",
+      "file": "pages/calculus-definite-integration/page-01.png",
+      "sha256": "9cd19fa4d3a75b3e10b4a9a676de1af4cd8bcecfbbf3a78eb62bb004965c46bb",
+      "subject": "Integral calculus",
+      "source_id": "calculus-definite-integration",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "differential-equations-intro-p1",
+      "file": "pages/differential-equations-intro/page-01.png",
+      "sha256": "bcd305ee38069b49a4a6f226b8ba9d0d7c35a8fb7d2d625ec75a53914b720184",
+      "subject": "Differential equations",
+      "source_id": "differential-equations-intro",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "required_figure_numbers": [
+        5,
+        6
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "probability-combinatorics-p1",
+      "file": "pages/probability-combinatorics/page-01.png",
+      "sha256": "6978705047a74d5e8ab89868f554c57a4e3ab3d3bb7e00db982a6ebd884eab39",
+      "subject": "Probability",
+      "source_id": "probability-combinatorics",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "probability-combinatorics-p2",
+      "file": "pages/probability-combinatorics/page-02.png",
+      "sha256": "6b2d999e20f9f0a25158c995671d167a28fc73a017370a5b399ed651c62dc5e3",
+      "subject": "Probability",
+      "source_id": "probability-combinatorics",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        7,
+        8,
+        9,
+        10
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "statistics-scatter-plots-p1",
+      "file": "pages/statistics-scatter-plots/page-01.png",
+      "sha256": "ae90a9437f74cbd8e728e278392ff75d771dca492fe439eadfb0c8fe655c57f0",
+      "subject": "Statistics",
+      "source_id": "statistics-scatter-plots",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "statistics-scatter-plots-p2",
+      "file": "pages/statistics-scatter-plots/page-02.png",
+      "sha256": "925cdb1c30f868dc7ee08dbdec2336960f5411898b3207da050164d3c6d24fc5",
+      "subject": "Statistics",
+      "source_id": "statistics-scatter-plots",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        7,
+        8,
+        9,
+        10
+      ],
+      "required_figure_numbers": [
+        7,
+        8,
+        9,
+        10
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "finance-compound-interest-p1",
+      "file": "pages/finance-compound-interest/page-01.png",
+      "sha256": "8f195620d531e7bcf16cb9ac1fda7438732def968ed823d4deeb402c45f031f9",
+      "subject": "Financial mathematics",
+      "source_id": "finance-compound-interest",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "finance-compound-interest-p2",
+      "file": "pages/finance-compound-interest/page-02.png",
+      "sha256": "8ce74fd528321273df9587483fb07d86630ab9852639b94c8dabffe63d9a01a6",
+      "subject": "Financial mathematics",
+      "source_id": "finance-compound-interest",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "discrete-induction-p1",
+      "file": "pages/discrete-induction/page-01.png",
+      "sha256": "cda90384643ddb744d727d970ad2df6ec5d78f041b337a5c8bf384ba20435ac9",
+      "subject": "Discrete mathematics",
+      "source_id": "discrete-induction",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "discrete-induction-p2",
+      "file": "pages/discrete-induction/page-02.png",
+      "sha256": "6b4609c7a4cd791cc347ce60492d38628d888ff14c5b6a6f0ea6c1e7658a31cc",
+      "subject": "Discrete mathematics",
+      "source_id": "discrete-induction",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        5,
+        6
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "trigonometry-ratios-p1",
+      "file": "pages/trigonometry-ratios/page-01.png",
+      "sha256": "efdfa8975995a964762b67f626b22e8cd95e56b96e2363f91266e3d9cff681b0",
+      "subject": "Trigonometry",
+      "source_id": "trigonometry-ratios",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "trigonometry-ratios-p2",
+      "file": "pages/trigonometry-ratios/page-02.png",
+      "sha256": "25aec7edf358f41108c1ce82c54566922ce9365d634cde9157251cf70f977c37",
+      "subject": "Trigonometry",
+      "source_id": "trigonometry-ratios",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "required_figure_numbers": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "trigonometry-graphs-p1",
+      "file": "pages/trigonometry-graphs/page-01.png",
+      "sha256": "fb3cebdc953cdfe7ef20aeaeb14ac61320351ba8ae57a2cc89c001a414ef457e",
+      "subject": "Trigonometry",
+      "source_id": "trigonometry-graphs",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "required_figure_numbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "trigonometry-graphs-p2",
+      "file": "pages/trigonometry-graphs/page-02.png",
+      "sha256": "32c5e52400e873db2b074dac080289ffd686802a76dc3a092a90c79591edfe59",
+      "subject": "Trigonometry",
+      "source_id": "trigonometry-graphs",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "required_figure_numbers": [
+        5,
+        6,
+        7,
+        8
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "vectors-cross-products-p1",
+      "file": "pages/vectors-cross-products/page-01.png",
+      "sha256": "773b418bedb52b4dc651ec3d7c6041d5f7ae679d7972473d1dce1cc72beae2ce",
+      "subject": "Vectors",
+      "source_id": "vectors-cross-products",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "vectors-cross-products-p2",
+      "file": "pages/vectors-cross-products/page-02.png",
+      "sha256": "77a5256269fc3401a4ea1c333da82c10a98e995c3dbd070af28bb79fef89210b",
+      "subject": "Vectors",
+      "source_id": "vectors-cross-products",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "linear-algebra-matrix-operations-p1",
+      "file": "pages/linear-algebra-matrix-operations/page-01.png",
+      "sha256": "1b08b8fe6ad8cfd63e4e6b3fbfb5292e05be6796c8b05679fb60f3fa85cf0a20",
+      "subject": "Linear algebra",
+      "source_id": "linear-algebra-matrix-operations",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "linear-algebra-matrix-operations-p2",
+      "file": "pages/linear-algebra-matrix-operations/page-02.png",
+      "sha256": "2fcf6ecfc870064b8959b415863a21e71ff95373011243ad32981c2a5f43d677",
+      "subject": "Linear algebra",
+      "source_id": "linear-algebra-matrix-operations",
+      "source_pdf_page": 2,
+      "question_numbers": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "statistics-confidence-intervals-p1",
+      "file": "pages/statistics-confidence-intervals/page-01.png",
+      "sha256": "4d8a51f8be69568fe05391b90b93cf3944797779d251297e9cab51a7f791dc0e",
+      "subject": "Statistics",
+      "source_id": "statistics-confidence-intervals",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1
+      ],
+      "required_figure_numbers": [
+        1
+      ],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "discrete-graph-theory-p1",
+      "file": "pages/discrete-graph-theory/page-01.png",
+      "sha256": "963c0b8613a7c09c77ce9f4376e5fbfc5b3dfb91f515085d22414b019bf01cdb",
+      "subject": "Discrete mathematics",
+      "source_id": "discrete-graph-theory",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1,
+        2,
+        3
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    },
+    {
+      "id": "multivariable-partial-derivatives-p1",
+      "file": "pages/multivariable-partial-derivatives/page-01.png",
+      "sha256": "e2539cba9a2191bb0d0ff696795a41a6af6347e1e33947a648c28b29de937f61",
+      "subject": "Multivariable calculus",
+      "source_id": "multivariable-partial-derivatives",
+      "source_pdf_page": 1,
+      "question_numbers": [
+        1
+      ],
+      "required_figure_numbers": [],
+      "content_certification": "pending independent question-by-question mathematical reference",
+      "source_basis": "Printed source question numbers and figures visually inspected; no AI output used as expected data."
+    }
+  ]
+}

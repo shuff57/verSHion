@@ -191,9 +191,57 @@ fn an_image_must_be_the_authors_and_present_and_is_rewritten_to_its_stored_form(
     let r = run(&w, true, &m, &payload, false).unwrap();
     let out: Value = serde_json::from_slice(&r.bytes).unwrap();
     assert_eq!(out["bank"]["questions"][0]["image"], json!({ "file": format!("media/{sha}.png"), "width": 7, "height": 9 }));
-    assert_eq!(r.images, vec![Some(sha.clone()), None]);
+    assert_eq!(r.images, vec![vec![sha.clone()], vec![]]);
     // The hold on the blob is extended by a day.
     assert_eq!(w.c.query_row::<i64, _, _>("SELECT until FROM pending_blobs WHERE sha256 = ?1", [&sha], |r| r.get(0)).unwrap(), 5 * DAY_MS + 777 + DAY_MS);
+}
+
+/// An Mc question whose choice `at` is a picture (no text), plus a Multipart whose Mc part's first choice is one.
+fn picture_choices(mc_sha: &str, part_sha: &str) -> (Value, Value) {
+    let mut q = mc("Which chart?", None, None);
+    q["kind"]["Mc"]["answers"][2] = json!({ "text": "", "correct": false, "locked": false, "image": { "file": format!("media/{mc_sha}.webp"), "width": 1, "height": 1 } });
+    let parts = json!({ "id": "q", "stem": "Parts", "kind": { "Multipart": { "parts": [
+        { "stem": "First", "kind": { "Tf": { "correct": true } } },
+        { "stem": "Second", "kind": { "Mc": { "answers": [
+            { "text": "", "correct": true, "locked": false, "image": { "file": format!("media/{part_sha}.png"), "width": 2, "height": 2 } },
+            { "text": "none", "correct": false, "locked": false }
+        ] } } }
+    ] } }, "points": null, "difficulty": null, "topics": [], "image": null, "explanation": null, "figure": null, "created": 1, "modified": 1 });
+    (q, parts)
+}
+
+#[test]
+fn a_choice_picture_takes_the_question_image_path() {
+    let w = world();
+    let (a, b) = ("d".repeat(64), "e".repeat(64));
+    let (q, parts) = picture_choices(&a, &b);
+    let payload = bank(vec![mc("Plain?", None, None), q, parts], 1);
+    let m = meta_for(true, json!({}));
+    // A choice picture unknown to the author is refused like a question's image, by the question's position.
+    let e = err(run(&w, true, &m, &payload, false));
+    assert_eq!((e.status, e.code.as_str(), e.extra["positions"].clone()), (422, "blob_missing", json!([1, 2])));
+    put_blob(&w, &a, None, true);
+    pend(&w, &a, 6 * DAY_MS);
+    let e = err(run(&w, true, &m, &payload, false));
+    assert_eq!((e.code.as_str(), e.extra["positions"].clone()), ("blob_missing", json!([2])), "the part's choice picture is checked too");
+    put_blob(&w, &b, None, false);
+    pend(&w, &b, 6 * DAY_MS);
+    let e = err(run(&w, true, &m, &payload, false));
+    assert_eq!((e.code.as_str(), e.extra["reason"].as_str(), e.extra["positions"].clone()), ("blob_missing", Some("reupload"), json!([2])), "its bytes must be stored");
+    w.s.put(&format!("blobs/{b}"), b"png").unwrap();
+    let r = run(&w, true, &m, &payload, false).unwrap();
+    assert_eq!(r.images, vec![vec![], vec![a.clone()], vec![b.clone()]]);
+    let out: Value = serde_json::from_slice(&r.bytes).unwrap();
+    let qs = &out["bank"]["questions"];
+    // Rewritten from the stored blob (type and size), like a question's image; text choices gain nothing.
+    assert_eq!(qs[1]["kind"]["Mc"]["answers"][2]["image"], json!({ "file": format!("media/{a}.png"), "width": 7, "height": 9 }));
+    assert!(qs[1]["kind"]["Mc"]["answers"][1].get("image").is_none());
+    assert_eq!(qs[2]["kind"]["Multipart"]["parts"][1]["kind"]["Mc"]["answers"][0]["image"], json!({ "file": format!("media/{b}.png"), "width": 7, "height": 9 }));
+    for s in [&a, &b] {
+        assert_eq!(w.c.query_row::<i64, _, _>("SELECT until FROM pending_blobs WHERE sha256 = ?1", [s], |r| r.get(0)).unwrap(), 5 * DAY_MS + 777 + DAY_MS, "held a day past now");
+    }
+    // share-core accepts the rewritten payload with its picture choices.
+    assert!(w.core.publish_prepare(&r.bytes, &PublishOpts::default()).is_ok());
 }
 
 #[test]

@@ -567,7 +567,7 @@ mod tests {
         let mut m = q("m", &[]);
         m.stem = "[picture] and [picture: x]".into();
         m.kind = Kind::Multipart {
-            parts: vec![Part { stem: "a) [picture]".into(), kind: PartKind::Mc { answers: vec![Answer { text: "[picture]".into(), correct: true, locked: false }] } }],
+            parts: vec![Part { stem: "a) [picture]".into(), kind: PartKind::Mc { answers: vec![Answer { text: "[picture]".into(), correct: true, locked: false, image: None, figure: None }] } }],
         };
         assert_eq!(pictures_needed(&m), 4);
         m.image = Some(crate::model::ImageRef { file: "media/x.png".into(), width: 1, height: 1 });

@@ -25,7 +25,7 @@
 //!
 //! **Not in it:** any `correct` flag, which or how many answers are correct, `locked`, answer
 //! order, which right item belongs to which left item, `accept` lists, `sample`, `explanation`,
-//! `figure`, `image`, `topics`, `points`, `difficulty`, `id`, `created`, `modified`, `keyless`,
+//! `figure`, `image` (a question's or a picture choice's), `topics`, `points`, `difficulty`, `id`, `created`, `modified`, `keyless`,
 //! `origin`, `published`, the schema version, and anything about the bank. So it is the same for
 //! a question and its stripped form, for every shuffle seed, and for every key of the same
 //! question: it cannot be used to test a guessed key.
@@ -46,7 +46,7 @@
 //! types (the same bytes as `canonical_json(serde_json::to_value(q))`, without building the tree).
 use crate::strip::{QuestionLabels, strip_without_shuffle};
 use crate::text::hash_form;
-use crate::wire::{Answer, Body, ChainLink, Kind, Origin, PartKind, Payload, Published, Question, QuestionBank};
+use crate::wire::{Answer, Body, ChainLink, FigureSpec, ImageRef, Kind, Origin, PartKind, Payload, Published, Question, QuestionBank};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
@@ -236,13 +236,38 @@ fn answers_(a: &[Answer], out: &mut String) {
         if i > 0 {
             out.push(',');
         }
-        out.push_str(if x.correct { "{\"correct\":true,\"locked\":" } else { "{\"correct\":false,\"locked\":" });
-        out.push_str(if x.locked { "true" } else { "false" });
+        out.push_str(if x.correct { "{\"correct\":true" } else { "{\"correct\":false" });
+        // A picture choice's `figure` and `image` (keys in sorted order); a text choice has
+        // neither key, exactly as serde skips them.
+        if let Some(fig) = &x.figure {
+            out.push_str(",\"figure\":");
+            figure_(fig, out);
+        }
+        if let Some(img) = &x.image {
+            out.push_str(",\"image\":");
+            image_(img, out);
+        }
+        out.push_str(if x.locked { ",\"locked\":true" } else { ",\"locked\":false" });
         out.push_str(",\"text\":");
         s_(&x.text, out);
         out.push('}');
     }
     out.push_str("]}");
+}
+
+fn figure_(fig: &FigureSpec, out: &mut String) {
+    out.push_str("{\"id\":");
+    s_(&fig.id, out);
+    out.push_str(",\"params\":");
+    let m: Map<String, Value> = fig.params.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    write(&Value::Object(m), out);
+    out.push('}');
+}
+
+fn image_(i: &ImageRef, out: &mut String) {
+    out.push_str("{\"file\":");
+    s_(&i.file, out);
+    out.push_str(&format!(",\"height\":{},\"width\":{}}}", i.height, i.width));
 }
 
 fn kind_(k: &Kind, out: &mut String) {
@@ -393,25 +418,14 @@ pub fn write_question(q: &Question, out: &mut String) {
     }
     k_("figure", &mut f, out);
     match &q.figure {
-        Some(fig) => {
-            out.push_str("{\"id\":");
-            s_(&fig.id, out);
-            out.push_str(",\"params\":");
-            let m: Map<String, Value> = fig.params.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            write(&Value::Object(m), out);
-            out.push('}');
-        }
+        Some(fig) => figure_(fig, out),
         None => out.push_str("null"),
     }
     k_("id", &mut f, out);
     s_(&q.id, out);
     k_("image", &mut f, out);
     match &q.image {
-        Some(i) => {
-            out.push_str("{\"file\":");
-            s_(&i.file, out);
-            out.push_str(&format!(",\"height\":{},\"width\":{}}}", i.height, i.width));
-        }
+        Some(i) => image_(i, out),
         None => out.push_str("null"),
     }
     if q.keep_order {

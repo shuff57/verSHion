@@ -2194,6 +2194,9 @@ mod riemann_exact;
 mod riemann_sym;
 /// Derivative graphs (new figure): f with f′ and f″ on aligned axes, each panel drawn by the coordinate grid.
 pub(crate) mod derivative_graphs;
+mod grid_diagnostics;
+#[cfg(test)]
+mod grid_controls_tests;
 pub(super) use grid_b7::{circle_room as grid_circle_room, label_ext as grid_label_ext};
 pub(super) use grid_b7::{float_text as grid_float_text, row_style_keys as grid_row_style_keys, typed_range as grid_typed_float, ROW_STYLE_KEYS as GRID_ROW_STYLE_KEYS};
 use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
@@ -2342,6 +2345,9 @@ fn eval_cs(cs: &[char], x: f64, y: Option<f64>, deg: bool) -> Option<f64> {
     if e.i == cs.len() { Some(v) } else { None }
 }
 pub(super) fn eval(expr: &str, x: f64) -> Option<f64> { eval_full(expr, x, None, false) }
+pub(super) fn eval_xy(expr: &str, x: f64, y:f64) -> Option<f64> { eval_full(expr,x,Some(y),false) }
+/// A constant position typed as a number, fraction, square root or π, with no variables.
+pub(super) fn eval_constant(text:&str)->Option<f64>{flat::eval_typed(text)}
 
 /// Domain restriction of an implicit row, `, x > 0, y < 3, x^2 + y^2 < 25` (any mix, applied to each point).
 #[derive(Default)]
@@ -2881,16 +2887,48 @@ const NUM_EVERY_LINE: [&str; 5] = ["Every line", "Every 2nd line", "Every 5th li
 
 fn coordinate_grid_params() -> Vec<ParamDef> {
     let mut v = vec![
-        ParamDef::float("xmin", "x-axis from", -1000.0, 1000.0, 1.0, 0.0),
-        ParamDef::float("xmax", "x-axis to", -1000.0, 1000.0, 1.0, 15.0),
+        ParamDef::float("xmin", "x-axis from", -1000.0, 1000.0, 1.0, 0.0)
+            .hint("Full window edge and left end of horizontal grid strokes; in the selected x units. Explicit grid bounds control line positions separately."),
+        ParamDef::float("xmax", "x-axis to", -1000.0, 1000.0, 1.0, 15.0)
+            .hint("Full window edge and right end of horizontal grid strokes. For a partial outer cell, keep Explicit grid positions fixed and put this edge before the next unwanted gridline."),
         ParamDef::float("xstep", "x-axis count by", 0.05, 180.0, 0.5, 1.0),
-        ParamDef::float("ymin", "y-axis from", -1000.0, 1000.0, 1.0, 0.0),
-        ParamDef::float("ymax", "y-axis to", -1000.0, 1000.0, 1.0, 15.0),
+        ParamDef::float("ymin", "y-axis from", -1000.0, 1000.0, 1.0, 0.0)
+            .hint("Full window edge and bottom end of vertical grid strokes; widening this past the last horizontal line adds vertical overhang."),
+        ParamDef::float("ymax", "y-axis to", -1000.0, 1000.0, 1.0, 15.0)
+            .hint("Full window edge and top end of vertical grid strokes. Set it at the last horizontal line when vertical strokes must stop on that border."),
         ParamDef::float("ystep", "y-axis count by", 0.05, 180.0, 0.5, 1.0),
         ParamDef::int("minor", "Minor gridlines per step", 0, 10, 0)
             .hint("0 = none."),
+        ParamDef::int("x_minor", "Vertical subdivisions override", -1, 10, -1)
+            .hint("-1 follows Minor gridlines per step; 0 or 1 disables vertical minor lines; 2 adds a half-step vertical line without changing horizontal lines."),
+        ParamDef::int("y_minor", "Horizontal subdivisions override", -1, 10, -1)
+            .hint("-1 follows Minor gridlines per step; 0 or 1 disables horizontal minor lines. Controls only the horizontal subdivisions."),
+        ParamDef::choice("grid_bounds_mode", "Gridline positions", &["Frame", "Explicit"], "Frame")
+            .hint("Frame uses every gridline inside the window. Explicit limits gridline positions and their numbers, NOT crossing-stroke lengths or axis ends. The full window still sets stroke lengths: for example a window ending at 5.3 with step 1 and an Explicit last line at 5 leaves a partial outer cell, not an extra line at 6. Compare all stroke edges separately."),
+        ParamDef::float("grid_xmin", "First vertical gridline bound", -1000.0, 1000.0, 0.25, 0.0)
+            .hint("Used only with Explicit gridline positions; in the chosen x-axis units, including multiples of π. Lines still lie on multiples of x-axis count by."),
+        ParamDef::float("grid_xmax", "Last vertical gridline bound", -1000.0, 1000.0, 0.25, 15.0),
+        ParamDef::float("grid_ymin", "First horizontal gridline bound", -1000.0, 1000.0, 1.0, 0.0),
+        ParamDef::float("grid_ymax", "Last horizontal gridline bound", -1000.0, 1000.0, 1.0, 15.0),
         ParamDef::bool("numbers", "Number the axes", true),
-        ParamDef::bool("arrows", "Arrowheads on axes", true),
+        ParamDef::bool("origin_zero", "Print the origin zero", true)
+            .hint("Off removes the zero while retaining the other axis numbers."),
+        ParamDef::choice("vertical_grid", "Vertical gridline style", &["Automatic", "Light", "Standard", "Bold", "None"], "Automatic"),
+        ParamDef::choice("horizontal_grid", "Horizontal gridline style", &["Automatic", "Light", "Standard", "Bold", "None"], "Automatic"),
+        ParamDef::int("x_major_every", "Emphasize every nth vertical line", 0, 100, 0)
+            .hint("0 disables periodic emphasis. Positive values restyle existing base gridlines at multiples of n grid steps from zero; no lines, labels, subdivisions or ranges are added."),
+        ParamDef::choice("x_major_style", "Emphasized vertical line style", &["Light", "Standard", "Bold"], "Bold"),
+        ParamDef::int("y_major_every", "Emphasize every nth horizontal line", 0, 100, 0),
+        ParamDef::choice("y_major_style", "Emphasized horizontal line style", &["Light", "Standard", "Bold"], "Bold"),
+        ParamDef::float("axis_width", "Axis thickness override", 0.0, 4.0, 0.1, 0.0)
+            .hint("0 uses the grid's normal axis thickness."),
+        ParamDef::choice("number_font", "Axis number font", &["Automatic", "Serif", "Sans"], "Automatic"),
+        ParamDef::bool("number_halo", "White backing around axis numbers", true)
+            .hint("Off prints tick numbers directly on the grid, including stacked fractions. It changes only the white backing, not the numbers, signs or tick positions."),
+        ParamDef::bool("stacked_fractions", "Stack fraction tick labels", false)
+            .hint("Prints a numerator, fraction bar and denominator for fractional numbers and multiples of π."),
+        ParamDef::bool("arrows", "Arrowheads on axes", true)
+            .hint("Automatic axis ends use filled triangle arrowheads when on and no arrows when off. Triangle arrow is filled; Line arrow is an open two-stroke chevron. Per-end None removes that arrow entirely. Match the visible source style; a clipped source end is unresolved evidence, not permission to remove an arrow."),
         ParamDef::bool("square", "Square cells", true),
         ParamDef::text("xlabel", "x-axis label", "x")
             .hint("At the arrow; empty = none."),
@@ -2924,6 +2962,10 @@ fn coordinate_grid_params() -> Vec<ParamDef> {
             .hint("Dotted."),
         ParamDef::bool("endpoints", "Endpoint circles on pieces with a domain", true),
         ParamDef::choice("pt_style", "Point style", &["Dot", "Cross"], "Dot"),
+        ParamDef::float("point_radius", "Dot radius override", 0.0, 30.0, 0.1, 0.0)
+            .hint("0 uses the standard dot radius of 4.5 drawing units. A positive value changes only authored Dot marks, never their data positions; Cross marks and curve endpoints are unchanged."),
+        ParamDef::bool("pt_outline", "White outline around dots", true)
+            .hint("Enabled uses a white outline 1.2 drawing units wide; disabled uses an unoutlined filled dot. Does not affect Cross marks, curve endpoints or axis circles."),
         ParamDef::choice("pt_label", "Point labels", &["Letter", "Letter and coordinates", "None"], "Letter"),
         ParamDef::choice("label_size", "Label size", &["Large", "Medium", "Small"], "Medium"),
         // Print: black curves told apart by dash pattern, hatched shading; show_answers off hides the equation labels and shading (student copy)
@@ -2934,6 +2976,11 @@ fn coordinate_grid_params() -> Vec<ParamDef> {
     ];
     // (batch 7: each row's line, thickness and arrows, each axis end, fraction numbering; every default draws as before)
     v.extend(grid_b7::params());
+    for d in &mut v {
+        if grid_b7::END_KEYS.contains(&d.key) {
+            d.hint = "Automatic follows Arrowheads on axes. None removes this endpoint's marker; the separate extension control can still lengthen its plain shaft. With extension set to -1, None has no extension. These controls do not change grid strokes or the window.";
+        }
+    }
     v
 }
 
@@ -2945,7 +2992,7 @@ const PALETTE: [&str; 5] = ["#1f5fbf", "#c0392b", "#2a8a3e", "#8e44ad", "#d68910
 
 /// Grid layout shared with the drag handles (math_plot::Cg): model ranges (x already in real
 /// units, i.e. multiplied by pi in pi mode), scales, margins and plot size.
-pub(super) struct GridL { pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64, pub ys: f64, pub ux: f64, pub uy: f64, pub ml: f64, pub mt: f64, pub pw: f64, pub ph: f64 }
+pub(super) struct GridL { pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64, pub ys: f64, pub ux: f64, pub uy: f64, pub ml: f64, pub mt: f64, pub pw: f64, pub ph: f64, pub mr:f64, pub mb:f64, pub axis_extra_margins:[f64;4] }
 pub(super) fn grid_layout(p: &Params) -> GridL { grid_layout_in(p, (480.0, 480.0)) }
 /// The same layout in a plot box other than the coordinate grid's own 480 x 480 (the derivative graphs' panels).
 pub(super) fn grid_layout_in(p: &Params, plot_box: (f64, f64)) -> GridL {
@@ -2964,7 +3011,20 @@ pub(super) fn grid_layout_in(p: &Params, plot_box: (f64, f64)) -> GridL {
     // the margins grow with the labels: 1.2 / 1.3 px for each px the tick numbers grow
     let dn = 14.0 * (lscale(p) - 1.0);
     let ml = 38.8 + 1.2 * dn + if p.s("ytitle_mode") == "Text" || p.s("ytitle_mode") == "Blank line" { 26.0 } else { 0.0 } + grid_b7::y_frac_room(p, y0, y1, ys, 38.8 + 1.2 * dn);
-    GridL { x0, x1, y0, y1, xs, ys, ux, uy, ml, mt: (if title { 88.2 } else { 56.2 }) + 1.3 * dn + grid_b7::circle_room(p).1, pw, ph }
+    let old_circle=grid_b7::legacy_circle_room(p);
+    let extra=grid_b7::extra_margins(p,(xs*ux,ys*uy));
+    let mt=(if title { 88.2 } else { 56.2 }) + 1.3 * dn + old_circle.1;
+    let xtitle=p.s("xtitle_mode")=="Text"||p.s("xtitle_mode")=="Blank line";
+    let mb=36.0+dn+if xtitle{26.0}else{0.0};
+    GridL { x0, x1, y0, y1, xs, ys, ux, uy, ml:ml+extra[0], mt:mt+extra[3], pw, ph, mr:52.5+0.75*dn+old_circle.0+extra[1], mb:mb+extra[2], axis_extra_margins:extra }
+}
+
+/// Positions of gridlines, independent of the frame the strokes extend across. In particular,
+/// a partial outer cell need not acquire a new vertical border just to lengthen horizontal lines.
+fn grid_line_limits(p: &Params, g: &GridL) -> (f64, f64, f64, f64) {
+    if p.s("grid_bounds_mode") != "Explicit" { return (g.x0, g.x1, g.y0, g.y1); }
+    let k = if p.s("xunits") == "Multiples of π" { PI } else { 1.0 };
+    ((p.f("grid_xmin") * k).max(g.x0), (p.f("grid_xmax") * k).min(g.x1), p.f("grid_ymin").max(g.y0), p.f("grid_ymax").min(g.y1))
 }
 
 /// "3π/4"-style label for v (in real units) when the axis counts in multiples of π.
@@ -3076,6 +3136,140 @@ fn wide_flat(p: &Params, g: &GridL) -> bool { p.b("square") && g.pw / g.ph.max(1
 
 fn coordinate_grid_render(p: &Params) -> String { coordinate_grid_build(p, &mut vec![]) }
 
+/// Candidate-only inventory from the same drawing pass; SVG bytes equal the ordinary renderer.
+/// It reports emitted vector geometry, never expected source facts or raster/source fidelity.
+pub(crate) fn grid_render_with_diagnostics(p: &Params) -> (String, serde_json::Value) {
+    let mut capture = grid_diagnostics::Collector::default();
+    let svg = coordinate_grid_build_in_with(
+        p,
+        &mut vec![],
+        (480.0, 480.0),
+        &GridHooks::default(),
+        Some(&mut capture),
+    );
+    (svg, capture.finish())
+}
+
+#[cfg(test)]
+#[test]
+fn coordinate_grid_vertical_minor_lines_do_not_invent_horizontal_subdivisions(){
+    let mut p=Params::defaults(&coordinate_grid_params());p.set_s("equations","");p.set_s("grid","Light");p.set_f("xmin",-3.0);p.set_f("xmax",3.0);p.set_f("ymin",-3.0);p.set_f("ymax",3.0);p.set_i("x_minor",2);p.set_i("y_minor",0);
+    let s=coordinate_grid_render(&p);let xml=roxmltree::Document::parse(&s).unwrap();let minors:Vec<_>=xml.descendants().filter(|n|n.has_tag_name("line")&&n.attribute("stroke")==Some("#eef1f5")).collect();assert!(!minors.is_empty());assert!(minors.iter().all(|n|n.attribute("x1")==n.attribute("x2")));
+    p.set_i("x_minor",0);p.set_i("y_minor",2);let s=coordinate_grid_render(&p);let xml=roxmltree::Document::parse(&s).unwrap();let minors:Vec<_>=xml.descendants().filter(|n|n.has_tag_name("line")&&n.attribute("stroke")==Some("#eef1f5")).collect();assert!(!minors.is_empty());assert!(minors.iter().all(|n|n.attribute("y1")==n.attribute("y2")));
+}
+
+#[cfg(test)]
+#[test]
+fn blank_source_grid_omits_only_zero_and_preserves_directional_lines_and_stacked_pi_ticks() {
+    let mut p=Params::defaults(&coordinate_grid_params());p.set_s("equations","");p.set_f("xmin",0.0);p.set_f("xmax",2.0);p.set_f("xstep",0.25);p.set_f("ymin",-3.0);p.set_f("ymax",3.0);p.set_s("xunits","Multiples of π");p.set_s("xnum","Every 2nd line");p.set_b("origin_zero",false);p.set_s("vertical_grid","Light");p.set_s("horizontal_grid","Standard");p.set_s("number_font","Serif");p.set_b("stacked_fractions",true);p.set_f("axis_width",1.0);p.set_s("xlabel","");p.set_s("ylabel","");
+    let s=coordinate_grid_render(&p);let xml=roxmltree::Document::parse(&s).unwrap();let texts:Vec<_>=xml.descendants().filter(|n|n.has_tag_name("text")).collect();assert!(!texts.iter().any(|n|n.text()==Some("0")));assert!(texts.iter().any(|n|n.text()==Some("π")));assert!(xml.descendants().any(|n|n.attribute("data-stacked-tick")==Some("π/2")));
+    let lines:Vec<_>=xml.descendants().filter(|n|n.has_tag_name("line")).collect();assert!(lines.iter().any(|n|n.attribute("stroke")==Some("#bdbdbd")&&n.attribute("x1")==n.attribute("x2")));assert!(lines.iter().any(|n|n.attribute("stroke")==Some("#555555")&&n.attribute("y1")==n.attribute("y2")));assert!(!s.contains("clip-path=\"url(#row"));
+    p.set_b("origin_zero",true);assert!(coordinate_grid_render(&p).contains(">0</text>"));
+}
+
+#[cfg(test)]
+#[test]
+fn explicit_gridline_positions_leave_partial_outer_cells_open() {
+    let mut p=Params::defaults(&coordinate_grid_params());p.set_s("equations","");p.set_s("grid","Light");p.set_b("square",false);
+    p.set_f("xmin",-2.1);p.set_f("xmax",5.7);p.set_f("xstep",0.5);p.set_f("ymin",-3.2);p.set_f("ymax",4.4);p.set_f("ystep",1.0);
+    p.set_s("grid_bounds_mode","Explicit");p.set_f("grid_xmin",-2.0);p.set_f("grid_xmax",5.5);p.set_f("grid_ymin",-3.0);p.set_f("grid_ymax",4.0);
+    let s=coordinate_grid_render(&p);let xml=roxmltree::Document::parse(&s).unwrap();let g=grid_layout(&p);
+    let val=|n:roxmltree::Node,k:&str|n.attribute(k).unwrap().parse::<f64>().unwrap();
+    let lines:Vec<_>=xml.descendants().filter(|n|n.has_tag_name("line")&&n.attribute("stroke")==Some("#dde3ea")).collect();
+    let vertical:Vec<_>=lines.iter().copied().filter(|n|n.attribute("x1")==n.attribute("x2")).collect();
+    let horizontal:Vec<_>=lines.iter().copied().filter(|n|n.attribute("y1")==n.attribute("y2")).collect();
+    assert_eq!(vertical.len(),16);assert_eq!(horizontal.len(),8);
+    let last_x=vertical.iter().map(|n|val(*n,"x1")).fold(f64::NEG_INFINITY,f64::max);
+    assert!((last_x-(g.ml+(5.5-g.x0)*g.ux)).abs()<0.011);
+    assert!(horizontal.iter().all(|n|val(*n,"x1")<val(*vertical.first().unwrap(),"x1")&&val(*n,"x2")>last_x),"crossing strokes extend past the first/last vertical gridline without manufacturing border lines");
+    assert!(!s.contains("clip-path=\"url(#row"));
+}
+
+#[cfg(test)]
+#[test]
+fn explicit_gridline_positions_respect_pi_units_and_minor_limits() {
+    let mut p=Params::defaults(&coordinate_grid_params());p.set_s("equations","");p.set_s("xunits","Multiples of π");p.set_f("xmin",0.0);p.set_f("xmax",2.375);p.set_f("xstep",0.125);p.set_f("ymin",-2.0);p.set_f("ymax",2.0);p.set_i("x_minor",2);p.set_i("y_minor",0);p.set_s("grid","Light");
+    let before=coordinate_grid_render(&p);p.set_f("grid_xmax",1.0);assert_eq!(coordinate_grid_render(&p),before,"inactive explicit limits never change existing specs");
+    p.set_s("grid_bounds_mode","Explicit");p.set_f("grid_xmin",0.0);p.set_f("grid_xmax",2.25);p.set_f("grid_ymin",-2.0);p.set_f("grid_ymax",2.0);
+    let s=coordinate_grid_render(&p);let xml=roxmltree::Document::parse(&s).unwrap();let g=grid_layout(&p);let bound=g.ml+(2.25*PI-g.x0)*g.ux;
+    let vertical:Vec<_>=xml.descendants().filter(|n|n.has_tag_name("line")&&n.attribute("x1")==n.attribute("x2")&&matches!(n.attribute("stroke"),Some("#dde3ea"|"#eef1f5"))).collect();
+    assert_eq!(vertical.iter().filter(|n|n.attribute("stroke")==Some("#dde3ea")).count(),19);
+    assert!(vertical.iter().all(|n|n.attribute("x1").unwrap().parse::<f64>().unwrap()<=bound+0.011),"major and minor positions both stop at the explicit π-unit bound");
+    let defs=coordinate_grid_params();let sections=crate::figures::layout::sections("coordinate-grid",&defs,None);
+    for key in ["grid_bounds_mode","grid_xmin","grid_xmax","grid_ymin","grid_ymax"] { assert!(sections.iter().any(|s|s.items.iter().any(|i|defs[*i].key==key)),"new grid control is exposed in the existing Figures tab: {key}"); }
+}
+
+#[cfg(test)]
+#[test]
+fn coordinate_grid_number_halo_is_opt_in_and_exposed() {
+    let defs = coordinate_grid_params();
+    let halo = defs.iter().find(|d| d.key == "number_halo").unwrap();
+    assert!(matches!(halo.kind, Kind::Bool));
+    assert!(matches!(halo.default, Value::B(true)));
+    let sections = crate::figures::layout::sections("coordinate-grid", &defs, None);
+    assert!(sections.iter().any(|s| s.items.iter().any(|i| defs[*i].key == "number_halo")));
+    assert!(crate::figure_agent::catalog_text().contains("number_halo (White backing around axis numbers): bool true/false, default true"));
+    for (equations, style) in [("", "Colour"), ("x^2+y^2=6", "Colour"), ("y=x", "Print")] {
+        let mut p = Params::defaults(&defs);
+        p.set_s("equations", equations);
+        p.set_s("style", style);
+        p.set_b("stacked_fractions", true);
+        p.set_f("xstep", 0.5);
+        let original = coordinate_grid_render(&p);
+        p.0.remove("number_halo");
+        assert_eq!(coordinate_grid_render(&p), original, "old Params without the key retain their exact SVG: {equations} {style}");
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn coordinate_grid_number_halo_off_preserves_literal_ticks_and_geometry() {
+    let visible_text = |svg: &str| {
+        let xml = roxmltree::Document::parse(svg).unwrap();
+        xml.descendants().filter(|n| n.has_tag_name("text") && n.attribute("fill") != Some("#fff"))
+            .map(|n| (n.text().unwrap_or("").to_string(), ["x", "y", "text-anchor", "font-family", "font-size", "font-weight"].map(|a| n.attribute(a).unwrap_or("").to_string())))
+            .collect::<Vec<_>>()
+    };
+    let geometry = |svg: &str| {
+        let xml = roxmltree::Document::parse(svg).unwrap();
+        xml.descendants().filter(|n| n.is_element() && matches!(n.tag_name().name(), "line" | "polygon" | "polyline" | "path" | "circle" | "ellipse" | "rect") && n.attribute("stroke") != Some("#ffffff"))
+            .map(|n| (n.tag_name().name().to_string(), n.attributes().map(|a| (a.name().to_string(), a.value().to_string())).collect::<Vec<_>>()))
+            .collect::<Vec<_>>()
+    };
+    for style in ["Colour", "Print"] {
+        for fractions in [false, true] {
+            for equations in ["", "x^2+y^2=6"] {
+                let mut p = Params::defaults(&coordinate_grid_params());
+                p.set_f("xmin", -1.5); p.set_f("xmax", 2.5); p.set_f("xstep", 0.5);
+                p.set_f("ymin", -3.0); p.set_f("ymax", 3.0); p.set_f("ystep", 0.5);
+                p.set_b("square", false); p.set_s("xlabel", ""); p.set_s("ylabel", "");
+                p.set_s("style", style); p.set_s("equations", equations);
+                p.set_s("number_font", "Serif"); p.set_b("stacked_fractions", fractions);
+                p.set_s("xunits", if fractions { "Multiples of π" } else { "Numbers" });
+                p.set_b("y_fractions", fractions);
+                let with_halo = coordinate_grid_render(&p);
+                p.set_b("number_halo", false);
+                let without_halo = coordinate_grid_render(&p);
+                assert_eq!(visible_text(&without_halo), visible_text(&with_halo), "text, signs and positions: {style} {fractions} {equations}");
+                assert_eq!(geometry(&without_halo), geometry(&with_halo), "grid, fraction bars, arrows and curves: {style} {fractions} {equations}");
+                let xml = roxmltree::Document::parse(&without_halo).unwrap();
+                let texts = xml.descendants().filter(|n| n.has_tag_name("text")).collect::<Vec<_>>();
+                assert!(!texts.is_empty());
+                assert!(texts.iter().all(|n| n.attribute("stroke").is_none() && n.attribute("fill") != Some("#fff")), "no white number plates or text halos, including the late curve layer");
+                assert!(!xml.descendants().any(|n| n.has_tag_name("line") && n.attribute("stroke") == Some("#ffffff")), "no white stacked-fraction bar plate");
+                assert!(texts.iter().any(|n| n.text() == Some("3")) && texts.iter().any(|n| n.text() == Some("−3")), "positive and negative integer labels remain literal");
+                if fractions {
+                    assert!(xml.descendants().any(|n| n.attribute("data-stacked-tick") == Some("−π/2")), "negative stacked fraction survives");
+                }
+                if !equations.is_empty() || style == "Print" {
+                    assert!(without_halo.contains("data-num=\"1\""));
+                    assert!(!without_halo.contains("<!--NUMS-->"));
+                }
+            }
+        }
+    }
+}
+
 /// Problems with the typed equations that only the editor shows (a curve that cannot be read, too
 /// many curves, a curve outside the window); they are never drawn into the figure, so exports
 /// stay clean.
@@ -3103,21 +3297,32 @@ pub(super) struct GridHooks {
 }
 
 fn coordinate_grid_build_with(p: &Params, notes: &mut Vec<String>, hooks: &GridHooks) -> String {
-    coordinate_grid_build_in_with(p, notes, (480.0, 480.0), hooks)
+    coordinate_grid_build_in_with(p, notes, (480.0, 480.0), hooks, None)
 }
 
 /// The coordinate grid drawn in a plot box of its own size (the derivative graphs' panels call it as it is).
 pub(super) fn coordinate_grid_build_in(p: &Params, notes: &mut Vec<String>, plot_box: (f64, f64)) -> String {
-    coordinate_grid_build_in_with(p, notes, plot_box, &GridHooks::default())
+    coordinate_grid_build_in_with(p, notes, plot_box, &GridHooks::default(), None)
 }
 
-fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: (f64, f64), hooks: &GridHooks) -> String {
+fn coordinate_grid_build_in_with(
+    p: &Params,
+    notes: &mut Vec<String>,
+    plot_box: (f64, f64),
+    hooks: &GridHooks,
+    mut capture: Option<&mut grid_diagnostics::Collector>,
+) -> String {
     // like the UI, clamp every control first: the render is safe even for a spec that never was
     let mut pn = p.clone();
     pn.normalize(&coordinate_grid_params(), false);
     let p = &pn;
     let g = grid_layout_in(p, plot_box);
+    if let Some(c) = capture.as_deref_mut() { c.configure(p, &g); }
     let (x0, x1, y0, y1, xs, ys, ux, uy, ml, mt, pw, ph) = (g.x0, g.x1, g.y0, g.y1, g.xs, g.ys, g.ux, g.uy, g.ml, g.mt, g.pw, g.ph);
+    let (gx0, gx1, gy0, gy1) = grid_line_limits(p, &g);
+    if gx0 > gx1 || gy0 > gy1 {
+        notes.push("Explicit gridline bounds are reversed or outside the frame; that direction has no gridlines or numbers".into());
+    }
     let pi_mode = p.s("xunits") == "Multiples of \u{3c0}";
     let deg = p.s("xunits") == "Degrees";
     let fills = super::svg::Fills::new(p);
@@ -3134,16 +3339,21 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
         notes.push("A line every pixel or two cannot be numbered: choose Every 10th line for the axis numbers, or a larger step".to_string());
     }
     if wide_flat(p, &g) { notes.push("The window is much wider than it is tall, so Square cells squeezes the plot into a strip: turn off Square cells".to_string()); }
-    let xtitle = p.s("xtitle_mode") == "Text" || p.s("xtitle_mode") == "Blank line";
     let ls = lscale(p);
     let dn = 14.0 * (ls - 1.0);
-    let (mr, mb) = (52.5 + 0.75 * dn + grid_b7::circle_room(p).0, 36.0 + dn + if xtitle { 26.0 } else { 0.0 });
+    let (mr, mb) = (g.mr, g.mb);
     let (w, h) = (pw + ml + mr, ph + mt + mb);
+    if grid_b7::uses_extensions(p) && (!w.is_finite()||!h.is_finite()||w>8192.0||h>8192.0||w*h>16_777_216.0) {
+        notes.push("Axis extension would exceed the safe canvas limit; reduce the requested extension or grid-step/window ratio".into());
+        if let Some(c)=capture.as_deref_mut(){c.reject("unsafe_axis_extension_canvas");}
+        let mut message=Doc::new(520.0,70.0);message.text(16.0,35.0,14.0,"start","Axis extension exceeds the safe canvas limit.");return message.finish();
+    }
     let mut d = new_doc(w, h);
     let sx = |x: f64| ml + (x - x0) * ux;
     let sy = |y: f64| mt + ph - (y - y0) * uy;
     let f = |expr: &str, x: f64| eval_full(expr, x, None, deg);
     let minor = p.i("minor");
+    let (xminor,yminor)=(if p.i("x_minor")>=0{p.i("x_minor")}else{minor},if p.i("y_minor")>=0{p.i("y_minor")}else{minor});
     // (a window already squeezed into a strip by Square cells is only warned about, as it always has been)
     let squeezed = p.b("square") && { let r = pw / ph.max(1.0); !(1.0 / 6.0..=6.0).contains(&r) };
     // major lines closer than 6 px smear into a block: then only every 2nd, 5th, 10th ... line is drawn; minor lines under 4 px are left out
@@ -3167,7 +3377,7 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
     let (xe_eff, ye_eff) = if !p.b("numbers") { (0, 0) } else {
     let (xe, ye) = (every_n(p.s("xnum")), every_n(p.s("ynum")));
     let xe = if xe > 0 {
-        let ws: Vec<f64> = (0..MAX_LINES).map(|i| (x0 / xs - 1e-9).ceil() + i as f64).take_while(|k| k * xs <= x1 + 1e-9).filter(|k| (*k as i64).rem_euclid(xe) == 0).map(|k| cw(&lab_of(k * xs))).collect();
+        let ws: Vec<f64> = (0..MAX_LINES).map(|i| (gx0 / xs - 1e-9).ceil() + i as f64).take_while(|k| k * xs <= gx1 + 1e-9).filter(|k| (*k as i64).rem_euclid(xe) == 0).map(|k| cw(&lab_of(k * xs))).collect();
         // (widths of the numbers `xe` lines apart, so the gap is measured between numbers that are really drawn)
         // (numbers beside a conic or in Print keep 4 px between them, the plain figure 0.5 px)
         thin(xe, xs * ux, &ws, if late { 1.0 } else if xfrac { 3.0 } else { 0.5 })
@@ -3184,12 +3394,12 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
         let ax = sx(if x0 <= 0.0 && x1 >= 0.0 { 0.0 } else { x0 });
         let xrow = if ay + 18.0 > mt + ph + 30.0 { ay - 9.0 } else { ay + 20.0 + dn };
         let bx = |x: f64, y: f64, an: &str, t: &str| -> [f64; 4] { let w = cw(t); let (a, b) = match an { "end" => (x - w, x), "start" => (x, x + w), _ => (x - 0.5 * w, x + 0.5 * w) }; [a, y - 10.0 * ls, b, y + 0.5 * ls] };
-        let ybs: Vec<[f64; 4]> = (0..MAX_LINES).map(|i| (y0 / ys - 1e-9).ceil() + i as f64).take_while(|k| k * ys <= y1 + 1e-9).filter(|k| (*k as i64).rem_euclid(ye_eff) == 0 && k.abs() > 1e-9 && (sy(k * ys) - ay).abs() < 90.0).map(|k| bx(ax - 6.0, sy(k * ys) + 4.1 + 0.35 * dn, "end", &lab_y(k * ys))).collect();
+        let ybs: Vec<[f64; 4]> = (0..MAX_LINES).map(|i| (gy0 / ys - 1e-9).ceil() + i as f64).take_while(|k| k * ys <= gy1 + 1e-9).filter(|k| (*k as i64).rem_euclid(ye_eff) == 0 && k.abs() > 1e-9 && (sy(k * ys) - ay).abs() < 90.0).map(|k| bx(ax - 6.0, sy(k * ys) + 4.1 + 0.35 * dn, "end", &lab_y(k * ys))).collect();
         let mut chosen = xe_eff;
         for m in [1i64, 2, 5, 10, 20, 50, 100, 1000] {
             let e = xe_eff * m;
             chosen = e;
-            let hit = (0..MAX_LINES).map(|i| (x0 / xs - 1e-9).ceil() + i as f64).take_while(|k| k * xs <= x1 + 1e-9).filter(|k| (*k as i64).rem_euclid(e) == 0 && k.abs() > 1e-9 && (sx(k * xs) - ax).abs() < 90.0).any(|k| {
+            let hit = (0..MAX_LINES).map(|i| (gx0 / xs - 1e-9).ceil() + i as f64).take_while(|k| k * xs <= gx1 + 1e-9).filter(|k| (*k as i64).rem_euclid(e) == 0 && k.abs() > 1e-9 && (sx(k * xs) - ax).abs() < 90.0).any(|k| {
                 let t = lab_of(k * xs);
                 let meets = |dy: f64| { let b = bx(sx(k * xs), xrow + dy, "middle", &t); ybs.iter().any(|o| rect_hit(&b, o)) };
                 meets(0.0) && (13..=26).all(|s| meets(s as f64))
@@ -3209,10 +3419,14 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
     let (gsx, gsy) = (line_stride(xs * ux, xe_eff), line_stride(ys * uy, ye_eff));
     let gstyle = p.s("grid");
     // the reference's standard grid is near-black 1 px crisp lines under 2.4 px axes
-    let (mut gcol, mut gw, mut mcol, axw) = match gstyle { "Light" => ("#dde3ea", 0.9, "#eef1f5", 2.4), "Bold" => ("#6f7d8c", 1.4, "#b9c2cc", 2.6), "None" => ("none", 0.0, "none", 2.4), _ => ("#111827", 1.0, "#e6ebf1", 2.4) };
+    let (mut gcol, mut gw, mut mcol, mut axw) = match gstyle { "Light" => ("#dde3ea", 0.9, "#eef1f5", 2.4), "Bold" => ("#6f7d8c", 1.4, "#b9c2cc", 2.6), "None" => ("none", 0.0, "none", 2.4), _ => ("#111827", 1.0, "#e6ebf1", 2.4) };
+    if p.f("axis_width")>0.0 { axw=p.f("axis_width"); }
     // (beside a conic the standard grid is a mid grey-blue, so it does not outweigh the 2 px curves)
     if !print && (has_conic || hooks.late) && gstyle == "Standard" { gcol = "#8794a3"; }
     if print { (gcol, gw, mcol) = match gstyle { "Light" => ("#8c8c8c", 1.0, "#d2d2d2"), "Bold" => ("#4a4a4a", 1.8, "#aaaaaa"), "None" => ("none", 0.0, "none"), _ => ("#5a5a5a", 1.4, "#aaaaaa") }; }
+    let direction_style=|key:&str|match p.s(key){"Light"=>("#bdbdbd",0.8),"Standard"=>("#555555",1.0),"Bold"=>("#111111",1.4),"None"=>("none",0.0),_=>(gcol,gw)};
+    let emphasized_style=|key:&str,base:(&'static str,f64)|{let candidate=direction_style(key);let light=|s:&str|u32::from_str_radix(s.trim_start_matches('#'),16).ok().map(|c|((c>>16)&255)+((c>>8)&255)+(c&255)).unwrap_or(765);if candidate.1>=base.1&&light(candidate.0)<=light(base.0){candidate}else{base}};
+    let ((xgcol,xgw),(ygcol,ygw))=(direction_style("vertical_grid"),direction_style("horizontal_grid"));
     // (a crispEdges group: figures::to_rgba widens its 1 px lines when the preview shrinks, as a browser does)
     let crisp = gstyle == "Standard" || gstyle.is_empty() || print;
     let gl = |d: &mut Doc, x1: f64, y1: f64, x2: f64, y2: f64, col: &str, w: f64| { d.raw(&format!(r#"<line x1="{x1:.2}" y1="{y1:.2}" x2="{x2:.2}" y2="{y2:.2}" stroke="{col}" stroke-width="{w}"/>"#)); };
@@ -3221,21 +3435,29 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
     // gridlines
     if gstyle != "None" {
         // (minor lines closer than 3 px smear, so they are left out)
-        if minor > 1 && (!late || squeezed || xs / minor as f64 * ux >= 4.0) {
-            let ms = xs / minor as f64;
-            let mut k = (x0 / ms).ceil();
-            let mut n = 0; while k * ms <= x1 + 1e-9 && n < MAX_LINES { d.line(sx(k * ms), mt, sx(k * ms), mt + ph, mcol, if print { 1.0 } else { 0.8 }); k += 1.0; n += 1; }
+        let start = d.len();
+        if xminor > 1 && (!late || squeezed || xs / xminor as f64 * ux >= 4.0) {
+            let ms = xs / xminor as f64;
+            let mut k = (gx0 / ms).ceil();
+            let mut n = 0; while k * ms <= gx1 + 1e-9 && n < MAX_LINES { d.line(sx(k * ms), mt, sx(k * ms), mt + ph, mcol, if print { 1.0 } else { 0.8 }); k += 1.0; n += 1; }
         }
-        if minor > 1 && (!late || squeezed || ys / minor as f64 * uy >= 4.0) {
-            let ms = ys / minor as f64;
-            let mut k = (y0 / ms).ceil();
-            let mut n = 0; while k * ms <= y1 + 1e-9 && n < MAX_LINES { d.line(ml, sy(k * ms), ml + pw, sy(k * ms), mcol, if print { 1.0 } else { 0.8 }); k += 1.0; n += 1; }
+        if let Some(c) = capture.as_deref_mut() { c.lines(grid_diagnostics::Role::VerticalMinor, d.fragment(start)); }
+        let start = d.len();
+        if yminor > 1 && (!late || squeezed || ys / yminor as f64 * uy >= 4.0) {
+            let ms = ys / yminor as f64;
+            let mut k = (gy0 / ms).ceil();
+            let mut n = 0; while k * ms <= gy1 + 1e-9 && n < MAX_LINES { d.line(ml, sy(k * ms), ml + pw, sy(k * ms), mcol, if print { 1.0 } else { 0.8 }); k += 1.0; n += 1; }
         }
+        if let Some(c) = capture.as_deref_mut() { c.lines(grid_diagnostics::Role::HorizontalMinor, d.fragment(start)); }
         if crisp { d.raw(r#"<g shape-rendering="crispEdges" data-op="math">"#); }
-        let mut k = (x0 / xs - 1e-9).ceil();
-        let mut n = 0; while k * xs <= x1 + 1e-9 && n < MAX_LINES { if (k as i64).rem_euclid(gsx) == 0 { gl(&mut d, sx(k * xs), mt, sx(k * xs), mt + ph, gcol, gw); } k += 1.0; n += 1; }
-        let mut k = (y0 / ys - 1e-9).ceil();
-        let mut n = 0; while k * ys <= y1 + 1e-9 && n < MAX_LINES { if (k as i64).rem_euclid(gsy) == 0 { gl(&mut d, ml, sy(k * ys), ml + pw, sy(k * ys), gcol, gw); } k += 1.0; n += 1; }
+        let start = d.len();
+        let mut k = (gx0 / xs - 1e-9).ceil();
+        let mut n = 0; while k * xs <= gx1 + 1e-9 && n < MAX_LINES { if (k as i64).rem_euclid(gsx) == 0 { let (col,width)=if p.i("x_major_every")>0&&(k as i64).rem_euclid(p.i("x_major_every"))==0&&xgw>0.0{emphasized_style("x_major_style",(xgcol,xgw))}else{(xgcol,xgw)};gl(&mut d, sx(k * xs), mt, sx(k * xs), mt + ph, col, width); } k += 1.0; n += 1; }
+        if let Some(c) = capture.as_deref_mut() { c.lines(grid_diagnostics::Role::VerticalMajor, d.fragment(start)); }
+        let start = d.len();
+        let mut k = (gy0 / ys - 1e-9).ceil();
+        let mut n = 0; while k * ys <= gy1 + 1e-9 && n < MAX_LINES { if (k as i64).rem_euclid(gsy) == 0 { let (col,width)=if p.i("y_major_every")>0&&(k as i64).rem_euclid(p.i("y_major_every"))==0&&ygw>0.0{emphasized_style("y_major_style",(ygcol,ygw))}else{(ygcol,ygw)};gl(&mut d, ml, sy(k * ys), ml + pw, sy(k * ys), col, width); } k += 1.0; n += 1; }
+        if let Some(c) = capture.as_deref_mut() { c.lines(grid_diagnostics::Role::HorizontalMajor, d.fragment(start)); }
         if crisp { d.raw("</g>"); }
     }
     d.raw(&hooks.over_grid);
@@ -3244,9 +3466,11 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
     let ax_x = if x0 <= 0.0 && x1 >= 0.0 { 0.0 } else { x0 };
     let ext = if p.b("arrows") { 20.0 } else { 0.0 };
     let (axy, axx) = (sy(ax_y), sx(ax_x));
+    let axes_start = d.len();
+    let ends = grid_b7::axis_ends(p);
     // (batch 7) an end set on its own draws every end through grid_b7; all four Automatic draw exactly as before
-    if let Some(ends) = grid_b7::axis_ends(p) {
-        grid_b7::draw_axes(&mut d, ends, (ml, mt, pw, ph), axx, axy, axw);
+    if let Some(ends) = ends {
+        grid_b7::draw_axes(&mut d, ends, (ml, mt, pw, ph), axx, axy, axw, grid_b7::extensions_px(p,(xs*ux,ys*uy)));
     } else if p.b("arrows") {
         let head = |d: &mut Doc, x: f64, y: f64, dx: f64, dy: f64| {
             // marker: 13 px triangle, tip 2.6 px past the line end, base 10.4 px behind it
@@ -3264,27 +3488,34 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
         d.line(ml, axy, ml + pw, axy, "#111827", axw);
         d.line(axx, mt + ph, axx, mt, "#111827", axw);
     }
-    // numbers (bold 14 with a white halo, no tick marks, as the reference)
+    if let Some(c) = capture.as_deref_mut() {
+        c.axes(d.fragment(axes_start), ends, p.b("arrows"));
+    }
+    // Older Params may omit newly introduced controls even when called directly, rather than
+    // through params_from_json. Only an explicit false removes the legacy white backing.
+    let number_halo = !matches!(p.0.get("number_halo"), Some(Value::B(false)));
+    // numbers (bold 14 with an optional white halo, no tick marks)
     // mode 0: halo and digits together; 1: only the white halo plates (placed under the curves); 2: only the digits (over them)
     let draw_numbers = |d: &mut Doc, obst: &[Vec<Pt>], mode: u8| { if p.b("numbers") {
+        if mode == 1 && !number_halo { return; }
         let origin = ax_y == 0.0 && ax_x == 0.0;
         let bbs: Vec<[f64; 4]> = obst.iter().map(|c| poly_bbox(c)).collect();
         let (xe, ye) = (xe_eff, ye_eff);
         // Every number sits at its own tick in the standard row (x numbers under the x-axis, y numbers left of the y-axis), never
         // moved. (x, y, anchor, text, kind: 0 along the x-axis, 1 along the y-axis, 2 the origin zero)
         let mut items: Vec<(f64, f64, &'static str, String, u8)> = vec![];
-        let mut k = (x0 / xs - 1e-9).ceil();
+        let mut k = (gx0 / xs - 1e-9).ceil();
         let mut n = 0;
-        while k * xs <= x1 + 1e-9 && n < MAX_LINES {
+        while k * xs <= gx1 + 1e-9 && n < MAX_LINES {
             n += 1;
             let v = k * xs;
             let numbered = xe > 0 && (k as i64).rem_euclid(xe) == 0;
             if numbered && !(v.abs() < 1e-9 && origin) { let yy = if axy + 18.0 > mt + ph + 30.0 { axy - 9.0 } else { axy + 20.0 + dn }; items.push((sx(v), yy, "middle", lab_of(v), 0)); }
             k += 1.0;
         }
-        let mut k = (y0 / ys - 1e-9).ceil();
+        let mut k = (gy0 / ys - 1e-9).ceil();
         let mut n = 0;
-        while k * ys <= y1 + 1e-9 && n < MAX_LINES {
+        while k * ys <= gy1 + 1e-9 && n < MAX_LINES {
             n += 1;
             let v = k * ys;
             let numbered = ye > 0 && (k as i64).rem_euclid(ye) == 0;
@@ -3316,7 +3547,7 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
             items.retain(|it| it.4 != 9);
         }
         // the origin zero: below left of the origin, else below right, left out only when neither is clear of the other numbers
-        if origin && xe > 0 {
+        if origin && xe > 0 && p.b("origin_zero") {
             let boxes: Vec<[f64; 4]> = items.iter().map(|(x, y, an, t, _)| box_of(*x, *y, an, t)).collect();
             let clear = |x: f64, y: f64, an: &str| { let b = box_of(x, y, an, "0"); let b = [b[0] - 2.0, b[1], b[2] + 2.0, b[3]]; !boxes.iter().any(|o| rect_hit(&b, o)) };
             let row = axy + 20.0 + dn;
@@ -3327,15 +3558,26 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
         let put: Vec<(f64, f64, &str, bool)> = items.iter().map(|(x, y, an, t, _)| (*x, *y, *an, late && on_curve(&box_of(*x, *y, an, t)))).collect();
         let halo = if print { 5 } else { 4 };
         for ((_, _, _, t, kind), (x, y, anchor, over)) in items.iter().zip(&put) {
-            let paint = match (mode, *over) {
+            let paint = if !number_halo {
+                if mode == 2 { format!(r##"fill="#111827" data-num="1" data-axis="{kind}""##) }
+                else { r##"fill="#111827""##.to_string() }
+            } else { match (mode, *over) {
                 (1, true) => continue,
                 (1, false) => format!(r##"fill="#fff" stroke="#fff" stroke-width="{halo}" stroke-linejoin="round""##),
                 // (a number over a curve gets only a thin halo: the curve is never erased, and a small circle keeps its whole outline)
                 (2, true) => format!(r##"fill="#111827" stroke="#fff" stroke-width="2" paint-order="stroke" stroke-linejoin="round" data-num="1" data-plate="over" data-axis="{kind}""##),
                 (2, false) => format!(r##"fill="#111827" data-num="1" data-axis="{kind}""##),
                 _ => format!(r##"fill="#111827" stroke="#fff" stroke-width="{halo}" paint-order="stroke" stroke-linejoin="round""##),
-            };
-            d.raw(&format!(r##"<text x="{x:.2}" y="{y:.2}" text-anchor="{anchor}" font-family="Arial, Helvetica, Liberation Sans, sans-serif" font-size="{}" font-weight="bold" {paint}>{}</text>"##, 14.0 * ls, super::svg::esc(t)));
+            } };
+            let font=if p.s("number_font")=="Serif" { SERIF } else { "Arial, Helvetica, Liberation Sans, sans-serif" };
+            let weight=if p.s("number_font")=="Automatic" { "bold" } else { "normal" };
+            if p.b("stacked_fractions") && t.contains('/') {
+                let(top,bottom)=t.split_once('/').unwrap();let fs=12.0*ls;let fw=top.chars().count().max(bottom.chars().count())as f64*fs*0.56+2.0;
+                let cx=match *anchor {"end"=>x-fw/2.0,"start"=>x+fw/2.0,_=>*x};
+                d.raw(&format!(r#"<g data-stacked-tick="{}">"#,super::svg::esc(t)));
+                for(ty,txt)in[(y-5.0*ls,top),(y+10.0*ls,bottom)] {d.raw(&format!(r#"<text x="{cx:.2}" y="{ty:.2}" text-anchor="middle" font-family="{font}" font-size="{fs}" font-weight="{weight}" {paint}>{}</text>"#,super::svg::esc(txt)));}
+                d.line(cx-fw/2.0,y-1.0*ls,cx+fw/2.0,y-1.0*ls,if mode==1{"#ffffff"}else{"#111827"},0.8);d.raw("</g>");
+            }else{d.raw(&format!(r##"<text x="{x:.2}" y="{y:.2}" text-anchor="{anchor}" font-family="{font}" font-size="{}" font-weight="{weight}" {paint}>{}</text>"##, 14.0 * ls, super::svg::esc(t)));}
         }
     } };
     // (with curves the numbers wait: their white plates go under the curves, so no curve ever shows a gap, the digits over them)
@@ -3983,6 +4225,7 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
     // points: "A(1, 2), B(-3, 4)" or the older "(2,3) A; (-1,4) B"
     let pcol = colp(p, "pt_color", INK);
     let mut pt_count = 0usize;
+    let points_start=d.len();
     for seg in p.s("points").split(';') {
         let seg = seg.trim();
         if pt_count >= MAX_POINTS { notes.push(format!("Only the first {MAX_POINTS} points are drawn")); break; }
@@ -4009,7 +4252,7 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
             if p.s("pt_style") == "Cross" {
                 d.line(px - 5.0, py - 5.0, px + 5.0, py + 5.0, &pcol, 2.2);
                 d.line(px - 5.0, py + 5.0, px + 5.0, py - 5.0, &pcol, 2.2);
-            } else { d.circle(px, py, 4.5, &pcol, "#fff", 1.2); }
+            } else { let radius=if p.f("point_radius")>0.0{p.f("point_radius")}else{4.5};let outline=!matches!(p.0.get("pt_outline"),Some(Value::B(false)));d.circle(px,py,radius,&pcol,if outline{"#fff"}else{"none"},if outline{1.2}else{0.0}); }
             let coord = format!("({}, {})", fmt(n[0], 3), fmt(n[1], 3));
             let lab = match p.s("pt_label") {
                 "None" => String::new(),
@@ -4026,6 +4269,11 @@ fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: 
                 } else { math_text(&mut d, px + 7.0, py - 11.0, 15.0, "start", &lab, false); }
             }
         }
+    }
+    if let Some(c)=capture.as_deref_mut(){
+        let fragment=d.fragment(points_start);let printed;
+        let fragment=if print{printed=greyify(fragment);printed.as_str()}else{fragment};
+        c.points(fragment,pt_count,p.s("pt_style")=="Cross",!p.s("points").trim().is_empty(),p.s("equations").split(';').any(|row|!row.trim().is_empty()));
     }
     if skipped_rows > 0 { notes.push(format!("Only the first {MAX_ROWS} rows are drawn; {skipped_rows} more were ignored")); }
     // many problems are one problem: keep the first few and count the rest

@@ -66,6 +66,8 @@ struct Source {
     /// The page image a photo / PDF page source was read from, kept after the AI reads it
     /// so a picture placeholder can be cropped from it.
     page: Option<Vec<u8>>,
+    /// Conversion warnings remain readable in the source details, beyond the toast.
+    notes: Vec<String>,
 }
 
 /// The "Add a picture" dialog for one question of the import preview.
@@ -313,6 +315,7 @@ impl State {
             exam_sel: vec![true; ne],
             tex: None,
             page: None,
+            notes: Vec::new(),
         });
     }
 
@@ -332,6 +335,7 @@ impl State {
             exam_sel: Vec::new(),
             tex: None,
             page: None,
+            notes: Vec::new(),
         });
     }
 }
@@ -501,6 +505,8 @@ impl crate::App {
         let cfg = crate::ai::AiCfg::from(&self.settings.clone());
         self.ai_busy = true;
         let page_no = f.name.rsplit_once("page ").and_then(|(_, n)| n.trim().parse().ok()).unwrap_or(1);
+        // Pages of one PDF are one document: later pages are read with the directions the earlier ones printed.
+        self.ai.set_document(f.name.rsplit_once(" · page ").map(|(doc, _)| doc.to_string()));
         self.ai.send_image(f.bytes, &f.mime, self.ai_hint.clone(), page_no, &cfg, ctx);
     }
 
@@ -531,6 +537,7 @@ impl crate::App {
             };
             match outcome {
                 Ok(doc) => {
+                    s.notes = notes.clone();
                     s.sel = vec![true; doc.questions.len()];
                     s.exam_sel = vec![true; doc.exams.len()];
                     s.doc = Some(doc);
@@ -541,6 +548,7 @@ impl crate::App {
                     s.tex = None;
                 }
                 Err(e) => {
+                    s.notes = notes.clone();
                     s.status = Status::NeedsAi(Some(e.clone()));
                     st.ai_all = false;
                     err = Some(e);
@@ -550,7 +558,7 @@ impl crate::App {
         if let Some(e) = err {
             self.toast_err(e);
         } else if let Some(n) = notes.iter().find(|n| !n.contains("cropped from the page")) {
-            self.toast_err(format!("{} (+{} more notes)", n, notes.len().saturating_sub(1)));
+            self.toast_err(format!("{n} See Conversion notes in the source details for all notes."));
         }
     }
 }
@@ -558,6 +566,7 @@ impl crate::App {
 fn start_next_ai(app: &mut crate::App, st: &mut State, ctx: &egui::Context) {
     let Some(s) = st.sources.iter_mut().find(|s| matches!(s.status, Status::NeedsAi(_))) else {
         st.ai_all = false;
+        app.ai.end_batch();
         return;
     };
     let cfg = crate::ai::AiCfg::from(&app.settings);
@@ -1699,6 +1708,10 @@ fn ai_block(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &m
             ui.spinner();
             ui.add(egui::Label::new(theme::strong(format!("Asking the AI to read {}…", app.import_name))).wrap());
         });
+        if crate::pageshell::outline(ui,"Cancel conversion").clicked() {
+            app.ai.cancel(); app.ai_busy=false; st.ai_all=false;
+            for source in &mut st.sources { if source.status==Status::Converting {source.status=Status::NeedsAi(Some("Conversion cancelled.".into()));} }
+        }
     } else if pending > 0 {
         ui.horizontal(|ui| {
             let (r, _) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
@@ -1720,8 +1733,13 @@ fn ai_block(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &m
         );
         ui.add_space(6.0);
         if crate::pageshell::primary(ui, "Convert with AI").clicked() {
-            st.ai_all = true;
-            start_next_ai(app, st, ctx);
+            if pending > 20 && crate::ai::AiCfg::from(&app.settings).is_relay() {
+                app.toast_err("Convert at most 20 photos or PDF pages at a time. Remove the extra pages and convert them in another batch.");
+            } else {
+                app.ai.start_batch(pending);
+                st.ai_all = true;
+                start_next_ai(app, st, ctx);
+            }
         }
     } else {
         ui.horizontal(|ui| {
@@ -2114,6 +2132,7 @@ fn detail_pane(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State, flags: &
             if let Some(v) = &version {
                 detail_row(ui, "Format version", v, true);
             }
+            conversion_notes(ui, &s.notes);
             // A bank that comes with tests: which of them use it (Test Parrot's "Used by").
             if let (None, Some(d)) = (e, &s.doc) {
                 if !d.exams.is_empty() {
@@ -2164,6 +2183,16 @@ fn detail_pane(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State, flags: &
         }
     }
     options_and_finish(app, ui, st, flags);
+}
+
+fn conversion_notes(ui: &mut egui::Ui, notes: &[String]) {
+    if notes.is_empty() { return; }
+    ui.add_space(10.0);
+    kit::small_caps(ui, "Conversion notes");
+    for note in notes {
+        ui.add_space(5.0);
+        ui.add(egui::Label::new(theme::text(note).size(12.0)).wrap());
+    }
 }
 
 /// "Check answers": the AI solves the source's questions on its own and compares with the answers the source gave. A match is
@@ -3332,6 +3361,31 @@ fn history(app: &mut crate::App, ui: &mut egui::Ui) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn all_conversion_reasons_stay_readable_and_wrap_in_a_narrow_details_pane() {
+        use egui_kittest::{kittest::Queryable, Harness};
+        let notes = vec![
+            "Question 2: editable figure not created. The x-axis ends before the source axis. The source image was kept.".to_string(),
+            "Question 3: editable figure not created. An extra grid column changes the right edge. The source image was kept.".to_string(),
+        ];
+        let expected = notes.clone();
+        let mut first = true;
+        let mut h = Harness::builder().with_size(egui::vec2(280.0, 800.0)).build_ui(move |ui| {
+            if std::mem::take(&mut first) {
+                theme::setup(ui.ctx());
+                ui.ctx().request_repaint();
+                return;
+            }
+            conversion_notes(ui, &notes);
+        });
+        h.run();
+        for note in expected {
+            let rect = h.get_by_label(&note).rect();
+            assert!(rect.height() > 25.0, "the full reason wraps, instead of being truncated");
+            assert!(rect.right() <= 280.0, "the reason stays within the details pane");
+        }
+    }
+
     use super::*;
     use std::io::Write;
 

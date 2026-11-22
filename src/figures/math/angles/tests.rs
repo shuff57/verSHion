@@ -20,6 +20,34 @@ fn with(set: &[(&str, Value)]) -> Params {
     p
 }
 
+#[test]
+fn source_plain_sector_labels_can_omit_all_unprinted_marks_and_measures() {
+    let p=with(&[("ray2",s("40")),("ray1_line",s("Line")),("ray2_line",s("Line")),("show_arcs",b(false)),("vertex_dot",b(false)),("measure_labels",b(false)),("letters",b(false)),("shade",b(false)),("right",b(false)),("sector_text",s("1 = b; 3 = 40°")),("label_radius",f(30.0))]);
+    let svg=angles_render(&p);
+    assert_eq!(drawn_rays(&svg).len(),4);
+    assert!(tags(&svg,"circle").is_empty());
+    assert!(tags(&svg,"polyline").is_empty(),"no angle arcs are printed");
+    let ts=texts(&svg);assert_eq!(ts.len(),2);assert!(ts.iter().any(|t|t.3=="b"));assert!(ts.iter().any(|t|t.3=="40°"));
+    for(x,y,_,_)in ts{assert!((x-C.0).hypot(y-C.1)>=29.9);}
+}
+
+#[test]
+fn a_small_custom_label_radius_cannot_erase_the_ray_vertex_with_a_white_halo(){
+    let p=with(&[("ray2",s("45")),("ray3",s("180")),("ray_count",i(3)),("turn",f(12.0)),("show_arcs",b(false)),("vertex_dot",b(false)),("letters",b(false)),("shade",b(false)),("right",b(false)),("label_radius",f(10.0)),("sector_text",s("2 = q"))]);
+    let l=layout(&p);let mut scene=Scene::new(&l);let boxes=label_boxes(&p,&l,&mut scene);for spot in boxes.into_iter().flatten(){assert!(box_pt_dist(spot.b,C)>4.0);for(a,_)in &l.dirs{assert!(!seg_meets_box(C,interact::polar(C,*a+l.turn,l.len),spot.b,2.5));}}
+    let svg=angles_render(&p);assert_eq!(drawn_rays(&svg).len(),3);assert!(texts(&svg).iter().any(|t|t.3=="45°"));
+    let mut sans=p.clone();sans.set_s("label_font","Sans");let svg=angles_render(&sans);assert!(!svg.contains("font-style=\"italic\""));assert_eq!(drawn_rays(&svg).len(),3);
+}
+
+#[test]
+fn explicit_reflex_arc_and_red_square_do_not_add_other_sector_arcs() {
+    let p=with(&[("ray2",s("30")),("ray3",s("90")),("ray_count",i(3)),("around",b(true)),("show_arcs",b(false)),("vertex_dot",b(false)),("measure_labels",b(false)),("letters",b(false)),("shade",b(false)),("right",b(false)),("arcs1",s("3")),("sector_text",s("1 = x; 3 = 270°")),("right_marks",s("0,90")),("right_color",s("#ff0000"))]);
+    let svg=angles_render(&p);
+    assert_eq!(tags(&svg,"polyline").len(),2,"only one explicit arc and one square");
+    assert_eq!(svg.matches("stroke=\"#ff0000\"").count(),1);
+    assert_eq!(texts(&svg).len(),2,"no inferred 30° or 60° label");
+}
+
 // ------------------------------------------------------------------------------------------------ reading the SVG
 
 fn attr(tag: &str, name: &str) -> Option<String> {

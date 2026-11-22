@@ -1181,8 +1181,20 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
 
 fn grade_mc_answer(answers: &[crate::model::Answer], student: &str) -> (bool, f64) {
     let s = crate::gradecore::clean(student).trim().to_lowercase();
+    // A choice that is only a picture has no words to match: the student's letter picks it
+    // ("B", "b", "B."). Questions of text choices are graded on the text alone, as before.
+    let picture_only = |a: &crate::model::Answer| a.image.is_some() && a.text.trim().is_empty();
+    if answers.iter().any(picture_only) {
+        let t = s.trim_end_matches(['.', ')']);
+        if let [c] = t.as_bytes()
+            && c.is_ascii_lowercase()
+            && let Some(a) = answers.get((c - b'a') as usize)
+        {
+            return if a.correct { (true, 1.0) } else { (false, 0.0) };
+        }
+    }
     let mut best = (usize::MAX, false, 0.0);
-    for a in answers {
+    for a in answers.iter().filter(|a| !picture_only(a)) {
         let d = crate::gradecore::lev(&s, &crate::gradecore::clean(&a.text).trim().to_lowercase());
         if d < best.0 { best = (d, a.correct, if a.correct { 1.0 } else { 0.0 }); }
     }
@@ -1661,10 +1673,21 @@ mod grade_tests {
     #[test]
     fn grade_mc_answer_correct() {
         let answers = vec![
-            crate::model::Answer { text: "A".into(), correct: true, locked: false },
-            crate::model::Answer { text: "B".into(), correct: false, locked: false },
+            crate::model::Answer { text: "A".into(), correct: true, locked: false, image: None, figure: None },
+            crate::model::Answer { text: "B".into(), correct: false, locked: false, image: None, figure: None },
         ];
         assert_eq!(grade_mc_answer(&answers, "A"), (true, 1.0));
+    }
+    /// Choices that are only pictures have no words: the student's letter picks one.
+    #[test]
+    fn grade_mc_picture_choices_by_letter() {
+        let pic = |correct: bool| crate::model::Answer { correct, image: Some(crate::model::ImageRef { file: "media/p.png".into(), width: 10, height: 10 }), ..Default::default() };
+        let answers = vec![pic(false), pic(true), pic(false), crate::model::Answer::new("None of these", false)];
+        assert_eq!(grade_mc_answer(&answers, "B"), (true, 1.0));
+        assert_eq!(grade_mc_answer(&answers, "b."), (true, 1.0));
+        assert_eq!(grade_mc_answer(&answers, "A"), (false, 0.0));
+        assert_eq!(grade_mc_answer(&answers, "E"), (false, 0.0), "no such letter: matched on the text choices");
+        assert_eq!(grade_mc_answer(&answers, "none of these"), (false, 0.0));
     }
     #[test]
     fn grade_tf_true() {
