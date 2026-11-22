@@ -16,6 +16,7 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::Duration;
 
 mod engine;
+mod chatgpt;
 mod operation;
 mod source_scope;
 mod directions;
@@ -143,6 +144,7 @@ impl AiCfg {
         let provider = match s.ai_provider.trim().to_ascii_lowercase().as_str() {
             "openrouter" => "openrouter",
             "custom" => "custom",
+            "chatgpt" => "chatgpt",
             "workers" | "workers-ai" | "relay" => "workers",
             "account" => "account",
             "ollama-cloud" | "cloud" | "ollama cloud" => "cloud",
@@ -153,6 +155,7 @@ impl AiCfg {
             match provider {
                 "openrouter" => OPENROUTER_DEFAULT_MODEL.to_string(),
                 "custom" => CUSTOM_DEFAULT_MODEL.to_string(),
+                "chatgpt" => "gpt-6.2-sol".to_string(),
                 "workers" => WORKERS_DEFAULT_MODEL.to_string(),
                 "account" => "server-managed".to_string(),
                 "cloud" => OLLAMA_CLOUD_DEFAULT_MODEL.to_string(),
@@ -168,14 +171,20 @@ impl AiCfg {
             "custom" | "workers" => s.ai_base.trim().trim_end_matches('/').to_string(),
             // The hosted AI is the account server's own relay.
             "account" => account_base(),
+            "chatgpt" => "chatgpt:desktop".into(),
             _ => {
                 let own = s.ollama_base.trim().trim_end_matches('/');
                 if own.starts_with("http://") || own.starts_with("https://") { own.to_string() } else { OLLAMA_DEFAULT_BASE.to_string() }
             }
         };
         AiCfg {
-            output_mode: match s.ai_output_mode.as_str() { "schema" => OutputMode::Schema, "tool" => OutputMode::Tool, _ => OutputMode::Json },
-            native_tools: s.ai_native_tools,
+            output_mode: match (provider, s.ai_output_mode.as_str()) {
+                ("chatgpt", _) => OutputMode::Json,
+                (_, "schema") => OutputMode::Schema,
+                (_, "tool") => OutputMode::Tool,
+                _ => OutputMode::Json,
+            },
+            native_tools: provider == "chatgpt" || s.ai_native_tools,
             provider: provider.to_string(), base, model, output: None, operation: None,
         }
     }

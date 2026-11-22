@@ -30,6 +30,10 @@ pub(super) fn messages(turns: &[Turn], ollama: bool) -> Vec<Value> {
     }).collect()
 }
 
+fn openrouter_gpt_sol(cfg: &AiCfg) -> bool {
+    cfg.provider == "openrouter" && cfg.model == "openai/gpt-6.2-sol"
+}
+
 pub(super) fn body(cfg: &AiCfg, messages: Vec<Value>, temp: f64) -> Value {
     let mut body = json!({"model":cfg.model,"messages":messages,"stream":false,"temperature":temp.clamp(0.0,1.0)});
     if cfg.provider == "ollama" {
@@ -56,9 +60,24 @@ pub(super) fn body(cfg: &AiCfg, messages: Vec<Value>, temp: f64) -> Value {
             }
         }
         if cfg.provider == "openrouter" {
-            body["reasoning"] = json!({"enabled":false});
+            if openrouter_gpt_sol(cfg) {
+                // This route does not advertise temperature or parallel_tool_calls.
+                // The figure loop still validates one call before executing it.
+                let request = body.as_object_mut().unwrap();
+                request.remove("temperature");
+                request.remove("parallel_tool_calls");
+                body["reasoning"] = json!({"effort":"high"});
+            } else {
+                body["reasoning"] = json!({"enabled":false});
+            }
             body["usage"] = json!({"include":true});
             body["provider"] = json!({"data_collection":"deny","require_parameters":cfg.output_mode!=OutputMode::Json});
+            if openrouter_gpt_sol(cfg) {
+                // Keep a single upstream for the benchmark and for native tool conversations.
+                body["provider"]["only"] = json!(["openai"]);
+                body["provider"]["allow_fallbacks"] = json!(false);
+                body["provider"]["require_parameters"] = json!(true);
+            }
         }
         if cfg.is_relay() {
             if let Some(op) = &cfg.operation {
@@ -177,6 +196,13 @@ fn reply_evidence(reply: &Value, ollama: bool) -> Value {
 
 pub(super) async fn chat_message_traced(cfg: &AiCfg, turns: &[Turn], temp: f64, provider_reply: &mut Option<Value>) -> Result<Value, String> {
     *provider_reply = None;
+    if cfg.provider == "chatgpt" {
+        let content = super::chatgpt::convert(cfg, turns)?;
+        let message = json!({"role":"assistant","content":content});
+        let reply = json!({"choices":[{"finish_reason":"stop","message":message}]});
+        *provider_reply = Some(reply_evidence(&reply, false));
+        return Ok(message);
+    }
     let mut turns = turns.to_vec();
     if cfg.output_mode != OutputMode::Json && cfg.output.is_some() {
         turns.insert(0,Turn::new("system","Follow the supplied output schema exactly. Include all required fields; use null for absent optional values and the stated defaults for unchanged parameters. Never invent missing source answers."));
@@ -238,7 +264,7 @@ pub(super) async fn figure_traced(
     provider_reply: &mut Option<Value>,
 ) -> Result<String, String> {
     *provider_reply = None;
-    if !cfg.native_tools || cfg.provider == "ollama" {
+    if !cfg.native_tools || matches!(cfg.provider.as_str(), "ollama" | "chatgpt") {
         return chat_traced(cfg, turns, 0.2, provider_reply).await;
     }
     if turns.len() <= 2 {
@@ -276,7 +302,9 @@ pub(super) async fn figure_traced(
     request.as_object_mut().unwrap().remove("response_format");
     request["tools"] = json!(definitions);
     request["tool_choice"] = json!("required");
-    request["parallel_tool_calls"] = json!(false);
+    if !openrouter_gpt_sol(cfg) {
+        request["parallel_tool_calls"] = json!(false);
+    }
     let mut raw = send(cfg, request.clone()).await?;
     // A figure built from many primitives (a six-panel set of graphs) can outrun the usual output
     // limit in one tool call; that turn is asked once more with a larger limit.
@@ -367,6 +395,34 @@ fn figure_tools() -> Vec<Value> {
 mod tests {
     use super::*;
     use crate::ai::tests::stub_relay;
+
+    #[test]
+    fn openrouter_gpt_sol_native_requests_use_supported_parameters() {
+        let response = json!({"choices":[{"finish_reason":"tool_calls","message":{
+            "content":null,"tool_calls":[{"id":"probe","type":"function","function":{
+                "name":"get_figure","arguments":r#"{"id":"coordinate-grid"}"#
+            }}]
+        }}]});
+        let (base, server) = stub_relay(vec![(200, response.to_string())]);
+        let cfg = AiCfg {
+            provider: "openrouter".into(), model: "openai/gpt-6.2-sol".into(),
+            base, native_tools: true, ..AiCfg::default()
+        };
+        let reply = block_on(figure_traced(
+            &cfg, &[Turn::new("user", "Copy this grid.")], &mut Default::default(), &mut None,
+        )).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&reply).unwrap()["tool"], "get_figure");
+        let requests = server.join().unwrap();
+        let sent: Value = serde_json::from_str(&requests[0].1).unwrap();
+        assert_eq!(sent["reasoning"]["effort"], "high");
+        assert_eq!(sent["tool_choice"], "required");
+        assert_eq!(sent["provider"]["data_collection"], "deny");
+        assert_eq!(sent["provider"]["require_parameters"], true);
+        assert_eq!(sent["provider"]["only"], json!(["openai"]));
+        assert_eq!(sent["provider"]["allow_fallbacks"], false);
+        assert!(sent.get("temperature").is_none());
+        assert!(sent.get("parallel_tool_calls").is_none());
+    }
     fn answer(text: &str) -> (u16, String) {
         (
             200,

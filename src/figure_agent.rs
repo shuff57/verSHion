@@ -73,11 +73,11 @@ impl<'a> ModelChat<'a> {
 impl AsyncChat for ModelChat<'_> {
     async fn chat(&mut self, turns: &[Turn]) -> Result<String,String> { self.chat_async(turns).await }
     fn take_provider_reply(&mut self) -> Option<Json> { self.provider_reply.take() }
-    fn native_tools(&self) -> bool { self.cfg.native_tools && self.cfg.provider != "ollama" }
+    fn native_tools(&self) -> bool { self.cfg.native_tools && !matches!(self.cfg.provider.as_str(), "ollama" | "chatgpt") }
 }
 impl Chat for ModelChat<'_> {
     fn take_provider_reply(&mut self) -> Option<Json> { self.provider_reply.take() }
-    fn native_tools(&self) -> bool { self.cfg.native_tools && self.cfg.provider != "ollama" }
+    fn native_tools(&self) -> bool { self.cfg.native_tools && !matches!(self.cfg.provider.as_str(), "ollama" | "chatgpt") }
     fn chat(&mut self, turns: &[Turn]) -> Result<String,String> {
         #[cfg(not(target_arch="wasm32"))]
         { crate::ai::block_on(self.chat_async(turns)) }

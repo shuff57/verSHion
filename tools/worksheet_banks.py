@@ -526,7 +526,7 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--manifest',type=Path,required=True);ap.add_argument('--gold',type=Path,default=ROOT/'tests/worksheet_banks/cases.json')
     ap.add_argument('--binary',type=Path,default=ROOT/'target/debug/vershion');ap.add_argument('--out',type=Path,required=True)
-    ap.add_argument('--provider',choices=['ollama','openrouter','cloud','custom'],default='ollama');ap.add_argument('--model')
+    ap.add_argument('--provider',choices=['ollama','openrouter','cloud','custom','chatgpt'],default='ollama');ap.add_argument('--model')
     ap.add_argument('--base-url',help='OpenAI-compatible base URL, required for --provider custom');ap.add_argument('--key-env',default='VERSHION_AI_KEY',help='Environment variable that holds the custom endpoint key (name only; the value is never stored)')
     ap.add_argument('--allow-remote',action='store_true');ap.add_argument('--replay',action='store_true');ap.add_argument('--only',action='append',default=[])
     ap.add_argument('--mode',choices=['page','document'],default='page',help='page: each page imported alone (ablation). document: each source document imported in page order with earlier-page directions as context, one process per document.');ap.add_argument('--threshold',type=float,default=DEFAULT_THRESHOLD);ap.add_argument('--workers',type=int,default=2);ap.add_argument('--timeout',type=int,default=240)
@@ -554,7 +554,7 @@ def main():
     env={k:v for k,v in os.environ.items() if not k.startswith('VERSHION_') and not k.endswith('API_KEY')}
     if a.provider=='custom' and not a.replay:
         if os.environ.get(a.key_env):env['VERSHION_AI_KEY']=os.environ[a.key_env]
-    elif a.provider!='ollama' and not a.replay:
+    elif a.provider in ('openrouter','cloud') and not a.replay:
         keys=json.loads((Path.home()/'.local/share/vershion/ai-keys.json').read_text())
         env['OPENROUTER_API_KEY' if a.provider=='openrouter' else 'OLLAMA_API_KEY']=keys['openrouter' if a.provider=='openrouter' else 'cloud']
     settings={'ai_provider':a.provider,'ai_model':a.model,'ai_output_mode':'json','ai_native_tools':True}
