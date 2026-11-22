@@ -652,11 +652,38 @@ pub(crate) fn along(g: &Node, dg: &Node, f: &F, x0: f64, x: f64, n: usize) -> Al
     let scale0: Vec<f64> = all(x0).unwrap_or_default().iter().map(|v| 1.0 + if v.is_finite() { v.abs() } else { 0.0 }).collect();
     let mut prev_t = x0;
     let mut prev_all = all(x0).unwrap_or_default();
+    // A touch can occur before the first ordinary derivative sample, including
+    // exactly at the first cell boundary. Check inside the incoming interval.
+    let check_approach = |from: f64, to: f64| {
+        let mid = from + (to - from) * 0.5;
+        match gf.at(mid, 0.0).and_then(|y| satisfies(f, mid, y, ev(dg, mid, 0.0))) {
+            Some(true) => None,
+            Some(false) => Some(Along::Fails(mid)),
+            None => Some(Along::Stop(from)),
+        }
+    };
     for k in 1..=n {
         let t = if k == n { x } else { x0 + (x - x0) * k as f64 / n as f64 };
         let at_end = k == n;
+        // Bracket a crossed formula guard before looking for a tangency. The far end
+        // of this cell can already be on a different branch of a reciprocal or tan.
+        let mut limit = t;
+        for (guard, before) in gf.guards.iter().zip(&prev_g) {
+            let after = ev(guard, limit, 0.0);
+            if (*before < 0.0 && after > 0.0) || (*before > 0.0 && after < 0.0) {
+                let (mut safe, mut beyond) = (prev_t, limit);
+                loop {
+                    let mid = safe + (beyond - safe) * 0.5;
+                    if mid == safe || mid == beyond { break; }
+                    let value = ev(guard, mid, 0.0);
+                    if value * before.signum() > 0.0 { safe = mid; } else { beyond = mid; }
+                }
+                limit = safe;
+            }
+        }
+        if limit != t { return Along::Stop(limit); }
         // a guard touching 0 inside this step without changing sign (the base y = (2 − x)² of −2√y at x = 2, 1 − sin²x of
-        // √(1 − y²) at π/2): its smallest size in the step, by golden section, within 1e-9 of 0 ends the walk there
+        // √(1 − y²) at π/2): its smallest size in the step, by golden section, within 1e-11 of its scale from 0 ends the walk there
         if let Some(cur_all) = all(t) {
             for (j, (pa, ca)) in prev_all.iter().zip(&cur_all).enumerate() {
                 let sc = scale0.get(j).copied().unwrap_or(1.0);
@@ -673,27 +700,32 @@ pub(crate) fn along(g: &Node, dg: &Node, f: &F, x0: f64, x: f64, n: usize) -> Al
                 // left to the sign-change and end tests; 1e-11 of its scale)
                 let cell = (t - prev_t).abs();
                 let inside = (xs - prev_t).abs() > 1e-6 * cell && (xs - t).abs() > 1e-6 * cell;
-                let touch = (inside && b(xs) <= 1e-11 * sc).then_some(xs);
+                let minimum = b(xs);
+                let touch = (inside && minimum < pa.abs().min(ca.abs()) && minimum <= 1e-11 * sc).then_some(xs);
                 if let Some(xt) = touch {
                     // (a guard that is 0 at the start itself, x for √x at x = 0, is no end)
                     if (xt - x0).abs() <= 1e-9 * (1.0 + x0.abs()) { continue; }
+                    if let Some(stop) = check_approach(prev_t, xt) { return stop; }
                     return if (xt - x).abs() <= 1e-6 * (1.0 + x.abs()) { Along::End } else { Along::Stop(xt) };
                 }
             }
             prev_all = cur_all;
         }
-        prev_t = t;
         let Some(gv) = gf.at(t, 0.0) else { return Along::Stop(t) };
         if gv.abs() > 1e6 { return Along::Big(t); }
         let cur_g = gvals(t, gv);
-        if crossed(&prev_g, &cur_g) && !at_end { return Along::Stop(t); }
         let cur_b = bvals(t, gv);
-        if crossed(&prev_b, &cur_b) || cur_b.iter().any(|v| v.abs() <= 1e-12 * (1.0 + y0.abs())) { return if at_end { Along::End } else { Along::Stop(t) }; }
+        if crossed(&prev_b, &cur_b) || cur_b.iter().any(|v| v.abs() <= 1e-12 * (1.0 + y0.abs())) {
+            if let Some(stop) = check_approach(prev_t, t) { return stop; }
+            return if at_end { Along::End } else { Along::Stop(t) };
+        }
+        if crossed(&prev_g, &cur_g) && !at_end { return Along::Stop(t); }
         match satisfies(f, t, gv, ev(dg, t, 0.0)) {
             None => return if at_end { Along::End } else { Along::Stop(t) },
             Some(false) => return Along::Fails(t),
             Some(true) => {}
         }
+        prev_t = t;
         prev_g = cur_g;
         prev_b = cur_b;
     }

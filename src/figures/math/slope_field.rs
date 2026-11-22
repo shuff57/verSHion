@@ -590,7 +590,9 @@ pub(super) fn build(p0: &Params) -> Out {
         let mut fails: Option<f64> = None;
         let mut short: Option<f64> = None;
         let mut reach = 0.0f64;
+        let branch_start = e.f.branch.iter().any(|guard| nm::ev(guard, s0.x.v, s0.y.v) == 0.0);
         for (way, x) in far.into_iter().enumerate() {
+            if branch_start { break; }
             if (x - s0.x.v).abs() < 1e-12 { continue; }
             match nm::along(tree, &d, &e.f, s0.x.v, x, 400) {
                 nm::Along::Fails(t) => { if fails.is_none_or(|f0| (t - s0.x.v).abs() < (f0 - s0.x.v).abs()) { fails = Some(t); } }
@@ -612,6 +614,7 @@ pub(super) fn build(p0: &Params) -> Out {
             }
         }
         if !through { notes.push(format!("The typed solution {} = {} does not pass through {}: it is not used", m.vs.dep, shown, coord(s0))); }
+        else if branch_start { notes.push(format!("The typed solution cannot be confirmed: the equation is not smooth in {} at the start, so it is not used", m.vs.dep)); }
         else if let Some(t) = fails { notes.push(format!("The typed solution {} = {} is not the solution through {}: it does not satisfy {} = {} at {} \u{2248} {}, so it is not used", m.vs.dep, shown, coord(s0), lhs(&m.vs), e.shown, m.vs.var, fmt(t))); }
         else if let Some(t) = short { notes.push(format!("The typed solution {} = {} is the solution through {} only as far as {} \u{2248} {}, where the solution itself goes on: it is not used", m.vs.dep, shown, coord(s0), m.vs.var, fmt(t))); }
         else if reach <= 1e-9 * (1.0 + s0.x.v.abs()) { notes.push(format!("The typed solution {} = {} cannot be checked: the solution through {} is not followed from it, so it is not used", m.vs.dep, shown, coord(s0))); }
@@ -625,7 +628,7 @@ pub(super) fn build(p0: &Params) -> Out {
                     let end = match nm::along(tree, &d, &e.f, s0.x.v, side, 2000) { nm::Along::Big(t) | nm::Along::Stop(t) | nm::Along::Fails(t) => t, _ => side };
                     let n = 1500;
                     // (from the point on, up to the last sample before g is undefined or past ±1000000: never across a pole)
-                    r.pts = (0..=n).map(|j| s0.x.v + (end - s0.x.v) * j as f64 / n as f64).map_while(|t| sv(t).filter(|v| v.abs() <= 1e6).map(|v| (t, v))).collect();
+                    r.pts = (0..=n).map(|j| if j == n { end } else { s0.x.v + (end - s0.x.v) * j as f64 / n as f64 }).map_while(|t| sv(t).filter(|v| v.abs() <= 1e6).map(|v| (t, v))).collect();
                 }
             }
         }

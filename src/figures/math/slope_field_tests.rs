@@ -1392,3 +1392,56 @@ fn round6_exact_equilibria_drawn_whole() {
         assert!((rs[0].end.0 - w[1]).abs() < 1e-6 && rs.get(1).is_none_or(|r| (r.end.0 - w[0]).abs() < 1e-6), "{eqt}: ends {:?}", rs.iter().map(|r| r.end).collect::<Vec<_>>());
     }
 }
+
+#[test]
+fn round7_start_on_a_branch_never_names_the_formula() {
+    for side in [2., 4., 8.] {
+        for (eq, point, formula) in [
+            ("sqrt(1-y^2)", "(0, 1)", "sin(x+pi/2)"),
+            ("sqrt(y-1)", "(0, 1)", "1+x^4"),
+            ("x sqrt(1-y^2)", "(0, 1)", "cos(x^2/2)"),
+            ("-2sqrt(y)", "(2, 0)", "x^3-6x^2+12x-8"),
+        ] {
+            let out = build(&with(&[("dydx", s(eq)), ("solution", s(formula)), ("points", s(point)),
+                ("xmin", f(-side)), ("xmax", f(side)), ("key_line", b(true))]));
+            assert!(out.notes.iter().any(|n| n.contains("cannot be confirmed: the equation is not smooth in y at the start")));
+            assert!(!texts(&out.svg, "panel").iter().any(|t| t.starts_with("Solution through")));
+            assert!(!texts(&out.svg, "key").join(" ").contains("solution y ="));
+        }
+    }
+}
+
+#[test]
+fn round7_reciprocal_svg_stays_on_the_initial_branch() {
+    // y = 1/(a-x), y' = y². The visible branch stays above zero and left of a.
+    for i in 1..=30 {
+        let a = format!("{:.2}", 0.5 + f64::from(i) / 25.);
+        let pole = a.parse::<f64>().unwrap();
+        for side in [4., 6., 8.] {
+            let out = build(&with(&[("dydx", s("y^2")), ("solution", s(&format!("1/({a}-x)"))),
+                ("points", s(&format!("(0, 1/{a})"))), ("xmin", f(-side)), ("xmax", f(side)),
+                ("ymin", f(-side)), ("ymax", f(side))]));
+            assert!(texts(&out.svg, "panel").iter().any(|t| t.starts_with("Solution through")));
+            let g = out.layout.as_ref().unwrap();
+            let paths = tagged(&out.svg, "curve");
+            assert!(!paths.is_empty());
+            for path in paths {
+                for point in attr(path, "d").unwrap().split(['M', 'L']).filter(|t| !t.is_empty()) {
+                    let (x, y) = point.trim().split_once(' ').unwrap();
+                    assert!(x.parse::<f64>().unwrap() < g.ml + (pole - g.x0) * g.ux);
+                    assert!(y.trim().parse::<f64>().unwrap() < g.mt + g.ph + g.y0 * g.uy);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn round7_checks_the_approach_even_in_the_first_cell() {
+    let g = ex::parse("(x - 0.01)^2").unwrap();
+    for target in [0.01, 0.025] {
+        // g decreases to zero while this equation requires a positive slope.
+        let result = nm::along(&g, &ex::deriv(&g), &eqn("2sqrt(y)"), 0., target, 1);
+        assert!(matches!(result, nm::Along::Fails(x) if x > 0. && x < 0.01));
+    }
+}
