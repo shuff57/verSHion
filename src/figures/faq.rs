@@ -78,6 +78,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         // math
         "coordinate-grid" => COORDINATE_GRID,
         "riemann-sums" => RIEMANN_SUMS,
+        "derivative-graphs" => DERIVATIVE_GRAPHS,
         "composite-shape" => COMPOSITE_SHAPE,
         "number-line" => NUMBER_LINE,
         "triangle" => TRIANGLE,
@@ -1396,6 +1397,33 @@ const RIEMANN_SUMS: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet and its key?",
         a: "Switch on the lines you want written (Δx, the sum, the integral, its exact value, the error), then turn off Show answers: each value becomes a blank line. The student copy can instead leave the strips off for students to draw, or put a blank on each strip for its height. Turn on the answer key line to give the sum, the exact integral and the error on the key; Student + key exports both.",
+    },
+];
+
+const DERIVATIVE_GRAPHS: &[Faq] = &[
+    Faq {
+        q: "How do I read f\u{2032} from the graph of f?",
+        a: "Where f rises, f\u{2032} is above the x-axis; where f falls, it is below. A peak or valley of f (a local maximum or minimum) is a zero of f\u{2032}, which the dashed guides join. Drag the tracer: its tangent on f has the slope the dot on f\u{2032} shows.",
+    },
+    Faq {
+        q: "What is a critical point?",
+        a: "A point inside the domain of f where f\u{2032} is 0 or does not exist (a corner or a cusp). It is a local maximum where f\u{2032} changes from + to \u{2212}, a local minimum where it changes from \u{2212} to +, and neither where f\u{2032} keeps its sign (as x\u{b3} at 0). The sign chart shows which.",
+    },
+    Faq {
+        q: "Where are the inflection points?",
+        a: "Where f changes concavity: f\u{2033} changes sign there, and f\u{2032} has a local maximum or minimum. Mark the inflection points to see all three lined up, with Draw f\u{2033} on.",
+    },
+    Faq {
+        q: "How do I make an AP \u{201c}graph of f\u{2032}\u{201d} question?",
+        a: "Choose Start from f\u{2032}(x) and type its pieces with their domains, such as -x - 2, -4 <= x <= -2; -sqrt(4 - x^2), -2 < x <= 2; x - 2, x > 2. Give a point f passes through: the key draws f through it, worked out from the areas under f\u{2032}; the student copy leaves f's axes blank with that point.",
+    },
+    Faq {
+        q: "How do I type a piecewise function?",
+        a: "One piece for each part, with its domain after a comma, the pieces split by semicolons: x^2, x < 1; 2 - x, x >= 1. Where the pieces meet at a corner, f\u{2032} has no value: it is drawn with open circles there and counted as a critical point.",
+    },
+    Faq {
+        q: "What do the student copies leave out?",
+        a: "Turn Show answers off (or use Student + key). Graphs, no marks keeps the graphs and leaves off every mark; Sketch f\u{2032} from f leaves blank axes under f; Sketch f from f\u{2032} leaves blank axes for f. Sign charts are left blank for students to fill in. The key can list every answer under the graphs.",
     },
 ];
 

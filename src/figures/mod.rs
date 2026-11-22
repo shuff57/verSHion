@@ -730,6 +730,7 @@ pub fn card_keys(id: &str) -> &'static [&'static str] {
 pub fn typed_float(fig: &str, key: &str, text: &str, p: &mut Params) -> Option<f64> {
     match fig {
         "coordinate-grid" => math::grid_typed_float(key, text, p),
+        "derivative-graphs" => math::derivative_graphs::typed(text).map(|t| t.v),
         _ => text.trim().parse::<f64>().ok(),
     }
 }
@@ -836,6 +837,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         math::riemann::ID => math::riemann::relevant(key, p) && cards::relevant(id, key, p),
         math::polar::ID => math::polar::relevant(key, p),
         math::slope_field::ID => math::slope_field::relevant(key, p),
+        // only the controls of what is drawn: the typed f or f′, the marks on the key, f″'s own lines and range
+        "derivative-graphs" => math::derivative_graphs::relevant(key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -923,6 +926,7 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
         math::riemann::ID => math::riemann::warnings(p),
         math::polar::ID => math::polar::warnings(p),
         math::slope_field::ID => math::slope_field::warnings(p),
+        "derivative-graphs" => math::derivative_graphs::warnings(p),
         _ => vec![] }
 }
 

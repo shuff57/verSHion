@@ -2192,6 +2192,8 @@ mod grid_b7;
 pub(crate) mod riemann;
 mod riemann_exact;
 mod riemann_sym;
+/// Derivative graphs (new figure): f with f′ and f″ on aligned axes, each panel drawn by the coordinate grid.
+pub(crate) mod derivative_graphs;
 pub(super) use grid_b7::{circle_room as grid_circle_room, label_ext as grid_label_ext};
 pub(super) use grid_b7::{float_text as grid_float_text, row_style_keys as grid_row_style_keys, typed_range as grid_typed_float, ROW_STYLE_KEYS as GRID_ROW_STYLE_KEYS};
 use flat::{angles_params, angles_render, kite_params, kite_render, parallelogram_params, parallelogram_render, rectangle_params, rectangle_render, regular_polygon_params, regular_polygon_render, trapezoid_params, trapezoid_render, triangle_params, triangle_render};
@@ -2944,14 +2946,16 @@ const PALETTE: [&str; 5] = ["#1f5fbf", "#c0392b", "#2a8a3e", "#8e44ad", "#d68910
 /// Grid layout shared with the drag handles (math_plot::Cg): model ranges (x already in real
 /// units, i.e. multiplied by pi in pi mode), scales, margins and plot size.
 pub(super) struct GridL { pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub xs: f64, pub ys: f64, pub ux: f64, pub uy: f64, pub ml: f64, pub mt: f64, pub pw: f64, pub ph: f64 }
-pub(super) fn grid_layout(p: &Params) -> GridL {
+pub(super) fn grid_layout(p: &Params) -> GridL { grid_layout_in(p, (480.0, 480.0)) }
+/// The same layout in a plot box other than the coordinate grid's own 480 x 480 (the derivative graphs' panels).
+pub(super) fn grid_layout_in(p: &Params, plot_box: (f64, f64)) -> GridL {
     let k = if p.s("xunits") == "Multiples of \u{3c0}" { PI } else { 1.0 };
     let (x0, mut x1, y0, mut y1) = (p.f("xmin") * k, p.f("xmax") * k, p.f("ymin"), p.f("ymax"));
     if x1 <= x0 { x1 = x0 + k; }
     if y1 <= y0 { y1 = y0 + 1.0; }
     let (xs, ys) = (p.f("xstep").max(1e-6) * k, p.f("ystep").max(1e-6));
     // the reference's 15 x 15 grid is 480 px square (32 px a unit)
-    let (maxw, maxh) = (480.0, 480.0);
+    let (maxw, maxh) = plot_box;
     let (ux, uy) = if p.b("square") && k == 1.0 && p.s("xunits") != "Degrees" {
         let u = (maxw / (x1 - x0)).min(maxh / (y1 - y0)); (u, u)
     } else { (maxw / (x1 - x0), maxh / (y1 - y0)) };
@@ -3099,11 +3103,20 @@ pub(super) struct GridHooks {
 }
 
 fn coordinate_grid_build_with(p: &Params, notes: &mut Vec<String>, hooks: &GridHooks) -> String {
+    coordinate_grid_build_in_with(p, notes, (480.0, 480.0), hooks)
+}
+
+/// The coordinate grid drawn in a plot box of its own size (the derivative graphs' panels call it as it is).
+pub(super) fn coordinate_grid_build_in(p: &Params, notes: &mut Vec<String>, plot_box: (f64, f64)) -> String {
+    coordinate_grid_build_in_with(p, notes, plot_box, &GridHooks::default())
+}
+
+fn coordinate_grid_build_in_with(p: &Params, notes: &mut Vec<String>, plot_box: (f64, f64), hooks: &GridHooks) -> String {
     // like the UI, clamp every control first: the render is safe even for a spec that never was
     let mut pn = p.clone();
     pn.normalize(&coordinate_grid_params(), false);
     let p = &pn;
-    let g = grid_layout(p);
+    let g = grid_layout_in(p, plot_box);
     let (x0, x1, y0, y1, xs, ys, ux, uy, ml, mt, pw, ph) = (g.x0, g.x1, g.y0, g.y1, g.xs, g.ys, g.ux, g.uy, g.ml, g.mt, g.pw, g.ph);
     let pi_mode = p.s("xunits") == "Multiples of \u{3c0}";
     let deg = p.s("xunits") == "Degrees";
@@ -3903,7 +3916,8 @@ fn coordinate_grid_build_with(p: &Params, notes: &mut Vec<String>, hooks: &GridH
                         let c = k * q;
                         if in_dom(c) && f(r, c).map_or(true, |v| !v.is_finite()) {
                             if let (Some(l), Some(rr)) = (f(r, c - eps).filter(|v| v.is_finite()), f(r, c + eps).filter(|v| v.is_finite())) {
-                                if (l - rr).abs() < 1e-3 * (1.0 + l.abs()) { holes.push((c, (l + rr) / 2.0)); }
+                                // (a "hole" far off the plot is the two sides of an even pole: no circle, which could not be drawn)
+                                if (l - rr).abs() < 1e-3 * (1.0 + l.abs()) { if ((l + rr) / 2.0 - (y0 + y1) / 2.0).abs() <= 1.5 * span_y { holes.push((c, (l + rr) / 2.0)); } }
                                 else if !asym.iter().any(|a| (a - c).abs() < (x1 - x0) / 200.0) { asym.push(c); }
                             }
                         }
@@ -6618,6 +6632,7 @@ pub(super) fn render_for(id: &str) -> Option<fn(&Params) -> String> {
 /// "Start from an example" entries for this subject's figures. Solids and plots (math-b) live in
 /// `examples_b`; flat shapes (math-a) chain their own `examples_a` here with `.or_else`.
 pub fn examples(id: &str) -> Option<Vec<super::Example>> {
+    if id == derivative_graphs::ID { return Some(derivative_graphs::examples()); }
     flat::examples(id).or_else(|| examples_a(id)).or_else(|| examples_b(id)).or_else(|| conics::examples(id)).or_else(|| limits::examples(id)).or_else(|| (id == tangent::ID).then(tangent::examples)).or_else(|| (id == riemann::ID).then(riemann::examples))
         .or_else(|| (id == polar::ID).then(polar::examples))
         .or_else(|| (id == slope_field::ID).then(slope_field::examples))
@@ -6781,6 +6796,7 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
 }
 
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::Handle>> {
+    if id == derivative_graphs::ID { return Some(derivative_graphs::handles(p)); }
     super::math_plot::handles(id, p, size).or_else(|| super::math_geo::handles(id, p, size)).or_else(|| super::circle::handles(id, p, size)).or_else(|| super::trig::handles(id, p, size)).or_else(|| super::unitcircle::handles(id, p, size))
         .or_else(|| (id == super::transform::ID).then(|| super::transform::handles(p)))
         .or_else(|| (id == super::stats::twoway::ID).then(|| super::stats::twoway::handles(p)))
@@ -6852,6 +6868,7 @@ pub fn defs() -> Vec<FigureDef> {
         f(riemann::ID, "Riemann Sums and Area", "Left, right, midpoint, trapezoid, upper and lower sums of a typed function, from a table, or the exact area under a curve or between two curves.", riemann::params, riemann::render),
         f(polar::ID, "Polar and Parametric Curves", "Polar curves r = f(\u{3b8}) and parametric curves on a polar grid or axes, with polar points, shaded regions and their areas, the tracer and tangents with dy/dx.", polar::params, polar::render),
         f(slope_field::ID, "Slope Fields", "The slope field of a typed dy/dx = f(x, y), with solution curves through chosen points, Euler's method and its table, equilibrium solutions and student copies to sketch on or match.", slope_field::params, slope_field::render),
+        f(derivative_graphs::ID, "Derivative Graphs", "A function with its first and second derivatives on aligned axes, with critical points, inflection points, intervals and sign charts.", derivative_graphs::params, derivative_graphs::render),
     ]
 }
 
